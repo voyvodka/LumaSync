@@ -35,12 +35,17 @@ const stopLighting = vi.fn();
 // Reached through `hueTestLease`, which the runner now calls around every run.
 const startHue = vi.fn();
 const stopHue = vi.fn();
+// The lease reads the running mode before it hands a stream back.
+const getLightingModeStatus = vi.fn(() =>
+  Promise.resolve({ active: false, mode: { kind: "off" }, status: { code: "LIGHTING_MODE_STATUS_OK", message: "" } }),
+);
 
 vi.mock("@/features/mode/modeApi", () => ({
   setLightingMode: (...args: unknown[]) => setLightingMode(...args),
   stopLighting: (...args: unknown[]) => stopLighting(...args),
   startHue: (...args: unknown[]) => startHue(...args),
   stopHue: (...args: unknown[]) => stopHue(...args),
+  getLightingModeStatus: () => getLightingModeStatus(),
 }));
 
 const storeSave = vi.fn();

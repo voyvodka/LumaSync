@@ -6,6 +6,7 @@ import { HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
 import { DeviceSection } from "../DeviceSection";
 
 const stopHueMock = vi.fn();
+const stopHueOutputMock = vi.fn(async () => {});
 const useHueOnboardingMock = vi.fn();
 // Mutable so individual tests can override port list without re-declaring the mock.
 const useDeviceConnectionMock = vi.fn();
@@ -161,7 +162,7 @@ function createHueHookState(overrides: Record<string, unknown> = {}) {
 async function renderHueTab(state: ReturnType<typeof createHueHookState>) {
   const user = userEvent.setup();
   useHueOnboardingMock.mockReturnValue(state);
-  render(<DeviceSection />);
+  render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
   const hueTabBtn = screen.getByText("device:page.rail.hueBridges").closest("button")!;
   await user.click(hueTabBtn);
 }
@@ -315,6 +316,7 @@ describe("HueReadySummaryCard", () => {
 describe("DeviceSection hue runtime controls", () => {
   beforeEach(() => {
     stopHueMock.mockReset();
+    stopHueOutputMock.mockClear();
     useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
     useHueOnboardingMock.mockReturnValue(createHueHookState());
   });
@@ -333,7 +335,9 @@ describe("DeviceSection hue runtime controls", () => {
     expect(screen.getAllByText("hue:runtime.checklist.revalidate")[0]).toBeInTheDocument();
   });
 
-  it("routes stop action to stopHue when stream is reconnecting", async () => {
+  // Through the mode orchestrator, never `stopHue` itself: a running mode that
+  // names Hue has to let go of it before the stream stops.
+  it("routes stop action to the orchestrator's Hue stop when stream is reconnecting", async () => {
     const user = userEvent.setup();
     await renderHueTab(createHueHookState({
       runtimeStatus: {
@@ -349,7 +353,8 @@ describe("DeviceSection hue runtime controls", () => {
     });
     await user.click(screen.getByRole("button", { name: "hue:page.stopRetrying" }));
 
-    expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
+    expect(stopHueOutputMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
+    expect(stopHueMock).not.toHaveBeenCalled();
   });
 
   it("routes reconnect action to startRuntime when streaming", async () => {
@@ -425,7 +430,7 @@ describe("DeviceSection USB tab — persistError banner (A3.6)", () => {
     vi.mocked(shellStore.save).mockRejectedValueOnce(new Error("disk full"));
 
     const user = userEvent.setup();
-    render(<DeviceSection />);
+    render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
 
     // USB tab is active by default. Click "Add first strip" to open the form.
     const addBtn = await screen.findByText("device:page.usb.paired.addFirst");
@@ -449,7 +454,7 @@ describe("DeviceSection USB tab — persistError banner (A3.6)", () => {
     vi.mocked(shellStore.save).mockRejectedValueOnce(new Error("disk full"));
 
     const user = userEvent.setup();
-    render(<DeviceSection />);
+    render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
 
     const addBtn = await screen.findByText("device:page.usb.paired.addFirst");
     await user.click(addBtn);
@@ -514,7 +519,7 @@ describe("DeviceSection — USB and Hue persist banners are independent", () => 
     vi.mocked(shellStore.save).mockRejectedValueOnce(new Error("disk full"));
 
     const user = userEvent.setup();
-    render(<DeviceSection />);
+    render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
 
     await failUsbStripAdd(user);
 
@@ -529,7 +534,7 @@ describe("DeviceSection — USB and Hue persist banners are independent", () => 
     vi.mocked(shellStore.save).mockRejectedValueOnce(new Error("disk full"));
 
     const user = userEvent.setup();
-    render(<DeviceSection />);
+    render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
 
     await failHueChannelMove(user);
 
@@ -546,7 +551,7 @@ describe("DeviceSection — USB and Hue persist banners are independent", () => 
     vi.mocked(shellStore.save).mockRejectedValue(new Error("disk full"));
 
     const user = userEvent.setup();
-    render(<DeviceSection />);
+    render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
 
     await failHueChannelMove(user);
     await waitFor(() => {
@@ -585,7 +590,7 @@ describe("DeviceSection — chip type forwarding", () => {
   it("hands the chip-type choice to its own caller", async () => {
     const onChipTypeChange = vi.fn();
     const user = userEvent.setup();
-    render(<DeviceSection onChipTypeChange={onChipTypeChange} />);
+    render(<DeviceSection onChipTypeChange={onChipTypeChange} onStopHueOutput={stopHueOutputMock} />);
 
     await user.click(await screen.findByText("stub:selectChipType"));
 
@@ -607,7 +612,7 @@ describe("DeviceSection — colour order", () => {
   it("replaces the control with a WLED hint when the local output is WLED", async () => {
     activeWledIpMock = "192.168.1.42";
 
-    render(<DeviceSection />);
+    render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
 
     expect(await screen.findByText("lights:led.colorOrder.wledHint")).toBeInTheDocument();
     expect(screen.queryByText("lights:led.colorOrder.identify.button")).toBeNull();
@@ -621,7 +626,7 @@ describe("DeviceSection — colour order", () => {
       connectedPort: "/dev/cu.usbserial-1420",
     });
 
-    render(<DeviceSection />);
+    render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
 
     const identify = await screen.findByRole("button", {
       name: "lights:led.colorOrder.identify.button",
@@ -633,7 +638,7 @@ describe("DeviceSection — colour order", () => {
   it("hands a manual order to its own caller after saving", async () => {
     const onColorOrderChange = vi.fn();
     const user = userEvent.setup();
-    render(<DeviceSection onColorOrderChange={onColorOrderChange} />);
+    render(<DeviceSection onColorOrderChange={onColorOrderChange} onStopHueOutput={stopHueOutputMock} />);
 
     await user.selectOptions(
       await screen.findByLabelText("lights:led.colorOrder.manualLabel"),
@@ -654,7 +659,7 @@ describe("DeviceSection — category scroll position", () => {
   // Categories only toggle `hidden`, so they share `.lm-device-main`'s scroller.
   it("returns to the top when the category changes", async () => {
     const user = userEvent.setup();
-    render(<DeviceSection />);
+    render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
 
     const main = document.querySelector(".lm-device-main") as HTMLElement;
     expect(main).toBeTruthy();
@@ -667,7 +672,7 @@ describe("DeviceSection — category scroll position", () => {
 
   it("does it again on every switch, not only the first", async () => {
     const user = userEvent.setup();
-    render(<DeviceSection />);
+    render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
 
     const main = document.querySelector(".lm-device-main") as HTMLElement;
     await user.click(screen.getByText("device:page.rail.hueBridges").closest("button")!);
@@ -701,7 +706,7 @@ describe("the category rail counts what its labels say", () => {
       ],
     });
 
-    render(<DeviceSection />);
+    render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
 
     expect(badgeFor("device:page.rail.usbStrips")).toHaveTextContent("1");
   });
@@ -712,7 +717,7 @@ describe("the category rail counts what its labels say", () => {
       ports: [{ name: "/dev/cu.Bluetooth-Incoming-Port", isSupported: false }],
     });
 
-    render(<DeviceSection />);
+    render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
 
     // Zero renders no badge at all, rather than a "0" chip.
     expect(badgeFor("device:page.rail.usbStrips")).toBeNull();
@@ -721,13 +726,13 @@ describe("the category rail counts what its labels say", () => {
   it("counts a bound WLED panel, which was hardcoded to zero", () => {
     activeWledIpMock = "192.168.1.42";
 
-    render(<DeviceSection />);
+    render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
 
     expect(badgeFor("device:page.rail.wled")).toHaveTextContent("1");
   });
 
   it("shows no WLED badge when nothing is bound", () => {
-    render(<DeviceSection />);
+    render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
 
     expect(badgeFor("device:page.rail.wled")).toBeNull();
   });
@@ -750,7 +755,7 @@ describe("the category rail is addressable by test id", () => {
     ["manual", "device:page.rail.manualEntry"],
   ])("gives the %s rail button its test id", async (category, labelKey) => {
     const user = userEvent.setup();
-    render(<DeviceSection />);
+    render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
 
     const button = screen.getByTestId(`device-category-${category}`);
     expect(button).toHaveTextContent(labelKey);

@@ -14,7 +14,7 @@ import type {
 } from "@/shared/contracts/device";
 import type { ModeGuardReason } from "../mode/state/modeGuard";
 import type { LightingModeConfig } from "../mode/model/contracts";
-import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hue";
+import type { HueIntensityPreset, HueRuntimeTarget, HueRuntimeTriggerSource } from "@/shared/contracts/hue";
 import type { UpdaterState } from "../updater/useAutoUpdater";
 import type { HueProbeVerdict } from "../hue/state/useHueBridgeReachability";
 import { RoomMapEditor } from "@/features/room-map/ui/RoomMapEditor";
@@ -49,6 +49,8 @@ interface SettingsLayoutProps {
   isModeTransitioning?: boolean;
   onLightingModeChange: (nextMode: LightingModeConfig) => void;
   onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
+  /** The Devices Hue card's stop, routed through the mode orchestrator. */
+  onStopHueOutput: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
   onCalibrationSaved: (config: LedCalibrationConfig) => void;
   onCheckForUpdates: () => void;
   isCheckingForUpdates: boolean;
@@ -110,6 +112,7 @@ export const SettingsLayout = memo(function SettingsLayout({
   isModeTransitioning = false,
   onLightingModeChange,
   onOutputTargetsChange,
+  onStopHueOutput,
   onCalibrationSaved,
   onCheckForUpdates,
   isCheckingForUpdates,
@@ -210,6 +213,7 @@ export const SettingsLayout = memo(function SettingsLayout({
               onNavigateToRoomMap={() => void onSectionChange(SECTION_IDS.ROOM_MAP)}
               onChipTypeChange={onChipTypeChange}
               onColorOrderChange={onColorOrderChange}
+              onStopHueOutput={onStopHueOutput}
             />
           </div>
         )}

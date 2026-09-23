@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { HUE_RUNTIME_ACTION_HINT, HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
-import type { HueChannelPlacementOverride } from "@/shared/contracts/hue";
+import type { HueChannelPlacementOverride, HueRuntimeTriggerSource } from "@/shared/contracts/hue";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import {
   deriveHueBridgeCardState,
@@ -11,7 +11,6 @@ import {
 import { HUE_STREAM_MAX_HZ } from "@/features/hue/model/streamRate";
 import { buildHueRuntimeStatusCard } from "@/features/hue/model/hueRuntimeStatusCard";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
-import { stopHue } from "@/features/mode/modeApi";
 import { HueChannelMapPanel } from "../HueChannelMapPanel";
 import {
   IconBridge,
@@ -37,6 +36,9 @@ export interface HueBridgesCategoryProps {
   /** Room-map zones, so the channel map can project through a bound channel's
    *  zone instead of writing the absolute pair the runtime ignores. */
   zones: readonly HueZone[];
+  /** Stop retrying and Retry stop. Not `stopHue`: a running mode that names Hue
+   *  has to let go of it first, which only the mode orchestrator can do. */
+  onStopHue: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
 }
 
 export function HueBridgesCategory({
@@ -49,6 +51,7 @@ export function HueBridgesCategory({
   onNavigateToRoomMap,
   persistError,
   zones,
+  onStopHue,
 }: HueBridgesCategoryProps) {
   const { t } = useTranslation();
   const {
@@ -756,7 +759,7 @@ export function HueBridgesCategory({
                     <button type="button" className="lm-dcard-act" onClick={() => { void retryRuntimeTarget(runtimeTargets[0]?.target ?? "hue"); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
                       {t("hue:page.reconnectNow")}
                     </button>
-                    <button type="button" className="lm-dcard-act is-danger" onClick={() => { void stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
+                    <button type="button" className="lm-dcard-act is-danger" onClick={() => { void onStopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
                       {t("hue:page.stopRetrying")}
                     </button>
                   </>
@@ -799,7 +802,7 @@ export function HueBridgesCategory({
                   </>
                 ) : hueBridgeState === "stopPartial" ? (
                   <>
-                    <button type="button" className="lm-dcard-act" onClick={() => { void stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
+                    <button type="button" className="lm-dcard-act" onClick={() => { void onStopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
                       {t("hue:page.retryStop")}
                     </button>
                     <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
