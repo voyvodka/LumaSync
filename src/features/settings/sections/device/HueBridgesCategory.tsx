@@ -130,7 +130,7 @@ export function HueBridgesCategory({
   const hueIsDiscoveryEmpty = !isHueDiscovering && !selectedBridgeId && hueStatus !== null && bridges.length === 0 && !hueIsDiscoveryFailed;
 
   return (
-    <div className={isActive ? "lm-device-cat-body" : "lm-device-cat-body hidden"} hidden={!isActive}>
+    <div className="lm-device-cat-body" hidden={!isActive}>
       <div className="lm-device-head">
         <div>
           <h1>{t("device:page.header.hueTitle")}</h1>

@@ -256,7 +256,7 @@ function LumaIcon() {
 
 function ExpandIcon() {
   return (
-    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M1 6V1h5M15 10v5h-5M1 10v5h5M15 6V1h-5" />
     </svg>
   );
@@ -264,7 +264,7 @@ function ExpandIcon() {
 
 function CollapseIcon() {
   return (
-    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 1v4H1M12 15v-4h3M1 12h4v3M15 4h-4V1" />
     </svg>
   );

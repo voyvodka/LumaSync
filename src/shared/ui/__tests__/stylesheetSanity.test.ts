@@ -66,6 +66,25 @@ describe("stylesheet sanity", () => {
     }
   });
 
+  it("imports every feature sheet into a cascade layer", () => {
+    // An unlayered rule outranks every utility, which is how `.hidden` once
+    // needed a per-class override. `@theme` has to stay top-level, so the
+    // theme file is the one exception and may hold nothing else.
+    const entry = readFileSync(join(SRC, "styles.css"), "utf8");
+    const imports = [...entry.matchAll(/^@import\s+"\.\/styles\/([^"]+)"([^;]*);$/gm)];
+    const imported = imports.map((m) => m[1]);
+    const onDisk = readdirSync(join(SRC, "styles")).filter((f) => f.endsWith(".css"));
+    expect(imported.slice().sort()).toEqual(onDisk.slice().sort());
+    for (const [, file, rest] of imports) {
+      if (file === "theme.css") {
+        const theme = stripComments(readFileSync(join(SRC, "styles", file), "utf8"));
+        expect(theme.replace(/@theme[^{]*\{[^}]*\}/g, "").trim(), file).toBe("");
+      } else {
+        expect(rest, `${file} is imported without a layer`).toMatch(/\blayer\((base|components)\)/);
+      }
+    }
+  });
+
   it("has no selector that repeats a compound back to back", () => {
     const offenders: string[] = [];
     for (const { file, css } of cssFiles) {

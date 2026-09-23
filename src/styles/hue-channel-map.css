@@ -388,9 +388,10 @@
 }
 
 /* A placement whose channel the bridge no longer reports. Dashed rather than
-   faded — a ghost has to stay legible enough to find and remove. */
+   faded — a ghost has to stay legible enough to find and remove. The dash is
+   `border-dashed` on the element: its `border-2` utility would override a
+   border-style set here. */
 .lm-room-hue-dot--ghost {
-  border-style: dashed;
   background: var(--lm-panel-2, #14171d);
   border-color: var(--lm-ink-faint, #4d5564);
   color: var(--lm-ink-dim, #8a94a3);

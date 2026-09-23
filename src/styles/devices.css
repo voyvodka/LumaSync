@@ -177,9 +177,6 @@
 .lm-device-cat-body > * {
   flex-shrink: 0;
 }
-.lm-device-cat-body.hidden {
-  display: none;
-}
 .lm-device-main > * {
   flex-shrink: 0;
 }
@@ -854,7 +851,7 @@
   border-radius: 6px;
   margin-top: 2px;
 }
-.lm-hue-stale svg { width: 12px; height: 12px; color: var(--lm-amber, #ffb020); flex-shrink: 0; }
+.lm-hue-stale svg { width: 12px; height: 12px; color: var(--lm-amber, #ffb020); flex-shrink: 0; margin-top: 2px; }
 .lm-hue-stale-tx { flex: 1; font-family: var(--lm-mono); font-size: 9.5px; color: #8a94a3; letter-spacing: 0.03em; }
 
 /* ── Config checklist (State P) ─────────────────────────────────────── */
@@ -878,7 +875,7 @@
   font-weight: 500;
 }
 .lm-hue-checklist-item { display: flex; align-items: center; gap: 8px; font-size: 10.5px; color: #8a94a3; }
-.lm-hue-checklist-item svg { width: 11px; height: 11px; color: var(--lm-amber, #ffb020); flex-shrink: 0; }
+.lm-hue-checklist-item svg { width: 11px; height: 11px; color: var(--lm-amber, #ffb020); flex-shrink: 0; margin-top: 2px; }
 
 /* ── Offline reasons (State F) ──────────────────────────────────────── */
 .lm-hue-offline {

@@ -624,7 +624,7 @@ export function HueChannelOverlay({
                 "flex items-center justify-center rounded-full border-2 text-[8px] font-bold select-none",
                 isSelected ? "w-4 h-4" : "w-3 h-3",
                 isGhost
-                  ? "lm-room-hue-dot--ghost"
+                  ? "lm-room-hue-dot--ghost border-dashed"
                   : isSelected
                     ? "bg-white border-white text-zinc-900"
                     : "bg-white/80 border-zinc-400 text-zinc-900",

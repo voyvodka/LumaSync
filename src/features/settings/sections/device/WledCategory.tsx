@@ -9,7 +9,7 @@ export function WledCategory({ isActive }: WledCategoryProps) {
   const { activeWledIp, savedSink, restoreOutcome, markConnected } = useActiveWledSink();
 
   return (
-    <div className={isActive ? "lm-device-cat-body" : "lm-device-cat-body hidden"} hidden={!isActive}>
+    <div className="lm-device-cat-body" hidden={!isActive}>
       <WledDevicePicker
         activeWledIp={activeWledIp}
         savedSink={savedSink}

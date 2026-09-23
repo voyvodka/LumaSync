@@ -23,6 +23,20 @@ woff2 is bundled and served over the local asset protocol, well inside the block
 paints once already in the right face. `optional` was rejected — it permanently drops a window to
 the fallback face on a cold-launch miss, which is worse than the bounded wait `block` accepts.
 
+**Stylesheet layers.** `src/styles.css` is an ordered import list over `src/styles/`: tokens and
+the element rules go into Tailwind's `base` layer, every `lm-*` feature file into `components`.
+Layer order is theme < base < components < utilities and it is decided before specificity, so a
+utility on an element beats any `lm-*` rule that sets the same property — `.lm-x .lm-y:hover`
+included. That is the point: a utility is the local override, with no `.lm-x.hidden`-style
+counter-rule needed. The cost is the reverse case. A container rule that sizes its children
+(`.lm-hue-repair svg { width: 13px }`) cannot beat a size utility on the child, so shared icons that
+sit in such containers declare their default size as `width`/`height` attributes, which any
+stylesheet rule overrides. Within a layer, source order still decides equal-specificity ties,
+which is why the import list is kept in cascade order. `stylesheetSanity.test.ts` fails on a
+feature file imported without a layer. `GlobalErrorBoundary.css` stays unlayered: it is loaded by its
+component rather than through this list, and unlayered it cannot lose to a components-layer rule
+on the `lm-settings-group` card it sits on, whatever order the bundler emits.
+
 **The compact/full mode transition is sequential, never a cross-fade.** `useUIMode.ts`: fade the
 current content out, resize the window to the target mode, then mount the incoming layout and fade
 it in. Pinning the incoming slot at its target size while the window is still animating toward that

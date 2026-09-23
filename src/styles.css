@@ -10,21 +10,25 @@
    ───────────────────────────────────────────────────────────────────── */
 @import "./fonts.css";
 
-@import "./styles/tokens.css";
-@import "./styles/base.css";
-@import "./styles/shell.css";
-@import "./styles/compact.css";
-@import "./styles/notices.css";
-@import "./styles/compact-controls.css";
-@import "./styles/updater.css";
-@import "./styles/settings.css";
-@import "./styles/devices.css";
-@import "./styles/lights.css";
-@import "./styles/hue-channel-map.css";
-@import "./styles/room-map.css";
-@import "./styles/paired-strips.css";
-@import "./styles/room-map-menu.css";
-@import "./styles/strip-pairing.css";
-@import "./styles/preview.css";
-@import "./styles/telemetry.css";
-@import "./styles/led-color-order.css";
+/* Layer order is theme < base < components < utilities, so a utility beats
+   every lm-* rule whatever the selector's specificity. Within a layer, later
+   wins: keep this list in cascade order. docs/architecture/ui-and-shell.md,
+   "Stylesheet layers". */
+@import "./styles/tokens.css" layer(base);
+@import "./styles/base.css" layer(base);
+@import "./styles/shell.css" layer(components);
+@import "./styles/compact.css" layer(components);
+@import "./styles/notices.css" layer(components);
+@import "./styles/compact-controls.css" layer(components);
+@import "./styles/updater.css" layer(components);
+@import "./styles/settings.css" layer(components);
+@import "./styles/devices.css" layer(components);
+@import "./styles/lights.css" layer(components);
+@import "./styles/hue-channel-map.css" layer(components);
+@import "./styles/room-map.css" layer(components);
+@import "./styles/paired-strips.css" layer(components);
+@import "./styles/room-map-menu.css" layer(components);
+@import "./styles/strip-pairing.css" layer(components);
+@import "./styles/preview.css" layer(components);
+@import "./styles/telemetry.css" layer(components);
+@import "./styles/led-color-order.css" layer(components);
