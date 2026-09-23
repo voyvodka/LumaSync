@@ -1,12 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "preview-overlay",
-  "description": "v1.6 digital-twin overlay. Click-through and passive: it listens for frame events and reads the shell store once at open. It calls no window API at all, so it is granted none — the ten core:window:allow-* it used to share with the popup were unused here, on the surface that already misbehaves on Windows.",
+  "description": "v1.6 digital-twin overlay. Click-through and passive: it listens for frame events, reads the shell store, and bridges its console into the log. No window API at all. `store:allow-set` stays because the shared shell-store read writes a migrated snapshot back. Policy: docs/architecture/ui-and-shell.md, \"Capabilities\".",
   "windows": ["led-twin-overlay-*"],
   "permissions": [
-    "core:default",
-    "core:event:default",
-    "store:default",
-    "log:default"
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "store:allow-load",
+    "store:allow-get",
+    "store:allow-set",
+    "log:allow-log"
   ]
 }
