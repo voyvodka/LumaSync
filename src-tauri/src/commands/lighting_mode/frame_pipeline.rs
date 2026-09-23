@@ -133,6 +133,18 @@ impl AmbilightFramePipeline {
         }
     }
 
+    /// The Hue stream the worker follows was replaced or went away. A
+    /// reconnect or restart may bring other channels, so the table is rebuilt;
+    /// `None` stops Hue sampling until a stream is back.
+    pub(super) fn set_hue_channels(&mut self, channels: Option<Vec<HueAreaChannel>>) {
+        if let Some(channels) = channels.as_deref() {
+            let (seen, geometry) = self.room_geometry.snapshot();
+            self.room_generation = seen;
+            self.hue_table = hue_sample_table(channels, geometry.as_ref());
+        }
+        self.hue_channels = channels;
+    }
+
     /// Per-LED colours of the strip, in physical order. The worker calls this
     /// while it still holds the frame source.
     pub(super) fn sample_strip(&self, frame: &CapturedFrame) -> Vec<[u8; 3]> {

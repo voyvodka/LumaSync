@@ -20,7 +20,9 @@ use super::{
     SYNTHETIC_SAMPLE_WINDOW,
 };
 use crate::commands::ambilight_capture::{AmbilightFrameSource, CapturedFrame, StaticFrameSource};
-use crate::commands::hue::state_store::{apply_hue_channels_with_context, HueActiveOutputContext};
+use crate::commands::hue::state_store::{
+    apply_hue_channels_with_context, HueActiveOutputContext, HueOutputLive,
+};
 use crate::commands::led_calibration::{
     build_led_sequence, sample_frame_for_sequence, LedCalibrationConfig,
 };
@@ -31,6 +33,57 @@ use crate::commands::runtime_quality::RuntimeFrameSlot;
 use crate::commands::runtime_telemetry::{RuntimeTelemetryWindow, SharedRuntimeTelemetry};
 use crate::commands::wled_sink::CorrectedWledSink;
 
+/// The worker's copy of the Hue runtime's live output. Its sender clone is the
+/// only one the worker holds, and it is replaced or dropped within a frame of
+/// the runtime publishing, so a reconnect reaches the new sender and a stop's
+/// sender can exit while the worker keeps driving USB or WLED. See
+/// docs/architecture/hue.md.
+pub(super) struct HueOutputFollower {
+    live: Arc<HueOutputLive>,
+    seen: u64,
+    pub(super) context: Option<HueActiveOutputContext>,
+}
+
+impl HueOutputFollower {
+    pub(super) fn new(live: Arc<HueOutputLive>) -> Self {
+        let (seen, context) = live.snapshot();
+        Self {
+            live,
+            seen,
+            context,
+        }
+    }
+
+    /// One relaxed load per frame when nothing moved. `true` when the context
+    /// was swapped.
+    pub(super) fn refresh(&mut self) -> bool {
+        if self.live.generation() == self.seen {
+            return false;
+        }
+        self.context = None;
+        let (seen, context) = self.live.snapshot();
+        self.seen = seen;
+        self.context = context;
+        true
+    }
+}
+
+fn log_hue_output(context: Option<&HueActiveOutputContext>) {
+    let Some(ctx) = context else {
+        info!("[ambilight-worker] hue output released — no live stream");
+        return;
+    };
+    for ch in &ctx.channels {
+        let norm_x = (ch.position_x.clamp(-1.0, 1.0) + 1.0) / 2.0;
+        let norm_y = (1.0 - ch.position_y.clamp(-1.0, 1.0)) / 2.0;
+        info!("[ambilight-worker] hue ch#{} bridge_pos=({:.3},{:.3}) z={:?} screen_norm=({:.1}%,{:.1}%) region={:?}",
+            ch.channel_id, ch.position_x, ch.position_y, ch.position_z,
+            norm_x * 100.0, norm_y * 100.0, ch.screen_region);
+    }
+}
+
+/// `hue_output` is the Hue runtime's slot, handed over only when the mode's
+/// targets name Hue.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn start_ambilight_worker(
     output_bridge: LedOutputBridge,
@@ -39,7 +92,7 @@ pub(super) fn start_ambilight_worker(
     live_settings: Arc<AmbilightLiveSettings>,
     frame_source: Box<dyn AmbilightFrameSource>,
     telemetry_snapshot: SharedRuntimeTelemetry,
-    hue_output: Option<HueActiveOutputContext>,
+    hue_output: Option<Arc<HueOutputLive>>,
     edge_signal_emitter: Option<EdgeSignalEmitter>,
     color_correction: ColorCorrectionConfig,
     firmware_profile: FirmwareProfile,
@@ -108,7 +161,11 @@ pub(super) fn start_ambilight_worker(
         led_calibration.is_some()
     );
 
-    let hue_only = usb_plan.is_none() && hue_output.is_some();
+    let mut hue_output = hue_output.map(HueOutputFollower::new);
+    let hue_only = usb_plan.is_none()
+        && hue_output
+            .as_ref()
+            .is_some_and(|follower| follower.context.is_some());
     let initial_smoothing_alpha = live_settings.read_smoothing_alpha();
     let (quality_config, serial_budget) = resolve_quality_config(
         &usb_plan,
@@ -207,25 +264,17 @@ pub(super) fn start_ambilight_worker(
 
     let handle = thread::spawn(move || {
         ACTIVE_AMBILIGHT_WORKERS.fetch_add(1, Ordering::SeqCst);
-        let has_hue = hue_output
-            .as_ref()
-            .map(|c| !c.channels.is_empty())
-            .unwrap_or(false);
+        let initial_hue = hue_output.as_ref().and_then(|f| f.context.as_ref());
+        let has_hue = initial_hue.map(|c| !c.channels.is_empty()).unwrap_or(false);
         info!(
             "[ambilight-worker] started — sink={:?} chip={:?} hue={} channels={}",
             usb_plan,
             chip_type,
             has_hue,
-            hue_output.as_ref().map(|c| c.channels.len()).unwrap_or(0)
+            initial_hue.map(|c| c.channels.len()).unwrap_or(0)
         );
-        if let Some(ctx) = hue_output.as_ref() {
-            for ch in &ctx.channels {
-                let norm_x = (ch.position_x.clamp(-1.0, 1.0) + 1.0) / 2.0;
-                let norm_y = (1.0 - ch.position_y.clamp(-1.0, 1.0)) / 2.0;
-                info!("[ambilight-worker] hue ch#{} bridge_pos=({:.3},{:.3}) z={:?} screen_norm=({:.1}%,{:.1}%) region={:?}",
-                    ch.channel_id, ch.position_x, ch.position_y, ch.position_z,
-                    norm_x * 100.0, norm_y * 100.0, ch.screen_region);
-            }
+        if initial_hue.is_some() {
+            log_hue_output(initial_hue);
         }
         let mut hue_send_count = 0u32;
         // Mirror of `hue_send_count` for the USB sink so live-debug sessions
@@ -243,7 +292,10 @@ pub(super) fn start_ambilight_worker(
             sample_window,
             scene_enabled,
             strip_topology: strip_topology_for(led_calibration.as_ref()),
-            hue_channels: hue_output.as_ref().map(|ctx| ctx.channels.clone()),
+            hue_channels: hue_output
+                .as_ref()
+                .and_then(|f| f.context.as_ref())
+                .map(|ctx| ctx.channels.clone()),
             room_geometry,
             black_border_detection: live_settings.read_black_border_detection(),
             color_correction,
@@ -260,6 +312,17 @@ pub(super) fn start_ambilight_worker(
         let mut edge_seq: u64 = 0;
         let mut last_hue_colors: Option<Vec<[u8; 3]>> = None;
         while !cancel_flag.load(Ordering::Relaxed) {
+            if let Some(follower) = hue_output.as_mut() {
+                if follower.refresh() {
+                    log_hue_output(follower.context.as_ref());
+                    if follower.context.is_none() {
+                        last_hue_colors = None;
+                    }
+                    pipeline.set_hue_channels(
+                        follower.context.as_ref().map(|ctx| ctx.channels.clone()),
+                    );
+                }
+            }
             let capture_started = Instant::now();
             let capture_result: Result<(Arc<CapturedFrame>, Vec<[u8; 3]>), String> =
                 match worker_source.lock() {
@@ -367,7 +430,8 @@ pub(super) fn start_ambilight_worker(
                 // smooth gradients.
                 let enrich_preview = preview.as_ref().is_some_and(|ctx| ctx.should_enrich());
 
-                if let (Some(context), Some(smoothed)) = (hue_output.as_ref(), step.hue_colors) {
+                let hue_context = hue_output.as_ref().and_then(|f| f.context.as_ref());
+                if let (Some(context), Some(smoothed)) = (hue_context, step.hue_colors) {
                     hue_send_count += 1;
                     if hue_send_count <= 3 || hue_send_count.is_multiple_of(200) {
                         info!(

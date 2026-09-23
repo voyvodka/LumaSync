@@ -23,6 +23,7 @@
 //! packet counters, cipher, error codes, and reconnect tallies without a
 //! getter API surface — same crate-wide access as before the split.
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -286,6 +287,18 @@ pub(crate) struct HueRuntimeOwner {
     /// Survives reconnects, restarts of the same area and a `Failed` runtime;
     /// only a stop (or a start onto another area) takes it. See `light_restore`.
     pub(crate) light_restore: Option<HueLightRestore>,
+    /// `active_stream`'s output context as the ambilight worker sees it.
+    pub(crate) output_live: Arc<HueOutputLive>,
+}
+
+impl HueRuntimeOwner {
+    /// Every production write of `active_stream` goes through here, so the
+    /// worker's slot never disagrees with the stream the runtime holds.
+    pub(crate) fn set_active_stream(&mut self, stream: Option<HueActiveStreamContext>) {
+        self.output_live
+            .publish(stream.as_ref().map(HueActiveStreamContext::output_context));
+        self.active_stream = stream;
+    }
 }
 
 #[derive(Clone)]
@@ -325,12 +338,78 @@ impl std::fmt::Debug for HueActiveStreamContext {
     }
 }
 
+impl HueActiveStreamContext {
+    fn output_context(&self) -> HueActiveOutputContext {
+        HueActiveOutputContext {
+            channels: self.channels.clone(),
+            color_sender: self.color_sender.clone(),
+        }
+    }
+}
+
 /// Lock-free snapshot of the channels + sender needed to push color, read by
 /// the ambilight worker without touching the runtime mutex.
 #[derive(Clone, Debug)]
 pub struct HueActiveOutputContext {
     pub channels: Vec<HueAreaChannel>,
     pub color_sender: HueColorSender,
+}
+
+/// The live stream's output context, shared with the running ambilight worker
+/// so that a reconnect, a restart or a stop reaches it without a mode change.
+/// Same shape as the lighting worker's `RoomGeometryLive`: the worker reads
+/// `generation` once per frame and takes the lock only when it moved, and the
+/// generation stored under the lock is the one it records as seen.
+///
+/// Mirrors `HueRuntimeOwner::active_stream` and is written with it in
+/// `set_active_stream`. Its copy of the sender is one of the handles the
+/// sender waits out before it exits — see docs/architecture/hue.md.
+#[derive(Debug)]
+pub struct HueOutputLive {
+    generation: AtomicU64,
+    slot: Mutex<(u64, Option<HueActiveOutputContext>)>,
+}
+
+impl HueOutputLive {
+    pub(crate) fn new() -> Arc<Self> {
+        Arc::new(Self {
+            generation: AtomicU64::new(0),
+            slot: Mutex::new((0, None)),
+        })
+    }
+
+    /// Production writes go through `HueRuntimeOwner::set_active_stream`.
+    pub(crate) fn publish(&self, context: Option<HueActiveOutputContext>) {
+        let replaced = {
+            let mut slot = self.slot.lock().unwrap_or_else(|err| err.into_inner());
+            let next = slot.0.wrapping_add(1);
+            slot.0 = next;
+            self.generation.store(next, Ordering::Relaxed);
+            std::mem::replace(&mut slot.1, context)
+        };
+        drop(replaced);
+    }
+
+    pub(crate) fn generation(&self) -> u64 {
+        self.generation.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn snapshot(&self) -> (u64, Option<HueActiveOutputContext>) {
+        let slot = self.slot.lock().unwrap_or_else(|err| err.into_inner());
+        (slot.0, slot.1.clone())
+    }
+
+    pub(crate) fn current(&self) -> Option<HueActiveOutputContext> {
+        self.snapshot().1
+    }
+
+    /// A slot no runtime writes to, already holding `context`.
+    #[cfg(test)]
+    pub(crate) fn holding(context: HueActiveOutputContext) -> Arc<Self> {
+        let live = Self::new();
+        live.publish(Some(context));
+        live
+    }
 }
 
 impl Default for HueRuntimeOwner {
@@ -363,6 +442,7 @@ impl Default for HueRuntimeOwner {
             packet_rate_sampled_at: None,
             packet_rate_last_count: 0,
             light_restore: None,
+            output_live: HueOutputLive::new(),
         }
     }
 }
@@ -375,6 +455,7 @@ pub struct HueRuntimeStateStore {
     /// start could snapshot lights the restore had not reached yet and later
     /// write that half-restored state back. See docs/architecture/hue.md.
     pub(crate) stop_in_flight: Arc<tokio::sync::Mutex<()>>,
+    output_live: Arc<HueOutputLive>,
 }
 
 impl Default for HueRuntimeStateStore {
@@ -385,10 +466,17 @@ impl Default for HueRuntimeStateStore {
 
 impl HueRuntimeStateStore {
     pub(crate) fn with_runtime(owner: HueRuntimeOwner) -> Self {
+        let output_live = Arc::clone(&owner.output_live);
         Self {
             runtime: Arc::new(Mutex::new(owner)),
             stop_in_flight: Arc::new(tokio::sync::Mutex::new(())),
+            output_live,
         }
+    }
+
+    /// The slot a running ambilight worker follows, without the runtime lock.
+    pub fn output_live(&self) -> Arc<HueOutputLive> {
+        Arc::clone(&self.output_live)
     }
 
     /// Clone the shared runtime handle for use outside the Tauri `State<>`
@@ -607,8 +695,6 @@ pub(crate) mod test_helpers {
     //! in one place and stay in lockstep with `HueRuntimeOwner` /
     //! `HueActiveStreamContext` field changes.
 
-    use std::sync::Arc;
-
     use super::super::frame::{HueAreaChannel, HueColorSender, HueColorUpdate, HueScreenRegion};
     use super::super::sender::{new_shutdown_signal, DeactivateToken};
     use super::{HueActiveStreamContext, HueRuntimeGateEvidence};
@@ -640,7 +726,6 @@ pub(crate) mod test_helpers {
     /// Helper: build a dummy `HueActiveStreamContext` for tests that need one
     /// without spawning a real background thread.
     pub(crate) fn dummy_active_stream_context() -> HueActiveStreamContext {
-        let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
         HueActiveStreamContext {
             bridge_ip: "192.168.1.2".to_string(),
             username: "username".to_string(),
@@ -653,10 +738,7 @@ pub(crate) mod test_helpers {
                 position_y: 0.0,
                 position_z: None,
             }],
-            color_sender: HueColorSender {
-                tx: Arc::new(tx),
-                channel_count: 1,
-            },
+            color_sender: HueColorSender::with_mailbox(1).0,
             uses_dtls: false,
             shutdown_signal: new_shutdown_signal(),
             deactivate_token: DeactivateToken::new(),
@@ -669,18 +751,14 @@ pub(crate) mod test_helpers {
         HueActiveStreamContext,
         std::sync::mpsc::Receiver<HueColorUpdate>,
     ) {
-        let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(4);
+        let (color_sender, rx) = HueColorSender::recording(1);
         let mut ctx = dummy_active_stream_context();
-        ctx.color_sender = HueColorSender {
-            tx: Arc::new(tx),
-            channel_count: 1,
-        };
+        ctx.color_sender = color_sender;
         (ctx, rx)
     }
 
     /// A persistent sender carrying one channel, tagged with `area_id`.
     pub(crate) fn dummy_persistent_sender(area_id: &str) -> super::HuePersistentSender {
-        let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
         super::HuePersistentSender {
             area_id: area_id.to_string(),
             channels: vec![HueAreaChannel {
@@ -691,10 +769,7 @@ pub(crate) mod test_helpers {
                 position_y: 0.0,
                 position_z: None,
             }],
-            sender: HueColorSender {
-                tx: Arc::new(tx),
-                channel_count: 1,
-            },
+            sender: HueColorSender::with_mailbox(1).0,
         }
     }
 }

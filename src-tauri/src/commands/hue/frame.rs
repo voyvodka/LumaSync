@@ -6,7 +6,9 @@
 //! pre-refactor implementation byte-for-byte.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::mpsc::{RecvError, RecvTimeoutError, TryRecvError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
@@ -106,21 +108,191 @@ pub(crate) struct HueColorUpdate {
     pub(crate) brightness: f32,
 }
 
+/// Newest-wins handoff from the frame producers to one sender thread. The
+/// bounded queue it replaced dropped the *newest* frame when full, so with
+/// capture running faster than the 50 ms send floor the sender streamed a
+/// frame that was already stale; a put here replaces whatever the sender has
+/// not taken yet.
+#[derive(Debug)]
+pub(crate) struct HueFrameMailbox {
+    state: Mutex<HueFrameMailboxState>,
+    ready: Condvar,
+}
+
+#[derive(Debug)]
+struct HueFrameMailboxState {
+    latest: Option<HueColorUpdate>,
+    closed: bool,
+}
+
+impl HueFrameMailbox {
+    fn lock(&self) -> MutexGuard<'_, HueFrameMailboxState> {
+        self.state.lock().unwrap_or_else(|err| err.into_inner())
+    }
+
+    fn put(&self, update: HueColorUpdate) {
+        let replaced = self.lock().latest.replace(update);
+        self.ready.notify_one();
+        drop(replaced);
+    }
+
+    fn close(&self) {
+        self.lock().closed = true;
+        self.ready.notify_all();
+    }
+}
+
+/// Producer end, shared by every `HueColorSender` clone through its `Arc`.
+/// Dropping the last one closes the mailbox, and that is what ends the sender
+/// thread: see "The sender exits only when every handle is gone" in
+/// docs/architecture/hue.md.
+#[derive(Debug)]
+pub(crate) enum HueFrameTx {
+    Mailbox(Arc<HueFrameMailbox>),
+    /// Every frame, in order, for tests that compare whole sequences.
+    #[cfg(test)]
+    Recording(std::sync::mpsc::Sender<HueColorUpdate>),
+}
+
+impl HueFrameTx {
+    fn put(&self, update: HueColorUpdate) {
+        match self {
+            Self::Mailbox(mailbox) => mailbox.put(update),
+            #[cfg(test)]
+            Self::Recording(tx) => {
+                let _ = tx.send(update);
+            }
+        }
+    }
+}
+
+impl Drop for HueFrameTx {
+    fn drop(&mut self) {
+        match self {
+            Self::Mailbox(mailbox) => mailbox.close(),
+            #[cfg(test)]
+            Self::Recording(_) => {}
+        }
+    }
+}
+
+/// Consumer end, owned by the sender thread. Shaped like the `mpsc` receiver
+/// it replaced: a frame put before the last handle dropped is still handed
+/// out before `Disconnected`.
+#[derive(Debug)]
+pub(crate) struct HueFrameRx {
+    mailbox: Arc<HueFrameMailbox>,
+}
+
+impl HueFrameRx {
+    pub(crate) fn recv_timeout(
+        &self,
+        timeout: Duration,
+    ) -> Result<HueColorUpdate, RecvTimeoutError> {
+        let deadline = Instant::now() + timeout;
+        let mut state = self.mailbox.lock();
+        loop {
+            if let Some(update) = state.latest.take() {
+                return Ok(update);
+            }
+            if state.closed {
+                return Err(RecvTimeoutError::Disconnected);
+            }
+            let now = Instant::now();
+            if now >= deadline {
+                return Err(RecvTimeoutError::Timeout);
+            }
+            state = self
+                .mailbox
+                .ready
+                .wait_timeout(state, deadline - now)
+                .unwrap_or_else(|err| err.into_inner())
+                .0;
+        }
+    }
+
+    pub(crate) fn recv(&self) -> Result<HueColorUpdate, RecvError> {
+        let mut state = self.mailbox.lock();
+        loop {
+            if let Some(update) = state.latest.take() {
+                return Ok(update);
+            }
+            if state.closed {
+                return Err(RecvError);
+            }
+            state = self
+                .mailbox
+                .ready
+                .wait(state)
+                .unwrap_or_else(|err| err.into_inner());
+        }
+    }
+
+    pub(crate) fn try_recv(&self) -> Result<HueColorUpdate, TryRecvError> {
+        let mut state = self.mailbox.lock();
+        match state.latest.take() {
+            Some(update) => Ok(update),
+            None if state.closed => Err(TryRecvError::Disconnected),
+            None => Err(TryRecvError::Empty),
+        }
+    }
+
+    /// Every producer handle is gone. Leaves a pending frame where it is.
+    pub(crate) fn is_closed(&self) -> bool {
+        self.mailbox.lock().closed
+    }
+}
+
 /// Lightweight, cloneable handle to the background Hue color sender thread.
 /// Cloning only increments an Arc refcount -- cheap. When every clone drops,
-/// the sender channel closes and the background thread exits on its own.
+/// the mailbox closes and the background thread exits on its own.
 #[derive(Clone, Debug)]
 pub struct HueColorSender {
-    pub(crate) tx: Arc<std::sync::mpsc::SyncSender<HueColorUpdate>>,
+    pub(crate) tx: Arc<HueFrameTx>,
     /// Number of channels; used by `try_send` to broadcast a solid colour.
     pub(crate) channel_count: usize,
 }
 
 impl HueColorSender {
-    /// Broadcast the same colour to every channel. Used by the solid-colour path.
+    /// A sender on a fresh mailbox, and the sender thread's end of it.
+    pub(crate) fn with_mailbox(channel_count: usize) -> (Self, HueFrameRx) {
+        let mailbox = Arc::new(HueFrameMailbox {
+            state: Mutex::new(HueFrameMailboxState {
+                latest: None,
+                closed: false,
+            }),
+            ready: Condvar::new(),
+        });
+        (
+            Self {
+                tx: Arc::new(HueFrameTx::Mailbox(Arc::clone(&mailbox))),
+                channel_count,
+            },
+            HueFrameRx { mailbox },
+        )
+    }
+
+    /// A sender that keeps every frame, in order, for tests that compare whole
+    /// sequences rather than what a sender thread would pick up.
+    #[cfg(test)]
+    pub(crate) fn recording(
+        channel_count: usize,
+    ) -> (Self, std::sync::mpsc::Receiver<HueColorUpdate>) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        (
+            Self {
+                tx: Arc::new(HueFrameTx::Recording(tx)),
+                channel_count,
+            },
+            rx,
+        )
+    }
+
+    /// Broadcast the same colour to every channel. Used by the solid-colour
+    /// path. Never blocks; a frame the sender has not taken yet is replaced.
     pub fn try_send(&self, r: u8, g: u8, b: u8, brightness: f32) {
         let channel_colors = vec![(r, g, b); self.channel_count.max(1)];
-        let _ = self.tx.try_send(HueColorUpdate {
+        self.tx.put(HueColorUpdate {
             channel_colors,
             brightness,
         });
@@ -132,7 +304,7 @@ impl HueColorSender {
         if colors.is_empty() {
             return;
         }
-        let _ = self.tx.try_send(HueColorUpdate {
+        self.tx.put(HueColorUpdate {
             channel_colors: colors,
             brightness,
         });
@@ -501,6 +673,44 @@ pub(crate) fn channels_to_info(channels: &[HueAreaChannel]) -> Vec<HueAreaChanne
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Item 16: the bounded queue dropped the newest frame when full. A sender
+    /// thread that has not taken a frame yet must find the latest one.
+    #[test]
+    fn a_frame_not_yet_taken_is_replaced_by_the_newer_one() {
+        let (sender, rx) = HueColorSender::with_mailbox(1);
+        for r in 1..=3 {
+            sender.try_send(r, 0, 0, 1.0);
+        }
+        assert_eq!(
+            rx.try_recv().expect("a frame").channel_colors,
+            vec![(3, 0, 0)]
+        );
+        assert!(matches!(rx.try_recv(), Err(TryRecvError::Empty)));
+    }
+
+    #[test]
+    fn the_mailbox_closes_only_once_every_sender_handle_is_gone() {
+        let (sender, rx) = HueColorSender::with_mailbox(1);
+        let clone = sender.clone();
+        sender.try_send(9, 0, 0, 1.0);
+        drop(sender);
+        assert!(!rx.is_closed());
+
+        drop(clone);
+        assert!(rx.is_closed());
+        assert_eq!(
+            rx.recv_timeout(Duration::ZERO)
+                .expect("a frame put before the close is still handed out")
+                .channel_colors,
+            vec![(9, 0, 0)]
+        );
+        assert!(matches!(
+            rx.recv_timeout(Duration::from_millis(10)),
+            Err(RecvTimeoutError::Disconnected)
+        ));
+        assert!(rx.recv().is_err());
+    }
 
     #[test]
     fn channels_to_info_keeps_the_bridge_id_apart_from_the_ordinal() {

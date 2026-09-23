@@ -147,7 +147,7 @@ pub(crate) fn start_with_evidence(
 
     if evidence.auth_invalid_evidence {
         owner.state = HueRuntimeState::Failed;
-        owner.active_stream = None;
+        owner.set_active_stream(None);
         owner.last_status = status_with(
             HueRuntimeState::Failed,
             "AUTH_INVALID_CREDENTIALS",
@@ -193,7 +193,7 @@ pub(crate) fn start_with_evidence(
         }
 
         owner.state = HueRuntimeState::Idle;
-        owner.active_stream = None;
+        owner.set_active_stream(None);
         owner.last_status = status_with(
             HueRuntimeState::Idle,
             "CONFIG_NOT_READY_GATE_BLOCKED",
@@ -309,7 +309,7 @@ pub(crate) fn stop_with_timeout(
     // by the caller AFTER releasing the lock to avoid blocking the mutex on HTTP I/O.
 
     owner.reconnect_attempt = 0;
-    owner.active_stream = None;
+    owner.set_active_stream(None);
     // A4: Drop persistent_sender so the background thread's mpsc channel closes
     // immediately (Arc refcount falls to zero). Without this, wait_for_shutdown
     // always times out because the thread's recv loop never sees Disconnected.

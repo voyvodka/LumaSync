@@ -66,6 +66,12 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Hue: after the stream to the bridge dropped and reconnected on its own, the lamps stayed frozen
+  on their last colour while the app still said Hue was running. Ambilight now carries on to the
+  reconnected stream. Stopping Hue while Ambilight was still sending to it no longer waits out a
+  timeout and reports that the stop was only partial.
+- Hue: the lamps lagged the screen by up to a twentieth of a second more than they had to. The
+  colour sent to the bridge is now the newest one ready when it goes out.
 - Hue: after the router gave the bridge a new address, streaming quietly fell back to the slower
   HTTP mode because the saved pairing was tied to the old address. The pairing now belongs to
   the bridge itself; an existing pairing is moved over the next time the bridge accepts it.
