@@ -97,6 +97,8 @@ const lights: Catalogue<typeof enLights> = {
         sk6812rgbw: "SK6812 · RGBW · piksel başına 4 bayt · W=min(R,G,B)",
       },
       sk6812AdalightWarning: "SK6812 RGBW, Adalight profili ile desteklenmez. WS2812B kodlamasına dönülüyor.",
+      firmwareExpectsRgb: "Bağlı denetleyici LED başına 3 bayt bekliyor. WS2812B'yi seçin ya da RGBW sürümünü yükleyin.",
+      firmwareExpectsRgbw: "Bağlı denetleyici LED başına 4 bayt bekliyor. SK6812 RGBW'yi seçin ya da RGB sürümünü yükleyin.",
     },
     colorOrder: {
       label: "Renk sırası",

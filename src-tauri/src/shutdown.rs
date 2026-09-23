@@ -111,8 +111,9 @@ pub(crate) fn run_cleanup(steps: CleanupSteps, budget: &CleanupBudget) {
     //
     // stop_lighting locks runtime_state.runtime, then apply_mode_change ->
     // stop_previous -> worker.stop() -> handle.join(). Worst case is ~1.6s when
-    // the lock is held behind an in-flight set_lighting_mode warmup and the
-    // worker join waits on a wedged serial write (OUTPUT_TIMEOUT_MS=500). With
+    // the lock is held behind an in-flight set_lighting_mode warmup or a Solid
+    // write waiting on a wedged port (OUTPUT_TIMEOUT_MS=500); the worker itself
+    // no longer waits on the port, its writer thread does. With
     // no inner deadline this could starve step 2 (Hue deactivate) under the 4s
     // watchdog, leaving the bridge in entertainment mode ("phantom active
     // streamer"). So detach the call and abandon after 1.5s if it hasn't

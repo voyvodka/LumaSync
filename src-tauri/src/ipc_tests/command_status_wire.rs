@@ -53,6 +53,7 @@ fn serial_responses_are_unchanged() {
             connected: false,
             status: CommandStatus::new("CONNECT_FAILED", "Failed", details()),
             updated_at_unix_ms: 1_700_000_000_000,
+            firmware: None,
         },
         r#"{"portName":"COM3","connected":false,"status":{"code":"CONNECT_FAILED","message":"Failed","details":"port \"COM3\" — busy\n"},"updatedAtUnixMs":1700000000000}"#,
     );

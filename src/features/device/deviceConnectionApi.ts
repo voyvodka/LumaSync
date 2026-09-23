@@ -5,6 +5,7 @@ import {
   type FirmwareProfile,
   type LedChipType,
   type SerialCommandStatus,
+  type SerialFirmwareInfo,
   type SerialHealthStepCode,
 } from "@/shared/contracts/device";
 
@@ -43,6 +44,10 @@ export interface SerialConnectionStatus {
   connected: boolean;
   status: SerialCommandStatus;
   updatedAtUnixMs: number;
+  /** The PONG answered to the connect-time PING. Absent when the device did
+   *  not answer or answered garbage — unknown firmware, and connect still
+   *  succeeds. */
+  firmware?: SerialFirmwareInfo;
 }
 
 export interface HealthStepResult {
@@ -98,6 +103,8 @@ export interface HealthCheckResult {
    * authority for disabling the mismatched option. (v1.5 H4)
    */
   advertisedFirmwareProfile?: FirmwareProfile;
+  /** The whole accepted PONG, pixel layout included. Same absence rule. */
+  firmware?: SerialFirmwareInfo;
 }
 
 /** Enumerate serial ports, filtering out the macOS `tty.*` siblings of each `cu.*` USB device. */

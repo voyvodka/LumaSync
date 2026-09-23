@@ -7,16 +7,19 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 use serialport::{available_ports, SerialPortInfo, SerialPortType};
 
-use super::device_handshake::{perform_handshake, HandshakeError, TimedSerialPort};
+use super::device_handshake::{
+    perform_handshake, probe_firmware, FirmwareProbe, HandshakeError, HandshakePongResponse,
+    SerialRoundTrip, TimedSerialPort, MAX_FW_MAJOR,
+};
 use super::led_output::{
     ColorCorrectionConfig, FirmwareProfile, LedChipType, LedOutputBridge, SerialSink,
+    WirePixelLayout,
 };
 use super::led_sink::LedSink;
 use super::status::CommandStatus;
 use super::wled_sink::WledSinkConfig;
 
 const DEFAULT_CONNECT_BAUD_RATE: u32 = 115_200;
-const DEFAULT_CONNECT_TIMEOUT_MS: u64 = 1_500;
 
 /// Per-call read timeout on the serial port during the handshake round-trip.
 /// Short enough that `TimedSerialPort` can poll tightly; the outer
@@ -30,6 +33,11 @@ const HANDSHAKE_PORT_READ_TIMEOUT_MS: u64 = 50;
 /// consumes most of this window; the remaining budget covers the actual
 /// round-trip which is typically < 5 ms on a healthy link.
 const HANDSHAKE_ROUND_TRIP_TIMEOUT: Duration = Duration::from_millis(2_000);
+
+/// The connect-time PING's window. Short because every silent device — every
+/// Adalight sketch — pays it on every connect; a LumaSync firmware answers in
+/// about 12 ms once the settle is over.
+const CONNECT_HANDSHAKE_TIMEOUT: Duration = Duration::from_millis(250);
 
 /// Post-open settle delay before sending any bytes to the device — a PING
 /// sent before the bootloader window closes is a guaranteed
@@ -83,6 +91,28 @@ pub struct SerialPortListResponse {
     pub ports: Vec<SerialPortDescriptor>,
 }
 
+/// A PONG the host accepted, as the frontend sees it. Advisory: nothing on the
+/// host switches profile or chip type from it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SerialFirmwareInfo {
+    pub version: String,
+    pub version_raw: u16,
+    pub profile: FirmwareProfile,
+    pub pixel_layout: WirePixelLayout,
+}
+
+impl SerialFirmwareInfo {
+    fn from_pong(pong: &HandshakePongResponse) -> Self {
+        Self {
+            version: pong.version_string(),
+            version_raw: pong.firmware_version,
+            profile: pong.firmware_profile,
+            pixel_layout: pong.pixel_layout,
+        }
+    }
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SerialConnectionStatus {
@@ -91,6 +121,10 @@ pub struct SerialConnectionStatus {
     pub connected: bool,
     pub status: CommandStatus,
     pub updated_at_unix_ms: u128,
+    /// The PONG answered to the connect-time PING. `None` for a device that
+    /// stayed silent or answered garbage, which still connects.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub firmware: Option<SerialFirmwareInfo>,
 }
 
 impl SerialConnectionStatus {
@@ -132,6 +166,24 @@ pub struct HealthCheckResult {
     /// incompatible option (Bug H4 — v1.5).
     /// Populated only on a successful handshake.
     pub advertised_firmware_profile: Option<FirmwareProfile>,
+    /// The whole accepted PONG, pixel layout included.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub firmware: Option<SerialFirmwareInfo>,
+}
+
+impl HealthCheckResult {
+    /// A check that stopped at the last of `steps`, with no handshake data.
+    fn failed(steps: Vec<HealthStepResult>) -> Self {
+        Self {
+            pass: false,
+            steps,
+            checked_at_unix_ms: now_unix_ms(),
+            round_trip_ms: None,
+            firmware_version: None,
+            advertised_firmware_profile: None,
+            firmware: None,
+        }
+    }
 }
 
 /// Tauri-managed state holding the most recently recorded serial connection status.
@@ -147,6 +199,7 @@ impl Default for SerialConnectionState {
                 connected: false,
                 status: command_status("NOT_CONNECTED", "No serial connection attempt yet.", None),
                 updated_at_unix_ms: now_unix_ms(),
+                firmware: None,
             }),
         }
     }
@@ -424,14 +477,19 @@ fn admit_port(
     })
 }
 
-/// Enumeration and the connect-time open, behind a seam so the IPC tests can
-/// drive `admit_port` with a synthetic inventory and see whether `open()` was
-/// ever reached. Production uses `SystemSerialPortIo`.
+/// A settled port handle, handed back for the PING/PONG round-trip.
+pub type SettledPort = Box<dyn SerialRoundTrip + Send>;
+
+/// Enumeration and the open behind connect and the health check, behind a
+/// seam so the IPC tests can drive `admit_port` with a synthetic inventory,
+/// see whether `open()` was ever reached, and script what the device answers.
+/// Production uses `SystemSerialPortIo`.
 pub trait SerialPortIo: Send + Sync {
     fn available_ports(&self) -> serialport::Result<Vec<SerialPortInfo>>;
-    /// Opens `port_name` at the connect baud, waits out the bootloader, and
-    /// drops the handle. Blocks for ~2 s; call it on the blocking pool.
-    fn open_and_settle(&self, port_name: &str) -> serialport::Result<()>;
+    /// Opens `port_name` at the connect baud and waits out the bootloader.
+    /// The handshake runs on the returned handle: reopening would assert DTR
+    /// and reset the board again. Blocks for ~2 s; call it on the blocking pool.
+    fn open_and_settle(&self, port_name: &str) -> serialport::Result<SettledPort>;
 }
 
 struct SystemSerialPortIo;
@@ -441,16 +499,16 @@ impl SerialPortIo for SystemSerialPortIo {
         available_ports()
     }
 
-    fn open_and_settle(&self, port_name: &str) -> serialport::Result<()> {
-        // The handle is dropped on return — the output path reopens the port
-        // and settles again. See docs/architecture/device-output.md.
-        let _port_handle = serialport::new(port_name, DEFAULT_CONNECT_BAUD_RATE)
-            .timeout(Duration::from_millis(DEFAULT_CONNECT_TIMEOUT_MS))
+    fn open_and_settle(&self, port_name: &str) -> serialport::Result<SettledPort> {
+        // A short per-read timeout: `TimedSerialPort` polls against its own
+        // round-trip deadline, which a long one would overrun.
+        let port = serialport::new(port_name, DEFAULT_CONNECT_BAUD_RATE)
+            .timeout(Duration::from_millis(HANDSHAKE_PORT_READ_TIMEOUT_MS))
             .open()?;
         // Opening asserts DTR, which auto-resets Arduino-class boards; the
         // bootloader owns the bus for ~1.5–2 s. See `BOOTLOADER_SETTLE_DELAY_MS`.
         std::thread::sleep(Duration::from_millis(BOOTLOADER_SETTLE_DELAY_MS));
-        Ok(())
+        Ok(Box::new(TimedSerialPort::new(port)))
     }
 }
 
@@ -476,6 +534,10 @@ impl SerialPortAccess {
 
     fn available_ports(&self) -> serialport::Result<Vec<SerialPortInfo>> {
         self.io.available_ports()
+    }
+
+    fn io(&self) -> Arc<dyn SerialPortIo> {
+        Arc::clone(&self.io)
     }
 }
 
@@ -519,7 +581,7 @@ pub async fn connect_serial_port(
     port_access: tauri::State<'_, SerialPortAccess>,
 ) -> Result<SerialConnectionStatus, String> {
     let port_name_for_blocking = port_name.clone();
-    let io = Arc::clone(&port_access.io);
+    let io = port_access.io();
     let outcome = tokio::task::spawn_blocking(move || {
         connect_serial_port_blocking(io.as_ref(), port_name_for_blocking, chip_type)
     })
@@ -608,27 +670,23 @@ fn connect_serial_port_blocking(
     }
 
     match io.open_and_settle(&port_name) {
-        Ok(()) => {
-            // Connection verified — build a SerialSink for this port and
-            // hand it back to the async caller, which owns the registry.
-            // The sink uses default profile (LumaSyncV1) and default
-            // corrections; the user can change these via the Firmware Profile
-            // setting (v1.4 G11) and color correction settings (v1.4 G4),
-            // which will replace the sink.
-            //
-            // The ambilight worker (v1.4, W0-B1) creates its own SerialSink
-            // independently. This registry entry is the hook for the v1.5
-            // path where the worker will take() the pre-built sink from here.
-            // Resolve chip type from caller (ShellState.selectedChipType).
-            // Absent or None => WS2812B GRB (backward-compat default).
-            let resolved_chip_type = chip_type.unwrap_or_default();
+        Ok(mut handle) => {
+            let probe = probe_firmware(handle.as_mut(), CONNECT_HANDSHAKE_TIMEOUT);
+            // Released before connect returns; the output path opens its own
+            // handle and settles again. See docs/architecture/device-output.md.
+            drop(handle);
+            let (firmware, details) = connect_firmware_outcome(&port_name, &probe);
+
+            // The worker and Solid build their own sinks from live settings;
+            // this is the registry entry `ActiveSinkRegistry` documents.
+            // Absent chip type => WS2812B GRB (backward-compat default).
             let new_sink = SerialSink::with_chip_type(
                 LedOutputBridge::new(),
                 Some(port_name.clone()),
                 1.0,
                 FirmwareProfile::default(),
                 ColorCorrectionConfig::default(),
-                resolved_chip_type,
+                chip_type.unwrap_or_default(),
             );
 
             ConnectOutcome::Connected {
@@ -638,9 +696,10 @@ fn connect_serial_port_blocking(
                     status: command_status(
                         "CONNECT_OK",
                         "Serial port connection attempt succeeded.",
-                        None,
+                        details,
                     ),
                     updated_at_unix_ms: now_unix_ms(),
+                    firmware,
                 },
                 sink: Box::new(new_sink),
             }
@@ -655,6 +714,56 @@ fn connect_serial_port_blocking(
             clear_sink: true,
         },
     }
+}
+
+/// What connect reports about its probe. A silent or garbled device connects
+/// exactly as it did before the probe existed: no firmware, no details.
+fn connect_firmware_outcome(
+    port_name: &str,
+    probe: &FirmwareProbe,
+) -> (Option<SerialFirmwareInfo>, Option<String>) {
+    match probe {
+        FirmwareProbe::Answered(pong) => {
+            log::info!(
+                "[connect_serial_port] firmware answered on {port_name}: v{} profile={:?} layout={:?}",
+                pong.version_string(),
+                pong.firmware_profile,
+                pong.pixel_layout
+            );
+            let details = version_window_warning(pong);
+            if let Some(warning) = &details {
+                log::warn!("[connect_serial_port] {warning}");
+            }
+            (Some(SerialFirmwareInfo::from_pong(pong)), details)
+        }
+        FirmwareProbe::Silent => {
+            log::info!(
+                "[connect_serial_port] no PONG from {port_name} within {}ms — unknown firmware \
+                 (Adalight or a pre-handshake sketch); connected without firmware info",
+                CONNECT_HANDSHAKE_TIMEOUT.as_millis()
+            );
+            (None, None)
+        }
+        FirmwareProbe::Garbled(error) => {
+            log::info!(
+                "[connect_serial_port] unreadable reply from {port_name} ({error:?}) — unknown \
+                 firmware; connected without firmware info"
+            );
+            (None, None)
+        }
+    }
+}
+
+/// `SERIAL_HEALTH_VERSION_MISMATCH` text for a PONG outside the host's window,
+/// or `None` inside it. Streaming carries on either way.
+fn version_window_warning(pong: &HandshakePongResponse) -> Option<String> {
+    (!pong.is_version_supported()).then(|| {
+        format!(
+            "SERIAL_HEALTH_VERSION_MISMATCH: firmware {} is outside the 1.0–{MAX_FW_MAJOR}.x \
+             versions this app knows; streaming LumaSync v1 frames anyway.",
+            pong.version_string()
+        )
+    })
 }
 
 /// Return the most recently recorded serial connection status.
@@ -678,7 +787,7 @@ pub fn get_serial_connection_status(
 /// 2. `PORT_SUPPORTED`  — VID:PID matches the allowlist.
 /// 3. `CONNECT_AND_VERIFY` — port can be opened at 115 200 baud.
 /// 4. `HANDSHAKE`       — LumaSync v1 PING → PONG round-trip succeeded.
-///    No companion firmware ships yet, so non-LumaSync firmware fails this step.
+///    Firmware that does not speak it (Adalight, older sketches) fails this step.
 ///
 /// The command never throws; it always returns a `HealthCheckResult`.
 ///
@@ -688,25 +797,25 @@ pub fn get_serial_connection_status(
 /// Tauri IPC dispatcher stays free to service UI events, telemetry, and
 /// other commands while the health check runs (~4 s end-to-end).
 #[tauri::command]
-pub async fn run_serial_health_check(port_name: String) -> HealthCheckResult {
-    let result = tokio::task::spawn_blocking(move || run_serial_health_check_blocking(port_name))
-        .await
-        .unwrap_or_else(|join_error| HealthCheckResult {
+pub async fn run_serial_health_check<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    port_name: String,
+) -> HealthCheckResult {
+    tokio::task::spawn_blocking(move || {
+        use tauri::Manager;
+        let io = app.state::<SerialPortAccess>().io();
+        run_serial_health_check_blocking(io.as_ref(), port_name)
+    })
+    .await
+    .unwrap_or_else(|join_error| {
+        HealthCheckResult::failed(vec![HealthStepResult {
+            step: "HEALTH_CHECK_WORKER".to_string(),
             pass: false,
-            steps: vec![HealthStepResult {
-                step: "HEALTH_CHECK_WORKER".to_string(),
-                pass: false,
-                code: "SERIAL_HEALTH_WORKER_PANIC".to_string(),
-                message: "Health check worker terminated unexpectedly.".to_string(),
-                details: Some(join_error.to_string()),
-            }],
-            checked_at_unix_ms: now_unix_ms(),
-            round_trip_ms: None,
-            firmware_version: None,
-            advertised_firmware_profile: None,
-        });
-
-    result
+            code: "SERIAL_HEALTH_WORKER_PANIC".to_string(),
+            message: "Health check worker terminated unexpectedly.".to_string(),
+            details: Some(join_error.to_string()),
+        }])
+    })
 }
 
 /// Synchronous core of `run_serial_health_check`, run on the blocking pool.
@@ -714,13 +823,13 @@ pub async fn run_serial_health_check(port_name: String) -> HealthCheckResult {
 /// Performs the full 4-step probe (port enum → support gate → open + settle
 /// → PING/PONG). Total wall time on a healthy Arduino-class link is
 /// ~`BOOTLOADER_SETTLE_DELAY_MS` (~2 s) plus the round-trip read window.
-fn run_serial_health_check_blocking(port_name: String) -> HealthCheckResult {
+fn run_serial_health_check_blocking(io: &dyn SerialPortIo, port_name: String) -> HealthCheckResult {
     let mut steps = Vec::new();
 
     // -----------------------------------------------------------------------
     // Step 1: PORT_VISIBLE
     // -----------------------------------------------------------------------
-    let ports = match available_ports() {
+    let ports = match io.available_ports() {
         Ok(ports) => ports,
         Err(error) => {
             steps.push(HealthStepResult {
@@ -730,15 +839,7 @@ fn run_serial_health_check_blocking(port_name: String) -> HealthCheckResult {
                 message: "Could not read serial ports for health check.".to_string(),
                 details: Some(error.to_string()),
             });
-
-            return HealthCheckResult {
-                pass: false,
-                steps,
-                checked_at_unix_ms: now_unix_ms(),
-                round_trip_ms: None,
-                firmware_version: None,
-                advertised_firmware_profile: None,
-            };
+            return HealthCheckResult::failed(steps);
         }
     };
 
@@ -753,15 +854,7 @@ fn run_serial_health_check_blocking(port_name: String) -> HealthCheckResult {
             message: "Selected serial port is not visible.".to_string(),
             details: Some("Refresh ports and verify cable connection.".to_string()),
         });
-
-        return HealthCheckResult {
-            pass: false,
-            steps,
-            checked_at_unix_ms: now_unix_ms(),
-            round_trip_ms: None,
-            firmware_version: None,
-            advertised_firmware_profile: None,
-        };
+        return HealthCheckResult::failed(steps);
     }
     steps.push(HealthStepResult {
         step: "PORT_VISIBLE".to_string(),
@@ -810,24 +903,14 @@ fn run_serial_health_check_blocking(port_name: String) -> HealthCheckResult {
             message: message.to_string(),
             details,
         });
-
-        return HealthCheckResult {
-            pass: false,
-            steps,
-            checked_at_unix_ms: now_unix_ms(),
-            round_trip_ms: None,
-            firmware_version: None,
-            advertised_firmware_profile: None,
-        };
+        return HealthCheckResult::failed(steps);
     }
 
     // -----------------------------------------------------------------------
-    // Step 3: CONNECT_AND_VERIFY — open the port
+    // Step 3: CONNECT_AND_VERIFY — open the port and wait out the bootloader
+    // (inside `open_and_settle`), on the blocking pool, never the IPC thread.
     // -----------------------------------------------------------------------
-    let port_handle = match serialport::new(&port_name, DEFAULT_CONNECT_BAUD_RATE)
-        .timeout(Duration::from_millis(HANDSHAKE_PORT_READ_TIMEOUT_MS))
-        .open()
-    {
+    let mut port_handle = match io.open_and_settle(&port_name) {
         Ok(handle) => {
             steps.push(HealthStepResult {
                 step: "CONNECT_AND_VERIFY".to_string(),
@@ -836,15 +919,6 @@ fn run_serial_health_check_blocking(port_name: String) -> HealthCheckResult {
                 message: "Port opened successfully at 115200 baud.".to_string(),
                 details: None,
             });
-            // Wait for the AVR bootloader to finish before sending PING.
-            // Opening the port asserts DTR which triggers auto-reset on
-            // Arduino-class boards; the bootloader occupies the bus for
-            // ~1.5–2 s. See `BOOTLOADER_SETTLE_DELAY_MS` for full rationale.
-            //
-            // SAFE: this runs on the tokio blocking pool (see the wrapping
-            // `run_serial_health_check` async command), never on the IPC
-            // dispatcher thread.
-            std::thread::sleep(Duration::from_millis(BOOTLOADER_SETTLE_DELAY_MS));
             handle
         }
         Err(error) => {
@@ -855,76 +929,87 @@ fn run_serial_health_check_blocking(port_name: String) -> HealthCheckResult {
                 message: "Could not open serial port for health check.".to_string(),
                 details: Some(error.to_string()),
             });
-
-            return HealthCheckResult {
-                pass: false,
-                steps,
-                checked_at_unix_ms: now_unix_ms(),
-                round_trip_ms: None,
-                firmware_version: None,
-                advertised_firmware_profile: None,
-            };
+            return HealthCheckResult::failed(steps);
         }
     };
 
     // -----------------------------------------------------------------------
     // Step 4: HANDSHAKE — LumaSync v1 PING → PONG round-trip
     //
-    // No companion firmware ships yet, so non-LumaSync firmware fails here.
-    // The step is non-fatal (pass=false) so the UI can explain it without
-    // blocking the user from using the port with the Adalight profile.
+    // Non-LumaSync firmware fails here. The step is non-fatal (pass=false) so
+    // the UI can explain it without blocking the user from using the port with
+    // the Adalight profile.
     // -----------------------------------------------------------------------
-    let mut timed_port = TimedSerialPort::new(port_handle);
-    let handshake_result = perform_handshake(&mut timed_port, HANDSHAKE_ROUND_TRIP_TIMEOUT);
+    let verdict = handshake_verdict(perform_handshake(
+        port_handle.as_mut(),
+        HANDSHAKE_ROUND_TRIP_TIMEOUT,
+    ));
+    steps.push(verdict.step);
+    let pass = steps.iter().all(|s| s.pass);
+    let pong = verdict.pong;
+    HealthCheckResult {
+        pass,
+        steps,
+        checked_at_unix_ms: now_unix_ms(),
+        round_trip_ms: verdict.round_trip_ms,
+        firmware_version: pong.as_ref().map(HandshakePongResponse::version_string),
+        advertised_firmware_profile: pong.as_ref().map(|pong| pong.firmware_profile),
+        firmware: pong.as_ref().map(SerialFirmwareInfo::from_pong),
+    }
+}
 
-    match handshake_result {
+/// The HANDSHAKE step and the handshake data it lets the result carry.
+struct HandshakeVerdict {
+    step: HealthStepResult,
+    round_trip_ms: Option<u32>,
+    pong: Option<HandshakePongResponse>,
+}
+
+/// A PONG outside the version window still passes, with
+/// `SERIAL_HEALTH_VERSION_MISMATCH` as a warning: streaming continues, so
+/// failing the check would claim a fault the strip does not show.
+fn handshake_verdict(
+    result: Result<(HandshakePongResponse, u32), HandshakeError>,
+) -> HandshakeVerdict {
+    match result {
         Ok((response, elapsed_ms)) => {
-            let version_str = response.version_string();
-            steps.push(HealthStepResult {
-                step: "HANDSHAKE".to_string(),
-                pass: true,
-                code: "SERIAL_HEALTH_OK".to_string(),
-                message: format!(
-                    "Handshake succeeded: firmware {} ({:?}), round-trip {}ms.",
-                    version_str, response.firmware_profile, elapsed_ms
+            let (code, message) = match version_window_warning(&response) {
+                Some(warning) => ("SERIAL_HEALTH_VERSION_MISMATCH", warning),
+                None => (
+                    "SERIAL_HEALTH_OK",
+                    format!(
+                        "Handshake succeeded: firmware {} ({:?}, {:?} pixels), round-trip {}ms.",
+                        response.version_string(),
+                        response.firmware_profile,
+                        response.pixel_layout,
+                        elapsed_ms
+                    ),
                 ),
-                details: Some(format!("round_trip_ms={elapsed_ms}")),
-            });
-
-            let pass = steps.iter().all(|s| s.pass);
-            HealthCheckResult {
-                pass,
-                steps,
-                checked_at_unix_ms: now_unix_ms(),
+            };
+            HandshakeVerdict {
+                step: HealthStepResult {
+                    step: "HANDSHAKE".to_string(),
+                    pass: true,
+                    code: code.to_string(),
+                    message,
+                    details: Some(format!("round_trip_ms={elapsed_ms}")),
+                },
                 round_trip_ms: Some(elapsed_ms),
-                firmware_version: Some(version_str),
-                advertised_firmware_profile: Some(response.firmware_profile),
+                pong: Some(response),
             }
         }
         Err(err) => {
-            let code = err.as_status_code();
             let (message, hint) = handshake_error_ui_message(&err);
-
-            steps.push(HealthStepResult {
-                step: "HANDSHAKE".to_string(),
-                pass: false,
-                code: code.to_string(),
-                message,
-                details: Some(hint),
-            });
-
-            // HANDSHAKE timeout/error is non-fatal at the result level — the port
-            // is open and supported. The UI can still allow the user to proceed
-            // with the Adalight profile. `pass` reflects all steps, so it will
-            // be false here.
-            let pass = steps.iter().all(|s| s.pass);
-            HealthCheckResult {
-                pass,
-                steps,
-                checked_at_unix_ms: now_unix_ms(),
+            HandshakeVerdict {
+                step: HealthStepResult {
+                    step: "HANDSHAKE".to_string(),
+                    pass: false,
+                    code: err.as_status_code().to_string(),
+                    message,
+                    details: Some(hint),
+                },
                 round_trip_ms: None,
-                firmware_version: None,
-                advertised_firmware_profile: None,
+                pong: None,
             }
         }
     }
@@ -994,6 +1079,10 @@ fn handshake_error_ui_message(err: &HandshakeError) -> (String, String) {
             "Handshake failed: firmware advertised an unknown profile byte.".to_string(),
             "Upgrade firmware or select a compatible profile in Device settings.".to_string(),
         ),
+        HandshakeError::UnknownPixelLayout => (
+            "Handshake failed: firmware advertised an unknown pixel layout.".to_string(),
+            "Upgrade firmware; this app knows RGB and RGBW pixels under LumaSync v1.".to_string(),
+        ),
     }
 }
 
@@ -1025,6 +1114,7 @@ fn failed_connect_status(
         connected: false,
         status: command_status(code, message, Some(details)),
         updated_at_unix_ms: now_unix_ms(),
+        firmware: None,
     }
 }
 
@@ -1047,15 +1137,16 @@ fn now_unix_ms() -> u128 {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::VecDeque;
     use std::time::Duration;
 
-    use super::super::device_handshake::{
-        perform_handshake, SerialRoundTrip, FRAME_MAGIC, HANDSHAKE_OPCODE_PONG,
-    };
-    use super::super::led_output::FirmwareProfile;
+    use serialport::{SerialPortInfo, SerialPortType, UsbPortInfo};
+
+    use super::super::device_handshake::{SerialRoundTrip, FRAME_MAGIC, HANDSHAKE_OPCODE_PONG};
+    use super::super::led_output::{FirmwareProfile, WirePixelLayout};
     use super::{
-        is_macos_tty_path, is_supported_usb, HealthCheckResult, SUPPORTED_USB_DEVICE_ALLOWLIST,
+        is_macos_tty_path, is_supported_usb, run_serial_health_check_blocking, HealthCheckResult,
+        HealthStepResult, SerialFirmwareInfo, SerialPortIo, SettledPort,
+        SUPPORTED_USB_DEVICE_ALLOWLIST,
     };
 
     // ---------------------------------------------------------------------------
@@ -1239,47 +1330,17 @@ mod tests {
     }
 
     // ---------------------------------------------------------------------------
-    // H4 — advertised_firmware_profile propagation from PONG into HealthCheckResult
-    //
-    // These tests verify that the Step 4 HANDSHAKE success arm correctly
-    // propagates  into
-    // , and that every error arm
-    // (timeout and protocol error) leaves the field as .
-    //
-    //  is a local in-memory implementation of  that
-    // mirrors the one in . Duplicated here to keep the
-    // two test modules independently runnable without exposing test helpers as
-    // .
+    // Health check over the `SerialPortIo` seam — the real blocking core,
+    // with the device's reply scripted.
     // ---------------------------------------------------------------------------
 
-    /// Minimal in-memory serial port for handshake unit tests.
-    struct MockPort {
-        read_queue: VecDeque<u8>,
-        written: Vec<u8>,
-        silent: bool,
+    /// A settled handle that answers every read with the scripted bytes once.
+    struct ScriptedPort {
+        reply: Vec<u8>,
     }
 
-    impl MockPort {
-        fn with_response(response: Vec<u8>) -> Self {
-            Self {
-                read_queue: VecDeque::from(response),
-                written: Vec::new(),
-                silent: false,
-            }
-        }
-
-        fn silent() -> Self {
-            Self {
-                read_queue: VecDeque::new(),
-                written: Vec::new(),
-                silent: true,
-            }
-        }
-    }
-
-    impl SerialRoundTrip for MockPort {
-        fn write_all(&mut self, bytes: &[u8]) -> std::io::Result<()> {
-            self.written.extend_from_slice(bytes);
+    impl SerialRoundTrip for ScriptedPort {
+        fn write_all(&mut self, _bytes: &[u8]) -> std::io::Result<()> {
             Ok(())
         }
 
@@ -1288,25 +1349,42 @@ mod tests {
             buf: &mut [u8],
             _timeout: Duration,
         ) -> std::io::Result<usize> {
-            if self.silent {
-                return Ok(0);
-            }
-            let mut count = 0usize;
-            for slot in buf.iter_mut() {
-                match self.read_queue.pop_front() {
-                    Some(b) => {
-                        *slot = b;
-                        count += 1;
-                    }
-                    None => break,
-                }
-            }
-            Ok(count)
+            let n = buf.len().min(self.reply.len());
+            buf[..n].copy_from_slice(&self.reply[..n]);
+            self.reply.drain(..n);
+            Ok(n)
+        }
+    }
+
+    struct OnePort {
+        reply: Vec<u8>,
+    }
+
+    const PORT: &str = "/dev/cu.usbserial-health";
+
+    impl SerialPortIo for OnePort {
+        fn available_ports(&self) -> serialport::Result<Vec<SerialPortInfo>> {
+            Ok(vec![SerialPortInfo {
+                port_name: PORT.to_string(),
+                port_type: SerialPortType::UsbPort(UsbPortInfo {
+                    vid: 0x1A86,
+                    pid: 0x7523,
+                    serial_number: None,
+                    manufacturer: None,
+                    product: None,
+                }),
+            }])
+        }
+
+        fn open_and_settle(&self, _port_name: &str) -> serialport::Result<SettledPort> {
+            Ok(Box::new(ScriptedPort {
+                reply: self.reply.clone(),
+            }))
         }
     }
 
     /// Build a correctly checksummed 7-byte PONG frame.
-    fn build_pong(fw_version: u16, profile_byte: u8) -> Vec<u8> {
+    fn build_pong(fw_version: u16, format_byte: u8) -> Vec<u8> {
         let ver = fw_version.to_le_bytes();
         let mut frame = vec![
             FRAME_MAGIC[0],
@@ -1314,131 +1392,114 @@ mod tests {
             HANDSHAKE_OPCODE_PONG,
             ver[0],
             ver[1],
-            profile_byte,
+            format_byte,
         ];
         let checksum = frame.iter().fold(0_u8, |acc, b| acc ^ b);
         frame.push(checksum);
         frame
     }
 
-    /// Helper: build the  that the Step 4 success arm would
-    /// produce, given the output of .
-    fn make_health_result_from_pong(profile_byte: u8) -> HealthCheckResult {
-        // 0x01 = LumaSyncV1, 0x02 = Adalight (wire constants from device_handshake)
-        let pong = build_pong(0x0105, profile_byte);
-        let mut port = MockPort::with_response(pong);
+    fn health_check_with_reply(reply: Vec<u8>) -> HealthCheckResult {
+        run_serial_health_check_blocking(&OnePort { reply }, PORT.to_string())
+    }
 
-        match perform_handshake(&mut port, Duration::from_millis(1_000)) {
-            Ok((response, elapsed_ms)) => HealthCheckResult {
-                pass: true,
-                steps: vec![],
-                checked_at_unix_ms: 0,
-                round_trip_ms: Some(elapsed_ms),
-                firmware_version: Some(response.version_string()),
-                advertised_firmware_profile: Some(response.firmware_profile),
-            },
-            Err(_) => HealthCheckResult {
-                pass: false,
-                steps: vec![],
-                checked_at_unix_ms: 0,
-                round_trip_ms: None,
-                firmware_version: None,
-                advertised_firmware_profile: None,
-            },
+    fn handshake_step(result: &HealthCheckResult) -> &HealthStepResult {
+        result
+            .steps
+            .iter()
+            .find(|step| step.step == "HANDSHAKE")
+            .expect("the check reached the HANDSHAKE step")
+    }
+
+    #[test]
+    fn health_check_carries_the_advertised_profile_and_layout() {
+        let result = health_check_with_reply(build_pong(0x0105, 0x11));
+
+        assert!(result.pass, "every step passes");
+        assert_eq!(handshake_step(&result).code, "SERIAL_HEALTH_OK");
+        assert_eq!(result.firmware_version.as_deref(), Some("1.5"));
+        assert_eq!(
+            result.advertised_firmware_profile,
+            Some(FirmwareProfile::LumaSyncV1)
+        );
+        assert_eq!(
+            result.firmware,
+            Some(SerialFirmwareInfo {
+                version: "1.5".to_string(),
+                version_raw: 0x0105,
+                profile: FirmwareProfile::LumaSyncV1,
+                pixel_layout: WirePixelLayout::Rgbw,
+            })
+        );
+    }
+
+    #[test]
+    fn health_check_reports_an_adalight_advertisement() {
+        let result = health_check_with_reply(build_pong(0x0105, 0x02));
+        assert_eq!(
+            result.advertised_firmware_profile,
+            Some(FirmwareProfile::Adalight)
+        );
+        assert!(result.pass);
+    }
+
+    #[test]
+    fn a_version_outside_the_window_passes_with_a_mismatch_warning() {
+        for version in [0x0200_u16, 0x0009] {
+            let result = health_check_with_reply(build_pong(version, 0x01));
+            let step = handshake_step(&result);
+
+            assert!(step.pass, "a warning, not a failure ({version:#06x})");
+            assert!(result.pass, "streaming continues, so the check passes");
+            assert_eq!(step.code, "SERIAL_HEALTH_VERSION_MISMATCH");
+            assert!(
+                result.firmware.is_some(),
+                "the PONG is still reported ({version:#06x})"
+            );
         }
     }
 
     #[test]
-    fn health_check_round_trips_advertised_lumasync_v1_profile_from_pong() {
-        // profile byte 0x01 = LumaSyncV1
-        let result = make_health_result_from_pong(0x01);
-        assert_eq!(
-            result.advertised_firmware_profile,
-            Some(FirmwareProfile::LumaSyncV1),
-            "PONG with profile byte 0x01 must propagate as LumaSyncV1"
-        );
-        assert!(result.pass, "success arm must set pass = true");
-        assert!(
-            result.firmware_version.is_some(),
-            "firmware_version must be populated on success"
-        );
+    fn a_silent_device_fails_the_handshake_with_no_firmware_data() {
+        let result = health_check_with_reply(Vec::new());
+        let step = handshake_step(&result);
+
+        assert!(!step.pass);
+        assert!(!result.pass);
+        assert_eq!(step.code, "SERIAL_HEALTH_HANDSHAKE_TIMEOUT");
+        assert_eq!(result.advertised_firmware_profile, None);
+        assert_eq!(result.round_trip_ms, None);
+        assert_eq!(result.firmware, None);
     }
 
     #[test]
-    fn health_check_round_trips_advertised_adalight_profile_from_pong() {
-        // profile byte 0x02 = Adalight
-        let result = make_health_result_from_pong(0x02);
-        assert_eq!(
-            result.advertised_firmware_profile,
-            Some(FirmwareProfile::Adalight),
-            "PONG with profile byte 0x02 must propagate as Adalight"
-        );
-        assert!(result.pass, "success arm must set pass = true");
+    fn a_garbled_reply_is_a_protocol_error_with_no_firmware_data() {
+        let result = health_check_with_reply(vec![0xDE, 0xAD, 0xBE, 0xEF, 0x11, 0x22, 0x33]);
+        let step = handshake_step(&result);
+
+        assert!(!step.pass);
+        assert_eq!(step.code, "SERIAL_HEALTH_PROTOCOL_ERROR");
+        assert_eq!(result.advertised_firmware_profile, None);
+        assert_eq!(result.firmware, None);
     }
 
     #[test]
-    fn health_check_returns_none_advertised_profile_on_handshake_timeout() {
-        // Silent port — simulates a device that never answers the PING
-        // (non-LumaSync firmware, or unpowered strip).
-        let mut port = MockPort::silent();
-        let err_result = match perform_handshake(&mut port, Duration::from_millis(100)) {
-            Ok((response, elapsed_ms)) => HealthCheckResult {
-                pass: true,
-                steps: vec![],
-                checked_at_unix_ms: 0,
-                round_trip_ms: Some(elapsed_ms),
-                firmware_version: Some(response.version_string()),
-                advertised_firmware_profile: Some(response.firmware_profile),
-            },
-            Err(_) => HealthCheckResult {
-                pass: false,
-                steps: vec![],
-                checked_at_unix_ms: 0,
-                round_trip_ms: None,
-                firmware_version: None,
-                advertised_firmware_profile: None,
-            },
-        };
-
-        assert_eq!(
-            err_result.advertised_firmware_profile, None,
-            "handshake timeout must leave advertised_firmware_profile as None"
-        );
-        assert_eq!(err_result.round_trip_ms, None);
-        assert!(!err_result.pass);
+    fn an_unknown_layout_nibble_is_a_protocol_error() {
+        let result = health_check_with_reply(build_pong(0x0105, 0x21));
+        assert_eq!(handshake_step(&result).code, "SERIAL_HEALTH_PROTOCOL_ERROR");
+        assert_eq!(result.firmware, None);
     }
 
     #[test]
-    fn health_check_returns_none_advertised_profile_on_protocol_error() {
-        // Garbled bytes — simulates a device that returns garbage on the bus
-        // (e.g. non-LumaSync firmware echoing its own protocol).
-        let garbled = vec![0xDE, 0xAD, 0xBE, 0xEF, 0x11, 0x22, 0x33];
-        let mut port = MockPort::with_response(garbled);
+    fn firmware_is_left_off_the_wire_when_absent() {
+        let result = health_check_with_reply(Vec::new());
+        let json = serde_json::to_value(&result).expect("serialises");
+        assert!(json.get("firmware").is_none(), "got: {json}");
 
-        let err_result = match perform_handshake(&mut port, Duration::from_millis(100)) {
-            Ok((response, elapsed_ms)) => HealthCheckResult {
-                pass: true,
-                steps: vec![],
-                checked_at_unix_ms: 0,
-                round_trip_ms: Some(elapsed_ms),
-                firmware_version: Some(response.version_string()),
-                advertised_firmware_profile: Some(response.firmware_profile),
-            },
-            Err(_) => HealthCheckResult {
-                pass: false,
-                steps: vec![],
-                checked_at_unix_ms: 0,
-                round_trip_ms: None,
-                firmware_version: None,
-                advertised_firmware_profile: None,
-            },
-        };
-
-        assert_eq!(
-            err_result.advertised_firmware_profile, None,
-            "protocol error must leave advertised_firmware_profile as None"
-        );
-        assert_eq!(err_result.round_trip_ms, None);
-        assert!(!err_result.pass);
+        let answered = health_check_with_reply(build_pong(0x0104, 0x11));
+        let json = serde_json::to_value(&answered).expect("serialises");
+        assert_eq!(json["firmware"]["pixelLayout"], "rgbw");
+        assert_eq!(json["firmware"]["versionRaw"], 0x0104);
+        assert_eq!(json["firmware"]["profile"], "lumasync-v1");
     }
 }
