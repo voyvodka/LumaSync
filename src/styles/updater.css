@@ -1,0 +1,489 @@
+/* ── Updater modal ────────────────────────────────────────────────── */
+.lm-modal-scrim {
+  position: fixed;
+  inset: var(--lm-titlebar-h) 0 0 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.lm-updater-backdrop {
+  position: fixed;
+  inset: var(--lm-titlebar-h) 0 0 0;
+  z-index: 50;
+  /* Flex, not grid: a grid row sizes to the card and lets it run off screen,
+     while a flex box gives `max-height: 100%` below a height to resolve. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* The scrim still covers the StatusBar (nothing behind a modal is live);
+     the card only keeps clear of it. */
+  padding: 24px 24px 48px;
+  background: rgba(4, 5, 8, 0.62);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.lm-updater-modal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 380px;
+  max-height: 100%;
+  background: linear-gradient(180deg, #0f1115, #0b0d11);
+  border: 1px solid #242a33;
+  border-radius: 14px;
+  padding: 22px 22px 18px;
+  color: var(--lm-ink, #eaeef4);
+  font-family: var(--lm-sans, "IBM Plex Sans", ui-sans-serif, system-ui);
+  box-shadow:
+    0 30px 70px -20px #000,
+    0 0 0 1px rgba(255, 176, 32, 0.08),
+    0 0 60px -20px rgba(255, 176, 32, 0.15);
+}
+.lm-updater-modal::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 176, 32, 0.3), transparent 35%);
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: -1;
+  filter: blur(0.5px);
+}
+.lm-updater-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.lm-updater-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, rgba(255, 176, 32, 0.18), rgba(255, 122, 26, 0.06));
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  display: grid;
+  place-items: center;
+  color: var(--lm-amber, #ffb020);
+  box-shadow: inset 0 0 14px rgba(255, 176, 32, 0.1);
+  flex-shrink: 0;
+}
+.lm-updater-badge svg {
+  width: 19px;
+  height: 19px;
+}
+.lm-updater-badge.is-error {
+  background: linear-gradient(135deg, rgba(239, 91, 91, 0.18), rgba(239, 91, 91, 0.05));
+  border-color: rgba(239, 91, 91, 0.4);
+  color: #ef5b5b;
+  box-shadow: inset 0 0 14px rgba(239, 91, 91, 0.12);
+}
+.lm-updater-titlewrap {
+  flex: 1;
+  min-width: 0;
+}
+.lm-updater-eyebrow {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  color: var(--lm-amber, #ffb020);
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.lm-updater-eyebrow.is-error {
+  color: #ef5b5b;
+}
+.lm-updater-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+.lm-updater-body {
+  margin-top: 14px;
+  font-size: 12.5px;
+  color: #8a94a3;
+  line-height: 1.55;
+}
+.lm-updater-body b {
+  color: #eaeef4;
+  font-weight: 500;
+}
+
+/* Version diff row */
+.lm-updater-verdiff {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 4px;
+  padding: 10px 12px;
+  background: #0a0c10;
+  border: 1px solid #1a1e25;
+  border-radius: 8px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+}
+.lm-updater-verdiff-from {
+  color: #4d5564;
+  text-decoration: line-through;
+  text-decoration-color: #4d5564;
+}
+.lm-updater-verdiff-arrow {
+  color: var(--lm-amber, #ffb020);
+  font-size: 12px;
+}
+.lm-updater-verdiff-to {
+  color: var(--lm-amber, #ffb020);
+  font-weight: 500;
+}
+.lm-updater-verdiff-size {
+  margin-left: auto;
+  color: #4d5564;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Release notes block */
+.lm-updater-notes {
+  margin-top: 12px;
+  padding: 11px 13px;
+  background: #0a0c10;
+  border: 1px solid #1a1e25;
+  border-radius: 8px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  color: #8a94a3;
+  line-height: 1.65;
+  max-height: 140px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 176, 32, 0.25) transparent;
+}
+.lm-updater-notes::-webkit-scrollbar {
+  width: 4px;
+}
+.lm-updater-notes::-webkit-scrollbar-track {
+  background: transparent;
+}
+.lm-updater-notes::-webkit-scrollbar-thumb {
+  background: rgba(255, 176, 32, 0.2);
+  border-radius: 2px;
+}
+.lm-updater-notes::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 176, 32, 0.35);
+}
+.lm-updater-notes-line {
+  display: block;
+}
+.lm-updater-notes-line + .lm-updater-notes-line {
+  margin-top: 2px;
+}
+.lm-updater-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-right: 6px;
+  font-weight: 500;
+}
+.lm-updater-tag.is-add {
+  background: rgba(74, 222, 128, 0.14);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.3);
+}
+.lm-updater-tag.is-fix {
+  background: rgba(255, 176, 32, 0.14);
+  color: var(--lm-amber, #ffb020);
+  border: 1px solid rgba(255, 176, 32, 0.3);
+}
+
+/* Progress */
+.lm-updater-prog {
+  margin: 16px 0 4px;
+}
+.lm-updater-prog-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  color: #4d5564;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 7px;
+}
+.lm-updater-prog-row b {
+  color: #eaeef4;
+  font-weight: 500;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+.lm-updater-prog-row em {
+  font-style: normal;
+  color: var(--lm-amber, #ffb020);
+}
+.lm-updater-prog-track {
+  height: 6px;
+  background: #0a0c10;
+  border: 1px solid #1a1e25;
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+.lm-updater-prog-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #ff7a1a, var(--lm-amber, #ffb020));
+  border-radius: 4px;
+  box-shadow: 0 0 10px rgba(255, 176, 32, 0.4);
+  position: relative;
+  transition: width 120ms linear;
+}
+.lm-updater-prog-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%);
+  animation: lm-updater-shine 1.8s linear infinite;
+}
+@keyframes lm-updater-shine {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+.lm-updater-prog-stats {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 7px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9px;
+  color: #4d5564;
+  letter-spacing: 0.06em;
+}
+.lm-updater-prog-stats b {
+  color: #8a94a3;
+  font-weight: 500;
+}
+
+/* Installing spinner */
+.lm-updater-spinner {
+  width: 52px;
+  height: 52px;
+  margin: 10px auto 6px;
+  position: relative;
+}
+.lm-updater-spinner::before,
+.lm-updater-spinner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+}
+.lm-updater-spinner::before {
+  border-top-color: var(--lm-amber, #ffb020);
+  border-right-color: var(--lm-amber, #ffb020);
+  animation: lm-updater-spin 1.1s cubic-bezier(0.5, 0.1, 0.5, 0.9) infinite;
+  box-shadow: 0 0 14px rgba(255, 176, 32, 0.35);
+}
+.lm-updater-spinner::after {
+  border: 1px solid rgba(255, 176, 32, 0.18);
+  inset: -4px;
+}
+@keyframes lm-updater-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.lm-updater-install-txt {
+  text-align: center;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10.5px;
+  color: #8a94a3;
+  letter-spacing: 0.04em;
+  margin-top: 4px;
+  line-height: 1.55;
+}
+.lm-updater-install-txt b {
+  color: var(--lm-amber, #ffb020);
+  display: block;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 9.5px;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+/* Error box */
+.lm-updater-errbox {
+  margin-top: 14px;
+  padding: 11px 13px;
+  background: rgba(239, 91, 91, 0.06);
+  border: 1px solid rgba(239, 91, 91, 0.25);
+  border-radius: 8px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  color: #f1a0a0;
+  line-height: 1.65;
+}
+.lm-updater-errbox b {
+  color: #ef5b5b;
+  display: block;
+  margin-bottom: 3px;
+  font-weight: 500;
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* Actions */
+.lm-updater-actions {
+  flex-shrink: 0;
+  margin-top: 18px;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  align-items: center;
+}
+/* Everything but the actions scrolls, so Install / Later stay reachable
+   however tall the notes run in a 320×480 window. */
+.lm-updater-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 176, 32, 0.25) transparent;
+}
+@media (max-width: 480px) {
+  .lm-updater-backdrop {
+    padding: 12px 12px 34px;
+  }
+  .lm-updater-modal {
+    padding: 16px 16px 14px;
+  }
+  /* One scroller, not a scroller inside a scroller. */
+  .lm-updater-notes {
+    max-height: none;
+    overflow-y: visible;
+  }
+  .lm-updater-actions {
+    margin-top: 12px;
+  }
+}
+.lm-updater-actions-spacer {
+  flex: 1;
+}
+.lm-updater-btn-ghost,
+.lm-updater-btn-primary,
+.lm-updater-btn-retry {
+  min-height: 32px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  text-transform: uppercase;
+  border-radius: 7px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 120ms ease, color 120ms ease;
+}
+.lm-updater-btn-ghost {
+  padding: 8px 14px;
+  letter-spacing: 0.14em;
+  color: #8a94a3;
+  background: transparent;
+  border: 1px solid transparent;
+}
+.lm-updater-btn-ghost:hover {
+  color: #eaeef4;
+  background: rgba(255, 255, 255, 0.03);
+}
+.lm-updater-btn-primary {
+  padding: 8px 16px;
+  letter-spacing: 0.16em;
+  color: #05070a;
+  background: linear-gradient(180deg, #ffc658, #ffb030);
+  border: 1px solid rgba(255, 176, 32, 0.55);
+  font-weight: 600;
+  box-shadow:
+    0 0 0 1px rgba(255, 176, 32, 0.25),
+    0 4px 14px -4px rgba(255, 176, 32, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.lm-updater-btn-primary:hover {
+  background: linear-gradient(180deg, #ffd478, #ffbb40);
+}
+.lm-updater-btn-retry {
+  padding: 8px 14px;
+  letter-spacing: 0.14em;
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.08);
+  border: 1px solid rgba(255, 176, 32, 0.3);
+}
+.lm-updater-btn-retry:hover {
+  background: rgba(255, 176, 32, 0.14);
+}
+.lm-updater-btn-ghost:focus-visible,
+.lm-updater-btn-primary:focus-visible,
+.lm-updater-btn-retry:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Updater (existing) */
+  .lm-updater-prog-fill::after {
+    animation: none;
+  }
+  .lm-updater-spinner::before {
+    animation-duration: 2.2s;
+  }
+  .lm-hue-wait-sp {
+    animation-duration: 2.2s;
+  }
+
+  /* Decorative infinite loops — kill outright (UI Gap 7).
+     Functional spinners (lm-spin) keep ticking but at a calmer cadence. */
+  .lm-dcard-pill.is-streaming::before,
+  .lm-hue-traffic-fill::after {
+    animation: none !important;
+  }
+
+  /* TitleBar / StatusBar / chips — collapse hover/focus transitions
+     so keyboard navigation does not animate. */
+  .lm-titlebar-toggle,
+  .lm-titlebar-ctrl,
+  .lm-titlebar-tab,
+  .lm-statusbar-value {
+    transition: none !important;
+  }
+
+  /* Compact mode — fade-in, scene-tile hover, mbtn ripple-style press */
+  .lm-compact,
+  .lm-compact-mbtn,
+  .lm-compact-scene-tile,
+  .lm-compact-hero,
+  .lm-compact-hero-text,
+  .lm-compact-hero-eye {
+    transition: none !important;
+  }
+
+  /* Updater spinner stays animated (functional) but slower. */
+  .lm-updater-spinner::before {
+    animation-duration: 2.2s !important;
+  }
+}

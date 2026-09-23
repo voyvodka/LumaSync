@@ -8,7 +8,7 @@
  * intentionally inert rather than broken.
  *
  * The "running" indicator pulse is guarded by `prefers-reduced-motion` through
- * the `.lm-test-pulse` rule in `styles.css`.
+ * the `.lm-test-pulse` rule in `src/styles/preview.css`.
  */
 
 import { useTranslation } from "react-i18next";

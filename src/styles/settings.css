@@ -1,0 +1,272 @@
+/* ── Settings page ────────────────────────────────────────────────── */
+.lm-settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 28px 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  height: 100%;
+}
+.lm-settings-page > * {
+  flex-shrink: 0;
+}
+.lm-settings-head h1 {
+  margin: 0 0 2px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: #fff;
+}
+.lm-settings-head-sub {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10.5px;
+  color: #8a94a3;
+  letter-spacing: 0.02em;
+}
+.lm-settings-group {
+  background: #0e1014;
+  border: 1px solid #1a1e25;
+  border-radius: 10px;
+  position: relative;
+}
+.lm-settings-group-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 16px;
+  border-bottom: 1px solid #1a1e25;
+  background: rgba(255, 255, 255, 0.01);
+  gap: 12px;
+}
+.lm-settings-group-h .t {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: #eaeef4;
+  text-transform: uppercase;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lm-settings-group-h .t::before {
+  content: "";
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--lm-amber, #ffb020);
+  box-shadow: 0 0 6px var(--lm-amber, #ffb020);
+}
+.lm-settings-group-h .sub {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  color: #4d5564;
+  letter-spacing: 0.02em;
+}
+.lm-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 16px;
+  border-bottom: 1px solid #1a1e25;
+  gap: 16px;
+}
+.lm-settings-row:last-child {
+  border-bottom: 0;
+}
+.lm-settings-row-l {
+  flex: 1;
+  min-width: 0;
+}
+.lm-settings-row-name {
+  font-size: 12.5px;
+  color: #eaeef4;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+.lm-settings-row-desc {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  color: #4d5564;
+  margin-top: 2px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+.lm-settings-row-r {
+  flex-shrink: 0;
+}
+
+/* Toggle */
+.lm-settings-tg {
+  width: 30px;
+  height: 16px;
+  border-radius: 10px;
+  background: #1a1d23;
+  border: 1px solid #252b34;
+  position: relative;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+  flex-shrink: 0;
+}
+.lm-settings-tg::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #3a3f48;
+  transition: transform 160ms cubic-bezier(0.33, 1, 0.68, 1), background 120ms ease, box-shadow 120ms ease;
+}
+.lm-settings-tg.is-on {
+  background: rgba(255, 176, 32, 0.15);
+  border-color: rgba(255, 176, 32, 0.4);
+}
+.lm-settings-tg.is-on::after {
+  transform: translateX(13px);
+  background: var(--lm-amber, #ffb020);
+  box-shadow: 0 0 6px rgba(255, 176, 32, 0.6);
+}
+.lm-settings-tg:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-settings-tg:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Segmented (2-up for language) */
+.lm-settings-select {
+  min-height: 32px;
+  min-width: 132px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid var(--lm-line-2);
+  background: #0a0c0f;
+  color: var(--lm-ink);
+  font-family: var(--lm-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  outline: none;
+}
+.lm-settings-select:hover {
+  border-color: rgba(255, 176, 32, 0.32);
+}
+.lm-settings-select:focus-visible {
+  border-color: rgba(255, 176, 32, 0.55);
+  box-shadow: var(--lm-focus-ring-soft);
+}
+
+.lm-settings-seg {
+  display: flex;
+  background: #0a0c0f;
+  border: 1px solid #252b34;
+  border-radius: 7px;
+  padding: 2px;
+  gap: 2px;
+}
+.lm-settings-seg button {
+  all: unset;
+  cursor: pointer;
+  padding: 5px 14px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8a94a3;
+  border-radius: 5px;
+  font-weight: 500;
+  transition: color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+}
+.lm-settings-seg button:hover {
+  color: #eaeef4;
+}
+.lm-settings-seg button.is-on {
+  background: rgba(255, 176, 32, 0.12);
+  color: var(--lm-amber, #ffb020);
+  box-shadow: inset 0 0 0 1px rgba(255, 176, 32, 0.25);
+}
+.lm-settings-seg button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 176, 32, 0.5), 0 0 0 2px rgba(255, 176, 32, 0.2);
+}
+
+/* Updates row button (amber ghost primary) */
+.lm-settings-btn {
+  padding: 6px 12px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.08);
+  border: 1px solid rgba(255, 176, 32, 0.3);
+  border-radius: 7px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 120ms ease, color 120ms ease;
+}
+.lm-settings-btn:hover:not(:disabled) {
+  background: rgba(255, 176, 32, 0.14);
+}
+.lm-settings-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.lm-settings-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+
+/* About block */
+.lm-settings-about {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 16px;
+  padding: 16px;
+  align-items: center;
+}
+.lm-settings-about-logo {
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #ffb020, #ff6a3d);
+  box-shadow: 0 0 24px rgba(255, 176, 32, 0.3);
+  display: grid;
+  place-items: center;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 22px;
+  font-weight: 700;
+  color: #05070a;
+}
+.lm-settings-about-tx-n {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+.lm-settings-about-tx-s {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  color: #4d5564;
+  margin-top: 2px;
+  letter-spacing: 0.04em;
+}
+.lm-settings-about-tx-s b {
+  color: #8a94a3;
+  font-weight: 500;
+}
+.lm-settings-about-v {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--lm-amber, #ffb020);
+  padding: 5px 10px;
+  background: rgba(255, 176, 32, 0.1);
+  border: 1px solid rgba(255, 176, 32, 0.3);
+  border-radius: 20px;
+  letter-spacing: 0.1em;
+}

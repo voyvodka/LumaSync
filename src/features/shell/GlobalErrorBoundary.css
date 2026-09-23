@@ -3,7 +3,7 @@
  *
  * Kept in a sibling CSS module (not styles.css) so the boundary can be
  * loaded/tested in isolation without pulling in the full shell sheet.
- * Tokens come from `:root` in `src/styles.css` so colors stay in sync
+ * Tokens come from `:root` in `src/styles/tokens.css` so colors stay in sync
  * with the migrated amber surfaces.
  */
 

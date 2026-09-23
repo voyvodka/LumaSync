@@ -1,0 +1,323 @@
+/* Active mode card */
+.lm-compact-card {
+  background: var(--lm-panel);
+  border: 1px solid var(--lm-line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.lm-compact-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 8px;
+}
+.lm-compact-card-header .l {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-ink);
+}
+.lm-compact-card-header .l::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--lm-amber);
+  box-shadow: 0 0 6px var(--lm-amber);
+}
+
+/* Slider rows — native input with amber gradient track + custom thumb */
+.lm-compact-slider-row {
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--lm-line);
+}
+.lm-compact-slider-row + .lm-compact-slider-row {
+  border-top: 1px solid var(--lm-line);
+}
+.lm-compact-slider-row .srow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint);
+}
+.lm-compact-slider-row .srow b {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--lm-ink);
+  /* Same reserved-box rule as `.lm-psl .row b` — 4ch fits "100%" so the
+     live readout does not slide while the slider is dragged. */
+  min-width: 4ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.lm-compact-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+.lm-compact-slider:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.lm-compact-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border: 1px solid var(--lm-line);
+  border-radius: 3px;
+  background:
+    linear-gradient(
+      to right,
+      var(--lm-amber-2) 0%,
+      var(--lm-amber) var(--lm-fill, 0%),
+      #0a0c0f var(--lm-fill, 0%),
+      #0a0c0f 100%
+    );
+  box-shadow: 0 0 8px rgba(255, 176, 32, 0.25);
+}
+.lm-compact-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #fff;
+  border: 0;
+  margin-top: -5px;
+  box-shadow:
+    0 0 0 3px rgba(255, 176, 32, 0.25),
+    0 2px 5px rgba(0, 0, 0, 0.55);
+}
+.lm-compact-slider::-moz-range-track {
+  height: 4px;
+  border: 1px solid var(--lm-line);
+  border-radius: 3px;
+  background:
+    linear-gradient(
+      to right,
+      var(--lm-amber-2) 0%,
+      var(--lm-amber) var(--lm-fill, 0%),
+      #0a0c0f var(--lm-fill, 0%),
+      #0a0c0f 100%
+    );
+}
+.lm-compact-slider::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #fff;
+  border: 0;
+  box-shadow:
+    0 0 0 3px rgba(255, 176, 32, 0.25),
+    0 2px 5px rgba(0, 0, 0, 0.55);
+}
+
+/* Hero color tile (Solid mode) — picker target */
+.lm-compact-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  padding: 0 14px;
+  margin: 10px 12px 0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.lm-compact-hero.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.lm-compact-hero-text {
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+  line-height: 1;
+}
+.lm-compact-hero-hex {
+  font-family: var(--lm-mono);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+.lm-compact-hero-sub {
+  margin-top: 4px;
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.lm-compact-hero-eye {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+/* Adalight brightness-locked notice. Mono mini-text
+   slotted under the slider when the firmware profile owns brightness;
+   matches the amber tone SolidColorPanel uses in the full Lights view. */
+.lm-compact-brightness-note {
+  margin-top: 6px;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+  color: rgba(255, 176, 32, 0.78);
+}
+
+/* Compact ambilight smoothing preset.
+   The shared LightingSmoothingPresetControl ships with `.lm-psl.lm-psl-seg`
+   styles tuned for the full Lights view; in the compact card we wrap it so
+   the segmented chip strip slots flush under the brightness slider with a
+   matching divider and slimmer padding. */
+.lm-compact-smoothing {
+  border-top: 1px solid var(--lm-line);
+}
+.lm-compact-smoothing .lm-psl {
+  padding: 8px 12px 10px;
+  border-right: 0;
+}
+.lm-compact-smoothing .lm-psl .row {
+  margin-bottom: 6px;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--lm-ink-faint);
+}
+.lm-compact-smoothing .lm-psl .row b {
+  font-size: 10px;
+  color: var(--lm-ink);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Compact-mode color picker popover.
+
+   Rendered through React.createPortal into document.body so the
+   surrounding `.lm-compact-body { overflow: auto }` chain cannot clip
+   it. Position + maxHeight are computed in CompactLayout.tsx; this rule
+   only owns the visual chrome (panel surface, amber-themed scrollbar,
+   forced-colors fallback, reduced-motion respect).
+
+   The internal `overflow-y: auto` is the load-bearing piece for short
+   windows: when the picker (hue ring + S/V square + hex + recent strip)
+   is taller than the available viewport side, the popover scrolls
+   inside its own clamp instead of overflowing off-screen — the original
+   bug before this fix.                                                       */
+.lm-compact-color-popover {
+  background-color: var(--lm-panel);
+  border: 1px solid var(--lm-line-2);
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow:
+    0 12px 32px -8px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 176, 32, 0.04);
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Honor the maxHeight set inline by CompactLayout, but never spill
+     below the viewport even if positioning math drifts. */
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 176, 32, 0.28) transparent;
+}
+.lm-compact-color-popover::-webkit-scrollbar {
+  width: 6px;
+}
+.lm-compact-color-popover::-webkit-scrollbar-track {
+  background: transparent;
+}
+.lm-compact-color-popover::-webkit-scrollbar-thumb {
+  background: rgba(255, 176, 32, 0.28);
+  border-radius: 3px;
+}
+.lm-compact-color-popover::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 176, 32, 0.45);
+}
+
+/* Forced-colors fallback — Windows High Contrast collapses our amber
+   tokens to system colors so the popover stays distinguishable from
+   the underlying surface. */
+@media (forced-colors: active) {
+  .lm-compact-color-popover {
+    border: 1px solid CanvasText;
+    background-color: Canvas;
+    box-shadow: none;
+  }
+}
+
+/* Scene tile row — 5-flex with gradient backgrounds */
+.lm-compact-scenes {
+  display: flex;
+  gap: 6px;
+}
+.lm-compact-scene-tile {
+  position: relative;
+  flex: 1;
+  height: 34px;
+  padding: 0 0 4px;
+  border-radius: 7px;
+  border: 1px solid var(--lm-line);
+  background: var(--lm-panel);
+  color: rgba(255, 255, 255, 0.92);
+  font-family: var(--lm-mono);
+  font-size: 7.5px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+.lm-compact-scene-tile:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--lm-line-2);
+}
+.lm-compact-scene-tile:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.lm-compact-scene-tile:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring);
+}
+.lm-compact-scene-tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.55));
+  pointer-events: none;
+}
+.lm-compact-scene-tile span {
+  position: relative;
+  z-index: 1;
+}
+.lm-compact-scene-tile.is-selected {
+  border-color: rgba(255, 176, 32, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(255, 176, 32, 0.3),
+    0 0 12px rgba(255, 176, 32, 0.2);
+}

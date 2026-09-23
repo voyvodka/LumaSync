@@ -1,0 +1,405 @@
+/* ─────────────────────────────────────────────────────────────────────
+   Hue Channel Map (Channel Screen Regions panel) — v1.5 Rev 07 rework
+   ─────────────────────────────────────────────────────────────────────
+   Replaces the legacy zinc/Tailwind-default surface that used to ship
+   inside `HueChannelMapPanel.tsx`. Aligned with `lm-settings-group` and
+   `lm-device-btn` so the panel stops looking like a foreign island
+   underneath the amber-tokenized DeviceSection cards.
+
+   Tokens consumed:
+   - `--lm-panel`, `--lm-panel-2`, `--lm-line`, `--lm-line-2`
+   - `--lm-ink`, `--lm-ink-dim`, `--lm-ink-faint`
+   - `--lm-amber`, `--lm-zone-1..4`, `--lm-ink-faint` (region dot ramp)
+   - `--lm-mono`, `--lm-focus-ring-soft`
+
+   A11y guarantees:
+   - `:focus-visible` everywhere via amber soft ring.
+   - All interactive controls clear the 28-32px tap-area floor.
+   - `prefers-reduced-motion` disables the selected-dot pulse.
+   - `forced-colors: active` mirrors selection chrome to system colors.
+   ────────────────────────────────────────────────────────────────── */
+
+/* Outer card sits in the same DeviceSection column as `.lm-settings-group`
+   and adopts the same shell so they read as one continuous surface. */
+.lm-chmap {
+  margin-top: 12px;
+}
+.lm-chmap-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 14px;
+}
+
+/* Hint row + multi-select badge */
+.lm-chmap-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--lm-ink-dim, #8a94a3);
+  line-height: 1.5;
+}
+.lm-chmap-hint-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Row state — three different facts arrive as an empty list, so they get
+   three different messages. Dimmed via ink tokens, never opacity. */
+.lm-chmap-state {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--lm-line, #1a1e25);
+  border-radius: 8px;
+  background: var(--lm-panel-2, #14171d);
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+}
+.lm-chmap-state-h {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink, #eaeef4);
+}
+.lm-chmap-state.is-empty .lm-chmap-state-h {
+  color: var(--lm-ink-dim, #8a94a3);
+}
+.lm-chmap-state.is-failed .lm-chmap-state-h {
+  color: var(--lm-amber, #ffb020);
+}
+.lm-chmap-state-b {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--lm-ink-dim, #8a94a3);
+}
+
+
+/* Region rows — per-channel override list */
+.lm-chmap-rows {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--lm-line, #1a1e25);
+}
+/* Dimmed with ink tokens rather than opacity, so forced-colors and the
+   contrast floor still hold. */
+.lm-chmap.is-stale .lm-chmap-row-num,
+.lm-chmap.is-stale .lm-chmap-row-lights {
+  color: var(--lm-ink-faint, #4d5564);
+}
+.lm-chmap-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--lm-line, #1a1e25);
+}
+.lm-chmap-row:last-child {
+  border-bottom: 0;
+}
+.lm-chmap-row-id {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  /* A floor, not a fixed width: the id grew from one digit to `#<channelId>`
+     and the count is translated, so a hard 96 px pushed the text out of the
+     column instead of letting it shrink. */
+  min-width: 96px;
+  max-width: 140px;
+}
+.lm-chmap-row-zone {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  color: var(--lm-ink-dim, #8a94a3);
+  letter-spacing: 0.02em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-chmap-row-zone.is-none {
+  color: var(--lm-ink-faint, #4d5564);
+}
+/* Inline link out to the surface that owns placement. */
+.lm-chmap-hint-cta {
+  all: unset;
+  cursor: pointer;
+  margin-left: 6px;
+  color: var(--lm-amber, #ffb020);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+.lm-chmap-hint-cta:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+  border-radius: 3px;
+}
+.lm-chmap-row-dot {
+  width: 14px;
+  background: var(--lm-ink-faint, #4d5564);
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.lm-chmap-row-num {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--lm-ink, #eaeef4);
+  letter-spacing: 0.04em;
+  min-width: 26px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+.lm-chmap-row-lights {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  color: var(--lm-ink-dim, #8a94a3);
+  letter-spacing: 0.02em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Region pill row — same family as `.lm-settings-seg button` */
+/* Outlined, not filled: this preset is where the bridge put the channel, not
+   something the user chose. */
+
+/* Trailing slot — the channel's zone, or that it has none */
+.lm-chmap-row-trail {
+  margin-left: auto;
+  flex-shrink: 0;
+  min-width: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+/* The state the region label could never express: a position on no preset. */
+
+/* Footer — Save to bridge action + status feedback */
+.lm-chmap-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--lm-line, #1a1e25);
+  background: rgba(255, 255, 255, 0.01);
+}
+/* Bridge-sync line. "Local ahead" is deliberately not an error colour: the
+   runtime samples the local placement, so the lights already follow it. */
+.lm-chmap-sync {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 0 8px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--lm-ink-dim, #8a94a3);
+}
+.lm-chmap-sync-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  align-self: center;
+  background: var(--lm-ink-faint, #4d5564);
+}
+.lm-chmap-sync-dot.is-in-sync {
+  background: var(--lm-green, #4ade80);
+}
+.lm-chmap-sync-dot.is-local-ahead {
+  background: var(--lm-amber, #ffb020);
+}
+.lm-chmap-sync-tx {
+  min-width: 0;
+}
+@media (forced-colors: active) {
+  .lm-chmap-sync-dot {
+    background: CanvasText;
+    forced-color-adjust: none;
+  }
+  .lm-chmap-sync-dot.is-local-ahead {
+    background: Highlight;
+  }
+}
+
+.lm-chmap-footer-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 10px;
+}
+.lm-chmap-beta {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.1);
+  border: 1px solid rgba(255, 176, 32, 0.3);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+.lm-chmap-footer-spacer {
+  flex: 1;
+}
+/* Inline status panel — error / success for save and persist */
+/* Shared status-banner tone. Carries colour only — each site keeps its own
+   padding and type scale, so converging the palette does not silently restyle
+   four surfaces. Mirrors `.lm-chmap-feedback`'s tones without its mono 10px
+   sizing, which is specific to the channel-map panel. */
+.lm-status-banner {
+  border: 1px solid transparent;
+}
+.lm-status-banner.is-ok {
+  color: var(--lm-green, #4ade80);
+  background: rgba(74, 222, 128, 0.06);
+  border-color: rgba(74, 222, 128, 0.25);
+}
+.lm-status-banner.is-warn {
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.07);
+  border-color: rgba(255, 176, 32, 0.3);
+}
+.lm-status-banner.is-err {
+  color: var(--lm-red, #ef5b5b);
+  background: rgba(239, 91, 91, 0.07);
+  border-color: rgba(239, 91, 91, 0.3);
+}
+.lm-status-banner.is-info {
+  color: var(--lm-ink-dim);
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--lm-line-2);
+}
+@media (forced-colors: active) {
+  .lm-status-banner {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+  }
+}
+
+.lm-chmap-feedback {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  border: 1px solid transparent;
+}
+.lm-chmap-feedback::before {
+  content: "";
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-top: 5px;
+}
+.lm-chmap-feedback.is-ok {
+  color: var(--lm-green, #4ade80);
+  background: rgba(74, 222, 128, 0.06);
+  border-color: rgba(74, 222, 128, 0.25);
+}
+.lm-chmap-feedback.is-ok::before {
+  background: var(--lm-green, #4ade80);
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
+}
+.lm-chmap-feedback.is-warn {
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.07);
+  border-color: rgba(255, 176, 32, 0.3);
+}
+.lm-chmap-feedback.is-warn::before {
+  background: var(--lm-amber, #ffb020);
+  box-shadow: 0 0 6px rgba(255, 176, 32, 0.6);
+}
+.lm-chmap-feedback.is-err {
+  color: var(--lm-red, #ef5b5b);
+  background: rgba(239, 91, 91, 0.07);
+  border-color: rgba(239, 91, 91, 0.3);
+}
+.lm-chmap-feedback.is-err::before {
+  background: var(--lm-red, #ef5b5b);
+  box-shadow: 0 0 6px rgba(239, 91, 91, 0.5);
+}
+.lm-chmap-feedback-retry {
+  all: unset;
+  cursor: pointer;
+  margin-left: 6px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  color: inherit;
+}
+.lm-chmap-feedback-retry:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+  border-radius: 3px;
+}
+
+/* Forced-colors fallback — selection chrome must collapse to system
+   colors so users on Windows high-contrast skins still get an
+   unambiguous selection signal. */
+@media (forced-colors: active) {
+  .lm-chmap-row-dot {
+    background: CanvasText;
+    forced-color-adjust: none;
+  }
+  .lm-chmap-hint-cta:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+    box-shadow: none;
+  }
+  .lm-chmap-feedback {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+  }
+  .lm-chmap-feedback::before {
+    background: CanvasText;
+  }
+  .lm-chmap-state {
+    border-color: CanvasText;
+    background: Canvas;
+  }
+  .lm-chmap-state-h,
+  .lm-chmap-state-b {
+    color: CanvasText;
+  }
+  .lm-chmap-beta {
+    color: Highlight;
+    border-color: Highlight;
+    background: Canvas;
+    forced-color-adjust: none;
+  }
+}
+
+/* A placement whose channel the bridge no longer reports. Dashed rather than
+   faded — a ghost has to stay legible enough to find and remove. */
+.lm-room-hue-dot--ghost {
+  border-style: dashed;
+  background: var(--lm-panel-2, #14171d);
+  border-color: var(--lm-ink-faint, #4d5564);
+  color: var(--lm-ink-dim, #8a94a3);
+}
+@media (forced-colors: active) {
+  .lm-room-hue-dot--ghost {
+    background: Canvas;
+    border-color: CanvasText;
+    color: CanvasText;
+    forced-color-adjust: none;
+  }
+}

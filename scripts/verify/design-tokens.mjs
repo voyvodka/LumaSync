@@ -25,7 +25,7 @@
  */
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, extname } from "node:path";
+import { dirname, join, extname, resolve } from "node:path";
 
 const ROOT = new URL("../..", import.meta.url).pathname;
 const STYLESHEET = join(ROOT, "src/styles.css");
@@ -53,15 +53,22 @@ function walk(dir, out = []) {
 
 console.log("\n[ Design tokens ]\n");
 
-const stylesheet = readFileSync(STYLESHEET, "utf-8");
+// `styles.css` is an ordered import list; inline it the way the build does.
+function inlineImports(file) {
+  return readFileSync(file, "utf-8").replace(/^@import\s+"(\.[^"]+)"[^;\n]*;$/gm, (_, rel) =>
+    inlineImports(resolve(dirname(file), rel)),
+  );
+}
+
+const stylesheet = inlineImports(STYLESHEET);
 const defined = new Set(
   [...stylesheet.matchAll(/^\s*(--lm-[a-z0-9-]+)\s*:/gm)].map((m) => m[1]),
 );
 
 if (defined.size === 0) {
-  fail("no --lm-* token declarations found in src/styles.css — this check cannot verify anything");
+  fail("no --lm-* token declarations found in src/styles.css or its imports — this check cannot verify anything");
 } else {
-  pass(`${defined.size} tokens declared in src/styles.css`);
+  pass(`${defined.size} tokens declared in src/styles.css and its imports`);
 }
 
 // A bare reference is `var(--lm-x)`; one with a fallback is `var(--lm-x, …)`.

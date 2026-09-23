@@ -1,0 +1,1008 @@
+/* ── Devices page ─────────────────────────────────────────────────── */
+.lm-device-page {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  height: 100%;
+  min-height: 0;
+  background: #07080a;
+  color: #eaeef4;
+}
+
+/* Left category rail */
+.lm-device-rail {
+  border-right: 1px solid #1a1e25;
+  padding: 20px 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(8, 9, 12, 0.3);
+  overflow-y: auto;
+}
+.lm-device-rail-h {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 8.5px;
+  letter-spacing: 0.2em;
+  color: #4d5564;
+  text-transform: uppercase;
+  padding: 14px 18px 6px;
+  margin-top: 10px;
+}
+.lm-device-rail-h:first-child {
+  margin-top: 0;
+}
+.lm-device-cat {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  cursor: pointer;
+  color: #8a94a3;
+  border-left: 2px solid transparent;
+  font-family: var(--lm-sans, "IBM Plex Sans", ui-sans-serif, system-ui);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  transition: color 120ms ease, background 120ms ease;
+}
+.lm-device-cat:hover {
+  color: #eaeef4;
+  background: rgba(255, 255, 255, 0.02);
+}
+.lm-device-cat.is-on {
+  color: var(--lm-amber, #ffb020);
+  border-left-color: var(--lm-amber, #ffb020);
+  background: linear-gradient(90deg, rgba(255, 176, 32, 0.08), transparent 60%);
+}
+.lm-device-cat:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 176, 32, 0.4);
+}
+.lm-device-cat-ic {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.lm-device-cat-ic svg {
+  width: 16px;
+  height: 16px;
+}
+.lm-device-cat-tx {
+  flex: 1;
+}
+.lm-device-cat-cnt {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: #0a0c0f;
+  border: 1px solid #252b34;
+  color: #4d5564;
+  letter-spacing: 0.08em;
+}
+.lm-device-cat.is-on .lm-device-cat-cnt {
+  background: rgba(255, 176, 32, 0.1);
+  border-color: rgba(255, 176, 32, 0.3);
+  color: var(--lm-amber, #ffb020);
+}
+
+/* Main content area */
+.lm-device-main {
+  padding: 22px 26px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.lm-device-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.lm-device-head h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: #fff;
+}
+.lm-device-head-sub {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10.5px;
+  color: #8a94a3;
+  margin-top: 3px;
+  letter-spacing: 0.02em;
+}
+.lm-device-head-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.lm-device-btn {
+  all: unset;
+  box-sizing: border-box;
+  padding: 7px 13px;
+  border-radius: 7px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8a94a3;
+  background: #0e1014;
+  border: 1px solid #252b34;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 500;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+.lm-device-btn:hover:not(:disabled) {
+  border-color: var(--lm-amber, #ffb020);
+  color: var(--lm-amber, #ffb020);
+}
+.lm-device-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.lm-device-btn svg {
+  width: 12px;
+  height: 12px;
+}
+.lm-device-btn.is-primary {
+  background: rgba(255, 176, 32, 0.1);
+  border-color: rgba(255, 176, 32, 0.4);
+  color: var(--lm-amber, #ffb020);
+}
+.lm-device-btn.is-primary:hover:not(:disabled) {
+  background: rgba(255, 176, 32, 0.18);
+}
+.lm-device-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+
+/* Category body — each rail category has its own content column */
+.lm-device-cat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+}
+.lm-device-cat-body > * {
+  flex-shrink: 0;
+}
+.lm-device-cat-body.hidden {
+  display: none;
+}
+.lm-device-main > * {
+  flex-shrink: 0;
+}
+
+/* Card grid */
+.lm-device-grid {
+  display: grid;
+  /* `auto-fit`, never `auto-fill`: auto-fill keeps the empty track, which is
+     the dead column beside a lone bridge. `min(…, 100%)` is load-bearing too —
+     a bare 260px floor overflows any container narrower than one card. */
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: 14px;
+  min-height: 0;
+}
+
+/* Device card */
+.lm-dcard {
+  background: #0e1014;
+  border: 1px solid #1a1e25;
+  border-radius: 10px;
+  padding: 14px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+  overflow: hidden;
+}
+.lm-dcard.is-on {
+  border-color: rgba(255, 176, 32, 0.3);
+  background: linear-gradient(180deg, rgba(255, 176, 32, 0.04), transparent 40%);
+}
+.lm-dcard.is-sel {
+  border-color: rgba(255, 176, 32, 0.55);
+  background: linear-gradient(180deg, rgba(255, 176, 32, 0.07), transparent 50%);
+  box-shadow: 0 0 0 1px rgba(255, 176, 32, 0.35), 0 8px 24px -12px rgba(255, 176, 32, 0.4);
+}
+.lm-dcard[role="button"] {
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+.lm-dcard[role="button"]:hover:not(.is-on):not(.is-sel) {
+  border-color: #2c3440;
+  background: #101319;
+}
+.lm-dcard[role="button"]:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring);
+}
+.lm-dcard::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.06), transparent);
+  pointer-events: none;
+}
+.lm-dcard.is-ghost {
+  border-style: dashed;
+  border-color: #252b34;
+  opacity: 0.9;
+}
+
+.lm-dcard-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+.lm-dcard-ic {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid #252b34;
+  color: #8a94a3;
+  flex-shrink: 0;
+}
+.lm-dcard-ic svg {
+  width: 20px;
+  height: 20px;
+}
+.lm-dcard.is-on .lm-dcard-ic {
+  background: rgba(255, 176, 32, 0.1);
+  border-color: rgba(255, 176, 32, 0.3);
+  color: var(--lm-amber, #ffb020);
+}
+.lm-dcard-tx {
+  flex: 1;
+  min-width: 0;
+}
+.lm-dcard-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.lm-dcard.is-ghost .lm-dcard-name {
+  color: #8a94a3;
+}
+.lm-dcard-sub {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  color: #4d5564;
+  margin-top: 3px;
+  letter-spacing: 0.02em;
+  word-break: break-all;
+}
+
+.lm-dcard-pill {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 8.5px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 20px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.lm-dcard-pill.is-ok {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.08);
+  border: 1px solid rgba(74, 222, 128, 0.25);
+}
+.lm-dcard-pill.is-ok::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 6px #4ade80;
+}
+.lm-dcard-pill.is-warn {
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.08);
+  border: 1px solid rgba(255, 176, 32, 0.25);
+}
+.lm-dcard-pill.is-warn::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--lm-amber, #ffb020);
+}
+
+/* Stats grid inside card */
+.lm-dcard-body {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: #1a1e25;
+  border: 1px solid #1a1e25;
+  border-radius: 7px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+.lm-dcard-cell {
+  background: #14171d;
+  padding: 7px 10px;
+}
+/* A state with an odd cell count would otherwise leave an empty half-cell. */
+.lm-dcard-cell:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+.lm-dcard-cell-k {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+  color: #4d5564;
+  text-transform: uppercase;
+}
+.lm-dcard-cell-v {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 11px;
+  color: #eaeef4;
+  font-weight: 500;
+  margin-top: 2px;
+}
+.lm-dcard-cell-v.is-am {
+  color: var(--lm-amber, #ffb020);
+}
+.lm-dcard-cell-v.is-ok {
+  color: #4ade80;
+}
+.lm-dcard-cell-v.is-error {
+  color: var(--lm-red, #ef5b5b);
+}
+.lm-dcard-cell-v.is-warn {
+  color: var(--lm-amber, #ffb020);
+  opacity: 0.7;
+}
+.lm-dcard-cell-v.is-dim {
+  color: #4d5564;
+}
+
+/* Actions row */
+.lm-dcard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.lm-dcard-act {
+  all: unset;
+  box-sizing: border-box;
+  /* `1 1 auto`, not the shorthand `1` (= `1 1 0%`). A zero basis makes every
+     button "fit" on one line, so wrap never fires and `all: unset`'s restored
+     `min-width: auto` pushes the row out of the card instead. */
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 7px 10px;
+  border: 1px solid var(--lm-line-2);
+  border-radius: 6px;
+  background: #0a0c0f;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim);
+  cursor: pointer;
+  text-align: center;
+  font-weight: 500;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+.lm-dcard-act:hover:not(:disabled) {
+  border-color: var(--lm-amber, #ffb020);
+  color: var(--lm-amber, #ffb020);
+}
+.lm-dcard-act:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.lm-dcard-act:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring);
+}
+/* Forced colors drop box-shadow, which would take the focus ring with it. */
+@media (forced-colors: active) {
+  .lm-dcard-act:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+    box-shadow: none;
+  }
+}
+
+/* Ghost card pair button */
+.lm-dcard-pair {
+  all: unset;
+  box-sizing: border-box;
+  display: block;
+  margin-top: 4px;
+  padding: 9px;
+  text-align: center;
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  border-radius: 7px;
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.05);
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 120ms ease;
+}
+.lm-dcard-pair:hover:not(:disabled) {
+  background: rgba(255, 176, 32, 0.12);
+}
+.lm-dcard-pair:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.lm-dcard-pair:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.35);
+}
+
+/* Empty state */
+.lm-device-empty {
+  grid-column: 1 / -1;
+  border: 1px dashed #252b34;
+  border-radius: 10px;
+  padding: 32px 20px;
+  text-align: center;
+  color: #8a94a3;
+}
+.lm-device-empty h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #eaeef4;
+}
+.lm-device-empty p {
+  margin: 0;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10.5px;
+  color: #4d5564;
+}
+
+/* ── Hue bridge card — additional state variants ───────────────────── */
+
+/* Streaming pill — pulsing amber */
+.lm-dcard-pill.is-streaming {
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.08);
+  border: 1px solid rgba(255, 176, 32, 0.3);
+}
+.lm-dcard-pill.is-streaming::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--lm-amber, #ffb020);
+  box-shadow: 0 0 6px var(--lm-amber, #ffb020);
+  animation: lm-pill-pulse 1.8s ease-in-out infinite;
+}
+@keyframes lm-pill-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Error pill — red */
+.lm-dcard-pill.is-error {
+  color: var(--lm-red, #ef5b5b);
+  background: rgba(239, 91, 91, 0.08);
+  border: 1px solid rgba(239, 91, 91, 0.25);
+}
+.lm-dcard-pill.is-error::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--lm-red, #ef5b5b);
+}
+
+/* Error / warn card tint variants */
+.lm-dcard.is-error-state {
+  border-color: rgba(239, 91, 91, 0.22);
+  background: linear-gradient(180deg, rgba(239, 91, 91, 0.04), transparent 40%);
+}
+.lm-dcard.is-warn-state {
+  border-color: rgba(255, 176, 32, 0.22);
+  background: linear-gradient(180deg, rgba(255, 176, 32, 0.04), transparent 40%);
+}
+.lm-dcard.is-error-state .lm-dcard-ic {
+  background: rgba(239, 91, 91, 0.07);
+  border-color: rgba(239, 91, 91, 0.2);
+  color: var(--lm-red, #ef5b5b);
+}
+.lm-dcard.is-warn-state .lm-dcard-ic {
+  background: rgba(255, 176, 32, 0.08);
+  border-color: rgba(255, 176, 32, 0.22);
+  color: var(--lm-amber, #ffb020);
+}
+/* Offline card — red border/gradient (State F) */
+.lm-dcard.is-offline {
+  border-color: rgba(239, 91, 91, 0.35);
+  background: linear-gradient(180deg, rgba(239, 91, 91, 0.07), transparent 40%);
+}
+.lm-dcard.is-offline .lm-dcard-ic {
+  background: rgba(239, 91, 91, 0.09);
+  border-color: rgba(239, 91, 91, 0.28);
+  color: var(--lm-red, #ef5b5b);
+}
+/* Idle pill — gray/dim (State B, no pulsing dot) */
+.lm-dcard-pill.is-idle {
+  color: #4d5564;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Danger action button */
+.lm-dcard-act.is-danger:hover:not(:disabled) {
+  border-color: var(--lm-red, #ef5b5b);
+  color: var(--lm-red, #ef5b5b);
+}
+
+/* ── Traffic bar (State A streaming) ───────────────────────────────── */
+.lm-hue-traffic { margin-top: 2px; }
+.lm-hue-traffic-label {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  color: #4d5564;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.lm-hue-traffic-label b { color: #eaeef4; font-weight: 500; }
+.lm-hue-traffic-bar {
+  height: 3px;
+  background: #0a0c0f;
+  border: 1px solid #1a1e25;
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+.lm-hue-traffic-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(to right, var(--lm-amber, #ffb020), #ff7a1a);
+  box-shadow: 0 0 6px rgba(255, 176, 32, 0.4);
+  position: relative;
+}
+.lm-hue-traffic-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  animation: lm-traffic-slide 2.5s linear infinite;
+}
+@keyframes lm-traffic-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+/* ── Pair step tracker (States C, D, G, M) ──────────────────────────── */
+.lm-hue-steps {
+  display: flex;
+  align-items: center;
+  margin-top: 2px;
+}
+.lm-hue-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #4d5564;
+  white-space: nowrap;
+}
+.lm-hue-step-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid #252b34;
+  background: #0a0c0f;
+  display: grid;
+  place-items: center;
+  font-size: 8px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.lm-hue-step-dot svg { width: 8px; height: 8px; }
+.lm-hue-step.is-done { color: #4d5564; }
+.lm-hue-step.is-done .lm-hue-step-dot {
+  border-color: rgba(74, 222, 128, 0.4);
+  background: rgba(74, 222, 128, 0.1);
+  color: #4ade80;
+}
+.lm-hue-step.is-active { color: #8a94a3; }
+.lm-hue-step.is-active .lm-hue-step-dot {
+  border-color: rgba(255, 176, 32, 0.5);
+  background: rgba(255, 176, 32, 0.1);
+  color: var(--lm-amber, #ffb020);
+}
+.lm-hue-step.is-fail .lm-hue-step-dot {
+  border-color: rgba(239, 91, 91, 0.4);
+  background: rgba(239, 91, 91, 0.1);
+  color: var(--lm-red, #ef5b5b);
+}
+.lm-hue-step-line {
+  flex: 1;
+  height: 1px;
+  background: #1a1e25;
+  margin: 0 4px;
+}
+.lm-hue-step-line.is-done { background: rgba(74, 222, 128, 0.25); }
+
+/* ── Link button waiting (State C) ─────────────────────────────────── */
+.lm-hue-wait {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 176, 32, 0.04);
+  border: 1px dashed rgba(255, 176, 32, 0.28);
+  border-radius: 7px;
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  color: var(--lm-amber, #ffb020);
+  letter-spacing: 0.05em;
+  margin-top: 4px;
+}
+.lm-hue-wait-sp {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid rgba(255, 176, 32, 0.3);
+  border-top-color: var(--lm-amber, #ffb020);
+  border-radius: 50%;
+  animation: lm-spin 1s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes lm-spin { to { transform: rotate(360deg); } }
+
+/* ── Area selection (States D, G) ───────────────────────────────────── */
+.lm-hue-areas { margin-top: 4px; display: flex; flex-direction: column; gap: 6px; }
+.lm-hue-areas-label {
+  font-family: var(--lm-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #4d5564;
+}
+.lm-hue-area-list { display: flex; flex-direction: column; gap: 4px; }
+.lm-hue-area-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border: 1px solid #252b34;
+  border-radius: 6px;
+  background: #0a0c0f;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.lm-hue-area-item:hover:not(.is-blocked) {
+  border-color: rgba(255, 176, 32, 0.35);
+  background: rgba(255, 176, 32, 0.04);
+}
+.lm-hue-area-item.is-sel {
+  border-color: rgba(255, 176, 32, 0.45);
+  background: rgba(255, 176, 32, 0.06);
+}
+.lm-hue-area-item.is-blocked { opacity: 0.6; cursor: not-allowed; }
+.lm-hue-area-ic {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid #252b34;
+  flex-shrink: 0;
+}
+.lm-hue-area-item.is-sel .lm-hue-area-ic {
+  border-color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.2);
+}
+.lm-hue-area-name {
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  color: #8a94a3;
+  flex: 1;
+  letter-spacing: 0.03em;
+}
+.lm-hue-area-item.is-sel .lm-hue-area-name { color: var(--lm-amber, #ffb020); }
+.lm-hue-area-ch { font-family: var(--lm-mono); font-size: 9px; color: #4d5564; letter-spacing: 0.08em; }
+.lm-hue-area-badge {
+  font-family: var(--lm-mono);
+  font-size: 8px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: rgba(239, 91, 91, 0.12);
+  border: 1px solid rgba(239, 91, 91, 0.3);
+  color: var(--lm-red, #ef5b5b);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.lm-hue-area-confirm {
+  all: unset;
+  box-sizing: border-box;
+  display: block;
+  margin-top: 4px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  border-radius: 7px;
+  background: rgba(255, 176, 32, 0.06);
+  color: var(--lm-amber, #ffb020);
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-align: center;
+  font-weight: 500;
+  transition: background 120ms ease;
+}
+.lm-hue-area-confirm:hover:not(:disabled) { background: rgba(255, 176, 32, 0.12); }
+.lm-hue-area-confirm:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Repair / info banner (States E, Q, K2) ─────────────────────────── */
+.lm-hue-repair {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 11px;
+  background: rgba(255, 176, 32, 0.05);
+  border: 1px solid rgba(255, 176, 32, 0.22);
+  border-radius: 7px;
+  margin-top: 4px;
+}
+.lm-hue-repair.is-error {
+  background: rgba(239, 91, 91, 0.04);
+  border-color: rgba(239, 91, 91, 0.2);
+}
+.lm-hue-repair svg { width: 13px; height: 13px; color: var(--lm-amber, #ffb020); flex-shrink: 0; margin-top: 1px; }
+.lm-hue-repair.is-error svg { color: var(--lm-red, #ef5b5b); }
+.lm-hue-repair-tx { flex: 1; }
+.lm-hue-repair-title {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  color: var(--lm-amber, #ffb020);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.lm-hue-repair.is-error .lm-hue-repair-title { color: var(--lm-red, #ef5b5b); }
+.lm-hue-repair-sub { font-size: 10.5px; color: #8a94a3; margin-top: 2px; line-height: 1.4; }
+
+/* Raw status code under a card message — a technical detail, not a headline. */
+.lm-hue-code {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  color: var(--lm-ink-dim);
+  overflow-wrap: anywhere;
+}
+.lm-hue-code-k {
+  color: var(--lm-ink-faint);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.lm-hue-code code { font: inherit; }
+
+/* ── Retry progress (State H) ───────────────────────────────────────── */
+.lm-hue-retry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 11px;
+  background: rgba(255, 176, 32, 0.04);
+  border: 1px solid rgba(255, 176, 32, 0.2);
+  border-radius: 7px;
+  margin-top: 4px;
+}
+.lm-hue-retry-sp {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid rgba(255, 176, 32, 0.3);
+  border-top-color: var(--lm-amber, #ffb020);
+  border-radius: 50%;
+  animation: lm-spin 1s linear infinite;
+  flex-shrink: 0;
+}
+.lm-hue-retry-tx { flex: 1; font-family: var(--lm-mono); font-size: 9.5px; color: var(--lm-amber, #ffb020); letter-spacing: 0.04em; }
+.lm-hue-retry-tx b { color: #8a94a3; font-weight: 400; }
+
+/* ── Stale readiness banner (State N) ───────────────────────────────── */
+.lm-hue-stale {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: rgba(255, 176, 32, 0.04);
+  border: 1px dashed rgba(255, 176, 32, 0.25);
+  border-radius: 6px;
+  margin-top: 2px;
+}
+.lm-hue-stale svg { width: 12px; height: 12px; color: var(--lm-amber, #ffb020); flex-shrink: 0; }
+.lm-hue-stale-tx { flex: 1; font-family: var(--lm-mono); font-size: 9.5px; color: #8a94a3; letter-spacing: 0.03em; }
+
+/* ── Config checklist (State P) ─────────────────────────────────────── */
+.lm-hue-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 11px;
+  background: rgba(255, 176, 32, 0.04);
+  border: 1px solid rgba(255, 176, 32, 0.18);
+  border-radius: 7px;
+  margin-top: 4px;
+}
+.lm-hue-checklist-title {
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-amber, #ffb020);
+  margin-bottom: 2px;
+  font-weight: 500;
+}
+.lm-hue-checklist-item { display: flex; align-items: center; gap: 8px; font-size: 10.5px; color: #8a94a3; }
+.lm-hue-checklist-item svg { width: 11px; height: 11px; color: var(--lm-amber, #ffb020); flex-shrink: 0; }
+
+/* ── Offline reasons (State F) ──────────────────────────────────────── */
+.lm-hue-offline {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  background: rgba(239, 91, 91, 0.04);
+  border: 1px solid rgba(239, 91, 91, 0.15);
+  border-radius: 7px;
+}
+.lm-hue-offline-title {
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-red, #ef5b5b);
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+.lm-hue-offline-item { display: flex; align-items: baseline; gap: 8px; font-size: 10.5px; color: #8a94a3; line-height: 1.4; }
+.lm-hue-offline-item::before { content: "—"; color: #4d5564; font-family: var(--lm-mono); font-size: 9px; flex-shrink: 0; }
+
+/* ── Empty hero (States I, K1) ──────────────────────────────────────── */
+.lm-hue-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px 20px;
+  text-align: center;
+  grid-column: 1 / -1;
+}
+.lm-hue-hero-ic {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid #252b34;
+  display: grid;
+  place-items: center;
+  color: #4d5564;
+}
+.lm-hue-hero-ic svg { width: 26px; height: 26px; }
+.lm-hue-hero-title { font-size: 15px; font-weight: 600; color: #eaeef4; letter-spacing: -0.01em; margin: 0; }
+.lm-hue-hero-sub {
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  color: #4d5564;
+  letter-spacing: 0.04em;
+  line-height: 1.55;
+  max-width: 340px;
+  margin: 0;
+}
+.lm-hue-hero-btns { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
+
+/* ── Discovering ghost card (State J) ───────────────────────────────── */
+.lm-hue-scan-card {
+  background: #0e1014;
+  border: 1px dashed #252b34;
+  border-radius: 10px;
+  padding: 14px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  grid-column: 1 / -1;
+}
+
+/* ── Manual IP inline form ──────────────────────────────────────────── */
+.lm-hue-ip-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 15px;
+  background: #0e1014;
+  border: 1px solid #1a1e25;
+  border-radius: 10px;
+  grid-column: 1 / -1;
+}
+.lm-hue-ip-form-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #eaeef4;
+  letter-spacing: -0.01em;
+}
+.lm-hue-ip-form-sub { font-family: var(--lm-mono); font-size: 10px; color: #4d5564; letter-spacing: 0.02em; }
+.lm-hue-ip-row { display: flex; gap: 8px; }
+.lm-hue-ip-input {
+  all: unset;
+  box-sizing: border-box;
+  flex: 1;
+  height: 34px;
+  border: 1px solid #252b34;
+  border-radius: 6px;
+  background: #0a0c0f;
+  padding: 0 10px;
+  font-family: var(--lm-mono);
+  font-size: 11px;
+  color: #eaeef4;
+  letter-spacing: 0.04em;
+  transition: border-color 120ms ease;
+}
+.lm-hue-ip-input::placeholder { color: #4d5564; }
+.lm-hue-ip-input:focus { border-color: rgba(255, 176, 32, 0.4); }
+.lm-hue-ip-submit {
+  all: unset;
+  box-sizing: border-box;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  border-radius: 6px;
+  background: rgba(255, 176, 32, 0.06);
+  color: var(--lm-amber, #ffb020);
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 120ms ease;
+  flex-shrink: 0;
+}
+.lm-hue-ip-submit:hover:not(:disabled) { background: rgba(255, 176, 32, 0.12); }
+.lm-hue-ip-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+.lm-hue-ip-error { font-family: var(--lm-mono); font-size: 10px; color: var(--lm-red, #ef5b5b); letter-spacing: 0.04em; }

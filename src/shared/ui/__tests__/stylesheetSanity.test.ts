@@ -8,6 +8,8 @@ import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { readStylesheet } from "@/test/stylesheetSource";
+
 const SRC = resolve(process.cwd(), "src");
 
 function walk(dir: string, exts: string[], out: string[] = []): string[] {
@@ -23,7 +25,7 @@ function walk(dir: string, exts: string[], out: string[] = []): string[] {
 }
 
 const stripComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, "");
-const stylesCss = stripComments(readFileSync(join(SRC, "styles.css"), "utf8"));
+const stylesCss = stripComments(readStylesheet());
 const cssFiles = walk(SRC, [".css"]).map((file) => ({
   file,
   css: stripComments(readFileSync(file, "utf8")),
@@ -47,6 +49,13 @@ describe("stylesheet sanity", () => {
     const body = ruleBody(stylesCss, "\nbody");
     expect(body).toContain("var(--lm-bg)");
     expect(body).not.toMatch(/linear-gradient|radial-gradient/);
+  });
+
+  it("keeps the twin overlay root transparent", () => {
+    // The twin is a see-through window over the desktop; any paint here is a
+    // full-screen opaque frame.
+    const twin = ruleBody(stylesCss, ".lm-twin-root");
+    expect(twin).toMatch(/background:\s*transparent\s*;/);
   });
 
   it("never uses a box-shadow ring token as an outline value", () => {

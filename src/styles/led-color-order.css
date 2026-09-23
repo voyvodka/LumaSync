@@ -1,0 +1,198 @@
+/* LED colour order (Devices → USB). Narrow-first: every row wraps, so the
+   flow fits a 320 px window as well as the full devices pane. */
+.lm-color-order-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 14px;
+}
+.lm-color-order > .lm-color-order-note {
+  padding: 12px 14px 14px;
+}
+.lm-color-order-note {
+  margin: 0;
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--lm-ink-dim);
+}
+.lm-color-order-current {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.lm-color-order-code {
+  font-family: var(--lm-mono);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--lm-ink);
+}
+.lm-color-order-tag {
+  padding: 2px 6px;
+  border: 1px solid var(--lm-line-2);
+  border-radius: 999px;
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint);
+}
+.lm-color-order-identify {
+  margin-left: auto;
+}
+.lm-color-order-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--lm-line-2);
+  border-radius: 7px;
+  background: var(--lm-panel-2);
+  color: var(--lm-ink);
+  font-family: var(--lm-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.lm-color-order-btn:hover:not(:disabled) {
+  border-color: rgba(255, 176, 32, 0.32);
+}
+.lm-color-order-btn.is-primary {
+  color: var(--lm-amber);
+  border-color: rgba(255, 176, 32, 0.45);
+  background: rgba(255, 176, 32, 0.12);
+}
+.lm-color-order-btn.is-primary:hover:not(:disabled) {
+  background: rgba(255, 176, 32, 0.18);
+}
+.lm-color-order-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-color-order-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.lm-color-order-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 176, 32, 0.3);
+  border-radius: 8px;
+  background: var(--lm-panel-2);
+}
+.lm-color-order-flow-title {
+  margin: 0;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-amber);
+}
+.lm-color-order-step {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--lm-ink);
+  outline: none;
+}
+.lm-color-order-step:focus-visible {
+  border-radius: 4px;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-color-order-step.is-error {
+  color: var(--lm-ink);
+  padding-left: 10px;
+  border-left: 2px solid var(--lm-red);
+}
+.lm-color-order-step-n {
+  display: block;
+  margin-bottom: 2px;
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--lm-ink-dim);
+}
+.lm-color-order-answers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.lm-color-order-answer {
+  justify-content: flex-start;
+  font-size: 11px;
+}
+.lm-color-order-answer.is-other {
+  color: var(--lm-ink-dim);
+}
+.lm-color-order-swatch {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+/* Pure primaries, deliberately not status tokens: they name what the strip shows. */
+.lm-color-order-swatch.is-r { background: #ff3b30; }
+.lm-color-order-swatch.is-g { background: #34d05c; }
+.lm-color-order-swatch.is-b { background: #3b6bff; }
+.lm-color-order-swatch.is-other {
+  border: 1px dashed var(--lm-ink-faint);
+}
+.lm-color-order-error {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--lm-ink);
+  padding-left: 10px;
+  border-left: 2px solid var(--lm-red);
+}
+.lm-color-order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.lm-color-order-manual {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--lm-line);
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  color: var(--lm-ink-dim);
+}
+.lm-color-order-manual .lm-settings-select {
+  min-width: 96px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-color-order-btn {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .lm-color-order-btn,
+  .lm-color-order-flow,
+  .lm-color-order-tag {
+    border-color: CanvasText;
+  }
+  .lm-color-order-btn.is-primary {
+    outline: 1px solid Highlight;
+  }
+  .lm-color-order-step.is-error,
+  .lm-color-order-error {
+    border-left-color: CanvasText;
+  }
+  /* The swatches are the only thing tying an answer to a colour on screen, so
+     keep them painted; the button text still names the colour. */
+  .lm-color-order-swatch {
+    forced-color-adjust: none;
+  }
+}
