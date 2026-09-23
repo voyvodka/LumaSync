@@ -255,6 +255,15 @@ off, and so do we now (`commands/hue/light_restore.rs`).
   writes and then puts its own state back. If off lamps ever come back on with every restore PUT
   logged as successful, the bridge's own post-stream restore is landing after ours and needs a
   settle delay — that has not been seen, and none is added.
+- **The sender exits only when every handle is gone.** Both senders (DTLS and HTTP fallback) leave
+  their loop on channel disconnect, and the stop drops only the runtime's handle. An ambilight
+  worker holds another one (`HueActiveOutputContext`), so a stop under a worker that still drives
+  Hue waits out `HUE_STOP_TIMEOUT_SECS`, reports `HUE_STOP_TIMEOUT_PARTIAL`, and restores with the
+  sender still running — the fallback's next light PUT undoes the restore. So the worker has to let
+  go first: `apply_mode_change` hands it the Hue context only when `targets` names Hue, and removing
+  Hue from `[usb, hue]` re-applies the mode on `[usb]` and awaits it before the stop
+  (`ui-and-shell.md`). A stop running alongside `stop_lighting` (Off from `[usb, hue]`) is also
+  safe: the worker's join drops its handle well inside the stop's wait.
 - **Colour mode.** CLIP v2 reports `color.xy` in both modes, so the mode is read from
   `color_temperature.mirek_valid` (`mirek` is null outside the ct spectrum). An on light gets one PUT
   with `on`, `dimming.brightness` and either `color_temperature.mirek` or `color.xy`, never both. An
