@@ -9,7 +9,8 @@
 //!   WLED_DISCOVERY_OK          -- /json/info responded; device info parsed.
 //!   WLED_DISCOVERY_TIMEOUT     -- HTTP request timed out (2 s).
 //!   WLED_DISCOVERY_UNREACHABLE -- Connection refused / network error.
-//!   WLED_PROTOCOL_MISMATCH     -- Response body is not valid WLED JSON.
+//!   WLED_PROTOCOL_MISMATCH     -- Response is not valid WLED JSON, or is a
+//!                                 redirect (never followed).
 //!   WLED_LED_COUNT_MISMATCH    -- Requested ledCount != device-reported count.
 //!   WLED_BRIDGE_UNREACHABLE    -- connect/test: device not reachable.
 //!   WLED_CONNECT_OK            -- Sink built and registered.
@@ -257,10 +258,16 @@ fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, CommandStatus> {
         ));
     }
 
-    let url = format!("http://{}/json/info", ip);
+    fetch_info_from(&format!("http://{}/json/info", ip))
+}
 
-    let client = reqwest::blocking::Client::builder()
+/// The one WLED HTTP client. Redirects are never followed: `parse_ipv4`
+/// vets only the address the user typed, so a device answering with a
+/// redirect could otherwise send the request to loopback or anywhere else.
+fn wled_http_client() -> Result<reqwest::blocking::Client, CommandStatus> {
+    reqwest::blocking::Client::builder()
         .timeout(WLED_HTTP_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| {
             CommandStatus::new(
@@ -268,9 +275,14 @@ fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, CommandStatus> {
                 "Failed to build HTTP client.",
                 Some(e.to_string()),
             )
-        })?;
+        })
+}
 
-    let response = client.get(&url).send().map_err(|e| {
+/// `/json/info` from an already-vetted URL.
+fn fetch_info_from(url: &str) -> Result<WledInfoResponse, CommandStatus> {
+    let client = wled_http_client()?;
+
+    let response = client.get(url).send().map_err(|e| {
         if e.is_timeout() {
             CommandStatus::new(
                 "WLED_DISCOVERY_TIMEOUT",
@@ -285,6 +297,19 @@ fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, CommandStatus> {
             )
         }
     })?;
+
+    if response.status().is_redirection() {
+        let location = response
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("(no Location)");
+        return Err(CommandStatus::new(
+            "WLED_PROTOCOL_MISMATCH",
+            "WLED device answered with a redirect, which is not followed.",
+            Some(format!("HTTP {} to {location}", response.status().as_u16())),
+        ));
+    }
 
     if !response.status().is_success() {
         return Err(CommandStatus::new(
@@ -789,8 +814,65 @@ mod tests {
     }
 
     fn fetch(url: &str) -> Result<super::WledInfoResponse, super::CommandStatus> {
-        let response = reqwest::blocking::Client::new().get(url).send().unwrap();
+        let response = super::wled_http_client().unwrap().get(url).send().unwrap();
         super::read_info_body(response)
+    }
+
+    /// A LAN device answering `/json/info` with a 302 to a loopback service
+    /// that looks like WLED. Following it would reach an address `parse_ipv4`
+    /// refuses, so the redirect must end the probe with a code, unfollowed.
+    #[test]
+    fn a_redirect_is_refused_not_followed() {
+        use std::io::{Read, Write};
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        let target = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let target_url = format!("http://{}/json/info", target.local_addr().unwrap());
+        let target_hit = Arc::new(AtomicBool::new(false));
+        let hit = Arc::clone(&target_hit);
+        std::thread::spawn(move || {
+            let (mut stream, _) = target.accept().unwrap();
+            hit.store(true, Ordering::SeqCst);
+            let mut request = [0u8; 1024];
+            let _ = stream.read(&mut request);
+            let body = br#"{"leds":{"count":60}}"#;
+            let _ = stream.write_all(
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                )
+                .as_bytes(),
+            );
+            let _ = stream.write_all(body);
+        });
+
+        let device = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let device_url = format!("http://{}/json/info", device.local_addr().unwrap());
+        let location = target_url.clone();
+        std::thread::spawn(move || {
+            let (mut stream, _) = device.accept().unwrap();
+            let mut request = [0u8; 1024];
+            let _ = stream.read(&mut request);
+            let _ = stream.write_all(
+                format!(
+                    "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                )
+                .as_bytes(),
+            );
+        });
+
+        let status = super::fetch_info_from(&device_url).unwrap_err();
+
+        assert_eq!(status.code, "WLED_PROTOCOL_MISMATCH");
+        assert_eq!(
+            status.details.as_deref(),
+            Some(format!("HTTP 302 to {target_url}").as_str())
+        );
+        assert!(
+            !target_hit.load(Ordering::SeqCst),
+            "the redirect target must never be contacted"
+        );
     }
 
     #[test]

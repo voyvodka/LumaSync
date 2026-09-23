@@ -78,6 +78,9 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- WLED: a device that answers the connection check with a redirect is now reported as not a
+  WLED device. Before, the app followed the redirect, which let anything on the local network
+  point the check at another address, including this computer.
 - Linux: the release build now starts on Ubuntu 22.04 and Debian 12. It was built against a newer
   C library (glibc 2.39) than those systems carry; the minimum is now glibc 2.35.
 - Updates: a failed update check at startup, for example with no internet connection, no longer
