@@ -13,7 +13,7 @@
  * refresh would make anyone stop composing and go back to presets.
  */
 
-import type { LightingModeConfig } from "../src/features/mode/model/contracts";
+import type { LightingModeConfig } from "../src/shared/contracts/mode";
 import type {
   FirmwareProfile,
   LedChipType,

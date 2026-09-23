@@ -19,5 +19,5 @@ export const TYPE_DOT_COLOR: Record<RoomObjectType, string> = {
 
 export function getZoneColor(zone: { borderColor?: string | null }, index: number): string {
   if (zone.borderColor) return zone.borderColor;
-  return ZONE_TOKENS[index % ZONE_TOKENS.length];
+  return ZONE_TOKENS[index % ZONE_TOKENS.length] ?? "var(--lm-zone-1)";
 }

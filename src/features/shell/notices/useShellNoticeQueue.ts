@@ -95,6 +95,7 @@ export function useShellNoticeQueue(
   // moves — keyed on identity, that would never settle.
   const signature = candidates.map(noticeSignature).join("\u0002");
   // Idempotent per input, so a StrictMode double render cannot count twice.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on `signature`, not on the array callers rebuild
   const live = useMemo<QueuedNotice[]>(() => {
     const occurrences = occurrencesRef.current;
     const liveIds = new Set<string>(candidates.map((notice) => notice.id));

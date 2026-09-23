@@ -145,16 +145,21 @@ export function DeviceSection({
   // Load placements from shellStore on mount and when selectedAreaId changes
   useEffect(() => {
     let cancelled = false;
-    shellStore.load().then((state) => {
-      if (cancelled) return;
-      const stored = state.roomMap?.hueChannels ?? [];
-      setChannelPlacements(selectedAreaId ? hueChannelsForArea(stored, selectedAreaId) : stored);
-      setSyncedPositions(
-        selectedAreaId ? state.hueBridgeSyncedPositions?.[selectedAreaId] : undefined,
-      );
-      setHueZones(state.roomMap?.zones ?? []);
-      setPairedStrips(state.roomMap?.usbStrips ?? []);
-    });
+    shellStore
+      .load()
+      .then((state) => {
+        if (cancelled) return;
+        const stored = state.roomMap?.hueChannels ?? [];
+        setChannelPlacements(selectedAreaId ? hueChannelsForArea(stored, selectedAreaId) : stored);
+        setSyncedPositions(
+          selectedAreaId ? state.hueBridgeSyncedPositions?.[selectedAreaId] : undefined,
+        );
+        setHueZones(state.roomMap?.zones ?? []);
+        setPairedStrips(state.roomMap?.usbStrips ?? []);
+      })
+      .catch((error: unknown) => {
+        console.error("[LumaSync] DeviceSection: loading room-map placements failed:", error);
+      });
     return () => { cancelled = true; };
   }, [selectedAreaId]);
 
@@ -171,6 +176,7 @@ export function DeviceSection({
   // One scroller serves every category — they only toggle `hidden` — so the
   // offset carries over and a taller category opens past its own heading.
   const mainScrollRef = useRef<HTMLDivElement | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: activeCategory is the trigger that resets the shared scroller
   useEffect(() => {
     const main = mainScrollRef.current;
     if (main) main.scrollTop = 0;
@@ -179,13 +185,19 @@ export function DeviceSection({
 
   // The room-map editor authors strips on its own surface; re-hydrating here
   // catches those edits without coupling the two stores.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: connectedPort is the trigger that re-reads strips paired elsewhere
   useEffect(() => {
     if (activeCategory !== "usb") return;
     let cancelled = false;
-    void shellStore.load().then((state) => {
-      if (cancelled) return;
-      setPairedStrips(state.roomMap?.usbStrips ?? []);
-    });
+    shellStore
+      .load()
+      .then((state) => {
+        if (cancelled) return;
+        setPairedStrips(state.roomMap?.usbStrips ?? []);
+      })
+      .catch((error: unknown) => {
+        console.error("[LumaSync] DeviceSection: re-reading paired USB strips failed:", error);
+      });
     return () => { cancelled = true; };
   }, [activeCategory, connectedPort]);
 

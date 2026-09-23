@@ -6,7 +6,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { useMemo } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/features/mode/model/contracts";
+import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/shared/contracts/mode";
 import {
   PREVIEW_OPEN_NOTICE_MS,
   usePreviewOpenNotice,

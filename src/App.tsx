@@ -54,7 +54,7 @@ import {
 import {
   LIGHTING_MODE_KIND,
   type LightingModeConfig,
-} from "./features/mode/model/contracts";
+} from "@/shared/contracts/mode";
 import type { HueStartConfig } from "./features/hue/model/hueStartConfig";
 import { useStableHueStartConfig } from "./features/hue/state/useStableHueStartConfig";
 import { useHueStartConfigSync } from "./features/hue/state/useHueStartConfigSync";
@@ -344,7 +344,7 @@ function App() {
       // v1.5 W2-B4 — first deliberate mode click satisfies the LIGHTS
       // step guard. Subsequent clicks are no-ops on the flag.
       if (!hasInteractedWithMode) setHasInteractedWithMode(true);
-      handleLightingModeChange(next);
+      void handleLightingModeChange(next);
     },
     onOutputTargetsChange: handleOutputTargetsChange,
     onStopHueOutput: mode.stopHueOutput,

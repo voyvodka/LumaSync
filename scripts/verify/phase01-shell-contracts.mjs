@@ -2320,7 +2320,10 @@ const checkedPairs = nullabilityPairs.filter(
 );
 // 45 → 44: `WledCommandStatus` folded into the shared `CommandStatus`.
 // 44 → 45: `LaunchContext`, the `get_launch_context` response.
-const EXPECTED_NULLABILITY_PAIR_COUNT = 45;
+// 45 → 49: the lighting-mode contract moved into shared/contracts/mode.ts,
+// pairing AmbilightPayload, LightingModeChangedPayload, LightingModeConfig and
+// SolidColorPayload.
+const EXPECTED_NULLABILITY_PAIR_COUNT = 49;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

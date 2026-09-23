@@ -1,0 +1,9 @@
+{
+  // Production code only: the test suites still index `mock.calls[0]` and
+  // fixture arrays unchecked (141 sites), so they stay on the base config.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noUncheckedIndexedAccess": true
+  },
+  "exclude": ["src/**/__tests__/**", "src/test/**"]
+}

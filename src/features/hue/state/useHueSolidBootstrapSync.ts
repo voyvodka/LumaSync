@@ -4,7 +4,7 @@ import {
   LIGHTING_MODE_KIND,
   type LightingModeConfig,
   type SolidColorPayload,
-} from "@/features/mode/model/contracts";
+} from "@/shared/contracts/mode";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 
 import { readHueStreamStatus } from "../hueReadCache";

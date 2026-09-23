@@ -13,7 +13,7 @@ import type { HueStartConfig } from "@/features/hue/model/hueStartConfig";
 import { HUE_READINESS_REASON, HUE_RUNTIME_STATUS, HUE_STATUS } from "@/shared/contracts/hue";
 import { HUE_LEFT_OUT_REASON, type HueLeftOutReason } from "@/shared/contracts/lighting";
 
-import type { LightingModeConfig } from "../model/contracts";
+import type { LightingModeConfig } from "@/shared/contracts/mode";
 
 /** The readiness loop's own cadence while a streamer holds the area. */
 export const BOOT_HUE_RETRY_POLL_MS = 3_000;

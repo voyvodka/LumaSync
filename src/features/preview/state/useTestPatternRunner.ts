@@ -110,7 +110,7 @@ export function useTestPatternRunner({
 
   const dispatch = useCallback(() => {
     const request = pendingRef.current;
-    if (!request || inFlightRef.current) return;
+    if (!request || inFlightRef.current !== null) return;
     pendingRef.current = null;
     lastStartAtRef.current = Date.now();
     const generation = generationRef.current;
@@ -161,7 +161,7 @@ export function useTestPatternRunner({
   }, [acquireHue, clearTimer, releaseHue, start]);
 
   const schedule = useCallback(() => {
-    if (inFlightRef.current) return;
+    if (inFlightRef.current !== null) return;
     const waitMs = Math.max(0, minIntervalMs - (Date.now() - lastStartAtRef.current));
     if (waitMs === 0) {
       clearTimer();
@@ -210,7 +210,7 @@ export function useTestPatternRunner({
 
   const settled = useCallback(async () => {
     // A start scheduled behind another can leave a second promise; drain them.
-    while (inFlightRef.current) await inFlightRef.current;
+    while (inFlightRef.current !== null) await inFlightRef.current;
   }, []);
 
   const stopRun = useCallback(async () => {

@@ -13,7 +13,7 @@
  * list behind.
  */
 
-import { CommandStatusOf } from "../../src/shared/contracts/status";
+import type { CommandStatusOf } from "../../src/shared/contracts/status";
 import type { CommandResponse } from "./responses";
 
 /**

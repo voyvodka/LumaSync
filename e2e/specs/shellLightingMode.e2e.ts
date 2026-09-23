@@ -1,7 +1,7 @@
 import { browser, expect } from "@wdio/globals";
 
 import type { UIMode } from "../../src/shared/contracts/shell";
-import { LIGHTING_MODE_KIND } from "../../src/features/mode/model/contracts";
+import { LIGHTING_MODE_KIND } from "../../src/shared/contracts/mode";
 import {
   activeModeKind,
   attribute,

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MODE_GUARD_REASONS } from "@/features/mode/state/modeGuard";
-import type { LightingModeConfig } from "@/features/mode/model/contracts";
+import type { LightingModeConfig } from "@/shared/contracts/mode";
 import { DEFAULT_ROOM_MAP, type HueZone, type RoomMapConfig } from "@/shared/contracts/roomMap";
 import type { ShellState } from "@/shared/contracts/shell";
 import type { LocalSink } from "@/features/device/localSink";

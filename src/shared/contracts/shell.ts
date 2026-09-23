@@ -8,7 +8,7 @@ import type {
 } from "./device";
 import type { DisplayId } from "./display";
 import type { LedTestPattern } from "./preview";
-import type { LightingModeConfig } from "@/features/mode/model/contracts";
+import type { LightingModeConfig } from "./mode";
 import type {
   HueBridgeSummary,
   HueChannelPlacementOverride,
