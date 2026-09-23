@@ -51,6 +51,7 @@ function Harness() {
     canStartHue: hook.canStartHue,
     isReadinessStale: hook.isReadinessStale,
     runtimeStatus: null,
+    runtimeStatusReadFailure: null,
     runtimeTargets: [],
     isRuntimeMutating: false,
     areaChannels: [],

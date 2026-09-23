@@ -185,6 +185,10 @@ export default {
       title: "Stop timeout",
     },
     reconnectingTitle: "Reconnecting to Hue bridge",
+    statusUnavailable: {
+      title: "Stream status unavailable",
+      body: "Could not read the Hue stream's state. Checking again automatically.",
+    },
     writeback: {
       codes: {
         CHAN_WB_SCHEMA_REJECTED: "Bridge rejected the position format.",
@@ -228,6 +232,7 @@ export default {
       failed: "FAILED",
       timedOut: "TIMED OUT",
       wait: "WAIT",
+      checking: "CHECKING",
       discovered: "DISCOVERED",
     },
   },

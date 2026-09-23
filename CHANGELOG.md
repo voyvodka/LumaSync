@@ -56,6 +56,11 @@ https://keepachangelog.com/en/1.1.0/
   started with that page already open — from the tray, a keyboard shortcut or the session restored
   at launch. The card now switches to Streaming as soon as the stream starts, and after its own Stop
   button it no longer keeps showing Streaming for up to ten seconds.
+- Devices → Hue Bridges no longer shows the bridge as Ready when the app briefly fails to read the
+  stream's state. A single failed read during a stream used to switch the card to Ready and stop it
+  checking again, so it stayed wrong until you started or stopped lighting. The card now says the
+  status is being checked, keeps retrying on its own at a slowing pace, and returns to Streaming
+  or Ready as soon as a read succeeds.
 - Switching between the compact and full window could stop working after the window had been
   hidden, covered or left behind a locked screen: the switch made in that state never finished, the
   window content stayed blank, and later switches from the title bar, the settings shortcut or the

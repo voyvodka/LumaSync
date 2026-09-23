@@ -5,7 +5,11 @@ import { HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
 
 import type { HueBridgeSummary, HuePairingCredentials } from "../../hueOnboardingApi";
 import { HUE_ONBOARDING_TRANSPORT_CODES, type HueOnboardingStatus } from "../../model/onboardingStatusCodes";
-import { RUNTIME_POLL_INTERVAL_MS } from "../../model/pollingCadence";
+import {
+  RUNTIME_POLL_INTERVAL_MS,
+  RUNTIME_POLL_MIN_INTERVAL_MS,
+  runtimeStatusRetryDelayMs,
+} from "../../model/pollingCadence";
 import { useHueRuntimeStatus } from "../useHueRuntimeStatus";
 
 const readHueStreamStatusMock = vi.fn();
@@ -83,6 +87,58 @@ describe("useHueRuntimeStatus", () => {
     readHueStreamStatusMock.mockResolvedValueOnce(statusOf("Running"));
     await flush(RUNTIME_POLL_INTERVAL_MS);
     expect(readHueStreamStatusMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("holds a rejected read beside the last reported status instead of minting a Failed state", async () => {
+    readHueStreamStatusMock.mockResolvedValueOnce(statusOf("Running"));
+    const { result } = renderHook(() =>
+      useHueRuntimeStatus({ bridge, credentials, areaId: "area-1", onError: () => {} }),
+    );
+    await flush(0);
+
+    readHueStreamStatusMock.mockRejectedValueOnce(new Error("IPC channel closed"));
+    await flush(RUNTIME_POLL_INTERVAL_MS);
+
+    expect(result.current.runtimeStatus?.state).toBe("Running");
+    expect(result.current.runtimeTargets[0]?.state).toBe("Running");
+    expect(result.current.runtimeStatusReadFailure).toEqual({
+      code: HUE_ONBOARDING_TRANSPORT_CODES.STREAM_STATUS_UNAVAILABLE,
+      message: expect.any(String),
+      details: "IPC channel closed",
+    });
+
+    readHueStreamStatusMock.mockResolvedValueOnce(statusOf("Running"));
+    await flush(runtimeStatusRetryDelayMs(1));
+    expect(result.current.runtimeStatusReadFailure).toBeNull();
+  });
+
+  it("retries on the backoff when the forced read after a start rejects while idle", async () => {
+    startHueMock.mockResolvedValue(undefined);
+    const { result } = renderHook(() =>
+      useHueRuntimeStatus({ bridge, credentials, areaId: "area-1", onError: () => {} }),
+    );
+    await flush(0);
+    expect(readHueStreamStatusMock).toHaveBeenCalledOnce();
+    // Idle is silent; let the mount read fall well behind the floor.
+    await flush(RUNTIME_POLL_MIN_INTERVAL_MS * 2);
+    expect(readHueStreamStatusMock).toHaveBeenCalledOnce();
+
+    readHueStreamStatusMock.mockRejectedValueOnce(new Error("IPC channel closed"));
+    await act(async () => {
+      await result.current.startRuntime();
+    });
+    expect(readHueStreamStatusMock).toHaveBeenCalledTimes(2);
+    expect(result.current.runtimeStatusReadFailure).not.toBeNull();
+
+    // The forced read counts toward the floor: no immediate second read.
+    await flush(runtimeStatusRetryDelayMs(1) - 1);
+    expect(readHueStreamStatusMock).toHaveBeenCalledTimes(2);
+
+    readHueStreamStatusMock.mockResolvedValueOnce(statusOf("Running"));
+    await flush(1);
+    expect(readHueStreamStatusMock).toHaveBeenCalledTimes(3);
+    expect(result.current.runtimeStatus?.state).toBe("Running");
+    expect(result.current.runtimeStatusReadFailure).toBeNull();
   });
 
   it("does nothing when startRuntime is called without a paired bridge", async () => {
