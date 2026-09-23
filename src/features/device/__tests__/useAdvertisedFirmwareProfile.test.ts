@@ -13,7 +13,7 @@ describe("useAdvertisedFirmwareProfile", () => {
     expect(result.current).toBeUndefined();
 
     act(() => {
-      bus.emit({ advertisedFirmwareProfile: FIRMWARE_PROFILE.ADALIGHT });
+      bus.emit({ advertisedFirmwareProfile: FIRMWARE_PROFILE.ADALIGHT, advertisedPixelLayout: undefined });
     });
 
     expect(result.current).toBe(FIRMWARE_PROFILE.ADALIGHT);
@@ -24,12 +24,12 @@ describe("useAdvertisedFirmwareProfile", () => {
     const { result } = renderHook(() => useAdvertisedFirmwareProfile({ firmwareProfileEvents: bus }));
 
     act(() => {
-      bus.emit({ advertisedFirmwareProfile: FIRMWARE_PROFILE.LUMASYNC_V1 });
+      bus.emit({ advertisedFirmwareProfile: FIRMWARE_PROFILE.LUMASYNC_V1, advertisedPixelLayout: undefined });
     });
     expect(result.current).toBe(FIRMWARE_PROFILE.LUMASYNC_V1);
 
     act(() => {
-      bus.emit({ advertisedFirmwareProfile: undefined });
+      bus.emit({ advertisedFirmwareProfile: undefined, advertisedPixelLayout: undefined });
     });
     expect(result.current).toBeUndefined();
   });
@@ -42,6 +42,6 @@ describe("useAdvertisedFirmwareProfile", () => {
 
     // No listener should remain — emitting after unmount must not throw
     // and must not resurrect any stale subscriber.
-    expect(() => bus.emit({ advertisedFirmwareProfile: FIRMWARE_PROFILE.ADALIGHT })).not.toThrow();
+    expect(() => bus.emit({ advertisedFirmwareProfile: FIRMWARE_PROFILE.ADALIGHT, advertisedPixelLayout: undefined })).not.toThrow();
   });
 });

@@ -27,8 +27,9 @@ stranger's device.
 no further than the picker would. On the output side, `apply_mode_change` builds a serial plan only
 from a status that is `connected`; a name alone was never admitted, and opening it would bypass the
 allowlist. A registered WLED sink is still the "usb" channel with no serial connection at all. The
-connect-time enumeration and open sit behind `SerialPortIo`, so the IPC tests drive the gate with a
-synthetic inventory and see every attempted open.
+enumeration and open behind both connect and the health check sit behind `SerialPortIo`, which hands
+back the settled handle for the PING, so the tests drive the gate with a synthetic inventory, see
+every attempted open, and script what the device answers.
 
 **Read the constant. Never hardcode the list elsewhere.** A second copy is a second thing to keep
 in sync, and the failure is silent: a device works in one code path and is rejected in another.
@@ -39,15 +40,35 @@ ceiling.** 11 520 bytes/s against a `6 + N × bpp` frame
 `led_calibration.rs`: 23 fps at 164 LEDs in GRB, 17 fps in RGBW. The pacer already clamps to it and
 telemetry already reports it through `linkConstrained` and `linkMaxFps`. Read that number as "the
 link is full", not as a pipeline shortfall — it has been misread as one, and the fixes that follow
-from the misreading (moving the sink write off the capture thread, splitting the frame across two
-channels) aim at a bottleneck that is not there. Moving the write off the capture thread is worth
-doing for latency; it will not add a frame.
+from the misreading (splitting the frame across two channels) aim at a bottleneck that is not
+there. Taking the write off the capture thread (below) let the app reach that ceiling; nothing
+host-side takes it past it.
 
 Raising the ceiling means raising the baud, and that is a contract with firmware that is already
 flashed rather than a constant to edit. Every chip on the allowlist supports far more than
 115 200 — but the host and the device have to agree, and the Adalight profile is pinned at 115 200
 by Adalight's own convention, so it could never move. `a_164_led_strip_is_capped_by_the_link_at_23_fps`
 pins the arithmetic so the next person meets the explanation instead of the number alone.
+
+**The serial write never blocks the worker.** Each open port gets a writer thread
+(`WriterSession`, `led_output.rs`). `send` copies the packet into a latest-wins slot and returns;
+the writer takes the newest packet, writes it, and waits out its wire time plus 2 % before taking
+another. Before, the worker wrote and then flushed — `tcdrain`, a wait for every byte to leave —
+so each frame cost its ~43 ms of wire time on the capture thread, the quality controller counted
+that as frame cost and stretched the interval, and a 164-LED strip got about 15 fps from a link
+that carries 23. Pacing in the writer instead of draining keeps the property the flush was buying:
+the OS buffer never holds a backlog, so what reaches the strip is never older than one wire time.
+Streaming never flushes; only Solid, a one-shot write, uses `send_and_wait`, which drains and
+reports that packet's own outcome.
+
+What did not change: a failed write still reaches the worker as the same coded error
+(`LED_OUTPUT_WRITE_FAILED`, `LED_OUTPUT_FLUSH_FAILED`), one send later, and removes the session so
+the send after reopens the port; the bootloader settle still runs once per newly opened handle, on
+the caller. Dropping a session — `disconnect_session`, or a failure — interrupts a pacing wait at
+once, closes the port before reporting the writer gone, and waits at most `OUTPUT_TIMEOUT_MS` +
+100 ms for a write in progress before detaching the thread. The writer allocates nothing per frame
+once its two ping-pong buffers have grown; the allocation guard runs the production writer to prove
+it (`capture-and-pipeline.md`).
 
 **Every sink goes through the `LedSink` trait.** Serial and WLED differ in transport, not in what
 they are asked to do. New output types implement the trait rather than branching at the call site.
@@ -102,7 +123,7 @@ alternative is a guaranteed handshake failure on every Arduino-class board.
 ## Gotchas
 
 - **Opening a serial port toggles DTR, which resets many boards.** Reconnecting on every mode change makes an Arduino-class controller reboot each time, so a cached session is deliberately preserved across mode changes — the log line `cached serial session preserved to avoid DTR-reset cycle` is that working as intended, not a leak. That preservation is scoped to the *same* port only: `set_active_port` (`lighting_mode.rs`) releases the previous port's cached session via `output_bridge.disconnect_session` the moment the active port actually changes, so switching away from a port does not hold its OS handle open until the app quits. A future `LedSink`-from-registry unification (see `ActiveSinkRegistry` in `commands/device_connection.rs`) must carry this same release-on-switch rule, not just the DTR-preserving cache.
-- **The output path settles too, because connect drops its handle.** `connect_serial_port` opens, waits `BOOTLOADER_SETTLE_DELAY_MS`, verifies, and lets its handle fall out of scope (`Ok(_port_handle)` — the underscore is deliberate). So the first frame reopens the port through `SerialLedPacketSender`'s factory, which is a *second* DTR assert and a second auto-reset; the session cache above only protects frame 2 onward. Frame 1 is the one the user is watching, so the same settle runs after any newly opened output handle. It is an `after_open` hook rather than a `sleep` inside the factory so tests can assert *when* it fires — once per session, never per frame — without waiting 2 s. Paying it per frame would put the capture-to-output path forty times over budget.
+- **The output path settles too, because connect drops its handle.** `connect_serial_port` opens, waits `BOOTLOADER_SETTLE_DELAY_MS`, PINGs on that same handle (`serial-protocol.md` §1.5), and drops it (`drop(handle)` in `connect_serial_port_blocking`). So the first frame reopens the port through `SerialLedPacketSender`'s factory, which is a *second* DTR assert and a second auto-reset; the session cache above only protects frame 2 onward. Frame 1 is the one the user is watching, so the same settle runs after any newly opened output handle. It is an `after_open` hook rather than a `sleep` inside the factory so tests can assert *when* it fires — once per session, never per frame — without waiting 2 s. Paying it per frame would put the capture-to-output path forty times over budget.
 - **macOS phantom serial endpoints accept `open()` and `write()` and go nowhere.** `/dev/cu.Bluetooth-Incoming-Port` and similar route to nothing — every frame "succeeds" at 20 Hz while the strip stays dark, which a user reads as a crash. This is why the allowlist rejects up front instead of trying and failing.
 - **A failed connect must not leave its port name in the connection status.** `SerialConnectionStatus.portName` is the port that was opened, and is `null` whenever `connected` is false. The refused name goes in `status.details` (`port="…"`). It used to be echoed back, and that did two kinds of damage. `apply_mode_change` (`lighting_mode.rs`) planned USB output from `port_name` even while `connected` was false, so the next Solid or Ambilight start opened and wrote to a port that had just been refused `PORT_UNSUPPORTED`, which bypassed the allowlist. It also fed `useUsbConnectionStatus`, so the room map showed a refused or unplugged port as ONLINE. `failed_connect_status` in `device_connection.rs` builds every failure status and has no way to set a port name, and `apply_mode_change` now requires `connected` as well, so neither side alone can reopen the hole. The LED test pattern needed the second guard most: with no output available it sends `targets: []`, which the legacy rule reads as "USB required", and a test skips the USB gate — so only the plan stood between a stale name and the worker.
 - **macOS exposes every USB adapter under two paths, and only one of them works.** `/dev/cu.*` is the call-out device and is correct; its `/dev/tty.*` sibling is a blocking terminal device that waits on DCD, and CH340/FTDI/CP2102/Arduino boards never assert it — so the `tty.*` port opens successfully and then stalls, producing "Connect and verify: Pass" followed by a handshake timeout. Real incident, 2026-04-26. All `/dev/tty.*` paths are filtered, including `usbmodem*`, because the `cu.*` sibling always exists. The filter used to cover only the listing: connect looked names up in the raw inventory, where the `tty.*` sibling carries the same allowlisted VID:PID, so a stale or directly invoked name still opened it. Connect and the health check now refuse an enumerated `tty.*` path with `PORT_UNSUPPORTED` and name the `cu.*` path in `details`, rather than silently opening the sibling — the caller asked for a path, and quietly substituting another would hide the stale value instead of surfacing it. The filter stays macOS-only; no other platform names a serial device `/dev/tty.<name>`.

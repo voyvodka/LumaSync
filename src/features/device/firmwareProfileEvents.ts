@@ -1,11 +1,13 @@
-// Broadcasts the last completed health check's advertised firmware profile.
-// Separate from connectionEvents.ts, whose every emit drives a re-poll a
-// health check has no reason to trigger.
-import type { FirmwareProfile } from "@/shared/contracts/device";
+// Broadcasts what the firmware last said about itself — on a connect's PING
+// or a health check. Separate from connectionEvents.ts, whose every emit
+// drives a re-poll neither has any reason to trigger.
+import type { FirmwarePixelLayout, FirmwareProfile } from "@/shared/contracts/device";
 
 export interface FirmwareProfileEvent {
   // Mirrors HealthCheckResult.advertisedFirmwareProfile's absence semantics verbatim.
   readonly advertisedFirmwareProfile: FirmwareProfile | undefined;
+  // Same absence rule: undefined is unknown firmware, never "RGB".
+  readonly advertisedPixelLayout: FirmwarePixelLayout | undefined;
 }
 
 export type FirmwareProfileEventListener = (event: FirmwareProfileEvent) => void;

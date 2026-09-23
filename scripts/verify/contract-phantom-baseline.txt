@@ -25,10 +25,9 @@ HEALTH_CHECK_NOT_AVAILABLE
 # as a MISSING PRODUCER until the frontend started minting it.
 HUE_PAIRING_PENDING_LINK_BUTTON
 
-# No producer, but EN+TR strings exist under device.health.codes.*. The handshake
-# emits OK / WORKER_PANIC / PROTOCOL_ERROR / HANDSHAKE_TIMEOUT only.
+# No producer, but EN+TR strings exist under device.health.codes.*. Rust never
+# sees the selected profile; the pickers compare the advertised one themselves.
 SERIAL_HEALTH_FIRMWARE_MISMATCH
-SERIAL_HEALTH_VERSION_MISMATCH
 
 # No producer and no consumer. Its sibling HUE_CHANNEL_POSITIONS_UPDATED is real.
 HUE_CHANNEL_POSITIONS_FAILED

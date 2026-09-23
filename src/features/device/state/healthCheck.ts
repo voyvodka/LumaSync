@@ -88,7 +88,10 @@ export function createHealthCheck(
 
       // Lets FirmwareProfilePicker read the advertised profile without
       // mounting its own controller (and running its own health check).
-      firmwareProfileEventsBus?.emit({ advertisedFirmwareProfile: result.advertisedFirmwareProfile });
+      firmwareProfileEventsBus?.emit({
+        advertisedFirmwareProfile: result.advertisedFirmwareProfile,
+        advertisedPixelLayout: result.firmware?.pixelLayout,
+      });
     } catch (error) {
       if (!store.isCurrentToken(token)) {
         return;

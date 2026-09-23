@@ -14,8 +14,9 @@ use tauri::{App, Manager};
 
 use super::{invoke, main_webview, mock_app, mock_app_with_serial_ports, status_code};
 use crate::commands::device_connection::{
-    ActiveSinkRegistry, SerialConnectionState, SerialPortAccess, SerialPortIo,
+    ActiveSinkRegistry, SerialConnectionState, SerialPortAccess, SerialPortIo, SettledPort,
 };
+use crate::commands::device_handshake::SerialRoundTrip;
 use crate::commands::led_output::{LedOutputBridge, LedOutputError, LedPacketSender};
 use crate::commands::lighting_mode::LightingRuntimeState;
 use crate::commands::wled_sink::{WledProtocol, WledSinkConfig};
@@ -43,12 +44,25 @@ impl SerialPortIo for FakeSerialPorts {
         Ok(self.ports.clone())
     }
 
-    fn open_and_settle(&self, port_name: &str) -> serialport::Result<()> {
+    fn open_and_settle(&self, port_name: &str) -> serialport::Result<SettledPort> {
         self.opened
             .lock()
             .expect("opened lock poisoned")
             .push(port_name.to_string());
+        Ok(Box::new(SilentDevice))
+    }
+}
+
+/// Answers nothing, like an Adalight sketch: admission is all these tests read.
+struct SilentDevice;
+
+impl SerialRoundTrip for SilentDevice {
+    fn write_all(&mut self, _bytes: &[u8]) -> std::io::Result<()> {
         Ok(())
+    }
+
+    fn read_with_timeout(&mut self, _buf: &mut [u8], _timeout: Duration) -> std::io::Result<usize> {
+        Ok(0)
     }
 }
 

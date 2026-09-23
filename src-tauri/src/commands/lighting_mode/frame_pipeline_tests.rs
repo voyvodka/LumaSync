@@ -820,12 +820,23 @@ mod alloc_count {
 
     /// (allocations, bytes requested) made by `f` on this thread.
     pub fn measure(f: impl FnOnce()) -> (usize, usize) {
-        COUNT.with(|count| count.set(0));
-        BYTES.with(|total| total.set(0));
-        ACTIVE.with(|active| active.set(true));
+        restart();
         f();
         ACTIVE.with(|active| active.set(false));
         (COUNT.with(Cell::get), BYTES.with(Cell::get))
+    }
+
+    /// Start counting on this thread from zero, for a thread the test does not
+    /// drive directly — the serial writer counts from inside its port.
+    pub fn restart() {
+        COUNT.with(|count| count.set(0));
+        BYTES.with(|total| total.set(0));
+        ACTIVE.with(|active| active.set(true));
+    }
+
+    /// Allocations on this thread since the last `restart`.
+    pub fn count_so_far() -> usize {
+        COUNT.with(Cell::get)
     }
 }
 
@@ -837,7 +848,8 @@ static COUNTING_ALLOCATOR: alloc_count::CountingAllocator = alloc_count::Countin
 /// stage and the border cache reuse their buffers and add nothing.
 const ALLOCS_PER_FRAME: usize = 3;
 
-/// Accepts the packet without keeping it, so the sink costs only its encode.
+/// Accepts the packet without keeping it, so the timing report's sink costs
+/// only its encode.
 struct NullSender;
 
 impl LedPacketSender for NullSender {
@@ -847,6 +859,33 @@ impl LedPacketSender for NullSender {
     }
 
     fn disconnect_session(&self, _port_name: &str) {}
+}
+
+/// The port behind the production serial writer. It runs on the writer
+/// thread, so it is where that thread's allocations are counted: each write
+/// reads what the writer allocated since the previous one, past warm-up.
+struct CountingPort {
+    writes: Arc<AtomicUsize>,
+    writer_allocs: Arc<AtomicUsize>,
+}
+
+/// Writes before the writer's two ping-pong buffers have both grown.
+const WRITER_WARM_WRITES: usize = 4;
+
+impl std::io::Write for CountingPort {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if self.writes.fetch_add(1, Ordering::SeqCst) >= WRITER_WARM_WRITES {
+            self.writer_allocs
+                .fetch_add(alloc_count::count_so_far(), Ordering::SeqCst);
+        }
+        std::hint::black_box(buf);
+        alloc_count::restart();
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 fn lut_builds() -> (usize, usize) {
@@ -872,6 +911,16 @@ fn assert_steady_frames_within_budget(
         Some(0.8),
     )])));
 
+    let writes = Arc::new(AtomicUsize::new(0));
+    let writer_allocs = Arc::new(AtomicUsize::new(0));
+    let (port_writes, port_allocs) = (Arc::clone(&writes), Arc::clone(&writer_allocs));
+    let bridge = LedOutputBridge::with_serial_writer_for_tests(move |_| {
+        Ok(Box::new(CountingPort {
+            writes: Arc::clone(&port_writes),
+            writer_allocs: Arc::clone(&port_allocs),
+        }))
+    });
+
     let before_construction = lut_builds();
     let mut run = PipelineRun::new(
         led_calibration,
@@ -879,7 +928,7 @@ fn assert_steady_frames_within_budget(
         room,
         profile,
         chip_type,
-        LedOutputBridge::from_sender(Arc::new(NullSender)),
+        bridge.clone(),
     );
     let after_construction = lut_builds();
     assert!(
@@ -914,6 +963,18 @@ fn assert_steady_frames_within_budget(
         before_steady,
         "a steady frame tabulated a gamma or sRGB LUT; build it once per worker"
     );
+
+    bridge.wait_idle_for_tests(PORT);
+    assert!(
+        writes.load(Ordering::SeqCst) > WRITER_WARM_WRITES,
+        "the writer never got past warm-up, so it was never measured"
+    );
+    assert_eq!(
+        writer_allocs.load(Ordering::SeqCst),
+        0,
+        "the serial writer allocated per frame ({leds} LEDs, {profile:?}/{chip_type:?}); \
+         it must reuse its two buffers"
+    );
 }
 
 #[test]
@@ -936,6 +997,46 @@ fn steady_frame_allocations_and_lut_builds_stay_within_budget() {
         FirmwareProfile::Adalight,
         LedChipType::Ws2812bGrb,
     );
+}
+
+/// A WLED frame's allocations: the corrected strip, then the datagram list,
+/// the chunk list and one datagram per chunk. 164 LEDs is one datagram in
+/// both protocols.
+const WLED_ALLOCS_PER_FRAME: usize = 4;
+
+#[test]
+fn corrected_wled_sink_frame_allocations_stay_within_budget() {
+    use crate::commands::led_sink::LedSink;
+    use crate::commands::wled_sink::{CorrectedWledSink, WledProtocol, WledUdpSink};
+
+    // Loopback only; nothing reads it, so UDP simply drops what overflows.
+    let receiver = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind receiver");
+    let port = receiver.local_addr().expect("receiver addr").port();
+    let strip: Vec<[u8; 3]> = (0..164_u16)
+        .map(|i| [(i % 256) as u8, (i * 3 % 256) as u8, (i * 7 % 256) as u8])
+        .collect();
+
+    for protocol in [WledProtocol::Ddp, WledProtocol::Drgb] {
+        let mut sink = CorrectedWledSink::new(
+            WledUdpSink::new(std::net::Ipv4Addr::LOCALHOST, port, 164, protocol),
+            color_correction(),
+        );
+        sink.start().expect("bind");
+        sink.set_brightness(0.8);
+        for _ in 0..4 {
+            sink.send_frame(&strip).expect("warm-up send");
+        }
+        for n in 0..16 {
+            let (allocs, _) = alloc_count::measure(|| {
+                sink.send_frame(&strip).expect("send");
+            });
+            assert!(
+                allocs <= WLED_ALLOCS_PER_FRAME,
+                "{protocol:?} frame {n} made {allocs} allocations; the budget is \
+                 {WLED_ALLOCS_PER_FRAME}"
+            );
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

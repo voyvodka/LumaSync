@@ -35,11 +35,13 @@
 //! 1       1      magic_lo          = 0x55
 //! 2       1      opcode            = 0x11  (HANDSHAKE_OPCODE_PONG)
 //! 3       2      firmware_version  little-endian u16 (e.g. 0x0104 = v1.4)
-//! 5       1      firmware_profile  0x01 = LumaSyncV1, 0x02 = Adalight
+//! 5       1      firmware_format   low nibble: framing, 1 = LumaSyncV1, 2 = Adalight
+//!                                  high nibble: pixel layout, 0 = RGB, 1 = RGBW
 //! 6       1      xor_checksum      = XOR of bytes [0..6)
 //! ```
 //!
-//! Total: 7 bytes.
+//! Total: 7 bytes. Firmware that predates the layout nibble sends `0x01`,
+//! which reads as LumaSync v1 with RGB pixels — what it always meant.
 //!
 //! ## Reading the response
 //!
@@ -47,12 +49,14 @@
 //! opcode fixes the frame length, and the round-trip returns the moment a
 //! complete valid PONG is buffered rather than waiting out the timeout.
 //!
-//! No companion firmware ships yet; the PONG path is exercised by mock ports.
+//! The host PINGs on connect (with `CONNECT_HANDSHAKE_TIMEOUT`) and in the
+//! health check. No LumaSync firmware ships yet, so the tests drive the PONG
+//! path through mock ports; see docs/architecture/serial-protocol.md §1.5.
 
 use std::io::{Read, Write};
 use std::time::{Duration, Instant};
 
-use super::led_output::FirmwareProfile;
+use super::led_output::{FirmwareProfile, WirePixelLayout};
 
 // ---------------------------------------------------------------------------
 // Opcode constants
@@ -68,14 +72,32 @@ pub const HANDSHAKE_OPCODE_PONG: u8 = 0x11;
 pub const FRAME_MAGIC: [u8; 2] = [0xAA, 0x55];
 
 // ---------------------------------------------------------------------------
-// Firmware profile wire byte mapping
+// PONG byte 5 — framing (low nibble) and pixel layout (high nibble)
 // ---------------------------------------------------------------------------
 
-/// Wire byte for `FirmwareProfile::LumaSyncV1` in a PONG frame.
-const PROFILE_BYTE_LUMASYNC_V1: u8 = 0x01;
+/// Framing nibble for `FirmwareProfile::LumaSyncV1`.
+const FRAMING_LUMASYNC_V1: u8 = 0x1;
 
-/// Wire byte for `FirmwareProfile::Adalight` in a PONG frame.
-const PROFILE_BYTE_ADALIGHT: u8 = 0x02;
+/// Framing nibble for `FirmwareProfile::Adalight`.
+const FRAMING_ADALIGHT: u8 = 0x2;
+
+/// Layout nibble for three bytes per pixel.
+const LAYOUT_RGB: u8 = 0x0;
+
+/// Layout nibble for four bytes per pixel.
+const LAYOUT_RGBW: u8 = 0x1;
+
+// ---------------------------------------------------------------------------
+// Host version window
+// ---------------------------------------------------------------------------
+
+/// Oldest firmware version this host speaks to: 1.0.
+pub const MIN_FW_VERSION: u16 = 0x0100;
+
+/// Newest firmware major this host knows. Minors are additive and every major
+/// keeps accepting v1 data frames under `AA 55`, so a version outside the window
+/// gates features, never streaming — see docs/architecture/serial-protocol.md §1.5.
+pub const MAX_FW_MAJOR: u8 = 1;
 
 // ---------------------------------------------------------------------------
 // Parsed PONG response
@@ -90,14 +112,23 @@ pub struct HandshakePongResponse {
     pub firmware_version: u16,
     /// Firmware profile advertised by the device.
     pub firmware_profile: FirmwareProfile,
+    /// Bytes per pixel the device expects inside a data frame.
+    pub pixel_layout: WirePixelLayout,
 }
 
 impl HandshakePongResponse {
     /// Format firmware_version as a human-readable string, e.g. `"1.4"`.
     pub fn version_string(&self) -> String {
-        let major = (self.firmware_version >> 8) as u8;
-        let minor = (self.firmware_version & 0xFF) as u8;
-        format!("{}.{}", major, minor)
+        format!("{}.{}", self.major(), self.firmware_version & 0xFF)
+    }
+
+    fn major(&self) -> u8 {
+        (self.firmware_version >> 8) as u8
+    }
+
+    /// Whether the version is inside `MIN_FW_VERSION`..=`MAX_FW_MAJOR`.x.
+    pub fn is_version_supported(&self) -> bool {
+        self.firmware_version >= MIN_FW_VERSION && self.major() <= MAX_FW_MAJOR
     }
 }
 
@@ -117,8 +148,11 @@ pub enum HandshakeError {
     /// The frame was shorter than the minimum valid PONG length (7 bytes),
     /// or no bytes were received within the timeout window.
     TooShort,
-    /// The profile byte did not map to a known `FirmwareProfile`.
+    /// The framing nibble did not map to a known `FirmwareProfile`.
     UnknownProfile,
+    /// The layout nibble is unknown, or names RGBW under Adalight framing,
+    /// which has no four-byte pixel.
+    UnknownPixelLayout,
 }
 
 impl HandshakeError {
@@ -126,9 +160,11 @@ impl HandshakeError {
     /// convention. The caller maps these to `SerialHealthCode` values.
     pub fn as_status_code(&self) -> &'static str {
         match self {
-            Self::BadMagic | Self::WrongOpcode | Self::BadChecksum | Self::UnknownProfile => {
-                "SERIAL_HEALTH_PROTOCOL_ERROR"
-            }
+            Self::BadMagic
+            | Self::WrongOpcode
+            | Self::BadChecksum
+            | Self::UnknownProfile
+            | Self::UnknownPixelLayout => "SERIAL_HEALTH_PROTOCOL_ERROR",
             Self::TooShort => "SERIAL_HEALTH_HANDSHAKE_TIMEOUT",
         }
     }
@@ -200,16 +236,21 @@ pub fn decode_handshake_pong(bytes: &[u8]) -> Result<HandshakePongResponse, Hand
     // Firmware version: little-endian u16 at bytes[3..5]
     let firmware_version = u16::from_le_bytes([bytes[3], bytes[4]]);
 
-    // Profile byte
-    let firmware_profile = match bytes[5] {
-        PROFILE_BYTE_LUMASYNC_V1 => FirmwareProfile::LumaSyncV1,
-        PROFILE_BYTE_ADALIGHT => FirmwareProfile::Adalight,
+    let firmware_profile = match bytes[5] & 0x0F {
+        FRAMING_LUMASYNC_V1 => FirmwareProfile::LumaSyncV1,
+        FRAMING_ADALIGHT => FirmwareProfile::Adalight,
         _ => return Err(HandshakeError::UnknownProfile),
+    };
+    let pixel_layout = match (bytes[5] >> 4, firmware_profile) {
+        (LAYOUT_RGB, _) => WirePixelLayout::Rgb,
+        (LAYOUT_RGBW, FirmwareProfile::LumaSyncV1) => WirePixelLayout::Rgbw,
+        _ => return Err(HandshakeError::UnknownPixelLayout),
     };
 
     Ok(HandshakePongResponse {
         firmware_version,
         firmware_profile,
+        pixel_layout,
     })
 }
 
@@ -393,7 +434,7 @@ impl ResponseReader {
 ///
 /// Returns a `HandshakeError` variant that maps directly to the appropriate
 /// `SerialHealthCode` in `run_serial_health_check`.
-pub fn perform_handshake<T: SerialRoundTrip>(
+pub fn perform_handshake<T: SerialRoundTrip + ?Sized>(
     port: &mut T,
     timeout: Duration,
 ) -> Result<(HandshakePongResponse, u32), HandshakeError> {
@@ -441,6 +482,34 @@ pub fn perform_handshake<T: SerialRoundTrip>(
 }
 
 // ---------------------------------------------------------------------------
+// probe_firmware — the connect-time PING
+// ---------------------------------------------------------------------------
+
+/// What a PING on connect found. Only `Answered` carries information; the other
+/// two mean "unknown firmware" and must leave connect exactly as it was before
+/// the probe existed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FirmwareProbe {
+    Answered(HandshakePongResponse),
+    /// Nothing came back: Adalight, a pre-handshake sketch, or a board still
+    /// booting.
+    Silent,
+    /// Bytes came back, but no valid PONG among them.
+    Garbled(HandshakeError),
+}
+
+pub fn probe_firmware<T: SerialRoundTrip + ?Sized>(
+    port: &mut T,
+    timeout: Duration,
+) -> FirmwareProbe {
+    match perform_handshake(port, timeout) {
+        Ok((response, _)) => FirmwareProbe::Answered(response),
+        Err(HandshakeError::TooShort) => FirmwareProbe::Silent,
+        Err(error) => FirmwareProbe::Garbled(error),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -449,6 +518,12 @@ mod tests {
     use super::*;
     use std::collections::VecDeque;
     use std::io::{Read, Write};
+
+    /// Byte 5 as every firmware before the layout nibble sent it.
+    const PROFILE_BYTE_LUMASYNC_V1: u8 = 0x01;
+    const PROFILE_BYTE_ADALIGHT: u8 = 0x02;
+    /// LumaSync v1 framing, RGBW layout.
+    const FORMAT_BYTE_V1_RGBW: u8 = 0x11;
 
     // -----------------------------------------------------------------------
     // MockPort — deterministic scripted responses for unit tests
@@ -890,14 +965,113 @@ mod tests {
         let resp = HandshakePongResponse {
             firmware_version: 0x0104,
             firmware_profile: FirmwareProfile::LumaSyncV1,
+            pixel_layout: WirePixelLayout::Rgb,
         };
         assert_eq!(resp.version_string(), "1.4");
 
         let resp2 = HandshakePongResponse {
             firmware_version: 0x0200,
             firmware_profile: FirmwareProfile::Adalight,
+            pixel_layout: WirePixelLayout::Rgb,
         };
         assert_eq!(resp2.version_string(), "2.0");
+    }
+
+    // -----------------------------------------------------------------------
+    // PONG byte 5: framing nibble + layout nibble
+    // -----------------------------------------------------------------------
+
+    fn decode_format(format_byte: u8) -> Result<HandshakePongResponse, HandshakeError> {
+        decode_handshake_pong(&build_valid_pong(0x0104, format_byte))
+    }
+
+    #[test]
+    fn a_pre_nibble_pong_still_reads_as_v1_rgb() {
+        let v1 = decode_format(PROFILE_BYTE_LUMASYNC_V1).expect("0x01 must parse");
+        assert_eq!(v1.firmware_profile, FirmwareProfile::LumaSyncV1);
+        assert_eq!(v1.pixel_layout, WirePixelLayout::Rgb);
+
+        let ada = decode_format(PROFILE_BYTE_ADALIGHT).expect("0x02 must parse");
+        assert_eq!(ada.firmware_profile, FirmwareProfile::Adalight);
+        assert_eq!(ada.pixel_layout, WirePixelLayout::Rgb);
+    }
+
+    #[test]
+    fn the_high_nibble_carries_the_rgbw_layout() {
+        let rgbw = decode_format(FORMAT_BYTE_V1_RGBW).expect("0x11 must parse");
+        assert_eq!(rgbw.firmware_profile, FirmwareProfile::LumaSyncV1);
+        assert_eq!(rgbw.pixel_layout, WirePixelLayout::Rgbw);
+    }
+
+    #[test]
+    fn unknown_nibbles_are_protocol_errors() {
+        assert_eq!(decode_format(0x21), Err(HandshakeError::UnknownPixelLayout));
+        assert_eq!(decode_format(0xF1), Err(HandshakeError::UnknownPixelLayout));
+        assert_eq!(decode_format(0x03), Err(HandshakeError::UnknownProfile));
+        assert_eq!(decode_format(0x10), Err(HandshakeError::UnknownProfile));
+        // Adalight has no four-byte pixel, so the host could never honour it.
+        assert_eq!(decode_format(0x12), Err(HandshakeError::UnknownPixelLayout));
+        assert_eq!(
+            HandshakeError::UnknownPixelLayout.as_status_code(),
+            "SERIAL_HEALTH_PROTOCOL_ERROR"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Version window
+    // -----------------------------------------------------------------------
+
+    fn with_version(firmware_version: u16) -> HandshakePongResponse {
+        HandshakePongResponse {
+            firmware_version,
+            firmware_profile: FirmwareProfile::LumaSyncV1,
+            pixel_layout: WirePixelLayout::Rgb,
+        }
+    }
+
+    #[test]
+    fn the_version_window_is_every_1_x_release() {
+        assert!(with_version(0x0100).is_version_supported());
+        assert!(with_version(0x0104).is_version_supported());
+        assert!(with_version(0x01FF).is_version_supported());
+        assert!(
+            !with_version(0x00FF).is_version_supported(),
+            "0.x is pre-release"
+        );
+        assert!(!with_version(0x0000).is_version_supported());
+        assert!(
+            !with_version(0x0200).is_version_supported(),
+            "2.x is a new major"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // probe_firmware — connect-time outcomes
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn probe_sorts_replies_into_answered_silent_and_garbled() {
+        let mut answering = MockPort::with_response(build_valid_pong(0x0105, FORMAT_BYTE_V1_RGBW));
+        match probe_firmware(&mut answering, Duration::from_millis(250)) {
+            FirmwareProbe::Answered(pong) => {
+                assert_eq!(pong.firmware_version, 0x0105);
+                assert_eq!(pong.pixel_layout, WirePixelLayout::Rgbw);
+            }
+            other => panic!("expected an answer, got {other:?}"),
+        }
+        assert_eq!(answering.written, encode_handshake_ping());
+
+        let mut silent = MockPort::silent();
+        assert_eq!(
+            probe_firmware(&mut silent, Duration::from_millis(250)),
+            FirmwareProbe::Silent
+        );
+
+        let mut adalight_noise = MockPort::with_response(b"Ada\n".to_vec());
+        assert_eq!(
+            probe_firmware(&mut adalight_noise, Duration::from_millis(250)),
+            FirmwareProbe::Garbled(HandshakeError::BadMagic)
+        );
     }
 
     // -----------------------------------------------------------------------
