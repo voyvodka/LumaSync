@@ -34,5 +34,6 @@ export default {
     maximize: "Maximize",
     restore: "Restore",
     close: "Close",
+    sectionsAriaLabel: "Sections",
   },
 };

@@ -3,33 +3,14 @@
 # Ratchet: this file may only SHRINK. A key here that gains a reference is fine
 # (prune the line); a new orphan not listed here fails the verifier.
 #
-# Every entry left is copy written for a failure the app can produce but does not
-# yet display in the user's language — kept so wiring it up needs no new copy:
-#   device:healthCheck.serialHealthCodes.*  the health-check step list renders the
-#     backend's English `message`/`details`; these are the per-code equivalents
-#   hue:pairing.errors.*  a pairing refusal shows no reason beyond "Pairing failed"
-#   preview:status.TWIN_OVERLAY_* / CONTROL_POPUP_FAILED, preview:live.unavailableLinux
-#     the LED preview launchers discard these results, so a failed open is silent
+# Every entry left is copy kept for a case the app does not show yet:
+#   hue:pairing.errors.LINK_BUTTON_NOT_PRESSED  the unpressed link button has its
+#     own polling and timed-out copy under hue:pair.*
+#   preview:live.unavailableLinux  nothing opens a live-scope twin overlay yet;
+#     both launchers ask for the test scope
 # Everything else unreferenced was deleted from both locales.
 #
 # Blank lines and # comments ignored. One key per line, sorted.
 
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_FIRMWARE_MISMATCH.hint
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_FIRMWARE_MISMATCH.label
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_HANDSHAKE_TIMEOUT.hint
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_HANDSHAKE_TIMEOUT.label
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_OK.hint
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_OK.label
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_PROTOCOL_ERROR.hint
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_PROTOCOL_ERROR.label
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_VERSION_MISMATCH.hint
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_VERSION_MISMATCH.label
-hue:pairing.errors.BRIDGE_BUSY.description
-hue:pairing.errors.DEVICETYPE_INVALID.description
 hue:pairing.errors.LINK_BUTTON_NOT_PRESSED.description
-hue:pairing.errors.RATE_LIMITED.description
 preview:live.unavailableLinux
-preview:status.CONTROL_POPUP_FAILED
-preview:status.TWIN_OVERLAY_DISPLAY_NOT_FOUND
-preview:status.TWIN_OVERLAY_OPEN_FAILED
-preview:status.TWIN_OVERLAY_UNSUPPORTED_PLATFORM_LIVE

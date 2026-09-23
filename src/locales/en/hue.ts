@@ -27,6 +27,7 @@ export default {
     timedOutTitle: "Button press not detected",
     timedOutHint: "Select Try again, then press the button on top of your Hue bridge within a minute.",
     tryAgain: "Try again",
+    deferredTitle: "Bridge asked to wait",
   },
   pairing: {
     errors: {
@@ -34,7 +35,7 @@ export default {
         description: "Press the bridge link button and retry within 30 seconds.",
       },
       DEVICETYPE_INVALID: {
-        description: "Bridge rejected pairing request format.",
+        description: "The bridge rejected the format of the pairing request. Try again; if it keeps happening, please report it.",
       },
       BRIDGE_BUSY: {
         description: "Bridge is busy. Try again in a moment.",
@@ -226,6 +227,7 @@ export default {
       reconnecting: "RECONNECTING",
       failed: "FAILED",
       timedOut: "TIMED OUT",
+      wait: "WAIT",
       discovered: "DISCOVERED",
     },
   },

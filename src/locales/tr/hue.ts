@@ -30,6 +30,7 @@ const hue: Catalogue<typeof enHue> = {
     timedOutTitle: "Buton basışı algılanmadı",
     timedOutHint: "Tekrar dene'yi seçin, ardından bir dakika içinde Hue köprünüzün üstündeki butona basın.",
     tryAgain: "Tekrar dene",
+    deferredTitle: "Köprü beklemenizi istedi",
   },
   pairing: {
     errors: {
@@ -37,13 +38,13 @@ const hue: Catalogue<typeof enHue> = {
         description: "Köprü üzerindeki link button'a bas ve 30 saniye içinde tekrar dene.",
       },
       DEVICETYPE_INVALID: {
-        description: "Köprü eşleştirme isteği formatını reddetti.",
+        description: "Köprü eşleştirme isteğinin biçimini reddetti. Tekrar deneyin; sürerse lütfen bildirin.",
       },
       BRIDGE_BUSY: {
-        description: "Köprü şu anda meşgul, biraz sonra tekrar dene.",
+        description: "Köprü şu anda meşgul. Biraz sonra tekrar deneyin.",
       },
       RATE_LIMITED: {
-        description: "Çok fazla istek. Tekrar denemeden önce bir dakika bekle.",
+        description: "Çok fazla istek. Tekrar denemeden önce bir dakika bekleyin.",
       },
     },
   },
@@ -229,6 +230,7 @@ const hue: Catalogue<typeof enHue> = {
       reconnecting: "YEN. BAĞLANIYOR",
       failed: "BAŞARISIZ",
       timedOut: "SÜRE DOLDU",
+      wait: "BEKLEYİN",
       discovered: "KEŞFEDİLDİ",
     },
   },
