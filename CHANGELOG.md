@@ -78,6 +78,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- USB strips and WLED: with black border detection on, a letterboxed film no longer turns the
+  top and bottom LEDs dark. The strip had been sampling the black bars since 1.4.0, when LEDs
+  started taking their colour one by one; Hue lights were already skipping them. The strip now
+  takes the edge of the picture inside the bars, the same crop Hue uses.
 - WLED: a device that answers the connection check with a redirect is now reported as not a
   WLED device. Before, the app followed the redirect, which let anything on the local network
   point the check at another address, including this computer.

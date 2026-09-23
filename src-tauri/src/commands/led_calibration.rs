@@ -7,6 +7,8 @@
 /// breaking deserialization — the encoder validates them at use-time.
 use serde::{Deserialize, Serialize};
 
+use crate::commands::ambilight_capture::BlackBorderInsets;
+
 // ---------------------------------------------------------------------------
 // LED segment counts
 // ---------------------------------------------------------------------------
@@ -352,14 +354,37 @@ pub fn sample_frame_for_sequence(
     counts: &LedSegmentCounts,
     window_frac: f32,
 ) -> Vec<[u8; 3]> {
+    sample_frame_within_insets(
+        frame,
+        sequence,
+        counts,
+        window_frac,
+        &BlackBorderInsets::default(),
+    )
+}
+
+/// `sample_frame_for_sequence` over the picture inside the black-border
+/// `insets`: LED positions map onto the content rectangle, and no window
+/// reaches into the bars, so on letterboxed content the top and bottom LEDs
+/// take the picture's edge rather than going dark. Zero insets give exactly
+/// the full-frame answer.
+pub fn sample_frame_within_insets(
+    frame: &crate::commands::ambilight_capture::CapturedFrame,
+    sequence: &[LedSequenceItem],
+    counts: &LedSegmentCounts,
+    window_frac: f32,
+    insets: &BlackBorderInsets,
+) -> Vec<[u8; 3]> {
     let w = frame.width as usize;
     let h = frame.height as usize;
     if w == 0 || h == 0 || frame.pixels_rgb.is_empty() {
         return vec![[0, 0, 0]; sequence.len()];
     }
+    let (rows, cols) = insets.content_bounds(w, h);
+    let (content_w, content_h) = (cols.len(), rows.len());
 
-    let half_w = ((w as f32 * window_frac) / 2.0).max(1.0) as usize;
-    let half_h = ((h as f32 * window_frac) / 2.0).max(1.0) as usize;
+    let half_w = ((content_w as f32 * window_frac) / 2.0).max(1.0) as usize;
+    let half_h = ((content_h as f32 * window_frac) / 2.0).max(1.0) as usize;
     // Stride 4 left ~24 samples per LED at 640×360 (half the window is off-frame
     // on an edge LED); that noise floor read as "sharp". Stride 2 is ~100.
     const STEP: usize = 2;
@@ -368,13 +393,13 @@ pub fn sample_frame_for_sequence(
         .iter()
         .map(|item| {
             let (nx, ny) = led_to_screen_pos(item, counts);
-            let cx = (nx * (w as f32 - 1.0)).round() as usize;
-            let cy = (ny * (h as f32 - 1.0)).round() as usize;
+            let cx = cols.start + (nx * (content_w as f32 - 1.0)).round() as usize;
+            let cy = rows.start + (ny * (content_h as f32 - 1.0)).round() as usize;
 
-            let row_start = cy.saturating_sub(half_h);
-            let row_end = (cy + half_h + 1).min(h);
-            let col_start = cx.saturating_sub(half_w);
-            let col_end = (cx + half_w + 1).min(w);
+            let row_start = cy.saturating_sub(half_h).max(rows.start);
+            let row_end = (cy + half_h + 1).min(rows.end);
+            let col_start = cx.saturating_sub(half_w).max(cols.start);
+            let col_end = (cx + half_w + 1).min(cols.end);
 
             let mut sum_r = 0u32;
             let mut sum_g = 0u32;
