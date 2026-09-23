@@ -173,7 +173,7 @@ export function HueBridgesCategory({
             disabled={isHueDiscovering} aria-busy={isHueDiscovering}
           >
             <IconRefresh />
-            <span>{isHueDiscovering ? t("hue:page.scanning") : hueBridgeState === "offline" ? t("hue:wizard.offlineRediscover") : t("hue:page.scanNetwork")}</span>
+            <span>{isHueDiscovering ? t("hue:page.scanning") : t("hue:page.scanNetwork")}</span>
           </button>
         </div>
       </div>
@@ -653,25 +653,17 @@ export function HueBridgesCategory({
                 </div>
               ) : null}
 
-              {/* State N: Stale readiness */}
+              {/* State N: Stale readiness — Validate lives in the footer. */}
               {hueBridgeState === "stale" ? (
-                <div className="lm-hue-stale">
+                <div className="lm-hue-stale" data-testid="hue-stale">
                   <IconInfo />
                   <span className="lm-hue-stale-tx">{t("hue:runtime.checklist.revalidate")}</span>
-                  <button
-                    type="button"
-                    className="lm-hue-stale-act"
-                    onClick={() => { void revalidateArea(); }}
-                    disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}
-                  >
-                    {isCheckingReadiness ? t("hue:actions.checkingReadiness") : t("hue:page.validate")}
-                  </button>
                 </div>
               ) : null}
 
-              {/* State P: Gate blocked checklist */}
+              {/* State P: Gate blocked checklist — Validate lives in the footer. */}
               {hueBridgeState === "gateBlocked" ? (
-                <div className="lm-hue-checklist">
+                <div className="lm-hue-checklist" data-testid="hue-gate-blocked">
                   <div className="lm-hue-checklist-title">{t("hue:runtime.checklist.title")}</div>
                   {isReadinessStale ? (
                     <div className="lm-hue-checklist-item">
@@ -680,16 +672,6 @@ export function HueBridgesCategory({
                     </div>
                   ) : null}
                   <StatusCodeDetail code={runtimeStatus?.code} />
-                  <div className="lm-hue-checklist-btns">
-                    <button
-                      type="button"
-                      className="lm-hue-checklist-btn"
-                      onClick={() => { void revalidateArea(); }}
-                      disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}
-                    >
-                      {isCheckingReadiness ? t("hue:actions.checkingReadiness") : t("hue:page.validate")}
-                    </button>
-                  </div>
                 </div>
               ) : null}
 
@@ -732,15 +714,15 @@ export function HueBridgesCategory({
                     </button>
                   </>
                 ) : hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton" ? (
-                  <button type="button" className="lm-dcard-act is-danger is-tap" onClick={() => { selectBridge(null); }}>
+                  <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
                     {t("hue:page.cancel")}
                   </button>
                 ) : hueBridgeState === "pairingTimedOut" || hueBridgeState === "pairingDeferred" ? (
                   <>
-                    <button type="button" className="lm-dcard-act is-tap" onClick={() => { void pair(); }}>
+                    <button type="button" className="lm-dcard-act" onClick={() => { void pair(); }}>
                       {t("hue:pair.tryAgain")}
                     </button>
-                    <button type="button" className="lm-dcard-act is-danger is-tap" onClick={() => { selectBridge(null); }}>
+                    <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
                       {t("hue:page.cancel")}
                     </button>
                   </>

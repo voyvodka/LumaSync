@@ -36,6 +36,11 @@ https://keepachangelog.com/en/1.1.0/
   large red text; every bridge card state now shows the code as a small line under its message,
   where it can still be read for support. A stat box left on its own now spans the card's full
   width instead of leaving an empty half, on WLED device cards too.
+- Devices: a Hue bridge whose area needs checking again, or whose start is blocked by an unready
+  setup, shows one Validate button instead of two, and an unreachable bridge no longer shows
+  Rediscover both at the top of the page and on its card. Action buttons on Hue, USB and WLED
+  device cards are now at least 32 px tall and show the amber focus ring when reached with the
+  keyboard.
 
 ### Fixed
 
