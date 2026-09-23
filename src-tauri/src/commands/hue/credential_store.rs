@@ -756,7 +756,7 @@ pub struct ResolvedHueAppKey {
 /// and for platforms where `default_store()` degraded to `NoopStore`.
 ///
 /// `#[track_caller]` so the "no key" line below names the command that asked.
-/// Nine call sites reach this through `effective_hue_app_key`, and an unpaired
+/// Seven call sites reach this through `effective_hue_app_key`, and an unpaired
 /// launch runs several of them within a second — four identical lines with no
 /// referent read as a loop rather than as four commands each doing their job.
 #[track_caller]

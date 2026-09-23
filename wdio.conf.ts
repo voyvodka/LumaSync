@@ -6,7 +6,7 @@
 // This drives the *installed* app: it opens a real window, switches modes and
 // tabs on screen, and reads and writes the real `shell-state.json`. On a machine
 // the maintainer also uses, a run is visible and it does leave state behind — so
-// specs must not assume a starting state. See docs/architecture/build-and-release.md.
+// specs must not assume a starting state. See docs/architecture/testing-and-verification.md.
 
 import type { TauriCapabilities } from "@wdio/tauri-service";
 
