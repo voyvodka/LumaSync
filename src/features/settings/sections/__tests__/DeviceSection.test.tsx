@@ -731,3 +731,30 @@ describe("the category rail counts what its labels say", () => {
     expect(badgeFor("device:page.rail.wled")).toBeNull();
   });
 });
+
+// e2e/specs/shellUiModeToggle.e2e.ts drives the rail by these ids and skips its
+// Hue sub-test when `device-category-hue` is missing.
+describe("the category rail is addressable by test id", () => {
+  beforeEach(() => {
+    activeWledIpMock = null;
+    useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
+    useHueOnboardingMock.mockReturnValue(createHueHookState());
+  });
+
+  it.each([
+    ["usb", "device:page.rail.usbStrips"],
+    ["hue", "device:page.rail.hueBridges"],
+    ["wled", "device:page.rail.wled"],
+    ["displays", "device:page.rail.displays"],
+    ["manual", "device:page.rail.manualEntry"],
+  ])("gives the %s rail button its test id", async (category, labelKey) => {
+    const user = userEvent.setup();
+    render(<DeviceSection />);
+
+    const button = screen.getByTestId(`device-category-${category}`);
+    expect(button).toHaveTextContent(labelKey);
+
+    await user.click(button);
+    expect(button).toHaveAttribute("aria-current", "page");
+  });
+});

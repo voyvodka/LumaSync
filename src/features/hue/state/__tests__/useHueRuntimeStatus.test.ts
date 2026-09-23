@@ -15,6 +15,7 @@ const shellLoadMock = vi.fn();
 
 vi.mock("../../hueReadCache", () => ({
   readHueStreamStatus: (...args: unknown[]) => readHueStreamStatusMock(...args),
+  subscribeHueStreamStatusInvalidation: () => () => {},
 }));
 
 vi.mock("@/features/mode/modeApi", () => ({

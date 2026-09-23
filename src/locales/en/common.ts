@@ -24,6 +24,7 @@ export default {
       retry: "Check again",
       retrying: "Checking…",
     },
+    checking: "Checking outputs…",
   },
   mode: {
     title: "LED mode",

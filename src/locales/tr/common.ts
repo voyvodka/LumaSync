@@ -26,6 +26,7 @@ const common: Catalogue<typeof enCommon> = {
       retry: "Yeniden dene",
       retrying: "Kontrol ediliyor…",
     },
+    checking: "Çıkışlar kontrol ediliyor…",
   },
   mode: {
     title: "LED modu",

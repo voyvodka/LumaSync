@@ -22,6 +22,7 @@ vi.mock("../hueReadCache", () => ({
   readHueStreamStatus: (...args: unknown[]) => readHueStreamStatusMock(...args),
   readHueStreamReadiness: vi.fn().mockResolvedValue({}),
   invalidateHueStreamStatus: vi.fn(),
+  subscribeHueStreamStatusInvalidation: () => () => {},
 }));
 
 vi.mock("@/features/mode/modeApi", () => ({
