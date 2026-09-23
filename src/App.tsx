@@ -27,9 +27,17 @@ import {
 } from "./features/hue/state/useHueStreamHealth";
 import { useHueSolidBootstrapSync } from "./features/hue/state/useHueSolidBootstrapSync";
 import { buildStatusItems, resolveHueHeldOut } from "./features/shell/statusItems";
-import { ShellNotices } from "./features/shell/ShellNotices";
-import { OnboardingFlow } from "./features/onboarding/ui/OnboardingFlow";
+import { buildShellNotices, type ShellNoticeHandlers } from "./features/shell/notices/buildShellNotices";
+import { useShellNoticeQueue } from "./features/shell/notices/useShellNoticeQueue";
+import { ShellNoticeAnnouncer, ShellNoticeSlot } from "./features/shell/notices/ShellNoticeSlot";
+import { useOnboardingStep } from "./features/onboarding/state/useOnboardingStep";
 import { useAutoUpdater } from "./features/updater/useAutoUpdater";
+import { isUpdateModalStatus } from "./features/updater/updateModalStatus";
+import { outputAvailability } from "./features/mode/model/outputAvailability";
+import { useCapturePermissionRecheck } from "./features/mode/state/useCapturePermissionRecheck";
+import type { DeviceCategory, DeviceCategoryRequest } from "./features/settings/sections/DeviceSection";
+import { CAPTURE_FAILURE_BUCKET } from "./shared/contracts/capture";
+import { HUE_RUNTIME_TRIGGER_SOURCE } from "./shared/contracts/hue";
 import { UpdateModal } from "./features/updater/UpdateModal";
 import {
   shouldAutoOpenCalibrationOnConnection,
@@ -84,6 +92,7 @@ function App() {
     setCurrentMode,
   } = useUIMode();
   const [activeSection, setActiveSection] = useState<SectionId>(SECTION_IDS.LIGHTS);
+  const [deviceCategoryRequest, setDeviceCategoryRequest] = useState<DeviceCategoryRequest | null>(null);
   const [savedCalibration, setSavedCalibration] = useState<LedCalibrationConfig | undefined>(undefined);
   const [hueStartConfig, setHueStartConfig] = useStableHueStartConfig();
   // Mirror of `hueStartConfig` so the connection-event subscriber (in a
@@ -226,7 +235,11 @@ function App() {
     onPreviewOpenFailed: reportPreviewOpenFailure,
   });
 
-  const handleSectionChange = useCallback(async (sectionId: SectionId) => {
+  const handleSectionChange = useCallback(async (sectionId: SectionId, deviceCategory?: DeviceCategory) => {
+    // Only a notice names a category; every other way in keeps the one open.
+    setDeviceCategoryRequest(
+      deviceCategory === undefined ? null : { category: deviceCategory, nonce: Date.now() },
+    );
     // CompactLayout ignores `activeSection`, so a deep-link from the banner, a
     // CTA or the tray would set it silently and leave the user staring at the
     // LIGHTS panel. Switch to full first, or the click appears to do nothing.
@@ -360,10 +373,7 @@ function App() {
     isCheckingForUpdates: updaterState.status === "checking",
     devSetUpdaterState,
     ...hotReload,
-    // v1.5 W2-B1 — compact-mode "no reachable output" banner deep-link.
-    // The full-mode shell already exposes DEVICES through the sidebar, so
-    // this prop is consumed exclusively by `<CompactLayout>`.
-    onOpenDevices: () => void handleSectionChange(SECTION_IDS.DEVICES),
+    deviceCategoryRequest,
   } as const;
 
   // v1.5 W2-B4 — onboarding completion handler. Persists the flag and
@@ -376,7 +386,116 @@ function App() {
     });
   }, []);
 
+  const onboarding = useOnboardingStep({
+    hasCompleted: hasCompletedOnboarding,
+    guards: {
+      hasInteractedWithMode,
+      hasReachableOutput: isConnected || hueReachable || hueSessionActive,
+      hasSavedCalibration: savedCalibration !== undefined,
+    },
+    guardsLoaded: bootstrapDone,
+    reachabilityPending: hueStartConfig !== null && hueProbe.verdict === null && !hueSessionActive,
+    onComplete: handleOnboardingComplete,
+  });
+
   const openDevicesSection = () => void handleSectionChange(SECTION_IDS.DEVICES);
+
+  // The same inputs the layouts gate the mode buttons on, so the notice that
+  // explains a dim button can never disagree with it.
+  const availability = outputAvailability({
+    localOutputConnected: localSink !== null,
+    hueConfigured: hueStartConfig !== null,
+    hueReachable: hueReachable || hueSessionActive,
+    hueProbeVerdict: hueProbe.verdict,
+    bootstrapDone,
+  });
+  const updateModalShown = isUpdateModalOpen && isUpdateModalStatus(updaterState);
+
+  useCapturePermissionRecheck(
+    mode.startFailedNotice?.bucket === CAPTURE_FAILURE_BUCKET.PERMISSION,
+    mode.clearCapturePermissionNotice,
+  );
+
+  // Read at click time, so the memoised notices below need not change identity
+  // every render just because a handler closure did.
+  const noticeHandlersRef = useRef<ShellNoticeHandlers | null>(null);
+  noticeHandlersRef.current = {
+    openCaptureSettings: () => void openScreenCaptureSettings(),
+    openDevices: (category) => void handleSectionChange(SECTION_IDS.DEVICES, category),
+    openLedSetup: () => void handleSectionChange(SECTION_IDS.LED_SETUP),
+    openLights: () => void handleSectionChange(SECTION_IDS.LIGHTS),
+    retryHueProbe: hueProbe.retry,
+    retryHueStop: () => void mode.stopHueOutput(HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL),
+    completeOnboarding: handleOnboardingComplete,
+  };
+  const noticeHandlers = useMemo<ShellNoticeHandlers>(
+    () => ({
+      openCaptureSettings: () => noticeHandlersRef.current?.openCaptureSettings(),
+      openDevices: (category) => noticeHandlersRef.current?.openDevices(category),
+      openLedSetup: () => noticeHandlersRef.current?.openLedSetup(),
+      openLights: () => noticeHandlersRef.current?.openLights(),
+      retryHueProbe: () => noticeHandlersRef.current?.retryHueProbe?.(),
+      retryHueStop: () => noticeHandlersRef.current?.retryHueStop(),
+      completeOnboarding: () => noticeHandlersRef.current?.completeOnboarding(),
+    }),
+    [],
+  );
+  // Bound, not merely selected: every fresh install starts with `usb` selected.
+  const localTargetConfigured = localSink !== null;
+  const noticeCandidates = useMemo(
+    () =>
+      buildShellNotices(
+        {
+          uiMode: currentMode,
+          activeSection,
+          availability,
+          hueProbeGaveUp: hueProbe.gaveUp,
+          hueProbeChecking: hueProbe.probing,
+          // Before boot the saved calibration is simply unread, not missing.
+          calibrationRequired: bootstrapDone && modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED,
+          startFailure: mode.startFailedNotice,
+          captureStalled: captureStalledNotice,
+          stopFailedTargets: mode.stopFailedNotice,
+          previewOpenFailure: previewOpenNotice,
+          hueLeftOut: mode.hueLeftOutNotice,
+          hueBootRetry: mode.bootHueRetryNotice,
+          usbDisconnected: usbDisconnectNotice,
+          usbDisconnectedLightingOff: usbDisconnectLightingOffNotice,
+          usbUnsupported: usbUnsupportedNotice,
+          usbUnsupportedHueFallback,
+          hueColorNotice,
+          onboardingStep: onboarding.step,
+          localTargetConfigured,
+        },
+        noticeHandlers,
+        t,
+      ),
+    [
+      currentMode,
+      activeSection,
+      availability,
+      hueProbe.gaveUp,
+      hueProbe.probing,
+      bootstrapDone,
+      modeGuard.reason,
+      mode.startFailedNotice,
+      captureStalledNotice,
+      mode.stopFailedNotice,
+      previewOpenNotice,
+      mode.hueLeftOutNotice,
+      mode.bootHueRetryNotice,
+      usbDisconnectNotice,
+      usbDisconnectLightingOffNotice,
+      usbUnsupportedNotice,
+      usbUnsupportedHueFallback,
+      hueColorNotice,
+      onboarding.step,
+      localTargetConfigured,
+      noticeHandlers,
+      t,
+    ],
+  );
+  const noticeQueue = useShellNoticeQueue(noticeCandidates, { suppressed: updateModalShown });
 
   const statusItems = buildStatusItems(
     {
@@ -455,20 +574,14 @@ function App() {
             transitionTimingFunction: UI_MODE_FADE_TIMING,
           }}
         >
-          <OnboardingFlow
-            hasCompleted={hasCompletedOnboarding}
-            guards={{
-              hasInteractedWithMode,
-              hasReachableOutput: isConnected || hueReachable || hueSessionActive,
-              hasSavedCalibration: savedCalibration !== undefined,
-            }}
-            guardsLoaded={bootstrapDone}
-            reachabilityPending={hueStartConfig !== null && hueProbe.verdict === null && !hueSessionActive}
-            onOpenLights={() => void handleSectionChange(SECTION_IDS.LIGHTS)}
-            onOpenDevices={() => void handleSectionChange(SECTION_IDS.DEVICES)}
-            onOpenCalibration={() => void handleSectionChange(SECTION_IDS.LED_SETUP)}
-            onComplete={handleOnboardingComplete}
-          />
+          {currentMode === "compact" && (
+            <ShellNoticeSlot
+              variant="compact"
+              queue={noticeQueue}
+              suppressed={updateModalShown}
+              holdSpace={onboarding.pending || !bootstrapDone}
+            />
+          )}
           <div className="min-h-0 flex-1">
             <SettingsLayout uiMode={currentMode} {...sharedSettingsLayoutProps} />
           </div>
@@ -479,6 +592,17 @@ function App() {
         uiMode={currentMode}
         lightingActive={lightingMode.kind !== LIGHTING_MODE_KIND.OFF}
       />
+      {currentMode === "full" && (
+        <ShellNoticeSlot
+          variant="full"
+          queue={noticeQueue}
+          suppressed={updateModalShown}
+          statusBarHeightPx={statusBarHeight}
+        />
+      )}
+      <ShellNoticeAnnouncer queue={noticeQueue} />
+      {/* After the notices, and above them: the modal owns the screen, and the
+          queue waits under it, inert and outside its focus trap. */}
       {isUpdateModalOpen && (
         <UpdateModal
           state={updaterState}
@@ -487,21 +611,6 @@ function App() {
           onRetry={() => void checkForUpdates()}
         />
       )}
-      <ShellNotices
-        usbDisconnected={usbDisconnectNotice}
-        usbDisconnectedLightingOff={usbDisconnectLightingOffNotice}
-        usbUnsupported={usbUnsupportedNotice}
-        usbUnsupportedHueFallback={usbUnsupportedHueFallback}
-        stopFailedTargets={mode.stopFailedNotice}
-        startFailure={mode.startFailedNotice}
-        hueLeftOut={mode.hueLeftOutNotice}
-        hueBootRetry={mode.bootHueRetryNotice}
-        captureStalled={captureStalledNotice}
-        hueColorNotice={hueColorNotice}
-        previewOpenFailure={previewOpenNotice}
-        onOpenCaptureSettings={() => void openScreenCaptureSettings()}
-        statusBarHeightPx={statusBarHeight}
-      />
     </>
   );
 }

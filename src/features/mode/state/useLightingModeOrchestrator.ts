@@ -7,6 +7,7 @@ import { loadShellState, saveShellState } from "@/features/shell/windowLifecycle
 import { createLatestOperationGuard } from "@/shared/lib/latestOperation";
 import {
   AMBILIGHT_CAPTURE_REASON,
+  CAPTURE_FAILURE_BUCKET,
   describeCaptureFailure,
   isScreenCaptureBlocked,
   type CaptureFailureNotice,
@@ -56,6 +57,14 @@ const START_FAILED_NOTICE_MS = 8_000;
 /** Same length as the start toast: the auth variant asks the user to re-pair. */
 const HUE_LEFT_OUT_NOTICE_MS = 8_000;
 
+function isPermissionNotice(notice: CaptureFailureNotice | null): boolean {
+  return notice?.bucket === CAPTURE_FAILURE_BUCKET.PERMISSION;
+}
+
+function withoutPermissionNotice(notice: CaptureFailureNotice | null): CaptureFailureNotice | null {
+  return isPermissionNotice(notice) ? null : notice;
+}
+
 /** An unplug of the only selected target; the delta path reports back through it. */
 interface LastTargetUnplug {
   ended: boolean;
@@ -80,6 +89,8 @@ export interface LightingModeOrchestrator {
   startFailedNotice: CaptureFailureNotice | null;
   /** Lets the boot restore raise the same toast the interactive start does. */
   reportStartFailure: (notice: CaptureFailureNotice) => void;
+  /** The permission came back: the permission notice, a condition, is no longer true. */
+  clearCapturePermissionNotice: () => void;
   /** A `[usb, hue]` start ran on USB alone this session; the reason picks the copy. */
   hueLeftOutNotice: HueLeftOutReason | null;
   /** The boot restore's route to the same notice. */
@@ -741,8 +752,12 @@ export function useLightingModeOrchestrator({
     return () => window.clearTimeout(timerId);
   }, [stopFailedNotice]);
 
+  const clearCapturePermissionNotice = useCallback(() => setStartFailedNotice(withoutPermissionNotice), []);
+
   useEffect(() => {
-    if (!startFailedNotice) return;
+    // Permission is a condition, not an event: it clears when the permission
+    // comes back or a start succeeds, never on a timer.
+    if (!startFailedNotice || isPermissionNotice(startFailedNotice)) return;
     const timerId = window.setTimeout(() => setStartFailedNotice(null), START_FAILED_NOTICE_MS);
     return () => window.clearTimeout(timerId);
   }, [startFailedNotice]);
@@ -965,6 +980,7 @@ export function useLightingModeOrchestrator({
         // Set by Phase 2 when the backend reports it is not running the requested
         // mode, so Phase 3's commit below can refuse to record a mode that never ran.
         let applyRefused = false;
+        let startFailureRaised = false;
         // What the backend is running after a refusal. A thrown apply reports
         // nothing, so the previous mode is assumed to still be live.
         let runningAfterRefusal: Pick<LightingModeConfig, "kind" | "targets"> = {
@@ -1020,6 +1036,7 @@ export function useLightingModeOrchestrator({
             }
             const outcome = readModeApplyOutcome(applyResult, normalizedNextMode.kind);
             if (outcome.startFailure) {
+              startFailureRaised = true;
               setStartFailedNotice(pickStartFailureNotice(probeNotice, outcome.startFailure));
             }
             if (applyResult !== null && outcome.refused) {
@@ -1122,6 +1139,9 @@ export function useLightingModeOrchestrator({
           } else {
             setLightingModeState(normalizedNextMode);
           }
+          // A start went through, so a permission notice — including the one
+          // the advisory probe raised for this very start — no longer holds.
+          if (!startFailureRaised) setStartFailedNotice(withoutPermissionNotice);
           scheduleLightingModePersist(normalizedNextMode);
         }
       } catch (error) {
@@ -1184,6 +1204,7 @@ export function useLightingModeOrchestrator({
     stopFailedNotice,
     startFailedNotice,
     reportStartFailure: setStartFailedNotice,
+    clearCapturePermissionNotice,
     hueLeftOutNotice,
     reportHueLeftOut: raiseHueLeftOut,
     hueHeldOutReason,

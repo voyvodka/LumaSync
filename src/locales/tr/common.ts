@@ -74,9 +74,10 @@ const common: Catalogue<typeof enCommon> = {
   hotplug: {
     usbDisconnected: "USB cihazı bağlantısı kesildi. Kalan hedeflerle devam ediliyor.",
     usbDisconnectedLightingOff: "USB cihazının bağlantısı kesildi, aydınlatma kapandı. Devam etmek için şeridi yeniden bağlayıp bir mod seçin.",
-    unsupportedFallback: "USB cihazı tanınmıyor — Hue-only moda alındı.",
+    unsupportedFallback: "USB cihazı tanınmıyor — yalnızca Hue ile devam ediliyor.",
     unsupportedNoFallback: "USB cihazı tanınmıyor ve kurulu başka bir çıkış yok. Cihazlar'dan desteklenen bir denetleyici bağlayın.",
-    stopFailed: "{{targets}} durdurulamadı. Çıkış etkin bırakıldı; yeniden deneyin.",
+    stopFailed: "{{targets}} durdurulamadı; çıkış hâlâ etkin.",
+    stopFailedUsbHint: "Şeridi durdurmak için modu Kapalı'ya alın.",
     targetLabel: {
       usb: "USB",
       hue: "Hue",
@@ -97,7 +98,7 @@ const common: Catalogue<typeof enCommon> = {
     genericNoReason: "Ekran yakalama kare göndermeyi durdurdu.",
   },
   captureAction: {
-    openSettings: "Sistem Ayarları'nı aç",
+    openSettings: "Sistem Ayarları",
   },
   hueLeftOut: {
     unreachable: "Hue köprüsüne ulaşılamıyor — şimdilik yalnızca USB ile çalışıyor. Köprü geri geldiğinde Hue'yu yeniden açın.",

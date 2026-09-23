@@ -450,7 +450,7 @@ describe("useLightingModeOrchestrator", () => {
     it("auto-dismisses after 8 s", async () => {
       vi.useFakeTimers();
       setLightingModeMock.mockResolvedValue(
-        startFailedResult("AMBILIGHT_CAPTURE_PERMISSION_DENIED"),
+        startFailedResult("AMBILIGHT_CAPTURE_SESSION_START_FAILED"),
       );
       const { result } = harness({ savedCalibration });
 
@@ -464,6 +464,64 @@ describe("useLightingModeOrchestrator", () => {
       });
       expect(result.current.startFailedNotice).toBeNull();
     });
+
+    // It vanished after 8 s and took its only action with it, while the
+    // permission was still missing.
+    describe("a denied permission is a condition, not an event", () => {
+      it("stays up past the event timer", async () => {
+        vi.useFakeTimers();
+        setLightingModeMock.mockResolvedValue(startFailedResult("AMBILIGHT_CAPTURE_PERMISSION_DENIED"));
+        const { result } = harness({ savedCalibration });
+
+        await act(async () => {
+          await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+        });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(10 * 60_000);
+        });
+
+        expect(result.current.startFailedNotice?.bucket).toBe("permission");
+      });
+
+      it("clears once a start succeeds", async () => {
+        setLightingModeMock.mockResolvedValueOnce(startFailedResult("AMBILIGHT_CAPTURE_PERMISSION_DENIED"));
+        const { result } = harness({ savedCalibration });
+        await act(async () => {
+          await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+        });
+        expect(result.current.startFailedNotice?.bucket).toBe("permission");
+
+        setLightingModeMock.mockResolvedValue({
+          active: true,
+          mode: { kind: LIGHTING_MODE_KIND.SOLID, solid: { r: 1, g: 2, b: 3, brightness: 1 } },
+          status: { code: "SOLID_MODE_APPLIED", message: "Applied.", details: null },
+        });
+        await act(async () => {
+          await result.current.handleLightingModeChange({
+            kind: LIGHTING_MODE_KIND.SOLID,
+            solid: { r: 1, g: 2, b: 3, brightness: 1 },
+          });
+        });
+
+        expect(result.current.startFailedNotice).toBeNull();
+      });
+
+      it("clears when the permission comes back, and leaves any other failure alone", async () => {
+        setLightingModeMock.mockResolvedValueOnce(startFailedResult("AMBILIGHT_CAPTURE_PERMISSION_DENIED"));
+        const { result } = harness({ savedCalibration });
+        await act(async () => {
+          await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+        });
+
+        act(() => result.current.clearCapturePermissionNotice());
+        expect(result.current.startFailedNotice).toBeNull();
+
+        const transient = { bucket: "transient" as const, reason: "AMBILIGHT_CAPTURE_SESSION_START_FAILED" };
+        act(() => result.current.reportStartFailure(transient));
+        act(() => result.current.clearCapturePermissionNotice());
+        expect(result.current.startFailedNotice).toBe(transient);
+      });
+    });
   });
 
   describe("screen-recording preflight", () => {
@@ -475,6 +533,13 @@ describe("useLightingModeOrchestrator", () => {
       getScreenCapturePermissionMock.mockResolvedValue({
         code: "SCREEN_CAPTURE_PERMISSION_DENIED",
       });
+      // A start that fails for a reason the backend does not name keeps the
+      // probe's notice, so what is left is the probe's own.
+      setLightingModeMock.mockResolvedValue({
+        active: false,
+        mode: { kind: LIGHTING_MODE_KIND.OFF },
+        status: { code: "AMBILIGHT_MODE_START_FAILED", message: "Could not start.", details: "UNCLASSIFIED" },
+      });
       const { result } = harness({ savedCalibration });
 
       await act(async () => {
@@ -485,6 +550,25 @@ describe("useLightingModeOrchestrator", () => {
         bucket: "permission",
         reason: "AMBILIGHT_CAPTURE_PERMISSION_DENIED",
       });
+    });
+
+    // The probe cannot tell "denied" from "never asked"; the start is what asks.
+    it("withdraws the probe's notice when the start it preceded succeeds", async () => {
+      getScreenCapturePermissionMock.mockResolvedValue({
+        code: "SCREEN_CAPTURE_PERMISSION_DENIED",
+      });
+      setLightingModeMock.mockResolvedValue({
+        active: true,
+        mode: { kind: LIGHTING_MODE_KIND.AMBILIGHT },
+        status: { code: "AMBILIGHT_MODE_STARTED", message: "Started.", details: null },
+      });
+      const { result } = harness({ savedCalibration });
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(result.current.startFailedNotice).toBeNull();
     });
 
     it("still dispatches the start when denied — the OS prompt only fires there", async () => {

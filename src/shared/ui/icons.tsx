@@ -326,3 +326,29 @@ export function IconError() {
     </svg>
   );
 }
+
+export function IconWarning() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3.5 2.8 19.5h18.4z" />
+      <path d="M12 10v4M12 17h.01" />
+    </svg>
+  );
+}
+
+export function IconClose() {
+  return (
+    <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+      <line x1="3" y1="3" x2="9" y2="9" />
+      <line x1="9" y1="3" x2="3" y2="9" />
+    </svg>
+  );
+}
+
+export function IconChevronDown() {
+  return (
+    <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 4.5 6 7.5 9 4.5" />
+    </svg>
+  );
+}

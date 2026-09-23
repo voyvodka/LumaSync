@@ -74,7 +74,8 @@ export default {
     usbDisconnectedLightingOff: "USB device disconnected, so lighting is off. Reconnect the strip and pick a mode to resume.",
     unsupportedFallback: "USB device not recognised — switched to Hue-only mode.",
     unsupportedNoFallback: "USB device not recognised, and no other output is set up. Connect a supported controller in Devices.",
-    stopFailed: "Stop failed for {{targets}}. Output left active — try again.",
+    stopFailed: "Stop failed for {{targets}} — the output is still active.",
+    stopFailedUsbHint: "Switch the mode Off to stop the strip.",
     targetLabel: {
       usb: "USB",
       hue: "Hue",
@@ -95,7 +96,7 @@ export default {
     genericNoReason: "Screen capture stopped delivering frames.",
   },
   captureAction: {
-    openSettings: "Open System Settings",
+    openSettings: "System Settings",
   },
   hueLeftOut: {
     unreachable: "Can't reach the Hue bridge — running on USB only for now. Turn Hue back on once the bridge is back.",

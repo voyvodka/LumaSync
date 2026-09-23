@@ -18,6 +18,8 @@ const stopHueMock = vi.fn();
 // Controllable isConnected for hot-plug tests
 let mockIsConnected = true;
 let mockActiveWledIp: string | null = null;
+// Idle unless a test opens the update prompt on purpose.
+let mockUpdaterState: { status: string; update?: unknown } = { status: "idle" };
 
 // Mock invoke for Tauri commands (used in bootstrap for USB status check)
 const invokeMock = vi.fn();
@@ -28,6 +30,7 @@ const invokeMock = vi.fn();
 // translated copy, so returning the key is the honest substitute.
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
+  Trans: ({ i18nKey }: { i18nKey: string }) => i18nKey,
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -70,7 +73,8 @@ vi.mock("../features/tray/trayApi", () => ({
 // orchestration assertions.
 vi.mock("../features/updater/useAutoUpdater", () => ({
   useAutoUpdater: () => ({
-    state: { status: "idle" },
+    state: mockUpdaterState,
+    isModalOpen: mockUpdaterState.status !== "idle",
     channel: "stable",
     checkForUpdates: vi.fn().mockResolvedValue(undefined),
     downloadAndInstall: vi.fn().mockResolvedValue(undefined),
@@ -422,6 +426,7 @@ describe("App mode orchestration", () => {
     vi.useRealTimers();
     mockIsConnected = true;
     mockActiveWledIp = null;
+    mockUpdaterState = { status: "idle" };
     // One flat resolved value cannot serve every command: a caller reading
     // `.status.code` or `.usb` off `{ connected: true }` throws into its own
     // catch, so the test still passed while the app measured its failure
@@ -3174,20 +3179,22 @@ describe("App mode orchestration", () => {
   // flag before it has read the guards that would complete the flow — so the
   // banner mounted for as long as the slowest guard took, then vanished.
   describe("onboarding banner for a user who is already set up", () => {
-    /** Records every banner insertion, including one removed before anyone looks. */
+    /**
+     * Records every time onboarding enters the notice queue, including behind
+     * "+N" where no card renders, and one removed before anyone looks.
+     */
     function watchForBanner() {
       let seen = false;
-      const holdsBanner = (node: Node) =>
-        node instanceof Element &&
-        (node.matches(".lm-onboarding-banner") || node.querySelector(".lm-onboarding-banner") !== null);
-      const observer = new MutationObserver((records) => {
-        for (const record of records) {
-          if (Array.from(record.addedNodes).some(holdsBanner)) seen = true;
-        }
+      const queued = () =>
+        Array.from(document.querySelectorAll("[data-queue]")).some((slot) =>
+          (slot.getAttribute("data-queue") ?? "").split(" ").includes("onboarding"),
+        );
+      const observer = new MutationObserver(() => {
+        if (queued()) seen = true;
       });
-      observer.observe(document.body, { childList: true, subtree: true });
+      observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-queue"] });
       return {
-        seen: () => seen || document.querySelector(".lm-onboarding-banner") !== null,
+        seen: () => seen || queued(),
         stop: () => observer.disconnect(),
       };
     }
@@ -3257,34 +3264,65 @@ describe("App mode orchestration", () => {
 
       render(<App />);
 
+      // Behind "no reachable output", which outranks it in the queue.
       await waitFor(() => {
-        expect(screen.getByText("common:ui.onboarding.step1.title")).toBeInTheDocument();
+        expect(screen.getByTestId("shell-notice-slot").getAttribute("data-queue")?.split(" ")).toEqual([
+          "output-none",
+          "onboarding",
+        ]);
       });
+      await act(async () => {
+        screen.getByTestId("notice-toggle").click();
+      });
+      expect(screen.getByTestId("onboarding-notice")).toHaveTextContent("common:ui.onboarding.step1.title");
     });
   });
 
   // No layout engine here, so only the structure is assertable, not the heights
   // it decides — as a block column the banner clipped 162 px at 320×480.
-  it("gives the onboarding banner its own row instead of letting it push the layout out", async () => {
-    // The describe-level shell state satisfies all three onboarding guards
-    // once bootstrap settles, which lets the banner mount and then unmount
-    // itself again a beat later (proven with a forced delay on the
-    // `getSerialConnectionStatus` await in PR #411) — a real but narrow
-    // window `waitFor` only sometimes catches. Use a fresh-install state
-    // instead, where no guard is ever met, so the banner mounts and stays.
+  // The toasts were z-50 like the modal and later in the DOM, so they drew
+  // over it, outside its focus trap.
+  it.each(["compact", "full"] as const)(
+    "keeps the notices under the update prompt, inert and silent, in %s",
+    async (uiMode) => {
+      mockIsConnected = false;
+      loadShellStateMock.mockResolvedValue({ lastSection: "general", uiMode });
+      mockUpdaterState = {
+        status: "available",
+        update: { version: "9.9.9", currentVersion: "1.0.0", body: null, date: null },
+      };
+
+      render(<App />);
+
+      const dialog = await screen.findByRole("dialog");
+      await waitFor(() => {
+        expect(screen.getByTestId("shell-notice-slot").getAttribute("data-queue")).not.toBe("");
+      });
+      const slot = screen.getByTestId("shell-notice-slot");
+      expect(slot).toHaveAttribute("inert");
+      expect(dialog.contains(slot)).toBe(false);
+      // Later in the document, so it paints above at any equal z-index.
+      expect(slot.compareDocumentPosition(dialog) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.getByTestId("shell-notice-announcer")).toBeEmptyDOMElement();
+    },
+  );
+
+  it("gives the compact notice slot its own row instead of letting it push the layout out", async () => {
+    // A fresh install: no guard is ever met and nothing is reachable, so the
+    // slot mounts and stays.
     mockIsConnected = false;
-    loadShellStateMock.mockResolvedValue({ lastSection: "general" });
+    loadShellStateMock.mockResolvedValue({ lastSection: "general", uiMode: "compact" });
 
     render(<App />);
 
     await waitFor(() => {
-      expect(document.querySelector(".lm-onboarding-banner")).not.toBeNull();
+      expect(screen.queryByTestId("shell-notice-slot")).not.toBeNull();
     });
 
-    const banner = document.querySelector(".lm-onboarding-banner");
-    expect(banner).not.toBeNull();
+    const noticeSlot = screen.getByTestId("shell-notice-slot");
+    expect(noticeSlot).toHaveClass("lm-notice-slot");
 
-    const slot = banner!.parentElement!;
+    const slot = noticeSlot.parentElement!;
     expect(slot.className).toContain("flex");
     expect(slot.className).toContain("flex-col");
 

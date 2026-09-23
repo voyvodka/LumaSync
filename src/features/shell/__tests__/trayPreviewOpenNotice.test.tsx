@@ -1,8 +1,9 @@
 // The tray's "Show LED Preview" through the real tray hook, the real notice
-// hook and the real toast stack; only the Tauri-facing modules are faked.
-// A refused open used to leave the user with nothing at all.
+// hook and the real notice queue and slot; only the Tauri-facing modules are
+// faked. A refused open used to leave the user with nothing at all.
 
 import { act, render, screen, waitFor } from "@testing-library/react";
+import { useMemo } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/features/mode/model/contracts";
@@ -12,7 +13,10 @@ import {
 } from "@/features/preview/state/usePreviewOpenNotice";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 
-import { ShellNotices } from "../ShellNotices";
+import { buildShellNotices } from "../notices/buildShellNotices";
+import { ShellNoticeSlot } from "../notices/ShellNoticeSlot";
+import { useShellNoticeQueue } from "../notices/useShellNoticeQueue";
+import { keyT, makeHandlers, QUIET_INPUT } from "../notices/__tests__/noticeFixtures";
 import { useTrayIntegration } from "../useTrayIntegration";
 
 vi.mock("react-i18next", () => ({
@@ -62,20 +66,15 @@ function Harness() {
     getSelectedDisplayId: () => "display-2",
     onPreviewOpenFailed: preview.report,
   });
-  return (
-    <ShellNotices
-      usbDisconnected={false}
-      usbUnsupported={false}
-      stopFailedTargets={null}
-      startFailure={null}
-      hueLeftOut={null}
-      captureStalled={null}
-      hueColorNotice={null}
-      previewOpenFailure={preview.notice}
-      onOpenCaptureSettings={() => {}}
-    />
+  const candidates = useMemo(
+    () => buildShellNotices({ ...QUIET_INPUT, uiMode: "full", previewOpenFailure: preview.notice }, handlers, keyT),
+    [preview.notice],
   );
+  const queue = useShellNoticeQueue(candidates, { suppressed: false });
+  return <ShellNoticeSlot variant="full" queue={queue} suppressed={false} />;
 }
+
+const handlers = makeHandlers();
 
 async function clickTrayShowPreview() {
   render(<Harness />);

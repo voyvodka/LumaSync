@@ -37,7 +37,6 @@ import { FIRMWARE_PROFILE, type FirmwareProfile } from "@/shared/contracts/devic
 import { SCENE_PRESETS, type ScenePreset } from "@/features/mode/model/scenePresets";
 import { LightingSmoothingPresetControl } from "../control/LightingSmoothingPresetControl";
 import { shellStore } from "@/features/persistence/shellStore";
-import { OutputCheckingNote } from "../OutputCheckingNote";
 import { CompactSolidSection } from "./CompactSolidSection";
 import { ModeButton } from "./ModeButton";
 import { SelfContainedBrightnessRow } from "./SelfContainedBrightnessRow";
@@ -50,23 +49,11 @@ interface CompactLayoutProps {
   /** The shell boot has settled; until then `hueConfigured: false` is not yet known. */
   bootstrapDone?: boolean;
   hueReachable: boolean;
-  /** The bridge probe stopped after a sustained outage; the banner offers a retry. */
-  hueProbeGaveUp?: boolean;
-  hueProbeChecking?: boolean;
   /** What the last bridge probe found; `null` while the first one is in flight. */
   hueProbeVerdict?: HueProbeVerdict | null;
-  onRetryHueProbe?: () => void;
   isModeTransitioning: boolean;
   modeLockReason: ModeGuardReason | null;
   onLightingModeChange: (next: LightingModeConfig) => void;
-  /**
-   * v1.5 W2-B1 — deep-link from the compact-mode "no reachable output"
-   * banner into the DEVICES section. Optional so callers that wire the
-   * compact layout outside the main shell (test fixtures, storybook)
-   * can omit it; in production App.tsx supplies a `handleSectionChange`
-   * bound to `SECTION_IDS.DEVICES`.
-   */
-  onOpenDevices?: () => void;
   /**
    * v1.5 W2 fix #40 — Compact ↔ Full feature parity for the lighting
    * smoothing preset. The compact ambilight card mounts the same
@@ -91,14 +78,10 @@ export function CompactLayout({
   hueConfigured,
   bootstrapDone = true,
   hueReachable,
-  hueProbeGaveUp = false,
-  hueProbeChecking = false,
   hueProbeVerdict = null,
-  onRetryHueProbe,
   isModeTransitioning,
   modeLockReason,
   onLightingModeChange,
-  onOpenDevices,
   onHueIntensityPresetChange,
 }: CompactLayoutProps) {
   const { t } = useTranslation();
@@ -213,49 +196,8 @@ export function CompactLayout({
   return (
     <div className="lm-compact" data-testid="compact-layout">
       <div className="lm-compact-body">
-        {/* ── Offline banner (v1.5 W2-B1) ───────────────────────────
-            Compact-friendly inline message + deep-link into DEVICES.
-            Shown only when neither USB nor Hue is reachable; non-Off
-            modes are already guarded by `nonOffDisabled`, so this
-            replaces the silent "buttons are dim" affordance with an
-            explicit recovery path. */}
-        {availability === "checking" && <OutputCheckingNote />}
-        {availability === "none" && (
-          <div className="lm-compact-offline" role="status" aria-live="polite">
-            <div className="lm-compact-offline-text">
-              <div className="ttl">{t("common:output.offline.title")}</div>
-              <div className="sub">
-                {hueProbeGaveUp
-                  ? t("common:output.offline.stoppedBody")
-                  : t("common:output.offline.body")}
-              </div>
-            </div>
-            <div className="lm-compact-offline-actions">
-              {onOpenDevices && (
-                <button
-                  type="button"
-                  className="lm-compact-offline-action"
-                  onClick={onOpenDevices}
-                >
-                  {t("common:output.offline.action")}
-                </button>
-              )}
-              {hueProbeGaveUp && onRetryHueProbe && (
-                <button
-                  type="button"
-                  className="lm-compact-offline-action is-ghost"
-                  onClick={onRetryHueProbe}
-                  disabled={hueProbeChecking}
-                  aria-busy={hueProbeChecking}
-                >
-                  {hueProbeChecking
-                    ? t("common:output.offline.retrying")
-                    : t("common:output.offline.retry")}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+        {/* Why the modes below are dim — checking, no output, calibration —
+            is said by the shell's notice slot above this body. */}
 
         {/* ── Mode strip ─────────────────────────────────────────── */}
         <div>

@@ -49,6 +49,41 @@ const shell: Catalogue<typeof enShell> = {
     close: "Kapat",
     sectionsAriaLabel: "Bölümler",
   },
+  notices: {
+    regionLabel: "Bildirimler",
+    severity: {
+      error: "Hata",
+      warning: "Uyarı",
+      info: "Bilgi",
+    },
+    dismiss: "Bildirimi kapat",
+    showDetails: "Ayrıntıları göster",
+    showLess: "Daha az göster",
+    showMore_one: "{{count}} bildirim daha göster",
+    showMore_other: "{{count}} bildirim daha göster",
+    moreBadge: "+{{count}}",
+    moreCount: "+{{count}} daha",
+    titles: {
+      capturePermission: "Ekran kaydı engelli",
+      captureStalled: "Ekran yakalama durdu",
+      startFailed: "Aydınlatma başlamadı",
+      stopFailed: "Çıkış durmadı",
+      previewOpenFailed: "LED önizlemesi açılmadı",
+      hueUnreachable: "Hue köprüsüne ulaşılamıyor",
+      hueAuth: "Hue yeniden eşleştirilmeli",
+      hueConfig: "Hue kurulmamış",
+      hueWaiting: "Hue köprüsü bekleniyor",
+      hueBusy: "Hue köprüsü meşgul",
+      usbDisconnected: "USB şerit çıkarıldı",
+      usbUnsupported: "USB cihazı tanınmadı",
+      hueColor: "Hue rengi uygulanmadı",
+    },
+    actions: {
+      devices: "Cihazlar",
+      ledSetup: "LED kurulumu",
+      stopHue: "Hue'yu durdur",
+    },
+  },
 };
 
 export default shell;
