@@ -13,7 +13,6 @@ const preview: Catalogue<typeof enPreview> = {
   control: {
     close: "Kapat",
     closeHint: "LED önizlemesini kapat — test deseni durur ve aydınlatmanız normale döner. LED Kurulumu'ndaki Test ve Önizleme ile yeniden açabilirsiniz.",
-    closed: "Önizleme kapatıldı",
     reopenHint: "LED önizlemesi kapatıldı. İstediğiniz zaman LED Kurulumu'ndaki Test ve Önizleme ile veya tepsi menüsünden yeniden açabilirsiniz.",
     dragHint: "Pencereyi taşımak için başlığı sürükleyin.",
   },

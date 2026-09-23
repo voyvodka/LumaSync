@@ -31,7 +31,6 @@ export default {
     later: "Later",
     install: "Install & relaunch",
     background: "Move to background",
-    showLogs: "Show logs",
     close: "Close",
     retry: "Try again",
   },
