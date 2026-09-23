@@ -30,6 +30,7 @@ use super::frame::{
     build_huestream_frame, channel_position_to_screen_region, HueAreaChannel, HueColorSender,
     HueColorUpdate,
 };
+use super::light_restore::{parse_light_state, HueLightSnapshot};
 use super::state_store::HueChannelPlacementOverride;
 
 // ---------------------------------------------------------------------------
@@ -280,7 +281,7 @@ impl RequestPacer {
         }
     }
 
-    fn time_until_slot(&self, now: Instant) -> Duration {
+    pub(super) fn time_until_slot(&self, now: Instant) -> Duration {
         self.next_slot.saturating_duration_since(now)
     }
 
@@ -292,11 +293,11 @@ impl RequestPacer {
     /// makes the budget a real ceiling: without it, a request that overran
     /// its slot would leave `next_slot` in the past and let the loop fire a
     /// catch-up burst that blows the one-second window wide open.
-    fn consume(&mut self, now: Instant) {
+    pub(super) fn consume(&mut self, now: Instant) {
         self.next_slot = now.max(self.next_slot) + self.interval;
     }
 
-    fn on_success(&mut self) {
+    pub(super) fn on_success(&mut self) {
         if self.interval > self.floor {
             self.interval = (self.interval * 9 / 10).max(self.floor);
         }
@@ -304,7 +305,7 @@ impl RequestPacer {
 
     /// Widen after a throttle signal, honouring a bridge-supplied
     /// `Retry-After` when it asks for more than our own doubling would.
-    fn on_throttle(&mut self, retry_after_ms: Option<u64>) {
+    pub(super) fn on_throttle(&mut self, retry_after_ms: Option<u64>) {
         let doubled = self.interval * 2;
         let requested = retry_after_ms
             .map(Duration::from_millis)
@@ -813,8 +814,14 @@ pub(crate) fn spawn_hue_http_sender(
 static HUE_BLOCKING_CLIENT: OnceLock<Arc<BlockingClient>> = OnceLock::new();
 
 pub(crate) fn hue_http_client() -> Result<BlockingClient, String> {
+    hue_http_client_with_timeout(Duration::from_millis(HUE_HTTP_TIMEOUT_MS))
+}
+
+/// For a caller with its own deadline (the quit path), which cannot afford the
+/// default timeout on a single request.
+pub(crate) fn hue_http_client_with_timeout(timeout: Duration) -> Result<BlockingClient, String> {
     BlockingClient::builder()
-        .timeout(Duration::from_millis(HUE_HTTP_TIMEOUT_MS))
+        .timeout(timeout)
         .danger_accept_invalid_certs(true)
         .build()
         .map_err(|error| error.to_string())
@@ -1402,7 +1409,7 @@ pub fn parse_light_metadata(light_id: &str, payload: &Value) -> Option<HueLightM
     })
 }
 
-/// Fetch `/clip/v2/resource/light/{light_id}` and return the parsed metadata,
+/// Fetch `/clip/v2/resource/light/{light_id}` and return its `data[0]` item,
 /// reusing a caller-supplied `reqwest::Client` so an entire batch of light
 /// fetches (W1-C3a hot path) shares one TLS-configured client instead of
 /// rebuilding one per light. The client MUST carry the same
@@ -1411,12 +1418,12 @@ pub fn parse_light_metadata(light_id: &str, payload: &Value) -> Option<HueLightM
 ///
 /// Errors propagate as a string so the caller can decide whether to fall back
 /// to `HueGamutType::Other` (loud) or skip the clipping step (silent).
-async fn fetch_light_metadata_with_client(
+async fn fetch_light_item_with_client(
     client: &reqwest::Client,
     bridge_ip: &str,
     username: &str,
     light_id: &str,
-) -> Result<HueLightMetadata, String> {
+) -> Result<Value, String> {
     // SECURITY: Validate light_id to prevent path traversal
     if !light_id
         .chars()
@@ -1438,15 +1445,20 @@ async fn fetch_light_metadata_with_client(
         .await
         .map_err(|fault| fault.to_string())?;
     let body = response.text().await.map_err(|error| error.to_string())?;
-    let value: Value = serde_json::from_str(&body).map_err(|error| error.to_string())?;
-    parse_light_metadata(light_id, &value).ok_or_else(|| {
-        format!("Bridge response for light `{light_id}` did not include a data array")
-    })
+    let mut value: Value = serde_json::from_str(&body).map_err(|error| error.to_string())?;
+    value
+        .get_mut("data")
+        .and_then(|v| v.as_array_mut())
+        .filter(|items| !items.is_empty())
+        .map(|items| items.swap_remove(0))
+        .ok_or_else(|| {
+            format!("Bridge response for light `{light_id}` did not include a data array")
+        })
 }
 
 /// Convenience: drain a slice of resolved channels into a flat list of
 /// unique light ids. Used by the runtime to populate the metadata cache
-/// in a single batch (one `fetch_light_metadata_with_client` call per light id).
+/// in a single batch (one `fetch_light_item_with_client` call per light id).
 pub fn unique_light_ids(channels: &[HueAreaChannel]) -> Vec<String> {
     let mut out = Vec::new();
     for ch in channels {
@@ -1459,28 +1471,53 @@ pub fn unique_light_ids(channels: &[HueAreaChannel]) -> Vec<String> {
     out
 }
 
+/// Both things one `GET /clip/v2/resource/light/{id}` per light yields: the
+/// gamut metadata the frame builder clips with, and the state a stop restores.
+#[derive(Default)]
+pub(crate) struct HueLightFetch {
+    pub(crate) metadata: HashMap<String, HueLightMetadata>,
+    pub(crate) states: Vec<HueLightSnapshot>,
+}
+
 /// Pre-fetch per-light metadata for every unique light id referenced by the
 /// provided channels and return it as a ready-to-share `Arc<HashMap>`.
 ///
-/// Failure mode is **graceful**: any single `fetch_light_metadata_with_client` error is
-/// swallowed (the bridge response shape can vary across firmware versions
-/// and we never want a metadata fetch to abort entertainment-area
-/// activation). The returned map omits the failing light ids; the frame
-/// builder treats absent entries as `HueGamutType::Other` and skips the
-/// per-bulb gamut clip — i.e. the bulb keeps the v1.4 behaviour while the
-/// rest of the area benefits from the per-bulb projection.
+/// Metadata-only on purpose: the reconnect path uses this, and a reconnect must
+/// never re-read the state a stop restores — by then the lights show our
+/// stream, or the bridge's "colour restored, left on" state after one.
+pub async fn fetch_light_metadata_for_channels(
+    bridge_ip: &str,
+    username: &str,
+    channels: &[HueAreaChannel],
+) -> HashMap<String, HueLightMetadata> {
+    fetch_lights_for_channels(bridge_ip, username, channels)
+        .await
+        .metadata
+}
+
+/// Metadata and pre-stream state for every unique light in `channels`, from
+/// one GET per light. The start path calls this right before the sender
+/// activates the area, which makes it the snapshot point for the restore.
+///
+/// Failure mode is **graceful**: any single fetch error is swallowed (the
+/// bridge response shape can vary across firmware versions and we never want
+/// a metadata fetch to abort entertainment-area activation). The returned map
+/// omits the failing light ids; the frame builder treats absent entries as
+/// `HueGamutType::Other` and skips the per-bulb gamut clip — i.e. the bulb
+/// keeps the v1.4 behaviour while the rest of the area benefits from the
+/// per-bulb projection. A light missing from `states` is not restored.
 ///
 /// Bridge fan-out is sequential: a typical Hue entertainment area has
 /// 1-10 lights and CLIP v2 light fetches each return in <50 ms on a LAN,
 /// well below the activation budget. If a future area type pushes that
 /// envelope this helper can be parallelised with `futures::future::join_all`
 /// without changing the public signature.
-pub async fn fetch_light_metadata_for_channels(
+pub(crate) async fn fetch_lights_for_channels(
     bridge_ip: &str,
     username: &str,
     channels: &[HueAreaChannel],
-) -> HashMap<String, HueLightMetadata> {
-    let mut out = HashMap::new();
+) -> HueLightFetch {
+    let mut out = HueLightFetch::default();
     // Build the HTTP client ONCE and reuse it across every light fetch, mirroring
     // how `fetch_area_channels` threads a single client through its fan-out.
     // Building a fresh `reqwest::Client` per light reran TLS config N times per
@@ -1497,9 +1534,17 @@ pub async fn fetch_light_metadata_for_channels(
     for light_id in unique_light_ids(channels) {
         // Per-light graceful failure isolation: a single failed fetch logs and
         // is omitted from the cache; the others must still succeed. No `?` here.
-        match fetch_light_metadata_with_client(&client, bridge_ip, username, &light_id).await {
-            Ok(meta) => {
-                out.insert(meta.light_id.clone(), meta);
+        match fetch_light_item_with_client(&client, bridge_ip, username, &light_id).await {
+            Ok(item) => {
+                if let Some(state) = parse_light_state(&item) {
+                    out.states.push(HueLightSnapshot {
+                        light_id: light_id.clone(),
+                        state,
+                    });
+                }
+                if let Some(meta) = parse_light_metadata(&light_id, &json!({ "data": [item] })) {
+                    out.metadata.insert(meta.light_id.clone(), meta);
+                }
             }
             Err(err) => {
                 warn!("light metadata fetch failed for `{light_id}`: {err}; falling back to HueGamutType::Other");

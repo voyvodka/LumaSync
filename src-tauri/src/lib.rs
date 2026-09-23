@@ -67,7 +67,7 @@ use commands::device_connection::{
 };
 use commands::hue::commands::{
     get_hue_area_channels, get_hue_stream_status, restart_hue_stream, set_hue_solid_color,
-    simulate_hue_fault, start_hue_stream, stop_hue_stream,
+    simulate_hue_fault, start_hue_stream, stop_hue_stream, stop_hue_stream_before_exit,
 };
 use commands::hue::state_store::HueRuntimeStateStore;
 use commands::hue_onboarding::{
@@ -110,6 +110,14 @@ const TRAY_ICON_ID: &str = "main-tray";
 /// (objc cleanup, network timeout, mutex contention). The watchdog ensures
 /// the process always dies within this window, even when something hangs.
 const SHUTDOWN_WATCHDOG: std::time::Duration = std::time::Duration::from_secs(4);
+
+/// Step 2 (Hue) must be finished this long after cleanup starts. Step 1 is
+/// bounded to 1.5 s, so the Hue step always gets at least ~1.8 s, and the
+/// remaining ~0.6 s under the watchdog is left for step 3 and the exit.
+const SHUTDOWN_HUE_DEADLINE: std::time::Duration = std::time::Duration::from_millis(3_300);
+
+/// How long past its own deadline step 2 is waited on before being abandoned.
+const SHUTDOWN_HUE_GRACE: std::time::Duration = std::time::Duration::from_millis(100);
 
 /// Set to `true` once a shutdown sequence has been kicked off so we don't
 /// spawn redundant cleanup threads on RunEvent::ExitRequested + RunEvent::Exit
@@ -200,6 +208,7 @@ pub(crate) fn close_all_overlays<R: Runtime>(app: &AppHandle<R>) {
 // ---------------------------------------------------------------------------
 fn cleanup_blocking<R: Runtime>(app: AppHandle<R>) {
     log::info!("[shutdown] cleanup thread started");
+    let cleanup_started = std::time::Instant::now();
 
     // 1. Ambilight / serial capture worker — bounded to 1.5s on shutdown.
     //
@@ -239,36 +248,40 @@ fn cleanup_blocking<R: Runtime>(app: AppHandle<R>) {
         ),
     }
 
-    // 2. Hue entertainment stream — bounded to 1.5s on shutdown.
+    // 2. Hue entertainment stream — deactivate, then put the area's lights back
+    //    the way they were before the stream started (off stays off).
     //
     // stop_hue_stream's worst case is HTTP deactivate (5s reqwest timeout)
-    // + sender shutdown wait (3s Condvar) = up to 8s when the bridge is
-    // slow or unreachable. That blew through our 4s watchdog and caused the
-    // "cleanup hung — forcing exit" path. Bridge state restore is
-    // best-effort (the bridge times out the entertainment session
-    // server-side anyway), so detach the call and abandon after 1.5s if it
-    // hasn't returned. process::exit(0) below will tear down the orphan
-    // worker thread regardless.
+    // + sender shutdown wait (3s Condvar) + the light restore, which blows
+    // through the 4s watchdog when the bridge is slow or unreachable. So the
+    // quit path passes a deadline that every one of those waits honours, and
+    // this thread still abandons the call shortly after it in case something
+    // does not. Bridge state restore is best-effort (the bridge times out the
+    // entertainment session server-side anyway); process::exit(0) below tears
+    // down an orphaned worker regardless.
     let t2 = std::time::Instant::now();
+    let hue_deadline = cleanup_started + SHUTDOWN_HUE_DEADLINE;
     let app_for_hue = app.clone();
-    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
     std::thread::Builder::new()
         .name("lumasync-shutdown-hue".into())
         .spawn(move || {
-            let result = stop_hue_stream(None, app_for_hue.state::<HueRuntimeStateStore>())
-                .map(|_| ())
-                .map_err(|e| format!("{e:?}"));
-            let _ = tx.send(result);
+            let result = stop_hue_stream_before_exit(
+                &app_for_hue.state::<HueRuntimeStateStore>(),
+                hue_deadline,
+            );
+            let _ = tx.send(result.status.code);
         })
         .ok();
-    match rx.recv_timeout(std::time::Duration::from_millis(1500)) {
-        Ok(Ok(())) => {
+    let hue_wait =
+        hue_deadline.saturating_duration_since(std::time::Instant::now()) + SHUTDOWN_HUE_GRACE;
+    match rx.recv_timeout(hue_wait) {
+        Ok(code) => {
             log::info!(
-                "[shutdown] step 2 (stop_hue_stream) took {:?}",
+                "[shutdown] step 2 (stop_hue_stream) took {:?} ({code})",
                 t2.elapsed()
             )
         }
-        Ok(Err(e)) => log::warn!("[shutdown] stop_hue_stream reported: {e}"),
         Err(_) => log::warn!(
             "[shutdown] step 2 (stop_hue_stream) abandoned after {:?}",
             t2.elapsed()
