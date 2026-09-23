@@ -103,7 +103,7 @@ export function LedTwinOverlay({ displayId, scope = "test" }: LedTwinOverlayProp
   const frame = useLedPreviewFrame(displayId);
 
   // Load persisted calibration so we can size + place the strip. Re-loading is
-  // cheap (plugin-store is in-memory after first open) and the overlay is a
+  // cheap (Rust answers from memory) and the overlay is a
   // short-lived window, so a one-shot mount read is sufficient for Phase 1.
   useEffect(() => {
     let alive = true;

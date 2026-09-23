@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-hide-led-control-popup"
+description = "Enables the hide_led_control_popup command without any pre-configured scope."
+commands.allow = ["hide_led_control_popup"]
+
+[[permission]]
+identifier = "deny-hide-led-control-popup"
+description = "Denies the hide_led_control_popup command without any pre-configured scope."
+commands.deny = ["hide_led_control_popup"]

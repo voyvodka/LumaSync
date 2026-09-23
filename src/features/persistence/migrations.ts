@@ -70,7 +70,7 @@ type LegacyWindowGeometry = {
 
 /**
  * Apply every queued schema-version step to a single `ShellState`
- * snapshot. Pure function — does not touch plugin-store, does not produce
+ * snapshot. Pure function — does not touch the store, does not produce
  * side effects beyond `console.warn` calls inside the per-step helpers.
  *
  * Behaviour:

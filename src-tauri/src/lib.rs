@@ -31,6 +31,7 @@ mod commands {
     pub mod runtime_quality;
     pub mod runtime_telemetry;
     pub mod screen_capture_permission;
+    pub mod shell_state;
     pub mod status;
     pub mod test_pattern;
     pub mod updater;
@@ -96,6 +97,9 @@ use commands::room_map::save_load::{copy_background_image, update_hue_channel_po
 use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
 use commands::screen_capture_permission::{
     get_screen_capture_permission, open_screen_capture_settings,
+};
+use commands::shell_state::{
+    get_shell_state, patch_shell_state, replace_shell_state, ShellStateStore,
 };
 use commands::updater::{check_for_update, download_and_install_update, PendingUpdate};
 use commands::wled_discovery::{
@@ -340,9 +344,6 @@ pub fn run() {
         Some(vec![AUTOSTART_TRAY_ARG]),
     ));
 
-    // 3. Store (settings persistence)
-    builder = builder.plugin(tauri_plugin_store::Builder::default().build());
-
     // 4. Window-state (geometry persistence)
     //
     // Default flags (`StateFlags::all()`) would auto-restore SIZE and
@@ -445,6 +446,9 @@ pub fn run() {
         .setup(|app| {
             // First thing after the log plugin has installed the logger.
             panic_log::install();
+
+            // Before the banner below, which reads the update channel from it.
+            app.manage(ShellStateStore::for_app(app.handle()));
 
             // Stable and beta are one install writing the same file in turn, so
             // no line says which build wrote it. Per-launch: a mid-session
@@ -759,6 +763,9 @@ pub fn run() {
             check_for_update,
             download_and_install_update,
             get_launch_context,
+            get_shell_state,
+            patch_shell_state,
+            replace_shell_state,
         ])
         .build(app_context())
         .expect("error while building tauri application");

@@ -30,6 +30,7 @@ use tauri::{
 
 use super::calibration::{build_transparent_overlay, list_displays};
 use super::lighting_mode::{LightingModeConfig, LightingRuntimeState};
+use super::shell_state;
 use super::test_pattern::TestPatternKind;
 
 // ---------------------------------------------------------------------------
@@ -480,18 +481,6 @@ pub fn close_led_twin_overlay<R: Runtime>(
 // Control popup commands
 // ---------------------------------------------------------------------------
 
-/// Read the persisted control-popup center (logical px) from the shell store on
-/// disk, mirroring `lighting_mode::hydrate_*`. Absent ⇒ `None` (OS placement).
-fn read_persisted_popup_center<R: Runtime>(app: &AppHandle<R>) -> Option<(f64, f64)> {
-    let dir = app.path().app_data_dir().ok()?;
-    let raw = std::fs::read_to_string(dir.join("shell-state.json")).ok()?;
-    let root: serde_json::Value = serde_json::from_str(&raw).ok()?;
-    let state = root.get("shell-state")?;
-    let x = state.get("ledPreviewPopupCenterX")?.as_f64()?;
-    let y = state.get("ledPreviewPopupCenterY")?.as_f64()?;
-    Some((x, y))
-}
-
 const POPUP_WIDTH: f64 = 320.0;
 const POPUP_HEIGHT: f64 = 460.0;
 
@@ -530,7 +519,8 @@ pub fn open_led_control_popup<R: Runtime>(
         };
 
         // Restore to the persisted center, else let the OS place it.
-        if let Some((cx, cy)) = read_persisted_popup_center(&app) {
+        if let Some((cx, cy)) = shell_state::persisted(&app).and_then(|state| state.popup_center())
+        {
             let _ = window.set_position(Position::Logical(LogicalPosition::new(
                 cx - POPUP_WIDTH / 2.0,
                 cy - POPUP_HEIGHT / 2.0,

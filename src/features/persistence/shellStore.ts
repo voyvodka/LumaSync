@@ -5,8 +5,8 @@
  *
  * This module provides the public API for reading and writing persisted shell
  * state (window geometry, last visited section, startup preference, and the
- * one-time tray hint flag). It delegates to `windowLifecycle` for the actual
- * Tauri plugin-store calls so there is a single store instance.
+ * one-time tray hint flag). It delegates to `windowLifecycle`, which holds this
+ * window's write queue and reaches the Rust-owned file through `shellStateApi`.
  *
  * Usage:
  *   import { shellStore } from './shellStore';
@@ -44,7 +44,7 @@ export const shellStore = {
     return saveShellState(partial);
   },
 
-  /** Fires after every successful save in this window — see {@link onShellStateSaved}. */
+  /** Fires after every successful save, in any window — see {@link onShellStateSaved}. */
   onSaved(listener: ShellStateSavedListener): () => void {
     return onShellStateSaved(listener);
   },

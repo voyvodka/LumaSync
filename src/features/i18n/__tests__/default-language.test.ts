@@ -4,7 +4,7 @@
  * Automated proof for I18N-02: first-launch default (English) and
  * persisted language override.
  *
- * Tests are mocked to avoid invoking the full Tauri plugin-store runtime.
+ * Tests mock the shell store so they need no Tauri runtime.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";

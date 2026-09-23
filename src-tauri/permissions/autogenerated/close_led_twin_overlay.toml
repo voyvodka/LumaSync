@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-close-led-twin-overlay"
+description = "Enables the close_led_twin_overlay command without any pre-configured scope."
+commands.allow = ["close_led_twin_overlay"]
+
+[[permission]]
+identifier = "deny-close-led-twin-overlay"
+description = "Denies the close_led_twin_overlay command without any pre-configured scope."
+commands.deny = ["close_led_twin_overlay"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-assign-channel-to-hue-zone"
+description = "Enables the assign_channel_to_hue_zone command without any pre-configured scope."
+commands.allow = ["assign_channel_to_hue_zone"]
+
+[[permission]]
+identifier = "deny-assign-channel-to-hue-zone"
+description = "Denies the assign_channel_to_hue_zone command without any pre-configured scope."
+commands.deny = ["assign_channel_to_hue_zone"]
