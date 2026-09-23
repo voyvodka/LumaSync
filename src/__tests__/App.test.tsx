@@ -192,6 +192,10 @@ vi.mock("../features/settings/SettingsLayout", () => ({
       >
         set-both-targets
       </button>
+      {/* The Lights toggle never sends an empty set; the handler still accepts one. */}
+      <button type="button" onClick={() => props.onOutputTargetsChange([])}>
+        set-no-targets
+      </button>
       <button
         type="button"
         onClick={() =>
@@ -1278,6 +1282,148 @@ describe("App mode orchestration", () => {
       expect(backend.targetChanges).toBe(0);
       expect(backend.hueSolidSends).toBe(hueSendsAfterBoot + 1);
       expect(persistedTargets()).toEqual([]);
+    });
+  });
+
+  // `stop_lighting` turns the whole backend mode Off. Sent for a USB removal
+  // from [usb, hue], it left the Hue stream open with nothing feeding it while
+  // the UI still showed the mode running on Hue.
+  describe("removing USB from a running [usb, hue] mode keeps Hue running", () => {
+    const pairedShellState = {
+      lastSection: "general",
+      ledCalibration: {
+        templateId: "monitor-27-16-9",
+        counts: { top: 10, right: 10, bottom: 10, left: 10 },
+        bottomMissing: 0,
+        cornerOwnership: "horizontal",
+        visualPreset: "subtle",
+        startAnchor: "top-start",
+        direction: "cw",
+        totalLeds: 40,
+      },
+      lightingMode: { kind: "solid", solid: { r: 10, g: 20, b: 30, brightness: 0.8 } },
+      lastOutputTargets: ["usb", "hue"],
+      lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
+      hueAppKey: "app-user",
+      hueClientKey: "AABBCCDD11223344",
+      lastHueAreaId: "area-1",
+    };
+    const persistedTargets = () =>
+      saveShellStateMock.mock.calls
+        .map(([patch]) => patch as Record<string, unknown>)
+        .filter((patch) => "lastOutputTargets" in patch)
+        .map((patch) => patch.lastOutputTargets);
+
+    async function bootDualTargetSession(shellState: Record<string, unknown> = pairedShellState) {
+      const backend = installLightingBackend();
+      loadShellStateMock.mockResolvedValue(shellState);
+      const view = render(<App />);
+      await waitFor(() => {
+        expect(backend.running?.targets).toEqual(["usb", "hue"]);
+        expect(screen.getByTestId("hue-shown-state")).toHaveTextContent("streaming");
+      });
+      const before = {
+        modeSends: setLightingModeMock.mock.calls.length,
+        hueStarts: startHueMock.mock.calls.length,
+      };
+      return { backend, view, before };
+    }
+
+    // Asserted after the change settles, so a late stop would still be counted.
+    async function expectRunningOnHueAlone(
+      backend: ReturnType<typeof installLightingBackend>,
+      before: { modeSends: number; hueStarts: number },
+    ) {
+      await waitFor(() => {
+        expect(screen.getByTestId("output-targets")).toHaveTextContent(/^hue$/);
+        expect(backend.running?.targets).toEqual(["hue"]);
+      });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      });
+      const sends = setLightingModeMock.mock.calls.slice(before.modeSends).map(([payload]) => payload);
+      expect(sends).toEqual([expect.objectContaining({ kind: "solid", targets: ["hue"] })]);
+      expect(stopLightingMock).not.toHaveBeenCalled();
+      // `stop_hue_stream` is also what runs the #425 light restore.
+      expect(stopHueMock).not.toHaveBeenCalled();
+      expect(startHueMock.mock.calls.length).toBe(before.hueStarts);
+      expect(backend.hueStreamUp).toBe(true);
+      expect(screen.getByTestId("active-mode")).toHaveTextContent("solid");
+      expect(screen.getByTestId("hue-shown-state")).toHaveTextContent("streaming");
+    }
+
+    it("re-applies the mode on Hue alone when the user turns USB off", async () => {
+      const { backend, before } = await bootDualTargetSession();
+
+      await act(async () => {
+        screen.getByRole("button", { name: "set-hue-target" }).click();
+      });
+
+      await expectRunningOnHueAlone(backend, before);
+      // The explicit toggle persists, as every user target change does.
+      expect(persistedTargets()).toEqual([["hue"]]);
+    });
+
+    it("re-applies the mode on Hue alone when the strip is unplugged, without rewriting the saved targets", async () => {
+      const { backend, view, before } = await bootDualTargetSession();
+
+      mockIsConnected = false;
+      await act(async () => {
+        view.rerender(<App />);
+      });
+
+      await expectRunningOnHueAlone(backend, before);
+      expect(screen.getByTestId("usb-disconnect-notice")).toBeInTheDocument();
+      // The strip is still the user's choice; the next launch filters it by availability.
+      expect(persistedTargets()).toEqual([]);
+    });
+
+    it("shows Off and gives back the Hue stream when the re-apply's start fails", async () => {
+      const { backend, before } = await bootDualTargetSession();
+      // Keyed on the payload, not `mockImplementationOnce`: an unconsumed "once"
+      // survives `clearAllMocks` and would answer the next test's boot restore.
+      const applyAsBackend = setLightingModeMock.getMockImplementation()!;
+      setLightingModeMock.mockImplementation((payload: LightingModeConfig) => {
+        if (payload.targets?.join() !== "hue") return applyAsBackend(payload);
+        backend.running = null;
+        return Promise.resolve({
+          active: false,
+          mode: { kind: "off" },
+          status: { code: "SOLID_MODE_APPLY_FAILED", message: "failed", details: null },
+        });
+      });
+
+      await act(async () => {
+        screen.getByRole("button", { name: "set-hue-target" }).click();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+      });
+      expect(setLightingModeMock.mock.calls.length).toBe(before.modeSends + 1);
+      expect(stopLightingMock).not.toHaveBeenCalled();
+      expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
+      expect(backend.hueStreamUp).toBe(false);
+    });
+
+    it("still stops the lighting runtime when the last target is removed", async () => {
+      const backend = installLightingBackend();
+      loadShellStateMock.mockResolvedValue({ ...pairedShellState, lastOutputTargets: ["usb"] });
+      render(<App />);
+      await waitFor(() => {
+        expect(backend.running?.targets).toEqual(["usb"]);
+      });
+      const modeSends = setLightingModeMock.mock.calls.length;
+
+      await act(async () => {
+        screen.getByRole("button", { name: "set-no-targets" }).click();
+      });
+
+      await waitFor(() => {
+        expect(stopLightingMock).toHaveBeenCalledTimes(1);
+      });
+      expect(setLightingModeMock.mock.calls.length).toBe(modeSends);
+      expect(backend.running).toBeNull();
     });
   });
 

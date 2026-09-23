@@ -116,9 +116,9 @@ describe("useLightingModeOrchestrator", () => {
         view.result.current.setActiveOutputTargets(["usb", "hue"]);
       });
 
-      stopLightingMock.mockRejectedValue(new Error("port gone"));
+      stopHueMock.mockRejectedValue(new Error("bridge gone"));
       await act(async () => {
-        await view.result.current.handleOutputTargetsChange(["hue"]);
+        await view.result.current.handleOutputTargetsChange(["usb"]);
       });
       return view;
     }
@@ -127,9 +127,9 @@ describe("useLightingModeOrchestrator", () => {
       const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       const view = await runFailingDeltaStop();
 
-      expect(view.result.current.stopFailedNotice).toEqual(["usb"]);
+      expect(view.result.current.stopFailedNotice).toEqual(["hue"]);
       // The chip stays truthful: a failed stop keeps the target active.
-      expect(view.result.current.activeOutputTargets).toContain("usb");
+      expect(view.result.current.activeOutputTargets).toContain("hue");
       errorSpy.mockRestore();
     });
 
@@ -137,7 +137,7 @@ describe("useLightingModeOrchestrator", () => {
       vi.useFakeTimers();
       const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       const view = await runFailingDeltaStop();
-      expect(view.result.current.stopFailedNotice).toEqual(["usb"]);
+      expect(view.result.current.stopFailedNotice).toEqual(["hue"]);
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(5_000);
@@ -150,7 +150,7 @@ describe("useLightingModeOrchestrator", () => {
       vi.useFakeTimers();
       const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       const view = await runFailingDeltaStop();
-      expect(view.result.current.stopFailedNotice).toEqual(["usb"]);
+      expect(view.result.current.stopFailedNotice).toEqual(["hue"]);
 
       const pendingBefore = vi.getTimerCount();
       expect(pendingBefore).toBeGreaterThan(0);
@@ -161,24 +161,67 @@ describe("useLightingModeOrchestrator", () => {
       errorSpy.mockRestore();
     });
 
-    it("drops a target whose stop succeeded", async () => {
+    function runningDualSession() {
       const view = harness();
       act(() => {
         view.result.current.setLightingMode({
           kind: LIGHTING_MODE_KIND.SOLID,
           solid: { r: 1, g: 2, b: 3, brightness: 1 },
+          targets: ["usb", "hue"],
         });
         view.result.current.setSelectedOutputTargets(["usb", "hue"]);
         view.result.current.setActiveOutputTargets(["usb", "hue"]);
+      });
+      return view;
+    }
+
+    it("drops USB by re-applying the mode on Hue, not by stopping the runtime", async () => {
+      const view = runningDualSession();
+
+      await act(async () => {
+        await view.result.current.handleOutputTargetsChange(["hue"]);
+      });
+
+      expect(setLightingModeMock).toHaveBeenCalledOnce();
+      expect(setLightingModeMock).toHaveBeenCalledWith(expect.objectContaining({ kind: "solid", targets: ["hue"] }));
+      expect(stopLightingMock).not.toHaveBeenCalled();
+      expect(stopHueMock).not.toHaveBeenCalled();
+      expect(view.result.current.activeOutputTargets).toEqual(["hue"]);
+      expect(view.result.current.lightingMode).toEqual(expect.objectContaining({ kind: "solid", targets: ["hue"] }));
+      expect(view.result.current.stopFailedNotice).toBeNull();
+    });
+
+    it("falls back to stopping the runtime when the re-apply is refused with the old mode still running", async () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const view = runningDualSession();
+      setLightingModeMock.mockResolvedValue({
+        active: true,
+        mode: { kind: "solid", solid: { r: 1, g: 2, b: 3, brightness: 1 }, targets: ["usb", "hue"] },
+        status: { code: "HUE_NOT_READY", message: "not ready", details: "HUE_RUNTIME_GATE_FAILED" },
       });
 
       await act(async () => {
         await view.result.current.handleOutputTargetsChange(["hue"]);
       });
 
+      // The user asked for the strip to stop; a refusal must not leave it lit.
       expect(stopLightingMock).toHaveBeenCalledOnce();
-      expect(view.result.current.activeOutputTargets).not.toContain("usb");
+      expect(view.result.current.activeOutputTargets).toEqual(["hue"]);
       expect(view.result.current.stopFailedNotice).toBeNull();
+      errorSpy.mockRestore();
+    });
+
+    it("an unplug drops USB the same way without writing the saved targets", async () => {
+      const view = runningDualSession();
+
+      await act(async () => {
+        await view.result.current.dropUnpluggedUsbTarget(["hue"]);
+      });
+
+      expect(setLightingModeMock).toHaveBeenCalledWith(expect.objectContaining({ targets: ["hue"] }));
+      expect(stopLightingMock).not.toHaveBeenCalled();
+      expect(view.result.current.selectedOutputTargets).toEqual(["hue"]);
+      expect(saveShellStateMock).not.toHaveBeenCalled();
     });
   });
 

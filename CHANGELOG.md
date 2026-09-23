@@ -110,6 +110,11 @@ https://keepachangelog.com/en/1.1.0/
   restarted and in Solid the Hue lights kept the old color. After Hue was removed from a running
   mode, the same change was turned away and never reached the strip. Settings now go to the
   outputs actually running, including after a launch that restored a mode Hue had been added to.
+- Turning the LED strip off in the Lights outputs while Hue is on, or unplugging the strip, no
+  longer stops the lighting on the Hue lights too. The whole mode used to stop, so the Hue lights
+  froze on their last color while the app still showed the mode running, until the next setting
+  change started it again. The mode now carries on with Hue alone. An unplugged strip is also no
+  longer removed from your saved outputs, so it is used again at the next launch once it is back.
 - The first-run guide banner could flash up for a moment at launch and disappear again for people
   who were already set up but had updated from a version without it. It now appears only once the
   app knows which step you are on, so it no longer flashes; a new install still sees the first step
