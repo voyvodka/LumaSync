@@ -5,14 +5,19 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use super::frame_pipeline::{
+    strip_topology_for, AmbilightFramePipeline, FramePipelineConfig, FrameSettings,
+};
 use super::*;
 use crate::commands::ambilight_capture::AmbilightCaptureError;
 use crate::commands::ambilight_scene::{LightSetState, SceneAnalyzer};
-use crate::commands::hue::frame::{
-    HueAreaChannel, HueColorSender, HueColorUpdate, HueScreenRegion,
+use crate::commands::hue::frame::{HueAreaChannel, HueColorSender, HueScreenRegion};
+use crate::commands::hue::state_store::{
+    HueActiveOutputContext, HueChannelPlacementOverride, HueOutputLive,
 };
-use crate::commands::hue::state_store::HueChannelPlacementOverride;
-use crate::commands::led_calibration::{LedSegmentCounts, LedSequenceItem};
+use crate::commands::led_calibration::{
+    build_led_sequence, sample_frame_for_sequence, LedSegmentCounts, LedSequenceItem,
+};
 use crate::commands::led_output::{
     apply_color_correction_rgb_with_luts, gamma_luts_for, GammaLuts, LedOutputError,
     LedPacketSender,
@@ -521,14 +526,11 @@ fn assert_worker_matches_reference(profile: FirmwareProfile, chip_type: LedChipT
     let live = live_settings();
     let room = RoomGeometryLive::new(None);
     let sent = Arc::new(RecordingSender::default());
-    let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(256);
-    let hue_output = HueActiveOutputContext {
+    let (color_sender, rx) = HueColorSender::recording(2);
+    let hue_output = HueOutputLive::holding(HueActiveOutputContext {
         channels: hue_channels(),
-        color_sender: HueColorSender {
-            tx: Arc::new(tx),
-            channel_count: 2,
-        },
-    };
+        color_sender,
+    });
     let runtime = start_ambilight_worker(
         LedOutputBridge::from_sender(sent.clone()),
         Some(UsbOutputPlan::Serial(PORT.to_string())),
@@ -975,6 +977,36 @@ fn assert_steady_frames_within_budget(
         "the serial writer allocated per frame ({leds} LEDs, {profile:?}/{chip_type:?}); \
          it must reuse its two buffers"
     );
+}
+
+/// The worker checks the Hue output slot every frame. Until a Hue start,
+/// reconnect, restart or stop moves it, that check must cost no allocation —
+/// it is one atomic load, not a lock and a clone of the context.
+#[test]
+fn an_unchanged_hue_output_slot_costs_a_frame_no_allocation() {
+    use super::worker::HueOutputFollower;
+
+    let (color_sender, _frames) = HueColorSender::recording(2);
+    let live = HueOutputLive::holding(HueActiveOutputContext {
+        channels: hue_channels(),
+        color_sender,
+    });
+    let mut follower = HueOutputFollower::new(Arc::clone(&live));
+    let mut swapped = 0;
+    let (allocs, _) = alloc_count::measure(|| {
+        for _ in 0..100 {
+            swapped += usize::from(follower.refresh());
+        }
+    });
+    assert_eq!(swapped, 0);
+    assert_eq!(allocs, 0, "the per-frame Hue slot check allocated");
+
+    live.publish(None);
+    assert!(
+        follower.refresh(),
+        "a published change must reach the worker"
+    );
+    assert!(follower.context.is_none());
 }
 
 #[test]

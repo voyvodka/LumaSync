@@ -13,7 +13,7 @@
 //!
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering as AtomicOrdering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -28,7 +28,7 @@ use super::area_cache::invalidate_hue_area_cache;
 use super::dtls::connect_dtls;
 use super::frame::{
     build_huestream_frame, channel_position_to_screen_region, HueAreaChannel, HueColorSender,
-    HueColorUpdate,
+    HueFrameRx,
 };
 use super::light_restore::{parse_light_state, HueLightSnapshot};
 use super::state_store::HueChannelPlacementOverride;
@@ -38,7 +38,7 @@ use super::transport::{
 
 /// Minimum interval between Hue color pushes in the background sender thread.
 /// 50ms = 20 Hz max, well within CLIP v2 limits and imperceptibly fast.
-pub(super) const HUE_SENDER_MIN_INTERVAL_MS: u64 = 50;
+pub(crate) const HUE_SENDER_MIN_INTERVAL_MS: u64 = 50;
 
 // ---------------------------------------------------------------------------
 // Shared shutdown signal — used to detect background thread exit
@@ -479,7 +479,7 @@ fn next_dirty_slot(
 pub(super) fn run_http_fallback_loop<S: LightPutSink>(
     sink: &S,
     slots: &[LightSlot],
-    rx: &std::sync::mpsc::Receiver<HueColorUpdate>,
+    rx: &HueFrameRx,
     pacer: &mut RequestPacer,
 ) {
     if slots.is_empty() {
@@ -563,15 +563,79 @@ pub(super) fn run_http_fallback_loop<S: LightPutSink>(
 /// fault? Either somebody holds the deactivate token (a stop, restart or
 /// reconnect cleanup already PUT `action: stop`), or every sender handle is
 /// gone. Only the write-failure log level depends on this.
-fn dtls_write_failed_during_stop(
-    deactivate_token: &DeactivateToken,
-    rx: &std::sync::mpsc::Receiver<HueColorUpdate>,
-) -> bool {
-    deactivate_token.was_acquired()
-        || matches!(
-            rx.try_recv(),
-            Err(std::sync::mpsc::TryRecvError::Disconnected)
-        )
+fn dtls_write_failed_during_stop(deactivate_token: &DeactivateToken, rx: &HueFrameRx) -> bool {
+    deactivate_token.was_acquired() || rx.is_closed()
+}
+
+/// Keep-alive: with no new frame for this long, the last one is sent again so
+/// the bridge does not close the session after ~10 s of silence.
+const HUE_DTLS_KEEPALIVE: Duration = Duration::from_secs(2);
+
+/// One DTLS session's send loop, apart from the socket so the frame it picks
+/// is testable. `min_interval` is `HUE_SENDER_MIN_INTERVAL_MS` outside tests.
+pub(crate) struct DtlsSendLoop<'a> {
+    pub(crate) area_id: &'a str,
+    pub(crate) channels: &'a [HueAreaChannel],
+    pub(crate) light_metadata: &'a HashMap<String, HueLightMetadata>,
+    pub(crate) packet_counter: &'a AtomicU32,
+    pub(crate) deactivate_token: &'a DeactivateToken,
+    pub(crate) min_interval: Duration,
+    pub(crate) keepalive: Duration,
+}
+
+impl DtlsSendLoop<'_> {
+    /// Returns once every sender handle is gone or a write fails.
+    pub(crate) fn run<W: std::io::Write>(&self, stream: &mut W, rx: &HueFrameRx) {
+        let mut last_sent_at = Instant::now()
+            .checked_sub(self.min_interval)
+            .unwrap_or_else(Instant::now);
+        let mut last_colors: Vec<(u8, u8, u8)> = vec![(0, 0, 0); self.channels.len()];
+        let mut last_brightness: f32 = 1.0;
+
+        loop {
+            let waited = match rx.recv_timeout(self.keepalive) {
+                Ok(update) => Some(update),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => None,
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+            };
+
+            let elapsed = Instant::now().saturating_duration_since(last_sent_at);
+            if elapsed < self.min_interval {
+                thread::sleep(self.min_interval - elapsed);
+            }
+
+            // Taken after the pacing sleep, not before it: a frame that arrived
+            // during the sleep is up to 50 ms newer than the one that woke us.
+            let latest = rx.try_recv().ok().or(waited);
+            if let Some(update) = latest {
+                last_colors = update.channel_colors;
+                last_brightness = update.brightness;
+            }
+
+            let frame = build_huestream_frame(
+                self.area_id,
+                self.channels,
+                &last_colors,
+                last_brightness,
+                self.light_metadata,
+            );
+            if stream.write_all(&frame).is_err() {
+                if dtls_write_failed_during_stop(self.deactivate_token, rx) {
+                    // A stop's deactivate PUT ends the bridge session under a
+                    // frame already in flight. Expected, not a fault.
+                    debug!("DTLS write failed while the stream was being stopped.");
+                } else {
+                    error!("DTLS write failed, stopping entertainment stream.");
+                }
+                break;
+            }
+
+            // Increment packet counter for telemetry.
+            self.packet_counter.fetch_add(1, AtomicOrdering::Relaxed);
+
+            last_sent_at = Instant::now();
+        }
+    }
 }
 
 /// Spawns a background thread that:
@@ -596,9 +660,7 @@ pub(crate) fn spawn_hue_dtls_sender(
     deactivate_token: Arc<DeactivateToken>,
     abandoned: Arc<AtomicBool>,
 ) -> Result<(HueColorSender, ShutdownSignal, Option<String>), String> {
-    let channel_count = channels.len();
-    let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(2);
-    let tx = Arc::new(tx);
+    let (color_sender, rx) = HueColorSender::with_mailbox(channels.len());
 
     // Activate entertainment mode via HTTPS before starting DTLS.
     activate_entertainment_config(&client, &bridge_ip, &username, &area_id)?;
@@ -649,79 +711,18 @@ pub(crate) fn spawn_hue_dtls_sender(
     let shutdown_inner = Arc::clone(&shutdown);
 
     thread::spawn(move || {
-        use std::io::Write;
-
         // Per-light metadata cache (gamut_type / archetype). Read by the
         // frame builder on every send for per-bulb gamut clipping (W1-C3b).
-        let light_metadata = Arc::clone(&light_metadata);
-
-        let min_interval = Duration::from_millis(HUE_SENDER_MIN_INTERVAL_MS);
-        let mut last_sent_at = Instant::now()
-            .checked_sub(min_interval)
-            .unwrap_or_else(Instant::now);
-
-        // Keep-alive: send a frame even when no update arrives, to prevent the
-        // bridge from closing the stream after ~10s of inactivity.
-        let keepalive_timeout = Duration::from_secs(2);
-
-        // Last known frame data for keep-alive re-sends.
-        let mut last_colors: Vec<(u8, u8, u8)> = vec![(0, 0, 0); channels.len()];
-        let mut last_brightness: f32 = 1.0;
-
-        loop {
-            // Try to receive with a timeout so we can send keep-alive frames.
-            let update = match rx.recv_timeout(keepalive_timeout) {
-                Ok(u) => Some(u),
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => None,
-                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
-            };
-
-            // If we got an update, drain any stale ones.
-            let latest = if let Some(mut latest) = update {
-                while let Ok(newer) = rx.try_recv() {
-                    latest = newer;
-                }
-                last_colors = latest.channel_colors.clone();
-                last_brightness = latest.brightness;
-                latest
-            } else {
-                // Keep-alive: re-send the last known frame.
-                HueColorUpdate {
-                    channel_colors: last_colors.clone(),
-                    brightness: last_brightness,
-                }
-            };
-
-            // Honour the minimum interval so we don't slam the bridge.
-            let elapsed = Instant::now().saturating_duration_since(last_sent_at);
-            if elapsed < min_interval {
-                thread::sleep(min_interval - elapsed);
-            }
-
-            // Build and send the HueStream binary frame.
-            let frame = build_huestream_frame(
-                &area_id,
-                &channels,
-                &latest.channel_colors,
-                latest.brightness,
-                &light_metadata,
-            );
-            if dtls_stream.write_all(&frame).is_err() {
-                if dtls_write_failed_during_stop(&deactivate_token, &rx) {
-                    // A stop's deactivate PUT ends the bridge session under a
-                    // frame already in flight. Expected, not a fault.
-                    debug!("DTLS write failed while the stream was being stopped.");
-                } else {
-                    error!("DTLS write failed, stopping entertainment stream.");
-                }
-                break;
-            }
-
-            // Increment packet counter for telemetry.
-            packet_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-            last_sent_at = Instant::now();
+        DtlsSendLoop {
+            area_id: &area_id,
+            channels: &channels,
+            light_metadata: &light_metadata,
+            packet_counter: &packet_counter,
+            deactivate_token: &deactivate_token,
+            min_interval: Duration::from_millis(HUE_SENDER_MIN_INTERVAL_MS),
+            keepalive: HUE_DTLS_KEEPALIVE,
         }
+        .run(&mut dtls_stream, &rx);
 
         // A1.3: emit DTLS `close_notify` before dropping the socket so the
         // bridge releases its "active streamer" slot immediately. Without
@@ -769,7 +770,7 @@ pub(crate) fn spawn_hue_dtls_sender(
         signal_shutdown_complete(&shutdown_inner);
     });
 
-    Ok((HueColorSender { tx, channel_count }, shutdown, cipher_name))
+    Ok((color_sender, shutdown, cipher_name))
 }
 
 /// Fallback HTTP sender for when DTLS is not available (e.g. missing clientkey).
@@ -785,9 +786,7 @@ pub(crate) fn spawn_hue_http_sender(
     username: String,
     channels: Vec<HueAreaChannel>,
 ) -> (HueColorSender, ShutdownSignal) {
-    let channel_count = channels.len();
-    let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(2);
-    let tx = Arc::new(tx);
+    let (color_sender, rx) = HueColorSender::with_mailbox(channels.len());
 
     let shutdown = new_shutdown_signal();
     let shutdown_inner = Arc::clone(&shutdown);
@@ -811,7 +810,7 @@ pub(crate) fn spawn_hue_http_sender(
         signal_shutdown_complete(&shutdown_inner);
     });
 
-    (HueColorSender { tx, channel_count }, shutdown)
+    (color_sender, shutdown)
 }
 
 // ---------------------------------------------------------------------------
@@ -1057,11 +1056,7 @@ pub(crate) fn apply_channel_placements(
 /// avoid scattering the `tx`/`channel_count` initialiser across the failure
 /// paths of `build_hue_sender`.
 pub(crate) fn no_op_sender() -> HueColorSender {
-    let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
-    HueColorSender {
-        tx: Arc::new(tx),
-        channel_count: 0,
-    }
+    HueColorSender::with_mailbox(0).0
 }
 
 /// Shutdown signal for a sender that never spawned a thread. Pre-signalled,
@@ -1801,7 +1796,7 @@ mod tests {
     ) {
         let slots = flatten_light_slots(channels);
         let channel_count = channels.len();
-        let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(2);
+        let (tx, rx) = HueColorSender::with_mailbox(channel_count);
 
         thread::scope(|scope| {
             scope.spawn(move || {
@@ -1809,10 +1804,7 @@ mod tests {
                 let mut tick: u8 = 0;
                 while Instant::now() < deadline && !enough(sink) {
                     tick = tick.wrapping_add(7);
-                    let _ = tx.try_send(HueColorUpdate {
-                        channel_colors: vec![(tick, tick, tick); channel_count],
-                        brightness: 1.0,
-                    });
+                    tx.try_send_channels(vec![(tick, tick, tick); channel_count], 1.0);
                     thread::sleep(Duration::from_millis(5));
                 }
                 drop(tx);
@@ -1897,7 +1889,7 @@ mod tests {
     fn http_fallback_loop_exits_when_the_color_channel_disconnects() {
         let channels = vec![channel_with_lights(0, &["a"])];
         let slots = flatten_light_slots(&channels);
-        let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+        let (tx, rx) = HueColorSender::with_mailbox(1);
         drop(tx);
 
         let sink = RecordingSink::default();
@@ -1911,7 +1903,7 @@ mod tests {
     /// `stop_hue_stream` would burn its full timeout waiting for shutdown.
     #[test]
     fn http_fallback_loop_with_no_lights_still_observes_disconnect() {
-        let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+        let (tx, rx) = HueColorSender::with_mailbox(1);
         drop(tx);
         let sink = RecordingSink::default();
         let mut pacer = RequestPacer::new(10);
@@ -2092,11 +2084,129 @@ mod tests {
     // deactivation across the sender thread, foreground stop, and reconnect monitor.
     // -----------------------------------------------------------------------
 
+    struct RecordingSocket(Arc<Mutex<Vec<Vec<u8>>>>);
+
+    impl std::io::Write for RecordingSocket {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().push(buf.to_vec());
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// Item 16: the loop took a frame, slept out the send floor, then sent the
+    /// frame it took — up to one interval stale. Frames that arrive during the
+    /// sleep are newer, and the newest is the one that must go out. The floor
+    /// is widened here only so the frames land inside the sleep on any runner.
+    #[test]
+    fn the_dtls_loop_sends_the_newest_frame_on_hand_at_send_time() {
+        let channels = vec![bridge_channel(0)];
+        let metadata = HashMap::new();
+        let counter = AtomicU32::new(0);
+        let token = DeactivateToken::new();
+        let written: Arc<Mutex<Vec<Vec<u8>>>> = Arc::default();
+        let frames_written = || written.lock().unwrap().len();
+        let wait_for_frames = |n: usize| {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while frames_written() < n {
+                assert!(Instant::now() < deadline, "frame {n} was never written");
+                thread::sleep(Duration::from_millis(5));
+            }
+        };
+        let expected =
+            |red: u8| build_huestream_frame("area", &channels, &[(red, 0, 0)], 1.0, &metadata);
+        let (sender, rx) = HueColorSender::with_mailbox(1);
+
+        thread::scope(|scope| {
+            let socket = Arc::clone(&written);
+            let (channels, metadata, counter, token, rx) =
+                (&channels, &metadata, &counter, &token, &rx);
+            scope.spawn(move || {
+                DtlsSendLoop {
+                    area_id: "area",
+                    channels,
+                    light_metadata: metadata,
+                    packet_counter: counter,
+                    deactivate_token: token,
+                    min_interval: Duration::from_secs(1),
+                    keepalive: Duration::from_secs(60),
+                }
+                .run(&mut RecordingSocket(socket), rx);
+            });
+
+            sender.try_send(1, 0, 0, 1.0);
+            wait_for_frames(1);
+            // Wakes the loop, which then sleeps out the rest of the interval.
+            sender.try_send(2, 0, 0, 1.0);
+            thread::sleep(Duration::from_millis(50));
+            sender.try_send(3, 0, 0, 1.0);
+            sender.try_send(4, 0, 0, 1.0);
+            wait_for_frames(2);
+            drop(sender);
+        });
+
+        let written = written.lock().unwrap();
+        assert_eq!(written.len(), 2);
+        assert_eq!(written[0], expected(1));
+        assert_eq!(
+            written[1],
+            expected(4),
+            "a frame older than the newest went out"
+        );
+        assert_eq!(counter.load(AtomicOrdering::Relaxed), 2);
+    }
+
+    /// The loop must not send faster than the floor however fast frames come.
+    #[test]
+    fn the_dtls_loop_holds_the_send_floor() {
+        let channels = vec![bridge_channel(0)];
+        let metadata = HashMap::new();
+        let counter = AtomicU32::new(0);
+        let token = DeactivateToken::new();
+        let written: Arc<Mutex<Vec<Vec<u8>>>> = Arc::default();
+        let (sender, rx) = HueColorSender::with_mailbox(1);
+        let min_interval = Duration::from_millis(HUE_SENDER_MIN_INTERVAL_MS);
+        let started = Instant::now();
+
+        thread::scope(|scope| {
+            let socket = Arc::clone(&written);
+            let (channels, metadata, counter, token, rx) =
+                (&channels, &metadata, &counter, &token, &rx);
+            scope.spawn(move || {
+                DtlsSendLoop {
+                    area_id: "area",
+                    channels,
+                    light_metadata: metadata,
+                    packet_counter: counter,
+                    deactivate_token: token,
+                    min_interval,
+                    keepalive: Duration::from_secs(60),
+                }
+                .run(&mut RecordingSocket(socket), rx);
+            });
+            let mut tick = 0u8;
+            while started.elapsed() < Duration::from_millis(500) {
+                tick = tick.wrapping_add(1);
+                sender.try_send(tick, 0, 0, 1.0);
+                thread::sleep(Duration::from_millis(2));
+            }
+            drop(sender);
+        });
+
+        let sent = counter.load(AtomicOrdering::Relaxed) as u128;
+        let ceiling = started.elapsed().as_millis() / min_interval.as_millis() + 1;
+        assert!(sent >= 2, "only {sent} frames went out");
+        assert!(sent <= ceiling, "{sent} frames in {:?}", started.elapsed());
+    }
+
     /// A write failing under a live session is a fault and must stay ERROR.
     #[test]
     fn a_write_failure_on_a_live_session_is_not_a_stop() {
         let token = DeactivateToken::new();
-        let (_tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+        let (_tx, rx) = HueColorSender::with_mailbox(1);
         assert!(!dtls_write_failed_during_stop(&token, &rx));
     }
 
@@ -2105,7 +2215,7 @@ mod tests {
     #[test]
     fn a_write_failure_after_the_stop_took_the_token_is_the_stop() {
         let token = DeactivateToken::new();
-        let (_tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+        let (_tx, rx) = HueColorSender::with_mailbox(1);
         assert!(token.try_acquire());
         assert!(dtls_write_failed_during_stop(&token, &rx));
     }
@@ -2113,7 +2223,7 @@ mod tests {
     #[test]
     fn a_write_failure_after_every_sender_handle_dropped_is_the_stop() {
         let token = DeactivateToken::new();
-        let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+        let (tx, rx) = HueColorSender::with_mailbox(1);
         drop(tx);
         assert!(dtls_write_failed_during_stop(&token, &rx));
     }

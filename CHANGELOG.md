@@ -75,6 +75,12 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Hue: after the stream to the bridge dropped and reconnected on its own, the lamps stayed frozen
+  on their last colour while the app still said Hue was running. Ambilight now carries on to the
+  reconnected stream. Stopping Hue while Ambilight was still sending to it no longer waits out a
+  timeout and reports that the stop was only partial.
+- Hue: the lamps lagged the screen by up to a twentieth of a second more than they had to. The
+  colour sent to the bridge is now the newest one ready when it goes out.
 - Settings: the main window and the LED control popup could undo each other's changes when both
   saved at about the same time. The settings file now has one owner in the app, which applies
   every change in turn, and it is written so that a crash or power cut mid-save leaves either the

@@ -4,7 +4,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use log::{info, warn};
@@ -13,19 +13,18 @@ use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime, State};
 
 use super::ambilight_capture::{
     create_live_frame_source, detect_black_borders, AmbilightCaptureError, AmbilightFrameSource,
-    BlackBorderInsets, CapturedFrame, StaticFrameSource, BLACK_BORDER_THRESHOLD,
+    BlackBorderInsets, CapturedFrame, BLACK_BORDER_THRESHOLD,
 };
 use super::ambilight_scene::{hue_default_screen_affinity, LightTopology};
 use super::calibration::list_displays;
 use super::device_connection::{ActiveSinkRegistry, SerialConnectionState};
 use super::hue::state_store::{
-    apply_hue_channels_with_context, apply_hue_color_with_context, snapshot_hue_output_context,
-    HueActiveOutputContext, HueRuntimeStateStore,
+    apply_hue_color_with_context, snapshot_hue_output_context, HueOutputLive, HueRuntimeStateStore,
 };
 use super::hue_intensity::{HueIntensityPreset, LightingSmoothingPreset};
 use super::led_calibration::{
-    build_led_sequence, derive_base_interval_ms_for, frame_wire_bytes, frame_wire_time_ms,
-    link_max_fps, sample_frame_for_sequence, LedCalibrationConfig,
+    derive_base_interval_ms_for, frame_wire_bytes, frame_wire_time_ms, link_max_fps,
+    LedCalibrationConfig,
 };
 use super::led_output::{
     apply_color_correction_rgb, encode_packet_for_output, ColorCorrectionConfig, EncoderPlan,
@@ -39,7 +38,7 @@ use super::led_sink::LedSink;
 use super::room_affinity::{room_aware_hue_samples, room_geometry_rejection};
 use super::runtime_quality::{RuntimeFrameSlot, RuntimeQualityConfig, RuntimeQualityController};
 use super::runtime_telemetry::{
-    RuntimeTelemetrySnapshot, RuntimeTelemetryState, RuntimeTelemetryWindow, SharedRuntimeTelemetry,
+    RuntimeTelemetrySnapshot, RuntimeTelemetryState, SharedRuntimeTelemetry,
 };
 use super::shell_state::{self, PersistedShellState};
 use super::status::CommandStatus;
@@ -51,9 +50,8 @@ use super::wled_sink::{CorrectedWledSink, WledSinkConfig};
 use crate::models::room_map::RoomGeometry;
 
 mod frame_pipeline;
-use frame_pipeline::{
-    strip_topology_for, AmbilightFramePipeline, FramePipelineConfig, FrameSettings,
-};
+mod worker;
+use worker::start_ambilight_worker;
 
 static ACTIVE_AMBILIGHT_WORKERS: AtomicUsize = AtomicUsize::new(0);
 static SOLID_OUTPUT_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
@@ -1375,434 +1373,6 @@ fn resolve_quality_config(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn start_ambilight_worker(
-    output_bridge: LedOutputBridge,
-    usb_plan: Option<UsbOutputPlan>,
-    led_calibration: Option<LedCalibrationConfig>,
-    live_settings: Arc<AmbilightLiveSettings>,
-    frame_source: Box<dyn AmbilightFrameSource>,
-    telemetry_snapshot: SharedRuntimeTelemetry,
-    hue_output: Option<HueActiveOutputContext>,
-    edge_signal_emitter: Option<EdgeSignalEmitter>,
-    color_correction: ColorCorrectionConfig,
-    firmware_profile: FirmwareProfile,
-    chip_type: LedChipType,
-    preview: Option<PreviewEmitContext>,
-    room_geometry: Arc<RoomGeometryLive>,
-) -> Result<LightingWorkerRuntime, String> {
-    let mut frame_source = frame_source;
-    // macOS SCStream (and Windows WGC) deliver the first frame asynchronously.
-    // Retry for up to ~1 s to give the capture session time to warm up.
-    let initial_frame = {
-        const MAX_ATTEMPTS: u32 = 20;
-        const RETRY_MS: u64 = 50;
-        let mut last_err = String::new();
-        let mut found = None;
-        for _ in 0..MAX_ATTEMPTS {
-            match frame_source.capture_frame() {
-                Ok(frame) => {
-                    found = Some(frame);
-                    break;
-                }
-                Err(
-                    crate::commands::ambilight_capture::AmbilightCaptureError::FrameUnavailable,
-                ) => {
-                    last_err = "AMBILIGHT_CAPTURE_FRAME_UNAVAILABLE".to_string();
-                    thread::sleep(Duration::from_millis(RETRY_MS));
-                }
-                Err(other) => return Err(other.as_reason()),
-            }
-        }
-        found.ok_or(last_err)?
-    };
-    // Per-LED calibration: build the strip sequence once at worker start.
-    // Each iteration calls sample_frame_for_sequence to produce per-LED colours
-    // from edge regions of the captured frame.
-    // When led_calibration is absent we fall back to a minimal 1-LED sequence
-    // so the legacy single-zone firmware path keeps working unchanged.
-    let (led_sequence, led_counts, total_leds) = if let Some(ref cal) = led_calibration {
-        let seq = build_led_sequence(cal);
-        let counts = cal.counts.clone();
-        let n = cal.total_leds;
-        (seq, counts, n)
-    } else {
-        // Fallback: 1 LED centred on screen (backward-compat with v1.3 firmware).
-        use super::led_calibration::LedSegmentCounts as Counts;
-        let fallback_cal = LedCalibrationConfig {
-            template_id: None,
-            counts: Counts {
-                top: 1,
-                right: 0,
-                bottom: 0,
-                left: 0,
-            },
-            bottom_missing: 0,
-            corner_ownership: "horizontal".to_string(),
-            visual_preset: "subtle".to_string(),
-            start_anchor: "top-start".to_string(),
-            direction: "cw".to_string(),
-            total_leds: 1,
-        };
-        (build_led_sequence(&fallback_cal), fallback_cal.counts, 1u16)
-    };
-    info!(
-        "[start_ambilight_worker] led sequence resolved — total_leds={total_leds} sequence_len={} calibration_present={}",
-        led_sequence.len(),
-        led_calibration.is_some()
-    );
-
-    let hue_only = usb_plan.is_none() && hue_output.is_some();
-    let initial_smoothing_alpha = live_settings.read_smoothing_alpha();
-    let (quality_config, serial_budget) = resolve_quality_config(
-        &usb_plan,
-        total_leds,
-        firmware_profile,
-        chip_type,
-        initial_smoothing_alpha,
-    );
-    let mut quality_state = AmbilightWorkerQualityState::new(quality_config);
-    let mut frame_slot = RuntimeFrameSlot::new();
-    let mut telemetry_window = RuntimeTelemetryWindow::new(Instant::now());
-    // Deliberately gated on `serial_budget`, not `usb_plan` -- a WLED-only
-    // session must report `link_max_fps: 0.0` / unconstrained, the same as
-    // a Hue-only session (see contract note on `RuntimeTelemetrySnapshot`).
-    if let Some(budget) = serial_budget {
-        telemetry_window.set_link_budget(budget.link_max_fps, budget.is_link_constrained());
-    }
-
-    let mut initial_frame_source =
-        StaticFrameSource::new(Arc::try_unwrap(initial_frame).unwrap_or_else(|arc| (*arc).clone()));
-    // No border detection for the initial warmup frame — detection runs in the worker loop.
-    let initial_raw = initial_frame_source
-        .capture_frame()
-        .map_err(|e| e.as_reason())?;
-    AMBILIGHT_CAPTURE_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-    // A synthetic test paints exact per-LED blocks; the live 0.05 box is wider
-    // than the whole comet, so it averaged in unlit screen and dimmed the head.
-    let sample_window = if preview.as_ref().is_some_and(|ctx| ctx.source == "test") {
-        SYNTHETIC_SAMPLE_WINDOW
-    } else {
-        LIVE_SAMPLE_WINDOW
-    };
-    let initial_sampled =
-        sample_frame_for_sequence(&initial_raw, &led_sequence, &led_counts, sample_window);
-    telemetry_window.record_capture();
-    if quality_state.queue_processed_frame(&mut frame_slot, initial_sampled.as_slice()) {
-        telemetry_window.record_slot_overwrite();
-    }
-
-    // Built once at worker start; brightness and colour order are synced each
-    // iteration via `set_brightness` / `set_color_order` before `send_frame`.
-    let mut usb_sink: Option<ActiveUsbSink> = usb_plan.as_ref().map(|plan| match plan {
-        UsbOutputPlan::Serial(port) => ActiveUsbSink::Serial(SerialSink::with_chip_type(
-            output_bridge.clone(),
-            Some(port.clone()),
-            live_settings.read_brightness(),
-            firmware_profile,
-            color_correction.clone(),
-            chip_type,
-        )),
-        UsbOutputPlan::Wled(cfg) => ActiveUsbSink::Wled(Box::new(CorrectedWledSink::new(
-            cfg.build(),
-            color_correction.clone(),
-        ))),
-    });
-    if let Some(ref mut sink) = usb_sink {
-        sink.start()?;
-    }
-
-    let send_started = Instant::now();
-    if usb_sink.is_some() {
-        let initial_brightness = live_settings.read_brightness();
-        if let Some(ref mut sink) = usb_sink {
-            sink.set_brightness(initial_brightness);
-            sink.set_color_order(live_settings.read_color_order());
-        }
-        let initial_sent =
-            quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
-                AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-                if let Some(ref mut s) = usb_sink {
-                    s.send_frame(frame)
-                } else {
-                    Ok(())
-                }
-            })?;
-        if initial_sent {
-            telemetry_window.record_send();
-        }
-    }
-    // Hue-only: no initial USB send needed, just apply Hue from capture
-    quality_state.observe_capture_and_send_cost(0.0, send_started.elapsed().as_secs_f32() * 1000.0);
-    telemetry_window.record_latency(quality_state.observed_cost_ms());
-    telemetry_window.flush_if_due(Instant::now(), &telemetry_snapshot)?;
-
-    let cancel = Arc::new(AtomicBool::new(false));
-    let cancel_flag = Arc::clone(&cancel);
-
-    // Wrap the frame source in Arc<Mutex<...>> so ownership stays on the command
-    // thread. The worker receives only a clone (refcount=2). When the worker loop
-    // exits it drops its clone (refcount→1). Then LightingWorkerRuntime::stop()
-    // drops `self` from the command thread, dropping the last Arc (refcount→0) and
-    // calling SCStream::stop_capture safely — never from the worker thread.
-    let frame_source_arc: Arc<Mutex<Box<dyn AmbilightFrameSource>>> =
-        Arc::new(Mutex::new(frame_source));
-    let worker_source = Arc::clone(&frame_source_arc);
-
-    let handle = thread::spawn(move || {
-        ACTIVE_AMBILIGHT_WORKERS.fetch_add(1, Ordering::SeqCst);
-        let has_hue = hue_output
-            .as_ref()
-            .map(|c| !c.channels.is_empty())
-            .unwrap_or(false);
-        info!(
-            "[ambilight-worker] started — sink={:?} chip={:?} hue={} channels={}",
-            usb_plan,
-            chip_type,
-            has_hue,
-            hue_output.as_ref().map(|c| c.channels.len()).unwrap_or(0)
-        );
-        if let Some(ctx) = hue_output.as_ref() {
-            for ch in &ctx.channels {
-                let norm_x = (ch.position_x.clamp(-1.0, 1.0) + 1.0) / 2.0;
-                let norm_y = (1.0 - ch.position_y.clamp(-1.0, 1.0)) / 2.0;
-                info!("[ambilight-worker] hue ch#{} bridge_pos=({:.3},{:.3}) z={:?} screen_norm=({:.1}%,{:.1}%) region={:?}",
-                    ch.channel_id, ch.position_x, ch.position_y, ch.position_z,
-                    norm_x * 100.0, norm_y * 100.0, ch.screen_region);
-            }
-        }
-        let mut hue_send_count = 0u32;
-        // Mirror of `hue_send_count` for the USB sink so live-debug sessions
-        // can confirm full-strip frames are reaching the wire (e.g. byte
-        // count, led_count) without flooding stdout at 60 Hz.
-        let mut usb_send_count = 0u32;
-        // Scene-adaptive stage (docs/architecture/capture-and-pipeline.md). Off
-        // for synthetic test frames, which must reach the strip exactly as
-        // painted, and under LUMASYNC_AMBILIGHT_LEGACY=1 for A/B bisecting.
-        let scene_enabled = preview.as_ref().is_none_or(|ctx| ctx.source != "test")
-            && std::env::var("LUMASYNC_AMBILIGHT_LEGACY").map_or(true, |v| v != "1");
-        let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
-            led_sequence,
-            led_counts,
-            sample_window,
-            scene_enabled,
-            strip_topology: strip_topology_for(led_calibration.as_ref()),
-            hue_channels: hue_output.as_ref().map(|ctx| ctx.channels.clone()),
-            room_geometry,
-            black_border_detection: live_settings.read_black_border_detection(),
-            color_correction,
-        });
-        info!(
-            "[ambilight-worker] scene-adaptive stage {}",
-            if scene_enabled { "on" } else { "off" }
-        );
-
-        let mut capture_fail_count = 0u32;
-        let mut last_edge_emit_at: Option<Instant> = None;
-        // v1.6 LED Preview — monotonic frame seq + last per-Hue-channel colours
-        // for the enriched edge-signal (only stamped while a preview is active).
-        let mut edge_seq: u64 = 0;
-        let mut last_hue_colors: Option<Vec<[u8; 3]>> = None;
-        while !cancel_flag.load(Ordering::Relaxed) {
-            let capture_started = Instant::now();
-            let capture_result: Result<(Arc<CapturedFrame>, Vec<[u8; 3]>), String> =
-                match worker_source.lock() {
-                    Ok(mut src) => {
-                        AMBILIGHT_CAPTURE_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-                        src.capture_frame().map_err(|e| e.as_reason()).map(|frame| {
-                            let colors = pipeline.sample_strip(&frame);
-                            (frame, colors)
-                        })
-                    }
-                    Err(_) => Err("AMBILIGHT_CAPTURE_FRAME_LOCK_FAILED".to_string()),
-                };
-            if let Err(ref e) = capture_result {
-                capture_fail_count += 1;
-                if capture_fail_count <= 5 || capture_fail_count.is_multiple_of(50) {
-                    warn!("[ambilight-worker] capture failed #{capture_fail_count}: {e}");
-                }
-                // The success branch owns the only other flush, so without this
-                // one a sustained outage freezes telemetry at the last good frame.
-                telemetry_window.record_capture_error(e, Instant::now());
-                let _ = telemetry_window.flush_if_due(Instant::now(), &telemetry_snapshot);
-            }
-            if let Ok((raw_frame, sampled)) = capture_result {
-                // Sync live-tunable settings from shared atomic state (zero-cost on hot path).
-                let brightness = live_settings.read_brightness();
-                let color_order = live_settings.read_color_order();
-                let settings = FrameSettings {
-                    black_border_detection: live_settings.read_black_border_detection(),
-                    alpha_ceiling: live_settings.read_smoothing_alpha(),
-                    saturation: live_settings.read_saturation(),
-                };
-                // Compute only, Hue channels included; the sends below keep
-                // their order (USB, then Hue).
-                let step = pipeline.process(
-                    &raw_frame,
-                    sampled,
-                    settings,
-                    &mut quality_state,
-                    &mut frame_slot,
-                );
-                let capture_ms = step
-                    .analyzed_at
-                    .duration_since(capture_started)
-                    .as_secs_f32()
-                    * 1000.0;
-                telemetry_window.record_capture();
-                if step.slot_overwritten {
-                    telemetry_window.record_slot_overwrite();
-                }
-
-                let send_started = Instant::now();
-                let send_ms = if usb_sink.is_some() {
-                    // USB send path: sync brightness then dispatch via LedSink trait.
-                    if let Some(ref mut sink) = usb_sink {
-                        sink.set_brightness(brightness);
-                        sink.set_color_order(color_order);
-                    }
-                    // Capture the per-frame led_count for the diagnostic log
-                    // BEFORE handing the slice to the closure (the closure
-                    // consumes &[[u8;3]] but we only want the count).
-                    let mut last_usb_led_count: usize = 0;
-                    match quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
-                        AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-                        last_usb_led_count = frame.len();
-                        if let Some(ref mut s) = usb_sink {
-                            s.send_frame(frame)
-                        } else {
-                            Ok(())
-                        }
-                    }) {
-                        Ok(true) => {
-                            telemetry_window.record_send();
-                            // LumaSync v1 wire format: 5-byte header
-                            // (magic + brightness + count_le) + RGB payload
-                            // (3 bytes per LED) + 1-byte XOR. Adalight's
-                            // 6-byte header without the brightness byte
-                            // produces a slightly different total — the log
-                            // assumes LumaSyncV1 (the production default)
-                            // and is observability-only, not load-bearing.
-                            let usb_bytes_estimate =
-                                5usize + last_usb_led_count.saturating_mul(3) + 1;
-                            usb_send_count += 1;
-                            if usb_send_count <= 3 || usb_send_count.is_multiple_of(200) {
-                                info!(
-                                    "[ambilight-worker] usb update #{usb_send_count} — bytes={usb_bytes_estimate} led_count={last_usb_led_count}"
-                                );
-                            }
-                            send_started.elapsed().as_secs_f32() * 1000.0
-                        }
-                        _ => 0.0,
-                    }
-                } else {
-                    // Hue-only path: skip the USB quality gate entirely.
-                    // The real Hue send happens below via apply_hue_channels_with_context,
-                    // which has its own 50ms rate-limit in the DTLS sender thread.
-                    // We just drain the slot to prevent indefinite overwrite accumulation.
-                    let _ = frame_slot.take_latest();
-                    0.0
-                };
-
-                // Hue update: sample raw screen regions, apply per-channel EWMA
-                // smoothing (both in `pipeline.process`), then send every frame to
-                // the bridge. Sending every frame (instead of delta-skipping) lets
-                // the bridge's internal ~100ms hardware interpolation produce
-                // smooth gradients.
-                let enrich_preview = preview.as_ref().is_some_and(|ctx| ctx.should_enrich());
-
-                if let (Some(context), Some(smoothed)) = (hue_output.as_ref(), step.hue_colors) {
-                    hue_send_count += 1;
-                    if hue_send_count <= 3 || hue_send_count.is_multiple_of(200) {
-                        info!(
-                            "[ambilight-worker] hue update #{hue_send_count} — colors: {:?}",
-                            &smoothed[..smoothed.len().min(3)]
-                        );
-                    }
-                    // Only the enriched edge-signal reads this; allocating it
-                    // unconditionally burned a Vec per frame at up to 60 Hz.
-                    if enrich_preview {
-                        last_hue_colors =
-                            Some(smoothed.iter().map(|&(r, g, b)| [r, g, b]).collect());
-                    }
-                    let _ = apply_hue_channels_with_context(context, smoothed.to_vec(), brightness);
-                    telemetry_window.record_send();
-                }
-
-                quality_state.observe_capture_and_send_cost(capture_ms, send_ms);
-                telemetry_window.record_latency(quality_state.observed_cost_ms());
-                let _ = telemetry_window.flush_if_due(Instant::now(), &telemetry_snapshot);
-
-                // Twin-overlay feed. With no twin open this is skipped whole —
-                // no buffer, no serialisation, no IPC.
-                let twin_feed = edge_signal_emitter
-                    .as_ref()
-                    .zip(preview.as_ref().filter(|_| enrich_preview));
-                if let Some((emitter, ctx)) = twin_feed {
-                    let now = Instant::now();
-                    let due = last_edge_emit_at
-                        .map(|prev| {
-                            now.duration_since(prev)
-                                >= Duration::from_millis(EDGE_SIGNAL_PREVIEW_INTERVAL_MS)
-                        })
-                        .unwrap_or(true);
-                    if due {
-                        let leds: Vec<[u8; 3]> = quality_state
-                            .last_smoothed()
-                            .iter()
-                            .map(|&[r, g, b]| {
-                                let (cr, cg, cb) = pipeline.correct_rgb((r, g, b));
-                                [
-                                    (cr as f32 * brightness).round().clamp(0.0, 255.0) as u8,
-                                    (cg as f32 * brightness).round().clamp(0.0, 255.0) as u8,
-                                    (cb as f32 * brightness).round().clamp(0.0, 255.0) as u8,
-                                ]
-                            })
-                            .collect();
-                        edge_seq = edge_seq.wrapping_add(1);
-                        emitter(EdgeSignalPayload {
-                            led_count: leds.len(),
-                            leds,
-                            hue_channels: last_hue_colors.clone(),
-                            source: ctx.source,
-                            pattern: ctx.pattern,
-                            seq: edge_seq,
-                            display_id: ctx.display_id.clone(),
-                        });
-                        last_edge_emit_at = Some(now);
-                    }
-                }
-            }
-
-            let interval_ms = quality_state.current_send_interval().as_millis() as u64;
-            // USB mode: capture slightly faster than send to keep the slot fresh.
-            // Hue-only mode: match capture rate to send rate (~20 Hz) to avoid
-            // queue overwrite pressure (slot overwrites → "Critical" health).
-            let sleep_ms = if hue_only {
-                // Sleep for ~90% of the send interval. Capture cost (~4ms) fills
-                // the remaining 10%, yielding capture FPS ≈ send FPS.
-                (interval_ms * 9 / 10).clamp(15, 50)
-            } else {
-                (interval_ms / 2).clamp(5, 50)
-            };
-            thread::sleep(Duration::from_millis(sleep_ms));
-        }
-
-        // Stop the USB sink cleanly before the worker thread exits.
-        if let Some(mut sink) = usb_sink {
-            let _ = sink.stop();
-        }
-
-        ACTIVE_AMBILIGHT_WORKERS.fetch_sub(1, Ordering::SeqCst);
-    });
-
-    Ok(LightingWorkerRuntime {
-        cancel,
-        handle,
-        _frame_source: frame_source_arc,
-    })
-}
-
 /// Resolved output for the "usb" channel — serial and WLED are alternate
 /// transports for the same logical LED-strip output, not separate targets
 /// (see `ls-led-protocols`). Whichever sink `ActiveSinkRegistry` currently
@@ -1829,7 +1399,7 @@ fn apply_mode_change(
     device_connected: bool,
     connected_port: Option<&str>,
     wled_sink: Option<WledSinkConfig>,
-    hue_output: Option<HueActiveOutputContext>,
+    hue_output: Option<Arc<HueOutputLive>>,
     telemetry_snapshot: Option<SharedRuntimeTelemetry>,
     edge_signal_emitter: Option<EdgeSignalEmitter>,
     trace: Option<&mut Vec<&'static str>>,
@@ -1859,7 +1429,7 @@ fn apply_mode_change_inner(
     // WLED device is the most recently connected "usb"-channel sink and
     // takes priority over `connected_port` for this mode change.
     wled_sink: Option<WledSinkConfig>,
-    hue_output: Option<HueActiveOutputContext>,
+    hue_output: Option<Arc<HueOutputLive>>,
     telemetry_snapshot: Option<SharedRuntimeTelemetry>,
     edge_signal_emitter: Option<EdgeSignalEmitter>,
     trace: Option<&mut Vec<&'static str>>,
@@ -1890,11 +1460,12 @@ fn apply_mode_change_inner(
     let requested_targets = normalized_next.targets.clone().unwrap_or_default();
     let needs_usb = requested_targets.is_empty() || requested_targets.iter().any(|t| t == "usb");
     let needs_hue = requested_targets.iter().any(|t| t == "hue");
-    // The caller snapshots whatever stream is live. A worker handed it while
-    // not targeting Hue keeps a sender handle, and the Hue sender exits only
-    // once every handle is gone — so removing Hue would leave it streaming
-    // through the stop and its light restore. See docs/architecture/hue.md.
+    // The caller hands over the Hue runtime's live slot whatever the targets.
+    // A worker given it while not targeting Hue would sample and send Hue every
+    // frame, and follow the stream into every reconnect — so only a mode that
+    // names Hue gets it. See docs/architecture/hue.md.
     let hue_output = hue_output.filter(|_| needs_hue);
+    let hue_context = hue_output.as_ref().and_then(|live| live.current());
     // v1.6 LED Preview — a synthetic test request bypasses the device/Hue
     // gates so it can run preview-only (twin + edge stream) with no sink.
     let is_test = owner.preview.pending_test_pattern.is_some();
@@ -1930,7 +1501,7 @@ fn apply_mode_change_inner(
     // Hue gate: when Hue target requested, Hue output context must be available (per D-03).
     if normalized_next.kind != LightingModeKind::Off
         && needs_hue
-        && hue_output.is_none()
+        && hue_context.is_none()
         && !is_test
     {
         return make_result(
@@ -2176,7 +1747,7 @@ fn apply_mode_change_inner(
             // Hue solid output (if hue target requested and context available)
             let mut hue_skip_reason: Option<String> = None;
             if needs_hue {
-                match hue_output.as_ref() {
+                match hue_context.as_ref() {
                     Some(context) => {
                         let hue_corrections =
                             normalized_next.color_correction.clone().unwrap_or_default();
@@ -2249,7 +1820,7 @@ fn apply_mode_change_inner(
             );
             live_settings.store_color_order(normalized_next.color_order.unwrap_or_default());
 
-            info!("[apply_mode_change] starting ambilight — needs_usb={needs_usb} needs_hue={needs_hue} hue_output={}", hue_output.is_some());
+            info!("[apply_mode_change] starting ambilight — needs_usb={needs_usb} needs_hue={needs_hue} hue_output={}", hue_context.is_some());
 
             // Fresh per worker: the old cell belongs to the source being torn
             // down, and handing it on would let a stale write reach it.
@@ -2452,7 +2023,7 @@ fn set_lighting_mode_blocking<R: Runtime>(
         info!("[set_lighting_mode] runtime lock waited {lock_ms}ms");
     }
 
-    let hue_output = snapshot_hue_output_context(&hue_runtime_state)?;
+    let hue_output = Some(hue_runtime_state.output_live());
 
     // v1.6 LED Preview — clear any stale synthetic-test request, wire the
     // shared gate so a twin opened mid-run starts receiving without a worker
@@ -2714,7 +2285,7 @@ fn apply_and_broadcast<R: Runtime>(
             .runtime
             .lock()
             .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
-        let hue_output = snapshot_hue_output_context(hue_runtime_state)?;
+        let hue_output = Some(hue_runtime_state.output_live());
         owner.preview.pending_test_pattern = test_pattern;
         owner.preview.preview_gate = Some(twin_state.preview_active());
         apply_mode_change(
@@ -4571,10 +4142,21 @@ mod lighting_mode_tests {
         LightingModeConfig, LightingModeKind, LightingRuntimeOwner, SolidColorPayload,
         TestPatternConfig, TestPatternKind, TestPatternSpeed,
     };
-    use crate::commands::hue::frame::{
-        HueAreaChannel, HueColorSender, HueColorUpdate, HueScreenRegion,
+    use std::time::Duration;
+
+    use crate::commands::hue::commands::stop_hue_runtime;
+    use crate::commands::hue::frame::{HueAreaChannel, HueColorSender, HueScreenRegion};
+    use crate::commands::hue::reconnect::store_active_stream_context;
+    use crate::commands::hue::retry::start_with_evidence;
+    use crate::commands::hue::sender::{
+        is_shutdown_signaled, spawn_hue_http_sender, DeactivateToken, HueLightMetadata,
+        ShutdownSignal, SpawnedHueSender,
     };
-    use crate::commands::hue::state_store::HueActiveOutputContext;
+    use crate::commands::hue::state_store::test_helpers::strict_gate_ready;
+    use crate::commands::hue::state_store::{
+        acquire_hue_runtime, HueActiveOutputContext, HueOutputLive, HueRuntimeStateStore,
+        HueRuntimeTriggerSource, StartHueStreamRequest,
+    };
     use crate::commands::led_output::{ColorCorrectionConfig, FirmwareProfile};
     use crate::models::room_map::{RoomDimensions, RoomGeometry, TvAnchorPlacement};
 
@@ -4865,10 +4447,6 @@ mod lighting_mode_tests {
     }
 
     fn hue_context_with_channels(channel_count: usize) -> HueActiveOutputContext {
-        let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(4);
-        // Keep the receiver alive for the duration of the test process so
-        // `try_send` mirrors a live sender thread rather than a closed channel.
-        std::mem::forget(rx);
         HueActiveOutputContext {
             channels: (0..channel_count)
                 .map(|i| HueAreaChannel {
@@ -4880,11 +4458,13 @@ mod lighting_mode_tests {
                     position_z: None,
                 })
                 .collect(),
-            color_sender: HueColorSender {
-                tx: Arc::new(tx),
-                channel_count: channel_count.max(1),
-            },
+            color_sender: HueColorSender::with_mailbox(channel_count.max(1)).0,
         }
+    }
+
+    /// The runtime's slot as a mode change is handed it, already holding `context`.
+    fn live(context: HueActiveOutputContext) -> Option<Arc<HueOutputLive>> {
+        Some(HueOutputLive::holding(context))
     }
 
     #[test]
@@ -5203,39 +4783,8 @@ mod lighting_mode_tests {
         }
     }
 
-    /// Removing Hue from a running `[usb, hue]` mode: the frontend re-applies
-    /// the mode on USB, then `stop_hue_stream` drops the runtime's sender
-    /// handle and waits for the sender thread to exit before it restores the
-    /// lights. That exit needs the worker's handle gone too, or the sender
-    /// keeps painting the lights after the restore.
-    #[test]
-    fn a_mode_re_applied_without_hue_lets_the_hue_sender_exit() {
-        use crate::commands::hue::sender::{spawn_hue_http_sender, wait_for_shutdown};
-        use crate::commands::hue::test_bridge::{Reply, TestBridge};
-        use std::time::Duration;
-
-        let _guard = acquire_worker_test_guard();
-        let bridge = TestBridge::start(|_, _, _| Reply::ok());
-        let light_puts = || bridge.puts_to("/clip/v2/resource/light/").len();
-        let channels = vec![channel(0, 0.0, 1.0, None)];
-        let (color_sender, sender_exited) = spawn_hue_http_sender(
-            crate::commands::hue::transport::blocking_client_for_key("app-key").expect("client"),
-            bridge.authority.clone(),
-            "app-key".to_string(),
-            channels.clone(),
-        );
-        // Stands in for the Hue runtime's `active_stream`, which every
-        // `set_lighting_mode` snapshots while the stream is up.
-        let runtime_handle = HueActiveOutputContext {
-            channels,
-            color_sender,
-        };
-
-        let mut owner = owner_with_fake_sender();
-        owner.frame_source_factory = Arc::new(|_req: super::AmbilightCaptureRequest| {
-            Ok(Box::new(CyclingFrameSource { tick: 0 }))
-        });
-        let mode = |targets: &[&str]| LightingModeConfig {
+    fn hue_mode(targets: &[&str]) -> LightingModeConfig {
+        LightingModeConfig {
             kind: LightingModeKind::Ambilight,
             ambilight: Some(AmbilightPayload {
                 brightness: 1.0,
@@ -5244,15 +4793,91 @@ mod lighting_mode_tests {
             }),
             targets: Some(targets.iter().map(|t| t.to_string()).collect()),
             ..LightingModeConfig::default()
-        };
+        }
+    }
+
+    fn hue_request(bridge_ip: &str, area_id: &str) -> StartHueStreamRequest {
+        StartHueStreamRequest {
+            bridge_ip: bridge_ip.to_string(),
+            username: "app-key".to_string(),
+            client_key: String::new(),
+            area_id: area_id.to_string(),
+            trigger_source: Some(HueRuntimeTriggerSource::ModeControl),
+            channel_placements: None,
+        }
+    }
+
+    fn wait_until(what: &str, done: impl Fn() -> bool) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !done() {
+            assert!(std::time::Instant::now() < deadline, "{what}");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
+    /// A running Hue runtime whose stream is the HTTP fallback sender against
+    /// `bridge`, stored the way a start stores it — which also fills the slot
+    /// a mode change hands the worker.
+    fn running_http_fallback(
+        bridge: &crate::commands::hue::test_bridge::TestBridge,
+    ) -> (HueRuntimeStateStore, ShutdownSignal) {
+        let channels = vec![channel(0, 0.0, 1.0, None)];
+        let (color_sender, sender_exited) = spawn_hue_http_sender(
+            crate::commands::hue::transport::blocking_client_for_key("app-key").expect("client"),
+            bridge.authority.clone(),
+            "app-key".to_string(),
+            channels.clone(),
+        );
+        let store = HueRuntimeStateStore::default();
+        {
+            let mut owner = acquire_hue_runtime(&store.runtime);
+            let _ = start_with_evidence(
+                &mut owner,
+                &strict_gate_ready(),
+                HueRuntimeTriggerSource::ModeControl,
+            );
+            store_active_stream_context(
+                &mut owner,
+                &hue_request(&bridge.authority, "area"),
+                channels,
+                SpawnedHueSender {
+                    color_sender,
+                    uses_dtls: false,
+                    shutdown_signal: Arc::clone(&sender_exited),
+                    cipher_name: None,
+                    deactivate_token: DeactivateToken::new(),
+                },
+            );
+        }
+        (store, sender_exited)
+    }
+
+    /// Removing Hue from a running `[usb, hue]` mode: the frontend re-applies
+    /// the mode on USB, then `stop_hue_stream` stops the stream and waits for
+    /// the sender thread to exit before it restores the lights. The re-applied
+    /// worker must not keep the sender alive, or it paints the lights after
+    /// the restore.
+    #[test]
+    fn a_mode_re_applied_without_hue_lets_the_hue_sender_exit() {
+        use crate::commands::hue::test_bridge::{Reply, TestBridge};
+
+        let _guard = acquire_worker_test_guard();
+        let bridge = TestBridge::start(|_, _, _| Reply::ok());
+        let light_puts = || bridge.puts_to("/clip/v2/resource/light/").len();
+        let (store, sender_exited) = running_http_fallback(&bridge);
+
+        let mut owner = owner_with_fake_sender();
+        owner.frame_source_factory = Arc::new(|_req: super::AmbilightCaptureRequest| {
+            Ok(Box::new(CyclingFrameSource { tick: 0 }))
+        });
         let mut apply = |targets: &[&str]| {
             apply_mode_change(
                 &mut owner,
-                mode(targets),
+                hue_mode(targets),
                 true,
                 Some("COM-HUE"),
                 None,
-                Some(runtime_handle.clone()),
+                Some(store.output_live()),
                 Some(shared_telemetry()),
                 None,
                 None,
@@ -5262,23 +4887,19 @@ mod lighting_mode_tests {
         };
 
         assert_eq!(apply(&["usb", "hue"]), "AMBILIGHT_MODE_STARTED");
-        let deadline = std::time::Instant::now() + Duration::from_secs(5);
-        while light_puts() < 2 {
-            assert!(
-                std::time::Instant::now() < deadline,
-                "the worker never drove the Hue sender"
-            );
-            std::thread::sleep(Duration::from_millis(20));
-        }
+        wait_until("the worker never drove the Hue sender", || {
+            light_puts() >= 2
+        });
 
         assert_eq!(apply(&["usb"]), "AMBILIGHT_MODE_STARTED");
-        // What `stop_hue_stream` does to `active_stream`.
-        drop(runtime_handle);
-
-        assert!(
-            wait_for_shutdown(&sender_exited, Duration::from_secs(2)),
-            "the worker re-applied on USB still holds the Hue sender open"
+        let stopped = stop_hue_runtime(
+            &store.runtime_arc(),
+            HueRuntimeTriggerSource::ModeControl,
+            None,
         );
+
+        assert_eq!(stopped.status.code, "HUE_STREAM_STOPPED");
+        assert!(is_shutdown_signaled(&sender_exited));
         // The restore would start here; nothing may reach a light after it.
         let at_restore = light_puts();
         std::thread::sleep(Duration::from_millis(400));
@@ -5290,116 +4911,330 @@ mod lighting_mode_tests {
         wait_for_workers_drained();
     }
 
-    /// Off from a Hue-only mode. `stop_hue_stream` alone drops only the
-    /// runtime's sender handle; the worker keeps its own and goes on painting
-    /// the lights. Only stopping the worker lets the sender go, which is why
-    /// the frontend's Off calls `stop_lighting` before the Hue stop whatever
-    /// the targets.
-    #[test]
-    fn off_from_a_hue_only_mode_needs_the_worker_stopped_before_the_hue_sender_can_exit() {
-        use crate::commands::hue::sender::{spawn_hue_http_sender, wait_for_shutdown};
+    /// `stop_hue_stream` under a worker whose targets still name Hue — Off from
+    /// a Hue-only mode, or a Hue stop the frontend sent before the re-apply. The
+    /// worker follows the runtime's slot, so it lets go of the sender within a
+    /// frame: the stop sees the sender exit instead of timing out as
+    /// `HUE_STOP_TIMEOUT_PARTIAL`, nothing reaches a light after it, and the
+    /// worker goes on driving the strip.
+    fn assert_a_hue_stop_under_a_live_worker_lets_the_sender_exit(targets: &[&str]) {
         use crate::commands::hue::test_bridge::{Reply, TestBridge};
-        use std::time::Duration;
 
         let _guard = acquire_worker_test_guard();
         let bridge = TestBridge::start(|_, _, _| Reply::ok());
         let light_puts = || bridge.puts_to("/clip/v2/resource/light/").len();
-        let wait_for_puts = |at_least: usize, why: &str| {
-            let deadline = std::time::Instant::now() + Duration::from_secs(5);
-            while light_puts() < at_least {
-                assert!(std::time::Instant::now() < deadline, "{why}");
-                std::thread::sleep(Duration::from_millis(20));
-            }
-        };
-        let channels = vec![channel(0, 0.0, 1.0, None)];
-        let (color_sender, sender_exited) = spawn_hue_http_sender(
-            crate::commands::hue::transport::blocking_client_for_key("app-key").expect("client"),
-            bridge.authority.clone(),
-            "app-key".to_string(),
-            channels.clone(),
-        );
-        let runtime_handle = HueActiveOutputContext {
-            channels,
-            color_sender,
-        };
+        let (store, sender_exited) = running_http_fallback(&bridge);
 
+        let usb = Arc::new(FakeLedSender::default());
+        let usb_writes = || usb.writes.lock().expect("writes lock").len();
         let mut owner = owner_with_fake_sender();
+        owner.output_bridge = LedOutputBridge::from_sender(usb.clone());
         owner.frame_source_factory = Arc::new(|_req: super::AmbilightCaptureRequest| {
             Ok(Box::new(CyclingFrameSource { tick: 0 }))
         });
-        let hue_only = LightingModeConfig {
-            kind: LightingModeKind::Ambilight,
-            ambilight: Some(AmbilightPayload {
-                brightness: 1.0,
-                smoothing_alpha: Some(1.0),
-                ..Default::default()
-            }),
-            targets: Some(vec!["hue".to_string()]),
-            ..LightingModeConfig::default()
-        };
         let started = apply_mode_change(
             &mut owner,
-            hue_only,
-            false,
+            hue_mode(targets),
+            true,
+            Some("COM-HUE"),
             None,
-            None,
-            Some(runtime_handle.clone()),
+            Some(store.output_live()),
             Some(shared_telemetry()),
             None,
             None,
         );
         assert_eq!(started.status.code, "AMBILIGHT_MODE_STARTED");
-        wait_for_puts(2, "the Hue-only worker never drove the Hue sender");
+        wait_until("the worker never drove the Hue sender", || {
+            light_puts() >= 2
+        });
 
-        // `stop_hue_stream` alone: the stream's handle goes, the worker's stays.
-        drop(runtime_handle);
-        assert!(
-            !wait_for_shutdown(&sender_exited, Duration::from_millis(300)),
-            "the sender exited while the worker still held it"
-        );
-        let after_stream_stop = light_puts();
-        wait_for_puts(
-            after_stream_stop + 1,
-            "the worker stopped painting the lights on its own",
+        let stopped = stop_hue_runtime(
+            &store.runtime_arc(),
+            HueRuntimeTriggerSource::ModeControl,
+            None,
         );
 
-        // What `stop_lighting` does.
-        let stopped = apply_mode_change(
-            &mut owner,
-            LightingModeConfig::default(),
-            true,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        );
-        assert_eq!(stopped.status.code, "LIGHTING_MODE_STOPPED");
-        assert!(owner.worker.is_none());
-        assert!(
-            wait_for_shutdown(&sender_exited, Duration::from_secs(2)),
-            "the Hue sender outlived the lighting stop"
-        );
-        // The restore would start here; nothing may reach a light after it.
+        assert_eq!(stopped.status.code, "HUE_STREAM_STOPPED");
+        assert!(is_shutdown_signaled(&sender_exited));
         let at_restore = light_puts();
         std::thread::sleep(Duration::from_millis(400));
-        assert_eq!(light_puts(), at_restore);
+        assert_eq!(
+            light_puts(),
+            at_restore,
+            "a light was painted after the stop"
+        );
+        assert!(owner.worker.is_some(), "the mode itself is not stopped");
+        if targets.contains(&"usb") {
+            let before = usb_writes();
+            wait_until("the strip stopped with the Hue stream", || {
+                usb_writes() > before
+            });
+        }
+
+        let mut cleanup_trace = None;
+        super::stop_previous(&mut owner, &mut cleanup_trace);
         wait_for_workers_drained();
+    }
+
+    #[test]
+    fn a_hue_stop_under_a_hue_only_worker_lets_the_sender_exit() {
+        assert_a_hue_stop_under_a_live_worker_lets_the_sender_exit(&["hue"]);
+    }
+
+    #[test]
+    fn a_hue_stop_under_a_usb_and_hue_worker_lets_the_sender_exit() {
+        assert_a_hue_stop_under_a_live_worker_lets_the_sender_exit(&["usb", "hue"]);
+    }
+
+    /// The slot is handed to every mode change, whatever its targets. A worker
+    /// whose targets leave Hue out must never sample or send Hue from it.
+    #[test]
+    fn a_worker_without_a_hue_target_never_uses_a_live_hue_stream() {
+        let _guard = acquire_worker_test_guard();
+        let (color_sender, frames) = HueColorSender::recording(1);
+        let hue = live(HueActiveOutputContext {
+            channels: vec![channel(0, 0.0, 1.0, None)],
+            color_sender,
+        });
+        let mut owner = owner_with_fake_sender();
+        owner.frame_source_factory = Arc::new(|_req: super::AmbilightCaptureRequest| {
+            Ok(Box::new(CyclingFrameSource { tick: 0 }))
+        });
+
+        let started = apply_mode_change(
+            &mut owner,
+            hue_mode(&["usb"]),
+            true,
+            Some("COM-HUE"),
+            None,
+            hue,
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+        assert_eq!(started.status.code, "AMBILIGHT_MODE_STARTED");
+        std::thread::sleep(Duration::from_millis(300));
+        assert!(
+            frames.try_recv().is_err(),
+            "a USB-only worker sent a Hue frame"
+        );
+
+        let mut cleanup_trace = None;
+        super::stop_previous(&mut owner, &mut cleanup_trace);
+        wait_for_workers_drained();
+    }
+
+    /// Stands in for one DTLS session: the real send loop, writing into a
+    /// counter instead of a socket.
+    #[cfg(debug_assertions)]
+    #[derive(Default)]
+    struct DtlsSession {
+        frames: std::sync::atomic::AtomicUsize,
+        exited: std::sync::atomic::AtomicBool,
+    }
+
+    #[cfg(debug_assertions)]
+    struct CountingSocket(Arc<DtlsSession>);
+
+    #[cfg(debug_assertions)]
+    impl std::io::Write for CountingSocket {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0
+                .frames
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// Item 7: a reconnect replaced the stream and its sender, and the worker
+    /// went on writing to the one it was handed at start, so the status read
+    /// Running while the lamps froze. `simulate_hue_fault` fires the stream's
+    /// shutdown signal; the reconnect monitor then rebuilds the stream, and the
+    /// worker must follow it there. The stand-in sessions keep-alive only once
+    /// a minute, so every frame they count came from the worker.
+    #[cfg(debug_assertions)]
+    #[test]
+    fn a_reconnect_hands_the_running_worker_the_new_sender() {
+        use std::sync::atomic::Ordering as AtomicOrdering;
+        use tauri::Manager;
+
+        use crate::commands::hue::commands::simulate_hue_fault;
+        use crate::commands::hue::reconnect::{
+            spawn_reconnect_monitor_with, HueSenderBuild, ReconnectDeps,
+        };
+        use crate::commands::hue::sender::{
+            new_shutdown_signal, signal_shutdown_complete, DtlsSendLoop, HUE_SENDER_MIN_INTERVAL_MS,
+        };
+        use crate::commands::hue::state_store::HueRuntimeState;
+        use crate::commands::hue::test_bridge::{light_json, FakeHue, Reply};
+
+        let _guard = acquire_worker_test_guard();
+        let hue = FakeHue::start(
+            &[("living-room", &["light-1"])],
+            &[("light-1", light_json(true, 100.0, None, (0.6, 0.3)))],
+            |_| Reply::ok(),
+        );
+        let request = hue_request(&hue.bridge.authority, "living-room");
+
+        let sessions: Arc<Mutex<Vec<Arc<DtlsSession>>>> = Arc::default();
+        let build: HueSenderBuild = {
+            let sessions = Arc::clone(&sessions);
+            Arc::new(
+                move |request: &StartHueStreamRequest,
+                      channels: Vec<HueAreaChannel>,
+                      light_metadata: Arc<std::collections::HashMap<String, HueLightMetadata>>,
+                      packet_counter: Arc<std::sync::atomic::AtomicU32>| {
+                    let session = Arc::new(DtlsSession::default());
+                    sessions
+                        .lock()
+                        .expect("sessions")
+                        .push(Arc::clone(&session));
+                    let (color_sender, rx) = HueColorSender::with_mailbox(channels.len());
+                    let shutdown = new_shutdown_signal();
+                    let signal = Arc::clone(&shutdown);
+                    let deactivate_token = DeactivateToken::new();
+                    let token = Arc::clone(&deactivate_token);
+                    let area_id = request.area_id.clone();
+                    std::thread::spawn(move || {
+                        DtlsSendLoop {
+                            area_id: &area_id,
+                            channels: &channels,
+                            light_metadata: &light_metadata,
+                            packet_counter: &packet_counter,
+                            deactivate_token: &token,
+                            min_interval: Duration::from_millis(HUE_SENDER_MIN_INTERVAL_MS),
+                            keepalive: Duration::from_secs(60),
+                        }
+                        .run(&mut CountingSocket(Arc::clone(&session)), &rx);
+                        session.exited.store(true, AtomicOrdering::SeqCst);
+                        signal_shutdown_complete(&signal);
+                    });
+                    SpawnedHueSender {
+                        color_sender,
+                        uses_dtls: true,
+                        shutdown_signal: shutdown,
+                        cipher_name: Some("PSK-AES128-GCM-SHA256".to_string()),
+                        deactivate_token,
+                    }
+                },
+            )
+        };
+        let session = |n: usize| Arc::clone(&sessions.lock().expect("sessions")[n]);
+
+        // Dropping a runtime waits for its blocking tasks, and the reconnect
+        // monitor's wait is one; a failed assertion must fail, not hang.
+        struct Abandoned(Option<tokio::runtime::Runtime>);
+        impl Drop for Abandoned {
+            fn drop(&mut self) {
+                if let Some(rt) = self.0.take() {
+                    rt.shutdown_background();
+                }
+            }
+        }
+        let rt = Abandoned(Some(
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .enable_all()
+                .build()
+                .expect("tokio runtime"),
+        ));
+        let app = tauri::test::mock_app();
+        app.manage(HueRuntimeStateStore::default());
+        let store = app.state::<HueRuntimeStateStore>();
+        let runtime = store.runtime_arc();
+        {
+            let mut owner = acquire_hue_runtime(&runtime);
+            let _ = start_with_evidence(
+                &mut owner,
+                &strict_gate_ready(),
+                HueRuntimeTriggerSource::ModeControl,
+            );
+            let channels = vec![channel(0, 0.0, 1.0, None)];
+            let spawned = build(
+                &request,
+                channels.clone(),
+                Arc::default(),
+                Arc::clone(&owner.packet_send_count),
+            );
+            let signal = Arc::clone(&spawned.shutdown_signal);
+            store_active_stream_context(&mut owner, &request, channels, spawned);
+            let _enter = rt.0.as_ref().expect("runtime").enter();
+            spawn_reconnect_monitor_with(
+                signal,
+                Arc::clone(&runtime),
+                request.clone(),
+                ReconnectDeps::assume_ready(Arc::clone(&build)),
+            );
+        }
+
+        let mut owner = owner_with_fake_sender();
+        owner.frame_source_factory = Arc::new(|_req: super::AmbilightCaptureRequest| {
+            Ok(Box::new(CyclingFrameSource { tick: 0 }))
+        });
+        let started = apply_mode_change(
+            &mut owner,
+            hue_mode(&["hue"]),
+            false,
+            None,
+            None,
+            Some(store.output_live()),
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+        assert_eq!(started.status.code, "AMBILIGHT_MODE_STARTED");
+        let first = session(0);
+        wait_until("the worker never reached the first sender", || {
+            first.frames.load(AtomicOrdering::SeqCst) >= 3
+        });
+
+        assert_eq!(
+            simulate_hue_fault(app.state::<HueRuntimeStateStore>()).code,
+            "HUE_FAULT_SIMULATED"
+        );
+        wait_until("the reconnect never built a second sender", || {
+            sessions.lock().expect("sessions").len() == 2
+        });
+        let second = session(1);
+        wait_until("the worker never reached the reconnected sender", || {
+            second.frames.load(AtomicOrdering::SeqCst) >= 3
+        });
+        wait_until("a handle kept the first sender alive", || {
+            first.exited.load(AtomicOrdering::SeqCst)
+        });
+        let packets = || {
+            acquire_hue_runtime(&runtime)
+                .packet_send_count
+                .load(AtomicOrdering::SeqCst)
+        };
+        let before = packets();
+        wait_until("the telemetry frame counter stopped", || packets() > before);
+        assert_eq!(
+            acquire_hue_runtime(&runtime).state,
+            HueRuntimeState::Running
+        );
+
+        let mut cleanup_trace = None;
+        super::stop_previous(&mut owner, &mut cleanup_trace);
+        let stopped = stop_hue_runtime(&runtime, HueRuntimeTriggerSource::ModeControl, None);
+        assert_eq!(stopped.status.code, "HUE_STREAM_STOPPED");
+        wait_for_workers_drained();
+        drop(rt);
     }
 
     #[test]
     fn a_live_room_geometry_update_reaches_hue_sampling() {
         let _guard = acquire_worker_test_guard();
         let mut owner = split_frame_owner();
-        let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(64);
-        let context = HueActiveOutputContext {
+        let (color_sender, rx) = HueColorSender::with_mailbox(1);
+        let hue = live(HueActiveOutputContext {
             channels: vec![channel(0, 0.0, 1.0, None)],
-            color_sender: HueColorSender {
-                tx: Arc::new(tx),
-                channel_count: 1,
-            },
-        };
+            color_sender,
+        });
         let mode_at = |z: f32| LightingModeConfig {
             kind: LightingModeKind::Ambilight,
             ambilight: Some(AmbilightPayload {
@@ -5418,7 +5253,7 @@ mod lighting_mode_tests {
                 false,
                 None,
                 None,
-                Some(context.clone()),
+                hue.clone(),
                 Some(shared_telemetry()),
                 None,
                 None,
@@ -5471,7 +5306,7 @@ mod lighting_mode_tests {
             false,
             None,
             None,
-            Some(hue_context_with_channels(2)),
+            live(hue_context_with_channels(2)),
             Some(shared_telemetry()),
             None,
             None,
@@ -5493,7 +5328,7 @@ mod lighting_mode_tests {
             false,
             None,
             None,
-            Some(hue_context_with_channels(0)),
+            live(hue_context_with_channels(0)),
             Some(shared_telemetry()),
             None,
             None,
@@ -6958,7 +6793,7 @@ mod lighting_mode_tests {
             true,
             Some("COM-TWIN"),
             None,
-            Some(hue_context_with_channels(2)),
+            live(hue_context_with_channels(2)),
             Some(shared_telemetry()),
             Some(emitter),
             None,
