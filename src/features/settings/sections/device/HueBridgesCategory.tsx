@@ -3,7 +3,10 @@ import { useTranslation } from "react-i18next";
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
 import type { HueChannelPlacementOverride } from "@/shared/contracts/hue";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
-import { deriveHueBridgeCardState } from "@/features/hue/model/hueBridgeCardState";
+import {
+  deriveHueBridgeCardState,
+  huePairingErrorDescriptionKey,
+} from "@/features/hue/model/hueBridgeCardState";
 import { HUE_STREAM_MAX_HZ } from "@/features/hue/model/streamRate";
 import { buildHueRuntimeStatusCard } from "@/features/hue/model/hueRuntimeStatusCard";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
@@ -112,6 +115,8 @@ export function HueBridgesCategory({
     isReadinessStale,
   });
 
+  const pairingErrorKey = huePairingErrorDescriptionKey(hueStatus?.code);
+
   const hueIsDiscoveryFailed = !isHueDiscovering && !selectedBridgeId && hueStatus?.code === "HUE_DISCOVERY_FAILED";
   const hueIsDiscoveryEmpty = !isHueDiscovering && !selectedBridgeId && hueStatus !== null && bridges.length === 0 && !hueIsDiscoveryFailed;
 
@@ -129,6 +134,8 @@ export function HueBridgesCategory({
               ? t("hue:wizard.pairingStep")
               : hueBridgeState === "pairingTimedOut"
               ? t("hue:pair.timedOutTitle")
+              : hueBridgeState === "pairingDeferred"
+              ? t("hue:pair.deferredTitle")
               : hueBridgeState === "areaSelect"
               ? t("hue:wizard.areaStep")
               : hueBridgeState === "authError"
@@ -251,7 +258,7 @@ export function HueBridgesCategory({
               hueBridgeState === "streaming" ? " is-on" :
               hueBridgeState === "offline" ? " is-offline" :
               hueBridgeState === "authError" || hueBridgeState === "pairingFailed" || hueBridgeState === "stopPartial" ? " is-error-state" :
-              hueBridgeState === "reconnecting" || hueBridgeState === "stale" || hueBridgeState === "pairingTimedOut" ? " is-warn-state" :
+              hueBridgeState === "reconnecting" || hueBridgeState === "stale" || hueBridgeState === "pairingTimedOut" || hueBridgeState === "pairingDeferred" ? " is-warn-state" :
               hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton" || hueBridgeState === "areaSelect" ? " is-ghost" :
               ""
             }`}>
@@ -273,6 +280,7 @@ export function HueBridgesCategory({
                        hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton" ? t("hue:page.pill.awaiting") :
                        hueBridgeState === "pairingFailed" ? t("hue:page.pill.failed") :
                        hueBridgeState === "pairingTimedOut" ? t("hue:page.pill.timedOut") :
+                       hueBridgeState === "pairingDeferred" ? t("hue:page.pill.wait") :
                        hueBridgeState === "areaSelect" ? t("hue:page.pill.paired") :
                        hueBridgeState === "authError" ? t("hue:page.pill.authError") :
                        hueBridgeState === "offline" ? t("hue:bridge.unreachable") :
@@ -525,6 +533,26 @@ export function HueBridgesCategory({
                 </div>
               ) : null}
 
+              {hueBridgeState === "pairingDeferred" && pairingErrorKey ? (
+                <div className="lm-hue-repair" role="status" aria-live="polite" data-testid="hue-pairing-deferred">
+                  <IconInfo />
+                  <div className="lm-hue-repair-tx">
+                    <div className="lm-hue-repair-title">{t("hue:pair.deferredTitle")}</div>
+                    <div className="lm-hue-repair-sub">{t(pairingErrorKey)}</div>
+                  </div>
+                </div>
+              ) : null}
+
+              {hueBridgeState === "pairingFailed" && pairingErrorKey ? (
+                <div className="lm-hue-repair is-error" role="status" aria-live="polite" data-testid="hue-pairing-failed-reason">
+                  <IconInfo />
+                  <div className="lm-hue-repair-tx">
+                    <div className="lm-hue-repair-title">{t("hue:wizard.pairingFailed")}</div>
+                    <div className="lm-hue-repair-sub">{t(pairingErrorKey)}</div>
+                  </div>
+                </div>
+              ) : null}
+
               {/* State D/G: Area selection */}
               {hueBridgeState === "areaSelect" ? (
                 <div className="lm-hue-areas">
@@ -682,7 +710,7 @@ export function HueBridgesCategory({
                   <button type="button" className="lm-dcard-act is-danger is-tap" onClick={() => { selectBridge(null); }}>
                     {t("hue:page.cancel")}
                   </button>
-                ) : hueBridgeState === "pairingTimedOut" ? (
+                ) : hueBridgeState === "pairingTimedOut" || hueBridgeState === "pairingDeferred" ? (
                   <>
                     <button type="button" className="lm-dcard-act is-tap" onClick={() => { void pair(); }}>
                       {t("hue:pair.tryAgain")}

@@ -115,7 +115,7 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
 
       {/* Nav tabs — full mode only, between brand and spacer. */}
       {uiMode === "full" && activeSection != null && onSectionChange != null && (
-        <div className="lm-titlebar-tabs" role="tablist">
+        <div className="lm-titlebar-tabs" role="tablist" aria-label={t("shell:titleBar.sectionsAriaLabel")}>
           {SECTION_ORDER.map((id) => (
             <button
               key={id}

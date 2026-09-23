@@ -1,39 +1,7 @@
 export default {
-  title: "Device",
-  description: "Scan serial ports, choose one, and connect without restarting the app.",
   actions: {
-    refresh: "Refresh",
-    ready: "Device scan is ready.",
     scanning: "Scanning ports...",
-    connect: "Connect",
-    reconnect: "Reconnect",
-    connected: "Connected",
     connecting: "Connecting...",
-  },
-  groups: {
-    supportedTitle: "Supported controllers",
-    supportedDescription: "Detected USB adapters that match current allowlist.",
-    otherTitle: "Other serial ports",
-    otherDescription: "Manual fallback ports. You can still select and try Connect.",
-    empty: "No ports in this group yet. Use Refresh to scan again.",
-  },
-  selection: {
-    title: "Manual selection",
-    description: "Manual port selection stays available even when auto-detect misses.",
-    placeholder: "Select a serial port",
-    selectedHint: "Selected port: {{port}}",
-    emptyHint: "Choose a port to enable Connect.",
-  },
-  fields: {
-    port: "Port",
-  },
-  badges: {
-    supported: "Supported",
-    other: "Other",
-    connected: "Connected",
-    reconnecting: "Reconnecting",
-    checking: "Checking…",
-    error: "Error",
   },
   port: {
     missingHint: "{{port}} is no longer visible. Reconnect the device or choose another port.",
@@ -51,7 +19,6 @@ export default {
     missingBody: "Your previous selection is no longer available. Pick another port and retry.",
     errorTitle: "Connection attempt failed",
     errorBody: "Connection was not completed. Refresh, pick another port, and try again.",
-    nextSteps: "Tip: if your remembered port appears again, it will be selected automatically.",
   },
   healthCheck: {
     runAction: "Run Health Check",
@@ -63,7 +30,6 @@ export default {
     failTitle: "Health check failed",
     failBody: "Review the failed step details, then refresh, choose another port, or retry.",
     steps: {
-      title: "Step outcomes",
       labels: {
         PORT_VISIBLE: "Port visibility",
         PORT_SUPPORTED: "Port support",
@@ -83,7 +49,7 @@ export default {
       },
       SERIAL_HEALTH_HANDSHAKE_TIMEOUT: {
         label: "No handshake response",
-        hint: "No reply within 1 s. If using non-LumaSync firmware, switch to the Adalight profile in Device settings.",
+        hint: "No reply within 2 s. If using non-LumaSync firmware, switch to the Adalight profile in Device settings.",
       },
       SERIAL_HEALTH_VERSION_MISMATCH: {
         label: "Protocol version mismatch",
@@ -96,6 +62,54 @@ export default {
       SERIAL_HEALTH_PROTOCOL_ERROR: {
         label: "Protocol error",
         hint: "Unexpected bytes in handshake frame. Check cable integrity or try a different USB cable.",
+      },
+      SERIAL_HEALTH_WORKER_PANIC: {
+        label: "Health check stopped unexpectedly",
+        hint: "The check could not finish. Run it again; if it keeps stopping, restart LumaSync.",
+      },
+      LIST_PORTS_FAILED: {
+        label: "Could not read serial ports",
+        hint: "The system did not return a port list. Refresh, and check that no other app is holding the ports.",
+      },
+      PORT_VISIBLE: {
+        label: "Port found",
+        hint: "The selected port is listed by the system.",
+      },
+      PORT_NOT_FOUND: {
+        label: "Port not found",
+        hint: "The selected port is not listed. Check the cable, then refresh ports.",
+      },
+      PORT_SUPPORTED: {
+        label: "Supported adapter",
+        hint: "The USB adapter is on the supported controller list.",
+      },
+      PORT_UNSUPPORTED: {
+        label: "Unsupported adapter",
+        hint: "This port is not a supported USB controller. Choose another port.",
+      },
+      CONNECT_OK: {
+        label: "Port opened",
+        hint: "The port opened at 115200 baud.",
+      },
+      CONNECT_FAILED: {
+        label: "Could not open the port",
+        hint: "Refresh ports, reconnect the cable, and try again.",
+      },
+      CONNECT_INVALID_INPUT: {
+        label: "Port settings rejected",
+        hint: "The system rejected the port name or settings. Choose the port again.",
+      },
+      CONNECT_PERMISSION_DENIED: {
+        label: "No permission to open the port",
+        hint: "Your user account cannot open this port. On Linux, add yourself to the dialout group and sign in again.",
+      },
+      CONNECT_TIMEOUT: {
+        label: "Opening the port timed out",
+        hint: "The device did not answer in time. Reconnect the cable and try again.",
+      },
+      CONNECT_IO_ERROR: {
+        label: "Port read or write failed",
+        hint: "Another app may be using the port. Close it, reconnect the cable, and try again.",
       },
     },
   },
@@ -123,7 +137,6 @@ export default {
     },
     actions: {
       rescan: "Rescan",
-      addDevice: "Add Device",
     },
     usb: {
       pill: {
@@ -137,7 +150,6 @@ export default {
         latency: "Latency",
         na: "—",
       },
-      traffic: "Traffic",
       pairAsStrip: "+ Pair as LED Strip",
       empty: {
         title: "No USB ports found",

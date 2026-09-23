@@ -30,7 +30,6 @@ const shell: Catalogue<typeof enShell> = {
     reconnect: {
       usbAriaLabel: "USB cihazını yeniden bağla",
       hueAriaLabel: "Hue köprüsünü yeniden bağla",
-      tooltip: "Cihaz ayarlarını aç",
     },
   },
   titleBar: {
@@ -38,6 +37,7 @@ const shell: Catalogue<typeof enShell> = {
     maximize: "Ekranı kapla",
     restore: "Geri yükle",
     close: "Kapat",
+    sectionsAriaLabel: "Bölümler",
   },
 };
 

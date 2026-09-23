@@ -430,23 +430,45 @@ export function UsbStripsCategory({
       >
         <p className="text-[11px] font-semibold text-[var(--lm-ink)]">{statusTitle}</p>
         <p className="mt-0.5 text-[11px] text-[var(--lm-ink-dim)]">{statusBody}</p>
-        {statusModel.details ? <p className="mt-0.5 text-[10px] text-[var(--lm-ink-faint)]">{statusModel.details}</p> : null}
+        {statusModel.detailsKey ? (
+          <p className="mt-0.5 text-[10px] text-[var(--lm-ink-faint)]">{t(statusModel.detailsKey)}</p>
+        ) : statusModel.details ? (
+          <p className="mt-0.5 text-[10px] text-[var(--lm-ink-faint)]">{statusModel.details}</p>
+        ) : null}
         {showHealthStepOutcomes ? (
           <div className="mt-2 space-y-1">
             {healthStepOutcomes.map((stepOutcome) => (
-              <div key={stepOutcome.step} className="flex items-start gap-2 rounded border border-[var(--lm-line-2)] bg-[var(--lm-panel-2)] px-2 py-1.5">
+              <div
+                key={stepOutcome.step}
+                data-testid={`health-step-${stepOutcome.step}`}
+                className="flex items-start gap-2 rounded border border-[var(--lm-line-2)] bg-[var(--lm-panel-2)] px-2 py-1.5"
+              >
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] font-medium text-[var(--lm-ink)]">
                     {t(`device:healthCheck.steps.labels.${stepOutcome.step}`)}
                   </p>
-                  <p className="mt-0.5 text-[10px] text-[var(--lm-ink-dim)]">{stepOutcome.message}</p>
-                  {stepOutcome.details ? <p className="mt-0.5 text-[10px] text-[var(--lm-ink-faint)]">{stepOutcome.details}</p> : null}
+                  {stepOutcome.text ? (
+                    <>
+                      <p className="mt-0.5 text-[10px] text-[var(--lm-ink-dim)]">{t(stepOutcome.text.labelKey)}</p>
+                      <p className="mt-0.5 text-[10px] text-[var(--lm-ink-faint)]">{t(stepOutcome.text.hintKey)}</p>
+                      {stepOutcome.text.details ? (
+                        <p className="mt-0.5 break-all [font-family:var(--lm-mono)] text-[10px] text-[var(--lm-ink-faint)]">
+                          {stepOutcome.text.details}
+                        </p>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <p className="mt-0.5 text-[10px] text-[var(--lm-ink-dim)]">{stepOutcome.message}</p>
+                      {stepOutcome.details ? <p className="mt-0.5 text-[10px] text-[var(--lm-ink-faint)]">{stepOutcome.details}</p> : null}
+                    </>
+                  )}
                 </div>
                 <span
                   className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold ${
                     stepOutcome.pass
-                      ? "bg-emerald-500/20 text-emerald-300"
-                      : "bg-rose-500/20 text-rose-300"
+                      ? "bg-[var(--lm-green)]/20 text-[var(--lm-green)]"
+                      : "bg-[var(--lm-red)]/20 text-[var(--lm-red)]"
                   }`}
                 >
                   {stepOutcome.pass ? t("device:healthCheck.steps.outcome.pass") : t("device:healthCheck.steps.outcome.fail")}

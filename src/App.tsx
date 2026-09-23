@@ -15,6 +15,7 @@ import { openScreenCaptureSettings } from "./features/mode/captureApi";
 import { useCaptureStallNotice } from "./features/telemetry/hooks/useCaptureStallNotice";
 import { useModeRuntimeConfig } from "./features/mode/state/useModeRuntimeConfig";
 import { useHueSolidColorNotice } from "./features/mode/state/useHueSolidColorNotice";
+import { usePreviewOpenNotice } from "./features/preview/state/usePreviewOpenNotice";
 import { useModeHotReload } from "./features/mode/state/useModeHotReload";
 import { useRoomGeometrySync } from "./features/mode/state/useRoomGeometrySync";
 import { useLightingModeOrchestrator } from "./features/mode/state/useLightingModeOrchestrator";
@@ -110,6 +111,7 @@ function App() {
   const runtimeConfig = useModeRuntimeConfig({ calibration: savedCalibration });
   const { notice: hueColorNotice, report: reportHueSolidColorStatus } =
     useHueSolidColorNotice();
+  const { notice: previewOpenNotice, report: reportPreviewOpenFailure } = usePreviewOpenNotice();
 
   const handleOpenCalibration = useCallback(() => {
     const entry = startCalibrationFromSettings(savedCalibration);
@@ -212,6 +214,7 @@ function App() {
     lastNonOffModeRef: mode.lastNonOffModeRef,
     selectedOutputTargetsRef: mode.selectedOutputTargetsRef,
     getSelectedDisplayId: runtimeConfig.getSelectedDisplayId,
+    onPreviewOpenFailed: reportPreviewOpenFailure,
   });
 
   const handleSectionChange = useCallback(async (sectionId: SectionId) => {
@@ -474,6 +477,7 @@ function App() {
         hueBootRetry={mode.bootHueRetryNotice}
         captureStalled={captureStalledNotice}
         hueColorNotice={hueColorNotice}
+        previewOpenFailure={previewOpenNotice}
         onOpenCaptureSettings={() => void openScreenCaptureSettings()}
         statusBarHeightPx={statusBarHeight}
       />

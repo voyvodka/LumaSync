@@ -960,6 +960,30 @@ describe("Scenario 15b — the animator finishes when animation frames stop", ()
   });
 });
 
+describe("Scenario 15c — failed intermediate frames are logged, once per animation", () => {
+  it("logs the first frame rejection with the [LumaSync] prefix and stays quiet after", async () => {
+    // Intermediate frames are fire-and-forget; their rejections used to be
+    // swallowed by `.catch(() => {})`, so a window dying mid-resize left no trace.
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const frameError = new Error("window destroyed");
+    setSizeMock
+      .mockRejectedValueOnce(frameError)
+      .mockRejectedValueOnce(frameError)
+      .mockRejectedValueOnce(frameError);
+    setPositionMock.mockRejectedValueOnce(frameError).mockRejectedValueOnce(frameError);
+    setupPersistedState(makePersistedState({ uiMode: "compact" }));
+
+    await resizeToMode("full");
+
+    const frameWarnings = warnSpy.mock.calls.filter(
+      ([message]) =>
+        typeof message === "string" && message.startsWith("[LumaSync] window resize animation"),
+    );
+    expect(frameWarnings).toHaveLength(1);
+    expect(frameWarnings[0][1]).toBe(frameError);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Scenario 16 — first run sizes full mode to the screen
 // ---------------------------------------------------------------------------

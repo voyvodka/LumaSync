@@ -14,7 +14,7 @@ it has to be called out in the release notes in as many words.
 **Four version locations move in lockstep:** `src-tauri/Cargo.toml`, `package.json`,
 `SECURITY.md`, and `bundle.windows.wix.version` in `tauri.conf.json`. Then `cargo check` to refresh
 `Cargo.lock`. The first three carry the full version including any prerelease suffix; the wix one
-carries the bare `X.Y.Z`, because MSI rejects a non-numeric prerelease identifier. The app version
+carries the bare `X.Y.Z` (why is under the prerelease entry below). The app version
 itself is inherited from `Cargo.toml` — `tauri.conf.json` has no top-level version field.
 
 **Publication is two-stage.** The build matrix uploads into a *draft* (`releaseDraft: true`) so the
@@ -97,9 +97,10 @@ copied rather than reimplemented; a check that reads the files differently can p
 fails, which is worse than no check. Learning at tag time that a version drifted is the most
 expensive moment to learn it: the work is already merged.
 
-`release.yml` also runs `typecheck:e2e` and `check:i18n`, the two members of `check:all` it was
-missing. `check:i18n` is the orphaned-translation-key ratchet, and a tag push runs no CI, so this is
-the only place it can catch one before publication.
+`release.yml` also runs `typecheck:e2e` and `check:i18n` from `check:all`. `check:i18n` is the
+orphaned-translation-key ratchet, and a tag push runs no CI, so this is the only place it can catch
+one before publication. `typecheck:mock`, `verify:mock-not-shipped` and `verify:design-tokens` are
+not re-run at tag time.
 
 ## The package manager and its dependency overrides
 
@@ -116,8 +117,8 @@ is strict JSON and cannot carry the reasoning inline, so it lives here — they 
 `pnpm-workspace.yaml` before the move to Bun. Each one exists to clear a GitHub advisory that the
 direct dependency tree cannot resolve on its own:
 
-- **`undici` → `^7.29.0`.** Reached transitively through jsdom in the vitest test environment, so
-  dev-only. Clears the advisories against `undici` < 7.29.0 — SOCKS5 cross-origin routing and TLS
+- **`undici` → `^7.29.0`.** Reached transitively through the WebdriverIO e2e stack (`webdriver`
+  asks for `^6`, `cheerio` for `^7`), so dev-only. Clears the advisories against `undici` < 7.29.0 — SOCKS5 cross-origin routing and TLS
   certificate validation bypass among them.
 - **`serialize-javascript` → `^7.1.0`.** mocha still pins `^6.0.2`, which both GHSA-5c6j-r48x-rmvq
   (RCE) and GHSA-qj8w-gfj5-8c6v cover. 7.0.5 was the first release clear of the pair.
@@ -136,7 +137,7 @@ those downloads. `esbuild` genuinely needs its postinstall to fetch a platform b
 
 - **`cargo build` and `bun run tauri build --debug` write the same path and produce different binaries.** Both land on `src-tauri/target/debug/lumasync`. The cargo one loads the frontend from the Vite dev server, so launching it without `bun run dev` running gives a blank window and `Could not connect to localhost:1420` in the Web Inspector — an intact app with no content, indistinguishable from a broken one. Nothing about the path reveals which is there. Use `bun run tauri dev`, or rebuild with `--debug --no-bundle` to embed the frontend. `scripts/verify/launch-smoke.mjs` asserts the frontend is embedded and fails immediately rather than waiting out its timeout.
 - **`build.rs` embeds `windows-app-manifest.xml` into every linked target**, not just the bin. Test binaries reach comctl32 v6 through tauri's tray/menu stack, and Windows refuses to load them without the manifest (`STATUS_ENTRYPOINT_NOT_FOUND`).
-- **CI passes `--test-threads=1` to `cargo test`, and it is not required.** The worker-touching `lighting_mode` tests serialise themselves on a `WORKER_TEST_GUARD` mutex shared by both test modules, so the suite passes at default parallelism. The flag predates that guard. Reproduce CI exactly only when chasing a CI-only failure.
+- **CI passes `--test-threads=1` to `cargo test`, and it is not required.** The worker-touching `lighting_mode` tests serialise themselves on a `WORKER_TEST_GUARD` mutex shared by all three test modules (`tests`, `lighting_mode_tests`, `frame_pipeline_tests`), so the suite passes at default parallelism. The flag predates that guard. Reproduce CI exactly only when chasing a CI-only failure.
 - **A green CI run proves the debug binary starts, not the installer.** `scripts/verify/launch-smoke.mjs` launches debug binaries on all three platforms; Windows uses `tauri.windows-smoke.conf.json` because WebView2 can lose the embedded top-level request when a debug webview starts hidden. `release.yml` launches the mounted `.dmg`, the AppImage, and the Windows release binary before the draft is published. The `.msi` and `.deb` installers themselves are not installed in CI.
 - **Log lines twice: `tauri_plugin_log::Builder::new()` already carries `[Stdout, LogDir { file_name: None }]`, and `.target()` appends.** Two `.target()` calls therefore made four sinks: stdout twice (every line doubled in `bun run tauri dev` and in CI's captured stdout), our named file, and a second file named after the package — `LumaSync.log`. In release that second name and our `lumasync.log` are the same file on macOS and Windows, so the release log carried every line twice; in dev it left a stray `LumaSync.log` next to `lumasync-dev.log`, which is the file the smoke `--log-file` deletion below once destroyed. `.targets([...])` replaces the default set instead of adding to it. A line seen once on stdout and once in the file is the two sinks doing their job; the same line twice in one place is a regression of this.
 - **`launch-smoke.mjs --log-file` scans the file from its size at launch and never deletes it.** A stale log would match the startup marker without the app ever starting, so only bytes appended after the script starts count; a file that is *shorter* than it was at launch was rotated or truncated and is read from the top. It used to delete the file instead, which on a developer machine is the live log — and on macOS's case-insensitive filesystem `lumasync.log` and `LumaSync.log` are the same file, so it once destroyed months of history. `overlay-smoke.mjs` follows the same rule.
@@ -222,7 +223,7 @@ returned, which is a wedged main thread rather than a slow one.
 
 ## The CI platform bench
 
-Three more hooks reuse the same idea — a `#[cfg(debug_assertions)]` function, armed
+Two more hooks reuse the same idea — a `#[cfg(debug_assertions)]` function, armed
 only by an environment variable, reporting one parseable log line — to answer
 questions that need a machine nobody on the project owns: a Credential Manager, a
 Secret Service, a Windows compositor. They live in `src-tauri/src/smoke_bench.rs` and
@@ -329,7 +330,7 @@ stands between a broken binary and a published release on all three platforms.
 ### What each runner is asked for
 
 - **Windows** — both hooks, both gating. This runner is the only Windows desktop the app ever reaches, so Credential Manager and Windows Graphics Capture get proved here or nowhere.
-- **Linux** — capture and credentials both gate (the credential leg was soft until its first green run on 2026-08-18: `backend=keychain roundtrip=ok set=714 get=2 delete=6`, and Xvfb capture came back `640x512` from a 1280×1024 screen — the integer downscale at work). The Secret Service is started by hand for the run: `dbus-run-session` wraps everything (so `gnome-keyring-daemon` and the app share one session bus — the daemon claims `org.freedesktop.secrets` on it, which is what keyring 4's `zbus-secret-service` backend talks to), `printf "\n"` unlocks the freshly created login keyring with an empty password, and `xvfb-run` nests inside because it only sets `DISPLAY`. Headless Secret Service is the thing being established here; until a run has shown it working it reads as evidence, not as a red build. Promote it to `--expect` once it has.
+- **Linux** — capture and credentials both gate (the credential leg was soft until its first green run on 2026-08-18: `backend=keychain roundtrip=ok set=714 get=2 delete=6`, and Xvfb capture came back `640x512` from a 1280×1024 screen — the integer downscale at work). The Secret Service is started by hand for the run: `dbus-run-session` wraps everything (so `gnome-keyring-daemon` and the app share one session bus — the daemon claims `org.freedesktop.secrets` on it, which is what keyring 4's `zbus-secret-service` backend talks to), `printf "\n"` unlocks the freshly created login keyring with an empty password, and `xvfb-run` nests inside because it only sets `DISPLAY`.
 - **macOS** — capture only, and soft: `--expect-soft "[smoke-capture]"` on the bare prefix, so a frame and a permission SKIP both satisfy it and both get printed. No credential run at all — a Keychain ACL prompt has nobody to answer it, which is the same wall described under "Keychain prompts in dev" below.
 
 ## Keychain prompts in dev

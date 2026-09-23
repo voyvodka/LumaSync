@@ -483,8 +483,8 @@ pub fn run() {
     // 4. Window-state (geometry persistence)
     //
     // Default flags (`StateFlags::all()`) would auto-restore SIZE and
-    // VISIBLE on launch, which fights our "always start in compact, hidden
-    // until React is ready" rule and causes a visible big→compact flash.
+    // VISIBLE on launch, which fights our "start hidden until React is ready,
+    // then restore the saved UI mode" rule and causes a visible resize flash.
     // `skip_initial_state("main")` keeps the save-on-close behavior but
     // disables the automatic restore so the JS bootstrap owns everything.
     builder = builder.plugin(

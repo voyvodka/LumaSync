@@ -31,10 +31,13 @@ import {
   type ModeGuardReason,
 } from "@/features/mode/state/modeGuard";
 import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hue";
+import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
+import { outputAvailability } from "@/features/mode/model/outputAvailability";
 import { FIRMWARE_PROFILE, type FirmwareProfile } from "@/shared/contracts/device";
 import { SCENE_PRESETS, type ScenePreset } from "@/features/mode/model/scenePresets";
 import { LightingSmoothingPresetControl } from "../control/LightingSmoothingPresetControl";
 import { shellStore } from "@/features/persistence/shellStore";
+import { OutputCheckingNote } from "../OutputCheckingNote";
 import { CompactSolidSection } from "./CompactSolidSection";
 import { ModeButton } from "./ModeButton";
 import { SelfContainedBrightnessRow } from "./SelfContainedBrightnessRow";
@@ -48,6 +51,8 @@ interface CompactLayoutProps {
   /** The bridge probe stopped after a sustained outage; the banner offers a retry. */
   hueProbeGaveUp?: boolean;
   hueProbeChecking?: boolean;
+  /** What the last bridge probe found; `null` while the first one is in flight. */
+  hueProbeVerdict?: HueProbeVerdict | null;
   onRetryHueProbe?: () => void;
   isModeTransitioning: boolean;
   modeLockReason: ModeGuardReason | null;
@@ -85,6 +90,7 @@ export function CompactLayout({
   hueReachable,
   hueProbeGaveUp = false,
   hueProbeChecking = false,
+  hueProbeVerdict = null,
   onRetryHueProbe,
   isModeTransitioning,
   modeLockReason,
@@ -125,9 +131,15 @@ export function CompactLayout({
   const isAmbilight = lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT;
 
   // Without this gate the worker spins up with nowhere to send frames — a
-  // running Ambilight state and no reachable output.
-  const hasAnyOutput = localOutputConnected || (hueConfigured && hueReachable);
-  const activationBlocked = !hasAnyOutput;
+  // running Ambilight state and no reachable output. A bridge still being
+  // checked blocks activation too, but must not be reported as missing.
+  const availability = outputAvailability({
+    localOutputConnected,
+    hueConfigured,
+    hueReachable,
+    hueProbeVerdict,
+  });
+  const activationBlocked = availability !== "ready";
   const calibrationLocked = modeLockReason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED;
   const nonOffDisabled = isModeTransitioning || activationBlocked || calibrationLocked;
 
@@ -203,7 +215,8 @@ export function CompactLayout({
             modes are already guarded by `nonOffDisabled`, so this
             replaces the silent "buttons are dim" affordance with an
             explicit recovery path. */}
-        {activationBlocked && (
+        {availability === "checking" && <OutputCheckingNote />}
+        {availability === "none" && (
           <div className="lm-compact-offline" role="status" aria-live="polite">
             <div className="lm-compact-offline-text">
               <div className="ttl">{t("common:output.offline.title")}</div>
