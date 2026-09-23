@@ -40,7 +40,12 @@ import { RenameDialog } from "./RenameDialog";
 import { TemplateSelector } from "./TemplateSelector";
 import { ZoneDeriveOverlay } from "./ZoneDeriveOverlay";
 import type { HueChannelPlacement, HueZoneStatusCode, RoomDimensions } from "@/shared/contracts/roomMap";
-import { hueChannelsForArea, replaceHueChannel } from "@/shared/contracts/roomMap";
+import {
+  hueChannelsForArea,
+  replaceHueChannel,
+  ROOM_MAP_BACKGROUND_ERROR,
+  ROOM_MAP_BACKGROUND_MAX_MB,
+} from "@/shared/contracts/roomMap";
 import type { LedSegmentCounts } from "@/features/calibration/model/contracts";
 import type React from "react";
 import { useUsbConnectionStatus } from "@/features/device/useUsbConnectionStatus";
@@ -176,6 +181,7 @@ export function RoomMapEditor({
   const {
     handleAddImage,
     imageError,
+    imageErrorCode,
     handleUpdateImageOpacity,
     handleUpdateImageScale,
     handleUpdateImageAspectLock,
@@ -808,7 +814,9 @@ export function RoomMapEditor({
 
       {imageError && (
         <div role="alert" className="px-3 py-1.5 text-[11px] text-[color:var(--lm-red)]">
-          {t("roomMap:imageImportError")}
+          {imageErrorCode === ROOM_MAP_BACKGROUND_ERROR.TOO_LARGE
+            ? t("roomMap:imageTooLarge", { maxMb: ROOM_MAP_BACKGROUND_MAX_MB })
+            : t("roomMap:imageImportError")}
         </div>
       )}
 

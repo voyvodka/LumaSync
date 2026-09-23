@@ -20,6 +20,7 @@
 //!   WLED_INVALID_IP            -- IP failed SSRF guard (not IPv4, loopback,
 //!                                 unspecified, multicast, or broadcast).
 //!   WLED_INVALID_LED_COUNT     -- led_count == 0 supplied to connect_wled_sink.
+use std::io::Read;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
@@ -32,6 +33,11 @@ use super::status::CommandStatus;
 use super::wled_sink::{WledProtocol, WledSinkConfig, WledUdpSink};
 
 const WLED_HTTP_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// The largest `/json/info` body read. A real one is a few KB even on a
+/// multi-segment install; anything past this is not WLED answering, and
+/// reading it unbounded would let any host on the LAN fill our memory.
+const WLED_MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 
 /// DDP's own port, fixed by the protocol and independent of the realtime UDP
 /// port the user can remap in WLED's settings.
@@ -288,13 +294,7 @@ fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, CommandStatus> {
         ));
     }
 
-    let info: WledInfoResponse = response.json().map_err(|e| {
-        CommandStatus::new(
-            "WLED_PROTOCOL_MISMATCH",
-            "Response from device is not valid WLED JSON.",
-            Some(e.to_string()),
-        )
-    })?;
+    let info = read_info_body(response)?;
 
     if info.leds.count == 0 {
         return Err(CommandStatus::new(
@@ -305,6 +305,37 @@ fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, CommandStatus> {
     }
 
     Ok(info)
+}
+
+/// Parses `/json/info`, refusing a body past [`WLED_MAX_RESPONSE_BYTES`].
+fn read_info_body(
+    response: reqwest::blocking::Response,
+) -> Result<WledInfoResponse, CommandStatus> {
+    let mut body = Vec::new();
+    response
+        .take(WLED_MAX_RESPONSE_BYTES as u64 + 1)
+        .read_to_end(&mut body)
+        .map_err(|e| {
+            CommandStatus::new(
+                "WLED_PROTOCOL_MISMATCH",
+                "Response from device is not valid WLED JSON.",
+                Some(e.to_string()),
+            )
+        })?;
+    if body.len() > WLED_MAX_RESPONSE_BYTES {
+        return Err(CommandStatus::new(
+            "WLED_PROTOCOL_MISMATCH",
+            "Response from device is too large to be WLED.",
+            Some(format!("body exceeds {WLED_MAX_RESPONSE_BYTES} bytes")),
+        ));
+    }
+    serde_json::from_slice(&body).map_err(|e| {
+        CommandStatus::new(
+            "WLED_PROTOCOL_MISMATCH",
+            "Response from device is not valid WLED JSON.",
+            Some(e.to_string()),
+        )
+    })
 }
 
 fn info_to_device(ip: &str, info: WledInfoResponse) -> WledDeviceInfo {
@@ -727,5 +758,65 @@ mod tests {
         assert!(device.mac.is_none());
         assert!(device.version.is_none());
         assert!(device.name.is_none());
+    }
+
+    /// Answers one request on 127.0.0.1 with `body`, chunked so no
+    /// Content-Length announces the size up front.
+    fn serve_once(body: Vec<u8>) -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0u8; 1024];
+            let _ = stream.read(&mut request);
+            let _ = stream.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n",
+            );
+            for chunk in body.chunks(64 * 1024) {
+                if stream
+                    .write_all(format!("{:x}\r\n", chunk.len()).as_bytes())
+                    .and_then(|()| stream.write_all(chunk))
+                    .and_then(|()| stream.write_all(b"\r\n"))
+                    .is_err()
+                {
+                    return;
+                }
+            }
+            let _ = stream.write_all(b"0\r\n\r\n");
+        });
+        format!("http://{addr}/json/info")
+    }
+
+    fn fetch(url: &str) -> Result<super::WledInfoResponse, super::CommandStatus> {
+        let response = reqwest::blocking::Client::new().get(url).send().unwrap();
+        super::read_info_body(response)
+    }
+
+    #[test]
+    fn info_body_within_the_cap_parses() {
+        let info = fetch(&serve_once(
+            br#"{"leds":{"count":60},"udpport":21324}"#.to_vec(),
+        ))
+        .unwrap();
+        assert_eq!(info.leds.count, 60);
+        assert_eq!(info.udpport, 21324);
+    }
+
+    #[test]
+    fn info_body_past_the_cap_is_refused() {
+        use super::WLED_MAX_RESPONSE_BYTES;
+        // Valid JSON the whole way, so only the cap can reject it.
+        let mut body = br#"{"leds":{"count":60},"name":""#.to_vec();
+        body.resize(WLED_MAX_RESPONSE_BYTES, b'x');
+        body.extend_from_slice(br#""}"#);
+        assert!(body.len() > WLED_MAX_RESPONSE_BYTES);
+
+        let status = fetch(&serve_once(body)).unwrap_err();
+        assert_eq!(status.code, "WLED_PROTOCOL_MISMATCH");
+        assert_eq!(
+            status.details.as_deref(),
+            Some(format!("body exceeds {WLED_MAX_RESPONSE_BYTES} bytes").as_str())
+        );
     }
 }

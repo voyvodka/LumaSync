@@ -481,6 +481,18 @@ pub fn run() {
                 ),
             }
 
+            // Off the setup path: it touches the disk and nothing waits on it.
+            match app.path().app_data_dir() {
+                Ok(dir) => {
+                    std::thread::spawn(move || {
+                        commands::room_map::background::prune_unreferenced_backgrounds(&dir)
+                    });
+                }
+                Err(error) => {
+                    log::warn!("[room-map] no app data dir — background prune skipped: {error}")
+                }
+            }
+
             // Build tray menu
             let (menu, tray_state) = build_tray_menu(app.handle())?;
             let app_handle = app.handle().clone();

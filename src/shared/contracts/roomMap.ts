@@ -31,6 +31,19 @@ export const ROOM_MAP_COMMANDS = {
   COPY_BACKGROUND_IMAGE: "copy_background_image",
 } as const;
 
+/** Codes `copy_background_image` rejects with, as the `"CODE: context"` prefix
+ *  of its `Err(String)`. Other failures reach the caller uncoded. */
+export const ROOM_MAP_BACKGROUND_ERROR = {
+  TOO_LARGE: "ROOM_MAP_BACKGROUND_TOO_LARGE",
+} as const;
+
+export type RoomMapBackgroundErrorCode =
+  (typeof ROOM_MAP_BACKGROUND_ERROR)[keyof typeof ROOM_MAP_BACKGROUND_ERROR];
+
+/** The import limit the UI quotes. A Rust test holds it equal to
+ *  `MAX_BACKGROUND_IMAGE_BYTES` in `room_map/background.rs`. */
+export const ROOM_MAP_BACKGROUND_MAX_MB = 20;
+
 // ---------------------------------------------------------------------------
 // Hue Channel Placement
 // ---------------------------------------------------------------------------
