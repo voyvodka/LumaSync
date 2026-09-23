@@ -41,8 +41,10 @@ the status bar said OK. The HTML page is accepted only when **every** term holds
 (`is_bridge_auth_page`): status 401/403, an HTML content type, that exact `<title>`, a body under
 4 KB, and a final URL — after any redirect reqwest followed — that is still an IPv4 literal on
 `/api…` or `/clip/v2/…`. A captive portal redirects to its own host and fails the last term; a
-proxy page does not carry Signify's title. Something that impersonates the page *from the bridge's
-own address* could equally forge the JSON body, so this admits nothing the JSON rule did not.
+proxy page does not carry Signify's title. (Bridge clients no longer follow redirects at all, so
+the last term now backs up the transport rather than standing alone.) Something that impersonates
+the page *from the bridge's own address* could equally forge the JSON body — and would first have
+to present that bridge's certificate — so this admits nothing the JSON rule did not.
 Home Assistant's `aiohue` goes further and treats any CLIP v2 403 as unauthorized; we do not.
 
 **Credential validation reads `GET /clip/v2/resource/bridge`, never v1 `/api/<key>/config`.** The
@@ -56,10 +58,83 @@ v1 `error.type 1` envelope or a v2 auth `errors[]` is still a refusal.
 **The HTTP fallback must never run on a request whose response carries a secret.** The pairing POST
 returns the DTLS `clientkey`: if that call fell back the way IP verification does, an attacker who
 blackholes TCP/443 could force the downgrade and read the pre-shared key off plain HTTP.
-`send_clip_v1`'s `allow_http_fallback` is `true` only for IP verification (`/api/config`) and
-`false` for pairing; credential validation is CLIP v2 over HTTPS and never goes through it. The
-fallback itself only triggers on a connect-level failure — a TLS handshake failure stays fatal,
-because that handshake failure is exactly the signal such an attacker manufactures.
+`send_clip_v1` takes a plain-HTTP client (`http_fallback`) only for IP verification
+(`/api/config`) and `None` for pairing; credential validation is CLIP v2 over HTTPS and never goes
+through it. The fallback itself only triggers on a connect-level failure, and never on a failed TLS
+handshake, because that handshake failure is exactly the signal such an attacker manufactures.
+reqwest files a TLS failure under `is_connect()` too — the same kind as a closed port — so this was
+not true until `send_clip_v1` checked `transport::is_tls_failure` explicitly; a refused bridge
+certificate is one such failure.
+
+**The bridge's certificate is checked, not trusted.** Every bridge client used to set
+`danger_accept_invalid_certs`, so anything answering on the bridge's address during pairing could
+read the application key and the DTLS client key. `commands/hue/bridge_identity.rs` now verifies
+each handshake (a `rustls` `ServerCertVerifier`, handed to reqwest as a preconfigured
+`ClientConfig`):
+
+- **The CN must be a bridge id** — 16 hex digits, compared lower-case. The square bridge writes it
+  lower-case; a real Bridge Pro (BSB003) certificate reads `CN=C42996FFFEC4E2D8, OU=BSB003`, so a
+  case-sensitive match would lock every Bridge Pro out. The server name is an IP literal and the
+  certificate carries no IP SAN, so ordinary hostname verification has nothing to compare; identity
+  is the CN.
+- **Signify-signed certificates are anchored** to the two roots Signify publishes in "Using HTTPS"
+  (https://developers.meethue.com/develop/application-design-guidance/using-https/ — behind a
+  developer login): `C=NL, O=Philips Hue, CN=root-bridge` (2017-01-01 → 2038-01-19, SHA-256
+  `F0:BD:8E:65:09:E8:2F:77:4D:63:BC:00:9D:53:88:C9:69:FE:3D:CF:7D:6D:54:1D:63:51:B7:2B:89:8D:8A:CF`)
+  and `C=NL, O=Signify Hue, CN=Hue Root CA 01` (2025-02-25 → 2050-12-31, SHA-256
+  `D8:B8:94:48:B2:AF:8E:16:76:18:5A:C0:72:19:EE:9D:CB:C8:F0:1C:12:2A:02:6A:2A:4B:7B:5C:FE:03:28:B8`).
+  The PEM text was taken from openHAB's Hue binding (`huebridge_cacert.pem`) and openhue-go
+  (`certs.go`), which both cite that page, and the two agree byte for byte. Intermediates the
+  bridge sends are used for the chain. The Bridge Pro certificate above chains to `root-bridge`.
+- **Older bridges sign their own certificate**, so a certificate that does not chain is pinned on
+  first use: its SHA-256 is stored in the OS keychain as `hue-bridge-cert:<bridge id>`
+  (`sha256:<hex>`), and a later, different certificate for that bridge id is refused. A bridge that
+  has once shown a Signify-signed certificate is recorded as `signify`, and a self-signed one for
+  it afterwards is refused as a downgrade — without that record an impostor presenting a
+  self-signed certificate under the real bridge id would simply be pinned. A self-signed bridge
+  that later presents a Signify-signed certificate (a firmware reissue) is re-recorded as `signify`.
+- **Link-button pairing re-learns a changed self-signed pin**, and only that: a factory reset
+  regenerates the self-signed certificate, and without this such a bridge could never be paired
+  again. Pairing is as trust-on-first-use as the very first pairing was; a `signify` record is
+  never relaxed, not even here.
+- **A refusal reads as `HUE_BRIDGE_IDENTITY_MISMATCH`** on `verify_hue_bridge_ip`,
+  `pair_hue_bridge` and `validate_hue_credentials`; every other command keeps its own failure code
+  with the rejection's text (which starts with that token) in `details`. The Devices card shows it as
+  a failed pairing with its own explanation, and the reachability probe treats it as an answer that
+  needs a re-pair — never as an offline bridge, and never counted against the poll budget.
+- **Accepted costs.** First contact is trust-on-first-use for a self-signed bridge, and every
+  existing pairing learns its bridge's certificate on the first connection after the update. Where
+  the keychain is unavailable (`NoopStore`) nothing is remembered, so a self-signed bridge is
+  accepted on every contact; a Signify-signed one is still checked against the roots. The
+  handshake signature is verified against the leaf's public key read by openssl
+  (`webpki::RawPublicKeyEntity`), not by parsing the leaf with `webpki`, which refuses some
+  certificate shapes an old bridge may hold. TLS session resumption is off, because a resumed
+  session skips the verifier.
+
+**One transport, bound to the key's bridge.** `commands/hue/transport/` is the only place a
+bridge client is built. A client is chosen by what it may send: `*_for_key(app_key)` binds the
+connection to the pair's owner (`KEY_HUE_BRIDGE_ID`) when `app_key` is the keychain's own key, so
+the handshake fails before the key leaves the machine if anything else answers on that address.
+The app-key resolver cannot make that check itself — every caller holds an address, and only the
+handshake learns which bridge is there. Clients are cached per trust for the process, so a poll
+reuses a pooled connection instead of paying a handshake per tick; they never follow redirects,
+refuse plain `http://`, and read at most 1 MiB of a body (`HUE_MAX_RESPONSE_BYTES`). The only
+client that can speak plain HTTP to a bridge is IP verification's fallback, which never carries a
+key. `validate_bridge_addr` (`transport/address.rs`) is the one address guard: a bare IPv4 literal
+in RFC 1918, link-local, or RFC 6598 shared space — no hostname, port, loopback, public, multicast
+or broadcast address — so the webview cannot aim a request carrying the key at an arbitrary host.
+
+**The pair belongs to a bridge id, not an address.** Pairing records the bridge id from the
+certificate of the pairing answer itself. Releases up to 1.5.5 recorded the bridge's IP address,
+and `resolve_hue_credentials` compared it with the address being streamed to — so after a DHCP
+renewal the DTLS pair stopped resolving and streaming fell back to HTTP without a word. An
+IP-shaped owner is now read as `PairOwner::LegacyAddress` and serves any caller, as an unscoped pair
+does, and `adopt_bridge_owner` rewrites it (or an unscoped one) to the bridge id the first time
+that bridge accepts the key (`validate_hue_credentials`, which runs at boot and every 30 s while
+idle). A 2xx to a request carrying the key is the proof: bridges issue their own keys. The DTLS
+pair is resolved without comparing owners at all, because the readiness read and the activate PUT
+that precede the handshake already went through a client bound to the owner. A pair written with
+no bridge id in hand (the boot migration) clears the previous owner instead of inheriting it.
 
 **Credentials live in the OS keychain, not in the state file.** macOS Keychain, Windows CredMan,
 Linux Secret Service, via `commands/hue/credential_store.rs`. `shell-state.json` holds neither the
@@ -257,6 +332,15 @@ off, and so do we now (`commands/hue/light_restore.rs`).
   writes and then puts its own state back. If off lamps ever come back on with every restore PUT
   logged as successful, the bridge's own post-stream restore is landing after ours and needs a
   settle delay — that has not been seen, and none is added.
+- **A start waits for a stop's restore.** `stop_with_timeout` leaves the runtime `Idle` at once,
+  and the deactivate, the sender wait and the restore all run after it, so a start issued in that
+  window (another webview, the test lease, a tray action) used to read the lights while the restore
+  was still walking through them: the ones it had not reached yet were snapshotted "on", and that
+  session's own stop switched them back on. `stop_hue_stream` now holds
+  `HueRuntimeStateStore::stop_in_flight` from its first lock until the restore returns, and
+  `start_hue_stream` / `restart_hue_stream` wait for it before they read the bridge. They only
+  wait — nothing is held across a start, so a stop can still overtake a start as described above.
+  The quit path does not take it: nothing starts after it.
 - **The sender exits only when every handle is gone.** Both senders (DTLS and HTTP fallback) leave
   their loop on channel disconnect, and the stop drops only the runtime's handle. An ambilight
   worker holds another one (`HueActiveOutputContext`), so a stop under a worker that still drives

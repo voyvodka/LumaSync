@@ -89,13 +89,14 @@ export function useHueBridgeReachability(
         setProbeVerdict(
           code === HUE_STATUS.CREDENTIAL_VALID
             ? "reachable"
-            : code === HUE_STATUS.CREDENTIAL_INVALID
+            : code === HUE_STATUS.CREDENTIAL_INVALID || code === HUE_STATUS.BRIDGE_IDENTITY_MISMATCH
               ? "credentialRejected"
               : "unreachable",
         );
         // Only a bridge that never answered counts against the budget. A
-        // bridge that answers CREDENTIAL_INVALID is on the network and needs
-        // a re-pair, which the Devices card already offers.
+        // bridge that answers CREDENTIAL_INVALID — or with a certificate that
+        // is not the paired bridge's — is on the network and needs a re-pair,
+        // which the Devices card already offers.
         if (code === HUE_STATUS.CREDENTIAL_CHECK_FAILED) {
           noteFailure(code);
         } else {

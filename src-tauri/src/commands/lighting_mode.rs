@@ -5240,9 +5240,7 @@ mod lighting_mode_tests {
     /// keeps painting the lights after the restore.
     #[test]
     fn a_mode_re_applied_without_hue_lets_the_hue_sender_exit() {
-        use crate::commands::hue::sender::{
-            hue_http_client_arc, spawn_hue_http_sender, wait_for_shutdown,
-        };
+        use crate::commands::hue::sender::{spawn_hue_http_sender, wait_for_shutdown};
         use crate::commands::hue::test_bridge::{Reply, TestBridge};
         use std::time::Duration;
 
@@ -5251,7 +5249,7 @@ mod lighting_mode_tests {
         let light_puts = || bridge.puts_to("/clip/v2/resource/light/").len();
         let channels = vec![channel(0, 0.0, 1.0, None)];
         let (color_sender, sender_exited) = spawn_hue_http_sender(
-            hue_http_client_arc().expect("client"),
+            crate::commands::hue::transport::blocking_client_for_key("app-key").expect("client"),
             bridge.authority.clone(),
             "app-key".to_string(),
             channels.clone(),
@@ -5329,9 +5327,7 @@ mod lighting_mode_tests {
     /// the targets.
     #[test]
     fn off_from_a_hue_only_mode_needs_the_worker_stopped_before_the_hue_sender_can_exit() {
-        use crate::commands::hue::sender::{
-            hue_http_client_arc, spawn_hue_http_sender, wait_for_shutdown,
-        };
+        use crate::commands::hue::sender::{spawn_hue_http_sender, wait_for_shutdown};
         use crate::commands::hue::test_bridge::{Reply, TestBridge};
         use std::time::Duration;
 
@@ -5347,7 +5343,7 @@ mod lighting_mode_tests {
         };
         let channels = vec![channel(0, 0.0, 1.0, None)];
         let (color_sender, sender_exited) = spawn_hue_http_sender(
-            hue_http_client_arc().expect("client"),
+            crate::commands::hue::transport::blocking_client_for_key("app-key").expect("client"),
             bridge.authority.clone(),
             "app-key".to_string(),
             channels.clone(),

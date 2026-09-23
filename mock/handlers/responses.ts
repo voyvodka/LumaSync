@@ -79,7 +79,11 @@ import type {
  */
 type ValidateHueCredentialsCode = Extract<
   HueOnboardingWireStatusCode,
-  "HUE_IP_INVALID" | "HUE_CREDENTIAL_VALID" | "HUE_CREDENTIAL_INVALID" | "HUE_CREDENTIAL_CHECK_FAILED"
+  | "HUE_IP_INVALID"
+  | "HUE_CREDENTIAL_VALID"
+  | "HUE_CREDENTIAL_INVALID"
+  | "HUE_CREDENTIAL_CHECK_FAILED"
+  | "HUE_BRIDGE_IDENTITY_MISMATCH"
 >;
 
 type ValidateHueCredentialsMockResponse = {
@@ -114,7 +118,7 @@ type DiscoverHueBridgesMockResponse = {
 
 type VerifyHueBridgeIpCode = Extract<
   HueOnboardingWireStatusCode,
-  "HUE_IP_INVALID" | "HUE_IP_UNREACHABLE" | "HUE_IP_VALID"
+  "HUE_IP_INVALID" | "HUE_IP_UNREACHABLE" | "HUE_IP_VALID" | "HUE_BRIDGE_IDENTITY_MISMATCH"
 >;
 
 type VerifyHueBridgeIpMockResponse = {
@@ -136,6 +140,7 @@ type PairHueBridgeCode = Extract<
   | "HUE_PAIRING_BRIDGE_BUSY"
   | "HUE_PAIRING_RATE_LIMITED"
   | "HUE_PAIRING_FAILED"
+  | "HUE_BRIDGE_IDENTITY_MISMATCH"
 >;
 
 type PairHueBridgeMockResponse = {

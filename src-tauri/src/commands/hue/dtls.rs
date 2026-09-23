@@ -103,15 +103,25 @@ pub(crate) fn connect_dtls(
 }
 
 /// Decode a hex string (e.g. "AABBCCDD") into raw bytes.
+///
+/// Works on bytes, not `str` slices: slicing at a byte offset panics inside a
+/// multi-byte character, and the input is a stored secret we do not control.
 pub(crate) fn hex_decode(hex: &str) -> Result<Vec<u8>, String> {
-    if !hex.len().is_multiple_of(2) {
+    fn nibble(byte: u8) -> Option<u8> {
+        char::from(byte).to_digit(16).map(|digit| digit as u8)
+    }
+    let bytes = hex.as_bytes();
+    if !bytes.len().is_multiple_of(2) {
         return Err("Hex string has odd length".to_string());
     }
-    (0..hex.len())
-        .step_by(2)
-        .map(|i| {
-            u8::from_str_radix(&hex[i..i + 2], 16)
-                .map_err(|e| format!("Invalid hex at position {i}: {e}"))
+    bytes
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .enumerate()
+        .map(|(pair, [high, low])| match (nibble(*high), nibble(*low)) {
+            (Some(high), Some(low)) => Ok(high << 4 | low),
+            _ => Err(format!("Invalid hex at position {}", pair * 2)),
         })
         .collect()
 }
@@ -129,5 +139,14 @@ mod tests {
         );
         assert!(hex_decode("ABC").is_err()); // odd length
         assert!(hex_decode("GG").is_err()); // invalid hex
+    }
+
+    #[test]
+    fn hex_decode_refuses_non_ascii_input_instead_of_panicking() {
+        // "aé0": four bytes, so the length check passes and a two-byte slice
+        // starting at 0 ends inside 'é'.
+        assert!(hex_decode("aé0").is_err());
+        assert!(hex_decode("éé").is_err());
+        assert!(hex_decode("+1").is_err(), "a sign is not a hex digit");
     }
 }

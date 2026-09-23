@@ -39,14 +39,15 @@ use super::frame::HueAreaChannel;
 use super::retry::register_transient_fault;
 use super::sender::{
     apply_channel_placements, build_hue_sender, deactivate_with_token, fetch_area_channels,
-    fetch_light_metadata_for_channels, hue_http_client, wait_for_shutdown, HueLightMetadata,
-    ShutdownSignal, SpawnedHueSender,
+    fetch_light_metadata_for_channels, wait_for_shutdown, HueLightMetadata, ShutdownSignal,
+    SpawnedHueSender,
 };
 use super::state_store::{
     acquire_hue_runtime, flush_pending_solid_color, status_with, HueActiveStreamContext,
     HuePersistentSender, HueRuntimeActionHint, HueRuntimeOwner, HueRuntimeState,
     HueRuntimeTriggerSource, StartHueStreamRequest,
 };
+use super::transport::blocking_client_for_key;
 
 // ---------------------------------------------------------------------------
 // Active-stream-context store
@@ -429,7 +430,7 @@ async fn internal_restart_stream(
     // dedupe token guarantees a single PUT) so the sleep is gone.
     if let Some((ip, username, area_id, token)) = dtls_deactivate {
         let _ = tokio::task::spawn_blocking(move || {
-            if let Ok(client) = hue_http_client() {
+            if let Ok(client) = blocking_client_for_key(&username) {
                 let _ = deactivate_with_token(&token, &client, &ip, &username, &area_id);
             }
         })

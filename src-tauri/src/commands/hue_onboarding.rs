@@ -1,16 +1,19 @@
 //! Hue bridge discovery, pairing, and Entertainment Area onboarding commands —
 //! the read/pair path that runs before a stream can start.
 
-use std::{net::Ipv4Addr, str::FromStr, time::Duration};
-
 use log::{debug, error, info, warn};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use super::hue::area_cache::{invalidate_hue_area_cache, read_area_snapshot, HueReadFreshness};
+use super::hue::bridge_identity::{normalize_bridge_id, BridgeTrust, IDENTITY_MISMATCH_CODE};
 use super::hue::credential_store::effective_hue_app_key;
 use super::hue::state_store::{streams_area, HueRuntimeStateStore};
+use super::hue::transport::{
+    answering_bridge_id, async_client, async_client_for_key, cloud_client, identity_rejection,
+    is_tls_failure, is_valid_bridge_addr, plain_http_client, read_body, send_error_text,
+};
 
 /// `details` for the "nothing resolved" arms. The reused
 /// `AUTH_INVALID_RE_PAIR_REQUIRED` message asserts the bridge returned a 403,
@@ -163,7 +166,7 @@ pub async fn discover_hue_bridges() -> HueDiscoveryResponse {
 /// Returned `Result` mirrors the previous `outcome` variable so the
 /// merge step can preserve the cloud-only status code on the empty path.
 async fn run_cloud_discovery() -> Result<HueDiscoveryResponse, String> {
-    let client = hue_cloud_http_client().map_err(|e| format!("CLIENT_INIT: {e}"))?;
+    let client = cloud_client().map_err(|e| format!("CLIENT_INIT: {e}"))?;
     let response = client
         .get("https://discovery.meethue.com/")
         .send()
@@ -172,7 +175,7 @@ async fn run_cloud_discovery() -> Result<HueDiscoveryResponse, String> {
     let ok_response = classify_hue_response(response)
         .await
         .map_err(|fault| fault.to_string())?;
-    let payload = ok_response.text().await.map_err(|e| e.to_string())?;
+    let payload = read_body(ok_response).await?;
     Ok(parse_discovery_payload(&payload))
 }
 
@@ -290,8 +293,10 @@ pub async fn verify_hue_bridge_ip(bridge_ip: String) -> HueVerifyBridgeIpRespons
         return invalid;
     }
 
-    let client = match hue_http_client() {
-        Ok(client) => client,
+    let clients = async_client(&BridgeTrust::any())
+        .and_then(|https| plain_http_client().map(|http| (https, http)));
+    let (client, http_fallback) = match clients {
+        Ok(clients) => clients,
         Err(error) => {
             return HueVerifyBridgeIpResponse {
                 status: command_status(
@@ -303,20 +308,70 @@ pub async fn verify_hue_bridge_ip(bridge_ip: String) -> HueVerifyBridgeIpRespons
             }
         }
     };
+    verify_bridge_at(&client, &http_fallback, &bridge_ip).await
+}
 
-    let outcome = match send_clip_v1(&client, &bridge_ip, "/api/config", true, |client, url| {
-        client.get(url)
-    })
+/// The network half of `verify_hue_bridge_ip`, split so a test can point it
+/// at a local stand-in for the bridge.
+pub(crate) async fn verify_bridge_at(
+    client: &Client,
+    http_fallback: &Client,
+    bridge_ip: &str,
+) -> HueVerifyBridgeIpResponse {
+    let mut answering = None;
+    let outcome = match send_clip_v1(
+        client,
+        bridge_ip,
+        "/api/config",
+        Some(http_fallback),
+        |client, url| client.get(url),
+    )
     .await
     {
-        Ok(response) => match classify_hue_response(response).await {
-            Ok(ok) => ok.text().await.map_err(|e| e.to_string()),
-            Err(fault) => Err(fault.to_string()),
-        },
-        Err(error) => Err(error.to_string()),
+        Ok(response) => {
+            answering = answering_bridge_id(&response);
+            match classify_hue_response(response).await {
+                Ok(ok) => read_body(ok).await,
+                Err(fault) => Err(fault.to_string()),
+            }
+        }
+        Err(error) => {
+            if let Some(rejection) = identity_rejection(&error) {
+                warn!("Hue bridge at {bridge_ip} refused: {rejection}");
+                return HueVerifyBridgeIpResponse {
+                    status: identity_mismatch_status(rejection.to_string()),
+                    bridge: None,
+                };
+            }
+            Err(send_error_text(&error))
+        }
     };
     match outcome {
-        Ok(payload) => parse_bridge_config_payload(&bridge_ip, &payload),
+        Ok(payload) => {
+            let verified = parse_bridge_config_payload(bridge_ip, &payload);
+            // The certificate and the config are both the bridge's word, so a
+            // disagreement means whatever answered is not one bridge.
+            let configured = verified
+                .bridge
+                .as_ref()
+                .and_then(|bridge| normalize_bridge_id(&bridge.id));
+            if let (Some(certificate), Some(configured)) = (answering, configured) {
+                if certificate != configured {
+                    warn!(
+                        "Hue bridge at {bridge_ip}: certificate names {certificate}, \
+                         config reports {configured}"
+                    );
+                    return HueVerifyBridgeIpResponse {
+                        status: identity_mismatch_status(format!(
+                            "{IDENTITY_MISMATCH_CODE}: the certificate names bridge \
+                             {certificate} but the bridge reports {configured}"
+                        )),
+                        bridge: None,
+                    };
+                }
+            }
+            verified
+        }
         Err(error) => HueVerifyBridgeIpResponse {
             status: command_status(
                 "HUE_IP_UNREACHABLE",
@@ -341,7 +396,7 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
         };
     }
 
-    let client = match hue_http_client() {
+    let client = match async_client(&BridgeTrust::pairing()) {
         Ok(client) => client,
         Err(error) => {
             warn!("Hue pairing client init failed: {error}");
@@ -356,25 +411,41 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
             };
         }
     };
+    let store = super::hue::credential_store::default_store();
+    pair_bridge_at(&client, &bridge_ip, store.as_ref()).await
+}
 
+/// The network half of `pair_hue_bridge`, split so a test can point it at a
+/// local stand-in for the bridge and a store of its own.
+pub(crate) async fn pair_bridge_at(
+    client: &Client,
+    bridge_ip: &str,
+    store: &dyn super::hue::credential_store::SecretStore,
+) -> HuePairBridgeResponse {
     let body = json!({
         "devicetype": "lumasync#desktop",
         "generateclientkey": true,
     });
+    // The pair's owner is the bridge the certificate of this very response
+    // names — never the address, which a DHCP renewal reassigns.
+    let mut answering = None;
     let outcome: Result<String, PairingTransportError> =
-        match send_clip_v1(&client, &bridge_ip, "/api", false, |client, url| {
+        match send_clip_v1(client, bridge_ip, "/api", None, |client, url| {
             client.post(url).json(&body)
         })
         .await
         {
-            Ok(response) => match classify_hue_response(response).await {
-                Ok(ok) => ok
-                    .text()
-                    .await
-                    .map_err(|e| PairingTransportError::Generic(e.to_string())),
-                Err(fault) => Err(PairingTransportError::from_fault(fault)),
-            },
-            Err(error) => Err(PairingTransportError::Generic(error.to_string())),
+            Ok(response) => {
+                answering = answering_bridge_id(&response);
+                match classify_hue_response(response).await {
+                    Ok(ok) => read_body(ok).await.map_err(PairingTransportError::Generic),
+                    Err(fault) => Err(PairingTransportError::from_fault(fault)),
+                }
+            }
+            Err(error) => Err(match identity_rejection(&error) {
+                Some(rejection) => PairingTransportError::Identity(rejection.to_string()),
+                None => PairingTransportError::Generic(send_error_text(&error)),
+            }),
         };
     match outcome {
         Ok(payload) => {
@@ -396,14 +467,16 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
             // whether it can safely clear `shellStore.hueAppKey` /
             // `shellStore.hueClientKey` after a successful pairing.
             if let Some(creds) = result.credentials.as_ref() {
-                let store = super::hue::credential_store::default_store();
+                if answering.is_none() {
+                    warn!("[hue-cred] pairing answer carried no bridge certificate; pair unscoped");
+                }
                 let outcome = super::hue::credential_store::migrate_hue_credentials_to_keychain(
-                    store.as_ref(),
-                    &bridge_ip,
+                    store,
+                    answering.as_deref().unwrap_or_default(),
                     &creds.username,
                     &creds.client_key,
                 );
-                let backend = outcome.backend(store.as_ref());
+                let backend = outcome.backend(store);
                 info!(
                     "[hue-cred] pairing migration {}: backend={}",
                     outcome.status_code(),
@@ -437,6 +510,14 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
                 credential_storage_backend: None,
             }
         }
+        Err(PairingTransportError::Identity(detail)) => {
+            warn!("Hue bridge pairing refused the bridge at {bridge_ip}: {detail}");
+            HuePairBridgeResponse {
+                status: identity_mismatch_status(detail),
+                credentials: None,
+                credential_storage_backend: None,
+            }
+        }
         Err(PairingTransportError::Generic(error)) => {
             warn!("Hue bridge pairing failed at {bridge_ip}");
             HuePairBridgeResponse {
@@ -460,7 +541,11 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
 /// polluting the payload parser.
 enum PairingTransportError {
     RateLimited,
-    BridgeBusy { detail: String },
+    BridgeBusy {
+        detail: String,
+    },
+    /// The certificate was refused, so nothing was sent.
+    Identity(String),
     Generic(String),
 }
 
@@ -493,9 +578,10 @@ pub fn migrate_hue_credentials(
     // No bridge context here: this is the boot cleanup for installs that
     // paired before the keychain existed, and the caller only carries the two
     // plaintext halves. The pair stays unscoped, which is exactly the
-    // behaviour it already had, and the owner is recorded on the next real
-    // pairing. Adding a bridge argument would be a command-surface change for
-    // a path that has nothing to put in it.
+    // behaviour it already had, and the owner is recorded on the next
+    // authenticated contact (`adopt_bridge_owner`) or real pairing. Adding a
+    // bridge argument would be a command-surface change for a path that has
+    // nothing to put in it.
     let outcome = super::hue::credential_store::migrate_hue_credentials_to_keychain(
         store.as_ref(),
         "",
@@ -549,7 +635,7 @@ pub async fn validate_hue_credentials(
         };
     }
 
-    let client = match hue_http_client() {
+    let client = match async_client_for_key(&username) {
         Ok(client) => client,
         Err(error) => {
             return HueValidateCredentialsResponse {
@@ -567,48 +653,68 @@ pub async fn validate_hue_credentials(
     // public config, `bridgeid` included, so a revoked key validated. This
     // resource needs the key, and a refusal comes back through the classifier.
     let endpoint = format!("https://{bridge_ip}/clip/v2/resource/bridge");
-    validate_app_key_at(&client, &endpoint, &bridge_ip, &username).await
+    let store = super::hue::credential_store::default_store();
+    validate_app_key_at(&client, &endpoint, &bridge_ip, &username, store.as_ref()).await
 }
 
 /// The network half of `validate_hue_credentials`, split so a test can point
-/// it at a local stand-in for the bridge.
-async fn validate_app_key_at(
+/// it at a local stand-in for the bridge and a store of its own.
+pub(crate) async fn validate_app_key_at(
     client: &Client,
     endpoint: &str,
     bridge_ip: &str,
     username: &str,
+    store: &dyn super::hue::credential_store::SecretStore,
 ) -> HueValidateCredentialsResponse {
+    let mut answering = None;
     let outcome = match client
         .get(endpoint)
         .header("hue-application-key", username)
         .send()
         .await
     {
-        Ok(response) => match classify_hue_response(response).await {
-            Ok(ok) => ok.text().await.map_err(|e| e.to_string()),
-            // A bridge that explicitly rejected the key is not unreachable.
-            // Collapsing this into the transport arm made the frontend
-            // render "bridge offline" for an expired application key.
-            Err(HueHttpFault::AuthInvalid) => {
-                error!("Hue credentials rejected by bridge {bridge_ip}");
+        Ok(response) => {
+            answering = answering_bridge_id(&response);
+            match classify_hue_response(response).await {
+                Ok(ok) => read_body(ok).await,
+                // A bridge that explicitly rejected the key is not unreachable.
+                // Collapsing this into the transport arm made the frontend
+                // render "bridge offline" for an expired application key.
+                Err(HueHttpFault::AuthInvalid) => {
+                    error!("Hue credentials rejected by bridge {bridge_ip}");
+                    return HueValidateCredentialsResponse {
+                        status: command_status(
+                            "HUE_CREDENTIAL_INVALID",
+                            "Bridge rejected the stored application key. Re-pair required.",
+                            None,
+                        ),
+                        valid: false,
+                    };
+                }
+                Err(fault) => Err(fault.to_string()),
+            }
+        }
+        // Refused before the key was sent: not an offline bridge, and not a
+        // verdict on the key either.
+        Err(error) => match identity_rejection(&error) {
+            Some(rejection) => {
+                warn!("Hue credential check refused the bridge at {bridge_ip}: {rejection}");
                 return HueValidateCredentialsResponse {
-                    status: command_status(
-                        "HUE_CREDENTIAL_INVALID",
-                        "Bridge rejected the stored application key. Re-pair required.",
-                        None,
-                    ),
+                    status: identity_mismatch_status(rejection.to_string()),
                     valid: false,
                 };
             }
-            Err(fault) => Err(fault.to_string()),
+            None => Err(send_error_text(&error)),
         },
-        Err(error) => Err(error.to_string()),
     };
     match outcome {
         Ok(payload) => {
             let result = parse_bridge_resource_payload(&payload);
             if result.valid {
                 info!("Hue credentials validated for bridge {bridge_ip}");
+                if let Some(bridge_id) = answering {
+                    super::hue::credential_store::adopt_bridge_owner(store, username, &bridge_id);
+                }
             } else if result.status.code == "HUE_CREDENTIAL_INVALID" {
                 error!("Hue credentials invalid for bridge {bridge_ip}");
             }
@@ -632,11 +738,11 @@ pub async fn list_hue_entertainment_areas(
     bridge_ip: String,
     username: String,
 ) -> HueEntertainmentAreaListResponse {
-    if !is_valid_ipv4(&bridge_ip) {
+    if !is_valid_bridge_addr(&bridge_ip) {
         return HueEntertainmentAreaListResponse {
             status: command_status(
                 "HUE_IP_INVALID",
-                "Bridge IP is not a valid IPv4 address.",
+                "Bridge IP is not a local-network IPv4 address.",
                 Some("Use a value like 192.168.1.50".to_string()),
             ),
             areas: Vec::new(),
@@ -763,11 +869,11 @@ pub(crate) async fn check_hue_stream_readiness_with_freshness(
     freshness: HueReadFreshness,
     streamer: ActiveStreamerView,
 ) -> HueStreamReadinessResponse {
-    if !is_valid_ipv4(&bridge_ip) {
+    if !is_valid_bridge_addr(&bridge_ip) {
         return HueStreamReadinessResponse {
             status: command_status(
                 "HUE_IP_INVALID",
-                "Bridge IP is not a valid IPv4 address.",
+                "Bridge IP is not a local-network IPv4 address.",
                 Some("Use a value like 192.168.1.50".to_string()),
             ),
             readiness: HueStreamReadiness {
@@ -934,11 +1040,11 @@ pub fn parse_discovery_payload(payload: &str) -> HueDiscoveryResponse {
 /// Validate the IP format only, without a network round-trip; used to
 /// short-circuit before reaching the bridge.
 pub fn verify_hue_bridge_ip_input(ip: &str) -> HueVerifyBridgeIpResponse {
-    if !is_valid_ipv4(ip) {
+    if !is_valid_bridge_addr(ip) {
         return HueVerifyBridgeIpResponse {
             status: command_status(
                 "HUE_IP_INVALID",
-                "Bridge IP is not a valid IPv4 address.",
+                "Bridge IP is not a local-network IPv4 address.",
                 Some("Use a value like 192.168.1.50".to_string()),
             ),
             bridge: None,
@@ -1164,13 +1270,13 @@ async fn fetch_hue_entertainment_areas(
     bridge_ip: &str,
     username: &str,
 ) -> Result<Vec<HueEntertainmentArea>, AreaListError> {
-    if !is_valid_ipv4(bridge_ip) {
+    if !is_valid_bridge_addr(bridge_ip) {
         return Err(AreaListError::Other(
-            "Invalid bridge IPv4 format".to_string(),
+            "Bridge IP is not a local-network IPv4 address".to_string(),
         ));
     }
 
-    let client = hue_http_client().map_err(AreaListError::Other)?;
+    let client = async_client_for_key(username).map_err(AreaListError::Other)?;
 
     let entertainment_payload = fetch_entertainment_payload(&client, bridge_ip, username).await?;
 
@@ -1188,7 +1294,7 @@ async fn fetch_entertainment_payload(
         .header("hue-application-key", username)
         .send()
         .await
-        .map_err(|e| AreaListError::Unreachable(e.to_string()))?;
+        .map_err(|e| AreaListError::Unreachable(send_error_text(&e)))?;
 
     let response = classify_hue_response(raw)
         .await
@@ -1197,10 +1303,7 @@ async fn fetch_entertainment_payload(
             other => AreaListError::Other(other.to_string()),
         })?;
 
-    response
-        .text()
-        .await
-        .map_err(|e| AreaListError::Other(e.to_string()))
+    read_body(response).await.map_err(AreaListError::Other)
 }
 
 /// Carrier for `fetch_hue_entertainment_areas` faults. Keeps
@@ -1315,24 +1418,14 @@ fn parse_bridge_config_payload(bridge_ip: &str, payload: &str) -> HueVerifyBridg
     }
 }
 
-/// Client for bridge-local HTTPS. Certificate verification is off because the
-/// bridge presents a self-signed certificate we have no way to anchor.
-fn hue_http_client() -> Result<Client, String> {
-    Client::builder()
-        .timeout(Duration::from_secs(5))
-        .danger_accept_invalid_certs(true)
-        .build()
-        .map_err(|error| error.to_string())
-}
-
-/// Client for `discovery.meethue.com`. That is a public CA-signed endpoint, so
-/// verification stays ON — the bridge's self-signed exemption must not leak to
-/// the internet call that tells us which IP to trust in the first place.
-fn hue_cloud_http_client() -> Result<Client, String> {
-    Client::builder()
-        .timeout(Duration::from_secs(5))
-        .build()
-        .map_err(|error| error.to_string())
+/// The address answered with a certificate that is not the bridge's we expect
+/// (or not a bridge's at all). Nothing carrying a secret was sent.
+fn identity_mismatch_status(details: String) -> CommandStatus {
+    command_status(
+        "HUE_BRIDGE_IDENTITY_MISMATCH",
+        "The device at this address is not the Hue bridge LumaSync paired with, or its certificate changed.",
+        Some(details),
+    )
 }
 
 /// Send a CLIP v1 request to the bridge, preferring HTTPS and falling back to
@@ -1344,17 +1437,20 @@ fn hue_cloud_http_client() -> Result<Client, String> {
 /// answer on both ports, so HTTPS-first is safe for every generation; the HTTP
 /// retry only exists for older firmware whose TLS stack we cannot reach.
 ///
-/// The fallback triggers on transport errors only. Once a bridge answers with
-/// any HTTP status the response is returned untouched so `classify_hue_response`
-/// keeps owning the 403/`error.type` re-pair contract.
+/// The fallback triggers on transport errors only, and never on a failed TLS
+/// handshake (a refused certificate included): reqwest reports those as
+/// connect errors too, and that failure is exactly what a downgrade attacker
+/// manufactures. Once a bridge answers with any HTTP status the response is
+/// returned untouched so `classify_hue_response` keeps owning the
+/// 403/`error.type` re-pair contract.
 ///
-/// `allow_http_fallback` must stay `false` on the pairing call — it returns the
+/// `http_fallback` must stay `None` on the pairing call — it returns the
 /// DTLS `clientkey`. See docs/architecture/hue.md (downgrade-attack constraint).
-async fn send_clip_v1<F>(
+pub(crate) async fn send_clip_v1<F>(
     client: &Client,
     bridge_ip: &str,
     path: &str,
-    allow_http_fallback: bool,
+    http_fallback: Option<&Client>,
     build: F,
 ) -> Result<reqwest::Response, reqwest::Error>
 where
@@ -1368,11 +1464,14 @@ where
         Err(error) => error,
     };
 
-    if !allow_http_fallback || !https_error.is_connect() {
+    let Some(http_client) = http_fallback else {
+        return Err(https_error);
+    };
+    if !https_error.is_connect() || is_tls_failure(&https_error) {
         return Err(https_error);
     }
 
-    match build(client, format!("http://{bridge_ip}{path}"))
+    match build(http_client, format!("http://{bridge_ip}{path}"))
         .send()
         .await
     {
@@ -1382,15 +1481,6 @@ where
         }
         // Surface the HTTPS failure: on a Bridge Pro that is the actionable one.
         Err(_) => Err(https_error),
-    }
-}
-
-fn is_valid_ipv4(value: &str) -> bool {
-    // SECURITY: Validate IP to prevent SSRF by rejecting loopback, unspecified, multicast, and broadcast
-    if let Ok(ip) = Ipv4Addr::from_str(value) {
-        !ip.is_loopback() && !ip.is_unspecified() && !ip.is_multicast() && !ip.is_broadcast()
-    } else {
-        false
     }
 }
 
@@ -1664,8 +1754,9 @@ mod tests {
     ) -> super::HueValidateCredentialsResponse {
         let (endpoint, server) = serve_once(status, content_type, body);
         let client = reqwest::Client::new();
+        let store = super::super::hue::credential_store::tests::InMemoryStore::default();
         let response =
-            super::validate_app_key_at(&client, &endpoint, "192.168.1.180", "bogus").await;
+            super::validate_app_key_at(&client, &endpoint, "192.168.1.180", "bogus", &store).await;
         server.join().unwrap();
         response
     }
