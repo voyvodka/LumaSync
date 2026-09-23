@@ -8,7 +8,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use log::warn;
-use serde_json::Value;
+
+use crate::commands::shell_state::PersistedShellState;
 
 /// Where copied background images live, under the app data dir. The
 /// `fs:allow-read-file` capability is scoped to exactly this directory.
@@ -79,24 +80,20 @@ fn remove_partial(dest: &Path) {
 }
 
 /// Copies in `bg_dir` that no layer of the persisted room map names, older
-/// than `grace`. `None` unless `shell_state` carries a `roomMap.imageLayers`
-/// array: an unreadable or reshaped store must never read as "nothing is
+/// than `grace`. `None` unless the store carries a `roomMap.imageLayers`
+/// array: an empty or reshaped store must never read as "nothing is
 /// referenced", which would delete every background.
 fn unreferenced_backgrounds(
     bg_dir: &Path,
-    shell_state: &str,
+    state: Option<&PersistedShellState>,
     now: SystemTime,
     grace: Duration,
 ) -> Option<Vec<PathBuf>> {
-    let root: Value = serde_json::from_str(shell_state).ok()?;
-    let room_map = root.get("shell-state")?.get("roomMap")?;
-    let layers = room_map.get("imageLayers")?.as_array()?;
     // Compared by file name: the stored path is absolute and would stop
     // matching if the app data dir ever moved.
-    let referenced: HashSet<OsString> = layers
+    let referenced: HashSet<OsString> = state?
+        .room_map_image_paths()?
         .iter()
-        .filter_map(|layer| layer.get("path")?.as_str())
-        .chain(room_map.get("backgroundImagePath").and_then(Value::as_str))
         .filter_map(|path| Path::new(path).file_name().map(OsString::from))
         .collect();
 
@@ -122,21 +119,17 @@ fn unreferenced_backgrounds(
 /// Deletes copied backgrounds that no image layer references any more — a
 /// removed layer leaves its copy behind. Runs once at startup, never on
 /// import: the editor's undo can bring a deleted layer back within a session.
+/// `state` comes from `shell_state::persisted`, the file's only reader.
 /// See docs/architecture/room-map.md.
-pub(crate) fn prune_unreferenced_backgrounds(app_data_dir: &Path) {
+pub(crate) fn prune_unreferenced_backgrounds(
+    app_data_dir: &Path,
+    state: Option<&PersistedShellState>,
+) {
     let bg_dir = app_data_dir.join(BACKGROUND_DIR);
     if !bg_dir.is_dir() {
         return;
     }
-    let shell_state = match std::fs::read_to_string(app_data_dir.join("shell-state.json")) {
-        Ok(raw) => raw,
-        Err(error) => {
-            warn!("[room-map] background prune skipped: shell-state unreadable: {error}");
-            return;
-        }
-    };
-    let Some(orphans) =
-        unreferenced_backgrounds(&bg_dir, &shell_state, SystemTime::now(), PRUNE_GRACE)
+    let Some(orphans) = unreferenced_backgrounds(&bg_dir, state, SystemTime::now(), PRUNE_GRACE)
     else {
         warn!("[room-map] background prune skipped: the persisted room map has no imageLayers");
         return;
@@ -244,11 +237,15 @@ mod tests {
     }
 
     fn state_with(paths: &[&str]) -> String {
-        let layers: Vec<Value> = paths
+        let layers: Vec<serde_json::Value> = paths
             .iter()
             .map(|path| serde_json::json!({ "id": "x", "path": path }))
             .collect();
         serde_json::json!({ "shell-state": { "roomMap": { "imageLayers": layers } } }).to_string()
+    }
+
+    fn parsed(raw: &str) -> Option<PersistedShellState> {
+        PersistedShellState::from_file_json(raw)
     }
 
     fn later() -> SystemTime {
@@ -262,15 +259,16 @@ mod tests {
         let legacy = file_of(&scratch.0, "legacy.jpg", 1);
         let orphan = file_of(&scratch.0, "orphan.png", 1);
         std::fs::create_dir(scratch.0.join("nested")).unwrap();
-        let mut state: Value = serde_json::from_str(&state_with(&[
+        let mut state: serde_json::Value = serde_json::from_str(&state_with(&[
             "/some/other/app-data/room-map-backgrounds/kept.png",
         ]))
         .unwrap();
         state["shell-state"]["roomMap"]["backgroundImagePath"] =
-            Value::from(legacy.to_string_lossy().into_owned());
+            serde_json::Value::from(legacy.to_string_lossy().into_owned());
+        let state = parsed(&state.to_string());
 
         let orphans =
-            unreferenced_backgrounds(&scratch.0, &state.to_string(), later(), PRUNE_GRACE).unwrap();
+            unreferenced_backgrounds(&scratch.0, state.as_ref(), later(), PRUNE_GRACE).unwrap();
 
         assert_eq!(orphans, vec![orphan]);
         assert!(kept.exists());
@@ -280,9 +278,10 @@ mod tests {
     fn a_fresh_copy_is_inside_the_grace_and_kept() {
         let scratch = Scratch::new();
         file_of(&scratch.0, "just-imported.png", 1);
+        let state = parsed(&state_with(&[]));
 
         let orphans =
-            unreferenced_backgrounds(&scratch.0, &state_with(&[]), SystemTime::now(), PRUNE_GRACE)
+            unreferenced_backgrounds(&scratch.0, state.as_ref(), SystemTime::now(), PRUNE_GRACE)
                 .unwrap();
 
         assert!(orphans.is_empty());
@@ -293,22 +292,30 @@ mod tests {
         let scratch = Scratch::new();
         file_of(&scratch.0, "a.png", 1);
 
-        for state in [
-            "not json",
+        assert_eq!(
+            unreferenced_backgrounds(&scratch.0, None, later(), PRUNE_GRACE),
+            None,
+            "nothing stored"
+        );
+        for raw in [
             r#"{"shell-state":{}}"#,
             r#"{"shell-state":{"roomMap":{}}}"#,
-            r#"{"other-key":{"roomMap":{"imageLayers":[]}}}"#,
+            r#"{"shell-state":{"roomMap":{"imageLayers":"not a list"}}}"#,
         ] {
+            let state = parsed(raw);
+            assert!(state.is_some(), "{raw} should load");
             assert_eq!(
-                unreferenced_backgrounds(&scratch.0, state, later(), PRUNE_GRACE),
+                unreferenced_backgrounds(&scratch.0, state.as_ref(), later(), PRUNE_GRACE),
                 None,
-                "{state}"
+                "{raw}"
             );
         }
     }
 
+    /// Through the real owner of the file: `ShellStateStore` loads it and
+    /// `persisted()` is what startup hands the prune.
     #[test]
-    fn prune_deletes_orphans_from_the_real_layout() {
+    fn prune_deletes_orphans_read_through_the_shell_state_store() {
         let scratch = Scratch::new();
         let bg_dir = scratch.0.join(BACKGROUND_DIR);
         std::fs::create_dir(&bg_dir).unwrap();
@@ -323,13 +330,13 @@ mod tests {
                 .set_modified(old)
                 .unwrap();
         }
-        std::fs::write(
-            scratch.0.join("shell-state.json"),
-            state_with(&[kept.to_str().unwrap()]),
-        )
-        .unwrap();
+        let file = scratch
+            .0
+            .join(crate::commands::shell_state::SHELL_STATE_FILE);
+        std::fs::write(&file, state_with(&[kept.to_str().unwrap()])).unwrap();
+        let store = crate::commands::shell_state::ShellStateStore::new(file);
 
-        prune_unreferenced_backgrounds(&scratch.0);
+        prune_unreferenced_backgrounds(&scratch.0, store.persisted().as_ref());
 
         assert!(kept.exists());
         assert!(!orphan.exists());

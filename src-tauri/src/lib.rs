@@ -488,8 +488,13 @@ pub fn run() {
             // Off the setup path: it touches the disk and nothing waits on it.
             match app.path().app_data_dir() {
                 Ok(dir) => {
+                    let handle = app.handle().clone();
                     std::thread::spawn(move || {
-                        commands::room_map::background::prune_unreferenced_backgrounds(&dir)
+                        let state = commands::shell_state::persisted(&handle);
+                        commands::room_map::background::prune_unreferenced_backgrounds(
+                            &dir,
+                            state.as_ref(),
+                        )
                     });
                 }
                 Err(error) => {

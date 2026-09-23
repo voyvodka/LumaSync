@@ -103,8 +103,9 @@ again while copying, since a file can grow in between. `ROOM_MAP_BACKGROUND_MAX_
 contract is the number the UI quotes; a Rust test holds the two equal.
 
 A deleted layer leaves its copy behind, so the startup path deletes copies that no
-`roomMap.imageLayers[].path` (or the legacy `backgroundImagePath`) names. It runs once, at
-startup, and never on import or delete: the editor's undo is in memory and can bring a deleted
+`roomMap.imageLayers[].path` (or the legacy `backgroundImagePath`) names. It reads them through
+`PersistedShellState::room_map_image_paths` in `shell_state.rs`, the file's only reader, never from
+the file itself. It runs once, at startup, and never on import or delete: the editor's undo is in memory and can bring a deleted
 layer back within a session, which would then point at a file already gone. Two more rules keep it
 from deleting something live. A store without an `imageLayers` array prunes nothing — an unreadable
 or reshaped `shell-state.json` must not read as "no image is used". And a copy younger than an hour
