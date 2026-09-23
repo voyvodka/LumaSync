@@ -33,6 +33,8 @@ const HUE_LEFT_OUT_COPY: Record<HueLeftOutReason, TranslationKey> = {
   [HUE_LEFT_OUT_REASON.UNREACHABLE]: "common:hueLeftOut.unreachable",
   [HUE_LEFT_OUT_REASON.AUTH]: "common:hueLeftOut.auth",
   [HUE_LEFT_OUT_REASON.CONFIG]: "common:hueLeftOut.config",
+  [HUE_LEFT_OUT_REASON.BUSY]: "common:hueLeftOut.busy",
+  [HUE_LEFT_OUT_REASON.BUSY_GAVE_UP]: "common:hueLeftOut.busyGaveUp",
 };
 
 const HUE_BOOT_RETRY_COPY: Record<BootHueRetryNotice, TranslationKey> = {
@@ -189,6 +191,7 @@ export function ShellNotices({
       {hueLeftOut && (
         <div
           data-testid="hue-left-out-notice"
+          data-reason={hueLeftOut}
           // Full width in compact, where this copy runs two lines at 320 px.
           className="fixed left-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2 sm:left-auto sm:max-w-sm"
           role="status"

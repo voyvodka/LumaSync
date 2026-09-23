@@ -91,6 +91,13 @@ https://keepachangelog.com/en/1.1.0/
   let go, with a short notice saying so, and turns the mode back on by itself. It waits up to about
   25 seconds, and stops waiting as soon as you pick a mode or turn Hue off yourself. It does not
   wait when the bridge cannot be reached or needs to be paired again.
+- The same relaunch with a USB strip in use as well no longer leaves Hue out for the rest of the
+  session. The strip still lights up straight away, and the notice now says the bridge is still
+  holding the old session and that Hue will join by itself. Once the bridge lets go, Hue is added
+  to the running mode and the notice disappears. If the bridge stays busy for about 25 seconds,
+  lighting carries on with the strip alone and the notice says so. Picking a mode or changing the
+  outputs yourself stops the wait, and a bridge that cannot be reached or needs pairing again is
+  never waited on.
 - The first-run guide banner could flash up for a moment at launch and disappear again for people
   who were already set up but had updated from a version without it. It now appears only once the
   app knows which step you are on, so it no longer flashes; a new install still sees the first step

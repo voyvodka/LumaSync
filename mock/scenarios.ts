@@ -23,6 +23,7 @@ export const SCENARIO_IDS = [
   "hue-key-expired",
   "hue-link-button",
   "hue-busy-at-boot",
+  "usb-hue-busy-at-boot",
   "capture-denied",
   "persist-failing",
 ] as const;
@@ -305,6 +306,24 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
       w.lighting = { mode: { kind: "off" } };
       w.shellState = { ...w.shellState, lastOutputTargets: ["hue"] };
       return { ...w, scenario: "hue-busy-at-boot" };
+    },
+  },
+  "usb-hue-busy-at-boot": {
+    id: "usb-hue-busy-at-boot",
+    label: "USB + Hue, Hue busy at launch",
+    summary: "The same relaunch with a strip plugged in: USB runs at once, Hue joins when the bridge lets go after 12 s.",
+    build: () => {
+      const w = furnished();
+      // The serial strip alone, so the status bar names USB rather than WLED.
+      w.wled = { devices: [], connectedHost: null, testOutcome: "WLED_TEST_LIVE_CONFIRMED" };
+      w.hue.streaming = false;
+      w.hue.everActive = false;
+      w.hue.activeStreamerElsewhere = true;
+      w.hue.activeStreamerReleasesAt = Date.now() + 12_000;
+      w.lighting = { mode: { kind: "off" } };
+      const { lastWledSink: _unused, ...shellState } = w.shellState;
+      w.shellState = { ...shellState, lastOutputTargets: ["usb", "hue"] };
+      return { ...w, scenario: "usb-hue-busy-at-boot" };
     },
   },
   "capture-denied": {

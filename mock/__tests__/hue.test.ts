@@ -22,7 +22,8 @@ import type {
   HueStreamReadinessResponse,
   HueValidateCredentialsResponse,
 } from "../../src/features/hue/hueOnboardingApi";
-import type { HueRuntimeCommandResult } from "../../src/features/mode/modeApi";
+import type { HueRuntimeCommandResult, ModeCommandResult } from "../../src/features/mode/modeApi";
+import { DEVICE_COMMANDS } from "../../src/shared/contracts/device";
 import { dispatch } from "../dispatch";
 import { handlerFor } from "../handlers";
 import { SCENARIOS } from "../scenarios";
@@ -271,5 +272,26 @@ describe("a held entertainment area", () => {
     expect(free.status.code).toBe(HUE_STATUS.STREAM_READY);
     const started = call(HUE_COMMANDS.START_STREAM) as HueRuntimeCommandResult;
     expect(started.active).toBe(true);
+  });
+
+  // The walk `usb-hue-busy-at-boot` exists for: USB alone at once, Hue added later.
+  it("with a strip plugged in, gates [usb, hue] on Hue but runs [usb], then takes Hue once freed", () => {
+    setWorld(SCENARIOS["usb-hue-busy-at-boot"].build());
+    const apply = (targets: string[]) =>
+      call(DEVICE_COMMANDS.SET_LIGHTING_MODE, { payload: { kind: "ambilight", targets } }) as ModeCommandResult;
+
+    expect((call(HUE_COMMANDS.START_STREAM) as HueRuntimeCommandResult).status.code).toBe(
+      HUE_RUNTIME_STATUS.CONFIG_NOT_READY_GATE_BLOCKED,
+    );
+    expect(apply(["usb", "hue"]).status.code).toBe("HUE_NOT_READY");
+    expect(apply(["usb"]).mode).toEqual(expect.objectContaining({ kind: "ambilight", targets: ["usb"] }));
+
+    mutate((w) => {
+      w.hue.activeStreamerReleasesAt = Date.now() - 1;
+    });
+    expect((call(HUE_COMMANDS.START_STREAM) as HueRuntimeCommandResult).active).toBe(true);
+    expect(apply(["usb", "hue"]).mode).toEqual(
+      expect.objectContaining({ kind: "ambilight", targets: ["usb", "hue"] }),
+    );
   });
 });
