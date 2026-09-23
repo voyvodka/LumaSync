@@ -227,6 +227,55 @@ free, acts once. What it does depends on how the restore ended:
   will join, is cleared when it does, and turns into "stayed busy, running on USB only" if the
   window closes first.
 
+**Lights return to their pre-stream state when Hue output ends.** Ending entertainment
+(`action: stop`) makes the bridge put each light's colour back but leave it **on** — a lamp that was
+off before Ambilight stayed on afterwards (seen on hardware, 2026-09-23). Hue Sync puts it back
+off, and so do we now (`commands/hue/light_restore.rs`).
+
+- **Snapshot point.** The start already GETs every area light (`/clip/v2/resource/light/{id}`) for
+  its gamut right before the sender PUTs `action: start`; the same response now yields `on`,
+  `dimming.brightness` and the colour. That is the last read before we touch the lights, so nothing
+  streamed can be captured. The window is the few tens of ms until activation: a change another
+  client makes to a light in that gap is lost and the older state comes back. A light already in
+  `mode: streaming` is not snapshotted. The area's lights are the channel members resolved to light
+  services, i.e. exactly the lights we drive.
+- **One snapshot per logical session, keyed by bridge + area** (`HueRuntimeOwner::light_restore`).
+  Reconnects never read it and never touch it (they use the metadata-only fetch), a restart or a
+  later start of the same area keeps the first one — by then the lights show our stream or the
+  bridge's "restored but on" state — and a `Failed` runtime keeps it for the next stop.
+- **Which stops restore.** `stop_hue_stream` always does: every frontend caller ends Hue output (Off,
+  Hue deselected, a mode without Hue, a start the mode apply left out, the test lease giving back a
+  stream it opened, the Devices stop button, quit). A mode change that keeps Hue never stops the
+  stream (`start_hue_stream` answers NOOP), and `stop_led_test_pattern` does not touch the Hue
+  runtime. A start or restart onto *another* area restores the held one first, before reading the
+  new area, so a light in both is snapshotted in its real state. A start that a stop overtook while
+  its sender was being built restores too, because that stop found nothing to deactivate or restore.
+- **Order.** The restore runs after the stop's deactivate and after the sender has signalled exit
+  (it signals only after its own deactivate): during entertainment the bridge overrides light
+  writes and then puts its own state back. If off lamps ever come back on with every restore PUT
+  logged as successful, the bridge's own post-stream restore is landing after ours and needs a
+  settle delay — that has not been seen, and none is added.
+- **Colour mode.** CLIP v2 reports `color.xy` in both modes, so the mode is read from
+  `color_temperature.mirek_valid` (`mirek` is null outside the ct spectrum). An on light gets one PUT
+  with `on`, `dimming.brightness` and either `color_temperature.mirek` or `color.xy`, never both. An
+  off light gets `{"on":{"on":false}}` alone: v1 refused colour writes to an off light, and the
+  bridge has already put its colour back. The HTTP fallback sender has no entertainment session to
+  end, so an off light it drove keeps the last streamed colour for its next switch-on.
+- **Pacing and bounds.** One PUT per light through the fallback's `RequestPacer` at the ~10 req/s
+  light budget, so ten lights take about a second. An interactive stop gives the restore
+  `HUE_LIGHT_RESTORE_BUDGET` (2.5 s); `stop_hue_stream` is `async` for this, because a sync command
+  runs on the main thread and froze the window. A refused key (the classifier's `AuthInvalid`,
+  #418's HTML page included) or an unanswered request ends the restore; a throttle is retried once;
+  a light rejected on its merits is skipped. None of it changes the stop's status: logged, never
+  fatal, and a snapshot that could not be written is dropped, not retried.
+- **Quit.** `[shutdown]` step 2 calls `stop_hue_stream_before_exit` with a deadline 3.3 s after
+  cleanup starts; the deactivate PUT, the sender wait and every restore request honour it, so a
+  slow bridge ends the step at that deadline rather than at the 4 s watchdog, and the thread is
+  abandoned 100 ms after it regardless. A slow step 1 leaves step 2 about 1.8 s.
+- **Unclean exit cannot restore.** A crash or kill never reaches the stop; the bridge times the
+  session out and the lights stay on in their restored colour. Accepted — nothing on disk carries the
+  snapshot to the next launch, and a snapshot taken then would read the lights already on.
+
 ## Gotchas
 
 - **Hue `+y` is the TV wall, and it is drawn at the *top* of the room-map canvas.** `x` is left/right, `y` is depth with `+1` at the screen and `-1` behind the viewer, `z` is height. Three comments in `HueChannelOverlay.tsx` used to say `+y` was the canvas *bottom*; the code never agreed with them — `hueToMetres(-worldY, …)` maps `+1` to `0 px`. No first-party Signify statement is quotable here: the Entertainment reference is behind a developer-portal login and OpenHue types the field with no description, so the axis is established from two independent implementations — diyHue synthesises the TV-mounted gradient strip at a constant `y = 0.8`, and HyperHDR treats `y >= 0.75` at TV height as the screen's own edge. Note also that without a TV anchor the runtime collapses this depth axis onto screen *vertical*: `+y` samples the top of the screen, `-y` the bottom. With one, height (`z`) picks the vertical band instead and depth only feeds the ambience blend — see `room-map.md`. Anything naming that axis must therefore name it for the room (far/near), not for the screen.

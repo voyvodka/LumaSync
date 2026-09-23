@@ -16,6 +16,8 @@
 //! - `commands` — the seven `#[tauri::command]` entry points
 //! - `area_cache` — single-flight, generation-invalidated cache for the
 //!   entertainment-area snapshot both readiness callers depend on
+//! - `light_restore` — the area's pre-stream light state, captured before the
+//!   first start and written back once Hue output ends
 //! - `credential_store` — v1.5 W2-A1 OS-keychain abstraction (macOS
 //!   Keychain / Windows CredMan / Linux Secret Service) used by W2-A2
 //!   to migrate Hue credentials off the plaintext shellStore fields.
@@ -29,7 +31,10 @@ pub mod commands;
 pub mod credential_store;
 pub mod dtls;
 pub mod frame;
+pub mod light_restore;
 pub mod reconnect;
 pub mod retry;
 pub mod sender;
 pub mod state_store;
+#[cfg(test)]
+pub(crate) mod test_bridge;

@@ -68,7 +68,7 @@ pub(crate) async fn spawn_hue_sender(
     .await
 }
 
-async fn spawn_hue_sender_with<F>(
+pub(crate) async fn spawn_hue_sender_with<F>(
     runtime: &Arc<Mutex<HueRuntimeOwner>>,
     build: F,
 ) -> Result<SpawnedHueSender, tokio::task::JoinError>
@@ -824,5 +824,70 @@ mod tests {
 
         assert_eq!(try_claim_reconnect(&mut owner), ReconnectClaim::Abort);
         assert!(!owner.reconnect_in_progress);
+    }
+
+    /// A reconnect deactivates the area like a stop does, but Hue output has
+    /// not ended: it must neither put the lights back nor read them again (they
+    /// show our stream, or the bridge's "restored but on" state, by now).
+    /// Readiness refuses the loopback bridge, so the attempt ends Retryable
+    /// right after the part of the reconnect that looks like a stop.
+    #[tokio::test]
+    async fn a_reconnect_neither_restores_nor_resnapshots_the_lights() {
+        use super::super::light_restore::{HueLightRestore, HueLightSnapshot, HueLightState};
+        use super::super::state_store::test_helpers::dummy_active_stream_context;
+        use super::super::test_bridge::{light_json, FakeHue, Reply};
+
+        let hue = FakeHue::start(
+            &[("living-room", &["light-1"])],
+            &[("light-1", light_json(true, 100.0, None, (0.6, 0.3)))],
+            |_| Reply::ok(),
+        );
+        let mut request = test_request();
+        request.bridge_ip = hue.bridge.authority.clone();
+
+        let store = HueRuntimeStateStore::default();
+        let runtime = store.runtime_arc();
+        {
+            let mut owner = acquire_hue_runtime(&runtime);
+            let _ = start_with_evidence(
+                &mut owner,
+                &strict_gate_ready(),
+                HueRuntimeTriggerSource::ModeControl,
+            );
+            let mut context = dummy_active_stream_context();
+            context.bridge_ip = request.bridge_ip.clone();
+            context.area_id = request.area_id.clone();
+            context.uses_dtls = true;
+            owner.active_stream = Some(context);
+            owner.light_restore = Some(HueLightRestore {
+                bridge_ip: request.bridge_ip.clone(),
+                username: request.username.clone(),
+                area_id: request.area_id.clone(),
+                lights: vec![HueLightSnapshot {
+                    light_id: "light-1".to_string(),
+                    state: HueLightState {
+                        on: false,
+                        brightness: Some(30.0),
+                        color: None,
+                    },
+                }],
+            });
+        }
+
+        let outcome = internal_restart_stream(&runtime, &request).await;
+
+        assert!(
+            matches!(outcome, RestartOutcome::Retryable(_)),
+            "{outcome:?}"
+        );
+        let requests = hue.bridge.requests();
+        assert_eq!(requests.len(), 1, "{requests:?}");
+        assert_eq!(requests[0].method, "PUT");
+        assert!(requests[0]
+            .path
+            .ends_with("/entertainment_configuration/living-room"));
+        let owner = acquire_hue_runtime(&runtime);
+        let held = owner.light_restore.as_ref().expect("snapshot survives");
+        assert!(!held.lights[0].state.on);
     }
 }
