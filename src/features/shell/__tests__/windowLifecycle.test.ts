@@ -122,6 +122,11 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn().mockReturnValue(Promise.resolve(() => {})),
 }));
 
+const readStartHiddenMock = vi.fn(() => Promise.resolve(false));
+vi.mock("../launchApi", () => ({
+  readStartHidden: () => readStartHiddenMock(),
+}));
+
 // Import AFTER mocks are registered.
 import {
   restoreWindowState,
@@ -1089,5 +1094,45 @@ describe("Scenario 16 — first-run full size follows the display", () => {
     await resizeToMode("compact", { animate: false });
 
     expect(lastSetSize()).toMatchObject({ width: 320, height: 480 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scenario 17 — an autostart launch (`--tray`) stays in the tray
+// ---------------------------------------------------------------------------
+
+describe("Scenario 17 — an autostart launch stays in the tray", () => {
+  // `initWindowLifecycle` runs once per module instance, so each case loads a
+  // fresh one.
+  async function freshInit() {
+    vi.resetModules();
+    const lifecycle = await import("../windowLifecycle");
+    await lifecycle.initWindowLifecycle();
+    return lifecycle;
+  }
+
+  it("restores the geometry but never shows or focuses the window", async () => {
+    readStartHiddenMock.mockResolvedValue(true);
+    setupPersistedState(makePersistedState({ windowCenterX: 960, windowCenterY: 540 }));
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    const { STARTUP_READY_MARKER } = await freshInit();
+
+    expect(setPositionMock).toHaveBeenCalled();
+    expect(showMock).not.toHaveBeenCalled();
+    expect(unminimizeMock).not.toHaveBeenCalled();
+    expect(setFocusMock).not.toHaveBeenCalled();
+    // The launch smoke waits for this line; a hidden start still reaches it.
+    expect(info).toHaveBeenCalledWith(STARTUP_READY_MARKER);
+  });
+
+  it("shows and focuses the window on an ordinary launch", async () => {
+    readStartHiddenMock.mockResolvedValue(false);
+    vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await freshInit();
+
+    expect(showMock).toHaveBeenCalledTimes(1);
+    expect(setFocusMock).toHaveBeenCalledTimes(1);
   });
 });

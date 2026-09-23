@@ -1,13 +1,13 @@
-// Full → compact through the real App, TitleBar and Devices page, with the Hue
+// Compact/full switches through the real App, TitleBar and Devices page, with the Hue
 // channel map mounted against a paired, idle bridge. Only the Tauri boundary is
 // faked: IPC, the window handle, and the store behind `windowLifecycle`.
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HUE_COMMANDS } from "@/shared/contracts/hue";
-import type { ShellState } from "@/shared/contracts/shell";
+import { KEYBIND_ACTIONS, getKeybindDefinition, type ShellState } from "@/shared/contracts/shell";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
@@ -189,5 +189,35 @@ describe("UI mode toggle with the Hue channel map mounted", () => {
 
     await waitFor(() => expect(resizeToModeMock).toHaveBeenCalledWith("compact"), { timeout: 3000 });
     expect(await screen.findByTestId("compact-layout", {}, { timeout: 3000 })).toBeTruthy();
+  });
+});
+
+// ⌘, from compact asked for full twice — once through the fade-owning switch and
+// once by resizing directly for the section change — and ran two window resize
+// animations against each other.
+describe("open settings from compact", () => {
+  it("resizes the window to full exactly once and lands on System", async () => {
+    shellState = { ...shellState, uiMode: "compact", lastSection: "lights" };
+    render(<App />);
+    expect(await screen.findByTestId("compact-layout", {}, { timeout: 3000 })).toBeTruthy();
+
+    const { code, modifier } = getKeybindDefinition(KEYBIND_ACTIONS.OPEN_SETTINGS);
+    fireEvent.keyDown(document, {
+      code,
+      metaKey: modifier === "meta",
+      ctrlKey: modifier === "ctrl",
+      altKey: modifier === "alt",
+    });
+
+    const systemTab = await screen.findByTestId("section-tab-system", {}, { timeout: 3000 });
+    await waitFor(() => expect(systemTab).toHaveAttribute("aria-selected", "true"));
+    await waitFor(() => expect(shellState.lastSection).toBe("system"));
+    // Outlast the fade-out's safety timeout, after which a second resize would
+    // have been issued.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    });
+    expect(resizeToModeMock).toHaveBeenCalledTimes(1);
+    expect(resizeToModeMock).toHaveBeenCalledWith("full");
   });
 });

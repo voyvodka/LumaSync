@@ -12,6 +12,7 @@ import {
 } from "@/shared/contracts/updater";
 import { checkForUpdate, downloadAndInstallUpdate } from "./updaterApi";
 import { createLatestOperationGuard } from "@/shared/lib/latestOperation";
+import { parseCommandError } from "@/shared/contracts/status";
 
 export type UpdaterState =
   | { status: "idle" }
@@ -88,7 +89,7 @@ export function useAutoUpdater() {
       if (!isLatest()) return;
       // The command never rejects; this is the invoke layer itself failing —
       // an unregistered command, or a window torn down mid-check.
-      const message = err instanceof Error ? err.message : String(err);
+      const message = parseCommandError(err).message;
       setState({ status: "error", message });
     }
   }, []);
@@ -134,16 +135,20 @@ export function useAutoUpdater() {
       });
 
       const response = await downloadAndInstallUpdate();
-      if (response.status.code !== UPDATER_STATUS.INSTALL_STARTED) {
+      if (response.status.code === UPDATER_STATUS.INSTALL_STARTED) {
+        // The backend is already restarting the app. Said here as well as by
+        // the `finished` event, so a missed event cannot leave the modal on a
+        // download bar until the window goes away.
+        setState({ status: "installing", update });
+      } else {
         setState({
           status: "error",
           code: response.status.code,
           message: response.status.message,
         });
       }
-      // On success the app is replaced and relaunched, so no state change here.
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = parseCommandError(err).message;
       setState({ status: "error", message });
     } finally {
       unlisten?.();

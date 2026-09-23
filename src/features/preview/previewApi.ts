@@ -17,6 +17,7 @@ import {
   type StartLedTestPatternPayload,
   type TwinOverlayResult,
 } from "@/shared/contracts/preview";
+import { parseCommandError } from "@/shared/contracts/status";
 
 /** Injectable `invoke()` signature so preview commands can be unit-tested with a mock transport. */
 export type PreviewInvoker = <T>(
@@ -30,19 +31,13 @@ const defaultInvoke: PreviewInvoker = (command, payload) => invoke(command, payl
 // Synthetic fallbacks — returned (never thrown) when the transport rejects.
 // ---------------------------------------------------------------------------
 
-function transportMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  return "Preview command transport failure";
-}
-
 function failedTestResult(error: unknown): LedTestPatternResult {
   return {
     active: false,
     previewOnly: false,
     status: {
       code: LED_TEST_STATUS.PATTERN_RUNTIME_ERROR,
-      message: transportMessage(error),
+      message: parseCommandError(error).message,
       details: null,
     },
   };
@@ -116,7 +111,7 @@ export async function openLedTwinOverlay(
     return {
       ok: false,
       code: TWIN_OVERLAY_STATUS.OPEN_FAILED,
-      message: transportMessage(error),
+      message: parseCommandError(error).message,
     };
   }
 }
@@ -135,7 +130,7 @@ export async function closeLedTwinOverlay(
     return {
       ok: false,
       code: TWIN_OVERLAY_STATUS.CLOSE_FAILED,
-      message: transportMessage(error),
+      message: parseCommandError(error).message,
     };
   }
 }
@@ -152,7 +147,7 @@ export async function openLedControlPopup(
     return await invoker<ControlPopupResult>(PREVIEW_COMMANDS.OPEN_CONTROL_POPUP);
   } catch (error) {
     console.error("[LumaSync] open_led_control_popup failed:", error);
-    return { ok: false, code: CONTROL_POPUP_STATUS.FAILED, message: transportMessage(error), visible: false };
+    return { ok: false, code: CONTROL_POPUP_STATUS.FAILED, message: parseCommandError(error).message, visible: false };
   }
 }
 
@@ -164,7 +159,7 @@ export async function showLedControlPopup(
     return await invoker<ControlPopupResult>(PREVIEW_COMMANDS.SHOW_CONTROL_POPUP);
   } catch (error) {
     console.error("[LumaSync] show_led_control_popup failed:", error);
-    return { ok: false, code: CONTROL_POPUP_STATUS.FAILED, message: transportMessage(error), visible: false };
+    return { ok: false, code: CONTROL_POPUP_STATUS.FAILED, message: parseCommandError(error).message, visible: false };
   }
 }
 
@@ -176,6 +171,6 @@ export async function hideLedControlPopup(
     return await invoker<ControlPopupResult>(PREVIEW_COMMANDS.HIDE_CONTROL_POPUP);
   } catch (error) {
     console.error("[LumaSync] hide_led_control_popup failed:", error);
-    return { ok: false, code: CONTROL_POPUP_STATUS.FAILED, message: transportMessage(error), visible: false };
+    return { ok: false, code: CONTROL_POPUP_STATUS.FAILED, message: parseCommandError(error).message, visible: false };
   }
 }

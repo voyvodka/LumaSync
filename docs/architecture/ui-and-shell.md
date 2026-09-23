@@ -28,7 +28,15 @@ current content out, resize the window to the target mode, then mount the incomi
 it in. Pinning the incoming slot at its target size while the window is still animating toward that
 size produces progressive clipping — a cross-fade needs both layouts live at once, and one of them
 is always the wrong size for part of the transition. A second `switchUIMode` call while one is
-already running is ignored rather than queued or interrupted.
+already running is neither queued nor allowed to interrupt: it gets the running transition's
+promise and resumes when that one settles.
+
+**`useUIMode` is the only frontend caller of `resizeToMode` after boot.** A section change from
+compact (a notice's deep-link, a CTA, ⌘,) used to resize the window itself and then set the mode,
+while ⌘, also called `switchUIMode` — two resize animations raced on the same window, and the
+section change skipped the fade entirely. Anything that needs full mode awaits `switchUIMode("full")`
+and sets its section before the await, so the full layout mounts on the right page. The boot restore
+in `initWindowLifecycle` is the one other caller; it runs before React exists.
 
 **No wait in that chain may depend on animation frames alone.** The webview stops firing
 `requestAnimationFrame` while the window is hidden, occluded, or behind a locked screen. The resize
@@ -94,19 +102,51 @@ that fights the tray-first shape.
 per-edge placement tuned to their room, and the defaults work without it. First run must reach
 working ambient lighting without ever mentioning it.
 
-**Every shutdown path converges on one watchdog-guaranteed cleanup.** tao 0.35 does not register
-`applicationShouldTerminate:`, so Cmd+Q cannot be intercepted directly — it arrives as `RunEvent::Exit`
-and runs the same `kick_off_shutdown_and_die` as the tray Quit item, `WindowEvent::CloseRequested`,
-and Ctrl+C. Cleanup runs on a worker thread (never the macOS main thread — running it inline from a
-tray callback was the v1.5.1 deadlock) and a separate watchdog thread forces `process::exit(0)` after
-4 seconds regardless of what cleanup is doing. That is what guarantees no `?E` zombie process: a
-stuck `SCStream`/DTLS `Drop` can hang, but the process dies anyway.
+**Every shutdown path converges on one watchdog-guaranteed cleanup.** `src-tauri/src/shutdown.rs`
+owns it: the tray Quit item, Ctrl+C in dev, Cmd+Q, a programmatic exit or restart, and the Windows
+update installer all go through the same `ShutdownCoordinator`. The first trigger wins and later ones
+are logged and ignored. Cleanup runs on a worker thread (never the macOS main thread — running it
+inline from a tray callback was the v1.5.1 deadlock) in three bounded steps (lighting 1.5 s, Hue by
+3.3 s, sink), and a separate watchdog thread forces the exit after 4 seconds regardless of what
+cleanup is doing. That is what guarantees no `?E` zombie process: a stuck `SCStream`/DTLS `Drop` can
+hang, but the process dies anyway. Exactly one thread ends the process; whoever loses that claim
+parks.
+
+- *Cmd+Q holds the main thread.* tao 0.35 does not register `applicationShouldTerminate:`, so Cmd+Q
+  cannot be intercepted — it arrives as `RunEvent::Exit` from inside `applicationWillTerminate`, and
+  AppKit calls `exit()` the moment that callback returns. The handler used to kick the cleanup off and
+  return, so the process died under the cleanup thread: the Hue step and everything after it never
+  ran, whatever the comment beside it claimed. It now waits on the cleanup (bounded by the watchdog)
+  and ends the process itself. It still never returns into Tauri's teardown, which runs on the main
+  thread after `applicationWillTerminate` and is where an `SCStream` drop was seen to deadlock; the
+  cleanup does not need the main thread (the capture stream's stop is detached onto its own thread).
+- *`RunEvent::ExitRequested` is prevented, and our cleanup ends the process.* Tauri ignores
+  `prevent_exit` for its restart code, so a restart (`relaunch()` from `GlobalErrorBoundary`, the
+  updater after an install) goes on to `RunEvent::Exit` and relaunches from the main thread there.
+  It has to: Tauri's plugins release the single-instance lock on that event, and a new process
+  spawned before it would hand its launch to the dying one and exit. The cleanup thread therefore
+  never relaunches on its own. A relaunch drops `--tray`, since it is always one the user asked for.
+- *The Windows installer runs the cleanup inline.* The updater plugin launches the installer and
+  calls `process::exit` itself, so `on_before_exit` runs the same three steps synchronously, without
+  a watchdog to race it. The installer relaunches the app.
+
+**An update restarts the app on macOS and Linux.** There the plugin replaces the bundle (or
+AppImage) in place and returns, and nothing used to restart it: the modal sat on "Installing". The
+install command now calls `request_restart`, which takes the restart path above.
+
+**A login launch stays in the tray.** Autostart passes `--tray`; `get_launch_context` reports it
+and `initWindowLifecycle` restores the geometry but skips its one `show()`, so the first tray click
+opens the window where it was left. The startup marker is still logged. A failed read shows the
+window: an app that never appears is worse than one that opens at login. A second launch carrying
+`--tray` (the autostart entry firing over an instance already running) does not raise the window
+either. On macOS a Dock-icon click (`RunEvent::Reopen`) shows and focuses the main window, like the
+tray's Open Settings.
 
 **A hard exit bypasses Tauri's plugin `destroy()`, which leaks the single-instance socket.** Every
 shutdown path here ends in `std::process::exit`, including the watchdog's forced one, so the
 single-instance plugin's `/tmp/com_lumasync_app_si.sock` is never cleaned up by the plugin itself.
 The next launch's `connect()` succeeds against the stale socket and silently `exit(0)`s against it —
-looking like the app failed to start. `kick_off_shutdown_and_die` removes the socket explicitly
+looking like the app failed to start. The shutdown's exit removes the socket explicitly
 before exiting so a normal quit starts the next launch clean; a killed dev process (`pkill -9`) skips
 that path entirely, which is why the debug recipe in `AGENTS.md` runs `rm -f` on the socket before
 every restart. Debug builds skip the single-instance plugin altogether for the same reason — the
@@ -177,7 +217,8 @@ and a row in the test.
 - **Off stops the worker before the Hue stream, whatever the targets.** The Off path used to call `stop_lighting` only for an active `usb`, so Off from a Hue-only mode sent `stop_hue_stream` alone under a worker still capturing the screen and holding the Hue sender open; Off from `[usb, hue]` sent both at once. It now awaits `stop_lighting` whenever the UI shows a running mode (or `usb` is active), then stops Hue, and a failed `stop_lighting` still goes on to the Hue stop. Why the order matters is in `hue.md`; which Off calls `stop_hue_stream` at all is unchanged.
 - **The Devices Hue card stops Hue through the orchestrator, never with `stopHue`.** Stop retrying (reconnecting) and Retry stop (partial stop) called `stop_hue_stream` straight from `HueBridgesCategory`, under whatever mode was running — the #445 hole with a different button. They now call `onStopHue`, which App wires to the orchestrator's `stopHueOutput`: with the mode Off it is a plain stop; otherwise it enters `applyOutputTargets` with the selection minus `hue`, `persist: false` and the card's trigger source, so the worker lets go of Hue by the same re-apply (or `stop_lighting`) the Outputs toggle uses, and then Hue stops. Three things differ from the toggle, all because the card is not the Lights outputs. It stops Hue even when `hue` is not in the active set or the selection: after a partial stop the health poll has already dropped `hue` from `activeOutputTargets`, and a stream the card started beside a USB-only mode was never selected, so the worker counts as holding Hue whenever the live mode's `targets` name it. When the worker had to stop (Hue was the only live target, or the re-apply was refused or tore the mode down), the mode ended, not a target: the UI shows Off and keeps the selection, as Off does, but nothing is persisted. And it is single-flight, so a double press joins the release in flight. Like the A2 drops, `lastOutputTargets` and the persisted mode stay as the user saved them, so the next launch restores Hue.
 - **A toast's dismissal timer does not belong in the effect that raises it.** The USB-unplug branch in `useUsbTargetReconciler.ts` rewrites `selectedOutputTargets` in the same commit that shows its toast, and that array is a dependency of the effect it lives in. The effect therefore tore itself down and cleared the timeout it had just scheduled, so the toast stayed on screen until something unrelated re-rendered it away. The timer now sits in its own effect keyed on the flag it clears — the shape any auto-dismissing surface should copy.
-- **The twin overlay neutralises its background synchronously, before React mounts.** It is created transparent and visible, but `index.html`'s bundled body gradient paints an opaque background before anything renders, so `main.tsx` clears html/body/#root backgrounds ahead of bootstrap, i18n, and React — otherwise the twin flashes an opaque full-screen frame on open. `LedTwinOverlay`'s own effect repeats the same clear as belt-and-suspenders.
+- **The twin overlay neutralises its background synchronously, before React mounts.** It is created transparent and visible, but `styles.css` paints `--lm-bg` on the body before anything renders, so `main.tsx` clears html/body/#root backgrounds ahead of bootstrap, i18n, and React — otherwise the twin flashes an opaque full-screen frame on open. `LedTwinOverlay`'s own effect repeats the same clear as belt-and-suspenders. Both also reset `color-scheme` to `normal` on the root: the app declares `color-scheme: dark` so native controls render dark, and a dark scheme lets an engine give an unpainted root a dark canvas instead of leaving it clear.
+- **The app is dark-only, and says so to the engine rather than to the OS.** `:root` carries `color-scheme: dark`, which is what turns select popups, number spinners, checkboxes and scrollbars dark. A `prefers-color-scheme` branch — or a Tailwind `dark:` variant, which compiles to the same media query — follows the *OS* setting, so on a light-mode machine the body was a light gradient and those variants picked their light half. Neither exists any more, and `stylesheetSanity.test.ts` keeps it that way.
 - **The twin overlay gets `TwinErrorBoundary`, not `GlobalErrorBoundary`.** Its fallback renders nothing. The twin is a click-through overlay covering a full display — an opaque fallback card there would blanket the screen with something the user cannot dismiss, so a render throw in the twin must degrade to invisible rather than to a visible error state. The main window and the (opaque) control popup keep the normal amber-card `GlobalErrorBoundaryWithI18n`.
 - **Boot restores the persisted UI mode, and the "flash" that once forbade it was never possible.** `restoreWindowState` used to carry a note that writing a persisted full-mode size at boot "would produce a visible big→compact flash before React mounts". The main window is created with `"visible": false` and nothing in Rust shows it, so the only `show()` is the one in `initWindowLifecycle` — after the size and position are applied. There was nothing on screen to flash. Boot now restores position at the created (compact) size, then calls `resizeToMode(mode, { animate: false })` to grow around that centre, reusing the manual-toggle path rather than reimplementing the monitor clamp and full-size memory. Two ordering rules hold it together: `sink.setUIMode` runs *before* `initWindowLifecycle`, or the shell appears full-sized still rendering compact; and `animate: false` must bypass `animateWindowRect` rather than pass it a zero duration, which would make `t` NaN and spin the loop forever.
 - **The Windows child-HWND sweep may add `WS_EX_TRANSPARENT` and must never add `WS_EX_LAYERED`.** WebView2's children (`Chrome_WidgetWin_*`, `Chrome_RenderWidgetHostHWND`, `Intermediate D3D Window`, all owned by `msedgewebview2.exe`) do not inherit the parent's ex-style, which is why `propagate_transparent_to_children` exists at all. But a window handed `WS_EX_LAYERED` through `SetWindowLong` "will not become visible until `SetLayeredWindowAttributes` or `UpdateLayeredWindow` has been called for this window" (Win32, *Layered Windows*), and nobody calls either on a window we do not own — so ORing that bit onto the WebView2 subtree makes it paint nothing. The overlay opens blank. `schedule_clickthrough_resweeps` then repeats the marking on a decaying schedule, which turned a race into a certainty rather than causing it. The sweep now sets `WS_EX_TRANSPARENT` alone, checks `SetWindowLongPtrW` against `SetLastError(0)`/`GetLastError` (a cross-process/UIPI refusal must be visible, and the call returns 0 both for failure and for "previous value was 0"), and follows it with `SetWindowPos(SWP_FRAMECHANGED)`, because an ex-style written this way is cached until a frame change is forced. The bits stay idempotent, so a re-sweep that finds an already-marked child is free.

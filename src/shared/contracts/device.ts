@@ -548,6 +548,8 @@ export const WLED_STATUS = {
   DISCOVERY_WORKER_FAILED: "WLED_DISCOVERY_WORKER_FAILED",
   /** Same, for the test worker. */
   TEST_WORKER_FAILED: "WLED_TEST_WORKER_FAILED",
+  /** Same, for `connect_wled_sink`'s worker: no sink was registered. */
+  CONNECT_WORKER_FAILED: "WLED_CONNECT_WORKER_FAILED",
 } as const;
 
 export type WledStatusCode = (typeof WLED_STATUS)[keyof typeof WLED_STATUS];

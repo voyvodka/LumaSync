@@ -7,6 +7,7 @@ import {
   type ScreenCapturePermissionResult,
   type ScreenCaptureSettingsResult,
 } from "@/shared/contracts/capture";
+import { parseCommandError } from "@/shared/contracts/status";
 
 /** Non-prompting probe. Advisory only — never gate a start on it, or a
  *  first-run user never sees the OS prompt the start path raises. */
@@ -28,7 +29,7 @@ export async function openScreenCaptureSettings(): Promise<ScreenCaptureSettings
       CAPTURE_COMMANDS.OPEN_SCREEN_CAPTURE_SETTINGS,
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const { message } = parseCommandError(error);
     console.error("[LumaSync] opening screen recording settings failed:", message);
     return { code: SCREEN_CAPTURE_SETTINGS_STATUS.OPEN_FAILED, message };
   }

@@ -27,7 +27,19 @@ frontend-invented code can never pose as something the backend can send. `Serial
 which is harder to spot than a bare `string`.
 
 **Failures are never swallowed.** An empty `catch {}` is a defect here, not a shortcut. Log with
-the `[LumaSync]` prefix. In Rust, return coded context through a status object or
+the `[LumaSync]` prefix.
+
+**A rejection is read once, by `parseCommandError` in `shared/contracts/status.ts`.** Every
+`Result<_, String>` command rejects with a bare string, by convention `"CODE: context"`. The
+frontend used to read it a dozen ways: `modeApi` expected an object with `.code`, so every string
+became `UNKNOWN` with a placeholder message and nothing in the log; `x instanceof Error ? x.message
+: String(x)` turned that thrown `ModeApiError` object into `"[object Object]"`. The parser takes a
+string, an `Error` or a structured `{ code, message, details }`, and never serialises an object
+without a `message` — a transport failure must not echo a payload that holds credentials. Its
+`message` and `details` are raw backend text and can carry a bridge's response body, so they are
+rendered only as text nodes, never as a `<Trans>` value: i18n runs with `escapeValue: false`, and
+`<Trans>` parses its interpolated string for tags. `transValues.test.ts` allowlists the keys a
+`<Trans values>` may use. In Rust, return coded context through a status object or
 `Result<_, String>`. For invalid external input, prefer an explicit fallback value over a silent
 default — a silent default hides the fact that the input was wrong.
 

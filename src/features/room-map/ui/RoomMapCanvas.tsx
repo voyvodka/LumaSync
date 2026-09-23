@@ -47,7 +47,10 @@ function ImageLayerView({
         url = URL.createObjectURL(new Blob([data], { type: mime }));
         setBlobUrl(url);
       })
-      .catch(() => { if (!revoked) setBlobUrl(null); });
+      .catch((error: unknown) => {
+        console.error(`[LumaSync] room map image layer read failed (${layer.path}):`, error);
+        if (!revoked) setBlobUrl(null);
+      });
     return () => { revoked = true; if (url) URL.revokeObjectURL(url); };
   }, [layer.path]);
 
@@ -303,21 +306,6 @@ export function RoomMapCanvas({
   const latestCanvasEventRef = useRef<{ dx: number; dy: number } | null>(null);
   const canvasRafRef = useRef<number | null>(null);
 
-  const spaceRef = useRef(false);
-  const [spaceHeld, setSpaceHeld] = useState(false);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === " " && !e.repeat) { spaceRef.current = true; setSpaceHeld(true); e.preventDefault(); }
-    };
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === " ") { spaceRef.current = false; setSpaceHeld(false); }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-    return () => { window.removeEventListener("keydown", handleKeyDown); window.removeEventListener("keyup", handleKeyUp); };
-  }, []);
-
   const handleCanvasWheel = useCallback(
     (e: React.WheelEvent<HTMLDivElement>) => {
       if (!onZoomChange || !onPanChange) return;
@@ -342,13 +330,13 @@ export function RoomMapCanvas({
 
   const handleCanvasPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      if (spaceRef.current || e.button === 1) {
+      if (panMode || e.button === 1) {
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);
         panRef.current = { active: true, startX: e.clientX, startY: e.clientY, ox: panOffset.x, oy: panOffset.y };
       }
     },
-    [panOffset],
+    [panOffset, panMode],
   );
 
   const handleCanvasPointerMove = useCallback(
@@ -490,7 +478,7 @@ export function RoomMapCanvas({
         // `select-none` because a drag sweeps bubbled pointer-moves across the
         // `<text>` and chip labels and highlights them. The dock's inputs mount
         // outside this root, so they keep native selection.
-        className={`select-none relative w-full h-full overflow-hidden bg-[var(--lm-bg)] ${spaceHeld ? "cursor-grab" : ""}`}
+        className={`select-none relative w-full h-full overflow-hidden bg-[var(--lm-bg)] ${panMode ? "cursor-grab" : ""}`}
         onClick={handleBackgroundClick}
         onWheel={handleCanvasWheel}
         onPointerDown={handleCanvasPointerDown}

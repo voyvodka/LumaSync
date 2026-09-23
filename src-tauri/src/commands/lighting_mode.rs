@@ -498,6 +498,8 @@ impl Default for LightingRuntimeOwner {
 #[derive(Default)]
 pub struct LightingRuntimeState {
     runtime: Mutex<LightingRuntimeOwner>,
+    /// The mode commands' turn order — see `run_mode_transition`.
+    transitions: tokio::sync::Mutex<()>,
 }
 
 #[cfg(test)]
@@ -509,6 +511,11 @@ impl LightingRuntimeState {
             .lock()
             .expect("lighting runtime lock poisoned")
             .output_bridge = bridge;
+    }
+
+    /// Takes the mode commands' turn, as a command in flight would hold it.
+    pub(crate) fn hold_transition_for_tests(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.transitions.blocking_lock()
     }
 }
 
@@ -2461,17 +2468,23 @@ fn apply_mode_change_inner(
 /// reconfigures, or stops the worker to match the requested mode. Broadcasts
 /// `LIGHTING_MODE_CHANGED_EVENT` and the preview snapshot on every call.
 #[tauri::command]
-#[allow(clippy::too_many_arguments)]
-pub fn set_lighting_mode<R: Runtime>(
+pub async fn set_lighting_mode<R: Runtime>(
     app: AppHandle<R>,
-    mut payload: LightingModeConfig,
-    runtime_state: State<'_, LightingRuntimeState>,
-    connection_state: State<'_, SerialConnectionState>,
-    sink_registry: State<'_, ActiveSinkRegistry>,
-    hue_runtime_state: State<'_, HueRuntimeStateStore>,
-    telemetry_state: State<'_, RuntimeTelemetryState>,
-    led_twin_state: State<'_, LedTwinState>,
+    payload: LightingModeConfig,
 ) -> Result<LightingModeCommandResult, String> {
+    run_mode_transition(app, move |app| set_lighting_mode_blocking(app, payload)).await
+}
+
+fn set_lighting_mode_blocking<R: Runtime>(
+    app: &AppHandle<R>,
+    mut payload: LightingModeConfig,
+) -> Result<LightingModeCommandResult, String> {
+    let runtime_state = app.state::<LightingRuntimeState>();
+    let connection_state = app.state::<SerialConnectionState>();
+    let sink_registry = app.state::<ActiveSinkRegistry>();
+    let hue_runtime_state = app.state::<HueRuntimeStateStore>();
+    let telemetry_state = app.state::<RuntimeTelemetryState>();
+    let led_twin_state = app.state::<LedTwinState>();
     let t_cmd = std::time::Instant::now();
     let incoming_total_leds = payload
         .led_calibration
@@ -2510,7 +2523,7 @@ pub fn set_lighting_mode<R: Runtime>(
     //
     // Output stamps (colour correction, firmware profile, chip type) follow
     // the same caller-wins rule; the LED control popup sends none of them.
-    hydrate_mode_payload(&mut payload, &|| read_persisted_shell_state(&app));
+    hydrate_mode_payload(&mut payload, &|| read_persisted_shell_state(app));
 
     let connection_snapshot = connection_state
         .last_status
@@ -2539,7 +2552,7 @@ pub fn set_lighting_mode<R: Runtime>(
     // BEFORE apply_mode_change clears it, so a live mode change that
     // supersedes the test can drop the captured prior mode below.
     let superseded_test = owner.preview.active_test_pattern.is_some();
-    let edge_emitter = Some(build_edge_emitter(&app));
+    let edge_emitter = Some(build_edge_emitter(app));
     let wled_sink = sink_registry.active_wled_config();
 
     let result = apply_mode_change(
@@ -2573,7 +2586,7 @@ pub fn set_lighting_mode<R: Runtime>(
     // The control popup + twin overlays derive `testActive` / `source`
     // SOLELY from preview://state-changed, so broadcast the refreshed
     // preview snapshot on every mode change — not just on test start/stop.
-    emit_preview_state_changed(&app);
+    emit_preview_state_changed(app);
     info!(
         "[set_lighting_mode] completed in {}ms",
         t_cmd.elapsed().as_millis()
@@ -2581,14 +2594,23 @@ pub fn set_lighting_mode<R: Runtime>(
     Ok(result)
 }
 
-/// Force the lighting mode to `Off`, stopping any running worker. Also used
-/// on the app shutdown path, so it resolves `LedTwinState` best-effort via
-/// the `AppHandle` rather than requiring it as a managed-state argument.
+/// Force the lighting mode to `Off`, stopping any running worker.
 #[tauri::command]
-pub fn stop_lighting<R: Runtime>(
+pub async fn stop_lighting<R: Runtime>(
     app: AppHandle<R>,
-    runtime_state: State<'_, LightingRuntimeState>,
 ) -> Result<LightingModeCommandResult, String> {
+    run_mode_transition(app, |app| stop_lighting_blocking(app)).await
+}
+
+/// Body of `stop_lighting`. Also used on the app shutdown path, so it resolves
+/// `LedTwinState` best-effort via the `AppHandle` rather than requiring it as a
+/// managed-state argument. The shutdown path calls it directly, outside the
+/// transition queue: quit must never wait behind a queued mode change, and
+/// the runtime lock still serialises it against the one in flight.
+pub fn stop_lighting_blocking<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<LightingModeCommandResult, String> {
+    let runtime_state = app.state::<LightingRuntimeState>();
     let (result, superseded_test) = {
         let mut owner = runtime_state
             .runtime
@@ -2628,7 +2650,7 @@ pub fn stop_lighting<R: Runtime>(
     }
     // Keep the control popup + twin overlays in sync — they derive
     // `testActive` / `source` solely from preview://state-changed.
-    emit_preview_state_changed(&app);
+    emit_preview_state_changed(app);
     Ok(result)
 }
 
@@ -2724,6 +2746,29 @@ fn build_preview_emit_context(
             display_id,
         })
     }
+}
+
+/// `Err` prefix when the blocking half of a mode command dies before answering.
+const LIGHTING_TRANSITION_WORKER_FAILED: &str = "LIGHTING_TRANSITION_WORKER_FAILED";
+
+/// Runs a mode command's blocking body off the main thread, one command at a
+/// time and in arrival order. The body joins workers, opens capture and waits
+/// out serial settles, which froze the UI for seconds as a sync command. The
+/// queue replaces the ordering the main thread used to give for free: a fair
+/// async mutex, because a std one wakes queued drag commits in any order and
+/// the last value could lose. See docs/architecture/capture-and-pipeline.md.
+async fn run_mode_transition<R, T, F>(app: AppHandle<R>, body: F) -> Result<T, String>
+where
+    R: Runtime,
+    T: Send + 'static,
+    F: FnOnce(&AppHandle<R>) -> Result<T, String> + Send + 'static,
+{
+    let state = app.state::<LightingRuntimeState>();
+    let _turn = state.transitions.lock().await;
+    let worker_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || body(&worker_app))
+        .await
+        .unwrap_or_else(|error| Err(format!("{LIGHTING_TRANSITION_WORKER_FAILED}: {error}")))
 }
 
 /// Apply a mode transition and broadcast `lighting://mode-changed`. Shared by
@@ -2843,19 +2888,27 @@ pub struct LedTestPatternResult {
 /// Preview feature — resolves available output targets, requires a real
 /// strip calibration to size the pattern, and captures the prior live mode
 /// so `stop_led_test_pattern` can restore it.
-// Arg count is Tauri's managed-state injection, not a bundling opportunity.
-#[allow(clippy::too_many_arguments)]
 #[tauri::command]
-pub fn start_led_test_pattern<R: Runtime>(
+pub async fn start_led_test_pattern<R: Runtime>(
     app: AppHandle<R>,
     payload: StartLedTestPatternPayload,
-    runtime_state: State<'_, LightingRuntimeState>,
-    connection_state: State<'_, SerialConnectionState>,
-    hue_runtime_state: State<'_, HueRuntimeStateStore>,
-    telemetry_state: State<'_, RuntimeTelemetryState>,
-    led_twin_state: State<'_, LedTwinState>,
-    sink_registry: State<'_, ActiveSinkRegistry>,
 ) -> Result<LedTestPatternResult, String> {
+    run_mode_transition(app, move |app| {
+        start_led_test_pattern_blocking(app, payload)
+    })
+    .await
+}
+
+fn start_led_test_pattern_blocking<R: Runtime>(
+    app: &AppHandle<R>,
+    payload: StartLedTestPatternPayload,
+) -> Result<LedTestPatternResult, String> {
+    let runtime_state = app.state::<LightingRuntimeState>();
+    let connection_state = app.state::<SerialConnectionState>();
+    let hue_runtime_state = app.state::<HueRuntimeStateStore>();
+    let telemetry_state = app.state::<RuntimeTelemetryState>();
+    let led_twin_state = app.state::<LedTwinState>();
+    let sink_registry = app.state::<ActiveSinkRegistry>();
     if !payload.brightness.is_finite() || !(0.0..=1.0).contains(&payload.brightness) {
         return Ok(LedTestPatternResult {
             active: false,
@@ -2883,7 +2936,7 @@ pub fn start_led_test_pattern<R: Runtime>(
         kind: payload.pattern.clone(),
         brightness: payload.brightness,
         speed: payload.speed.unwrap_or_default(),
-        display_aspect: resolve_display_aspect(&app),
+        display_aspect: resolve_display_aspect(app),
     };
 
     // Resolve sink availability up front to choose targets + report
@@ -2941,7 +2994,7 @@ pub fn start_led_test_pattern<R: Runtime>(
     // chase band is sized for FALLBACK_TOTAL_LEDS — a misleading single-dot
     // preview. Route the user to the calibration flow with a coded status
     // instead. (Never throws — coded status on the Ok result.)
-    maybe_hydrate_led_calibration(&mut config, &|| read_persisted_shell_state(&app));
+    maybe_hydrate_led_calibration(&mut config, &|| read_persisted_shell_state(app));
     let effective_total_leds = config
         .led_calibration
         .as_ref()
@@ -2985,7 +3038,7 @@ pub fn start_led_test_pattern<R: Runtime>(
     }
 
     let result = apply_and_broadcast(
-        &app,
+        app,
         config,
         runtime_state.inner(),
         connection_state.inner(),
@@ -2996,7 +3049,7 @@ pub fn start_led_test_pattern<R: Runtime>(
         wled_sink,
     )?;
 
-    emit_preview_state_changed(&app);
+    emit_preview_state_changed(app);
 
     let outcome = if is_ambilight_start_ok(&result.status.code) {
         let code = if preview_only {
@@ -3068,21 +3121,27 @@ fn restore_mode_after_test(
 /// before it started (or force `Off` if that restore itself gets gated by a
 /// disconnected sink, so the synthetic worker never gets stranded running).
 #[tauri::command]
-pub fn stop_led_test_pattern<R: Runtime>(
+pub async fn stop_led_test_pattern<R: Runtime>(
     app: AppHandle<R>,
-    runtime_state: State<'_, LightingRuntimeState>,
-    connection_state: State<'_, SerialConnectionState>,
-    hue_runtime_state: State<'_, HueRuntimeStateStore>,
-    telemetry_state: State<'_, RuntimeTelemetryState>,
-    led_twin_state: State<'_, LedTwinState>,
-    sink_registry: State<'_, ActiveSinkRegistry>,
 ) -> Result<LedTestPatternResult, String> {
+    run_mode_transition(app, |app| stop_led_test_pattern_blocking(app)).await
+}
+
+fn stop_led_test_pattern_blocking<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<LedTestPatternResult, String> {
+    let runtime_state = app.state::<LightingRuntimeState>();
+    let connection_state = app.state::<SerialConnectionState>();
+    let hue_runtime_state = app.state::<HueRuntimeStateStore>();
+    let telemetry_state = app.state::<RuntimeTelemetryState>();
+    let led_twin_state = app.state::<LedTwinState>();
+    let sink_registry = app.state::<ActiveSinkRegistry>();
     let wled_sink = sink_registry.active_wled_config();
     let restore = restore_mode_after_test(led_twin_state.take_prior_mode(), &|| {
-        read_persisted_shell_state(&app)
+        read_persisted_shell_state(app)
     });
     let mut result = apply_and_broadcast(
-        &app,
+        app,
         restore,
         runtime_state.inner(),
         connection_state.inner(),
@@ -3102,7 +3161,7 @@ pub fn stop_led_test_pattern<R: Runtime>(
             result.status.code
         );
         result = apply_and_broadcast(
-            &app,
+            app,
             LightingModeConfig::default(),
             runtime_state.inner(),
             connection_state.inner(),
@@ -3115,7 +3174,7 @@ pub fn stop_led_test_pattern<R: Runtime>(
     }
 
     led_twin_state.recompute();
-    emit_preview_state_changed(&app);
+    emit_preview_state_changed(app);
     Ok(LedTestPatternResult {
         active: result.active,
         preview_only: false,

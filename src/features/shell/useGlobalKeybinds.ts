@@ -34,6 +34,7 @@ import {
   getKeybindDefinition,
   resolveKeybindPlatform,
 } from "@/shared/contracts/shell";
+import { isEditableTarget } from "@/shared/lib/editableTarget";
 
 /**
  * Callback map — each action in `KEYBIND_ACTIONS` maps to a handler the
@@ -53,14 +54,6 @@ interface UseGlobalKeybindsOptions {
    * during the UI-mode fade so shortcuts do not fire mid-transition.
    */
   disabled?: boolean;
-}
-
-function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  if (target.isContentEditable) return true;
-  const tag = target.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  return false;
 }
 
 function modifierMatches(event: KeyboardEvent, definition: KeybindDefinition): boolean {

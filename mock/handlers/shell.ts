@@ -11,7 +11,7 @@ import { CAPTURE_COMMANDS } from "../../src/shared/contracts/capture";
 import { DISPLAY_OVERLAY_COMMANDS } from "../../src/shared/contracts/display";
 import { LED_TEST_STATUS, PREVIEW_COMMANDS } from "../../src/shared/contracts/preview";
 import { UPDATER_COMMANDS, UPDATER_STATUS } from "../../src/shared/contracts/updater";
-import { SHELL_STORE_KEY } from "../../src/shared/contracts/shell";
+import { SHELL_COMMANDS, SHELL_STORE_KEY } from "../../src/shared/contracts/shell";
 import { getWorld, mutate } from "../state";
 import { status } from "./status";
 import type { Handler, TypedHandlers } from "./types";
@@ -155,6 +155,9 @@ export const shellHandlers = {
   [UPDATER_COMMANDS.DOWNLOAD_AND_INSTALL_UPDATE]: () => ({
     status: status(UPDATER_STATUS.UP_TO_DATE, "Nothing pending"),
   }),
+
+  // A browser tab has no autostart; the window it would hide is the page.
+  [SHELL_COMMANDS.GET_LAUNCH_CONTEXT]: () => ({ startHidden: false }),
 } satisfies TypedHandlers;
 
 /**

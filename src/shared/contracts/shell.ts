@@ -36,9 +36,21 @@ import type { RoomMapConfig } from "./roomMap";
 /** Canonical Tauri command names for shell-level operations */
 export const SHELL_COMMANDS = {
   UPDATE_TRAY_LABELS: "update_tray_labels",
+  /** How this process was launched; read once before the window is first shown. */
+  GET_LAUNCH_CONTEXT: "get_launch_context",
 } as const;
 
 export type ShellCommand = (typeof SHELL_COMMANDS)[keyof typeof SHELL_COMMANDS];
+
+/** Response from `get_launch_context`. A plain read that cannot fail, so no status. */
+export interface LaunchContext {
+  /**
+   * Launched by the autostart entry (`--tray`): the window stays hidden and the
+   * tray is the way in, instead of opening over whatever the user is doing at
+   * login.
+   */
+  startHidden: boolean;
+}
 
 // ---------------------------------------------------------------------------
 // Tray Menu IDs

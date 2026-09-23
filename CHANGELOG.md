@@ -71,6 +71,23 @@ https://keepachangelog.com/en/1.1.0/
   the bridge itself; an existing pairing is moved over the next time the bridge accepts it.
 - Hue: turning Hue back on while it was still switching the lamps back off could leave some of
   them on afterwards. The new start now waits for the lamps to be put back first.
+- Quitting with Cmd+Q now finishes cleaning up before the app exits: the Hue lights are handed
+  back and the LED strip is released, as the tray's Quit already did. Before, the app closed
+  partway through, which could leave the Hue bridge in entertainment mode.
+- After installing an update on macOS or Linux the app now restarts itself. The update prompt
+  used to stay on "Installing" and the new version only ran after a manual restart. On Windows
+  the installer now waits for the lights to be released before it takes over. The download bar
+  also updates about ten times a second instead of on every chunk, which kept the window busy.
+- Changing or stopping the lighting mode, and starting or stopping an LED test, no longer freeze
+  the window for up to a few seconds while capture or the strip starts. Commands sent in quick
+  succession, such as a brightness drag, still apply in the order they were sent. Listing USB
+  ports, connecting a WLED device and moving Hue credentials into the keychain no longer freeze
+  it either.
+- Starting at login no longer opens the window over whatever you are doing: LumaSync starts in
+  the tray. On macOS, clicking the Dock icon now opens the window.
+- A crash inside the app is now written to the log file with where it happened, including on
+  Windows, where it used to leave no trace. On macOS 15 the local network permission prompt now
+  says why LumaSync needs it: to find and control your Hue bridge and WLED devices.
 - The "Screen recording permission is required" notice no longer disappears after eight seconds
   while the permission is still missing, taking its System Settings button with it. It now stays
   until the permission is granted or lighting starts, and the app notices the change on its own
@@ -425,6 +442,25 @@ https://keepachangelog.com/en/1.1.0/
   meantime. The port is now released the moment you switch away from it. Reconnecting the same
   port, or restarting a lighting mode on it, is untouched: that case is still kept open on
   purpose, to avoid resetting the board every time.
+- Room map: "Derive zones" measured the strip against a TV half a TV's size up and to the left of
+  where it is drawn, so LEDs could land on the wrong edge and the preview lines sat off the TV. It
+  now uses the TV where you placed it. Resizing the room no longer moves Hue lights off the map,
+  and typing in a field no longer triggers the editor's shortcuts: Backspace in the LED count
+  deleted the strip, and Cmd+Z undid the last room edit instead of the typing.
+- Pressing ⌘, (Ctrl+, on Windows and Linux) in the compact window ran two window resizes at once;
+  it now makes one smooth switch to the full window and opens System. Opening a Devices or LED
+  Setup link from a compact notice now fades between the layouts like the mode toggle does.
+- The app is dark throughout, including its own controls: drop-down lists, number fields,
+  checkboxes and scrollbars no longer turn light when the operating system is in light mode, and
+  the window behind the app no longer shows a light background. A few room-map objects that
+  picked their light-mode colors on such systems now always use the dark ones.
+- Clickable Hue zone headers in the room map show a focus ring again, and dimmed channel rows in
+  the Hue channel map dim their light names as well as their numbers.
+- Errors from lighting and Hue commands are now written to the log with the reason the app was
+  given, instead of an "unknown" error with no detail. Some error details that read "[object
+  Object]" now show the actual message.
+- The status bar and the capture-stalled notice no longer redraw the window every second while
+  nothing they show has changed.
 
 ### Added
 

@@ -43,6 +43,7 @@ import type {
   UpdateInstallResponse,
 } from "../../src/shared/contracts/updater";
 import type { FullTelemetrySnapshot } from "../../src/shared/contracts/telemetry";
+import type { LaunchContext } from "../../src/shared/contracts/shell";
 
 import type {
   HealthCheckResult,
@@ -237,6 +238,7 @@ export interface CommandResponse {
   stop_led_test_pattern: LedTestPatternResult;
   check_for_update: UpdateCheckResponse;
   download_and_install_update: UpdateInstallResponse;
+  get_launch_context: LaunchContext;
 
   // --- windowless -----------------------------------------------------------
   // Answered even though the effect needs a second webview or an OS surface;

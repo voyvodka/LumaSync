@@ -13,15 +13,15 @@ const FURNITURE_COLORS: Record<
     border: "border-zinc-500",
   },
   table: {
-    bg: "bg-amber-400/35 dark:bg-amber-600/35",
+    bg: "bg-amber-600/35",
     border: "border-amber-500",
   },
   chair: {
-    bg: "bg-emerald-400/35 dark:bg-emerald-600/35",
+    bg: "bg-emerald-600/35",
     border: "border-emerald-500",
   },
   other: {
-    bg: "bg-violet-400/35 dark:bg-violet-600/35",
+    bg: "bg-violet-600/35",
     border: "border-violet-500",
   },
 };

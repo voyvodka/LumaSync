@@ -18,9 +18,9 @@ const EDGE_COLORS = {
   right: "#a855f7",
 } as const;
 
-// pxPerMeter 100 with this TV puts the box at left 140, right 260, top 115,
-// bottom 185 — the numbers the geometry assertions below expect.
-const TV: TvAnchorPlacement = { x: 2, y: 1.5, width: 1.2, height: 0.7 };
+// `x`/`y` is the footprint's top-left corner, so pxPerMeter 100 puts the box at
+// left 140, right 260, top 115, bottom 185 — the numbers asserted below.
+const TV: TvAnchorPlacement = { x: 1.4, y: 1.15, width: 1.2, height: 0.7 };
 const PX_PER_METER = 100;
 
 function makeResult(segments: ZoneDeriveResult["segments"]): ZoneDeriveResult {

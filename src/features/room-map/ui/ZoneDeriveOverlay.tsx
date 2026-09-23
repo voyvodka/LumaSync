@@ -9,7 +9,7 @@
 
 import { useTranslation } from "react-i18next";
 import type { TvAnchorPlacement } from "@/shared/contracts/roomMap";
-import type { ZoneDeriveResult } from "../model/deriveZones";
+import { tvFootprintBounds, type ZoneDeriveResult } from "../model/deriveZones";
 
 // ---------------------------------------------------------------------------
 // Edge palette (per UI-SPEC Zone Edge Palette)
@@ -47,11 +47,11 @@ export function ZoneDeriveOverlay({
 }: ZoneDeriveOverlayProps) {
   const { t } = useTranslation();
 
-  // TV bounding box in pixels
-  const leftPx = (tv.x - tv.width / 2) * pxPerMeter;
-  const rightPx = (tv.x + tv.width / 2) * pxPerMeter;
-  const topPx = (tv.y - tv.height / 2) * pxPerMeter;
-  const bottomPx = (tv.y + tv.height / 2) * pxPerMeter;
+  const bounds = tvFootprintBounds(tv);
+  const leftPx = bounds.left * pxPerMeter;
+  const rightPx = bounds.right * pxPerMeter;
+  const topPx = bounds.top * pxPerMeter;
+  const bottomPx = bounds.bottom * pxPerMeter;
 
   const tvWidthPx = rightPx - leftPx;
   const tvHeightPx = bottomPx - topPx;
@@ -190,7 +190,7 @@ export function ZoneDeriveOverlay({
         style={{ zIndex: 30 }}
       >
         <button
-          className="bg-amber-500 text-zinc-950 hover:bg-amber-400 px-3 py-1 rounded-md text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
+          className="bg-[var(--lm-amber)] text-[var(--lm-bg)] hover:brightness-110 px-3 py-1 rounded-md text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lm-bg)]"
           onClick={onConfirm}
           // Deliberate: the overlay is a modal confirm step, so focus belongs on
           // its primary action the moment it opens.
@@ -199,7 +199,7 @@ export function ZoneDeriveOverlay({
           {t("roomMap:zones.confirmDeriveButton")}
         </button>
         <button
-          className="text-zinc-400 hover:text-zinc-200 px-3 py-1 rounded-md text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
+          className="text-[var(--lm-ink-dim)] hover:text-[var(--lm-ink)] px-3 py-1 rounded-md text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60"
           onClick={onDiscard}
         >
           {t("roomMap:zones.cancelDeriveButton")}

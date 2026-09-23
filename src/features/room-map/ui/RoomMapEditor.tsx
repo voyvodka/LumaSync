@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { isEditableTarget } from "@/shared/lib/editableTarget";
 import { useRoomMapPersist } from "../state/useRoomMapPersist";
 import { RoomMapCanvas } from "./RoomMapCanvas";
 import { RoomMapToolbar } from "./RoomMapToolbar";
@@ -257,6 +258,9 @@ export function RoomMapEditor({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
+      // A field's keys are the field's: Backspace in the LED count deleted the
+      // strip, and Cmd+Z replaced the field's own undo with the editor's.
+      if (isEditableTarget(e.target)) return;
       // Undo: Cmd+Z (Mac) / Ctrl+Z (Win/Linux)
       if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
@@ -330,12 +334,8 @@ export function RoomMapEditor({
       if (config.usbStrips.length > 0) {
         patch.usbStrips = config.usbStrips.map((s) => ({ ...s, startX: s.startX + dxM, startY: s.startY + dyM, endX: s.endX + dxM, endY: s.endY + dyM }));
       }
-      if (visibleHueChannels.length > 0) {
-        const moving = new Set(visibleHueChannels);
-        patch.hueChannels = config.hueChannels.map((ch) =>
-          moving.has(ch) ? { ...ch, x: ch.x + dxM, y: ch.y + dyM } : ch,
-        );
-      }
+      // Hue channels and zones are not shifted: they live in the bridge's [-1, 1]
+      // cube, which spans the room, so they already follow its new size.
       if (config.imageLayers.length > 0) {
         patch.imageLayers = config.imageLayers.map((l) => ({ ...l, offsetX: l.offsetX + dxPx, offsetY: l.offsetY + dyPx }));
       }

@@ -67,6 +67,39 @@ describe("useUIMode — transition orchestration", () => {
     expect(resizeToModeMock).toHaveBeenCalledWith("full");
     expect(result.current.currentMode).toBe("full");
   });
+
+  it("hands a caller arriving mid-transition the running transition to await", async () => {
+    const { result } = renderHook(() => useUIMode());
+
+    let first!: Promise<void>;
+    let second!: Promise<void>;
+    act(() => {
+      first = result.current.switchUIMode("full");
+    });
+    act(() => {
+      second = result.current.switchUIMode("full");
+    });
+
+    // Same promise: the second caller resumes when the window is full, not
+    // before the resize it depends on has even started.
+    expect(second).toBe(first);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+      await second;
+    });
+    expect(resizeToModeMock).toHaveBeenCalledTimes(1);
+    expect(result.current.currentMode).toBe("full");
+  });
+
+  it("resolves at once when the window is already in the requested mode", async () => {
+    const { result } = renderHook(() => useUIMode());
+
+    await act(async () => {
+      await result.current.switchUIMode("compact");
+    });
+
+    expect(resizeToModeMock).not.toHaveBeenCalled();
+  });
 });
 
 // rAF is suspended while the window is hidden, occluded or the screen is

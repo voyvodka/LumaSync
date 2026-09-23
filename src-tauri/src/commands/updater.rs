@@ -5,12 +5,14 @@
 //! calling `UpdaterBuilder::endpoints` ourselves, which is Rust-only — so the
 //! resolved `Update` never reaches JS and the install has to live here too.
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, Runtime, State};
+use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 use super::status::CommandStatus;
+use crate::MAIN_WINDOW_LABEL;
 
 /// Resolves through `/releases/latest`, which GitHub defines as the newest
 /// release that is neither a draft nor a prerelease.
@@ -23,6 +25,37 @@ const BETA_ENDPOINT: &str =
     "https://github.com/voyvodka/LumaSync/releases/download/beta-channel/latest-beta.json";
 
 const PROGRESS_EVENT: &str = "updater://download-progress";
+
+/// Every chunk used to be an event and every event an App re-render.
+const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
+
+/// Decides which download chunks become a progress event: the first, one per
+/// `PROGRESS_INTERVAL`, and the one that completes a known length.
+struct ProgressThrottle {
+    interval: Duration,
+    last_emit: Option<Instant>,
+}
+
+impl ProgressThrottle {
+    fn new(interval: Duration) -> Self {
+        Self {
+            interval,
+            last_emit: None,
+        }
+    }
+
+    fn should_emit(&mut self, now: Instant, downloaded: u64, total: Option<u64>) -> bool {
+        let complete = total.is_some_and(|total| downloaded >= total);
+        let due = self
+            .last_emit
+            .is_none_or(|last| now.duration_since(last) >= self.interval);
+        if complete || due {
+            self.last_emit = Some(now);
+            return true;
+        }
+        false
+    }
+}
 
 /// The update a successful check resolved, waiting for an install call.
 #[derive(Default)]
@@ -57,6 +90,16 @@ pub struct UpdateDownloadProgress {
     downloaded_bytes: u64,
     total_bytes: Option<u64>,
     finished: bool,
+}
+
+/// `useAutoUpdater` in the main window is the only listener; overlay webviews
+/// have no reason to wake per chunk.
+fn emit_progress<R: Runtime>(app: &AppHandle<R>, progress: UpdateDownloadProgress) {
+    let _ = app.emit_to(
+        EventTarget::webview_window(MAIN_WINDOW_LABEL),
+        PROGRESS_EVENT,
+        progress,
+    );
 }
 
 /// Read `updateChannel` from the shell store, mirroring the other
@@ -106,7 +149,13 @@ pub async fn check_for_update<R: Runtime>(
         }
     };
 
-    let builder = match app.updater_builder().endpoints(vec![url]) {
+    // Windows only: the plugin runs this, launches the installer and exits
+    // the process itself, so the orderly shutdown has to happen inside it.
+    let installer_app = app.clone();
+    let builder = app
+        .updater_builder()
+        .on_before_exit(move || crate::shutdown::cleanup_before_installer(&installer_app));
+    let builder = match builder.endpoints(vec![url]) {
         Ok(builder) => builder,
         Err(e) => {
             return Ok(UpdateCheckResponse {
@@ -208,29 +257,29 @@ pub async fn download_and_install_update<R: Runtime>(
         });
     };
 
-    let downloaded = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let mut downloaded: u64 = 0;
+    let mut throttle = ProgressThrottle::new(PROGRESS_INTERVAL);
     let chunk_app = app.clone();
-    let chunk_downloaded = downloaded.clone();
     let finish_app = app.clone();
 
     let result = update
         .download_and_install(
             move |chunk_length, content_length| {
-                let total = chunk_downloaded
-                    .fetch_add(chunk_length as u64, std::sync::atomic::Ordering::Relaxed)
-                    + chunk_length as u64;
-                let _ = chunk_app.emit(
-                    PROGRESS_EVENT,
-                    UpdateDownloadProgress {
-                        downloaded_bytes: total,
-                        total_bytes: content_length,
-                        finished: false,
-                    },
-                );
+                downloaded += chunk_length as u64;
+                if throttle.should_emit(Instant::now(), downloaded, content_length) {
+                    emit_progress(
+                        &chunk_app,
+                        UpdateDownloadProgress {
+                            downloaded_bytes: downloaded,
+                            total_bytes: content_length,
+                            finished: false,
+                        },
+                    );
+                }
             },
             move || {
-                let _ = finish_app.emit(
-                    PROGRESS_EVENT,
+                emit_progress(
+                    &finish_app,
                     UpdateDownloadProgress {
                         downloaded_bytes: 0,
                         total_bytes: None,
@@ -242,13 +291,20 @@ pub async fn download_and_install_update<R: Runtime>(
         .await;
 
     match result {
-        Ok(()) => Ok(UpdateInstallResponse {
-            status: CommandStatus::new(
-                "UPDATER_INSTALL_STARTED",
-                "The update was downloaded and handed to the installer.",
-                None,
-            ),
-        }),
+        Ok(()) => {
+            // Windows never gets here: its installer relaunches the app. On
+            // macOS and Linux the bundle was replaced in place and nothing
+            // would restart it — the modal sat on "Installing".
+            log::info!("[updater] install complete, restarting");
+            app.request_restart();
+            Ok(UpdateInstallResponse {
+                status: CommandStatus::new(
+                    "UPDATER_INSTALL_STARTED",
+                    "The update was installed; the app is restarting.",
+                    None,
+                ),
+            })
+        }
         Err(e) => {
             log::error!("[updater] install failed: {e}");
             Ok(UpdateInstallResponse {
@@ -264,7 +320,55 @@ pub async fn download_and_install_update<R: Runtime>(
 
 #[cfg(test)]
 mod tests {
-    use super::{endpoint_for, BETA_ENDPOINT, STABLE_ENDPOINT};
+    use std::time::{Duration, Instant};
+
+    use super::{endpoint_for, ProgressThrottle, BETA_ENDPOINT, STABLE_ENDPOINT};
+
+    const MS: Duration = Duration::from_millis(1);
+
+    /// A 30 MB bundle arrives in thousands of chunks; each one used to be an
+    /// event and each event an App render.
+    #[test]
+    fn a_burst_of_chunks_emits_once_per_interval() {
+        let start = Instant::now();
+        let mut throttle = ProgressThrottle::new(100 * MS);
+        let emitted: Vec<u64> = (0..1_000u64)
+            .filter(|&i| {
+                throttle.should_emit(
+                    start + Duration::from_millis(i),
+                    i * 1_000,
+                    Some(10_000_000),
+                )
+            })
+            .collect();
+        assert_eq!(emitted, (0..1_000).step_by(100).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn the_first_chunk_is_emitted_at_once() {
+        let mut throttle = ProgressThrottle::new(100 * MS);
+        assert!(throttle.should_emit(Instant::now(), 1, None));
+    }
+
+    /// The bar has to reach 100 % even when the last chunk lands inside the
+    /// interval.
+    #[test]
+    fn the_completing_chunk_is_always_emitted() {
+        let start = Instant::now();
+        let mut throttle = ProgressThrottle::new(100 * MS);
+        assert!(throttle.should_emit(start, 10, Some(100)));
+        assert!(!throttle.should_emit(start + 5 * MS, 50, Some(100)));
+        assert!(throttle.should_emit(start + 10 * MS, 100, Some(100)));
+    }
+
+    #[test]
+    fn an_unknown_length_is_only_paced() {
+        let start = Instant::now();
+        let mut throttle = ProgressThrottle::new(100 * MS);
+        assert!(throttle.should_emit(start, 10, None));
+        assert!(!throttle.should_emit(start + 99 * MS, 20, None));
+        assert!(throttle.should_emit(start + 100 * MS, 30, None));
+    }
 
     #[test]
     fn beta_channel_resolves_to_the_anchor_feed() {

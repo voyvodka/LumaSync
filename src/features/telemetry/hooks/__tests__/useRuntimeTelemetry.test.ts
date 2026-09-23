@@ -70,6 +70,29 @@ describe("useRuntimeTelemetry", () => {
     expect(result.current.timestamp).toBeGreaterThan(0);
   });
 
+  it("does not re-render the consumer on a tick that reports the same values", async () => {
+    vi.useFakeTimers();
+    let renders = 0;
+    const { result } = renderHook(() => {
+      renders += 1;
+      return useRuntimeTelemetry(1000);
+    });
+    await act(async () => {
+      await flushMicrotasks();
+    });
+    const first = result.current;
+    const rendersAfterFirst = renders;
+    const callsAfterFirst = getFullTelemetrySnapshotMock.mock.calls.length;
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+
+    expect(getFullTelemetrySnapshotMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+    expect(result.current).toBe(first);
+    expect(renders).toBe(rendersAfterFirst);
+  });
+
   it("pauses polling while visibilityState is 'hidden' and resumes on visibilitychange", async () => {
     vi.useFakeTimers();
     renderHook(() => useRuntimeTelemetry(1000));

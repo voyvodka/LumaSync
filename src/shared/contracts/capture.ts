@@ -1,3 +1,5 @@
+import { parseCommandError } from "./status";
+
 /** Reasons riding `status.details` on `AMBILIGHT_MODE_START_FAILED` and
  *  `SOLID_MODE_APPLY_FAILED`, never codes of their own. The `LED_OUTPUT_*` family
  *  shares the field without being capture reasons — see `LedOutputError::as_reason`. */
@@ -103,8 +105,8 @@ export function isAmbilightCaptureReason(value: string): value is AmbilightCaptu
 export function classifyCaptureFailure(details: string | null | undefined): CaptureFailureBucket {
   if (!details) return CAPTURE_FAILURE_BUCKET.INTERNAL;
   // Some Err arms carry the code as a `"CODE: context"` prefix rather than bare.
-  const code = details.trim().split(":", 1)[0]?.trim() ?? "";
-  if (!isAmbilightCaptureReason(code)) return CAPTURE_FAILURE_BUCKET.INTERNAL;
+  const { code } = parseCommandError(details);
+  if (code === null || !isAmbilightCaptureReason(code)) return CAPTURE_FAILURE_BUCKET.INTERNAL;
   return BUCKET_BY_REASON[code];
 }
 

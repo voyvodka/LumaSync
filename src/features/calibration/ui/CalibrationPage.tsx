@@ -53,6 +53,7 @@ import {
 import { LED_TEST_STATUS } from "@/shared/contracts/preview";
 import { clamp } from "@/shared/lib/math";
 import { useDialogFocus } from "@/shared/ui/useDialogFocus";
+import { parseCommandError } from "@/shared/contracts/status";
 
 function reclaimFocus() {
   void getCurrentWindow().setFocus();
@@ -186,7 +187,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
       })
       .catch((error) => {
         if (cancelled) return;
-        const reason = error instanceof Error ? error.message : String(error);
+        const reason = parseCommandError(error).message;
         console.warn(`[LumaSync] Display list unavailable: ${reason}`);
         setDisplayTarget(displayTargetRef.current.setDisplays([]));
       });
@@ -269,7 +270,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
         setDisplayTarget(displayTargetRef.current.clearBlockedState());
       }
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = parseCommandError(error).message;
       setTestPatternError(t("calibration:overlay.errors.testPatternToggleFailed", { reason }));
       // Best-effort rollback: testPatternError above already tells the user what
       // failed, so a failing rollback must not overwrite it with a second message.
@@ -278,13 +279,13 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
         const s = await flowRef.current.toggle(false);
         setTestPattern(s);
       } catch (rollbackError) {
-        console.debug(`[LumaSync] Test pattern rollback failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`);
+        console.debug(`[LumaSync] Test pattern rollback failed: ${parseCommandError(rollbackError).message}`);
       }
       try {
         const c = await displayTargetRef.current.closeActiveDisplay();
         setDisplayTarget(c);
       } catch (rollbackError) {
-        console.debug(`[LumaSync] Overlay close after failure did not complete: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`);
+        console.debug(`[LumaSync] Overlay close after failure did not complete: ${parseCommandError(rollbackError).message}`);
       }
     }
   }, [testPattern.isEnabled, displayTarget, overlayPreviewPayload, t]);
@@ -319,7 +320,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
         setTestPatternError(null);
       }
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = parseCommandError(error).message;
       setTestPatternError(t("calibration:overlay.errors.displaySwitchFailed", { reason }));
     }
   }, [editorState, overlayPreviewPayload, testPattern.isEnabled, t, onDisplayChange]);

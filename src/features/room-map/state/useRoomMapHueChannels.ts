@@ -7,6 +7,7 @@ import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { hueChannelsForArea, mergeHueChannels } from "@/shared/contracts/roomMap";
 
 import { liveChannelIdSet, seedChannelPlacements } from "../model/hueChannelSeeding";
+import { parseCommandError } from "@/shared/contracts/status";
 
 export interface UseRoomMapHueChannelsArgs {
   config: RoomMapConfig;
@@ -97,7 +98,7 @@ export function useRoomMapHueChannels({
       .catch((error: unknown) => {
         if (cancelled) return;
         setChannelsStatus(HUE_AREA_CHANNELS_STATUS.FAILED);
-        console.warn(`[LumaSync] Room map Hue channel fetch failed: ${String(error)}`);
+        console.warn(`[LumaSync] Room map Hue channel fetch failed: ${parseCommandError(error).message}`);
       })
       .finally(() => {
         if (!cancelled) setIsLoadingChannels(false);

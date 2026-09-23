@@ -4,6 +4,7 @@ import { applySuccessfulConnection } from "./connectionOutcomes";
 import type { ConnectionStore } from "./connectionStore";
 import { nextStatusForReadyState } from "./connectionStateHelpers";
 import type { DeviceConnectionControllerDeps, DeviceStatusCard } from "./connectionTypes";
+import { parseCommandError } from "@/shared/contracts/status";
 
 export interface AutoRecovery {
   startAutoRecovery(targetPort: string): void;
@@ -156,7 +157,7 @@ export function createAutoRecovery(
               variant: "error",
               code: "RECOVERY_MANUAL_REQUIRED",
               message: "Auto-recovery timed out.",
-              details: error instanceof Error ? error.message : String(error),
+              details: parseCommandError(error).message,
             },
           }));
           return;
