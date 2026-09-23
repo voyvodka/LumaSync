@@ -11,7 +11,7 @@ import {
   normalizeLightingModeConfig,
   normalizeAmbilightPayload,
   type LightingModeConfig,
-} from "@/features/mode/model/contracts";
+} from "@/shared/contracts/mode";
 import {
   SCENE_PRESETS,
   findMatchingScenePreset,

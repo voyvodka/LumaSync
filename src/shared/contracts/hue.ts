@@ -9,7 +9,7 @@ import {
 } from "./lighting";
 import type { CommandStatusOf } from "./status";
 import {
-  CHANNEL_WRITEBACK_STATUS,
+  type CHANNEL_WRITEBACK_STATUS,
   HUE_ZONE_COMMANDS as ROOM_MAP_HUE_ZONE_COMMANDS,
   HUE_ZONE_STATUS_CODES as ROOM_MAP_HUE_ZONE_STATUS_CODES,
   type HueZone as RoomMapHueZone,

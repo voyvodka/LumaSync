@@ -33,8 +33,9 @@ export function resolveInitialSelection(
     }
   }
 
-  if (grouped.supported.length > 0) {
-    return grouped.supported[0].portName;
+  const firstSupported = grouped.supported[0];
+  if (firstSupported) {
+    return firstSupported.portName;
   }
 
   return null;

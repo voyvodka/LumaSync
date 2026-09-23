@@ -1,4 +1,4 @@
-import type { LightingModeKind } from "@/features/mode/model/contracts";
+import type { LightingModeKind } from "@/shared/contracts/mode";
 
 interface ModeButtonProps {
   kind: LightingModeKind;

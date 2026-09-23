@@ -29,6 +29,7 @@ export function useSolidColorDraft({ incoming, onCommit }: UseSolidColorDraftOpt
   const pendingCommitRef = useRef<SolidDraft | null>(null);
   const lastCommitAtRef = useRef(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the fields, not the object callers rebuild every render
   useEffect(() => {
     if (pendingCommitRef.current) return;
     setDraft((prev) => (isSameSolidDraft(prev, incoming) ? prev : incoming));

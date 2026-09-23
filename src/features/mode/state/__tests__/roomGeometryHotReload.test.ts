@@ -13,7 +13,7 @@ import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap
 import { SHELL_STATE_SCHEMA_VERSION, SHELL_STORE_KEY } from "@/shared/contracts/shell";
 import { appliedResult } from "@/test/modeCommandResult";
 
-import { LIGHTING_MODE_KIND, type LightingModeConfig } from "../../model/contracts";
+import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/shared/contracts/mode";
 import { useLightingModeOrchestrator } from "../useLightingModeOrchestrator";
 import { useModeHotReload } from "../useModeHotReload";
 import { useModeRuntimeConfig } from "../useModeRuntimeConfig";

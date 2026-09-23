@@ -97,6 +97,7 @@ export function useHueRuntimeStatus({
   // A rejected read also keeps it polling, on a backoff, until a read lands.
   const runtimeState = runtimeStatus?.state ?? null;
   const isStatusReadFailing = runtimeStatusReadFailure !== null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: isStatusReadFailing re-arms the loop so a failing read keeps polling on backoff
   useEffect(() => {
     let mounted = true;
     let timeoutId: number | null = null;

@@ -118,7 +118,7 @@ export function createDisplayTargetState(deps: CreateDisplayTargetStateDeps): Di
       // floor, so a second click left the store and the UI on the display the
       // overlay had not moved to. Queue behind it and let the newest win.
       const isLatest = switchGuard.begin();
-      while (inFlightSwitch) {
+      while (inFlightSwitch !== null) {
         await inFlightSwitch.catch(() => undefined);
         if (!isLatest()) return snapshot;
       }

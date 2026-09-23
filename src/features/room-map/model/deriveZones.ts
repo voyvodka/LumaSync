@@ -152,11 +152,11 @@ function distributeLeds(
   const counts: number[] = new Array(segments.length).fill(0);
   let allocated = 0;
 
-  for (let i = 0; i < segments.length - 1; i++) {
-    const share = totalLength > 0 ? Math.round((segments[i].lengthMeters / totalLength) * totalLeds) : 0;
+  segments.slice(0, -1).forEach((segment, i) => {
+    const share = totalLength > 0 ? Math.round((segment.lengthMeters / totalLength) * totalLeds) : 0;
     counts[i] = share;
     allocated += share;
-  }
+  });
 
   // Last segment gets the remainder to prevent rounding drift
   counts[segments.length - 1] = totalLeds - allocated;
@@ -224,14 +224,16 @@ export function deriveZones(
   }
 
   const rawSegments: RawSegment[] = [];
-  let segStart = 0;
+  let current: RawSegment | null = null;
 
-  for (let i = 1; i <= N; i++) {
-    if (i === N || assignments[i] !== assignments[segStart]) {
-      rawSegments.push({ edge: assignments[segStart], startIdx: segStart, endIdx: i - 1 });
-      segStart = i;
+  assignments.forEach((edge, i) => {
+    if (current !== null && current.edge === edge) {
+      current.endIdx = i;
+      return;
     }
-  }
+    current = { edge, startIdx: i, endIdx: i };
+    rawSegments.push(current);
+  });
 
   // Calculate physical length for each segment
   const segmentsWithLength = rawSegments.map((seg) => {
@@ -252,7 +254,7 @@ export function deriveZones(
 
   const derivedSegments: DerivedSegment[] = segmentsWithLength.map((seg, i) => ({
     edge: seg.edge,
-    ledCount: ledCounts[i],
+    ledCount: ledCounts[i] ?? 0,
     lengthMeters: seg.lengthMeters,
   }));
 

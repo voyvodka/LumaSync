@@ -25,7 +25,7 @@ import {
   LIGHTING_MODE_KIND,
   type LightingModeConfig,
   type LightingModeKind,
-} from "@/features/mode/model/contracts";
+} from "@/shared/contracts/mode";
 import {
   MODE_GUARD_REASONS,
   type ModeGuardReason,

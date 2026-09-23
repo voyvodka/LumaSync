@@ -6,7 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LED_TEST_STATUS, type LedPreviewStatus } from "@/shared/contracts/preview";
-import { LIGHTING_MODE_KIND } from "@/features/mode/model/contracts";
+import { LIGHTING_MODE_KIND } from "@/shared/contracts/mode";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),

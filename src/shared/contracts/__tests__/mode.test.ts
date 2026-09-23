@@ -8,7 +8,7 @@ import {
   HUE_RUNTIME_TRIGGER_SOURCE,
   type HueRuntimeStatus,
 } from "@/shared/contracts/hue";
-import { type ShellState } from "@/shared/contracts/shell";
+import type { ShellState } from "@/shared/contracts/shell";
 import {
   LIGHTING_MODE_KIND,
   isLightingModeKind,
@@ -17,7 +17,7 @@ import {
   normalizeLightingModeConfig,
   normalizeOutputTargets,
   normalizeSolidColorPayload,
-} from "../contracts";
+} from "../mode";
 
 const CALIBRATION: LedCalibrationConfig = {
   templateId: "monitor-27-16-9",

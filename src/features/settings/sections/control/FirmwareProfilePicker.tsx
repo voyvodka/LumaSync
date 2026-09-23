@@ -555,7 +555,7 @@ export function FirmwareProfilePicker({
       const len = ORDERED_PROFILES.length;
       for (let step = 1; step <= len; step++) {
         const candidate = ORDERED_PROFILES[(idx + direction * step + len * len) % len];
-        if (!tileDisabled(candidate)) return candidate;
+        if (candidate !== undefined && !tileDisabled(candidate)) return candidate;
       }
       // Every tile is disabled (advertised set + override off in a future
       // 3-tile world). Stay put.

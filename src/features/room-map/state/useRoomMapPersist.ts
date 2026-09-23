@@ -140,8 +140,8 @@ export function useRoomMapPersist(): UseRoomMapPersistReturn {
   }, [config, persist, pushHistory]);
 
   const undo = useCallback(async () => {
-    if (pastRef.current.length === 0) return;
     const previous = pastRef.current[pastRef.current.length - 1];
+    if (previous === undefined) return;
     pastRef.current = pastRef.current.slice(0, -1);
     futureRef.current = [...futureRef.current, config];
     syncUndoFlags();
@@ -150,8 +150,8 @@ export function useRoomMapPersist(): UseRoomMapPersistReturn {
   }, [config, persist, syncUndoFlags]);
 
   const redo = useCallback(async () => {
-    if (futureRef.current.length === 0) return;
     const next = futureRef.current[futureRef.current.length - 1];
+    if (next === undefined) return;
     futureRef.current = futureRef.current.slice(0, -1);
     pastRef.current = [...pastRef.current, config];
     syncUndoFlags();

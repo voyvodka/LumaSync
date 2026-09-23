@@ -38,6 +38,7 @@ export function useHueBridgeReachability(
   const [probing, setProbing] = useState(false);
   const restartToken = useHuePollRestartToken();
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: restartToken is a re-run trigger that restarts the probe loop
   useEffect(() => {
     if (!hueStartConfig) setProbeVerdict(null);
     if (!hueStartConfig || hueStreaming) {

@@ -19,11 +19,11 @@
     "dev": "vite",
     "dev:mock": "LUMASYNC_MOCK=1 vite",
     "build": "tsc && vite build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.src.json",
     "typecheck:e2e": "tsc --noEmit -p tsconfig.e2e.json",
     "typecheck:mock": "tsc --noEmit -p tsconfig.mock.json",
     "test": "vitest run",
-    "lint": "bun run typecheck",
+    "lint": "bun run typecheck && biome lint src mock e2e",
     "check:rust": "cargo check --manifest-path src-tauri/Cargo.toml",
     "check:all": "bun run lint && bun run typecheck:e2e && bun run typecheck:mock && bun run check:rust && bun run verify:shell-contracts && bun run check:i18n && bun run verify:version-parity && bun run verify:mock-not-shipped && bun run verify:design-tokens",
     "preview": "vite preview",
@@ -68,6 +68,7 @@
     "react-i18next": "^17.0.15"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.14",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/cli": "^2.11.5",
     "@testing-library/dom": "^10.4.2",

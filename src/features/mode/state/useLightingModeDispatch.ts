@@ -1,7 +1,7 @@
 import { useCallback, useRef, type RefObject } from "react";
 
 import { setLightingMode, type ModeCommandResult } from "../modeApi";
-import type { LightingModeConfig } from "../model/contracts";
+import type { LightingModeConfig } from "@/shared/contracts/mode";
 import { canonicalLightingModeSignature } from "./modePayloadHydration";
 
 /**

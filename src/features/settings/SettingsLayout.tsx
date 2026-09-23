@@ -13,7 +13,7 @@ import type {
   LedColorOrder,
 } from "@/shared/contracts/device";
 import type { ModeGuardReason } from "../mode/state/modeGuard";
-import type { LightingModeConfig } from "../mode/model/contracts";
+import type { LightingModeConfig } from "@/shared/contracts/mode";
 import type { HueIntensityPreset, HueRuntimeTarget, HueRuntimeTriggerSource } from "@/shared/contracts/hue";
 import type { UpdaterState } from "../updater/useAutoUpdater";
 import type { HueProbeVerdict } from "../hue/state/useHueBridgeReachability";

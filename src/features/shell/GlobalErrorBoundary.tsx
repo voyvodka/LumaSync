@@ -38,6 +38,7 @@ import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import { openLogDir } from "@/features/platform/platformApi";
+import { relaunchApp } from "./launchApi";
 
 import "./GlobalErrorBoundary.css";
 
@@ -98,8 +99,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
     // streams all reinitialise; the WebView reload is the no-plugin fallback.
     void (async () => {
       try {
-        const { relaunch } = await import("@tauri-apps/plugin-process");
-        await relaunch();
+        await relaunchApp();
       } catch (err) {
         console.warn(
           "[LumaSync] relaunch() failed — falling back to WebView reload:",

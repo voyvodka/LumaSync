@@ -18,7 +18,7 @@ import {
   normalizeLightingModeConfig,
   normalizeOutputTargets,
   type LightingModeConfig,
-} from "@/features/mode/model/contracts";
+} from "@/shared/contracts/mode";
 import {
   hueLeftOutReason,
   hueLeftOutRetryTargets,
@@ -69,6 +69,7 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
   const [bootstrapDone, setBootstrapDone] = useState(false);
   const bootstrapRanRef = useRef(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: one-shot boot sequence; it must not re-run when the sink's identity changes
   useEffect(() => {
     // StrictMode guard: prevent double bootstrap in dev mode.
     // React.StrictMode unmounts/remounts, running the effect twice.
@@ -271,7 +272,7 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
       }
     }
 
-    bootstrap();
+    void bootstrap();
   }, []);
 
   return { bootstrapDone };

@@ -12,7 +12,7 @@ import { DEFAULT_HUE_INTENSITY_PRESET, type HueIntensityPreset } from "@/shared/
 import type { RoomGeometry, RoomMapConfig } from "@/shared/contracts/roomMap";
 import { toRoomGeometry } from "@/features/room-map/model/roomGeometry";
 
-import { normalizeColorOrder, type AmbilightPayload, type LightingModeConfig } from "../model/contracts";
+import { normalizeColorOrder, type AmbilightPayload, type LightingModeConfig } from "@/shared/contracts/mode";
 import {
   hydrateModePayload,
   type ModeRuntimeConfigSnapshot,
@@ -36,7 +36,7 @@ export interface ModeRuntimeConfig {
   /** Synchronous bootstrap prime — must run before the first dispatch. */
   prime: (state: ModeRuntimeConfigPrimeInput) => void;
   setCalibration: (calibration: LedCalibrationConfig | undefined) => void;
-  setAmbilight: (ambilight: AmbilightPayload | undefined) => void;
+  setAmbilight: (ambilight: AmbilightPayload | null | undefined) => void;
   setLightingSmoothingPreset: (preset: HueIntensityPreset) => void;
   setColorCorrection: (correction: ColorCorrectionConfig) => void;
   setFirmwareProfile: (profile: FirmwareProfile) => void;
@@ -83,8 +83,8 @@ export function useModeRuntimeConfig(input: {
     savedCalibrationRef.current = calibration;
   }, []);
 
-  const setAmbilight = useCallback((ambilight: AmbilightPayload | undefined) => {
-    savedAmbilightRef.current = ambilight;
+  const setAmbilight = useCallback((ambilight: AmbilightPayload | null | undefined) => {
+    savedAmbilightRef.current = ambilight ?? undefined;
   }, []);
 
   const setLightingSmoothingPreset = useCallback((preset: HueIntensityPreset) => {
