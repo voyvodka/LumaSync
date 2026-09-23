@@ -18,6 +18,7 @@ const PAIRED_STATE = {
 function makeDeps(overrides: {
   state?: Record<string, unknown>;
   startCode?: string;
+  runningMode?: Record<string, unknown>;
 } = {}) {
   const load = vi.fn().mockResolvedValue(overrides.state ?? PAIRED_STATE);
   const start = vi.fn().mockResolvedValue({
@@ -26,10 +27,16 @@ function makeDeps(overrides: {
   const stop = vi.fn().mockResolvedValue({
     status: { code: HUE_RUNTIME_STATUS.STREAM_STOPPED, message: "" },
   });
-  return { load, start, stop } as unknown as HueTestLeaseDeps & {
+  const readMode = vi.fn().mockResolvedValue({
+    active: overrides.runningMode !== undefined,
+    mode: overrides.runningMode ?? { kind: "off" },
+    status: { code: "LIGHTING_MODE_STATUS_OK", message: "" },
+  });
+  return { load, start, stop, readMode } as unknown as HueTestLeaseDeps & {
     load: typeof load;
     start: typeof start;
     stop: typeof stop;
+    readMode: typeof readMode;
   };
 }
 
@@ -63,6 +70,33 @@ describe("hueTestLease", () => {
 
   it("stops only the stream it opened", async () => {
     const deps = makeDeps();
+    await acquireHueForTest(["hue"], deps);
+    await releaseHueAfterTest(deps);
+    expect(deps.stop).toHaveBeenCalledTimes(1);
+  });
+
+  // A mode started during the run took over the stream the lease opened; its
+  // worker holds the sender, so a stop here would land under it.
+  it("hands the stream to a running mode that names Hue instead of stopping it", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const deps = makeDeps({ runningMode: { kind: "ambilight", targets: ["usb", "hue"] } });
+    await acquireHueForTest(["hue"], deps);
+    await releaseHueAfterTest(deps);
+    expect(deps.readMode).toHaveBeenCalledTimes(1);
+    expect(deps.stop).not.toHaveBeenCalled();
+  });
+
+  it("still stops when the running mode does not name Hue", async () => {
+    const deps = makeDeps({ runningMode: { kind: "solid", targets: ["usb"] } });
+    await acquireHueForTest(["hue"], deps);
+    await releaseHueAfterTest(deps);
+    expect(deps.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops as before when the running mode cannot be read", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const deps = makeDeps();
+    deps.readMode.mockRejectedValue(new Error("LIGHTING_RUNTIME_STATE_LOCK_FAILED"));
     await acquireHueForTest(["hue"], deps);
     await releaseHueAfterTest(deps);
     expect(deps.stop).toHaveBeenCalledTimes(1);

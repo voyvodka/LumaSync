@@ -127,6 +127,16 @@ https://keepachangelog.com/en/1.1.0/
   Entertainment stream, they kept following the screen after being put back the way they were
   before. The same happened when Off was pressed while a mode was still starting. Off now stops the
   lighting first, then Hue, whatever outputs were on.
+- Stop retrying and Retry stop on the Hue bridge card in Devices now let the Hue lights go
+  cleanly while a lighting mode is using them. Both buttons stopped the Hue stream with the mode
+  still sending it colors, so the stop took about three seconds and was reported as only partly
+  done, the lights were put back while the app was still driving them, and when the app was
+  setting the lights one by one instead of through an Entertainment stream they were painted
+  again. They now work like turning Hue off in the Lights outputs: the LED strip carries on
+  alone, or, with Hue as the only output, lighting turns off, and then Hue stops. This lasts
+  until the app is restarted; the outputs you saved are left as they were. An LED test that
+  opened the Hue stream no longer stops it at the end when a lighting mode started during the
+  test is using it.
 - The first-run guide banner could flash up for a moment at launch and disappear again for people
   who were already set up but had updated from a version without it. It now appears only once the
   app knows which step you are on, so it no longer flashes; a new install still sees the first step

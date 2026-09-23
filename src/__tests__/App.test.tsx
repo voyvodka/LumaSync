@@ -123,6 +123,7 @@ vi.mock("../features/mode/state/modeGuard", () => ({
 }));
 
 const getHueStreamStatusMock = vi.fn();
+const getLightingModeStatusMock = vi.fn();
 const setHueSolidColorMock = vi.fn();
 
 vi.mock("../features/mode/modeApi", () => ({
@@ -131,6 +132,7 @@ vi.mock("../features/mode/modeApi", () => ({
   startHue: (payload: { bridgeIp: string; username: string; clientKey: string; areaId: string }) => startHueMock(payload),
   stopHue: (...args: unknown[]) => stopHueMock(...args),
   getHueStreamStatus: () => getHueStreamStatusMock(),
+  getLightingModeStatus: () => getLightingModeStatusMock(),
   setHueSolidColor: (payload: unknown) => setHueSolidColorMock(payload),
 }));
 
@@ -159,6 +161,7 @@ vi.mock("../features/settings/SettingsLayout", () => ({
     hueReconnecting?: boolean;
     onLightingModeChange: (mode: LightingModeConfig) => void;
     onOutputTargetsChange: (targets: Array<"usb" | "hue">) => void;
+    onStopHueOutput: (triggerSource: string) => Promise<void>;
     onColorCorrectionChange: (next: ColorCorrectionConfig) => void;
     onChipTypeChange: (next: LedChipType) => void;
   }) => (
@@ -195,6 +198,10 @@ vi.mock("../features/settings/SettingsLayout", () => ({
       {/* The Lights toggle never sends an empty set; the handler still accepts one. */}
       <button type="button" onClick={() => props.onOutputTargetsChange([])}>
         set-no-targets
+      </button>
+      {/* The Devices Hue card's Stop retrying / Retry stop. */}
+      <button type="button" onClick={() => void props.onStopHueOutput("device_surface")}>
+        device-stop-hue
       </button>
       <button
         type="button"
@@ -279,6 +286,11 @@ vi.mock("../features/settings/SettingsLayout", () => ({
 
 import App from "../App";
 import { __resetHueReadCacheForTests } from "../features/hue/hueReadCache";
+import {
+  __resetHueTestLease,
+  acquireHueForTest,
+  releaseHueAfterTest,
+} from "../features/hue/state/hueTestLease";
 
 /** Serial status is the only per-test variable; every other command keeps the
  * shape its contract declares. Overriding invokeMock wholesale used to discard
@@ -368,6 +380,13 @@ function installLightingBackend() {
     backend.running = null;
     return Promise.resolve({ active: false });
   });
+  getLightingModeStatusMock.mockImplementation(() =>
+    Promise.resolve({
+      active: backend.running !== null,
+      mode: backend.running ?? { kind: "off" },
+      status: { code: "LIGHTING_MODE_STATUS_OK", message: "ok", details: null },
+    }),
+  );
   getHueStreamStatusMock.mockImplementation(() =>
     Promise.resolve({
       active: backend.hueStreamUp,
@@ -398,6 +417,11 @@ describe("App mode orchestration", () => {
     // branch. Dispatch on the command name and give each the shape its
     // contract declares; the serial-status default stays for the rest.
     installInvokeDispatch(true);
+    getLightingModeStatusMock.mockResolvedValue({
+      active: false,
+      mode: { kind: "off" },
+      status: { code: "LIGHTING_MODE_STATUS_OK", message: "ok", details: null },
+    });
     getHueStreamStatusMock.mockResolvedValue({
       active: false,
       lastSolidColor: null,
@@ -1735,6 +1759,232 @@ describe("App mode orchestration", () => {
       expect(firstCallOrder(stopLightingMock)).toBeLessThan(firstCallOrder(stopHueMock));
       expect(backend.hueStreamUp).toBe(false);
       errorSpy.mockRestore();
+    });
+  });
+
+  // The Devices card's Stop retrying and Retry stop called `stop_hue_stream`
+  // straight from the card, under a running mode whose worker still held the
+  // Hue sender: the same partial stop and restore-under-a-live-sender as #445.
+  // They now leave through the orchestrator, session-only.
+  describe("the Devices card's Hue stop lets the running mode go of Hue first", () => {
+    const stopFromCard = async () => {
+      await act(async () => {
+        screen.getByRole("button", { name: "device-stop-hue" }).click();
+      });
+    };
+    const persistedOff = () =>
+      saveShellStateMock.mock.calls.some(
+        ([patch]) => (patch as { lightingMode?: LightingModeConfig }).lightingMode?.kind === "off",
+      );
+
+    it("from [usb, hue]: re-applies the mode on USB, then stops Hue, without saving the targets", async () => {
+      const { backend, modeSends } = await bootSession(["usb", "hue"]);
+
+      await stopFromCard();
+      await waitFor(() => {
+        expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
+        expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+      });
+      await settle();
+
+      const sends = setLightingModeMock.mock.calls.slice(modeSends).map(([payload]) => payload);
+      expect(sends).toEqual([expect.objectContaining({ kind: "solid", targets: ["usb"] })]);
+      expect(stopHueMock).toHaveBeenCalledTimes(1);
+      expect(setLightingModeMock.mock.invocationCallOrder[modeSends]).toBeLessThan(firstCallOrder(stopHueMock));
+      expect(backend.hueStopsUnderWorker).toBe(0);
+      expect(stopLightingMock).not.toHaveBeenCalled();
+      expect(backend.running?.targets).toEqual(["usb"]);
+      expect(backend.hueStreamUp).toBe(false);
+      expect(screen.getByTestId("active-mode")).toHaveTextContent("solid");
+      expect(savedOutputTargets()).toEqual([]);
+    });
+
+    it("from a Hue-only mode: stops the worker, then Hue, and shows Off with the selection kept", async () => {
+      const { backend, modeSends } = await bootSession(["hue"]);
+
+      await stopFromCard();
+      await waitFor(() => {
+        expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+        expect(stopHueMock).toHaveBeenCalledTimes(1);
+      });
+      await settle();
+
+      expect(setLightingModeMock.mock.calls.length).toBe(modeSends);
+      expect(stopLightingMock).toHaveBeenCalledTimes(1);
+      expect(firstCallOrder(stopLightingMock)).toBeLessThan(firstCallOrder(stopHueMock));
+      expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
+      expect(backend.hueStopsUnderWorker).toBe(0);
+      expect(backend.running).toBeNull();
+      expect(screen.getByTestId("output-targets")).toHaveTextContent(/^hue$/);
+      expect(screen.getByTestId("hue-shown-state")).toHaveTextContent("none");
+      expect(savedOutputTargets()).toEqual([]);
+      expect(persistedOff()).toBe(false);
+    });
+
+    it("after the health poll dropped Hue (Retry stop): the worker still lets go before the stop", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const { backend, modeSends } = await bootSession(["usb", "hue"]);
+        // The first stop timed out: the runtime reads Idle, the mode still names Hue.
+        getHueStreamStatusMock.mockResolvedValue({
+          active: false,
+          lastSolidColor: null,
+          status: {
+            state: "Idle",
+            code: "HUE_STOP_TIMEOUT_PARTIAL",
+            message: "partial",
+            details: "retry stop to ensure bridge state restore",
+          },
+        });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(20_000);
+        });
+        await waitFor(() => {
+          expect(screen.getByTestId("hue-shown-state")).toHaveTextContent("none");
+        });
+        expect(backend.running?.targets).toEqual(["usb", "hue"]);
+
+        await stopFromCard();
+        await waitFor(() => {
+          expect(stopHueMock).toHaveBeenCalledTimes(1);
+        });
+        await settle();
+
+        const sends = setLightingModeMock.mock.calls.slice(modeSends).map(([payload]) => payload);
+        expect(sends).toEqual([expect.objectContaining({ kind: "solid", targets: ["usb"] })]);
+        expect(setLightingModeMock.mock.invocationCallOrder[modeSends]).toBeLessThan(firstCallOrder(stopHueMock));
+        expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
+        expect(backend.hueStopsUnderWorker).toBe(0);
+        expect(backend.running?.targets).toEqual(["usb"]);
+        expect(screen.getByTestId("active-mode")).toHaveTextContent("solid");
+        expect(savedOutputTargets()).toEqual([]);
+      } finally {
+        warnSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it("a second press while the first is in flight joins it", async () => {
+      const { backend, modeSends } = await bootSession(["usb", "hue"]);
+
+      await act(async () => {
+        const button = screen.getByRole("button", { name: "device-stop-hue" });
+        button.click();
+        button.click();
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+      });
+      await settle();
+
+      expect(setLightingModeMock.mock.calls.length).toBe(modeSends + 1);
+      expect(stopHueMock).toHaveBeenCalledTimes(1);
+      expect(backend.hueStopsUnderWorker).toBe(0);
+    });
+
+    // A stream the card started beside a USB-only mode is not in the selection,
+    // and the release still has to reach `stop_hue_stream`.
+    it("beside a USB-only mode: a plain Hue stop, the mode untouched", async () => {
+      const backend = installLightingBackend();
+      loadShellStateMock.mockResolvedValue({ ...streamingShellState, lastOutputTargets: ["usb"] });
+      render(<App />);
+      await waitFor(() => {
+        expect(backend.running?.targets).toEqual(["usb"]);
+      });
+      const modeSends = setLightingModeMock.mock.calls.length;
+
+      await stopFromCard();
+      await waitFor(() => {
+        expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
+      });
+      await settle();
+
+      expect(stopHueMock).toHaveBeenCalledTimes(1);
+      expect(setLightingModeMock.mock.calls.length).toBe(modeSends);
+      expect(stopLightingMock).not.toHaveBeenCalled();
+      expect(backend.running?.targets).toEqual(["usb"]);
+      expect(screen.getByTestId("active-mode")).toHaveTextContent("solid");
+      expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+    });
+
+    it("with the mode off: a plain Hue stop, nothing re-applied", async () => {
+      const backend = installLightingBackend();
+      loadShellStateMock.mockResolvedValue({ ...streamingShellState, lightingMode: { kind: "off" } });
+      render(<App />);
+      await waitFor(() => {
+        expect(screen.getByTestId("calibration-leds")).toHaveTextContent("40");
+        expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb,hue$/);
+      });
+      const modeSends = setLightingModeMock.mock.calls.length;
+
+      await stopFromCard();
+      await waitFor(() => {
+        expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
+      });
+      await settle();
+
+      expect(stopHueMock).toHaveBeenCalledTimes(1);
+      expect(setLightingModeMock.mock.calls.length).toBe(modeSends);
+      expect(stopLightingMock).not.toHaveBeenCalled();
+      expect(backend.hueStopsUnderWorker).toBe(0);
+      expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb,hue$/);
+    });
+  });
+
+  // The test lease stops only a stream it opened. A mode started during the run
+  // takes that stream over (its start answers already-active) and its worker
+  // holds the sender, so the lease's stop used to land under that worker.
+  describe("a test lease hands a stream a mode adopted over to the mode", () => {
+    it("leaves the stream up when the running mode names Hue", async () => {
+      __resetHueTestLease();
+      const backend = installLightingBackend();
+      loadShellStateMock.mockResolvedValue({ ...streamingShellState, lightingMode: { kind: "off" } });
+      render(<App />);
+      await waitFor(() => {
+        expect(screen.getByTestId("calibration-leds")).toHaveTextContent("40");
+        expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb,hue$/);
+      });
+      await act(async () => {
+        await acquireHueForTest(["usb", "hue"]);
+      });
+      expect(backend.hueStreamUp).toBe(true);
+      await act(async () => {
+        screen.getByRole("button", { name: "set-solid" }).click();
+      });
+      await waitFor(() => {
+        expect(backend.running?.targets).toEqual(["usb", "hue"]);
+      });
+
+      await act(async () => {
+        await releaseHueAfterTest();
+      });
+      await settle();
+
+      expect(stopHueMock).not.toHaveBeenCalled();
+      expect(backend.hueStopsUnderWorker).toBe(0);
+      expect(backend.hueStreamUp).toBe(true);
+      expect(screen.getByTestId("hue-shown-state")).toHaveTextContent("streaming");
+    });
+
+    it("still releases the stream when no mode took it", async () => {
+      __resetHueTestLease();
+      const backend = installLightingBackend();
+      loadShellStateMock.mockResolvedValue({ ...streamingShellState, lightingMode: { kind: "off" } });
+      render(<App />);
+      await waitFor(() => {
+        expect(screen.getByTestId("calibration-leds")).toHaveTextContent("40");
+      });
+      await act(async () => {
+        await acquireHueForTest(["usb", "hue"]);
+      });
+
+      await act(async () => {
+        await releaseHueAfterTest();
+      });
+
+      expect(stopHueMock).toHaveBeenCalledTimes(1);
+      expect(backend.hueStreamUp).toBe(false);
     });
   });
 

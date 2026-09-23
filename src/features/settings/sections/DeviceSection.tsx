@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import type { LedChipType, LedColorOrder } from "@/shared/contracts/device";
 import type { DisplayInfo } from "@/shared/contracts/display";
-import type { HueChannelPlacementOverride } from "@/shared/contracts/hue";
+import type { HueChannelPlacementOverride, HueRuntimeTriggerSource } from "@/shared/contracts/hue";
 import { DEFAULT_ROOM_MAP, hueChannelsForArea, mergeHueChannels } from "@/shared/contracts/roomMap";
 import type {
   HueChannelPlacement,
@@ -43,6 +43,8 @@ export interface DeviceSectionProps {
   onChipTypeChange?: (next: LedChipType) => void;
   /** Forwarded to the colour-order control; see `UsbStripsCategoryProps`. */
   onColorOrderChange?: (next: LedColorOrder) => void;
+  /** Forwarded to the Hue card; see `HueBridgesCategoryProps.onStopHue`. */
+  onStopHueOutput: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
 }
 
 interface RailButtonProps {
@@ -99,7 +101,8 @@ export function DeviceSection({
   onNavigateToRoomMap,
   onChipTypeChange,
   onColorOrderChange,
-}: DeviceSectionProps = {}) {
+  onStopHueOutput,
+}: DeviceSectionProps) {
   const { t } = useTranslation();
 
   // Mounted once and handed to the children whole: `useHueOnboarding` composes
@@ -315,6 +318,7 @@ export function DeviceSection({
           onNavigateToRoomMap={onNavigateToRoomMap}
           persistError={hueChannelPersistError.active}
           zones={hueZones}
+          onStopHue={onStopHueOutput}
         />
 
         <WledCategory isActive={activeCategory === "wled"} />

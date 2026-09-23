@@ -4,7 +4,8 @@
 import { HUE_RUNTIME_STATUS, type HueRuntimeTarget } from "@/shared/contracts/hue";
 import { isHueStartCodeOk, toHueStartConfig } from "@/features/hue/model/hueStartConfig";
 import { shellStore } from "@/features/persistence/shellStore";
-import { startHue, stopHue } from "@/features/mode/modeApi";
+import { getLightingModeStatus, startHue, stopHue } from "@/features/mode/modeApi";
+import { LIGHTING_MODE_KIND } from "@/features/mode/model/contracts";
 
 type LeaseState =
   /** Nothing attempted for the current run. */
@@ -30,6 +31,7 @@ export interface HueTestLeaseDeps {
   load?: typeof shellStore.load;
   start?: typeof startHue;
   stop?: typeof stopHue;
+  readMode?: typeof getLightingModeStatus;
 }
 
 /**
@@ -84,11 +86,24 @@ export function acquireHueForTest(
 /** Hand the stream back if this lease opened it. Safe to call unconditionally. */
 export function releaseHueAfterTest(deps: HueTestLeaseDeps = {}): Promise<void> {
   const stop = deps.stop ?? stopHue;
+  const readMode = deps.readMode ?? getLightingModeStatus;
 
   return enqueue(async () => {
     const held = state === "held";
     state = "idle";
     if (!held) return;
+    // A mode started during the run took the open stream (its start answered
+    // already-active), and its worker now holds the sender. Stopping here would
+    // pull Hue out from under it; the stream is the mode's to stop.
+    try {
+      const running = (await readMode()).mode;
+      if (running.kind !== LIGHTING_MODE_KIND.OFF && (running.targets ?? []).includes("hue")) {
+        console.info("[LumaSync] hueTestLease: a running mode adopted the Hue stream; leaving it up");
+        return;
+      }
+    } catch (error) {
+      console.error("[LumaSync] hueTestLease could not read the running mode; releasing anyway:", error);
+    }
     try {
       await stop();
     } catch (error) {

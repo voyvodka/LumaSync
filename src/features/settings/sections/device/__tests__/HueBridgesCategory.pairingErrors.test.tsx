@@ -78,6 +78,7 @@ function Harness() {
       onPositionChange={async () => {}}
       persistError={false}
       zones={[]}
+      onStopHue={async () => {}}
     />
   );
 }

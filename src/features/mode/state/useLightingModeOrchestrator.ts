@@ -11,7 +11,11 @@ import {
   isScreenCaptureBlocked,
   type CaptureFailureNotice,
 } from "@/shared/contracts/capture";
-import { HUE_RUNTIME_TRIGGER_SOURCE, type HueRuntimeTarget } from "@/shared/contracts/hue";
+import {
+  HUE_RUNTIME_TRIGGER_SOURCE,
+  type HueRuntimeTarget,
+  type HueRuntimeTriggerSource,
+} from "@/shared/contracts/hue";
 import { HUE_LEFT_OUT_REASON, LIGHTING_MODE_GATE_STATUS, type HueLeftOutReason } from "@/shared/contracts/lighting";
 
 import { getScreenCapturePermission } from "../captureApi";
@@ -83,6 +87,8 @@ export interface LightingModeOrchestrator {
   handleOutputTargetsChange: (targets: HueRuntimeTarget[]) => Promise<void>;
   /** The same delta pipeline for a USB unplug, without writing `lastOutputTargets`. */
   dropUnpluggedUsbTarget: (targets: HueRuntimeTarget[]) => Promise<void>;
+  /** A Hue stop from outside the mode controls: a running mode lets go of Hue first. */
+  stopHueOutput: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
   /** Hot-reload props push a config nudge without going through a transition. */
   dispatch: LightingModeDispatcher;
   /** Bootstrap and the Hue solid sync write the mode without a transition. */
@@ -163,7 +169,9 @@ export function useLightingModeOrchestrator({
   }, [lightingMode]);
 
   const handleLightingModeChangeRef = useRef<((mode: LightingModeConfig) => Promise<void>) | null>(null);
-  const applyOutputTargetsRef = useRef<((targets: HueRuntimeTarget[], persist: boolean) => Promise<void>) | null>(null);
+  const applyOutputTargetsRef = useRef<
+    ((targets: HueRuntimeTarget[], persist: boolean, hueStopTrigger?: HueRuntimeTriggerSource) => Promise<void>) | null
+  >(null);
   const resumeAfterBootHueRetry = useCallback(async (mode: LightingModeConfig) => {
     // Anything that started a mode meanwhile has already had its say.
     if (lightingModeRef.current.kind !== LIGHTING_MODE_KIND.OFF) return;
@@ -189,7 +197,14 @@ export function useLightingModeOrchestrator({
 
   // The delta path the user's own output toggle takes. The boot rejoin enters
   // here directly: the same dispatch, without persisting or cancelling itself.
-  const applyOutputTargets = useCallback(async (targets: HueRuntimeTarget[], persist: boolean) => {
+  // `hueStopTrigger` marks a Hue release from outside the mode controls
+  // (`stopHueOutput`): Hue is stopped whatever the active set says, and the
+  // stop is attributed to that surface.
+  const applyOutputTargets = useCallback(async (
+    targets: HueRuntimeTarget[],
+    persist: boolean,
+    hueStopTrigger?: HueRuntimeTriggerSource,
+  ) => {
     // The toggles stay live while this runs, so a user can remove Hue before
     // the add that started first has finished. Without the guard that add
     // lands afterwards and puts Hue back into the active set.
@@ -211,6 +226,13 @@ export function useLightingModeOrchestrator({
     const currentActive = activeOutputTargetsRef.current;
     const addedTargets = normalizedTargets.filter((t) => !prevTargets.includes(t));
     const removedTargets = prevTargets.filter((t) => !normalizedTargets.includes(t));
+    const releasingHue = hueStopTrigger !== undefined;
+    // A release stops Hue even when the selection had already dropped it.
+    if (releasingHue && !removedTargets.includes("hue")) removedTargets.push("hue");
+    // The health poll drops "hue" from the active set once the backend reports
+    // the stream dead (a partial stop included), but the worker keeps its handle
+    // on the sender for as long as the running mode's targets name Hue.
+    const workerHoldsHue = currentActive.includes("hue") || (lightingMode.targets ?? []).includes("hue");
 
     // The live mode's targets are what every hot-reload re-dispatch sends. Left
     // on the old set, the next setting change reads as a target change: the
@@ -262,7 +284,8 @@ export function useLightingModeOrchestrator({
     const stopLightingOnce = () => (lightingStop ??= stopLighting());
     const stopResults = await Promise.allSettled(
       removedTargets.map(async (target): Promise<StopOutcome> => {
-        if (!currentActive.includes(target)) return { target, ok: true };
+        const releasedHue = releasingHue && target === "hue";
+        if (!currentActive.includes(target) && !releasedHue) return { target, ok: true };
         if (target !== "usb" && target !== "hue") return { target, ok: true };
         const stayLive = currentActive.filter((t) => t !== target && normalizedTargets.includes(t));
         let tornDown: ModeCommandResult | undefined;
@@ -284,7 +307,11 @@ export function useLightingModeOrchestrator({
           // Stopped under a live worker, the sender outlives the stop, the #425
           // restore runs under it, and the next frame paints the lights again.
           // See docs/architecture/hue.md.
-          const outcome = stayLive.length > 0 ? await reapplyWithout("hue", stayLive) : "refused";
+          const outcome = !workerHoldsHue
+            ? "dropped"
+            : stayLive.length > 0
+              ? await reapplyWithout("hue", stayLive)
+              : "refused";
           if (typeof outcome === "object") tornDown = outcome.tornDown;
           if (outcome === "refused") {
             try {
@@ -296,7 +323,7 @@ export function useLightingModeOrchestrator({
           }
           // System-attributed, not MODE_CONTROL default — this stop is a side
           // effect of the target-set change, not a direct user mode toggle.
-          await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
+          await stopHue(hueStopTrigger ?? HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
           return { target, ok: true, tornDown };
         } catch (err) {
           console.error(
@@ -317,6 +344,20 @@ export function useLightingModeOrchestrator({
       .map((r) => (r.status === "fulfilled" ? r.value.tornDown : undefined))
       .find((result): result is ModeCommandResult => result !== undefined);
     if (!isLatest()) return;
+
+    // A release that stopped the worker, or whose re-apply tore it down, ended
+    // the mode rather than a target: show Off and keep the selection, as Off
+    // does. UI only — the persisted mode and `lastOutputTargets` stay.
+    if (releasingHue && (lightingStop !== null || tornDown !== undefined)) {
+      const hueStillHeld = failedToStop.includes("hue");
+      if (hueStillHeld) setStopFailedNotice(["hue"]);
+      setActiveOutputTargets(hueStillHeld ? ["hue"] : []);
+      setSelectedOutputTargets(prevTargets);
+      setLightingModeState({ ...lightingMode, kind: LIGHTING_MODE_KIND.OFF });
+      const startFailure = tornDown ? readModeApplyOutcome(tornDown, lightingMode.kind).startFailure : null;
+      if (startFailure) setStartFailedNotice(startFailure);
+      return;
+    }
 
     if (tornDown) {
       // The re-apply stopped the old worker and its start failed, so nothing
@@ -569,7 +610,7 @@ export function useLightingModeOrchestrator({
   }, [applyOutputTargets]);
 
   const changeOutputTargets = useCallback(
-    (targets: HueRuntimeTarget[], persist: boolean) => {
+    (targets: HueRuntimeTarget[], persist: boolean, hueStopTrigger?: HueRuntimeTriggerSource) => {
       const normalizedTargets = normalizeOutputTargets(targets);
       if (!normalizedTargets.includes("hue")) {
         cancelBootHueRetry("Hue was deselected");
@@ -577,7 +618,7 @@ export function useLightingModeOrchestrator({
         // The user turned Hue on themselves; their add answers for itself.
         cancelBootHueRetry("the output targets changed");
       }
-      return applyOutputTargets(normalizedTargets, persist);
+      return applyOutputTargets(normalizedTargets, persist, hueStopTrigger);
     },
     [applyOutputTargets, cancelBootHueRetry, isBootHueRejoinPending],
   );
@@ -588,6 +629,37 @@ export function useLightingModeOrchestrator({
   // Session-only: a cable falling out is not the user choosing to stop using the strip.
   const dropUnpluggedUsbTarget = useCallback(
     (targets: HueRuntimeTarget[]) => changeOutputTargets(targets, false),
+    [changeOutputTargets],
+  );
+
+  // The Devices card's Stop retrying and Retry stop. A bare `stop_hue_stream`
+  // under a running mode that names Hue leaves its worker holding the sender
+  // (docs/architecture/hue.md), so Hue leaves the live mode through the delta
+  // path first. Session-only, as the A2 drops: `lastOutputTargets` keeps Hue.
+  const hueReleaseRef = useRef<Promise<void> | null>(null);
+  const stopHueOutput = useCallback(
+    (triggerSource: HueRuntimeTriggerSource) => {
+      if (hueReleaseRef.current) return hueReleaseRef.current;
+      const release = (async () => {
+        try {
+          if (lightingModeRef.current.kind === LIGHTING_MODE_KIND.OFF) {
+            await stopHue(triggerSource);
+            return;
+          }
+          await changeOutputTargets(
+            selectedOutputTargetsRef.current.filter((t) => t !== "hue"),
+            false,
+            triggerSource,
+          );
+        } catch (err) {
+          console.error("[LumaSync] Hue stop from the Devices card failed:", err);
+        } finally {
+          hueReleaseRef.current = null;
+        }
+      })();
+      hueReleaseRef.current = release;
+      return release;
+    },
     [changeOutputTargets],
   );
 
@@ -1047,6 +1119,7 @@ export function useLightingModeOrchestrator({
     handleLightingModeChange,
     handleOutputTargetsChange,
     dropUnpluggedUsbTarget,
+    stopHueOutput,
     dispatch: dispatchSetLightingMode,
     setLightingMode: setLightingModeState,
     adoptSolidColor,

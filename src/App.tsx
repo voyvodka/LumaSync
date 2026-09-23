@@ -341,6 +341,7 @@ function App() {
       handleLightingModeChange(next);
     },
     onOutputTargetsChange: handleOutputTargetsChange,
+    onStopHueOutput: mode.stopHueOutput,
     onCalibrationSaved: (config: LedCalibrationConfig) => {
       setSavedCalibration(config);
       // Synchronous, because a save followed by an immediate mode toggle

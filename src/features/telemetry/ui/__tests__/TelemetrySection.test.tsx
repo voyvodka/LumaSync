@@ -266,6 +266,7 @@ describe("Settings telemetry wiring", () => {
         modeLockReason={null}
         onLightingModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
+        onStopHueOutput={async () => {}}
         onCalibrationSaved={vi.fn()}
         onCheckForUpdates={vi.fn()}
         isCheckingForUpdates={false}
@@ -294,6 +295,7 @@ describe("Settings telemetry wiring", () => {
         modeLockReason={null}
         onLightingModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
+        onStopHueOutput={async () => {}}
         onCalibrationSaved={vi.fn()}
         onCheckForUpdates={vi.fn()}
         isCheckingForUpdates={false}
