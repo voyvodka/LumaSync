@@ -43,6 +43,10 @@ export default {
       RATE_LIMITED: {
         description: "Too many requests. Wait a minute before retrying.",
       },
+      BRIDGE_IDENTITY_MISMATCH: {
+        description:
+          "The device at this address did not identify as the bridge LumaSync paired with, so nothing was sent to it. If you reset or replaced the bridge, pair it again; otherwise check that the address still belongs to your bridge.",
+      },
     },
   },
   credential: {

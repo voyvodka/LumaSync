@@ -75,6 +75,11 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Hue: after the router gave the bridge a new address, streaming quietly fell back to the slower
+  HTTP mode because the saved pairing was tied to the old address. The pairing now belongs to
+  the bridge itself; an existing pairing is moved over the next time the bridge accepts it.
+- Hue: turning Hue back on while it was still switching the lamps back off could leave some of
+  them on afterwards. The new start now waits for the lamps to be put back first.
 - Quitting with Cmd+Q now finishes cleaning up before the app exits: the Hue lights are handed
   back and the LED strip is released, as the tray's Quit already did. Before, the app closed
   partway through, which could leave the Hue bridge in entertainment mode.
@@ -518,6 +523,15 @@ https://keepachangelog.com/en/1.1.0/
   images there rather than everything in it, including the settings file. Links from the window
   open lumasync.app and nothing else. The LED preview overlay and control popup lose every window
   control they never called.
+- Hue: LumaSync now checks who it is talking to before it sends the bridge key. The bridge's
+  certificate must name the bridge and either be signed by Signify or match the one it presented
+  the first time LumaSync reached it (older bridges sign their own); a device on your network
+  pretending to be the bridge is refused before anything is sent, and the Devices page says so
+  instead of asking you to re-pair a key that was fine. The key is only ever sent to the bridge
+  that issued it, bridge requests no longer follow redirects, and bridge addresses must be on
+  your local network. Existing pairings keep working: the first connection after updating learns
+  the bridge's certificate, which is remembered in a small file beside the app's settings rather
+  than in the keychain, so it adds no keychain prompt.
 
 ### Internal
 

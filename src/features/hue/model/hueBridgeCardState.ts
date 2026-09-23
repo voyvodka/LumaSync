@@ -11,6 +11,7 @@ const PAIRING_ERROR_DESCRIPTIONS: Partial<Record<string, TranslationKey>> = {
   [HUE_STATUS.PAIRING_DEVICETYPE_INVALID]: "hue:pairing.errors.DEVICETYPE_INVALID.description",
   [HUE_STATUS.PAIRING_BRIDGE_BUSY]: "hue:pairing.errors.BRIDGE_BUSY.description",
   [HUE_STATUS.PAIRING_RATE_LIMITED]: "hue:pairing.errors.RATE_LIMITED.description",
+  [HUE_STATUS.BRIDGE_IDENTITY_MISMATCH]: "hue:pairing.errors.BRIDGE_IDENTITY_MISMATCH.description",
 };
 
 /** The specific explanation for a pairing refusal the bridge named, if any. */
@@ -102,7 +103,11 @@ export function deriveHueBridgeCardState({
     if (hueStatus?.code === "HUE_PAIRING_BRIDGE_BUSY" || hueStatus?.code === "HUE_PAIRING_RATE_LIMITED") {
       return "pairingDeferred";
     }
-    return hueStatus?.code === "HUE_PAIRING_FAILED" || hueStatus?.code === "HUE_PAIRING_DEVICETYPE_INVALID"
+    // A refused bridge certificate is not an expired key: say what happened,
+    // with pairing again as the way back.
+    return hueStatus?.code === "HUE_PAIRING_FAILED"
+      || hueStatus?.code === "HUE_PAIRING_DEVICETYPE_INVALID"
+      || hueStatus?.code === HUE_STATUS.BRIDGE_IDENTITY_MISMATCH
       ? "pairingFailed"
       : "authError";
   }

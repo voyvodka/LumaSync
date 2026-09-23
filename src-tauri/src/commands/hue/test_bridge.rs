@@ -1,28 +1,28 @@
 //! A local HTTPS stand-in for a Hue bridge, for tests that drive the real
 //! runtime paths. Every bridge call is `https://{bridge_ip}/…`, so passing
-//! `127.0.0.1:<port>` as the bridge address routes them here unchanged; the
-//! clients already accept the bridge's self-signed certificate, and this one's.
+//! `127.0.0.1:<port>` as the bridge address routes them here unchanged. Its
+//! certificate is self-signed and names [`TEST_BRIDGE_ID`], so it passes the
+//! real certificate check the way an older bridge does: pinned on first use,
+//! in the in-memory store tests use instead of the keychain.
 //!
-//! Readiness cannot be driven this way — `is_valid_ipv4` refuses a loopback
-//! address with a port, and that guard stays.
+//! Readiness cannot be driven this way — `validate_bridge_addr` refuses a
+//! loopback address with a port, and that guard stays.
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use openssl::asn1::Asn1Time;
-use openssl::bn::BigNum;
-use openssl::ec::{EcGroup, EcKey};
-use openssl::hash::MessageDigest;
-use openssl::nid::Nid;
-use openssl::pkey::PKey;
-use openssl::ssl::{SslAcceptor, SslMethod};
-use openssl::x509::{X509Builder, X509NameBuilder};
+use openssl::ssl::{SslAcceptor, SslMethod, SslVersion};
 use serde_json::{json, Value};
+
+use super::bridge_identity::tests::{self_signed, TestCert};
+
+/// The bridge id every `TestBridge` presents.
+pub(crate) const TEST_BRIDGE_ID: &str = "001788fffe7e57b1";
 
 #[derive(Clone, Debug)]
 pub(crate) struct Recorded {
@@ -44,15 +44,21 @@ pub(crate) struct Reply {
     pub(crate) body: String,
     /// Held before answering, to stand in for a slow or silent bridge.
     pub(crate) delay: Duration,
+    pub(crate) headers: Vec<(&'static str, String)>,
 }
 
 impl Reply {
     pub(crate) fn json(status: u16, body: serde_json::Value) -> Self {
+        Self::text(status, body.to_string())
+    }
+
+    pub(crate) fn text(status: u16, body: String) -> Self {
         Self {
             status,
             content_type: "application/json",
-            body: body.to_string(),
+            body,
             delay: Duration::ZERO,
+            headers: Vec::new(),
         }
     }
 
@@ -64,6 +70,11 @@ impl Reply {
         self.delay = delay;
         self
     }
+
+    pub(crate) fn with_header(mut self, name: &'static str, value: &str) -> Self {
+        self.headers.push((name, value.to_string()));
+        self
+    }
 }
 
 type Router = dyn Fn(&str, &str, &str) -> Reply + Send + Sync;
@@ -72,6 +83,8 @@ pub(crate) struct TestBridge {
     /// Pass this as `bridge_ip`.
     pub(crate) authority: String,
     seen: Arc<Mutex<Vec<Recorded>>>,
+    /// TCP connections accepted, whether or not TLS then completed.
+    connections: Arc<AtomicUsize>,
     stop: Arc<AtomicBool>,
     handle: Option<JoinHandle<()>>,
 }
@@ -83,26 +96,65 @@ impl TestBridge {
     where
         F: Fn(&str, &str, &str) -> Reply + Send + Sync + 'static,
     {
+        Self::serving(Arc::clone(default_acceptor()), route)
+    }
+
+    /// Same, presenting `leaf` (and `chain` after it) instead of the default
+    /// certificate.
+    pub(crate) fn presenting<F>(leaf: &TestCert, chain: &[&TestCert], route: F) -> Self
+    where
+        F: Fn(&str, &str, &str) -> Reply + Send + Sync + 'static,
+    {
+        Self::serving(Arc::new(acceptor_for(leaf, chain, None)), route)
+    }
+
+    /// Same, but refusing anything above TLS 1.2, as a bridge on older
+    /// firmware may — the handshake signature then takes the TLS 1.2 path.
+    pub(crate) fn presenting_tls12<F>(leaf: &TestCert, route: F) -> Self
+    where
+        F: Fn(&str, &str, &str) -> Reply + Send + Sync + 'static,
+    {
+        Self::serving(
+            Arc::new(acceptor_for(leaf, &[], Some(SslVersion::TLS1_2))),
+            route,
+        )
+    }
+
+    fn serving<F>(acceptor: Arc<SslAcceptor>, route: F) -> Self
+    where
+        F: Fn(&str, &str, &str) -> Reply + Send + Sync + 'static,
+    {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let authority = listener.local_addr().unwrap().to_string();
         let seen = Arc::new(Mutex::new(Vec::new()));
+        let connections = Arc::new(AtomicUsize::new(0));
         let stop = Arc::new(AtomicBool::new(false));
         let route: Arc<Router> = Arc::new(route);
-        let (thread_seen, thread_stop) = (Arc::clone(&seen), Arc::clone(&stop));
+        let (thread_seen, thread_stop, thread_connections) = (
+            Arc::clone(&seen),
+            Arc::clone(&stop),
+            Arc::clone(&connections),
+        );
         let handle = std::thread::spawn(move || {
             while !thread_stop.load(Ordering::SeqCst) {
                 let Ok((stream, _)) = listener.accept() else {
                     std::thread::sleep(Duration::from_millis(2));
                     continue;
                 };
-                let (seen, route) = (Arc::clone(&thread_seen), Arc::clone(&route));
-                std::thread::spawn(move || serve(stream, &seen, route.as_ref()));
+                thread_connections.fetch_add(1, Ordering::SeqCst);
+                let (seen, route, acceptor) = (
+                    Arc::clone(&thread_seen),
+                    Arc::clone(&route),
+                    Arc::clone(&acceptor),
+                );
+                std::thread::spawn(move || serve(stream, &acceptor, &seen, route.as_ref()));
             }
         });
         Self {
             authority,
             seen,
+            connections,
             stop,
             handle: Some(handle),
         }
@@ -110,6 +162,10 @@ impl TestBridge {
 
     pub(crate) fn requests(&self) -> Vec<Recorded> {
         self.seen.lock().unwrap().clone()
+    }
+
+    pub(crate) fn connections(&self) -> usize {
+        self.connections.load(Ordering::SeqCst)
     }
 
     /// Every PUT whose path starts with `prefix`, in arrival order.
@@ -130,41 +186,29 @@ impl Drop for TestBridge {
     }
 }
 
-fn acceptor() -> &'static SslAcceptor {
-    static ACCEPTOR: OnceLock<SslAcceptor> = OnceLock::new();
-    ACCEPTOR.get_or_init(|| {
-        let group = EcGroup::from_curve_name(Nid::X9_62_PRIME256V1).unwrap();
-        let key = PKey::from_ec_key(EcKey::generate(&group).unwrap()).unwrap();
-        let mut name = X509NameBuilder::new().unwrap();
-        name.append_entry_by_nid(Nid::COMMONNAME, "test-bridge")
-            .unwrap();
-        let name = name.build();
-        let mut cert = X509Builder::new().unwrap();
-        cert.set_version(2).unwrap();
-        let serial = BigNum::from_u32(1).unwrap().to_asn1_integer().unwrap();
-        cert.set_serial_number(&serial).unwrap();
-        cert.set_subject_name(&name).unwrap();
-        cert.set_issuer_name(&name).unwrap();
-        cert.set_pubkey(&key).unwrap();
-        cert.set_not_before(&Asn1Time::days_from_now(0).unwrap())
-            .unwrap();
-        cert.set_not_after(&Asn1Time::days_from_now(1).unwrap())
-            .unwrap();
-        cert.sign(&key, MessageDigest::sha256()).unwrap();
-        let cert = cert.build();
-
-        let mut builder = SslAcceptor::mozilla_intermediate_v5(SslMethod::tls()).unwrap();
-        builder.set_private_key(&key).unwrap();
-        builder.set_certificate(&cert).unwrap();
-        builder.check_private_key().unwrap();
-        builder.build()
-    })
+fn acceptor_for(leaf: &TestCert, chain: &[&TestCert], max: Option<SslVersion>) -> SslAcceptor {
+    let mut builder = SslAcceptor::mozilla_intermediate_v5(SslMethod::tls()).unwrap();
+    builder.set_max_proto_version(max).unwrap();
+    builder.set_private_key(&leaf.key).unwrap();
+    builder.set_certificate(&leaf.cert).unwrap();
+    for cert in chain {
+        builder.add_extra_chain_cert(cert.cert.clone()).unwrap();
+    }
+    builder.check_private_key().unwrap();
+    builder.build()
 }
 
-fn serve(stream: TcpStream, seen: &Mutex<Vec<Recorded>>, route: &Router) {
+/// One certificate for every default bridge in the process, so the pin the
+/// first test learns holds for the rest.
+fn default_acceptor() -> &'static Arc<SslAcceptor> {
+    static ACCEPTOR: OnceLock<Arc<SslAcceptor>> = OnceLock::new();
+    ACCEPTOR.get_or_init(|| Arc::new(acceptor_for(&self_signed(TEST_BRIDGE_ID), &[], None)))
+}
+
+fn serve(stream: TcpStream, acceptor: &SslAcceptor, seen: &Mutex<Vec<Recorded>>, route: &Router) {
     let _ = stream.set_nonblocking(false);
     let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
-    let Ok(tls) = acceptor().accept(stream) else {
+    let Ok(tls) = acceptor.accept(stream) else {
         return;
     };
     let mut reader = BufReader::new(tls);
@@ -205,9 +249,14 @@ fn serve(stream: TcpStream, seen: &Mutex<Vec<Recorded>>, route: &Router) {
     let reply = route(&method, &path, &body);
     std::thread::sleep(reply.delay);
     let mut tls = reader.into_inner();
+    let headers = reply
+        .headers
+        .iter()
+        .map(|(name, value)| format!("{name}: {value}\r\n"))
+        .collect::<String>();
     let _ = write!(
         tls,
-        "HTTP/1.1 {} X\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        "HTTP/1.1 {} X\r\n{headers}Content-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
         reply.status,
         reply.content_type,
         reply.body.len(),
@@ -256,6 +305,31 @@ impl FakeHue {
     where
         P: Fn(&str) -> Reply + Send + Sync + 'static,
     {
+        Self::with_puts(areas, lights, put_light, false)
+    }
+
+    /// Like [`FakeHue::start`], but a light PUT the route answers with a 2xx
+    /// also changes what the next GET reports, as a real bridge's does.
+    pub(crate) fn start_applying_puts<P>(
+        areas: &[(&str, &[&str])],
+        lights: &[(&str, Value)],
+        put_light: P,
+    ) -> Self
+    where
+        P: Fn(&str) -> Reply + Send + Sync + 'static,
+    {
+        Self::with_puts(areas, lights, put_light, true)
+    }
+
+    fn with_puts<P>(
+        areas: &[(&str, &[&str])],
+        lights: &[(&str, Value)],
+        put_light: P,
+        apply_puts: bool,
+    ) -> Self
+    where
+        P: Fn(&str) -> Reply + Send + Sync + 'static,
+    {
         let areas: HashMap<String, Vec<String>> = areas
             .iter()
             .map(|(area, ids)| {
@@ -274,7 +348,7 @@ impl FakeHue {
         let put_light: Arc<LightPutRoute> = Arc::new(put_light);
         let route_table = Arc::clone(&table);
         let not_found = || Reply::json(404, json!({ "errors": [{ "description": "not found" }] }));
-        let bridge = TestBridge::start(move |method, path, _body| {
+        let bridge = TestBridge::start(move |method, path, body| {
             let rest = path.strip_prefix("/clip/v2/resource/").unwrap_or_default();
             let (rtype, id) = rest.split_once('/').unwrap_or((rest, ""));
             let data = |item: Value| Reply::json(200, json!({ "errors": [], "data": [item] }));
@@ -306,7 +380,18 @@ impl FakeHue {
                     None => not_found(),
                 },
                 ("PUT", "entertainment_configuration") => Reply::ok(),
-                ("PUT", "light") => put_light(id),
+                ("PUT", "light") => {
+                    let reply = put_light(id);
+                    if apply_puts && (200..300).contains(&reply.status) {
+                        let written: Value = serde_json::from_str(body).unwrap_or(Value::Null);
+                        if let (Some(state), Some(on)) =
+                            (route_table.lock().unwrap().get_mut(id), written.get("on"))
+                        {
+                            state["on"] = on.clone();
+                        }
+                    }
+                    reply
+                }
                 _ => not_found(),
             }
         });

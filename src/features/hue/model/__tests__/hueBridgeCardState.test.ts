@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { HueOnboardingStatus, HueRuntimeStatusView } from "../onboardingStatusCodes";
 import {
   deriveHueBridgeCardState,
+  huePairingErrorDescriptionKey,
   hueStreamFailureReasonKey,
   type HueBridgeCardStateInput,
 } from "../hueBridgeCardState";
@@ -111,6 +112,16 @@ describe("deriveHueBridgeCardState", () => {
           hueStatus: status("HUE_PAIRING_DEVICETYPE_INVALID"),
         }),
       ).toBe("pairingFailed");
+    });
+
+    it("explains a refused bridge certificate instead of calling the key expired", () => {
+      const hueStatus = status("HUE_BRIDGE_IDENTITY_MISMATCH");
+      expect(deriveHueBridgeCardState({ ...BASE, credentialState: "needs_repair", hueStatus })).toBe(
+        "pairingFailed",
+      );
+      expect(huePairingErrorDescriptionKey(hueStatus.code)).toBe(
+        "hue:pairing.errors.BRIDGE_IDENTITY_MISMATCH.description",
+      );
     });
 
     it("falls through to authError for any other needs_repair reason", () => {

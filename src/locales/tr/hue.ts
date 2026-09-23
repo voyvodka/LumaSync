@@ -46,6 +46,10 @@ const hue: Catalogue<typeof enHue> = {
       RATE_LIMITED: {
         description: "Çok fazla istek. Tekrar denemeden önce bir dakika bekleyin.",
       },
+      BRIDGE_IDENTITY_MISMATCH: {
+        description:
+          "Bu adresteki cihaz LumaSync'in eşleştiği köprü olarak tanınmadı, bu yüzden ona hiçbir şey gönderilmedi. Köprüyü sıfırladıysanız ya da değiştirdiyseniz yeniden eşleştirin; değilse adresin hâlâ köprünüze ait olduğunu kontrol edin.",
+      },
     },
   },
   credential: {

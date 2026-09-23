@@ -18,6 +18,11 @@ mod hue_http;
 #[allow(dead_code)]
 mod status;
 
+/// `commands::hue::transport`'s address guard, re-exported by the stub below.
+#[path = "../src/commands/hue/transport/address.rs"]
+#[allow(dead_code)]
+mod bridge_address;
+
 // v1.5 W2-A2 / W2-A3 stubs — `pair_hue_bridge` and `discover_hue_bridges`
 // (which we don't exercise in this TDD harness) reach into
 // `super::hue::credential_store::*` and `crate::network::mdns::*`.
@@ -71,11 +76,21 @@ mod hue {
     }
 
     pub mod credential_store {
+        pub trait SecretStore {}
         #[allow(dead_code)]
         pub struct StubStore;
+        impl SecretStore for StubStore {}
         #[allow(dead_code)]
         pub fn default_store() -> Box<StubStore> {
             Box::new(StubStore)
+        }
+
+        pub mod tests {
+            #[derive(Default)]
+            pub struct InMemoryStore {
+                _stub: (),
+            }
+            impl super::SecretStore for InMemoryStore {}
         }
         #[allow(dead_code)]
         pub enum MigrationOutcome {
@@ -89,7 +104,7 @@ mod hue {
                 "STUB"
             }
             #[allow(dead_code)]
-            pub fn backend(&self, _store: &StubStore) -> Backend {
+            pub fn backend(&self, _store: &dyn SecretStore) -> Backend {
                 Backend
             }
         }
@@ -109,12 +124,91 @@ mod hue {
 
         #[allow(dead_code)]
         pub fn migrate_hue_credentials_to_keychain(
-            _store: &StubStore,
+            _store: &dyn SecretStore,
             _bridge_id: &str,
             _username: &str,
             _client_key: &str,
         ) -> MigrationOutcome {
             MigrationOutcome::Failed
+        }
+
+        #[allow(dead_code)]
+        pub fn adopt_bridge_owner(_store: &dyn SecretStore, _app_key: &str, _bridge_id: &str) {}
+    }
+
+    /// Presence-only stub for `commands::hue::bridge_identity`: certificate
+    /// checks need the real transport, which this harness does not mount.
+    /// Covered by the unit tests in `src/commands/hue/bridge_identity.rs`.
+    pub mod bridge_identity {
+        #[allow(dead_code)]
+        pub const IDENTITY_MISMATCH_CODE: &str = "HUE_BRIDGE_IDENTITY_MISMATCH";
+
+        #[allow(dead_code)]
+        pub struct BridgeTrust;
+        impl BridgeTrust {
+            #[allow(dead_code)]
+            pub fn any() -> Self {
+                Self
+            }
+            #[allow(dead_code)]
+            pub fn pairing() -> Self {
+                Self
+            }
+        }
+
+        #[allow(dead_code)]
+        pub fn normalize_bridge_id(_value: &str) -> Option<String> {
+            None
+        }
+    }
+
+    /// The real address guard, so `verify_hue_bridge_ip_input` is tested
+    /// against the check production runs; the clients are plain stand-ins.
+    pub mod transport {
+        #[allow(unused_imports)]
+        pub(crate) use crate::bridge_address::{is_valid_bridge_addr, validate_bridge_addr};
+
+        use super::bridge_identity::BridgeTrust;
+
+        #[allow(dead_code)]
+        pub fn async_client(_trust: &BridgeTrust) -> Result<reqwest::Client, String> {
+            Ok(reqwest::Client::new())
+        }
+        #[allow(dead_code)]
+        pub fn async_client_for_key(_app_key: &str) -> Result<reqwest::Client, String> {
+            Ok(reqwest::Client::new())
+        }
+        #[allow(dead_code)]
+        pub fn cloud_client() -> Result<reqwest::Client, String> {
+            Ok(reqwest::Client::new())
+        }
+        #[allow(dead_code)]
+        pub fn plain_http_client() -> Result<reqwest::Client, String> {
+            Ok(reqwest::Client::new())
+        }
+        #[allow(dead_code)]
+        pub fn answering_bridge_id(_response: &reqwest::Response) -> Option<String> {
+            None
+        }
+        #[allow(dead_code)]
+        pub fn identity_rejection(_error: &reqwest::Error) -> Option<String> {
+            None
+        }
+        #[allow(dead_code)]
+        pub fn is_tls_failure(_error: &reqwest::Error) -> bool {
+            false
+        }
+        #[allow(dead_code)]
+        pub fn send_error_text(error: &reqwest::Error) -> String {
+            error.to_string()
+        }
+        #[allow(dead_code)]
+        pub async fn read_body(response: reqwest::Response) -> Result<String, String> {
+            response.text().await.map_err(|error| error.to_string())
+        }
+        #[allow(dead_code)]
+        pub fn read_body_blocking(response: reqwest::blocking::Response) -> Result<String, String> {
+            response.text().map_err(|error| error.to_string())
         }
     }
 }
