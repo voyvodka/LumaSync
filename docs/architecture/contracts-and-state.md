@@ -22,8 +22,8 @@ per-module copies once drifted apart on their derives while the TS side typed on
 shape, no more. Codes the frontend mints (a transport rejection, a synthesised "no command ran")
 live in a separate union that widens the wire one at the consumer holding both, so a
 frontend-invented code can never pose as something the backend can send. `SerialHealthStepWireCode`
-/ `SerialHealthStepCode` and `HueOnboardingWireStatusCode` / `HueOnboardingStatus` are the two
-worked examples. `SomeCode | string` is banned outright: it reads as typed and admits everything,
+/ `SerialHealthStepCode` and `HueOnboardingWireStatusCode` / `HueOnboardingStatus` (the latter in
+`features/hue/model/onboardingStatusCodes.ts`) are the two worked examples. `SomeCode | string` is banned outright: it reads as typed and admits everything,
 which is harder to spot than a bare `string`.
 
 **Failures are never swallowed.** An empty `catch {}` is a defect here, not a shortcut. Log with
@@ -41,7 +41,10 @@ Windows, `~/.local/share/com.lumasync.app/` on Linux. The store key is `SHELL_ST
 through `migrations.ts`. Stored keys follow `ShellState` in `shell.ts`.
 
 **i18n keys are stable and scoped by feature.** EN and TR move together — a locale-parity test
-enforces it, so a key added to one and not the other fails the suite.
+enforces it, so a key added to one and not the other fails the suite. `check:i18n`
+(`scripts/verify/i18n-keys.mjs`) ratchets orphans, and a `` t(`prefix.${x}`) `` site references
+only the children its contract value set can produce — so a key whose value left the contract turns
+orphan instead of hiding under the prefix, and a contract value with no message fails.
 
 ## Gotchas
 
