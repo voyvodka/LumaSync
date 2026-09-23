@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LightingModeConfig } from "../features/mode/model/contracts";
 import type { LocalSink } from "../features/device/localSink";
-import { DEVICE_COMMANDS } from "@/shared/contracts/device";
+import { DEVICE_COMMANDS, type ColorCorrectionConfig, type LedChipType } from "@/shared/contracts/device";
 import { HUE_COMMANDS, HUE_READINESS_REASON, HUE_RUNTIME_TRIGGER_SOURCE, HUE_STATUS } from "@/shared/contracts/hue";
 import { appliedResult } from "@/test/modeCommandResult";
 
@@ -159,6 +159,8 @@ vi.mock("../features/settings/SettingsLayout", () => ({
     hueReconnecting?: boolean;
     onLightingModeChange: (mode: LightingModeConfig) => void;
     onOutputTargetsChange: (targets: Array<"usb" | "hue">) => void;
+    onColorCorrectionChange: (next: ColorCorrectionConfig) => void;
+    onChipTypeChange: (next: LedChipType) => void;
   }) => (
     <div>
       <p data-testid="active-mode">{props.lightingMode.kind}</p>
@@ -200,6 +202,18 @@ vi.mock("../features/settings/SettingsLayout", () => ({
         }
       >
         set-solid
+      </button>
+      {/* Instant settings: each re-dispatches the live mode as it stands. */}
+      <button
+        type="button"
+        onClick={() =>
+          props.onColorCorrectionChange({ gammaR: 2.2, gammaG: 2.2, gammaB: 2.2, kelvin: 5000, saturation: 1.1 })
+        }
+      >
+        change-color-correction
+      </button>
+      <button type="button" onClick={() => props.onChipTypeChange("sk6812-rgbw")}>
+        change-chip-type
       </button>
       <button
         type="button"
@@ -292,6 +306,74 @@ function installInvokeDispatch(serialConnected: boolean): void {
     }
   });
 }
+
+/**
+ * A `set_lighting_mode` backend that remembers what it runs. Rust retunes the
+ * running mode in place only while the targets match, so a send naming other
+ * targets counts as a target change (a worker restart). A send naming Hue while
+ * no stream is up is refused by the Hue gate, and a Solid send naming Hue is the
+ * one Rust pushes the colour to the bridge for.
+ */
+function installLightingBackend() {
+  const backend = {
+    hueStreamUp: false,
+    running: null as LightingModeConfig | null,
+    targetChanges: 0,
+    hueSolidSends: 0,
+  };
+  // Absent or empty targets mean USB to the backend (legacy D-10).
+  const targetsOf = (mode: LightingModeConfig) =>
+    mode.targets && mode.targets.length > 0 ? mode.targets : ["usb"];
+  setLightingModeMock.mockImplementation((payload: LightingModeConfig) => {
+    if (payload.kind !== "off" && targetsOf(payload).includes("hue") && !backend.hueStreamUp) {
+      return Promise.resolve({
+        active: backend.running !== null,
+        mode: backend.running ?? { kind: "off" },
+        status: { code: "HUE_NOT_READY", message: "not ready", details: "HUE_RUNTIME_GATE_FAILED" },
+      });
+    }
+    if (
+      backend.running?.kind === payload.kind &&
+      targetsOf(backend.running).join() !== targetsOf(payload).join()
+    ) {
+      backend.targetChanges += 1;
+    }
+    backend.running = payload.kind === "off" ? null : payload;
+    if (payload.kind === "solid" && targetsOf(payload).includes("hue")) backend.hueSolidSends += 1;
+    return Promise.resolve(appliedResult(payload));
+  });
+  startHueMock.mockImplementation(() => {
+    backend.hueStreamUp = true;
+    return Promise.resolve({
+      active: true,
+      status: { code: "HUE_STREAM_RUNNING", message: "Running", details: null },
+    });
+  });
+  stopHueMock.mockImplementation(() => {
+    backend.hueStreamUp = false;
+    return Promise.resolve({
+      active: false,
+      status: { code: "HUE_STREAM_STOPPED", message: "Stopped", details: null },
+    });
+  });
+  stopLightingMock.mockImplementation(() => {
+    backend.running = null;
+    return Promise.resolve({ active: false });
+  });
+  getHueStreamStatusMock.mockImplementation(() =>
+    Promise.resolve({
+      active: backend.hueStreamUp,
+      lastSolidColor: null,
+      status: backend.hueStreamUp
+        ? { state: "Running", code: "HUE_STREAM_RUNNING", message: "Running", details: null }
+        : { state: "Idle", code: "HUE_STREAM_STOPPED", message: "Stopped", details: null },
+    }),
+  );
+  return backend;
+}
+
+const lastModeSend = () =>
+  setLightingModeMock.mock.calls[setLightingModeMock.mock.calls.length - 1][0] as LightingModeConfig;
 
 describe("App mode orchestration", () => {
   beforeEach(() => {
@@ -1036,6 +1118,167 @@ describe("App mode orchestration", () => {
     // System, not the MODE_CONTROL default — a bare stopHue() here would
     // silently reattribute the stop event in runtime telemetry.
     expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
+  });
+
+  // The Outputs card adds or removes a target from the running mode without a
+  // mode transition. The live mode kept its old targets, so the next instant
+  // setting re-sent them: Rust saw a target change and restarted the worker,
+  // and a Solid re-apply sent the bridge no colour.
+  describe("the live mode follows a target added to or removed from it", () => {
+    const pairedShellState = {
+      lastSection: "general",
+      ledCalibration: {
+        templateId: "monitor-27-16-9",
+        counts: { top: 10, right: 10, bottom: 10, left: 10 },
+        bottomMissing: 0,
+        cornerOwnership: "horizontal",
+        visualPreset: "subtle",
+        startAnchor: "top-start",
+        direction: "cw",
+        totalLeds: 40,
+      },
+      lightingMode: { kind: "solid", solid: { r: 10, g: 20, b: 30, brightness: 0.8 } },
+      lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
+      hueAppKey: "app-user",
+      hueClientKey: "AABBCCDD11223344",
+      lastHueAreaId: "area-1",
+    };
+    const persistedTargets = () =>
+      saveShellStateMock.mock.calls
+        .map(([patch]) => patch as Record<string, unknown>)
+        .filter((patch) => "lastOutputTargets" in patch)
+        .map((patch) => patch.lastOutputTargets);
+
+    async function changeColorCorrection() {
+      // Past the dispatcher's 20 ms cooldown, which drops an unforced send.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      });
+      const before = setLightingModeMock.mock.calls.length;
+      await act(async () => {
+        screen.getByRole("button", { name: "change-color-correction" }).click();
+      });
+      await waitFor(() => {
+        expect(setLightingModeMock.mock.calls.length).toBe(before + 1);
+      });
+      return lastModeSend();
+    }
+
+    it("sends a setting change to both targets after the user adds Hue, and Solid keeps colouring Hue", async () => {
+      const backend = installLightingBackend();
+      loadShellStateMock.mockResolvedValue({ ...pairedShellState, lastOutputTargets: ["usb"] });
+      render(<App />);
+      await waitFor(() => {
+        expect(screen.getByTestId("active-mode")).toHaveTextContent("solid");
+        expect(backend.running?.targets).toEqual(["usb"]);
+      });
+
+      await act(async () => {
+        screen.getByRole("button", { name: "set-both-targets" }).click();
+      });
+      await waitFor(() => {
+        expect(backend.running?.targets).toEqual(["usb", "hue"]);
+        expect(setHueSolidColorMock).toHaveBeenCalled();
+      });
+      // The add itself is the one restart it costs.
+      const restartsAfterAdd = backend.targetChanges;
+      const hueSendsAfterAdd = backend.hueSolidSends;
+
+      const send = await changeColorCorrection();
+      expect(send.targets).toEqual(["usb", "hue"]);
+      expect(send.colorCorrection).toEqual(expect.objectContaining({ kelvin: 5000 }));
+      expect(backend.targetChanges).toBe(restartsAfterAdd);
+      expect(backend.hueSolidSends).toBe(hueSendsAfterAdd + 1);
+
+      await act(async () => {
+        screen.getByRole("button", { name: "change-chip-type" }).click();
+      });
+      await waitFor(() => {
+        expect(lastModeSend().chipType).toBe("sk6812-rgbw");
+      });
+      expect(lastModeSend().targets).toEqual(["usb", "hue"]);
+      expect(backend.targetChanges).toBe(restartsAfterAdd);
+      expect(backend.hueSolidSends).toBe(hueSendsAfterAdd + 2);
+      // The user's own toggle is the one write; keeping the live mode current adds none.
+      expect(persistedTargets()).toEqual([["usb", "hue"]]);
+    });
+
+    it("sends a setting change to USB alone after the user removes Hue", async () => {
+      const backend = installLightingBackend();
+      loadShellStateMock.mockResolvedValue({ ...pairedShellState, lastOutputTargets: ["usb", "hue"] });
+      render(<App />);
+      await waitFor(() => {
+        expect(backend.running?.targets).toEqual(["usb", "hue"]);
+        expect(screen.getByTestId("hue-shown-state")).toHaveTextContent("streaming");
+      });
+
+      await act(async () => {
+        screen.getByRole("button", { name: "set-usb-target" }).click();
+      });
+      await waitFor(() => {
+        expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
+        expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+      });
+      const hueSendsAfterRemove = backend.hueSolidSends;
+
+      // With Hue still in the live mode, this send hits the Hue gate and the
+      // setting never reaches the strip.
+      const send = await changeColorCorrection();
+      expect(send.targets).toEqual(["usb"]);
+      expect(backend.running?.targets).toEqual(["usb"]);
+      expect(backend.running?.colorCorrection).toEqual(expect.objectContaining({ kelvin: 5000 }));
+      expect(backend.hueSolidSends).toBe(hueSendsAfterRemove);
+      expect(screen.getByTestId("active-mode")).toHaveTextContent("solid");
+    });
+
+    it("keeps a Hue add the bridge refused out of the live mode, without rewriting the saved targets", async () => {
+      const backend = installLightingBackend();
+      loadShellStateMock.mockResolvedValue({ ...pairedShellState, lastOutputTargets: ["usb"] });
+      startHueMock.mockResolvedValue({
+        active: false,
+        status: { code: "CONFIG_NOT_READY_GATE_BLOCKED", message: "blocked", details: null },
+      });
+      render(<App />);
+      await waitFor(() => {
+        expect(backend.running?.targets).toEqual(["usb"]);
+      });
+
+      await act(async () => {
+        screen.getByRole("button", { name: "set-both-targets" }).click();
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId("hue-left-out-notice")).toBeInTheDocument();
+        expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+      });
+
+      const send = await changeColorCorrection();
+      expect(send.targets).toEqual(["usb"]);
+      expect(backend.targetChanges).toBe(0);
+      // Only the user's explicit add; the drop is session-only.
+      expect(persistedTargets()).toEqual([["usb", "hue"]]);
+    });
+
+    // A delta add never rewrites the persisted mode, so its targets go stale
+    // and the next launch restored them into the live mode.
+    it("sends a setting change to what the launch restore ran, not the saved mode's targets", async () => {
+      const backend = installLightingBackend();
+      loadShellStateMock.mockResolvedValue({
+        ...pairedShellState,
+        lightingMode: { ...pairedShellState.lightingMode, targets: ["usb"] },
+        lastOutputTargets: ["usb", "hue"],
+      });
+      render(<App />);
+      await waitFor(() => {
+        expect(backend.running?.targets).toEqual(["usb", "hue"]);
+      });
+      const hueSendsAfterBoot = backend.hueSolidSends;
+
+      const send = await changeColorCorrection();
+      expect(send.targets).toEqual(["usb", "hue"]);
+      expect(backend.targetChanges).toBe(0);
+      expect(backend.hueSolidSends).toBe(hueSendsAfterBoot + 1);
+      expect(persistedTargets()).toEqual([]);
+    });
   });
 
   it(
@@ -1846,6 +2089,64 @@ describe("App mode orchestration", () => {
         expect(stopLightingMock).not.toHaveBeenCalled();
         expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight");
         // Neither the drop nor the rejoin rewrites what the next launch restores.
+        expect(persistedTargets()).toEqual([]);
+      });
+
+      // The rejoin re-applies with both targets; a setting sent afterwards with
+      // the restore's [usb] would restart the worker the rejoin just rebuilt.
+      it("sends a setting change to both targets once Hue has rejoined, without saving them", async () => {
+        await renderRunningOnUsb();
+        await waitForBusyNotice();
+        await freeTheAreaAndWait(3_000);
+        await waitFor(() => {
+          expect(screen.getByTestId("hue-shown-state")).toHaveTextContent("streaming");
+          expect(lastModeSend().targets).toEqual(["usb", "hue"]);
+        });
+        const sendsAfterRejoin = setLightingModeMock.mock.calls.length;
+
+        await act(async () => {
+          screen.getByRole("button", { name: "change-chip-type" }).click();
+        });
+        await waitFor(() => {
+          expect(setLightingModeMock.mock.calls.length).toBe(sendsAfterRejoin + 1);
+        });
+        expect(lastModeSend()).toEqual(
+          expect.objectContaining({ kind: "ambilight", chipType: "sk6812-rgbw", targets: ["usb", "hue"] }),
+        );
+        expect(persistedTargets()).toEqual([]);
+      });
+
+      it("keeps a rejoined Hue coloured by a Solid setting change", async () => {
+        loadShellStateMock.mockResolvedValue({
+          ...(await loadShellStateMock()),
+          lightingMode: { kind: "solid", solid: { r: 10, g: 20, b: 30, brightness: 0.8 } },
+        });
+        render(<App />);
+        await waitFor(() => {
+          expect(screen.getByTestId("active-mode")).toHaveTextContent("solid");
+          expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+        });
+        await waitForBusyNotice();
+        await freeTheAreaAndWait(3_000);
+        await waitFor(() => {
+          expect(lastModeSend().targets).toEqual(["usb", "hue"]);
+          expect(setHueSolidColorMock).toHaveBeenCalled();
+        });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(25);
+        });
+        const sendsAfterRejoin = setLightingModeMock.mock.calls.length;
+
+        await act(async () => {
+          screen.getByRole("button", { name: "change-color-correction" }).click();
+        });
+        await waitFor(() => {
+          expect(setLightingModeMock.mock.calls.length).toBe(sendsAfterRejoin + 1);
+        });
+        // A Solid apply naming Hue is the one Rust pushes the colour to the bridge for.
+        expect(lastModeSend()).toEqual(
+          expect.objectContaining({ kind: "solid", targets: ["usb", "hue"] }),
+        );
         expect(persistedTargets()).toEqual([]);
       });
 

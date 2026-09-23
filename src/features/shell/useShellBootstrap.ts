@@ -219,6 +219,11 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
             if (hueBootstrapConfig && isHueBusyCandidate(restore.hueStartCode)) {
               sink.scheduleHueBusyRetry({ type: "resume", mode: restoredMode }, hueBootstrapConfig);
             }
+          } else if (restore.hueLeftOut === null) {
+            // The persisted mode's targets are not what ran: a delta add or
+            // remove never rewrites them, and a strip unplugged at launch is
+            // filtered out of `bootTargets`. Hot-reload re-dispatches send these.
+            sink.setLightingMode({ ...restoredMode, targets: bootTargets });
           }
           // A launch against an unplugged display must not toast; every other
           // failure needs the user, and without the toast they only see Off.
