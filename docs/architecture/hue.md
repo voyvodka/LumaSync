@@ -262,8 +262,14 @@ off, and so do we now (`commands/hue/light_restore.rs`).
   sender still running — the fallback's next light PUT undoes the restore. So the worker has to let
   go first: `apply_mode_change` hands it the Hue context only when `targets` names Hue, and removing
   Hue from `[usb, hue]` re-applies the mode on `[usb]` and awaits it before the stop
-  (`ui-and-shell.md`). A stop running alongside `stop_lighting` (Off from `[usb, hue]`) is also
-  safe: the worker's join drops its handle well inside the stop's wait.
+  (`ui-and-shell.md`). Off awaits `stop_lighting` before `stop_hue_stream` whenever a mode is
+  running, whatever its targets. It used to call `stop_lighting` only when `usb` was an active
+  target, so Off from a Hue-only mode sent `stop_hue_stream` alone: the worker kept capturing the
+  screen and holding its handle, the stop timed out partial, and on the fallback the worker went on
+  driving the lights after the restore, with nothing left to stop it. Off from `[usb, hue]` ran
+  the two stops side by side, which held only because the worker's join landed inside the stop's
+  wait; it is sequential now as well. The quit path already had this order (`[shutdown]` step 1
+  stops the worker, step 2 stops Hue).
 - **Colour mode.** CLIP v2 reports `color.xy` in both modes, so the mode is read from
   `color_temperature.mirek_valid` (`mirek` is null outside the ct spectrum). An on light gets one PUT
   with `on`, `dimming.brightness` and either `color_temperature.mirek` or `color.xy`, never both. An

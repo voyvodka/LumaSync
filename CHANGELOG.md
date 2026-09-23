@@ -121,6 +121,12 @@ https://keepachangelog.com/en/1.1.0/
   the lights one by one instead of through an Entertainment stream, they were painted again after
   being put back the way they were before. The strip now carries on alone first, then Hue stops and the lights are
   put back.
+- Turning lighting off when only Hue lights were in use now really stops it. The app kept
+  capturing the screen behind the scenes, the Hue stop took about three seconds and was reported as
+  only partly done, and when the app was setting the lights one by one instead of through an
+  Entertainment stream, they kept following the screen after being put back the way they were
+  before. The same happened when Off was pressed while a mode was still starting. Off now stops the
+  lighting first, then Hue, whatever outputs were on.
 - The first-run guide banner could flash up for a moment at launch and disappear again for people
   who were already set up but had updated from a version without it. It now appears only once the
   app knows which step you are on, so it no longer flashes; a new install still sees the first step
