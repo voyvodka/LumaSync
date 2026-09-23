@@ -14,9 +14,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
+use super::hue::hue_config::{HueStartView, PlacementRecord, RoomPlacementView, ZoneFrame};
+use super::hue_intensity::LightingSmoothingPreset;
 use super::led_calibration::LedCalibrationConfig;
 use super::led_output::{ColorCorrectionConfig, FirmwareProfile, LedChipType, LedColorOrder};
-use super::lighting_mode::AmbilightPayload;
+use super::lighting_mode::{AmbilightPayload, LightingModeConfig};
+use crate::models::room_map::{RoomDimensions, TvAnchorPlacement};
 
 pub const SHELL_STATE_FILE: &str = "shell-state.json";
 /// `SHELL_STORE_KEY` in `src/shared/contracts/shell.ts`.
@@ -25,6 +28,10 @@ pub const SHELL_STORE_KEY: &str = "shell-state";
 pub const SHELL_STATE_CHANGED_EVENT: &str = "shell://state-changed";
 
 const SHELL_STATE_WRITE_FAILED: &str = "SHELL_STATE_WRITE_FAILED";
+
+/// `writerId` on a change Rust made itself. No window holds it, so no window
+/// drops the event as its own echo.
+pub const RUST_WRITER_ID: &str = "rust";
 
 type StateMap = Map<String, Value>;
 
@@ -98,6 +105,69 @@ impl PersistedShellState {
             self.read("ledPreviewPopupCenterX")?,
             self.read("ledPreviewPopupCenterY")?,
         ))
+    }
+
+    /// The mode last chosen, with the targets saved beside it.
+    pub fn lighting_mode(&self) -> Option<LightingModeConfig> {
+        self.read("lightingMode")
+    }
+
+    /// `lightingMode` as stored, for a write that changes some fields and
+    /// must carry the rest through as they are.
+    pub fn lighting_mode_object(&self) -> Option<Map<String, Value>> {
+        self.0.get("lightingMode")?.as_object().cloned()
+    }
+
+    pub fn last_output_targets(&self) -> Option<Vec<String>> {
+        self.read("lastOutputTargets")
+    }
+
+    pub fn lighting_intensity_preset(&self) -> Option<LightingSmoothingPreset> {
+        self.read("lightingIntensityPreset")
+    }
+
+    /// Bridge, area and pairing evidence for a Hue start. The legacy keys are
+    /// what an install that predates the keychain still has on disk.
+    pub fn hue_start_view(&self) -> HueStartView {
+        HueStartView {
+            bridge_ip: self
+                .0
+                .get("lastHueBridge")
+                .and_then(|bridge| bridge.get("ip"))
+                .and_then(|ip| read_value(ip, "lastHueBridge.ip")),
+            app_key: self.read("hueAppKey"),
+            client_key: self.read("hueClientKey"),
+            credential_backend: self.read("credentialStorageBackend"),
+            area_id: self.read("lastHueAreaId"),
+        }
+    }
+
+    /// Only what channel placement and room geometry read out of `roomMap`. A
+    /// record this build cannot read is skipped and logged, not fatal to the rest.
+    pub fn room_placement_view(&self) -> Option<RoomPlacementView> {
+        let room = self.0.get("roomMap")?.as_object()?;
+        let records = |key: &str| -> Vec<&Value> {
+            room.get(key)
+                .and_then(Value::as_array)
+                .map(|items| items.iter().collect())
+                .unwrap_or_default()
+        };
+        Some(RoomPlacementView {
+            hue_channels: records("hueChannels")
+                .into_iter()
+                .filter_map(|record| read_value::<PlacementRecord>(record, "roomMap.hueChannels[]"))
+                .collect(),
+            zones: records("zones")
+                .into_iter()
+                .filter_map(|record| read_value::<ZoneFrame>(record, "roomMap.zones[]"))
+                .collect(),
+            tv_anchor: room
+                .get("tvAnchor")
+                .and_then(|anchor| read_value::<TvAnchorPlacement>(anchor, "roomMap.tvAnchor")),
+            dimensions: room
+                .get("dimensions")
+                .and_then(|dims| read_value::<RoomDimensions>(dims, "roomMap.dimensions")),
+        })
     }
 }
 
@@ -499,6 +569,20 @@ fn sync_parent_dir(_path: &Path) {}
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
+
+/// A write Rust makes on its own behalf, announced to every window exactly as
+/// a webview's `patch_shell_state` is, so the frontend cache follows it.
+pub fn patch_from_rust<R: Runtime>(app: &AppHandle<R>, set: StateMap) -> Result<u64, String> {
+    let Some(store) = app.try_state::<ShellStateStore>() else {
+        return Err(format!("{SHELL_STATE_WRITE_FAILED}: no shell-state store"));
+    };
+    store.patch(
+        set,
+        Vec::new(),
+        Some(RUST_WRITER_ID.to_string()),
+        |changed| emit_changed(app, changed),
+    )
+}
 
 fn emit_changed<R: Runtime>(app: &AppHandle<R>, changed: &ShellStateChanged) {
     if let Err(error) = app.emit(SHELL_STATE_CHANGED_EVENT, changed) {
@@ -1061,6 +1145,83 @@ mod tests {
         assert_eq!(unplaced.popup_center(), None);
         let wrong_type = persisted(r#"{ "shell-state": { "updateChannel": 3 } }"#).unwrap();
         assert_eq!(wrong_type.update_channel(), None);
+    }
+
+    /// What the lighting transaction reads to restore a mode and start Hue.
+    #[test]
+    fn the_lighting_transaction_reads_its_keys() {
+        use crate::commands::hue_intensity::LightingSmoothingPreset;
+        use crate::commands::lighting_mode::LightingModeKind;
+        let state = persisted(
+            r#"{ "shell-state": {
+                "lightingMode": { "kind": "solid", "targets": ["usb", "hue"],
+                    "solid": { "r": 1, "g": 2, "b": 3, "brightness": 0.5 } },
+                "lastOutputTargets": ["hue"],
+                "lightingIntensityPreset": "intense",
+                "lastHueBridge": { "ip": "192.168.1.50", "id": "abc" },
+                "lastHueAreaId": "area-1",
+                "hueAppKey": "key",
+                "credentialStorageBackend": "keychain",
+                "roomMap": {
+                    "dimensions": { "widthMeters": 4, "depthMeters": 5, "heightMeters": 2.5 },
+                    "tvAnchor": { "x": 1, "y": 0, "width": 1.2, "height": 0.1 },
+                    "hueChannels": [
+                        { "channelIndex": 0, "channelId": 3, "x": 0.1, "y": 0.2, "z": 0 },
+                        { "channelIndex": 1, "x": "not a number" }
+                    ],
+                    "zones": []
+                }
+            } }"#,
+        )
+        .unwrap();
+
+        let mode = state.lighting_mode().expect("the saved mode reads");
+        assert_eq!(mode.kind, LightingModeKind::Solid);
+        assert_eq!(
+            mode.targets,
+            Some(vec!["usb".to_string(), "hue".to_string()])
+        );
+        assert_eq!(state.last_output_targets(), Some(vec!["hue".to_string()]));
+        assert_eq!(
+            state.lighting_intensity_preset(),
+            Some(LightingSmoothingPreset::Intense)
+        );
+        let hue = state.hue_start_view();
+        assert_eq!(hue.bridge_ip.as_deref(), Some("192.168.1.50"));
+        assert_eq!(hue.area_id.as_deref(), Some("area-1"));
+        assert_eq!(hue.app_key.as_deref(), Some("key"));
+        assert_eq!(hue.client_key, None);
+        assert_eq!(hue.credential_backend.as_deref(), Some("keychain"));
+        let room = state.room_placement_view().expect("the room map reads");
+        assert_eq!(
+            room.hue_channels.len(),
+            1,
+            "an unreadable record is skipped alone"
+        );
+        assert!(room.tv_anchor.is_some());
+        assert!(room.dimensions.is_some());
+    }
+
+    #[test]
+    fn a_rust_write_is_announced_like_a_webview_patch() {
+        let app = tauri::test::mock_app();
+        app.manage(ShellStateStore::in_memory());
+        let (tx, rx) = std::sync::mpsc::channel();
+        tauri::Listener::listen(&app, SHELL_STATE_CHANGED_EVENT, move |event| {
+            let _ = tx.send(event.payload().to_string());
+        });
+
+        let mut set = Map::new();
+        set.insert("lastOutputTargets".to_string(), json!(["usb"]));
+        patch_from_rust(app.handle(), set).unwrap();
+
+        let announced: Value = serde_json::from_str(&rx.recv().unwrap()).unwrap();
+        assert_eq!(announced["set"], json!({ "lastOutputTargets": ["usb"] }));
+        assert_eq!(announced["writerId"], json!(RUST_WRITER_ID));
+        assert_eq!(
+            app.state::<ShellStateStore>().snapshot().state.unwrap()["lastOutputTargets"],
+            json!(["usb"])
+        );
     }
 
     #[test]

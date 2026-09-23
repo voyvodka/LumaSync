@@ -37,6 +37,7 @@ pub mod commands;
 pub mod credential_store;
 pub mod dtls;
 pub mod frame;
+pub mod hue_config;
 pub mod light_restore;
 pub mod pin_store;
 pub mod reconnect;
