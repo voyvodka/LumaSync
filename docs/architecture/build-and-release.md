@@ -43,7 +43,10 @@ updater feed never sees a platform-incomplete `latest.json`; a `publish` job the
 platform keys before undrafting. A `-` in the tag marks it prerelease.
 
 **Updates ship through GitHub Releases with minisign verification.** The updater checks on startup
-and surfaces `UpdateModal.tsx`. Artefacts must include a `latest.json` endpoint.
+and surfaces `UpdateModal.tsx` when a version is available. A failed startup check is only logged
+and raised as a low-priority shell notice with "Try again"; the modal reports a failure only for a
+check the user started (see `ui-and-shell.md`). The e2e build skips the startup check. Artefacts
+must include a `latest.json` endpoint.
 
 **Tests live in a `__tests__/` subfolder beside the code under test** (`foo.ts` →
 `__tests__/foo.test.ts`), never co-located. Mock the Tauri boundary for deterministic frontend

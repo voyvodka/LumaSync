@@ -43,6 +43,7 @@ const PRESETS: Record<StateKey, UpdaterState> = {
   installing: { status: "installing", update: MOCK_UPDATE },
   error: {
     status: "error",
+    phase: "install",
     message:
       "minisign public key mismatch — downloaded artifact signature does not match repository key. Update aborted, rollback clean.",
   },

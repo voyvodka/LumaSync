@@ -16,5 +16,8 @@ fn a_plain_launch_is_not_started_hidden() {
         invoke(&webview, "get_launch_context", json!({})).expect("launch context must resolve");
 
     assert_camel_case_keys(&response);
-    assert_eq!(response, json!({ "startHidden": false }));
+    assert_eq!(
+        response,
+        json!({ "startHidden": false, "e2eBuild": cfg!(feature = "e2e") })
+    );
 }

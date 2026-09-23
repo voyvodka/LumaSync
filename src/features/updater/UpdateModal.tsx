@@ -1,7 +1,7 @@
 import type { TFunction } from "i18next";
 import { useTranslation, Trans } from "react-i18next";
-import { UPDATER_STATUS, type UpdateMetadata } from "@/shared/contracts/updater";
-import type { UpdaterState } from "./useAutoUpdater";
+import type { UpdateMetadata } from "@/shared/contracts/updater";
+import type { UpdaterErrorPhase, UpdaterState } from "./useAutoUpdater";
 import { isUpdateModalStatus } from "./updateModalStatus";
 import { IconDownload, IconInstall, IconError } from "@/shared/ui/icons";
 import { clamp } from "@/shared/lib/math";
@@ -124,7 +124,7 @@ export function UpdateModal({ state, onInstall, onDismiss, onRetry }: UpdateModa
         {/* ── Error ─────────────────────────────────────────────────── */}
         {state.status === "error" && (
           <ErrorContent
-            code={state.code}
+            phase={state.phase}
             message={state.message}
             onDismiss={onDismiss}
             onRetry={onRetry}
@@ -323,22 +323,22 @@ function InstallingContent({ version, onDismiss, t }: { version: string; onDismi
 }
 
 function ErrorContent({
-  code,
+  phase,
   message,
   onDismiss,
   onRetry,
   t,
 }: {
-  code?: string;
+  phase: UpdaterErrorPhase;
   message: string;
   onDismiss: () => void;
   onRetry: () => void;
   t: TFn;
 }) {
-  // A check that never reached the feed is not a failed installation, and its
-  // raw message is the plugin's — which embeds the endpoint URL.
-  const isCheckFailure =
-    code === UPDATER_STATUS.CHECK_FAILED || code === UPDATER_STATUS.ENDPOINT_INVALID;
+  // A check that never reached the feed is not a failed installation, whatever
+  // its code — an invoke-level rejection carries none. Its raw message is the
+  // plugin's, which embeds the endpoint URL.
+  const isCheckFailure = phase === "check";
   return (
     <>
       <div className="lm-updater-scroll">
