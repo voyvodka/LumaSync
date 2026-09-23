@@ -3003,6 +3003,8 @@ dependencies = [
  "openssl",
  "raw-window-handle",
  "reqwest",
+ "rustls",
+ "rustls-webpki",
  "screencapturekit",
  "serde",
  "serde_json",

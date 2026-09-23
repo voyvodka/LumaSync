@@ -3,8 +3,6 @@
 //! persisted frontend-side through the shellStore.
 
 use std::collections::HashMap;
-use std::net::Ipv4Addr;
-use std::str::FromStr;
 
 use log::warn;
 use reqwest::blocking::Client as BlockingClient;
@@ -13,6 +11,9 @@ use tauri::Manager;
 use tauri_plugin_fs::FsExt;
 
 use crate::commands::hue::credential_store::effective_hue_app_key;
+use crate::commands::hue::transport::{
+    blocking_client_for_key, read_body_blocking, send_error_text, validate_bridge_addr,
+};
 use crate::commands::hue_http::{classify_hue_response_blocking, HueHttpFault};
 use crate::commands::status::CommandStatus;
 use crate::models::room_map::HueChannelPlacement;
@@ -300,7 +301,7 @@ fn write_channel_positions(
         Err(e) => {
             return status(
                 "CHAN_WB_NETWORK_ERROR",
-                format!("Could not reach the bridge: {e}"),
+                format!("Could not reach the bridge: {}", send_error_text(&e)),
                 None,
             )
         }
@@ -309,7 +310,7 @@ fn write_channel_positions(
         Ok(r) => r,
         Err(fault) => return fault_status(fault, "CHAN_WB_NETWORK_ERROR", read_failed),
     };
-    let body = response.text().unwrap_or_default();
+    let body = read_body_blocking(response).unwrap_or_default();
     if let Some(errors) = clip_v2_errors(&body) {
         return status("CHAN_WB_NETWORK_ERROR", read_failed, Some(errors));
     }
@@ -345,7 +346,7 @@ fn write_channel_positions(
         Err(e) => {
             return status(
                 "CHAN_WB_NETWORK_ERROR",
-                format!("Could not reach the bridge: {e}"),
+                format!("Could not reach the bridge: {}", send_error_text(&e)),
                 None,
             )
         }
@@ -357,7 +358,7 @@ fn write_channel_positions(
             return fault_status(fault, "CHAN_WB_SCHEMA_REJECTED", rejected);
         }
     };
-    if let Some(errors) = clip_v2_errors(&response.text().unwrap_or_default()) {
+    if let Some(errors) = clip_v2_errors(&read_body_blocking(response).unwrap_or_default()) {
         warn!("[hue-writeback] PUT answered 2xx with errors: {errors}");
         return status("CHAN_WB_SCHEMA_REJECTED", rejected, Some(errors));
     }
@@ -409,20 +410,11 @@ fn update_hue_channel_positions_blocking(
     username: String,
     area_id: String,
 ) -> CommandStatus {
-    // SECURITY: Validate bridge IP to prevent SSRF
-    if let Ok(ip) = Ipv4Addr::from_str(&bridge_ip) {
-        if ip.is_loopback() || ip.is_unspecified() || ip.is_multicast() || ip.is_broadcast() {
-            return CommandStatus {
-                code: "HUE_IP_INVALID".to_string(),
-                message: "Invalid bridge IP address format.".to_string(),
-                details: None,
-            };
-        }
-    } else {
+    if let Err(reason) = validate_bridge_addr(&bridge_ip) {
         return CommandStatus {
             code: "HUE_IP_INVALID".to_string(),
             message: "Invalid bridge IP address format.".to_string(),
-            details: None,
+            details: Some(reason),
         };
     }
 
@@ -444,12 +436,7 @@ fn update_hue_channel_positions_blocking(
         return re_pair_status("No Hue application key in the OS keychain or the request payload.");
     }
 
-    // Build TLS-skip HTTP client (Hue bridges use self-signed certificates)
-    let client = match BlockingClient::builder()
-        .danger_accept_invalid_certs(true)
-        .timeout(std::time::Duration::from_millis(5_000))
-        .build()
-    {
+    let client = match blocking_client_for_key(&username) {
         Ok(c) => c,
         Err(e) => {
             return CommandStatus {

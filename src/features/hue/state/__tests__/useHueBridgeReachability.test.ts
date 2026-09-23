@@ -66,6 +66,11 @@ describe("useHueBridgeReachability (INV-30)", () => {
     const rejected = renderHook(() => useHueBridgeReachability(config, false));
     await waitFor(() => expect(rejected.result.current.verdict).toBe("credentialRejected"));
 
+    // A refused certificate answered too, and pairing again is its way back.
+    validateHueCredentialsMock.mockResolvedValue({ status: { code: "HUE_BRIDGE_IDENTITY_MISMATCH" } });
+    const impostor = renderHook(() => useHueBridgeReachability(config, false));
+    await waitFor(() => expect(impostor.result.current.verdict).toBe("credentialRejected"));
+
     validateHueCredentialsMock.mockResolvedValue({ status: { code: "HUE_CREDENTIAL_CHECK_FAILED" } });
     const silent = renderHook(() => useHueBridgeReachability(config, false));
     await waitFor(() => expect(silent.result.current.verdict).toBe("unreachable"));

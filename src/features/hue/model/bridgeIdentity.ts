@@ -3,9 +3,9 @@ import type { TranslationKey } from "@/features/i18n/catalogue";
 import type { HueBridgeSummary } from "../hueOnboardingApi";
 
 // Input-shape UX only, NOT the SSRF guard: this pattern happily accepts
-// 127.0.0.1, 0.0.0.0 and 255.255.255.255. The real check is Rust's
-// `is_valid_ipv4` in `commands/hue_onboarding.rs`, which rejects loopback,
-// unspecified, multicast and broadcast. Never treat this regex as the
+// 127.0.0.1, 0.0.0.0, 255.255.255.255 and public addresses. The real check is
+// Rust's `validate_bridge_addr` in `commands/hue/transport/address.rs`, which
+// accepts local-network addresses only. Never treat this regex as the
 // security boundary, and never conclude the Rust guard is redundant.
 const IPV4_PATTERN =
   /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
