@@ -174,7 +174,8 @@ describe("useRoomMapState — a gesture is one undo step and one save", () => {
     expect(roomMapSaves()).toHaveLength(1);
     expect(roomMapSaves()[0]?.[0].roomMap.furniture[0].x).toBeCloseTo(1 + 21 * 0.1, 10);
 
-    act(() => result.current.undo());
+    // Undo saves, and the save settles after the call returns.
+    await act(async () => result.current.undo());
     expect(result.current.config.furniture[0]?.x).toBe(1);
     expect(result.current.canUndo).toBe(false);
   });
@@ -192,7 +193,7 @@ describe("useRoomMapState — a gesture is one undo step and one save", () => {
   it("an undo mid-gesture saves at once and cancels the held save", async () => {
     const { result } = await loadedHook();
     nudgeSofa(result, false);
-    act(() => result.current.undo());
+    await act(async () => result.current.undo());
     expect(roomMapSaves()).toHaveLength(1);
 
     await act(async () => {

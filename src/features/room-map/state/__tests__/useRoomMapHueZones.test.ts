@@ -262,7 +262,8 @@ describe("useRoomMapHueZones — a refusal is a resolved promise", () => {
     await waitFor(() => expect(result.current.zones.hueZoneRejection).toBe("HUE_ZONE_OVERSIZED"));
     expect(result.current.store.config.zones).toEqual([ZONE_A]);
 
-    act(() => result.current.store.undo());
+    // Undo saves, and the save settles after the call returns.
+    await act(async () => result.current.store.undo());
     expect(result.current.store.config.zones).toEqual([ZONE_A]);
     expect(result.current.store.canUndo).toBe(false);
   });
