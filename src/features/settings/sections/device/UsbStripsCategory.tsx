@@ -428,12 +428,12 @@ export function UsbStripsCategory({
               : "is-info"
         }`}
       >
-        <p className="text-[11px] font-semibold text-[var(--lm-ink)]">{statusTitle}</p>
-        <p className="mt-0.5 text-[11px] text-[var(--lm-ink-dim)]">{statusBody}</p>
+        <p className="text-[11px] font-semibold text-ink">{statusTitle}</p>
+        <p className="mt-0.5 text-[11px] text-ink-dim">{statusBody}</p>
         {statusModel.detailsKey ? (
-          <p className="mt-0.5 text-[10px] text-[var(--lm-ink-faint)]">{t(statusModel.detailsKey)}</p>
+          <p className="mt-0.5 text-[10px] text-ink-faint">{t(statusModel.detailsKey)}</p>
         ) : statusModel.details ? (
-          <p className="mt-0.5 text-[10px] text-[var(--lm-ink-faint)]">{statusModel.details}</p>
+          <p className="mt-0.5 text-[10px] text-ink-faint">{statusModel.details}</p>
         ) : null}
         {showHealthStepOutcomes ? (
           <div className="mt-2 space-y-1">
@@ -441,34 +441,34 @@ export function UsbStripsCategory({
               <div
                 key={stepOutcome.step}
                 data-testid={`health-step-${stepOutcome.step}`}
-                className="flex items-start gap-2 rounded border border-[var(--lm-line-2)] bg-[var(--lm-panel-2)] px-2 py-1.5"
+                className="flex items-start gap-2 rounded border border-line-2 bg-panel-2 px-2 py-1.5"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-medium text-[var(--lm-ink)]">
+                  <p className="text-[10px] font-medium text-ink">
                     {t(`device:healthCheck.steps.labels.${stepOutcome.step}`)}
                   </p>
                   {stepOutcome.text ? (
                     <>
-                      <p className="mt-0.5 text-[10px] text-[var(--lm-ink-dim)]">{t(stepOutcome.text.labelKey)}</p>
-                      <p className="mt-0.5 text-[10px] text-[var(--lm-ink-faint)]">{t(stepOutcome.text.hintKey)}</p>
+                      <p className="mt-0.5 text-[10px] text-ink-dim">{t(stepOutcome.text.labelKey)}</p>
+                      <p className="mt-0.5 text-[10px] text-ink-faint">{t(stepOutcome.text.hintKey)}</p>
                       {stepOutcome.text.details ? (
-                        <p className="mt-0.5 break-all [font-family:var(--lm-mono)] text-[10px] text-[var(--lm-ink-faint)]">
+                        <p className="mt-0.5 break-all font-mono text-[10px] text-ink-faint">
                           {stepOutcome.text.details}
                         </p>
                       ) : null}
                     </>
                   ) : (
                     <>
-                      <p className="mt-0.5 text-[10px] text-[var(--lm-ink-dim)]">{stepOutcome.message}</p>
-                      {stepOutcome.details ? <p className="mt-0.5 text-[10px] text-[var(--lm-ink-faint)]">{stepOutcome.details}</p> : null}
+                      <p className="mt-0.5 text-[10px] text-ink-dim">{stepOutcome.message}</p>
+                      {stepOutcome.details ? <p className="mt-0.5 text-[10px] text-ink-faint">{stepOutcome.details}</p> : null}
                     </>
                   )}
                 </div>
                 <span
                   className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold ${
                     stepOutcome.pass
-                      ? "bg-[var(--lm-green)]/20 text-[var(--lm-green)]"
-                      : "bg-[var(--lm-red)]/20 text-[var(--lm-red)]"
+                      ? "bg-green/20 text-green"
+                      : "bg-red/20 text-red"
                   }`}
                 >
                   {stepOutcome.pass ? t("device:healthCheck.steps.outcome.pass") : t("device:healthCheck.steps.outcome.fail")}
@@ -478,7 +478,7 @@ export function UsbStripsCategory({
           </div>
         ) : null}
         {statusCard?.code === "SELECTED_PORT_MISSING" ? (
-          <p className="mt-1 text-[10px] text-[var(--lm-ink-faint)]">
+          <p className="mt-1 text-[10px] text-ink-faint">
             {t("device:port.missingHint", { port: selectedPort ?? "-" })}
           </p>
         ) : null}

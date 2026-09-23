@@ -25,6 +25,10 @@ the fallback face on a cold-launch miss, which is worse than the bounded wait `b
 
 **Stylesheet layers.** `src/styles.css` is an ordered import list over `src/styles/`: tokens and
 the element rules go into Tailwind's `base` layer, every `lm-*` feature file into `components`.
+`theme.css` maps the colour tokens and `--lm-mono` into `@theme inline`, so a utility names the
+token — `text-ink`, `bg-panel-2`, `ring-amber/60`, `font-mono` — and still compiles to
+`var(--lm-*)`; `verify:design-tokens` rejects the old arbitrary `[var(--lm-*)]` form where a named
+utility exists.
 Layer order is theme < base < components < utilities and it is decided before specificity, so a
 utility on an element beats any `lm-*` rule that sets the same property — `.lm-x .lm-y:hover`
 included. That is the point: a utility is the local override, with no `.lm-x.hidden`-style

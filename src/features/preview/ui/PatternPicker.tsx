@@ -70,9 +70,9 @@ export function PatternPicker({
       <div className="lm-control-section-title flex items-center justify-between">
         <span>{t("preview:test.title")}</span>
         {running && (
-          <span className="inline-flex items-center gap-1.5 text-[var(--lm-amber)]">
+          <span className="inline-flex items-center gap-1.5 text-amber">
             <span className="lm-test-pulse" aria-hidden="true" />
-            <span className="[font-family:var(--lm-mono)] text-[9px] tracking-wide">
+            <span className="font-mono text-[9px] tracking-wide">
               {t("preview:test.running")}
             </span>
           </span>

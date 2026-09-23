@@ -14,6 +14,7 @@
    every lm-* rule whatever the selector's specificity. Within a layer, later
    wins: keep this list in cascade order. docs/architecture/ui-and-shell.md,
    "Stylesheet layers". */
+@import "./styles/theme.css";
 @import "./styles/tokens.css" layer(base);
 @import "./styles/base.css" layer(base);
 @import "./styles/shell.css" layer(components);

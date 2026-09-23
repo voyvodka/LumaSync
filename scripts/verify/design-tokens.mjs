@@ -105,6 +105,34 @@ if (undefinedRefs.size === 0) {
   }
 }
 
+// A token with a `@theme` name has a utility (`text-ink`); the arbitrary
+// `text-[var(--lm-ink)]` spelling of the same thing splits the vocabulary.
+const THEMED = new Map(
+  [...stylesheet.matchAll(/^\s*--(color|font)-([a-z0-9-]+)\s*:\s*var\((--lm-[a-z0-9-]+)\)/gm)].map(
+    (m) => [m[3], m[1] === "font" ? `font-${m[2]}` : m[2]],
+  ),
+);
+const ARBITRARY = /\[(?:[a-z-]+:)?var\((--lm-[a-z0-9-]+)\)\]/g;
+const arbitrary = [];
+for (const dir of SCANNED) {
+  for (const file of walk(join(ROOT, dir))) {
+    if (extname(file) === ".css") continue;
+    const source = readFileSync(file, "utf-8");
+    for (const match of source.matchAll(ARBITRARY)) {
+      if (!THEMED.has(match[1])) continue;
+      const line = source.slice(0, match.index).split("\n").length;
+      arbitrary.push(`${file.replace(ROOT, "")}:${line} ${match[0]} → ${THEMED.get(match[1])}`);
+    }
+  }
+}
+if (THEMED.size === 0) {
+  fail("no `@theme` mapping of --lm-* tokens found — src/styles/theme.css is missing or unimported");
+} else if (arbitrary.length === 0) {
+  pass(`no arbitrary [var(--lm-*)] utility where one of the ${THEMED.size} named utilities exists`);
+} else {
+  fail(`arbitrary token utilities with a named equivalent:\n       ${arbitrary.join("\n       ")}`);
+}
+
 console.log(`\n${"=".repeat(44)}`);
 if (failures === 0) {
   console.log("✔  Design tokens verified — no reference to a token that does not exist.\n");
