@@ -33,12 +33,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-24.04, windows-latest]
+        # Linux builds on 22.04, not 24.04: the binary takes its glibc symbol
+        # versions from the build host, so a 24.04 build (glibc 2.39) cannot
+        # load on Ubuntu 22.04 (2.35) or Debian 12 (2.36). The oldest runner
+        # sets the floor. ci.yml's matrix is separate and its entries are
+        # required status contexts; do not mirror this change there.
+        os: [macos-latest, ubuntu-22.04, windows-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # The three version locations move in lockstep by convention only: a
       # `v1.5.4` tag on a 1.5.5 tree published a mislabelled release, all green.
@@ -147,26 +154,26 @@ jobs:
           echo "Introduced by ${MERGED} merged pull request(s)."
 
       - name: Install Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.2
 
       # Kept deliberately: vitest, wdio and the Tauri CLI still resolve through a
       # Node shebang, so removing this breaks the run even though Bun installs.
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
 
       - name: Cache Bun install cache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
           restore-keys: ${{ runner.os }}-bun-
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
       # See ci.yml. Also what `rustup target add` below adds the macOS targets
       # to, so it has to exist before that step.
@@ -174,7 +181,7 @@ jobs:
         run: rustup toolchain install
 
       - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: src-tauri
           # Mirror ci.yml so the release matrix can re-use the per-OS cache
@@ -184,7 +191,7 @@ jobs:
           shared-key: ${{ matrix.os }}
 
       - name: Install Linux deps for Tauri bundle + xcap (X11 capture)
-        if: matrix.os == 'ubuntu-24.04'
+        if: runner.os == 'Linux'
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
@@ -252,26 +259,26 @@ jobs:
       # without adding signal (the CI gate already covers cross-platform
       # parity for these JS-only checks).
       - name: Verify shell contracts (Linux only)
-        if: matrix.os == 'ubuntu-24.04'
+        if: runner.os == 'Linux'
         run: bun run verify:shell-contracts
 
       - name: Run frontend tests (Linux only)
-        if: matrix.os == 'ubuntu-24.04'
+        if: runner.os == 'Linux'
         run: bun run test
 
       # The two members of `check:all` the release was missing. check:i18n is the
       # ratchet for an orphaned translation key — exactly what a release must not
       # carry — and it can only be caught here, since a tag push runs no CI.
       - name: E2E type check (Linux only)
-        if: matrix.os == 'ubuntu-24.04'
+        if: runner.os == 'Linux'
         run: bun run typecheck:e2e
 
       - name: Verify i18n catalogue (Linux only)
-        if: matrix.os == 'ubuntu-24.04'
+        if: runner.os == 'Linux'
         run: bun run check:i18n
 
       - name: Rust audit (Linux only)
-        if: matrix.os == 'ubuntu-24.04'
+        if: runner.os == 'Linux'
         working-directory: src-tauri
         run: |
           cargo install --locked cargo-audit
@@ -332,9 +339,9 @@ jobs:
             echo "RELEASE_NOTES_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # Pinned to a commit, unlike the other actions here: this is the only step
-      # handed TAURI_SIGNING_PRIVATE_KEY, the trust anchor for every auto-update
-      # the app performs. Move the SHA and the version comment together.
+      # This is the only step handed TAURI_SIGNING_PRIVATE_KEY, the trust anchor
+      # for every auto-update the app performs. Every action is pinned to a
+      # commit; move the SHA and the version comment together.
       - name: Build and upload release assets
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
@@ -391,12 +398,12 @@ jobs:
             --hard-kill
 
       - name: Launch smoke test on the AppImage
-        if: matrix.os == 'ubuntu-24.04'
+        if: runner.os == 'Linux'
         env:
-          # ubuntu-24.04 ships FUSE 3 only and the AppImage runtime wants FUSE 2.
-          # Extracting runs the same shipped payload without coupling the release
-          # to whether the runner can mount; the FUSE path is the runtime's
-          # problem, not ours.
+          # The AppImage runtime wants FUSE 2, which runner images do not
+          # promise. Extracting runs the same shipped payload without coupling
+          # the release to whether the runner can mount; the FUSE path is the
+          # runtime's problem, not ours.
           APPIMAGE_EXTRACT_AND_RUN: "1"
           # Xvfb has no GPU, and WebKit's accelerated compositor and DMA-BUF
           # renderer both abort without one, taking the webview down with them.
@@ -433,6 +440,16 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Only the verifier script and the shipped public key are needed.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/verify/updater-signatures.mjs
+            src-tauri/tauri.conf.json
+          sparse-checkout-cone-mode: false
+
       # The single point where a build becomes visible to the updater. Assert
       # every platform is present first — a merge regression in tauri-action
       # would otherwise ship a feed that silently skips a whole OS.
@@ -450,6 +467,16 @@ jobs:
             fi
           done
           echo "latest.json covers $(jq -r '.platforms | keys | length' latest.json) platform keys."
+
+      # Every artefact the feed names is downloaded from the draft and checked
+      # against the pubkey the tagged tree ships — the same check each installed
+      # copy runs before it applies an update. A key rotated in the tree but not
+      # in CI secrets (or the reverse) fails here instead of on users' machines.
+      - name: Verify updater artefact signatures
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: node scripts/verify/updater-signatures.mjs --feed latest.json --repo "$GITHUB_REPOSITORY" --expect-version "${TAG#v}"
 
       # The anchor is a prerelease so it stays out of /releases/latest, and
       # stable tags refresh it too — see docs/architecture/build-and-release.md.
