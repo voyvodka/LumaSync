@@ -111,6 +111,45 @@ and the close-to-tray hint. `scripts/verify/launch-smoke.mjs` reads the constant
 hardcoding it, so renaming the string is safe — but separating the constant from the call, or
 removing either, breaks CI rather than silently passing.
 
+## Capabilities
+
+**Each window is granted the plugin and core calls its own frontend makes, and nothing else.**
+`src-tauri/capabilities/`, one file per window. Every entry is an explicit identifier — no
+`core:default`, no `<plugin>:default` — because a default set is how a window came to hold the
+whole menu, tray and `image:from_path` API, every store command, `updater:*`, and write access to
+the app data directory without a single call site for any of them.
+
+| Window | Granted |
+|---|---|
+| `main` | event listen/unlisten; the window getters and setters `windowLifecycle.ts`, `TitleBar.tsx` and `CalibrationPage.tsx` call, plus `start_dragging`; store `load`/`get`/`set`; `log`; autostart enable/disable/is-enabled; `dialog:open`; `fs:read-file` scoped to `$APPDATA/room-map-backgrounds/*`; `opener:open-url` scoped to `https://lumasync.app/*`; `notification:is-permission-granted`; `process:restart` |
+| `led-control-popup` | event listen/unlisten; `scale_factor`/`outer_position`/`inner_size` for position persistence; `start_dragging`; store `load`/`get`/`set`; `log` |
+| `led-twin-overlay-*` | event listen/unlisten; store `load`/`get`/`set`; `log` — no window API at all |
+| `calibration-overlay-*` | nothing: a static page fed by an initialization script, no IPC |
+
+Some grants have no call site in `src/`, because the caller is a script Tauri or a plugin injects
+into every webview. `internal_toggle_maximize` is `data-tauri-drag-region`'s double-click;
+`internal_toggle_devtools` is the debug-build devtools shortcut; `notification:is-permission-granted`
+is the plugin's `window.Notification` shim, which asks once at load; `opener:open-url` is the
+opener plugin's handler for `<a target="_blank">`, which is how the About link opens. The twin keeps
+`store:set` although it never saves: `loadShellState` writes a migrated snapshot back, and it is the
+same read every window runs at boot.
+
+Store writes rely on `autoSave` in Rust, so `store:save` is not granted. The updater, notifications
+and log-directory reveal all run through app commands that call the plugin from Rust, where the ACL
+does not apply. `copy_background_image` is checked against the fs plugin's global scope, which the
+dialog widens to the picked file — capability scopes play no part in it.
+
+**App commands are not ACL-scoped.** `build.rs` declares no app manifest, and without one Tauri
+admits every `generate_handler!` command from any local window, including the overlays. Scoping
+them means listing every command in `build.rs` and granting a set per window, with a drift check
+against the handler list.
+
+A missing grant fails only at runtime, as a rejected invoke in that one window.
+`ipc_tests/capability_policy.rs` resolves the real capability files per window label and asserts
+the table above plus a list of removed grants, and reads through the real fs plugin to check the
+scope. A new plugin or core call from the frontend needs its identifier in that window's capability
+and a row in the test.
+
 ## Gotchas
 
 - **`onboarding` does not include the room map.** The two are separate surfaces despite both being setup-shaped.

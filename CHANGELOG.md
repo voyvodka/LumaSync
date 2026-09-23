@@ -351,6 +351,15 @@ https://keepachangelog.com/en/1.1.0/
   major versions, including Tauri 2.11.6 (a security fix keeping one app window from reading data
   sent to another) and the Tauri plugins kept on matching npm and crate versions.
 
+### Security
+
+- Each app window can now reach only the Tauri features it actually uses. The main window can no
+  longer build menus or tray icons, drive the updater directly (update checks still go through the
+  app as before), or write to the app's data folder, and it can read only the room-map background
+  images there rather than everything in it, including the settings file. Links from the window
+  open lumasync.app and nothing else. The LED preview overlay and control popup lose every window
+  control they never called.
+
 ### Internal
 
 - Ambilight's per-frame work can now be measured without a display or LEDs: a local timing report,
