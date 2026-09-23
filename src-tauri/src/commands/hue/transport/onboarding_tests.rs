@@ -9,18 +9,19 @@ use std::time::Duration;
 use serde_json::json;
 
 use super::super::bridge_identity::tests::self_signed;
-use super::super::bridge_identity::{pin_account, BridgeTrust};
+use super::super::bridge_identity::BridgeTrust;
 use super::super::credential_store::tests::InMemoryStore;
 use super::super::credential_store::{
     pair_owner, PairOwner, SecretStore, KEY_HUE_APP_KEY, KEY_HUE_BRIDGE_ID, KEY_HUE_CLIENT_KEY,
 };
+use super::super::pin_store::{MemoryPinStore, PinRecord, PinStore};
 use super::super::test_bridge::{Reply, TestBridge, TEST_BRIDGE_ID};
 use super::{build_async_client, plain_http_client};
 use crate::commands::hue_onboarding::{
     pair_bridge_at, send_clip_v1, validate_app_key_at, verify_bridge_at,
 };
 
-fn client(trust: BridgeTrust, store: &Arc<InMemoryStore>) -> reqwest::Client {
+fn client(trust: BridgeTrust, store: &Arc<MemoryPinStore>) -> reqwest::Client {
     build_async_client(&trust, store.clone(), Duration::from_secs(5)).unwrap()
 }
 
@@ -36,7 +37,7 @@ fn paired() -> Reply {
 #[tokio::test]
 async fn a_new_pair_is_owned_by_the_bridge_the_certificate_names() {
     let bridge = TestBridge::start(|_, _, _| paired());
-    let pins = Arc::new(InMemoryStore::default());
+    let pins = Arc::new(MemoryPinStore::default());
     let keychain = InMemoryStore::default();
 
     let response = pair_bridge_at(
@@ -51,7 +52,7 @@ async fn a_new_pair_is_owned_by_the_bridge_the_certificate_names() {
         keychain.get(KEY_HUE_BRIDGE_ID).unwrap().as_deref(),
         Some(TEST_BRIDGE_ID)
     );
-    assert!(pins.get(&pin_account(TEST_BRIDGE_ID)).unwrap().is_some());
+    assert!(pins.get(TEST_BRIDGE_ID).is_some());
 }
 
 /// A bridge that has shown a Signify-signed certificate cannot be
@@ -60,8 +61,9 @@ async fn a_new_pair_is_owned_by_the_bridge_the_certificate_names() {
 #[tokio::test]
 async fn pairing_refuses_a_downgraded_certificate_before_anything_is_sent() {
     let bridge = TestBridge::start(|_, _, _| paired());
-    let pins = Arc::new(InMemoryStore::default());
-    pins.set(&pin_account(TEST_BRIDGE_ID), "signify").unwrap();
+    let pins = Arc::new(MemoryPinStore::default());
+    pins.set(TEST_BRIDGE_ID, &PinRecord::SignifySigned(String::new()))
+        .unwrap();
     let keychain = InMemoryStore::default();
 
     let response = pair_bridge_at(
@@ -85,7 +87,7 @@ async fn a_validated_key_rewrites_a_legacy_address_owner_to_the_bridge_id() {
             json!({ "errors": [], "data": [{ "bridge_id": TEST_BRIDGE_ID }] }),
         )
     });
-    let pins = Arc::new(InMemoryStore::default());
+    let pins = Arc::new(MemoryPinStore::default());
     let keychain = InMemoryStore::default();
     keychain.set(KEY_HUE_APP_KEY, "kc-key").unwrap();
     keychain.set(KEY_HUE_CLIENT_KEY, "kc-psk").unwrap();
@@ -111,7 +113,7 @@ async fn a_validated_key_rewrites_a_legacy_address_owner_to_the_bridge_id() {
 #[tokio::test]
 async fn a_key_bound_to_another_bridge_is_never_sent_and_reads_as_a_mismatch() {
     let bridge = TestBridge::start(|_, _, _| Reply::ok());
-    let pins = Arc::new(InMemoryStore::default());
+    let pins = Arc::new(MemoryPinStore::default());
     let endpoint = format!("https://{}/clip/v2/resource/bridge", bridge.authority);
 
     let response = validate_app_key_at(
@@ -135,7 +137,7 @@ async fn ip_verification_refuses_a_bridge_whose_config_names_another() {
             Reply::json(200, json!({ "bridgeid": bridgeid, "name": "Hue Bridge" }))
         }
     };
-    let pins = Arc::new(InMemoryStore::default());
+    let pins = Arc::new(MemoryPinStore::default());
     let http = plain_http_client().unwrap();
 
     let same = TestBridge::start(answer("001788FFFE7E57B1"));
@@ -155,7 +157,7 @@ async fn ip_verification_refuses_a_bridge_whose_config_names_another() {
 #[tokio::test]
 async fn a_refused_certificate_is_not_retried_over_plain_http() {
     let bridge = TestBridge::presenting(&self_signed("not-a-bridge"), &[], |_, _, _| Reply::ok());
-    let pins = Arc::new(InMemoryStore::default());
+    let pins = Arc::new(MemoryPinStore::default());
     let http = plain_http_client().unwrap();
 
     let error = send_clip_v1(

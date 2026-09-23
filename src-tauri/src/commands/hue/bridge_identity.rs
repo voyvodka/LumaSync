@@ -21,7 +21,7 @@ use rustls::crypto::CryptoProvider;
 use rustls::pki_types::{CertificateDer, ServerName, SubjectPublicKeyInfoDer, UnixTime};
 use rustls::{CertificateError, DigitallySignedStruct, SignatureScheme};
 
-use super::credential_store::SecretStore;
+use super::pin_store::{PinRecord, PinStore};
 
 /// The two roots Signify publishes for bridge certificates: `root-bridge`
 /// (Philips Hue, 2017–2038) and `Hue Root CA 01` (Signify Hue, 2025–2050).
@@ -55,9 +55,6 @@ IYSgwwxHXm73/JgcU9lAM6c8Bmu3UE3kBIUwBs1qXFw=
 -----END CERTIFICATE-----
 ";
 
-/// Keychain account holding one bridge's pin, suffixed with its bridge id.
-pub(crate) const PIN_ACCOUNT_PREFIX: &str = "hue-bridge-cert:";
-
 /// The wire code a refused certificate surfaces as, and the token its
 /// `Display` starts with so it survives into `details` strings.
 pub(crate) const IDENTITY_MISMATCH_CODE: &str = "HUE_BRIDGE_IDENTITY_MISMATCH";
@@ -69,10 +66,6 @@ pub(crate) fn normalize_bridge_id(value: &str) -> Option<String> {
     let trimmed = value.trim();
     (trimmed.len() == 16 && trimmed.bytes().all(|b| b.is_ascii_hexdigit()))
         .then(|| trimmed.to_ascii_lowercase())
-}
-
-pub(crate) fn pin_account(bridge_id: &str) -> String {
-    format!("{PIN_ACCOUNT_PREFIX}{bridge_id}")
 }
 
 /// Why a presented certificate was refused.
@@ -211,33 +204,6 @@ pub(crate) fn bridge_id_of_certificate(leaf_der: &[u8]) -> Option<String> {
     normalize_bridge_id(&common_name(&leaf)?)
 }
 
-/// What is remembered about one bridge's certificate.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum PinRecord {
-    /// Seen chaining to a Signify root; a certificate that does not is refused.
-    SignifySigned,
-    /// Not Signify-signed; this exact leaf (SHA-256) is the only one accepted.
-    Leaf(String),
-}
-
-impl PinRecord {
-    fn encode(&self) -> String {
-        match self {
-            Self::SignifySigned => "signify".to_string(),
-            Self::Leaf(fingerprint) => format!("sha256:{fingerprint}"),
-        }
-    }
-
-    fn decode(value: &str) -> Option<Self> {
-        match value {
-            "signify" => Some(Self::SignifySigned),
-            _ => value
-                .strip_prefix("sha256:")
-                .map(|fingerprint| Self::Leaf(fingerprint.to_string())),
-        }
-    }
-}
-
 /// How strictly a client treats a certificate that is not the pinned one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum TrustMode {
@@ -279,20 +245,20 @@ impl BridgeTrust {
     }
 }
 
-fn store_pin(store: &dyn SecretStore, bridge_id: &str, record: &PinRecord) {
-    if let Err(error) = store.set(&pin_account(bridge_id), &record.encode()) {
+fn store_pin(store: &dyn PinStore, bridge_id: &str, record: &PinRecord) {
+    if let Err(error) = store.set(bridge_id, record) {
         warn!("[hue-tls] could not store the certificate pin for bridge {bridge_id}: {error}");
     }
 }
 
 /// Decide whether `presented` may carry this connection, recording what is
-/// learned on the way. A store that cannot be read or written degrades to
+/// learned on the way. A pin that cannot be read or written degrades to
 /// trust-on-every-use for self-signed bridges; a Signify-signed one is checked
 /// against the roots regardless.
 pub(crate) fn admit(
     presented: &PresentedCertificate,
     trust: &BridgeTrust,
-    store: &dyn SecretStore,
+    store: &dyn PinStore,
 ) -> Result<(), IdentityRejection> {
     let bridge_id = &presented.bridge_id;
     if let Some(expected) = &trust.expected {
@@ -304,25 +270,20 @@ pub(crate) fn admit(
         }
     }
 
-    let pinned = match store.get(&pin_account(bridge_id)) {
-        Ok(value) => value.as_deref().and_then(PinRecord::decode),
-        Err(error) => {
-            warn!("[hue-tls] could not read the certificate pin for bridge {bridge_id}: {error}");
-            None
-        }
-    };
+    let pinned = store.get(bridge_id);
 
     if presented.signify_signed {
-        if pinned != Some(PinRecord::SignifySigned) {
+        if !matches!(pinned, Some(PinRecord::SignifySigned(_))) {
             info!("[hue-tls] bridge {bridge_id} presents a Signify-signed certificate; pinned");
-            store_pin(store, bridge_id, &PinRecord::SignifySigned);
+            let record = PinRecord::SignifySigned(presented.fingerprint.clone());
+            store_pin(store, bridge_id, &record);
         }
         return Ok(());
     }
 
     let leaf = PinRecord::Leaf(presented.fingerprint.clone());
     match pinned {
-        Some(PinRecord::SignifySigned) => Err(IdentityRejection::SignatureDowngrade {
+        Some(PinRecord::SignifySigned(_)) => Err(IdentityRejection::SignatureDowngrade {
             bridge_id: bridge_id.clone(),
         }),
         Some(record) if record == leaf => Ok(()),
@@ -355,14 +316,14 @@ pub(crate) fn admit(
 /// nothing to compare; identity is the CN, checked by [`admit`].
 pub(crate) struct BridgeCertVerifier {
     trust: BridgeTrust,
-    store: Arc<dyn SecretStore>,
+    store: Arc<dyn PinStore>,
     provider: Arc<CryptoProvider>,
 }
 
 impl BridgeCertVerifier {
     pub(crate) fn new(
         trust: BridgeTrust,
-        store: Arc<dyn SecretStore>,
+        store: Arc<dyn PinStore>,
         provider: Arc<CryptoProvider>,
     ) -> Self {
         Self {
@@ -535,7 +496,7 @@ pub(crate) fn identity_rejection_in(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::commands::hue::credential_store::tests::InMemoryStore;
+    use crate::commands::hue::pin_store::MemoryPinStore;
     use openssl::asn1::Asn1Time;
     use openssl::bn::BigNum;
     use openssl::ec::{EcGroup, EcKey};
@@ -639,8 +600,11 @@ AP31tUs6kG4a9CifLyi7MaFYZBcxMZY0u+yNFK2eCqXzAiEAnD9leje6HlDcgWft
         }
     }
 
-    fn pin_of(store: &InMemoryStore, bridge_id: &str) -> Option<String> {
-        store.get(&pin_account(bridge_id)).unwrap()
+    fn pin_of(store: &MemoryPinStore, bridge_id: &str) -> Option<String> {
+        store.get(bridge_id).map(|record| match record {
+            PinRecord::SignifySigned(_) => "signify".to_string(),
+            PinRecord::Leaf(fingerprint) => format!("sha256:{fingerprint}"),
+        })
     }
 
     #[test]
@@ -686,7 +650,7 @@ AP31tUs6kG4a9CifLyi7MaFYZBcxMZY0u+yNFK2eCqXzAiEAnD9leje6HlDcgWft
 
     #[test]
     fn a_signify_signed_bridge_is_admitted_and_remembered_as_such() {
-        let store = InMemoryStore::default();
+        let store = MemoryPinStore::default();
         admit(
             &presented(BRIDGE_A, true, "aa"),
             &BridgeTrust::any(),
@@ -698,7 +662,7 @@ AP31tUs6kG4a9CifLyi7MaFYZBcxMZY0u+yNFK2eCqXzAiEAnD9leje6HlDcgWft
 
     #[test]
     fn the_wrong_bridge_is_refused_even_when_signify_signed() {
-        let store = InMemoryStore::default();
+        let store = MemoryPinStore::default();
         let result = admit(
             &presented(BRIDGE_B, true, "aa"),
             &BridgeTrust::bridge(BRIDGE_A),
@@ -720,7 +684,7 @@ AP31tUs6kG4a9CifLyi7MaFYZBcxMZY0u+yNFK2eCqXzAiEAnD9leje6HlDcgWft
 
     #[test]
     fn a_self_signed_bridge_is_pinned_on_first_use_and_held_to_it() {
-        let store = InMemoryStore::default();
+        let store = MemoryPinStore::default();
         admit(
             &presented(BRIDGE_A, false, "aa"),
             &BridgeTrust::any(),
@@ -750,7 +714,7 @@ AP31tUs6kG4a9CifLyi7MaFYZBcxMZY0u+yNFK2eCqXzAiEAnD9leje6HlDcgWft
 
     #[test]
     fn a_bridge_seen_signify_signed_cannot_fall_back_to_self_signed() {
-        let store = InMemoryStore::default();
+        let store = MemoryPinStore::default();
         admit(
             &presented(BRIDGE_A, true, "aa"),
             &BridgeTrust::any(),
@@ -769,7 +733,7 @@ AP31tUs6kG4a9CifLyi7MaFYZBcxMZY0u+yNFK2eCqXzAiEAnD9leje6HlDcgWft
 
     #[test]
     fn a_self_signed_bridge_upgraded_to_signify_is_re_pinned() {
-        let store = InMemoryStore::default();
+        let store = MemoryPinStore::default();
         admit(
             &presented(BRIDGE_A, false, "aa"),
             &BridgeTrust::any(),
@@ -787,7 +751,7 @@ AP31tUs6kG4a9CifLyi7MaFYZBcxMZY0u+yNFK2eCqXzAiEAnD9leje6HlDcgWft
 
     #[test]
     fn only_pairing_re_learns_a_changed_self_signed_certificate() {
-        let store = InMemoryStore::default();
+        let store = MemoryPinStore::default();
         admit(
             &presented(BRIDGE_A, false, "aa"),
             &BridgeTrust::any(),

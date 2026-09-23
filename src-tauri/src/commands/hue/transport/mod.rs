@@ -20,6 +20,7 @@ use super::bridge_identity::{
     BridgeTrust, IdentityRejection,
 };
 use super::credential_store::{default_store, pair_owner, PairOwner, SecretStore, KEY_HUE_APP_KEY};
+use super::pin_store::{default_pin_store, PinStore};
 
 /// Per-request ceiling for a bridge call.
 pub(crate) const HUE_HTTP_TIMEOUT_MS: u64 = 5_000;
@@ -71,10 +72,10 @@ fn crypto_provider() -> Arc<rustls::crypto::CryptoProvider> {
 
 fn tls_config(
     trust: &BridgeTrust,
-    store: Arc<dyn SecretStore>,
+    pins: Arc<dyn PinStore>,
 ) -> Result<rustls::ClientConfig, String> {
     let provider = crypto_provider();
-    let verifier = BridgeCertVerifier::new(trust.clone(), store, Arc::clone(&provider));
+    let verifier = BridgeCertVerifier::new(trust.clone(), pins, Arc::clone(&provider));
     let mut config = rustls::ClientConfig::builder_with_provider(provider)
         .with_safe_default_protocol_versions()
         .map_err(|error| error.to_string())?
@@ -86,15 +87,15 @@ fn tls_config(
     Ok(config)
 }
 
-/// Build an async bridge client. `store` holds the certificate pins; the
-/// shared clients below pass the process-wide keychain store.
+/// Build an async bridge client. `pins` holds the certificate pins; the
+/// shared clients below pass the process-wide pins file.
 pub(crate) fn build_async_client(
     trust: &BridgeTrust,
-    store: Arc<dyn SecretStore>,
+    pins: Arc<dyn PinStore>,
     timeout: Duration,
 ) -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
-        .tls_backend_preconfigured(tls_config(trust, store)?)
+        .tls_backend_preconfigured(tls_config(trust, pins)?)
         .tls_info(true)
         .https_only(true)
         .redirect(Policy::none())
@@ -107,11 +108,11 @@ pub(crate) fn build_async_client(
 /// runtime thread — reqwest panics tearing its inner runtime down there.
 pub(crate) fn build_blocking_client(
     trust: &BridgeTrust,
-    store: Arc<dyn SecretStore>,
+    pins: Arc<dyn PinStore>,
     timeout: Duration,
 ) -> Result<BlockingClient, String> {
     BlockingClient::builder()
-        .tls_backend_preconfigured(tls_config(trust, store)?)
+        .tls_backend_preconfigured(tls_config(trust, pins)?)
         .tls_info(true)
         .https_only(true)
         .redirect(Policy::none())
@@ -135,7 +136,7 @@ pub(crate) fn async_client(trust: &BridgeTrust) -> Result<reqwest::Client, Strin
     if let Some(client) = clients.get(trust) {
         return Ok(client.clone());
     }
-    let client = build_async_client(trust, default_store(), default_timeout())?;
+    let client = build_async_client(trust, default_pin_store(), default_timeout())?;
     clients.insert(trust.clone(), client.clone());
     Ok(client)
 }
@@ -153,7 +154,7 @@ pub(crate) fn blocking_client(trust: &BridgeTrust) -> Result<Arc<BlockingClient>
     }
     let client = Arc::new(build_blocking_client(
         trust,
-        default_store(),
+        default_pin_store(),
         default_timeout(),
     )?);
     clients.insert(trust.clone(), Arc::clone(&client));
@@ -166,7 +167,7 @@ pub(crate) fn blocking_client_with_timeout(
     trust: &BridgeTrust,
     timeout: Duration,
 ) -> Result<BlockingClient, String> {
-    build_blocking_client(trust, default_store(), timeout)
+    build_blocking_client(trust, default_pin_store(), timeout)
 }
 
 pub(crate) fn async_client_for_key(app_key: &str) -> Result<reqwest::Client, String> {
@@ -274,9 +275,10 @@ pub(crate) fn send_error_text(error: &reqwest::Error) -> String {
 #[cfg(test)]
 mod tests {
     use super::super::bridge_identity::tests::{ca_signed, self_signed, BRIDGE_A};
-    use super::super::bridge_identity::{pin_account, IdentityRejection};
+    use super::super::bridge_identity::IdentityRejection;
     use super::super::credential_store::tests::InMemoryStore;
     use super::super::credential_store::KEY_HUE_BRIDGE_ID;
+    use super::super::pin_store::{MemoryPinStore, PinRecord};
     use super::super::test_bridge::{Reply, TestBridge};
     use super::*;
 
@@ -314,14 +316,14 @@ mod tests {
         format!("https://{}/clip/v2/resource/bridge", bridge.authority)
     }
 
-    fn client(trust: BridgeTrust, store: &Arc<InMemoryStore>) -> reqwest::Client {
+    fn client(trust: BridgeTrust, store: &Arc<MemoryPinStore>) -> reqwest::Client {
         build_async_client(&trust, store.clone(), Duration::from_secs(5)).unwrap()
     }
 
     #[tokio::test]
     async fn a_self_signed_bridge_is_pinned_on_first_contact_and_its_id_is_read_from_the_cert() {
         let bridge = TestBridge::presenting(&self_signed(BRIDGE_A), &[], answering_ok());
-        let store = Arc::new(InMemoryStore::default());
+        let store = Arc::new(MemoryPinStore::default());
 
         let response = client(BridgeTrust::any(), &store)
             .get(url(&bridge))
@@ -331,13 +333,13 @@ mod tests {
 
         assert_eq!(answering_bridge_id(&response).as_deref(), Some(BRIDGE_A));
         assert_eq!(read_body(response).await.unwrap(), ok_body());
-        let pinned = store.get(&pin_account(BRIDGE_A)).unwrap().unwrap();
-        assert!(pinned.starts_with("sha256:"), "{pinned}");
+        let pinned = store.get(BRIDGE_A).unwrap();
+        assert!(matches!(pinned, PinRecord::Leaf(_)), "{pinned:?}");
     }
 
     #[tokio::test]
     async fn a_later_different_certificate_for_a_pinned_bridge_is_refused() {
-        let store = Arc::new(InMemoryStore::default());
+        let store = Arc::new(MemoryPinStore::default());
         let first = TestBridge::presenting(&self_signed(BRIDGE_A), &[], answering_ok());
         client(BridgeTrust::any(), &store)
             .get(url(&first))
@@ -368,7 +370,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_certificate_naming_another_bridge_is_refused_for_a_bound_key() {
-        let store = Arc::new(InMemoryStore::default());
+        let store = Arc::new(MemoryPinStore::default());
         let bridge = TestBridge::presenting(&self_signed("001788fffe00ffff"), &[], answering_ok());
 
         let error = client(BridgeTrust::bridge(BRIDGE_A), &store)
@@ -386,7 +388,7 @@ mod tests {
             })
         );
         assert!(bridge.requests().is_empty(), "the key was never sent");
-        assert_eq!(store.get(&pin_account("001788fffe00ffff")).unwrap(), None);
+        assert_eq!(store.get("001788fffe00ffff"), None);
     }
 
     #[tokio::test]
@@ -397,7 +399,7 @@ mod tests {
         // `bridge_identity`.
         let (ca, leaf) = ca_signed(BRIDGE_A);
         let bridge = TestBridge::presenting(&leaf, &[&ca], answering_ok());
-        let store = Arc::new(InMemoryStore::default());
+        let store = Arc::new(MemoryPinStore::default());
 
         let response = client(BridgeTrust::bridge(BRIDGE_A), &store)
             .get(url(&bridge))
@@ -411,7 +413,7 @@ mod tests {
     #[tokio::test]
     async fn a_certificate_that_names_no_bridge_is_refused() {
         let bridge = TestBridge::presenting(&self_signed("test-bridge"), &[], answering_ok());
-        let store = Arc::new(InMemoryStore::default());
+        let store = Arc::new(MemoryPinStore::default());
 
         let error = client(BridgeTrust::any(), &store)
             .get(url(&bridge))
@@ -430,7 +432,7 @@ mod tests {
         let bridge = TestBridge::presenting(&self_signed(BRIDGE_A), &[], |_, _, _| {
             Reply::text(302, String::new()).with_header("Location", "https://127.0.0.1:1/steal")
         });
-        let store = Arc::new(InMemoryStore::default());
+        let store = Arc::new(MemoryPinStore::default());
 
         let response = client(BridgeTrust::any(), &store)
             .get(url(&bridge))
@@ -449,7 +451,7 @@ mod tests {
         let bridge = TestBridge::presenting(&self_signed(BRIDGE_A), &[], |_, _, _| {
             Reply::text(200, "x".repeat(HUE_MAX_RESPONSE_BYTES + 1))
         });
-        let store = Arc::new(InMemoryStore::default());
+        let store = Arc::new(MemoryPinStore::default());
 
         let response = client(BridgeTrust::any(), &store)
             .get(url(&bridge))
@@ -462,7 +464,7 @@ mod tests {
 
     #[test]
     fn the_blocking_client_meets_the_same_verifier_and_cap() {
-        let store = Arc::new(InMemoryStore::default());
+        let store = Arc::new(MemoryPinStore::default());
         let first = TestBridge::presenting(&self_signed(BRIDGE_A), &[], |_, _, _| {
             Reply::text(200, "x".repeat(HUE_MAX_RESPONSE_BYTES + 1))
         });
@@ -484,7 +486,7 @@ mod tests {
     /// through the other verifier entry point.
     #[test]
     fn a_tls12_bridge_completes_and_is_held_to_its_pin() {
-        let store = Arc::new(InMemoryStore::default());
+        let store = Arc::new(MemoryPinStore::default());
         let leaf = self_signed(BRIDGE_A);
         let first = TestBridge::presenting_tls12(&leaf, answering_ok());
         let impostor = TestBridge::presenting_tls12(&self_signed(BRIDGE_A), answering_ok());
@@ -503,7 +505,7 @@ mod tests {
 
     #[test]
     fn plain_http_is_refused_by_every_bridge_client() {
-        let store = Arc::new(InMemoryStore::default());
+        let store = Arc::new(MemoryPinStore::default());
         let blocking =
             build_blocking_client(&BridgeTrust::any(), store, Duration::from_secs(1)).unwrap();
         let error = blocking

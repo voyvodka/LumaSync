@@ -87,12 +87,22 @@ each handshake (a `rustls` `ServerCertVerifier`, handed to reqwest as a preconfi
   (`certs.go`), which both cite that page, and the two agree byte for byte. Intermediates the
   bridge sends are used for the chain. The Bridge Pro certificate above chains to `root-bridge`.
 - **Older bridges sign their own certificate**, so a certificate that does not chain is pinned on
-  first use: its SHA-256 is stored in the OS keychain as `hue-bridge-cert:<bridge id>`
-  (`sha256:<hex>`), and a later, different certificate for that bridge id is refused. A bridge that
-  has once shown a Signify-signed certificate is recorded as `signify`, and a self-signed one for
-  it afterwards is refused as a downgrade — without that record an impostor presenting a
-  self-signed certificate under the real bridge id would simply be pinned. A self-signed bridge
-  that later presents a Signify-signed certificate (a firmware reissue) is re-recorded as `signify`.
+  first use: its SHA-256 is recorded as `{ "kind": "selfSigned", "sha256": "<hex>" }`, and a
+  later, different certificate for that bridge id is refused. A bridge that has once shown a
+  Signify-signed certificate is recorded as `"kind": "signify"`, and a self-signed one for it
+  afterwards is refused as a downgrade — without that record an impostor presenting a self-signed
+  certificate under the real bridge id would simply be pinned. A self-signed bridge that later
+  presents a Signify-signed certificate (a firmware reissue) is re-recorded as `signify`.
+- **Pins are a file, not keychain items.** `hue-bridge-pins.json` in the app data dir
+  (`commands/hue/pin_store.rs`), keyed by bridge id, set up in `lib.rs` before any Hue command
+  runs. A pin is not a secret; it needs integrity, and anything that can write the app data dir
+  already owns `shell-state.json` and the app's own configuration. The keychain would have cost
+  more than it protects: an ad-hoc-signed macOS build is asked once per keychain item after every
+  update (see `build-and-release.md`), so each bridge would have added a prompt per update, and on
+  a Linux box without Secret Service (`NoopStore`) nothing would have been stored at all. The file
+  is written atomically (temp file, fsync, rename) under a process mutex; a missing or corrupt
+  file reads as no pins, is logged, and never blocks Hue — the next pin written replaces it. The
+  keychain keeps what is secret: the application key, the client key, and the pair's owner.
 - **Link-button pairing re-learns a changed self-signed pin**, and only that: a factory reset
   regenerates the self-signed certificate, and without this such a bridge could never be paired
   again. Pairing is as trust-on-first-use as the very first pairing was; a `signify` record is
@@ -103,9 +113,10 @@ each handshake (a `rustls` `ServerCertVerifier`, handed to reqwest as a preconfi
   a failed pairing with its own explanation, and the reachability probe treats it as an answer that
   needs a re-pair — never as an offline bridge, and never counted against the poll budget.
 - **Accepted costs.** First contact is trust-on-first-use for a self-signed bridge, and every
-  existing pairing learns its bridge's certificate on the first connection after the update. Where
-  the keychain is unavailable (`NoopStore`) nothing is remembered, so a self-signed bridge is
-  accepted on every contact; a Signify-signed one is still checked against the roots. The
+  existing pairing learns its bridge's certificate on the first connection after the update. A
+  corrupt pins file, or a process that found no app data dir (pins then last for the session),
+  loses the record, so the next contact is first use again; a Signify-signed bridge is still
+  checked against the roots either way. The
   handshake signature is verified against the leaf's public key read by openssl
   (`webpki::RawPublicKeyEntity`), not by parsing the leaf with `webpki`, which refuses some
   certificate shapes an old bridge may hold. TLS session resumption is off, because a resumed

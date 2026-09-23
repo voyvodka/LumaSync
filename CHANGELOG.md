@@ -521,7 +521,8 @@ https://keepachangelog.com/en/1.1.0/
   instead of asking you to re-pair a key that was fine. The key is only ever sent to the bridge
   that issued it, bridge requests no longer follow redirects, and bridge addresses must be on
   your local network. Existing pairings keep working: the first connection after updating learns
-  the bridge's certificate.
+  the bridge's certificate, which is remembered in a small file beside the app's settings rather
+  than in the keychain, so it adds no keychain prompt.
 
 ### Internal
 

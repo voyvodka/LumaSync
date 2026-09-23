@@ -408,11 +408,11 @@ in [`hue.md`](hue.md).
 **Released builds have the same defect, and there it reaches users.** `tauri.conf.json` sets no
 `signingIdentity` and no workflow carries `APPLE_*` credentials, so shipped macOS builds are
 ad-hoc signed as well and their identity changes with every version. A user who has paired a
-bridge is asked again after each update, once per item the new build reads: the two secrets, the
-pair's owner (`hue-bridge-id`), and — since bridge certificates are pinned — one
-`hue-bridge-cert:<bridge id>` item per bridge it connects to, read on the first handshake
-(see [`hue.md`](hue.md)). That is the strongest argument for Developer ID signing, and it is a
-user-facing one rather than a developer convenience.
+bridge is asked again after each update — twice, for the same two items. That per-item cost is
+why Hue bridge certificate pins are a file in the app data dir rather than keychain items (see
+[`hue.md`](hue.md)): a pin per bridge would have added a prompt per update. That is the strongest
+argument for Developer ID signing, and it is a user-facing one rather than a developer
+convenience.
 
 ## Accepted risks
 

@@ -22,6 +22,7 @@
 //!   shared clients bound to the key's bridge, response size cap
 //! - `bridge_identity` — bridge certificate check: Signify roots, CN =
 //!   bridge id, first-use pin for self-signed bridges
+//! - `pin_store` — the bridge certificate pins file in the app data dir
 //! - `credential_store` — v1.5 W2-A1 OS-keychain abstraction (macOS
 //!   Keychain / Windows CredMan / Linux Secret Service) used by W2-A2
 //!   to migrate Hue credentials off the plaintext shellStore fields.
@@ -37,6 +38,7 @@ pub mod credential_store;
 pub mod dtls;
 pub mod frame;
 pub mod light_restore;
+pub mod pin_store;
 pub mod reconnect;
 pub mod retry;
 pub mod sender;
