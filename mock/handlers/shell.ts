@@ -151,6 +151,7 @@ export const shellHandlers = {
     const gated =
       prior.kind !== "off" &&
       targets !== undefined &&
+      targets !== null &&
       (((targets.length === 0 || targets.includes("usb")) && !usbAvailable) ||
         (targets.includes("hue") && !w.hue.streaming));
     if (gated) {

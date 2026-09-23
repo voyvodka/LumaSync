@@ -15,6 +15,7 @@ mod overlay_commands;
 mod preview_commands;
 mod room_map_commands;
 mod serial_admission;
+mod serial_firmware;
 mod shell_state_commands;
 mod telemetry_commands;
 mod wled_commands;

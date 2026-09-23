@@ -17,19 +17,16 @@
  */
 
 import { useEffect, useState } from "react";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-import {
-  LIGHTING_MODE_CHANGED_EVENT,
-  type LightingModeChangedPayload,
-  type LightingModeConfig,
-} from "@/features/mode/model/contracts";
-import {
-  PREVIEW_STATE_CHANGED_EVENT,
-  type LedPreviewStatus,
-} from "@/shared/contracts/preview";
+import type { LightingModeConfig } from "@/shared/contracts/mode";
+import type { LedPreviewStatus } from "@/shared/contracts/preview";
 import { getLightingModeStatus } from "@/features/mode/modeApi";
 import { getLedPreviewStatus } from "../previewApi";
+import {
+  listenLightingModeChanged,
+  listenPreviewStateChanged,
+  type UnlistenFn,
+} from "../previewEventsApi";
 
 export interface LightingModeSyncState {
   /** Live lighting mode config, or `null` until the first sync resolves. */
@@ -68,9 +65,9 @@ export function useLightingModeSync(): LightingModeSyncState {
         console.error("[LumaSync] useLightingModeSync initial preview read failed:", error);
       });
 
-    listen<LightingModeChangedPayload>(LIGHTING_MODE_CHANGED_EVENT, (event) => {
-      setMode(event.payload.config);
-      setActive(event.payload.active);
+    listenLightingModeChanged((payload) => {
+      setMode(payload.config);
+      setActive(payload.active);
     })
       .then((fn) => {
         if (alive) unlistens.push(fn);
@@ -80,8 +77,8 @@ export function useLightingModeSync(): LightingModeSyncState {
         console.error("[LumaSync] useLightingModeSync mode listen failed:", error);
       });
 
-    listen<LedPreviewStatus>(PREVIEW_STATE_CHANGED_EVENT, (event) => {
-      setPreview(event.payload);
+    listenPreviewStateChanged((payload) => {
+      setPreview(payload);
     })
       .then((fn) => {
         if (alive) unlistens.push(fn);

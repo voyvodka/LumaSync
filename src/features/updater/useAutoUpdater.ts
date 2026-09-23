@@ -1,16 +1,14 @@
 import { useState, useCallback, useRef } from "react";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import { shellStore } from "../persistence/shellStore";
 import { DEFAULT_UPDATE_CHANNEL, type UpdateChannel } from "@/shared/contracts/shell";
 import {
-  UPDATER_PROGRESS_EVENT,
   UPDATER_STATUS,
   type UpdaterStatusCode,
-  type UpdateDownloadProgress,
   type UpdateMetadata,
 } from "@/shared/contracts/updater";
 import { checkForUpdate, downloadAndInstallUpdate } from "./updaterApi";
+import { listenUpdateDownloadProgress, type UnlistenFn } from "./updaterEventsApi";
 import { createLatestOperationGuard } from "@/shared/lib/latestOperation";
 import { parseCommandError } from "@/shared/contracts/status";
 
@@ -111,8 +109,8 @@ export function useAutoUpdater() {
         etaSeconds: null,
       });
 
-      unlisten = await listen<UpdateDownloadProgress>(UPDATER_PROGRESS_EVENT, (event) => {
-        const { downloadedBytes, totalBytes, finished } = event.payload;
+      unlisten = await listenUpdateDownloadProgress((progress) => {
+        const { downloadedBytes, totalBytes, finished } = progress;
         if (finished) {
           setState({ status: "installing", update });
           return;

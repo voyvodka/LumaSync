@@ -9,6 +9,11 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Added
 
+- USB strips: connecting now asks the controller what it is. A LumaSync controller that answers
+  reports its firmware version, the frame format it expects and whether it wants RGB or RGBW
+  pixels, and Settings marks a firmware profile or LED chip type that disagrees, without changing
+  either for you. Controllers that do not answer, such as Adalight sketches, connect exactly as
+  before, about a quarter of a second later.
 - Room map: the TV has an optional mount height. Left empty it follows 40% of the room height, so
   changing the ceiling moves it too. The TV's footprint field is now labelled Depth, since it never
   meant the screen's height. A small "Room-aware" chip in the room map toolbar and under the Hue
@@ -22,6 +27,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- USB strips: frames are now written to the serial port on their own thread, paced to what the
+  115 200-baud link can carry, so a long strip no longer holds up screen capture while its bytes
+  drain. A 164-LED strip should run at about 21 frames per second instead of about 15; 23 is what
+  the link allows.
 - Notices: every message the app shows about its state now appears in one place, one at a time,
   with a "+N" that opens the rest. In the compact window it sits at the top, above the mode
   buttons, and pushes them down instead of covering them; the first-run hint and the "no reachable

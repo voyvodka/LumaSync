@@ -144,13 +144,20 @@ over the hot path, and criterion adds 16–19 crates to the lockfile for a repor
 **The CI guard counts instead of timing**, because wall-clock time on a shared runner is noise.
 `steady_frame_allocations_and_lut_builds_stay_within_budget` runs in the ordinary `cargo test`. The
 test binary installs a counting global allocator — it counts only on a thread that asks — and for
-every steady-state frame through the pipeline and `SerialSink::send_frame` asserts:
+every steady-state frame through the pipeline and `SerialSink::send_frame`, over the production
+serial writer with a counting port behind it, asserts:
 
 - **at most three heap allocations** — the sampled strip, the smoothed strip queued for the sink,
   the encoded packet — and no more bytes than those three need. A copy of the frame, a rebuilt Hue
-  sample table, a `collect()` on the Hue path or a cloned port name each fails it.
+  sample table, a `collect()` on the Hue path or a cloned port name each fails it. Handing the
+  packet to the writer is a copy into a buffer it gives back, not an allocation.
+- **none on the writer thread.** The port counts from inside `write`, on the writer thread, what
+  that thread allocated since its previous write.
 - **no gamma or sRGB LUT tabulation.** Both tables live on the stack, so the allocator cannot see a
   rebuild; the thread-local build counters in `led_output.rs` and `ambilight_scene.rs` can.
+
+`CorrectedWledSink` has its own pin, `WLED_ALLOCS_PER_FRAME` (four: the corrected strip, the
+datagram list, the chunk list, one datagram), over a loopback socket nothing reads.
 
 A change that genuinely needs another per-frame allocation raises `ALLOCS_PER_FRAME` in the same
 PR and says why. Outside the guard: the Hue send's `to_vec()` (the sender thread takes an owned

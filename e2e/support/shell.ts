@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { browser } from "@wdio/globals";
 
 import { SHELL_STORE_KEY, type SectionId, type UIMode } from "../../src/shared/contracts/shell";
-import { LIGHTING_MODE_KIND } from "../../src/features/mode/model/contracts";
+import { LIGHTING_MODE_KIND } from "../../src/shared/contracts/mode";
 
 // `browser.execute` only, never `$()`: the embedded provider answers execute
 // in-process (~3 ms) but takes 5-22 s per element-protocol call on macOS.

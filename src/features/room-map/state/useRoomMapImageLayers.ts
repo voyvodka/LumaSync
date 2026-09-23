@@ -1,8 +1,8 @@
 import { useCallback, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { imageLayerObjectId } from "../model/objectId";
 import { copyBackgroundImage } from "../roomMapApi";
+import { pickRoomMapImage } from "../roomMapFilesApi";
 import { parseCommandError } from "@/shared/contracts/status";
 
 export interface UseRoomMapImageLayersArgs {
@@ -33,10 +33,7 @@ export function useRoomMapImageLayers({
   const handleAddImage = useCallback(async () => {
     setImageError(null);
     try {
-      const selected = await open({
-        multiple: false,
-        filters: [{ name: "Image", extensions: ["png", "jpg", "jpeg"] }],
-      });
+      const selected = await pickRoomMapImage();
       if (selected && typeof selected === "string") {
         const destPath = await copyBackgroundImage(selected);
         const fileName = destPath.split("/").pop() ?? "Image";

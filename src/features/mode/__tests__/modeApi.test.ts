@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { HUE_COMMANDS, HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
-import type { LightingModeConfig } from "../model/contracts";
+import type { LightingModeConfig } from "@/shared/contracts/mode";
 import {
   getHueStreamStatus,
   getLightingModeStatus,

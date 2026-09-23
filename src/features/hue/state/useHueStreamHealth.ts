@@ -3,7 +3,7 @@ import { useEffect, useState, type RefObject } from "react";
 import {
   LIGHTING_MODE_KIND,
   type LightingModeConfig,
-} from "@/features/mode/model/contracts";
+} from "@/shared/contracts/mode";
 import type { LightingModeDispatcher } from "@/features/mode/state/useLightingModeDispatch";
 import {
   HUE_RUNTIME_STATES,
@@ -75,6 +75,7 @@ export function useHueStreamHealth({
 }: HueStreamHealthInput): HueStreamHealth {
   const [runtimeState, setRuntimeState] = useState<HueRuntimeState | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refs and the setter are read at call time; any other dep restarts the poll loop and storms the bridge
   useEffect(() => {
     if (!hueTargetSelected) {
       setRuntimeState(null);

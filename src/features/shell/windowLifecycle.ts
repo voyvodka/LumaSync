@@ -260,14 +260,20 @@ export async function initCloseToTrayHint(
     unlistenCloseToTray = null;
   }
 
-  unlistenCloseToTray = await listen("shell:close-to-tray", async () => {
-    await persistWindowState();
+  unlistenCloseToTray = await listen("shell:close-to-tray", () => {
+    void (async () => {
+      try {
+        await persistWindowState();
 
-    const state = await loadShellState();
-    if (!state.trayHintShown) {
-      await saveShellState({ trayHintShown: true });
-      onFirstClose?.();
-    }
+        const state = await loadShellState();
+        if (!state.trayHintShown) {
+          await saveShellState({ trayHintShown: true });
+          onFirstClose?.();
+        }
+      } catch (err) {
+        console.error("[LumaSync] close-to-tray: saving window state failed:", err);
+      }
+    })();
   });
 }
 
@@ -442,7 +448,10 @@ async function logicalWorkAreaNear(
   const nearest = pickNearestMonitor(rect, bounds);
   if (!nearest) return null;
 
-  const work = buildWorkAreaRect(monitors[bounds.indexOf(nearest)]);
+  const monitor = monitors[bounds.indexOf(nearest)];
+  if (!monitor) return null;
+
+  const work = buildWorkAreaRect(monitor);
   return {
     width: Math.floor(work.width / scaleFactor),
     height: Math.floor(work.height / scaleFactor),

@@ -50,7 +50,7 @@ function parseReleaseNotes(body: string | undefined): Note[] {
   for (const line of rawLines) {
     const sectionMatch = /^#+\s*(added|fixed|changed|removed|new|fix)/i.exec(line);
     if (sectionMatch) {
-      const head = sectionMatch[1].toLowerCase();
+      const head = sectionMatch[1]?.toLowerCase();
       if (head === "added" || head === "new") currentKind = "add";
       else if (head === "fixed" || head === "fix") currentKind = "fix";
       else currentKind = "change";
@@ -59,7 +59,7 @@ function parseReleaseNotes(body: string | undefined): Note[] {
 
     const bulletMatch = /^[-*•]\s+(.*)$/.exec(line);
     if (bulletMatch) {
-      notes.push({ kind: currentKind, text: bulletMatch[1] });
+      notes.push({ kind: currentKind, text: bulletMatch[1] ?? "" });
       continue;
     }
 

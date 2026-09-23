@@ -11,7 +11,7 @@
  *   (label prefix `led-twin-overlay-`) and an interactive control popup
  *   (label `led-control-popup`).
  * - **Per-LED color stream** — enriches `ambilight://edge-signal`
- *   (`EdgeSignalPayload` in `features/mode/model/contracts.ts`); owns the status surface.
+ *   (`EdgeSignalPayload` in `features/mode/model/edgeSignal.ts`); owns the status surface.
  */
 
 import type { LedCalibrationConfig } from "./calibration";
@@ -103,7 +103,7 @@ export interface StartLedTestPatternPayload {
   speed?: TestPatternSpeed;
   /**
    * Output targets the synthetic frame is streamed to. Absent ⇒ backend
-   * default (USB-first, mirroring `resolveDefaultTargets`).
+   * default (USB-first).
    */
   targets?: HueRuntimeTarget[];
   /** Strip layout to size the pattern with; absent ⇒ backend hydrates the

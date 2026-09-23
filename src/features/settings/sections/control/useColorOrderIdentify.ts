@@ -130,9 +130,9 @@ export function useColorOrderIdentify({
   const stoppingRef = useRef<Promise<boolean> | null>(null);
 
   const stopProbe = useCallback((): Promise<boolean> => {
-    if (stoppingRef.current) return stoppingRef.current;
+    if (stoppingRef.current !== null) return stoppingRef.current;
     const stopping = (async () => {
-      while (inFlightRef.current) await inFlightRef.current;
+      while (inFlightRef.current !== null) await inFlightRef.current;
       if (!probeLiveRef.current) return true;
       let result: LedTestPatternResult;
       try {

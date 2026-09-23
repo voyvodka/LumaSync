@@ -206,6 +206,44 @@ export const LED_CHIP_TYPE = {
 export type LedChipType = (typeof LED_CHIP_TYPE)[keyof typeof LED_CHIP_TYPE];
 
 // ---------------------------------------------------------------------------
+// Firmware advertisement — what a LumaSync firmware says about itself in PONG
+// ---------------------------------------------------------------------------
+
+/**
+ * Pixel layout a LumaSync firmware expects, from the high nibble of PONG
+ * byte 5 (`docs/architecture/serial-protocol.md` §1.5). Firmware that predates
+ * the nibble sends `0`, which reads as `rgb`. Mirrors Rust `WirePixelLayout`.
+ */
+export const FIRMWARE_PIXEL_LAYOUT = {
+  RGB: "rgb",
+  RGBW: "rgbw",
+} as const;
+
+export type FirmwarePixelLayout = (typeof FIRMWARE_PIXEL_LAYOUT)[keyof typeof FIRMWARE_PIXEL_LAYOUT];
+
+/** The layout a chip type puts in each pixel — what the firmware must expect. */
+export function pixelLayoutForChipType(chipType: LedChipType): FirmwarePixelLayout {
+  return chipType === LED_CHIP_TYPE.SK6812_RGBW ? FIRMWARE_PIXEL_LAYOUT.RGBW : FIRMWARE_PIXEL_LAYOUT.RGB;
+}
+
+/**
+ * A PONG the host accepted. Carried by `SerialConnectionStatus.firmware` and
+ * `HealthCheckResult.firmware`; absent there means the device did not answer
+ * (Adalight or pre-handshake firmware) or answered garbage — unknown, never
+ * "wrong". Advisory only: the host never switches profile or chip type from it.
+ */
+export interface SerialFirmwareInfo {
+  /** `"major.minor"`, e.g. `"1.4"`. */
+  version: string;
+  /** Raw `(major << 8) | minor` from the PONG. */
+  versionRaw: number;
+  /** Framing the firmware expects (low nibble of PONG byte 5). */
+  profile: FirmwareProfile;
+  /** Pixel layout the firmware expects (high nibble of PONG byte 5). */
+  pixelLayout: FirmwarePixelLayout;
+}
+
+// ---------------------------------------------------------------------------
 // LED colour order — host-side correction for the serial sink
 // ---------------------------------------------------------------------------
 
@@ -305,12 +343,15 @@ export const DEFAULT_COLOR_CORRECTION: ColorCorrectionConfig = {
  * - `SERIAL_HEALTH_HANDSHAKE_TIMEOUT` — no reply within the handshake
  *   window; usually a wrong baud rate or a port that is not a LumaSync
  *   controller at all.
- * - `SERIAL_HEALTH_VERSION_MISMATCH` — firmware responded with a
- *   protocol version the host does not understand. User must upgrade
- *   one of the two sides.
+ * - `SERIAL_HEALTH_VERSION_MISMATCH` — a warning, not a failure: the
+ *   HANDSHAKE step passes with this code when the PONG's version is outside
+ *   the host's window (`MIN_FW_VERSION`..`MAX_FW_MAJOR`, `device_handshake.rs`).
+ *   The host keeps streaming v1 frames.
  * - `SERIAL_HEALTH_FIRMWARE_MISMATCH` — handshake replied, but the
  *   firmware profile advertised by the device does not match the
  *   user-selected `FirmwareProfile` (distinct from `UNSUPPORTED_PORT`).
+ *   No producer: Rust never sees the selected profile, so the pickers compare
+ *   `SerialFirmwareInfo` against the setting themselves.
  * - `SERIAL_HEALTH_PROTOCOL_ERROR` — handshake parser failed mid-frame
  *   (checksum, malformed length, unexpected byte). Usually a cable or
  *   interference issue.

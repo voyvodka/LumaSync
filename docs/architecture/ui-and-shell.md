@@ -170,7 +170,7 @@ the app data directory without a single call site for any of them.
 
 | Window | Granted |
 |---|---|
-| `main` | event listen/unlisten; the window getters and setters `windowLifecycle.ts`, `TitleBar.tsx` and `CalibrationPage.tsx` call, plus `start_dragging`; `log`; autostart enable/disable/is-enabled; `dialog:open`; `fs:read-file` scoped to `$APPDATA/room-map-backgrounds/*`; `opener:open-url` scoped to `https://lumasync.app/*`; `notification:is-permission-granted`; `process:restart` |
+| `main` | event listen/unlisten; the window getters and setters `windowLifecycle.ts` and `windowApi.ts` call, plus `start_dragging`; `log`; autostart enable/disable/is-enabled; `dialog:open`; `fs:read-file` scoped to `$APPDATA/room-map-backgrounds/*`; `opener:open-url` scoped to `https://lumasync.app/*`; `notification:is-permission-granted`; `process:restart` |
 | `led-control-popup` | event listen/unlisten; `scale_factor`/`outer_position`/`inner_size` for position persistence; `start_dragging`; `log` |
 | `led-twin-overlay-*` | event listen/unlisten; `log` — no window API at all |
 | `calibration-overlay-*` | nothing: a static page fed by an initialization script, no IPC |

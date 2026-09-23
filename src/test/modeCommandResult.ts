@@ -1,5 +1,5 @@
 import type { ModeCommandResult } from "@/features/mode/modeApi";
-import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/features/mode/model/contracts";
+import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/shared/contracts/mode";
 import { LIGHTING_MODE_STATUS } from "@/shared/contracts/lighting";
 
 /** Accepted `set_lighting_mode` reply, typed as the real result so a mock cannot

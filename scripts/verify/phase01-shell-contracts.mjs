@@ -2403,8 +2403,12 @@ const checkedPairs = nullabilityPairs.filter(
 );
 // 45 → 44: `WledCommandStatus` folded into the shared `CommandStatus`.
 // 44 → 45: `LaunchContext`, the `get_launch_context` response.
-// 45 → 48: `ShellStateSnapshot`, `ShellStateWriteResult`, `ShellStateChanged`.
-const EXPECTED_NULLABILITY_PAIR_COUNT = 48;
+// 45 → 49: the lighting-mode contract moved into shared/contracts/mode.ts,
+// pairing AmbilightPayload, LightingModeChangedPayload, LightingModeConfig and
+// SolidColorPayload.
+// 49 → 50: `SerialFirmwareInfo`, the PONG a connect or health check accepted.
+// 50 → 53: `ShellStateSnapshot`, `ShellStateWriteResult`, `ShellStateChanged`.
+const EXPECTED_NULLABILITY_PAIR_COUNT = 53;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

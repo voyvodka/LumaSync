@@ -764,3 +764,34 @@ describe("the category rail is addressable by test id", () => {
     expect(button).toHaveAttribute("aria-current", "page");
   });
 });
+
+// Both mount-time reads were fire-and-forget; a rejection bypassed the
+// `[LumaSync]` console bridge and never reached the log file.
+describe("DeviceSection — a failed placement read is logged", () => {
+  beforeEach(() => {
+    useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
+    useHueOnboardingMock.mockReturnValue(createHueHookState());
+  });
+
+  it("logs both shellStore reads when the store rejects", async () => {
+    const { shellStore } = await import("@/features/persistence/shellStore");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(shellStore.load).mockRejectedValue(new Error("store unreadable"));
+    try {
+      render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
+      await waitFor(() => {
+        expect(errorSpy).toHaveBeenCalledWith(
+          "[LumaSync] DeviceSection: loading room-map placements failed:",
+          expect.any(Error),
+        );
+        expect(errorSpy).toHaveBeenCalledWith(
+          "[LumaSync] DeviceSection: re-reading paired USB strips failed:",
+          expect.any(Error),
+        );
+      });
+    } finally {
+      vi.mocked(shellStore.load).mockResolvedValue({ roomMap: null } as never);
+      errorSpy.mockRestore();
+    }
+  });
+});

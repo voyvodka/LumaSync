@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LightingModeConfig } from "../features/mode/model/contracts";
+import type { LightingModeConfig } from "@/shared/contracts/mode";
 import type { LocalSink } from "../features/device/localSink";
 import { DEVICE_COMMANDS, type ColorCorrectionConfig, type LedChipType } from "@/shared/contracts/device";
 import { HUE_COMMANDS, HUE_READINESS_REASON, HUE_RUNTIME_TRIGGER_SOURCE, HUE_STATUS } from "@/shared/contracts/hue";

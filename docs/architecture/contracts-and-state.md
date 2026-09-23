@@ -52,6 +52,17 @@ on Windows, `~/.local/share/com.lumasync.app/` on Linux. `ShellStateStore` in
 **All frontend reads and writes go through the `shellStore.ts` facade**, and shape changes go
 through `migrations.ts`. Stored keys follow `ShellState` in `shell.ts`.
 
+**Import layers are lint-enforced.** `biome.json` (`noRestrictedImports`, run by `bun run lint`)
+holds three rules. `@tauri-apps/*` is imported only by a feature's `*Api.ts` bridge, plus
+`main.tsx` (the log bridge and window-label routing, before any feature loads),
+`shell/windowLifecycle.ts` (window geometry and the store) and `tray/trayController.ts` (tray events
+and autostart) — a component or hook that wants the window, an event or a plugin goes through a
+bridge, so a test can mock one module and a capability audit has one caller to read. Events use a
+`*EventsApi.ts` beside the command bridge. `plugin-store` is opened only by `windowLifecycle.ts`,
+behind `shellStore`; `plugin-fs` and `plugin-dialog` only by `room-map/roomMapFilesApi.ts`. And
+`src/shared/**` never imports `src/features/**`: a type both need moves into `shared/contracts/`,
+which is why the lighting-mode contract is `shared/contracts/mode.ts`. Tests are exempt.
+
 **i18n keys are stable and scoped by feature.** EN and TR move together — a locale-parity test
 enforces it, so a key added to one and not the other fails the suite. `check:i18n`
 (`scripts/verify/i18n-keys.mjs`) ratchets orphans, and a `` t(`prefix.${x}`) `` site references

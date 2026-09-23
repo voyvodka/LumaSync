@@ -37,6 +37,7 @@ export function useHueReadinessPolling({
 }: UseHueReadinessPollingInput): void {
   const restartToken = useHuePollRestartToken();
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: restartToken is a re-run trigger that restarts the poll loop
   useEffect(() => {
     if (!bridge || !credentials || !selectedAreaId || isValidatingCredential || isLoadingAreas) {
       return;

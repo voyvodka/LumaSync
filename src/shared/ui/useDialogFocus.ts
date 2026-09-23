@@ -72,12 +72,12 @@ export function useDialogFocus<T extends HTMLElement = HTMLDivElement>(
     const container = containerRef.current;
     if (!container) return;
     const focusable = focusableWithin(container);
-    if (focusable.length === 0) {
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) {
       event.preventDefault();
       return;
     }
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
     const active = document.activeElement;
 
     if (event.shiftKey && (active === first || active === container)) {

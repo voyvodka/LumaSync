@@ -20,7 +20,7 @@ import {
   LIGHTING_MODE_KIND,
   type AmbilightPayload,
   type LightingModeConfig,
-} from "../model/contracts";
+} from "@/shared/contracts/mode";
 
 /** The runtime-config cache, read once per dispatch. */
 export interface ModeRuntimeConfigSnapshot {

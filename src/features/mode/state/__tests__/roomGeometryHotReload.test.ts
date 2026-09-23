@@ -15,7 +15,7 @@ import { SHELL_STATE_SCHEMA_VERSION } from "@/shared/contracts/shell";
 import { createFakeShellStateBackend } from "@/test/fakeShellStateBackend";
 import { appliedResult } from "@/test/modeCommandResult";
 
-import { LIGHTING_MODE_KIND, type LightingModeConfig } from "../../model/contracts";
+import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/shared/contracts/mode";
 import { useLightingModeOrchestrator } from "../useLightingModeOrchestrator";
 import { useModeHotReload } from "../useModeHotReload";
 import { useModeRuntimeConfig } from "../useModeRuntimeConfig";
