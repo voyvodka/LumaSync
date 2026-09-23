@@ -260,9 +260,25 @@ impl ActiveSinkRegistry {
 
 /// List every serial port the OS can see, flagging which ones match the
 /// supported USB adapter allowlist.
+// Off the main thread: enumeration walks the OS device tree and can stall.
 #[tauri::command]
-pub fn list_serial_ports(
-    port_access: tauri::State<'_, SerialPortAccess>,
+pub async fn list_serial_ports<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<SerialPortListResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        list_serial_ports_blocking(&app.state::<SerialPortAccess>())
+    })
+    .await
+    .unwrap_or_else(|error| {
+        Err(format!(
+            "LIST_PORTS_FAILED: Serial port enumeration did not complete ({error})"
+        ))
+    })
+}
+
+fn list_serial_ports_blocking(
+    port_access: &SerialPortAccess,
 ) -> Result<SerialPortListResponse, String> {
     let ports = port_access.available_ports().map_err(|error| {
         format!("LIST_PORTS_FAILED: Could not enumerate serial ports ({error})")

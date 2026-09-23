@@ -9,6 +9,7 @@ mod capability_policy;
 mod command_status_wire;
 mod device_commands;
 mod hue_commands;
+mod launch_commands;
 mod lighting_commands;
 mod overlay_commands;
 mod preview_commands;

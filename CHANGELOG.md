@@ -66,6 +66,23 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Quitting with Cmd+Q now finishes cleaning up before the app exits: the Hue lights are handed
+  back and the LED strip is released, as the tray's Quit already did. Before, the app closed
+  partway through, which could leave the Hue bridge in entertainment mode.
+- After installing an update on macOS or Linux the app now restarts itself. The update prompt
+  used to stay on "Installing" and the new version only ran after a manual restart. On Windows
+  the installer now waits for the lights to be released before it takes over. The download bar
+  also updates about ten times a second instead of on every chunk, which kept the window busy.
+- Changing or stopping the lighting mode, and starting or stopping an LED test, no longer freeze
+  the window for up to a few seconds while capture or the strip starts. Commands sent in quick
+  succession, such as a brightness drag, still apply in the order they were sent. Listing USB
+  ports, connecting a WLED device and moving Hue credentials into the keychain no longer freeze
+  it either.
+- Starting at login no longer opens the window over whatever you are doing: LumaSync starts in
+  the tray. On macOS, clicking the Dock icon now opens the window.
+- A crash inside the app is now written to the log file with where it happened, including on
+  Windows, where it used to leave no trace. On macOS 15 the local network permission prompt now
+  says why LumaSync needs it: to find and control your Hue bridge and WLED devices.
 - The "Screen recording permission is required" notice no longer disappears after eight seconds
   while the permission is still missing, taking its System Settings button with it. It now stays
   until the permission is granted or lighting starts, and the app notices the change on its own

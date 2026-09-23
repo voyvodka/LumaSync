@@ -7,6 +7,27 @@ The traps here cost the most time per incident, and one of them shipped a broken
 **`MACOSX_DEPLOYMENT_TARGET` is pinned to 12.3** at workflow level in both CI and release.
 Lowering it reintroduces the v1.5.2 launch crash — see *Resolved* below.
 
+**The Rust toolchain is pinned to an exact version** in `rust-toolchain.toml`, not `stable`. A new
+stable release brings new clippy lints, and CI runs clippy at deny level, so a floating channel turns
+an unrelated PR red on the day a release ships. Both workflows still run
+`dtolnay/rust-toolchain@stable` for its environment defaults and then `rustup toolchain install`,
+which reads the file — the pinned toolchain has to exist before `release.yml` adds the macOS targets
+to it. Bump the pin deliberately, in a PR that also fixes whatever the new clippy finds.
+
+**The release profile is thin LTO, one codegen unit, stripped — and `panic = "unwind"` on purpose.**
+A panicking worker or command must unwind: its thread dies alone, the locks it held poison and are
+recovered (`unwrap_or_else(|e| e.into_inner())` in several status reads), and a panic inside a
+`spawn_blocking` body comes back as a coded error. `abort` would turn each of those into the whole
+app vanishing from the tray. `panic_log.rs` routes every panic — thread, location, message — into
+the log file, chained to the default hook; a released Windows GUI process has no stderr, so a panic
+there used to leave no trace at all.
+
+**`Info.plist` carries the macOS usage strings**, merged into the bundle by
+`bundle.macOS.infoPlist`: screen recording, and `NSLocalNetworkUsageDescription`, without which
+macOS 15 shows the local-network prompt (Hue bridge discovery and streaming, WLED) with no
+explanation. mDNS here is raw multicast sockets rather than `NSNetService`, so no `NSBonjourServices`
+list is involved.
+
 **Releases are patch bumps.** For the foreseeable future, whatever the change contains. Do not
 classify the bump from the diff. A genuinely breaking change still ships under a patch number, so
 it has to be called out in the release notes in as many words.

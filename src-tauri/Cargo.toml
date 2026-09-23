@@ -99,3 +99,12 @@ e2e = ["dep:tauri-plugin-wdio-webdriver"]
 # shipped binary never links the mock runtime.
 tauri = { version = "2", features = ["test"] }
 tokio = { version = "1.52.3", features = ["rt", "macros", "sync", "time"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+# Never "abort": a panicking worker or command must unwind so its thread dies
+# alone, locks poison and are recovered, and a `spawn_blocking` panic comes back
+# as a coded error instead of taking the tray and every output down with it.
+panic = "unwind"

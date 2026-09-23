@@ -134,14 +134,18 @@ export function useAutoUpdater() {
       });
 
       const response = await downloadAndInstallUpdate();
-      if (response.status.code !== UPDATER_STATUS.INSTALL_STARTED) {
+      if (response.status.code === UPDATER_STATUS.INSTALL_STARTED) {
+        // The backend is already restarting the app. Said here as well as by
+        // the `finished` event, so a missed event cannot leave the modal on a
+        // download bar until the window goes away.
+        setState({ status: "installing", update });
+      } else {
         setState({
           status: "error",
           code: response.status.code,
           message: response.status.message,
         });
       }
-      // On success the app is replaced and relaunched, so no state change here.
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setState({ status: "error", message });
