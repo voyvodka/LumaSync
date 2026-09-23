@@ -132,9 +132,11 @@ cargo test --release --lib frame_budget_report -- --ignored --nocapture
 
 Quote release numbers: the whole step was ~40 µs (164 LEDs) and ~74 µs (300 LEDs) when this
 landed, under 0.5 % of a 60 Hz frame. Debug runs about 16× slower overall and up to 50× on the
-encoders, so it only compares two builds of the same profile. If a release test build fails with
-`can't find crate for ctor_proc_macro` (seen on macOS 27: dyld rejects the stripped proc-macro dylib
-as "mis-aligned LINKEDIT string pool"), prefix `CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP=none`.
+encoders, so it only compares two builds of the same profile. A release build (test or
+`tauri build`) failing with `can't find crate for ctor_proc_macro` on macOS 27 is an old toolchain:
+rustc 1.94 strips proc-macro dylibs in a way macOS 27's dyld rejects ("mis-aligned LINKEDIT string
+pool"); rustc 1.98.1 builds cleanly, so run `rustup update`. `CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP=none`
+also works around it.
 It is a plain test, not `criterion`: the
 pipeline's types are crate-private, which a `benches/` target cannot reach without a public facade
 over the hot path, and criterion adds 16–19 crates to the lockfile for a report CI never runs.
