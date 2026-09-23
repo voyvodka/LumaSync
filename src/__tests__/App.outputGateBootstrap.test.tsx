@@ -47,6 +47,8 @@ vi.mock("../features/updater/useAutoUpdater", () => ({
     state: { status: "idle" },
     channel: "stable",
     checkForUpdates: vi.fn().mockResolvedValue(undefined),
+    checkForUpdatesInBackground: vi.fn().mockResolvedValue(undefined),
+    checkFailedNotice: null,
     downloadAndInstall: vi.fn().mockResolvedValue(undefined),
     dismiss: vi.fn(),
     devSetState: vi.fn(),

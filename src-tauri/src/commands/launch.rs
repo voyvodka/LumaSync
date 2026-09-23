@@ -15,6 +15,9 @@ pub const AUTOSTART_TRAY_ARG: &str = "--tray";
 #[serde(rename_all = "camelCase")]
 pub struct LaunchContext {
     pub start_hidden: bool,
+    /// Built with the `e2e` cargo feature (`bun run e2e:build`). Release bundles
+    /// never enable it, so this is `false` for every user.
+    pub e2e_build: bool,
 }
 
 /// `args` is a full argv, program name first.
@@ -33,6 +36,7 @@ where
 pub fn get_launch_context<R: Runtime>(app: AppHandle<R>) -> LaunchContext {
     LaunchContext {
         start_hidden: launched_to_tray(&app.env().args_os),
+        e2e_build: cfg!(feature = "e2e"),
     }
 }
 

@@ -11,6 +11,7 @@ import {
 } from "@/features/onboarding/state/onboardingState";
 import { PREVIEW_OPEN_FAILURE_COPY, type PreviewOpenFailure } from "@/features/preview/previewOpenFailure";
 import type { DeviceCategory } from "@/features/settings/sections/DeviceSection";
+import type { UpdateCheckFailure } from "@/features/updater/useUpdateCheckFailedNotice";
 import { CAPTURE_FAILURE_BUCKET, type CaptureFailureNotice } from "@/shared/contracts/capture";
 import { HUE_SOLID_COLOR_STATUS, type HueRuntimeTarget, type HueSolidColorStatusCode } from "@/shared/contracts/hue";
 import { HUE_LEFT_OUT_REASON, type HueLeftOutReason } from "@/shared/contracts/lighting";
@@ -48,6 +49,9 @@ export interface ShellNoticeInput {
   onboardingStep: OnboardingStep | null;
   /** A USB strip or WLED panel is bound — the only outputs calibration applies to. */
   localTargetConfigured: boolean;
+  /** The startup update check failed; a check the user starts reports through the modal instead. */
+  updateCheckFailed: UpdateCheckFailure | null;
+  updateChecking: boolean;
 }
 
 export interface ShellNoticeHandlers {
@@ -58,6 +62,7 @@ export interface ShellNoticeHandlers {
   retryHueProbe?: () => void;
   retryHueStop: () => void;
   completeOnboarding: () => void;
+  retryUpdateCheck: () => void;
 }
 
 const HUE_LEFT_OUT_TITLE: Record<HueLeftOutReason, TranslationKey> = {
@@ -411,6 +416,29 @@ export function buildShellNotices(
       onDismiss: handlers.completeOnboarding,
       source: step,
       testId: "onboarding-notice",
+    });
+  }
+
+  // ── Updates ──────────────────────────────────────────────────────────
+  // Listed last: nothing about the lights depends on it, so it is never the
+  // notice that pushes a first-run step out of view.
+  if (input.updateCheckFailed) {
+    notices.push({
+      id: SHELL_NOTICE_IDS.UPDATE_CHECK_FAILED,
+      tier: NOTICE_TIER.INFO,
+      severity: NOTICE_SEVERITY.INFO,
+      kind: "event",
+      title: t("shell:notices.titles.updateCheckFailed"),
+      body: t("updater:error.backgroundCheckBody"),
+      action: {
+        label: input.updateChecking ? t("updater:checking") : t("updater:actions.retry"),
+        onClick: handlers.retryUpdateCheck,
+        pending: input.updateChecking,
+        testId: "update-check-retry",
+      },
+      dismissible: true,
+      source: input.updateCheckFailed,
+      testId: "update-check-failed-notice",
     });
   }
 

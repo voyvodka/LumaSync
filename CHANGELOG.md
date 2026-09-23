@@ -66,6 +66,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Updates: a failed update check at startup, for example with no internet connection, no longer
+  opens a window-blocking prompt. It shows a small notice with a "Try again" button instead. A
+  failed check was also described as a failed installation; it now says the update server could
+  not be reached.
 - Hue: after the router gave the bridge a new address, streaming quietly fell back to the slower
   HTTP mode because the saved pairing was tied to the old address. The pairing now belongs to
   the bridge itself; an existing pairing is moved over the next time the bridge accepts it.

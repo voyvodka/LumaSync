@@ -77,6 +77,7 @@ const shell: Catalogue<typeof enShell> = {
       usbDisconnected: "USB şerit çıkarıldı",
       usbUnsupported: "USB cihazı tanınmadı",
       hueColor: "Hue rengi uygulanmadı",
+      updateCheckFailed: "Güncellemeler kontrol edilemedi",
     },
     actions: {
       devices: "Cihazlar",

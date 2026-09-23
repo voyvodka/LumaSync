@@ -3,7 +3,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 
 import { SECTION_ORDER } from "../../src/shared/contracts/shell";
 import type { SectionId } from "../../src/shared/contracts/shell";
-import { clickTestId, exists, switchUiMode, waitForAppReady } from "../support/shell";
+import {
+  assertNoOpenDialog,
+  clickTestId,
+  exists,
+  openDialogs,
+  switchUiMode,
+  waitForAppReady,
+} from "../support/shell";
 
 /**
  * Diagnostic, not part of the suite — the spec glob only picks up `*.e2e.ts`,
@@ -59,7 +66,14 @@ const drainConsole = () =>
     return errors.splice(0, errors.length);
   });
 
-const structure = (panel: string) =>
+/** The panel's own findings plus every open dialog, which covers the panel and
+ *  makes the rest of the report describe a screen nobody can reach. */
+const structure = async (panel: string) => ({
+  ...(await panelStructure(panel)),
+  openDialogs: (await openDialogs()).map(({ role, text }) => ({ role, text })),
+});
+
+const panelStructure = (panel: string) =>
   browser.execute((selector: string) => {
     const root = document.querySelector(selector) ?? document.body;
     const controls = Array.from(
@@ -104,7 +118,14 @@ const structure = (panel: string) =>
 describe("ui audit", () => {
   before(async () => {
     mkdirSync(OUT, { recursive: true });
-    await waitForAppReady();
+    try {
+      await waitForAppReady();
+    } catch (error) {
+      // The failure names the dialog; the picture shows what it covered.
+      await browser.saveScreenshot(`${OUT}/not-ready.png`);
+      console.error(`[audit] app not ready -> ${OUT}/not-ready.png`);
+      throw error;
+    }
     await watchConsole();
   });
 
@@ -112,6 +133,7 @@ describe("ui audit", () => {
     await switchUiMode("compact");
     await browser.saveScreenshot(`${OUT}/compact.png`);
     report.compact = await structure('[data-testid="compact-layout"]');
+    await assertNoOpenDialog("ui audit: compact");
   });
 
   it("captures every requested section in full mode", async () => {
@@ -136,6 +158,8 @@ describe("ui audit", () => {
         consoleErrors: await drainConsole(),
       });
       console.log(`[audit] ${section} -> ${screenshot}`);
+      // After the capture, so the report and PNG show what the dialog covered.
+      await assertNoOpenDialog(`ui audit: ${section}`);
     }
 
     await switchUiMode("compact");

@@ -25,13 +25,20 @@ vi.mock("@/features/persistence/shellStore", () => ({
   },
 }));
 
+vi.mock("@/features/shell/launchApi", () => ({
+  readE2eBuild: vi.fn().mockResolvedValue(false),
+}));
+
 // ---------------------------------------------------------------------------
 // Imports (after mock declarations)
 // ---------------------------------------------------------------------------
 import { listen } from "@tauri-apps/api/event";
 import { shellStore } from "@/features/persistence/shellStore";
+import { readE2eBuild } from "@/features/shell/launchApi";
 import { checkForUpdate, downloadAndInstallUpdate } from "../updaterApi";
 import { useAutoUpdater } from "../useAutoUpdater";
+import { isUpdateModalStatus } from "../updateModalStatus";
+import { UPDATE_CHECK_FAILED_NOTICE_MS } from "../useUpdateCheckFailedNotice";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -72,6 +79,10 @@ describe("useAutoUpdater", () => {
     vi.mocked(downloadAndInstallUpdate).mockResolvedValue({
       status: status(UPDATER_STATUS.INSTALL_STARTED),
     });
+    vi.mocked(readE2eBuild).mockResolvedValue(false);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "info").mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -110,6 +121,9 @@ describe("useAutoUpdater", () => {
     expect(result.current.state.status).toBe("error");
     if (result.current.state.status === "error") {
       expect(result.current.state.message).toBe("network timeout");
+      // Uncoded, yet still a check failure: the wording must not say install.
+      expect(result.current.state.phase).toBe("check");
+      expect(result.current.state.code).toBeUndefined();
     }
   });
 
@@ -161,6 +175,7 @@ describe("useAutoUpdater", () => {
     expect(result.current.state.status).toBe("error");
     if (result.current.state.status === "error") {
       expect(result.current.state.message).toBe("disk full");
+      expect(result.current.state.phase).toBe("install");
     }
   });
 
@@ -373,6 +388,170 @@ describe("useAutoUpdater", () => {
       });
 
       expect(result.current.isModalOpen).toBe(true);
+    });
+  });
+
+  /** The startup check nobody asked for. It fails on every offline boot, so a
+   *  failure is a notice, never the modal. */
+  describe("background check", () => {
+    const modalShown = (current: ReturnType<typeof useAutoUpdater>) =>
+      current.isModalOpen && isUpdateModalStatus(current.state);
+
+    async function runBackground() {
+      const hook = renderHook(() => useAutoUpdater());
+      await act(async () => {
+        await hook.result.current.checkForUpdatesInBackground();
+      });
+      return hook;
+    }
+
+    it("does not open the modal when the invoke layer rejects, and raises the notice", async () => {
+      vi.mocked(checkForUpdate).mockRejectedValue(new Error("check_for_update not allowed"));
+
+      const { result } = await runBackground();
+
+      expect(modalShown(result.current)).toBe(false);
+      expect(result.current.state.status).toBe("idle");
+      expect(result.current.checkFailedNotice).toEqual({ message: "check_for_update not allowed" });
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining("[LumaSync] update check rejected (background)"),
+        expect.any(Error),
+      );
+    });
+
+    it("does not open the modal on a coded check failure, and logs it", async () => {
+      vi.mocked(checkForUpdate).mockResolvedValue({
+        status: status(UPDATER_STATUS.CHECK_FAILED, "offline"),
+        channel: "stable",
+        update: null,
+      });
+
+      const { result } = await runBackground();
+
+      expect(modalShown(result.current)).toBe(false);
+      expect(result.current.checkFailedNotice).toEqual({ code: UPDATER_STATUS.CHECK_FAILED, message: "offline" });
+      expect(console.warn).toHaveBeenCalledWith(
+        expect.stringContaining("[LumaSync] update check failed (background)"),
+        { code: UPDATER_STATUS.CHECK_FAILED, message: "offline" },
+      );
+    });
+
+    it("still opens the modal when an update is available", async () => {
+      vi.mocked(checkForUpdate).mockResolvedValue({
+        status: status(UPDATER_STATUS.UPDATE_AVAILABLE),
+        channel: "stable",
+        update: UPDATE,
+      });
+
+      const { result } = await runBackground();
+
+      expect(result.current.state.status).toBe("available");
+      expect(modalShown(result.current)).toBe(true);
+      expect(result.current.checkFailedNotice).toBeNull();
+    });
+
+    it("never reaches the feed in the e2e build", async () => {
+      vi.mocked(readE2eBuild).mockResolvedValue(true);
+
+      const { result } = await runBackground();
+
+      expect(checkForUpdate).not.toHaveBeenCalled();
+      expect(result.current.state.status).toBe("idle");
+      expect(result.current.checkFailedNotice).toBeNull();
+    });
+
+    it("a user check still opens the modal on the same failure", async () => {
+      vi.mocked(checkForUpdate).mockRejectedValue(new Error("check_for_update not allowed"));
+      const { result } = await runBackground();
+      expect(result.current.checkFailedNotice).not.toBeNull();
+
+      await act(async () => {
+        await result.current.checkForUpdates();
+      });
+
+      expect(modalShown(result.current)).toBe(true);
+      expect(result.current.state).toMatchObject({ status: "error", phase: "check" });
+      // The modal now says it; the notice would only repeat it.
+      expect(result.current.checkFailedNotice).toBeNull();
+    });
+
+    it("keeps the notice through a retry and clears it once the retry succeeds", async () => {
+      vi.mocked(checkForUpdate).mockRejectedValueOnce(new Error("offline"));
+      const { result } = await runBackground();
+      const failure = result.current.checkFailedNotice;
+      expect(failure).not.toBeNull();
+
+      let resolveCheck: ((value: Awaited<ReturnType<typeof checkForUpdate>>) => void) | undefined;
+      vi.mocked(checkForUpdate).mockImplementationOnce(
+        () => new Promise((resolve) => (resolveCheck = resolve)),
+      );
+      let pending: Promise<void>;
+      await act(async () => {
+        pending = result.current.checkForUpdates();
+        await Promise.resolve();
+      });
+      expect(result.current.state.status).toBe("checking");
+      expect(result.current.checkFailedNotice).toBe(failure);
+
+      await act(async () => {
+        resolveCheck?.({ status: status(UPDATER_STATUS.UP_TO_DATE), channel: "stable", update: null });
+        await pending;
+      });
+      expect(result.current.checkFailedNotice).toBeNull();
+      expect(modalShown(result.current)).toBe(false);
+    });
+
+    it("does not let the notice expire under a retry that is still running", async () => {
+      vi.useFakeTimers();
+      try {
+        vi.mocked(checkForUpdate).mockRejectedValueOnce(new Error("offline"));
+        const { result } = await runBackground();
+        expect(result.current.checkFailedNotice).not.toBeNull();
+
+        // A slow feed: the retry outlives the notice's own countdown.
+        vi.mocked(checkForUpdate).mockReturnValueOnce(new Promise(() => {}));
+        await act(async () => {
+          void result.current.checkForUpdates();
+          await Promise.resolve();
+        });
+        await act(async () => {
+          vi.advanceTimersByTime(UPDATE_CHECK_FAILED_NOTICE_MS * 2);
+        });
+
+        expect(result.current.state.status).toBe("checking");
+        expect(result.current.checkFailedNotice).not.toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("lets the notice go on its own timer, counted only while the window is visible", async () => {
+      vi.useFakeTimers();
+      const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+      try {
+        vi.mocked(checkForUpdate).mockRejectedValue(new Error("offline"));
+        const { result } = await runBackground();
+
+        // Started in the tray: nobody has seen it yet.
+        await act(async () => {
+          vi.advanceTimersByTime(UPDATE_CHECK_FAILED_NOTICE_MS * 2);
+        });
+        expect(result.current.checkFailedNotice).not.toBeNull();
+
+        visibility.mockReturnValue("visible");
+        await act(async () => {
+          document.dispatchEvent(new Event("visibilitychange"));
+          vi.advanceTimersByTime(UPDATE_CHECK_FAILED_NOTICE_MS - 1);
+        });
+        expect(result.current.checkFailedNotice).not.toBeNull();
+
+        await act(async () => {
+          vi.advanceTimersByTime(1);
+        });
+        expect(result.current.checkFailedNotice).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });
