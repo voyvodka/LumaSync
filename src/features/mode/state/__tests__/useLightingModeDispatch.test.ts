@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { appliedResult } from "@/test/modeCommandResult";
 
-import { LIGHTING_MODE_KIND, type LightingModeConfig } from "../../model/contracts";
+import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/shared/contracts/mode";
 import { useLightingModeDispatch } from "../useLightingModeDispatch";
 
 const setLightingModeMock = vi.fn();

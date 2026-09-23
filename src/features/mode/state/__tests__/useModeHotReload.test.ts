@@ -6,7 +6,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
 
 import { LED_CHIP_TYPE } from "@/shared/contracts/device";
 
-import { LIGHTING_MODE_KIND, type LightingModeConfig } from "../../model/contracts";
+import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/shared/contracts/mode";
 import { useLightingModeDispatch, type LightingModeDispatcher } from "../useLightingModeDispatch";
 import { useModeHotReload } from "../useModeHotReload";
 import { useModeRuntimeConfig } from "../useModeRuntimeConfig";

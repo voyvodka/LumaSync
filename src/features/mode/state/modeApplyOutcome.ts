@@ -19,7 +19,7 @@ import {
 } from "@/shared/contracts/lighting";
 
 import type { ModeCommandResult } from "../modeApi";
-import { LIGHTING_MODE_KIND, type LightingModeConfig, type LightingModeKind } from "../model/contracts";
+import { LIGHTING_MODE_KIND, type LightingModeConfig, type LightingModeKind } from "@/shared/contracts/mode";
 
 export interface ModeApplyOutcome {
   /** The backend is not running the requested mode. */

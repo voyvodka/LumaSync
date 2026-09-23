@@ -32,7 +32,7 @@ function read<T>(key: string, maxAgeMs: number, fetcher: () => Promise<T>): Prom
   const entry = entries.get(key) as CacheEntry<T> | undefined;
 
   if (maxAgeMs > 0 && entry) {
-    if (entry.inFlight) return entry.inFlight;
+    if (entry.inFlight !== null) return entry.inFlight;
     if (entry.at > 0 && now() - entry.at <= maxAgeMs) return Promise.resolve(entry.value);
   }
 

@@ -54,9 +54,11 @@ export function packLedBuffer(
   }
   const next = new Array<PackedLedColor>(source.length);
   let identical = previous.length === source.length;
-  for (let i = 0; i < source.length; i += 1) {
-    next[i] = packLedColor(source[i]);
+  let i = 0;
+  for (const color of source) {
+    next[i] = packLedColor(color);
     if (identical && previous[i] !== next[i]) identical = false;
+    i += 1;
   }
   return identical ? previous : next;
 }

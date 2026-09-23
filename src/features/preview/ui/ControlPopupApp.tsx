@@ -5,11 +5,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { UnlistenFn } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { shellStore, type ShellState } from "@/features/persistence/shellStore";
 import { showNotification } from "@/features/platform/platformApi";
+import {
+  onCurrentWindowMoved,
+  readCurrentWindowLogicalCenter,
+  type UnlistenFn,
+} from "@/features/shell/windowApi";
 import { parseHex, rgbToHex } from "@/shared/lib/color";
 import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
 import { IconOff, IconAmbilight, IconSolidDot } from "@/shared/ui/icons";
@@ -19,7 +22,7 @@ import {
   type AmbilightPayload,
   type LightingModeConfig,
   type LightingModeKind,
-} from "@/features/mode/model/contracts";
+} from "@/shared/contracts/mode";
 import type { DisplayId } from "@/shared/contracts/display";
 import type { RoomGeometry } from "@/shared/contracts/roomMap";
 import { toRoomGeometry } from "@/features/room-map/model/roomGeometry";
@@ -59,7 +62,7 @@ function stampsFrom(state: ShellState): ModeStamps {
       state.lastOutputTargets && state.lastOutputTargets.length > 0
         ? state.lastOutputTargets
         : ["usb"],
-    ambilight: state.lightingMode?.ambilight,
+    ambilight: state.lightingMode?.ambilight ?? undefined,
     displayId: state.selectedDisplayId,
     roomGeometry: toRoomGeometry(state),
   };
@@ -159,7 +162,6 @@ export function ControlPopupApp() {
 
   // ── Persist the popup centre so it reopens where the user left it ────────
   useEffect(() => {
-    const win = getCurrentWindow();
     let alive = true;
     let timer: number | null = null;
     let unlisten: UnlistenFn | null = null;
@@ -172,13 +174,11 @@ export function ControlPopupApp() {
           try {
             // Rust restores through LogicalPosition, so store logical px —
             // unlike the main window, whose centre is persisted in physical px.
-            const scale = await win.scaleFactor();
-            const pos = await win.outerPosition();
-            const size = await win.innerSize();
+            const center = await readCurrentWindowLogicalCenter();
             if (!alive) return;
             await shellStore.save({
-              ledPreviewPopupCenterX: Math.round((pos.x + size.width / 2) / scale),
-              ledPreviewPopupCenterY: Math.round((pos.y + size.height / 2) / scale),
+              ledPreviewPopupCenterX: Math.round(center.x),
+              ledPreviewPopupCenterY: Math.round(center.y),
             });
           } catch (error) {
             console.error("[LumaSync] ControlPopupApp persist popup centre failed:", error);
@@ -187,8 +187,7 @@ export function ControlPopupApp() {
       }, PERSIST_CENTER_DEBOUNCE_MS);
     };
 
-    void win
-      .onMoved(persist)
+    void onCurrentWindowMoved(persist)
       .then((fn) => {
         if (alive) unlisten = fn;
         else fn();

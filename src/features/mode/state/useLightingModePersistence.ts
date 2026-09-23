@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 
 import { saveShellState } from "@/features/shell/windowLifecycle";
 
-import type { LightingModeConfig } from "../model/contracts";
+import type { LightingModeConfig } from "@/shared/contracts/mode";
 
 const LIGHTING_MODE_PERSIST_DEBOUNCE_MS = 300;
 

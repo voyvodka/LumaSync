@@ -14,6 +14,10 @@
  * is surfaced (the Rust fallback path already handles this gracefully by
  * falling back to WS2812B encoding — this is a visible hint only).
  *
+ * When a LumaSync firmware has reported its pixel layout (connect or health
+ * check) and the selected chip type sends the other one, the selected tile is
+ * marked. Never switched for the user: the marker is the whole response.
+ *
  * Accessibility:
  *   - `role="radiogroup"` + per-tile `role="radio"` + `aria-checked`.
  *   - Arrow-key navigation between tiles (Left/Right, Up/Down).
@@ -23,11 +27,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
+  FIRMWARE_PIXEL_LAYOUT,
   FIRMWARE_PROFILE,
   LED_CHIP_TYPE,
+  pixelLayoutForChipType,
+  type FirmwarePixelLayout,
   type FirmwareProfile,
   type LedChipType,
 } from "@/shared/contracts/device";
+import { useAdvertisedPixelLayout } from "@/features/device/useAdvertisedFirmwareProfile";
 import { shellStore } from "@/features/persistence/shellStore";
 
 const DEFAULT_CHIP_TYPE: LedChipType = LED_CHIP_TYPE.WS2812B_GRB;
@@ -37,6 +45,8 @@ interface ChipTileProps {
   label: string;
   description: string;
   warning?: string;
+  /** The connected firmware expects the other pixel layout. */
+  firmwareMismatch?: string;
   checked: boolean;
   onSelect: (chipType: LedChipType) => void;
   onKeyNavigate: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
@@ -48,6 +58,7 @@ function ChipTile({
   label,
   description,
   warning,
+  firmwareMismatch,
   checked,
   onSelect,
   onKeyNavigate,
@@ -62,6 +73,8 @@ function ChipTile({
       tabIndex={checked ? 0 : -1}
       onClick={() => onSelect(chipType)}
       onKeyDown={onKeyNavigate}
+      data-chip-type={chipType}
+      data-mismatched={firmwareMismatch ? "true" : undefined}
       style={{
         all: "unset",
         cursor: "pointer",
@@ -111,6 +124,20 @@ function ChipTile({
           {"⚠ "}{warning}
         </div>
       )}
+      {firmwareMismatch && (
+        <div
+          style={{
+            fontFamily: "var(--lm-mono, \"IBM Plex Mono\", ui-monospace, monospace)",
+            fontSize: 9.5,
+            color: "var(--lm-amber, #ffb020)",
+            letterSpacing: "0.02em",
+            marginTop: 2,
+          }}
+          title={firmwareMismatch}
+        >
+          {"⚠ "}{firmwareMismatch}
+        </div>
+      )}
     </button>
   );
 }
@@ -123,6 +150,11 @@ export interface LedChipTypePickerProps {
    * compatibility warning tooltip. Does not block selection.
    */
   firmwareProfile?: FirmwareProfile;
+  /**
+   * Test override for the layout the firmware reported; production mounts
+   * leave it `undefined` and subscribe to the firmware bus.
+   */
+  advertisedPixelLayout?: FirmwarePixelLayout;
   /** Fired after persistence completes so parents can react. */
   onChipTypeChange?: (next: LedChipType) => void;
 }
@@ -130,9 +162,12 @@ export interface LedChipTypePickerProps {
 export function LedChipTypePicker({
   initialChipType,
   firmwareProfile,
+  advertisedPixelLayout: advertisedFromProp,
   onChipTypeChange,
 }: LedChipTypePickerProps) {
   const { t } = useTranslation();
+  const advertisedFromBus = useAdvertisedPixelLayout();
+  const advertisedLayout = advertisedFromProp ?? advertisedFromBus;
   const [chipType, setChipType] = useState<LedChipType>(
     initialChipType ?? DEFAULT_CHIP_TYPE,
   );
@@ -205,6 +240,13 @@ export function LedChipTypePicker({
     chipType === LED_CHIP_TYPE.SK6812_RGBW &&
     firmwareProfile === FIRMWARE_PROFILE.ADALIGHT;
 
+  const firmwareMismatch =
+    advertisedLayout !== undefined && advertisedLayout !== pixelLayoutForChipType(chipType)
+      ? advertisedLayout === FIRMWARE_PIXEL_LAYOUT.RGBW
+        ? t("lights:led.chipType.firmwareExpectsRgbw")
+        : t("lights:led.chipType.firmwareExpectsRgb")
+      : undefined;
+
   return (
     <section className="lm-settings-group">
       <div className="lm-settings-group-h">
@@ -226,6 +268,7 @@ export function LedChipTypePicker({
           label={t("lights:led.chipType.options.ws2812b")}
           description={t("lights:led.chipType.details.ws2812b")}
           checked={chipType === LED_CHIP_TYPE.WS2812B_GRB}
+          firmwareMismatch={chipType === LED_CHIP_TYPE.WS2812B_GRB ? firmwareMismatch : undefined}
           onSelect={handleSelect}
           onKeyNavigate={handleKeyNavigate}
           tileRef={ws2812bRef}
@@ -240,6 +283,7 @@ export function LedChipTypePicker({
               : undefined
           }
           checked={chipType === LED_CHIP_TYPE.SK6812_RGBW}
+          firmwareMismatch={chipType === LED_CHIP_TYPE.SK6812_RGBW ? firmwareMismatch : undefined}
           onSelect={handleSelect}
           onKeyNavigate={handleKeyNavigate}
           tileRef={sk6812Ref}

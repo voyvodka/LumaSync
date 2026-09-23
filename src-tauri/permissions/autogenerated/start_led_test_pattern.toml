@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-start-led-test-pattern"
+description = "Enables the start_led_test_pattern command without any pre-configured scope."
+commands.allow = ["start_led_test_pattern"]
+
+[[permission]]
+identifier = "deny-start-led-test-pattern"
+description = "Denies the start_led_test_pattern command without any pre-configured scope."
+commands.deny = ["start_led_test_pattern"]

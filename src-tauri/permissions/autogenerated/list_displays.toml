@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-displays"
+description = "Enables the list_displays command without any pre-configured scope."
+commands.allow = ["list_displays"]
+
+[[permission]]
+identifier = "deny-list-displays"
+description = "Denies the list_displays command without any pre-configured scope."
+commands.deny = ["list_displays"]

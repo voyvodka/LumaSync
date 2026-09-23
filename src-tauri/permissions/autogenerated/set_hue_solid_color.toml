@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-hue-solid-color"
+description = "Enables the set_hue_solid_color command without any pre-configured scope."
+commands.allow = ["set_hue_solid_color"]
+
+[[permission]]
+identifier = "deny-set-hue-solid-color"
+description = "Denies the set_hue_solid_color command without any pre-configured scope."
+commands.deny = ["set_hue_solid_color"]

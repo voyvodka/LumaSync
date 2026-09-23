@@ -9,6 +9,11 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Added
 
+- USB strips: connecting now asks the controller what it is. A LumaSync controller that answers
+  reports its firmware version, the frame format it expects and whether it wants RGB or RGBW
+  pixels, and Settings marks a firmware profile or LED chip type that disagrees, without changing
+  either for you. Controllers that do not answer, such as Adalight sketches, connect exactly as
+  before, about a quarter of a second later.
 - Room map: the TV has an optional mount height. Left empty it follows 40% of the room height, so
   changing the ceiling moves it too. The TV's footprint field is now labelled Depth, since it never
   meant the screen's height. A small "Room-aware" chip in the room map toolbar and under the Hue
@@ -22,6 +27,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- USB strips: frames are now written to the serial port on their own thread, paced to what the
+  115 200-baud link can carry, so a long strip no longer holds up screen capture while its bytes
+  drain. A 164-LED strip should run at about 21 frames per second instead of about 15; 23 is what
+  the link allows.
 - Notices: every message the app shows about its state now appears in one place, one at a time,
   with a "+N" that opens the rest. In the compact window it sits at the top, above the mode
   buttons, and pushes them down instead of covering them; the first-run hint and the "no reachable
@@ -72,6 +81,16 @@ https://keepachangelog.com/en/1.1.0/
   timeout and reports that the stop was only partial.
 - Hue: the lamps lagged the screen by up to a twentieth of a second more than they had to. The
   colour sent to the bridge is now the newest one ready when it goes out.
+- Settings: the main window and the LED control popup could undo each other's changes when both
+  saved at about the same time. The settings file now has one owner in the app, which applies
+  every change in turn, and it is written so that a crash or power cut mid-save leaves either the
+  old file or the new one, never a broken one. The previous good copy is kept beside it as
+  `shell-state.json.bak`, and a damaged file is set aside and the backup loaded instead of
+  resetting every setting. The file format is unchanged, so an older release still reads it.
+- Updates: a failed update check at startup, for example with no internet connection, no longer
+  opens a window-blocking prompt. It shows a small notice with a "Try again" button instead. A
+  failed check was also described as a failed installation; it now says the update server could
+  not be reached.
 - Hue: after the router gave the bridge a new address, streaming quietly fell back to the slower
   HTTP mode because the saved pairing was tied to the old address. The pairing now belongs to
   the bridge itself; an existing pairing is moved over the next time the bridge accepts it.
@@ -514,6 +533,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Security
 
+- Each app window can now call only the LumaSync commands its own screens use. The LED preview
+  overlay can read the settings and nothing else, and the control popup can drive modes, test
+  patterns and its own position but cannot pair a Hue bridge, move its key, check for or install
+  an update, or rewrite the settings wholesale.
 - Each app window can now reach only the Tauri features it actually uses. The main window can no
   longer build menus or tray icons, drive the updater directly (update checks still go through the
   app as before), or write to the app's data folder, and it can read only the room-map background

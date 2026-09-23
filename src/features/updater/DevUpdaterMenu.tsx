@@ -1,14 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import type { Update } from "@tauri-apps/plugin-updater";
+import type { UpdateMetadata } from "@/shared/contracts/updater";
 import type { UpdaterState } from "./useAutoUpdater";
 
 interface DevUpdaterMenuProps {
   onSetState: (state: UpdaterState) => void;
 }
 
-const MOCK_UPDATE = {
-  rid: 0,
-  available: true,
+const MOCK_UPDATE: UpdateMetadata = {
   currentVersion: "1.2.0",
   version: "1.3.0",
   date: "2026-04-13",
@@ -27,8 +25,7 @@ const MOCK_UPDATE = {
     "- Compact mode mode-strip focus ring clipping",
     "- Tray icon dark mode contrast on Windows 11",
   ].join("\n"),
-  rawJson: {},
-} as unknown as Update;
+};
 
 type StateKey = "available" | "downloading" | "installing" | "error" | "idle";
 
@@ -46,6 +43,7 @@ const PRESETS: Record<StateKey, UpdaterState> = {
   installing: { status: "installing", update: MOCK_UPDATE },
   error: {
     status: "error",
+    phase: "install",
     message:
       "minisign public key mismatch — downloaded artifact signature does not match repository key. Update aborted, rollback clean.",
   },

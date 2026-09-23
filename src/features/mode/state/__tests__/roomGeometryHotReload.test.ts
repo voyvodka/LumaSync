@@ -1,6 +1,7 @@
 // Room geometry hot reload through the real hook stack — runtime config,
 // orchestrator, hot-reload handlers, the save listener and the shell store —
-// with only the Tauri boundary (`invoke`, plugin-store) mocked.
+// with only the Tauri boundary (`invoke`, `listen`) mocked and the shell state
+// answered by an in-memory stand-in for the Rust store.
 
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,34 +11,32 @@ import { CAPTURE_COMMANDS } from "@/shared/contracts/capture";
 import { DEVICE_COMMANDS } from "@/shared/contracts/device";
 import { HUE_COMMANDS } from "@/shared/contracts/hue";
 import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap";
-import { SHELL_STATE_SCHEMA_VERSION, SHELL_STORE_KEY } from "@/shared/contracts/shell";
+import { SHELL_STATE_SCHEMA_VERSION } from "@/shared/contracts/shell";
+import { createFakeShellStateBackend } from "@/test/fakeShellStateBackend";
 import { appliedResult } from "@/test/modeCommandResult";
 
-import { LIGHTING_MODE_KIND, type LightingModeConfig } from "../../model/contracts";
+import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/shared/contracts/mode";
 import { useLightingModeOrchestrator } from "../useLightingModeOrchestrator";
 import { useModeHotReload } from "../useModeHotReload";
 import { useModeRuntimeConfig } from "../useModeRuntimeConfig";
 import { ROOM_GEOMETRY_RELOAD_DEBOUNCE_MS, useRoomGeometrySync } from "../useRoomGeometrySync";
 
 const invokeMock = vi.fn();
+let backend = createFakeShellStateBackend();
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: (command: string, args?: unknown) => invokeMock(command, args),
-}));
-
-let storeBlob: Record<string, unknown> = {};
-vi.mock("@tauri-apps/plugin-store", () => ({
-  load: () =>
-    Promise.resolve({
-      get: (key: string) => Promise.resolve(key === SHELL_STORE_KEY ? storeBlob : undefined),
-      set: (key: string, value: Record<string, unknown>) => {
-        if (key === SHELL_STORE_KEY) storeBlob = value;
-        return Promise.resolve();
-      },
-    }),
+  invoke: (command: string, args?: unknown) =>
+    backend.invoke(command, args) ?? invokeMock(command, args),
 }));
 
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: vi.fn() }));
-vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(() => Promise.resolve(() => {})) }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: (event: string, handler: (event: { event: string; payload: unknown }) => void) =>
+    backend.listen(event, handler),
+}));
+
+function stored(): Record<string, unknown> {
+  return backend.state() ?? {};
+}
 
 function roomMap(lampX: number, tv = true): RoomMapConfig {
   return {
@@ -90,7 +89,7 @@ function useStack() {
 async function mountOnHue() {
   const view = renderHook(() => useStack());
   act(() => {
-    view.result.current.runtimeConfig.prime(storeBlob);
+    view.result.current.runtimeConfig.prime(stored());
     view.result.current.mode.setSelectedOutputTargets(["hue"]);
   });
   return view;
@@ -120,7 +119,7 @@ async function advance(ms: number) {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
-  storeBlob = {
+  backend = createFakeShellStateBackend({
     schemaVersion: SHELL_STATE_SCHEMA_VERSION,
     lastHueBridge: { ip: "192.168.1.10" },
     hueAppKey: "app-user",
@@ -128,7 +127,7 @@ beforeEach(() => {
     lastHueAreaId: "area-1",
     lastOutputTargets: ["hue"],
     roomMap: roomMap(0.2),
-  };
+  });
   invokeMock.mockImplementation((command: string, args?: { payload?: LightingModeConfig }) => {
     if (command === DEVICE_COMMANDS.SET_LIGHTING_MODE) {
       return Promise.resolve(appliedResult(args!.payload!));
@@ -282,7 +281,7 @@ describe("room geometry hot reload", () => {
     });
     await advance(1_000);
 
-    const persisted = storeBlob.lightingMode as Record<string, unknown> | undefined;
+    const persisted = stored().lightingMode as Record<string, unknown> | undefined;
     expect(persisted).toMatchObject({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
     expect(persisted).not.toHaveProperty("roomGeometry");
     view.unmount();

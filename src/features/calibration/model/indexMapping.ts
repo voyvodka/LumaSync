@@ -106,9 +106,10 @@ export function buildLedSequence(config: LedCalibrationConfig): LedSequenceItem[
     return rotated;
   }
 
-  if (rotated.length <= 1) {
+  const [first, ...rest] = rotated;
+  if (first === undefined || rest.length === 0) {
     return rotated;
   }
 
-  return [rotated[0], ...rotated.slice(1).reverse()];
+  return [first, ...rest.reverse()];
 }

@@ -8,7 +8,7 @@ import {
   type LedColorOrder,
 } from "@/shared/contracts/device";
 import { shellStore } from "@/features/persistence/shellStore";
-import { normalizeColorOrder } from "@/features/mode/model/contracts";
+import { normalizeColorOrder } from "@/shared/contracts/mode";
 
 import {
   useColorOrderIdentify,
@@ -114,6 +114,7 @@ export function LedColorOrderControl({
   const wasOpenRef = useRef(false);
   const currentStepKey = stepKey(state);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: currentStepKey moves focus to the new step's heading
   useEffect(() => {
     if (flowOpen) {
       stepHeadingRef.current?.focus();

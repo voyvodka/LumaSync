@@ -13,7 +13,7 @@
  * refresh would make anyone stop composing and go back to presets.
  */
 
-import type { LightingModeConfig } from "../src/features/mode/model/contracts";
+import type { LightingModeConfig } from "../src/shared/contracts/mode";
 import type {
   FirmwareProfile,
   LedChipType,
@@ -150,7 +150,7 @@ export interface MockWorld {
     lastCaptureErrorCode: string | null;
     lastCaptureErrorAtSecs: number | null;
   };
-  /** Every write through `plugin:store` fails, reproducing the persist banners. */
+  /** Every shell-state write fails, reproducing the persist banners. */
   persistFails: boolean;
   /**
    * Command → the status code it should answer with, overriding the fixture's

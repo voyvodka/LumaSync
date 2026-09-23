@@ -18,7 +18,13 @@
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  closeCurrentWindow,
+  isCurrentWindowMaximized,
+  minimizeCurrentWindow,
+  onCurrentWindowResized,
+  toggleMaximizeCurrentWindow,
+} from "./windowApi";
 import { SECTION_ORDER, type SectionId } from "@/shared/contracts/shell";
 
 type Platform = "macos" | "windows" | "linux";
@@ -51,13 +57,11 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
   // actual window (double-click, Win+Up, etc. all bypass our button).
   useEffect(() => {
     if (platform === "macos") return;
-    const win = getCurrentWindow();
     let unlisten: (() => void) | undefined;
-    void win.isMaximized().then(setIsMaximized);
-    void win
-      .onResized(() => {
-        void win.isMaximized().then(setIsMaximized);
-      })
+    void isCurrentWindowMaximized().then(setIsMaximized);
+    void onCurrentWindowResized(() => {
+      void isCurrentWindowMaximized().then(setIsMaximized);
+    })
       .then((fn) => {
         unlisten = fn;
       });
@@ -156,9 +160,9 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
             <span aria-hidden className="inline-block" style={{ width: "8px" }} />
             <WindowControls
               isMaximized={isMaximized}
-              onMinimize={() => void getCurrentWindow().minimize()}
-              onToggleMaximize={() => void getCurrentWindow().toggleMaximize()}
-              onClose={() => void getCurrentWindow().close()}
+              onMinimize={() => void minimizeCurrentWindow()}
+              onToggleMaximize={() => void toggleMaximizeCurrentWindow()}
+              onClose={() => void closeCurrentWindow()}
             />
           </>
         )}

@@ -7,7 +7,7 @@
  * with the full per-LED buffer (`leds`), the calibrated `ledCount`, sparse
  * `hueChannels`, the frame `source`/`pattern`, a `seq` counter, and the
  * `displayId` the frame was sampled from (see
- * `features/mode/model/contracts.ts > EdgeSignalPayload`).
+ * `features/mode/model/edgeSignal.ts > EdgeSignalPayload`).
  *
  * The twin overlay window is bound to ONE display, so this hook filters by
  * `displayId`: a frame is accepted only when the caller did not request a
@@ -17,13 +17,9 @@
  */
 
 import { useEffect, useState } from "react";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-import {
-  EDGE_SIGNAL_EVENT,
-  type EdgeSignalPayload,
-} from "@/features/mode/model/contracts";
 import type { LedTestPatternKind } from "@/shared/contracts/preview";
+import { listenEdgeSignal, type UnlistenFn } from "../previewEventsApi";
 
 export interface LedPreviewFrame {
   /** Full per-LED RGB buffer, ordered along the calibrated strip path. */
@@ -51,8 +47,7 @@ export function useLedPreviewFrame(displayId?: string): LedPreviewFrame | null {
     let active = true;
     let unlisten: UnlistenFn | null = null;
 
-    listen<EdgeSignalPayload>(EDGE_SIGNAL_EVENT, (event) => {
-      const payload = event.payload;
+    listenEdgeSignal((payload) => {
       // Filter by display only when both sides name one.
       if (displayId && payload.displayId && payload.displayId !== displayId) return;
       // Only the enriched preview path carries the per-LED buffer.

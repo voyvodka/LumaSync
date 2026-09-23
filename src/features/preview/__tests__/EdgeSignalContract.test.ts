@@ -15,7 +15,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { EdgeSignalPayload } from "@/features/mode/model/contracts";
+import type { EdgeSignalPayload } from "@/features/mode/model/edgeSignal";
 import { PREVIEW_COMMANDS } from "@/shared/contracts/preview";
 
 /** Mirrors what `EdgeSignalPayload` in `lighting_mode.rs` serialises. */

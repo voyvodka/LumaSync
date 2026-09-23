@@ -42,7 +42,7 @@ import { ZoneDeriveOverlay } from "./ZoneDeriveOverlay";
 import type { HueChannelPlacement, HueZoneStatusCode, RoomDimensions } from "@/shared/contracts/roomMap";
 import { hueChannelsForArea, replaceHueChannel } from "@/shared/contracts/roomMap";
 import type { LedSegmentCounts } from "@/features/calibration/model/contracts";
-import React from "react";
+import type React from "react";
 import { useUsbConnectionStatus } from "@/features/device/useUsbConnectionStatus";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
@@ -342,7 +342,7 @@ export function RoomMapEditor({
 
       void updateConfig(patch);
     },
-    [updateConfig, config, panOffset, widthMeters, depthMeters, zoom, pxPerMeter, setPanOffset],
+    [updateConfig, config, panOffset, widthMeters, depthMeters, zoom, setPanOffset],
   );
 
   const handleContextMenu = useCallback(
@@ -409,7 +409,7 @@ export function RoomMapEditor({
     }
 
     return actions;
-  }, [contextMenu, t, handleDuplicate, handleRotate, deleteById, config.furniture, config.imageLayers, handleRenameFurniture]);
+  }, [contextMenu, t, handleDuplicate, handleRotate, deleteById, config.furniture, config.imageLayers]);
 
   if (loading) {
     return (

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { browser } from "@wdio/globals";
 
 import { SHELL_STORE_KEY, type SectionId, type UIMode } from "../../src/shared/contracts/shell";
-import { LIGHTING_MODE_KIND } from "../../src/features/mode/model/contracts";
+import { LIGHTING_MODE_KIND } from "../../src/shared/contracts/mode";
 
 // `browser.execute` only, never `$()`: the embedded provider answers execute
 // in-process (~3 ms) but takes 5-22 s per element-protocol call on macOS.
@@ -13,6 +13,52 @@ import { LIGHTING_MODE_KIND } from "../../src/features/mode/model/contracts";
 
 const COMPACT = '[data-testid="compact-layout"]';
 const FULL = '[data-testid="full-layout"]';
+
+/** `UpdateModal` renders `role="dialog"` + `aria-modal="true"`; the last
+ *  selector catches a future modal that forgets its role. */
+const DIALOG_SELECTOR = '[role="dialog"], [role="alertdialog"], [aria-modal="true"]';
+
+export interface OpenDialog {
+  role: string;
+  modal: boolean;
+  /** Accessible name, from `aria-label` or the `aria-labelledby` target. */
+  label: string;
+  /** Visible text, whitespace-collapsed and truncated. */
+  text: string;
+}
+
+/**
+ * Every dialog currently rendered with a box. A JS `click()` reaches a control
+ * behind a modal that a user could never reach, so a spec that navigates under
+ * one reports success on a screen nobody can use.
+ */
+export async function openDialogs(): Promise<OpenDialog[]> {
+  return browser.execute((selector: string) => {
+    const collapse = (value: string) => value.replace(/\s+/g, " ").trim();
+    return Array.from(document.querySelectorAll<HTMLElement>(selector))
+      .filter((el) => el.getClientRects().length > 0)
+      .map((el) => {
+        const labelledBy = el.getAttribute("aria-labelledby");
+        const labelSource = labelledBy === null ? null : document.getElementById(labelledBy);
+        return {
+          role: el.getAttribute("role") ?? "(none)",
+          modal: el.getAttribute("aria-modal") === "true",
+          label: collapse(el.getAttribute("aria-label") ?? labelSource?.textContent ?? ""),
+          text: collapse(el.innerText || el.textContent || "").slice(0, 300),
+        };
+      });
+  }, DIALOG_SELECTOR);
+}
+
+/** Fails when a dialog is open that the calling step did not open itself. */
+export async function assertNoOpenDialog(context: string): Promise<void> {
+  const dialogs = await openDialogs();
+  if (dialogs.length === 0) return;
+  const described = dialogs
+    .map((d) => `${d.role}${d.modal ? " (modal)" : ""} "${d.label}": ${d.text}`)
+    .join(" | ");
+  throw new Error(`${context}: unexpected dialog open over the app — ${described}`);
+}
 
 export async function waitForAppReady(): Promise<void> {
   await browser.waitUntil(
@@ -27,6 +73,7 @@ export async function waitForAppReady(): Promise<void> {
     },
   );
   await withPaintDiagnostic("waitForAppReady", () => settleTransition());
+  await assertNoOpenDialog("waitForAppReady");
 }
 
 export async function exists(selector: string): Promise<boolean> {
@@ -50,6 +97,7 @@ export async function currentUiMode(): Promise<UIMode> {
 }
 
 export async function clickTestId(testId: string): Promise<void> {
+  await assertNoOpenDialog(`clickTestId(${testId})`);
   const clicked = await browser.execute((query: string) => {
     const element = document.querySelector<HTMLElement>(query);
     if (element === null) {
@@ -89,6 +137,7 @@ const MAX_TOGGLE_ATTEMPTS = 4;
  * that did land makes every further attempt a no-op.
  */
 export async function switchUiMode(target: UIMode): Promise<void> {
+  await assertNoOpenDialog(`switchUiMode(${target})`);
   if ((await currentUiMode()) === target) {
     return;
   }
@@ -275,7 +324,7 @@ export async function drainErrors(): Promise<unknown[]> {
   });
 }
 
-/** Where `plugin-store` puts `shell-state.json` for `com.lumasync.app`. */
+/** Where `shell-state.json` lives for `com.lumasync.app`. */
 function shellStatePath(): string {
   const home = homedir();
   if (process.platform === "darwin") {

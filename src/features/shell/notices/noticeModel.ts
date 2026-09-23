@@ -55,6 +55,7 @@ export const SHELL_NOTICE_IDS = {
   HUE_COLOR: "hue-color",
   OUTPUT_CHECKING: "output-checking",
   ONBOARDING: "onboarding",
+  UPDATE_CHECK_FAILED: "update-check-failed",
 } as const;
 
 export type ShellNoticeId = (typeof SHELL_NOTICE_IDS)[keyof typeof SHELL_NOTICE_IDS];

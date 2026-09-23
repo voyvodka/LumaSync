@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LightingModeConfig } from "../features/mode/model/contracts";
+import type { LightingModeConfig } from "@/shared/contracts/mode";
 import type { LocalSink } from "../features/device/localSink";
 import { DEVICE_COMMANDS, type ColorCorrectionConfig, type LedChipType } from "@/shared/contracts/device";
 import { HUE_COMMANDS, HUE_READINESS_REASON, HUE_RUNTIME_TRIGGER_SOURCE, HUE_STATUS } from "@/shared/contracts/hue";
@@ -20,6 +20,9 @@ let mockIsConnected = true;
 let mockActiveWledIp: string | null = null;
 // Idle unless a test opens the update prompt on purpose.
 let mockUpdaterState: { status: string; update?: unknown } = { status: "idle" };
+let mockCheckFailedNotice: { message: string } | null = null;
+const checkForUpdatesMock = vi.fn().mockResolvedValue(undefined);
+const checkForUpdatesInBackgroundMock = vi.fn().mockResolvedValue(undefined);
 
 // Mock invoke for Tauri commands (used in bootstrap for USB status check)
 const invokeMock = vi.fn();
@@ -76,7 +79,9 @@ vi.mock("../features/updater/useAutoUpdater", () => ({
     state: mockUpdaterState,
     isModalOpen: mockUpdaterState.status !== "idle",
     channel: "stable",
-    checkForUpdates: vi.fn().mockResolvedValue(undefined),
+    checkForUpdates: checkForUpdatesMock,
+    checkForUpdatesInBackground: checkForUpdatesInBackgroundMock,
+    checkFailedNotice: mockCheckFailedNotice,
     downloadAndInstall: vi.fn().mockResolvedValue(undefined),
     dismiss: vi.fn(),
     devSetState: vi.fn(),
@@ -427,6 +432,7 @@ describe("App mode orchestration", () => {
     mockIsConnected = true;
     mockActiveWledIp = null;
     mockUpdaterState = { status: "idle" };
+    mockCheckFailedNotice = null;
     // One flat resolved value cannot serve every command: a caller reading
     // `.status.code` or `.usb` off `{ connected: true }` throws into its own
     // catch, so the test still passed while the app measured its failure
@@ -3306,6 +3312,37 @@ describe("App mode orchestration", () => {
       expect(screen.getByTestId("shell-notice-announcer")).toBeEmptyDOMElement();
     },
   );
+
+  // A startup check that failed on a broken build used to open the blocking
+  // modal as "installation could not be completed".
+  it("runs the startup update check as a background check, never as a user check", async () => {
+    loadShellStateMock.mockResolvedValue({ lastSection: "lights", uiMode: "compact" });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(checkForUpdatesInBackgroundMock).toHaveBeenCalledOnce();
+    });
+    expect(checkForUpdatesMock).not.toHaveBeenCalled();
+  });
+
+  it("offers a failed background check as a notice whose retry is a user check", async () => {
+    // Off Lights and past onboarding, so nothing outranks the lowest-tier notice.
+    loadShellStateMock.mockResolvedValue({ lastSection: "system", uiMode: "full", hasCompletedOnboarding: true });
+    mockCheckFailedNotice = { message: "check_for_update not allowed" };
+
+    render(<App />);
+
+    await screen.findByTestId("update-check-retry");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(checkForUpdatesMock).not.toHaveBeenCalled();
+
+    // Re-queried: the slot re-renders as boot settles, so an early handle can be detached.
+    await waitFor(() => {
+      screen.getByTestId("update-check-retry").click();
+      expect(checkForUpdatesMock).toHaveBeenCalledOnce();
+    });
+  });
 
   // Full used to float its notices bottom right, over the page; both modes now
   // give the slot a row of its own above the layout.

@@ -15,6 +15,8 @@ mod overlay_commands;
 mod preview_commands;
 mod room_map_commands;
 mod serial_admission;
+mod serial_firmware;
+mod shell_state_commands;
 mod telemetry_commands;
 mod wled_commands;
 
@@ -32,6 +34,7 @@ use crate::commands::hue::state_store::HueRuntimeStateStore;
 use crate::commands::led_preview::LedTwinState;
 use crate::commands::lighting_mode::LightingRuntimeState;
 use crate::commands::runtime_telemetry::RuntimeTelemetryState;
+use crate::commands::shell_state::ShellStateStore;
 
 /// Builds a mock app carrying the same managed state `lib.rs` registers, with
 /// `handler` supplying the command subset under test.
@@ -67,6 +70,7 @@ where
     app.manage(OverlayState::default());
     app.manage(HueRuntimeStateStore::default());
     app.manage(RuntimeTelemetryState::default());
+    app.manage(ShellStateStore::in_memory());
     app
 }
 

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-create-hue-zone"
+description = "Enables the create_hue_zone command without any pre-configured scope."
+commands.allow = ["create_hue_zone"]
+
+[[permission]]
+identifier = "deny-create-hue-zone"
+description = "Denies the create_hue_zone command without any pre-configured scope."
+commands.deny = ["create_hue_zone"]

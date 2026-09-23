@@ -20,3 +20,23 @@ export async function readStartHidden(invoker: LaunchInvoker = defaultInvoke): P
     return false;
   }
 }
+
+/**
+ * Whether this binary was built for the e2e suite. A failed read answers
+ * `false`: the normal startup behaviour is the safe default for a user.
+ */
+export async function readE2eBuild(invoker: LaunchInvoker = defaultInvoke): Promise<boolean> {
+  try {
+    const context = await invoker<LaunchContext | undefined>(SHELL_COMMANDS.GET_LAUNCH_CONTEXT);
+    return context?.e2eBuild === true;
+  } catch (err) {
+    console.warn("[LumaSync] [startup] launch context unavailable; assuming a normal build:", err);
+    return false;
+  }
+}
+
+/** Spawns a fresh app process and exits this one. */
+export async function relaunchApp(): Promise<void> {
+  const { relaunch } = await import("@tauri-apps/plugin-process");
+  await relaunch();
+}

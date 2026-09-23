@@ -1,0 +1,135 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": ["src/**/*.ts", "src/**/*.tsx", "mock/**/*.ts", "mock/**/*.tsx", "e2e/**/*.ts"]
+  },
+  "formatter": { "enabled": false },
+  "assist": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "none",
+      "correctness": {
+        "useExhaustiveDependencies": "error",
+        "noUnusedImports": "error"
+      },
+      "style": {
+        "useImportType": "error"
+      },
+      "nursery": {
+        "noFloatingPromises": "error",
+        "noMisusedPromises": "error"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@tauri-apps/*", "@tauri-apps/**"],
+                    "message": "Tauri APIs are reached only through a feature's *Api.ts bridge (see docs/architecture/contracts-and-state.md)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/shared/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@tauri-apps/*", "@tauri-apps/**"],
+                    "message": "Tauri APIs are reached only through a feature's *Api.ts bridge (see docs/architecture/contracts-and-state.md)."
+                  },
+                  {
+                    "group": ["@/features/**", "**/features/**"],
+                    "message": "src/shared must not depend on src/features; move the shared piece into src/shared instead."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/**/*Api.ts",
+        "src/main.tsx",
+        "src/features/shell/windowLifecycle.ts",
+        "src/features/tray/trayController.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@tauri-apps/plugin-store": "plugin-store is opened only by src/features/shell/windowLifecycle.ts; go through shellStore.",
+                  "@tauri-apps/plugin-fs": "plugin-fs is imported only by src/features/room-map/roomMapFilesApi.ts.",
+                  "@tauri-apps/plugin-dialog": "plugin-dialog is imported only by src/features/room-map/roomMapFilesApi.ts."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/features/shell/windowLifecycle.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@tauri-apps/plugin-fs": "plugin-fs is imported only by src/features/room-map/roomMapFilesApi.ts.",
+                  "@tauri-apps/plugin-dialog": "plugin-dialog is imported only by src/features/room-map/roomMapFilesApi.ts."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/features/room-map/roomMapFilesApi.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@tauri-apps/plugin-store": "plugin-store is opened only by src/features/shell/windowLifecycle.ts; go through shellStore."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/**/__tests__/**"],
+      "linter": { "rules": { "style": { "noRestrictedImports": { "level": "off" } } } }
+    }
+  ]
+}

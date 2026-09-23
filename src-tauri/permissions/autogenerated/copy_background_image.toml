@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-copy-background-image"
+description = "Enables the copy_background_image command without any pre-configured scope."
+commands.allow = ["copy_background_image"]
+
+[[permission]]
+identifier = "deny-copy-background-image"
+description = "Denies the copy_background_image command without any pre-configured scope."
+commands.deny = ["copy_background_image"]

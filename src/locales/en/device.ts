@@ -53,7 +53,7 @@ export default {
       },
       SERIAL_HEALTH_VERSION_MISMATCH: {
         label: "Protocol version mismatch",
-        hint: "Firmware responded with an unsupported protocol version. Upgrade firmware or the app.",
+        hint: "The firmware reported a version this app does not know. LumaSync keeps sending v1 frames; update the firmware or the app.",
       },
       SERIAL_HEALTH_FIRMWARE_MISMATCH: {
         label: "Firmware profile mismatch",

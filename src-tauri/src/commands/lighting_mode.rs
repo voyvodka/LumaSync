@@ -40,6 +40,7 @@ use super::runtime_quality::{RuntimeFrameSlot, RuntimeQualityConfig, RuntimeQual
 use super::runtime_telemetry::{
     RuntimeTelemetrySnapshot, RuntimeTelemetryState, SharedRuntimeTelemetry,
 };
+use super::shell_state::{self, PersistedShellState};
 use super::status::CommandStatus;
 use super::test_pattern::{
     create_synthetic_frame_source, TestPatternConfig, TestPatternKind, TestPatternLive,
@@ -574,46 +575,19 @@ fn clamp_brightness(value: Option<f32>, fallback: f32) -> f32 {
     value.unwrap_or(fallback).clamp(0.0, 1.0)
 }
 
-/// Pure parse-only helper. Extracted from `hydrate_led_calibration_from_disk`
-/// so unit tests can exercise the JSON-shape contract without spinning up
-/// a Tauri AppHandle. The IO-bound wrapper handles the file read; this
-/// function owns only the deserialisation contract.
-fn parse_led_calibration_from_shell_state(raw: &str) -> Option<LedCalibrationConfig> {
-    let root: serde_json::Value = serde_json::from_str(raw).ok()?;
-    // Top-level shape: `{ "shell-state": { ...persisted state... } }`.
-    let calibration = root.get("shell-state")?.get("ledCalibration")?.clone();
-    serde_json::from_value::<LedCalibrationConfig>(calibration).ok()
-}
-
-/// Read the raw persisted shell-state JSON file. The frontend `shellStore`
-/// writes it via the
-/// `tauri-plugin-store` instance whose default file name is
-/// `<SHELL_STORE_KEY>.json` (currently `shell-state.json`). Reading the file
-/// directly side-steps the plugin-store API surface — the store registers
-/// itself lazily inside the Tauri runtime and we don't want to depend on
-/// that registration order from a command handler. The trade-off is that
-/// we accept the risk of a marginally stale read between an in-flight
-/// `shellStore.save` and the next `set_lighting_mode` invoke; this matches
-/// the existing windowLifecycle behaviour and is acceptable here because
-/// LED calibration mutates only when the user explicitly saves it from
-/// the calibration editor.
-///
-/// Resolution rules — applied in `set_lighting_mode` before
-/// `apply_mode_change` runs:
+/// The persisted shell state, for the hydrators below. Resolution rules for
+/// the calibration, applied in `set_lighting_mode` before `apply_mode_change`:
 ///
 /// 1. If the incoming payload already carries a calibration with
 ///    `total_leds > 1`, keep it — caller-wins.
-/// 2. Otherwise read `<app_data_dir>/shell-state.json`, drill into
-///    `["shell-state"]["ledCalibration"]`, and deserialise into a
-///    `LedCalibrationConfig`. This is the user's persisted setup that
-///    the frontend `savedCalibrationRef` should have stamped but
+/// 2. Otherwise take the persisted `ledCalibration` — the user's saved setup,
+///    which the frontend `savedCalibrationRef` should have stamped but
 ///    evidently does not on every code path.
 /// 3. If both are absent, leave `None` so the existing legacy 1-LED
 ///    fallback inside `apply_mode_change` keeps the v1.3 firmware
 ///    compat path unchanged.
-fn read_persisted_shell_state<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
-    let app_data_dir = app.path().app_data_dir().ok()?;
-    std::fs::read_to_string(app_data_dir.join("shell-state.json")).ok()
+fn read_persisted_shell_state<R: Runtime>(app: &AppHandle<R>) -> Option<PersistedShellState> {
+    shell_state::persisted(app)
 }
 
 /// Every payload hydrator, run by both mode entry points (`set_lighting_mode`
@@ -622,7 +596,10 @@ fn read_persisted_shell_state<R: Runtime>(app: &AppHandle<R>) -> Option<String> 
 /// click restarted a running SK6812 worker onto the WS2812B encoder. `load`
 /// is the shell-state reader, injected so the chain is testable without an
 /// `AppHandle`; it is only called when a field is actually missing.
-fn hydrate_mode_payload(payload: &mut LightingModeConfig, load: &dyn Fn() -> Option<String>) {
+fn hydrate_mode_payload(
+    payload: &mut LightingModeConfig,
+    load: &dyn Fn() -> Option<PersistedShellState>,
+) {
     maybe_hydrate_led_calibration(payload, load);
     maybe_hydrate_ambilight_settings(payload, load);
     maybe_hydrate_output_stamps(payload, load);
@@ -642,7 +619,7 @@ fn hydrate_mode_payload(payload: &mut LightingModeConfig, load: &dyn Fn() -> Opt
 /// short-circuits on the `total_leds > 1` check before touching disk.
 fn maybe_hydrate_led_calibration(
     payload: &mut LightingModeConfig,
-    load: &dyn Fn() -> Option<String>,
+    load: &dyn Fn() -> Option<PersistedShellState>,
 ) {
     let payload_total_leds = payload
         .led_calibration
@@ -654,7 +631,7 @@ fn maybe_hydrate_led_calibration(
         return;
     }
 
-    if let Some(persisted) = load().and_then(|raw| parse_led_calibration_from_shell_state(&raw)) {
+    if let Some(persisted) = load().and_then(|state| state.led_calibration()) {
         if persisted.total_leds > 1 {
             info!(
                 "[set_lighting_mode] led_calibration fallback engaged — payload_total_leds={payload_total_leds} disk_total_leds={} (frontend payload missing or degenerate; using persisted shell-state)",
@@ -674,33 +651,6 @@ fn maybe_hydrate_led_calibration(
     }
 }
 
-/// Pure parse-only helper for the persisted `lightingMode.ambilight`
-/// payload (v1.5 H1 fix — bug H1). Mirrors the LED-calibration helper
-/// above so unit tests can pin the JSON-shape contract without spinning
-/// up a Tauri AppHandle.
-///
-/// The frontend `shellStore` writes the canonical layout:
-///
-/// ```json
-/// {
-///   "shell-state": {
-///     "lightingMode": {
-///       "kind": "ambilight",
-///       "ambilight": { "brightness": 1, "saturation": 1.7, ... }
-///     }
-///   }
-/// }
-/// ```
-fn parse_ambilight_from_shell_state(raw: &str) -> Option<AmbilightPayload> {
-    let root: serde_json::Value = serde_json::from_str(raw).ok()?;
-    let ambilight = root
-        .get("shell-state")?
-        .get("lightingMode")?
-        .get("ambilight")?
-        .clone();
-    serde_json::from_value::<AmbilightPayload>(ambilight).ok()
-}
-
 /// Apply backend-side ambilight-settings fallback to an incoming
 /// `LightingModeConfig` (v1.5 H1 fix — bug H1). Triggers ONLY when
 /// `kind == Ambilight` and the payload's `ambilight` field is entirely
@@ -716,7 +666,7 @@ fn parse_ambilight_from_shell_state(raw: &str) -> Option<AmbilightPayload> {
 /// chain) doesn't strip the user's settings down to backend defaults.
 fn maybe_hydrate_ambilight_settings(
     payload: &mut LightingModeConfig,
-    load: &dyn Fn() -> Option<String>,
+    load: &dyn Fn() -> Option<PersistedShellState>,
 ) {
     if payload.kind != LightingModeKind::Ambilight {
         return;
@@ -726,40 +676,11 @@ fn maybe_hydrate_ambilight_settings(
         // present-but-default value. Do NOT compare to defaults here.
         return;
     }
-    if let Some(persisted) = load().and_then(|raw| parse_ambilight_from_shell_state(&raw)) {
+    if let Some(persisted) = load().and_then(|state| state.ambilight()) {
         info!(
             "[set_lighting_mode] ambilight settings fallback engaged — payload.ambilight=None disk.ambilight=Some (frontend payload missing; using persisted shell-state)"
         );
         payload.ambilight = Some(persisted);
-    }
-}
-
-/// Output stamps a caller may leave off a mode payload. The main window stamps
-/// them (`withColorCorrectionAndFirmwareProfile`); the LED control popup does
-/// not, and server-built configs have no payload to inherit from — so every
-/// entry point hydrates them from the persisted shell state.
-#[derive(Default)]
-struct PersistedOutputStamps {
-    color_correction: Option<ColorCorrectionConfig>,
-    firmware_profile: Option<FirmwareProfile>,
-    chip_type: Option<LedChipType>,
-    color_order: Option<LedColorOrder>,
-}
-
-fn parse_output_stamps_from_shell_state(raw: &str) -> PersistedOutputStamps {
-    let Ok(root) = serde_json::from_str::<serde_json::Value>(raw) else {
-        return PersistedOutputStamps::default();
-    };
-    let Some(state) = root.get("shell-state") else {
-        return PersistedOutputStamps::default();
-    };
-    let read = |key: &str| state.get(key).cloned();
-    PersistedOutputStamps {
-        color_correction: read("colorCorrection").and_then(|v| serde_json::from_value(v).ok()),
-        firmware_profile: read("firmwareProfile").and_then(|v| serde_json::from_value(v).ok()),
-        // The chip picker persists under `selectedChipType`, not `chipType`.
-        chip_type: read("selectedChipType").and_then(|v| serde_json::from_value(v).ok()),
-        color_order: read("ledColorOrder").and_then(|v| serde_json::from_value(v).ok()),
     }
 }
 
@@ -770,18 +691,7 @@ fn resolve_display_aspect<R: Runtime>(app: &AppHandle<R>) -> f32 {
     let Ok(displays) = list_displays(app.clone()) else {
         return DEFAULT_DISPLAY_ASPECT;
     };
-    let selected = app
-        .path()
-        .app_data_dir()
-        .ok()
-        .and_then(|dir| std::fs::read_to_string(dir.join("shell-state.json")).ok())
-        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
-        .and_then(|root| {
-            root.get("shell-state")?
-                .get("selectedDisplayId")?
-                .as_str()
-                .map(str::to_string)
-        });
+    let selected = shell_state::persisted(app).and_then(|state| state.selected_display_id());
 
     let target = selected
         .and_then(|id| displays.iter().find(|d| d.id == id))
@@ -795,7 +705,9 @@ fn resolve_display_aspect<R: Runtime>(app: &AppHandle<R>) -> f32 {
 }
 
 /// Fill any output stamp the caller left unset from the persisted shell state
-/// (caller-wins: a stamp already on the payload is never overwritten).
+/// (caller-wins: a stamp already on the payload is never overwritten). The main
+/// window stamps them (`withColorCorrectionAndFirmwareProfile`); the LED control
+/// popup does not, and server-built configs have no payload to inherit from.
 ///
 /// Without this a synthetic test drives an SK6812 RGBW strip through the
 /// WS2812B encoder and an Adalight controller through the LumaSync v1 header,
@@ -803,7 +715,7 @@ fn resolve_display_aspect<R: Runtime>(app: &AppHandle<R>) -> f32 {
 /// nothing, or the wrong colours, on exactly the hardware it exists to verify.
 fn maybe_hydrate_output_stamps(
     payload: &mut LightingModeConfig,
-    load: &dyn Fn() -> Option<String>,
+    load: &dyn Fn() -> Option<PersistedShellState>,
 ) {
     if payload.color_correction.is_some()
         && payload.firmware_profile.is_some()
@@ -812,21 +724,20 @@ fn maybe_hydrate_output_stamps(
     {
         return;
     }
-    let Some(raw) = load() else {
+    let Some(state) = load() else {
         return;
     };
-    let stamps = parse_output_stamps_from_shell_state(&raw);
     if payload.color_correction.is_none() {
-        payload.color_correction = stamps.color_correction;
+        payload.color_correction = state.color_correction();
     }
     if payload.firmware_profile.is_none() {
-        payload.firmware_profile = stamps.firmware_profile;
+        payload.firmware_profile = state.firmware_profile();
     }
     if payload.chip_type.is_none() {
-        payload.chip_type = stamps.chip_type;
+        payload.chip_type = state.chip_type();
     }
     if payload.color_order.is_none() {
-        payload.color_order = stamps.color_order;
+        payload.color_order = state.color_order();
     }
     info!(
         "[preview] output stamps hydrated — correction={} profile={:?} chip={:?} order={:?}",
@@ -1794,7 +1705,7 @@ fn apply_mode_change_inner(
                         );
                         owner
                             .output_bridge
-                            .send_packet_to_port(port_name, &solid_packet)
+                            .send_packet_to_port_and_wait(port_name, &solid_packet)
                             .map_err(|error| error.as_reason())
                     }
                     UsbOutputPlan::Wled(cfg) => {
@@ -2672,7 +2583,7 @@ fn is_ambilight_start_ok(code: &str) -> bool {
 /// when disk has none, instead of dropping to the legacy 1-LED frame.
 fn restore_mode_after_test(
     prior: Option<LightingModeConfig>,
-    load: &dyn Fn() -> Option<String>,
+    load: &dyn Fn() -> Option<PersistedShellState>,
 ) -> LightingModeConfig {
     let mut restore = prior.unwrap_or_default();
     restore.chip_type = None;
@@ -6375,314 +6286,24 @@ mod lighting_mode_tests {
     }
 
     // -----------------------------------------------------------------------
-    // Backend calibration fallback — `parse_led_calibration_from_shell_state`
-    //
-    // The frontend `shellStore` writes `~/Library/Application Support/
-    // com.lumasync.app/shell-state.json` with the canonical shape:
-    //
-    //   {
-    //     "shell-state": {
-    //       "ledCalibration": { "totalLeds": 59, ... },
-    //       ... other persisted shell state ...
-    //     }
-    //   }
-    //
-    // The backend reads this file directly inside `set_lighting_mode` to
-    // recover the user's calibration when the frontend payload arrives
-    // without one (v1.5 hardware repro #46). These tests pin the
-    // top-level wrapper key, the camelCase serde rename, and the
-    // graceful failure modes against every wrong-shape variant we can
-    // think of, so the safety net cannot silently regress.
-    // -----------------------------------------------------------------------
-
-    fn fixture_shell_state_with_calibration_total(total_leds: u16) -> String {
-        // Matches the production layout 1:1 (verified against the live
-        // Application Support file): top-level `"shell-state"` wrapper,
-        // camelCase keys, `counts` summing to `totalLeds`.
-        format!(
-            r#"{{
-              "shell-state": {{
-                "schemaVersion": 1,
-                "ledCalibration": {{
-                  "templateId": "monitor-34-ultrawide",
-                  "counts": {{ "top": 30, "right": 14, "bottom": 0, "left": 15 }},
-                  "bottomMissing": 0,
-                  "cornerOwnership": "horizontal",
-                  "visualPreset": "vivid",
-                  "startAnchor": "left-end",
-                  "direction": "cw",
-                  "totalLeds": {total_leds}
-                }}
-              }}
-            }}"#
-        )
-    }
-
-    #[test]
-    fn parse_led_calibration_extracts_total_leds_from_canonical_shape() {
-        let raw = fixture_shell_state_with_calibration_total(59);
-        let parsed = super::parse_led_calibration_from_shell_state(&raw)
-            .expect("canonical shell-state must yield calibration");
-        assert_eq!(parsed.total_leds, 59);
-        assert_eq!(parsed.counts.top, 30);
-        assert_eq!(parsed.counts.right, 14);
-        assert_eq!(parsed.counts.left, 15);
-        assert_eq!(parsed.start_anchor, "left-end");
-        assert_eq!(parsed.direction, "cw");
-    }
-
-    #[test]
-    fn parse_led_calibration_returns_none_when_top_level_wrapper_missing() {
-        // Some imagined future store layout might inline the keys at the
-        // top level. Today's writer always wraps under `"shell-state"`; if
-        // that ever changes the parser must NOT silently succeed on the
-        // wrong shape — return None and let the caller fall back.
-        let raw = r#"{
-          "ledCalibration": { "totalLeds": 59 }
-        }"#;
-        assert!(super::parse_led_calibration_from_shell_state(raw).is_none());
-    }
-
-    #[test]
-    fn parse_led_calibration_returns_none_when_calibration_field_absent() {
-        let raw = r#"{
-          "shell-state": {
-            "schemaVersion": 1,
-            "lastSection": "lights"
-          }
-        }"#;
-        assert!(super::parse_led_calibration_from_shell_state(raw).is_none());
-    }
-
-    #[test]
-    fn parse_led_calibration_returns_none_on_malformed_json() {
-        // A truncated write or partial flush mid-save would put garbage
-        // on disk. The parser MUST return None rather than panic so the
-        // command handler can fall through to the legacy 1-LED frame.
-        assert!(super::parse_led_calibration_from_shell_state("{ not json").is_none());
-        assert!(super::parse_led_calibration_from_shell_state("").is_none());
-    }
-
-    #[test]
-    fn parse_led_calibration_returns_none_when_required_field_missing() {
-        // `bottomMissing` is non-optional in the Rust struct (no
-        // `#[serde(default)]`). A persisted file that pre-dates the
-        // field MUST yield None, not partial deserialisation.
-        let raw = r#"{
-          "shell-state": {
-            "ledCalibration": {
-              "counts": { "top": 30, "right": 14, "bottom": 0, "left": 15 },
-              "cornerOwnership": "horizontal",
-              "visualPreset": "vivid",
-              "startAnchor": "left-end",
-              "direction": "cw",
-              "totalLeds": 59
-            }
-          }
-        }"#;
-        assert!(super::parse_led_calibration_from_shell_state(raw).is_none());
-    }
-
-    #[test]
-    fn parse_led_calibration_round_trips_through_canonical_writer_shape() {
-        // Sanity: re-parsing what we'd write produces structurally
-        // identical output. Guards against drift between the snake_case
-        // Rust struct and the camelCase JSON contract.
-        let raw = fixture_shell_state_with_calibration_total(30);
-        let parsed = super::parse_led_calibration_from_shell_state(&raw)
-            .expect("canonical fixture must parse");
-        assert_eq!(parsed.total_leds, 30);
-        // Re-serialise the parsed struct and confirm camelCase output.
-        let serialised = serde_json::to_string(&parsed).expect("serialise");
-        assert!(
-            serialised.contains("\"totalLeds\":30"),
-            "Rust -> JSON must preserve camelCase totalLeds; got: {serialised}"
-        );
-        assert!(
-            serialised.contains("\"startAnchor\":\"left-end\""),
-            "Rust -> JSON must preserve camelCase startAnchor; got: {serialised}"
-        );
-    }
-
-    // -------------------------------------------------------------------
-    // Backend ambilight settings fallback — `parse_ambilight_from_shell_state`
-    // (v1.5 H1 fix — bug H1).
-    //
-    // Mirror of the led_calibration disk-fallback test pattern above.
-    // Pins the canonical shell-state shape and graceful failure modes
-    // for the ambilight payload so the safety net cannot silently
-    // regress. The parser MUST extract `lightingMode.ambilight` from
-    // the canonical shape, refuse wrong shapes, and survive malformed
-    // / partial JSON without panicking.
-    // -------------------------------------------------------------------
-
-    fn fixture_shell_state_with_ambilight(
-        saturation: f32,
-        black_border: bool,
-        preset: &str,
-    ) -> String {
-        format!(
-            r#"{{
-              "shell-state": {{
-                "schemaVersion": 1,
-                "lightingMode": {{
-                  "kind": "ambilight",
-                  "ambilight": {{
-                    "brightness": 0.42,
-                    "saturation": {saturation},
-                    "blackBorderDetection": {black_border},
-                    "lightingSmoothingPreset": "{preset}"
-                  }}
-                }}
-              }}
-            }}"#
-        )
-    }
-
-    #[test]
-    fn parse_ambilight_extracts_payload_from_canonical_shape() {
-        // Regression for v1.5 H1 at the parser level: a canonical shell-state
-        // file with a `lightingMode.ambilight` block must round-trip into a
-        // populated `AmbilightPayload`. This is what
-        // `maybe_hydrate_ambilight_settings` consumes when the frontend
-        // payload arrives without an ambilight field.
-        use crate::commands::hue_intensity::LightingSmoothingPreset;
-        let raw = fixture_shell_state_with_ambilight(1.7, true, "intense");
-        let parsed = super::parse_ambilight_from_shell_state(&raw)
-            .expect("canonical shell-state must yield ambilight payload");
-        assert!((parsed.brightness - 0.42).abs() < 1e-4);
-        assert_eq!(parsed.saturation, Some(1.7));
-        assert!(parsed.black_border_detection);
-        assert_eq!(
-            parsed.lighting_smoothing_preset,
-            Some(LightingSmoothingPreset::Intense),
-        );
-    }
-
-    #[test]
-    fn parse_ambilight_returns_none_when_top_level_wrapper_missing() {
-        // Same defensive contract as the led_calibration parser: if the
-        // store layout ever changes, the parser must NOT silently
-        // succeed on the wrong shape.
-        let raw = r#"{
-          "lightingMode": { "kind": "ambilight", "ambilight": { "brightness": 1 } }
-        }"#;
-        assert!(super::parse_ambilight_from_shell_state(raw).is_none());
-    }
-
-    #[test]
-    fn parse_ambilight_returns_none_when_lighting_mode_field_absent() {
-        let raw = r#"{
-          "shell-state": { "schemaVersion": 1, "lastSection": "lights" }
-        }"#;
-        assert!(super::parse_ambilight_from_shell_state(raw).is_none());
-    }
-
-    #[test]
-    fn parse_ambilight_returns_none_when_ambilight_field_absent() {
-        // Persisted lightingMode without an ambilight payload (e.g.
-        // `{ kind: "solid", solid: {...} }`) must yield None — there's
-        // nothing to recover, so let the caller fall through.
-        let raw = r#"{
-          "shell-state": {
-            "lightingMode": {
-              "kind": "solid",
-              "solid": { "r": 255, "g": 0, "b": 0, "brightness": 1 }
-            }
-          }
-        }"#;
-        assert!(super::parse_ambilight_from_shell_state(raw).is_none());
-    }
-
-    #[test]
-    fn parse_ambilight_returns_none_on_malformed_json() {
-        // A truncated write or partial flush mid-save must NOT panic.
-        assert!(super::parse_ambilight_from_shell_state("{ not json").is_none());
-        assert!(super::parse_ambilight_from_shell_state("").is_none());
-    }
-
-    #[test]
-    fn parse_ambilight_round_trips_through_canonical_writer_shape() {
-        // Sanity: re-serialising the parsed struct preserves camelCase
-        // for the fields that drive `maybe_hydrate_ambilight_settings`.
-        // This guards against drift between the snake_case Rust struct
-        // and the camelCase JSON contract that the frontend writes.
-        let raw = fixture_shell_state_with_ambilight(1.5, true, "moderate");
-        let parsed =
-            super::parse_ambilight_from_shell_state(&raw).expect("canonical fixture must parse");
-        let serialised = serde_json::to_string(&parsed).expect("serialise");
-        assert!(
-            serialised.contains("\"saturation\":1.5"),
-            "Rust -> JSON must preserve saturation; got: {serialised}"
-        );
-        assert!(
-            serialised.contains("\"blackBorderDetection\":true"),
-            "Rust -> JSON must preserve camelCase blackBorderDetection; got: {serialised}"
-        );
-        assert!(
-            serialised.contains("\"lightingSmoothingPreset\":\"moderate\""),
-            "Rust -> JSON must preserve camelCase lightingSmoothingPreset; got: {serialised}"
-        );
-    }
-
-    // -----------------------------------------------------------------------
     // v1.6 LED Preview — output-stamp hydration + enrichment gating
     // -----------------------------------------------------------------------
 
-    /// The synthetic-test commands build their mode config server-side, so the
-    /// encoder settings can only come off disk. Reading the wrong key drops an
-    /// SK6812 strip onto the WS2812B encoder without any visible error.
-    #[test]
-    fn output_stamps_read_the_keys_the_frontend_actually_writes() {
-        let raw = r#"{
-            "shell-state": {
-                "colorCorrection": {
-                    "gammaR": 2.6, "gammaG": 2.4, "gammaB": 2.2,
-                    "kelvin": 4000, "saturation": 1.2
-                },
-                "firmwareProfile": "adalight",
-                "selectedChipType": "sk6812-rgbw"
-            }
-        }"#;
-        let stamps = super::parse_output_stamps_from_shell_state(raw);
-        assert_eq!(stamps.chip_type, Some(super::LedChipType::Sk6812Rgbw));
-        assert_eq!(
-            stamps.firmware_profile,
-            Some(super::FirmwareProfile::Adalight)
-        );
-        assert_eq!(stamps.color_correction.map(|c| c.kelvin), Some(4000));
-    }
-
-    /// `chipType` is NOT the persisted key — only `selectedChipType` is.
-    #[test]
-    fn output_stamps_ignore_the_non_persisted_chip_key() {
-        let raw = r#"{"shell-state":{"chipType":"sk6812-rgbw"}}"#;
-        assert_eq!(
-            super::parse_output_stamps_from_shell_state(raw).chip_type,
-            None
-        );
-    }
-
-    #[test]
-    fn output_stamps_degrade_to_empty_on_malformed_state() {
-        assert!(super::parse_output_stamps_from_shell_state("not json")
-            .chip_type
-            .is_none());
-        assert!(super::parse_output_stamps_from_shell_state("{}")
-            .firmware_profile
-            .is_none());
-    }
-
     const SK6812_SHELL_STATE: &str = r#"{"shell-state":{"selectedChipType":"sk6812-rgbw"}}"#;
+
+    /// A shell-state file body as the store would load it.
+    fn persisted(raw: &str) -> Option<super::PersistedShellState> {
+        super::PersistedShellState::from_file_json(raw)
+    }
 
     /// A payload as the LED control popup sends it — kind + settings, no
     /// output stamps — run through the same hydration chain `set_lighting_mode`
-    /// uses, with the persisted shell state injected in place of the disk read.
+    /// uses, with the persisted shell state injected in place of the store.
     fn hydrated_like_set_lighting_mode(
         mut payload: LightingModeConfig,
         shell_state: &'static str,
     ) -> LightingModeConfig {
-        super::hydrate_mode_payload(&mut payload, &|| Some(shell_state.to_string()));
+        super::hydrate_mode_payload(&mut payload, &|| persisted(shell_state));
         payload
     }
 
@@ -6780,6 +6401,44 @@ mod lighting_mode_tests {
         assert_eq!(packet[packet.len() - 1], checksum);
     }
 
+    /// Streaming hands packets to the serial writer and learns of a failure one
+    /// send later. Solid is a single write, so it must wait for its own.
+    #[test]
+    fn solid_reports_its_own_serial_write_failure() {
+        struct RefusingPort;
+        impl std::io::Write for RefusingPort {
+            fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::ErrorKind::BrokenPipe.into())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let (mut owner, _) = owner_with_recording_sender();
+        owner.output_bridge =
+            LedOutputBridge::with_serial_writer_for_tests(|_| Ok(Box::new(RefusingPort)));
+
+        let result = apply_mode_change(
+            &mut owner,
+            solid_with_calibration(10),
+            true,
+            Some("COM-REFUSING"),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(result.status.code, "SOLID_MODE_APPLY_FAILED");
+        let details = result.status.details.expect("the reason rides details");
+        assert!(
+            details.starts_with("LED_OUTPUT_WRITE_FAILED"),
+            "got: {details}"
+        );
+    }
+
     /// The default setup (LumaSync v1 + WS2812B) used to ignore the gamma
     /// sliders on Solid too, because it shared the hardcoded-2.2 encoder.
     #[test]
@@ -6863,7 +6522,7 @@ mod lighting_mode_tests {
     /// snapshot helper, the hydration `apply_and_broadcast` performs, then
     /// `apply_mode_change`, with the persisted shell state injected.
     fn restored_after_test(prior: LightingModeConfig, shell_state: String) -> LightingModeConfig {
-        let load = || Some(shell_state.clone());
+        let load = || persisted(&shell_state);
         let mut restore = super::restore_mode_after_test(Some(prior), &load);
         super::hydrate_mode_payload(&mut restore, &load);
         restore
@@ -6989,21 +6648,6 @@ mod lighting_mode_tests {
         assert!(
             plain.get("colorOrder").is_none(),
             "an unset order keeps the echoed mode byte-identical"
-        );
-    }
-
-    /// The order is persisted under `ledColorOrder`; the IPC field name
-    /// `colorOrder` is not a shell-state key and must not be read as one.
-    #[test]
-    fn output_stamps_read_the_persisted_color_order_key() {
-        assert_eq!(
-            super::parse_output_stamps_from_shell_state(BGR_SHELL_STATE).color_order,
-            Some(LedColorOrder::Bgr)
-        );
-        assert_eq!(
-            super::parse_output_stamps_from_shell_state(r#"{"shell-state":{"colorOrder":"bgr"}}"#)
-                .color_order,
-            None
         );
     }
 

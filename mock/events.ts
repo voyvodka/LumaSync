@@ -26,12 +26,8 @@
 
 import { emit } from "@tauri-apps/api/event";
 
-import {
-  EDGE_SIGNAL_EVENT,
-  LIGHTING_MODE_CHANGED_EVENT,
-  type EdgeSignalPayload,
-  type LightingModeChangedPayload,
-} from "../src/features/mode/model/contracts";
+import { LIGHTING_MODE_CHANGED_EVENT, type LightingModeChangedPayload } from "../src/shared/contracts/mode";
+import { EDGE_SIGNAL_EVENT, type EdgeSignalPayload } from "../src/features/mode/model/edgeSignal";
 import {
   PREVIEW_STATE_CHANGED_EVENT,
   type LedPreviewStatus,

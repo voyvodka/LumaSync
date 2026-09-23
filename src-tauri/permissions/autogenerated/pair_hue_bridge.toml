@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pair-hue-bridge"
+description = "Enables the pair_hue_bridge command without any pre-configured scope."
+commands.allow = ["pair_hue_bridge"]
+
+[[permission]]
+identifier = "deny-pair-hue-bridge"
+description = "Denies the pair_hue_bridge command without any pre-configured scope."
+commands.deny = ["pair_hue_bridge"]

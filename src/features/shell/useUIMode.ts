@@ -57,7 +57,7 @@ export function useUIMode() {
   // here, and a caller arriving mid-transition awaits the running one instead of
   // starting a second resize animation against it.
   const switchUIMode = useCallback((nextMode: UIMode): Promise<void> => {
-    if (inFlightRef.current) return inFlightRef.current;
+    if (inFlightRef.current !== null) return inFlightRef.current;
     if (nextMode === currentModeRef.current) return Promise.resolve();
 
     const run = (async () => {

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useTranslation } from "react-i18next";
 
 import { shellStore } from "@/features/persistence/shellStore";
+import { focusCurrentWindow } from "@/features/shell/windowApi";
 import {
   openLedTwinOverlay,
   openLedControlPopup,
@@ -56,8 +56,8 @@ import { useDialogFocus } from "@/shared/ui/useDialogFocus";
 import { parseCommandError } from "@/shared/contracts/status";
 
 function reclaimFocus() {
-  void getCurrentWindow().setFocus();
-  setTimeout(() => void getCurrentWindow().setFocus(), 150);
+  void focusCurrentWindow();
+  setTimeout(() => void focusCurrentWindow(), 150);
 }
 
 interface CalibrationPageProps {
@@ -163,7 +163,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
         const persisted = shell.selectedDisplayId;
         if (persisted && displays.some((candidate) => candidate.id === persisted)) {
           newState = displayTargetRef.current.selectDisplay(persisted);
-        } else if (displays.length > 0 && !newState.selectedDisplayId) {
+        } else if (displays[0] && !newState.selectedDisplayId) {
           newState = displayTargetRef.current.selectDisplay(displays[0].id);
         }
         setDisplayTarget(newState);

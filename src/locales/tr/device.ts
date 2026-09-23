@@ -56,7 +56,7 @@ const device: Catalogue<typeof enDevice> = {
       },
       SERIAL_HEALTH_VERSION_MISMATCH: {
         label: "Protokol sürümü uyumsuz",
-        hint: "Firmware desteklenmeyen bir protokol sürümüyle yanıt verdi. Firmware veya uygulamayı güncelleyin.",
+        hint: "Firmware bu uygulamanın tanımadığı bir sürüm bildirdi. LumaSync v1 çerçeveleri göndermeyi sürdürüyor; firmware'i veya uygulamayı güncelleyin.",
       },
       SERIAL_HEALTH_FIRMWARE_MISMATCH: {
         label: "Firmware profili uyumsuz",

@@ -8,7 +8,7 @@ import type {
 } from "./device";
 import type { DisplayId } from "./display";
 import type { LedTestPattern } from "./preview";
-import type { LightingModeConfig } from "@/features/mode/model/contracts";
+import type { LightingModeConfig } from "./mode";
 import type {
   HueBridgeSummary,
   HueChannelPlacementOverride,
@@ -38,6 +38,14 @@ export const SHELL_COMMANDS = {
   UPDATE_TRAY_LABELS: "update_tray_labels",
   /** How this process was launched; read once before the window is first shown. */
   GET_LAUNCH_CONTEXT: "get_launch_context",
+  /** The persisted state and its revision. See docs/architecture/contracts-and-state.md,
+   * "Shell-state ownership". */
+  GET_SHELL_STATE: "get_shell_state",
+  /** Merge top-level keys and remove others, under Rust's one writer. */
+  PATCH_SHELL_STATE: "patch_shell_state",
+  /** Swap the whole object, only if nothing was written since `expectedRevision`.
+   * The migration write-back; main window only. */
+  REPLACE_SHELL_STATE: "replace_shell_state",
 } as const;
 
 export type ShellCommand = (typeof SHELL_COMMANDS)[keyof typeof SHELL_COMMANDS];
@@ -50,6 +58,12 @@ export interface LaunchContext {
    * login.
    */
   startHidden: boolean;
+  /**
+   * Built with the `e2e` cargo feature (`bun run e2e:build`), which a release
+   * bundle never is. The frontend skips work there whose answer comes from
+   * outside the machine, such as the startup update check.
+   */
+  e2eBuild: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -142,7 +156,7 @@ export const SECTION_ORDER: SectionId[] = [
  *  `5 → 6` folds the retired region overrides into channel positions. */
 export const SHELL_STATE_SCHEMA_VERSION = 6 as const;
 
-/** Shape of shell state persisted to disk via plugin-store */
+/** Shape of shell state persisted to `shell-state.json` */
 export interface ShellState {
   /**
    * Persisted-state schema version (v1.5+). Defaults to
@@ -413,8 +427,62 @@ export const DEFAULT_SHELL_STATE: ShellState = {
 // Store Keys
 // ---------------------------------------------------------------------------
 
-/** Key used by plugin-store to persist shell state */
+/** Key the state object sits under in `shell-state.json`. The file name and this
+ * wrapper are what plugin-store wrote, kept so an older release still reads it. */
 export const SHELL_STORE_KEY = "shell-state";
+
+// ---------------------------------------------------------------------------
+// Shell-state commands — Rust owns the file
+// ---------------------------------------------------------------------------
+
+/** Rejection prefix of `patch_shell_state` / `replace_shell_state` when the file
+ * could not be written; memory is left as it was. */
+export const SHELL_STATE_ERROR_CODES = {
+  WRITE_FAILED: "SHELL_STATE_WRITE_FAILED",
+} as const;
+
+/** Emitted to every window after each accepted write, in write order. */
+export const SHELL_STATE_CHANGED_EVENT = "shell://state-changed";
+
+/** Response from `get_shell_state`. */
+export interface ShellStateSnapshot {
+  /** `null` when nothing was ever stored. Whatever is on disk, unmigrated. */
+  state: Partial<ShellState> | null;
+  /** Accepted writes since the process started; the token `replace_shell_state` compares. */
+  revision: number;
+}
+
+/** Argument of `patch_shell_state`, sent as `{ patch }`. */
+export interface ShellStatePatchRequest {
+  set: Partial<ShellState>;
+  /** Keys to delete. A partial's `undefined` value means "delete", and `invoke`
+   * would drop it silently — the bridge moves such keys here. */
+  remove: (keyof ShellState)[];
+  /** Identifies the writing facade, so it can skip its own change event. */
+  writerId?: string;
+}
+
+/** Argument of `replace_shell_state`, sent as `{ request }`. */
+export interface ShellStateReplaceRequest {
+  state: ShellState;
+  expectedRevision: number;
+  writerId?: string;
+}
+
+/** Response from `patch_shell_state` (always applied) and `replace_shell_state`. */
+export interface ShellStateWriteResult {
+  /** `false` only from `replace_shell_state`, when another write landed first. */
+  applied: boolean;
+  revision: number;
+}
+
+/** Payload of `SHELL_STATE_CHANGED_EVENT`. */
+export interface ShellStateChanged {
+  set: Partial<ShellState>;
+  remove: string[];
+  revision: number;
+  writerId: string | null;
+}
 
 // ---------------------------------------------------------------------------
 // UI Mode (compact / full)

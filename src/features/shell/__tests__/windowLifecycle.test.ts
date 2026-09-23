@@ -6,29 +6,26 @@
  * (mode-dependent).
  *
  * Mock strategy: stub the Tauri window API at the @tauri-apps/api/window
- * boundary AND the plugin-store at @tauri-apps/plugin-store.  The real
- * loadShellState / saveShellState code paths are exercised (same depth as
- * the persistence migration.*.test.ts suites) rather than mocking windowLifecycle exports themselves.
+ * boundary AND `invoke` at @tauri-apps/api/core, answered by an in-memory
+ * stand-in for the Rust shell-state store. The real loadShellState /
+ * saveShellState code paths and the real invoke bridge are exercised (same
+ * depth as the persistence migration.*.test.ts suites) rather than mocking
+ * windowLifecycle exports themselves.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { createFakeShellStateBackend } from "@/test/fakeShellStateBackend";
+
 // ---------------------------------------------------------------------------
-// Store mock — set up before importing windowLifecycle so the real
-// loadShellState/saveShellState code picks up the stub.
+// Shell-state backend — the real bridge reaches it through `invoke`.
 // ---------------------------------------------------------------------------
 
-// vi.fn() with no generic params — avoids the Vitest 4 Mock<any> callable issue.
-const storeGetMock = vi.fn((_key?: string) => Promise.resolve<unknown>(null));
-const storeSetMock = vi.fn((_key?: string, _value?: unknown) => Promise.resolve<void>(undefined));
+let backend = createFakeShellStateBackend();
 
-vi.mock("@tauri-apps/plugin-store", () => ({
-  load: vi.fn().mockImplementation(() =>
-    Promise.resolve({
-      get: (key: string) => storeGetMock(key),
-      set: (key: string, value: unknown) => storeSetMock(key, value),
-    }),
-  ),
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: (command: string, args?: unknown) =>
+    backend.invoke(command, args) ?? Promise.reject(new Error(`unexpected invoke: ${command}`)),
 }));
 
 // ---------------------------------------------------------------------------
@@ -146,21 +143,13 @@ import {
   type ShellState,
 } from "@/shared/contracts/shell";
 
-/**
- * Build a persisted shell state object that storeGetMock returns when
- * loadShellState calls `store.get(SHELL_STORE_KEY)`.
- */
+/** A persisted shell state at the current schema, so no migration writes back. */
 function makePersistedState(overrides: Partial<ShellState>): ShellState {
   return { ...DEFAULT_SHELL_STATE, ...overrides };
 }
 
-/**
- * Configure storeGetMock to return the given shell state for all calls.
- * windowLifecycle.saveShellState calls loadShellState internally to merge,
- * so all get calls must return a valid state.
- */
 function setupPersistedState(state: ShellState) {
-  storeGetMock.mockResolvedValue(state);
+  backend.seed(state as unknown as Record<string, unknown>);
 }
 
 /**
@@ -173,15 +162,10 @@ function captureSetPositionArgs(): { x: number; y: number } {
   return { x: arg.x, y: arg.y };
 }
 
-/**
- * Extract the most recent saveShellState by inspecting the last storeSetMock
- * call. storeSetMock receives `(SHELL_STORE_KEY, fullState)`.
- */
+/** The stored state after the last save, which must have happened. */
 function captureLastSavedState(): ShellState {
-  const calls = storeSetMock.mock.calls;
-  expect(calls.length).toBeGreaterThan(0);
-  const lastCall = calls[calls.length - 1] as unknown as [string, ShellState];
-  return lastCall[1];
+  expect(backend.patches().length).toBeGreaterThan(0);
+  return backend.state() as unknown as ShellState;
 }
 
 /** A single monitor covering a typical 1920×1080 display */
@@ -207,8 +191,7 @@ beforeEach(() => {
   });
   availableMonitorsMock.mockResolvedValue([MONITOR_1080P]);
   scaleFactorMock.mockResolvedValue(1);
-  storeGetMock.mockResolvedValue(null);
-  storeSetMock.mockResolvedValue(undefined);
+  backend = createFakeShellStateBackend();
   setPositionMock.mockResolvedValue(undefined);
   showMock.mockResolvedValue(undefined);
   setMinSizeMock.mockResolvedValue(undefined);
@@ -253,8 +236,8 @@ describe("Scenario 1 — center-anchored restore: happy path", () => {
     await restoreWindowState();
 
     // The resulting rect (800, 300, 320, 480) is fully inside 1920×1080 —
-    // no clamp, so saveShellState (storeSetMock) must NOT have been called.
-    expect(storeSetMock).not.toHaveBeenCalled();
+    // no clamp, so saveShellState must NOT have been called.
+    expect(backend.patches()).toHaveLength(0);
   });
 });
 
@@ -306,7 +289,7 @@ describe("Scenario 3 — persistWindowState reads outerSize, never innerSize", (
     // innerSize is available but must NOT be called by persistWindowState.
     innerSizeMock.mockResolvedValue({ width: 900, height: 620 });
 
-    storeGetMock.mockResolvedValue(
+    setupPersistedState(
       makePersistedState({ windowCenterX: null, windowCenterY: null }),
     );
 
@@ -417,7 +400,7 @@ describe("Scenario 6 — no monitors available falls back to win.center()", () =
       outerSizeMock.mockResolvedValue({ width: 320, height: 480 });
     });
 
-    storeGetMock.mockResolvedValue(
+    setupPersistedState(
       makePersistedState({ windowCenterX: 960, windowCenterY: 540 }),
     );
 
@@ -478,7 +461,7 @@ describe("Scenario 7 — rectCenter and rectTopLeftFromCenter inverse relationsh
     const outerH = 648;
     outerPositionMock.mockResolvedValue({ x: originX, y: originY });
     outerSizeMock.mockResolvedValue({ width: outerW, height: outerH });
-    storeGetMock.mockResolvedValue(
+    setupPersistedState(
       makePersistedState({ windowCenterX: null, windowCenterY: null }),
     );
 
@@ -492,8 +475,7 @@ describe("Scenario 7 — rectCenter and rectTopLeftFromCenter inverse relationsh
 
     // Now simulate a restore with a different (compact) outer size to verify
     // the inverse: top-left from center.
-    storeSetMock.mockClear();
-    storeGetMock.mockResolvedValue(
+    setupPersistedState(
       makePersistedState({
         windowCenterX: saved.windowCenterX,
         windowCenterY: saved.windowCenterY,
@@ -553,21 +535,12 @@ describe("Scenario 8 — center-preserve: single setPosition per restore", () =>
 // ---------------------------------------------------------------------------
 
 describe("Scenario 9 — concurrent saveShellState calls do not revert each other", () => {
-  /** `set` must land on a later macrotask, not a microtask — otherwise the
-   * first writer always finishes before the second one reads and the race
-   * this scenario exists to catch quietly stops happening. */
+  /** Answer on a later macrotask, not a microtask — otherwise the first writer
+   * always finishes before the second one is sent and nothing interleaves. */
   function usePersistentStore(initial: ShellState) {
-    let persisted = initial;
-    const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
-    storeGetMock.mockImplementation(async () => {
-      await tick();
-      return persisted;
-    });
-    storeSetMock.mockImplementation(async (_key, value) => {
-      await tick();
-      persisted = value as ShellState;
-    });
-    return () => persisted;
+    setupPersistedState(initial);
+    backend.useMacrotaskLatency(true);
+    return () => backend.state() as unknown as ShellState;
   }
 
   it("keeps both fields when two writers start from the same snapshot", async () => {
@@ -584,12 +557,30 @@ describe("Scenario 9 — concurrent saveShellState calls do not revert each othe
 
   it("a rejected write does not wedge the writes queued behind it", async () => {
     const read = usePersistentStore(makePersistedState({}));
-    storeSetMock.mockRejectedValueOnce(new Error("disk full"));
+    backend.failNextWrite(new Error("disk full"));
 
     await expect(saveShellState({ lastSection: "devices" })).rejects.toThrow("disk full");
     await saveShellState({ hasCompletedOnboarding: true });
 
     expect(read().hasCompletedOnboarding).toBe(true);
+  });
+
+  it("sends an undefined value as a removal, so the key leaves the file", async () => {
+    const read = usePersistentStore(
+      makePersistedState({ hueAppKey: "plain-user", hueClientKey: "plain-key" }),
+    );
+
+    await saveShellState({
+      hueAppKey: undefined,
+      hueClientKey: undefined,
+      credentialStorageBackend: "keychain",
+    });
+
+    expect(read()).not.toHaveProperty("hueAppKey");
+    expect(read()).not.toHaveProperty("hueClientKey");
+    expect(read().credentialStorageBackend).toBe("keychain");
+    const patches = backend.patches();
+    expect(patches[patches.length - 1].remove).toEqual(["hueAppKey", "hueClientKey"]);
   });
 });
 
@@ -598,20 +589,10 @@ describe("Scenario 9 — concurrent saveShellState calls do not revert each othe
 // ---------------------------------------------------------------------------
 
 describe("Scenario 10 — the write queue under load and failure", () => {
-  /** Same macrotask-delayed store as Scenario 9 — without the delay the first
-   * writer always finishes before the second reads and nothing interleaves. */
+  /** Same macrotask-delayed backend as Scenario 9. */
   function usePersistentStore() {
-    let persisted: Record<string, unknown> | null = null;
-    const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
-    storeGetMock.mockImplementation(async () => {
-      await tick();
-      return persisted;
-    });
-    storeSetMock.mockImplementation(async (_key, value) => {
-      await tick();
-      persisted = value as Record<string, unknown>;
-    });
-    return () => persisted;
+    backend.useMacrotaskLatency(true);
+    return () => backend.state();
   }
 
   it("keeps every field across a burst of overlapping writes", async () => {
@@ -647,14 +628,14 @@ describe("Scenario 10 — the write queue under load and failure", () => {
 
   it("surfaces a failed write to its own caller", async () => {
     usePersistentStore();
-    storeSetMock.mockRejectedValueOnce(new Error("disk full"));
+    backend.failNextWrite(new Error("disk full"));
 
     await expect(saveShellState({ language: "tr" })).rejects.toThrow("disk full");
   });
 
   it("does not wedge the queue after a failure", async () => {
     const read = usePersistentStore();
-    storeSetMock.mockRejectedValueOnce(new Error("disk full"));
+    backend.failNextWrite(new Error("disk full"));
 
     await expect(saveShellState({ language: "tr" })).rejects.toThrow();
     // Without the `.catch(() => {})` on the queue tail this never resolves.
@@ -960,7 +941,7 @@ describe("Scenario 15b — the animator finishes when animation frames stop", ()
     expect(cancelSpy).toHaveBeenCalled();
     const floors = setMinSizeMock.mock.calls.map((c) => c[0] as { width: number; height: number });
     expect(floors[floors.length - 1]).toMatchObject({ width: 800, height: 560 });
-    const saved = storeSetMock.mock.calls.map((c) => (c[1] as ShellState).uiMode);
+    const saved = backend.patches().map((p) => p.set.uiMode);
     expect(saved).toContain("full");
   });
 });

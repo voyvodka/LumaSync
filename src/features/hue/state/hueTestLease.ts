@@ -5,7 +5,7 @@ import { HUE_RUNTIME_STATUS, type HueRuntimeTarget } from "@/shared/contracts/hu
 import { isHueStartCodeOk, toHueStartConfig } from "@/features/hue/model/hueStartConfig";
 import { shellStore } from "@/features/persistence/shellStore";
 import { getLightingModeStatus, startHue, stopHue } from "@/features/mode/modeApi";
-import { LIGHTING_MODE_KIND } from "@/features/mode/model/contracts";
+import { LIGHTING_MODE_KIND } from "@/shared/contracts/mode";
 
 type LeaseState =
   /** Nothing attempted for the current run. */

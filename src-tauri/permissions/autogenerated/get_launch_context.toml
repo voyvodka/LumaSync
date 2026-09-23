@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-launch-context"
+description = "Enables the get_launch_context command without any pre-configured scope."
+commands.allow = ["get_launch_context"]
+
+[[permission]]
+identifier = "deny-get-launch-context"
+description = "Denies the get_launch_context command without any pre-configured scope."
+commands.deny = ["get_launch_context"]

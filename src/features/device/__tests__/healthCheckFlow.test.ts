@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { FIRMWARE_PROFILE } from "@/shared/contracts/device";
+import { FIRMWARE_PIXEL_LAYOUT, FIRMWARE_PROFILE } from "@/shared/contracts/device";
 import type { HealthCheckResult, SerialPortListResponse } from "../deviceConnectionApi";
 import type { FirmwareProfileEventBus } from "../firmwareProfileEvents";
 import { createDeviceConnectionController } from "../state/deviceConnectionController";
@@ -187,6 +187,12 @@ describe("health check flow", () => {
       runSerialHealthCheck: vi.fn().mockResolvedValue({
         ...healthResult(true),
         advertisedFirmwareProfile: FIRMWARE_PROFILE.LUMASYNC_V1,
+        firmware: {
+          version: "1.4",
+          versionRaw: 0x0104,
+          profile: FIRMWARE_PROFILE.LUMASYNC_V1,
+          pixelLayout: FIRMWARE_PIXEL_LAYOUT.RGBW,
+        },
       }),
       firmwareProfileEvents,
     });
@@ -194,7 +200,10 @@ describe("health check flow", () => {
     await controller.initialize();
     await controller.runHealthCheck();
 
-    expect(emit).toHaveBeenCalledWith({ advertisedFirmwareProfile: FIRMWARE_PROFILE.LUMASYNC_V1 });
+    expect(emit).toHaveBeenCalledWith({
+      advertisedFirmwareProfile: FIRMWARE_PROFILE.LUMASYNC_V1,
+      advertisedPixelLayout: FIRMWARE_PIXEL_LAYOUT.RGBW,
+    });
   });
 
   it("broadcasts undefined when the handshake step didn't complete", async () => {
@@ -227,7 +236,10 @@ describe("health check flow", () => {
     await controller.initialize();
     await controller.runHealthCheck();
 
-    expect(emit).toHaveBeenCalledWith({ advertisedFirmwareProfile: undefined });
+    expect(emit).toHaveBeenCalledWith({
+      advertisedFirmwareProfile: undefined,
+      advertisedPixelLayout: undefined,
+    });
   });
 
   it("does not emit when the health check throws", async () => {

@@ -1,5 +1,5 @@
-//! The per-window plugin and core permission policy, resolved from the real
-//! capability files the way the running app resolves them.
+//! The per-window permission policy — plugin, core and app commands — resolved
+//! from the real capability files the way the running app resolves them.
 //!
 //! A permission a window needs but no capability grants compiles, builds and
 //! passes every other test — it only fails as a rejected invoke in that window.
@@ -7,8 +7,8 @@
 //! entry in docs/architecture/ui-and-shell.md for the call sites), and each
 //! "denied" row is a call no window makes — most of them grants that were removed.
 //!
-//! App commands are not here: without an app ACL manifest Tauri admits every
-//! `generate_handler!` command from any local window.
+//! App commands are ACL-checked because `build.rs` declares an app manifest;
+//! `APP_POLICY` must name every command in it.
 
 use serde_json::json;
 use tauri::ipc::Origin;
@@ -26,15 +26,13 @@ const CALIBRATION: &str = "calibration-overlay-00000000000000ff-0";
 const BUNDLE_WINDOWS: [bool; 4] = [true, true, true, false];
 const MAIN_AND_POPUP: [bool; 4] = [true, true, false, false];
 const MAIN_ONLY: [bool; 4] = [true, false, false, false];
+const POPUP_ONLY: [bool; 4] = [false, true, false, false];
 const NO_WINDOW: [bool; 4] = [false; 4];
 
 const POLICY: &[(&str, [bool; 4])] = &[
     // Every window with the app bundle loaded
     ("plugin:event|listen", BUNDLE_WINDOWS),
     ("plugin:event|unlisten", BUNDLE_WINDOWS),
-    ("plugin:store|load", BUNDLE_WINDOWS),
-    ("plugin:store|get", BUNDLE_WINDOWS),
-    ("plugin:store|set", BUNDLE_WINDOWS),
     ("plugin:log|log", BUNDLE_WINDOWS),
     // Main and the popup: geometry reads, drag regions, debug devtools shortcut
     ("plugin:window|scale_factor", MAIN_AND_POPUP),
@@ -82,6 +80,10 @@ const POLICY: &[(&str, [bool; 4])] = &[
     ("plugin:image|from_path", NO_WINDOW),
     ("plugin:app|version", NO_WINDOW),
     ("plugin:path|resolve_directory", NO_WINDOW),
+    // The store plugin is gone: Rust owns shell-state.json.
+    ("plugin:store|load", NO_WINDOW),
+    ("plugin:store|get", NO_WINDOW),
+    ("plugin:store|set", NO_WINDOW),
     ("plugin:store|clear", NO_WINDOW),
     ("plugin:store|delete", NO_WINDOW),
     ("plugin:store|save", NO_WINDOW),
@@ -103,13 +105,154 @@ const POLICY: &[(&str, [bool; 4])] = &[
     ("plugin:dialog|message", NO_WINDOW),
 ];
 
+/// Every app command, with the windows whose frontend invokes it. Derived from
+/// the `*Api.ts` bridges each window's entry mounts — the table in
+/// docs/architecture/ui-and-shell.md says which caller justifies each row.
+const APP_POLICY: &[(&str, [bool; 4])] = &[
+    // Shell state: every bundle window reads it; the twin never writes it, and
+    // only the main window runs the migration write-back.
+    ("get_shell_state", BUNDLE_WINDOWS),
+    ("patch_shell_state", MAIN_AND_POPUP),
+    ("replace_shell_state", MAIN_ONLY),
+    // The popup drives modes, test patterns, and a Hue test lease.
+    ("set_lighting_mode", MAIN_AND_POPUP),
+    ("stop_lighting", MAIN_AND_POPUP),
+    ("get_lighting_mode_status", MAIN_AND_POPUP),
+    ("start_led_test_pattern", MAIN_AND_POPUP),
+    ("stop_led_test_pattern", MAIN_AND_POPUP),
+    ("start_hue_stream", MAIN_AND_POPUP),
+    ("stop_hue_stream", MAIN_AND_POPUP),
+    ("show_notification", MAIN_AND_POPUP),
+    // GlobalErrorBoundary's "Show logs", mounted in both.
+    ("open_log_dir", MAIN_AND_POPUP),
+    // Only the popup's own controls call these.
+    ("get_led_preview_status", POPUP_ONLY),
+    ("close_led_twin_overlay", POPUP_ONLY),
+    ("hide_led_control_popup", POPUP_ONLY),
+    // The main window only.
+    ("update_tray_labels", MAIN_ONLY),
+    ("get_launch_context", MAIN_ONLY),
+    ("list_serial_ports", MAIN_ONLY),
+    ("connect_serial_port", MAIN_ONLY),
+    ("get_serial_connection_status", MAIN_ONLY),
+    ("run_serial_health_check", MAIN_ONLY),
+    ("discover_hue_bridges", MAIN_ONLY),
+    ("verify_hue_bridge_ip", MAIN_ONLY),
+    ("pair_hue_bridge", MAIN_ONLY),
+    ("validate_hue_credentials", MAIN_ONLY),
+    ("migrate_hue_credentials", MAIN_ONLY),
+    ("list_hue_entertainment_areas", MAIN_ONLY),
+    ("check_hue_stream_readiness", MAIN_ONLY),
+    ("restart_hue_stream", MAIN_ONLY),
+    ("set_hue_solid_color", MAIN_ONLY),
+    ("get_hue_stream_status", MAIN_ONLY),
+    ("get_hue_area_channels", MAIN_ONLY),
+    ("get_runtime_telemetry", MAIN_ONLY),
+    ("get_screen_capture_permission", MAIN_ONLY),
+    ("open_screen_capture_settings", MAIN_ONLY),
+    ("list_displays", MAIN_ONLY),
+    ("open_display_overlay", MAIN_ONLY),
+    ("close_display_overlay", MAIN_ONLY),
+    ("update_display_overlay_preview", MAIN_ONLY),
+    ("copy_background_image", MAIN_ONLY),
+    ("update_hue_channel_positions", MAIN_ONLY),
+    ("create_hue_zone", MAIN_ONLY),
+    ("update_hue_zone", MAIN_ONLY),
+    ("delete_hue_zone", MAIN_ONLY),
+    ("assign_channel_to_hue_zone", MAIN_ONLY),
+    // The dev mock's panel passes it through to Rust from the main window.
+    ("simulate_hue_fault", MAIN_ONLY),
+    ("discover_wled_devices", MAIN_ONLY),
+    ("connect_wled_sink", MAIN_ONLY),
+    ("test_wled_bridge", MAIN_ONLY),
+    ("get_wled_sink_status", MAIN_ONLY),
+    ("open_led_twin_overlay", MAIN_ONLY),
+    ("open_led_control_popup", MAIN_ONLY),
+    ("show_led_control_popup", MAIN_ONLY),
+    ("check_for_update", MAIN_ONLY),
+    ("download_and_install_update", MAIN_ONLY),
+    // Registered, but nothing in the frontend calls it.
+    ("request_notification_permission", NO_WINDOW),
+];
+
+/// The commands a compromised overlay or popup page must never reach, named so
+/// the intent survives a table edit that would otherwise pass unnoticed.
+const MAIN_WINDOW_PRIVILEGES: &[&str] = &[
+    "pair_hue_bridge",
+    "migrate_hue_credentials",
+    "validate_hue_credentials",
+    "download_and_install_update",
+    "check_for_update",
+    "replace_shell_state",
+    "copy_background_image",
+];
+
 #[test]
 fn each_window_is_granted_exactly_the_plugin_calls_it_makes() {
+    assert_policy(POLICY);
+}
+
+#[test]
+fn each_window_is_granted_exactly_the_app_commands_it_invokes() {
+    assert_policy(APP_POLICY);
+}
+
+#[test]
+fn overlays_and_the_popup_cannot_reach_main_window_privileges() {
+    let mut context = crate::app_context::<MockRuntime>();
+    let authority = context.runtime_authority_mut();
+    for command in MAIN_WINDOW_PRIVILEGES {
+        assert!(
+            authority
+                .resolve_access(command, MAIN, MAIN, &Origin::Local)
+                .is_some(),
+            "{command} must stay reachable from the main window"
+        );
+        for window in [POPUP, TWIN, CALIBRATION] {
+            assert!(
+                authority
+                    .resolve_access(command, window, window, &Origin::Local)
+                    .is_none(),
+                "{command} is reachable from `{window}`"
+            );
+        }
+    }
+    // The twin reads settings and nothing else; the calibration overlay has no IPC.
+    for window in [TWIN, CALIBRATION] {
+        assert!(authority
+            .resolve_access("patch_shell_state", window, window, &Origin::Local)
+            .is_none());
+    }
+}
+
+/// `APP_POLICY` must cover exactly the manifest in `build.rs`, which the
+/// contracts verifier in turn holds equal to `generate_handler!`.
+#[test]
+fn the_app_policy_names_every_command_in_the_manifest() {
+    let build_rs = include_str!("../../build.rs");
+    let start = build_rs
+        .find("const APP_COMMANDS")
+        .expect("build.rs declares APP_COMMANDS");
+    let end = start
+        + build_rs[start..]
+            .find("];")
+            .expect("APP_COMMANDS is closed");
+    let mut manifest: Vec<&str> = build_rs[start..end].split('"').skip(1).step_by(2).collect();
+    let mut table: Vec<&str> = APP_POLICY.iter().map(|(command, _)| *command).collect();
+    manifest.sort_unstable();
+    table.sort_unstable();
+    assert_eq!(
+        table, manifest,
+        "APP_POLICY and build.rs APP_COMMANDS differ"
+    );
+}
+
+fn assert_policy(policy: &[(&str, [bool; 4])]) {
     let mut context = crate::app_context::<MockRuntime>();
     let authority = context.runtime_authority_mut();
 
     let mut mismatches = Vec::new();
-    for (command, expected) in POLICY {
+    for (command, expected) in policy {
         for (window, want) in [MAIN, POPUP, TWIN, CALIBRATION].iter().zip(expected) {
             let got = authority
                 .resolve_access(command, window, window, &Origin::Local)
@@ -134,14 +277,14 @@ fn each_window_is_granted_exactly_the_plugin_calls_it_makes() {
 /// Every grant is local-only: a remote page loaded into any window must reach
 /// none of them.
 #[test]
-fn no_plugin_call_is_reachable_from_a_remote_origin() {
+fn no_call_is_reachable_from_a_remote_origin() {
     let mut context = crate::app_context::<MockRuntime>();
     let authority = context.runtime_authority_mut();
     let remote = Origin::Remote {
         url: "https://example.com".parse().expect("valid URL"),
     };
 
-    for (command, _) in POLICY {
+    for (command, _) in POLICY.iter().chain(APP_POLICY) {
         for window in [MAIN, POPUP, TWIN, CALIBRATION] {
             assert!(
                 authority

@@ -1,8 +1,10 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main settings window. Only the plugin and core calls its frontend actually makes, each as an explicit identifier rather than a `:default` set; fs and opener are scoped to the one path and host they serve. Policy and call sites: docs/architecture/ui-and-shell.md, \"Capabilities\".",
-  "windows": ["main"],
+  "description": "Main settings window. Only the plugin, core and app calls its frontend actually makes, each as an explicit identifier rather than a `:default` set; fs and opener are scoped to the one path and host they serve. Policy and call sites: docs/architecture/ui-and-shell.md, \"Capabilities\".",
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
@@ -25,9 +27,6 @@
     "core:window:allow-start-dragging",
     "core:window:allow-internal-toggle-maximize",
     "core:webview:allow-internal-toggle-devtools",
-    "store:allow-load",
-    "store:allow-get",
-    "store:allow-set",
     "log:allow-log",
     "autostart:allow-enable",
     "autostart:allow-disable",
@@ -35,13 +34,73 @@
     "dialog:allow-open",
     {
       "identifier": "fs:allow-read-file",
-      "allow": [{ "path": "$APPDATA/room-map-backgrounds/*" }]
+      "allow": [
+        {
+          "path": "$APPDATA/room-map-backgrounds/*"
+        }
+      ]
     },
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://lumasync.app/*" }]
+      "allow": [
+        {
+          "url": "https://lumasync.app/*"
+        }
+      ]
     },
     "notification:allow-is-permission-granted",
-    "process:allow-restart"
+    "process:allow-restart",
+    "allow-update-tray-labels",
+    "allow-list-serial-ports",
+    "allow-connect-serial-port",
+    "allow-get-serial-connection-status",
+    "allow-run-serial-health-check",
+    "allow-discover-hue-bridges",
+    "allow-verify-hue-bridge-ip",
+    "allow-pair-hue-bridge",
+    "allow-validate-hue-credentials",
+    "allow-migrate-hue-credentials",
+    "allow-list-hue-entertainment-areas",
+    "allow-check-hue-stream-readiness",
+    "allow-start-hue-stream",
+    "allow-stop-hue-stream",
+    "allow-restart-hue-stream",
+    "allow-set-hue-solid-color",
+    "allow-get-hue-stream-status",
+    "allow-get-hue-area-channels",
+    "allow-set-lighting-mode",
+    "allow-stop-lighting",
+    "allow-get-lighting-mode-status",
+    "allow-get-runtime-telemetry",
+    "allow-show-notification",
+    "allow-open-log-dir",
+    "allow-get-screen-capture-permission",
+    "allow-open-screen-capture-settings",
+    "allow-list-displays",
+    "allow-open-display-overlay",
+    "allow-close-display-overlay",
+    "allow-update-display-overlay-preview",
+    "allow-copy-background-image",
+    "allow-update-hue-channel-positions",
+    "allow-create-hue-zone",
+    "allow-update-hue-zone",
+    "allow-delete-hue-zone",
+    "allow-assign-channel-to-hue-zone",
+    "allow-simulate-hue-fault",
+    "allow-discover-wled-devices",
+    "allow-connect-wled-sink",
+    "allow-test-wled-bridge",
+    "allow-get-wled-sink-status",
+    "allow-start-led-test-pattern",
+    "allow-stop-led-test-pattern",
+    "allow-open-led-twin-overlay",
+    "allow-open-led-control-popup",
+    "allow-show-led-control-popup",
+    "allow-check-for-update",
+    "allow-download-and-install-update",
+    "allow-get-launch-context",
+    "allow-get-shell-state",
+    "allow-patch-shell-state",
+    "allow-replace-shell-state"
   ]
 }
