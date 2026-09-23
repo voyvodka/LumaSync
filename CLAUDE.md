@@ -14,8 +14,9 @@ them and holds neither map, so it does not go stale when a note is added.
 - **`docs/architecture/README.md` — public, committed.** Technical decisions, gotchas, and the reasoning behind them. This is where a long explanation belongs instead of a twenty-line comment above a function: **write the reason there and keep the comment short.** Committed source may link to it freely.
 - **`devdocs/README.md` — private, excluded from git.** Product direction, goals, roadmap, research. **Never committed, unignored, or distributed**; assume collaborators, CI, and sandboxed agents cannot see it. **Never reference a `devdocs/` path from committed source, commit messages, PRs, or release notes** — it is a dead reference for every other reader. Put the reasoning in `docs/architecture/` instead, or inline it.
 
-`docs/architecture/` is split by area — Hue, device output, capture, contracts, build, UI — so
-reading about one does not mean loading all of them. Its README routes by task.
+`docs/architecture/` is split by area — Hue, device output, serial protocol, capture, contracts,
+build, testing, UI, room map — so reading about one does not mean loading all of them. Its README
+routes by task.
 
 Before changing anything: the area file for whether the thing you find odd is deliberate, and
 `devdocs/product/00-state.md` for where the project stands.
@@ -167,7 +168,7 @@ Two things the directory listing will not tell you:
 
 ### Rust command modules (`src-tauri/src/commands/`)
 
-Around twenty files plus the `hue/` and `room_map/` subdirectories. Grep for
+Around twenty files plus the `hue/`, `lighting_mode/` and `room_map/` subdirectories. Grep for
 `#[tauri::command]`; the `generate_handler![]` block in `src-tauri/src/lib.rs` is the
 authoritative registration list.
 

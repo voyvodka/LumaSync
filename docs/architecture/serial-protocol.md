@@ -18,10 +18,10 @@ the symbol name is the anchor — fix the line, do not delete the citation.
 
 | Parameter | Value | Source |
 |---|---|---|
-| Baud rate | 115 200 | `DEFAULT_CONNECT_BAUD_RATE` `commands/device_connection.rs:17`, `OUTPUT_BAUD_RATE` `commands/led_output.rs:15` |
-| Framing | 8 data bits, no parity, 1 stop bit, no flow control | `serialport` builder defaults — `device_connection.rs:511`, `:758`, `led_output.rs:446` |
+| Baud rate | 115 200 | `DEFAULT_CONNECT_BAUD_RATE` `commands/device_connection.rs:18`, `OUTPUT_BAUD_RATE` `commands/led_output.rs:15` |
+| Framing | 8 data bits, no parity, 1 stop bit, no flow control | `serialport` builder defaults — `device_connection.rs:485`, `:726`, `led_output.rs:633` |
 | Throughput | 11 520 bytes/s (10 bit-times per byte) | `SERIAL_LINK_BYTES_PER_SEC` `commands/led_calibration.rs:280` |
-| Settle after open | 2 000 ms before the first byte | `BOOTLOADER_SETTLE_DELAY_MS` `device_connection.rs:37`, applied at `:524`, `:778`, `led_output.rs:458` |
+| Settle after open | 2 000 ms before the first byte | `BOOTLOADER_SETTLE_DELAY_MS` `device_connection.rs:38`, applied at `:498`, `:746`, `led_output.rs:645` |
 
 **DTR.** Opening the port asserts DTR, which auto-resets Arduino-class boards. The host therefore
 waits the settle delay after *every* open before writing, and keeps the output handle open across
@@ -32,17 +32,17 @@ any time the host opens the port, and must be ready to parse within 2 s of reset
 
 | Operation | Timeout | Source |
 |---|---|---|
-| Open for connect | 1 500 ms | `DEFAULT_CONNECT_TIMEOUT_MS` `device_connection.rs:18` |
-| Handshake per-read poll | 50 ms | `HANDSHAKE_PORT_READ_TIMEOUT_MS` `device_connection.rs:23` |
-| Handshake round-trip window | 2 000 ms | `HANDSHAKE_ROUND_TRIP_TIMEOUT` `device_connection.rs:31` |
+| Open for connect | 1 500 ms | `DEFAULT_CONNECT_TIMEOUT_MS` `device_connection.rs:19` |
+| Handshake per-read poll | 50 ms | `HANDSHAKE_PORT_READ_TIMEOUT_MS` `device_connection.rs:24` |
+| Handshake round-trip window | 2 000 ms | `HANDSHAKE_ROUND_TRIP_TIMEOUT` `device_connection.rs:32` |
 | Output frame write | 500 ms | `OUTPUT_TIMEOUT_MS` `led_output.rs:16` |
 
 ### 1.2 Data frame (host → device)
 
-The default framing, selected by `FirmwareProfile::LumaSyncV1` (`led_output.rs:35`). Encoded by
-`encode_led_packet_with_corrections` (`led_output.rs:618`) for 3-byte pixels and
-`encode_sk6812_packet` (`led_output.rs:801`) for 4-byte pixels; every write is dispatched through
-`encode_packet_for_output` (`led_output.rs:749`).
+The default framing, selected by `FirmwareProfile::LumaSyncV1` (`led_output.rs:40`). Encoded by
+`encode_lumasync_v1_packet` (`led_output.rs:803`) for 3-byte pixels and
+`encode_sk6812_packet` (`led_output.rs:953`) for 4-byte pixels; every write is dispatched through
+`encode_packet_for_output` (`led_output.rs:903`).
 
 ```text
 Offset  Width      Field
@@ -55,14 +55,14 @@ Offset  Width      Field
 
 Total `6 + N × bpp` bytes (`LED_FRAME_HEADER_BYTES`, `led_calibration.rs:285`).
 
-- **brightness** is `floor(clamp(b, 0, 1) × 255)` (`led_output.rs:624`). The host does **not**
+- **brightness** is `floor(clamp(b, 0, 1) × 255)` (`led_output.rs:808`). The host does **not**
   scale pixel values by it — applying it is the device's job.
-- **led_count** saturates at 65 535 (`led_output.rs:625`). A device should reject any count above
+- **led_count** saturates at 65 535 (`led_output.rs:809`). A device should reject any count above
   what it was built for.
-- **checksum** covers the whole frame (`led_output.rs:654`, `:844`).
+- **checksum** covers the whole frame (`led_output.rs:821`, `:975`).
 
 Worked example, one LED, brightness 0.5, colour `(255, 0, 128)` after the default 2.2 gamma
-(pinned by `solid_payload_encodes_to_deterministic_packet`, `led_output.rs:1099`):
+(pinned by `solid_payload_encodes_to_deterministic_packet`, `led_output.rs:1242`):
 
 ```text
 AA 55 7F 01 00 FF 00 38 46
@@ -70,8 +70,8 @@ AA 55 7F 01 00 FF 00 38 46
 
 ### 1.3 Pixel layouts
 
-`LedChipType` (`led_output.rs:70`) chooses the pixel layout and is independent of the framing;
-`bytes_per_pixel` is at `led_output.rs:89`.
+`LedChipType` (`led_output.rs:71`) chooses the pixel layout together with the framing (see below);
+`WirePixelLayout::bytes_per_pixel` is at `led_output.rs:161`.
 
 | Chip type | bpp | Bytes per pixel, in order |
 |---|---|---|
@@ -94,21 +94,21 @@ firmware never sees anything but three (or four) bytes per pixel. The variant or
 proposed TLV `0x02` numbering in §2.1.
 
 **Pixels arrive fully corrected.** The host applies saturation, then Kelvin white balance, then a
-gamma lookup table, before packing (`led_output.rs:618`, `:678`, `:801`). A device must
+gamma lookup table, before packing, for every encoder (`EncoderPlan::correct`, `led_output.rs:520`). A device must
 not apply gamma again.
 
-**RGBW** is produced after correction by `extract_rgbw` (`led_output.rs:785`):
+**RGBW** is produced after correction by `extract_rgbw` (`led_output.rs:937`):
 `W = min(R, G, B)`, then `R' = R − W`, `G' = G − W`, `B' = B − W`. W itself is not passed through
 the gamma table; the device drives it at the white emitter's native temperature. Pinned by
-`sk6812_w_channel_bypasses_lut_corrections_are_on_rgb_only` (`led_output.rs:1757`).
+`sk6812_w_channel_bypasses_lut_corrections_are_on_rgb_only` (`led_output.rs:1908`).
 
 **RGBW exists only under LumaSync v1.** Adalight has no four-byte pixel, so Adalight with an SK6812
 chip type falls back to the three-byte Adalight frame rather than dropping output
-(`encode_packet_for_output`, `led_output.rs:749`).
+(`WirePixelLayout::for_output`, `led_output.rs:154`).
 
 ### 1.4 Adalight frame, for comparison
 
-Opt-in via `FirmwareProfile::Adalight`, encoded by `encode_adalight_packet` (`led_output.rs:847`).
+Opt-in via `FirmwareProfile::Adalight`, encoded by `encode_adalight_packet` (`led_output.rs:852`).
 It exists so LumaSync can drive firmware that already speaks Adalight; it is not LumaSync's own
 format, and the two are not interchangeable.
 
@@ -132,33 +132,33 @@ Offset  Width   Field
 Adalight has no brightness field, so the host scales the corrected pixels by brightness before
 packing them, the same way `CorrectedWledSink` does; brightness 1.0 leaves every byte unchanged.
 Before that the brightness setting never reached an Adalight device. Pinned by
-`adalight_header_is_byte_exact` (`led_output.rs:1261`), `adalight_has_no_brightness_byte`
-(`led_output.rs:1289`) and `adalight_scales_brightness_into_the_corrected_pixels`
-(`led_output.rs:2188`).
+`adalight_header_is_byte_exact` (`led_output.rs:1264`), `adalight_has_no_brightness_byte`
+(`led_output.rs:1292`) and `adalight_scales_brightness_into_the_corrected_pixels`
+(`led_output.rs:2191`).
 
 ### 1.5 Handshake
 
 Implemented in `commands/device_handshake.rs`. Both frames share the `AA 55` magic
-(`FRAME_MAGIC`, `device_handshake.rs:67`) and a trailing XOR over every preceding byte.
+(`FRAME_MAGIC`, `device_handshake.rs:68`) and a trailing XOR over every preceding byte.
 
-**PING, host → device** (`encode_handshake_ping`, `device_handshake.rs:148`), 5 bytes, always
+**PING, host → device** (`encode_handshake_ping`, `device_handshake.rs:149`), 5 bytes, always
 identical:
 
 ```text
 AA 55 10 00 EF
       │  │  └ XOR of the four bytes before it
       │  └ payload length = 0
-      └ opcode PING (HANDSHAKE_OPCODE_PING, device_handshake.rs:61)
+      └ opcode PING (HANDSHAKE_OPCODE_PING, device_handshake.rs:62)
 ```
 
-**PONG, device → host** (`decode_handshake_pong`, `device_handshake.rs:177`), 7 bytes:
+**PONG, device → host** (`decode_handshake_pong`, `device_handshake.rs:178`), 7 bytes:
 
 ```text
 Offset  Width  Field
 0       2      magic             = AA 55
-2       1      opcode            = 11   (HANDSHAKE_OPCODE_PONG, device_handshake.rs:64)
+2       1      opcode            = 11   (HANDSHAKE_OPCODE_PONG, device_handshake.rs:65)
 3       2      firmware_version  u16 little-endian, (major << 8) | minor
-5       1      firmware_profile  01 = LumaSync v1, 02 = Adalight  (device_handshake.rs:74, :77)
+5       1      firmware_profile  01 = LumaSync v1, 02 = Adalight  (device_handshake.rs:75, :78)
 6       1      checksum          XOR of bytes 0..6
 ```
 
@@ -167,17 +167,18 @@ which data framing the device expects; the host compares it with the user's sett
 mismatch rather than switching on its own.
 
 **When the host sends PING.** Only from the serial health check — on a freshly opened handle,
-after the settle delay (`device_connection.rs:758`–`:811`). Connecting does not PING. A device that
+after the settle delay (`device_connection.rs:726`–`:777`). Connecting does not PING. A device that
 does not answer fails the `HANDSHAKE` step non-fatally with `SERIAL_HEALTH_HANDSHAKE_TIMEOUT`, and
-the user is told to try the Adalight profile (`device_connection.rs:910`); a malformed reply is
-`SERIAL_HEALTH_PROTOCOL_ERROR` (`device_handshake.rs:126`).
+the user is told to try the Adalight profile (`device_connection.rs:876`); a malformed reply is
+`SERIAL_HEALTH_PROTOCOL_ERROR` (`device_handshake.rs:130`).
 
-**How the host reads the reply.** `perform_handshake` (`device_handshake.rs:297`) reads into a
-16-byte buffer until it is full or the 2 s window closes (`:264`, `:308`), then decodes from byte 0.
-So the PONG must be the **first** bytes the device sends after the PING — a boot banner or debug
-print on the same UART before it is a protocol error — and bytes after the PONG are ignored. A
-7-byte PONG does not fill the buffer, so the reported round-trip time currently includes the rest of
-the window; do not read it as link latency.
+**How the host reads the reply.** `perform_handshake` (`device_handshake.rs:396`) accumulates
+reads across the 2 s window and resynchronises on `AA 55` (`ResponseReader`): bytes before the
+magic are skipped, a PONG split across reads is reassembled, and a frame that fails validation is
+stepped past in case a real PONG follows. It returns on the first valid PONG, so the reported
+round-trip time is the time to that PONG. If the window closes without one, the last rejected
+frame's error is reported, and noise with no frame in it counts as a protocol error rather than a
+timeout.
 
 **Telling a PING from a data frame.** Byte 2 is an opcode in a PING and a brightness in a data
 frame, and `0x10` is a valid brightness, so the opcode alone cannot decide. A device treats the
@@ -193,10 +194,10 @@ frames afterwards.
 
 The host paces frames to what the link can carry. `frame_wire_bytes` (`led_calibration.rs:291`),
 `frame_wire_time_ms` (`:300`) and `link_max_fps` (`:309`) compute it from
-`SERIAL_LINK_BYTES_PER_SEC`; `SerialSendBudget` (`commands/lighting_mode.rs:1320`) clamps the send
+`SERIAL_LINK_BYTES_PER_SEC`; `SerialSendBudget` (`commands/lighting_mode.rs:1283`) clamps the send
 interval to it and flags a strip as link-constrained below 30 fps (`LINK_CONSTRAINED_FPS`,
-`lighting_mode.rs:1314`). Only a serial sink gets this budget; WLED does not
-(`resolve_quality_config`, `lighting_mode.rs:1420`).
+`lighting_mode.rs:1277`). Only a serial sink gets this budget; WLED does not
+(`resolve_quality_config`, `lighting_mode.rs:1391`).
 
 164 LEDs is 498 bytes in RGB — 23 fps — and 662 bytes in RGBW — 17 fps. At the ceiling the link is
 continuously busy: there is no idle gap between frames. Pinned by
@@ -308,8 +309,8 @@ Until that firmware exists, APA102 and SK9822 go through WLED (section 4).
   partial or corrupt frame. LEDs past `led_count` keep their last value.
 - **Apply brightness; do not apply gamma.** The host sends a brightness byte and gamma-corrected
   pixels (1.2, 1.3).
-- **Nothing on the UART but protocol.** No boot banner and no debug output — the host decodes the
-  PONG from the first byte it receives (1.5).
+- **Nothing on the UART but protocol.** No boot banner and no debug output. The host skips bytes
+  before a PONG (1.5), but a reply window holding only noise fails the handshake as a protocol error.
 - **Mind the LED output while receiving.** At the link ceiling there is no gap between frames
   (1.6). Bit-banged WS2812B output disables interrupts for roughly 30 µs per LED, long enough to
   overrun the UART, so frames arriving during `show()` are corrupted and dropped. Prefer
@@ -328,5 +329,5 @@ a sink over UDP — DDP by default, or DRGB/DNRGB (`WledProtocol`, `commands/wle
   would correct the order twice.
 
 Over WLED the host sends RGB with brightness scaled into the pixel values, because DDP and DRGB have
-no brightness field (`CorrectedWledSink`, `wled_sink.rs:227`). The serial link budget does not
+no brightness field (`CorrectedWledSink`, `wled_sink.rs:228`). The serial link budget does not
 apply. WLED is driven over its documented protocols only; no WLED code is used.

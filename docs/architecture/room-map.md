@@ -5,8 +5,8 @@ strip runs, and Hue channel dots. Most users never open it — first run reaches
 lighting without it — but everything authored here feeds the runtime sampler, so the coordinate
 rules below are load-bearing rather than cosmetic.
 
-The module is `src/features/room-map/`; `RoomMapEditor.tsx` is its entry point and the largest
-single piece of UI in the codebase.
+The module is `src/features/room-map/`; `RoomMapEditor.tsx` is its entry point and one of the
+largest single pieces of UI in the codebase.
 
 ## Decisions
 
@@ -41,32 +41,20 @@ channel from its zone in a way the user had not asked for *and* shifted every la
 Detaching goes through "Move to → Unassigned" instead. Anything reaching for a channel by array
 position rather than `channelIndex` is repeating that bug.
 
-**Minting a `channelIndex` by array length repeated it from the other end.** "Add Hue channel"
-stamped `hueChannels.length`, which on a gapped map — and maps written by v1.4.0 and earlier are
-gapped — hands the new channel a number that is already taken: `[0, 2]` has length 2, so the new
-entry is a second `2`. Every lookup and update matches on `channelIndex`, so the two become one
-object the user cannot separate, and because nothing ever removes a channel the collision is
-permanent. `nextHueChannelIndex` counts past the highest instead. It does not fill the gap on
-purpose: a gap plausibly belongs to a bridge channel that simply has not been placed yet, and
-claiming its number would look like a mapping nobody made.
+**The editor never mints a Hue channel, and every consumer addresses one by the bridge's
+`channelId`.** An "Add Hue channel" button once stamped a local `channelIndex` — by array length,
+which on a gapped map duplicated a live index — for a marker matching nothing on the bridge. It is
+gone: channels enter `hueChannels` only by seeding from the bridge's own list
+(`seedChannelPlacements` in `model/hueChannelSeeding.ts`, shared by the room map and the Devices
+panel so the two cannot disagree about which channel is which). `resolveChannelPlacement` there is
+the one place a placement meets its live channel, so it stamps `channelId`; the stream start and
+room-aware sampling (`toChannelPlacements` → `apply_channel_placements`) and the write-back
+(`merge_service_locations`) all match on it and skip a record without one. Which light gets which
+colour still comes from the bridge's channel array (`flatten_light_slots` in
+`commands/hue/sender.rs`), so a bad placement can move a real channel's sampled region or its
+bridge position, never re-route a light.
 
-That is a collision fix, not an answer to the larger question — there is still no bridge-sync
-path, so a hand-stamped index is not known to correspond to any real channel. Whether the editor
-should be minting these at all is open.
-
-**How far a wrong index can actually reach.** Less far than it looks, and worth knowing before
-treating one as an emergency. The live frame path never reads the room map: `flatten_light_slots`
-in `commands/hue/sender.rs` builds its light slots from `channels.iter().enumerate()` over the
-*bridge's* channel array, so a bad room-map index cannot change which light gets which colour. The
-bridge write-back does not carry a minted index either — `HueChannelMapPanel` rebuilds the payload
-from the live `channels` array, keying on `ch.index`, so an index matching no bridge channel is
-never PUT. The one place it does bite is `resolvePlacement`, which looks the persisted placement up
-*by the bridge channel's* index: a hand-placed marker whose index collides with a real channel
-supplies that channel's position, and that position does reach the bridge on "Save to bridge". So
-the failure mode is a wrong **position** for a real channel, not a wrong light and not a wrong
-colour. That changes when room-aware ambilight lands and the live path starts reading placements.
-
-**The Devices channel map edits the same `hueChannels` the room map does, so it has to respect the zone binding rather than flatten it.** It rebuilds its working list from the *bridge's* channel array, which is what keeps a hand-minted index from ever being PUT — but the rebuild used to emit a bare `{channelIndex, x, y, z}` literal, dropping `label`, `locked`, `zoneId` and `zoneRelativePosition` for every channel on every save. A channel the room map had bound to a zone came back detached, and since the bare record also carries no area attribution, a second entertainment area's placements overwrote the first's. Seeding now preserves the stored record and resolves the displayed coordinates through the zone, and the three write paths (drag, arrow keys, the height slider) go through `model/hueChannelPosition.ts` so a bound channel's `zoneRelativePosition` moves with it — writing only the absolute pair would leave the runtime resolving the old position. Height needed its own helper there: Rust resolves `center_z + scale_z * relative.z` too, and this panel is the only surface that edits `z` at all.
+**The Devices channel map writes the same `hueChannels` the room map does, so it has to carry the whole record rather than flatten it.** It no longer edits positions — placement is authored here — but it still seeds, pushes and takes the bridge's arrangement. Its rebuild once emitted a bare `{channelIndex, x, y, z}` literal, dropping `label`, `locked`, `zoneId` and `zoneRelativePosition` on every save: a zone-bound channel came back detached, and with no area attribution a second entertainment area's placements overwrote the first's. `resolveChannelPlacement` returns the stored record with its world position resolved through the zone, and every position write (drag, nudge, the height inspector, "Take bridge's") goes through `model/hueChannelPosition.ts` so a bound channel's `zoneRelativePosition` moves with it — writing only the absolute pair would leave the runtime resolving the old position. Height has its own helper (`setHueChannelWorldZ`) because Rust resolves `center_z + scale_z * relative.z` too.
 
 **A channel's height carries its provenance, because a stored `z = 0` does not say whether anyone measured it.** Until heights were carried end to end, seeding wrote `z: 0` for every new channel whatever the bridge reported, so a stored `0` is as likely a placeholder as a measurement. `zOrigin` (`"bridge"` | `"user"`, absent ⇒ unknown) settles it without a migration or a schema bump, since an absent field already means "unknown". A new record takes the bridge's `z` stamped `"bridge"`, or `0` with no origin when the bridge reports none. A legacy record with no origin and `z === 0`, not bound to a zone, is a seeding placeholder: it adopts the bridge's height when there is one. A legacy non-zero `z` was authored locally — the height slider, or a zone the channel has since left — so it is stamped `"user"`, and every later slider write (`setHueChannelWorldZ`) stamps `"user"` too. A zone-bound legacy record is left alone — its height is the zone's projection, not a seeded default, and adopting the bridge's would quietly detach it. The start request (`toChannelPlacements`) honours an unknown origin rather than trusting the number: it omits `positionZ`, so the stream keeps the bridge's own height. The bridge write-back consults it the same way: a height of unknown origin keeps the bridge's own `z` instead of writing the placeholder (`merge_service_locations` in `room_map/save_load.rs`; the write path itself is in `hue.md`). The bridge-sync state (`hueSyncState.ts`) does: a recorded arrangement carries `positionZ` only for a height of known origin (or, for a read of the bridge, only when the bridge reported one), and height counts toward "in sync" only when both sides carry one — a snapshot written before heights were recorded compares `x`/`y` alone, so an upgrade does not turn every area "not saved to bridge". "Take bridge's" adopts the bridge's height with `zOrigin: "bridge"` through `setHueChannelWorldZ`, so a zone-bound channel's relative height moves with it (`adoptBridgePlacement` in `hueChannelSeeding.ts`); how the verdict is reached is in `hue.md`. The persisted `z` stays a plain `number`. Only room-aware sampling reads it (below), and only while a TV anchor exists; without one, region, topology and screen affinity still read `x`/`y` alone, so for that user carrying it changes no colour.
 
@@ -76,9 +64,9 @@ colour. That changes when room-aware ambilight lands and the live path starts re
 
 **The frontend projects the geometry at dispatch time and never stores it.** `toRoomGeometry` (`room-map/model/roomGeometry.ts`) is the only projection; its `huePlacements` is `toChannelPlacements`, so zone resolution and the unknown-height rule have one owner. It rides in the runtime-config cache like the other stamps and is stamped onto Ambilight payloads only. Three places keep it off disk and on the wire: `normalizeLightingModeConfig` drops it, so a persisted `lightingMode` can never carry a geometry that outlives its room map; `setLightingMode` re-attaches it after that normalize, because unlike the output stamps Rust does not hydrate it from the store; and the LED popup stamps it itself from the re-read state, because an Ambilight payload without it tells a running worker to go back to legacy sampling. The room map has many writers and none of them knows about the worker, so the main window listens to its own `saveShellState` (`onShellStateSaved`), and a save carrying `roomMap` or `lastHueAreaId` triggers a reload 500 ms after the last one. The re-dispatch is unforced — the geometry is in the dedupe signature — and it is the one hot reload that retries: the dispatcher answers `null` for both a dedup and its 20 ms cooldown, and the cooldown drops rather than queues, so a drag settling right after a brightness commit would otherwise never arrive. One retry is enough, because anything dispatched in between was already hydrated with the new geometry.
 
-**A channel placement names its entertainment area, because `channelIndex` is unique only inside one.** `HueZone` has carried `entertainmentAreaId` since v1.5 and `hueChannelRegionOverrides` is keyed by it; `hueChannels` was the one place that was not, so two areas' channel 0 were a single record and the second area's placements overwrote the first's. The `4 → 5` migration backfills from `lastHueAreaId` — sound because one bridge is paired at a time and, until this landed, a second area *overwrote* rather than joined. A state with no `lastHueAreaId` is left unscoped rather than bound to an invented area, and an unscoped record is adopted by whichever area is being viewed. Treat empty as unscoped rather than testing for `undefined`: the field is nullable like `zoneId` because the Rust mirror echoes `None` back as `null`, and a strict `=== undefined` hides every round-tripped record from every area.
+**A channel placement names its entertainment area, because `channelIndex` is unique only inside one.** `HueZone` has carried `entertainmentAreaId` since v1.5 (and the since-retired `hueChannelRegionOverrides` was keyed by it); `hueChannels` was the one place that was not, so two areas' channel 0 were a single record and the second area's placements overwrote the first's. The `4 → 5` migration backfills from `lastHueAreaId` — sound because one bridge is paired at a time and, until this landed, a second area *overwrote* rather than joined. A state with no `lastHueAreaId` is left unscoped rather than bound to an invented area, and an unscoped record is adopted by whichever area is being viewed. Treat empty as unscoped rather than testing for `undefined`: the field is nullable like `zoneId` because the Rust mirror echoes `None` back as `null`, and a strict `=== undefined` hides every round-tripped record from every area.
 
-**The editor shows one area at a time, and the object-id scheme is why.** Room-map object ids are `hue:<index>` with no area, so rendering two areas at once makes a selection ambiguous — every mutation matching on `channelIndex` alone would hit the same-numbered channel in the other area. `RoomMapEditor` filters to the active `hueAreaId` and writes back through `replaceHueChannel`, which matches area *and* index against the full stored list. Placing several areas independently is P3 work and needs a wider id first.
+**The editor shows one area at a time, and the object-id scheme is why.** Room-map object ids are `hue-<index>` with no area (`model/objectId.ts`), so rendering two areas at once makes a selection ambiguous — every mutation matching on `channelIndex` alone would hit the same-numbered channel in the other area. `RoomMapEditor` filters to the active `hueAreaId` and writes back through `replaceHueChannel`, which matches area *and* index against the full stored list. Placing several areas independently is P3 work and needs a wider id first.
 
 **Anything the Rust zone commands echo back has to exist on the Rust struct, or the round trip erases it.** The four `hue_zone` commands return the channel list and `useRoomMapHueZones` re-applies it wholesale, so a field present in TypeScript and absent from `models/room_map.rs` is silently dropped the moment a channel is assigned to a zone. `locked` had been lost that way since it was added; `entertainmentAreaId` would have joined it. Both are mirrored now, and a channel synthesised by `assign_channel_to_hue_zone` inherits its area from the zone, which belongs to exactly one.
 
