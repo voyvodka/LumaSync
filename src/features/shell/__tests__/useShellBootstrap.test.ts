@@ -329,7 +329,7 @@ describe("useShellBootstrap with Hue left out", () => {
     );
   });
 
-  it("runs on USB, drops Hue for the session only, and raises the notice", async () => {
+  it("runs on USB, drops Hue for the session only, and hands a gate refusal to the rejoin", async () => {
     const bag = sink();
     const { result } = renderHook(() => useShellBootstrap(bag));
     await waitFor(() => expect(result.current.bootstrapDone).toBe(true));
@@ -339,12 +339,34 @@ describe("useShellBootstrap with Hue left out", () => {
     expect(bag.setLightingMode).toHaveBeenLastCalledWith(
       expect.objectContaining({ kind: "ambilight", targets: ["usb"] }),
     );
-    expect(bag.reportHueLeftOut).toHaveBeenCalledWith("unreachable");
-    // Something is running, so the boot busy-retry does not apply.
-    expect(bag.scheduleHueBusyRetry).not.toHaveBeenCalled();
+    // A gate refusal may be a held area, so the notice waits for the rejoin's
+    // first probe instead of calling the bridge unreachable outright.
+    expect(bag.reportHueLeftOut).not.toHaveBeenCalled();
+    expect(bag.scheduleHueBusyRetry).toHaveBeenCalledTimes(1);
+    expect(bag.scheduleHueBusyRetry).toHaveBeenCalledWith(
+      { type: "rejoin", leftOut: "unreachable" },
+      expect.objectContaining({ bridgeIp: "192.168.1.10", areaId: "area-1" }),
+    );
     // The next launch must try Hue again: nothing rewrites the persisted set.
     const patches = saveShellStateMock.mock.calls.map(([patch]) => patch as Record<string, unknown>);
     expect(patches.some((patch) => "lastOutputTargets" in patch)).toBe(false);
+  });
+
+  it.each([
+    ["AUTH_INVALID_CREDENTIALS", "Failed", "auth"],
+    ["TRANSIENT_RETRY_SCHEDULED", "Reconnecting", "unreachable"],
+  ])("raises the notice at once and never rejoins after a %s start", async (code, state, reason) => {
+    startHueMock.mockResolvedValue({
+      active: false,
+      status: { code, message: "refused", details: null, state },
+    });
+    const bag = sink();
+    const { result } = renderHook(() => useShellBootstrap(bag));
+    await waitFor(() => expect(result.current.bootstrapDone).toBe(true));
+
+    expect(bag.setActiveOutputTargets).toHaveBeenLastCalledWith(["usb"]);
+    expect(bag.reportHueLeftOut).toHaveBeenCalledWith(reason);
+    expect(bag.scheduleHueBusyRetry).not.toHaveBeenCalled();
   });
 });
 
@@ -412,7 +434,7 @@ describe("useShellBootstrap with the bridge refusing a Hue-only restore", () => 
     expect(bag.setLightingMode).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "off" }));
     expect(bag.scheduleHueBusyRetry).toHaveBeenCalledTimes(1);
     expect(bag.scheduleHueBusyRetry).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: "ambilight" }),
+      { type: "resume", mode: expect.objectContaining({ kind: "ambilight" }) },
       expect.objectContaining({ bridgeIp: "192.168.1.10", areaId: "area-1" }),
     );
   });

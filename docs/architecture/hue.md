@@ -196,21 +196,36 @@ a Hue start the bridge refuses is settled on the spot (Off, or USB alone with a 
 user or the next launch tries again. The one exception is `mode/state/bootHueRetry.ts`. After an
 unclean exit the bridge keeps counting the dead process as the area's streamer for 10–20 s, so a
 relaunch inside that window has its restore refused and used to land on Off for no reason the user
-could see or fix. When the boot restore ends not running and `start_hue_stream` answered
-`CONFIG_NOT_READY_GATE_BLOCKED`, the frontend polls `check_hue_stream_readiness` every 3 s for up
-to 25 s and, the moment the area is free, re-runs the mode through the interactive handler — once.
+could see or fix. When `start_hue_stream` answered `CONFIG_NOT_READY_GATE_BLOCKED` at boot, the
+frontend polls `check_hue_stream_readiness` every 3 s for up to 25 s and, the moment the area is
+free, acts once. What it does depends on how the restore ended:
 
+- **Off (a Hue-only restore) — resume.** The mode is re-run through the interactive handler.
+- **Running on USB with Hue left out (a `[usb, hue]` restore) — rejoin.** USB runs at once, as the
+  A2 rule says, and Hue is added back through the delta-start path the user's own Hue toggle takes
+  (`startHue`, then a forced `set_lighting_mode` with both targets). That path restarts the running
+  worker, since `set_lighting_mode` retunes in place only when the targets are unchanged — the same
+  brief glitch the user's own add costs. The rejoin enters below the toggle's handler, so it
+  neither cancels itself nor writes `lastOutputTargets`: the drop was session-only, and the saved
+  set still holds Hue.
 - **Busy is decided by readiness, not by the start code.** The gate code also covers an unreachable
   bridge and an unusable area, and its `details` only name the missing prerequisite. Busy means
   the readiness reasons are exactly the `HUE_STREAM_NOT_READY_ACTIVE_STREAMER` sentinel; any other
-  answer (unreachable, re-pair, no channels, area gone) ends the wait at the first probe, before
-  any notice shows. An auth code from the start never qualifies at all.
-- **Boot only, Off only.** A restore that ran on USB with Hue left out keeps the existing notice
-  and is not retried; the interactive paths never schedule it.
-- **The user always wins.** Any lighting-mode choice, deselecting Hue, or any `stopHue` call cancels
-  the wait. The last is attached to the command wrapper in `modeApi.ts`, the same way
-  `stop_hue_stream` cancels the backend's own reconnect retry. The waiting notice says lighting will
-  resume by itself; if the window closes first a second notice says it stayed off.
+  answer (unreachable, re-pair, no channels, area gone) ends the wait at the first probe. An auth
+  code from the start never qualifies at all. For a rejoin this is also why the left-out notice
+  waits for that first probe: by the gate code alone a held area would read "can't reach the
+  bridge". A busy answer raises the `busy` variant (Hue joins by itself), which stays up for the
+  whole wait; any other answer raises the notice the restore would have raised.
+- **Boot only.** The interactive paths never schedule either retry; an interactive `[usb, hue]`
+  start the gate refuses keeps A2's notice and waits for the user.
+- **The user always wins.** Any lighting-mode choice, any output-target change, or any `stopHue`
+  call cancels the wait — the resume keeps running through a target change that still includes Hue,
+  the rejoin does not. A slider tweak of the running mode is not a mode choice and cancels nothing.
+  The `stopHue` hook is attached to the command wrapper in `modeApi.ts`, the same way
+  `stop_hue_stream` cancels the backend's own reconnect retry. The resume's notice says lighting
+  will resume by itself and, if the window closes first, that it stayed off; the rejoin's says Hue
+  will join, is cleared when it does, and turns into "stayed busy, running on USB only" if the
+  window closes first.
 
 ## Gotchas
 

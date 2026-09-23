@@ -121,6 +121,10 @@ export const HUE_LEFT_OUT_REASON = {
   UNREACHABLE: "unreachable",
   AUTH: "auth",
   CONFIG: "config",
+  /** Boot only: the area is held and Hue is added back once it frees. Never auto-dismissed. */
+  BUSY: "busy",
+  /** Boot only: the area stayed held for the whole wait. */
+  BUSY_GAVE_UP: "busyGaveUp",
 } as const;
 
 export type HueLeftOutReason = (typeof HUE_LEFT_OUT_REASON)[keyof typeof HUE_LEFT_OUT_REASON];

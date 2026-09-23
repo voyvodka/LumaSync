@@ -12,7 +12,7 @@ import {
   type CaptureFailureNotice,
 } from "@/shared/contracts/capture";
 import { HUE_RUNTIME_TRIGGER_SOURCE, type HueRuntimeTarget } from "@/shared/contracts/hue";
-import { LIGHTING_MODE_GATE_STATUS, type HueLeftOutReason } from "@/shared/contracts/lighting";
+import { HUE_LEFT_OUT_REASON, LIGHTING_MODE_GATE_STATUS, type HueLeftOutReason } from "@/shared/contracts/lighting";
 
 import { getScreenCapturePermission } from "../captureApi";
 import { setHueSolidColor, startHue, stopHue, stopLighting, type ModeCommandResult } from "../modeApi";
@@ -38,7 +38,7 @@ import {
   shouldReleaseHueAfterRefusal,
   usbStartRefusalNotice,
 } from "./modeApplyOutcome";
-import { useBootHueRetry, type BootHueRetryNotice } from "./bootHueRetry";
+import { useBootHueRetry, type BootHueRetryNotice, type BootHueRetryPlan } from "./bootHueRetry";
 import { useLightingModeDispatch, type LightingModeDispatcher } from "./useLightingModeDispatch";
 import { useLightingModePersistence } from "./useLightingModePersistence";
 import type { ModeRuntimeConfig } from "./useModeRuntimeConfig";
@@ -77,8 +77,8 @@ export interface LightingModeOrchestrator {
   reportHueLeftOut: (reason: HueLeftOutReason) => void;
   /** A boot restore is waiting for the bridge to free its area, or gave up waiting. */
   bootHueRetryNotice: BootHueRetryNotice | null;
-  /** Boot only: retry a restore the bridge refused because its area was still held. */
-  scheduleBootHueRetry: (mode: LightingModeConfig, config: HueStartConfig) => void;
+  /** Boot only: resume a restore, or add Hue back to one, that a held area refused. */
+  scheduleBootHueRetry: (plan: BootHueRetryPlan, config: HueStartConfig) => void;
   handleLightingModeChange: (mode: LightingModeConfig) => Promise<void>;
   handleOutputTargetsChange: (targets: HueRuntimeTarget[]) => Promise<void>;
   /** Hot-reload props push a config nudge without going through a transition. */
@@ -160,6 +160,7 @@ export function useLightingModeOrchestrator({
   }, [lightingMode]);
 
   const handleLightingModeChangeRef = useRef<((mode: LightingModeConfig) => Promise<void>) | null>(null);
+  const applyOutputTargetsRef = useRef<((targets: HueRuntimeTarget[], persist: boolean) => Promise<void>) | null>(null);
   const resumeAfterBootHueRetry = useCallback(async (mode: LightingModeConfig) => {
     // Anything that started a mode meanwhile has already had its say.
     if (lightingModeRef.current.kind !== LIGHTING_MODE_KIND.OFF) return;
@@ -169,22 +170,36 @@ export function useLightingModeOrchestrator({
       solid: mode.solid,
     });
   }, []);
-  const bootHueRetry = useBootHueRetry(resumeAfterBootHueRetry);
+  // No guard of its own: every mode or output choice cancels the wait first,
+  // and the delta path already starts nothing while Off.
+  const rejoinAfterBootHueRetry = useCallback(async () => {
+    // Not persisted: `lastOutputTargets` never lost Hue, since the drop was session-only.
+    await applyOutputTargetsRef.current?.([...selectedOutputTargetsRef.current, "hue"], false);
+  }, []);
+  const bootHueRetry = useBootHueRetry({
+    resume: resumeAfterBootHueRetry,
+    rejoin: rejoinAfterBootHueRetry,
+    setHueLeftOut: setHueLeftOutNotice,
+  });
   const cancelBootHueRetry = bootHueRetry.cancel;
+  const isBootHueRejoinPending = bootHueRetry.isRejoinPending;
 
-  const handleOutputTargetsChange = useCallback(async (targets: HueRuntimeTarget[]) => {
+  // The delta path the user's own output toggle takes. The boot rejoin enters
+  // here directly: the same dispatch, without persisting or cancelling itself.
+  const applyOutputTargets = useCallback(async (targets: HueRuntimeTarget[], persist: boolean) => {
     // The toggles stay live while this runs, so a user can remove Hue before
     // the add that started first has finished. Without the guard that add
     // lands afterwards and puts Hue back into the active set.
     const isLatest = outputTargetsGuardRef.current.begin();
     const normalizedTargets = normalizeOutputTargets(targets);
-    if (!normalizedTargets.includes("hue")) cancelBootHueRetry("Hue was deselected");
     const prevTargets = selectedOutputTargets;
     setSelectedOutputTargets(normalizedTargets);
-    try {
-      await saveShellState({ lastOutputTargets: normalizedTargets });
-    } catch (err) {
-      console.error("[LumaSync] saveShellState(lastOutputTargets) failed:", err);
+    if (persist) {
+      try {
+        await saveShellState({ lastOutputTargets: normalizedTargets });
+      } catch (err) {
+        console.error("[LumaSync] saveShellState(lastOutputTargets) failed:", err);
+      }
     }
 
     // Delta logic — only when a mode is actively running (not OFF)
@@ -441,7 +456,25 @@ export function useLightingModeOrchestrator({
         }
       }
     }
-  }, [lightingMode, selectedOutputTargets, hueStartConfig, hydrateModePayload, dispatchSetLightingMode, reportHueSolidColorStatus, cancelBootHueRetry]);
+  }, [lightingMode, selectedOutputTargets, hueStartConfig, hydrateModePayload, dispatchSetLightingMode, reportHueSolidColorStatus]);
+
+  useEffect(() => {
+    applyOutputTargetsRef.current = applyOutputTargets;
+  }, [applyOutputTargets]);
+
+  const handleOutputTargetsChange = useCallback(
+    (targets: HueRuntimeTarget[]) => {
+      const normalizedTargets = normalizeOutputTargets(targets);
+      if (!normalizedTargets.includes("hue")) {
+        cancelBootHueRetry("Hue was deselected");
+      } else if (isBootHueRejoinPending()) {
+        // The user turned Hue on themselves; their add answers for itself.
+        cancelBootHueRetry("the output targets changed");
+      }
+      return applyOutputTargets(normalizedTargets, true);
+    },
+    [applyOutputTargets, cancelBootHueRetry, isBootHueRejoinPending],
+  );
 
 
   // Same shape as the notice above. The dismissal used to be an untracked
@@ -460,15 +493,14 @@ export function useLightingModeOrchestrator({
   }, [startFailedNotice]);
 
   useEffect(() => {
-    if (!hueLeftOutNotice) return;
+    // The busy notice describes a wait still under way; the retry replaces or clears it.
+    if (!hueLeftOutNotice || hueLeftOutNotice === HUE_LEFT_OUT_REASON.BUSY) return;
     const timerId = window.setTimeout(() => setHueLeftOutNotice(null), HUE_LEFT_OUT_NOTICE_MS);
     return () => window.clearTimeout(timerId);
   }, [hueLeftOutNotice]);
 
   const handleLightingModeChange = useCallback(
     async (nextMode: LightingModeConfig) => {
-      // Any mode choice, the retry's own included, supersedes a pending boot retry.
-      cancelBootHueRetry("the lighting mode changed");
       const normalizedNextMode = normalizeLightingModeConfig({
         kind: nextMode.kind,
         solid: nextMode.solid ?? lightingMode.solid,
@@ -485,6 +517,9 @@ export function useLightingModeOrchestrator({
         normalizedNextMode.kind === LIGHTING_MODE_KIND.AMBILIGHT &&
         lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT;
       const isQuickAdjustment = isQuickSolidAdjustment || isQuickAmbilightAdjustment;
+      // Any mode choice, the retry's own included, supersedes a pending boot
+      // retry. A slider tweak is not a choice: a rejoin adds Hue to the tweaked mode.
+      if (!isQuickAdjustment) cancelBootHueRetry("the lighting mode changed");
 
       // fix #45 — quick adjustments dispatch unconditionally; the lock-gate is
       // strictly for kind-changing transitions. Queueing them behind it wedged

@@ -101,6 +101,8 @@ const common: Catalogue<typeof enCommon> = {
     unreachable: "Hue köprüsüne ulaşılamıyor — şimdilik yalnızca USB ile çalışıyor. Köprü geri geldiğinde Hue'yu yeniden açın.",
     auth: "Hue yeniden eşleştirilmeli — şimdilik yalnızca USB ile çalışıyor. Cihazlar'dan tekrar eşleştirin.",
     config: "Hue kurulmamış — şimdilik yalnızca USB ile çalışıyor.",
+    busy: "Hue köprüsü önceki bir oturumu hâlâ tutuyor — şimdilik yalnızca USB ile çalışıyor. Köprü bıraktığı anda Hue kendiliğinden katılacak.",
+    busyGaveUp: "Hue köprüsü başka bir oturumla meşgul kaldı — yalnızca USB ile çalışıyor. Köprü boşalınca Hue'yu yeniden açın.",
   },
   hueBootRetry: {
     waiting: "Hue köprüsü önceki bir oturumu hâlâ tutuyor. Köprü bıraktığı anda aydınlatma kendiliğinden devam edecek.",

@@ -1705,6 +1705,289 @@ describe("App mode orchestration", () => {
         expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
       });
     });
+
+    // The same relaunch with a strip plugged in: the restore runs on USB alone
+    // at once, and Hue used to stay out for the rest of the session.
+    describe("a [usb, hue] restore whose bridge still holds the previous session", () => {
+      let bridgeAnswer: "busy" | "free" | "unreachable";
+      let hueUp: boolean;
+      let hueStartCode: string;
+
+      const leftOutNotice = () => screen.queryByTestId("hue-left-out-notice");
+      const readinessProbes = () =>
+        invokeMock.mock.calls.filter(([command]) => command === HUE_COMMANDS.CHECK_STREAM_READINESS).length;
+      const persistedTargets = () =>
+        saveShellStateMock.mock.calls
+          .map(([patch]) => patch as Record<string, unknown>)
+          .filter((patch) => "lastOutputTargets" in patch);
+
+      async function renderRunningOnUsb() {
+        render(<App />);
+        await waitFor(() => {
+          expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight");
+          expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+        });
+      }
+
+      async function waitForBusyNotice() {
+        await waitFor(() => {
+          expect(leftOutNotice()).toHaveAttribute("data-reason", "busy");
+        });
+      }
+
+      async function freeTheAreaAndWait(ms: number) {
+        bridgeAnswer = "free";
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(ms);
+        });
+      }
+
+      beforeEach(() => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        vi.spyOn(console, "info").mockImplementation(() => {});
+        bridgeAnswer = "busy";
+        hueUp = false;
+        hueStartCode = "CONFIG_NOT_READY_GATE_BLOCKED";
+        installInvokeDispatch(true);
+        const base = invokeMock.getMockImplementation()!;
+        invokeMock.mockImplementation((command: string, ...rest: unknown[]) => {
+          if (command !== HUE_COMMANDS.CHECK_STREAM_READINESS) return base(command, ...rest);
+          if (bridgeAnswer === "unreachable") {
+            return Promise.resolve({
+              status: { code: HUE_STATUS.STREAM_READINESS_FAILED, message: "down", details: null },
+              readiness: { ready: false, reasons: ["Bridge unreachable"] },
+            });
+          }
+          const busy = bridgeAnswer === "busy";
+          return Promise.resolve({
+            status: {
+              code: busy ? HUE_STATUS.STREAM_NOT_READY : HUE_STATUS.STREAM_READY,
+              message: "readiness",
+              details: null,
+            },
+            readiness: { ready: !busy, reasons: busy ? [HUE_READINESS_REASON.ACTIVE_STREAMER] : [] },
+          });
+        });
+        loadShellStateMock.mockResolvedValue({
+          ...hueAmbilightShellState,
+          ledCalibration: {
+            templateId: "monitor-27-16-9",
+            counts: { top: 10, right: 10, bottom: 10, left: 10 },
+            bottomMissing: 0,
+            cornerOwnership: "horizontal",
+            visualPreset: "subtle",
+            startAnchor: "top-start",
+            direction: "cw",
+            totalLeds: 40,
+          },
+          lastOutputTargets: ["usb", "hue"],
+        });
+        getHueStreamStatusMock.mockImplementation(() => Promise.resolve(hueStatus(hueUp ? "Running" : "Idle")));
+        startHueMock.mockImplementation(() => {
+          if (bridgeAnswer !== "free") {
+            return Promise.resolve({
+              active: false,
+              status: { code: hueStartCode, state: "Idle", message: "blocked", details: "Missing prerequisites: ready" },
+            });
+          }
+          hueUp = true;
+          return Promise.resolve({
+            active: true,
+            status: { code: "HUE_STREAM_RUNNING", state: "Running", message: "ok", details: null },
+          });
+        });
+        setLightingModeMock.mockImplementation((payload: LightingModeConfig) =>
+          Promise.resolve(
+            (payload.targets ?? []).includes("hue") && !hueUp
+              ? {
+                  active: false,
+                  mode: { kind: "off" },
+                  status: { code: "HUE_NOT_READY", message: "not ready", details: "HUE_RUNTIME_GATE_FAILED" },
+                }
+              : appliedResult(payload),
+          ),
+        );
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+        vi.restoreAllMocks();
+      });
+
+      it("runs on USB at once, then adds Hue to the running mode once the area frees", async () => {
+        await renderRunningOnUsb();
+        expect(setLightingModeMock.mock.calls.map(([payload]) => payload.targets)).toEqual([
+          ["usb", "hue"],
+          ["usb"],
+        ]);
+        await waitForBusyNotice();
+        expect(leftOutNotice()).toHaveTextContent("common:hueLeftOut.busy");
+        // Lighting runs, so the Off-only notice would be false.
+        expect(screen.queryByTestId("hue-boot-retry-notice")).not.toBeInTheDocument();
+
+        // The notice describes a wait still under way, so it outlives the usual 8 s.
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(9_000);
+        });
+        expect(leftOutNotice()).toHaveAttribute("data-reason", "busy");
+
+        await freeTheAreaAndWait(3_000);
+
+        await waitFor(() => {
+          expect(screen.getByTestId("output-targets")).toHaveTextContent("usb,hue");
+          expect(screen.getByTestId("hue-shown-state")).toHaveTextContent("streaming");
+        });
+        expect(leftOutNotice()).not.toBeInTheDocument();
+        expect(startHueMock).toHaveBeenCalledTimes(2);
+        // The user's own Hue add: a forced re-apply of the running mode with both targets.
+        const lastPayload = setLightingModeMock.mock.calls[setLightingModeMock.mock.calls.length - 1][0] as LightingModeConfig;
+        expect(lastPayload).toEqual(expect.objectContaining({ kind: "ambilight", targets: ["usb", "hue"] }));
+        expect(stopLightingMock).not.toHaveBeenCalled();
+        expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight");
+        // Neither the drop nor the rejoin rewrites what the next launch restores.
+        expect(persistedTargets()).toEqual([]);
+      });
+
+      it("keeps running on USB, with a gave-up notice, when the window closes", async () => {
+        await renderRunningOnUsb();
+        await waitForBusyNotice();
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(30_000);
+        });
+
+        await waitFor(() => {
+          expect(leftOutNotice()).toHaveAttribute("data-reason", "busyGaveUp");
+        });
+        expect(leftOutNotice()).toHaveTextContent("common:hueLeftOut.busyGaveUp");
+        expect(startHueMock).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+        expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight");
+
+        await freeTheAreaAndWait(8_000);
+        expect(leftOutNotice()).not.toBeInTheDocument();
+        expect(startHueMock).toHaveBeenCalledTimes(1);
+        expect(persistedTargets()).toEqual([]);
+      });
+
+      it("drops the rejoin when the user picks a mode while it waits", async () => {
+        await renderRunningOnUsb();
+        await waitForBusyNotice();
+
+        await act(async () => {
+          screen.getByRole("button", { name: "set-solid" }).click();
+        });
+        await waitFor(() => {
+          expect(screen.getByTestId("active-mode")).toHaveTextContent("solid");
+        });
+        expect(leftOutNotice()).not.toBeInTheDocument();
+
+        await freeTheAreaAndWait(30_000);
+        expect(startHueMock).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+      });
+
+      it("drops the rejoin when the user changes the outputs while it waits", async () => {
+        await renderRunningOnUsb();
+        await waitForBusyNotice();
+
+        await act(async () => {
+          screen.getByRole("button", { name: "set-usb-target" }).click();
+        });
+        expect(leftOutNotice()).not.toBeInTheDocument();
+
+        await freeTheAreaAndWait(30_000);
+        expect(startHueMock).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+      });
+
+      it("lets the user's own Hue add answer for itself instead of adding Hue twice", async () => {
+        await renderRunningOnUsb();
+        await waitForBusyNotice();
+
+        await act(async () => {
+          screen.getByRole("button", { name: "set-both-targets" }).click();
+        });
+        // Still held, so the user's add is left out the way any interactive add is.
+        await waitFor(() => {
+          expect(leftOutNotice()).toHaveAttribute("data-reason", "unreachable");
+        });
+        expect(startHueMock).toHaveBeenCalledTimes(2);
+
+        await freeTheAreaAndWait(30_000);
+        expect(startHueMock).toHaveBeenCalledTimes(2);
+        expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+      });
+
+      it("keeps waiting through a slider tweak, which is not a mode choice", async () => {
+        await renderRunningOnUsb();
+        await waitForBusyNotice();
+
+        await act(async () => {
+          screen.getByRole("button", { name: "set-ambilight-reordered" }).click();
+        });
+        expect(leftOutNotice()).toHaveAttribute("data-reason", "busy");
+
+        await freeTheAreaAndWait(3_000);
+        await waitFor(() => {
+          expect(screen.getByTestId("output-targets")).toHaveTextContent("usb,hue");
+        });
+        expect(startHueMock).toHaveBeenCalledTimes(2);
+      });
+
+      it("never waits on a bridge that refused the app's key", async () => {
+        hueStartCode = "AUTH_INVALID_CREDENTIALS";
+        await renderRunningOnUsb();
+        await waitFor(() => {
+          expect(leftOutNotice()).toHaveAttribute("data-reason", "auth");
+        });
+
+        await freeTheAreaAndWait(30_000);
+        expect(readinessProbes()).toBe(0);
+        expect(startHueMock).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+      });
+
+      it("never waits on a bridge that is unreachable rather than busy", async () => {
+        bridgeAnswer = "unreachable";
+        await renderRunningOnUsb();
+        await waitFor(() => {
+          expect(leftOutNotice()).toHaveAttribute("data-reason", "unreachable");
+        });
+
+        await freeTheAreaAndWait(30_000);
+        expect(readinessProbes()).toBe(1);
+        expect(startHueMock).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+      });
+
+      // A2 stays as it was outside boot: the user is present and can turn Hue on.
+      it("does not rejoin Hue after an interactive start left it out", async () => {
+        loadShellStateMock.mockResolvedValue({
+          ...(await loadShellStateMock()),
+          lightingMode: { kind: "off" },
+        });
+        render(<App />);
+        await waitFor(() => {
+          expect(screen.getByTestId("calibration-leds")).toHaveTextContent("40");
+          expect(screen.getByTestId("output-targets")).toHaveTextContent("usb,hue");
+        });
+
+        await act(async () => {
+          screen.getByRole("button", { name: "set-ambilight" }).click();
+        });
+        await waitFor(() => {
+          expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight");
+          expect(leftOutNotice()).toHaveAttribute("data-reason", "unreachable");
+        });
+
+        await freeTheAreaAndWait(30_000);
+        expect(readinessProbes()).toBe(0);
+        expect(startHueMock).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+      });
+    });
   });
 
   // An upgrader has no `hasCompletedOnboarding` on disk, and bootstrap clears the

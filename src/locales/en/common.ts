@@ -99,6 +99,8 @@ export default {
     unreachable: "Can't reach the Hue bridge — running on USB only for now. Turn Hue back on once the bridge is back.",
     auth: "Hue needs to be paired again — running on USB only for now. Re-pair it in Devices.",
     config: "Hue isn't set up — running on USB only for now.",
+    busy: "The Hue bridge is still holding an earlier session — running on USB only for now. Hue joins by itself as soon as the bridge lets go.",
+    busyGaveUp: "The Hue bridge stayed busy with another session — running on USB only. Turn Hue back on once the bridge is free.",
   },
   hueBootRetry: {
     waiting: "The Hue bridge is still holding an earlier session. Lighting resumes by itself as soon as the bridge lets go.",
