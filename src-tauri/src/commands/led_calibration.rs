@@ -305,6 +305,15 @@ pub fn frame_wire_time_ms(total_leds: u16, bytes_per_pixel: usize) -> u64 {
         .max(1)
 }
 
+/// Time the link needs to shift `bytes`, unrounded — what the serial writer
+/// paces by. `frame_wire_time_ms` is the same arithmetic rounded up for the
+/// worker's millisecond interval.
+pub fn wire_duration(bytes: usize) -> std::time::Duration {
+    std::time::Duration::from_nanos(
+        (bytes as u64).saturating_mul(1_000_000_000) / SERIAL_LINK_BYTES_PER_SEC as u64,
+    )
+}
+
 /// Frames per second the link can physically carry for this strip.
 pub fn link_max_fps(total_leds: u16, bytes_per_pixel: usize) -> f32 {
     SERIAL_LINK_BYTES_PER_SEC as f32 / frame_wire_bytes(total_leds, bytes_per_pixel) as f32

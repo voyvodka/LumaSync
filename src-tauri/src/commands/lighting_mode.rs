@@ -2223,7 +2223,7 @@ fn apply_mode_change_inner(
                         );
                         owner
                             .output_bridge
-                            .send_packet_to_port(port_name, &solid_packet)
+                            .send_packet_to_port_and_wait(port_name, &solid_packet)
                             .map_err(|error| error.as_reason())
                     }
                     UsbOutputPlan::Wled(cfg) => {
@@ -6943,6 +6943,44 @@ mod lighting_mode_tests {
             .iter()
             .fold(0_u8, |acc, byte| acc ^ byte);
         assert_eq!(packet[packet.len() - 1], checksum);
+    }
+
+    /// Streaming hands packets to the serial writer and learns of a failure one
+    /// send later. Solid is a single write, so it must wait for its own.
+    #[test]
+    fn solid_reports_its_own_serial_write_failure() {
+        struct RefusingPort;
+        impl std::io::Write for RefusingPort {
+            fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::ErrorKind::BrokenPipe.into())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let (mut owner, _) = owner_with_recording_sender();
+        owner.output_bridge =
+            LedOutputBridge::with_serial_writer_for_tests(|_| Ok(Box::new(RefusingPort)));
+
+        let result = apply_mode_change(
+            &mut owner,
+            solid_with_calibration(10),
+            true,
+            Some("COM-REFUSING"),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(result.status.code, "SOLID_MODE_APPLY_FAILED");
+        let details = result.status.details.expect("the reason rides details");
+        assert!(
+            details.starts_with("LED_OUTPUT_WRITE_FAILED"),
+            "got: {details}"
+        );
     }
 
     /// The default setup (LumaSync v1 + WS2812B) used to ignore the gamma

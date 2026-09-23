@@ -17,17 +17,29 @@ import {
   DEVICE_COMMANDS,
   SERIAL_CONNECT_STATUS,
   SERIAL_PORT_LIST_STATUS,
+  pixelLayoutForChipType,
   type SerialCommandStatusCode,
+  type SerialFirmwareInfo,
 } from "../../src/shared/contracts/device";
 import { HUE_RUNTIME_STATES } from "../../src/shared/contracts/hue";
 import { LINK_MAX_FPS_ABSENT } from "../../src/shared/contracts/telemetry";
 import type { HealthStepResult } from "../../src/features/device/deviceConnectionApi";
-import { getWorld, mutate } from "../state";
+import { getWorld, mutate, type MockSerialPort } from "../state";
 import { hueRuntimeFault } from "./hue";
 import { status } from "./status";
 import type { TypedHandlers } from "./types";
 
 const now = () => Date.now();
+
+// Obviously synthetic on purpose: nobody should mistake a fixture's advertised
+// firmware for a real handshake response. The layout follows the strip the
+// port drives, so switching the Settings chip type shows the mismatch marker.
+const mockFirmware = (port: MockSerialPort): SerialFirmwareInfo => ({
+  version: "9.9",
+  versionRaw: 0x0909,
+  profile: port.firmwareProfile,
+  pixelLayout: pixelLayoutForChipType(port.chipType),
+});
 
 export const deviceHandlers = {
   [DEVICE_COMMANDS.LIST_PORTS]: () => {
@@ -92,12 +104,14 @@ export const deviceHandlers = {
       connected: true,
       status: status(SERIAL_CONNECT_STATUS.OK, "Connected"),
       updatedAtUnixMs: now(),
+      firmware: mockFirmware(port),
     };
   },
 
   [DEVICE_COMMANDS.GET_CONNECTION_STATUS]: () => {
     const { serial } = getWorld();
     const connected = serial.connectedPort !== null;
+    const port = serial.ports.find((p) => p.name === serial.connectedPort);
     return {
       portName: serial.connectedPort,
       connected,
@@ -105,6 +119,7 @@ export const deviceHandlers = {
         ? status(SERIAL_CONNECT_STATUS.OK, "Connected")
         : status(SERIAL_CONNECT_STATUS.IDLE, "Nothing connected"),
       updatedAtUnixMs: now(),
+      ...(port === undefined ? {} : { firmware: mockFirmware(port) }),
     };
   },
 
@@ -145,10 +160,9 @@ export const deviceHandlers = {
       steps,
       checkedAtUnixMs: now(),
       roundTripMs: failed ? undefined : 12,
-      // Obviously synthetic on purpose: nobody should mistake a fixture's
-      // advertised firmware for a real handshake response.
-      firmwareVersion: failed ? undefined : "9.9.9-mock",
+      firmwareVersion: failed || port === undefined ? undefined : mockFirmware(port).version,
       advertisedFirmwareProfile: failed ? undefined : port?.firmwareProfile,
+      firmware: failed || port === undefined ? undefined : mockFirmware(port),
     };
   },
 

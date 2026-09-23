@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import type { FirmwareProfile } from "@/shared/contracts/device";
+import type { FirmwarePixelLayout, FirmwareProfile } from "@/shared/contracts/device";
 import {
   firmwareProfileEvents as defaultFirmwareProfileEvents,
+  type FirmwareProfileEvent,
   type FirmwareProfileEventBus,
 } from "./firmwareProfileEvents";
 
@@ -10,15 +11,30 @@ export interface UseAdvertisedFirmwareProfileDeps {
   firmwareProfileEvents?: FirmwareProfileEventBus;
 }
 
-// Read-only snapshot, no controller mount / port scan — `undefined` until
-// some controller's health check has run this session (Bug H4).
+const UNKNOWN_FIRMWARE: FirmwareProfileEvent = {
+  advertisedFirmwareProfile: undefined,
+  advertisedPixelLayout: undefined,
+};
+
+// Read-only snapshot, no controller mount / port scan — unknown until some
+// controller has connected or run a health check this session (Bug H4).
+function useAdvertisedFirmware(deps: UseAdvertisedFirmwareProfileDeps): FirmwareProfileEvent {
+  const bus = deps.firmwareProfileEvents ?? defaultFirmwareProfileEvents;
+  const [advertised, setAdvertised] = useState<FirmwareProfileEvent>(UNKNOWN_FIRMWARE);
+
+  useEffect(() => bus.subscribe(setAdvertised), [bus]);
+
+  return advertised;
+}
+
 export function useAdvertisedFirmwareProfile(
   deps: UseAdvertisedFirmwareProfileDeps = {},
 ): FirmwareProfile | undefined {
-  const bus = deps.firmwareProfileEvents ?? defaultFirmwareProfileEvents;
-  const [advertised, setAdvertised] = useState<FirmwareProfile | undefined>(undefined);
+  return useAdvertisedFirmware(deps).advertisedFirmwareProfile;
+}
 
-  useEffect(() => bus.subscribe((event) => setAdvertised(event.advertisedFirmwareProfile)), [bus]);
-
-  return advertised;
+export function useAdvertisedPixelLayout(
+  deps: UseAdvertisedFirmwareProfileDeps = {},
+): FirmwarePixelLayout | undefined {
+  return useAdvertisedFirmware(deps).advertisedPixelLayout;
 }

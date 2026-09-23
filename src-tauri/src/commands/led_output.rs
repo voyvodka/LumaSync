@@ -3,14 +3,16 @@
 
 use std::collections::HashMap;
 use std::io::Write;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::{Arc, Condvar, Mutex};
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
 use super::device_connection::SerialConnectionState;
 use super::device_connection::BOOTLOADER_SETTLE_DELAY_MS;
+use super::led_calibration::wire_duration;
 
 const OUTPUT_BAUD_RATE: u32 = 115_200;
 const OUTPUT_TIMEOUT_MS: u64 = 500;
@@ -144,7 +146,11 @@ impl LedColorOrder {
 /// and the 115 200-baud frame budget sizes frames from it, so the two cannot
 /// disagree — the budget once charged that fallback 4 bytes a pixel and
 /// capped its frame rate a quarter below what the link carries.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+///
+/// It is also what a LumaSync firmware advertises it expects, in the PONG's
+/// high nibble (`device_handshake.rs`), serialised as `"rgb"` / `"rgbw"`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum WirePixelLayout {
     Rgb,
     Rgbw,
@@ -579,7 +585,18 @@ impl LedOutputError {
 /// Low-level write abstraction behind `LedOutputBridge`, so the bridge and
 /// its callers can be tested without opening a real serial port.
 pub trait LedPacketSender: Send + Sync {
+    /// Hand `packet` over for writing. The serial implementation returns before
+    /// the bytes are on the wire; a write that fails is reported by the next
+    /// call for the same port.
     fn send(&self, port_name: &str, packet: &[u8]) -> Result<(), LedOutputError>;
+    /// Like `send`, but returns once this packet has left the host, so a
+    /// one-shot write (Solid) reports its own outcome.
+    fn send_and_wait(&self, port_name: &str, packet: &[u8]) -> Result<(), LedOutputError> {
+        self.send(port_name, packet)
+    }
+    /// Block until everything queued for `port_name` has been handled.
+    #[cfg(test)]
+    fn wait_idle(&self, _port_name: &str) {}
     /// Drop the cached writer for `port_name`. Called by `set_active_port`
     /// (lighting_mode.rs) when the active port switches to a different one,
     /// so the abandoned port's OS handle is released instead of staying open
@@ -591,20 +608,272 @@ pub trait LedPacketSender: Send + Sync {
 
 type PortFactory = dyn Fn(&str) -> Result<Box<dyn Write + Send>, LedOutputError> + Send + Sync;
 
+/// How long a writer waits, after starting a packet of this many bytes,
+/// before it starts the next one.
+type WriterPacing = fn(usize) -> Duration;
+
+/// Paces a little under the nominal 11 520 bytes/s, so an adapter that clocks
+/// slightly slow never lets a backlog build in the OS buffer.
+const WRITER_PACING_MARGIN_PERCENT: u32 = 2;
+
+fn link_pacing(packet_len: usize) -> Duration {
+    wire_duration(packet_len) * (100 + WRITER_PACING_MARGIN_PERCENT) / 100
+}
+
+/// How long dropping a session waits for its writer to exit. A write already
+/// in progress finishes or hits `OUTPUT_TIMEOUT_MS` first; past this bound the
+/// writer is detached rather than stalling the caller.
+const WRITER_EXIT_TIMEOUT: Duration = Duration::from_millis(OUTPUT_TIMEOUT_MS + 100);
+
+/// What `send_and_wait` allows beyond its packet's wire time: a pacing wait for
+/// the packet before it, then the write and the drain, each bounded by the
+/// port timeout.
+const CONFIRM_SLACK: Duration = Duration::from_millis(3 * OUTPUT_TIMEOUT_MS);
+
+/// State shared between a session and its writer thread. `packet` is a
+/// latest-wins slot: a send overwrites whatever the writer has not taken yet.
+#[derive(Default)]
+struct WriterSlot {
+    packet: Vec<u8>,
+    pending: bool,
+    queued: u64,
+    written: u64,
+    /// Packets up to this sequence number are drained after writing.
+    drain_through: u64,
+    failure: Option<LedOutputError>,
+    closing: bool,
+    exited: bool,
+}
+
+#[derive(Default)]
+struct WriterShared {
+    slot: Mutex<WriterSlot>,
+    changed: Condvar,
+}
+
+impl WriterShared {
+    fn lock(&self) -> std::sync::MutexGuard<'_, WriterSlot> {
+        self.slot
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Wait until the writer has finished packet `seq` (or a newer one).
+    fn wait_written(&self, seq: u64, timeout: Duration) -> Result<(), LedOutputError> {
+        let deadline = Instant::now() + timeout;
+        let mut slot = self.lock();
+        loop {
+            if let Some(failure) = &slot.failure {
+                return Err(failure.clone());
+            }
+            if slot.written >= seq {
+                return Ok(());
+            }
+            let now = Instant::now();
+            if slot.exited || now >= deadline {
+                return Err(LedOutputError::new(
+                    "LED_OUTPUT_WRITE_FAILED",
+                    Some(format!(
+                        "The serial writer did not finish the packet within {} ms.",
+                        timeout.as_millis()
+                    )),
+                ));
+            }
+            slot = self
+                .changed
+                .wait_timeout(slot, deadline - now)
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .0;
+        }
+    }
+}
+
+/// One open port and the thread that writes to it. See
+/// docs/architecture/device-output.md, "The serial write never blocks the worker".
+struct WriterSession {
+    shared: Arc<WriterShared>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl WriterSession {
+    fn spawn(port: Box<dyn Write + Send>, pacing: WriterPacing) -> Result<Self, LedOutputError> {
+        let shared = Arc::new(WriterShared::default());
+        let for_thread = Arc::clone(&shared);
+        let thread = std::thread::Builder::new()
+            .name("lumasync-serial-writer".into())
+            .spawn(move || run_writer(port, &for_thread, pacing))
+            .map_err(|error| {
+                LedOutputError::new("LED_OUTPUT_PORT_UNAVAILABLE", Some(error.to_string()))
+            })?;
+        Ok(Self {
+            shared,
+            thread: Some(thread),
+        })
+    }
+
+    /// Replace the pending packet, or report the failure that ended the writer.
+    /// Copies into a buffer the writer hands back, so it does not allocate once
+    /// both buffers have grown to the frame size.
+    fn queue(&self, packet: &[u8], drain: bool) -> Result<u64, LedOutputError> {
+        let mut slot = self.shared.lock();
+        if let Some(failure) = &slot.failure {
+            return Err(failure.clone());
+        }
+        if slot.exited {
+            return Err(LedOutputError::new(
+                "LED_OUTPUT_PORT_UNAVAILABLE",
+                Some("The serial writer has stopped.".to_string()),
+            ));
+        }
+        slot.packet.clear();
+        slot.packet.extend_from_slice(packet);
+        slot.pending = true;
+        slot.queued += 1;
+        let seq = slot.queued;
+        if drain {
+            slot.drain_through = seq;
+        }
+        drop(slot);
+        self.shared.changed.notify_all();
+        Ok(seq)
+    }
+
+    #[cfg(test)]
+    fn wait_idle(&self) {
+        let seq = self.shared.lock().queued;
+        let _ = self.shared.wait_written(seq, Duration::from_secs(5));
+    }
+}
+
+impl Drop for WriterSession {
+    fn drop(&mut self) {
+        self.shared.lock().closing = true;
+        self.shared.changed.notify_all();
+
+        let deadline = Instant::now() + WRITER_EXIT_TIMEOUT;
+        let mut slot = self.shared.lock();
+        while !slot.exited {
+            let now = Instant::now();
+            if now >= deadline {
+                break;
+            }
+            slot = self
+                .shared
+                .changed
+                .wait_timeout(slot, deadline - now)
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .0;
+        }
+        let exited = slot.exited;
+        drop(slot);
+
+        if let Some(thread) = self.thread.take() {
+            if exited {
+                let _ = thread.join();
+            } else {
+                log::warn!(
+                    "[serial-writer] writer still inside a write after {}ms; detached",
+                    WRITER_EXIT_TIMEOUT.as_millis()
+                );
+            }
+        }
+    }
+}
+
+/// The writer thread: takes the newest packet, writes it, then waits out its
+/// wire time before taking another, so the OS buffer never holds a backlog.
+fn run_writer(mut port: Box<dyn Write + Send>, shared: &WriterShared, pacing: WriterPacing) {
+    let mut packet = Vec::new();
+    let mut next_write_at = Instant::now();
+    let failure = loop {
+        let (seq, drain) = {
+            let mut slot = shared.lock();
+            loop {
+                if slot.closing {
+                    break;
+                }
+                let now = Instant::now();
+                if slot.pending && now >= next_write_at {
+                    break;
+                }
+                slot = if slot.pending {
+                    shared
+                        .changed
+                        .wait_timeout(slot, next_write_at - now)
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .0
+                } else {
+                    shared
+                        .changed
+                        .wait(slot)
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                };
+            }
+            if slot.closing {
+                break None;
+            }
+            std::mem::swap(&mut packet, &mut slot.packet);
+            slot.pending = false;
+            (slot.queued, slot.queued <= slot.drain_through)
+        };
+
+        let started = Instant::now();
+        let mut result = port.write_all(&packet).map_err(|error| {
+            LedOutputError::new("LED_OUTPUT_WRITE_FAILED", Some(error.to_string()))
+        });
+        if drain && result.is_ok() {
+            result = port.flush().map_err(|error| {
+                LedOutputError::new("LED_OUTPUT_FLUSH_FAILED", Some(error.to_string()))
+            });
+        }
+        // A drained packet is already off the wire; anything else is still
+        // shifting out for its wire time from when it started.
+        next_write_at = if drain {
+            Instant::now()
+        } else {
+            started + pacing(packet.len())
+        };
+
+        let mut slot = shared.lock();
+        slot.written = seq;
+        if let Err(error) = result {
+            drop(slot);
+            break Some(error);
+        }
+        drop(slot);
+        shared.changed.notify_all();
+    };
+
+    // Closed before `exited` is published, so a reopen right after a
+    // disconnect does not find the port still held.
+    drop(port);
+    let mut slot = shared.lock();
+    slot.failure = failure;
+    slot.exited = true;
+    drop(slot);
+    shared.changed.notify_all();
+}
+
 struct SerialLedPacketSender {
-    sessions: Mutex<HashMap<String, Box<dyn Write + Send>>>,
+    sessions: Mutex<HashMap<String, WriterSession>>,
     port_factory: Arc<PortFactory>,
     /// Runs once per newly opened handle, before its first byte. Separate from
     /// `port_factory` so tests can observe *when* it fires without sleeping.
     after_open: Arc<dyn Fn() + Send + Sync>,
+    pacing: WriterPacing,
 }
 
 impl SerialLedPacketSender {
-    fn new(port_factory: Arc<PortFactory>, after_open: Arc<dyn Fn() + Send + Sync>) -> Self {
+    fn new(
+        port_factory: Arc<PortFactory>,
+        after_open: Arc<dyn Fn() + Send + Sync>,
+        pacing: WriterPacing,
+    ) -> Self {
         Self {
             sessions: Mutex::new(HashMap::new()),
             port_factory,
             after_open,
+            pacing,
         }
     }
 
@@ -613,7 +882,7 @@ impl SerialLedPacketSender {
     where
         F: Fn(&str) -> Result<Box<dyn Write + Send>, LedOutputError> + Send + Sync + 'static,
     {
-        Self::new(Arc::new(factory), Arc::new(|| {}))
+        Self::new(Arc::new(factory), Arc::new(|| {}), |_| Duration::ZERO)
     }
 
     #[cfg(test)]
@@ -622,7 +891,70 @@ impl SerialLedPacketSender {
         F: Fn(&str) -> Result<Box<dyn Write + Send>, LedOutputError> + Send + Sync + 'static,
         H: Fn() + Send + Sync + 'static,
     {
-        Self::new(Arc::new(factory), Arc::new(after_open))
+        Self::new(Arc::new(factory), Arc::new(after_open), |_| Duration::ZERO)
+    }
+
+    #[cfg(test)]
+    fn with_pacing_for_tests<F>(factory: F, pacing: WriterPacing) -> Self
+    where
+        F: Fn(&str) -> Result<Box<dyn Write + Send>, LedOutputError> + Send + Sync + 'static,
+    {
+        Self::new(Arc::new(factory), Arc::new(|| {}), pacing)
+    }
+
+    fn lock_sessions(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, HashMap<String, WriterSession>>, LedOutputError> {
+        self.sessions.lock().map_err(|error| {
+            LedOutputError::new("LED_OUTPUT_SESSION_LOCK_FAILED", Some(error.to_string()))
+        })
+    }
+
+    /// Queue `packet` on the port's writer, opening the port first if needed.
+    /// A writer that has failed is removed here, so the error reaches the
+    /// caller once and the next send reopens the port.
+    fn queue(
+        &self,
+        port_name: &str,
+        packet: &[u8],
+        drain: bool,
+    ) -> Result<(Arc<WriterShared>, u64), LedOutputError> {
+        let mut sessions = self.lock_sessions()?;
+
+        if !sessions.contains_key(port_name) {
+            let opened = (self.port_factory)(port_name)?;
+            (self.after_open)();
+            let session = WriterSession::spawn(opened, self.pacing)?;
+            sessions.insert(port_name.to_string(), session);
+        }
+
+        let Some(session) = sessions.get(port_name) else {
+            return Err(LedOutputError::new(
+                "LED_OUTPUT_PORT_UNAVAILABLE",
+                Some("Port session could not be created for output write.".to_string()),
+            ));
+        };
+
+        match session.queue(packet, drain) {
+            Ok(seq) => Ok((Arc::clone(&session.shared), seq)),
+            Err(error) => {
+                let dead = sessions.remove(port_name);
+                drop(sessions);
+                drop(dead);
+                Err(error)
+            }
+        }
+    }
+
+    /// Remove `port_name`'s session if it is still the one behind `shared`.
+    fn remove_if_current(&self, port_name: &str, shared: &Arc<WriterShared>) {
+        let removed = self.lock_sessions().ok().and_then(|mut sessions| {
+            let current = sessions
+                .get(port_name)
+                .is_some_and(|session| Arc::ptr_eq(&session.shared, shared));
+            current.then(|| sessions.remove(port_name)).flatten()
+        });
+        drop(removed);
     }
 }
 
@@ -644,55 +976,41 @@ impl Default for SerialLedPacketSender {
             Arc::new(|| {
                 std::thread::sleep(Duration::from_millis(BOOTLOADER_SETTLE_DELAY_MS));
             }),
+            link_pacing,
         )
     }
 }
 
 impl LedPacketSender for SerialLedPacketSender {
     fn send(&self, port_name: &str, packet: &[u8]) -> Result<(), LedOutputError> {
-        let mut sessions = self.sessions.lock().map_err(|error| {
-            LedOutputError::new("LED_OUTPUT_SESSION_LOCK_FAILED", Some(error.to_string()))
-        })?;
+        self.queue(port_name, packet, false).map(|_| ())
+    }
 
-        if !sessions.contains_key(port_name) {
-            let opened = (self.port_factory)(port_name)?;
-            (self.after_open)();
-            sessions.insert(port_name.to_string(), opened);
-        }
-
-        let Some(port) = sessions.get_mut(port_name) else {
-            return Err(LedOutputError::new(
-                "LED_OUTPUT_PORT_UNAVAILABLE",
-                Some("Port session could not be created for output write.".to_string()),
-            ));
-        };
-
-        let write_result = port.write_all(packet).map_err(|error| {
-            LedOutputError::new("LED_OUTPUT_WRITE_FAILED", Some(error.to_string()))
-        });
-        let flush_result = if write_result.is_ok() {
-            port.flush().map_err(|error| {
-                LedOutputError::new("LED_OUTPUT_FLUSH_FAILED", Some(error.to_string()))
-            })
-        } else {
-            Ok(())
-        };
-        let result = write_result.and(flush_result);
-
+    fn send_and_wait(&self, port_name: &str, packet: &[u8]) -> Result<(), LedOutputError> {
+        let (shared, seq) = self.queue(port_name, packet, true)?;
+        let result = shared.wait_written(seq, wire_duration(packet.len()) + CONFIRM_SLACK);
         if result.is_err() {
-            sessions.remove(port_name);
+            self.remove_if_current(port_name, &shared);
         }
-
         result
     }
 
-    fn disconnect_session(&self, port_name: &str) {
-        if let Ok(mut sessions) = self.sessions.lock() {
-            sessions.remove(port_name);
+    #[cfg(test)]
+    fn wait_idle(&self, port_name: &str) {
+        let sessions = self.sessions.lock().expect("sessions lock");
+        if let Some(session) = sessions.get(port_name) {
+            session.wait_idle();
         }
     }
-}
 
+    fn disconnect_session(&self, port_name: &str) {
+        let removed = self
+            .lock_sessions()
+            .ok()
+            .and_then(|mut sessions| sessions.remove(port_name));
+        drop(removed);
+    }
+}
 // ---------------------------------------------------------------------------
 // LedOutputBridge
 // ---------------------------------------------------------------------------
@@ -719,12 +1037,27 @@ impl LedOutputBridge {
         Self { sender }
     }
 
+    /// The production serial writer over injected ports, unpaced and unsettled.
+    #[cfg(test)]
+    pub fn with_serial_writer_for_tests<F>(factory: F) -> Self
+    where
+        F: Fn(&str) -> Result<Box<dyn Write + Send>, LedOutputError> + Send + Sync + 'static,
+    {
+        Self {
+            sender: Arc::new(SerialLedPacketSender::with_port_factory_for_tests(factory)),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn wait_idle_for_tests(&self, port_name: &str) {
+        self.sender.wait_idle(port_name);
+    }
+
     /// Drop the cached port handle for `port_name`. `SerialSink::stop` still
     /// never calls this on a same-port transition — see the rationale
     /// comment there — but `set_active_port` (lighting_mode.rs) calls it
-    /// when the active port switches to a different one, and the per-write
-    /// failure path inside `SerialLedPacketSender::send` still drops dead
-    /// handles automatically.
+    /// when the active port switches to a different one, and a failed write
+    /// still drops its dead handle on the next `SerialLedPacketSender::send`.
     pub fn disconnect_session(&self, port_name: &str) {
         self.sender.disconnect_session(port_name);
     }
@@ -773,6 +1106,16 @@ impl LedOutputBridge {
         packet: &[u8],
     ) -> Result<(), LedOutputError> {
         self.sender.send(port_name, packet)
+    }
+
+    /// `send_packet_to_port` for a one-shot write: returns once the packet has
+    /// left the host, with that write's own outcome.
+    pub fn send_packet_to_port_and_wait(
+        &self,
+        port_name: &str,
+        packet: &[u8],
+    ) -> Result<(), LedOutputError> {
+        self.sender.send_and_wait(port_name, packet)
     }
 }
 
@@ -1131,8 +1474,9 @@ impl super::led_sink::LedSink for SerialSink {
 #[cfg(test)]
 mod tests {
     use std::io::Write;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
 
     use super::{
         apply_color_correction_rgb, apply_kelvin_to_pixel, apply_saturation_to_pixel,
@@ -1230,6 +1574,7 @@ mod tests {
                     details: None,
                 },
                 updated_at_unix_ms: 0,
+                firmware: None,
             }),
         }
     }
@@ -1597,6 +1942,297 @@ mod tests {
             open_count.load(Ordering::SeqCst),
             2,
             "port must be reopened after disconnect_session"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // The writer thread: the caller never waits on the port
+    // ---------------------------------------------------------------------------
+
+    /// What a scripted port saw, shared with the test after the port has moved
+    /// onto the writer thread.
+    #[derive(Default)]
+    struct PortLog {
+        writes: Mutex<Vec<(Instant, Vec<u8>)>>,
+        flushes: AtomicUsize,
+        dropped: AtomicBool,
+    }
+
+    impl PortLog {
+        fn packets(&self) -> Vec<Vec<u8>> {
+            let writes = self.writes.lock().expect("writes lock");
+            writes.iter().map(|(_, packet)| packet.clone()).collect()
+        }
+
+        fn write_times(&self) -> Vec<Instant> {
+            let writes = self.writes.lock().expect("writes lock");
+            writes.iter().map(|(at, _)| *at).collect()
+        }
+    }
+
+    #[derive(Clone, Copy, Default)]
+    struct PortScript {
+        write_takes: Duration,
+        fail_writes: bool,
+        fail_flushes: bool,
+    }
+
+    struct ScriptedPort {
+        log: Arc<PortLog>,
+        script: PortScript,
+    }
+
+    impl Write for ScriptedPort {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            let started = Instant::now();
+            std::thread::sleep(self.script.write_takes);
+            if self.script.fail_writes {
+                return Err(std::io::ErrorKind::BrokenPipe.into());
+            }
+            self.log
+                .writes
+                .lock()
+                .expect("writes lock")
+                .push((started, buf.to_vec()));
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            self.log.flushes.fetch_add(1, Ordering::SeqCst);
+            if self.script.fail_flushes {
+                return Err(std::io::ErrorKind::TimedOut.into());
+            }
+            Ok(())
+        }
+    }
+
+    impl Drop for ScriptedPort {
+        fn drop(&mut self) {
+            self.log.dropped.store(true, Ordering::SeqCst);
+        }
+    }
+
+    /// A sender over scripted ports. Every open gets a fresh port with the same
+    /// script; the returned logs are per open, in order.
+    fn scripted_sender(
+        script: PortScript,
+        pacing: super::WriterPacing,
+    ) -> (super::SerialLedPacketSender, Arc<Mutex<Vec<Arc<PortLog>>>>) {
+        let logs: Arc<Mutex<Vec<Arc<PortLog>>>> = Arc::default();
+        let logs_for_factory = Arc::clone(&logs);
+        let sender = super::SerialLedPacketSender::with_pacing_for_tests(
+            move |_port_name| {
+                let log = Arc::new(PortLog::default());
+                logs_for_factory
+                    .lock()
+                    .expect("logs lock")
+                    .push(Arc::clone(&log));
+                Ok(Box::new(ScriptedPort { log, script }) as Box<dyn Write + Send>)
+            },
+            pacing,
+        );
+        (sender, logs)
+    }
+
+    fn first_log(logs: &Mutex<Vec<Arc<PortLog>>>) -> Arc<PortLog> {
+        Arc::clone(&logs.lock().expect("logs lock")[0])
+    }
+
+    fn no_pacing(_: usize) -> Duration {
+        Duration::ZERO
+    }
+
+    fn pacing_100ms(_: usize) -> Duration {
+        Duration::from_millis(100)
+    }
+
+    fn pacing_10s(_: usize) -> Duration {
+        Duration::from_secs(10)
+    }
+
+    #[test]
+    fn a_slow_link_never_blocks_the_sender() {
+        // 150 ms per write is a link far slower than any frame interval. The
+        // worker used to wait out every write and then a flush on top.
+        let script = PortScript {
+            write_takes: Duration::from_millis(150),
+            ..PortScript::default()
+        };
+        let (sender, logs) = scripted_sender(script, no_pacing);
+
+        sender
+            .send("COM1", &[1])
+            .expect("first send opens the port");
+        for byte in 2..6_u8 {
+            let started = Instant::now();
+            sender.send("COM1", &[byte]).expect("send");
+            assert!(
+                started.elapsed() < Duration::from_millis(50),
+                "send {byte} waited {:?} on the port",
+                started.elapsed()
+            );
+        }
+        sender.wait_idle("COM1");
+        assert_eq!(
+            first_log(&logs).packets().last(),
+            Some(&vec![5]),
+            "the newest packet is the one that ends up on the wire"
+        );
+    }
+
+    #[test]
+    fn packets_queued_while_the_link_is_busy_collapse_to_the_newest() {
+        let (sender, logs) = scripted_sender(PortScript::default(), pacing_100ms);
+
+        sender.send("COM1", &[1]).expect("send");
+        // Let the writer take packet 1, so 2..=5 all land inside its wire time.
+        std::thread::sleep(Duration::from_millis(20));
+        for byte in 2..=5_u8 {
+            sender.send("COM1", &[byte]).expect("send");
+        }
+        sender.wait_idle("COM1");
+
+        assert_eq!(first_log(&logs).packets(), vec![vec![1], vec![5]]);
+    }
+
+    #[test]
+    fn the_next_packet_waits_out_the_previous_one_on_the_wire() {
+        let (sender, logs) = scripted_sender(PortScript::default(), pacing_100ms);
+
+        sender.send("COM1", &[1]).expect("send");
+        sender.wait_idle("COM1");
+        sender.send("COM1", &[2]).expect("send");
+        sender.wait_idle("COM1");
+
+        let times = first_log(&logs).write_times();
+        assert_eq!(times.len(), 2);
+        assert!(
+            times[1].duration_since(times[0]) >= Duration::from_millis(100),
+            "packet 2 started {:?} after packet 1, inside its wire time",
+            times[1].duration_since(times[0])
+        );
+    }
+
+    #[test]
+    fn link_pacing_is_the_wire_time_plus_its_margin() {
+        // 498 bytes is a 164-LED RGB frame: 43.23 ms at 11 520 bytes/s.
+        let paced = super::link_pacing(498);
+        assert!(
+            paced > Duration::from_micros(44_000) && paced < Duration::from_micros(44_200),
+            "got {paced:?}"
+        );
+        assert!(super::link_pacing(498) > crate::commands::led_calibration::wire_duration(498));
+    }
+
+    #[test]
+    fn streaming_never_drains_the_port() {
+        let (sender, logs) = scripted_sender(PortScript::default(), no_pacing);
+        for byte in 0..5_u8 {
+            sender.send("COM1", &[byte]).expect("send");
+            sender.wait_idle("COM1");
+        }
+        assert_eq!(first_log(&logs).flushes.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn a_failed_write_reaches_the_next_send_and_the_one_after_reopens() {
+        let script = PortScript {
+            fail_writes: true,
+            ..PortScript::default()
+        };
+        let (sender, logs) = scripted_sender(script, no_pacing);
+
+        sender
+            .send("COM1", &[1])
+            .expect("the write has not happened yet");
+        sender.wait_idle("COM1");
+        let error = sender.send("COM1", &[2]).expect_err("the failure surfaces");
+        assert_eq!(error.code, "LED_OUTPUT_WRITE_FAILED");
+
+        sender.send("COM1", &[3]).expect("a fresh session");
+        assert_eq!(
+            logs.lock().unwrap().len(),
+            2,
+            "the dead handle was reopened"
+        );
+        assert!(first_log(&logs).dropped.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn send_and_wait_reports_its_own_outcome() {
+        let (sender, logs) = scripted_sender(PortScript::default(), pacing_100ms);
+        sender
+            .send_and_wait("COM1", &[7])
+            .expect("written and drained");
+        let log = first_log(&logs);
+        assert_eq!(log.packets(), vec![vec![7]]);
+        assert_eq!(log.flushes.load(Ordering::SeqCst), 1);
+
+        let failing = PortScript {
+            fail_writes: true,
+            ..PortScript::default()
+        };
+        let (sender, _) = scripted_sender(failing, no_pacing);
+        let error = sender.send_and_wait("COM1", &[7]).expect_err("write fails");
+        assert_eq!(error.code, "LED_OUTPUT_WRITE_FAILED");
+
+        let failing_drain = PortScript {
+            fail_flushes: true,
+            ..PortScript::default()
+        };
+        let (sender, logs) = scripted_sender(failing_drain, no_pacing);
+        let error = sender.send_and_wait("COM1", &[7]).expect_err("drain fails");
+        assert_eq!(error.code, "LED_OUTPUT_FLUSH_FAILED");
+        sender
+            .send("COM1", &[8])
+            .expect("the failed session was removed");
+        assert_eq!(logs.lock().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn disconnect_interrupts_a_pacing_wait_and_closes_the_port() {
+        let (sender, logs) = scripted_sender(PortScript::default(), pacing_10s);
+        sender.send("COM1", &[1]).expect("send");
+        sender.wait_idle("COM1");
+        sender
+            .send("COM1", &[2])
+            .expect("queued behind a 10 s wire time");
+
+        let started = Instant::now();
+        sender.disconnect_session("COM1");
+        assert!(
+            started.elapsed() < Duration::from_millis(200),
+            "disconnect took {:?}",
+            started.elapsed()
+        );
+        let log = first_log(&logs);
+        assert!(
+            log.dropped.load(Ordering::SeqCst),
+            "the port is closed on return"
+        );
+        assert_eq!(
+            log.packets(),
+            vec![vec![1]],
+            "nothing is written after close"
+        );
+    }
+
+    #[test]
+    fn a_wedged_write_is_detached_instead_of_stalling_disconnect() {
+        let script = PortScript {
+            write_takes: Duration::from_secs(3),
+            ..PortScript::default()
+        };
+        let (sender, _) = scripted_sender(script, no_pacing);
+        sender.send("COM1", &[1]).expect("send");
+        std::thread::sleep(Duration::from_millis(20));
+
+        let started = Instant::now();
+        sender.disconnect_session("COM1");
+        let took = started.elapsed();
+        assert!(
+            took >= super::WRITER_EXIT_TIMEOUT && took < Duration::from_millis(1_500),
+            "disconnect took {took:?}"
         );
     }
 

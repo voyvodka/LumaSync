@@ -69,8 +69,9 @@ export interface DeviceConnectionControllerDeps {
    */
   connectionEvents?: ConnectionEventBus;
   /**
-   * Broadcasts a completed health check's advertised firmware profile so
-   * FirmwareProfilePicker can read it without mounting its own controller.
+   * Broadcasts what the firmware reported — on every successful connect and
+   * every health check — so the profile and chip-type pickers can read it
+   * without mounting their own controller.
    */
   firmwareProfileEvents?: FirmwareProfileEventBus;
 }

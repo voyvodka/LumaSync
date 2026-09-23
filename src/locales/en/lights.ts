@@ -94,6 +94,8 @@ export default {
         sk6812rgbw: "SK6812 · RGBW · 4 bytes/pixel · W=min(R,G,B)",
       },
       sk6812AdalightWarning: "SK6812 RGBW is not supported with the Adalight profile. Falling back to WS2812B encoding.",
+      firmwareExpectsRgb: "The connected controller expects 3 bytes per LED. Pick WS2812B, or flash an RGBW build.",
+      firmwareExpectsRgbw: "The connected controller expects 4 bytes per LED. Pick SK6812 RGBW, or flash an RGB build.",
     },
     colorOrder: {
       label: "Color order",

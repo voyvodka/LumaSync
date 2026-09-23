@@ -23,6 +23,23 @@ export function createDeviceConnectionController(
   const connectionEventsBus = deps.connectionEvents ?? null;
   const firmwareProfileEventsBus = deps.firmwareProfileEvents ?? null;
 
+  // Connect PINGs the firmware too, so every connect path — manual, the boot
+  // auto-reconnect, recovery — tells the pickers what it found, and a silent
+  // device clears what an earlier one reported.
+  const connectDeps: DeviceConnectionControllerDeps = {
+    ...deps,
+    connectSerialPort: async (portName) => {
+      const status = await deps.connectSerialPort(portName);
+      if (status.connected) {
+        firmwareProfileEventsBus?.emit({
+          advertisedFirmwareProfile: status.firmware?.profile,
+          advertisedPixelLayout: status.firmware?.pixelLayout,
+        });
+      }
+      return status;
+    },
+  };
+
   const store = createConnectionStore(
     withDerivedFlags({
       ...DEFAULT_STATE,
@@ -32,7 +49,7 @@ export function createDeviceConnectionController(
 
   const autoRecovery = createAutoRecovery(
     store,
-    deps,
+    connectDeps,
     { recoveryFastDelayMs, recoveryRetryDelayMs, recoveryMaxAttempts },
     connectionEventsBus,
   );
@@ -44,12 +61,12 @@ export function createDeviceConnectionController(
     { onConnectedPortMissing: (lastSuccessfulPort) => autoRecovery.startAutoRecovery(lastSuccessfulPort) },
   );
 
-  const lifecycle = createConnectionLifecycle(store, deps, connectionEventsBus, {
+  const lifecycle = createConnectionLifecycle(store, connectDeps, connectionEventsBus, {
     cancelRecovery: autoRecovery.cancelRecovery,
   });
 
   const healthCheck = createHealthCheck(store, deps, firmwareProfileEventsBus);
-  const autoReconnect = createAutoReconnectOnInit(store, deps, connectionEventsBus);
+  const autoReconnect = createAutoReconnectOnInit(store, connectDeps, connectionEventsBus);
   const siblingSync = createSiblingSync(store, deps, connectionEventsBus);
 
   const initialize = async () => {
