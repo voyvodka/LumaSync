@@ -18,7 +18,7 @@ export function ModeButton({ kind, active, disabled, label, labelLang, icon, onC
       type="button"
       disabled={disabled}
       onClick={() => onClick(kind)}
-      className={`lm-compact-mbtn ${active ? "is-on" : ""}`}
+      className="lm-compact-mbtn"
       aria-pressed={active}
       data-testid={`mode-button-${kind}`}
     >

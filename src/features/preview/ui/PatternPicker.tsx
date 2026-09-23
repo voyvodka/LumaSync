@@ -89,7 +89,7 @@ export function PatternPicker({
               role="radio"
               aria-checked={on}
               disabled={disabled}
-              className={`lm-pattern-tile ${on ? "is-on" : ""}`}
+              className="lm-pattern-tile"
               onClick={() => onSelectKind(kind)}
             >
               <span className="swatch" style={{ background: SWATCH[kind] }} aria-hidden="true" />
@@ -112,7 +112,6 @@ export function PatternPicker({
             role="radio"
             aria-checked={s === speed}
             disabled={speedDisabled}
-            className={s === speed ? "is-on" : ""}
             onClick={() => onSpeedChange(s)}
           >
             {t(`preview:test.speed.${s}`)}

@@ -68,6 +68,7 @@ import { useTranslation } from "react-i18next";
 import { clamp } from "@/shared/lib/math";
 import { parseHex, rgbToHex, type Rgb } from "@/shared/lib/color";
 import { SectionLabel } from "@/shared/ui/SectionLabel";
+import { cx } from "@/shared/ui/cx";
 
 // ---------------------------------------------------------------------------
 // Color math
@@ -564,14 +565,12 @@ export function HsvColorPicker({
       role="group"
       aria-label={ariaLabel ?? t("common:ui.colorPicker.rootAriaLabel")}
       aria-disabled={disabled}
-      className={[
+      className={cx(
         "flex flex-col",
         compact ? "gap-1.5" : "gap-2",
         disabled ? "pointer-events-none opacity-60" : "",
         className ?? "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
+      )}
       style={wrapperStyle}
     >
       <svg

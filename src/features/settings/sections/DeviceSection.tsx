@@ -90,7 +90,7 @@ function RailButton({ category, icon, label, count, countLabel, active, onClick 
     <button
       type="button"
       data-testid={`device-category-${category}`}
-      className={`lm-device-cat ${active ? "is-on" : ""}`}
+      className="lm-device-cat"
       aria-current={active ? "page" : undefined}
       onClick={onClick}
     >

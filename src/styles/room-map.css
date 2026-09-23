@@ -88,10 +88,10 @@
   color: var(--lm-amber);
   box-shadow: var(--lm-focus-ring-soft);
 }
-.lm-room-dock-tab.is-on {
+.lm-room-dock-tab[aria-selected="true"] {
   color: var(--lm-ink);
 }
-.lm-room-dock-tab.is-on::after {
+.lm-room-dock-tab[aria-selected="true"]::after {
   content: "";
   position: absolute;
   left: 8px;
@@ -113,7 +113,7 @@
   border: 1px solid var(--lm-line-2);
   text-transform: none;
 }
-.lm-room-dock-tab.is-on .lm-room-dock-tab-count {
+.lm-room-dock-tab[aria-selected="true"] .lm-room-dock-tab-count {
   color: var(--lm-amber);
   background: rgba(255, 176, 32, 0.1);
   border-color: rgba(255, 176, 32, 0.32);
@@ -160,7 +160,7 @@
 /*
  * Clickable Hue zone headers in
  * the Objects list. Hover lifts opacity + shows the amber selection
- * cue, `is-on` matches the `.lm-room-dock-row.is-on` treatment so a
+ * cue, and pressed it matches the selected `.lm-room-dock-row` treatment so a
  * selected zone in the side list visually pairs with the bottom
  * inspector.
  */
@@ -183,7 +183,7 @@
   outline-offset: 1px;
   box-shadow: var(--lm-focus-ring);
 }
-.lm-room-dock-h.is-clickable.is-on {
+.lm-room-dock-h.is-clickable[aria-pressed="true"] {
   background: rgba(255, 176, 32, 0.1);
   color: var(--lm-amber);
 }
@@ -266,11 +266,11 @@
   outline: none;
   box-shadow: var(--lm-focus-ring-soft);
 }
-.lm-room-dock-row.is-on {
+.lm-room-dock-row[aria-pressed="true"] {
   background: rgba(255, 176, 32, 0.08);
   color: var(--lm-ink);
 }
-.lm-room-dock-row.is-on::before {
+.lm-room-dock-row[aria-pressed="true"]::before {
   content: "";
   position: absolute;
   left: 0;
@@ -882,13 +882,13 @@
     border-color: CanvasText;
     background: Canvas;
   }
-  .lm-room-dock-tab.is-on {
+  .lm-room-dock-tab[aria-selected="true"] {
     color: Highlight;
   }
-  .lm-room-dock-tab.is-on::after {
+  .lm-room-dock-tab[aria-selected="true"]::after {
     background: Highlight;
   }
-  .lm-room-dock-row.is-on {
+  .lm-room-dock-row[aria-pressed="true"] {
     background: SelectedItem;
     color: SelectedItemText;
     forced-color-adjust: none;
@@ -949,7 +949,7 @@
   box-shadow: var(--lm-focus-ring-soft);
   color: var(--lm-amber);
 }
-.lm-room-toolbar-btn.is-on {
+.lm-room-toolbar-btn:is(.is-on, [aria-pressed="true"], [aria-expanded="true"]) {
   color: var(--lm-amber);
   background: rgba(255, 176, 32, 0.1);
 }
@@ -969,7 +969,7 @@
   letter-spacing: 0;
   color: var(--lm-ink);
 }
-.lm-room-toolbar-btn.is-on .lm-room-toolbar-badge {
+.lm-room-toolbar-btn:is(.is-on, [aria-pressed="true"], [aria-expanded="true"]) .lm-room-toolbar-badge {
   background: rgba(255, 176, 32, 0.16);
   border-color: rgba(255, 176, 32, 0.4);
   color: var(--lm-amber);
@@ -1159,7 +1159,7 @@
   .lm-room-toolbar {
     border-color: CanvasText;
   }
-  .lm-room-toolbar-btn.is-on {
+  .lm-room-toolbar-btn:is(.is-on, [aria-pressed="true"], [aria-expanded="true"]) {
     color: Highlight;
     border: 1px solid Highlight;
     background: Canvas;
@@ -1573,7 +1573,7 @@
 .lm-zone-inspector-swatch:focus-visible {
   box-shadow: var(--lm-focus-ring-soft);
 }
-.lm-zone-inspector-swatch.is-active {
+.lm-zone-inspector-swatch[aria-pressed="true"] {
   border-color: var(--lm-amber);
   box-shadow: 0 0 0 1px var(--lm-amber);
 }
@@ -1596,7 +1596,7 @@
     background: Canvas;
     color: CanvasText;
   }
-  .lm-zone-inspector-swatch.is-active {
+  .lm-zone-inspector-swatch[aria-pressed="true"] {
     border-color: Highlight;
     box-shadow: 0 0 0 1px Highlight;
   }

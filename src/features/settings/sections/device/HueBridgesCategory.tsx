@@ -572,7 +572,7 @@ export function HueBridgesCategory({
                           <button
                             key={area.id}
                             type="button"
-                            className={`lm-hue-area-item${selectedAreaId === area.id ? " is-sel" : ""}${area.activeStreamer ? " is-blocked" : ""}`}
+                            className={`lm-hue-area-item${selectedAreaId === area.id ? " is-on" : ""}${area.activeStreamer ? " is-blocked" : ""}`}
                             onClick={() => { if (!area.activeStreamer) selectArea(area.id); }}
                           >
                             <span className="lm-hue-area-ic" />

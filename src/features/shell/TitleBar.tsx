@@ -126,7 +126,7 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
               type="button"
               role="tab"
               data-tauri-drag-region="false"
-              className={`lm-titlebar-tab${id === activeSection ? " is-on" : ""}`}
+              className="lm-titlebar-tab"
               aria-selected={id === activeSection}
               onClick={() => onSectionChange(id)}
               data-testid={`section-tab-${id}`}

@@ -214,7 +214,7 @@
 .lm-control-mbtn:hover:not(:disabled) { color: var(--lm-ink); border-color: var(--lm-line-2); }
 .lm-control-mbtn:disabled { opacity: 0.4; cursor: not-allowed; }
 .lm-control-mbtn:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
-.lm-control-mbtn.is-on { color: var(--lm-amber); border-color: rgba(255, 176, 32, 0.5); background: rgba(255, 176, 32, 0.08); }
+.lm-control-mbtn[aria-checked="true"] { color: var(--lm-amber); border-color: rgba(255, 176, 32, 0.5); background: rgba(255, 176, 32, 0.08); }
 .lm-control-mbtn svg { width: 18px; height: 18px; }
 
 /* ── Pattern picker ──────────────────────────────────────────────────────── */
@@ -241,7 +241,7 @@
 .lm-pattern-tile:hover:not(:disabled) { color: var(--lm-ink); }
 .lm-pattern-tile:disabled { opacity: 0.4; cursor: not-allowed; }
 .lm-pattern-tile:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
-.lm-pattern-tile.is-on { color: var(--lm-ink); border-color: rgba(255, 176, 32, 0.5); background: rgba(255, 176, 32, 0.08); }
+.lm-pattern-tile[aria-checked="true"] { color: var(--lm-ink); border-color: rgba(255, 176, 32, 0.5); background: rgba(255, 176, 32, 0.08); }
 .lm-pattern-tile .swatch {
   width: 14px;
   height: 14px;
@@ -271,7 +271,7 @@
 .lm-pattern-speed button:hover:not(:disabled) { color: var(--lm-ink); }
 .lm-pattern-speed button:disabled { opacity: 0.4; cursor: not-allowed; }
 .lm-pattern-speed button:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
-.lm-pattern-speed button.is-on { color: var(--lm-amber); border-color: rgba(255, 176, 32, 0.5); background: rgba(255, 176, 32, 0.08); }
+.lm-pattern-speed button[aria-checked="true"] { color: var(--lm-amber); border-color: rgba(255, 176, 32, 0.5); background: rgba(255, 176, 32, 0.08); }
 
 /* ── Preview-only info note (FE-3) ───────────────────────────────────────
    A PATTERN_PREVIEW_ONLY run is a success (the test ran into the twin /
@@ -371,9 +371,9 @@
   .lm-signal-note-dot {
     background: CanvasText;
   }
-  .lm-control-mbtn.is-on,
-  .lm-pattern-tile.is-on,
-  .lm-pattern-speed button.is-on {
+  .lm-control-mbtn[aria-checked="true"],
+  .lm-pattern-tile[aria-checked="true"],
+  .lm-pattern-speed button[aria-checked="true"] {
     outline: 2px solid Highlight;
   }
 }

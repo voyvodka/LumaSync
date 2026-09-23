@@ -41,6 +41,13 @@ feature file imported without a layer. `GlobalErrorBoundary.css` stays unlayered
 component rather than through this list, and unlayered it cannot lose to a components-layer rule
 on the `lm-settings-group` card it sits on, whatever order the bundler emits.
 
+**Selection state is styled from ARIA where the element carries it.** A tab's selected look is
+`[aria-selected="true"]`, a toggle's `[aria-pressed="true"]`, a radio's `[aria-checked="true"]`, the
+device rail's `[aria-current="page"]` — the attribute a screen reader announces is the same one the
+stylesheet reads, so the two cannot disagree. Where the element has no such attribute, the class is
+`is-on`; `is-sel` and `is-selected` are gone. `is-active` survives only for things that are not
+selection: a step tracker's current step and the status bar's tone scale.
+
 **The compact/full mode transition is sequential, never a cross-fade.** `useUIMode.ts`: fade the
 current content out, resize the window to the target mode, then mount the incoming layout and fade
 it in. Pinning the incoming slot at its target size while the window is still animating toward that

@@ -11,6 +11,7 @@ import type { LedChipType, LedColorOrder } from "@/shared/contracts/device";
 import { deriveLocalSink } from "@/features/device/localSink";
 import { LedChipTypePicker } from "../control/LedChipTypePicker";
 import { LedColorOrderControl } from "../control/LedColorOrderControl";
+import { cx } from "@/shared/ui/cx";
 import { IconRefresh, IconUsb } from "@/shared/ui/icons";
 
 function portDisplayName(portName: string, product?: string, manufacturer?: string): string {
@@ -325,18 +326,15 @@ export function UsbStripsCategory({
               ? t("device:page.usb.pill.online")
               : t("device:page.usb.pill.discovered");
             const pillClass = isConnectedCard ? "is-ok" : "is-warn";
-            const cardStateClass = isConnectedCard
-              ? "is-on"
-              : isSelectedCard
-                ? "is-sel"
-                : "is-ghost";
+            // Selection is `aria-pressed`, which the CSS reads; `is-on` marks the live port.
+            const cardStateClass = isConnectedCard ? "is-on" : isSelectedCard ? "" : "is-ghost";
             return (
               <div
                 key={port.portName}
                 role="button"
                 tabIndex={0}
                 aria-pressed={isSelectedCard || isConnectedCard}
-                className={`lm-dcard ${cardStateClass}`}
+                className={cx("lm-dcard", cardStateClass)}
                 onClick={() => {
                   if (!isConnectedCard) selectPort(port.portName);
                 }}

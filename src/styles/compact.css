@@ -125,14 +125,14 @@
   text-transform: uppercase;
   color: var(--lm-ink-dim);
 }
-.lm-compact-mbtn.is-on {
+.lm-compact-mbtn[aria-pressed="true"] {
   background: linear-gradient(180deg, rgba(255, 176, 32, 0.14), rgba(255, 176, 32, 0.03));
   border-color: rgba(255, 176, 32, 0.45);
   box-shadow:
     0 0 0 1px rgba(255, 176, 32, 0.18),
     0 0 18px -4px rgba(255, 176, 32, 0.35);
 }
-.lm-compact-mbtn.is-on .ico,
-.lm-compact-mbtn.is-on .tn {
+.lm-compact-mbtn[aria-pressed="true"] .ico,
+.lm-compact-mbtn[aria-pressed="true"] .tn {
   color: var(--lm-amber);
 }

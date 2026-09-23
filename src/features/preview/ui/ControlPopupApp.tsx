@@ -634,7 +634,7 @@ function ModeButton({ kind, active, label, icon, onClick }: ModeButtonProps) {
       type="button"
       role="radio"
       aria-checked={active}
-      className={`lm-control-mbtn ${active ? "is-on" : ""}`}
+      className="lm-control-mbtn"
       onClick={() => onClick(kind)}
     >
       <span aria-hidden="true">{icon}</span>

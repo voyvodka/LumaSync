@@ -85,6 +85,15 @@ describe("stylesheet sanity", () => {
     }
   });
 
+  it("names a selected state `is-on` or reads it from ARIA, never `is-sel`/`is-selected`", () => {
+    const retired = /\bis-(sel|selected)\b/;
+    const offenders = [
+      ...cssFiles.filter(({ css }) => retired.test(css)).map(({ file }) => file),
+      ...walk(SRC, [".tsx"]).filter((file) => retired.test(readFileSync(file, "utf8"))),
+    ];
+    expect(offenders).toEqual([]);
+  });
+
   it("has no selector that repeats a compound back to back", () => {
     const offenders: string[] = [];
     for (const { file, css } of cssFiles) {

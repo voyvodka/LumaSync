@@ -116,7 +116,7 @@ function ProfileTile({
         onKeyDown={onKeyNavigate}
         data-profile={profile}
         data-mismatched={mismatched ? "true" : undefined}
-        className={`lm-fw-tile${checked ? " is-on" : ""}${disabled ? " is-disabled" : ""}`}
+        className={`lm-fw-tile${disabled ? " is-disabled" : ""}`}
         style={{
           all: "unset",
           cursor: disabled ? "not-allowed" : "pointer",

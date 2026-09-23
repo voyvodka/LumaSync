@@ -48,7 +48,7 @@
   color: var(--lm-ink);
   background: rgba(255, 255, 255, 0.02);
 }
-.lm-device-cat.is-on {
+.lm-device-cat[aria-current="page"] {
   color: var(--lm-amber);
   border-left-color: var(--lm-amber);
   background: linear-gradient(90deg, rgba(255, 176, 32, 0.08), transparent 60%);
@@ -81,7 +81,7 @@
   color: var(--lm-ink-faint);
   letter-spacing: 0.08em;
 }
-.lm-device-cat.is-on .lm-device-cat-cnt {
+.lm-device-cat[aria-current="page"] .lm-device-cat-cnt {
   background: rgba(255, 176, 32, 0.1);
   border-color: rgba(255, 176, 32, 0.3);
   color: var(--lm-amber);
@@ -208,7 +208,7 @@
   border-color: rgba(255, 176, 32, 0.3);
   background: linear-gradient(180deg, rgba(255, 176, 32, 0.04), transparent 40%);
 }
-.lm-dcard.is-sel {
+.lm-dcard[aria-pressed="true"]:not(.is-on) {
   border-color: rgba(255, 176, 32, 0.55);
   background: linear-gradient(180deg, rgba(255, 176, 32, 0.07), transparent 50%);
   box-shadow: 0 0 0 1px rgba(255, 176, 32, 0.35), 0 8px 24px -12px rgba(255, 176, 32, 0.4);
@@ -217,7 +217,7 @@
   cursor: pointer;
   transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
 }
-.lm-dcard[role="button"]:hover:not(.is-on):not(.is-sel) {
+.lm-dcard[role="button"]:hover:not(.is-on):not([aria-pressed="true"]) {
   border-color: #2c3440;
   background: #101319;
 }
@@ -711,7 +711,7 @@
   border-color: rgba(255, 176, 32, 0.35);
   background: rgba(255, 176, 32, 0.04);
 }
-.lm-hue-area-item.is-sel {
+.lm-hue-area-item.is-on {
   border-color: rgba(255, 176, 32, 0.45);
   background: rgba(255, 176, 32, 0.06);
 }
@@ -723,7 +723,7 @@
   border: 1.5px solid var(--lm-line-2);
   flex-shrink: 0;
 }
-.lm-hue-area-item.is-sel .lm-hue-area-ic {
+.lm-hue-area-item.is-on .lm-hue-area-ic {
   border-color: var(--lm-amber);
   background: rgba(255, 176, 32, 0.2);
 }
@@ -734,7 +734,7 @@
   flex: 1;
   letter-spacing: 0.03em;
 }
-.lm-hue-area-item.is-sel .lm-hue-area-name { color: var(--lm-amber); }
+.lm-hue-area-item.is-on .lm-hue-area-name { color: var(--lm-amber); }
 .lm-hue-area-ch { font-family: var(--lm-mono); font-size: 9px; color: var(--lm-ink-faint); letter-spacing: 0.08em; }
 .lm-hue-area-badge {
   font-family: var(--lm-mono);

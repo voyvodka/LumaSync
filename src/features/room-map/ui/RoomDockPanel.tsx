@@ -305,7 +305,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
               type="button"
               role="tab"
               aria-selected={activeTab === tab.id}
-              className={`lm-room-dock-tab ${activeTab === tab.id ? "is-on" : ""}`}
+              className="lm-room-dock-tab"
               onClick={() => setActiveTab(tab.id)}
             >
               <span className="lm-room-dock-tab-label">{tab.label}</span>

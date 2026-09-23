@@ -87,10 +87,10 @@
   outline: none;
   color: var(--lm-amber);
 }
-.lm-titlebar-tab.is-on {
+.lm-titlebar-tab[aria-selected="true"] {
   color: var(--lm-ink);
 }
-.lm-titlebar-tab.is-on::after {
+.lm-titlebar-tab[aria-selected="true"]::after {
   content: "";
   position: absolute;
   left: 0;
@@ -312,10 +312,10 @@
   .lm-titlebar-tab {
     color: CanvasText;
   }
-  .lm-titlebar-tab.is-on {
+  .lm-titlebar-tab[aria-selected="true"] {
     color: Highlight;
   }
-  .lm-titlebar-tab.is-on::after {
+  .lm-titlebar-tab[aria-selected="true"]::after {
     background: Highlight;
     box-shadow: none;
   }
@@ -333,7 +333,7 @@
     background: Canvas;
     forced-color-adjust: none;
   }
-  .lm-compact-mbtn.is-on {
+  .lm-compact-mbtn[aria-pressed="true"] {
     color: Highlight;
     border-color: Highlight;
   }

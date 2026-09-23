@@ -315,7 +315,7 @@
   position: relative;
   z-index: 1;
 }
-.lm-compact-scene-tile.is-selected {
+.lm-compact-scene-tile.is-on {
   border-color: rgba(255, 176, 32, 0.55);
   box-shadow:
     0 0 0 1px rgba(255, 176, 32, 0.3),
