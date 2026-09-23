@@ -9,6 +9,8 @@ import {
 } from "@/shared/contracts/updater";
 import { checkForUpdate, downloadAndInstallUpdate } from "./updaterApi";
 import { listenUpdateDownloadProgress, type UnlistenFn } from "./updaterEventsApi";
+import { useUpdateCheckFailedNotice, type UpdateCheckFailure } from "./useUpdateCheckFailedNotice";
+import { readE2eBuild } from "@/features/shell/launchApi";
 import { createLatestOperationGuard } from "@/shared/lib/latestOperation";
 import { parseCommandError } from "@/shared/contracts/status";
 
@@ -26,9 +28,15 @@ export type UpdaterState =
       etaSeconds: number | null;
     }
   | { status: "installing"; update: UpdateMetadata }
-  /** `code` decides the wording; `message` is the raw backend detail, which for
-   *  a failed check embeds the feed URL and must not be the headline. */
-  | { status: "error"; code?: UpdaterStatusCode; message: string };
+  /** `phase` decides the wording: a check that failed for any reason, coded or
+   *  not, is not a failed installation. `message` is the raw backend detail,
+   *  which for a failed check embeds the feed URL and must not be the headline. */
+  | { status: "error"; phase: UpdaterErrorPhase; code?: UpdaterStatusCode; message: string };
+
+export type UpdaterErrorPhase = "check" | "install";
+
+/** `background` is the startup check nobody asked for; it never opens the modal on failure. */
+type UpdateCheckTrigger = "user" | "background";
 
 /** Rendered as a badge, so it is refreshed from the store before every check.
  * Rust reads the same field to pick the endpoint and echoes it back — a
@@ -52,45 +60,83 @@ export function useAutoUpdater() {
   const lastStartRef = useRef<number>(0);
   const checkGuardRef = useRef(createLatestOperationGuard());
 
-  const checkForUpdates = useCallback(async () => {
-    // A newer version is new information even though the status is `available`
-    // again, so it must not stay hidden behind the previous "Later".
-    setDismissedStatus(null);
-    // The startup check and a Retry press can be in flight together and resolve
-    // in either order; without this the older answer lands last and wins.
-    const isLatest = checkGuardRef.current.begin();
+  const {
+    notice: checkFailedNotice,
+    report: reportCheckFailed,
+    hold: holdCheckFailed,
+    clear: clearCheckFailed,
+  } = useUpdateCheckFailedNotice();
 
-    const storedChannel = await readUpdateChannel();
-    if (!isLatest()) return;
-    setChannel(storedChannel);
-    setState({ status: "checking" });
+  const runCheck = useCallback(
+    async (trigger: UpdateCheckTrigger) => {
+      // A newer version is new information even though the status is `available`
+      // again, so it must not stay hidden behind the previous "Later".
+      setDismissedStatus(null);
+      // The startup check and a Retry press can be in flight together and resolve
+      // in either order; without this the older answer lands last and wins.
+      const isLatest = checkGuardRef.current.begin();
+      if (trigger === "user") holdCheckFailed();
 
-    try {
-      const response = await checkForUpdate();
+      const storedChannel = await readUpdateChannel();
       if (!isLatest()) return;
-      // Rust's answer wins over the store read above: it is what actually
-      // chose the endpoint the result came from.
-      setChannel(response.channel);
+      setChannel(storedChannel);
+      setState({ status: "checking" });
 
-      if (response.status.code === UPDATER_STATUS.UPDATE_AVAILABLE && response.update) {
-        setState({ status: "available", update: response.update });
-      } else if (response.status.code === UPDATER_STATUS.UP_TO_DATE) {
-        setState({ status: "idle" });
-      } else {
-        setState({
-          status: "error",
-          code: response.status.code,
-          message: response.status.message,
-        });
+      // A background failure is logged and offered as a notice; only a check the
+      // user asked for may put the modal over the window.
+      const fail = (failure: UpdateCheckFailure) => {
+        if (trigger === "background") {
+          setState({ status: "idle" });
+          reportCheckFailed(failure);
+        } else {
+          clearCheckFailed();
+          setState({ status: "error", phase: "check", ...failure });
+        }
+      };
+
+      try {
+        const response = await checkForUpdate();
+        if (!isLatest()) return;
+        // Rust's answer wins over the store read above: it is what actually
+        // chose the endpoint the result came from.
+        setChannel(response.channel);
+
+        if (response.status.code === UPDATER_STATUS.UPDATE_AVAILABLE && response.update) {
+          clearCheckFailed();
+          setState({ status: "available", update: response.update });
+        } else if (response.status.code === UPDATER_STATUS.UP_TO_DATE) {
+          clearCheckFailed();
+          setState({ status: "idle" });
+        } else {
+          console.warn(`[LumaSync] update check failed (${trigger}):`, {
+            code: response.status.code,
+            message: response.status.message,
+          });
+          fail({ code: response.status.code, message: response.status.message });
+        }
+      } catch (err) {
+        if (!isLatest()) return;
+        // The command never rejects; this is the invoke layer itself failing —
+        // an unregistered command, or a window torn down mid-check.
+        console.error(`[LumaSync] update check rejected (${trigger}):`, err);
+        fail({ message: parseCommandError(err).message });
       }
-    } catch (err) {
-      if (!isLatest()) return;
-      // The command never rejects; this is the invoke layer itself failing —
-      // an unregistered command, or a window torn down mid-check.
-      const message = parseCommandError(err).message;
-      setState({ status: "error", message });
+    },
+    [holdCheckFailed, reportCheckFailed, clearCheckFailed],
+  );
+
+  /** A check the user asked for: Retry, the Software update button, the notice. */
+  const checkForUpdates = useCallback(() => runCheck("user"), [runCheck]);
+
+  const checkForUpdatesInBackground = useCallback(async () => {
+    // The e2e binary drives the real window; whatever the live feed answers
+    // would land over the screens a spec is asserting on.
+    if (await readE2eBuild()) {
+      console.info("[LumaSync] e2e build: startup update check skipped");
+      return;
     }
-  }, []);
+    await runCheck("background");
+  }, [runCheck]);
 
   const downloadAndInstall = useCallback(async (update: UpdateMetadata) => {
     let unlisten: UnlistenFn | undefined;
@@ -141,13 +187,14 @@ export function useAutoUpdater() {
       } else {
         setState({
           status: "error",
+          phase: "install",
           code: response.status.code,
           message: response.status.message,
         });
       }
     } catch (err) {
       const message = parseCommandError(err).message;
-      setState({ status: "error", message });
+      setState({ status: "error", phase: "install", message });
     } finally {
       unlisten?.();
     }
@@ -170,5 +217,15 @@ export function useAutoUpdater() {
   // is not the interruption the user declined.
   const isModalOpen = state.status !== dismissedStatus;
 
-  return { state, channel, isModalOpen, checkForUpdates, downloadAndInstall, dismiss, devSetState };
+  return {
+    state,
+    channel,
+    isModalOpen,
+    checkForUpdates,
+    checkForUpdatesInBackground,
+    checkFailedNotice,
+    downloadAndInstall,
+    dismiss,
+    devSetState,
+  };
 }

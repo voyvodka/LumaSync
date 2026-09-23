@@ -58,6 +58,12 @@ export interface LaunchContext {
    * login.
    */
   startHidden: boolean;
+  /**
+   * Built with the `e2e` cargo feature (`bun run e2e:build`), which a release
+   * bundle never is. The frontend skips work there whose answer comes from
+   * outside the machine, such as the startup update check.
+   */
+  e2eBuild: boolean;
 }
 
 // ---------------------------------------------------------------------------

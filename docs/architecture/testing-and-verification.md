@@ -81,6 +81,18 @@ window, not a transient dip — `switchUiMode`/`waitForAppReady` say so explicit
 surfacing the bare WDIO timeout. That case is not a spec bug and a spec cannot fix it: unlock the
 screen (or bring the window to the front) and re-run.
 
+**An open dialog fails the step, and the e2e build never checks for updates on its own.** A failed
+startup update check once opened `UpdateModal` over the whole window, and every spec and the audit
+probe then navigated behind it and passed: `clickTestId` clicks through JavaScript, which reaches a
+control no user could reach under a modal. `waitForAppReady`, `switchUiMode` and `clickTestId` now
+call `assertNoOpenDialog`, which fails on any rendered `[role="dialog"]`, `[role="alertdialog"]` or
+`[aria-modal="true"]` and quotes its role, name and visible text. The probe records `openDialogs` in
+every section's structure and fails once it has captured the PNG. A spec that opens a dialog on
+purpose must close it before the next helper call. Separately, `get_launch_context` reports
+`e2eBuild` (`cfg!(feature = "e2e")`), and `useAutoUpdater` skips the automatic startup check when it
+is set, so a run's first screen does not depend on what the live feed answers that day. A check the
+user starts still reaches the feed; the unit tests cover both paths.
+
 ## Seeing the screen
 
 `browser.saveScreenshot` works, and it is the reason this layer is worth more than its assertions.

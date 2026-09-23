@@ -180,7 +180,7 @@ export const shellHandlers = {
   }),
 
   // A browser tab has no autostart; the window it would hide is the page.
-  [SHELL_COMMANDS.GET_LAUNCH_CONTEXT]: () => ({ startHidden: false }),
+  [SHELL_COMMANDS.GET_LAUNCH_CONTEXT]: () => ({ startHidden: false, e2eBuild: false }),
 
   [SHELL_COMMANDS.GET_SHELL_STATE]: () => {
     ensureSeeded();

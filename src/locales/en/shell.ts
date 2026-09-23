@@ -76,6 +76,7 @@ export default {
       usbDisconnected: "USB strip disconnected",
       usbUnsupported: "USB device not recognised",
       hueColor: "Hue colour not applied",
+      updateCheckFailed: "Couldn't check for updates",
     },
     actions: {
       devices: "Devices",

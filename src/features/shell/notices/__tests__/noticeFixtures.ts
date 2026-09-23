@@ -35,6 +35,8 @@ export const QUIET_INPUT: ShellNoticeInput = {
   hueColorNotice: null,
   onboardingStep: null,
   localTargetConfigured: true,
+  updateCheckFailed: null,
+  updateChecking: false,
 };
 
 export function makeHandlers(): { [K in keyof Required<ShellNoticeHandlers>]: Mock } {
@@ -46,5 +48,6 @@ export function makeHandlers(): { [K in keyof Required<ShellNoticeHandlers>]: Mo
     retryHueProbe: vi.fn(),
     retryHueStop: vi.fn(),
     completeOnboarding: vi.fn(),
+    retryUpdateCheck: vi.fn(),
   };
 }

@@ -80,7 +80,16 @@ const CALIBRATION_AUTO_OPENED_KEY = "lumasync_calibration_opened";
 
 function App() {
   const { t } = useTranslation();
-  const { state: updaterState, isModalOpen: isUpdateModalOpen, checkForUpdates, downloadAndInstall, dismiss, devSetState: devSetUpdaterState } = useAutoUpdater();
+  const {
+    state: updaterState,
+    isModalOpen: isUpdateModalOpen,
+    checkForUpdates,
+    checkForUpdatesInBackground,
+    checkFailedNotice: updateCheckFailedNotice,
+    downloadAndInstall,
+    dismiss,
+    devSetState: devSetUpdaterState,
+  } = useAutoUpdater();
   const {
     currentMode,
     isContentVisible,
@@ -146,12 +155,13 @@ function App() {
 
   // Deliberately outside `bootstrap()` — behind shellStore, Hue, USB and DTLS the
   // release probe landed well past the user's first frame. The ref keeps
-  // StrictMode's double-mount from firing `check()` twice.
+  // StrictMode's double-mount from firing `check()` twice. A failure here is a
+  // notice, never the modal: nobody asked for this check.
   useEffect(() => {
     if (updateCheckRanRef.current) return;
     updateCheckRanRef.current = true;
-    void checkForUpdates();
-  }, [checkForUpdates]);
+    void checkForUpdatesInBackground();
+  }, [checkForUpdatesInBackground]);
 
   const { runtimeState: hueRuntimeState } = useHueStreamHealth({
     hueTargetSelected: selectedOutputTargets.includes("hue"),
@@ -413,6 +423,7 @@ function App() {
     retryHueProbe: hueProbe.retry,
     retryHueStop: () => void mode.stopHueOutput(HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL),
     completeOnboarding: handleOnboardingComplete,
+    retryUpdateCheck: () => void checkForUpdates(),
   };
   const noticeHandlers = useMemo<ShellNoticeHandlers>(
     () => ({
@@ -423,6 +434,7 @@ function App() {
       retryHueProbe: () => noticeHandlersRef.current?.retryHueProbe?.(),
       retryHueStop: () => noticeHandlersRef.current?.retryHueStop(),
       completeOnboarding: () => noticeHandlersRef.current?.completeOnboarding(),
+      retryUpdateCheck: () => noticeHandlersRef.current?.retryUpdateCheck(),
     }),
     [],
   );
@@ -452,6 +464,8 @@ function App() {
           hueColorNotice,
           onboardingStep: onboarding.step,
           localTargetConfigured,
+          updateCheckFailed: updateCheckFailedNotice,
+          updateChecking: updaterState.status === "checking",
         },
         noticeHandlers,
         t,
@@ -477,6 +491,8 @@ function App() {
       hueColorNotice,
       onboarding.step,
       localTargetConfigured,
+      updateCheckFailedNotice,
+      updaterState.status,
       noticeHandlers,
       t,
     ],

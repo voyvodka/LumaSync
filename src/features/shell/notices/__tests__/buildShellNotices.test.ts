@@ -377,4 +377,48 @@ describe("buildShellNotices", () => {
       expect(handlers.completeOnboarding).toHaveBeenCalledOnce();
     });
   });
+
+  describe("update check", () => {
+    const FAILURE = { message: "check_for_update not allowed" };
+
+    it("reports a failed background check as a dismissible low-priority event with a retry", () => {
+      const handlers = makeHandlers();
+      const notice = byId({ updateCheckFailed: FAILURE }, SHELL_NOTICE_IDS.UPDATE_CHECK_FAILED, handlers);
+
+      expect(notice.tier).toBe(NOTICE_TIER.INFO);
+      expect(notice.severity).toBe(NOTICE_SEVERITY.INFO);
+      expect(notice.kind).toBe("event");
+      expect(notice.dismissible).toBe(true);
+      expect(notice.title).toBe("shell:notices.titles.updateCheckFailed");
+      expect(notice.body).toBe("updater:error.backgroundCheckBody");
+      // The raw message embeds the feed URL and is not the explanation.
+      expect(notice.body).not.toContain(FAILURE.message);
+      expect(notice.action?.label).toBe("updater:actions.retry");
+      expect(notice.action?.pending).toBe(false);
+      notice.action?.onClick();
+      expect(handlers.retryUpdateCheck).toHaveBeenCalledOnce();
+    });
+
+    it("shows the retry as pending while the check it started runs", () => {
+      const notice = byId({ updateCheckFailed: FAILURE, updateChecking: true }, SHELL_NOTICE_IDS.UPDATE_CHECK_FAILED);
+
+      expect(notice.action?.label).toBe("updater:checking");
+      expect(notice.action?.pending).toBe(true);
+    });
+
+    it("sits below everything that concerns the lights, onboarding included", () => {
+      const ids = build({
+        updateCheckFailed: FAILURE,
+        onboardingStep: ONBOARDING_STEPS.LIGHTS,
+        availability: "checking",
+        usbDisconnected: true,
+      }).map((n) => n.id);
+
+      expect(ids[ids.length - 1]).toBe(SHELL_NOTICE_IDS.UPDATE_CHECK_FAILED);
+    });
+
+    it("says nothing without a failure", () => {
+      expect(build({ updateChecking: true })).toEqual([]);
+    });
+  });
 });
