@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-update-display-overlay-preview"
+description = "Enables the update_display_overlay_preview command without any pre-configured scope."
+commands.allow = ["update_display_overlay_preview"]
+
+[[permission]]
+identifier = "deny-update-display-overlay-preview"
+description = "Denies the update_display_overlay_preview command without any pre-configured scope."
+commands.deny = ["update_display_overlay_preview"]

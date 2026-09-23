@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-discover-wled-devices"
+description = "Enables the discover_wled_devices command without any pre-configured scope."
+commands.allow = ["discover_wled_devices"]
+
+[[permission]]
+identifier = "deny-discover-wled-devices"
+description = "Denies the discover_wled_devices command without any pre-configured scope."
+commands.deny = ["discover_wled_devices"]

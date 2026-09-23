@@ -1,8 +1,10 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "preview-popup",
-  "description": "v1.6 interactive control popup. Listens for mode and preview events, reads and writes the shell store, persists its own position from three geometry reads, and drags by its header. Hiding goes through a Rust command rather than the window API. Policy: docs/architecture/ui-and-shell.md, \"Capabilities\".",
-  "windows": ["led-control-popup"],
+  "description": "v1.6 interactive control popup. Listens for mode and preview events, reads and patches shell state, persists its own position from three geometry reads, and drags by its header. App commands: what ControlPopupApp, its hooks and its error boundary invoke; hiding goes through one of them rather than the window API. Policy: docs/architecture/ui-and-shell.md, \"Capabilities\".",
+  "windows": [
+    "led-control-popup"
+  ],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
@@ -12,9 +14,20 @@
     "core:window:allow-start-dragging",
     "core:window:allow-internal-toggle-maximize",
     "core:webview:allow-internal-toggle-devtools",
-    "store:allow-load",
-    "store:allow-get",
-    "store:allow-set",
-    "log:allow-log"
+    "log:allow-log",
+    "allow-get-shell-state",
+    "allow-patch-shell-state",
+    "allow-get-lighting-mode-status",
+    "allow-set-lighting-mode",
+    "allow-stop-lighting",
+    "allow-get-led-preview-status",
+    "allow-start-led-test-pattern",
+    "allow-stop-led-test-pattern",
+    "allow-start-hue-stream",
+    "allow-stop-hue-stream",
+    "allow-close-led-twin-overlay",
+    "allow-hide-led-control-popup",
+    "allow-show-notification",
+    "allow-open-log-dir"
   ]
 }

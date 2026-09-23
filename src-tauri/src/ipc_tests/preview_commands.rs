@@ -14,7 +14,7 @@
 
 use serde_json::json;
 use tauri::test::MockRuntime;
-use tauri::App;
+use tauri::{App, WebviewWindowBuilder};
 
 use super::{assert_camel_case_keys, invoke, main_webview, mock_app, status_code};
 
@@ -92,10 +92,18 @@ fn stopping_a_test_that_never_started_still_resolves() {
     assert_camel_case_keys(&response);
 }
 
+/// Asked from the popup: `useLightingModeSync` is its only caller, and the
+/// capabilities grant it nowhere else.
 #[test]
 fn preview_status_reports_an_idle_surface_before_anything_runs() {
     let app = app();
-    let webview = main_webview(&app);
+    let webview = WebviewWindowBuilder::new(
+        &app,
+        crate::commands::led_preview::LED_CONTROL_POPUP_LABEL,
+        Default::default(),
+    )
+    .build()
+    .expect("mock webview should build");
 
     let response =
         invoke(&webview, "get_led_preview_status", json!({})).expect("status must resolve");

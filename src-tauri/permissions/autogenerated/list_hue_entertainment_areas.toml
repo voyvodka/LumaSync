@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-hue-entertainment-areas"
+description = "Enables the list_hue_entertainment_areas command without any pre-configured scope."
+commands.allow = ["list_hue_entertainment_areas"]
+
+[[permission]]
+identifier = "deny-list-hue-entertainment-areas"
+description = "Denies the list_hue_entertainment_areas command without any pre-configured scope."
+commands.deny = ["list_hue_entertainment_areas"]

@@ -41,6 +41,10 @@ import type {
 import type { HueChannelPlacement } from "../../src/shared/contracts/roomMap";
 import type { LightingModeConfig } from "../../src/features/mode/model/contracts";
 import type { StartLedTestPatternPayload } from "../../src/shared/contracts/preview";
+import type {
+  ShellStatePatchRequest,
+  ShellStateReplaceRequest,
+} from "../../src/shared/contracts/shell";
 
 /**
  * Shared by `start_hue_stream` / `restart_hue_stream` — `startHue` and
@@ -105,6 +109,10 @@ export interface CommandArgs {
     username: string;
     areaId: string;
   };
+
+  // --- shell state ------------------------------------------------------------
+  patch_shell_state: { patch: ShellStatePatchRequest };
+  replace_shell_state: { request: ShellStateReplaceRequest };
 }
 
 /** A command this table types. */

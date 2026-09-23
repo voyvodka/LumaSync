@@ -41,7 +41,7 @@ const SLOW_COMMANDS: Record<string, number> = {
 
 export function isPassthrough(command: string): boolean {
   // A plugin command is only passed through when nothing here answers it —
-  // `plugin:store|load` gates startup and must be answered in the browser.
+  // `plugin:log|log` carries every console line and must be answered in the browser.
   if (command.startsWith(PLUGIN_PREFIX)) {
     return handlerFor(command) === undefined;
   }

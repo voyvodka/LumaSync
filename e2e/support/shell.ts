@@ -275,7 +275,7 @@ export async function drainErrors(): Promise<unknown[]> {
   });
 }
 
-/** Where `plugin-store` puts `shell-state.json` for `com.lumasync.app`. */
+/** Where `shell-state.json` lives for `com.lumasync.app`. */
 function shellStatePath(): string {
   const home = homedir();
   if (process.platform === "darwin") {

@@ -66,6 +66,12 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Settings: the main window and the LED control popup could undo each other's changes when both
+  saved at about the same time. The settings file now has one owner in the app, which applies
+  every change in turn, and it is written so that a crash or power cut mid-save leaves either the
+  old file or the new one, never a broken one. The previous good copy is kept beside it as
+  `shell-state.json.bak`, and a damaged file is set aside and the backup loaded instead of
+  resetting every setting. The file format is unchanged, so an older release still reads it.
 - Hue: after the router gave the bridge a new address, streaming quietly fell back to the slower
   HTTP mode because the saved pairing was tied to the old address. The pairing now belongs to
   the bridge itself; an existing pairing is moved over the next time the bridge accepts it.
@@ -508,6 +514,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Security
 
+- Each app window can now call only the LumaSync commands its own screens use. The LED preview
+  overlay can read the settings and nothing else, and the control popup can drive modes, test
+  patterns and its own position but cannot pair a Hue bridge, move its key, check for or install
+  an update, or rewrite the settings wholesale.
 - Each app window can now reach only the Tauri features it actually uses. The main window can no
   longer build menus or tray icons, drive the updater directly (update checks still go through the
   app as before), or write to the app's data folder, and it can read only the room-map background

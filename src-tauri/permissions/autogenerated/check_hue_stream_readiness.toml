@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-check-hue-stream-readiness"
+description = "Enables the check_hue_stream_readiness command without any pre-configured scope."
+commands.allow = ["check_hue_stream_readiness"]
+
+[[permission]]
+identifier = "deny-check-hue-stream-readiness"
+description = "Denies the check_hue_stream_readiness command without any pre-configured scope."
+commands.deny = ["check_hue_stream_readiness"]
