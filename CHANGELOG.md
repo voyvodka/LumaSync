@@ -31,9 +31,18 @@ https://keepachangelog.com/en/1.1.0/
   window about ten times a second for the Lights preview removed above, whether or not anything
   showed them. That stopped. The LED preview overlay still gets its per-LED feed, and only while
   it is open.
+- Devices → Hue Bridges: a bridge that no longer accepts the app's key shows one Re-pair button
+  instead of two. Error codes such as `AUTH_INVALID_RE_PAIR_REQUIRED` no longer fill a stat box in
+  large red text; every bridge card state now shows the code as a small line under its message,
+  where it can still be read for support. A stat box left on its own now spans the card's full
+  width instead of leaving an empty half, on WLED device cards too.
 
 ### Fixed
 
+- Opening the LED preview from the tray or from LED Setup no longer lights your Hue lamps. The
+  test pattern that starts by itself when the popup opens now goes to the LED strip (USB or WLED)
+  only. With no strip connected it shows in the overlay only, and the popup says so. Hue lights
+  join the test when you pick a pattern in the popup, as before.
 - Lights and the compact window no longer say "No reachable output" and ask you to pair a Hue
   bridge while an already paired bridge is still being checked, which happened for a second or so
   after opening the window. They now show "Checking outputs…" until the bridge answers; Ambilight
