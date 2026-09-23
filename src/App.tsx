@@ -342,10 +342,7 @@ function App() {
     hueConfigured: hueStartConfig !== null,
     bootstrapDone,
     hueReachable: hueReachable || hueSessionActive,
-    hueProbeGaveUp: hueProbe.gaveUp,
     hueProbeVerdict: hueProbe.verdict,
-    hueProbeChecking: hueProbe.probing,
-    onRetryHueProbe: hueProbe.retry,
     hueStreaming,
     hueReconnecting,
     hueStreamFailed,
@@ -574,14 +571,12 @@ function App() {
             transitionTimingFunction: UI_MODE_FADE_TIMING,
           }}
         >
-          {currentMode === "compact" && (
-            <ShellNoticeSlot
-              variant="compact"
-              queue={noticeQueue}
-              suppressed={updateModalShown}
-              holdSpace={onboarding.pending || !bootstrapDone}
-            />
-          )}
+          <ShellNoticeSlot
+            variant={currentMode}
+            queue={noticeQueue}
+            suppressed={updateModalShown}
+            holdSpace={onboarding.pending || !bootstrapDone}
+          />
           <div className="min-h-0 flex-1">
             <SettingsLayout uiMode={currentMode} {...sharedSettingsLayoutProps} />
           </div>
@@ -592,14 +587,6 @@ function App() {
         uiMode={currentMode}
         lightingActive={lightingMode.kind !== LIGHTING_MODE_KIND.OFF}
       />
-      {currentMode === "full" && (
-        <ShellNoticeSlot
-          variant="full"
-          queue={noticeQueue}
-          suppressed={updateModalShown}
-          statusBarHeightPx={statusBarHeight}
-        />
-      )}
       <ShellNoticeAnnouncer queue={noticeQueue} />
       {/* After the notices, and above them: the modal owns the screen, and the
           queue waits under it, inert and outside its focus trap. */}

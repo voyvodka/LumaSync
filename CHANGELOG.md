@@ -26,7 +26,7 @@ https://keepachangelog.com/en/1.1.0/
   with a "+N" that opens the rest. In the compact window it sits at the top, above the mode
   buttons, and pushes them down instead of covering them; the first-run hint and the "no reachable
   output" message no longer take half the window between them, and no longer say the same thing
-  twice. In the full window the notices stack at the bottom right without overlapping. Errors come
+  twice. The full window shows them the same way, at the top of the page. Errors come
   first, then warnings, then hints. A notice that reports something that happened can be closed
   and stays up while the pointer or keyboard focus is on it; one that describes something still
   true stays until it is no longer true. Screen readers hear each new notice once, and no longer
@@ -37,6 +37,13 @@ https://keepachangelog.com/en/1.1.0/
   are unavailable when the strip still needs calibrating, with a button to LED Setup. The
   first-run hint no longer asks Hue-only setups to calibrate a strip, and no longer offers "Open
   lights" in the compact window, where it did nothing.
+- Lights: in the full window, "no reachable output", "checking outputs" and "calibration required"
+  now appear as notices at the top of the page, in the same style as every other notice, instead
+  of as separate banners on the Lights page next to a second copy of the same message. Their
+  buttons stay: Open devices, Check again with Open devices beside it once the Hue bridge has
+  stopped answering (the compact window now has both too, the second behind the notice's expand
+  button), and Open setup for calibration. The first-run
+  "calibrate your strip" hint no longer repeats "calibration required".
 - Lights: the Ambilight card no longer shows the live preview, which was a capture latency and
   frame-rate readout, a box standing for the screen, and a colour estimate along each edge. The
   status bar already shows capture and output health. The card is now called "Mode settings" and

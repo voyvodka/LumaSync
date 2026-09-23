@@ -137,10 +137,13 @@ export function buildShellNotices(
   // A start failure means no worker exists, so the two can never co-fire; the
   // start notice wins to keep that invariant obvious if one ever does.
   const stalled = input.startFailure === null ? input.captureStalled : null;
-  // Full mode shows these three on the Lights page, beside the controls they
-  // explain; only compact has no room for them there.
-  const outputNoneShown =
-    input.availability === "none" && (compact || input.activeSection === SECTION_IDS.LIGHTS);
+  // No output, checking and calibration explain why the Lights mode buttons
+  // are dim, so they show where those buttons are: always in compact, and on
+  // the Lights section in full.
+  const onLights = compact || input.activeSection === SECTION_IDS.LIGHTS;
+  const outputNoneShown = onLights && input.availability === "none";
+  // With nothing to send frames to, calibrating is not the next step.
+  const calibrationShown = onLights && input.calibrationRequired && input.availability !== "none";
 
   // ── Capture ──────────────────────────────────────────────────────────
   if (permission) {
@@ -322,8 +325,9 @@ export function buildShellNotices(
   }
 
   // ── Outputs and calibration ──────────────────────────────────────────
-  if (compact && input.availability === "none") {
+  if (outputNoneShown) {
     const offerRetry = input.hueProbeGaveUp && handlers.retryHueProbe !== undefined;
+    const openDevices = { label: t("common:output.offline.action"), onClick: () => handlers.openDevices() };
     notices.push({
       id: SHELL_NOTICE_IDS.OUTPUT_NONE,
       tier: NOTICE_TIER.ERROR_CONDITION,
@@ -338,14 +342,14 @@ export function buildShellNotices(
             onClick: () => handlers.retryHueProbe?.(),
             pending: input.hueProbeChecking,
           }
-        : { label: t("common:output.offline.action"), onClick: () => handlers.openDevices() },
+        : openDevices,
+      secondaryAction: offerRetry ? openDevices : undefined,
       dismissible: false,
       source: input.hueProbeGaveUp,
       testId: "output-none-notice",
     });
   }
-  // With nothing to send frames to, calibrating is not the next step.
-  if (compact && input.calibrationRequired && input.availability !== "none") {
+  if (calibrationShown) {
     notices.push({
       id: SHELL_NOTICE_IDS.CALIBRATION_REQUIRED,
       tier: NOTICE_TIER.ERROR_CONDITION,
@@ -360,7 +364,7 @@ export function buildShellNotices(
     });
   }
 
-  if (compact && input.availability === "checking") {
+  if (onLights && input.availability === "checking") {
     notices.push({
       id: SHELL_NOTICE_IDS.OUTPUT_CHECKING,
       tier: NOTICE_TIER.INFO,
@@ -379,6 +383,8 @@ export function buildShellNotices(
     step === ONBOARDING_STEPS.COMPLETE ||
     // "Connect your lights" says what the no-output notice already says.
     (step === ONBOARDING_STEPS.DEVICES && outputNoneShown) ||
+    // "Calibrate your LEDs" says what the calibration notice already says.
+    (step === ONBOARDING_STEPS.LED_SETUP && calibrationShown) ||
     // Calibration maps LEDs; a Hue-only setup has none to map.
     (step === ONBOARDING_STEPS.LED_SETUP && !input.localTargetConfigured);
   if (!onboardingHidden) {
@@ -386,7 +392,7 @@ export function buildShellNotices(
     const action =
       step === ONBOARDING_STEPS.LIGHTS
         ? // Compact is the Lights screen already, and so is full on Lights.
-          compact || input.activeSection === SECTION_IDS.LIGHTS
+          onLights
           ? undefined
           : { label: t(copy.action), onClick: handlers.openLights }
         : step === ONBOARDING_STEPS.DEVICES

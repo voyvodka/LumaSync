@@ -49,16 +49,9 @@ vi.mock("react-i18next", () => ({
         "lights:mode.ambilight.subtitleFallback": "Live screen capture",
         "lights:mode.solid.title": "Solid",
         "lights:calibrationBanner.title": "Calibration required",
-        "lights:calibrationBanner.sub": "Finish LED layout before enabling this mode.",
         "lights:calibrationBanner.action": "Open calibration",
         "common:output.offline.title": "No reachable output",
-        "common:output.offline.body":
-          "Connect a USB LED strip or pair a Hue bridge to enable lighting modes.",
         "common:output.offline.action": "Open devices",
-        "common:output.offline.stoppedBody":
-          "LumaSync stopped checking for your Hue bridge — it did not answer on this network.",
-        "common:output.offline.retry": "Check again",
-        "common:output.offline.retrying": "Checking…",
         "lights:signal.linkBudget.constrained":
           "USB link limit — at 115,200 baud this strip carries about {{fps}} fps.",
         "lights:signal.linkBudget.hint": "Shorten the strip or output over WLED.",
@@ -130,7 +123,6 @@ describe("LightsSection", () => {
         modeLockReason={null}
         onModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
-        onOpenCalibration={vi.fn()}
       />,
     );
 
@@ -154,7 +146,6 @@ describe("LightsSection", () => {
         modeLockReason={null}
         onModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
-        onOpenCalibration={vi.fn()}
       />,
     );
 
@@ -179,7 +170,6 @@ describe("LightsSection", () => {
         modeLockReason={null}
         onModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
-        onOpenCalibration={vi.fn()}
       />,
     );
 
@@ -203,7 +193,6 @@ describe("LightsSection", () => {
         modeLockReason={null}
         onModeChange={onModeChange}
         onOutputTargetsChange={vi.fn()}
-        onOpenCalibration={vi.fn()}
       />,
     );
 
@@ -238,7 +227,6 @@ describe("LightsSection", () => {
             onModeChange(nextMode);
           }}
           onOutputTargetsChange={vi.fn()}
-          onOpenCalibration={vi.fn()}
         />
       );
     }
@@ -263,9 +251,9 @@ describe("LightsSection", () => {
     });
   });
 
-  it("keeps controls disabled and opens calibration CTA when lock reason is CALIBRATION_REQUIRED", async () => {
-    const user = userEvent.setup();
-    const onOpenCalibration = vi.fn();
+  // The reason and its "Open setup" live in the shell notice queue; the page
+  // only disables what the lock covers.
+  it("keeps controls disabled when lock reason is CALIBRATION_REQUIRED, and leaves the explanation to the notice queue", () => {
     const onModeChange = vi.fn();
 
     render(
@@ -279,16 +267,14 @@ describe("LightsSection", () => {
         modeLockReason={MODE_GUARD_REASONS.CALIBRATION_REQUIRED}
         onModeChange={onModeChange}
         onOutputTargetsChange={vi.fn()}
-        onOpenCalibration={onOpenCalibration}
       />,
     );
 
     expect(screen.getByRole("button", { name: /Ambilight/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Solid/ })).toBeDisabled();
 
-    await user.click(screen.getByRole("button", { name: "Open calibration" }));
-
-    expect(onOpenCalibration).toHaveBeenCalledOnce();
+    expect(screen.queryByText("Calibration required")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open calibration" })).not.toBeInTheDocument();
     expect(onModeChange).not.toHaveBeenCalled();
   });
 
@@ -307,7 +293,6 @@ describe("LightsSection", () => {
         modeLockReason={null}
         onModeChange={vi.fn()}
         onOutputTargetsChange={onOutputTargetsChange}
-        onOpenCalibration={vi.fn()}
       />,
     );
 
@@ -334,7 +319,6 @@ describe("LightsSection — the local output row names what is actually bound", 
         modeLockReason={null}
         onModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
-        onOpenCalibration={vi.fn()}
       />,
     );
     // Asserted against the row itself rather than the document: "USB" also
@@ -396,11 +380,7 @@ describe("LightsSection — output availability gate", () => {
       localOutputConnected: boolean;
       hueConfigured: boolean;
       hueReachable: boolean;
-      hueProbeGaveUp: boolean;
-      hueProbeChecking: boolean;
       hueProbeVerdict: HueProbeVerdict | null;
-      onRetryHueProbe: () => void;
-      onOpenDevices: () => void;
       onModeChange: (next: LightingModeConfig) => void;
     }> = {},
   ) {
@@ -418,16 +398,11 @@ describe("LightsSection — output availability gate", () => {
         localSink={(props.localOutputConnected ?? false) ? { transport: "serial" as const, id: "/dev/cu.usbserial-1420" } : null}
         hueConfigured={props.hueConfigured ?? false}
         hueReachable={props.hueReachable ?? false}
-        hueProbeGaveUp={props.hueProbeGaveUp ?? false}
-        hueProbeChecking={props.hueProbeChecking ?? false}
         hueProbeVerdict={props.hueProbeVerdict ?? null}
-        onRetryHueProbe={props.onRetryHueProbe}
         hueStreaming={false}
         modeLockReason={null}
         onModeChange={props.onModeChange ?? vi.fn()}
         onOutputTargetsChange={vi.fn()}
-        onOpenCalibration={vi.fn()}
-        onOpenDevices={props.onOpenDevices}
         />,
       );
     });
@@ -438,79 +413,20 @@ describe("LightsSection — output availability gate", () => {
     shellStateRef.current = {};
   });
 
-  it("disables the non-Off modes and explains why when nothing is connected", async () => {
-    const user = userEvent.setup();
+  // What is missing, and the way to fix it, is said by the shell notice queue
+  // (buildShellNotices); a second copy here said it twice in full mode.
+  it("disables the non-Off modes when nothing is connected, without an inline banner", async () => {
     const onModeChange = vi.fn();
-    const onOpenDevices = vi.fn();
-    await renderWithOutputs({ onModeChange, onOpenDevices });
+    await renderWithOutputs({ onModeChange });
 
     expect(screen.getByRole("button", { name: /Ambilight/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Solid/ })).toBeDisabled();
     // Off parks the outputs — always safe, never gated on having one.
     expect(screen.getByRole("button", { name: /Off/ })).toBeEnabled();
 
-    expect(screen.getByText("No reachable output")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Connect a USB LED strip or pair a Hue bridge to enable lighting modes.",
-      ),
-    ).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Open devices" }));
-    expect(onOpenDevices).toHaveBeenCalledOnce();
+    expect(screen.queryByText("No reachable output")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open devices" })).not.toBeInTheDocument();
     expect(onModeChange).not.toHaveBeenCalled();
-  });
-
-  it("offers a manual retry once the bridge probe has given up", async () => {
-    const user = userEvent.setup();
-    const onRetryHueProbe = vi.fn();
-    await renderWithOutputs({
-      hueConfigured: true,
-      hueProbeVerdict: "unreachable",
-      hueProbeGaveUp: true,
-      onRetryHueProbe,
-    });
-
-    expect(
-      screen.getByText(
-        "LumaSync stopped checking for your Hue bridge — it did not answer on this network.",
-      ),
-    ).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Check again" }));
-    expect(onRetryHueProbe).toHaveBeenCalledOnce();
-  });
-
-  it("keeps the retry on screen while the retry it triggered is in flight", async () => {
-    await renderWithOutputs({
-      hueConfigured: true,
-      hueProbeVerdict: "unreachable",
-      hueProbeGaveUp: true,
-      hueProbeChecking: true,
-      onRetryHueProbe: vi.fn(),
-    });
-
-    // The whole complaint: pressing it used to clear `gaveUp` and delete the
-    // only thing on screen that said anything was happening.
-    const retry = screen.getByRole("button", { name: "Checking…" });
-    expect(retry).toBeDisabled();
-    expect(retry).toHaveAttribute("aria-busy", "true");
-    expect(screen.queryByRole("button", { name: "Check again" })).not.toBeInTheDocument();
-  });
-
-  it("hides the retry while the probe is still trying", async () => {
-    await renderWithOutputs({
-      hueConfigured: true,
-      hueProbeVerdict: "unreachable",
-      onRetryHueProbe: vi.fn(),
-    });
-
-    expect(screen.queryByRole("button", { name: "Check again" })).not.toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Connect a USB LED strip or pair a Hue bridge to enable lighting modes.",
-      ),
-    ).toBeInTheDocument();
   });
 
   it("blocks scene presets too — every scene tile activates SOLID", async () => {
@@ -529,17 +445,17 @@ describe("LightsSection — output availability gate", () => {
     });
 
     expect(screen.getByRole("button", { name: /Ambilight/ })).toBeDisabled();
-    expect(screen.getByText("No reachable output")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Solid/ })).toBeDisabled();
   });
 
   // Seen on launch: the Outputs card read "Bridge · checking…" while the banner
-  // above it asked the user to pair the bridge that was being checked.
-  it("says it is checking — not that nothing is paired — while the bridge's first probe runs", async () => {
+  // above it asked the user to pair the bridge that was being checked. The
+  // checking notice itself is the queue's (buildShellNotices).
+  it("says checking on the Hue row — not that nothing is paired — while the bridge's first probe runs", async () => {
     await renderWithOutputs({ hueConfigured: true, hueReachable: false, hueProbeVerdict: null });
 
-    expect(screen.getByTestId("output-checking")).toHaveTextContent("common:output.checking");
-    expect(screen.queryByText("No reachable output")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open devices" })).not.toBeInTheDocument();
+    expect(screen.getByText("lights:dock.rows.hueSubChecking")).toBeInTheDocument();
+    expect(screen.queryByTestId("output-checking")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Ambilight/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Solid/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Off/ })).toBeEnabled();
@@ -550,32 +466,6 @@ describe("LightsSection — output availability gate", () => {
 
     expect(screen.getByRole("button", { name: /Ambilight/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Solid/ })).toBeEnabled();
-    expect(screen.queryByText("No reachable output")).not.toBeInTheDocument();
-  });
-
-  it("keeps the calibration reason distinct from the offline reason", async () => {
-    // Renders LightsSection directly rather than through renderWithOutputs, so
-    // it needs the same mount-effect flush the helper performs.
-    await act(async () => {
-      render(
-        <LightsSection
-          mode={{ kind: "off" }}
-          outputTargets={["usb"]}
-          localOutputConnected={true}
-          localSink={{ transport: "serial", id: "/dev/cu.usbserial-1420" }}
-          hueConfigured={false}
-          hueStreaming={false}
-          modeLockReason={MODE_GUARD_REASONS.CALIBRATION_REQUIRED}
-          onModeChange={vi.fn()}
-          onOutputTargetsChange={vi.fn()}
-          onOpenCalibration={vi.fn()}
-          onOpenDevices={vi.fn()}
-        />,
-      );
-    });
-
-    expect(screen.getByText("Calibration required")).toBeInTheDocument();
-    expect(screen.queryByText("No reachable output")).not.toBeInTheDocument();
   });
 });
 
@@ -618,7 +508,6 @@ describe("LightsSection — Add Hue zone", () => {
         modeLockReason={null}
         onModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
-        onOpenCalibration={vi.fn()}
       />,
     );
   }
@@ -706,7 +595,6 @@ describe("LightsSection — serial link budget note", () => {
         modeLockReason={null}
         onModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
-        onOpenCalibration={vi.fn()}
       />,
     );
   }
@@ -774,7 +662,6 @@ describe("LightsSection — Ambilight mode settings card", () => {
         modeLockReason={null}
         onModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
-        onOpenCalibration={vi.fn()}
       />,
     );
   }
@@ -844,7 +731,6 @@ describe("LightsSection — room-aware indicator", () => {
         modeLockReason={null}
         onModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
-        onOpenCalibration={vi.fn()}
       />,
     );
   }

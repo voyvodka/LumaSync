@@ -7,7 +7,7 @@ import { HUE_LEFT_OUT_REASON } from "@/shared/contracts/lighting";
 import { SECTION_IDS } from "@/shared/contracts/shell";
 
 import { buildShellNotices, type ShellNoticeInput } from "../buildShellNotices";
-import { SHELL_NOTICE_IDS } from "../noticeModel";
+import { NOTICE_SEVERITY, NOTICE_TIER, SHELL_NOTICE_IDS } from "../noticeModel";
 import { keyT, makeHandlers, QUIET_INPUT } from "./noticeFixtures";
 
 function build(overrides: Partial<ShellNoticeInput> = {}, handlers = makeHandlers()) {
@@ -224,16 +224,55 @@ describe("buildShellNotices", () => {
   });
 
   describe("outputs and calibration", () => {
-    it("shows checking, no output and calibration in compact only — full shows them on the Lights page", () => {
-      const inputs: Partial<ShellNoticeInput>[] = [
-        { availability: "checking" },
-        { availability: "none" },
-        { calibrationRequired: true },
-      ];
-      for (const input of inputs) {
-        expect(build({ ...input, uiMode: "compact" })).toHaveLength(1);
-        expect(build({ ...input, uiMode: "full" })).toEqual([]);
+    // They explain the dim Lights mode buttons, so they go where those are.
+    // Full mode used to draw its own copies inline on the Lights page.
+    it.each([
+      [{ availability: "checking" as const }, SHELL_NOTICE_IDS.OUTPUT_CHECKING],
+      [{ availability: "none" as const }, SHELL_NOTICE_IDS.OUTPUT_NONE],
+      [{ calibrationRequired: true }, SHELL_NOTICE_IDS.CALIBRATION_REQUIRED],
+    ])("shows %o in compact and on the full Lights section, nowhere else", (input, id) => {
+      expect(build({ ...input, uiMode: "compact" }).map((n) => n.id)).toEqual([id]);
+      expect(build({ ...input, uiMode: "compact", activeSection: SECTION_IDS.DEVICES }).map((n) => n.id)).toEqual([id]);
+      expect(build({ ...input, uiMode: "full", activeSection: SECTION_IDS.LIGHTS }).map((n) => n.id)).toEqual([id]);
+      for (const section of [SECTION_IDS.DEVICES, SECTION_IDS.LED_SETUP, SECTION_IDS.SYSTEM]) {
+        expect(build({ ...input, uiMode: "full", activeSection: section })).toEqual([]);
       }
+    });
+
+    it.each(["compact", "full"] as const)(
+      "grades no output and calibration as error conditions and checking as info (%s)",
+      (uiMode) => {
+        for (const [input, id] of [
+          [{ availability: "none" as const }, SHELL_NOTICE_IDS.OUTPUT_NONE],
+          [{ calibrationRequired: true }, SHELL_NOTICE_IDS.CALIBRATION_REQUIRED],
+        ] as const) {
+          const notice = byId({ ...input, uiMode }, id);
+          expect([notice.tier, notice.severity, notice.kind, notice.dismissible]).toEqual([
+            NOTICE_TIER.ERROR_CONDITION,
+            NOTICE_SEVERITY.ERROR,
+            "condition",
+            false,
+          ]);
+        }
+        const checking = byId({ availability: "checking", uiMode }, SHELL_NOTICE_IDS.OUTPUT_CHECKING);
+        expect([checking.tier, checking.severity, checking.kind, checking.action]).toEqual([
+          NOTICE_TIER.INFO,
+          NOTICE_SEVERITY.INFO,
+          "condition",
+          undefined,
+        ]);
+      },
+    );
+
+    it("sends the user to Devices while the probe is still trying, with no retry", () => {
+      const handlers = makeHandlers();
+      const notice = byId({ availability: "none", uiMode: "full" }, SHELL_NOTICE_IDS.OUTPUT_NONE, handlers);
+      expect(notice.body).toBe("common:output.offline.body");
+      expect(notice.action?.label).toBe("common:output.offline.action");
+      expect(notice.secondaryAction).toBeUndefined();
+      notice.action?.onClick();
+      expect(handlers.openDevices).toHaveBeenCalledOnce();
+      expect(handlers.retryHueProbe).not.toHaveBeenCalled();
     });
 
     it("offers a retry once the bridge probe gave up, and shows it pending while it runs", () => {
@@ -242,6 +281,10 @@ describe("buildShellNotices", () => {
       expect(notice.body).toBe("common:output.offline.stoppedBody");
       notice.action?.onClick();
       expect(handlers.retryHueProbe).toHaveBeenCalledOnce();
+      // Devices stays one click away beside the retry, as the full-mode banner had it.
+      expect(notice.secondaryAction?.label).toBe("common:output.offline.action");
+      notice.secondaryAction?.onClick();
+      expect(handlers.openDevices).toHaveBeenCalledOnce();
 
       const pending = byId(
         { availability: "none", hueProbeGaveUp: true, hueProbeChecking: true },
@@ -252,15 +295,27 @@ describe("buildShellNotices", () => {
     });
 
     it("leaves calibration unsaid while there is no output to calibrate for", () => {
-      expect(build({ availability: "none", calibrationRequired: true }).map((n) => n.id)).toEqual([
-        SHELL_NOTICE_IDS.OUTPUT_NONE,
-      ]);
+      for (const uiMode of ["compact", "full"] as const) {
+        expect(build({ availability: "none", calibrationRequired: true, uiMode }).map((n) => n.id)).toEqual([
+          SHELL_NOTICE_IDS.OUTPUT_NONE,
+        ]);
+      }
     });
 
-    it("explains the compact calibration lock and opens LED setup", () => {
+    // A calibrated strip that is merely unplugged must not be told to go and
+    // calibrate, and an uncalibrated one that is connected must not be called missing.
+    it("keeps the calibration reason distinct from the offline reason", () => {
+      expect(build({ calibrationRequired: true, uiMode: "full" }).map((n) => n.id)).toEqual([
+        SHELL_NOTICE_IDS.CALIBRATION_REQUIRED,
+      ]);
+      expect(build({ availability: "none", uiMode: "full" }).map((n) => n.id)).toEqual([SHELL_NOTICE_IDS.OUTPUT_NONE]);
+    });
+
+    it.each(["compact", "full"] as const)("explains the calibration lock and opens LED setup (%s)", (uiMode) => {
       const handlers = makeHandlers();
-      const notice = byId({ calibrationRequired: true }, SHELL_NOTICE_IDS.CALIBRATION_REQUIRED, handlers);
+      const notice = byId({ calibrationRequired: true, uiMode }, SHELL_NOTICE_IDS.CALIBRATION_REQUIRED, handlers);
       expect(notice.title).toBe("lights:calibrationBanner.title");
+      expect(notice.body).toBe("lights:calibrationBanner.sub");
       notice.action?.onClick();
       expect(handlers.openLedSetup).toHaveBeenCalledOnce();
     });
@@ -271,9 +326,23 @@ describe("buildShellNotices", () => {
     it("hides 'connect your lights' while the no-output notice says it", () => {
       const step2 = { onboardingStep: ONBOARDING_STEPS.DEVICES, availability: "none" as const };
       expect(build({ ...step2, uiMode: "compact" }).map((n) => n.id)).toEqual([SHELL_NOTICE_IDS.OUTPUT_NONE]);
-      // Full shows the no-output banner on Lights only; elsewhere step 2 is the only one saying it.
-      expect(build({ ...step2, uiMode: "full", activeSection: SECTION_IDS.LIGHTS })).toEqual([]);
+      // Full shows the no-output notice on Lights only; elsewhere step 2 is the only one saying it.
+      expect(build({ ...step2, uiMode: "full", activeSection: SECTION_IDS.LIGHTS }).map((n) => n.id)).toEqual([
+        SHELL_NOTICE_IDS.OUTPUT_NONE,
+      ]);
       expect(build({ ...step2, uiMode: "full", activeSection: SECTION_IDS.SYSTEM }).map((n) => n.id)).toEqual([
+        SHELL_NOTICE_IDS.ONBOARDING,
+      ]);
+    });
+
+    // Step 3 and "calibration required" said the same thing with the same button.
+    it("hides 'calibrate your strip' while the calibration notice says it", () => {
+      const step3 = { onboardingStep: ONBOARDING_STEPS.LED_SETUP, calibrationRequired: true };
+      expect(build({ ...step3, uiMode: "compact" }).map((n) => n.id)).toEqual([SHELL_NOTICE_IDS.CALIBRATION_REQUIRED]);
+      expect(build({ ...step3, uiMode: "full", activeSection: SECTION_IDS.LIGHTS }).map((n) => n.id)).toEqual([
+        SHELL_NOTICE_IDS.CALIBRATION_REQUIRED,
+      ]);
+      expect(build({ ...step3, uiMode: "full", activeSection: SECTION_IDS.DEVICES }).map((n) => n.id)).toEqual([
         SHELL_NOTICE_IDS.ONBOARDING,
       ]);
     });

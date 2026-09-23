@@ -3307,11 +3307,13 @@ describe("App mode orchestration", () => {
     },
   );
 
-  it("gives the compact notice slot its own row instead of letting it push the layout out", async () => {
+  // Full used to float its notices bottom right, over the page; both modes now
+  // give the slot a row of its own above the layout.
+  it.each(["compact", "full"] as const)("gives the %s notice slot its own row instead of letting it push the layout out", async (uiMode) => {
     // A fresh install: no guard is ever met and nothing is reachable, so the
     // slot mounts and stays.
     mockIsConnected = false;
-    loadShellStateMock.mockResolvedValue({ lastSection: "general", uiMode: "compact" });
+    loadShellStateMock.mockResolvedValue({ lastSection: "lights", uiMode });
 
     render(<App />);
 
@@ -3321,6 +3323,7 @@ describe("App mode orchestration", () => {
 
     const noticeSlot = screen.getByTestId("shell-notice-slot");
     expect(noticeSlot).toHaveClass("lm-notice-slot");
+    expect(noticeSlot).toHaveAttribute("data-variant", uiMode);
 
     const slot = noticeSlot.parentElement!;
     expect(slot.className).toContain("flex");

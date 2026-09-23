@@ -67,6 +67,8 @@ function noticeSignature(notice: ShellNotice): string {
     notice.step ?? "",
     notice.action?.label ?? "",
     notice.action?.pending ? "1" : "0",
+    notice.secondaryAction?.label ?? "",
+    notice.secondaryAction?.pending ? "1" : "0",
     notice.dismissible ? "1" : "0",
     sourceToken(notice.source),
   ].join("\u0001");

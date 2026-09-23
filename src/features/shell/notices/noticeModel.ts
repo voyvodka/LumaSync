@@ -78,6 +78,11 @@ export interface ShellNotice {
   /** Onboarding's "1/3". */
   step?: string;
   action?: NoticeAction;
+  /**
+   * A second way out, shown only where the body is: never in the compact
+   * headline, which has room for one button.
+   */
+  secondaryAction?: NoticeAction;
   /** Shows a ×. Events always have one; the only dismissible condition is onboarding. */
   dismissible: boolean;
   /** Runs after the queue hides the notice — onboarding persists its completion here. */
