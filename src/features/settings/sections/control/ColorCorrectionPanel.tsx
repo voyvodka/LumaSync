@@ -1,5 +1,5 @@
 /**
- * ColorCorrectionPanel — v1.4 G4 LED color correction editor.
+ * ColorCorrectionPanel — LED color correction editor.
  *
  * Renders the per-channel gamma (R/G/B), white-point Kelvin, and saturation
  * sliders that feed the Rust LED encoder. State is persisted to

@@ -16,10 +16,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Dependency review
-        uses: actions/dependency-review-action@v5
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
           # Deny strong copyleft licenses — switched from allow-list because
@@ -31,6 +33,7 @@ jobs:
           deny-licenses: GPL-1.0, GPL-2.0, GPL-3.0, LGPL-2.0, LGPL-2.1, LGPL-3.0, AGPL-1.0, AGPL-3.0, EUPL-1.1, EUPL-1.2, SSPL-1.0
           # unescaper (via serialport) and jszip (via webdriverio) are dual
           # "MIT OR GPL-3.0-*" — we take the MIT arm; the action matches inside
-          # OR and cannot see that.
-          allow-dependencies-licenses: pkg:cargo/unescaper, pkg:npm/jszip
+          # OR and cannot see that. Swatinem/rust-cache (LGPL-3.0) is a CI
+          # action: it runs on the runner and is never linked or shipped.
+          allow-dependencies-licenses: pkg:cargo/unescaper, pkg:npm/jszip, pkg:githubactions/Swatinem/rust-cache
           comment-summary-in-pr: on-failure

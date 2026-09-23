@@ -71,7 +71,7 @@ pub struct HuePairingCredentials {
 pub struct HuePairBridgeResponse {
     pub status: CommandStatus,
     pub credentials: Option<HuePairingCredentials>,
-    /// v1.5 W2-A2 — backend used to persist the new credentials.
+    /// Backend used to persist the new credentials.
     /// Absent on legacy paths (rate-limited, bridge-busy, link-button-not-pressed).
     /// `"keychain"` ⇒ frontend SHOULD clear the legacy plaintext shellStore fields.
     /// `"plaintext-legacy"` ⇒ keychain unavailable, frontend keeps plaintext fallback.
@@ -144,7 +144,7 @@ struct DiscoveryBridge {
 /// parallel, merging and deduplicating the results by bridge id.
 #[tauri::command]
 pub async fn discover_hue_bridges() -> HueDiscoveryResponse {
-    // v1.5 W2-A3 — run cloud and mDNS discovery in parallel.
+    // Run cloud and mDNS discovery in parallel.
     //
     // Cloud (`https://discovery.meethue.com/`) returns the bridges
     // Signify recorded against the calling NAT IP — works for users on
@@ -460,7 +460,7 @@ pub(crate) async fn pair_bridge_at(
                 }
                 code => warn!("Hue bridge pairing failed at {bridge_ip} ({code})"),
             }
-            // v1.5 W2-A2 — opportunistically migrate the fresh credentials
+            // Opportunistically migrate the fresh credentials
             // into the OS keychain. If the keychain is unavailable we keep
             // the plaintext fallback path; the frontend uses the
             // `credentialStorageBackend` field on the response to decide
@@ -1178,7 +1178,7 @@ pub fn parse_pairing_payload(payload: &str) -> HuePairBridgeResponse {
 ///
 /// Pure (no I/O) so the mapping stays trivially unit-testable. Unknown
 /// error types collapse to `HUE_PAIRING_FAILED` to preserve backwards
-/// compatibility with frontends that predate the v1.4 G7 split.
+/// compatibility with frontends that predate the specific pairing codes.
 fn pairing_error_status(error_type: Option<i64>, description: &str) -> CommandStatus {
     let description_lower = description.to_lowercase();
     match error_type {

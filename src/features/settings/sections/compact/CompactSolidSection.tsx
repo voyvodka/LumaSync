@@ -12,7 +12,7 @@ import { SelfContainedBrightnessRow } from "./SelfContainedBrightnessRow";
 interface CompactSolidSectionProps {
   incoming: { r: number; g: number; b: number; brightness: number };
   disabled: boolean;
-  /** v1.5 W2 fix #41 — Adalight firmware lock parity with full Lights view. */
+  /** Adalight firmware lock parity with full Lights view. */
   brightnessDisabled?: boolean;
   /** Tooltip / mono notice surfaced when `brightnessDisabled` is true. */
   brightnessDisabledReason?: string;

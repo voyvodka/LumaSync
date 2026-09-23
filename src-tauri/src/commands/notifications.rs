@@ -1,4 +1,4 @@
-//! Platform notification commands (v1.4 W3-O).
+//! Platform notification commands.
 //!
 //! Platform nuances:
 //!   - macOS: the plugin's desktop `permission_state()` always returns

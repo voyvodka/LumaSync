@@ -17,7 +17,7 @@
  *    the plugin is not available.
  *  - "Show logs" → `platformApi.openLogDir()`. Reveals the LumaSync log
  *    directory in Finder / Explorer / xdg-open so the user can attach
- *    log files to a bug report. Backed by the v1.4 W3-O platform
+ *    log files to a bug report. Backed by the `open_log_dir` platform
  *    command; hidden until that command succeeds during a probe call,
  *    in keeping with the project's no-false-affordance rule.
  *  - "Copy error" → `navigator.clipboard.writeText()` with the error

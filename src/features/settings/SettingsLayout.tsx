@@ -52,20 +52,20 @@ interface SettingsLayoutProps {
   isCheckingForUpdates: boolean;
   devSetUpdaterState?: (state: UpdaterState) => void;
   /**
-   * v1.4 G6 — forwarded to LightsSection so the user's Hue intensity preset
+   * Forwarded to LightsSection so the user's Hue intensity preset
    * selection can hot-reload the running ambilight worker through the
    * shared shell helper in App.tsx. Optional so the compact-only path can
    * drop it without complaining.
    */
   onHueIntensityPresetChange?: (preset: HueIntensityPreset) => void;
   /**
-   * v1.4 G4 — forwarded to LightsSection so color correction edits in the
+   * Forwarded to LightsSection so color correction edits in the
    * ColorCorrectionPanel can hot-reload the running worker via
    * set_lighting_mode. Mirrors the onHueIntensityPresetChange pattern.
    */
   onColorCorrectionChange?: (next: ColorCorrectionConfig) => void;
   /**
-   * v1.4 G11 — forwarded to LightsSection so firmware profile swaps in
+   * Forwarded to LightsSection so firmware profile swaps in
    * the FirmwareProfilePicker can hot-reload the running encoder via
    * set_lighting_mode. Mirrors the onHueIntensityPresetChange pattern.
    */

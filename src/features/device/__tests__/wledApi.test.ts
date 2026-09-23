@@ -1,12 +1,12 @@
 /**
- * wledApi — invoke contract tests (F2 regression coverage)
+ * wledApi — invoke contract tests
  *
  * Strategy: mock `@tauri-apps/api/core` at the module boundary so we test the
  * thin wrappers in isolation — correct command name from DEVICE_COMMANDS,
  * exact payload shape, and the never-throws contract (coded failures are
  * resolved, not rejected).
  *
- * A1.1 regression guard: discoverWledDevices must return the response under
+ * Regression guard: discoverWledDevices must return the response under
  * the `devices` (plural) field. If Rust ever drifts back to `device`, the
  * wire contract test will fail.
  */
@@ -115,9 +115,9 @@ describe("discoverWledDevices", () => {
     expect(result.devices).toEqual([]);
   });
 
-  // A1.1 regression guard ——————————————————————————————————————————————————
+  // Regression guard: plural `devices` ————————————————————————————————————
   // The pre-fix Rust handler returned `device: Option<WledDeviceInfo>` (singular).
-  // After A1.1 the field was renamed to `devices: Vec<WledDeviceInfo>` (plural).
+  // The field was then renamed to `devices: Vec<WledDeviceInfo>` (plural).
   // If anyone reverts the rename, `result.devices` becomes undefined and the
   // length assertion fails — exactly the failure we want.
   it("A1.1 wire contract: response carries plural `devices` field, not `device`", async () => {

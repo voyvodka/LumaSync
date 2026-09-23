@@ -14,8 +14,8 @@
 //! on a bogus signal.
 //!
 //! The helpers live here rather than inside `hue_onboarding.rs` or the
-//! streaming code so the v1.5 G8 split could lift them without touching the
-//! contract surface. That split has since landed as `commands::hue::*`.
+//! streaming code so the streaming split into `commands::hue::*` could lift
+//! them without touching the contract surface.
 
 use serde_json::Value;
 

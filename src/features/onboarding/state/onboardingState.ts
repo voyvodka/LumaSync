@@ -1,5 +1,5 @@
 /**
- * Onboarding state machine — v1.5 W2-B4
+ * Onboarding state machine
  *
  * The first-run onboarding flow is a 3-step progressive banner that
  * walks a fresh user through:

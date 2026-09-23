@@ -37,7 +37,7 @@ export interface ModeRuntimeConfigSnapshot {
 
 /**
  * Inject the persisted capture-source display id into an outgoing
- * LightingModeConfig payload (v1.4 Platform GAP 2). The ambilight
+ * LightingModeConfig payload. The ambilight
  * worker uses this id to bind its SCStream / windows-capture session
  * to the selected monitor; an absent or unknown id falls back to the
  * OS primary on the backend, so we only stamp the field when it is

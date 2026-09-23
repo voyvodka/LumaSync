@@ -9,7 +9,7 @@ interface SolidColorPanelProps {
   disabled: boolean;
   /**
    * When true, the brightness slider is locked with an explanatory notice.
-   * Used by the Adalight firmware profile (v1.4 G11 / D2 decision): the
+   * Used by the Adalight firmware profile: the
    * Adalight wire format does not carry a brightness byte, so any UI-level
    * brightness adjustment would silently no-op. We visibly lock the slider
    * and surface the `brightnessDisabledTooltip` copy instead so the user

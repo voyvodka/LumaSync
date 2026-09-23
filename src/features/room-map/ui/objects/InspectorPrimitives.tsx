@@ -184,7 +184,7 @@ export function InspectorOptionalNumberField({
 
 /**
  * `Header` is shared by every inspector so the visual rhythm matches
- * `HueZoneInspector` (the W4-C reference). The chip label is the
+ * `HueZoneInspector` (the reference layout). The chip label is the
  * machine-readable type (translated) and `name` is the user-facing
  * label of the selected object.
  */

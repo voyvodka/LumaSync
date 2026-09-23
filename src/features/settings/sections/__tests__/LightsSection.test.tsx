@@ -236,7 +236,7 @@ describe("LightsSection", () => {
     fireEvent.change(screen.getByLabelText("Brightness"), {
       target: { value: "35" },
     });
-    // v1.5 W1-A7: solid colour picker migrated from native <input type="color">
+    // Solid colour picker migrated from native <input type="color">
     // to the SVG-native HsvColorPicker. Drive the change through the picker's
     // hex text input — value setter + Enter triggers commitHexDraft.
     const hexInput = screen.getByLabelText("HEX");

@@ -23,13 +23,26 @@ allow = [
 confidence-threshold = 0.9
 
 [bans]
-multiple-versions = "allow"
+# Warn, not deny: the tree carries ~60 duplicate versions today, almost all of
+# them the windows-sys / windows-targets family pulled at different majors by
+# tauri, tao, wry and the capture crates. None are ours to unify.
+multiple-versions = "warn"
+# A `*` requirement lets any future release in, including a hijacked one.
+wildcards = "deny"
 
 [advisories]
 # `cargo audit` already owns the advisory gate in ci.yml with its own ignore
-# list; duplicating it here would mean two places to keep in sync.
+# list; duplicating it here would mean two places to keep in sync. CI runs only
+# `licenses bans sources`. `unmaintained` is scoped to direct dependencies so a
+# local `cargo deny check` agrees with cargo audit, which only warns on the
+# transitive unmaintained crates (proc-macro-error, unic-*) tauri still pulls.
 ignore = []
+unmaintained = "workspace"
 
 [sources]
+# crates.io only. No dependency is taken from git today; one that needs to be
+# must be listed in `allow-git` with a reason, not slipped in.
 unknown-registry = "deny"
 unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

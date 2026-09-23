@@ -2,7 +2,7 @@
  * i18n.ts — i18next runtime initialisation
  *
  * Initialises i18next with:
- *  - English and Turkish locale resources (Phase 1 baseline)
+ *  - English and Turkish locale resources
  *  - English as the fallback language (missing keys → English text)
  *  - No automatic language detection (first-launch language is resolved
  *    by `languagePolicy.resolveInitialLanguage()` which honours I18N-02)

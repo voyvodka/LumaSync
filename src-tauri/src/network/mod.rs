@@ -1,4 +1,4 @@
-//! v1.5 W2-A3 — shared LAN-discovery primitives.
+//! Shared LAN-discovery primitives.
 //!
 //! Submodules:
 //!
@@ -6,6 +6,6 @@
 //!   `_hue._tcp.local.` today; the shared instance pattern means the
 //!   future WLED browser (`_wled._tcp.local.`) plugs in without
 //!   spawning a second responder, avoiding macOS `SO_REUSEPORT`
-//!   contention (D5 — locked).
+//!   contention.
 
 pub mod mdns;

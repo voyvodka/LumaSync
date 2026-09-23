@@ -1,6 +1,6 @@
-//! Hue zone state machine (v1.5 W4-F2 — Hue spatial 3D zones only).
+//! Hue zone state machine (Hue spatial 3D zones only).
 //!
-//! Scope (v1.5 D2 + W4-F2 — locked):
+//! Scope (a settled decision):
 //! - A `HueZone` is a UI / authoring concept that lives **inside one Hue
 //!   entertainment area**. The bridge state machine is untouched, no
 //!   multi-stream mux, no DTLS surface change.
@@ -829,7 +829,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // v1.5 W4-I — per-axis scale validation (no AR lock; physical 1:1 square)
+    // Per-axis scale validation (no AR lock; physical 1:1 square)
     // -----------------------------------------------------------------------
 
     #[test]

@@ -10,6 +10,7 @@ use serde_json::{json, Value};
 use tauri::Manager;
 use tauri_plugin_fs::FsExt;
 
+use super::background::{copy_background_into, BACKGROUND_DIR};
 use crate::commands::hue::credential_store::effective_hue_app_key;
 use crate::commands::hue::transport::{
     blocking_client_for_key, read_body_blocking, send_error_text, validate_bridge_addr,
@@ -39,22 +40,7 @@ pub async fn copy_background_image(
         .path()
         .app_data_dir()
         .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
-    let bg_dir = app_data_dir.join("room-map-backgrounds");
-    std::fs::create_dir_all(&bg_dir)
-        .map_err(|e| format!("Failed to create background dir: {}", e))?;
-
-    // SECURITY: Use a random UUID for the destination filename to prevent
-    // path traversal bypasses and accidental overwriting of other background files.
-    let mut filename = uuid::Uuid::new_v4().to_string();
-    if let Some(ext) = src.extension() {
-        if let Some(ext_str) = ext.to_str() {
-            filename.push('.');
-            filename.push_str(ext_str);
-        }
-    }
-
-    let dest = bg_dir.join(filename);
-    std::fs::copy(&src, &dest).map_err(|e| format!("Failed to copy background image: {}", e))?;
+    let dest = copy_background_into(&src, &app_data_dir.join(BACKGROUND_DIR))?;
     Ok(dest.to_string_lossy().to_string())
 }
 

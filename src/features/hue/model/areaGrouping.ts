@@ -59,7 +59,7 @@ export function applyAreaReadinessSnapshot(
   // foreign streamer is still attached. Mirror that into the area row
   // so the active-streamer banner (which reads `area.activeStreamer`)
   // clears as soon as the foreign session disconnects, without the user
-  // having to manually click revalidate (A3.1).
+  // having to manually click revalidate.
   const activeStreamer = readiness.reasons.includes(ACTIVE_STREAMER_REASON);
   return areaGroups.map((group) => ({
     ...group,

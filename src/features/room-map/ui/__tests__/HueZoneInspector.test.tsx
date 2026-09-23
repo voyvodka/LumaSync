@@ -1,18 +1,18 @@
 /**
  * HueZoneInspector regression tests.
  *
- * Coverage for v1.5 W4-I "physical 1:1 metric square" + W4-K
- * single-row layout refactor:
+ * Coverage for the "physical 1:1 metric square" sizing and the
+ * single-row layout:
  *  - The size slider edits a metre value; we derive per-axis cube-
  *    space scales as `edge_m / room{Width,Depth}M` so the zone paints
  *    as a true physical square on the canvas.
  *  - Maximum edge equals `min(roomWidthM, roomDepthM)` so the zone
  *    never spills outside the room footprint.
- *  - Legacy zones with asymmetric scales (pre-W4-I writes) resolve
+ *  - Legacy zones with asymmetric scales (older writes) resolve
  *    onto the smaller of `scaleX*roomW` / `scaleY*roomD` so the slider
  *    value is well-defined and the rendered square fits inside the
  *    persisted bounds.
- *  - W4-K — the redundant `{edge}m × {edge}m` metric reader is gone;
+ *  - The redundant `{edge}m × {edge}m` metric reader is gone;
  *    the EDGE field and HEX field share a single side-by-side row,
  *    and the hex input commits to `borderColor`.
  */
@@ -69,7 +69,7 @@ const BASE_ZONE: HueZone = {
   centerY: 0,
   centerZ: 0,
   // 0.5 × 5m = 2.5m on X, 0.5 × 4m = 2.0m on Y → physical edge 2.0m
-  // (the smaller of the two) once resolved through the W4-I helper.
+  // (the smaller of the two) once resolved through the edge helper.
   scaleX: 0.5,
   scaleY: 0.5,
   scaleZ: 0.5,
@@ -127,7 +127,7 @@ describe("HueZoneInspector — W4-I physical metric square", () => {
   });
 
   it("resolves legacy asymmetric zones onto the smaller physical edge", () => {
-    // Legacy persisted zone written before W4-I — scaleX/scaleY do not
+    // Legacy persisted zone written before square sizing — scaleX/scaleY do not
     // necessarily resolve to a square in metres. The Inspector takes
     // `min(scaleX*roomW, scaleY*roomD)` so the displayed edge fits
     // inside whatever the bridge currently reports.
@@ -166,8 +166,8 @@ describe("HueZoneInspector — W4-I physical metric square", () => {
 
 describe("HueZoneInspector — W4-K single-row layout", () => {
   it("does not render the redundant {edge}m × {edge}m metric reader", () => {
-    // The W4-I metric reader collided with the HSV recent strip on
-    // narrow docks; W4-K drops it because the EDGE field above already
+    // The old metric reader collided with the HSV recent strip on
+    // narrow docks; it was dropped because the EDGE field above already
     // shows the same number.
     const { container } = render(
       <HueZoneInspector
@@ -268,7 +268,7 @@ describe("HueZoneInspector — headroom at the wall", () => {
 });
 
 // ---------------------------------------------------------------------------
-// W4-K row layout — the wrap must not separate a label from its control
+// Row layout — the wrap must not separate a label from its control
 // ---------------------------------------------------------------------------
 
 describe("edge / hex row grouping", () => {

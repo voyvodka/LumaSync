@@ -55,7 +55,7 @@ export function useDeviceConnection(): UseDeviceConnectionResult {
     () =>
       createDeviceConnectionController({
         listSerialPorts,
-        // Wrap connectSerialPort to inject the persisted chip type (v1.5 G3 Wire-A).
+        // Wrap connectSerialPort to inject the persisted chip type.
         // shellStore.load() is cheap (cached after first read); reading it here keeps
         // the controller interface stable so existing tests need no changes.
         connectSerialPort: async (portName: string) => {

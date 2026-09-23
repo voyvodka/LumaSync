@@ -66,7 +66,7 @@ interface RoomMapSettingsPopoverProps {
   dimensions: RoomDimensions;
   showGrid: boolean;
   gridStrokeWidth: number;
-  /** v1.5 W4-J #3 — Hue zone bounds visibility toggle. */
+  /** Hue zone bounds visibility toggle. */
   showHueZones: boolean;
   onDimensionsChange: (d: RoomDimensions) => void;
   onGridToggle: (v: boolean) => void;
@@ -212,7 +212,7 @@ export function RoomMapSettingsPopover({
           )}
         </div>
 
-        {/* W4-J #3 — Hue zone bounds visibility toggle. Persisted to
+        {/* Hue zone bounds visibility toggle. Persisted to
             shellStore as `roomMapShowHueZones` so the user's choice
             survives editor reopen. */}
         <div>

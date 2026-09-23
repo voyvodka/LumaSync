@@ -42,8 +42,7 @@ pub fn forbid_native_fullscreen(window: &WebviewWindow) {
 /// when another app owns the active fullscreen Space (e.g. a fullscreen game /
 /// video the user is calibrating against). Sets `canJoinAllSpaces |
 /// fullScreenAuxiliary` collection behaviour plus a raised window level, using
-/// the same objc2 NSWindow pattern as `forbid_native_fullscreen`. (v1.6 LED
-/// Preview — Phase 1.)
+/// the same objc2 NSWindow pattern as `forbid_native_fullscreen`.
 pub fn elevate_overlay_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
     let raw = match window.ns_window() {
         Ok(ptr) => ptr,

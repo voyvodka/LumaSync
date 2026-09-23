@@ -20,9 +20,9 @@ export function RenameDialog({
   const { containerRef, handleKeyDown } = useDialogFocus<HTMLDivElement>(true, {
     onClose: onCancel,
   });
-  // A1.4 — useId() instead of a static "rename-dialog-label" so multiple
+  // useId() instead of a static "rename-dialog-label" so multiple
   // RenameDialog instances (or re-mounts) don't collide on the aria-labelledby
-  // target. Pure a11y delta on top of the W4 i18n + role="dialog" pass.
+  // target.
   const labelId = useId();
 
   useEffect(() => {

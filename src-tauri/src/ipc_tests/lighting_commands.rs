@@ -32,7 +32,7 @@ fn lighting_mode_starts_off() {
 /// *actually* running, not the one that was asked for — `apply_mode_change`
 /// returns `owner.active_mode.clone()` on the USB gate (`lighting_mode.rs`).
 /// Reporting `solid` here would light the mode strip with no LEDs behind it.
-/// An empty `targets` list means USB-required by the legacy D-10 rule, so this
+/// An empty `targets` list means USB-required by the legacy rule, so this
 /// pins that default too.
 #[test]
 fn gated_mode_change_reports_the_running_mode_not_the_requested_one() {

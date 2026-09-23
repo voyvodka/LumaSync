@@ -1,5 +1,5 @@
 /**
- * RoomMapEditor — F8 regression tests
+ * RoomMapEditor — regression tests
  *
  * Covers the mousemove handler stability fix from commit fe351c2:
  * "fix(ui): prevent event listener thrashing in RoomMapEditor mousemove handler"
@@ -246,7 +246,7 @@ describe("RoomMapEditor — canvas container observation", () => {
 });
 
 // ---------------------------------------------------------------------------
-// F8 — MouseCoordinateDisplay event-listener stability tests
+// MouseCoordinateDisplay event-listener stability tests
 // ---------------------------------------------------------------------------
 
 describe("RoomMapEditor — MouseCoordinateDisplay event-listener stability (F8)", () => {
@@ -325,7 +325,7 @@ describe("RoomMapEditor — MouseCoordinateDisplay event-listener stability (F8)
   });
 });
 
-// Wave 0 stubs resolved where the decisions are actually made: ROOM-01 by
+// Placeholder stubs resolved where the decisions are actually made: ROOM-01 by
 // `computeFit` (useRoomMapViewport.test.ts), ROOM-06 by `deriveZones`
 // (deriveZones.test.ts). ROOM-08 dropped with `backgroundImagePath` in v1.5.x.
 
