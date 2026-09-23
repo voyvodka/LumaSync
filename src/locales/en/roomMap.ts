@@ -1,5 +1,4 @@
 export default {
-  comingSoon: "Room map editor is coming in a future update.",
   loading: "Loading room map…",
   toolbar: {
     addTv: "Add TV",
@@ -7,7 +6,6 @@ export default {
     addUsb: "Add LED Strip",
     addImage: "Add Image",
     settingsAriaLabel: "Map Settings",
-    tvAlreadyPlaced: "TV already placed",
     undo: "Undo",
     redo: "Redo",
   },
@@ -32,8 +30,6 @@ export default {
     },
   },
   settings: {
-    uploadBackground: "Upload floor plan",
-    opacity: "Opacity",
     showGrid: "Show grid",
     gridStrokeWidth: "Grid thickness",
     showHueZones: "Show Hue zones",
@@ -60,12 +56,8 @@ export default {
     confirmDeriveButton: "Confirm",
     cancelDeriveButton: "Discard Preview",
     addZoneButton: "+ Zone",
-    namePlaceholder: "Zone name",
     deriveDisabledTooltip: "Place a USB strip and TV anchor first",
     deriveSuccess: "Zones derived — review and confirm",
-    errNoTvAnchor: "Place a TV anchor on the map before deriving zones.",
-    errNoUsbStrip: "Place a USB strip on the map before deriving zones.",
-    calibrationApplyNote: "Zone counts applied. Save in Calibration to persist.",
   },
   hueZones: {
     title: "Hue Zones",
@@ -119,8 +111,6 @@ export default {
   },
   zoneProperties: {
     color: "Color",
-    borderColor: "Border",
-    centerColor: "Center",
     swatchAriaLabel: "Use {{name}} swatch",
   },
   objectPanel: {
@@ -138,19 +128,13 @@ export default {
   inspector: {
     regionAriaLabel: "Selected item properties",
     empty: "Select an object or zone to edit its properties.",
-    zoneTitle: "Zone",
-    channelsLabel: "Channels",
-    legacyZoneHint: "Click LED dots on the canvas to add or remove channels from this zone.",
     typeTv: "TV",
     typeFurniture: "Furniture",
     typeUsb: "USB strip",
     typeHue: "Hue light",
     typeImage: "Image",
     typeHueZone: "Hue zone",
-    scaleX: "Width",
-    scaleY: "Depth",
     zoneSize: "Size",
-    zoneEdgeLabel: "Edge length",
     zoneEdgeShort: "Edge",
     zoneEdgeAriaLabel: "Zone edge length in metres",
     zoneHexShort: "Hex",

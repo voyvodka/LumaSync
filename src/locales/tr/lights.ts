@@ -39,7 +39,6 @@ const lights: Catalogue<typeof enLights> = {
     },
     smoothing: {
       title: "Işık yanıtlama hızı",
-      description: "Işıkların ekran değişikliklerini ne kadar hızlı takip edeceğini belirler — LED strip ve Hue ışıkları için geçerli.",
       subtle: "Yumuşak",
       moderate: "Dengeli",
       intense: "Yoğun",
@@ -48,7 +47,6 @@ const lights: Catalogue<typeof enLights> = {
   dock: {
     outputs: "Çıkışlar",
     addAria: "Çıkış ekle",
-    addTooltip: "Yakında — çoklu Hue alanı",
     addHueZoneTooltip: "Yeni bir Hue bölgesi ekle",
     addDisabledTooltip: "Bölge eklemek için bir Hue köprüsü eşleyin",
     rows: {

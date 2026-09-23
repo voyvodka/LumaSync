@@ -34,7 +34,6 @@ const updater: Catalogue<typeof enUpdater> = {
     later: "Sonra",
     install: "Kur ve yeniden başlat",
     background: "Arkaplana al",
-    showLogs: "Log göster",
     close: "Kapat",
     retry: "Tekrar dene",
   },

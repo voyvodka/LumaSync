@@ -2,19 +2,6 @@ export default {
   title: "General",
   description: "General application settings.",
   output: {
-    title: "Output targets",
-    devices: {
-      usb: "USB LED Strip",
-      hue: "Philips Hue",
-    },
-    status: {
-      connected: "Connected",
-      notConnected: "Not connected",
-      ready: "Ready",
-      notConfigured: "Not configured",
-    },
-    noDevices: "No devices available",
-    noDevicesHint: "Connect your devices in Settings",
     // Shared by the compact banner and the full-mode Lights banner.
     offline: {
       title: "No reachable output",
@@ -36,16 +23,6 @@ export default {
     colorModelRgb: "RGB",
     solidColor: "Solid color",
     brightness: "Brightness",
-    lockedReasonCalibration: "Complete calibration before enabling LED mode.",
-    openCalibration: "Open calibration",
-    ambilight: {
-      blackBorderTitle: "Black border detection",
-      blackBorderDescription: "Automatically detects and skips letterbox / pillarbox bars when sampling screen color.",
-      smoothingTitle: "Color transition speed",
-      smoothingDescription: "Lower values produce smoother gradients; higher values react faster to screen changes.",
-      smoothingSlowLabel: "Smooth",
-      smoothingFastLabel: "Instant",
-    },
   },
   compact: {
     sections: {

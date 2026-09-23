@@ -1,6 +1,4 @@
 export default {
-  title: "Philips Hue",
-  description: "Bridge discovery, pairing, and entertainment area setup.",
   steps: {
     discover: "Discover",
     pair: "Pair",
@@ -8,29 +6,20 @@ export default {
     ready: "Ready",
   },
   actions: {
-    discover: "Discover bridges",
     discovering: "Discovering...",
-    pair: "Pair bridge",
     pairing: "Pairing...",
     refreshAreas: "Refresh areas",
     loadingAreas: "Loading areas...",
     checkingReadiness: "Checking readiness...",
     start: "Start Hue",
-    stop: "Stop Hue",
   },
   bridge: {
-    placeholder: "Select a Hue bridge",
-    noBridges: "No bridges found yet. Start discovery or enter an IP manually.",
     unreachable: "Unreachable",
-    online: "Online",
-    checking: "Checking…",
-    networkHint: "Could not reach {{name}} at {{ip}}. Make sure you are on the same network as your Hue bridge.",
   },
   manualIp: {
     title: "Manual IP entry",
     description: "If auto-discovery did not find your bridge, enter its IP address.",
     placeholder: "e.g. 192.168.1.50",
-    submit: "Verify IP",
     invalid: "Enter a valid IPv4 address before submitting.",
   },
   pair: {
@@ -56,19 +45,14 @@ export default {
     },
   },
   credential: {
-    valid: "Paired",
     needsRepair: "Needs Re-pair",
-    unreachable: "Unreachable",
-    line: "Credential state: {{state}}",
     repairHint: "Your credentials have expired. Press the bridge button and pair again.",
   },
   areas: {
-    title: "Entertainment areas",
     selectLabel: "Select entertainment area",
     empty: "No entertainment areas found. Create one in the Hue app first.",
     channels: "{{count}} channels",
     activeStreamer: "Active",
-    activeStreamerHint: "Another app is streaming",
     conflictTitle: "Area already in use",
     conflictHint: "Another app is actively streaming to this area. Stop the other stream before starting.",
   },
@@ -114,36 +98,15 @@ export default {
       failedBody: "The bridge answered with something unexpected. Validate the area and try again.",
     },
   },
-  targetFailed: "Could not add {{target}} to active output.",
-  readiness: {
-    pending: "Readiness has not been validated yet.",
-    recoveryHint: "Area is not ready. Revalidate or choose another area.",
-    activeStreamer: "Another app is already streaming to this area.",
-  },
-  successSummary: "Ready to start on {{bridge}} with {{area}} ({{readiness}}).",
   wizard: {
-    locked: "Complete the previous step first",
-    badgeReady: "Ready",
-    badgeConnected: "Connected",
-    badgeUnreachable: "Unreachable",
-    badgeInProgress: "In progress",
-    badgeNotStarted: "Not started",
-    badgeSelected: "Selected",
-    pairInstruction: "Press the physical button on your Hue bridge, then click Pair bridge.",
-    areaInstruction: "Choose the entertainment area you want to sync with your lights.",
-    readySummary: "{{bridge}} / {{area}}",
     emptyTitle: "No Hue bridge configured",
     emptyBody: "Connect your Philips Hue bridge to sync your room lights with your screen. Make sure your bridge is powered on and connected to the same network.",
     emptyAction: "Discover bridges",
-    offlineTitle: "Bridge is not reachable",
-    offlineBody: "{{name}} ({{ip}}) is not responding right now. This usually means:",
     offlineReasonsTitle: "Possible reasons",
     offlineReason1: "You are on a different Wi-Fi network",
     offlineReason2: "The bridge is turned off or restarting",
     offlineReason3: "The bridge IP address has changed",
     offlineRediscover: "Rediscover",
-    offlineTryIp: "Try a different IP",
-    offlineReset: "Remove this bridge and start over",
     pairingStep: "Pairing in progress",
     areaStep: "Select entertainment area",
     pairingFailed: "Pairing failed",
@@ -164,11 +127,6 @@ export default {
     cellCredentialInvalid: "Invalid",
     trafficLabel: "Stream",
     subtitleStreaming: "{{area}} · DTLS streaming",
-  },
-  summary: {
-    idle: "Ready, not streaming",
-    streaming: "Streaming",
-    error: "Stream error",
   },
   runtime: {
     idleTitle: "Runtime is idle",
@@ -205,7 +163,6 @@ export default {
     retry: {
       progress: "Retries left: {{remaining}} | Next attempt: {{nextMs}} ms",
     },
-    retryStatus: "Retries left: {{remaining}} | Next attempt: {{nextMs}} ms",
     triggerSource: {
       mode_control: "Triggered from mode controls",
       device_surface: "Triggered from device surface",
@@ -214,26 +171,10 @@ export default {
     },
     checklist: {
       title: "Start checklist",
-      waitCredential: "Wait for credential validation to complete.",
       revalidate: "Readiness is stale. Revalidate before Start.",
     },
     actions: {
-      retry: "Retry",
-      reconnect: "Reconnect",
       repair: "Re-pair",
-      revalidate: "Revalidate",
-      adjust_area: "Adjust area",
-      stopRetrying: "Stop retrying",
-    },
-    targets: {
-      hue: {
-        title: "Hue target",
-        retry: "Retry Hue target",
-      },
-      usb: {
-        title: "USB target",
-        retry: "Retry USB target",
-      },
     },
     partialStop: {
       title: "Partial stop",
@@ -241,68 +182,8 @@ export default {
     },
     timeout: {
       title: "Stop timeout",
-      body: "Stop reached timeout. You can retry stop without restarting the app.",
     },
     reconnectingTitle: "Reconnecting to Hue bridge",
-    reconnectingBody: "Retries left: {{remaining}} | Next attempt: {{nextMs}} ms",
-    failedTitle: "Hue stream failed",
-    failedBody: "[{{code}}] {{description}} — {{actionHint}}",
-    retryStreamAction: "Retry Stream",
-    stopStreamAction: "Stop Stream",
-    faults: {
-      "HUE-NET-01": {
-        description: "Bridge unreachable",
-        hint: "Check your network connection",
-      },
-      "HUE-NET-02": {
-        description: "DTLS handshake failed",
-        hint: "Try restarting the stream",
-      },
-      "HUE-NET-03": {
-        description: "DTLS send timeout",
-        hint: "Check network latency and bridge proximity",
-      },
-      "HUE-NET-04": {
-        description: "DTLS connection dropped unexpectedly",
-        hint: "Retry to reconnect",
-      },
-      "HUE-AUTH-01": {
-        description: "Credentials are invalid",
-        hint: "Re-pair your Hue bridge",
-      },
-      "HUE-AUTH-02": {
-        description: "Bridge pairing is broken",
-        hint: "Press the bridge button and pair again",
-      },
-      "HUE-AUTH-03": {
-        description: "Bridge rejected the request (403)",
-        hint: "Re-pair to refresh credentials",
-      },
-      "HUE-STR-01": {
-        description: "Entertainment area not found",
-        hint: "Select a valid area in Device settings",
-      },
-      "HUE-STR-02": {
-        description: "Stream throttle detected",
-        hint: "Reduce stream frequency or check bridge load",
-      },
-      "HUE-STR-03": {
-        description: "Packet send failed",
-        hint: "Check network stability",
-      },
-      "HUE-STR-04": {
-        description: "Sender exited unexpectedly",
-        hint: "Retry stream",
-      },
-      "HUE-CFG-01": {
-        description: "No entertainment area selected",
-        hint: "Choose an area in Device settings",
-      },
-      "HUE-CFG-02": {
-        description: "Bridge IP has changed",
-        hint: "Update bridge IP in Device settings",
-      },
-    },
     writeback: {
       codes: {
         CHAN_WB_SCHEMA_REJECTED: "Bridge rejected the position format.",
@@ -325,7 +206,6 @@ export default {
     changeArea: "Change Area",
     confirmArea: "Confirm Area",
     validate: "Revalidate",
-    retryPair: "Retry Pair",
     reconnectNow: "Reconnect",
     retryStop: "Retry Stop",
     stopRetrying: "Stop",
@@ -343,7 +223,6 @@ export default {
       awaiting: "AWAITING",
       paired: "PAIRED",
       authError: "AUTH ERROR",
-      offline: "OFFLINE",
       reconnecting: "RECONNECTING",
       failed: "FAILED",
       timedOut: "TIMED OUT",

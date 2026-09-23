@@ -19,7 +19,6 @@ export default {
       sub: "Build · license",
     },
     telemetry: {
-      title: "Runtime telemetry",
       sub: "Live throughput",
     },
   },
@@ -32,8 +31,6 @@ export default {
     license: "MIT",
   },
   nav: {
-    title: "Settings",
-    navigationAria: "Main navigation",
     switchToCompact: "Compact view",
     switchToFull: "Full settings",
     sections: {
@@ -42,22 +39,10 @@ export default {
       devices: "Devices",
       system: "Settings",
       "room-map": "Room",
-      control: "Control",
-      calibration: "Calibration",
-      settings: "Settings",
-    },
-    tabs: {
-      device: "Device",
-      system: "System",
-      diagnostics: "Diagnostics",
     },
   },
   startupTray: {
-    title: "Startup & Tray",
     launchAtLogin: "Launch at login",
     launchAtLoginDescription: "Start LumaSync automatically when you log in.",
-    trayInfo: "The app runs in the system tray when closed.",
-    minimizeOnClose: "Minimize to tray on close",
-    alwaysOn: "Always on",
   },
 };
