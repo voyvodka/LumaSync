@@ -17,6 +17,7 @@ import {
   DEVICE_COMMANDS,
   SERIAL_CONNECT_STATUS,
   SERIAL_PORT_LIST_STATUS,
+  type SerialCommandStatusCode,
 } from "../../src/shared/contracts/device";
 import { HUE_RUNTIME_STATES } from "../../src/shared/contracts/hue";
 import { LINK_MAX_FPS_ABSENT } from "../../src/shared/contracts/telemetry";
@@ -54,35 +55,34 @@ export const deviceHandlers = {
   [DEVICE_COMMANDS.CONNECT_PORT]: (args) => {
     const { portName } = args;
     const port = getWorld().serial.ports.find((p) => p.name === portName);
+    // Like Rust, a failed attempt drops any prior session and never reports
+    // the attempted name as `portName` — it only appears in `details`.
+    const refused = (code: SerialCommandStatusCode, message: string, detail?: string) => {
+      mutate((w) => {
+        w.serial.connectedPort = null;
+      });
+      const attempted = `port=${JSON.stringify(portName)}`;
+      return {
+        portName: null,
+        connected: false,
+        status: status(code, message, detail ? `${attempted}; ${detail}` : attempted),
+        updatedAtUnixMs: now(),
+      };
+    };
     // The two-stage gate: a port can enumerate and still be refused, and the
     // refusal carries its own code rather than the generic failure.
     if (port === undefined) {
-      return {
-        portName,
-        connected: false,
-        status: status("PORT_NOT_FOUND", "No such port"),
-        updatedAtUnixMs: now(),
-      };
+      return refused("PORT_NOT_FOUND", "No such port");
     }
     if (!port.supported) {
-      return {
-        portName,
-        connected: false,
-        status: status(
-          "PORT_UNSUPPORTED",
-          "Not on the VID/PID allowlist",
-          `${port.vid.toString(16)}:${port.pid.toString(16)}`,
-        ),
-        updatedAtUnixMs: now(),
-      };
+      return refused(
+        "PORT_UNSUPPORTED",
+        "Not on the VID/PID allowlist",
+        `${port.vid.toString(16)}:${port.pid.toString(16)}`,
+      );
     }
     if (port.connectOutcome !== "OK") {
-      return {
-        portName,
-        connected: false,
-        status: status(SERIAL_CONNECT_STATUS[port.connectOutcome], "Open refused"),
-        updatedAtUnixMs: now(),
-      };
+      return refused(SERIAL_CONNECT_STATUS[port.connectOutcome], "Open refused");
     }
     mutate((w) => {
       w.serial.connectedPort = portName;

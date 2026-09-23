@@ -38,6 +38,11 @@ https://keepachangelog.com/en/1.1.0/
   hidden, covered or left behind a locked screen: the switch made in that state never finished, the
   window content stayed blank, and later switches from the title bar, the settings shortcut or the
   tray did nothing until the window was shown again. The switch now always completes.
+- USB: a failed connection no longer leaves the port behind as if it were the connected one.
+  After a port was refused, for example an unplugged strip or a port that is not a supported USB
+  adapter, the room map could show a strip on that port as online. Starting a lighting mode
+  would also try to send colors to the refused port. Now nothing counts as connected until a
+  port has actually been opened.
 - Reopening the app within a few seconds of it closing unexpectedly left lighting off when the
   last mode used Hue. The Hue bridge was still holding the old session for 10–20 seconds and
   turned the new one away, and the app never asked again. At launch it now waits for the bridge to

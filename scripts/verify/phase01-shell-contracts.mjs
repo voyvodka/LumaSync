@@ -1447,6 +1447,9 @@ checkWireUnion(
   "SerialCommandStatusCode",
   [
     ...[...rustSerialProduction.matchAll(/command_status\(\s*"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]),
+    // Failed connects go through `failed_connect_status(&port, "CODE", ...)`.
+    ...[...rustSerialProduction.matchAll(/failed_connect_status\(\s*&?\w+,\s*"([A-Z][A-Z0-9_]*)"/g)]
+      .map((m) => m[1]),
     // The last `command_status` arm passes `connect_error_code(&error)`, so its
     // match arms are part of the same wire union.
     ...[...(rustSerialProduction.match(/fn connect_error_code[\s\S]*?\n\}/) ?? [""])[0]

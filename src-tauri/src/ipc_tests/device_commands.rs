@@ -53,7 +53,16 @@ fn connect_to_absent_port_resolves_with_port_not_found() {
 
     assert_eq!(status_code(&response), "PORT_NOT_FOUND");
     assert_eq!(response["connected"], json!(false));
-    assert_eq!(response["portName"], json!(ABSENT_PORT));
+    assert_eq!(
+        response["portName"],
+        Value::Null,
+        "a port that was never opened is not the status's port"
+    );
+    assert_eq!(
+        response["status"]["details"],
+        json!(format!("port={ABSENT_PORT:?}")),
+        "the attempted name is kept for diagnostics in `details`"
+    );
 }
 
 /// The 9-entry VID/PID allowlist is only observable through a real enumeration,
@@ -90,6 +99,15 @@ fn connect_to_unsupported_port_is_blocked() {
         "an allowlist miss must be refused before open(), not opened and written to"
     );
     assert_eq!(response["connected"], json!(false));
+    assert_eq!(response["portName"], Value::Null);
+
+    let status =
+        invoke(&webview, "get_serial_connection_status", json!({})).expect("status must resolve");
+    assert_eq!(
+        status["portName"],
+        Value::Null,
+        "a refused port must not become the recorded port"
+    );
 }
 
 /// The failed attempt has to land in `SerialConnectionState`, otherwise the UI
@@ -115,7 +133,71 @@ fn failed_connect_is_readable_from_connection_status() {
 
     assert_eq!(status_code(&after), "PORT_NOT_FOUND");
     assert_eq!(after["connected"], json!(false));
-    assert_eq!(after["portName"], json!(ABSENT_PORT));
+    assert_eq!(after["portName"], Value::Null);
+}
+
+/// Names no enumerator produces, including path-shaped ones, are refused by
+/// the inventory lookup and never recorded as the status's port.
+#[test]
+fn path_shaped_port_names_are_refused_without_becoming_the_status_port() {
+    let app = app();
+    let webview = main_webview(&app);
+
+    for name in ["", "../../etc/passwd", "/etc/passwd", ABSENT_PORT] {
+        let response = invoke(
+            &webview,
+            "connect_serial_port",
+            json!({ "portName": name, "chipType": null }),
+        )
+        .expect("connect must resolve");
+
+        assert_eq!(status_code(&response), "PORT_NOT_FOUND", "input {name:?}");
+        assert_eq!(response["portName"], Value::Null, "input {name:?}");
+
+        let status = invoke(&webview, "get_serial_connection_status", json!({}))
+            .expect("status must resolve");
+        assert_eq!(status["connected"], json!(false), "input {name:?}");
+        assert_eq!(status["portName"], Value::Null, "input {name:?}");
+    }
+}
+
+/// `apply_mode_change` plans USB output from the recorded port name even while
+/// `connected` is false, so a refused name left in the status would be opened
+/// and written to by the next mode change. The gate must hold instead.
+#[test]
+fn refused_connect_does_not_arm_usb_output() {
+    let app = mock_app(tauri::generate_handler![
+        crate::commands::device_connection::connect_serial_port,
+        crate::commands::lighting_mode::set_lighting_mode
+    ]);
+    let webview = main_webview(&app);
+
+    invoke(
+        &webview,
+        "connect_serial_port",
+        json!({ "portName": ABSENT_PORT, "chipType": null }),
+    )
+    .expect("connect must resolve");
+
+    let response = invoke(
+        &webview,
+        "set_lighting_mode",
+        json!({
+            "payload": {
+                "kind": "solid",
+                "solid": { "r": 255, "g": 0, "b": 0, "brightness": 1.0 },
+                "targets": ["usb"]
+            }
+        }),
+    )
+    .expect("set_lighting_mode must resolve, never reject");
+
+    assert_eq!(
+        status_code(&response),
+        "DEVICE_NOT_CONNECTED",
+        "a refused port must leave USB output gated, got: {response}"
+    );
+    assert_eq!(response["active"], json!(false));
 }
 
 #[test]

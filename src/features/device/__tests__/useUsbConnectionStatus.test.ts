@@ -75,6 +75,25 @@ describe("useUsbConnectionStatus", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
+  it("never reports a port from a status that is not connected", async () => {
+    const bus = createConnectionEventBus();
+    const fetcher = vi.fn().mockResolvedValue({
+      portName: "/etc/passwd",
+      connected: false,
+      status: { code: "PORT_NOT_FOUND", message: "not found", details: null },
+      updatedAtUnixMs: Date.now(),
+    } satisfies SerialConnectionStatus);
+
+    const { result } = renderHook(() =>
+      useUsbConnectionStatus({ connectionEvents: bus, getStatus: fetcher }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+    });
+    expect(result.current.connectedPort).toBe(null);
+  });
+
   it("flips ready=true even when getStatus rejects (silent-catch ban)", async () => {
     const bus = createConnectionEventBus();
     const fetcher = vi.fn().mockRejectedValue(new Error("offline"));
