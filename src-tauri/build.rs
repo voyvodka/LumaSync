@@ -60,6 +60,10 @@ const APP_COMMANDS: &[&str] = &[
     "get_shell_state",
     "patch_shell_state",
     "replace_shell_state",
+    "apply_outputs",
+    "retune_lighting",
+    "release_hue_output",
+    "get_lighting_runtime",
 ];
 
 fn main() {

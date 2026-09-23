@@ -157,9 +157,19 @@ impl KeychainStore {
         Self
     }
 
+    #[cfg(not(test))]
     fn entry(account: &str) -> Result<keyring::Entry, String> {
         keyring::Entry::new(KEYCHAIN_SERVICE, account)
             .map_err(|e| format!("KEYCHAIN_ENTRY_FAILED: {e}"))
+    }
+
+    /// A test binary never reaches the developer's keychain, even through a
+    /// `KeychainStore` built by hand: every call fails as an unavailable backend.
+    #[cfg(test)]
+    fn entry(account: &str) -> Result<keyring::Entry, String> {
+        Err(format!(
+            "KEYCHAIN_ENTRY_FAILED: the OS keychain is off limits to tests ({account})"
+        ))
     }
 }
 
@@ -907,6 +917,14 @@ pub fn effective_hue_app_key(fallback_username: &str) -> String {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    #[test]
+    fn a_test_binary_cannot_reach_the_os_keychain() {
+        let store = KeychainStore::new();
+        assert!(store.get(KEY_HUE_APP_KEY).is_err());
+        assert!(store.set(KEY_HUE_APP_KEY, "never-written").is_err());
+        assert!(store.delete(KEY_HUE_APP_KEY).is_err());
+    }
 
     /// In-memory `SecretStore` used by W2-A2 migration scenarios. Mirrors
     /// the trait surface so we can deterministically test both happy-path

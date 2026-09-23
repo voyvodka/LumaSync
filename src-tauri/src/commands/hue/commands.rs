@@ -233,9 +233,21 @@ fn start_gate_evidence(
 /// stream context.
 #[tauri::command]
 pub async fn start_hue_stream(
-    mut request: StartHueStreamRequest,
+    request: StartHueStreamRequest,
     runtime_state: State<'_, HueRuntimeStateStore>,
 ) -> Result<HueRuntimeCommandResult, String> {
+    Ok(start_hue_stream_on(runtime_state.inner(), request, &|| false).await)
+}
+
+/// Body of `start_hue_stream`, over the store rather than a Tauri `State`, so
+/// the lighting transaction's Hue driver runs the very same start. `closing` is
+/// read once readiness has answered and before anything is brought up: a start
+/// the quit overtook must not open a stream the quit's Hue step already passed.
+pub(crate) async fn start_hue_stream_on(
+    runtime_state: &HueRuntimeStateStore,
+    mut request: StartHueStreamRequest,
+    closing: &(dyn Fn() -> bool + Sync),
+) -> HueRuntimeCommandResult {
     // MUST precede the readiness call and the `credentials_valid` evidence —
     // every downstream reader, including the stored `ActiveHueStream`, takes
     // the key from this one field. See docs/architecture/hue.md.
@@ -262,6 +274,10 @@ pub async fn start_hue_stream(
     )
     .await;
 
+    if closing() {
+        return make_result(&acquire_hue_runtime(&runtime_state.runtime));
+    }
+
     let gate = start_gate_evidence(&request, &readiness);
 
     // 2. Lock briefly for state decision only.
@@ -272,20 +288,20 @@ pub async fn start_hue_stream(
         // channels. Re-fetching while the stream is live can fail and would overwrite
         // the working channel/sender state with empty data, breaking solid color.
         if result.status.code == "HUE_START_NOOP_ALREADY_ACTIVE" {
-            return Ok(result);
+            return result;
         }
         result
     }; // lock released before async I/O
 
     let build = production_sender(&request);
-    Ok(bring_up_stream(
+    bring_up_stream(
         &runtime_state.runtime_arc(),
         &request,
         result,
         BringUpKind::Start,
         build,
     )
-    .await)
+    .await
 }
 
 /// Which command is bringing a stream up. Only the no-lights wording differs.
@@ -532,6 +548,15 @@ pub async fn stop_hue_stream(
     runtime_state: State<'_, HueRuntimeStateStore>,
 ) -> Result<HueRuntimeCommandResult, String> {
     let trigger = trigger_source.unwrap_or(HueRuntimeTriggerSource::System);
+    Ok(stop_hue_stream_on(runtime_state.inner(), trigger).await)
+}
+
+/// Body of `stop_hue_stream`, shared with the lighting transaction's Hue driver
+/// so both hold `stop_in_flight` across the restore.
+pub(crate) async fn stop_hue_stream_on(
+    runtime_state: &HueRuntimeStateStore,
+    trigger: HueRuntimeTriggerSource,
+) -> HueRuntimeCommandResult {
     let runtime = runtime_state.runtime_arc();
     let in_flight = Arc::clone(&runtime_state.stop_in_flight).lock_owned().await;
     let stopped = tokio::task::spawn_blocking(move || {
@@ -539,10 +564,10 @@ pub async fn stop_hue_stream(
         stop_hue_runtime(&runtime, trigger, None)
     })
     .await;
-    Ok(stopped.unwrap_or_else(|_join_err| {
+    stopped.unwrap_or_else(|_join_err| {
         error!("stop_hue_stream task panicked; reporting the runtime as it stands.");
         make_result(&acquire_hue_runtime(&runtime_state.runtime))
-    }))
+    })
 }
 
 /// The quit path's stop (`lib.rs` `[shutdown]` step 2). Same stop and restore

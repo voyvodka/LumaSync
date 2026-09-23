@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-retune-lighting"
+description = "Enables the retune_lighting command without any pre-configured scope."
+commands.allow = ["retune_lighting"]
+
+[[permission]]
+identifier = "deny-retune-lighting"
+description = "Denies the retune_lighting command without any pre-configured scope."
+commands.deny = ["retune_lighting"]

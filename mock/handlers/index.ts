@@ -18,6 +18,7 @@ import { CAPTURE_COMMANDS } from "../../src/shared/contracts/capture";
 import { DEVICE_COMMANDS } from "../../src/shared/contracts/device";
 import { DISPLAY_OVERLAY_COMMANDS } from "../../src/shared/contracts/display";
 import { HUE_COMMANDS, HUE_DEBUG_COMMANDS } from "../../src/shared/contracts/hue";
+import { LIGHTING_RUNTIME_COMMANDS } from "../../src/shared/contracts/lightingRuntime";
 import { PLATFORM_COMMANDS } from "../../src/shared/contracts/platform";
 import { PREVIEW_COMMANDS } from "../../src/shared/contracts/preview";
 import { HUE_ZONE_COMMANDS, ROOM_MAP_COMMANDS } from "../../src/shared/contracts/roomMap";
@@ -26,6 +27,7 @@ import { UPDATER_COMMANDS } from "../../src/shared/contracts/updater";
 
 import { deviceHandlers } from "./device";
 import { hueHandlers } from "./hue";
+import { lightingRuntimeHandlers } from "./lighting";
 import { pluginHandlers, shellHandlers, windowPluginHandler } from "./shell";
 import { windowlessHandlers } from "./windowless";
 import type { CommandResponse } from "./responses";
@@ -37,6 +39,7 @@ const COMMAND_MAPS = [
   DISPLAY_OVERLAY_COMMANDS,
   HUE_COMMANDS,
   HUE_ZONE_COMMANDS,
+  LIGHTING_RUNTIME_COMMANDS,
   PLATFORM_COMMANDS,
   PREVIEW_COMMANDS,
   ROOM_MAP_COMMANDS,
@@ -102,6 +105,7 @@ export type UnmappedCommandName = (typeof INTENTIONALLY_UNMAPPED)[number];
 const staticHandlers = {
   ...deviceHandlers,
   ...hueHandlers,
+  ...lightingRuntimeHandlers,
   ...shellHandlers,
   ...windowlessHandlers,
   ...pluginHandlers,

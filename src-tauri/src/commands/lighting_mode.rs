@@ -50,7 +50,13 @@ use super::wled_sink::{CorrectedWledSink, WledSinkConfig};
 use crate::models::room_map::RoomGeometry;
 
 mod frame_pipeline;
+pub mod hue_driver;
+pub mod outputs;
+pub mod snapshot;
+pub mod tuning;
 mod worker;
+use snapshot::LightingSnapshotCell;
+use tuning::TuningCell;
 use worker::start_ambilight_worker;
 
 static ACTIVE_AMBILIGHT_WORKERS: AtomicUsize = AtomicUsize::new(0);
@@ -95,7 +101,7 @@ type AmbilightFrameSourceFactory = dyn Fn(AmbilightCaptureRequest) -> Result<Box
     + Send
     + Sync;
 
-#[derive(Clone, Default, Deserialize, Serialize, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum LightingModeKind {
     #[default]
@@ -277,7 +283,7 @@ impl LightingWorkerRuntime {
 /// border detection) while the mode is already active, so the worker never
 /// needs to be stopped/restarted just for a setting tweak. This prevents
 /// the macOS SCStream rapid stop/recreate cycle that causes crashes.
-struct AmbilightLiveSettings {
+pub(crate) struct AmbilightLiveSettings {
     /// Brightness as f32 bit pattern stored in an AtomicU32.
     brightness: AtomicU32,
     black_border_detection: AtomicBool,
@@ -358,6 +364,35 @@ impl AmbilightLiveSettings {
     }
 }
 
+/// Writes an Ambilight payload into a running worker's atomics. Shared by the
+/// `apply_mode_change` fast path and `retune_lighting`.
+fn retune_ambilight_live(live: &AmbilightLiveSettings, cfg: &AmbilightPayload) {
+    // None-preservation: when the incoming payload omits saturation
+    // or smoothing_alpha (e.g. brightness-only slider tweak from the
+    // frontend), keep the currently running atomic value instead of
+    // resetting to defaults. The previous unwrap_or(1.0)/(0.35) path
+    // silently clobbered user-tuned values on every brightness move.
+    let next_smoothing_alpha = cfg
+        .smoothing_alpha
+        .unwrap_or_else(|| live.read_smoothing_alpha());
+    let next_saturation = cfg.saturation.unwrap_or_else(|| live.read_saturation());
+    log::info!(
+        "[ambilight-live-update] brightness={:.3} smoothing={:.3} saturation={:.3} black_border={} preset={:?}",
+        cfg.brightness,
+        next_smoothing_alpha,
+        next_saturation,
+        cfg.black_border_detection,
+        cfg.lighting_smoothing_preset.or(cfg.hue_intensity_preset),
+    );
+    live.update(
+        cfg.brightness,
+        cfg.black_border_detection,
+        next_smoothing_alpha,
+        next_saturation,
+        cfg.lighting_smoothing_preset.or(cfg.hue_intensity_preset),
+    );
+}
+
 /// Room geometry shared with the running ambilight worker, so a room-map drag
 /// retunes Hue sampling in place — same role as `TestPatternLive`. The worker
 /// reads `generation` once per frame and takes the lock only when it moved.
@@ -395,7 +430,7 @@ impl RoomGeometryLive {
     }
 }
 
-struct LightingRuntimeOwner {
+pub(crate) struct LightingRuntimeOwner {
     active_mode: LightingModeConfig,
     /// Port name for the currently active LED session. Cleared in
     /// `stop_previous`, which deliberately leaves the cached serial handle
@@ -411,6 +446,8 @@ struct LightingRuntimeOwner {
     frame_source_factory: Arc<AmbilightFrameSourceFactory>,
     /// v1.6 LED Preview — synthetic test request + shared enrichment gate.
     preview: PreviewRuntime,
+    /// `LightingRuntimeState::closing`, read under the runtime lock.
+    closing: Arc<AtomicBool>,
 }
 
 /// v1.6 LED Preview runtime state carried alongside the lighting worker.
@@ -488,21 +525,63 @@ impl Default for LightingRuntimeOwner {
                     create_live_frame_source(req.display_id.as_deref())
                 }
             }),
+            closing: Arc::default(),
         }
     }
 }
 
 /// Tauri-managed holder for the lighting mode state machine — active mode,
 /// the running worker (if any), live-tunable settings, and the output bridge.
-#[derive(Default)]
 pub struct LightingRuntimeState {
     runtime: Mutex<LightingRuntimeOwner>,
     /// The mode commands' turn order — see `run_mode_transition`.
     transitions: tokio::sync::Mutex<()>,
+    /// Set first by the quit path. A mode start checks it under the runtime
+    /// lock, so no worker comes up after the quit's own stop has run.
+    closing: Arc<AtomicBool>,
+    /// What runs, for readers that must never wait on `runtime`.
+    pub(crate) snapshot: Arc<LightingSnapshotCell>,
+    pub(crate) outputs: outputs::OutputsState,
+    pub(crate) tuning: Arc<TuningCell>,
+}
+
+impl Default for LightingRuntimeState {
+    fn default() -> Self {
+        Self::with_owner(LightingRuntimeOwner::default())
+    }
+}
+
+impl LightingRuntimeState {
+    fn with_owner(mut owner: LightingRuntimeOwner) -> Self {
+        let closing = Arc::new(AtomicBool::new(false));
+        owner.closing = Arc::clone(&closing);
+        Self {
+            runtime: Mutex::new(owner),
+            transitions: tokio::sync::Mutex::new(()),
+            closing,
+            snapshot: Arc::default(),
+            outputs: outputs::OutputsState::default(),
+            tuning: Arc::default(),
+        }
+    }
+
+    /// Step 1 of the quit calls this before it stops anything.
+    pub fn mark_closing(&self) {
+        self.closing.store(true, Ordering::SeqCst);
+    }
+
+    pub fn is_closing(&self) -> bool {
+        self.closing.load(Ordering::SeqCst)
+    }
 }
 
 #[cfg(test)]
 impl LightingRuntimeState {
+    /// A runtime over a test owner — fake capture, recording serial bridge.
+    pub(crate) fn for_tests(owner: LightingRuntimeOwner) -> Self {
+        Self::with_owner(owner)
+    }
+
     /// Swaps the serial write path, so an IPC test sees every write — and
     /// every port open — a mode change would make.
     pub(crate) fn replace_output_bridge_for_tests(&self, bridge: LedOutputBridge) {
@@ -515,6 +594,13 @@ impl LightingRuntimeState {
     /// Takes the mode commands' turn, as a command in flight would hold it.
     pub(crate) fn hold_transition_for_tests(&self) -> tokio::sync::MutexGuard<'_, ()> {
         self.transitions.blocking_lock()
+    }
+
+    /// Holds the runtime lock, as a worker join mid-transition does.
+    pub(crate) fn hold_runtime_for_tests(&self) -> std::sync::MutexGuard<'_, LightingRuntimeOwner> {
+        self.runtime
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
@@ -1383,6 +1469,70 @@ enum UsbOutputPlan {
     Wled(WledSinkConfig),
 }
 
+/// A solid frame's destination on the "usb" channel and how that strip wants
+/// it encoded — taken from the mode when it starts, so a colour retune can
+/// repaint the strip without the runtime lock.
+#[derive(Clone)]
+pub(crate) struct SolidUsbOutput {
+    bridge: LedOutputBridge,
+    plan: UsbOutputPlan,
+    corrections: ColorCorrectionConfig,
+    profile: FirmwareProfile,
+    chip: LedChipType,
+    color_order: LedColorOrder,
+    led_count: usize,
+}
+
+impl SolidUsbOutput {
+    fn for_mode(bridge: &LedOutputBridge, plan: UsbOutputPlan, mode: &LightingModeConfig) -> Self {
+        Self {
+            bridge: bridge.clone(),
+            plan,
+            corrections: mode.color_correction.clone().unwrap_or_default(),
+            profile: mode.firmware_profile.unwrap_or_default(),
+            chip: mode.chip_type.unwrap_or_default(),
+            color_order: mode.color_order.unwrap_or_default(),
+            // Must paint EVERY LED, not just LED #0 (historical bug: a
+            // 1-element slice left 58/59 LEDs dark). Falls back to a
+            // 1-LED frame when no calibration is on record yet.
+            led_count: mode
+                .led_calibration
+                .as_ref()
+                .map(|cal| cal.total_leds as usize)
+                .filter(|n| *n > 0)
+                .unwrap_or(1),
+        }
+    }
+
+    fn send(&self, payload: &SolidColorPayload) -> Result<(), String> {
+        let triplets: Vec<[u8; 3]> = vec![[payload.r, payload.g, payload.b]; self.led_count];
+        // WLED has no on-wire brightness field, so `CorrectedWledSink`
+        // scales it into the RGB values host-side; the serial path
+        // keeps encoding brightness into the packet header as before.
+        match &self.plan {
+            UsbOutputPlan::Serial(port_name) => {
+                let packet = encode_packet_for_output(
+                    self.profile,
+                    self.chip,
+                    payload.brightness,
+                    &triplets,
+                    &EncoderPlan::new(&self.corrections).with_color_order(self.color_order),
+                );
+                self.bridge
+                    .send_packet_to_port_and_wait(port_name, &packet)
+                    .map_err(|error| error.as_reason())
+            }
+            UsbOutputPlan::Wled(cfg) => {
+                let mut sink = CorrectedWledSink::new(cfg.build(), self.corrections.clone());
+                sink.set_brightness(payload.brightness);
+                let result = sink.start().and_then(|_| sink.send_frame(&triplets));
+                let _ = sink.stop();
+                result
+            }
+        }
+    }
+}
+
 // Central state machine transition. 9-arg signature is retained to avoid
 // disturbing the many existing call sites (several of which live in
 // lib-tests that carry other outstanding compilation issues). Bundling
@@ -1454,6 +1604,21 @@ fn apply_mode_change_inner(
             .unwrap_or(-1),
         normalized_next.targets,
     );
+
+    // Checked under the runtime lock, which the quit's own stop also takes: a
+    // start ordered after that stop is refused here, before `stop_previous`,
+    // and one ordered before it is stopped by it. Off still runs.
+    if normalized_next.kind != LightingModeKind::Off && owner.closing.load(Ordering::SeqCst) {
+        warn!("[apply_mode_change] refused — the app is shutting down");
+        return make_result(
+            owner.active_mode.clone(),
+            command_status(
+                "LIGHTING_MODE_SHUTTING_DOWN",
+                "The app is shutting down; the lighting mode was not changed.",
+                None,
+            ),
+        );
+    }
 
     // Derive target flags from the requested targets list.
     // Empty/None targets = legacy behavior: USB is required (backward compat per D-10).
@@ -1557,30 +1722,7 @@ fn apply_mode_change_inner(
                 .as_ref()
                 .cloned()
                 .unwrap_or_default();
-            // None-preservation: when the incoming payload omits saturation
-            // or smoothing_alpha (e.g. brightness-only slider tweak from the
-            // frontend), keep the currently running atomic value instead of
-            // resetting to defaults. The previous unwrap_or(1.0)/(0.35) path
-            // silently clobbered user-tuned values on every brightness move.
-            let next_smoothing_alpha = cfg
-                .smoothing_alpha
-                .unwrap_or_else(|| live.read_smoothing_alpha());
-            let next_saturation = cfg.saturation.unwrap_or_else(|| live.read_saturation());
-            log::info!(
-                "[ambilight-live-update] brightness={:.3} smoothing={:.3} saturation={:.3} black_border={} preset={:?}",
-                cfg.brightness,
-                next_smoothing_alpha,
-                next_saturation,
-                cfg.black_border_detection,
-                cfg.lighting_smoothing_preset.or(cfg.hue_intensity_preset),
-            );
-            live.update(
-                cfg.brightness,
-                cfg.black_border_detection,
-                next_smoothing_alpha,
-                next_saturation,
-                cfg.lighting_smoothing_preset.or(cfg.hue_intensity_preset),
-            );
+            retune_ambilight_live(live, &cfg);
             // Unconditional: the atomic is the worker's only copy, so it must
             // follow every apply, including one that returns to the default.
             live.store_color_order(normalized_next.color_order.unwrap_or_default());
@@ -1654,14 +1796,6 @@ fn apply_mode_change_inner(
 
                 SOLID_OUTPUT_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
 
-                let solid_corrections =
-                    normalized_next.color_correction.clone().unwrap_or_default();
-                let solid_profile = normalized_next.firmware_profile.unwrap_or_default();
-                let solid_chip = normalized_next.chip_type.unwrap_or_default();
-
-                // Must paint EVERY LED, not just LED #0 (historical bug: a
-                // 1-element slice left 58/59 LEDs dark). Falls back to a
-                // 1-LED frame when no calibration is on record yet.
                 log::info!(
                     "[apply_mode_change] solid led_calibration={}",
                     normalized_next
@@ -1670,14 +1804,9 @@ fn apply_mode_change_inner(
                         .map(|c| format!("Some(total_leds={})", c.total_leds))
                         .unwrap_or_else(|| "None".to_string())
                 );
-                let solid_led_count: usize = normalized_next
-                    .led_calibration
-                    .as_ref()
-                    .map(|cal| cal.total_leds as usize)
-                    .filter(|n| *n > 0)
-                    .unwrap_or(1);
-                let solid_triplets: Vec<[u8; 3]> =
-                    vec![[payload.r, payload.g, payload.b]; solid_led_count];
+                let output =
+                    SolidUsbOutput::for_mode(&owner.output_bridge, plan.clone(), &normalized_next);
+                let solid_led_count = output.led_count;
 
                 // Diagnostic: dump the post-correction RGB triplet that
                 // actually goes onto the wire. Useful when investigating
@@ -1686,38 +1815,11 @@ fn apply_mode_change_inner(
                 // and saturation math without firing up a USB sniffer.
                 let (corrected_r, corrected_g, corrected_b) = apply_color_correction_rgb(
                     (payload.r, payload.g, payload.b),
-                    &solid_corrections,
+                    &output.corrections,
                 );
                 let brightness_byte = (payload.brightness.clamp(0.0, 1.0) * 255.0).floor() as u8;
 
-                // WLED has no on-wire brightness field, so `CorrectedWledSink`
-                // scales it into the RGB values host-side; the serial path
-                // keeps encoding brightness into the packet header as before.
-                let send_result: Result<(), String> = match &plan {
-                    UsbOutputPlan::Serial(port_name) => {
-                        let solid_packet = encode_packet_for_output(
-                            solid_profile,
-                            solid_chip,
-                            payload.brightness,
-                            &solid_triplets,
-                            &EncoderPlan::new(&solid_corrections)
-                                .with_color_order(normalized_next.color_order.unwrap_or_default()),
-                        );
-                        owner
-                            .output_bridge
-                            .send_packet_to_port_and_wait(port_name, &solid_packet)
-                            .map_err(|error| error.as_reason())
-                    }
-                    UsbOutputPlan::Wled(cfg) => {
-                        let mut sink = CorrectedWledSink::new(cfg.build(), solid_corrections);
-                        sink.set_brightness(payload.brightness);
-                        let result = sink.start().and_then(|_| sink.send_frame(&solid_triplets));
-                        let _ = sink.stop();
-                        result
-                    }
-                };
-
-                if let Err(reason) = send_result {
+                if let Err(reason) = output.send(&payload) {
                     warn!(
                         "[apply_mode_change] solid USB send FAILED — sink={plan:?} led_count={solid_led_count} reason={reason}"
                     );
@@ -1959,12 +2061,26 @@ pub async fn set_lighting_mode<R: Runtime>(
 
 fn set_lighting_mode_blocking<R: Runtime>(
     app: &AppHandle<R>,
+    payload: LightingModeConfig,
+) -> Result<LightingModeCommandResult, String> {
+    app.state::<LightingRuntimeState>().tuning.close_blocking();
+    let hue_output = app.state::<HueRuntimeStateStore>().output_live();
+    let result = apply_config_blocking(app, payload, hue_output)?;
+    snapshot::publish_running(app, &result.mode);
+    Ok(result)
+}
+
+/// The body of a mode apply: hydrate, apply under the runtime lock, broadcast.
+/// `hue_output` is the slot a worker naming Hue follows. Shared by
+/// `set_lighting_mode` and the lighting transaction.
+pub(crate) fn apply_config_blocking<R: Runtime>(
+    app: &AppHandle<R>,
     mut payload: LightingModeConfig,
+    hue_output: Arc<HueOutputLive>,
 ) -> Result<LightingModeCommandResult, String> {
     let runtime_state = app.state::<LightingRuntimeState>();
     let connection_state = app.state::<SerialConnectionState>();
     let sink_registry = app.state::<ActiveSinkRegistry>();
-    let hue_runtime_state = app.state::<HueRuntimeStateStore>();
     let telemetry_state = app.state::<RuntimeTelemetryState>();
     let led_twin_state = app.state::<LedTwinState>();
     let t_cmd = std::time::Instant::now();
@@ -2023,7 +2139,7 @@ fn set_lighting_mode_blocking<R: Runtime>(
         info!("[set_lighting_mode] runtime lock waited {lock_ms}ms");
     }
 
-    let hue_output = Some(hue_runtime_state.output_live());
+    let hue_output = Some(hue_output);
 
     // v1.6 LED Preview — clear any stale synthetic-test request, wire the
     // shared gate so a twin opened mid-run starts receiving without a worker
@@ -2093,6 +2209,7 @@ pub fn stop_lighting_blocking<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<LightingModeCommandResult, String> {
     let runtime_state = app.state::<LightingRuntimeState>();
+    runtime_state.tuning.close_blocking();
     let (result, superseded_test) = {
         let mut owner = runtime_state
             .runtime
@@ -2121,6 +2238,7 @@ pub fn stop_lighting_blocking<R: Runtime>(
             active: result.active,
         },
     );
+    snapshot::publish_running(app, &result.mode);
     // v1.6 LED Preview — stopping all lighting supersedes any active test;
     // drop the captured prior mode so a late Stop cannot revive it. This
     // command is also called from the shutdown path, so resolve the twin
@@ -2138,17 +2256,15 @@ pub fn stop_lighting_blocking<R: Runtime>(
 
 /// Read-only snapshot of the current lighting mode, for the frontend to
 /// reconcile against on load without triggering a mode change.
+///
+/// Sync, so it runs on the main thread: it reads the published snapshot and
+/// never the runtime lock, which a transition holds for seconds.
 #[tauri::command]
 pub fn get_lighting_mode_status(
     runtime_state: State<'_, LightingRuntimeState>,
 ) -> Result<LightingModeCommandResult, String> {
-    let owner = runtime_state
-        .runtime
-        .lock()
-        .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
-
     Ok(make_result(
-        owner.active_mode.clone(),
+        runtime_state.snapshot.read().mode,
         command_status(
             "LIGHTING_MODE_STATUS_OK",
             "Lighting mode status read successfully.",
@@ -2270,6 +2386,7 @@ fn apply_and_broadcast<R: Runtime>(
     // WLED-only session runs preview-only and its restore is gated on stop.
     wled_sink: Option<WledSinkConfig>,
 ) -> Result<LightingModeCommandResult, String> {
+    runtime_state.tuning.close_blocking();
     hydrate_mode_payload(&mut payload, &|| read_persisted_shell_state(app));
 
     let connection_snapshot = connection_state
@@ -2308,6 +2425,7 @@ fn apply_and_broadcast<R: Runtime>(
             active: result.active,
         },
     );
+    snapshot::publish_running(app, &result.mode);
 
     Ok(result)
 }
@@ -2761,6 +2879,14 @@ fn hue_topology_and_affinity(
 mod frame_pipeline_tests;
 
 #[cfg(test)]
+mod outputs_tests;
+
+#[cfg(test)]
+mod test_support;
+#[cfg(test)]
+pub(crate) use test_support::{calibration as calibration_for_tests, EventLog, FakeHue};
+
+#[cfg(test)]
 mod tests {
     use std::sync::{Arc, Mutex};
     use std::thread;
@@ -2985,6 +3111,7 @@ mod tests {
             room_geometry_live: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
             preview: Default::default(),
+            closing: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FakeFrameSource {
                     frame: CapturedFrame {
@@ -3007,6 +3134,7 @@ mod tests {
             room_geometry_live: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
             preview: Default::default(),
+            closing: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FakeFrameSource {
                     frame: CapturedFrame {
@@ -3096,6 +3224,7 @@ mod tests {
             room_geometry_live: None,
             output_bridge: LedOutputBridge::from_sender(recorder.clone()),
             preview: Default::default(),
+            closing: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FakeFrameSource {
                     frame: CapturedFrame {
@@ -3423,6 +3552,7 @@ mod tests {
             output_bridge: owner.output_bridge,
             frame_source_factory: owner.frame_source_factory,
             preview: Default::default(),
+            closing: Default::default(),
         };
         let mut trace = Vec::new();
 
@@ -3857,6 +3987,7 @@ mod tests {
             room_geometry_live: None,
             output_bridge: LedOutputBridge::from_sender(recorder.clone()),
             preview: Default::default(),
+            closing: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FakeFrameSource {
                     frame: CapturedFrame {
@@ -3954,6 +4085,7 @@ mod tests {
             room_geometry_live: None,
             output_bridge: LedOutputBridge::from_sender(recorder.clone()),
             preview: Default::default(),
+            closing: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FakeFrameSource {
                     frame: CapturedFrame {
@@ -4196,6 +4328,7 @@ mod lighting_mode_tests {
             room_geometry_live: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
             preview: Default::default(),
+            closing: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FakeFrameSource {
                     frame: CapturedFrame {
@@ -4240,6 +4373,7 @@ mod lighting_mode_tests {
             room_geometry_live: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
             preview: Default::default(),
+            closing: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FailsAfterFirstFrameSource {
                     frame: CapturedFrame {
@@ -6078,6 +6212,7 @@ mod lighting_mode_tests {
             room_geometry_live: None,
             output_bridge: LedOutputBridge::from_sender(recorder.clone()),
             preview: Default::default(),
+            closing: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FakeFrameSource {
                     frame: CapturedFrame {

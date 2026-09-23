@@ -86,6 +86,8 @@ export const LIGHTING_MODE_STATUS = {
   AMBILIGHT_MODE_START_FAILED: "AMBILIGHT_MODE_START_FAILED",
   LIGHTING_MODE_STOPPED: "LIGHTING_MODE_STOPPED",
   LIGHTING_MODE_STATUS_OK: "LIGHTING_MODE_STATUS_OK",
+  /** The app is quitting: a start is refused and the running mode is left to the quit path. */
+  LIGHTING_MODE_SHUTTING_DOWN: "LIGHTING_MODE_SHUTTING_DOWN",
 } as const;
 
 export type LightingModeStatusCode =
@@ -116,10 +118,10 @@ export function isLightingModeGateCode(code: string): code is LightingModeGateSt
 }
 
 /**
- * Why a `[usb, hue]` start ran on USB alone after the Hue gate refused it.
- * Frontend-minted and never on the wire, so deliberately outside
- * `LIGHTING_MODE_STATUS` — the contract verifier requires that set to equal
- * the Rust literals exactly.
+ * Why a `[usb, hue]` start ran on USB alone after the Hue gate refused it. On
+ * the wire as `ApplyOutputsOutcome.hueLeftOut` and the snapshot's
+ * `hueHeldOutReason` (`HueLeftOutReason` in `lighting_mode/outputs.rs`). A
+ * reason, not a status code, so it stays outside `LIGHTING_MODE_STATUS`.
  */
 export const HUE_LEFT_OUT_REASON = {
   UNREACHABLE: "unreachable",

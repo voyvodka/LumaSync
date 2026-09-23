@@ -1194,7 +1194,8 @@ const emittedLightingCodes = [
 // Pinned, not `> 0`: the harvest sees string literals only, so hoisting a code
 // to a `const` (the shape led_preview.rs already uses) would silently drop it while
 // the other nine still matched. Bump this deliberately when a code is added.
-const EXPECTED_LIGHTING_CODE_COUNT = 10;
+// 10 → 11: LIGHTING_MODE_SHUTTING_DOWN, a start refused once the quit began.
+const EXPECTED_LIGHTING_CODE_COUNT = 11;
 check(
   emittedLightingCodes.length === EXPECTED_LIGHTING_CODE_COUNT,
   `harvested exactly ${EXPECTED_LIGHTING_CODE_COUNT} command_status codes from lighting_mode.rs`,
@@ -1219,6 +1220,69 @@ check(
   "LIGHTING_MODE_GATE_STATUS + isLightingModeGateCode exported",
   "MISSING LIGHTING_MODE_GATE_STATUS / isLightingModeGateCode in lighting.ts"
 );
+
+// ---------------------------------------------------------------------------
+// The lighting transaction — its two status shapes pinned to their one
+// constructor each, and its wire enums held equal to the contract's values.
+// ---------------------------------------------------------------------------
+console.log("\n[ Lighting transaction — Rust → lightingRuntime.ts parity ]");
+{
+  const lightingRuntimeSource = readOrEmpty(
+    resolve(ROOT, "src/shared/contracts/lightingRuntime.ts"),
+    "lightingRuntime"
+  );
+  const rustOutputs = stripComments(
+    readOrEmpty(resolve(ROOT, "src-tauri/src/commands/lighting_mode/outputs.rs"), "rust outputs")
+  );
+  const rustTuning = stripComments(
+    readOrEmpty(resolve(ROOT, "src-tauri/src/commands/lighting_mode/tuning.rs"), "rust tuning")
+  );
+  const rustSnapshot = stripComments(
+    readOrEmpty(resolve(ROOT, "src-tauri/src/commands/lighting_mode/snapshot.rs"), "rust snapshot")
+  );
+  const literalCodes = (source, fn) =>
+    [...source.matchAll(new RegExp(`${fn}\\(\\s*"([A-Z][A-Z0-9_]*)"`, "g"))].map((m) => m[1]);
+  checkWireUnion(
+    "LightingOutputsStatusCode",
+    literalCodes(rustOutputs, "outputs_status"),
+    constMembers(lightingRuntimeSource, "LIGHTING_OUTPUTS_STATUS"),
+    7
+  );
+  checkWireUnion(
+    "LightingRetuneStatusCode",
+    literalCodes(rustTuning, "retune_status"),
+    constMembers(lightingRuntimeSource, "LIGHTING_RETUNE_STATUS"),
+    3
+  );
+
+  // `#[serde(rename_all = "camelCase")]` unit variants, as the wire spells them.
+  const rustEnumValues = (source, name) => {
+    const block = source.match(new RegExp(`pub enum ${name}\\s*\\{([\\s\\S]*?)\\n\\}`));
+    return block
+      ? [...block[1].matchAll(/^\s*([A-Z][A-Za-z]*),/gm)].map(
+          (m) => m[1][0].toLowerCase() + m[1].slice(1)
+        )
+      : [];
+  };
+  const tsValues = (source, name) => {
+    const block = source.match(new RegExp(`export const ${name}\\s*=\\s*\\{([\\s\\S]*?)\\n\\} as const;`));
+    return block ? [...block[1].matchAll(/:\s*"([a-zA-Z]+)"/g)].map((m) => m[1]) : [];
+  };
+  for (const [rustSource, rustName, tsSource, tsName] of [
+    [rustSnapshot, "HueLeftOutReason", lightingSource, "HUE_LEFT_OUT_REASON"],
+    [rustSnapshot, "LightingPhase", lightingRuntimeSource, "LIGHTING_RUNTIME_PHASE"],
+    [rustSnapshot, "BootHueRetryState", lightingRuntimeSource, "BOOT_HUE_RETRY_STATE"],
+    [rustOutputs, "LightingOrigin", lightingRuntimeSource, "LIGHTING_ORIGIN"],
+  ]) {
+    const rust = rustEnumValues(rustSource, rustName);
+    const ts = tsValues(tsSource, tsName);
+    check(
+      rust.length > 0 && rust.join(",") === ts.join(","),
+      `${tsName} matches Rust ${rustName} (${ts.join(" ")})`,
+      `WIRE ENUM DRIFT: ${rustName} [${rust.join(" ")}] vs ${tsName} [${ts.join(" ")}]`
+    );
+  }
+}
 
 // ---------------------------------------------------------------------------
 // LED colour order — derived Rust ↔ device.ts parity. Unlike the chip-type
@@ -1619,9 +1683,15 @@ function walkSourceFiles(dir, match, out = []) {
 function rustTestOnlyPaths(root) {
   const paths = new Set();
   for (const file of walkSourceFiles(root, /\.rs$/)) {
+    // `mod x;` in `mod.rs`/`lib.rs` is a sibling file; in any other `foo.rs`
+    // it lives under `foo/`, which is where `lighting_mode.rs`'s tests are.
+    const name = file.split("/").pop();
+    const base = ["mod.rs", "lib.rs", "main.rs"].includes(name)
+      ? dirname(file)
+      : resolve(dirname(file), name.replace(/\.rs$/, ""));
     for (const m of readFileSync(file, "utf-8").matchAll(/^#\[cfg\(test\)\]\s*\nmod\s+(\w+)\s*;/gm)) {
-      paths.add(normalizeSourcePath(resolve(dirname(file), `${m[1]}.rs`)));
-      paths.add(normalizeSourcePath(resolve(dirname(file), m[1])));
+      paths.add(normalizeSourcePath(resolve(base, `${m[1]}.rs`)));
+      paths.add(normalizeSourcePath(resolve(base, m[1])));
     }
   }
   return paths;
@@ -2408,7 +2478,9 @@ const checkedPairs = nullabilityPairs.filter(
 // SolidColorPayload.
 // 49 → 50: `SerialFirmwareInfo`, the PONG a connect or health check accepted.
 // 50 → 53: `ShellStateSnapshot`, `ShellStateWriteResult`, `ShellStateChanged`.
-const EXPECTED_NULLABILITY_PAIR_COUNT = 53;
+// 53 → 57: the lighting transaction's `ApplyOutputsResult`, `ApplyOutputsOutcome`,
+// `LightingRuntimeSnapshot` and `RetuneLightingResult`.
+const EXPECTED_NULLABILITY_PAIR_COUNT = 57;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,
