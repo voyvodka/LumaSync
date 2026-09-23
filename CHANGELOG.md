@@ -103,6 +103,13 @@ https://keepachangelog.com/en/1.1.0/
   lighting carries on with the strip alone and the notice says so. Picking a mode or changing the
   outputs yourself stops the wait, and a bridge that cannot be reached or needs pairing again is
   never waited on.
+- Changing a setting such as color correction or the LED chip type right after adding Hue to a
+  running mode no longer restarts the lighting, and in Solid the Hue lights now get the change
+  too. After Hue joined a running mode, from the Lights outputs or by itself at launch, the next
+  such change was sent for the outputs the mode had started with, so the lighting briefly
+  restarted and in Solid the Hue lights kept the old color. After Hue was removed from a running
+  mode, the same change was turned away and never reached the strip. Settings now go to the
+  outputs actually running, including after a launch that restored a mode Hue had been added to.
 - The first-run guide banner could flash up for a moment at launch and disappear again for people
   who were already set up but had updated from a version without it. It now appears only once the
   app knows which step you are on, so it no longer flashes; a new install still sees the first step

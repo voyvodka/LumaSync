@@ -209,6 +209,14 @@ export function useLightingModeOrchestrator({
     const addedTargets = normalizedTargets.filter((t) => !prevTargets.includes(t));
     const removedTargets = prevTargets.filter((t) => !normalizedTargets.includes(t));
 
+    // The live mode's targets are what every hot-reload re-dispatch sends. Left
+    // on the old set, the next setting change reads as a target change: the
+    // worker restarts, and a Solid re-apply sends Hue no colour. In memory only —
+    // the persisted mode and `lastOutputTargets` are not this path's to write.
+    const commitModeTargets = (targets: HueRuntimeTarget[]) => {
+      setLightingModeState((prev) => (prev.kind === lightingMode.kind ? { ...prev, targets } : prev));
+    };
+
     // Per-target outcome, not `Promise.all`: only a target that actually stopped
     // leaves active membership. Dropping one from the UI while its backend stream
     // lived on is what produced HUE_STREAM_NOT_READY_ACTIVE_STREAMER next start.
@@ -249,6 +257,9 @@ export function useLightingModeOrchestrator({
     }
     if (failedToStop.length > 0) {
       setStopFailedNotice(failedToStop);
+    }
+    if (removedTargets.length > 0) {
+      commitModeTargets(prevTargets.filter((t) => normalizedTargets.includes(t)));
     }
 
     // What outputs once the stops above settle. The left-out notice says
@@ -292,6 +303,7 @@ export function useLightingModeOrchestrator({
         if (usbDriven) {
           setActiveOutputTargets((prev) => [...new Set([...prev, "usb" as HueRuntimeTarget])]);
           liveTargets = [...new Set([...liveTargets, "usb" as HueRuntimeTarget])];
+          commitModeTargets(requestTargets);
           continue;
         }
 
@@ -383,6 +395,7 @@ export function useLightingModeOrchestrator({
         if (hueDriven) {
           setActiveOutputTargets((prev) => [...new Set([...prev, "hue" as HueRuntimeTarget])]);
           liveTargets = [...new Set([...liveTargets, "hue" as HueRuntimeTarget])];
+          commitModeTargets(requestTargets);
           if (lightingMode.kind === LIGHTING_MODE_KIND.SOLID && lightingMode.solid) {
             try {
               const colorResult = await setHueSolidColor({
