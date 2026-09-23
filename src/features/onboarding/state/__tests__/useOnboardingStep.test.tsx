@@ -4,13 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ONBOARDING_REVEAL_CAP_MS,
   ONBOARDING_REVEAL_SETTLE_MS,
+  ONBOARDING_STEPS,
   type OnboardingGuardSnapshot,
-} from "../../state/onboardingState";
-import { OnboardingFlow } from "../OnboardingFlow";
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
-}));
+  type OnboardingStep,
+} from "../onboardingState";
+import { useOnboardingStep, type OnboardingStepInput } from "../useOnboardingStep";
 
 interface FlowState {
   guards: OnboardingGuardSnapshot;
@@ -18,20 +16,27 @@ interface FlowState {
   reachabilityPending?: boolean;
 }
 
+const STEP_TITLE: Record<Exclude<OnboardingStep, "complete">, string> = {
+  [ONBOARDING_STEPS.LIGHTS]: "common:ui.onboarding.step1.title",
+  [ONBOARDING_STEPS.DEVICES]: "common:ui.onboarding.step2.title",
+  [ONBOARDING_STEPS.LED_SETUP]: "common:ui.onboarding.step3.title",
+};
+
+/** Renders the shown step the way the notice slot names it. */
+function Harness(props: OnboardingStepInput) {
+  const { step } = useOnboardingStep(props);
+  if (step === null || step === ONBOARDING_STEPS.COMPLETE) return null;
+  return <div role="region">{STEP_TITLE[step]}</div>;
+}
+
 function flow(initial: OnboardingGuardSnapshot | FlowState, onComplete = vi.fn()) {
   const toState = (next: OnboardingGuardSnapshot | FlowState): FlowState =>
     "guards" in next ? next : { guards: next };
-  const props = {
-    hasCompleted: false,
-    onOpenLights: vi.fn(),
-    onOpenDevices: vi.fn(),
-    onOpenCalibration: vi.fn(),
-    onComplete,
-  };
   const element = (state: FlowState) => (
     // A fresh-but-equal guard object is what App passes on every render.
-    <OnboardingFlow
-      {...props}
+    <Harness
+      hasCompleted={false}
+      onComplete={onComplete}
       guards={{ ...state.guards }}
       guardsLoaded={state.guardsLoaded}
       reachabilityPending={state.reachabilityPending}
@@ -64,7 +69,7 @@ const ALL: OnboardingGuardSnapshot = {
   hasSavedCalibration: true,
 };
 
-describe("OnboardingFlow", () => {
+describe("useOnboardingStep", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });

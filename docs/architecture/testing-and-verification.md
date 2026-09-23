@@ -148,7 +148,7 @@ rather than a matter of trusting tree-shaking; `verify:mock-not-shipped` asserts
 build guard by running into it. The reverse direction is fine and deliberate: `mock/` imports
 contract types, and `mock/hotplug.ts` imports two runtime singletons on purpose.
 
-Three things about it are not obvious and each cost a cycle:
+Four things about it are not obvious and each cost a cycle:
 
 - **Fixtures are bound to the real response types.** `handlers/responses.ts` ties each command to
   its `*Api.ts` return type and `handlers/index.ts` derives its coverage guard from the handler
@@ -166,6 +166,13 @@ Three things about it are not obvious and each cost a cycle:
   component that remounts, hundreds a second into the console you are trying to read.
   `mock/eventBridge.ts` replaces it, browser-only, so passthrough still reaches Rust under
   `tauri:mock`.
+- **A fixture that reports the world instead of the command lies about state.** `stop_hue_stream`
+  answered with whatever fault the world held, so against an unreachable bridge the stop returned
+  the retry code, the app read that as a failed stop, kept Hue listed active and showed HUE
+  STREAMING beside a "can't reach the bridge" notice. Rust's stop is local: it answers
+  `HUE_STREAM_STOPPED` (or `HUE_STOP_TIMEOUT_PARTIAL` when its sender will not exit), never a
+  bridge fault, and the runtime then sits Idle until the next start; the world's `hue.stopped` flag
+  models that. Before trusting a contradiction seen only in the mock, check what the Rust command returns.
 
 **A world edit is not always visible to the app, and the panel says which is which.** Every control
 carries a `[live]` / `[revisit]` / `[reload]` badge. The serial connection is the sharp case:

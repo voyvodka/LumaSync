@@ -24,6 +24,17 @@ export default {
   statusBar: {
     kbdMode: "mode",
     kbdSettings: "settings",
+    // Chip values: short and uppercase, none longer than STREAMING.
+    state: {
+      ok: "OK",
+      off: "OFF",
+      idle: "IDLE",
+      streaming: "STREAMING",
+      retrying: "RETRYING",
+      failed: "FAILED",
+      waiting: "WAITING",
+      leftOut: "LEFT OUT",
+    },
     reconnect: {
       usbAriaLabel: "Reconnect USB device",
       hueAriaLabel: "Reconnect Hue bridge",
@@ -35,5 +46,41 @@ export default {
     restore: "Restore",
     close: "Close",
     sectionsAriaLabel: "Sections",
+  },
+  notices: {
+    regionLabel: "Notices",
+    severity: {
+      error: "Error",
+      warning: "Warning",
+      info: "Note",
+    },
+    dismiss: "Dismiss notice",
+    showDetails: "Show details",
+    showLess: "Show less",
+    showMore_one: "Show {{count}} more notice",
+    showMore_other: "Show {{count}} more notices",
+    moreBadge: "+{{count}}",
+    moreCount: "+{{count}} more",
+    // Titles are all the compact slot shows until expanded: keep them to a few words.
+    titles: {
+      capturePermission: "Screen recording blocked",
+      captureStalled: "Screen capture stopped",
+      startFailed: "Lighting didn't start",
+      stopFailed: "Output didn't stop",
+      previewOpenFailed: "LED preview didn't open",
+      hueUnreachable: "Hue bridge unreachable",
+      hueAuth: "Hue needs pairing again",
+      hueConfig: "Hue isn't set up",
+      hueWaiting: "Waiting for the Hue bridge",
+      hueBusy: "Hue bridge busy",
+      usbDisconnected: "USB strip disconnected",
+      usbUnsupported: "USB device not recognised",
+      hueColor: "Hue colour not applied",
+    },
+    actions: {
+      devices: "Devices",
+      ledSetup: "LED setup",
+      stopHue: "Stop Hue",
+    },
   },
 };

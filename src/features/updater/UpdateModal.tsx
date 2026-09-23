@@ -2,6 +2,7 @@ import type { TFunction } from "i18next";
 import { useTranslation, Trans } from "react-i18next";
 import { UPDATER_STATUS, type UpdateMetadata } from "@/shared/contracts/updater";
 import type { UpdaterState } from "./useAutoUpdater";
+import { isUpdateModalStatus } from "./updateModalStatus";
 import { IconDownload, IconInstall, IconError } from "@/shared/ui/icons";
 import { clamp } from "@/shared/lib/math";
 import { useDialogFocus } from "@/shared/ui/useDialogFocus";
@@ -78,14 +79,7 @@ export function UpdateModal({ state, onInstall, onDismiss, onRetry }: UpdateModa
     onClose: state.status === "installing" ? undefined : onDismiss,
   });
 
-  if (
-    state.status !== "available" &&
-    state.status !== "downloading" &&
-    state.status !== "installing" &&
-    state.status !== "error"
-  ) {
-    return null;
-  }
+  if (!isUpdateModalStatus(state)) return null;
 
   return (
     <div
@@ -170,43 +164,45 @@ function AvailableContent({
 
   return (
     <>
-      <div className="lm-updater-head">
-        <div className="lm-updater-badge">
-          <IconDownload />
-        </div>
-        <div className="lm-updater-titlewrap">
-          <div className="lm-updater-eyebrow">{t("updater:available.eyebrow")}</div>
-          <div className="lm-updater-title" id="lm-updater-title">
-            {t("updater:available.title")}
+      <div className="lm-updater-scroll">
+        <div className="lm-updater-head">
+          <div className="lm-updater-badge">
+            <IconDownload />
+          </div>
+          <div className="lm-updater-titlewrap">
+            <div className="lm-updater-eyebrow">{t("updater:available.eyebrow")}</div>
+            <div className="lm-updater-title" id="lm-updater-title">
+              {t("updater:available.title")}
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="lm-updater-body">
-        <Trans t={t} i18nKey="updater:available.body" values={{ version: nextVersion }} components={{ b: <b /> }} />
-      </div>
-
-      <div className="lm-updater-verdiff">
-        <span className="lm-updater-verdiff-from">v{currentVersion}</span>
-        <span className="lm-updater-verdiff-arrow">→</span>
-        <span className="lm-updater-verdiff-to">v{nextVersion}</span>
-        <span className="lm-updater-verdiff-size">· {sizeLabel}</span>
-      </div>
-
-      {notes.length > 0 && (
-        <div className="lm-updater-notes">
-          {notes.map((note, idx) => (
-            <span key={idx} className="lm-updater-notes-line">
-              {note.kind && (
-                <span className={`lm-updater-tag is-${note.kind === "fix" ? "fix" : "add"}`}>
-                  {note.kind === "fix" ? t("updater:noteKind.fix") : note.kind === "add" ? t("updater:noteKind.add") : t("updater:noteKind.change")}
-                </span>
-              )}
-              {note.text}
-            </span>
-          ))}
+        <div className="lm-updater-body">
+          <Trans t={t} i18nKey="updater:available.body" values={{ version: nextVersion }} components={{ b: <b /> }} />
         </div>
-      )}
+
+        <div className="lm-updater-verdiff">
+          <span className="lm-updater-verdiff-from">v{currentVersion}</span>
+          <span className="lm-updater-verdiff-arrow">→</span>
+          <span className="lm-updater-verdiff-to">v{nextVersion}</span>
+          <span className="lm-updater-verdiff-size">· {sizeLabel}</span>
+        </div>
+
+        {notes.length > 0 && (
+          <div className="lm-updater-notes">
+            {notes.map((note, idx) => (
+              <span key={idx} className="lm-updater-notes-line">
+                {note.kind && (
+                  <span className={`lm-updater-tag is-${note.kind === "fix" ? "fix" : "add"}`}>
+                    {note.kind === "fix" ? t("updater:noteKind.fix") : note.kind === "add" ? t("updater:noteKind.add") : t("updater:noteKind.change")}
+                  </span>
+                )}
+                {note.text}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="lm-updater-actions">
         <button type="button" className="lm-updater-btn-ghost" onClick={onDismiss}>
@@ -242,39 +238,41 @@ function DownloadingContent({
   const clamped = clamp(progress, 0, 100);
   return (
     <>
-      <div className="lm-updater-head">
-        <div className="lm-updater-badge">
-          <IconDownload />
-        </div>
-        <div className="lm-updater-titlewrap">
-          <div className="lm-updater-eyebrow">{t("updater:downloading.eyebrow")}</div>
-          <div className="lm-updater-title" id="lm-updater-title">
-            {t("updater:downloading.title", { version })}
+      <div className="lm-updater-scroll">
+        <div className="lm-updater-head">
+          <div className="lm-updater-badge">
+            <IconDownload />
+          </div>
+          <div className="lm-updater-titlewrap">
+            <div className="lm-updater-eyebrow">{t("updater:downloading.eyebrow")}</div>
+            <div className="lm-updater-title" id="lm-updater-title">
+              {t("updater:downloading.title", { version })}
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="lm-updater-body">{t("updater:downloading.body")}</div>
+        <div className="lm-updater-body">{t("updater:downloading.body")}</div>
 
-      <div className="lm-updater-prog">
-        <div className="lm-updater-prog-row">
-          <span>{t("updater:downloading.progressLabel")}</span>
-          <b>
-            <em>{clamped}</em>%
-          </b>
-        </div>
-        <div className="lm-updater-prog-track" role="progressbar" aria-valuenow={clamped} aria-valuemin={0} aria-valuemax={100}>
-          <span className="lm-updater-prog-fill" style={{ width: `${clamped}%` }} />
-        </div>
-        <div className="lm-updater-prog-stats">
-          <span>
-            <b>{formatBytes(downloadedBytes)}</b>
-            {totalBytes > 0 ? ` / ${formatBytes(totalBytes)}` : ""}
-          </span>
-          <span>{formatSpeed(bytesPerSecond)}</span>
-          <span>
-            {t("updater:downloading.etaLabel")} <b>{formatEta(etaSeconds)}</b>
-          </span>
+        <div className="lm-updater-prog">
+          <div className="lm-updater-prog-row">
+            <span>{t("updater:downloading.progressLabel")}</span>
+            <b>
+              <em>{clamped}</em>%
+            </b>
+          </div>
+          <div className="lm-updater-prog-track" role="progressbar" aria-valuenow={clamped} aria-valuemin={0} aria-valuemax={100}>
+            <span className="lm-updater-prog-fill" style={{ width: `${clamped}%` }} />
+          </div>
+          <div className="lm-updater-prog-stats">
+            <span>
+              <b>{formatBytes(downloadedBytes)}</b>
+              {totalBytes > 0 ? ` / ${formatBytes(totalBytes)}` : ""}
+            </span>
+            <span>{formatSpeed(bytesPerSecond)}</span>
+            <span>
+              {t("updater:downloading.etaLabel")} <b>{formatEta(etaSeconds)}</b>
+            </span>
+          </div>
         </div>
       </div>
 
@@ -290,25 +288,27 @@ function DownloadingContent({
 function InstallingContent({ version, onDismiss, t }: { version: string; onDismiss: () => void; t: TFn }) {
   return (
     <>
-      <div className="lm-updater-head">
-        <div className="lm-updater-badge">
-          <IconInstall />
-        </div>
-        <div className="lm-updater-titlewrap">
-          <div className="lm-updater-eyebrow">{t("updater:installing.eyebrow")}</div>
-          <div className="lm-updater-title" id="lm-updater-title">
-            {t("updater:installing.title")}
+      <div className="lm-updater-scroll">
+        <div className="lm-updater-head">
+          <div className="lm-updater-badge">
+            <IconInstall />
+          </div>
+          <div className="lm-updater-titlewrap">
+            <div className="lm-updater-eyebrow">{t("updater:installing.eyebrow")}</div>
+            <div className="lm-updater-title" id="lm-updater-title">
+              {t("updater:installing.title")}
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="lm-updater-spinner" aria-hidden="true" />
+        <div className="lm-updater-spinner" aria-hidden="true" />
 
-      <div className="lm-updater-install-txt">
-        <b>{t("updater:installing.verify")}</b>
-        <span>
-          <Trans t={t} i18nKey="updater:installing.body" values={{ version }} components={{ br: <br /> }} />
-        </span>
+        <div className="lm-updater-install-txt">
+          <b>{t("updater:installing.verify")}</b>
+          <span>
+            <Trans t={t} i18nKey="updater:installing.body" values={{ version }} components={{ br: <br /> }} />
+          </span>
+        </div>
       </div>
 
       {import.meta.env.DEV && (
@@ -341,27 +341,29 @@ function ErrorContent({
     code === UPDATER_STATUS.CHECK_FAILED || code === UPDATER_STATUS.ENDPOINT_INVALID;
   return (
     <>
-      <div className="lm-updater-head">
-        <div className="lm-updater-badge is-error">
-          <IconError />
-        </div>
-        <div className="lm-updater-titlewrap">
-          <div className="lm-updater-eyebrow is-error">
-            {t(isCheckFailure ? "updater:error.checkEyebrow" : "updater:error.eyebrow")}
+      <div className="lm-updater-scroll">
+        <div className="lm-updater-head">
+          <div className="lm-updater-badge is-error">
+            <IconError />
           </div>
-          <div className="lm-updater-title" id="lm-updater-title">
-            {t(isCheckFailure ? "updater:error.checkTitle" : "updater:error.title")}
+          <div className="lm-updater-titlewrap">
+            <div className="lm-updater-eyebrow is-error">
+              {t(isCheckFailure ? "updater:error.checkEyebrow" : "updater:error.eyebrow")}
+            </div>
+            <div className="lm-updater-title" id="lm-updater-title">
+              {t(isCheckFailure ? "updater:error.checkTitle" : "updater:error.title")}
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="lm-updater-body">
-        {t(isCheckFailure ? "updater:error.checkBody" : "updater:error.body")}
-      </div>
+        <div className="lm-updater-body">
+          {t(isCheckFailure ? "updater:error.checkBody" : "updater:error.body")}
+        </div>
 
-      <div className="lm-updater-errbox">
-        <b>{t(isCheckFailure ? "updater:error.detailTitle" : "updater:error.boxTitle")}</b>
-        {message}
+        <div className="lm-updater-errbox">
+          <b>{t(isCheckFailure ? "updater:error.detailTitle" : "updater:error.boxTitle")}</b>
+          {message}
+        </div>
       </div>
 
       <div className="lm-updater-actions">

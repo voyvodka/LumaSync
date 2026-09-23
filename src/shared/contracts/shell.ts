@@ -310,8 +310,8 @@ export interface ShellState {
   notificationsEnabled?: boolean;
   /**
    * v1.5 W2-B4 — first-run onboarding completion flag. When `true`,
-   * `OnboardingFlow` skips render entirely; when `undefined` / `false`,
-   * the 3-step inline progressive banner walks the user through
+   * `useOnboardingStep` shows nothing; when `undefined` / `false`,
+   * the 3-step progressive hint in the notice slot walks the user through
    * picking a mode → connecting devices → calibrating LEDs. Set to
    * `true` once the user finishes (or explicitly skips) the final step.
    *

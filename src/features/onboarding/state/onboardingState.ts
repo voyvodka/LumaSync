@@ -63,8 +63,8 @@ export const ONBOARDING_TOTAL_STEPS = ONBOARDING_STEP_ORDER.length;
 
 /**
  * Inputs the state machine needs to decide whether each step's
- * advance guard is satisfied. Mirrors the props `OnboardingFlow`
- * already receives from App.tsx so wiring is a 1:1 forward.
+ * advance guard is satisfied. Mirrors the guards `useOnboardingStep`
+ * receives from App.tsx so wiring is a 1:1 forward.
  */
 export interface OnboardingGuardSnapshot {
   /** True once the user has clicked any mode button at least once. */

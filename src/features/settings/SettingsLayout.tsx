@@ -3,7 +3,7 @@ import { useState, memo } from "react";
 import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/shell";
 import { LightsSection } from "./sections/LightsSection";
 import { CalibrationPage } from "../calibration/ui/CalibrationPage";
-import { DeviceSection } from "./sections/DeviceSection";
+import { DeviceSection, type DeviceCategoryRequest } from "./sections/DeviceSection";
 import { SystemSection } from "./sections/SystemSection";
 import type { LedCalibrationConfig, LedSegmentCounts } from "../calibration/model/contracts";
 import type {
@@ -82,12 +82,8 @@ interface SettingsLayoutProps {
   /** Forwarded to LED Setup's display picker. Without it a mid-session monitor
    *  switch persists but never reaches the running capture session. */
   onSelectedDisplayIdChange?: (next: string) => void;
-  /**
-   * v1.5 W2-B1 — compact-mode "no reachable output" banner deep-link.
-   * Forwarded only when `uiMode === "compact"`; full mode renders its
-   * own DEVICES section navigation through the sidebar.
-   */
-  onOpenDevices?: () => void;
+  /** A notice asked for one Devices category; forwarded to the rail. */
+  deviceCategoryRequest?: DeviceCategoryRequest | null;
 }
 
 export const SettingsLayout = memo(function SettingsLayout({
@@ -123,7 +119,7 @@ export const SettingsLayout = memo(function SettingsLayout({
   onChipTypeChange,
   onColorOrderChange,
   onSelectedDisplayIdChange,
-  onOpenDevices,
+  deviceCategoryRequest = null,
 }: SettingsLayoutProps) {
   const localOutputConnected = localSink !== null;
   const [pendingZoneCounts, setPendingZoneCounts] = useState<LedSegmentCounts | null>(null);
@@ -138,14 +134,10 @@ export const SettingsLayout = memo(function SettingsLayout({
         hueConfigured={hueConfigured}
         bootstrapDone={bootstrapDone}
         hueReachable={hueReachable}
-        hueProbeGaveUp={hueProbeGaveUp}
-        hueProbeChecking={hueProbeChecking}
         hueProbeVerdict={hueProbeVerdict}
-        onRetryHueProbe={onRetryHueProbe}
         isModeTransitioning={isModeTransitioning}
         modeLockReason={modeLockReason}
         onLightingModeChange={onLightingModeChange}
-        onOpenDevices={onOpenDevices}
         onHueIntensityPresetChange={onHueIntensityPresetChange}
       />
     );
@@ -214,6 +206,7 @@ export const SettingsLayout = memo(function SettingsLayout({
               onChipTypeChange={onChipTypeChange}
               onColorOrderChange={onColorOrderChange}
               onStopHueOutput={onStopHueOutput}
+              categoryRequest={deviceCategoryRequest}
             />
           </div>
         )}

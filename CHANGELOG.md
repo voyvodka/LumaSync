@@ -22,6 +22,21 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Notices: every message the app shows about its state now appears in one place, one at a time,
+  with a "+N" that opens the rest. In the compact window it sits at the top, above the mode
+  buttons, and pushes them down instead of covering them; the first-run hint and the "no reachable
+  output" message no longer take half the window between them, and no longer say the same thing
+  twice. In the full window the notices stack at the bottom right without overlapping. Errors come
+  first, then warnings, then hints. A notice that reports something that happened can be closed
+  and stays up while the pointer or keyboard focus is on it; one that describes something still
+  true stays until it is no longer true. Screen readers hear each new notice once, and no longer
+  hear the frame rate every second.
+- Notices now offer a button where there is somewhere useful to go: Hue re-pairing or an
+  unreachable bridge opens the Hue page in Devices, a missing display opens LED Setup, and a Hue
+  output that would not stop can be stopped again. The compact window now explains why the modes
+  are unavailable when the strip still needs calibrating, with a button to LED Setup. The
+  first-run hint no longer asks Hue-only setups to calibrate a strip, and no longer offers "Open
+  lights" in the compact window, where it did nothing.
 - Lights: the Ambilight card no longer shows the live preview, which was a capture latency and
   frame-rate readout, a box standing for the screen, and a colour estimate along each edge. The
   status bar already shows capture and output health. The card is now called "Mode settings" and
@@ -44,6 +59,29 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- The "Screen recording permission is required" notice no longer disappears after eight seconds
+  while the permission is still missing, taking its System Settings button with it. It now stays
+  until the permission is granted or lighting starts, and the app notices the change on its own
+  when you come back from System Settings.
+- Notices no longer appear on top of the update prompt, where they could be clicked but not
+  reached with the keyboard. They wait underneath it, and anything that arrived meanwhile is shown
+  once the prompt closes. The update prompt now fits the compact window: its text scrolls and the
+  Install and Later buttons stay visible.
+- The close button on the first-run hint and the reconnect button in the compact status bar are
+  now large enough to hit reliably. The Turkish "USB device not recognised" notice no longer says
+  "Hue-only" in English.
+- Unplugging the LED strip while it was the only output now turns lighting off and says the strip
+  was disconnected. Before, nothing was said, the mode still looked like it was running, and screen
+  capture carried on for a strip that was gone. This includes a launch that was running on the
+  strip alone while it waited for a busy Hue bridge: the wait for Hue ends too, so the notice no
+  longer claims lighting is "running on USB only". Your saved outputs are not changed, so the strip
+  is used again once it is back.
+- The HUE entry in the status bar no longer reads OK while Hue is left out of the running lighting.
+  It shows WAITING while the app waits for a busy bridge to let go, and LEFT OUT when Hue could not
+  join, and keeps saying so after the notice has gone, until Hue joins or you change the mode or
+  outputs. The status bar values are now translated, so they appear in Turkish too.
+- The "USB device not recognised" notice no longer says the app switched to Hue when no Hue bridge
+  is paired. It now says no other output is set up.
 - Opening the LED preview from the tray or from LED Setup no longer lights your Hue lamps. The
   test pattern that starts by itself when the popup opens now goes to the LED strip (USB or WLED)
   only. With no strip connected it shows in the overlay only, and the popup says so. Hue lights

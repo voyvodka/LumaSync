@@ -924,7 +924,10 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                 onClick={() =>
                   mutate((w) => {
                     w.hue.streaming = !w.hue.streaming;
-                    if (w.hue.streaming) w.hue.everActive = true;
+                    if (w.hue.streaming) {
+                      w.hue.everActive = true;
+                      w.hue.stopped = false;
+                    }
                   })
                 }
               />

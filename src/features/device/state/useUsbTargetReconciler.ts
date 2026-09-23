@@ -6,7 +6,7 @@ import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 
 import { connectionEvents } from "../connectionEvents";
 
-/** How long the "USB unplugged, continuing with remaining targets" toast stays up. */
+/** How long either USB-unplugged toast stays up. */
 const USB_DISCONNECT_NOTICE_MS = 5_000;
 /** The boot-time unsupported-port toast carries more to read, so it stays up longer. */
 const USB_UNSUPPORTED_NOTICE_MS = 6_000;
@@ -22,12 +22,19 @@ export interface UsbTargetReconcilerInput {
   onAutoAddUsbTarget: (targets: HueRuntimeTarget[]) => void;
   /** The delta-stop pipeline, session-only: an unplug never rewrites `lastOutputTargets`. */
   onDropUsbTarget: (targets: HueRuntimeTarget[]) => void;
+  /** The same, when USB was the only selected target. Resolves whether a running mode ended. */
+  onLastTargetUnplugged: () => Promise<boolean>;
   onFallbackTargets: (targets: HueRuntimeTarget[]) => void;
 }
 
 export interface UsbTargetReconciler {
+  /** Unplugged; the other selected targets carry on. */
   usbDisconnectNotice: boolean;
+  /** Unplugged while it was the only target, so the running mode ended. */
+  usbDisconnectLightingOffNotice: boolean;
   usbUnsupportedNotice: boolean;
+  /** Which fallback the unsupported notice reports: Hue took over, or nothing is selected. */
+  usbUnsupportedHueFallback: boolean;
   /** Bootstrap arms the edge detector from the live USB snapshot. */
   armUsbConnected: (connected: boolean) => void;
 }
@@ -45,15 +52,17 @@ export function useUsbTargetReconciler({
   hueStartConfigRef,
   onAutoAddUsbTarget,
   onDropUsbTarget,
+  onLastTargetUnplugged,
   onFallbackTargets,
 }: UsbTargetReconcilerInput): UsbTargetReconciler {
   // Hot-plug detection ref — null until bootstrap arms it.
   const prevUsbConnectedRef = useRef<boolean | null>(null);
-  const [usbDisconnectNotice, setUsbDisconnectNotice] = useState(false);
+  const [usbDisconnectNotice, setUsbDisconnectNotice] = useState<"continuing" | "lightingOff" | null>(null);
   // Bug 10D — surfaces a one-time non-blocking notice when boot-time
   // auto-reconnect rejects with PORT_UNSUPPORTED / PORT_NOT_FOUND, so
   // the user understands why we just dropped them into Hue-only mode.
   const [usbUnsupportedNotice, setUsbUnsupportedNotice] = useState(false);
+  const [usbUnsupportedHueFallback, setUsbUnsupportedHueFallback] = useState(true);
 
   const armUsbConnected = useCallback((connected: boolean) => {
     prevUsbConnectedRef.current = connected;
@@ -80,26 +89,36 @@ export function useUsbTargetReconciler({
     }
 
     if (wasConnected === true && !isConnected) {
-      // USB just unplugged (D-08) — silently drop from targets
+      // USB just unplugged (D-08): drop it from the targets for this session.
       if (selectedOutputTargets.includes("usb")) {
         const nextTargets = selectedOutputTargets.filter((t) => t !== "usb");
         if (nextTargets.length > 0) {
           onDropUsbTarget(nextTargets);
-          setUsbDisconnectNotice(true);
+          setUsbDisconnectNotice("continuing");
+        } else {
+          // Nothing else to run on, so a running mode ends and the selection
+          // stays, as Off leaves it. Told only once it has: with the mode
+          // already off, or a stop that failed, there is nothing to report.
+          void onLastTargetUnplugged()
+            .then((ended) => {
+              if (ended) setUsbDisconnectNotice("lightingOff");
+            })
+            .catch((err) => {
+              console.error("[LumaSync] Ending the lighting mode after the USB unplug failed:", err);
+            });
         }
-        // If no targets remain, keep current targets — mode buttons will show disabled via guard
       }
     }
 
     prevUsbConnectedRef.current = isConnected;
-  }, [isConnected, selectedOutputTargets, onAutoAddUsbTarget, onDropUsbTarget, bootstrapDone]);
+  }, [isConnected, selectedOutputTargets, onAutoAddUsbTarget, onDropUsbTarget, onLastTargetUnplugged, bootstrapDone]);
 
   // Own effect keyed on the flag it clears — the hot-plug effect above re-runs
   // whenever `selectedOutputTargets` changes, which its own unplug branch causes.
   // See docs/architecture/ui-and-shell.md.
   useEffect(() => {
     if (!usbDisconnectNotice) return;
-    const timerId = window.setTimeout(() => setUsbDisconnectNotice(false), USB_DISCONNECT_NOTICE_MS);
+    const timerId = window.setTimeout(() => setUsbDisconnectNotice(null), USB_DISCONNECT_NOTICE_MS);
     return () => window.clearTimeout(timerId);
   }, [usbDisconnectNotice]);
 
@@ -126,6 +145,8 @@ export function useUsbTargetReconciler({
       if (!includedUsb && !wantsHueAutoAdd) return;
       const nextTargets: HueRuntimeTarget[] = wantsHueAutoAdd ? ["hue"] : filtered;
       onFallbackTargets(nextTargets);
+      // "Switched to Hue" is only true when Hue is what is left.
+      setUsbUnsupportedHueFallback(nextTargets.includes("hue"));
       void saveShellState({ lastOutputTargets: nextTargets }).catch((err) => {
         console.error(
           "[LumaSync] saveShellState(lastOutputTargets) on unsupported-port fallback failed:",
@@ -147,5 +168,11 @@ export function useUsbTargetReconciler({
     };
   }, [selectedOutputTargetsRef, hueStartConfigRef, onFallbackTargets]);
 
-  return { usbDisconnectNotice, usbUnsupportedNotice, armUsbConnected };
+  return {
+    usbDisconnectNotice: usbDisconnectNotice === "continuing",
+    usbDisconnectLightingOffNotice: usbDisconnectNotice === "lightingOff",
+    usbUnsupportedNotice,
+    usbUnsupportedHueFallback,
+    armUsbConnected,
+  };
 }

@@ -27,6 +27,16 @@ const shell: Catalogue<typeof enShell> = {
   statusBar: {
     kbdMode: "mod",
     kbdSettings: "ayarlar",
+    state: {
+      ok: "TAMAM",
+      off: "KAPALI",
+      idle: "BOŞTA",
+      streaming: "YAYIN",
+      retrying: "DENİYOR",
+      failed: "BAŞARISIZ",
+      waiting: "BEKLİYOR",
+      leftOut: "DIŞARIDA",
+    },
     reconnect: {
       usbAriaLabel: "USB cihazını yeniden bağla",
       hueAriaLabel: "Hue köprüsünü yeniden bağla",
@@ -38,6 +48,41 @@ const shell: Catalogue<typeof enShell> = {
     restore: "Geri yükle",
     close: "Kapat",
     sectionsAriaLabel: "Bölümler",
+  },
+  notices: {
+    regionLabel: "Bildirimler",
+    severity: {
+      error: "Hata",
+      warning: "Uyarı",
+      info: "Bilgi",
+    },
+    dismiss: "Bildirimi kapat",
+    showDetails: "Ayrıntıları göster",
+    showLess: "Daha az göster",
+    showMore_one: "{{count}} bildirim daha göster",
+    showMore_other: "{{count}} bildirim daha göster",
+    moreBadge: "+{{count}}",
+    moreCount: "+{{count}} daha",
+    titles: {
+      capturePermission: "Ekran kaydı engelli",
+      captureStalled: "Ekran yakalama durdu",
+      startFailed: "Aydınlatma başlamadı",
+      stopFailed: "Çıkış durmadı",
+      previewOpenFailed: "LED önizlemesi açılmadı",
+      hueUnreachable: "Hue köprüsüne ulaşılamıyor",
+      hueAuth: "Hue yeniden eşleştirilmeli",
+      hueConfig: "Hue kurulmamış",
+      hueWaiting: "Hue köprüsü bekleniyor",
+      hueBusy: "Hue köprüsü meşgul",
+      usbDisconnected: "USB şerit çıkarıldı",
+      usbUnsupported: "USB cihazı tanınmadı",
+      hueColor: "Hue rengi uygulanmadı",
+    },
+    actions: {
+      devices: "Cihazlar",
+      ledSetup: "LED kurulumu",
+      stopHue: "Hue'yu durdur",
+    },
   },
 };
 

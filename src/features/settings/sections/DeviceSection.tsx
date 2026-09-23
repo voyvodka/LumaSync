@@ -30,7 +30,13 @@ import {
   IconPencil,
 } from "@/shared/ui/icons";
 
-type DeviceCategory = "usb" | "hue" | "wled" | "displays" | "manual";
+export type DeviceCategory = "usb" | "hue" | "wled" | "displays" | "manual";
+
+/** A deep link into one category. The nonce makes asking twice for the same one count. */
+export interface DeviceCategoryRequest {
+  category: DeviceCategory;
+  nonce: number;
+}
 
 export interface DeviceSectionProps {
   /**
@@ -45,6 +51,8 @@ export interface DeviceSectionProps {
   onColorOrderChange?: (next: LedColorOrder) => void;
   /** Forwarded to the Hue card; see `HueBridgesCategoryProps.onStopHue`. */
   onStopHueOutput: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
+  /** Opens a category from outside, e.g. a notice's "Devices" action for Hue. */
+  categoryRequest?: DeviceCategoryRequest | null;
 }
 
 interface RailButtonProps {
@@ -102,6 +110,7 @@ export function DeviceSection({
   onChipTypeChange,
   onColorOrderChange,
   onStopHueOutput,
+  categoryRequest = null,
 }: DeviceSectionProps) {
   const { t } = useTranslation();
 
@@ -151,7 +160,12 @@ export function DeviceSection({
   // -------------------------------------------------------------------------
   // Phase 7: category rail + displays list
   // -------------------------------------------------------------------------
-  const [activeCategory, setActiveCategory] = useState<DeviceCategory>("usb");
+  const [activeCategory, setActiveCategory] = useState<DeviceCategory>(categoryRequest?.category ?? "usb");
+  const [handledRequest, setHandledRequest] = useState(categoryRequest);
+  if (categoryRequest !== handledRequest) {
+    setHandledRequest(categoryRequest);
+    if (categoryRequest !== null) setActiveCategory(categoryRequest.category);
+  }
 
   // One scroller serves every category — they only toggle `hidden` — so the
   // offset carries over and a taller category opens past its own heading.

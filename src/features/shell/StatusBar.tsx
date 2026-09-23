@@ -109,11 +109,12 @@ export function StatusBar({ items, uiMode, lightingActive = true }: StatusBarPro
   ].join(", ");
 
   return (
+    // Deliberately not a live region: the FPS pill ticks at 1 Hz, and what
+    // needs saying about a chip going down is said by the notice queue.
     <div
       className={`lm-statusbar${isCompact ? " is-compact" : ""}`}
       style={{ height: `${statusBarHeightPx(uiMode)}px` }}
-      role="status"
-      aria-live="polite"
+      data-testid="status-bar"
     >
       {items.map((item) => (
         <StatusPill key={item.label} item={item} />

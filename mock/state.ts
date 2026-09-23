@@ -115,6 +115,13 @@ export interface MockWorld {
     /** `false` makes telemetry report `hue: null` — a third state beyond
      *  streaming and idle, meaning Hue was never active this session. */
     everActive: boolean;
+    /**
+     * `stop_hue_stream` ran and nothing has started since. Rust's runtime then
+     * sits Idle / `HUE_STREAM_STOPPED` whatever the bridge does — the stop
+     * cancelled the retry — so no fault is reported until the next start.
+     * Absent from a world saved before the field existed, which reads as false.
+     */
+    stopped: boolean;
     totalReconnects: number;
     /** Drives the `HUE_STREAM_NOT_READY_ACTIVE_STREAMER` readiness sentinel. */
     activeStreamerElsewhere: boolean;

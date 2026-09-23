@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject, type SetStateAction } from "react";
 
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import type { HueStartConfig } from "@/features/hue/model/hueStartConfig";
@@ -7,6 +7,7 @@ import { loadShellState, saveShellState } from "@/features/shell/windowLifecycle
 import { createLatestOperationGuard } from "@/shared/lib/latestOperation";
 import {
   AMBILIGHT_CAPTURE_REASON,
+  CAPTURE_FAILURE_BUCKET,
   describeCaptureFailure,
   isScreenCaptureBlocked,
   type CaptureFailureNotice,
@@ -56,6 +57,19 @@ const START_FAILED_NOTICE_MS = 8_000;
 /** Same length as the start toast: the auth variant asks the user to re-pair. */
 const HUE_LEFT_OUT_NOTICE_MS = 8_000;
 
+function isPermissionNotice(notice: CaptureFailureNotice | null): boolean {
+  return notice?.bucket === CAPTURE_FAILURE_BUCKET.PERMISSION;
+}
+
+function withoutPermissionNotice(notice: CaptureFailureNotice | null): CaptureFailureNotice | null {
+  return isPermissionNotice(notice) ? null : notice;
+}
+
+/** An unplug of the only selected target; the delta path reports back through it. */
+interface LastTargetUnplug {
+  ended: boolean;
+}
+
 export interface LightingModeOrchestratorInput {
   runtimeConfig: ModeRuntimeConfig;
   savedCalibration: LedCalibrationConfig | undefined;
@@ -75,10 +89,18 @@ export interface LightingModeOrchestrator {
   startFailedNotice: CaptureFailureNotice | null;
   /** Lets the boot restore raise the same toast the interactive start does. */
   reportStartFailure: (notice: CaptureFailureNotice) => void;
+  /** The permission came back: the permission notice, a condition, is no longer true. */
+  clearCapturePermissionNotice: () => void;
   /** A `[usb, hue]` start ran on USB alone this session; the reason picks the copy. */
   hueLeftOutNotice: HueLeftOutReason | null;
   /** The boot restore's route to the same notice. */
   reportHueLeftOut: (reason: HueLeftOutReason) => void;
+  /**
+   * Why Hue is out of the running mode, for the status chip. Raised with the
+   * notice but not dismissed with it: it holds until Hue joins, or the user
+   * makes a mode or output choice.
+   */
+  hueHeldOutReason: HueLeftOutReason | null;
   /** A boot restore is waiting for the bridge to free its area, or gave up waiting. */
   bootHueRetryNotice: BootHueRetryNotice | null;
   /** Boot only: resume a restore, or add Hue back to one, that a held area refused. */
@@ -87,6 +109,11 @@ export interface LightingModeOrchestrator {
   handleOutputTargetsChange: (targets: HueRuntimeTarget[]) => Promise<void>;
   /** The same delta pipeline for a USB unplug, without writing `lastOutputTargets`. */
   dropUnpluggedUsbTarget: (targets: HueRuntimeTarget[]) => Promise<void>;
+  /**
+   * An unplug of the strip that was the only selected target. Resolves `true`
+   * when a running mode ended because of it, and so the UI now shows Off.
+   */
+  endLightingOnUsbUnplug: () => Promise<boolean>;
   /** A Hue stop from outside the mode controls: a running mode lets go of Hue first. */
   stopHueOutput: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
   /** Hot-reload props push a config nudge without going through a transition. */
@@ -133,6 +160,13 @@ export function useLightingModeOrchestrator({
   // Unlike the start notice, the boot restore raises this one for every reason:
   // the display-bucket filter is about capture, and this says what is running.
   const [hueLeftOutNotice, setHueLeftOutNotice] = useState<HueLeftOutReason | null>(null);
+  const [hueHeldOutReason, setHueHeldOutReason] = useState<HueLeftOutReason | null>(null);
+  // Every raise and every retry-driven clear goes to both; only the notice's
+  // own dismissal timer, and a user choice, touch one without the other.
+  const raiseHueLeftOut = useCallback((next: SetStateAction<HueLeftOutReason | null>) => {
+    setHueLeftOutNotice(next);
+    setHueHeldOutReason(next);
+  }, []);
 
   const modeTransitionLockRef = useRef(false);
   const pendingModeChangeRef = useRef<LightingModeConfig | null>(null);
@@ -170,7 +204,12 @@ export function useLightingModeOrchestrator({
 
   const handleLightingModeChangeRef = useRef<((mode: LightingModeConfig) => Promise<void>) | null>(null);
   const applyOutputTargetsRef = useRef<
-    ((targets: HueRuntimeTarget[], persist: boolean, hueStopTrigger?: HueRuntimeTriggerSource) => Promise<void>) | null
+    ((
+      targets: HueRuntimeTarget[],
+      persist: boolean,
+      hueStopTrigger?: HueRuntimeTriggerSource,
+      lastTargetUnplug?: LastTargetUnplug,
+    ) => Promise<void>) | null
   >(null);
   const resumeAfterBootHueRetry = useCallback(async (mode: LightingModeConfig) => {
     // Anything that started a mode meanwhile has already had its say.
@@ -190,7 +229,7 @@ export function useLightingModeOrchestrator({
   const bootHueRetry = useBootHueRetry({
     resume: resumeAfterBootHueRetry,
     rejoin: rejoinAfterBootHueRetry,
-    setHueLeftOut: setHueLeftOutNotice,
+    setHueLeftOut: raiseHueLeftOut,
   });
   const cancelBootHueRetry = bootHueRetry.cancel;
   const isBootHueRejoinPending = bootHueRetry.isRejoinPending;
@@ -199,11 +238,13 @@ export function useLightingModeOrchestrator({
   // here directly: the same dispatch, without persisting or cancelling itself.
   // `hueStopTrigger` marks a Hue release from outside the mode controls
   // (`stopHueOutput`): Hue is stopped whatever the active set says, and the
-  // stop is attributed to that surface.
+  // stop is attributed to that surface. `lastTargetUnplug` marks an unplug of
+  // the only selected target; `ended` reports whether the mode ended with it.
   const applyOutputTargets = useCallback(async (
     targets: HueRuntimeTarget[],
     persist: boolean,
     hueStopTrigger?: HueRuntimeTriggerSource,
+    lastTargetUnplug?: LastTargetUnplug,
   ) => {
     // The toggles stay live while this runs, so a user can remove Hue before
     // the add that started first has finished. Without the guard that add
@@ -227,6 +268,9 @@ export function useLightingModeOrchestrator({
     const addedTargets = normalizedTargets.filter((t) => !prevTargets.includes(t));
     const removedTargets = prevTargets.filter((t) => !normalizedTargets.includes(t));
     const releasingHue = hueStopTrigger !== undefined;
+    // Nothing is left to re-apply the mode on, so the worker stops whatever the
+    // active set says: it captures and sends for as long as it runs.
+    const endingOnUnplug = lastTargetUnplug !== undefined && normalizedTargets.length === 0;
     // A release stops Hue even when the selection had already dropped it.
     if (releasingHue && !removedTargets.includes("hue")) removedTargets.push("hue");
     // The health poll drops "hue" from the active set once the backend reports
@@ -285,7 +329,8 @@ export function useLightingModeOrchestrator({
     const stopResults = await Promise.allSettled(
       removedTargets.map(async (target): Promise<StopOutcome> => {
         const releasedHue = releasingHue && target === "hue";
-        if (!currentActive.includes(target) && !releasedHue) return { target, ok: true };
+        const unpluggedUsb = endingOnUnplug && target === "usb";
+        if (!currentActive.includes(target) && !releasedHue && !unpluggedUsb) return { target, ok: true };
         if (target !== "usb" && target !== "hue") return { target, ok: true };
         const stayLive = currentActive.filter((t) => t !== target && normalizedTargets.includes(t));
         let tornDown: ModeCommandResult | undefined;
@@ -344,6 +389,23 @@ export function useLightingModeOrchestrator({
       .map((r) => (r.status === "fulfilled" ? r.value.tornDown : undefined))
       .find((result): result is ModeCommandResult => result !== undefined);
     if (!isLatest()) return;
+
+    // The strip that carried the mode alone is gone: end the mode the way Off
+    // does, keeping the selection. UI only — the persisted mode and
+    // `lastOutputTargets` stay, so the next launch restores it once it is back.
+    if (endingOnUnplug) {
+      setSelectedOutputTargets(prevTargets);
+      if (failedToStop.length > 0) {
+        setStopFailedNotice(failedToStop);
+        return;
+      }
+      setActiveOutputTargets((prev) => prev.filter((t) => t !== "usb"));
+      setLightingModeState({ ...lightingMode, kind: LIGHTING_MODE_KIND.OFF });
+      // "Running on USB only" stopped being true with the strip.
+      setHueLeftOutNotice(null);
+      lastTargetUnplug.ended = true;
+      return;
+    }
 
     // A release that stopped the worker, or whose re-apply tore it down, ended
     // the mode rather than a target: show Off and keep the selection, as Off
@@ -595,7 +657,7 @@ export function useLightingModeOrchestrator({
           !isHueStartCodeOk(hueStartCode) ||
           hueLeftOutRetryTargets(applyResult, requestTargets) !== null;
         if (hueWasTheReason && liveTargets.includes("usb")) {
-          setHueLeftOutNotice(hueLeftOutReason(runtimeHueConfig !== null, hueStartCode));
+          raiseHueLeftOut(hueLeftOutReason(runtimeHueConfig !== null, hueStartCode));
         } else {
           console.error(
             `[LumaSync] Hue delta-start left Hue out (start ${hueStartCode ?? "none"}, apply ${applyResult?.status.code ?? "none"}).`,
@@ -603,22 +665,30 @@ export function useLightingModeOrchestrator({
         }
       }
     }
-  }, [lightingMode, selectedOutputTargets, hueStartConfig, hydrateModePayload, dispatchSetLightingMode, reportHueSolidColorStatus]);
+  }, [lightingMode, selectedOutputTargets, hueStartConfig, hydrateModePayload, dispatchSetLightingMode, reportHueSolidColorStatus, raiseHueLeftOut]);
 
   useEffect(() => {
     applyOutputTargetsRef.current = applyOutputTargets;
   }, [applyOutputTargets]);
 
   const changeOutputTargets = useCallback(
-    (targets: HueRuntimeTarget[], persist: boolean, hueStopTrigger?: HueRuntimeTriggerSource) => {
+    (
+      targets: HueRuntimeTarget[],
+      persist: boolean,
+      hueStopTrigger?: HueRuntimeTriggerSource,
+      lastTargetUnplug?: LastTargetUnplug,
+    ) => {
       const normalizedTargets = normalizeOutputTargets(targets);
+      // An output change answers "is Hue in the mode" afresh; a Hue left out
+      // again raises it again.
+      setHueHeldOutReason(null);
       if (!normalizedTargets.includes("hue")) {
         cancelBootHueRetry("Hue was deselected");
       } else if (isBootHueRejoinPending()) {
         // The user turned Hue on themselves; their add answers for itself.
         cancelBootHueRetry("the output targets changed");
       }
-      return applyOutputTargets(normalizedTargets, persist, hueStopTrigger);
+      return applyOutputTargets(normalizedTargets, persist, hueStopTrigger, lastTargetUnplug);
     },
     [applyOutputTargets, cancelBootHueRetry, isBootHueRejoinPending],
   );
@@ -631,6 +701,15 @@ export function useLightingModeOrchestrator({
     (targets: HueRuntimeTarget[]) => changeOutputTargets(targets, false),
     [changeOutputTargets],
   );
+  // The same drop with nothing left to run on. The empty set also cancels a
+  // pending #441 rejoin, whose "running on USB only" would now be false.
+  const endLightingOnUsbUnplug = useCallback(async () => {
+    // Off already: nothing runs, and the delta path would clear the selection.
+    if (lightingModeRef.current.kind === LIGHTING_MODE_KIND.OFF) return false;
+    const unplug: LastTargetUnplug = { ended: false };
+    await changeOutputTargets([], false, undefined, unplug);
+    return unplug.ended;
+  }, [changeOutputTargets]);
 
   // The Devices card's Stop retrying and Retry stop. A bare `stop_hue_stream`
   // under a running mode that names Hue leaves its worker holding the sender
@@ -673,8 +752,12 @@ export function useLightingModeOrchestrator({
     return () => window.clearTimeout(timerId);
   }, [stopFailedNotice]);
 
+  const clearCapturePermissionNotice = useCallback(() => setStartFailedNotice(withoutPermissionNotice), []);
+
   useEffect(() => {
-    if (!startFailedNotice) return;
+    // Permission is a condition, not an event: it clears when the permission
+    // comes back or a start succeeds, never on a timer.
+    if (!startFailedNotice || isPermissionNotice(startFailedNotice)) return;
     const timerId = window.setTimeout(() => setStartFailedNotice(null), START_FAILED_NOTICE_MS);
     return () => window.clearTimeout(timerId);
   }, [startFailedNotice]);
@@ -706,7 +789,10 @@ export function useLightingModeOrchestrator({
       const isQuickAdjustment = isQuickSolidAdjustment || isQuickAmbilightAdjustment;
       // Any mode choice, the retry's own included, supersedes a pending boot
       // retry. A slider tweak is not a choice: a rejoin adds Hue to the tweaked mode.
-      if (!isQuickAdjustment) cancelBootHueRetry("the lighting mode changed");
+      if (!isQuickAdjustment) {
+        cancelBootHueRetry("the lighting mode changed");
+        setHueHeldOutReason(null);
+      }
 
       // fix #45 — quick adjustments dispatch unconditionally; the lock-gate is
       // strictly for kind-changing transitions. Queueing them behind it wedged
@@ -894,6 +980,7 @@ export function useLightingModeOrchestrator({
         // Set by Phase 2 when the backend reports it is not running the requested
         // mode, so Phase 3's commit below can refuse to record a mode that never ran.
         let applyRefused = false;
+        let startFailureRaised = false;
         // What the backend is running after a refusal. A thrown apply reports
         // nothing, so the previous mode is assumed to still be live.
         let runningAfterRefusal: Pick<LightingModeConfig, "kind" | "targets"> = {
@@ -949,6 +1036,7 @@ export function useLightingModeOrchestrator({
             }
             const outcome = readModeApplyOutcome(applyResult, normalizedNextMode.kind);
             if (outcome.startFailure) {
+              startFailureRaised = true;
               setStartFailedNotice(pickStartFailureNotice(probeNotice, outcome.startFailure));
             }
             if (applyResult !== null && outcome.refused) {
@@ -1047,10 +1135,13 @@ export function useLightingModeOrchestrator({
             // `lastOutputTargets` keep Hue, so the next launch tries it again.
             setLightingModeState({ ...normalizedNextMode, targets: usbOnlyTargets });
             setSelectedOutputTargets((prev) => prev.filter((t) => t !== "hue"));
-            setHueLeftOutNotice(hueLeftOutReason(runtimeHueStartConfig !== null, hueStartCode));
+            raiseHueLeftOut(hueLeftOutReason(runtimeHueStartConfig !== null, hueStartCode));
           } else {
             setLightingModeState(normalizedNextMode);
           }
+          // A start went through, so a permission notice — including the one
+          // the advisory probe raised for this very start — no longer holds.
+          if (!startFailureRaised) setStartFailedNotice(withoutPermissionNotice);
           scheduleLightingModePersist(normalizedNextMode);
         }
       } catch (error) {
@@ -1079,6 +1170,7 @@ export function useLightingModeOrchestrator({
       lightingMode.ambilight,
       lightingMode.kind,
       lightingMode.solid,
+      raiseHueLeftOut,
       reportHueSolidColorStatus,
       savedCalibration,
       scheduleLightingModePersist,
@@ -1112,13 +1204,16 @@ export function useLightingModeOrchestrator({
     stopFailedNotice,
     startFailedNotice,
     reportStartFailure: setStartFailedNotice,
+    clearCapturePermissionNotice,
     hueLeftOutNotice,
-    reportHueLeftOut: setHueLeftOutNotice,
+    reportHueLeftOut: raiseHueLeftOut,
+    hueHeldOutReason,
     bootHueRetryNotice: bootHueRetry.notice,
     scheduleBootHueRetry: bootHueRetry.schedule,
     handleLightingModeChange,
     handleOutputTargetsChange,
     dropUnpluggedUsbTarget,
+    endLightingOnUsbUnplug,
     stopHueOutput,
     dispatch: dispatchSetLightingMode,
     setLightingMode: setLightingModeState,

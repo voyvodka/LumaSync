@@ -18,6 +18,8 @@ const stopHueMock = vi.fn();
 // Controllable isConnected for hot-plug tests
 let mockIsConnected = true;
 let mockActiveWledIp: string | null = null;
+// Idle unless a test opens the update prompt on purpose.
+let mockUpdaterState: { status: string; update?: unknown } = { status: "idle" };
 
 // Mock invoke for Tauri commands (used in bootstrap for USB status check)
 const invokeMock = vi.fn();
@@ -28,6 +30,7 @@ const invokeMock = vi.fn();
 // translated copy, so returning the key is the honest substitute.
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
+  Trans: ({ i18nKey }: { i18nKey: string }) => i18nKey,
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -70,7 +73,8 @@ vi.mock("../features/tray/trayApi", () => ({
 // orchestration assertions.
 vi.mock("../features/updater/useAutoUpdater", () => ({
   useAutoUpdater: () => ({
-    state: { status: "idle" },
+    state: mockUpdaterState,
+    isModalOpen: mockUpdaterState.status !== "idle",
     channel: "stable",
     checkForUpdates: vi.fn().mockResolvedValue(undefined),
     downloadAndInstall: vi.fn().mockResolvedValue(undefined),
@@ -143,9 +147,18 @@ vi.mock("../features/mode/modeApi", () => ({
 // floods the happy-dom event queue — causing ambilight `waitFor` assertions to
 // hit their 3 s timeout in the full suite even though each test passes in
 // isolation. Stubbing the entire StatusBar component is the cleanest
-// isolation boundary; it already contains no state being tested here.
+// isolation boundary. The stub still renders each chip's value, which App
+// derives and which is under test here; the telemetry-polling FPS pill is not.
 vi.mock("../features/shell/StatusBar", () => ({
-  StatusBar: () => null,
+  StatusBar: ({ items }: { items: Array<{ label: string; state: string }> }) => (
+    <ul>
+      {items.map((item) => (
+        <li key={item.label} data-testid={`status-chip-${item.label}`}>
+          {item.state}
+        </li>
+      ))}
+    </ul>
+  ),
   statusBarHeightPx: () => 24,
   STATUS_BAR_HEIGHT_FULL_PX: 24,
   STATUS_BAR_HEIGHT_COMPACT_PX: 22,
@@ -402,6 +415,8 @@ function installLightingBackend() {
 const lastModeSend = () =>
   setLightingModeMock.mock.calls[setLightingModeMock.mock.calls.length - 1][0] as LightingModeConfig;
 
+const hueChip = () => screen.getByTestId("status-chip-HUE");
+
 describe("App mode orchestration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -411,6 +426,7 @@ describe("App mode orchestration", () => {
     vi.useRealTimers();
     mockIsConnected = true;
     mockActiveWledIp = null;
+    mockUpdaterState = { status: "idle" };
     // One flat resolved value cannot serve every command: a caller reading
     // `.status.code` or `.usb` off `{ connected: true }` throws into its own
     // catch, so the test still passed while the app measured its failure
@@ -1452,6 +1468,69 @@ describe("App mode orchestration", () => {
       });
       expect(setLightingModeMock.mock.calls.length).toBe(modeSends);
       expect(backend.running).toBeNull();
+    });
+
+    // With nothing else selected the unplug used to do nothing at all: no
+    // notice, the worker left capturing, and the mode still shown running.
+    it("ends a USB-only mode when the strip is unplugged, shows Off with the selection kept, and says so", async () => {
+      const backend = installLightingBackend();
+      loadShellStateMock.mockResolvedValue({ ...pairedShellState, lastOutputTargets: ["usb"] });
+      const view = render(<App />);
+      await waitFor(() => {
+        expect(backend.running?.targets).toEqual(["usb"]);
+      });
+      const modeSends = setLightingModeMock.mock.calls.length;
+
+      mockIsConnected = false;
+      await act(async () => {
+        view.rerender(<App />);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+        expect(screen.getByTestId("usb-disconnect-notice")).toHaveTextContent(
+          "common:hotplug.usbDisconnectedLightingOff",
+        );
+      });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      });
+      expect(stopLightingMock).toHaveBeenCalledTimes(1);
+      expect(backend.running).toBeNull();
+      expect(setLightingModeMock.mock.calls.length).toBe(modeSends);
+      expect(stopHueMock).not.toHaveBeenCalled();
+      // Off keeps the selection; the strip is still the user's choice.
+      expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+      expect(persistedTargets()).toEqual([]);
+      const persistedModes = saveShellStateMock.mock.calls
+        .map(([patch]) => patch as Record<string, unknown>)
+        .filter((patch) => "lightingMode" in patch);
+      expect(persistedModes).toEqual([]);
+    });
+
+    it("leaves an Off session alone when the only target is unplugged", async () => {
+      installLightingBackend();
+      loadShellStateMock.mockResolvedValue({
+        ...pairedShellState,
+        lightingMode: { kind: "off" },
+        lastOutputTargets: ["usb"],
+      });
+      const view = render(<App />);
+      await waitFor(() => {
+        expect(screen.getByTestId("calibration-leds")).toHaveTextContent("40");
+      });
+
+      mockIsConnected = false;
+      await act(async () => {
+        view.rerender(<App />);
+      });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      });
+
+      expect(stopLightingMock).not.toHaveBeenCalled();
+      expect(screen.queryByTestId("usb-disconnect-notice")).not.toBeInTheDocument();
+      expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
     });
   });
 
@@ -2569,6 +2648,7 @@ describe("App mode orchestration", () => {
         });
         expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
         expect(screen.getByTestId("hue-boot-retry-notice")).toHaveTextContent("common:hueBootRetry.waiting");
+        expect(hueChip()).toHaveTextContent("shell:statusBar.state.waiting");
 
         bridgeAnswer = "free";
         await act(async () => {
@@ -2577,6 +2657,7 @@ describe("App mode orchestration", () => {
 
         await waitFor(() => {
           expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight");
+          expect(hueChip()).toHaveTextContent("shell:statusBar.state.streaming");
         });
         expect(screen.queryByTestId("hue-boot-retry-notice")).not.toBeInTheDocument();
         expect(startHueMock).toHaveBeenCalledTimes(2);
@@ -2672,11 +2753,12 @@ describe("App mode orchestration", () => {
           .filter((patch) => "lastOutputTargets" in patch);
 
       async function renderRunningOnUsb() {
-        render(<App />);
+        const view = render(<App />);
         await waitFor(() => {
           expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight");
           expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
         });
+        return view;
       }
 
       async function waitForBusyNotice() {
@@ -2797,6 +2879,101 @@ describe("App mode orchestration", () => {
         expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight");
         // Neither the drop nor the rejoin rewrites what the next launch restores.
         expect(persistedTargets()).toEqual([]);
+      });
+
+      // The bridge is reachable, just held, so the chip read OK beside a
+      // notice saying Hue was not running.
+      it("shows the HUE chip waiting while the rejoin waits, then streaming once Hue joins", async () => {
+        await renderRunningOnUsb();
+        await waitForBusyNotice();
+        expect(hueChip()).toHaveTextContent("shell:statusBar.state.waiting");
+
+        await freeTheAreaAndWait(3_000);
+        await waitFor(() => {
+          expect(hueChip()).toHaveTextContent("shell:statusBar.state.streaming");
+        });
+      });
+
+      it("keeps the HUE chip on left out after the gave-up notice clears, until the user makes a choice", async () => {
+        await renderRunningOnUsb();
+        await waitForBusyNotice();
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(30_000);
+        });
+        await waitFor(() => {
+          expect(leftOutNotice()).toHaveAttribute("data-reason", "busyGaveUp");
+        });
+        expect(hueChip()).toHaveTextContent("shell:statusBar.state.leftOut");
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(8_000);
+        });
+        expect(leftOutNotice()).not.toBeInTheDocument();
+        // The toast is gone; Hue is still not part of the running mode.
+        expect(hueChip()).toHaveTextContent("shell:statusBar.state.leftOut");
+
+        await act(async () => {
+          screen.getByRole("button", { name: "set-usb-target" }).click();
+        });
+        await waitFor(() => {
+          expect(hueChip()).toHaveTextContent("shell:statusBar.state.ok");
+        });
+      });
+
+      // The busy notice kept saying "running on USB only" with the strip gone,
+      // and the rejoin would have added Hue to a worker nothing fed.
+      it("ends the mode and drops the rejoin when the strip is unplugged while it waits", async () => {
+        const view = await renderRunningOnUsb();
+        await waitForBusyNotice();
+
+        mockIsConnected = false;
+        await act(async () => {
+          view.rerender(<App />);
+        });
+
+        await waitFor(() => {
+          expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+          expect(screen.getByTestId("usb-disconnect-notice")).toHaveTextContent(
+            "common:hotplug.usbDisconnectedLightingOff",
+          );
+        });
+        expect(stopLightingMock).toHaveBeenCalledTimes(1);
+        expect(leftOutNotice()).not.toBeInTheDocument();
+        expect(hueChip()).toHaveTextContent("shell:statusBar.state.ok");
+        expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+        const modeSends = setLightingModeMock.mock.calls.length;
+        const probes = readinessProbes();
+
+        await freeTheAreaAndWait(30_000);
+        // Cancelled, not merely outlived: it stops asking the bridge.
+        expect(readinessProbes()).toBe(probes);
+        expect(startHueMock).toHaveBeenCalledTimes(1);
+        expect(setLightingModeMock.mock.calls.length).toBe(modeSends);
+        expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+        expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+        expect(persistedTargets()).toEqual([]);
+      });
+
+      it("takes down a gave-up notice's \"running on USB only\" with the strip", async () => {
+        const view = await renderRunningOnUsb();
+        await waitForBusyNotice();
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(30_000);
+        });
+        await waitFor(() => {
+          expect(leftOutNotice()).toHaveAttribute("data-reason", "busyGaveUp");
+        });
+
+        mockIsConnected = false;
+        await act(async () => {
+          view.rerender(<App />);
+        });
+
+        await waitFor(() => {
+          expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+        });
+        expect(leftOutNotice()).not.toBeInTheDocument();
+        expect(hueChip()).toHaveTextContent("shell:statusBar.state.ok");
       });
 
       // The rejoin re-applies with both targets; a setting sent afterwards with
@@ -3002,20 +3179,22 @@ describe("App mode orchestration", () => {
   // flag before it has read the guards that would complete the flow — so the
   // banner mounted for as long as the slowest guard took, then vanished.
   describe("onboarding banner for a user who is already set up", () => {
-    /** Records every banner insertion, including one removed before anyone looks. */
+    /**
+     * Records every time onboarding enters the notice queue, including behind
+     * "+N" where no card renders, and one removed before anyone looks.
+     */
     function watchForBanner() {
       let seen = false;
-      const holdsBanner = (node: Node) =>
-        node instanceof Element &&
-        (node.matches(".lm-onboarding-banner") || node.querySelector(".lm-onboarding-banner") !== null);
-      const observer = new MutationObserver((records) => {
-        for (const record of records) {
-          if (Array.from(record.addedNodes).some(holdsBanner)) seen = true;
-        }
+      const queued = () =>
+        Array.from(document.querySelectorAll("[data-queue]")).some((slot) =>
+          (slot.getAttribute("data-queue") ?? "").split(" ").includes("onboarding"),
+        );
+      const observer = new MutationObserver(() => {
+        if (queued()) seen = true;
       });
-      observer.observe(document.body, { childList: true, subtree: true });
+      observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-queue"] });
       return {
-        seen: () => seen || document.querySelector(".lm-onboarding-banner") !== null,
+        seen: () => seen || queued(),
         stop: () => observer.disconnect(),
       };
     }
@@ -3085,34 +3264,65 @@ describe("App mode orchestration", () => {
 
       render(<App />);
 
+      // Behind "no reachable output", which outranks it in the queue.
       await waitFor(() => {
-        expect(screen.getByText("common:ui.onboarding.step1.title")).toBeInTheDocument();
+        expect(screen.getByTestId("shell-notice-slot").getAttribute("data-queue")?.split(" ")).toEqual([
+          "output-none",
+          "onboarding",
+        ]);
       });
+      await act(async () => {
+        screen.getByTestId("notice-toggle").click();
+      });
+      expect(screen.getByTestId("onboarding-notice")).toHaveTextContent("common:ui.onboarding.step1.title");
     });
   });
 
   // No layout engine here, so only the structure is assertable, not the heights
   // it decides — as a block column the banner clipped 162 px at 320×480.
-  it("gives the onboarding banner its own row instead of letting it push the layout out", async () => {
-    // The describe-level shell state satisfies all three onboarding guards
-    // once bootstrap settles, which lets the banner mount and then unmount
-    // itself again a beat later (proven with a forced delay on the
-    // `getSerialConnectionStatus` await in PR #411) — a real but narrow
-    // window `waitFor` only sometimes catches. Use a fresh-install state
-    // instead, where no guard is ever met, so the banner mounts and stays.
+  // The toasts were z-50 like the modal and later in the DOM, so they drew
+  // over it, outside its focus trap.
+  it.each(["compact", "full"] as const)(
+    "keeps the notices under the update prompt, inert and silent, in %s",
+    async (uiMode) => {
+      mockIsConnected = false;
+      loadShellStateMock.mockResolvedValue({ lastSection: "general", uiMode });
+      mockUpdaterState = {
+        status: "available",
+        update: { version: "9.9.9", currentVersion: "1.0.0", body: null, date: null },
+      };
+
+      render(<App />);
+
+      const dialog = await screen.findByRole("dialog");
+      await waitFor(() => {
+        expect(screen.getByTestId("shell-notice-slot").getAttribute("data-queue")).not.toBe("");
+      });
+      const slot = screen.getByTestId("shell-notice-slot");
+      expect(slot).toHaveAttribute("inert");
+      expect(dialog.contains(slot)).toBe(false);
+      // Later in the document, so it paints above at any equal z-index.
+      expect(slot.compareDocumentPosition(dialog) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.getByTestId("shell-notice-announcer")).toBeEmptyDOMElement();
+    },
+  );
+
+  it("gives the compact notice slot its own row instead of letting it push the layout out", async () => {
+    // A fresh install: no guard is ever met and nothing is reachable, so the
+    // slot mounts and stays.
     mockIsConnected = false;
-    loadShellStateMock.mockResolvedValue({ lastSection: "general" });
+    loadShellStateMock.mockResolvedValue({ lastSection: "general", uiMode: "compact" });
 
     render(<App />);
 
     await waitFor(() => {
-      expect(document.querySelector(".lm-onboarding-banner")).not.toBeNull();
+      expect(screen.queryByTestId("shell-notice-slot")).not.toBeNull();
     });
 
-    const banner = document.querySelector(".lm-onboarding-banner");
-    expect(banner).not.toBeNull();
+    const noticeSlot = screen.getByTestId("shell-notice-slot");
+    expect(noticeSlot).toHaveClass("lm-notice-slot");
 
-    const slot = banner!.parentElement!;
+    const slot = noticeSlot.parentElement!;
     expect(slot.className).toContain("flex");
     expect(slot.className).toContain("flex-col");
 

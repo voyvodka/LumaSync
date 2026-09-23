@@ -261,6 +261,7 @@
    (idle = ink-faint, off = ink-faint), upgrades to amber on hover/focus,
    and collapses to system colors under forced-colors. */
 .lm-statusbar-reconnect {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -293,6 +294,17 @@
   width: 14px;
   height: 14px;
   margin-left: 3px;
+}
+/* The glyph stays small to fit a 22 px bar; the hit area meets the 32 px
+   floor. It reaches 5 px above the bar, over the body's bottom padding. */
+.lm-statusbar-reconnect::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 32px;
+  height: 32px;
+  transform: translate(-50%, -50%);
 }
 @media (prefers-reduced-motion: reduce) {
   .lm-statusbar-reconnect {
@@ -592,82 +604,268 @@
   color: var(--lm-amber);
 }
 
-/* v1.5 W2-B1 — Compact-mode offline banner. Inline alternative to a
-   greyed-out hero/scene tile when no USB/Hue output is reachable. Mirrors
-   the dark amber language of `.lm-lights-cal-banner` but shrunk to fit
-   the 320 px tray window. */
-.lm-compact-offline {
-  background: linear-gradient(180deg, rgba(255, 176, 32, 0.1), rgba(255, 176, 32, 0.03));
-  border: 1px solid rgba(255, 176, 32, 0.35);
-  border-radius: 10px;
-  padding: 10px 12px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--lm-ink);
-}
-.lm-compact-offline-text {
-  flex: 1;
-  min-width: 0;
-}
-.lm-compact-offline-text .ttl {
-  font-family: var(--lm-mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--lm-amber);
-  font-weight: 500;
-}
-.lm-compact-offline-text .sub {
-  font-size: 11px;
-  color: var(--lm-ink-dim);
-  margin-top: 2px;
-  line-height: 1.35;
-}
-.lm-compact-offline-actions {
+/* ─────────────────────────────────────────────────────────────────────
+   Shell notices — one queue, one slot, one visual language. Compact puts
+   the slot in flow above the body (`.lm-notice-slot`), so it pushes the
+   mode strip rather than covering it; full stacks it bottom right
+   (`.lm-notice-stack`) with real heights. Severity comes from a token and
+   a glyph shape, never from colour alone. docs/architecture/ui-and-shell.md
+   ───────────────────────────────────────────────────────────────────── */
+.lm-notice-slot {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  /* Matches the compact body's 12 px inset. */
+  padding: 10px 12px 0;
+  /* Expanded, the rest scroll here rather than shove the controls off screen. */
+  max-height: 60%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
-.lm-compact-offline-action {
+.lm-notice-stack {
+  position: fixed;
+  right: 16px;
+  /* Above the StatusBar's 40, below every modal's 50. */
+  z-index: 45;
+  width: min(380px, calc(100vw - 32px));
+  max-height: calc(100vh - var(--lm-titlebar-h) - 48px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* DOM order is queue order; the top notice sits nearest the anchor. */
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+}
+.lm-notice-slot:focus-visible,
+.lm-notice-stack:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-inset);
+  border-radius: 10px;
+}
+.lm-notice-placeholder {
+  min-height: 44px;
+}
+
+.lm-notice {
+  --lm-notice-tone: var(--lm-ink-dim);
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-shrink: 0;
+  min-height: 44px;
+  padding: 5px 6px 5px 10px;
+  border: 1px solid var(--lm-line-2);
+  border-left: 3px solid var(--lm-notice-tone);
+  border-radius: 10px;
+  background: var(--lm-panel-2);
+  color: var(--lm-ink);
+  font-family: var(--lm-sans);
+}
+.lm-notice.is-error {
+  --lm-notice-tone: var(--lm-red);
+}
+.lm-notice.is-warning {
+  --lm-notice-tone: var(--lm-amber);
+}
+.lm-notice.is-detail {
+  align-items: flex-start;
+  padding-top: 7px;
+  padding-right: 10px;
+  padding-bottom: 7px;
+}
+.lm-notice-stack .lm-notice {
+  box-shadow: 0 14px 32px -14px rgba(0, 0, 0, 0.85);
+}
+.lm-notice-glyph {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--lm-notice-tone);
+}
+.lm-notice.is-detail .lm-notice-glyph {
+  margin-top: 1px;
+}
+.lm-notice-glyph svg {
+  width: 14px;
+  height: 14px;
+}
+.lm-notice-text {
+  flex: 1;
+  min-width: 0;
+}
+.lm-notice-title {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--lm-ink);
+  overflow-wrap: anywhere;
+}
+/* Two lines, then the toggle beside it opens the rest. */
+.lm-notice.is-headline .lm-notice-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.lm-notice-step {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 4px;
   border: 1px solid rgba(255, 176, 32, 0.4);
-  background: rgba(255, 176, 32, 0.1);
-  color: var(--lm-amber);
-  padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: 4px;
   font-family: var(--lm-mono);
   font-size: 9.5px;
-  letter-spacing: 0.12em;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--lm-amber);
+  vertical-align: 1px;
+}
+.lm-notice-body {
+  margin: 3px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--lm-ink-dim);
+  overflow-wrap: anywhere;
+}
+.lm-notice-action {
+  flex-shrink: 0;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 176, 32, 0.4);
+  border-radius: 6px;
+  background: rgba(255, 176, 32, 0.1);
+  color: var(--lm-amber);
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
   text-transform: uppercase;
   cursor: pointer;
-  font-weight: 500;
-  min-height: 32px;
+  transition: background 120ms ease, border-color 120ms ease;
 }
-.lm-compact-offline-action.is-ghost {
-  background: transparent;
-  border-color: rgba(255, 176, 32, 0.25);
+/* At 320 px a one-line "SYSTEM SETTINGS" leaves the title a word; wrapping
+   the label onto two lines gives the title its two back. */
+.lm-notice.is-headline .lm-notice-action {
+  max-width: 34%;
+  padding: 3px 8px;
 }
-.lm-compact-offline-action:hover {
+.lm-notice-action:hover:not(:disabled) {
   background: rgba(255, 176, 32, 0.18);
   border-color: rgba(255, 176, 32, 0.55);
 }
-.lm-compact-offline-action:focus-visible {
+.lm-notice-action:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.lm-notice-icon-btn {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--lm-ink-dim);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.lm-notice-icon-btn svg {
+  width: 12px;
+  height: 12px;
+  transition: transform 150ms ease;
+}
+.lm-notice-icon-btn:hover {
+  color: var(--lm-ink);
+  background: rgba(255, 255, 255, 0.04);
+}
+.lm-notice-toggle.is-expanded svg {
+  transform: rotate(180deg);
+}
+.lm-notice-count {
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--lm-amber);
+}
+.lm-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 6px;
+}
+.lm-notice-more {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--lm-amber);
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.lm-notice-action:focus-visible,
+.lm-notice-icon-btn:focus-visible,
+.lm-notice-more:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.55);
+  box-shadow: var(--lm-focus-ring);
+}
+.lm-notice-icon-btn:focus-visible {
+  color: var(--lm-amber);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-notice-action,
+  .lm-notice-icon-btn,
+  .lm-notice-icon-btn svg {
+    transition: none;
+  }
 }
 @media (forced-colors: active) {
-  .lm-compact-offline {
-    border-color: CanvasText;
-    color: CanvasText;
+  .lm-notice {
     forced-color-adjust: none;
-  }
-  .lm-compact-offline-text .ttl,
-  .lm-compact-offline-action {
+    background: Canvas;
     color: CanvasText;
     border-color: CanvasText;
-    background: Canvas;
+  }
+  .lm-notice-glyph,
+  .lm-notice-title,
+  .lm-notice-body,
+  .lm-notice-step,
+  .lm-notice-count {
+    color: CanvasText;
+  }
+  .lm-notice-step {
+    border-color: CanvasText;
+  }
+  .lm-notice-action,
+  .lm-notice-icon-btn,
+  .lm-notice-more {
+    color: ButtonText;
+    background: ButtonFace;
+    border-color: ButtonText;
+  }
+  .lm-notice-action:focus-visible,
+  .lm-notice-icon-btn:focus-visible,
+  .lm-notice-more:focus-visible,
+  .lm-notice-slot:focus-visible,
+  .lm-notice-stack:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
   }
 }
 
@@ -1051,17 +1249,25 @@
   position: fixed;
   inset: var(--lm-titlebar-h) 0 0 0;
   z-index: 50;
-  display: grid;
-  place-items: center;
-  padding: 24px;
+  /* Flex, not grid: a grid row sizes to the card and lets it run off screen,
+     while a flex box gives `max-height: 100%` below a height to resolve. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* The scrim still covers the StatusBar (nothing behind a modal is live);
+     the card only keeps clear of it. */
+  padding: 24px 24px 48px;
   background: rgba(4, 5, 8, 0.62);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
 .lm-updater-modal {
   position: relative;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: 380px;
+  max-height: 100%;
   background: linear-gradient(180deg, #0f1115, #0b0d11);
   border: 1px solid #242a33;
   border-radius: 14px;
@@ -1383,11 +1589,38 @@
 
 /* Actions */
 .lm-updater-actions {
+  flex-shrink: 0;
   margin-top: 18px;
   display: flex;
   gap: 10px;
   justify-content: flex-end;
   align-items: center;
+}
+/* Everything but the actions scrolls, so Install / Later stay reachable
+   however tall the notes run in a 320×480 window. */
+.lm-updater-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 176, 32, 0.25) transparent;
+}
+@media (max-width: 480px) {
+  .lm-updater-backdrop {
+    padding: 12px 12px 34px;
+  }
+  .lm-updater-modal {
+    padding: 16px 16px 14px;
+  }
+  /* One scroller, not a scroller inside a scroller. */
+  .lm-updater-notes {
+    max-height: none;
+    overflow-y: visible;
+  }
+  .lm-updater-actions {
+    margin-top: 12px;
+  }
 }
 .lm-updater-actions-spacer {
   flex: 1;
@@ -1395,6 +1628,7 @@
 .lm-updater-btn-ghost,
 .lm-updater-btn-primary,
 .lm-updater-btn-retry {
+  min-height: 32px;
   font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
   font-size: 10px;
   text-transform: uppercase;
@@ -3524,8 +3758,8 @@
 }
 .lm-onboarding-banner-dismiss {
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 32px;
+  height: 32px;
   border-radius: 6px;
   border: 1px solid transparent;
   background: transparent;
