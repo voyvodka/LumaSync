@@ -223,7 +223,7 @@ export function useRoomMapHueZones({
           : c,
       );
       // Keep Hue zones' `channelIndices` in sync — remove from old zone,
-      // add to new zone (idempotent). v1.5 W4-F2: only Hue zones live in
+      // add to new zone (idempotent). Only Hue zones live in
       // `config.zones`, so the previous `zoneType !== HUE` skip is gone.
       const nextZones = config.zones.map((z) => {
         const without = z.channelIndices.filter((i) => i !== channelIndex);

@@ -121,11 +121,11 @@ export const SECTION_ORDER: SectionId[] = [
  * pre-versioning state (also `1`, since v1.4 and earlier match the same
  * additive shape).
  *
- * v1.5 W4-F bumped to `2` for the unified `Zone` shape (folded
+ * v1.5 bumped it to `2` for the unified `Zone` shape (folded
  * `RoomMapConfig.hueZones` into `RoomMapConfig.zones: HueZone[]` via the
  * `migrateLegacyHueZone` helper).
  *
- * v1.5 (post-W4-F2) bumps to `3` because the corner-anchored window
+ * v1.5 then bumped it to `3` because the corner-anchored window
  * geometry (`windowX` / `windowY` / `windowWidth` / `windowHeight`) is
  * replaced by a mode-invariant center point (`windowCenterX` /
  * `windowCenterY`). The boot path always (re)opens the window at compact
@@ -244,7 +244,7 @@ export interface ShellState {
    */
   hueCredentialStatus?: HueCredentialStatus;
   /**
-   * v1.5 W2-A2 — where the Hue credentials currently live.
+   * Where the Hue credentials currently live.
    *
    * `keychain` ⇒ `hueAppKey` / `hueClientKey` MUST be cleared on the
    *   shellStore (the OS keychain is the source of truth).
@@ -271,7 +271,7 @@ export interface ShellState {
   /** Room map editor grid stroke width (px) */
   roomMapGridStrokeWidth?: number;
   /**
-   * v1.5 W4-J #3 — Hue zone bounds visibility on the room-map canvas.
+   * Hue zone bounds visibility on the room-map canvas.
    * When true (default), every persisted Hue zone renders its dashed
    * bounds box; when false, only the active selection's bounds render
    * (or none, if nothing is selected). Persisted so the user's
@@ -294,12 +294,12 @@ export interface ShellState {
    */
   lightingIntensityPreset?: HueIntensityPreset;
   /**
-   * Per-channel color correction (v1.4 G4) applied before sinks. Absent ⇒
+   * Per-channel color correction applied before sinks. Absent ⇒
    * `DEFAULT_COLOR_CORRECTION` (gamma 2.2 / 6500K / saturation 1.0).
    */
   colorCorrection?: ColorCorrectionConfig;
   /**
-   * Preferred firmware profile (v1.4 G11). Absent ⇒ backend falls back to
+   * Preferred firmware profile. Absent ⇒ backend falls back to
    * `LUMASYNC_V1` on successful handshake, then `ADALIGHT` if the handshake
    * fails, so plain Adalight sketches continue to light up.
    */
@@ -317,7 +317,7 @@ export interface ShellState {
    */
   dontWarnFirmwareProfileMismatch?: boolean;
   /**
-   * Display chosen for ambilight capture (v1.4 GAP 2). Absent ⇒ capture
+   * Display chosen for ambilight capture. Absent ⇒ capture
    * pipeline uses the OS primary display as it does today.
    */
   selectedDisplayId?: DisplayId;
@@ -327,7 +327,7 @@ export interface ShellState {
    */
   notificationsEnabled?: boolean;
   /**
-   * v1.5 W2-B4 — first-run onboarding completion flag. When `true`,
+   * First-run onboarding completion flag. When `true`,
    * `useOnboardingStep` shows nothing; when `undefined` / `false`,
    * the 3-step progressive hint in the notice slot walks the user through
    * picking a mode → connecting devices → calibrating LEDs. Set to
@@ -340,7 +340,7 @@ export interface ShellState {
    */
   hasCompletedOnboarding?: boolean;
   /**
-   * LED chip type for the USB serial sink (v1.5 G3). Controls the per-pixel
+   * LED chip type for the USB serial sink. Controls the per-pixel
    * byte layout: `ws2812b-grb` (3 bytes, default) or `sk6812-rgbw` (4 bytes
    * with host-side W = min(R,G,B) extraction). Absent ⇒ `WS2812B_GRB`.
    */
@@ -353,16 +353,14 @@ export interface ShellState {
    */
   ledColorOrder?: LedColorOrder;
   /**
-   * Update channel preference (v1.5 W2-C6). Defaults to `"stable"` when
+   * Update channel preference. Defaults to `"stable"` when
    * absent — `"beta"` opts the user into the prerelease feed served from
    * `latest-beta.json` alongside the canonical `latest.json`.
    *
    * The channel is read at startup by `useAutoUpdater` so it can render the
-   * active channel badge inside `<UpdateModal />`. Endpoint selection is a
-   * fallback list today (Tauri updater walks both endpoints in order); a
-   * future Rust-side dynamic `app.updater_builder().endpoints(...)` rewrite
-   * is tracked behind Platform GAP 16 — the contract field lands first so
-   * the toggle UI and persisted state ship without blocking on it.
+   * active channel badge inside `<UpdateModal />`. The Rust updater
+   * (`commands/updater.rs`) reads the same persisted field to pick the
+   * stable or beta feed.
    *
    * Additive — `schemaVersion` is not bumped because absence naturally
    * degrades to `"stable"` which matches v1.4 behaviour exactly.
@@ -459,7 +457,7 @@ export const UI_MODE_MIN_SIZES: Readonly<Record<UIMode, { width: number; height:
 };
 
 // ---------------------------------------------------------------------------
-// Keybind Registry (G9 — launch-credibility fix)
+// Keybind Registry (launch-credibility fix)
 // ---------------------------------------------------------------------------
 
 /**

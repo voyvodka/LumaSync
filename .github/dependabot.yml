@@ -36,7 +36,7 @@ updates:
           - minor
           - patch
     # No package-specific ignores — `windows-capture` was successfully
-    # bumped to 2.0.0 in v1.5 (W2-C1) after the FrameBuffer::nopadding
+    # bumped to 2.0.0 in v1.5 after the FrameBuffer::nopadding
     # API was ported in `ambilight_capture.rs`. Future majors are reviewed
     # individually through Dependabot's default ungrouped-major flow.
 

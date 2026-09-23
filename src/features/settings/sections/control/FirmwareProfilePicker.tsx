@@ -1,14 +1,14 @@
 /**
- * FirmwareProfilePicker — v1.4 G11 serial protocol toggle (v1.5 H4 hardening).
+ * FirmwareProfilePicker — serial protocol toggle.
  *
  * A 2-tile radio group that lets the user choose between the LumaSync v1
  * protocol (handshake + telemetry) and Adalight (plain interoperability
  * for Prismatik / Hyperion / Boblight / DIY Arduino). Selection is
  * persisted to `shellStore.firmwareProfile`; when Adalight is active the
  * brightness slider in `SolidColorPanel` is locked because the Adalight
- * wire format has brightness baked into the firmware (see D2 decision).
+ * wire format has brightness baked into the firmware.
  *
- * v1.5 Bug H4 — when the last serial health check reported a definite
+ * Bug H4 — when the last serial health check reported a definite
  * `advertisedFirmwareProfile`, the mismatched tile is rendered as
  * `aria-disabled` with a localized tooltip. This stops the silent
  * "Adalight selected, but firmware speaks LumaSync v1" failure mode where

@@ -288,12 +288,10 @@ jobs:
         id: channel
         shell: bash
         run: |
-          # v1.5 W2-C6 — derive the release channel from the tag suffix so
-          # `vX.Y.Z` lands as a stable GitHub Release while `vX.Y.Z-beta.N`,
-          # `vX.Y.Z-rc.N`, etc. land flagged as prerelease. Tauri updater on
-          # the user side keeps reading `latest.json` (stable) until a
-          # follow-up Rust-side dynamic-endpoint commit teaches it to fan
-          # out to `latest-beta.json` for opted-in installs.
+          # Derive the release channel from the tag suffix so `vX.Y.Z` lands
+          # as a stable GitHub Release while `vX.Y.Z-beta.N`, `vX.Y.Z-rc.N`,
+          # etc. land flagged as prerelease. Installs on the beta channel read
+          # `latest-beta.json`, which `publish` refreshes below.
           TAG="${{ github.ref_name }}"
           if [[ "$TAG" == *-* ]]; then
             echo "is_prerelease=true" >> "$GITHUB_OUTPUT"

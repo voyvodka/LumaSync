@@ -93,7 +93,7 @@ describe("validateCalibrationConfig", () => {
     expect(result.errors.some((error) => error.code === "TOTAL_MISMATCH")).toBe(true);
   });
 
-  // F7-b — edge case: bottom=0 but bottomMissing>0 (contradictory configuration).
+  // Edge case: bottom=0 but bottomMissing>0 (contradictory configuration).
   // Production logic (validation.ts:40): `bottomMissing > counts.bottom` evaluates
   // as `1 > 0 = true` → BOTTOM_MISSING_EXCEEDS_BOTTOM is surfaced.
   // This pins the current behaviour so a future refactor cannot silently ignore it.

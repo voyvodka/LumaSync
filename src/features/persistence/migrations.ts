@@ -10,7 +10,7 @@
  * `1 → 2` folds `hueZones` into `zones` and drops stray `ZoneDefinition`
  * records (never shipped) — see docs/architecture/{hue,contracts-and-state}.md.
  *
- * v1.5 (post-W4-F2) `2 → 3` — the corner-anchored window geometry
+ * `2 → 3` — the corner-anchored window geometry
  * (`windowX` / `windowY` / `windowWidth` / `windowHeight`) is replaced by
  * a mode-invariant center point (`windowCenterX` / `windowCenterY`). The
  * boot path always (re)opens the window at compact dimensions regardless
@@ -206,7 +206,7 @@ function migrateV4ToV5(state: ShellState): ShellState {
 /**
  * Internal — fold legacy `roomMap.hueZones` (`LegacyHueZone[]`) into
  * `roomMap.zones: HueZone[]` and drop any pre-existing `ZoneDefinition`
- * entries (brief W4-F unification dev-branch shape) with a single
+ * entries (a brief dev-branch unification shape) with a single
  * aggregate warn.
  *
  * The idempotent re-run guard inspects each entry of the legacy `zones[]`
@@ -234,7 +234,7 @@ function migrateV1ToV2(state: ShellState): ShellState {
   for (const candidate of existingZonesRaw) {
     if (isHueShapedRecord(candidate)) {
       // Already-canonical (or already-migrated) Hue zone — strip any
-      // `zoneType` field left over from the brief W4-F unification.
+      // `zoneType` field left over from the brief zone unification.
       const { zoneType: _drop, region: _drop2, ...cleaned } = candidate as Record<
         string,
         unknown
@@ -285,7 +285,7 @@ function migrateV1ToV2(state: ShellState): ShellState {
  * Hue zone shape (string `entertainmentAreaId`, finite center/scale).
  * Used by the idempotent re-run guard so a v2-on-disk state survives a
  * second migration call without losing valid Hue zones, and so a brief
- * W4-F-era record carrying `zoneType: "hue"` is treated as Hue-shaped
+ * dev-branch record carrying `zoneType: "hue"` is treated as Hue-shaped
  * after the discriminator is stripped.
  */
 function isHueShapedRecord(record: Record<string, unknown>): boolean {

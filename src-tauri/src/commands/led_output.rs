@@ -31,7 +31,6 @@ const OUTPUT_TIMEOUT_MS: u64 = 500;
 ///
 /// `LumaSyncV1` is the default. `Adalight` enables compatibility with
 /// Prismatik, Hyperion, Boblight, and most DIY Arduino Adalight sketches.
-/// (v1.4 G11)
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum FirmwareProfile {
@@ -47,7 +46,7 @@ pub enum FirmwareProfile {
 }
 
 // ---------------------------------------------------------------------------
-// LedChipType — host-side chip encoding variant (v1.5 G3)
+// LedChipType — host-side chip encoding variant
 //
 // Orthogonal axis to FirmwareProfile: FirmwareProfile selects the wire
 // framing family (LumaSync v1 vs Adalight); LedChipType selects the
@@ -59,15 +58,15 @@ pub enum FirmwareProfile {
 // R/G/B before extraction — the W channel bypasses the LUT so that the
 // firmware-side native white temperature is preserved.
 //
-// APA102 is deferred to v2.0 (D8(b) companion firmware repo decision
-// pending). Do not add it here until that milestone lands.
+// APA102 is deferred to v2.0 (it waits on the companion firmware repo
+// decision). Do not add it here until that milestone lands.
 // ---------------------------------------------------------------------------
 
 /// LED chip type — controls the per-pixel byte layout in the encoded payload.
 ///
 /// Stored under `ShellState.selectedChipType` (optional, default
 /// `WS2812B_GRB`). Changing this at runtime does NOT change the on-wire
-/// framing header; it only affects the pixel bytes. (v1.5 G3)
+/// framing header; it only affects the pixel bytes.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum LedChipType {
@@ -179,7 +178,7 @@ impl WirePixelLayout {
 /// Per-channel colour correction parameters applied in the LED encoder hot path.
 ///
 /// Defaults (gamma 2.2, 6500 K, saturation 1.0) reproduce the original
-/// `encode_led_packet` output byte-for-byte. (v1.4 G4)
+/// `encode_led_packet` output byte-for-byte.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ColorCorrectionConfig {
@@ -1257,7 +1256,7 @@ pub fn encode_packet_for_output(
 }
 
 // ---------------------------------------------------------------------------
-// SK6812 RGBW encoder (v1.5 G3)
+// SK6812 RGBW encoder
 //
 // White channel extraction algorithm: W = min(R, G, B) after colour
 // corrections. Remaining channels: R' = R - W, G' = G - W, B' = B - W.
@@ -2447,7 +2446,7 @@ mod tests {
     }
 
     // ---------------------------------------------------------------------------
-    // SK6812 RGBW encoder (v1.5 G3)
+    // SK6812 RGBW encoder
     // ---------------------------------------------------------------------------
 
     /// extract_rgbw: [200, 100, 50] → W = min(200,100,50) = 50

@@ -28,7 +28,7 @@ export function canEnableLedMode(
   calibration?: LedCalibrationConfig,
   selectedTargets?: HueRuntimeTarget[],
 ): LedModeGuardResult {
-  // D-05: If targets are exclusively Hue (no USB), skip calibration requirement.
+  // If targets are exclusively Hue (no USB), skip calibration requirement.
   // USB target (or no targets = default to USB) requires calibration.
   const usesUsb =
     !selectedTargets ||

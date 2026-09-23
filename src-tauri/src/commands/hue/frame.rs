@@ -1,7 +1,7 @@
 //! HueStream binary frame builder, channel data model, and colour conversions.
 //!
 //! Pure (no I/O) helpers carved out of the original `hue_stream_lifecycle.rs`
-//! during the v1.5 G8 split. Behaviour and on-the-wire layout are preserved
+//! when it was split up. Behaviour and on-the-wire layout are preserved
 //! exactly — every constant, frame layout, and rgb→xy coefficient matches the
 //! pre-refactor implementation byte-for-byte.
 
@@ -204,7 +204,7 @@ pub(crate) fn build_huestream_frame(
     for (i, channel) in channels.iter().enumerate() {
         let (mut r, mut g, mut b) = channel_colors.get(i).copied().unwrap_or((0, 0, 0));
 
-        // Per-bulb gamut triangle clip (W1-C3b — Hyperion-lead quality gap G1).
+        // Per-bulb gamut triangle clip.
         //
         // We resolve the channel's gamut from the first bulb in `light_ids`
         // (a Hue entertainment channel's bulbs are typically the same
@@ -615,7 +615,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Per-bulb gamut triangle clipping (v1.5 W1-C2)
+    // Per-bulb gamut triangle clipping
     // -----------------------------------------------------------------------
 
     #[test]
@@ -713,7 +713,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Hot-path per-bulb gamut clip (v1.5 W1-C3b)
+    // Hot-path per-bulb gamut clip
     // -----------------------------------------------------------------------
 
     #[test]

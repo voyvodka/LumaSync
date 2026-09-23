@@ -33,8 +33,8 @@ export interface LightingModeDispatch {
 }
 
 /**
- * Idempotent funnel for every `setLightingMode` Tauri invoke (v1.5
- * fix #45 + Ambilight-spam follow-up).
+ * Idempotent funnel for every `setLightingMode` Tauri invoke, added
+ * against the Ambilight invoke spam a dragged colour picker produced.
  *
  * Every direct call site — quick adjustments, hot-reload effects
  * (color correction / firmware profile / lighting smoothing preset),

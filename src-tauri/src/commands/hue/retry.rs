@@ -1,7 +1,7 @@
 //! Bounded-retry policy + state-machine transition fns for the Hue runtime.
 //!
-//! Carved out of the original `hue_stream_lifecycle.rs` during the v1.5 G8
-//! split. This module is the single home of:
+//! Carved out of the original `hue_stream_lifecycle.rs`. This module is the
+//! single home of:
 //!
 //! - `next_backoff_ms` (exponential backoff, capped) for the
 //!   `Reconnecting → Reconnecting → Failed` ladder.
@@ -310,7 +310,7 @@ pub(crate) fn stop_with_timeout(
 
     owner.reconnect_attempt = 0;
     owner.active_stream = None;
-    // A4: Drop persistent_sender so the background thread's mpsc channel closes
+    // Drop persistent_sender so the background thread's mpsc channel closes
     // immediately (Arc refcount falls to zero). Without this, wait_for_shutdown
     // always times out because the thread's recv loop never sees Disconnected.
     owner.persistent_sender = None;

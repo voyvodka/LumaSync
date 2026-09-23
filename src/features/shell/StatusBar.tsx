@@ -14,13 +14,13 @@
  * shown here is backed by a matching handler in `useGlobalKeybinds`. Edit
  * that registry instead of hand-patching `⌥1` / `Alt+1` strings.
  *
- * The FPS pill is the runtime-performance HUD (G1). It polls
+ * The FPS pill is the runtime-performance HUD. It polls
  * `get_runtime_telemetry` through `useRuntimeTelemetry` and renders a dot +
  * value whose color tracks fixed thresholds (>=45 green, 25-44 amber, <25
  * red + "Low FPS" text — text label avoids a color-only state). While
  * Ambilight is inactive the pill shows "FPS —" as a neutral placeholder.
  *
- * v1.5 W2-B1: offline `StatusItem`s may opt-in to a "Reconnect" affordance
+ * Offline `StatusItem`s may opt-in to a "Reconnect" affordance
  * via `onReconnect`. When set, the pill renders a small icon button after
  * the value text that deep-links into the DEVICES section (or runs a
  * caller-supplied retry). The button is keyboard-focusable, exposes an
@@ -56,7 +56,7 @@ export interface StatusItem {
   /** Drives the dot + value color. */
   kind: StatusKind;
   /**
-   * v1.5 W2-B1 — when present, an inline "Reconnect" icon button is
+   * When present, an inline "Reconnect" icon button is
    * rendered next to the state text. Typically wired to a section
    * deep-link (DEVICES) or a backend retry. Only meaningful for chips
    * whose `kind` is `off` / `idle`; ignored otherwise so a healthy chip
@@ -195,7 +195,7 @@ function ReconnectIcon() {
 }
 
 /**
- * FPS / latency runtime pill (G1). Renders as the 4th StatusBar chip after
+ * FPS / latency runtime pill. Renders as the 4th StatusBar chip after
  * CAP / USB / HUE and is always mounted — an inactive Ambilight pipeline
  * shows a neutral "FPS —" placeholder rather than hiding the pill so the
  * HUD layout stays stable.

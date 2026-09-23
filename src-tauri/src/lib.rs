@@ -1,4 +1,4 @@
-// LumaSync — Phase 1: Tray-first runtime shell. Plugin registration order
+// LumaSync — tray-first runtime shell. Plugin registration order
 // matters (single-instance first). Shutdown triggers all converge on
 // `shutdown::begin` — see docs/architecture/ui-and-shell.md.
 
@@ -54,7 +54,7 @@ mod models {
     pub mod room_map;
 }
 
-// v1.5 W2-A3 — shared LAN-discovery primitives (mDNS responder registry).
+// Shared LAN-discovery primitives (mDNS responder registry).
 mod network;
 
 // Lives in-crate rather than under `tests/` because `mod commands` is private.

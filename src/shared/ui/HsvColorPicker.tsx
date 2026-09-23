@@ -1,5 +1,5 @@
 /**
- * HsvColorPicker — v1.5 W1-A7
+ * HsvColorPicker
  *
  * SVG-native HSV color picker that replaces the browser's
  * `<input type="color">`:
@@ -41,7 +41,7 @@
  * events + `setPointerCapture` so an off-canvas drag still tracks
  * smoothly, the same pattern the room-map dots use.
  *
- * v1.5 fix #45 — drag-throttled `onChange`:
+ * Drag-throttled `onChange`:
  * Pointer-move events fire at 60–240 Hz on modern displays, so an
  * unthrottled drag was firing the parent `onChange` (and therefore the
  * `set_lighting_mode` Tauri invoke when wired to compact Solid mode)
@@ -548,7 +548,7 @@ export function HsvColorPicker({
     [],
   );
 
-  // v1.5 W2-B2 — compact-mode geometry for the 320 px tray window.
+  // Compact-mode geometry for the 320 px tray window.
   // The ring shrinks 200→160, the wrapper caps its own width so the
   // hosting popover hugs the picker (no orphan whitespace), and the
   // recent-colors strip switches to a single-row horizontal scroller

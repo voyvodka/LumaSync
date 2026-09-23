@@ -45,7 +45,7 @@ export function HueChannelInspector({
   roomHeightMeters: number;
   onHeightChange: (worldZ: number) => void;
   /**
-   * Wave 4-G #4 — Hue bridge reachability mirror. Renders the same
+   * Hue bridge reachability mirror. Renders the same
    * connection chip vocabulary used by `UsbStripInspector` so a
    * disconnected Hue bridge is as visible as a disconnected USB port.
    * `unknown` (default) ⇒ no chip rendered.

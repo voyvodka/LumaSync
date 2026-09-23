@@ -1,9 +1,9 @@
 //! WLED device discovery and sink connection commands.
 //!
-//! v1.5 W1-B3: manual IP path only. mDNS auto-discovery is Wave 2 (W2-A3).
+//! Manual IP path only; there is no mDNS auto-discovery for WLED yet.
 //! `WledDiscoveryResponse.devices` is a `Vec<WledDeviceInfo>` (not `Option<WledDeviceInfo>`)
 //! so the frontend always gets a stable array — empty on failure, `[device]` on success.
-//! This mirrors the Wave 2 mDNS path shape where multiple devices may appear.
+//! That is also the shape an mDNS path would need, where several devices may appear.
 //!
 //! Status codes:
 //!   WLED_DISCOVERY_OK          -- /json/info responded; device info parsed.
@@ -69,8 +69,8 @@ pub struct WledDeviceInfo {
 /// Response from `discover_wled_devices`.
 ///
 /// `devices` is always a stable Vec — empty on failure, `[device]` on a
-/// successful single-IP probe. This shape already matches the Wave 2 mDNS
-/// path (W2-A3) where multiple devices can appear in one response, so the
+/// successful single-IP probe. This shape already matches a future mDNS
+/// path, where multiple devices can appear in one response, so the
 /// frontend array-rendering code needs no change at that migration point.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

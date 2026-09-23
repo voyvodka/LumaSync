@@ -1,4 +1,4 @@
-//! Hue credential secret store (v1.5 W2-A1 + W2-A2).
+//! Hue credential secret store.
 //!
 //! Privacy-positive credential storage backed by the OS-native keychain:
 //!
@@ -8,7 +8,7 @@
 //!
 //! Falls back to a `NoopStore` when the keychain is genuinely unavailable
 //! (CI containers without D-Bus, headless test fixtures). The runtime
-//! migration in W2-A2 prefers `KeychainStore`, falls back to the legacy
+//! migration prefers `KeychainStore`, falls back to the legacy
 //! plaintext shellStore fields, and never silently fails — every error
 //! collapses onto a coded `CommandStatus` so the Tauri pipeline preserves
 //! the project-wide "commands never throw" pattern.
@@ -216,7 +216,7 @@ impl SecretStore for KeychainStore {
 // ---------------------------------------------------------------------------
 
 /// Sentinel store returned when the platform has no keychain.
-/// All calls return `STORE_UNAVAILABLE`-shaped errors; W2-A2 migration
+/// All calls return `STORE_UNAVAILABLE`-shaped errors; the migration
 /// falls back to the legacy plaintext fields without crashing the app.
 #[derive(Default)]
 pub struct NoopStore;
@@ -557,7 +557,7 @@ fn platform_store() -> Box<dyn SecretStore> {
 }
 
 // ---------------------------------------------------------------------------
-// W2-A2 — migration + credential resolver
+// Migration + credential resolver
 // ---------------------------------------------------------------------------
 
 /// Outcome of a one-shot migration write into the keychain.
@@ -761,7 +761,7 @@ pub(crate) fn adopt_bridge_owner(store: &dyn SecretStore, app_key: &str, bridge_
 /// the request-supplied values for legacy v1.4 users.
 ///
 /// This is the only credential lookup path that the DTLS connect should
-/// use after W2-A2. Returns:
+/// use. Returns:
 /// - `Some(creds)` from keychain if both keys are present there.
 /// - `Some(creds)` from `(fallback_username, fallback_client_key)` when
 ///   keychain miss but the request carries non-empty values.
@@ -908,7 +908,7 @@ pub fn effective_hue_app_key(fallback_username: &str) -> String {
 pub(crate) mod tests {
     use super::*;
 
-    /// In-memory `SecretStore` used by W2-A2 migration scenarios. Mirrors
+    /// In-memory `SecretStore` used by the migration scenarios. Mirrors
     /// the trait surface so we can deterministically test both happy-path
     /// and "set failed" branches without touching the real keychain.
     #[derive(Default)]
@@ -1230,7 +1230,7 @@ pub(crate) mod tests {
         assert!(store.get(KEY_HUE_APP_KEY).is_err());
     }
 
-    // ---------------------- W2-A2 migration scenarios ----------------------
+    // -------------------------- migration scenarios -------------------------
 
     #[test]
     fn migration_writes_both_keys_to_empty_store() {
@@ -1384,7 +1384,7 @@ pub(crate) mod tests {
         assert_eq!(store.inner.get(KEY_HUE_CLIENT_KEY).unwrap(), None);
     }
 
-    // ----------------------- W2-A2 resolver scenarios -----------------------
+    // --------------------------- resolver scenarios --------------------------
 
     #[test]
     fn resolver_prefers_keychain_when_both_keys_present() {

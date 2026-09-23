@@ -65,7 +65,7 @@ export interface LightingModeConfig {
   ambilight?: AmbilightPayload | null;
   targets?: HueRuntimeTarget[] | null;
   /**
-   * Display the ambilight worker should sample from (v1.4 Platform GAP 2).
+   * Display the ambilight worker should sample from.
    * Absent ⇒ backend falls back to the OS primary display so existing
    * single-monitor behaviour is unchanged. Matched platform-side against the
    * stable `DisplayInfo.id` form returned by `list_displays`; a missing or
@@ -73,18 +73,18 @@ export interface LightingModeConfig {
    */
   displayId?: DisplayId | null;
   /**
-   * Per-channel color correction (v1.4 G4). Absent ⇒ backend uses
+   * Per-channel color correction. Absent ⇒ backend uses
    * ColorCorrectionConfig defaults (gamma 2.2 / 6500 K / saturation 1.0).
    * Applied to USB output only — Hue sink is not affected.
    */
   colorCorrection?: ColorCorrectionConfig | null;
   /**
-   * Firmware encoding profile (v1.4 G11). Absent ⇒ backend defaults to
+   * Firmware encoding profile. Absent ⇒ backend defaults to
    * LumaSyncV1. User-visible setting only — never switched silently.
    */
   firmwareProfile?: FirmwareProfile | null;
   /**
-   * LED chip type (v1.5 G3). Absent ⇒ `ws2812b-grb`. Changes bytes-per-pixel.
+   * LED chip type. Absent ⇒ `ws2812b-grb`. Changes bytes-per-pixel.
    */
   chipType?: LedChipType | null;
   /**

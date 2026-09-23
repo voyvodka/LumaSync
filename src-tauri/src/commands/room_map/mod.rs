@@ -7,10 +7,10 @@
 //!   shellStore, so neither command carries a `RoomMapConfig`.
 //! - `background` — the size-limited copy behind `copy_background_image` and
 //!   the startup prune of copies no image layer references.
-//! - `hue_zone` — v1.5 W4-F2 Hue zone authoring commands
+//! - `hue_zone` — Hue zone authoring commands
 //!   (`create_hue_zone`, `update_hue_zone`, `delete_hue_zone`,
 //!   `assign_channel_to_hue_zone`). The previous "logical zone" surface
-//!   was removed in W4-F2; future zone kinds (`ScreenZone`, `LedZone`)
+//!   was removed; future zone kinds (`ScreenZone`, `LedZone`)
 //!   will land as separate, explicit-prefix modules with their own
 //!   struct shapes.
 //!

@@ -61,7 +61,7 @@ export const DEFAULT_LIGHTING_SMOOTHING_PRESET: LightingSmoothingPreset = "moder
 /**
  * Refusal codes from `apply_mode_change`. Invariant: on a gate, `mode` reports
  * the mode *actually running*, never an echo of the request, and the runtime is
- * untouched. Absent `targets` still means USB-required (legacy D-10).
+ * untouched. Absent `targets` still means USB-required (legacy rule).
  */
 export const LIGHTING_MODE_GATE_STATUS = {
   DEVICE_NOT_CONNECTED: "DEVICE_NOT_CONNECTED",

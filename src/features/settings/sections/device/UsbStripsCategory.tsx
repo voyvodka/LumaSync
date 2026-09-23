@@ -288,7 +288,7 @@ export function UsbStripsCategory({
         </div>
       </div>
 
-      {/* W4-I #2 — "Discover ports" is now a collapsible utility,
+      {/* "Discover ports" is now a collapsible utility,
           not the primary surface. The primary surface is the
           "Paired strips" list below; this section just lets the
           user inspect/connect a raw serial port when something is
@@ -484,7 +484,7 @@ export function UsbStripsCategory({
         ) : null}
       </div>
 
-      {/* Chip type selector — USB sink strip config (v1.5 G3) */}
+      {/* Chip type selector — USB sink strip config */}
       <LedChipTypePicker onChipTypeChange={onChipTypeChange} />
 
       <LedColorOrderControl
@@ -492,10 +492,10 @@ export function UsbStripsCategory({
         onColorOrderChange={onColorOrderChange}
       />
 
-      {/* Paired strips — Wave 4-E + 4-G surface. Lists every
+      {/* Paired strips. Lists every
           persisted UsbStripPlacement with a per-strip portName,
           live ONLINE/OFFLINE chip, and a deep-link to the room-map
-          editor. The W4-G "+ Add LED strip" CTA below allows
+          editor. The "+ Add LED strip" CTA below allows
           authoring multiple segments per controller (multi-strip
           flow). */}
       <div className="lm-paired-strips">
@@ -642,9 +642,9 @@ export function UsbStripsCategory({
           })
         )}
 
-        {/* W4-I #2 — "+ Add LED strip" CTA. Drives a port dropdown
+        {/* "+ Add LED strip" CTA. Drives a port dropdown
             (any unpaired discovered port is eligible) + LED count
-            input. W4-J #1: opening the form fires a fresh
+            input. Opening the form fires a fresh
             `list_serial_ports` invoke, and the dropdown stays open
             even when the available-port list is momentarily empty
             (e.g. user opens with one device, plugs / unplugs

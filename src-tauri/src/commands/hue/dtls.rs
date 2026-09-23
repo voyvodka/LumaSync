@@ -1,9 +1,9 @@
 //! DTLS 1.2 PSK connection to the Hue bridge entertainment endpoint.
 //!
-//! Carved out of the original `hue_stream_lifecycle.rs` during the v1.5 G8
-//! split. Cipher suite (`PSK-AES128-GCM-SHA256`), PSK identity layout, and
-//! the dedicated-thread handshake-deadline pattern are preserved exactly —
-//! these are protocol-critical and cannot drift from `ls-hue-protocol §2.5`.
+//! Carved out of the original `hue_stream_lifecycle.rs`. Cipher suite
+//! (`PSK-AES128-GCM-SHA256`), PSK identity layout, and the dedicated-thread
+//! handshake-deadline pattern are preserved exactly — these are
+//! protocol-critical and must not drift.
 
 use std::time::Duration;
 

@@ -99,7 +99,7 @@ export function ObjectRow({
         {entry.locked ? <IconLockClosed /> : <IconLockOpen />}
       </button>
       {/*
-        v1.5 W4-F2 manual-test feedback (2026-04-28): Hue channels are
+        Hue channels are
         bridge-managed and cannot be deleted from the LumaSync side, so
         the delete (×) button is hidden for `type === "hue"` rows. Zone
         detach for a Hue channel goes through the Hue Zones tab's

@@ -76,7 +76,7 @@ export interface LightingModeOrchestratorInput {
   savedCalibration: LedCalibrationConfig | undefined;
   hueStartConfig: HueStartConfig | null;
   setHueStartConfig: (config: HueStartConfig | null) => void;
-  /** D-05 gate: a USB target with no calibration routes the user to the editor. */
+  /** Calibration gate: a USB target with no calibration routes the user to the editor. */
   onRequireCalibration: () => void;
   reportHueSolidColorStatus: (code: string) => void;
 }
@@ -150,7 +150,7 @@ export function useLightingModeOrchestrator({
   const [activeOutputTargets, setActiveOutputTargets] = useState<HueRuntimeTarget[]>([]);
   const outputTargetsGuardRef = useRef(createLatestOperationGuard());
   const [isModeTransitioning, setIsModeTransitioning] = useState(false);
-  // A1.2 — surfaces the targets whose stop_lighting / stop_hue_stream invoke
+  // Surfaces the targets whose stop_lighting / stop_hue_stream invoke
   // failed during a delta-stop, so the chip stays active instead of silently
   // lying about state. Banner auto-dismisses; user can retry by toggling.
   const [stopFailedNotice, setStopFailedNotice] = useState<HueRuntimeTarget[] | null>(null);
@@ -313,7 +313,7 @@ export function useLightingModeOrchestrator({
       if (reapply === null) return "refused";
       // A gate refusal echoes the old mode, same kind, so `refused` alone
       // reads it as accepted; the running targets must have lost the removed one.
-      // Absent or empty targets mean USB-required to the backend (legacy D-10).
+      // Absent or empty targets mean USB-required to the backend (legacy rule).
       const running = reapply.mode.targets ?? [];
       const dropped = running.length > 0 && !running.includes(removed);
       if (!readModeApplyOutcome(reapply, lightingMode.kind).refused && dropped) return "dropped";
@@ -468,7 +468,7 @@ export function useLightingModeOrchestrator({
     let requestTargets = normalizedTargets;
 
     // Delta-start: for each added target, start the current mode on it.
-    // D-06: a target that fails to start never disturbs the ones already running.
+    // A target that fails to start never disturbs the ones already running.
     for (const target of addedTargets) {
       // Re-checked per target, not once: each iteration awaits, so a newer
       // change can supersede this run partway through the list.
@@ -489,7 +489,7 @@ export function useLightingModeOrchestrator({
 
         // Read as the Hue add below reads it: a gate refusal (DEVICE_NOT_CONNECTED)
         // echoes the running mode, which has the same kind. Absent or empty
-        // targets mean USB-required to the backend (legacy D-10).
+        // targets mean USB-required to the backend (legacy rule).
         const outcome = readModeApplyOutcome(applyResult, lightingMode.kind);
         const runningTargets = applyResult?.mode.targets;
         const usbDriven =
@@ -535,7 +535,7 @@ export function useLightingModeOrchestrator({
           return;
         }
 
-        // D-06: the gate returns before teardown, so the running targets are
+        // The gate returns before teardown, so the running targets are
         // untouched. Session-only, as for a left-out Hue: `lastOutputTargets`
         // keeps the explicit add saved above, so the next launch retries USB.
         console.error(
@@ -795,7 +795,7 @@ export function useLightingModeOrchestrator({
         setHueHeldOutReason(null);
       }
 
-      // fix #45 — quick adjustments dispatch unconditionally; the lock-gate is
+      // Quick adjustments dispatch unconditionally; the lock-gate is
       // strictly for kind-changing transitions. Queueing them behind it wedged
       // `isModeTransitioning` true. See docs/architecture/ui-and-shell.md.
       if (!isQuickAdjustment && modeTransitionLockRef.current) {
@@ -858,7 +858,7 @@ export function useLightingModeOrchestrator({
       resetLightingModeSignature();
       setIsModeTransitioning(true);
 
-      // D-05: USB target requires calibration; Hue-only does not
+      // USB target requires calibration; Hue-only does not
       const usesUsb = selectedOutputTargets.includes("usb");
       const requiresCalibration =
         usesUsb && !savedCalibration && normalizedNextMode.kind !== LIGHTING_MODE_KIND.OFF;

@@ -41,7 +41,7 @@ export interface DeviceCategoryRequest {
 
 export interface DeviceSectionProps {
   /**
-   * Wave 4-E — deep-link the user from the "Paired strips" sub-card
+   * Deep-link the user from the "Paired strips" sub-card
    * back to the Room Map editor where the strip's placement and LED
    * count live. Inert when omitted.
    */
@@ -164,7 +164,7 @@ export function DeviceSection({
   }, [selectedAreaId]);
 
   // -------------------------------------------------------------------------
-  // Phase 7: category rail + displays list
+  // Category rail + displays list
   // -------------------------------------------------------------------------
   const [activeCategory, setActiveCategory] = useState<DeviceCategory>(categoryRequest?.category ?? "usb");
   const [handledRequest, setHandledRequest] = useState(categoryRequest);
