@@ -1,6 +1,7 @@
 // ControlPopupApp — root of the `led-control-popup` webview. Reachable only by
 // choosing test mode, so it auto-starts on reveal and applies every selection
-// immediately; `PATTERN_PREVIEW_ONLY` is a success, not an error.
+// immediately; `PATTERN_PREVIEW_ONLY` is a success, not an error. The
+// auto-start drives the strip only — see `docs/architecture/hue.md`.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -66,6 +67,10 @@ function stampsFrom(state: ShellState): ModeStamps {
 
 const DEFAULT_SOLID = { r: 255, g: 255, b: 255, brightness: 1 };
 
+/** Nobody asked for the reveal, so it never lights Hue: with no strip it runs
+ * preview-only. A pattern-tile click is the gesture that reaches saved Hue. */
+const AUTO_START_TARGETS: readonly HueRuntimeTarget[] = ["usb"];
+
 /** Patterns whose payload carries an RGB triple, so they track the colour editor. */
 const COLOR_PATTERNS: ReadonlySet<LedTestPatternKind> = new Set(["solid", "chase"]);
 
@@ -99,12 +104,17 @@ export function ControlPopupApp() {
   const { mode, preview } = useLightingModeSync();
 
   const stampsRef = useRef<ModeStamps>({ targets: ["usb"] });
+  // Targets of the run in progress. A colour or speed change retunes that run,
+  // so it must not widen an auto-started strip-only test onto Hue.
+  const runTargetsRef = useRef<HueRuntimeTarget[]>([...AUTO_START_TARGETS]);
   const [patternKind, setPatternKind] = useState<PickerPatternKind>("gamut");
   const [speed, setSpeed] = useState<TestPatternSpeed>("med");
   const [runError, setRunError] = useState<string | null>(null);
   // FE-3: PREVIEW_ONLY is a success, not an error — surfaced as a distinct
   // non-error info note rather than via `runError`.
   const [previewOnly, setPreviewOnly] = useState(false);
+  // The running test left out a Hue target the user has saved (auto-start only).
+  const [hueLeftOut, setHueLeftOut] = useState(false);
   // User intent that the synthetic test — not the mode strip — owns the light.
   // Set by auto-start and by picking a pattern; cleared by Stop / a mode click.
   const [testDesired, setTestDesired] = useState(false);
@@ -257,10 +267,14 @@ export function ControlPopupApp() {
       if (isTestPatternErrorCode(code)) {
         setRunError(t(`preview:status.${code}`));
         setPreviewOnly(false);
+        setHueLeftOut(false);
         return;
       }
       setRunError(null);
       setPreviewOnly(code === LED_TEST_STATUS.PATTERN_PREVIEW_ONLY || result.previewOnly === true);
+      setHueLeftOut(
+        !request.targets?.includes("hue") && stampsRef.current.targets.includes("hue"),
+      );
       queuePersistPattern(request.pattern);
     },
     [queuePersistPattern, t],
@@ -273,7 +287,7 @@ export function ControlPopupApp() {
       // While the test owns the light, a colour/brightness move must refresh
       // the pattern — routing it to `setLightingMode` would kill the test.
       if (testEngaged) {
-        runner.refresh(buildRunRequest(patternKind, next, speed, stampsRef.current.targets));
+        runner.refresh(buildRunRequest(patternKind, next, speed, runTargetsRef.current));
         return;
       }
       if (!isSolid) return;
@@ -298,7 +312,8 @@ export function ControlPopupApp() {
     (next: PickerPatternKind) => {
       setPatternKind(next);
       setTestDesired(true);
-      runner.apply(buildRunRequest(next, draft, speed, stampsRef.current.targets));
+      runTargetsRef.current = stampsRef.current.targets;
+      runner.apply(buildRunRequest(next, draft, speed, runTargetsRef.current));
     },
     [draft, runner, speed],
   );
@@ -307,14 +322,15 @@ export function ControlPopupApp() {
     (next: TestPatternSpeed) => {
       setSpeed(next);
       if (!testEngaged) return;
-      runner.apply(buildRunRequest(patternKind, draft, next, stampsRef.current.targets));
+      runner.apply(buildRunRequest(patternKind, draft, next, runTargetsRef.current));
     },
     [draft, patternKind, runner, testEngaged],
   );
 
-  const handleStart = useCallback(() => {
+  const handleAutoStart = useCallback(() => {
     setTestDesired(true);
-    runner.apply(buildRunRequest(patternKind, draft, speed, stampsRef.current.targets));
+    runTargetsRef.current = [...AUTO_START_TARGETS];
+    runner.apply(buildRunRequest(patternKind, draft, speed, runTargetsRef.current));
   }, [draft, patternKind, runner, speed]);
 
   // ── Mode strip handlers ──────────────────────────────────────────────────
@@ -323,6 +339,7 @@ export function ControlPopupApp() {
       setTestDesired(false);
       setRunError(null);
       setPreviewOnly(false);
+      setHueLeftOut(false);
       void (async () => {
         try {
           // Drop queued refreshes and let any in-flight start land first, so a
@@ -362,7 +379,7 @@ export function ControlPopupApp() {
   // that effect depend on (and therefore re-fire on) every draft keystroke.
   const startSelectedRef = useRef<() => void>(() => {});
   useEffect(() => {
-    startSelectedRef.current = handleStart;
+    startSelectedRef.current = handleAutoStart;
   });
 
   const autoStartRef = useRef({ armed: true, wasVisible: false });
@@ -409,6 +426,7 @@ export function ControlPopupApp() {
       }
       setRunError(null);
       setPreviewOnly(false);
+      setHueLeftOut(false);
 
       // The twin is click-through with no decorations, taskbar entry or tray
       // item, so dropping the popup without it would strand an undismissable
@@ -552,7 +570,15 @@ export function ControlPopupApp() {
               {runError}
             </p>
           )}
-          {!runError && previewOnly && (
+          {!runError && hueLeftOut && (
+            <p className="lm-control-info" role="status">
+              <span className="lm-control-info-dot" aria-hidden="true" />
+              {previewOnly
+                ? t("preview:control.autoStart.noStrip")
+                : t("preview:control.autoStart.stripOnly")}
+            </p>
+          )}
+          {!runError && !hueLeftOut && previewOnly && (
             <p className="lm-control-info" role="status">
               <span className="lm-control-info-dot" aria-hidden="true" />
               {t("preview:status.LED_TEST_PATTERN_PREVIEW_ONLY")}

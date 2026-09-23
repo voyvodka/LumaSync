@@ -3,12 +3,14 @@ import { describe, expect, it } from "vitest";
 import type { HueOnboardingStatus, HueRuntimeStatusView } from "../onboardingStatusCodes";
 import {
   deriveHueBridgeCardState,
+  hueStreamFailureReasonKey,
   type HueBridgeCardStateInput,
 } from "../hueBridgeCardState";
 
 const BASE: HueBridgeCardStateInput = {
   selectedBridgeId: "bridge-1",
   runtimeStatus: null,
+  runtimeStatusUnavailable: false,
   hueStatus: null,
   credentialState: "valid",
   bridgeUnreachable: false,
@@ -92,6 +94,25 @@ describe("deriveHueBridgeCardState", () => {
       ).toBe("pairingFailed");
     });
 
+    it.each(["HUE_PAIRING_BRIDGE_BUSY", "HUE_PAIRING_RATE_LIMITED"] as const)(
+      "maps %s to pairingDeferred, never authError",
+      (code) => {
+        expect(
+          deriveHueBridgeCardState({ ...BASE, credentialState: "needs_repair", hueStatus: status(code) }),
+        ).toBe("pairingDeferred");
+      },
+    );
+
+    it("maps a rejected devicetype to pairingFailed", () => {
+      expect(
+        deriveHueBridgeCardState({
+          ...BASE,
+          credentialState: "needs_repair",
+          hueStatus: status("HUE_PAIRING_DEVICETYPE_INVALID"),
+        }),
+      ).toBe("pairingFailed");
+    });
+
     it("falls through to authError for any other needs_repair reason", () => {
       expect(
         deriveHueBridgeCardState({
@@ -145,6 +166,89 @@ describe("deriveHueBridgeCardState", () => {
 
     it("reports idle when everything is settled", () => {
       expect(deriveHueBridgeCardState(BASE)).toBe("idle");
+    });
+  });
+
+  describe("runtime status read rejected", () => {
+    it("never reports Ready for a runtime it could not read", () => {
+      expect(deriveHueBridgeCardState({ ...BASE, runtimeStatusUnavailable: true })).toBe("statusUnknown");
+    });
+
+    it("does not let the last status it read speak for the runtime", () => {
+      for (const last of [
+        runtime({ state: "Running" }),
+        runtime({ state: "Reconnecting" }),
+        runtime({ code: "HUE_STOP_TIMEOUT_PARTIAL" }),
+      ]) {
+        expect(
+          deriveHueBridgeCardState({ ...BASE, runtimeStatus: last, runtimeStatusUnavailable: true }),
+        ).toBe("statusUnknown");
+      }
+    });
+
+    it("keeps states that come from the bridge or the credential, not the runtime", () => {
+      expect(
+        deriveHueBridgeCardState({ ...BASE, runtimeStatusUnavailable: true, bridgeUnreachable: true }),
+      ).toBe("offline");
+      expect(
+        deriveHueBridgeCardState({ ...BASE, runtimeStatusUnavailable: true, credentialState: "needs_repair" }),
+      ).toBe("authError");
+      expect(
+        deriveHueBridgeCardState({ ...BASE, runtimeStatusUnavailable: true, selectedAreaId: null }),
+      ).toBe("areaSelect");
+    });
+
+    it("keeps a stale Failed status apart from the Failed the backend reports", () => {
+      expect(
+        deriveHueBridgeCardState({
+          ...BASE,
+          runtimeStatus: runtime({ state: "Failed", code: "TRANSIENT_RETRY_EXHAUSTED" }),
+          runtimeStatusUnavailable: true,
+        }),
+      ).toBe("statusUnknown");
+    });
+  });
+
+  // Nothing mapped `Failed`, so a stream the backend had given up on fell
+  // through to Ready — and a spent retry budget, being a TRANSIENT_ code, to a
+  // reconnect that was no longer happening.
+  describe("a backend-reported Failed stream", () => {
+    const failed = (code: HueRuntimeStatusView["code"], partial: Partial<HueRuntimeStatusView> = {}) =>
+      runtime({ state: "Failed", code, ...partial });
+
+    it("reads as a stopped stream for every Failed code the runtime produces", () => {
+      for (const code of ["TRANSIENT_RETRY_EXHAUSTED", "HUE_STREAM_START_ABORTED", "AUTH_INVALID_CREDENTIALS"] as const) {
+        expect(deriveHueBridgeCardState({ ...BASE, runtimeStatus: failed(code) }), code).toBe("streamFailed");
+      }
+    });
+
+    it("never reads a spent retry budget as reconnecting", () => {
+      expect(
+        deriveHueBridgeCardState({ ...BASE, runtimeStatus: failed("TRANSIENT_RETRY_EXHAUSTED", { remainingAttempts: 0 }) }),
+      ).toBe("streamFailed");
+    });
+
+    it("outranks a stale readiness check", () => {
+      expect(
+        deriveHueBridgeCardState({ ...BASE, runtimeStatus: failed("HUE_STREAM_START_ABORTED"), isReadinessStale: true }),
+      ).toBe("streamFailed");
+    });
+
+    it("leaves an unreachable bridge, a refused credential and a pairing run their own cards", () => {
+      const runtimeStatus = failed("TRANSIENT_RETRY_EXHAUSTED");
+      expect(deriveHueBridgeCardState({ ...BASE, runtimeStatus, bridgeUnreachable: true })).toBe("offline");
+      expect(deriveHueBridgeCardState({ ...BASE, runtimeStatus, credentialState: "needs_repair" })).toBe("authError");
+      expect(deriveHueBridgeCardState({ ...BASE, runtimeStatus, isPairing: true })).toBe("pairing");
+      expect(deriveHueBridgeCardState({ ...BASE, runtimeStatus, selectedAreaId: null })).toBe("areaSelect");
+    });
+
+    it("explains each produced code in its own words and anything else with the generic line", () => {
+      expect(hueStreamFailureReasonKey("TRANSIENT_RETRY_EXHAUSTED")).toBe("hue:runtime.codes.TRANSIENT_RETRY_EXHAUSTED");
+      expect(hueStreamFailureReasonKey("HUE_STREAM_START_ABORTED")).toBe("hue:runtime.codes.HUE_STREAM_START_ABORTED");
+      expect(hueStreamFailureReasonKey("AUTH_INVALID_CREDENTIALS")).toBe("hue:runtime.codes.AUTH_INVALID_CREDENTIALS");
+      expect(hueStreamFailureReasonKey("HUE-NET-04")).toBe("hue:runtime.failed.body");
+      expect(hueStreamFailureReasonKey("toString")).toBe("hue:runtime.failed.body");
+      expect(hueStreamFailureReasonKey(null)).toBe("hue:runtime.failed.body");
     });
   });
 

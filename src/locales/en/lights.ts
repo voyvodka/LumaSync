@@ -58,6 +58,7 @@ export default {
       hueSubStreaming: "Bridge · <b>DTLS {{hz}} Hz</b>",
       hueSubIdle: "Bridge · <b>standby</b>",
       hueSubReconnecting: "Bridge · <b>reconnecting</b>",
+      hueSubFailed: "Bridge · <b>stream stopped</b>",
       hueSubUnavailable: "Not configured",
       hueSubKeyRejected: "Bridge · <b>re-pair required</b>",
       hueSubUnreachable: "Bridge · <b>unreachable</b>",

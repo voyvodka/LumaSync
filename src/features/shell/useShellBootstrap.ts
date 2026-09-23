@@ -28,7 +28,7 @@ import {
 } from "@/features/mode/state/modeApplyOutcome";
 import type { ModeCommandResult } from "@/features/mode/modeApi";
 import type { ModeRuntimeConfig } from "@/features/mode/state/useModeRuntimeConfig";
-import { isHueBusyCandidate } from "@/features/mode/state/bootHueRetry";
+import { isHueBusyCandidate, type BootHueRetryPlan } from "@/features/mode/state/bootHueRetry";
 import { showNotification } from "@/features/platform/platformApi";
 import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/shell";
 import { CAPTURE_FAILURE_BUCKET, type CaptureFailureNotice } from "@/shared/contracts/capture";
@@ -60,8 +60,8 @@ export interface ShellBootstrapSink {
   reportStartFailure: (notice: CaptureFailureNotice) => void;
   /** The interactive "running on USB only" notice, raised when a restore left Hue out. */
   reportHueLeftOut: (reason: HueLeftOutReason) => void;
-  /** Waits for a busy bridge to free its area, then retries the restore once. */
-  scheduleHueBusyRetry: (mode: LightingModeConfig, config: HueStartConfig) => void;
+  /** Waits for a busy bridge to free its area, then resumes the restore or adds Hue back, once. */
+  scheduleHueBusyRetry: (plan: BootHueRetryPlan, config: HueStartConfig) => void;
 }
 
 /** Runs the shell boot sequence exactly once and reports when it has settled. */
@@ -217,7 +217,7 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
             // Only the retry confirms the area is merely busy, so a refusal for
             // auth or an unreachable bridge is never retried.
             if (hueBootstrapConfig && isHueBusyCandidate(restore.hueStartCode)) {
-              sink.scheduleHueBusyRetry(restoredMode, hueBootstrapConfig);
+              sink.scheduleHueBusyRetry({ type: "resume", mode: restoredMode }, hueBootstrapConfig);
             }
           }
           // A launch against an unplugged display must not toast; every other
@@ -235,7 +235,17 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
             const ranTargets = bootTargets.filter((target) => target !== "hue");
             sink.setSelectedOutputTargets(restoredTargets.filter((target) => target !== "hue"));
             sink.setLightingMode({ ...restoredMode, targets: ranTargets });
-            sink.reportHueLeftOut(restore.hueLeftOut);
+            if (hueBootstrapConfig && isHueBusyCandidate(restore.hueStartCode)) {
+              // The same busy wait as above, adding Hue back instead of resuming.
+              // Its first probe decides the notice: the gate code alone would
+              // read a held area as an unreachable bridge.
+              sink.scheduleHueBusyRetry(
+                { type: "rejoin", leftOut: restore.hueLeftOut },
+                hueBootstrapConfig,
+              );
+            } else {
+              sink.reportHueLeftOut(restore.hueLeftOut);
+            }
           }
         } else {
           sink.setActiveOutputTargets([]);

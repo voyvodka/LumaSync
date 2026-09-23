@@ -1454,6 +1454,9 @@ checkWireUnion(
     // match arms are part of the same wire union.
     ...[...(rustSerialProduction.match(/fn connect_error_code[\s\S]*?\n\}/) ?? [""])[0]
       .matchAll(/"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]),
+    // A refused admission passes `refusal.code()` the same way.
+    ...[...(rustSerialProduction.match(/impl PortRefusal[\s\S]*?\n\}/) ?? [""])[0]
+      .matchAll(/"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]),
   ],
   [
     ...constMembers(deviceSource, "SERIAL_PORT_LIST_STATUS"),

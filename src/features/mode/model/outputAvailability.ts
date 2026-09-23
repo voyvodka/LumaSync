@@ -12,6 +12,9 @@ export interface OutputAvailabilityInput {
   hueConfigured: boolean;
   hueReachable: boolean;
   hueProbeVerdict: HueProbeVerdict | null;
+  /** The shell boot has settled. Before it, `hueConfigured: false` means the
+   * saved pairing has not been read yet, not that there is none. */
+  bootstrapDone: boolean;
 }
 
 export function outputAvailability({
@@ -19,8 +22,10 @@ export function outputAvailability({
   hueConfigured,
   hueReachable,
   hueProbeVerdict,
+  bootstrapDone,
 }: OutputAvailabilityInput): OutputAvailability {
   if (localOutputConnected) return "ready";
+  if (!bootstrapDone) return "checking";
   const reason = hueUnavailableReason(hueConfigured, hueReachable, hueProbeVerdict);
   if (reason === null) return "ready";
   return reason === "checking" ? "checking" : "none";

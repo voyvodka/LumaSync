@@ -128,7 +128,7 @@ bun run tauri build
 - `src/`: React application and feature modules
 - `src/shared/contracts/`: cross-layer contract definitions
 - `src-tauri/src/commands/`: Rust Tauri command handlers
-- `docs/`: debugging and manual operational docs
+- `docs/`: debugging, manual, and architecture notes (`docs/architecture/README.md`)
 
 ## Documentation
 

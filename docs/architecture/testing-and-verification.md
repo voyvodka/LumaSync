@@ -61,14 +61,16 @@ then the suite *repaired itself*, because the section-routing spec ends by switc
 compact, so a second run passed and the failure read as a flake.
 
 A locked screen (or a minimized/occluded window) used to produce a believable-looking hang: the run
-would time out on `switchUiMode` with "UI mode did not settle on compact", because `useUIMode.ts`'s
-fade/resize chain awaited `requestAnimationFrame` with no bound in two places, and the webview stops
-firing rAF while unpainted. #423 fixed the product side of that — every such wait now falls back to
-a 250 ms timer, so `transitionLockRef` is always eventually released, screen locked or not.
+would time out on `switchUiMode` with "UI mode did not settle on compact", because the compact/full
+switch awaited `requestAnimationFrame` with no bound in two places, and the webview stops firing rAF
+while unpainted. #423 fixed the product side of that — every such wait now falls back to a 250 ms
+timer ([`ui-and-shell.md`](ui-and-shell.md)), so `useUIMode.ts`'s `transitionLockRef` is always
+eventually released, screen locked or not.
 
-That fix moved the remaining race entirely onto this layer. `transitionLockRef` is released *after*
-the final paint wait, which can trail the DOM's mode-testid swap (what `currentUiMode()` reads) by
-up to that same 250 ms while occluded. A toggle click landing inside that window is dropped by
+That fix moved the remaining race entirely onto this layer. `transitionLockRef` is released only
+after the double-paint wait and the fade-in, which can trail the DOM's mode-testid swap (what
+`currentUiMode()` reads) by roughly half a second while occluded — the 250 ms frame fallback plus
+the fade's own safety timeout. A toggle click landing inside that window is dropped by
 design, not queued, which is exactly what turned a *successful* switch to compact into "UI mode did
 not settle on full" on the very next call — the previous switch's lock was still draining when the
 next click fired. `switchUiMode` now retries the click a few times (`MAX_TOGGLE_ATTEMPTS`,
@@ -130,7 +132,7 @@ the harness does not fail, it just quietly agrees with you.
 |---|---|
 | Hover, focus-within, real pointer behaviour | the dev mock in a browser — below |
 | A state that needs hardware you do not have | the dev mock |
-| What the backend actually did | the Rust log — `docs/debugging.md`, and the patterns in `CLAUDE.md` |
+| What the backend actually did | the Rust log — `docs/debugging.md`, and the patterns in `AGENTS.md` |
 | A second window | a manual run, or the dev mock with `?window=<label>` |
 | Window geometry, tray, native chrome | a manual run |
 

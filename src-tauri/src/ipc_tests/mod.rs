@@ -5,6 +5,7 @@
 //! `bun run verify:shell-contracts` cannot close: it proves names and shapes agree,
 //! not that a given input yields the documented `status.code`.
 
+mod capability_policy;
 mod command_status_wire;
 mod device_commands;
 mod hue_commands;
@@ -12,6 +13,7 @@ mod lighting_commands;
 mod overlay_commands;
 mod preview_commands;
 mod room_map_commands;
+mod serial_admission;
 mod telemetry_commands;
 mod wled_commands;
 
@@ -22,7 +24,9 @@ use tauri::webview::InvokeRequest;
 use tauri::{App, Manager, WebviewWindow, WebviewWindowBuilder};
 
 use crate::commands::calibration::OverlayState;
-use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionState};
+use crate::commands::device_connection::{
+    ActiveSinkRegistry, SerialConnectionState, SerialPortAccess,
+};
 use crate::commands::hue::state_store::HueRuntimeStateStore;
 use crate::commands::led_preview::LedTwinState;
 use crate::commands::lighting_mode::LightingRuntimeState;
@@ -38,6 +42,15 @@ pub fn mock_app<F>(handler: F) -> App<MockRuntime>
 where
     F: Fn(tauri::ipc::Invoke<MockRuntime>) -> bool + Send + Sync + 'static,
 {
+    mock_app_with_serial_ports(handler, SerialPortAccess::default())
+}
+
+/// `mock_app` over a synthetic serial port inventory, so the connect gate can
+/// be driven with ports no runner has and an attempted `open()` observed.
+pub fn mock_app_with_serial_ports<F>(handler: F, serial_ports: SerialPortAccess) -> App<MockRuntime>
+where
+    F: Fn(tauri::ipc::Invoke<MockRuntime>) -> bool + Send + Sync + 'static,
+{
     let app = mock_builder()
         .invoke_handler(handler)
         // Not `mock_context`: its ACL authority is empty, so every invoke comes
@@ -46,6 +59,7 @@ where
         .expect("mock app should build");
 
     app.manage(SerialConnectionState::default());
+    app.manage(serial_ports);
     app.manage(ActiveSinkRegistry::default());
     app.manage(LightingRuntimeState::default());
     app.manage(LedTwinState::default());

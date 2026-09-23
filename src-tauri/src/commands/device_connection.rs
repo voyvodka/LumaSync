@@ -1,11 +1,11 @@
 //! USB serial port enumeration, connect/health-check commands, and the
 //! `ActiveSinkRegistry` that hands the built `LedSink` to the ambilight worker.
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
-use serialport::{available_ports, SerialPortType};
+use serialport::{available_ports, SerialPortInfo, SerialPortType};
 
 use super::device_handshake::{perform_handshake, HandshakeError, TimedSerialPort};
 use super::led_output::{
@@ -91,6 +91,14 @@ pub struct SerialConnectionStatus {
     pub connected: bool,
     pub status: CommandStatus,
     pub updated_at_unix_ms: u128,
+}
+
+impl SerialConnectionStatus {
+    /// The port serial output may be written to: the recorded one, and only
+    /// while connected.
+    pub fn output_port(&self) -> Option<&str> {
+        self.port_name.as_deref().filter(|_| self.connected)
+    }
 }
 
 #[derive(Clone, Serialize)]
@@ -253,12 +261,24 @@ impl ActiveSinkRegistry {
 /// List every serial port the OS can see, flagging which ones match the
 /// supported USB adapter allowlist.
 #[tauri::command]
-pub fn list_serial_ports() -> Result<SerialPortListResponse, String> {
-    let ports = available_ports().map_err(|error| {
+pub fn list_serial_ports(
+    port_access: tauri::State<'_, SerialPortAccess>,
+) -> Result<SerialPortListResponse, String> {
+    let ports = port_access.available_ports().map_err(|error| {
         format!("LIST_PORTS_FAILED: Could not enumerate serial ports ({error})")
     })?;
 
-    let mapped_ports = ports
+    Ok(SerialPortListResponse {
+        status: command_status("LIST_PORTS_OK", "Serial ports listed successfully.", None),
+        ports: listed_ports(ports),
+    })
+}
+
+/// The ports the UI is shown, each flagged against the allowlist. Connect and
+/// the health check reach `open()` only through `admit_port`, which reads this
+/// same listing, so nothing is opened that the list would not offer.
+fn listed_ports(ports: Vec<SerialPortInfo>) -> Vec<SerialPortDescriptor> {
+    ports
         .into_iter()
         // macOS exposes every USB serial device under both /dev/cu.* (call-out,
         // non-blocking, correct for data) and /dev/tty.* (blocking, requires DCD
@@ -269,65 +289,178 @@ pub fn list_serial_ports() -> Result<SerialPortListResponse, String> {
         // followed by handshake timeout). Filter tty.* siblings out of
         // enumeration on macOS only; Linux and Windows are not affected.
         .filter(|p| !is_macos_tty_path(&p.port_name))
-        .map(|port| {
-            let name = port.port_name;
+        .map(describe_port)
+        .collect()
+}
 
-            match port.port_type {
-                SerialPortType::UsbPort(usb_info) => {
-                    let is_supported = is_supported_usb(usb_info.vid, usb_info.pid);
-                    let support_reason = if is_supported {
-                        "Supported USB serial adapter".to_string()
-                    } else {
-                        format!(
-                            "Unsupported USB device (VID: {:04X}, PID: {:04X})",
-                            usb_info.vid, usb_info.pid
-                        )
-                    };
+fn describe_port(port: SerialPortInfo) -> SerialPortDescriptor {
+    let name = port.port_name;
 
-                    SerialPortDescriptor {
-                        name,
-                        kind: "usb".to_string(),
-                        is_supported,
-                        support_reason,
-                        usb: Some(UsbPortMetadata {
-                            vid: usb_info.vid,
-                            pid: usb_info.pid,
-                            manufacturer: usb_info.manufacturer,
-                            product: usb_info.product,
-                            serial_number: usb_info.serial_number,
-                        }),
-                    }
-                }
-                SerialPortType::PciPort => SerialPortDescriptor {
-                    name,
-                    kind: "pci".to_string(),
-                    is_supported: false,
-                    support_reason: "Non-USB serial port (out of current support scope)"
-                        .to_string(),
-                    usb: None,
-                },
-                SerialPortType::BluetoothPort => SerialPortDescriptor {
-                    name,
-                    kind: "bluetooth".to_string(),
-                    is_supported: false,
-                    support_reason: "Bluetooth serial is not supported in this phase".to_string(),
-                    usb: None,
-                },
-                SerialPortType::Unknown => SerialPortDescriptor {
-                    name,
-                    kind: "unknown".to_string(),
-                    is_supported: false,
-                    support_reason: "Unknown serial port type".to_string(),
-                    usb: None,
-                },
+    match port.port_type {
+        SerialPortType::UsbPort(usb_info) => {
+            let is_supported = is_supported_usb(usb_info.vid, usb_info.pid);
+            let support_reason = if is_supported {
+                "Supported USB serial adapter".to_string()
+            } else {
+                format!(
+                    "Unsupported USB device (VID: {:04X}, PID: {:04X})",
+                    usb_info.vid, usb_info.pid
+                )
+            };
+
+            SerialPortDescriptor {
+                name,
+                kind: "usb".to_string(),
+                is_supported,
+                support_reason,
+                usb: Some(UsbPortMetadata {
+                    vid: usb_info.vid,
+                    pid: usb_info.pid,
+                    manufacturer: usb_info.manufacturer,
+                    product: usb_info.product,
+                    serial_number: usb_info.serial_number,
+                }),
             }
-        })
-        .collect();
+        }
+        SerialPortType::PciPort => SerialPortDescriptor {
+            name,
+            kind: "pci".to_string(),
+            is_supported: false,
+            support_reason: "Non-USB serial port (out of current support scope)".to_string(),
+            usb: None,
+        },
+        SerialPortType::BluetoothPort => SerialPortDescriptor {
+            name,
+            kind: "bluetooth".to_string(),
+            is_supported: false,
+            support_reason: "Bluetooth serial is not supported in this phase".to_string(),
+            usb: None,
+        },
+        SerialPortType::Unknown => SerialPortDescriptor {
+            name,
+            kind: "unknown".to_string(),
+            is_supported: false,
+            support_reason: "Unknown serial port type".to_string(),
+            usb: None,
+        },
+    }
+}
 
-    Ok(SerialPortListResponse {
-        status: command_status("LIST_PORTS_OK", "Serial ports listed successfully.", None),
-        ports: mapped_ports,
+/// Why `admit_port` refused a name. The variant only chooses the message; the
+/// code is `PORT_NOT_FOUND` or `PORT_UNSUPPORTED`.
+#[derive(Debug, PartialEq, Eq)]
+enum PortRefusal {
+    NotFound,
+    /// The macOS `/dev/tty.*` sibling of a call-out device: it opens, then
+    /// stalls on DCD. Carries the `/dev/cu.*` path that works.
+    MacosTtySibling {
+        call_out: String,
+    },
+    UnsupportedUsb {
+        vid: u16,
+        pid: u16,
+    },
+    /// Bluetooth, PCI, or an unknown port type.
+    NotUsb,
+}
+
+impl PortRefusal {
+    fn code(&self) -> &'static str {
+        match self {
+            PortRefusal::NotFound => "PORT_NOT_FOUND",
+            _ => "PORT_UNSUPPORTED",
+        }
+    }
+}
+
+/// Admits `port_name` only when `listed_ports` shows it as supported. This is
+/// the one gate between a name — picked, persisted as `lastSuccessfulPort`, or
+/// sent over IPC directly — and `open()`.
+fn admit_port(
+    ports: Vec<SerialPortInfo>,
+    port_name: &str,
+) -> Result<SerialPortDescriptor, PortRefusal> {
+    if is_macos_tty_path(port_name) {
+        let enumerated = ports.iter().any(|port| port.port_name == port_name);
+        return Err(if enumerated {
+            PortRefusal::MacosTtySibling {
+                call_out: port_name.replacen("/dev/tty.", "/dev/cu.", 1),
+            }
+        } else {
+            PortRefusal::NotFound
+        });
+    }
+
+    let descriptor = listed_ports(ports)
+        .into_iter()
+        .find(|port| port.name == port_name)
+        .ok_or(PortRefusal::NotFound)?;
+
+    if descriptor.is_supported {
+        return Ok(descriptor);
+    }
+    Err(match descriptor.usb {
+        Some(usb) => PortRefusal::UnsupportedUsb {
+            vid: usb.vid,
+            pid: usb.pid,
+        },
+        None => PortRefusal::NotUsb,
     })
+}
+
+/// Enumeration and the connect-time open, behind a seam so the IPC tests can
+/// drive `admit_port` with a synthetic inventory and see whether `open()` was
+/// ever reached. Production uses `SystemSerialPortIo`.
+pub trait SerialPortIo: Send + Sync {
+    fn available_ports(&self) -> serialport::Result<Vec<SerialPortInfo>>;
+    /// Opens `port_name` at the connect baud, waits out the bootloader, and
+    /// drops the handle. Blocks for ~2 s; call it on the blocking pool.
+    fn open_and_settle(&self, port_name: &str) -> serialport::Result<()>;
+}
+
+struct SystemSerialPortIo;
+
+impl SerialPortIo for SystemSerialPortIo {
+    fn available_ports(&self) -> serialport::Result<Vec<SerialPortInfo>> {
+        available_ports()
+    }
+
+    fn open_and_settle(&self, port_name: &str) -> serialport::Result<()> {
+        // The handle is dropped on return — the output path reopens the port
+        // and settles again. See docs/architecture/device-output.md.
+        let _port_handle = serialport::new(port_name, DEFAULT_CONNECT_BAUD_RATE)
+            .timeout(Duration::from_millis(DEFAULT_CONNECT_TIMEOUT_MS))
+            .open()?;
+        // Opening asserts DTR, which auto-resets Arduino-class boards; the
+        // bootloader owns the bus for ~1.5–2 s. See `BOOTLOADER_SETTLE_DELAY_MS`.
+        std::thread::sleep(Duration::from_millis(BOOTLOADER_SETTLE_DELAY_MS));
+        Ok(())
+    }
+}
+
+/// Tauri-managed serial port inventory behind listing and connect.
+#[derive(Clone)]
+pub struct SerialPortAccess {
+    io: Arc<dyn SerialPortIo>,
+}
+
+impl Default for SerialPortAccess {
+    fn default() -> Self {
+        Self {
+            io: Arc::new(SystemSerialPortIo),
+        }
+    }
+}
+
+impl SerialPortAccess {
+    #[cfg(test)]
+    pub fn from_io(io: Arc<dyn SerialPortIo>) -> Self {
+        Self { io }
+    }
+
+    fn available_ports(&self) -> serialport::Result<Vec<SerialPortInfo>> {
+        self.io.available_ports()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -367,10 +500,12 @@ pub async fn connect_serial_port(
     chip_type: Option<LedChipType>,
     connection_state: tauri::State<'_, SerialConnectionState>,
     sink_registry: tauri::State<'_, ActiveSinkRegistry>,
+    port_access: tauri::State<'_, SerialPortAccess>,
 ) -> Result<SerialConnectionStatus, String> {
     let port_name_for_blocking = port_name.clone();
+    let io = Arc::clone(&port_access.io);
     let outcome = tokio::task::spawn_blocking(move || {
-        connect_serial_port_blocking(port_name_for_blocking, chip_type)
+        connect_serial_port_blocking(io.as_ref(), port_name_for_blocking, chip_type)
     })
     .await
     .unwrap_or_else(|join_error| ConnectOutcome::Failed {
@@ -413,10 +548,11 @@ pub async fn connect_serial_port(
 ///     locality so the returned `Box<dyn LedSink>` is built once and handed
 ///     back as a `Send` value).
 fn connect_serial_port_blocking(
+    io: &dyn SerialPortIo,
     port_name: String,
     chip_type: Option<LedChipType>,
 ) -> ConnectOutcome {
-    let known_ports = match available_ports() {
+    let known_ports = match io.available_ports() {
         Ok(ports) => ports,
         Err(error) => {
             return ConnectOutcome::Failed {
@@ -431,72 +567,32 @@ fn connect_serial_port_blocking(
         }
     };
 
-    let selected_port = known_ports
-        .into_iter()
-        .find(|port| port.port_name == port_name);
-
-    let selected_port = match selected_port {
-        Some(port) => port,
-        None => {
-            return ConnectOutcome::Failed {
-                status: failed_connect_status(
-                    &port_name,
-                    "PORT_NOT_FOUND",
-                    "Selected serial port is not available.",
-                    None,
-                ),
-                clear_sink: true,
-            };
-        }
-    };
-
     // Reject non-USB serial ports up-front — macOS phantom endpoints accept
     // open()/write() and go nowhere. See docs/architecture/device-output.md.
-    match selected_port.port_type {
-        SerialPortType::UsbPort(ref usb_info) => {
-            if !is_supported_usb(usb_info.vid, usb_info.pid) {
-                return ConnectOutcome::Failed {
-                    status: failed_connect_status(
-                        &port_name,
-                        "PORT_UNSUPPORTED",
-                        "Selected USB serial adapter is not in the supported allowlist.",
-                        Some(format!(
-                            "VID={:04X}, PID={:04X}",
-                            usb_info.vid, usb_info.pid
-                        )),
-                    ),
-                    clear_sink: true,
-                };
-            }
-        }
-        SerialPortType::BluetoothPort | SerialPortType::PciPort | SerialPortType::Unknown => {
-            return ConnectOutcome::Failed {
-                status: failed_connect_status(
-                    &port_name,
-                    "PORT_UNSUPPORTED",
-                    "Only USB serial adapters are supported (Bluetooth and PCI serial ports cannot drive LED strips).",
-                    None,
-                ),
-                clear_sink: true,
-            };
-        }
+    if let Err(refusal) = admit_port(known_ports, &port_name) {
+        let (message, details) = match &refusal {
+            PortRefusal::NotFound => ("Selected serial port is not available.", None),
+            PortRefusal::MacosTtySibling { call_out } => (
+                "macOS /dev/tty.* serial paths wait on a carrier signal USB adapters never raise; use the /dev/cu.* path.",
+                Some(format!("use {call_out:?}")),
+            ),
+            PortRefusal::UnsupportedUsb { vid, pid } => (
+                "Selected USB serial adapter is not in the supported allowlist.",
+                Some(format!("VID={vid:04X}, PID={pid:04X}")),
+            ),
+            PortRefusal::NotUsb => (
+                "Only USB serial adapters are supported (Bluetooth and PCI serial ports cannot drive LED strips).",
+                None,
+            ),
+        };
+        return ConnectOutcome::Failed {
+            status: failed_connect_status(&port_name, refusal.code(), message, details),
+            clear_sink: true,
+        };
     }
 
-    let open_result = serialport::new(&port_name, DEFAULT_CONNECT_BAUD_RATE)
-        .timeout(Duration::from_millis(DEFAULT_CONNECT_TIMEOUT_MS))
-        .open();
-
-    match open_result {
-        Ok(_port_handle) => {
-            // Wait for the AVR bootloader to finish before writing any bytes.
-            // Opening the port asserts DTR which triggers auto-reset on
-            // Arduino-class boards; the bootloader occupies the bus for
-            // ~1.5–2 s. See `BOOTLOADER_SETTLE_DELAY_MS` for full rationale.
-            //
-            // SAFE: this runs on the tokio blocking pool, never on the IPC
-            // dispatcher thread.
-            std::thread::sleep(Duration::from_millis(BOOTLOADER_SETTLE_DELAY_MS));
-
+    match io.open_and_settle(&port_name) {
+        Ok(()) => {
             // Connection verified — build a SerialSink for this port and
             // hand it back to the async caller, which owns the registry.
             // The sink uses default profile (LumaSyncV1) and default
@@ -630,94 +726,83 @@ fn run_serial_health_check_blocking(port_name: String) -> HealthCheckResult {
         }
     };
 
-    let selected_port = ports.into_iter().find(|port| port.port_name == port_name);
-    let selected_port = match selected_port {
-        Some(port) => {
-            steps.push(HealthStepResult {
-                step: "PORT_VISIBLE".to_string(),
-                pass: true,
-                code: "PORT_VISIBLE".to_string(),
-                message: "Port is visible in serial inventory.".to_string(),
-                details: None,
-            });
-            port
-        }
-        None => {
-            steps.push(HealthStepResult {
-                step: "PORT_VISIBLE".to_string(),
-                pass: false,
-                code: "PORT_NOT_FOUND".to_string(),
-                message: "Selected serial port is not visible.".to_string(),
-                details: Some("Refresh ports and verify cable connection.".to_string()),
-            });
+    // Same gate as connect: a name the listing would not offer as supported
+    // (including a macOS `/dev/tty.*` sibling) is never opened.
+    let admission = admit_port(ports, &port_name);
+    if matches!(admission, Err(PortRefusal::NotFound)) {
+        steps.push(HealthStepResult {
+            step: "PORT_VISIBLE".to_string(),
+            pass: false,
+            code: "PORT_NOT_FOUND".to_string(),
+            message: "Selected serial port is not visible.".to_string(),
+            details: Some("Refresh ports and verify cable connection.".to_string()),
+        });
 
-            return HealthCheckResult {
-                pass: false,
-                steps,
-                checked_at_unix_ms: now_unix_ms(),
-                round_trip_ms: None,
-                firmware_version: None,
-                advertised_firmware_profile: None,
-            };
-        }
-    };
+        return HealthCheckResult {
+            pass: false,
+            steps,
+            checked_at_unix_ms: now_unix_ms(),
+            round_trip_ms: None,
+            firmware_version: None,
+            advertised_firmware_profile: None,
+        };
+    }
+    steps.push(HealthStepResult {
+        step: "PORT_VISIBLE".to_string(),
+        pass: true,
+        code: "PORT_VISIBLE".to_string(),
+        message: "Port is visible in serial inventory.".to_string(),
+        details: None,
+    });
 
     // -----------------------------------------------------------------------
     // Step 2: PORT_SUPPORTED
     // -----------------------------------------------------------------------
-    match selected_port.port_type {
-        SerialPortType::UsbPort(usb_info) => {
-            if is_supported_usb(usb_info.vid, usb_info.pid) {
-                steps.push(HealthStepResult {
-                    step: "PORT_SUPPORTED".to_string(),
-                    pass: true,
-                    code: "PORT_SUPPORTED".to_string(),
-                    message: "Port matches supported USB adapter allowlist.".to_string(),
-                    details: Some(format!(
-                        "VID={:04X}, PID={:04X}",
-                        usb_info.vid, usb_info.pid
-                    )),
-                });
-            } else {
-                steps.push(HealthStepResult {
-                    step: "PORT_SUPPORTED".to_string(),
-                    pass: false,
-                    code: "PORT_UNSUPPORTED".to_string(),
-                    message: "Port is visible but not in supported adapter allowlist.".to_string(),
-                    details: Some(format!(
-                        "VID={:04X}, PID={:04X}",
-                        usb_info.vid, usb_info.pid
-                    )),
-                });
-
-                return HealthCheckResult {
-                    pass: false,
-                    steps,
-                    checked_at_unix_ms: now_unix_ms(),
-                    round_trip_ms: None,
-                    firmware_version: None,
-                    advertised_firmware_profile: None,
-                };
-            }
-        }
-        _ => {
+    let refusal = match admission {
+        Ok(descriptor) => {
             steps.push(HealthStepResult {
                 step: "PORT_SUPPORTED".to_string(),
-                pass: false,
-                code: "PORT_UNSUPPORTED".to_string(),
-                message: "Only supported USB serial adapters are eligible.".to_string(),
-                details: None,
+                pass: true,
+                code: "PORT_SUPPORTED".to_string(),
+                message: "Port matches supported USB adapter allowlist.".to_string(),
+                details: descriptor
+                    .usb
+                    .map(|usb| format!("VID={:04X}, PID={:04X}", usb.vid, usb.pid)),
             });
-
-            return HealthCheckResult {
-                pass: false,
-                steps,
-                checked_at_unix_ms: now_unix_ms(),
-                round_trip_ms: None,
-                firmware_version: None,
-                advertised_firmware_profile: None,
-            };
+            None
         }
+        Err(refusal) => Some(refusal),
+    };
+    if let Some(refusal) = refusal {
+        let (message, details) = match refusal {
+            PortRefusal::MacosTtySibling { call_out } => (
+                "macOS /dev/tty.* serial paths wait on a carrier signal USB adapters never raise; use the /dev/cu.* path.",
+                Some(format!("use {call_out:?}")),
+            ),
+            PortRefusal::UnsupportedUsb { vid, pid } => (
+                "Port is visible but not in supported adapter allowlist.",
+                Some(format!("VID={vid:04X}, PID={pid:04X}")),
+            ),
+            PortRefusal::NotUsb | PortRefusal::NotFound => {
+                ("Only supported USB serial adapters are eligible.", None)
+            }
+        };
+        steps.push(HealthStepResult {
+            step: "PORT_SUPPORTED".to_string(),
+            pass: false,
+            code: "PORT_UNSUPPORTED".to_string(),
+            message: message.to_string(),
+            details,
+        });
+
+        return HealthCheckResult {
+            pass: false,
+            steps,
+            checked_at_unix_ms: now_unix_ms(),
+            round_trip_ms: None,
+            firmware_version: None,
+            advertised_firmware_profile: None,
+        };
     }
 
     // -----------------------------------------------------------------------
@@ -905,9 +990,9 @@ pub fn command_status(code: &str, message: &str, details: Option<String>) -> Com
 }
 
 /// Status for a connect that did not end with an open port. It never carries
-/// the attempted name as `port_name`: `lighting_mode.rs` plans serial output
-/// from `port_name` even while `connected` is false, so an echoed name would
-/// be opened by the next mode change — past the allowlist. See
+/// the attempted name as `port_name`: an echoed name reads as the connected
+/// port to the frontend, and before `apply_mode_change` also required
+/// `connected` it was opened by the next mode change — past the allowlist. See
 /// docs/architecture/device-output.md. The name goes in `details` instead.
 fn failed_connect_status(
     attempted_port: &str,

@@ -19,11 +19,12 @@ in an area needs both.
 | Working on USB serial, WLED, or any output sink | [`device-output.md`](device-output.md) |
 | Changing the serial wire format, the handshake, or writing firmware | [`serial-protocol.md`](serial-protocol.md) |
 | Touching screen capture, the worker, or anything per frame | [`capture-and-pipeline.md`](capture-and-pipeline.md) |
-| Adding or changing a Tauri command, a status code, or persisted state | [`contracts-and-state.md`](contracts-and-state.md) |
+| Adding or changing a Tauri command, a status code, persisted state, or an i18n key | [`contracts-and-state.md`](contracts-and-state.md) |
 | Building for the first time, changing CI, or cutting a release | [`build-and-release.md`](build-and-release.md) |
 | Writing a test, or trusting one — especially anything that drives the real window | [`testing-and-verification.md`](testing-and-verification.md) |
 | Reproducing a state without the hardware for it, or checking hover in a real browser | [`testing-and-verification.md`](testing-and-verification.md) — the dev mock |
-| Working on the window, the tray, compact mode, or i18n | [`ui-and-shell.md`](ui-and-shell.md) |
+| Working on the window, the tray, or compact mode | [`ui-and-shell.md`](ui-and-shell.md) |
+| Calling a Tauri plugin or core API from the frontend, or adding a window | [`ui-and-shell.md`](ui-and-shell.md#capabilities) |
 | Working on the room-map editor, zone geometry, or channel placement | [`room-map.md`](room-map.md) |
 | Chasing a runtime bug with no obvious cause | [`../debugging.md`](../debugging.md), then the area file above |
 | About to change something that looks odd | The area file — it may be deliberate, and the reason is recorded |
@@ -38,8 +39,9 @@ Nothing about the user or their screen ever leaves the machine.
 
 Three outbound calls exist, and they are the whole list. Hue's cloud discovery endpoint, which
 has a manual-IP fallback precisely so it can be avoided. WLED discovery, LAN-only
-(`commands/wled_discovery.rs`). And the update check, which polls the GitHub Releases endpoint in
-`src-tauri/tauri.conf.json` on startup — unconditional today, with no manual fallback. Adding a
+(`commands/wled_discovery.rs`). And the update check, which polls the selected channel's GitHub
+Releases feed (`STABLE_ENDPOINT` / `BETA_ENDPOINT` in `commands/updater.rs`) on startup —
+unconditional today, with no manual fallback. Adding a
 fourth is a decision, not an implementation detail.
 
 **The capture-to-output path has a per-frame budget.** A regression in it is a defect, not a

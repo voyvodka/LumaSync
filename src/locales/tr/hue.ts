@@ -30,6 +30,7 @@ const hue: Catalogue<typeof enHue> = {
     timedOutTitle: "Buton basışı algılanmadı",
     timedOutHint: "Tekrar dene'yi seçin, ardından bir dakika içinde Hue köprünüzün üstündeki butona basın.",
     tryAgain: "Tekrar dene",
+    deferredTitle: "Köprü beklemenizi istedi",
   },
   pairing: {
     errors: {
@@ -37,13 +38,13 @@ const hue: Catalogue<typeof enHue> = {
         description: "Köprü üzerindeki link button'a bas ve 30 saniye içinde tekrar dene.",
       },
       DEVICETYPE_INVALID: {
-        description: "Köprü eşleştirme isteği formatını reddetti.",
+        description: "Köprü eşleştirme isteğinin biçimini reddetti. Tekrar deneyin; sürerse lütfen bildirin.",
       },
       BRIDGE_BUSY: {
-        description: "Köprü şu anda meşgul, biraz sonra tekrar dene.",
+        description: "Köprü şu anda meşgul. Biraz sonra tekrar deneyin.",
       },
       RATE_LIMITED: {
-        description: "Çok fazla istek. Tekrar denemeden önce bir dakika bekle.",
+        description: "Çok fazla istek. Tekrar denemeden önce bir dakika bekleyin.",
       },
     },
   },
@@ -121,13 +122,11 @@ const hue: Catalogue<typeof enHue> = {
     cellRate: "Hız",
     rateHz: "{{hz}} Hz",
     cellStatus: "Durum",
-    cellError: "Hata",
     cellRetries: "Deneme",
     cellNext: "Sonraki",
-    cellFault: "Arıza",
-    cellConfig: "Yapılandırma",
     cellCredential: "Kimlik",
     cellCredentialInvalid: "Geçersiz",
+    codeLabel: "Kod",
     trafficLabel: "Yayın",
     subtitleStreaming: "{{area}} · DTLS yayını",
   },
@@ -187,6 +186,14 @@ const hue: Catalogue<typeof enHue> = {
       title: "Durdurma zaman aşımı",
     },
     reconnectingTitle: "Hue köprüsüne yeniden bağlanılıyor",
+    statusUnavailable: {
+      title: "Akış durumu okunamadı",
+      body: "Hue akışının durumu okunamadı. Kendiliğinden yeniden kontrol ediliyor.",
+    },
+    failed: {
+      title: "Yayın durdu",
+      body: "Hue yayını durdu ve kendiliğinden yeniden başlamayacak. Sürdürmek için yeniden başlat.",
+    },
     writeback: {
       codes: {
         CHAN_WB_SCHEMA_REJECTED: "Köprü konum formatını reddetti.",
@@ -210,6 +217,7 @@ const hue: Catalogue<typeof enHue> = {
     confirmArea: "Alanı Onayla",
     validate: "Yeniden Doğrula",
     reconnectNow: "Yeniden Bağlan",
+    startAgain: "Yeniden Başlat",
     retryStop: "Durdurmayı Tekrarla",
     stopRetrying: "Durdur",
     enterIp: "IP Doğrula",
@@ -229,6 +237,8 @@ const hue: Catalogue<typeof enHue> = {
       reconnecting: "YEN. BAĞLANIYOR",
       failed: "BAŞARISIZ",
       timedOut: "SÜRE DOLDU",
+      wait: "BEKLEYİN",
+      checking: "KONTROL",
       discovered: "KEŞFEDİLDİ",
     },
   },

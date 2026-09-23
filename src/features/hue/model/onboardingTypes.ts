@@ -11,7 +11,11 @@ import type {
   HueEntertainmentAreaSummary,
   HuePairingCredentials,
 } from "../hueOnboardingApi";
-import type { HueOnboardingStatus, HueRuntimeStatusView } from "./onboardingStatusCodes";
+import type {
+  HueOnboardingStatus,
+  HueRuntimeStatusReadFailure,
+  HueRuntimeStatusView,
+} from "./onboardingStatusCodes";
 import type { HueRuntimeTargetRow } from "./runtimeTargets";
 
 export type HueStep = "discover" | "pair" | "area" | "ready";
@@ -69,6 +73,8 @@ export interface UseHueOnboardingResult {
   isValidatingCredential: boolean;
   status: HueOnboardingStatus | null;
   runtimeStatus: HueRuntimeStatusView | null;
+  /** The latest status read rejected; `runtimeStatus` is the last good one. */
+  runtimeStatusReadFailure: HueRuntimeStatusReadFailure | null;
   runtimeTargets: HueRuntimeTargetRow[];
   isRuntimeMutating: boolean;
   /** Channels for the currently selected area (empty while loading or no area selected). */

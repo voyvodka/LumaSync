@@ -52,7 +52,7 @@ const device: Catalogue<typeof enDevice> = {
       },
       SERIAL_HEALTH_HANDSHAKE_TIMEOUT: {
         label: "El sıkışması yanıtsız",
-        hint: "1 s içinde yanıt gelmedi. LumaSync dışı firmware kullanıyorsanız Cihaz ayarlarından Adalight profiline geçin.",
+        hint: "2 s içinde yanıt gelmedi. LumaSync dışı firmware kullanıyorsanız Cihaz ayarlarından Adalight profiline geçin.",
       },
       SERIAL_HEALTH_VERSION_MISMATCH: {
         label: "Protokol sürümü uyumsuz",
@@ -65,6 +65,54 @@ const device: Catalogue<typeof enDevice> = {
       SERIAL_HEALTH_PROTOCOL_ERROR: {
         label: "Protokol hatası",
         hint: "El sıkışma çerçevesinde beklenmedik byte'lar. Kablo bütünlüğünü kontrol edin veya farklı USB kablosu deneyin.",
+      },
+      SERIAL_HEALTH_WORKER_PANIC: {
+        label: "Sağlık kontrolü beklenmedik şekilde durdu",
+        hint: "Kontrol tamamlanamadı. Yeniden çalıştırın; durmaya devam ederse LumaSync'i yeniden başlatın.",
+      },
+      LIST_PORTS_FAILED: {
+        label: "Seri portlar okunamadı",
+        hint: "Sistem port listesini döndürmedi. Yenileyin ve portları başka bir uygulamanın tutmadığını kontrol edin.",
+      },
+      PORT_VISIBLE: {
+        label: "Port bulundu",
+        hint: "Seçili port sistem tarafından listeleniyor.",
+      },
+      PORT_NOT_FOUND: {
+        label: "Port bulunamadı",
+        hint: "Seçili port listelenmiyor. Kabloyu kontrol edin, ardından portları yenileyin.",
+      },
+      PORT_SUPPORTED: {
+        label: "Desteklenen adaptör",
+        hint: "USB adaptörü desteklenen kontrolcü listesinde.",
+      },
+      PORT_UNSUPPORTED: {
+        label: "Desteklenmeyen adaptör",
+        hint: "Bu port desteklenen bir USB kontrolcüsü değil. Başka bir port seçin.",
+      },
+      CONNECT_OK: {
+        label: "Port açıldı",
+        hint: "Port 115200 baud hızında açıldı.",
+      },
+      CONNECT_FAILED: {
+        label: "Port açılamadı",
+        hint: "Portları yenileyin, kabloyu yeniden takın ve tekrar deneyin.",
+      },
+      CONNECT_INVALID_INPUT: {
+        label: "Port ayarları reddedildi",
+        hint: "Sistem port adını veya ayarlarını reddetti. Portu yeniden seçin.",
+      },
+      CONNECT_PERMISSION_DENIED: {
+        label: "Portu açma izni yok",
+        hint: "Kullanıcı hesabınız bu portu açamıyor. Linux'ta kendinizi dialout grubuna ekleyip yeniden oturum açın.",
+      },
+      CONNECT_TIMEOUT: {
+        label: "Port açılırken zaman aşımı",
+        hint: "Cihaz zamanında yanıt vermedi. Kabloyu yeniden takın ve tekrar deneyin.",
+      },
+      CONNECT_IO_ERROR: {
+        label: "Port okuma veya yazma hatası",
+        hint: "Portu başka bir uygulama kullanıyor olabilir. Onu kapatın, kabloyu yeniden takın ve tekrar deneyin.",
       },
     },
   },

@@ -31,17 +31,51 @@ https://keepachangelog.com/en/1.1.0/
   window about ten times a second for the Lights preview removed above, whether or not anything
   showed them. That stopped. The LED preview overlay still gets its per-LED feed, and only while
   it is open.
+- Devices → Hue Bridges: a bridge that no longer accepts the app's key shows one Re-pair button
+  instead of two. Error codes such as `AUTH_INVALID_RE_PAIR_REQUIRED` no longer fill a stat box in
+  large red text; every bridge card state now shows the code as a small line under its message,
+  where it can still be read for support. A stat box left on its own now spans the card's full
+  width instead of leaving an empty half, on WLED device cards too.
 
 ### Fixed
 
+- Opening the LED preview from the tray or from LED Setup no longer lights your Hue lamps. The
+  test pattern that starts by itself when the popup opens now goes to the LED strip (USB or WLED)
+  only. With no strip connected it shows in the overlay only, and the popup says so. Hue lights
+  join the test when you pick a pattern in the popup, as before.
 - Lights and the compact window no longer say "No reachable output" and ask you to pair a Hue
   bridge while an already paired bridge is still being checked, which happened for a second or so
   after opening the window. They now show "Checking outputs…" until the bridge answers; Ambilight
   and Solid stay unavailable until then, and the no-output message appears only if it does not.
+  The same message could also flash at launch before the app had read which bridge you paired,
+  and the Hue output on the Lights page briefly read as not paired; both now say they are
+  checking until launch has finished.
+- The USB health check now describes each step in the app's language. It used to show the
+  backend's English text for every step, even with the app set to Turkish. Raw diagnostics such
+  as an adapter's VID/PID or an operating-system error still appear as they are, and a stopped
+  check now says so instead of naming an internal worker.
+- Hue pairing no longer says your credentials have expired when the bridge is busy or has had too
+  many pairing attempts. It now asks you to wait and try again. A bridge that rejects the pairing
+  request says so, and no longer shows the generic sign-in error.
+- Opening the LED preview from the tray or from LED Setup now tells you when the control popup or
+  the twin overlay could not open, for example because the chosen display is gone. Before, the
+  click did nothing and said nothing. From the tray, the notice waits for the main window to be
+  shown before it disappears.
 - Devices → Hue Bridges could show the bridge as Ready while it was streaming, when lighting
   started with that page already open — from the tray, a keyboard shortcut or the session restored
   at launch. The card now switches to Streaming as soon as the stream starts, and after its own Stop
   button it no longer keeps showing Streaming for up to ten seconds.
+- Devices → Hue Bridges no longer shows the bridge as Ready when the app briefly fails to read the
+  stream's state. A single failed read during a stream used to switch the card to Ready and stop it
+  checking again, so it stayed wrong until you started or stopped lighting. The card now says the
+  status is being checked, keeps retrying on its own at a slowing pace, and returns to Streaming
+  or Ready as soon as a read succeeds.
+- Devices → Hue Bridges no longer shows the bridge as Ready after the Hue stream has stopped for
+  good — when reconnecting gave up, a start was cut short, or the bridge refused the app's key.
+  A stream that had run out of retries also no longer claims to be reconnecting. The card now
+  says the stream stopped and why, and offers Start Again, plus Re-pair when the key was the
+  problem. The status bar and the Hue output on the Lights page say the same instead of OK and
+  standby.
 - Switching between the compact and full window could stop working after the window had been
   hidden, covered or left behind a locked screen: the switch made in that state never finished, the
   window content stayed blank, and later switches from the title bar, the settings shortcut or the
@@ -57,6 +91,13 @@ https://keepachangelog.com/en/1.1.0/
   let go, with a short notice saying so, and turns the mode back on by itself. It waits up to about
   25 seconds, and stops waiting as soon as you pick a mode or turn Hue off yourself. It does not
   wait when the bridge cannot be reached or needs to be paired again.
+- The same relaunch with a USB strip in use as well no longer leaves Hue out for the rest of the
+  session. The strip still lights up straight away, and the notice now says the bridge is still
+  holding the old session and that Hue will join by itself. Once the bridge lets go, Hue is added
+  to the running mode and the notice disappears. If the bridge stays busy for about 25 seconds,
+  lighting carries on with the strip alone and the notice says so. Picking a mode or changing the
+  outputs yourself stops the wait, and a bridge that cannot be reached or needs pairing again is
+  never waited on.
 - The first-run guide banner could flash up for a moment at launch and disappear again for people
   who were already set up but had updated from a version without it. It now appears only once the
   app knows which step you are on, so it no longer flashes; a new install still sees the first step
@@ -339,6 +380,15 @@ https://keepachangelog.com/en/1.1.0/
 - Frontend and Rust dependencies refreshed to their latest stable releases within their current
   major versions, including Tauri 2.11.6 (a security fix keeping one app window from reading data
   sent to another) and the Tauri plugins kept on matching npm and crate versions.
+
+### Security
+
+- Each app window can now reach only the Tauri features it actually uses. The main window can no
+  longer build menus or tray icons, drive the updater directly (update checks still go through the
+  app as before), or write to the app's data folder, and it can read only the room-map background
+  images there rather than everything in it, including the settings file. Links from the window
+  open lumasync.app and nothing else. The LED preview overlay and control popup lose every window
+  control they never called.
 
 ### Internal
 

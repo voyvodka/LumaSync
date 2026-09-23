@@ -13,9 +13,15 @@ import {
   HUE_ONBOARDING_TRANSPORT_CODES as CODE,
   toErrorDetails,
   type HueOnboardingStatus,
+  type HueRuntimeStatusReadFailure,
   type HueRuntimeStatusView,
 } from "../model/onboardingStatusCodes";
-import { RUNTIME_POLL_INTERVAL_MS, RUNTIME_POLL_MIN_INTERVAL_MS, STREAMING_RUNTIME_STATES } from "../model/pollingCadence";
+import {
+  RUNTIME_POLL_INTERVAL_MS,
+  RUNTIME_POLL_MIN_INTERVAL_MS,
+  STREAMING_RUNTIME_STATES,
+  runtimeStatusRetryDelayMs,
+} from "../model/pollingCadence";
 import { deriveRuntimeTargets, type HueRuntimeTargetRow } from "../model/runtimeTargets";
 
 export interface UseHueRuntimeStatusInput {
@@ -26,7 +32,10 @@ export interface UseHueRuntimeStatusInput {
 }
 
 export interface UseHueRuntimeStatusResult {
+  /** The last status the backend reported; kept through a failed read. */
   runtimeStatus: HueRuntimeStatusView | null;
+  /** Set while the latest read rejected, so `runtimeStatus` may be stale. */
+  runtimeStatusReadFailure: HueRuntimeStatusReadFailure | null;
   runtimeTargets: HueRuntimeTargetRow[];
   isRuntimeMutating: boolean;
   startRuntime: () => Promise<void>;
@@ -40,6 +49,10 @@ export function useHueRuntimeStatus({
   onError,
 }: UseHueRuntimeStatusInput): UseHueRuntimeStatusResult {
   const [runtimeStatus, setRuntimeStatus] = useState<HueRuntimeStatusView | null>(null);
+  const [runtimeStatusReadFailure, setRuntimeStatusReadFailure] =
+    useState<HueRuntimeStatusReadFailure | null>(null);
+  /** Consecutive rejected reads; drives the retry backoff. */
+  const readFailuresRef = useRef(0);
   /** Survives the runtime-loop effect re-running on every state transition. */
   const lastRuntimePollAtRef = useRef(0);
   const [runtimeTargets, setRuntimeTargets] = useState<HueRuntimeTargetRow[]>([]);
@@ -55,22 +68,23 @@ export function useHueRuntimeStatus({
   // cached pre-mutation status would paint the Devices tab with the state the
   // user just changed away from.
   const pollRuntimeStatus = useCallback(async (options?: { force?: boolean }) => {
+    // A forced read counts toward the floor too, so the loop's reaction to its
+    // result does not fire a second read straight behind it.
+    lastRuntimePollAtRef.current = Date.now();
     try {
       const result = await readHueStreamStatus(options?.force ? 0 : undefined);
       const nextStatus = result.status as HueRuntimeStatusView;
+      readFailuresRef.current = 0;
+      setRuntimeStatusReadFailure(null);
       setRuntimeStatus(nextStatus);
       setRuntimeTargets(deriveRuntimeTargets(nextStatus));
     } catch (error) {
-      const details = error instanceof Error ? error.message : String(error);
-      const fallbackStatus: HueRuntimeStatusView = {
-        state: "Failed",
+      readFailuresRef.current += 1;
+      setRuntimeStatusReadFailure({
         code: CODE.STREAM_STATUS_UNAVAILABLE,
         message: "Could not fetch Hue runtime status.",
-        details,
-        triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM,
-      };
-      setRuntimeStatus(fallbackStatus);
-      setRuntimeTargets(deriveRuntimeTargets(fallbackStatus));
+        details: toErrorDetails(error),
+      });
     }
   }, []);
 
@@ -80,7 +94,9 @@ export function useHueRuntimeStatus({
   // by the tray, a keybind or the boot restore while this tab was open left the
   // card on "Ready" beside a STREAMING status bar. Visibility-aware, per the convention in
   // docs/architecture/ui-and-shell.md.
+  // A rejected read also keeps it polling, on a backoff, until a read lands.
   const runtimeState = runtimeStatus?.state ?? null;
+  const isStatusReadFailing = runtimeStatusReadFailure !== null;
   useEffect(() => {
     let mounted = true;
     let timeoutId: number | null = null;
@@ -94,7 +110,6 @@ export function useHueRuntimeStatus({
       if (document.visibilityState === "hidden") return;
       inFlight = true;
       refreshPendingRef.current = false;
-      lastRuntimePollAtRef.current = Date.now();
       try {
         await pollRuntimeStatus();
       } finally {
@@ -137,13 +152,17 @@ export function useHueRuntimeStatus({
 
     const scheduleNext = () => {
       if (!mounted) return;
-      if (!isStreaming) return;
+      const failures = readFailuresRef.current;
+      if (!isStreaming && failures === 0) return;
       if (document.visibilityState === "hidden") return;
       if (timeoutId !== null) return;
-      timeoutId = window.setTimeout(() => {
-        timeoutId = null;
-        void tick();
-      }, RUNTIME_POLL_INTERVAL_MS);
+      timeoutId = window.setTimeout(
+        () => {
+          timeoutId = null;
+          void tick();
+        },
+        failures > 0 ? runtimeStatusRetryDelayMs(failures) : RUNTIME_POLL_INTERVAL_MS,
+      );
     };
 
     const handleVisibilityChange = () => {
@@ -168,7 +187,7 @@ export function useHueRuntimeStatus({
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       unsubscribeInvalidation();
     };
-  }, [pollRuntimeStatus, runtimeState]);
+  }, [pollRuntimeStatus, runtimeState, isStatusReadFailing]);
 
   const startRuntime = useCallback(async () => {
     if (isRuntimeMutating || !bridge || !credentials || !areaId) {
@@ -233,5 +252,12 @@ export function useHueRuntimeStatus({
     [areaId, bridge, credentials, isRuntimeMutating, onError, pollRuntimeStatus],
   );
 
-  return { runtimeStatus, runtimeTargets, isRuntimeMutating, startRuntime, retryRuntimeTarget };
+  return {
+    runtimeStatus,
+    runtimeStatusReadFailure,
+    runtimeTargets,
+    isRuntimeMutating,
+    startRuntime,
+    retryRuntimeTarget,
+  };
 }

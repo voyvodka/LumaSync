@@ -222,6 +222,9 @@
 .lm-statusbar-value.is-off {
   color: var(--lm-ink-faint);
 }
+.lm-statusbar-value.is-error {
+  color: var(--lm-red);
+}
 
 /* FPS/latency HUD pill (G1) — 4th StatusBar chip. `is-low` lights up when
    the rolling FPS drops below the hard red threshold; the component also
@@ -308,6 +311,7 @@
   .lm-statusbar-value.is-active,
   .lm-statusbar-value.is-idle,
   .lm-statusbar-value.is-off,
+  .lm-statusbar-value.is-error,
   .lm-statusbar-value.is-low,
   .lm-statusbar-lowfps,
   .lm-statusbar-label,
@@ -2109,6 +2113,10 @@
   background: #14171d;
   padding: 7px 10px;
 }
+/* A state with an odd cell count would otherwise leave an empty half-cell. */
+.lm-dcard-cell:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
 .lm-dcard-cell-k {
   font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
   font-size: 8.5px;
@@ -2554,24 +2562,24 @@
 }
 .lm-hue-repair.is-error .lm-hue-repair-title { color: var(--lm-red, #ef5b5b); }
 .lm-hue-repair-sub { font-size: 10.5px; color: #8a94a3; margin-top: 2px; line-height: 1.4; }
-.lm-hue-repair-act {
-  all: unset;
-  box-sizing: border-box;
+
+/* Raw status code under a card message — a technical detail, not a headline. */
+.lm-hue-code {
+  display: block;
+  margin-top: 4px;
   font-family: var(--lm-mono);
   font-size: 9px;
-  padding: 4px 8px;
-  border-radius: 5px;
-  border: 1px solid rgba(255, 176, 32, 0.35);
-  background: rgba(255, 176, 32, 0.08);
-  color: var(--lm-amber, #ffb020);
-  cursor: pointer;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  flex-shrink: 0;
-  align-self: center;
-  transition: background 120ms ease;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  color: var(--lm-ink-dim);
+  overflow-wrap: anywhere;
 }
-.lm-hue-repair-act:hover { background: rgba(255, 176, 32, 0.15); }
+.lm-hue-code-k {
+  color: var(--lm-ink-faint);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.lm-hue-code code { font: inherit; }
 
 /* ── Retry progress (State H) ───────────────────────────────────────── */
 .lm-hue-retry {
@@ -3339,6 +3347,11 @@
 .lm-out-row.is-reconnecting .st {
   background: var(--lm-amber);
   box-shadow: 0 0 8px var(--lm-amber);
+}
+/* The user asked for Hue and the backend gave up on it. */
+.lm-out-row.is-failed .st {
+  background: var(--lm-red);
+  box-shadow: 0 0 8px var(--lm-red);
 }
 .lm-out-row.is-off .st {
   background: #4d5564;

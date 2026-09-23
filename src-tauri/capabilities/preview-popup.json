@@ -1,13 +1,20 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "preview-popup",
-  "description": "v1.6 interactive control popup. Invokes preview commands, reads and writes the shell store, and drags by its header. `start-dragging` is the only window permission it needs: its three geometry reads (scaleFactor, outerPosition, innerSize) are already in core:window:default, and hiding goes through a Rust command rather than the window API.",
+  "description": "v1.6 interactive control popup. Listens for mode and preview events, reads and writes the shell store, persists its own position from three geometry reads, and drags by its header. Hiding goes through a Rust command rather than the window API. Policy: docs/architecture/ui-and-shell.md, \"Capabilities\".",
   "windows": ["led-control-popup"],
   "permissions": [
-    "core:default",
-    "core:event:default",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-scale-factor",
+    "core:window:allow-outer-position",
+    "core:window:allow-inner-size",
     "core:window:allow-start-dragging",
-    "store:default",
-    "log:default"
+    "core:window:allow-internal-toggle-maximize",
+    "core:webview:allow-internal-toggle-devtools",
+    "store:allow-load",
+    "store:allow-get",
+    "store:allow-set",
+    "log:allow-log"
   ]
 }

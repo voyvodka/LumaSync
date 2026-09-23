@@ -25,6 +25,7 @@ const PAIRED = [
   "hue-unreachable",
   "hue-key-expired",
   "hue-busy-at-boot",
+  "usb-hue-busy-at-boot",
   "capture-denied",
   "persist-failing",
 ] as const;

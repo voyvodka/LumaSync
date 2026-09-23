@@ -15,12 +15,14 @@ import { openScreenCaptureSettings } from "./features/mode/captureApi";
 import { useCaptureStallNotice } from "./features/telemetry/hooks/useCaptureStallNotice";
 import { useModeRuntimeConfig } from "./features/mode/state/useModeRuntimeConfig";
 import { useHueSolidColorNotice } from "./features/mode/state/useHueSolidColorNotice";
+import { usePreviewOpenNotice } from "./features/preview/state/usePreviewOpenNotice";
 import { useModeHotReload } from "./features/mode/state/useModeHotReload";
 import { useRoomGeometrySync } from "./features/mode/state/useRoomGeometrySync";
 import { useLightingModeOrchestrator } from "./features/mode/state/useLightingModeOrchestrator";
 import { useHueBridgeReachability } from "./features/hue/state/useHueBridgeReachability";
 import {
   isHueSessionReconnecting,
+  isHueStreamFailed,
   useHueStreamHealth,
 } from "./features/hue/state/useHueStreamHealth";
 import { useHueSolidBootstrapSync } from "./features/hue/state/useHueSolidBootstrapSync";
@@ -110,6 +112,7 @@ function App() {
   const runtimeConfig = useModeRuntimeConfig({ calibration: savedCalibration });
   const { notice: hueColorNotice, report: reportHueSolidColorStatus } =
     useHueSolidColorNotice();
+  const { notice: previewOpenNotice, report: reportPreviewOpenFailure } = usePreviewOpenNotice();
 
   const handleOpenCalibration = useCallback(() => {
     const entry = startCalibrationFromSettings(savedCalibration);
@@ -159,6 +162,7 @@ function App() {
   const hueSessionActive = activeOutputTargets.includes("hue");
   const hueReconnecting = isHueSessionReconnecting(hueSessionActive, hueRuntimeState);
   const hueStreaming = hueSessionActive && !hueReconnecting;
+  const hueStreamFailed = isHueStreamFailed(hueRuntimeState);
   const hueProbe = useHueBridgeReachability(hueStartConfig, hueSessionActive);
   const hueReachable = hueProbe.reachable;
 
@@ -212,6 +216,7 @@ function App() {
     lastNonOffModeRef: mode.lastNonOffModeRef,
     selectedOutputTargetsRef: mode.selectedOutputTargetsRef,
     getSelectedDisplayId: runtimeConfig.getSelectedDisplayId,
+    onPreviewOpenFailed: reportPreviewOpenFailure,
   });
 
   const handleSectionChange = useCallback(async (sectionId: SectionId) => {
@@ -315,6 +320,7 @@ function App() {
     outputTargets: selectedOutputTargets,
     localSink,
     hueConfigured: hueStartConfig !== null,
+    bootstrapDone,
     hueReachable: hueReachable || hueSessionActive,
     hueProbeGaveUp: hueProbe.gaveUp,
     hueProbeVerdict: hueProbe.verdict,
@@ -322,6 +328,7 @@ function App() {
     onRetryHueProbe: hueProbe.retry,
     hueStreaming,
     hueReconnecting,
+    hueStreamFailed,
     modeLockReason:
       modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED
         ? modeGuard.reason
@@ -369,6 +376,7 @@ function App() {
       localSink,
       hueStreaming,
       hueReconnecting,
+      hueFailed: hueStreamFailed,
       hueReachable,
       hueConfigured: hueStartConfig !== null,
       onOpenDevices: openDevicesSection,
@@ -474,6 +482,7 @@ function App() {
         hueBootRetry={mode.bootHueRetryNotice}
         captureStalled={captureStalledNotice}
         hueColorNotice={hueColorNotice}
+        previewOpenFailure={previewOpenNotice}
         onOpenCaptureSettings={() => void openScreenCaptureSettings()}
         statusBarHeightPx={statusBarHeight}
       />

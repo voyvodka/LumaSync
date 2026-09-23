@@ -11,6 +11,8 @@ export interface StatusItemsInput {
   hueStreaming: boolean;
   /** The app owns a Hue session but the backend is retrying the bridge. Wins over `hueStreaming`. */
   hueReconnecting: boolean;
+  /** The backend reports the Hue stream Failed while Hue is a selected output. */
+  hueFailed: boolean;
   hueReachable: boolean;
   hueConfigured: boolean;
   /** Deep-link offered by any chip that is not in a healthy state. */
@@ -25,6 +27,7 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
     localSink,
     hueStreaming,
     hueReconnecting,
+    hueFailed,
     hueReachable,
     hueConfigured,
     onOpenDevices,
@@ -55,21 +58,27 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
         ? "RETRYING"
         : hueStreaming
           ? "STREAMING"
-          : hueReachable
-            ? "OK"
-            : hueConfigured
-              ? "IDLE"
-              : "OFF",
+          : hueFailed
+            ? "FAILED"
+            : hueReachable
+              ? "OK"
+              : hueConfigured
+                ? "IDLE"
+                : "OFF",
       // Amber, not green, while retrying; no reconnect button, because the
       // backend is already doing exactly that.
       kind: hueReconnecting || hueStreaming
         ? "active"
-        : hueReachable
-          ? "ok"
-          : hueConfigured
-            ? "idle"
-            : "off",
-      onReconnect: hueReconnecting || hueStreaming || hueReachable ? undefined : onOpenDevices,
+        : hueFailed
+          ? "error"
+          : hueReachable
+            ? "ok"
+            : hueConfigured
+              ? "idle"
+              : "off",
+      // A failed stream links to Devices even with the bridge reachable: the
+      // bridge card is where it is started again.
+      onReconnect: hueReconnecting || hueStreaming || (hueReachable && !hueFailed) ? undefined : onOpenDevices,
       reconnectAriaLabel: t("shell:statusBar.reconnect.hueAriaLabel"),
     },
   ];

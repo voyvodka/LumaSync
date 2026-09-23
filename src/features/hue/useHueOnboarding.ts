@@ -88,6 +88,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     isValidatingCredential: state.isValidatingCredential,
     status: state.status,
     runtimeStatus: runtime.runtimeStatus,
+    runtimeStatusReadFailure: runtime.runtimeStatusReadFailure,
     runtimeTargets: runtime.runtimeTargets,
     isRuntimeMutating: runtime.isRuntimeMutating,
     areaChannels: channels.areaChannels,

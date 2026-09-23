@@ -86,11 +86,14 @@ const HUE_UNAVAILABLE_SUB_KEYS = {
   checking: "lights:dock.rows.hueSubChecking",
 } as const satisfies Record<HueUnavailableReason, string>;
 
-/** Why the Hue row is unavailable; only called when it is. */
+/** Why the Hue row is unavailable; only called when it is. Before boot has
+ * read the saved pairing, "not paired" would be a guess, so it says checking. */
 export function hueUnavailableSubKey(
   hueConfigured: boolean,
   verdict: HueProbeVerdict | null,
+  bootstrapDone: boolean,
 ): (typeof HUE_UNAVAILABLE_SUB_KEYS)[HueUnavailableReason] {
+  if (!bootstrapDone) return HUE_UNAVAILABLE_SUB_KEYS.checking;
   return HUE_UNAVAILABLE_SUB_KEYS[hueUnavailableReason(hueConfigured, false, verdict) ?? "checking"];
 }
 
@@ -102,6 +105,8 @@ interface LightsSectionProps {
   /** Which one, so the row can name it rather than always saying USB. */
   localSink: LocalSink | null;
   hueConfigured: boolean;
+  /** The shell boot has settled; until then `hueConfigured: false` is not yet known. */
+  bootstrapDone?: boolean;
   hueReachable?: boolean;
   /** The bridge probe stopped after a sustained outage; the banner offers a retry. */
   hueProbeGaveUp?: boolean;
@@ -113,6 +118,8 @@ interface LightsSectionProps {
   hueStreaming: boolean;
   /** Hue session owned but the backend is retrying the bridge; overrides `hueStreaming`. */
   hueReconnecting?: boolean;
+  /** The backend reports the Hue stream Failed: the retries are over. */
+  hueStreamFailed?: boolean;
   calibration?: LedCalibrationConfig;
   modeLockReason: ModeGuardReason | null;
   isModeTransitioning?: boolean;
@@ -162,6 +169,7 @@ export function LightsSection({
   localOutputConnected,
   localSink,
   hueConfigured,
+  bootstrapDone = true,
   hueReachable = true,
   hueProbeGaveUp = false,
   hueProbeChecking = false,
@@ -169,6 +177,7 @@ export function LightsSection({
   onRetryHueProbe,
   hueStreaming,
   hueReconnecting = false,
+  hueStreamFailed = false,
   calibration,
   modeLockReason,
   isModeTransitioning = false,
@@ -191,6 +200,7 @@ export function LightsSection({
     hueConfigured,
     hueReachable,
     hueProbeVerdict,
+    bootstrapDone,
   });
   const nonOffModeDisabled = modeSelectorDisabled || availability !== "ready";
   const normalizedMode = normalizeLightingModeConfig(mode);
@@ -794,7 +804,9 @@ export function LightsSection({
                     ? "is-off"
                     : hueReconnecting
                       ? "is-reconnecting"
-                      : ""
+                      : hueStreamFailed
+                        ? "is-failed"
+                        : ""
               }`}
               disabled={modeSelectorDisabled || !hueAvailable || (hueSelected && outputTargets.length === 1)}
               onClick={() => toggleTarget("hue", hueSelected)}
@@ -809,12 +821,17 @@ export function LightsSection({
                 <div className="s">
                   {!hueAvailable ? (
                     <Trans
-                      i18nKey={hueUnavailableSubKey(hueConfigured, hueProbeVerdict)}
+                      i18nKey={hueUnavailableSubKey(hueConfigured, hueProbeVerdict, bootstrapDone)}
                       components={{ b: <b /> }}
                     />
                   ) : hueReconnecting ? (
                     <Trans
                       i18nKey="lights:dock.rows.hueSubReconnecting"
+                      components={{ b: <b /> }}
+                    />
+                  ) : hueStreamFailed ? (
+                    <Trans
+                      i18nKey="lights:dock.rows.hueSubFailed"
                       components={{ b: <b /> }}
                     />
                   ) : hueStreaming ? (

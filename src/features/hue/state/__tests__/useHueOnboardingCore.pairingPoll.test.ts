@@ -73,6 +73,7 @@ function cardState(state: ReturnType<typeof useHueOnboardingCore>["state"]) {
   return deriveHueBridgeCardState({
     selectedBridgeId: state.selectedBridgeId,
     runtimeStatus: null,
+    runtimeStatusUnavailable: false,
     hueStatus: state.status,
     credentialState: state.credentialState,
     bridgeUnreachable: state.bridgeUnreachable,

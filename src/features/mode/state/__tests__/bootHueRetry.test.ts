@@ -1,9 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
+import type { SetStateAction } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { HueStreamReadinessResponse } from "@/features/hue/hueOnboardingApi";
 import type { HueStartConfig } from "@/features/hue/model/hueStartConfig";
 import { HUE_READINESS_REASON, HUE_STATUS } from "@/shared/contracts/hue";
+import { HUE_LEFT_OUT_REASON, type HueLeftOutReason } from "@/shared/contracts/lighting";
 
 const checkReadinessMock = vi.fn();
 vi.mock("@/features/hue/hueOnboardingApi", () => ({
@@ -167,15 +169,20 @@ describe("useBootHueRetry", () => {
 
   function mount() {
     const resume = vi.fn(() => Promise.resolve());
-    const view = renderHook(() => useBootHueRetry(resume));
-    return { resume, view };
+    const rejoin = vi.fn(() => Promise.resolve());
+    let leftOut: HueLeftOutReason | null = null;
+    const setHueLeftOut = vi.fn((next: SetStateAction<HueLeftOutReason | null>) => {
+      leftOut = typeof next === "function" ? next(leftOut) : next;
+    });
+    const view = renderHook(() => useBootHueRetry({ resume, rejoin, setHueLeftOut }));
+    return { resume, rejoin, view, leftOut: () => leftOut, setHueLeftOut };
   }
 
   it("resumes the restored mode once, after the area frees", async () => {
     checkReadinessMock.mockResolvedValueOnce(BUSY).mockResolvedValue(FREE);
     const { resume, view } = mount();
 
-    act(() => view.result.current.schedule(ambilight, config));
+    act(() => view.result.current.schedule({ type: "resume", mode: ambilight }, config));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
@@ -194,7 +201,7 @@ describe("useBootHueRetry", () => {
   it("is cancelled by a Hue stop from any surface", async () => {
     checkReadinessMock.mockResolvedValue(BUSY);
     const { resume, view } = mount();
-    act(() => view.result.current.schedule(ambilight, config));
+    act(() => view.result.current.schedule({ type: "resume", mode: ambilight }, config));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
@@ -216,7 +223,7 @@ describe("useBootHueRetry", () => {
   it("shows the gave-up notice for a while, then clears it", async () => {
     checkReadinessMock.mockResolvedValue(BUSY);
     const { resume, view } = mount();
-    act(() => view.result.current.schedule(ambilight, config));
+    act(() => view.result.current.schedule({ type: "resume", mode: ambilight }, config));
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(BOOT_HUE_RETRY_WINDOW_MS);
@@ -228,5 +235,91 @@ describe("useBootHueRetry", () => {
       await vi.advanceTimersByTimeAsync(BOOT_HUE_RETRY_GAVE_UP_NOTICE_MS);
     });
     expect(view.result.current.notice).toBeNull();
+  });
+
+  describe("rejoin", () => {
+    const rejoinPlan = { type: "rejoin", leftOut: HUE_LEFT_OUT_REASON.UNREACHABLE } as const;
+
+    it("says Hue will join while it waits, then adds it once and clears the notice", async () => {
+      checkReadinessMock.mockResolvedValueOnce(BUSY).mockResolvedValue(FREE);
+      const { rejoin, resume, view, leftOut } = mount();
+
+      act(() => view.result.current.schedule(rejoinPlan, config));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(leftOut()).toBe(HUE_LEFT_OUT_REASON.BUSY);
+      // It speaks through the left-out notice, never the Off-only one.
+      expect(view.result.current.notice).toBeNull();
+      expect(view.result.current.isRejoinPending()).toBe(true);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(BOOT_HUE_RETRY_POLL_MS);
+      });
+      expect(rejoin).toHaveBeenCalledTimes(1);
+      expect(resume).not.toHaveBeenCalled();
+      expect(leftOut()).toBeNull();
+      expect(view.result.current.isRejoinPending()).toBe(false);
+    });
+
+    it("keeps the notice, as a gave-up one, when the window closes", async () => {
+      checkReadinessMock.mockResolvedValue(BUSY);
+      const { rejoin, view, leftOut } = mount();
+      act(() => view.result.current.schedule(rejoinPlan, config));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(BOOT_HUE_RETRY_WINDOW_MS);
+      });
+      expect(leftOut()).toBe(HUE_LEFT_OUT_REASON.BUSY_GAVE_UP);
+      expect(rejoin).not.toHaveBeenCalled();
+      expect(view.result.current.isRejoinPending()).toBe(false);
+    });
+
+    it("raises the notice the restore held back when the area is not merely busy", async () => {
+      checkReadinessMock.mockResolvedValue(
+        readiness(HUE_STATUS.STREAM_READINESS_FAILED, false, ["Bridge unreachable"]),
+      );
+      const { rejoin, view, leftOut } = mount();
+      act(() => view.result.current.schedule(rejoinPlan, config));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(BOOT_HUE_RETRY_WINDOW_MS);
+      });
+
+      expect(leftOut()).toBe(HUE_LEFT_OUT_REASON.UNREACHABLE);
+      expect(rejoin).not.toHaveBeenCalled();
+      expect(checkReadinessMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("clears only its own notice when a Hue stop cancels it", async () => {
+      checkReadinessMock.mockResolvedValue(BUSY);
+      const { rejoin, view, leftOut, setHueLeftOut } = mount();
+      act(() => view.result.current.schedule(rejoinPlan, config));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(leftOut()).toBe(HUE_LEFT_OUT_REASON.BUSY);
+
+      const invoker = vi.fn(() => Promise.resolve({ active: false, status: { code: "HUE_STREAM_STOPPED" } }));
+      await act(async () => {
+        await stopHue(undefined, invoker as never);
+      });
+      expect(leftOut()).toBeNull();
+      expect(view.result.current.isRejoinPending()).toBe(false);
+
+      // A notice some other path raised afterwards is not the cancelled wait's to clear.
+      act(() => view.result.current.schedule(rejoinPlan, config));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      setHueLeftOut(HUE_LEFT_OUT_REASON.AUTH);
+      act(() => view.result.current.cancel("test"));
+      expect(leftOut()).toBe(HUE_LEFT_OUT_REASON.AUTH);
+
+      checkReadinessMock.mockResolvedValue(FREE);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(BOOT_HUE_RETRY_WINDOW_MS);
+      });
+      expect(rejoin).not.toHaveBeenCalled();
+    });
   });
 });

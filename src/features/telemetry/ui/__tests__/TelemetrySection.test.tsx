@@ -261,6 +261,7 @@ describe("Settings telemetry wiring", () => {
         outputTargets={["usb"]}
         localSink={{ transport: "serial" as const, id: "/dev/cu.usbserial-1420" }}
         hueConfigured={false}
+        bootstrapDone
         hueStreaming={false}
         modeLockReason={null}
         onLightingModeChange={vi.fn()}
@@ -288,6 +289,7 @@ describe("Settings telemetry wiring", () => {
         outputTargets={["usb"]}
         localSink={{ transport: "serial" as const, id: "/dev/cu.usbserial-1420" }}
         hueConfigured={false}
+        bootstrapDone
         hueStreaming={false}
         modeLockReason={null}
         onLightingModeChange={vi.fn()}

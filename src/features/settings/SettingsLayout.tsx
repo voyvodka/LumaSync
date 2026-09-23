@@ -32,6 +32,9 @@ interface SettingsLayoutProps {
   /** The bound local output — serial strip or WLED panel — or `null` for none. */
   localSink: LocalSink | null;
   hueConfigured: boolean;
+  /** The shell boot has settled. Before it the saved pairing is unread, so the
+   *  output gate reports checking rather than "no reachable output". */
+  bootstrapDone: boolean;
   hueReachable?: boolean;
   /** The Hue bridge probe stopped after a sustained outage; surfaces a retry in the offline banner. */
   hueProbeGaveUp?: boolean;
@@ -41,6 +44,7 @@ interface SettingsLayoutProps {
   hueStreaming: boolean;
   /** Hue session owned but the backend is retrying the bridge; overrides `hueStreaming`. */
   hueReconnecting?: boolean;
+  hueStreamFailed?: boolean;
   modeLockReason: ModeGuardReason | null;
   isModeTransitioning?: boolean;
   onLightingModeChange: (nextMode: LightingModeConfig) => void;
@@ -93,6 +97,7 @@ export const SettingsLayout = memo(function SettingsLayout({
   outputTargets,
   localSink,
   hueConfigured,
+  bootstrapDone,
   hueReachable = true,
   hueProbeGaveUp = false,
   hueProbeChecking = false,
@@ -100,6 +105,7 @@ export const SettingsLayout = memo(function SettingsLayout({
   onRetryHueProbe,
   hueStreaming,
   hueReconnecting = false,
+  hueStreamFailed = false,
   modeLockReason,
   isModeTransitioning = false,
   onLightingModeChange,
@@ -127,6 +133,7 @@ export const SettingsLayout = memo(function SettingsLayout({
         outputTargets={outputTargets}
         localOutputConnected={localOutputConnected}
         hueConfigured={hueConfigured}
+        bootstrapDone={bootstrapDone}
         hueReachable={hueReachable}
         hueProbeGaveUp={hueProbeGaveUp}
         hueProbeChecking={hueProbeChecking}
@@ -154,6 +161,7 @@ export const SettingsLayout = memo(function SettingsLayout({
               localOutputConnected={localOutputConnected}
               localSink={localSink}
               hueConfigured={hueConfigured}
+              bootstrapDone={bootstrapDone}
               hueReachable={hueReachable}
               hueProbeGaveUp={hueProbeGaveUp}
               hueProbeChecking={hueProbeChecking}
@@ -161,6 +169,7 @@ export const SettingsLayout = memo(function SettingsLayout({
               onRetryHueProbe={onRetryHueProbe}
               hueStreaming={hueStreaming}
               hueReconnecting={hueReconnecting}
+              hueStreamFailed={hueStreamFailed}
               calibration={calibration}
               modeLockReason={modeLockReason}
               isModeTransitioning={isModeTransitioning}

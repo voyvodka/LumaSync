@@ -27,6 +27,7 @@ export default {
     timedOutTitle: "Button press not detected",
     timedOutHint: "Select Try again, then press the button on top of your Hue bridge within a minute.",
     tryAgain: "Try again",
+    deferredTitle: "Bridge asked to wait",
   },
   pairing: {
     errors: {
@@ -34,7 +35,7 @@ export default {
         description: "Press the bridge link button and retry within 30 seconds.",
       },
       DEVICETYPE_INVALID: {
-        description: "Bridge rejected pairing request format.",
+        description: "The bridge rejected the format of the pairing request. Try again; if it keeps happening, please report it.",
       },
       BRIDGE_BUSY: {
         description: "Bridge is busy. Try again in a moment.",
@@ -118,13 +119,11 @@ export default {
     cellRate: "Rate",
     rateHz: "{{hz}} Hz",
     cellStatus: "Status",
-    cellError: "Error",
     cellRetries: "Retries",
     cellNext: "Next",
-    cellFault: "Fault",
-    cellConfig: "Config",
     cellCredential: "Credential",
     cellCredentialInvalid: "Invalid",
+    codeLabel: "Code",
     trafficLabel: "Stream",
     subtitleStreaming: "{{area}} · DTLS streaming",
   },
@@ -184,6 +183,14 @@ export default {
       title: "Stop timeout",
     },
     reconnectingTitle: "Reconnecting to Hue bridge",
+    statusUnavailable: {
+      title: "Stream status unavailable",
+      body: "Could not read the Hue stream's state. Checking again automatically.",
+    },
+    failed: {
+      title: "Stream stopped",
+      body: "The Hue stream stopped and will not restart on its own. Start it again to resume.",
+    },
     writeback: {
       codes: {
         CHAN_WB_SCHEMA_REJECTED: "Bridge rejected the position format.",
@@ -207,6 +214,7 @@ export default {
     confirmArea: "Confirm Area",
     validate: "Revalidate",
     reconnectNow: "Reconnect",
+    startAgain: "Start Again",
     retryStop: "Retry Stop",
     stopRetrying: "Stop",
     enterIp: "Verify IP",
@@ -226,6 +234,8 @@ export default {
       reconnecting: "RECONNECTING",
       failed: "FAILED",
       timedOut: "TIMED OUT",
+      wait: "WAIT",
+      checking: "CHECKING",
       discovered: "DISCOVERED",
     },
   },

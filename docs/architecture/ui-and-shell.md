@@ -44,13 +44,12 @@ so a timer-paced loop still lands on the final rect. Timers can themselves be th
 hidden, but they fire; rAF does not. The opacity waits already had their own safety timeout. A
 rejected resize is logged and fades the old layout back in instead of leaving it invisible.
 
-**Every launch opens compact, whatever the last session used.** The persisted `uiMode` is read but
-deliberately ignored at startup, so the app always appears with the same small tray-style footprint.
-That is only flash-free because the Tauri window is *created* at compact dimensions in
-`tauri.conf.json` (320×480, `visible: false`) and `tauri-plugin-window-state` is registered with
-`skip_initial_state("main")` — the plugin restores nothing, and `windowLifecycle.ts` restores
-position alone from our own store. Letting the plugin restore size or visibility brings back a
-visible big→compact flash on every cold start.
+**The window-state plugin restores nothing; our own store does.** The Tauri window is *created* at
+compact dimensions in `tauri.conf.json` (320×480, `visible: false`) and `tauri-plugin-window-state`
+is registered with `skip_initial_state("main")`. `windowLifecycle.ts` then restores position and the
+persisted mode's size from `shell-state.json` before its one `show()` — see the boot-restore gotcha
+below. Letting the plugin restore size or visibility would show and size the window before the
+bootstrap has, and two restorers disagreeing is a visible jump on every cold start.
 
 **Background polls are visibility-aware, and that is a repo-wide convention, not a per-hook
 choice.** The Hue reachability, readiness, and runtime-status loops and `useRuntimeTelemetry` all
@@ -100,7 +99,7 @@ single-instance plugin's `/tmp/com_lumasync_app_si.sock` is never cleaned up by 
 The next launch's `connect()` succeeds against the stale socket and silently `exit(0)`s against it —
 looking like the app failed to start. `kick_off_shutdown_and_die` removes the socket explicitly
 before exiting so a normal quit starts the next launch clean; a killed dev process (`pkill -9`) skips
-that path entirely, which is why the debug recipe in `CLAUDE.md` runs `rm -f` on the socket before
+that path entirely, which is why the debug recipe in `AGENTS.md` runs `rm -f` on the socket before
 every restart. Debug builds skip the single-instance plugin altogether for the same reason — the
 common `cargo build`/hot-reload hard-exit would otherwise leak it on every iteration. Release keeps
 the plugin on: tray-first UX needs the single-instance contract, and the explicit socket cleanup
@@ -108,9 +107,48 @@ above covers the hard-exit path there too.
 
 **Startup readiness is signalled by one log line.** `initWindowLifecycle` emits
 `STARTUP_READY_MARKER` as its last statement, after window restore, `show()`, geometry persistence
-and the tray. `scripts/verify/launch-smoke.mjs` reads the constant out of the source rather than
+and the close-to-tray hint. `scripts/verify/launch-smoke.mjs` reads the constant out of the source rather than
 hardcoding it, so renaming the string is safe — but separating the constant from the call, or
 removing either, breaks CI rather than silently passing.
+
+## Capabilities
+
+**Each window is granted the plugin and core calls its own frontend makes, and nothing else.**
+`src-tauri/capabilities/`, one file per window. Every entry is an explicit identifier — no
+`core:default`, no `<plugin>:default` — because a default set is how a window came to hold the
+whole menu, tray and `image:from_path` API, every store command, `updater:*`, and write access to
+the app data directory without a single call site for any of them.
+
+| Window | Granted |
+|---|---|
+| `main` | event listen/unlisten; the window getters and setters `windowLifecycle.ts`, `TitleBar.tsx` and `CalibrationPage.tsx` call, plus `start_dragging`; store `load`/`get`/`set`; `log`; autostart enable/disable/is-enabled; `dialog:open`; `fs:read-file` scoped to `$APPDATA/room-map-backgrounds/*`; `opener:open-url` scoped to `https://lumasync.app/*`; `notification:is-permission-granted`; `process:restart` |
+| `led-control-popup` | event listen/unlisten; `scale_factor`/`outer_position`/`inner_size` for position persistence; `start_dragging`; store `load`/`get`/`set`; `log` |
+| `led-twin-overlay-*` | event listen/unlisten; store `load`/`get`/`set`; `log` — no window API at all |
+| `calibration-overlay-*` | nothing: a static page fed by an initialization script, no IPC |
+
+Some grants have no call site in `src/`, because the caller is a script Tauri or a plugin injects
+into every webview. `internal_toggle_maximize` is `data-tauri-drag-region`'s double-click;
+`internal_toggle_devtools` is the debug-build devtools shortcut; `notification:is-permission-granted`
+is the plugin's `window.Notification` shim, which asks once at load; `opener:open-url` is the
+opener plugin's handler for `<a target="_blank">`, which is how the About link opens. The twin keeps
+`store:set` although it never saves: `loadShellState` writes a migrated snapshot back, and it is the
+same read every window runs at boot.
+
+Store writes rely on `autoSave` in Rust, so `store:save` is not granted. The updater, notifications
+and log-directory reveal all run through app commands that call the plugin from Rust, where the ACL
+does not apply. `copy_background_image` is checked against the fs plugin's global scope, which the
+dialog widens to the picked file — capability scopes play no part in it.
+
+**App commands are not ACL-scoped.** `build.rs` declares no app manifest, and without one Tauri
+admits every `generate_handler!` command from any local window, including the overlays. Scoping
+them means listing every command in `build.rs` and granting a set per window, with a drift check
+against the handler list.
+
+A missing grant fails only at runtime, as a rejected invoke in that one window.
+`ipc_tests/capability_policy.rs` resolves the real capability files per window label and asserts
+the table above plus a list of removed grants, and reads through the real fs plugin to check the
+scope. A new plugin or core call from the frontend needs its identifier in that window's capability
+and a row in the test.
 
 ## Gotchas
 
@@ -118,11 +156,11 @@ removing either, breaks CI rather than silently passing.
 - **Native fullscreen draws a second title bar over the custom amber one.** Tauri/tao has an open upstream bug (`tauri-apps/tauri#5115`, `tao#548`) that re-applies the system `NSTitledWindow` styleMask during the fullscreen transition, so a delegate patch loses the race. `macos_window.rs` forbids native fullscreen instead of fighting it: `NSWindowCollectionBehavior::FullScreenNone` removes the fullscreen pathways, and the zoom button is separately disabled so the green dot renders as inert rather than a live control with no effect.
 - **Compact mode is not a narrow full mode.** It has its own layout under `settings/sections/compact/`; a component added only to the full layout simply does not exist for compact users.
 - **A popover in compact has to be portalled and positioned from a measured height.** `.lm-compact { overflow: hidden }` over `.lm-compact-body { overflow: auto }` clips anything anchored inside the layout, so the colour picker renders through a portal into `document.body` and computes its position from the trigger's rect, refreshed on resize and scroll. Height then has to be *measured*, not estimated: the recent-colours strip mounts lazily and the picker grows after first paint, and at 320×480 the difference is the popover hanging off-screen. A `useLayoutEffect` re-measure follows the first paint and a `ResizeObserver` catches later growth, so the visible position is always the second pass.
-- **`RoomMapEditor` is the largest single piece of UI in the codebase** — around 1,500 lines, at the head of a `features/room-map/` tree of roughly twenty more files — for a surface most users never open. Worth knowing before adding to it. It is a settings *section* that lives in its own feature module, the same way `CalibrationPage` does: `SettingsLayout` is a router, not an owner.
+- **`RoomMapEditor` is among the largest single pieces of UI in the codebase** — around 800 lines, at the head of a `features/room-map/` tree of roughly fifty more source files — for a surface most users never open. Worth knowing before adding to it. It is a settings *section* that lives in its own feature module, the same way `CalibrationPage` does: `SettingsLayout` is a router, not an owner.
 - **Pairing a USB strip adds it as an output target by itself.** Without that, the Lights output toggle stays off until a WebView reload even though the StatusBar USB pill has already flipped to OK — pairing is the intent, so nothing further should be asked of the user. The auto-add writes state and persistence directly instead of calling `handleOutputTargetsChange`: that helper's delta-start branch is gated on a running mode, so on a cold-launch pair it would do exactly the same two things anyway, and if a mode *is* already running it would race the bootstrap pipeline for a target bootstrap is concurrently hydrating from `lastOutputTargets`. Let the next deliberate user action drive delta-start.
 - **Bootstrap must not strip `usb` from the output targets when the live snapshot says disconnected.** Cold launch races `tryAutoReconnect`, which waits out the ~2 s bootloader settle before it can report anything; roughly a quarter of starts finish bootstrap first, see `connected: false`, and drop the user's persisted USB target. Auto-reconnect then succeeds and emits `connected: true`, but the hot-plug reconciler's membership check no longer matches, so the output stays silently off until the user toggles it by hand. The target is kept regardless of the snapshot — `modeGuard` already renders the disabled state from `isConnected`, so nothing is hidden from the user. The separate "was USB physically present last time we looked" flag is *not* part of this and must keep tracking the snapshot, or the false→true transition re-fires on every cold start.
 - **A structurally unavailable USB port does get dropped from the targets, but only for two codes.** `PORT_UNSUPPORTED` and `PORT_NOT_FOUND` mean the port will not work for the rest of this session — typically a phantom endpoint the allowlist now rejects — and leaving `usb` selected sends every later `set_lighting_mode` into the Rust gate, which returns `DEVICE_NOT_CONNECTED` silently. From the user's seat, Ambilight does nothing. Transient codes (`CONNECT_TIMEOUT`, `CONNECT_IO_ERROR`, `CONNECT_FAILED`) must *not* trigger this: stripping the target on a retryable failure loses a setting the user chose. The boot path writes the surviving targets directly rather than through `handleOutputTargetsChange`, whose delta-stop branch would try to stop a mode that is not running yet.
-- **A toast's dismissal timer does not belong in the effect that raises it.** The USB-unplug branch in `App.tsx` rewrites `selectedOutputTargets` in the same commit that shows its toast, and that array is a dependency of the effect it lives in. The effect therefore tore itself down and cleared the timeout it had just scheduled, so the toast stayed on screen until something unrelated re-rendered it away. The timer now sits in its own effect keyed on the flag it clears — the shape any auto-dismissing surface should copy.
+- **A toast's dismissal timer does not belong in the effect that raises it.** The USB-unplug branch in `useUsbTargetReconciler.ts` rewrites `selectedOutputTargets` in the same commit that shows its toast, and that array is a dependency of the effect it lives in. The effect therefore tore itself down and cleared the timeout it had just scheduled, so the toast stayed on screen until something unrelated re-rendered it away. The timer now sits in its own effect keyed on the flag it clears — the shape any auto-dismissing surface should copy.
 - **The twin overlay neutralises its background synchronously, before React mounts.** It is created transparent and visible, but `index.html`'s bundled body gradient paints an opaque background before anything renders, so `main.tsx` clears html/body/#root backgrounds ahead of bootstrap, i18n, and React — otherwise the twin flashes an opaque full-screen frame on open. `LedTwinOverlay`'s own effect repeats the same clear as belt-and-suspenders.
 - **The twin overlay gets `TwinErrorBoundary`, not `GlobalErrorBoundary`.** Its fallback renders nothing. The twin is a click-through overlay covering a full display — an opaque fallback card there would blanket the screen with something the user cannot dismiss, so a render throw in the twin must degrade to invisible rather than to a visible error state. The main window and the (opaque) control popup keep the normal amber-card `GlobalErrorBoundaryWithI18n`.
 - **Boot restores the persisted UI mode, and the "flash" that once forbade it was never possible.** `restoreWindowState` used to carry a note that writing a persisted full-mode size at boot "would produce a visible big→compact flash before React mounts". The main window is created with `"visible": false` and nothing in Rust shows it, so the only `show()` is the one in `initWindowLifecycle` — after the size and position are applied. There was nothing on screen to flash. Boot now restores position at the created (compact) size, then calls `resizeToMode(mode, { animate: false })` to grow around that centre, reusing the manual-toggle path rather than reimplementing the monitor clamp and full-size memory. Two ordering rules hold it together: `sink.setUIMode` runs *before* `initWindowLifecycle`, or the shell appears full-sized still rendering compact; and `animate: false` must bypass `animateWindowRect` rather than pass it a zero duration, which would make `t` NaN and spin the loop forever.

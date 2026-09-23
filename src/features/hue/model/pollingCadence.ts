@@ -20,6 +20,16 @@ export const RUNTIME_POLL_INTERVAL_MS = 10_000;
 // it every state transition (and every visibility resume) fired an immediate
 // bridge round-trip, so a Idle→Starting→Running burst cost three.
 export const RUNTIME_POLL_MIN_INTERVAL_MS = 1_500;
+// A rejected status read keeps the loop alive whatever state it last held —
+// the read failing says nothing about the runtime — retrying at 2, 4, 8, 16,
+// then every 30 s until one succeeds.
+export const RUNTIME_STATUS_RETRY_BASE_MS = 2_000;
+export const RUNTIME_STATUS_RETRY_MAX_MS = 30_000;
+
+export function runtimeStatusRetryDelayMs(consecutiveFailures: number): number {
+  const exponent = Math.max(0, consecutiveFailures - 1);
+  return Math.min(RUNTIME_STATUS_RETRY_BASE_MS * 2 ** exponent, RUNTIME_STATUS_RETRY_MAX_MS);
+}
 // Runtime states for which polling makes sense — the stream is alive (or
 // trying to be), so the readiness probe / dead-sender check carry signal.
 // In Idle / Stopping / Failed the backend snapshot is fully owned by the

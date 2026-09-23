@@ -63,7 +63,7 @@ use commands::calibration::{
 };
 use commands::device_connection::{
     connect_serial_port, get_serial_connection_status, list_serial_ports, run_serial_health_check,
-    ActiveSinkRegistry, SerialConnectionState,
+    ActiveSinkRegistry, SerialConnectionState, SerialPortAccess,
 };
 use commands::hue::commands::{
     get_hue_area_channels, get_hue_stream_status, restart_hue_stream, set_hue_solid_color,
@@ -496,8 +496,8 @@ pub fn run() {
     // 4. Window-state (geometry persistence)
     //
     // Default flags (`StateFlags::all()`) would auto-restore SIZE and
-    // VISIBLE on launch, which fights our "always start in compact, hidden
-    // until React is ready" rule and causes a visible big→compact flash.
+    // VISIBLE on launch, which fights our "start hidden until React is ready,
+    // then restore the saved UI mode" rule and causes a visible resize flash.
     // `skip_initial_state("main")` keeps the save-on-close behavior but
     // disables the automatic restore so the JS bootstrap owns everything.
     builder = builder.plugin(
@@ -654,6 +654,7 @@ pub fn run() {
 
             app.manage(tray_state);
             app.manage(SerialConnectionState::default());
+            app.manage(SerialPortAccess::default());
             app.manage(ActiveSinkRegistry::default());
             app.manage(OverlayState::default());
             app.manage(LightingRuntimeState::default());
