@@ -118,6 +118,8 @@ interface LightsSectionProps {
   hueStreaming: boolean;
   /** Hue session owned but the backend is retrying the bridge; overrides `hueStreaming`. */
   hueReconnecting?: boolean;
+  /** The backend reports the Hue stream Failed: the retries are over. */
+  hueStreamFailed?: boolean;
   calibration?: LedCalibrationConfig;
   modeLockReason: ModeGuardReason | null;
   isModeTransitioning?: boolean;
@@ -175,6 +177,7 @@ export function LightsSection({
   onRetryHueProbe,
   hueStreaming,
   hueReconnecting = false,
+  hueStreamFailed = false,
   calibration,
   modeLockReason,
   isModeTransitioning = false,
@@ -801,7 +804,9 @@ export function LightsSection({
                     ? "is-off"
                     : hueReconnecting
                       ? "is-reconnecting"
-                      : ""
+                      : hueStreamFailed
+                        ? "is-failed"
+                        : ""
               }`}
               disabled={modeSelectorDisabled || !hueAvailable || (hueSelected && outputTargets.length === 1)}
               onClick={() => toggleTarget("hue", hueSelected)}
@@ -822,6 +827,11 @@ export function LightsSection({
                   ) : hueReconnecting ? (
                     <Trans
                       i18nKey="lights:dock.rows.hueSubReconnecting"
+                      components={{ b: <b /> }}
+                    />
+                  ) : hueStreamFailed ? (
+                    <Trans
+                      i18nKey="lights:dock.rows.hueSubFailed"
                       components={{ b: <b /> }}
                     />
                   ) : hueStreaming ? (

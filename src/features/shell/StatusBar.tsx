@@ -46,7 +46,7 @@ export function statusBarHeightPx(uiMode: "full" | "compact"): number {
   return uiMode === "compact" ? STATUS_BAR_HEIGHT_COMPACT_PX : STATUS_BAR_HEIGHT_FULL_PX;
 }
 
-export type StatusKind = "ok" | "active" | "idle" | "off";
+export type StatusKind = "ok" | "active" | "idle" | "off" | "error";
 
 export interface StatusItem {
   /** Short uppercase label, e.g. "CAP", "USB", "HUE". */
@@ -145,7 +145,7 @@ function StatusPill({ item }: { item: StatusItem }) {
   // retry button — that would imply something is wrong when nothing is.
   const showReconnect =
     typeof item.onReconnect === "function" &&
-    (item.kind === "off" || item.kind === "idle");
+    (item.kind === "off" || item.kind === "idle" || item.kind === "error");
 
   return (
     <div className="lm-statusbar-pair">

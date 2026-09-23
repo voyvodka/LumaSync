@@ -44,6 +44,7 @@ interface SettingsLayoutProps {
   hueStreaming: boolean;
   /** Hue session owned but the backend is retrying the bridge; overrides `hueStreaming`. */
   hueReconnecting?: boolean;
+  hueStreamFailed?: boolean;
   modeLockReason: ModeGuardReason | null;
   isModeTransitioning?: boolean;
   onLightingModeChange: (nextMode: LightingModeConfig) => void;
@@ -104,6 +105,7 @@ export const SettingsLayout = memo(function SettingsLayout({
   onRetryHueProbe,
   hueStreaming,
   hueReconnecting = false,
+  hueStreamFailed = false,
   modeLockReason,
   isModeTransitioning = false,
   onLightingModeChange,
@@ -167,6 +169,7 @@ export const SettingsLayout = memo(function SettingsLayout({
               onRetryHueProbe={onRetryHueProbe}
               hueStreaming={hueStreaming}
               hueReconnecting={hueReconnecting}
+              hueStreamFailed={hueStreamFailed}
               calibration={calibration}
               modeLockReason={modeLockReason}
               isModeTransitioning={isModeTransitioning}

@@ -5,13 +5,26 @@ import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/features/mode/mod
 import type { LightingModeDispatcher } from "@/features/mode/state/useLightingModeDispatch";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 
-import { isHueSessionReconnecting, useHueStreamHealth } from "../useHueStreamHealth";
+import { isHueSessionReconnecting, isHueStreamFailed, useHueStreamHealth } from "../useHueStreamHealth";
 
 const readHueStreamStatusMock = vi.fn();
+const invalidationListeners = new Set<() => void>();
 
 vi.mock("../../hueReadCache", () => ({
   readHueStreamStatus: (...args: unknown[]) => readHueStreamStatusMock(...args),
+  subscribeHueStreamStatusInvalidation: (listener: () => void) => {
+    invalidationListeners.add(listener);
+    return () => {
+      invalidationListeners.delete(listener);
+    };
+  },
 }));
+
+const invalidate = () => {
+  act(() => {
+    for (const listener of invalidationListeners) listener();
+  });
+};
 
 const failedStatus = (message = "bridge dropped the stream") => ({
   status: { state: "Failed", code: "X", message, details: null },
@@ -68,6 +81,7 @@ const flush = async (ms = 0) => {
 describe("useHueStreamHealth", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    invalidationListeners.clear();
     vi.useFakeTimers();
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.spyOn(console, "info").mockImplementation(() => {});
@@ -136,6 +150,29 @@ describe("useHueStreamHealth", () => {
     readHueStreamStatusMock.mockResolvedValue(runningStatus());
     await flush(5_000);
     expect(view.result.current.runtimeState).toBe("Running");
+  });
+
+  // The shell shows FAILED from this reading. The dead cadence is 15 s, so a
+  // restart from the Devices card would otherwise leave FAILED up that long.
+  it("reports Failed until a start or stop invalidates the status", async () => {
+    readHueStreamStatusMock.mockResolvedValue(failedStatus());
+    const { view } = mount({ activeOutputTargets: ["hue"], mode: ambilightMode });
+
+    await flush(0);
+    expect(isHueStreamFailed(view.result.current.runtimeState)).toBe(true);
+
+    invalidate();
+    expect(view.result.current.runtimeState).toBeNull();
+    expect(isHueStreamFailed(view.result.current.runtimeState)).toBe(false);
+  });
+
+  it("keeps a non-Failed reading through an invalidation", async () => {
+    readHueStreamStatusMock.mockResolvedValue(reconnectingStatus());
+    const { view } = mount({ activeOutputTargets: ["hue"], mode: ambilightMode });
+
+    await flush(0);
+    invalidate();
+    expect(view.result.current.runtimeState).toBe("Reconnecting");
   });
 
   it("only calls an owned session reconnecting", () => {

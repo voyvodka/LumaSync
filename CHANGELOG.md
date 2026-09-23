@@ -61,6 +61,12 @@ https://keepachangelog.com/en/1.1.0/
   checking again, so it stayed wrong until you started or stopped lighting. The card now says the
   status is being checked, keeps retrying on its own at a slowing pace, and returns to Streaming
   or Ready as soon as a read succeeds.
+- Devices → Hue Bridges no longer shows the bridge as Ready after the Hue stream has stopped for
+  good — when reconnecting gave up, a start was cut short, or the bridge refused the app's key.
+  A stream that had run out of retries also no longer claims to be reconnecting. The card now
+  says the stream stopped and why, and offers Start Again, plus Re-pair when the key was the
+  problem. The status bar and the Hue output on the Lights page say the same instead of OK and
+  standby.
 - Switching between the compact and full window could stop working after the window had been
   hidden, covered or left behind a locked screen: the switch made in that state never finished, the
   window content stayed blank, and later switches from the title bar, the settings shortcut or the
