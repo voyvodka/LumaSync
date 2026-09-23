@@ -5,6 +5,9 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use super::frame_pipeline::{
+    strip_topology_for, AmbilightFramePipeline, FramePipelineConfig, FrameSettings,
+};
 use super::*;
 use crate::commands::ambilight_capture::AmbilightCaptureError;
 use crate::commands::ambilight_scene::{LightSetState, SceneAnalyzer};
@@ -12,7 +15,9 @@ use crate::commands::hue::frame::{
     HueAreaChannel, HueColorSender, HueColorUpdate, HueScreenRegion,
 };
 use crate::commands::hue::state_store::HueChannelPlacementOverride;
-use crate::commands::led_calibration::{LedSegmentCounts, LedSequenceItem};
+use crate::commands::led_calibration::{
+    build_led_sequence, sample_frame_for_sequence, LedSegmentCounts, LedSequenceItem,
+};
 use crate::commands::led_output::{
     apply_color_correction_rgb_with_luts, gamma_luts_for, GammaLuts, LedOutputError,
     LedPacketSender,
