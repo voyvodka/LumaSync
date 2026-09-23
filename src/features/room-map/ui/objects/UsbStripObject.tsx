@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { memo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
 import { clamp } from "@/shared/lib/math";
@@ -18,7 +18,8 @@ interface UsbStripObjectProps {
    */
   connectionStatus?: "connected" | "disconnected" | "unknown";
   onSelect: (id: string) => void;
-  onChange: (updated: UsbStripPlacement) => void;
+  /** `continuous` marks the LED-count field, which writes per keystroke. */
+  onChange: (updated: UsbStripPlacement, continuous?: boolean) => void;
 }
 
 type HandleType = "start" | "end" | "line";
@@ -26,7 +27,7 @@ type HandleType = "start" | "end" | "line";
 /** Snap threshold in metres — if difference is within this, snap to axis */
 const AXIS_SNAP_M = 0.15;
 
-export function UsbStripObject({
+export const UsbStripObject = memo(function UsbStripObject({
   placement,
   pxPerMeter,
   selected,
@@ -191,7 +192,7 @@ export function UsbStripObject({
     const val = parseInt(e.target.value, 10);
     const clamped = isNaN(val) ? 1 : clamp(val, 1, 1000);
     setLocalLedCount(clamped);
-    onChange({ ...placement, ledCount: clamped });
+    onChange({ ...placement, ledCount: clamped }, true);
   };
 
   // Pixel positions
@@ -385,4 +386,4 @@ export function UsbStripObject({
       )}
     </>
   );
-}
+});

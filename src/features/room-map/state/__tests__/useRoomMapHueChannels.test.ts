@@ -41,12 +41,12 @@ function config(overrides: Partial<RoomMapConfig> = {}): RoomMapConfig {
 function args(overrides: Record<string, unknown> = {}) {
   return {
     config: config(),
-    adoptConfig: vi.fn().mockResolvedValue(undefined),
+    adopt: vi.fn(),
     hueAreaId: "area-1",
     hueBridgeConfigured: true,
     ready: true,
     ...overrides,
-  } as Parameters<typeof useRoomMapHueChannels>[0] & { adoptConfig: ReturnType<typeof vi.fn> };
+  } as Parameters<typeof useRoomMapHueChannels>[0] & { adopt: ReturnType<typeof vi.fn> };
 }
 
 describe("useRoomMapHueChannels", () => {
@@ -73,8 +73,8 @@ describe("useRoomMapHueChannels", () => {
     const a = args();
     renderHook(() => useRoomMapHueChannels(a));
 
-    await waitFor(() => expect(a.adoptConfig).toHaveBeenCalled());
-    const written = a.adoptConfig.mock.calls[0]![0].hueChannels;
+    await waitFor(() => expect(a.adopt).toHaveBeenCalled());
+    const written = a.adopt.mock.calls[0]![0].hueChannels;
     expect(written).toEqual([
       expect.objectContaining({ channelIndex: 0, channelId: 0, entertainmentAreaId: "area-1" }),
       expect.objectContaining({ channelIndex: 1, channelId: 2, entertainmentAreaId: "area-1" }),
@@ -87,8 +87,8 @@ describe("useRoomMapHueChannels", () => {
     const a = args({ config: config({ hueChannels: [other] }) });
     renderHook(() => useRoomMapHueChannels(a));
 
-    await waitFor(() => expect(a.adoptConfig).toHaveBeenCalled());
-    const written = a.adoptConfig.mock.calls[0]![0].hueChannels;
+    await waitFor(() => expect(a.adopt).toHaveBeenCalled());
+    const written = a.adopt.mock.calls[0]![0].hueChannels;
     expect(written).toContainEqual(other);
     expect(written).toHaveLength(4);
   });
@@ -106,7 +106,7 @@ describe("useRoomMapHueChannels", () => {
     renderHook(() => useRoomMapHueChannels(a));
 
     await waitFor(() => expect(getAreaChannelsMock).toHaveBeenCalled());
-    expect(a.adoptConfig).not.toHaveBeenCalled();
+    expect(a.adopt).not.toHaveBeenCalled();
   });
 
   it("does not seed into the default map while the persisted one is still loading", async () => {
@@ -114,7 +114,7 @@ describe("useRoomMapHueChannels", () => {
     renderHook(() => useRoomMapHueChannels(a));
 
     await waitFor(() => expect(getAreaChannelsMock).toHaveBeenCalled());
-    expect(a.adoptConfig).not.toHaveBeenCalled();
+    expect(a.adopt).not.toHaveBeenCalled();
   });
 
   it("keeps the last known list when the bridge stops answering", async () => {
