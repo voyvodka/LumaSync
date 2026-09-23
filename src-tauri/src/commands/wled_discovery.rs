@@ -367,10 +367,30 @@ fn discover_wled_devices_blocking(request: WledDiscoveryRequest) -> WledDiscover
 
 /// Build and register a `WledUdpSink` for the "usb" output channel,
 /// evicting any previously connected serial or WLED sink.
+// Off the main thread: replacing the registered sink stops the old one, and a
+// serial sink's stop can wait on its port.
 #[tauri::command]
-pub fn connect_wled_sink(
+pub async fn connect_wled_sink<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     request: WledConnectRequest,
-    sink_registry: tauri::State<'_, ActiveSinkRegistry>,
+) -> WledConnectResponse {
+    tokio::task::spawn_blocking(move || {
+        use tauri::Manager;
+        connect_wled_sink_blocking(request, &app.state::<ActiveSinkRegistry>())
+    })
+    .await
+    .unwrap_or_else(|join_error| WledConnectResponse {
+        status: CommandStatus::new(
+            "WLED_CONNECT_WORKER_FAILED",
+            "WLED connect worker terminated unexpectedly.",
+            Some(join_error.to_string()),
+        ),
+    })
+}
+
+fn connect_wled_sink_blocking(
+    request: WledConnectRequest,
+    sink_registry: &ActiveSinkRegistry,
 ) -> WledConnectResponse {
     let device = &request.device;
 

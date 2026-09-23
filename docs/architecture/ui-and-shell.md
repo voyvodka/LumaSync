@@ -102,19 +102,51 @@ that fights the tray-first shape.
 per-edge placement tuned to their room, and the defaults work without it. First run must reach
 working ambient lighting without ever mentioning it.
 
-**Every shutdown path converges on one watchdog-guaranteed cleanup.** tao 0.35 does not register
-`applicationShouldTerminate:`, so Cmd+Q cannot be intercepted directly — it arrives as `RunEvent::Exit`
-and runs the same `kick_off_shutdown_and_die` as the tray Quit item, `WindowEvent::CloseRequested`,
-and Ctrl+C. Cleanup runs on a worker thread (never the macOS main thread — running it inline from a
-tray callback was the v1.5.1 deadlock) and a separate watchdog thread forces `process::exit(0)` after
-4 seconds regardless of what cleanup is doing. That is what guarantees no `?E` zombie process: a
-stuck `SCStream`/DTLS `Drop` can hang, but the process dies anyway.
+**Every shutdown path converges on one watchdog-guaranteed cleanup.** `src-tauri/src/shutdown.rs`
+owns it: the tray Quit item, Ctrl+C in dev, Cmd+Q, a programmatic exit or restart, and the Windows
+update installer all go through the same `ShutdownCoordinator`. The first trigger wins and later ones
+are logged and ignored. Cleanup runs on a worker thread (never the macOS main thread — running it
+inline from a tray callback was the v1.5.1 deadlock) in three bounded steps (lighting 1.5 s, Hue by
+3.3 s, sink), and a separate watchdog thread forces the exit after 4 seconds regardless of what
+cleanup is doing. That is what guarantees no `?E` zombie process: a stuck `SCStream`/DTLS `Drop` can
+hang, but the process dies anyway. Exactly one thread ends the process; whoever loses that claim
+parks.
+
+- *Cmd+Q holds the main thread.* tao 0.35 does not register `applicationShouldTerminate:`, so Cmd+Q
+  cannot be intercepted — it arrives as `RunEvent::Exit` from inside `applicationWillTerminate`, and
+  AppKit calls `exit()` the moment that callback returns. The handler used to kick the cleanup off and
+  return, so the process died under the cleanup thread: the Hue step and everything after it never
+  ran, whatever the comment beside it claimed. It now waits on the cleanup (bounded by the watchdog)
+  and ends the process itself. It still never returns into Tauri's teardown, which runs on the main
+  thread after `applicationWillTerminate` and is where an `SCStream` drop was seen to deadlock; the
+  cleanup does not need the main thread (the capture stream's stop is detached onto its own thread).
+- *`RunEvent::ExitRequested` is prevented, and our cleanup ends the process.* Tauri ignores
+  `prevent_exit` for its restart code, so a restart (`relaunch()` from `GlobalErrorBoundary`, the
+  updater after an install) goes on to `RunEvent::Exit` and relaunches from the main thread there.
+  It has to: Tauri's plugins release the single-instance lock on that event, and a new process
+  spawned before it would hand its launch to the dying one and exit. The cleanup thread therefore
+  never relaunches on its own. A relaunch drops `--tray`, since it is always one the user asked for.
+- *The Windows installer runs the cleanup inline.* The updater plugin launches the installer and
+  calls `process::exit` itself, so `on_before_exit` runs the same three steps synchronously, without
+  a watchdog to race it. The installer relaunches the app.
+
+**An update restarts the app on macOS and Linux.** There the plugin replaces the bundle (or
+AppImage) in place and returns, and nothing used to restart it: the modal sat on "Installing". The
+install command now calls `request_restart`, which takes the restart path above.
+
+**A login launch stays in the tray.** Autostart passes `--tray`; `get_launch_context` reports it
+and `initWindowLifecycle` restores the geometry but skips its one `show()`, so the first tray click
+opens the window where it was left. The startup marker is still logged. A failed read shows the
+window: an app that never appears is worse than one that opens at login. A second launch carrying
+`--tray` (the autostart entry firing over an instance already running) does not raise the window
+either. On macOS a Dock-icon click (`RunEvent::Reopen`) shows and focuses the main window, like the
+tray's Open Settings.
 
 **A hard exit bypasses Tauri's plugin `destroy()`, which leaks the single-instance socket.** Every
 shutdown path here ends in `std::process::exit`, including the watchdog's forced one, so the
 single-instance plugin's `/tmp/com_lumasync_app_si.sock` is never cleaned up by the plugin itself.
 The next launch's `connect()` succeeds against the stale socket and silently `exit(0)`s against it —
-looking like the app failed to start. `kick_off_shutdown_and_die` removes the socket explicitly
+looking like the app failed to start. The shutdown's exit removes the socket explicitly
 before exiting so a normal quit starts the next launch clean; a killed dev process (`pkill -9`) skips
 that path entirely, which is why the debug recipe in `AGENTS.md` runs `rm -f` on the socket before
 every restart. Debug builds skip the single-instance plugin altogether for the same reason — the

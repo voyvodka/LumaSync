@@ -71,6 +71,11 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      # rust-toolchain.toml pins the exact version cargo runs under; install it
+      # (with its rustfmt and clippy) up front rather than on first cargo call.
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install
+
       - name: Select Xcode 26 (macOS 26 SDK for screencapturekit 8 / apple-metal)
         if: runner.os == 'macOS'
         run: |

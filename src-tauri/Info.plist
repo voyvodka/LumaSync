@@ -4,5 +4,7 @@
 <dict>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>LumaSync needs screen recording permission to capture screen colors for ambient lighting synchronization.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>LumaSync finds and controls your Philips Hue bridge and WLED devices on your local network.</string>
 </dict>
 </plist>

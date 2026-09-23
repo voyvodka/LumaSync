@@ -218,6 +218,36 @@ describe("useAutoUpdater", () => {
     expect(result.current.state.status).toBe("installing");
   });
 
+  it("shows installing once the install succeeds, even without the finished event", async () => {
+    const getHandler = captureProgressHandler();
+    let resolveInstall: (() => void) | undefined;
+    vi.mocked(downloadAndInstallUpdate).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveInstall = () => resolve({ status: status(UPDATER_STATUS.INSTALL_STARTED) });
+        }),
+    );
+
+    const { result } = renderHook(() => useAutoUpdater());
+
+    let pending: Promise<void>;
+    await act(async () => {
+      pending = result.current.downloadAndInstall(UPDATE);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      getHandler()?.({ payload: { downloadedBytes: 900, totalBytes: 1000, finished: false } });
+    });
+    expect(result.current.state.status).toBe("downloading");
+
+    await act(async () => {
+      resolveInstall?.();
+      await pending;
+    });
+
+    expect(result.current.state.status).toBe("installing");
+  });
+
   it("channel reflects what Rust says it used, not just the store", async () => {
     vi.mocked(shellStore.load).mockResolvedValue(
       { updateChannel: "beta" } as Awaited<ReturnType<typeof shellStore.load>>,

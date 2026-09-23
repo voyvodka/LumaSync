@@ -1,4 +1,6 @@
 [toolchain]
-channel = "stable"
+# Exact, not "stable": a new stable release brings new clippy lints, and CI runs
+# clippy at deny level. Bump this deliberately, with the fixes it needs.
+channel = "1.98.1"
 components = ["rustfmt", "clippy"]
 profile = "minimal"

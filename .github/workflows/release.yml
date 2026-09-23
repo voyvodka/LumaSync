@@ -168,6 +168,11 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      # See ci.yml. Also what `rustup target add` below adds the macOS targets
+      # to, so it has to exist before that step.
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install
+
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:

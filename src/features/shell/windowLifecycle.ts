@@ -22,6 +22,7 @@ import {
 import { migrateShellState } from "../persistence/migrations";
 import { clamp } from "@/shared/lib/math";
 import { waitForFrames } from "./frameWait";
+import { readStartHidden } from "./launchApi";
 
 // CI's definition of "the build launches": `scripts/verify/launch-smoke.mjs`
 // greps the app's stdout for this literal, which it reads back out of this file
@@ -829,20 +830,26 @@ export async function initWindowLifecycle(opts?: {
       if ((uiMode ?? "compact") !== "compact") {
         await resizeToMode(uiMode ?? "compact", { animate: false });
       }
-      await win.show();
-      // `show()` alone can reveal the window *behind* the active app on a cold
-      // launch (notably macOS), leaving the user to click the dock icon.
-      try {
-        await win.unminimize();
-      } catch {
-        // Some platforms throw if the window isn't minimized — ignore.
-      }
-      try {
-        await win.setFocus();
-      } catch {
-        // Focus is cosmetic and must never reject this promise: bootstrap awaits
-        // it before calibration, targets and Hue, so a throw here would surface
-        // to the user as "calibration required / Hue offline".
+      // Geometry is restored either way, so the first tray click opens the
+      // window where it was left.
+      if (await readStartHidden()) {
+        console.info("[LumaSync] [startup] launched with --tray; staying in the tray");
+      } else {
+        await win.show();
+        // `show()` alone can reveal the window *behind* the active app on a cold
+        // launch (notably macOS), leaving the user to click the dock icon.
+        try {
+          await win.unminimize();
+        } catch {
+          // Some platforms throw if the window isn't minimized — ignore.
+        }
+        try {
+          await win.setFocus();
+        } catch {
+          // Focus is cosmetic and must never reject this promise: bootstrap awaits
+          // it before calibration, targets and Hue, so a throw here would surface
+          // to the user as "calibration required / Hue offline".
+        }
       }
       await initWindowGeometryPersistence();
       await initCloseToTrayHint(opts?.onFirstCloseToTray);

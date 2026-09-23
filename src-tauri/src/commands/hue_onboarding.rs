@@ -484,10 +484,33 @@ impl PairingTransportError {
 /// Move an existing plaintext credential pair into the OS keychain. Additive
 /// boot cleanup for installs that paired before the keychain landed; the caller
 /// may clear its plaintext copy only when `backend` comes back `"keychain"`.
+// Off the main thread: a keychain write can wait on the user answering a
+// system prompt, which froze the whole UI while it was a sync command.
 #[tauri::command]
-pub fn migrate_hue_credentials(
+pub async fn migrate_hue_credentials(
     username: String,
     client_key: String,
+) -> HueCredentialMigrationResponse {
+    tauri::async_runtime::spawn_blocking(move || {
+        migrate_hue_credentials_blocking(&username, &client_key)
+    })
+    .await
+    .unwrap_or_else(|join_error| {
+        // No backend: the caller keeps its plaintext copy unless told otherwise.
+        HueCredentialMigrationResponse {
+            status: command_status(
+                super::hue::credential_store::MigrationOutcome::Failed.status_code(),
+                "Hue credential keychain migration did not complete.",
+                Some(join_error.to_string()),
+            ),
+            backend: None,
+        }
+    })
+}
+
+fn migrate_hue_credentials_blocking(
+    username: &str,
+    client_key: &str,
 ) -> HueCredentialMigrationResponse {
     let store = super::hue::credential_store::default_store();
     // No bridge context here: this is the boot cleanup for installs that
@@ -499,8 +522,8 @@ pub fn migrate_hue_credentials(
     let outcome = super::hue::credential_store::migrate_hue_credentials_to_keychain(
         store.as_ref(),
         "",
-        &username,
-        &client_key,
+        username,
+        client_key,
     );
     let backend = outcome.backend(store.as_ref());
     info!(

@@ -1,6 +1,6 @@
 // LumaSync — Phase 1: Tray-first runtime shell. Plugin registration order
 // matters (single-instance first). Shutdown triggers all converge on
-// `kick_off_shutdown_and_die` — see docs/architecture/ui-and-shell.md.
+// `shutdown::begin` — see docs/architecture/ui-and-shell.md.
 
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -18,6 +18,7 @@ mod commands {
     pub mod hue_http;
     pub mod hue_intensity;
     pub mod hue_onboarding;
+    pub mod launch;
     pub mod led_calibration;
     pub mod led_output;
     pub mod led_preview;
@@ -39,6 +40,9 @@ mod commands {
 
 #[cfg(target_os = "macos")]
 mod macos_window;
+
+mod panic_log;
+mod shutdown;
 
 // Evidence-gathering hooks for the CI platform bench; never in a release bin.
 #[cfg(debug_assertions)]
@@ -67,13 +71,14 @@ use commands::device_connection::{
 };
 use commands::hue::commands::{
     get_hue_area_channels, get_hue_stream_status, restart_hue_stream, set_hue_solid_color,
-    simulate_hue_fault, start_hue_stream, stop_hue_stream, stop_hue_stream_before_exit,
+    simulate_hue_fault, start_hue_stream, stop_hue_stream,
 };
 use commands::hue::state_store::HueRuntimeStateStore;
 use commands::hue_onboarding::{
     check_hue_stream_readiness, discover_hue_bridges, list_hue_entertainment_areas,
     migrate_hue_credentials, pair_hue_bridge, validate_hue_credentials, verify_hue_bridge_ip,
 };
+use commands::launch::{get_launch_context, AUTOSTART_TRAY_ARG};
 use commands::led_preview::{
     close_led_twin_overlay, hide_led_control_popup, open_led_control_popup, open_led_twin_overlay,
     show_led_control_popup, LedTwinState,
@@ -104,25 +109,6 @@ use commands::wled_discovery::{
 pub const MAIN_WINDOW_LABEL: &str = "main";
 
 const TRAY_ICON_ID: &str = "main-tray";
-
-/// Hard-exit deadline for shutdown. The cleanup path joins worker threads,
-/// drops SCStream, deactivates DTLS — each of which can theoretically hang
-/// (objc cleanup, network timeout, mutex contention). The watchdog ensures
-/// the process always dies within this window, even when something hangs.
-const SHUTDOWN_WATCHDOG: std::time::Duration = std::time::Duration::from_secs(4);
-
-/// Step 2 (Hue) must be finished this long after cleanup starts. Step 1 is
-/// bounded to 1.5 s, so the Hue step always gets at least ~1.8 s, and the
-/// remaining ~0.6 s under the watchdog is left for step 3 and the exit.
-const SHUTDOWN_HUE_DEADLINE: std::time::Duration = std::time::Duration::from_millis(3_300);
-
-/// How long past its own deadline step 2 is waited on before being abandoned.
-const SHUTDOWN_HUE_GRACE: std::time::Duration = std::time::Duration::from_millis(100);
-
-/// Set to `true` once a shutdown sequence has been kicked off so we don't
-/// spawn redundant cleanup threads on RunEvent::ExitRequested + RunEvent::Exit
-/// arriving back-to-back.
-static SHUTDOWN_FIRED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 struct TrayState<R: Runtime> {
     open_settings: MenuItem<R>,
@@ -196,145 +182,6 @@ pub(crate) fn close_all_overlays<R: Runtime>(app: &AppHandle<R>) {
     }
 
     show_and_focus_settings(app);
-}
-
-// ---------------------------------------------------------------------------
-// Helper: cleanup_blocking — actually stops all background workers.
-//
-// Runs on a dedicated std::thread (NEVER the macOS main thread). Joins
-// the ambilight worker (drops SCStream from a non-main thread, see
-// LightingWorkerRuntime::stop), waits up to 3s for the Hue DTLS sender
-// to ack shutdown, and releases the active serial sink.
-// ---------------------------------------------------------------------------
-fn cleanup_blocking<R: Runtime>(app: AppHandle<R>) {
-    log::info!("[shutdown] cleanup thread started");
-    let cleanup_started = std::time::Instant::now();
-
-    // 1. Ambilight / serial capture worker — bounded to 1.5s on shutdown.
-    //
-    // stop_lighting locks runtime_state.runtime, then apply_mode_change ->
-    // stop_previous -> worker.stop() -> handle.join(). Worst case is ~1.6s when
-    // the lock is held behind an in-flight set_lighting_mode warmup and the
-    // worker join waits on a wedged serial write (OUTPUT_TIMEOUT_MS=500). With
-    // no inner deadline this could starve step 2 (Hue deactivate) under the 4s
-    // watchdog, leaving the bridge in entertainment mode ("phantom active
-    // streamer"). So detach the call and abandon after 1.5s if it hasn't
-    // returned. We BLOCK on recv_timeout here (not fire-and-forget) so step 2
-    // only begins once step 1 returns or is abandoned, preserving the
-    // sequential ordering. process::exit(0) below reaps the orphan thread even
-    // if it is still wedged mid-join holding runtime.lock() -- we do not join it.
-    let t1 = std::time::Instant::now();
-    let app_for_lighting = app.clone();
-    let (tx1, rx1) = std::sync::mpsc::channel::<Result<(), String>>();
-    std::thread::Builder::new()
-        .name("lumasync-shutdown-lighting".into())
-        .spawn(move || {
-            let result = stop_lighting(
-                app_for_lighting.clone(),
-                app_for_lighting.state::<LightingRuntimeState>(),
-            )
-            .map(|_| ());
-            let _ = tx1.send(result);
-        })
-        .ok();
-    match rx1.recv_timeout(std::time::Duration::from_millis(1500)) {
-        Ok(Ok(())) => {
-            log::info!("[shutdown] step 1 (stop_lighting) took {:?}", t1.elapsed())
-        }
-        Ok(Err(e)) => log::warn!("[shutdown] stop_lighting reported: {e}"),
-        Err(_) => log::warn!(
-            "[shutdown] step 1 (stop_lighting) abandoned after {:?}",
-            t1.elapsed()
-        ),
-    }
-
-    // 2. Hue entertainment stream — deactivate, then put the area's lights back
-    //    the way they were before the stream started (off stays off).
-    //
-    // stop_hue_stream's worst case is HTTP deactivate (5s reqwest timeout)
-    // + sender shutdown wait (3s Condvar) + the light restore, which blows
-    // through the 4s watchdog when the bridge is slow or unreachable. So the
-    // quit path passes a deadline that every one of those waits honours, and
-    // this thread still abandons the call shortly after it in case something
-    // does not. Bridge state restore is best-effort (the bridge times out the
-    // entertainment session server-side anyway); process::exit(0) below tears
-    // down an orphaned worker regardless.
-    let t2 = std::time::Instant::now();
-    let hue_deadline = cleanup_started + SHUTDOWN_HUE_DEADLINE;
-    let app_for_hue = app.clone();
-    let (tx, rx) = std::sync::mpsc::channel::<String>();
-    std::thread::Builder::new()
-        .name("lumasync-shutdown-hue".into())
-        .spawn(move || {
-            let result = stop_hue_stream_before_exit(
-                &app_for_hue.state::<HueRuntimeStateStore>(),
-                hue_deadline,
-            );
-            let _ = tx.send(result.status.code);
-        })
-        .ok();
-    let hue_wait =
-        hue_deadline.saturating_duration_since(std::time::Instant::now()) + SHUTDOWN_HUE_GRACE;
-    match rx.recv_timeout(hue_wait) {
-        Ok(code) => {
-            log::info!(
-                "[shutdown] step 2 (stop_hue_stream) took {:?} ({code})",
-                t2.elapsed()
-            )
-        }
-        Err(_) => log::warn!(
-            "[shutdown] step 2 (stop_hue_stream) abandoned after {:?}",
-            t2.elapsed()
-        ),
-    }
-
-    // 3. Active LED sink (serial port session).
-    let t3 = std::time::Instant::now();
-    app.state::<ActiveSinkRegistry>().clear();
-    log::info!("[shutdown] step 3 (sink clear) took {:?}", t3.elapsed());
-
-    log::info!("[shutdown] cleanup complete, exiting");
-    cleanup_orphan_socket();
-    std::process::exit(0);
-}
-
-// Entry point for ALL shutdown triggers — watchdog-guaranteed, idempotent
-// via SHUTDOWN_FIRED. See docs/architecture/ui-and-shell.md.
-fn kick_off_shutdown_and_die<R: Runtime>(app: &AppHandle<R>) {
-    if SHUTDOWN_FIRED.swap(true, std::sync::atomic::Ordering::SeqCst) {
-        // Already in progress — don't re-arm.
-        return;
-    }
-    log::info!("[shutdown] kicked off (watchdog={SHUTDOWN_WATCHDOG:?})");
-
-    // Worker thread: do the graceful cleanup, then exit(0).
-    let app_for_cleanup = app.clone();
-    std::thread::Builder::new()
-        .name("lumasync-shutdown".into())
-        .spawn(move || cleanup_blocking(app_for_cleanup))
-        .expect("failed to spawn shutdown cleanup thread");
-
-    // Watchdog thread: guaranteed exit after SHUTDOWN_WATCHDOG.
-    std::thread::Builder::new()
-        .name("lumasync-shutdown-watchdog".into())
-        .spawn(|| {
-            std::thread::sleep(SHUTDOWN_WATCHDOG);
-            log::warn!("[shutdown] watchdog fired — forcing exit (cleanup hung)");
-            cleanup_orphan_socket();
-            std::process::exit(0);
-        })
-        .expect("failed to spawn shutdown watchdog thread");
-}
-
-// Hard-exit bypasses plugin destroy(), leaking the single-instance socket.
-// See docs/architecture/ui-and-shell.md.
-fn cleanup_orphan_socket() {
-    let path = "/tmp/com_lumasync_app_si.sock";
-    match std::fs::remove_file(path) {
-        Ok(()) => log::info!("[shutdown] removed orphan socket {path}"),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(e) => log::warn!("[shutdown] could not remove {path}: {e}"),
-    }
 }
 
 fn hide_to_tray<R: Runtime>(window: &tauri::Window<R>) {
@@ -471,9 +318,12 @@ pub fn run() {
     // iteration. See docs/architecture/ui-and-shell.md.
     #[cfg(not(debug_assertions))]
     {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // Second launch: focus existing main window
-            show_and_focus_settings(app);
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // Second launch: focus existing main window — unless it is the
+            // autostart entry firing at login over an instance already running.
+            if !commands::launch::launched_to_tray(&args) {
+                show_and_focus_settings(app);
+            }
         }));
     }
 
@@ -487,7 +337,7 @@ pub fn run() {
     // 2. Autostart
     builder = builder.plugin(tauri_plugin_autostart::init(
         tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-        Some(vec!["--tray"]), // args passed on autostart launch
+        Some(vec![AUTOSTART_TRAY_ARG]),
     ));
 
     // 3. Store (settings persistence)
@@ -593,6 +443,9 @@ pub fn run() {
 
     let app = builder
         .setup(|app| {
+            // First thing after the log plugin has installed the logger.
+            panic_log::install();
+
             // Stable and beta are one install writing the same file in turn, so
             // no line says which build wrote it. Per-launch: a mid-session
             // rotation can still leave a file with no banner.
@@ -764,7 +617,7 @@ pub fn run() {
                         );
                     }
                     "tray-close-overlays" => close_all_overlays(app),
-                    "quit" => kick_off_shutdown_and_die(app),
+                    "quit" => shutdown::begin(app, shutdown::ShutdownTrigger::TrayQuit, false),
                     _ => {}
                 })
                 .build(&app_handle)?;
@@ -782,7 +635,11 @@ pub fn run() {
                 tauri::async_runtime::spawn(async move {
                     if let Ok(()) = tokio::signal::ctrl_c().await {
                         log::info!("[shutdown] SIGINT received");
-                        kick_off_shutdown_and_die(&app_for_signal);
+                        shutdown::begin(
+                            &app_for_signal,
+                            shutdown::ShutdownTrigger::Sigint,
+                            false,
+                        );
                     }
                 });
             }
@@ -892,6 +749,7 @@ pub fn run() {
             hide_led_control_popup,
             check_for_update,
             download_and_install_update,
+            get_launch_context,
         ])
         .build(app_context())
         .expect("error while building tauri application");
@@ -902,29 +760,38 @@ pub fn run() {
     // hook, Cmd+Q tears the process down WITHOUT ever running our cleanup,
     // which is what produced the `?E` zombies in earlier sessions.
     //
-    // RunEvent::ExitRequested fires on app.exit() / app.restart() — currently
-    // unused but covered for completeness in case future code paths add a
-    // programmatic exit.
+    // RunEvent::ExitRequested fires on app.exit() / app.request_restart() —
+    // the process plugin's relaunch (GlobalErrorBoundary) and the updater's
+    // restart after an install.
     app.run(|app_handle, event| match event {
-        RunEvent::ExitRequested { api, .. } => {
-            // We do our own orderly shutdown; let Tauri proceed with its
-            // exit flow but make sure cleanup is kicked off so the process
-            // dies before any plugin cleanup hangs.
-            log::info!("[shutdown] RunEvent::ExitRequested received");
-            kick_off_shutdown_and_die(app_handle);
-            // Don't prevent — let Tauri also try its graceful path; whichever
-            // races to exit(0) first wins, watchdog backstop is armed.
-            let _ = api;
+        RunEvent::ExitRequested { code, api, .. } => {
+            log::info!("[shutdown] RunEvent::ExitRequested received (code={code:?})");
+            let restart = shutdown::is_restart_code(code);
+            // Our own cleanup ends the process. Tauri ignores this for a
+            // restart, which then reaches RunEvent::Exit below and relaunches
+            // from there once the single-instance plugin has let go.
+            api.prevent_exit();
+            let trigger = if restart {
+                shutdown::ShutdownTrigger::RestartRequested
+            } else {
+                shutdown::ShutdownTrigger::ExitRequested
+            };
+            shutdown::begin(app_handle, trigger, restart);
         }
         RunEvent::Exit => {
             log::info!("[shutdown] RunEvent::Exit received");
-            kick_off_shutdown_and_die(app_handle);
+            shutdown::begin(app_handle, shutdown::ShutdownTrigger::AppExit, false);
             // We do NOT return from this callback into Tauri's normal teardown
             // because that path runs in the macOS main thread context post-
             // applicationWillTerminate, where SCStream Drop has been observed
-            // to deadlock. The watchdog inside kick_off guarantees _exit(0)
-            // within SHUTDOWN_WATCHDOG.
+            // to deadlock. Returning also let AppKit exit() the process under
+            // the cleanup thread, so this thread waits for it (bounded by the
+            // watchdog) and ends the process itself.
+            shutdown::hold_main_thread_until_exit(app_handle);
         }
+        // Dock icon click with the window hidden to the tray.
+        #[cfg(target_os = "macos")]
+        RunEvent::Reopen { .. } => show_and_focus_settings(app_handle),
         _ => {}
     });
 }

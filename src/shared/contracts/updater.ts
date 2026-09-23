@@ -16,7 +16,9 @@ export type UpdaterCommand = (typeof UPDATER_COMMANDS)[keyof typeof UPDATER_COMM
 /**
  * Tauri event carrying download progress. Emitted only between
  * `download_and_install_update` being called and its response resolving; the
- * command's own status reports the outcome.
+ * command's own status reports the outcome. Sent to the main window only, at
+ * most every ~100 ms plus the chunk that completes a known length; the
+ * `finished` emission is always sent.
  */
 export const UPDATER_PROGRESS_EVENT = "updater://download-progress";
 
@@ -36,8 +38,9 @@ export const UPDATER_STATUS = {
   /** Install was asked for without a preceding successful check. */
   NO_PENDING_UPDATE: "UPDATER_NO_PENDING_UPDATE",
   /**
-   * The download completed and the installer was handed off. On most platforms
-   * the app is replaced and relaunched, so a frontend may never observe this.
+   * The update is installed and the app is restarting: on Windows its installer
+   * relaunches it, on macOS and Linux the backend restarts it through the
+   * orderly shutdown. A frontend that observes this stays on "installing".
    */
   INSTALL_STARTED: "UPDATER_INSTALL_STARTED",
   /** Download or signature verification failed; nothing was installed. */
