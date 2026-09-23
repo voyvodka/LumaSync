@@ -1972,6 +1972,11 @@ fn apply_mode_change_inner(
     let requested_targets = normalized_next.targets.clone().unwrap_or_default();
     let needs_usb = requested_targets.is_empty() || requested_targets.iter().any(|t| t == "usb");
     let needs_hue = requested_targets.iter().any(|t| t == "hue");
+    // The caller snapshots whatever stream is live. A worker handed it while
+    // not targeting Hue keeps a sender handle, and the Hue sender exits only
+    // once every handle is gone — so removing Hue would leave it streaming
+    // through the stop and its light restore. See docs/architecture/hue.md.
+    let hue_output = hue_output.filter(|_| needs_hue);
     // v1.6 LED Preview — a synthetic test request bypasses the device/Hue
     // gates so it can run preview-only (twin + edge stream) with no sink.
     let is_test = owner.preview.pending_test_pattern.is_some();
@@ -5209,6 +5214,112 @@ mod lighting_mode_tests {
             }))
         });
         owner
+    }
+
+    /// A new colour every capture, so every Hue frame is a light PUT the
+    /// fallback sender has to make.
+    struct CyclingFrameSource {
+        tick: u8,
+    }
+
+    impl AmbilightFrameSource for CyclingFrameSource {
+        fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
+            self.tick = self.tick.wrapping_add(47);
+            Ok(Arc::new(CapturedFrame {
+                width: 2,
+                height: 2,
+                pixels_rgb: vec![[self.tick, 255 - self.tick, 90]; 4],
+            }))
+        }
+    }
+
+    /// Removing Hue from a running `[usb, hue]` mode: the frontend re-applies
+    /// the mode on USB, then `stop_hue_stream` drops the runtime's sender
+    /// handle and waits for the sender thread to exit before it restores the
+    /// lights. That exit needs the worker's handle gone too, or the sender
+    /// keeps painting the lights after the restore.
+    #[test]
+    fn a_mode_re_applied_without_hue_lets_the_hue_sender_exit() {
+        use crate::commands::hue::sender::{
+            hue_http_client_arc, spawn_hue_http_sender, wait_for_shutdown,
+        };
+        use crate::commands::hue::test_bridge::{Reply, TestBridge};
+        use std::time::Duration;
+
+        let _guard = acquire_worker_test_guard();
+        let bridge = TestBridge::start(|_, _, _| Reply::ok());
+        let light_puts = || bridge.puts_to("/clip/v2/resource/light/").len();
+        let channels = vec![channel(0, 0.0, 1.0, None)];
+        let (color_sender, sender_exited) = spawn_hue_http_sender(
+            hue_http_client_arc().expect("client"),
+            bridge.authority.clone(),
+            "app-key".to_string(),
+            channels.clone(),
+        );
+        // Stands in for the Hue runtime's `active_stream`, which every
+        // `set_lighting_mode` snapshots while the stream is up.
+        let runtime_handle = HueActiveOutputContext {
+            channels,
+            color_sender,
+        };
+
+        let mut owner = owner_with_fake_sender();
+        owner.frame_source_factory = Arc::new(|_req: super::AmbilightCaptureRequest| {
+            Ok(Box::new(CyclingFrameSource { tick: 0 }))
+        });
+        let mode = |targets: &[&str]| LightingModeConfig {
+            kind: LightingModeKind::Ambilight,
+            ambilight: Some(AmbilightPayload {
+                brightness: 1.0,
+                smoothing_alpha: Some(1.0),
+                ..Default::default()
+            }),
+            targets: Some(targets.iter().map(|t| t.to_string()).collect()),
+            ..LightingModeConfig::default()
+        };
+        let mut apply = |targets: &[&str]| {
+            apply_mode_change(
+                &mut owner,
+                mode(targets),
+                true,
+                Some("COM-HUE"),
+                None,
+                Some(runtime_handle.clone()),
+                Some(shared_telemetry()),
+                None,
+                None,
+            )
+            .status
+            .code
+        };
+
+        assert_eq!(apply(&["usb", "hue"]), "AMBILIGHT_MODE_STARTED");
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while light_puts() < 2 {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the worker never drove the Hue sender"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+
+        assert_eq!(apply(&["usb"]), "AMBILIGHT_MODE_STARTED");
+        // What `stop_hue_stream` does to `active_stream`.
+        drop(runtime_handle);
+
+        assert!(
+            wait_for_shutdown(&sender_exited, Duration::from_secs(2)),
+            "the worker re-applied on USB still holds the Hue sender open"
+        );
+        // The restore would start here; nothing may reach a light after it.
+        let at_restore = light_puts();
+        std::thread::sleep(Duration::from_millis(400));
+        assert_eq!(light_puts(), at_restore);
+        assert!(owner.worker.is_some(), "USB keeps running");
+
+        let mut cleanup_trace = None;
+        super::stop_previous(&mut owner, &mut cleanup_trace);
+        wait_for_workers_drained();
     }
 
     #[test]

@@ -222,59 +222,87 @@ export function useLightingModeOrchestrator({
     // Per-target outcome, not `Promise.all`: only a target that actually stopped
     // leaves active membership. Dropping one from the UI while its backend stream
     // lived on is what produced HUE_STREAM_NOT_READY_ACTIVE_STREAMER next start.
-    // `tornDown`: a USB-removal re-apply that stopped the old mode, then failed to start.
+    // `tornDown`: a removal re-apply that stopped the old mode, then failed to start.
     type StopOutcome = { target: HueRuntimeTarget; ok: boolean; tornDown?: ModeCommandResult };
+    type ReapplyOutcome = "dropped" | "refused" | { tornDown: ModeCommandResult };
+    // Re-apply the running mode on what stays live, without `removed`.
+    const reapplyWithout = async (
+      removed: HueRuntimeTarget,
+      stayLive: HueRuntimeTarget[],
+    ): Promise<ReapplyOutcome> => {
+      const label = removed === "usb" ? "USB" : "Hue";
+      let reapply: ModeCommandResult | null = null;
+      try {
+        reapply = await dispatchSetLightingMode({
+          kind: lightingMode.kind,
+          solid: lightingMode.solid,
+          ambilight: lightingMode.ambilight,
+          targets: stayLive,
+        }, { force: true });
+      } catch (err) {
+        console.error(`[LumaSync] ${label} delta-remove re-apply failed; stopping the lighting runtime:`, err);
+      }
+      if (reapply === null) return "refused";
+      // A gate refusal echoes the old mode, same kind, so `refused` alone
+      // reads it as accepted; the running targets must have lost the removed one.
+      // Absent or empty targets mean USB-required to the backend (legacy D-10).
+      const running = reapply.mode.targets ?? [];
+      const dropped = running.length > 0 && !running.includes(removed);
+      if (!readModeApplyOutcome(reapply, lightingMode.kind).refused && dropped) return "dropped";
+      if (reapply.mode.kind === LIGHTING_MODE_KIND.OFF) return { tornDown: reapply };
+      // A gate refusal leaves the old mode, the removed target included, running.
+      console.error(
+        `[LumaSync] ${label} delta-remove re-apply was refused (${reapply.status.code}); stopping the lighting runtime.`,
+      );
+      return "refused";
+    };
+    // Removing both targets reaches `stop_lighting` from both branches; one call serves them.
+    let lightingStop: Promise<ModeCommandResult> | null = null;
+    const stopLightingOnce = () => (lightingStop ??= stopLighting());
     const stopResults = await Promise.allSettled(
       removedTargets.map(async (target): Promise<StopOutcome> => {
         if (!currentActive.includes(target)) return { target, ok: true };
         if (target !== "usb" && target !== "hue") return { target, ok: true };
+        const stayLive = currentActive.filter((t) => t !== target && normalizedTargets.includes(t));
+        let tornDown: ModeCommandResult | undefined;
         try {
           if (target === "usb") {
             // `stop_lighting` stops the whole worker, not just the strip: a Hue
             // stream left running would hold the bridge's one streamer slot and
             // keep-alive its last frame. Re-apply the mode on what stays live instead.
-            const stayLive = currentActive.filter((t) => t !== "usb" && normalizedTargets.includes(t));
             if (stayLive.length > 0) {
-              let reapply: ModeCommandResult | null = null;
-              try {
-                reapply = await dispatchSetLightingMode({
-                  kind: lightingMode.kind,
-                  solid: lightingMode.solid,
-                  ambilight: lightingMode.ambilight,
-                  targets: stayLive,
-                }, { force: true });
-              } catch (err) {
-                console.error("[LumaSync] USB delta-remove re-apply failed; stopping the lighting runtime:", err);
-              }
-              if (reapply !== null) {
-                // A gate refusal echoes the old mode, same kind, so `refused` alone
-                // reads it as accepted; the running targets must have lost USB.
-                // Absent or empty targets mean USB-required to the backend (legacy D-10).
-                const running = reapply.mode.targets ?? [];
-                const usbDropped = running.length > 0 && !running.includes("usb");
-                if (!readModeApplyOutcome(reapply, lightingMode.kind).refused && usbDropped) {
-                  return { target, ok: true };
-                }
-                if (reapply.mode.kind === LIGHTING_MODE_KIND.OFF) return { target, ok: true, tornDown: reapply };
-                // A gate refusal leaves the old mode, USB included, running.
-                console.error(
-                  `[LumaSync] USB delta-remove re-apply was refused (${reapply.status.code}); stopping the lighting runtime.`,
-                );
-              }
+              const outcome = await reapplyWithout("usb", stayLive);
+              if (outcome === "dropped") return { target, ok: true };
+              if (outcome !== "refused") return { target, ok: true, tornDown: outcome.tornDown };
             }
-            await stopLighting();
-          } else {
-            // System-attributed, not MODE_CONTROL default — this stop is a side
-            // effect of the target-set change, not a direct user mode toggle.
-            await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
+            await stopLightingOnce();
+            return { target, ok: true };
           }
-          return { target, ok: true };
+          // The worker must let go of Hue BEFORE the stream stops: it holds a
+          // handle on the Hue sender, which exits only once every handle is gone.
+          // Stopped under a live worker, the sender outlives the stop, the #425
+          // restore runs under it, and the next frame paints the lights again.
+          // See docs/architecture/hue.md.
+          const outcome = stayLive.length > 0 ? await reapplyWithout("hue", stayLive) : "refused";
+          if (typeof outcome === "object") tornDown = outcome.tornDown;
+          if (outcome === "refused") {
+            try {
+              await stopLightingOnce();
+            } catch (err) {
+              // The stream is still released below; that stop waits for the sender.
+              console.error("[LumaSync] stop_lighting before the Hue stop failed:", err);
+            }
+          }
+          // System-attributed, not MODE_CONTROL default — this stop is a side
+          // effect of the target-set change, not a direct user mode toggle.
+          await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
+          return { target, ok: true, tornDown };
         } catch (err) {
           console.error(
             `[LumaSync] stop failed for target=${target}, retaining in activeOutputTargets:`,
             err,
           );
-          return { target, ok: false };
+          return { target, ok: false, tornDown };
         }
       })
     );
@@ -293,9 +321,11 @@ export function useLightingModeOrchestrator({
       // The re-apply stopped the old worker and its start failed, so nothing
       // outputs. Settled as the USB delta-start teardown below: give back the
       // Hue stream nothing feeds, and show Off. UI only; the persisted mode stays.
-      console.error(`[LumaSync] USB delta-remove re-apply stopped the running mode (${tornDown.status.code}).`);
-      let hueStillHeld = false;
-      if (currentActive.includes("hue")) {
+      console.error(`[LumaSync] Delta-remove re-apply stopped the running mode (${tornDown.status.code}).`);
+      // A Hue removal already stopped the stream in its own branch.
+      let hueStillHeld = failedToStop.includes("hue");
+      if (hueStillHeld) setStopFailedNotice(["hue"]);
+      if (currentActive.includes("hue") && !removedTargets.includes("hue")) {
         try {
           const stopResult = await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
           hueStillHeld = !isHueStopCodeOk(stopResult.status.code);

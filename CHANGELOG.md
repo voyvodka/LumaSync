@@ -115,6 +115,12 @@ https://keepachangelog.com/en/1.1.0/
   froze on their last color while the app still showed the mode running, until the next setting
   change started it again. The mode now carries on with Hue alone. An unplugged strip is also no
   longer removed from your saved outputs, so it is used again at the next launch once it is back.
+- Turning Hue off in the Lights outputs while the LED strip is on now lets the Hue lights go
+  cleanly. Ambilight used to keep working out colors for Hue until the next setting change, the
+  stop took about three seconds and was reported as only partly done, and when the app was setting
+  the lights one by one instead of through an Entertainment stream, they were painted again after
+  being put back the way they were before. The strip now carries on alone first, then Hue stops and the lights are
+  put back.
 - The first-run guide banner could flash up for a moment at launch and disappear again for people
   who were already set up but had updated from a version without it. It now appears only once the
   app knows which step you are on, so it no longer flashes; a new install still sees the first step
