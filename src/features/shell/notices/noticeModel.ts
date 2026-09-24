@@ -59,6 +59,7 @@ export const SHELL_NOTICE_IDS = {
   LED_SETUP_NEXT: "led-setup-next",
   ONBOARDING: "onboarding",
   UPDATE_CHECK_FAILED: "update-check-failed",
+  SETTINGS_NOT_SAVED: "settings-not-saved",
 } as const;
 
 export type ShellNoticeId = (typeof SHELL_NOTICE_IDS)[keyof typeof SHELL_NOTICE_IDS];
@@ -120,7 +121,7 @@ export interface ShellNotice {
    * expanded compact slot — never the compact line, which has room for one.
    */
   secondaryAction?: NoticeAction;
-  /** Shows a ×. Events always have one; the only dismissible condition is onboarding. */
+  /** Shows a ×. Events always have one; of the conditions, only onboarding and the failed settings save. */
   dismissible: boolean;
   /** Runs after the queue hides the notice — onboarding persists its completion here. */
   onDismiss?: () => void;

@@ -57,6 +57,8 @@ export type ShellCommand = (typeof SHELL_COMMANDS)[keyof typeof SHELL_COMMANDS];
  * the whole call. */
 export interface TrayLabels {
   openSettings: string;
+  /** The disabled status line under it — the running mode and its outputs. */
+  status: string;
   lightsOff: string;
   resumeLastMode: string;
   solidColor: string;

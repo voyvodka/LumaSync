@@ -1,5 +1,5 @@
 import type { LocalSink } from "@/features/device/localSink";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation, Trans } from "react-i18next";
 
 import {
@@ -7,6 +7,7 @@ import {
   type ModeGuardReason,
 } from "@/features/mode/state/modeGuard";
 import {
+  DEFAULT_SOLID_COLOR,
   LIGHTING_MODE_KIND,
   OUTPUT_TARGETS,
   normalizeLightingModeConfig,
@@ -20,11 +21,9 @@ import {
 } from "@/features/mode/model/scenePresets";
 import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hue";
 import { rgbToHex } from "@/shared/lib/color";
-import { createHueZone } from "@/features/room-map/roomMapApi";
 import { roomAwareStatus } from "@/features/room-map/model/roomAware";
 import { RoomAwareIndicator } from "@/features/room-map/ui/RoomAwareIndicator";
-import type { HueZone, RoomMapConfig, TvAnchorPlacement } from "@/shared/contracts/roomMap";
-import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
+import type { TvAnchorPlacement } from "@/shared/contracts/roomMap";
 import {
   FIRMWARE_PROFILE,
   type ColorCorrectionConfig,
@@ -108,6 +107,8 @@ interface LightsSectionProps {
   isModeTransitioning?: boolean;
   onModeChange: (nextMode: LightingModeConfig) => void;
   onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
+  /** The dock's "+": outputs are added on Devices. */
+  onAddOutput?: () => void;
 }
 
 export function LightsSection({
@@ -127,6 +128,7 @@ export function LightsSection({
   isModeTransitioning = false,
   onModeChange,
   onOutputTargetsChange,
+  onAddOutput,
 }: LightsSectionProps) {
   const { t } = useTranslation();
   // Why the mode buttons are dim — calibration, no output, still checking — is
@@ -148,7 +150,7 @@ export function LightsSection({
   const activeKind = normalizedMode.kind;
   const isSolid = activeKind === LIGHTING_MODE_KIND.SOLID;
   const isAmbilight = activeKind === LIGHTING_MODE_KIND.AMBILIGHT;
-  const incomingSolid = normalizedMode.solid ?? { r: 255, g: 255, b: 255, brightness: 1 };
+  const incomingSolid = normalizedMode.solid ?? DEFAULT_SOLID_COLOR;
   const incomingAmbilight = normalizeAmbilightPayload(normalizedMode.ambilight);
 
   const solidHex = rgbToHex(incomingSolid);
@@ -196,12 +198,6 @@ export function LightsSection({
     };
   }, []);
 
-  // ── Hue zone authoring ──────────────────────────────
-  // Track the persisted entertainment area so the dock "+" CTA is only
-  // enabled when the user has finished Hue onboarding. We do not mount
-  // the full useHueOnboarding state machine here; the area id alone is
-  // enough to author a logical zone.
-  const [lastHueAreaId, setLastHueAreaId] = useState<string | null>(null);
   // Read once on mount: the room map is a different section, so returning
   // here from an edit remounts this one.
   const [tvAnchor, setTvAnchor] = useState<TvAnchorPlacement | null>(null);
@@ -209,57 +205,13 @@ export function LightsSection({
     let cancelled = false;
     void shellStore.load().then((state) => {
       if (cancelled) return;
-      setLastHueAreaId(state.lastHueAreaId ?? null);
       setTvAnchor(state.roomMap?.tvAnchor ?? null);
     }).catch((error) => {
-      console.error("[LumaSync] LightsSection hueAreaId hydrate failed:", error);
+      console.error("[LumaSync] LightsSection tvAnchor hydrate failed:", error);
     });
     return () => { cancelled = true; };
   }, []);
 
-  const canAddHueZone = hueConfigured && hueReachable && lastHueAreaId !== null;
-
-  const handleAddHueZone = useCallback(async () => {
-    if (!canAddHueZone || !lastHueAreaId) return;
-    try {
-      const state = await shellStore.load();
-      const currentMap: RoomMapConfig = state.roomMap ?? DEFAULT_ROOM_MAP;
-      // `zones` is the only zone array the room map renders; `hueZones` is a
-      // one-shot migration input. See docs/architecture/hue.md.
-      const existing = currentMap.zones ?? [];
-      const id = `hue-zone-${crypto.randomUUID()}`;
-      const palette = ["--lm-zone-1", "--lm-zone-2", "--lm-zone-3", "--lm-zone-4", "--lm-zone-5", "--lm-zone-6"];
-      const colorVar = `var(${palette[existing.length % palette.length]})`;
-      const newZone: HueZone = {
-        id,
-        name: t("roomMap:hueZones.defaultName", { N: String(existing.length + 1) }),
-        entertainmentAreaId: lastHueAreaId,
-        centerX: 0,
-        centerY: 0,
-        centerZ: 0,
-        scaleX: 0.5,
-        scaleY: 0.5,
-        scaleZ: 0.5,
-        channelIndices: [],
-        borderColor: colorVar,
-      };
-      const nextMap: RoomMapConfig = {
-        ...currentMap,
-        zones: [...existing, newZone],
-      };
-      await shellStore.save({
-        roomMap: nextMap,
-        roomMapVersion: (state.roomMapVersion ?? 0) + 1,
-      });
-      try {
-        await createHueZone({ zone: newZone, existingZones: existing });
-      } catch (invokeErr) {
-        console.error("[LumaSync] create_hue_zone failed", invokeErr);
-      }
-    } catch (error) {
-      console.error("[LumaSync] handleAddHueZone failed:", error);
-    }
-  }, [canAddHueZone, lastHueAreaId, t]);
 
   const isAdalight = firmwareProfile === FIRMWARE_PROFILE.ADALIGHT;
 
@@ -591,17 +543,15 @@ export function LightsSection({
         <div>
           <h4>
             <span className="t">{t("lights:dock.outputs")}</span>
+            {/* Only opens Devices: it used to write an empty Hue zone at the
+                room's origin, which nobody asked for. */}
             <button
               type="button"
               className="add"
-              aria-disabled={!canAddHueZone}
               aria-label={t("lights:dock.addAria")}
-              title={
-                canAddHueZone
-                  ? t("lights:dock.addHueZoneTooltip")
-                  : t("lights:dock.addDisabledTooltip")
-              }
-              onClick={canAddHueZone ? () => { void handleAddHueZone(); } : undefined}
+              title={t("lights:dock.addAria")}
+              onClick={onAddOutput}
+              data-testid="lights-add-output"
             >
               +
             </button>

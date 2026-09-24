@@ -5,7 +5,7 @@ const updater: Catalogue<typeof enUpdater> = {
   available: {
     eyebrow: "Güncelleme hazır",
     title: "Yeni bir sürüm var",
-    body: "LumaSync <b>v{{version}}</b> indirilmeye hazır. Uygulama yeniden başlatıldığında yüklenir.",
+    body: "LumaSync <b>v{{version}}</b> hazır. Şimdi kurarsan LumaSync yeni sürümle yeniden başlar.",
   },
   downloading: {
     eyebrow: "İndiriliyor",
@@ -49,7 +49,8 @@ const updater: Catalogue<typeof enUpdater> = {
   betaChannel: "Beta kanalı",
   betaChannelDescription:
     "Kararlı sürümlerin yanı sıra ön sürümleri de al. Ön sürümler CI tarafından derlenip test edilir, ancak paketlenmiş kurulum dosyasının kendisi hiçbir zaman çalıştırılarak sınanmaz — pürüz bekleyin.",
-  checking: "Kontrol ediliyor...",
+  checking: "Kontrol ediliyor…",
+  upToDate: "En son sürümü kullanıyorsun · {{time}} itibarıyla",
 };
 
 export default updater;

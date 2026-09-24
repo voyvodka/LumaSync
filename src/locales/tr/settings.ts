@@ -2,12 +2,12 @@ import type { Catalogue } from "@/features/i18n/catalogue";
 import type enSettings from "@/locales/en/settings";
 
 const settings: Catalogue<typeof enSettings> = {
-  title: "Genel",
-  subtitle: "Başlangıç davranışı ve dil",
+  title: "Ayarlar",
+  subtitle: "Başlangıç, dil, güncellemeler ve hakkında",
   groups: {
     startup: {
       title: "Başlangıç",
-      sub: "Başlat · tepsi",
+      sub: "Girişte başlatma",
     },
     language: {
       title: "Dil",
@@ -27,7 +27,7 @@ const settings: Catalogue<typeof enSettings> = {
   },
   language: {
     label: "Arayüz dili",
-    description: "Değişiklik için yeniden başlatma gerekir",
+    description: "Tüm LumaSync pencerelerinde hemen uygulanır",
   },
   about: {
     tagline: "Ekran senkronlu ortam aydınlatması",
@@ -47,6 +47,8 @@ const settings: Catalogue<typeof enSettings> = {
   startupTray: {
     launchAtLogin: "Girişte başlat",
     launchAtLoginDescription: "LumaSync'i oturum açtığınızda otomatik başlatın.",
+    readError: "LumaSync'in girişte başlayıp başlamadığı okunamadı",
+    writeError: "Girişte başlatma değiştirilemedi — tekrar dene",
   },
   nerdStats: {
     label: "Meraklısı için istatistikler",

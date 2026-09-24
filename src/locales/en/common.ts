@@ -50,5 +50,7 @@ export default {
       usb: "USB",
       hue: "Hue",
     },
+    // The `usb` target when a WLED panel is what drives it.
+    wledLabel: "WLED",
   },
 };

@@ -84,6 +84,7 @@ export function renderWithShellStores(
     state: { status: "idle" },
     isModalOpen: false,
     checkFailedNotice: null,
+    upToDateAt: null,
     ...options.updater,
   });
   const lightingActions: LightingControlActions = {

@@ -20,7 +20,7 @@
 import { memo, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { LIGHTING_MODE_KIND, type LightingModeKind } from "@/shared/contracts/mode";
+import { DEFAULT_SOLID_COLOR, LIGHTING_MODE_KIND, type LightingModeKind } from "@/shared/contracts/mode";
 import { MODE_GUARD_REASONS } from "@/features/mode/state/modeGuard";
 import {
   useLightingActions,
@@ -56,7 +56,6 @@ const selectCompactLighting = (state: LightingControlState) => ({
   modeLockReason: state.modeLockReason,
 });
 
-const DEFAULT_SOLID = { r: 255, g: 220, b: 180, brightness: 1 } as const;
 const DEFAULT_AMBILIGHT = {
   brightness: 1,
   smoothingAlpha: 0.35,
@@ -103,7 +102,7 @@ export const CompactLayout = memo(function CompactLayout() {
     ? t("lights:led.firmwareProfile.brightnessDisabledTooltip")
     : undefined;
 
-  const incomingSolid = lightingMode.solid ?? DEFAULT_SOLID;
+  const incomingSolid = lightingMode.solid ?? DEFAULT_SOLID_COLOR;
   const ambilightConfig = lightingMode.ambilight ?? DEFAULT_AMBILIGHT;
   const isSolid = lightingMode.kind === LIGHTING_MODE_KIND.SOLID;
   const isAmbilight = lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT;

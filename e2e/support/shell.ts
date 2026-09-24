@@ -273,17 +273,17 @@ export async function activeSectionTab(): Promise<SectionId | null> {
 
 /**
  * True only when the StatusBar's HUE pill (`statusItems.ts`, always mounted
- * regardless of section or UI mode) reads anything other than `is-off` —
- * i.e. a bridge is paired, whether or not it is currently reachable.
+ * regardless of section or UI mode) does not offer its set-up link — i.e. a
+ * bridge is paired, whether or not it is currently reachable.
  *
  * `status-chip-HUE` is keyed by the chip's label, a hardcoded non-i18n
- * string (`buildStatusItems` in `statusItems.ts`), as is the `is-<kind>`
- * class, so this is stable across locales.
+ * string (`buildStatusItems` in `statusItems.ts`), as is the link's
+ * `data-link-kind`, so this is stable across locales.
  */
 export async function hueConfigured(): Promise<boolean> {
   return browser.execute(() => {
-    const value = document.querySelector('[data-testid="status-chip-HUE"] .lm-statusbar-value');
-    return value !== null && !value.classList.contains("is-off");
+    const chip = document.querySelector('[data-testid="status-chip-HUE"]');
+    return chip !== null && chip.querySelector('[data-link-kind="setUp"]') === null;
   });
 }
 

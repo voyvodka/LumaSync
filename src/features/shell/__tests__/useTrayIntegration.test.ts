@@ -1,7 +1,12 @@
 import { renderHook, waitFor } from "@testing-library/react";
+import type { TFunction } from "i18next";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useTrayIntegration } from "../useTrayIntegration";
+import type { TrayLabels } from "@/shared/contracts/shell";
+
+import { trayStatusLabel, useTrayIntegration } from "../useTrayIntegration";
+
+const updateTrayLabelsMock = vi.fn<(labels: TrayLabels) => Promise<void>>();
 
 type Listener = () => void;
 let previewListener: Listener | undefined;
@@ -18,8 +23,11 @@ vi.mock("@/features/tray/trayController", () => ({
 }));
 
 vi.mock("@/features/tray/trayApi", () => ({
-  updateTrayLabels: () => Promise.resolve(),
+  updateTrayLabels: (labels: TrayLabels) => updateTrayLabelsMock(labels),
 }));
+
+const keyT = ((key: string, options?: Record<string, unknown>) =>
+  options ? `${key}(${Object.values(options).join("|")})` : key) as unknown as TFunction;
 
 vi.mock("../windowLifecycle", () => ({
   loadShellState: () => Promise.resolve({}),
@@ -35,6 +43,7 @@ vi.mock("@/features/preview/previewApi", () => ({
 describe("useTrayIntegration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    updateTrayLabelsMock.mockResolvedValue(undefined);
     previewListener = undefined;
   });
 
@@ -45,11 +54,54 @@ describe("useTrayIntegration", () => {
     expect(listenTrayShowLedPreview).toHaveBeenCalledOnce();
   });
 
+  // The line used to read a hardcoded, untranslated "● Idle" whatever ran.
+  it("pushes the status line again whenever the mode or its outputs change", async () => {
+    const view = renderHook((props: Parameters<typeof useTrayIntegration>[0]) => useTrayIntegration(props), {
+      initialProps: { status: { mode: "off", outputs: [] } },
+    });
+    await waitFor(() => expect(updateTrayLabelsMock).toHaveBeenCalledTimes(1));
+
+    view.rerender({ status: { mode: "off", outputs: [] } });
+    expect(updateTrayLabelsMock).toHaveBeenCalledTimes(1);
+
+    view.rerender({ status: { mode: "ambilight", outputs: ["usb", "hue"] } });
+    await waitFor(() => expect(updateTrayLabelsMock).toHaveBeenCalledTimes(2));
+    expect(Object.keys(updateTrayLabelsMock.mock.calls[1][0])).toContain("status");
+  });
+
+  it("logs a push the tray refused instead of leaving it unhandled", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    updateTrayLabelsMock.mockRejectedValue(new Error("tray gone"));
+    renderHook(() => useTrayIntegration({ status: { mode: "solid", outputs: ["wled"] } }));
+    await waitFor(() =>
+      expect(consoleError).toHaveBeenCalledWith(expect.stringContaining("[LumaSync]"), expect.any(Error)),
+    );
+    consoleError.mockRestore();
+  });
+
   it("removes its listener on unmount", async () => {
     const view = renderHook(() => useTrayIntegration({}));
     await waitFor(() => expect(previewListener).toBeDefined());
 
     view.unmount();
     expect(unlisten).toHaveBeenCalledOnce();
+  });
+});
+
+describe("trayStatusLabel", () => {
+  it("says the lights are off when they are", () => {
+    expect(trayStatusLabel({ mode: "off", outputs: ["usb"] }, keyT)).toBe("tray:status.off");
+  });
+
+  it("names the running mode and every output it reaches, WLED as WLED", () => {
+    expect(trayStatusLabel({ mode: "ambilight", outputs: ["wled", "hue"] }, keyT)).toBe(
+      "tray:status.running(common:mode.options.ambilight|common:hotplug.wledLabel + common:hotplug.targetLabel.hue)",
+    );
+  });
+
+  it("names the mode alone when nothing is reached", () => {
+    expect(trayStatusLabel({ mode: "solid", outputs: [] }, keyT)).toBe(
+      "tray:status.runningNoOutputs(common:mode.options.solid)",
+    );
   });
 });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { isWindowVisible, subscribeWindowVisible } from "@/features/shell/windowVisibility";
 import type { UpdaterStatusCode } from "@/shared/contracts/updater";
 
 export const UPDATE_CHECK_FAILED_NOTICE_MS = 8_000;
@@ -21,7 +22,8 @@ export interface UpdateCheckFailedNotice {
 /**
  * Sole writer of the "could not check for updates" notice. The startup check
  * usually finishes with the window still in the tray, so the countdown only
- * runs while the document is visible.
+ * runs while the window is on screen — read from Rust, since WebView2 keeps the
+ * document "visible" in the tray.
  */
 export function useUpdateCheckFailedNotice(): UpdateCheckFailedNotice {
   const [notice, setNotice] = useState<UpdateCheckFailure | null>(null);
@@ -37,7 +39,7 @@ export function useUpdateCheckFailedNotice(): UpdateCheckFailedNotice {
 
   const armTimer = useCallback(() => {
     clearTimer();
-    if (heldRef.current || document.visibilityState === "hidden") return;
+    if (heldRef.current || !isWindowVisible()) return;
     timeoutRef.current = window.setTimeout(() => {
       timeoutRef.current = null;
       setNotice(null);
@@ -66,12 +68,11 @@ export function useUpdateCheckFailedNotice(): UpdateCheckFailedNotice {
 
   useEffect(() => {
     if (notice === null) return;
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible" && timeoutRef.current === null) armTimer();
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [notice, armTimer]);
+    return subscribeWindowVisible((visible) => {
+      if (!visible) clearTimer();
+      else if (timeoutRef.current === null) armTimer();
+    });
+  }, [notice, armTimer, clearTimer]);
 
   useEffect(() => clearTimer, [clearTimer]);
 

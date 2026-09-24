@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
 import { TitleBar, TITLE_BAR_HEIGHT_PX } from "./features/shell/TitleBar";
 import { StatusBar, statusBarHeightPx } from "./features/shell/StatusBar";
-import { useTrayIntegration } from "./features/shell/useTrayIntegration";
+import { useTrayIntegration, type TrayOutput } from "./features/shell/useTrayIntegration";
 import { useShellBootstrap } from "./features/shell/useShellBootstrap";
 import { openScreenCaptureSettings } from "./features/mode/captureApi";
 import { useCaptureStallNotice } from "./features/telemetry/hooks/useCaptureStallNotice";
@@ -60,6 +60,7 @@ import { LightingControlProvider } from "./features/mode/state/lightingControl";
 import {
   LIGHTING_MODE_KIND,
   type LightingModeConfig,
+  type LightingModeKind,
 } from "@/shared/contracts/mode";
 import type { HueStartConfig } from "./features/hue/model/hueStartConfig";
 import { useStableHueStartConfig } from "./features/hue/state/useStableHueStartConfig";
@@ -72,7 +73,9 @@ import {
   UI_MODE_FADE_TIMING,
 } from "./features/shell/useUIMode";
 import { useGlobalKeybinds, type KeybindHandlers } from "./features/shell/useGlobalKeybinds";
-import { MODE_KIND_ORDER, modeKind } from "./features/mode/model/modeKinds";
+import { modeKeybindHandlers } from "./features/shell/modeKeybinds";
+import { useWindowVisible } from "./features/shell/windowVisibility";
+import { useShellStateWriteFailing } from "./features/persistence/writeHealth";
 import {
   createNavigationStore,
   NavigationProvider,
@@ -119,7 +122,7 @@ function Shell() {
   // useEffect with `[]` deps) can read the latest paired-bridge state
   // without re-subscribing on every state mutation.
   const hueStartConfigRef = useRef<HueStartConfig | null>(null);
-  const { isConnected, connectedPort, ports } = useDeviceConnection();
+  const { isConnected, connectedPort, ports, lastSuccessfulPort } = useDeviceConnection();
   // Boot restore of the persisted WLED sink. Mounted here, not in the picker:
   // the sink must be bound before a lighting mode starts.
   useWledSinkRestore();
@@ -127,7 +130,7 @@ function Shell() {
   // whether a serial port is. Without this a WLED-only setup reads as "no
   // strip connected" and every non-Off mode stays disabled, while Rust is
   // perfectly able to drive the panel.
-  const { activeWledIp } = useActiveWledSink();
+  const { activeWledIp, savedSink: savedWledSink } = useActiveWledSink();
   const connectedProduct = ports.find((port) => port.portName === connectedPort)?.product;
   // Memoised because the lighting store compares by identity: a fresh object
   // per render would re-render every section that reads it.
@@ -135,6 +138,9 @@ function Shell() {
     () => deriveLocalSink(isConnected, connectedPort ?? null, activeWledIp, connectedProduct),
     [isConnected, connectedPort, activeWledIp, connectedProduct],
   );
+  // Latched: a strip unplugged this session is an outage, not "never set up".
+  const [localSinkSeen, setLocalSinkSeen] = useState(false);
+  if (localSink !== null && !localSinkSeen) setLocalSinkSeen(true);
   // Defaults to `true` so a hydrating store never flashes the banner at a user
   // who has already dismissed it; bootstrap flips it false for a fresh install.
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(true);
@@ -236,7 +242,15 @@ function Shell() {
 
   useHueStartConfigSync(setHueStartConfig);
   useEffect(() => { hueStartConfigRef.current = hueStartConfig; }, [hueStartConfig]);
-  useTrayIntegration({ onPreviewOpenFailed: reportPreviewOpenFailure });
+  const trayOutputs: TrayOutput[] = [];
+  if (activeOutputTargets.includes("usb") && localSink !== null) {
+    trayOutputs.push(localSink.transport === "wled" ? "wled" : "usb");
+  }
+  if (hueSessionActive) trayOutputs.push("hue");
+  useTrayIntegration({
+    onPreviewOpenFailed: reportPreviewOpenFailure,
+    status: { mode: lightingMode.kind, outputs: trayOutputs },
+  });
 
   const handleSectionChange = useCallback(async (sectionId: SectionId, deviceCategory?: DeviceCategory) => {
     // Only a notice names a category; every other way in keeps the one open.
@@ -263,29 +277,6 @@ function Shell() {
     hasCalibration: savedCalibration !== undefined,
     onLedSetup: activeSection === SECTION_IDS.LED_SETUP,
   });
-
-  // Global keyboard shortcuts — the behaviour behind every `<kbd>` badge in
-  // `KEYBIND_REGISTRY`. The hook is disabled during a UI-mode fade: firing
-  // ⌥1/⌥2/⌥3 mid-transition is what produced the "ghost mode flash".
-  const keybindHandlers = useMemo(() => {
-    const handlers: KeybindHandlers = {
-      [KEYBIND_ACTIONS.OPEN_SETTINGS]: () => {
-        // ⌘, / Ctrl+, is the canonical open-settings shortcut on all three
-        // platforms; the section change switches compact to full itself.
-        void handleSectionChange(SECTION_IDS.SYSTEM);
-      },
-    };
-    for (const kind of MODE_KIND_ORDER) {
-      const descriptor = modeKind(kind);
-      // The kind alone: Rust keeps the last colour and Ambilight settings.
-      handlers[descriptor.keybind] = () => {
-        void handleLightingModeChange(descriptor.config({}));
-      };
-    }
-    return handlers;
-  }, [handleLightingModeChange, handleSectionChange]);
-
-  useGlobalKeybinds(keybindHandlers, { disabled: !isContentVisible });
 
   const modeGuard = canEnableLedMode(savedCalibration, selectedOutputTargets);
 
@@ -361,6 +352,25 @@ function Shell() {
     bootstrapDone,
   });
 
+  // Global keyboard shortcuts — the behaviour behind every `<kbd>` badge in
+  // `KEYBIND_REGISTRY`. The hook is disabled during a UI-mode fade: firing
+  // ⌥1/⌥2/⌥3 mid-transition is what produced the "ghost mode flash". A mode
+  // shortcut is off wherever its button is; the gate matches the mode strips.
+  const isModeKindDisabled = (kind: LightingModeKind) =>
+    kind === LIGHTING_MODE_KIND.OFF
+      ? isModeTransitioning
+      : isModeTransitioning ||
+        availability !== "ready" ||
+        modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED;
+  // Read at press time through the hook's ref, so fresh closures cost nothing.
+  const keybindHandlers: KeybindHandlers = {
+    // ⌘, / Ctrl+, is the canonical open-settings shortcut on all three
+    // platforms; the section change switches compact to full itself.
+    [KEYBIND_ACTIONS.OPEN_SETTINGS]: () => void handleSectionChange(SECTION_IDS.SYSTEM),
+    ...modeKeybindHandlers(lightingControlActions.changeMode, isModeKindDisabled),
+  };
+  useGlobalKeybinds(keybindHandlers, { disabled: !isContentVisible });
+
   useCapturePermissionRecheck(
     mode.startFailedNotice?.bucket === CAPTURE_FAILURE_BUCKET.PERMISSION,
     mode.clearCapturePermissionNotice,
@@ -394,6 +404,8 @@ function Shell() {
   );
   // Bound, not merely selected: every fresh install starts with `usb` selected.
   const localTargetConfigured = localSink !== null;
+  const localTransport = localSink?.transport ?? null;
+  const settingsWriteFailing = useShellStateWriteFailing();
   const noticeCandidates = useMemo(
     () =>
       buildShellNotices(
@@ -419,6 +431,8 @@ function Shell() {
           onboardingStep: onboarding.step,
           ledSetupNext: ledSetupNextPort,
           localTargetConfigured,
+          localTransport,
+          settingsWriteFailing,
           updateCheckFailed: updateCheckFailedNotice,
           updateChecking: updaterStatus === "checking",
         },
@@ -447,18 +461,29 @@ function Shell() {
       onboarding.step,
       ledSetupNextPort,
       localTargetConfigured,
+      localTransport,
+      settingsWriteFailing,
       updateCheckFailedNotice,
       updaterStatus,
       noticeHandlers,
       t,
     ],
   );
-  const noticeQueue = useShellNoticeQueue(noticeCandidates, { suppressed: updateModalShown, view: noticeView });
+  // In the tray nobody can read a notice, so none may time out there: an event
+  // raised or expiring while hidden is kept until the window is back.
+  const windowVisible = useWindowVisible();
+  const noticeQueue = useShellNoticeQueue(noticeCandidates, {
+    suppressed: updateModalShown || !windowVisible,
+    view: noticeView,
+  });
 
   const statusItems = buildStatusItems(
     {
       ambilightActive: lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT,
       localSink,
+      // Before boot the remembered port and WLED sink are simply unread.
+      localEverConfigured:
+        !bootstrapDone || localSinkSeen || Boolean(lastSuccessfulPort) || (savedWledSink ?? null) !== null,
       hueStreaming,
       hueReconnecting,
       hueFailed: hueStreamFailed,

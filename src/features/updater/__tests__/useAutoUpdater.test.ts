@@ -165,6 +165,46 @@ describe("useAutoUpdater", () => {
     expect(result.current.state.status).toBe("idle");
   });
 
+  // `idle` is also "never checked"; a manual check that found nothing said nothing.
+  it("records when a check the user asked for came back up to date, and clears it on the next check", async () => {
+    vi.mocked(checkForUpdate).mockResolvedValue({
+      status: status(UPDATER_STATUS.UP_TO_DATE),
+      channel: "stable",
+      update: null,
+    });
+    const { result } = renderHook(() => useAutoUpdater());
+    expect(result.current.upToDateAt).toBeNull();
+
+    await act(async () => {
+      await result.current.checkForUpdates();
+    });
+    expect(result.current.upToDateAt).toEqual(expect.any(Number));
+
+    vi.mocked(checkForUpdate).mockResolvedValue({
+      status: status(UPDATER_STATUS.UPDATE_AVAILABLE),
+      channel: "stable",
+      update: UPDATE,
+    });
+    await act(async () => {
+      await result.current.checkForUpdates();
+    });
+    expect(result.current.upToDateAt).toBeNull();
+  });
+
+  it("says nothing about being up to date after the startup check nobody asked for", async () => {
+    vi.mocked(checkForUpdate).mockResolvedValue({
+      status: status(UPDATER_STATUS.UP_TO_DATE),
+      channel: "stable",
+      update: null,
+    });
+    const { result } = renderHook(() => useAutoUpdater());
+
+    await act(async () => {
+      await result.current.checkForUpdatesInBackground();
+    });
+    expect(result.current.upToDateAt).toBeNull();
+  });
+
   it("transitions to error when the install command rejects", async () => {
     vi.mocked(downloadAndInstallUpdate).mockRejectedValue(new Error("disk full"));
 

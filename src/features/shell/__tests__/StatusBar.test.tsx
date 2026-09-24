@@ -32,4 +32,35 @@ describe("StatusBar", () => {
     expect(bar.querySelector("[aria-live]")).toBeNull();
     expect(screen.getByRole("button", { name: "reconnect" })).toBeInTheDocument();
   });
+
+  // A left-out Hue is amber, yet still links to the bridge card.
+  it("keeps a chip's link on every state but ok", () => {
+    const { rerender } = render(
+      <StatusBar
+        uiMode="full"
+        items={[{ label: "HUE", state: "LEFT OUT", kind: "active", onReconnect: vi.fn<() => void>(), reconnectAriaLabel: "open" }]}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "open" })).toBeInTheDocument();
+
+    rerender(
+      <StatusBar
+        uiMode="full"
+        items={[{ label: "HUE", state: "OK", kind: "ok", onReconnect: vi.fn<() => void>(), reconnectAriaLabel: "open" }]}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "open" })).toBeNull();
+  });
+
+  it("draws a set-up link apart from a reconnect one", () => {
+    render(
+      <StatusBar
+        uiMode="compact"
+        items={[
+          { label: "USB", state: "—", kind: "idle", onReconnect: vi.fn<() => void>(), reconnectAriaLabel: "set up", linkKind: "setUp" },
+        ]}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "set up" })).toHaveAttribute("data-link-kind", "setUp");
+  });
 });

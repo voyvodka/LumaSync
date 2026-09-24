@@ -46,6 +46,7 @@ vi.mock("../features/updater/useAutoUpdater", () => ({
     checkForUpdates: vi.fn().mockResolvedValue(undefined),
     checkForUpdatesInBackground: vi.fn().mockResolvedValue(undefined),
     checkFailedNotice: null,
+    upToDateAt: null,
     downloadAndInstall: vi.fn().mockResolvedValue(undefined),
     dismiss: vi.fn(),
     devSetState: vi.fn(),

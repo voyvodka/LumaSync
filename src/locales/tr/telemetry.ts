@@ -15,13 +15,16 @@ const telemetry: Catalogue<typeof enTelemetry> = {
     absent: "—",
     absentTitle: "Bu oturumda seri bağlantı yok",
   },
+  local: {
+    absentTitle: "Bağlı USB şerit ya da WLED yok",
+  },
   queueHealth: {
     healthy: "Sağlıklı",
     warning: "Uyarı",
     critical: "Kritik",
   },
   states: {
-    loading: "Telemetri yükleniyor...",
+    loading: "Telemetri yükleniyor…",
     empty: "Henüz runtime aktivitesi yok.",
     error: "Telemetri şu anda kullanılamıyor.",
   },

@@ -124,6 +124,7 @@ const DOWNLOADING = (progress: number) => ({
   },
   isModalOpen: true,
   checkFailedNotice: null,
+  upToDateAt: null,
 });
 
 describe("SettingsLayout render boundaries", () => {
@@ -176,13 +177,19 @@ describe("SettingsLayout render boundaries", () => {
     expect(screen.getByTestId("system-checking")).toHaveTextContent("true");
   });
 
-  it.each([SECTION_IDS.SYSTEM, SECTION_IDS.ROOM_MAP] as const)(
+  // System reads only whether a Hue session exists (its telemetry polls for
+  // one), so a stream going from live to retrying is nothing it shows.
+  it.each([
+    [SECTION_IDS.SYSTEM, { streaming: true }, { streaming: false, reconnecting: true }],
+    [SECTION_IDS.ROOM_MAP, {}, { streaming: true, reconnecting: true }],
+  ] as const)(
     "does not re-render %s for a Hue status change it does not show",
-    async (section) => {
+    async (section, start, change) => {
       const shell = await renderFull(section);
+      shell.setHue(start);
       const before = renders[NAME[section]];
 
-      shell.setHue({ streaming: true, reconnecting: true });
+      shell.setHue(change);
 
       expect(renders[NAME[section]]).toBe(before);
     },
@@ -224,7 +231,12 @@ describe("SettingsLayout render boundaries", () => {
     const shell = await renderFull(SECTION_IDS.DEVICES);
     const before = renders.devices;
 
-    shell.setLighting({ lightingMode: { kind: "ambilight" } });
+    // Devices reads whether Ambilight runs (Displays marks the captured
+    // display), so the change it must ignore is one inside the running mode.
+    shell.setLighting({ lightingMode: { kind: "solid" } });
+    const afterMode = renders.devices;
+    shell.setLighting({ lightingMode: { kind: "solid", solid: { r: 1, g: 2, b: 3, brightness: 1 } } });
+    expect(renders.devices).toBe(afterMode);
     act(() => shell.navigation.openSection(SECTION_IDS.DEVICES, "hue"));
 
     expect(screen.getByTestId("devices-category")).toHaveTextContent("hue");

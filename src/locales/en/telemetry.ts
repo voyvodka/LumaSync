@@ -12,13 +12,16 @@ export default {
     absent: "—",
     absentTitle: "No serial link in this session",
   },
+  local: {
+    absentTitle: "No USB strip or WLED bound",
+  },
   queueHealth: {
     healthy: "Healthy",
     warning: "Warning",
     critical: "Critical",
   },
   states: {
-    loading: "Loading telemetry...",
+    loading: "Loading telemetry…",
     empty: "No runtime activity yet.",
     error: "Telemetry unavailable.",
   },
