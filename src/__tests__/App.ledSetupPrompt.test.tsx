@@ -2,7 +2,7 @@
 // LED Setup, so the user never saw the chip type and colour order on the page
 // they connected from. It now leaves them there and says what comes next.
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 
 import { CALIBRATION, bootDone, env, loadShellStateMock, publish, resetAppHarness } from "./support/appHarness";
@@ -28,6 +28,7 @@ vi.mock("../features/hue/hueHealthApi", async () => (await import("../features/h
 
 import App from "../App";
 import { LED_SETUP_PROMPTED_KEY } from "../features/calibration/state/useLedSetupPrompt";
+import { connectionEvents } from "../features/device/connectionEvents";
 import { __resetHueHealthStoreForTests } from "../features/hue/state/hueHealthStore";
 import { resetHealth } from "../features/hue/__tests__/fakeHueHealth";
 
@@ -41,7 +42,7 @@ beforeEach(() => {
   sessionStorage.setItem("lumasync_session", "1");
 });
 
-async function connectOnDevices(savedLayout: boolean) {
+async function connectOnDevices(savedLayout: boolean, { byUser = true } = {}) {
   env.isConnected = false;
   loadShellStateMock.mockResolvedValue({
     lastSection: "devices",
@@ -54,6 +55,15 @@ async function connectOnDevices(savedLayout: boolean) {
   expect(screen.getByTestId("active-section")).toHaveTextContent("devices");
 
   env.isConnected = true;
+  // A Connect on Devices announces itself as the user's; the boot
+  // auto-reconnect announces a plain connect.
+  act(() => {
+    connectionEvents.emit({
+      portName: "/dev/cu.usbserial-test",
+      connected: true,
+      ...(byUser ? { userInitiated: true } : {}),
+    });
+  });
   // Any shell render re-reads the (mocked) connection hook.
   publish({});
 }
@@ -63,6 +73,14 @@ it("stays on Devices after the first connect and points at LED Setup instead", a
 
   expect(await screen.findByTestId("led-setup-next-notice")).toBeInTheDocument();
   expect(screen.getByTestId("active-section")).toHaveTextContent("devices");
+});
+
+// A user without a layout was nudged on every launch.
+it("says nothing when the strip reconnected on its own at launch", async () => {
+  await connectOnDevices(false, { byUser: false });
+
+  await waitFor(() => expect(screen.getByTestId("active-section")).toHaveTextContent("devices"));
+  expect(screen.queryByTestId("led-setup-next-notice")).toBeNull();
 });
 
 it("says nothing when a layout is already saved", async () => {

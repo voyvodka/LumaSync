@@ -44,7 +44,7 @@ export const SHELL_COMMANDS = {
   /** Merge top-level keys and remove others, under Rust's one writer. */
   PATCH_SHELL_STATE: "patch_shell_state",
   /** Swap the whole object, only if nothing was written since `expectedRevision`.
-   * The migration write-back; main window only. */
+   * The migration write-back and `shellStore.update`; main window only. */
   REPLACE_SHELL_STATE: "replace_shell_state",
   /** Whether the main window is on screen, read from the native window. */
   GET_MAIN_WINDOW_VISIBILITY: "get_main_window_visibility",

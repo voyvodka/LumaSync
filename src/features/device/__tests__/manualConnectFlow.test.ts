@@ -476,6 +476,49 @@ describe("manual connect flow", () => {
     expect(controller.getState().statusCard?.message).toBe("Refresh is temporarily limited.");
   });
 
+  // Every refresh carried the card through, so "wait a moment" outlived the
+  // rescan that answered it.
+  it("drops the rate-limit hint once a later refresh completes", async () => {
+    let nowMs = 1_000;
+    const listSerialPorts = vi.fn<() => Promise<SerialPortListResponse>>().mockResolvedValue(
+      listResponse([
+        {
+          name: "COM4",
+          kind: "usb",
+          isSupported: true,
+          supportReason: "Supported USB serial adapter",
+          usb: { vid: 0x1a86, pid: 0x7523, manufacturer: null, product: null, serialNumber: null },
+        },
+      ]),
+    );
+    const controller = createDeviceConnectionController({
+      listSerialPorts,
+      connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>(),
+      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
+      persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
+      refreshMinIntervalMs: 250,
+      refreshVisibleWaitMs: 0,
+      now: () => nowMs,
+    });
+
+    await controller.initialize();
+    nowMs += 300;
+    await controller.refreshPorts();
+    await controller.refreshPorts();
+    expect(controller.getState().statusCard?.code).toBe("REFRESH_RATE_LIMITED");
+
+    nowMs += 300;
+    await controller.refreshPorts();
+
+    expect(listSerialPorts).toHaveBeenCalledTimes(3);
+    expect(controller.getState().statusCard).toBeNull();
+  });
+
   it("refresh allows retry again after the minimum interval passes", async () => {
     let nowMs = 2_000;
     const listSerialPorts = vi.fn<() => Promise<SerialPortListResponse>>().mockResolvedValue(

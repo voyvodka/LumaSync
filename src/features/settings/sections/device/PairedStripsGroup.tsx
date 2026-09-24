@@ -1,4 +1,4 @@
-import { useCallback, useId, useState } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -26,6 +26,8 @@ export interface PairedStripsGroupProps {
   /** Adds the connected strip to the roster; the page never does it on its own at boot. */
   onAddConnected: () => void;
   addingConnected?: boolean;
+  /** A connect is between landing and its roster write: the connected port is about to be listed. */
+  rosterSettling?: boolean;
   onNavigateToRoomMap?: () => void;
 }
 
@@ -41,10 +43,12 @@ export function PairedStripsGroup({
   onRescan,
   onAddConnected,
   addingConnected = false,
+  rosterSettling = false,
   onNavigateToRoomMap,
 }: PairedStripsGroupProps) {
   const { t } = useTranslation();
   const titleId = useId();
+  const rowIdBase = useId();
   // One row in edit mode at a time. The dropdown includes the strip's own
   // current port, or cancelling would leave the slot pointing at nothing.
   const [editStripId, setEditStripId] = useState<string | null>(null);
@@ -57,7 +61,9 @@ export function PairedStripsGroup({
   // A strip that reconnected at boot on a setup that predates the roster. A
   // placement with no port already follows the live one, so it covers it.
   const connectedUnlisted =
-    connectedPort !== null && !pairedStrips.some((s) => s.portName === connectedPort || !s.portName);
+    !rosterSettling &&
+    connectedPort !== null &&
+    !pairedStrips.some((s) => s.portName === connectedPort || !s.portName);
   const unpairedPortNames = supportedPorts
     .map((p) => p.portName)
     .filter((name) => !pairedPortNames.has(name));
@@ -72,10 +78,21 @@ export function PairedStripsGroup({
     [onRescan],
   );
 
+  // Closing the editor unmounts the control that had focus; it goes back to
+  // the row's Change port button when that remounts, not to <body>.
+  const focusOnRemount = useRef<string | null>(null);
+  const changePortButtonRef = useCallback((stripId: string, button: HTMLButtonElement | null) => {
+    if (button && focusOnRemount.current === stripId) {
+      focusOnRemount.current = null;
+      button.focus();
+    }
+  }, []);
+
   const closeEditor = useCallback(() => {
+    focusOnRemount.current = editStripId;
     setEditStripId(null);
     setEditDraft(null);
-  }, []);
+  }, [editStripId]);
 
   // The duplicate-port guard is mandatory even though the dropdown filters
   // paired ports out: a stale selection from a concurrent edit still lands here.
@@ -94,14 +111,15 @@ export function PairedStripsGroup({
       return;
     }
     try {
-      const current = await shellStore.load();
-      const roomMap = current.roomMap ?? DEFAULT_ROOM_MAP;
-      const usbStrips = roomMap.usbStrips.map((s) =>
-        s.stripId === targetId ? { ...s, portName: nextPort } : s,
-      );
-      await shellStore.save({
-        roomMap: { ...roomMap, usbStrips },
-        roomMapVersion: (current.roomMapVersion ?? 0) + 1,
+      let usbStrips: UsbStripPlacement[] = [];
+      // `update`, not load-then-save: a save replaces all of `roomMap`.
+      await shellStore.update((current) => {
+        const roomMap = current.roomMap ?? DEFAULT_ROOM_MAP;
+        usbStrips = roomMap.usbStrips.map((s) => (s.stripId === targetId ? { ...s, portName: nextPort } : s));
+        return {
+          roomMap: { ...roomMap, usbStrips },
+          roomMapVersion: (current.roomMapVersion ?? 0) + 1,
+        };
       });
       setPairedStrips(usbStrips);
       closeEditor();
@@ -150,11 +168,20 @@ export function PairedStripsGroup({
             const options = editing
               ? Array.from(new Set([...(strip.portName ? [strip.portName] : []), ...unpairedPortNames]))
               : [];
+            // Every row has the same buttons; the group names whose they are.
+            const nameId = `${rowIdBase}-${strip.stripId}-name`;
+            const portId = `${rowIdBase}-${strip.stripId}-port`;
             return (
-              <div key={strip.stripId} className="lm-paired-strip" data-testid="usb-paired-strip">
+              <div
+                key={strip.stripId}
+                className="lm-paired-strip"
+                role="group"
+                aria-labelledby={editing ? nameId : `${nameId} ${portId}`}
+                data-testid="usb-paired-strip"
+              >
                 <div className="lm-paired-strip-ic"><IconUsb /></div>
                 <div className="lm-paired-strip-tx">
-                  <div className="lm-paired-strip-name">
+                  <div className="lm-paired-strip-name" id={nameId}>
                     {t("device:page.usb.paired.stripName", { count: strip.ledCount })}
                   </div>
                   {editing ? (
@@ -190,7 +217,7 @@ export function PairedStripsGroup({
                       )}
                     </select>
                   ) : (
-                    <div className="lm-paired-strip-sub">{portLabel}</div>
+                    <div className="lm-paired-strip-sub" id={portId}>{portLabel}</div>
                   )}
                 </div>
                 <div className="lm-paired-strip-actions">
@@ -208,7 +235,11 @@ export function PairedStripsGroup({
                       <StatusPill tone={live ? "ok" : "idle"}>
                         {live ? t("device:page.usb.pill.online") : t("device:page.usb.paired.offline")}
                       </StatusPill>
-                      <Button size="md" onClick={() => openEditor(strip.stripId, strip.portName ?? null)}>
+                      <Button
+                        size="md"
+                        ref={(button) => changePortButtonRef(strip.stripId, button)}
+                        onClick={() => openEditor(strip.stripId, strip.portName ?? null)}
+                      >
                         {t("device:page.usb.paired.changePort")}
                       </Button>
                       {onNavigateToRoomMap ? (

@@ -39,6 +39,7 @@ import { roomObjectAdapter } from "../model/roomObjectKinds";
 import { PropertyBar } from "./PropertyBar";
 import { RenameDialog } from "./RenameDialog";
 import { TemplateSelector } from "./TemplateSelector";
+import { applyRoomTemplate, isRoomMapEmpty } from "../model/roomTemplate";
 import { ZoneDeriveOverlay } from "./ZoneDeriveOverlay";
 import type {
   FurniturePlacement,
@@ -333,11 +334,11 @@ export function RoomMapEditor({
   const hasTv = !!config.tvAnchor;
   const hasUsb = config.usbStrips.length > 0;
   const derivePreviewActive = derivePreview !== null;
-  const isEmpty =
-    !config.tvAnchor &&
-    config.furniture.length === 0 &&
-    config.usbStrips.length === 0 &&
-    visibleHueChannels.length === 0;
+  const isEmpty = isRoomMapEmpty(config, visibleHueChannels.length);
+  const handleTemplateSelect = useCallback(
+    (template: RoomMapConfig) => replace(applyRoomTemplate(config, template)),
+    [config, replace],
+  );
 
   // Zone derivation handlers
   const handleDeriveZones = useCallback(() => {
@@ -525,7 +526,7 @@ export function RoomMapEditor({
 
   // Show template selector for empty maps with no edit history
   if (isEmpty && !canUndo) {
-    return <TemplateSelector onSelect={replace} />;
+    return <TemplateSelector onSelect={handleTemplateSelect} />;
   }
 
   return (

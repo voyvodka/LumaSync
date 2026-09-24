@@ -220,6 +220,38 @@ describe("Bug 10B — sibling controller propagation via connectionEvents", () =
     controller.selectPort("COM3");
     await controller.connectSelectedPort();
 
+    expect(observed).toEqual([{ portName: "COM3", connected: true, userInitiated: true }]);
+  });
+
+  // The LED Setup nudge keys on `userInitiated`; the launch reconnect fired it every boot.
+  it("announces the boot auto-reconnect as a plain connect, not the user's", async () => {
+    const events = createConnectionEventBus();
+    const observed: Array<{ portName: string; connected: boolean }> = [];
+    events.subscribe((event) => observed.push(event));
+
+    const controller = createDeviceConnectionController({
+      listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(listResponse([SUPPORTED_PORT])),
+      connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>().mockResolvedValue({
+        connected: true,
+        portName: "COM3",
+        updatedAtUnixMs: Date.now(),
+        status: { code: "CONNECT_OK", message: "Connected", details: null },
+      }),
+      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: Date.now(),
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
+      persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
+      initialLastSuccessfulPort: "COM3",
+      autoReconnectOnInit: true,
+      connectionEvents: events,
+    });
+
+    await controller.initialize();
+
+    expect(controller.getState().connectedPort).toBe("COM3");
     expect(observed).toEqual([{ portName: "COM3", connected: true }]);
   });
 
@@ -326,5 +358,47 @@ describe("Bug 10B — sibling controller propagation via connectionEvents", () =
     await Promise.resolve();
 
     expect(siblingBStatusMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// StrictMode's rehearsal unmount disposes a controller while its initial scan
+// is still in flight; subscribing after that left a listener nothing removed.
+describe("a controller disposed while it initialises", () => {
+  it("never subscribes to its siblings", async () => {
+    const inner = createConnectionEventBus();
+    let subscribed = 0;
+    const events = {
+      emit: inner.emit,
+      subscribe: (listener: Parameters<typeof inner.subscribe>[0]) => {
+        subscribed += 1;
+        const unsubscribe = inner.subscribe(listener);
+        return () => {
+          subscribed -= 1;
+          unsubscribe();
+        };
+      },
+    };
+    let finishScan!: (response: SerialPortListResponse) => void;
+    const controller = createDeviceConnectionController({
+      listSerialPorts: vi
+        .fn<DeviceConnectionControllerDeps["listSerialPorts"]>()
+        .mockReturnValue(new Promise((resolve) => { finishScan = resolve; })),
+      connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>(),
+      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
+      persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
+      connectionEvents: events,
+    });
+
+    const initializing = controller.initialize();
+    controller.dispose();
+    finishScan(listResponse([SUPPORTED_PORT]));
+    await initializing;
+
+    expect(subscribed).toBe(0);
   });
 });

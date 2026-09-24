@@ -60,6 +60,7 @@ export function UsbStripsCategory({
     isReconnecting,
     isHealthChecking,
     isConnected,
+    lastSuccessfulPort,
     statusCard,
     latestHealthCheck,
     refreshPorts,
@@ -86,7 +87,9 @@ export function UsbStripsCategory({
   const showStatus = statusModel.code !== "NO_PORTS";
 
   const localSink = deriveLocalSink(isConnected, connectedPort ?? null, activeWledIp);
-  const controllerBusy = isScanning || isConnecting || isReconnecting || isHealthChecking;
+  // Auto-recovery is not busy: pressing Connect is how the user takes over
+  // from it, which the reconnecting copy invites.
+  const controllerBusy = isScanning || isConnecting || isHealthChecking;
 
   const rescan = useCallback(() => {
     void refreshPorts();
@@ -94,10 +97,10 @@ export function UsbStripsCategory({
 
   const [addingToRoster, setAddingToRoster] = useState(false);
   const addToRoster = useCallback(
-    async (portName: string) => {
+    async (portName: string, previousPort: string | null) => {
       setAddingToRoster(true);
       try {
-        setPairedStrips(await ensureStripForPort(portName));
+        setPairedStrips(await ensureStripForPort(portName, previousPort));
         clearPersistError();
       } catch (e) {
         console.error("[LumaSync] UsbStripsCategory: adding the connected strip to the roster failed", e);
@@ -109,16 +112,29 @@ export function UsbStripsCategory({
     [setPairedStrips, clearPersistError, flagPersistError],
   );
 
+  // Between a connect landing and its roster write settling, the connected
+  // port is briefly missing from the list; the "not in the list" callout
+  // waits it out rather than flashing a live Add button.
+  const [connectInFlight, setConnectInFlight] = useState(false);
+
   // The one way a strip is added: connecting its controller. The roster entry
   // follows a connect the user asked for, never a boot auto-reconnect, so an
   // existing setup never gains a strip it did not ask for.
   const handleConnect = useCallback(
     async (portName: string) => {
-      selectPort(portName);
-      const connected = await connectSelectedPort();
-      if (connected) await addToRoster(portName);
+      // Read before the connect overwrites it: the port that was driving the
+      // strip until now decides whether an unlinked placement is this one's.
+      const previousPort = connectedPort ?? lastSuccessfulPort ?? null;
+      setConnectInFlight(true);
+      try {
+        selectPort(portName);
+        const connected = await connectSelectedPort();
+        if (connected) await addToRoster(portName, previousPort);
+      } finally {
+        setConnectInFlight(false);
+      }
     },
-    [selectPort, connectSelectedPort, addToRoster],
+    [connectedPort, lastSuccessfulPort, selectPort, connectSelectedPort, addToRoster],
   );
 
   return (
@@ -148,19 +164,26 @@ export function UsbStripsCategory({
           </span>
         </div>
         <div className="lm-usb-group-body">
-          {/* Always mounted: a live region added with its text is not announced. */}
+          {/* Always mounted and never `hidden`: a live region that enters the
+              accessibility tree together with its text is not announced. Empty,
+              it takes no space. The step list stays outside, or every check
+              would read a dozen nodes aloud. */}
           <div
             role="status"
             aria-live="polite"
-            className={cx("lm-usb-status", showStatus && `lm-status-banner ${STATUS_TONE_CLASS[statusModel.variant]}`)}
-            hidden={!showStatus}
+            className={cx(
+              "lm-usb-live",
+              showStatus && `lm-usb-status lm-status-banner ${STATUS_TONE_CLASS[statusModel.variant]}`,
+            )}
             data-testid="usb-status"
           >
             {showStatus ? (
               <>
                 <p className="lm-usb-status-title">{t(statusModel.titleKey)}</p>
                 <p className="lm-usb-status-body">
-                  {t(statusModel.bodyKey, { port: connectedPort ?? selectedPort ?? "-" })}
+                  {t(statusModel.bodyKey, {
+                    port: (statusModel.code === "CONNECTING" ? selectedPort : connectedPort ?? selectedPort) ?? "-",
+                  })}
                 </p>
                 {statusModel.detailsKey ? (
                   <p className="lm-usb-status-body">{t(statusModel.detailsKey)}</p>
@@ -172,47 +195,47 @@ export function UsbStripsCategory({
                     {t("device:port.missingHint", { port: selectedPort ?? "-" })}
                   </p>
                 ) : null}
-                {showHealthStepOutcomes ? (
-                  <div className="lm-usb-status-steps">
-                    {healthStepOutcomes.map((stepOutcome) => (
-                      <div
-                        key={stepOutcome.step}
-                        data-testid={`health-step-${stepOutcome.step}`}
-                        className="lm-usb-step"
-                      >
-                        <div className="lm-usb-step-tx">
-                          <p className="lm-usb-step-name">
-                            {t(`device:healthCheck.steps.labels.${stepOutcome.step}`)}
-                          </p>
-                          {stepOutcome.text ? (
-                            <>
-                              <p className="lm-usb-step-line">{t(stepOutcome.text.labelKey)}</p>
-                              <p className="lm-usb-step-hint">{t(stepOutcome.text.hintKey)}</p>
-                              {stepOutcome.text.details ? (
-                                <p className="lm-usb-status-detail">{stepOutcome.text.details}</p>
-                              ) : null}
-                            </>
-                          ) : (
-                            <>
-                              <p className="lm-usb-step-line">{stepOutcome.message}</p>
-                              {stepOutcome.details ? (
-                                <p className="lm-usb-status-detail">{stepOutcome.details}</p>
-                              ) : null}
-                            </>
-                          )}
-                        </div>
-                        <span className={cx("lm-usb-step-outcome", stepOutcome.pass ? "is-pass" : "is-fail")}>
-                          {stepOutcome.pass
-                            ? t("device:healthCheck.steps.outcome.pass")
-                            : t("device:healthCheck.steps.outcome.fail")}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
               </>
             ) : null}
           </div>
+          {showStatus && showHealthStepOutcomes ? (
+            <div className="lm-usb-status-steps" data-testid="usb-health-steps">
+              {healthStepOutcomes.map((stepOutcome) => (
+                <div
+                  key={stepOutcome.step}
+                  data-testid={`health-step-${stepOutcome.step}`}
+                  className="lm-usb-step"
+                >
+                  <div className="lm-usb-step-tx">
+                    <p className="lm-usb-step-name">
+                      {t(`device:healthCheck.steps.labels.${stepOutcome.step}`)}
+                    </p>
+                    {stepOutcome.text ? (
+                      <>
+                        <p className="lm-usb-step-line">{t(stepOutcome.text.labelKey)}</p>
+                        <p className="lm-usb-step-hint">{t(stepOutcome.text.hintKey)}</p>
+                        {stepOutcome.text.details ? (
+                          <p className="lm-usb-status-detail">{stepOutcome.text.details}</p>
+                        ) : null}
+                      </>
+                    ) : (
+                      <>
+                        <p className="lm-usb-step-line">{stepOutcome.message}</p>
+                        {stepOutcome.details ? (
+                          <p className="lm-usb-status-detail">{stepOutcome.details}</p>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                  <span className={cx("lm-usb-step-outcome", stepOutcome.pass ? "is-pass" : "is-fail")}>
+                    {stepOutcome.pass
+                      ? t("device:healthCheck.steps.outcome.pass")
+                      : t("device:healthCheck.steps.outcome.fail")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : null}
 
           {ports.length === 0 ? (
             <EmptyState
@@ -262,9 +285,10 @@ export function UsbStripsCategory({
         clearPersistError={clearPersistError}
         onRescan={rescan}
         onAddConnected={() => {
-          if (connectedPort) void addToRoster(connectedPort);
+          if (connectedPort) void addToRoster(connectedPort, connectedPort);
         }}
         addingConnected={addingToRoster}
+        rosterSettling={connectInFlight}
         onNavigateToRoomMap={onNavigateToRoomMap}
       />
     </div>

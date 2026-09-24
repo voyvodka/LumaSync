@@ -290,21 +290,29 @@ supported ports, each with one Connect) → Strip settings (firmware profile, ch
 order) → Paired strips. There used to be two half-paths: "Pair as strip" only connected, and
 "+ Add LED strip" only wrote a room-map placement and never connected. Now a connect the user asks
 for also makes sure the strip is in the roster (`device/usbStripRoster.ts`): nothing is written if a
-placement already names the port, a placement drawn before strips carried a port is adopted rather
-than duplicated, and a new one takes its LED count from the saved LED layout (60 before there is
-one). The boot auto-reconnect never writes, so an existing setup gains no strip it did not ask for; when
-it reconnects a strip the roster lacks, Paired strips says so and offers "Add connected strip",
-which runs the same function.
+placement already names the port, and a new one takes its LED count from the saved LED layout (60
+before there is one). A placement drawn before strips carried a port is adopted rather than
+duplicated, but only when that is unambiguous — it is the one unlinked placement, and no other port
+(the one connected, or last connected, before this connect) was driving it; otherwise a second
+controller would relabel the first one's strip. The write goes through `shellStore.update`, a
+revision-guarded replace, because a plain save of `roomMap` would revert Hue channels or zones written
+between its read and its write. The boot auto-reconnect never writes, so an existing setup gains no
+strip it did not ask for; when it reconnects a strip the roster lacks, Paired strips says so and
+offers "Add connected strip", which runs the same function. While a Connect is between landing and
+its roster write, that offer is held back rather than flashed.
 The placement changes no light: output and capture never read `roomMap.usbStrips` — it is the
-roster and the room map's drawing — so the room map stays off the first-run path. The cost is that
-a user's first visit to the room map finds that strip drawn along the top wall instead of the
-template picker. Ports that fail the VID/PID allowlist are listed only under a collapsed "Other
+roster and the room map's drawing — so the room map stays off the first-run path. A strip linked to
+a port does not make the map "non-empty" (`room-map/model/roomTemplate.ts`), so a USB user's first
+visit still opens on the template picker, and applying a template keeps every port-linked strip —
+the first takes the template's strip placement — along with the Hue channels and zones. Ports that fail the VID/PID allowlist are listed only under a collapsed "Other
 serial ports", with no action.
 
 **The first connect points at LED Setup; it does not open it.** It used to switch the window to LED
 Setup, so the chip type and colour order on the page the user connected from went unseen. It now
-raises `LED_SETUP_NEXT` (`useLedSetupPrompt`), once a session and only once boot has read the
-saved layout. It gives way to the onboarding step and the calibration notice, which say the same.
+raises `LED_SETUP_NEXT` (`useLedSetupPrompt`), once a session, only once boot has read the saved
+layout, and only for a connect the user made: the manual connect's `connectionEvents` emit carries
+`userInitiated`, the boot auto-reconnect's and recovery's do not. Keyed on `connected` flipping, it
+had nudged a user with no layout on every launch. It gives way to the onboarding step and the calibration notice, which say the same.
 
 **A Devices rail badge counts what is active.** A connected strip, a streaming bridge, a bound WLED
 panel; displays and manual entry have no badge. An enumerated port or a paired-but-idle bridge

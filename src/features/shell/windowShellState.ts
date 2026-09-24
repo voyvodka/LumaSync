@@ -25,31 +25,35 @@ const WRITER_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice
  * re-migrated, which normally settles on the second try. */
 const MIGRATION_WRITE_ATTEMPTS = 3;
 
+/** A stored snapshot as the app reads it: defaults filled in, then migrated. */
+function readSnapshot(saved: Partial<ShellState>): ShellState {
+  // `schemaVersion` defaults to `1`, NOT the latest — an absent version is a
+  // legacy snapshot the shim below still has to upgrade.
+  const merged: ShellState = {
+    ...DEFAULT_SHELL_STATE,
+    ...saved,
+    schemaVersion: saved.schemaVersion ?? 1,
+  };
+
+  // Caught so one corrupt persisted record cannot brick startup: we fall back
+  // to the unmigrated shape and the next launch retries.
+  try {
+    return migrateShellState(merged);
+  } catch (error) {
+    console.warn(
+      "[LumaSync] migration: schemaVersion upgrade failed; keeping legacy shape until next launch",
+      error,
+    );
+    return merged;
+  }
+}
+
 export async function loadShellState(): Promise<ShellState> {
   for (let attempt = 1; ; attempt++) {
     const { state: saved, revision } = await getShellState();
     if (!saved) return { ...DEFAULT_SHELL_STATE };
 
-    // `schemaVersion` defaults to `1`, NOT the latest — an absent version is a
-    // legacy snapshot the shim below still has to upgrade.
-    const merged: ShellState = {
-      ...DEFAULT_SHELL_STATE,
-      ...saved,
-      schemaVersion: saved.schemaVersion ?? 1,
-    };
-
-    // Caught so one corrupt persisted record cannot brick startup: we fall back
-    // to the unmigrated shape and the next launch retries.
-    let migrated: ShellState;
-    try {
-      migrated = migrateShellState(merged);
-    } catch (error) {
-      console.warn(
-        "[LumaSync] migration: schemaVersion upgrade failed; keeping legacy shape until next launch",
-        error,
-      );
-      migrated = merged;
-    }
+    const migrated = readSnapshot(saved);
 
     if (saved.schemaVersion !== undefined && migrated.schemaVersion === saved.schemaVersion) {
       return migrated;
@@ -153,6 +157,48 @@ export async function saveShellState(state: Partial<ShellState>): Promise<void> 
   // The queue continues past a rejection; the caller still sees it via `write`.
   // Without this a single failed write would wedge every later one forever.
   shellWriteQueue = write.catch(() => {});
+
+  return write;
+}
+
+/** A conflict means another write landed between the read and the swap. */
+const UPDATE_WRITE_ATTEMPTS = 5;
+
+/**
+ * Read-modify-write of keys whose value is derived from what is stored — a
+ * nested object such as `roomMap`, where a patch of the whole key would revert
+ * a field another writer (another window, or Rust) changed in between. `update`
+ * returns the partial to apply, or `null` to write nothing; it is re-run on a
+ * fresh read after a conflict, so it must be pure. Resolves with the state the
+ * update was applied to, as written. Main window only: the twin overlay has no
+ * grant for `replace_shell_state`.
+ */
+export async function updateShellState(
+  update: (current: ShellState) => Partial<ShellState> | null,
+): Promise<ShellState> {
+  const write = shellWriteQueue.then(async () => {
+    for (let attempt = 1; ; attempt++) {
+      const { state: saved, revision } = await getShellState();
+      const current = saved ? readSnapshot(saved) : { ...DEFAULT_SHELL_STATE };
+      const partial = update(current);
+      if (!partial) return current;
+
+      const next: ShellState = { ...current, ...partial };
+      const result = await replaceShellState({ state: next, expectedRevision: revision, writerId: WRITER_ID });
+      if (result.applied) {
+        notifyShellStateSaved(partial);
+        return next;
+      }
+      if (attempt >= UPDATE_WRITE_ATTEMPTS) {
+        throw new Error(`shell-state update lost ${attempt} races to other writes`);
+      }
+    }
+  });
+
+  shellWriteQueue = write.then(
+    () => undefined,
+    () => undefined,
+  );
 
   return write;
 }

@@ -18,6 +18,7 @@ import {
   loadShellState,
   onShellStateSaved,
   saveShellState,
+  updateShellState,
   type ShellStateSavedListener,
 } from "../shell/windowLifecycle";
 import type { ShellState } from "@/shared/contracts/shell";
@@ -44,6 +45,16 @@ export const shellStore = {
     return saveShellState(partial);
   },
 
+  /**
+   * Derive a partial from the stored state and write it only if nothing else
+   * was written meanwhile, retrying on a fresh read — see {@link updateShellState}.
+   * For a nested key such as `roomMap`, where `save` would revert a field
+   * another writer changed between the read and the save.
+   */
+  async update(update: (current: ShellState) => Partial<ShellState> | null): Promise<ShellState> {
+    return updateShellState(update);
+  },
+
   /** Fires after every successful save, in any window — see {@link onShellStateSaved}. */
   onSaved(listener: ShellStateSavedListener): () => void {
     return onShellStateSaved(listener);
@@ -61,7 +72,7 @@ export const shellStore = {
 // Named re-exports for direct import convenience
 // ---------------------------------------------------------------------------
 
-export { loadShellState, onShellStateSaved, saveShellState };
+export { loadShellState, onShellStateSaved, saveShellState, updateShellState };
 export type { ShellStateSavedListener };
 export type { ShellState };
 export { DEFAULT_SHELL_STATE };

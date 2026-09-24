@@ -3,18 +3,21 @@
 
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DevicePort } from "@/features/device/types";
 import type { UseDeviceConnectionResult } from "@/features/device/useDeviceConnection";
-import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
+import { DEFAULT_ROOM_MAP, type UsbStripPlacement } from "@/shared/contracts/roomMap";
 import type { ShellState } from "@/shared/contracts/shell";
 
 import { UsbStripsCategory } from "../UsbStripsCategory";
 
-const { stateRef, saveMock } = vi.hoisted(() => ({
+const { stateRef, saveMock, writeGate } = vi.hoisted(() => ({
   stateRef: { current: {} as Partial<ShellState> },
   saveMock: vi.fn<(partial: Partial<ShellState>) => void>(),
+  /** Set to hold roster writes open, as a slow disk would. */
+  writeGate: { current: null as Promise<void> | null },
 }));
 
 vi.mock("react-i18next", () => ({
@@ -28,6 +31,16 @@ vi.mock("@/features/persistence/shellStore", () => ({
       saveMock(partial);
       stateRef.current = { ...stateRef.current, ...partial };
       return Promise.resolve();
+    },
+    // The revision-guarded write, minus the guard: one writer here.
+    update: async (fn: (current: ShellState) => Partial<ShellState> | null) => {
+      await writeGate.current;
+      const partial = fn(stateRef.current as ShellState);
+      if (partial) {
+        saveMock(partial);
+        stateRef.current = { ...stateRef.current, ...partial };
+      }
+      return stateRef.current as ShellState;
     },
   },
 }));
@@ -67,6 +80,22 @@ function device(overrides: Partial<UseDeviceConnectionResult> = {}): UseDeviceCo
   };
 }
 
+/** The page as DeviceSection mounts it: the roster is state it writes back to. */
+function LivePage({ connection, initial = [] }: { connection: UseDeviceConnectionResult; initial?: UsbStripPlacement[] }) {
+  const [pairedStrips, setPairedStrips] = useState<UsbStripPlacement[]>(initial);
+  return (
+    <UsbStripsCategory
+      isActive
+      device={connection}
+      pairedStrips={pairedStrips}
+      setPairedStrips={setPairedStrips}
+      persistError={false}
+      flagPersistError={() => {}}
+      clearPersistError={() => {}}
+    />
+  );
+}
+
 async function renderCategory(connection: UseDeviceConnectionResult, pairedStrips: UsbStripPlacement[] = []) {
   const setPairedStrips = vi.fn<(next: UsbStripPlacement[]) => void>();
   render(
@@ -91,6 +120,7 @@ const CONNECT = { name: "device:page.usb.connect" };
 beforeEach(() => {
   stateRef.current = {};
   saveMock.mockClear();
+  writeGate.current = null;
 });
 
 describe("which ports the page offers", () => {
@@ -132,7 +162,12 @@ describe("which ports the page offers", () => {
     await renderCategory(connection);
 
     expect(screen.getByText("device:status.noPortsTitle")).toBeInTheDocument();
-    expect(screen.getByTestId("usb-status")).toHaveAttribute("hidden");
+    // Empty, not hidden: a live region must already be in the tree when its
+    // first status arrives, or that status is not announced.
+    const status = screen.getByTestId("usb-status");
+    expect(status).not.toHaveAttribute("hidden");
+    expect(status).toBeEmptyDOMElement();
+    expect(status).toHaveAttribute("role", "status");
     const controller = screen.getByTestId("usb-controller");
     await userEvent.setup().click(within(controller).getByRole("button", { name: "device:page.actions.rescan" }));
     expect(connection.refreshPorts).toHaveBeenCalled();
@@ -210,11 +245,87 @@ describe("Connect is the one way a strip is added", () => {
     expect(screen.getAllByTestId("usb-paired-strip")).toHaveLength(1);
   });
 
+  // Between the connect landing and the roster write, the connected port was
+  // briefly unlisted, and "Add connected strip" flashed up live.
+  it("does not offer to add the strip it is already adding", async () => {
+    let releaseWrite!: () => void;
+    writeGate.current = new Promise((resolve) => { releaseWrite = resolve; });
+    const idle = device({ ports: [STRIP_PORT] });
+    const connected = { ...idle, connectedPort: STRIP_PORT.portName, isConnected: true, status: "connected" as const };
+    const view = render(<LivePage connection={idle} />);
+    await act(async () => {});
+
+    await userEvent.setup().click(screen.getByRole("button", CONNECT));
+    // The controller's state lands before the roster write does.
+    view.rerender(<LivePage connection={connected} />);
+    expect(screen.queryByTestId("usb-paired-unlisted")).toBeNull();
+
+    await act(async () => { releaseWrite(); });
+    await waitFor(() => expect(screen.getAllByTestId("usb-paired-strip")).toHaveLength(1));
+    expect(screen.queryByTestId("usb-paired-unlisted")).toBeNull();
+  });
+
+  // The drawn strip belonged to the controller already connected; a second
+  // one got it relabelled instead of a strip of its own.
+  it("gives a second controller its own strip rather than taking the drawn one", async () => {
+    const drawn: UsbStripPlacement = { stripId: "usb-drawn", startX: 1, startY: 1, endX: 4, endY: 1, ledCount: 120 };
+    stateRef.current = { roomMap: { ...DEFAULT_ROOM_MAP, usbStrips: [drawn] } };
+    const secondPort: DevicePort = { ...STRIP_PORT, portName: "/dev/cu.usbserial-2210" };
+    const connection = device({
+      ports: [STRIP_PORT, secondPort],
+      connectedPort: STRIP_PORT.portName,
+      lastSuccessfulPort: STRIP_PORT.portName,
+      isConnected: true,
+      status: "connected",
+    });
+    await renderCategory(connection, [drawn]);
+
+    await userEvent.setup().click(screen.getByRole("button", CONNECT));
+
+    await waitFor(() => expect(saveMock).toHaveBeenCalledTimes(1));
+    expect(saveMock.mock.calls[0][0].roomMap?.usbStrips).toEqual([
+      drawn,
+      expect.objectContaining({ portName: secondPort.portName }),
+    ]);
+  });
+
   it("offers no add-strip form beside the roster", async () => {
     await renderCategory(device({ ports: [STRIP_PORT] }));
     const roster = screen.getByTestId("usb-paired-strips");
     expect(within(roster).queryByRole("button")).toBeNull();
     expect(within(roster).getByText("device:page.usb.paired.empty")).toBeInTheDocument();
+  });
+});
+
+describe("a paired strip row", () => {
+  const listed: UsbStripPlacement = {
+    stripId: "usb-a", startX: 1, startY: 1, endX: 4, endY: 1, ledCount: 60, portName: STRIP_PORT.portName,
+  };
+
+  // Every row has a Change port and an Open in map; a screen reader could not
+  // tell whose.
+  it("is a group named by its strip and port", async () => {
+    await renderCategory(device({ ports: [STRIP_PORT] }), [listed]);
+    const row = screen.getByRole("group", { name: `device:page.usb.paired.stripName ${STRIP_PORT.portName}` });
+    expect(within(row).getByRole("button", { name: "device:page.usb.paired.changePort" })).toBeInTheDocument();
+  });
+
+  // Closing the editor unmounted the focused control and dropped focus on <body>.
+  it.each([
+    ["Escape", async (user: ReturnType<typeof userEvent.setup>) => { await user.keyboard("{Escape}"); }],
+    ["Cancel", async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(screen.getByRole("button", { name: "device:page.usb.paired.changePortCancel" }));
+    }],
+    ["Enter", async (user: ReturnType<typeof userEvent.setup>) => { await user.keyboard("{Enter}"); }],
+  ] as const)("hands focus back to Change port after %s", async (_how, close) => {
+    await renderCategory(device({ ports: [STRIP_PORT] }), [listed]);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "device:page.usb.paired.changePort" }));
+    expect(screen.getByRole("combobox", { name: "device:page.usb.paired.portLabel" })).toHaveFocus();
+
+    await close(user);
+
+    expect(await screen.findByRole("button", { name: "device:page.usb.paired.changePort" })).toHaveFocus();
   });
 });
 
@@ -228,6 +339,19 @@ it("gives every button size on the page the same case", async () => {
     const body = css.slice(css.indexOf("{", start), css.indexOf("}", start));
     expect(body, selector).toMatch(/text-transform:\s*uppercase/);
   }
+});
+
+// The shared caps turned "Red", "Green", "Other colour / off" into 9.5px shouting.
+it("keeps the colour-order answers, which are words, in sentence case", async () => {
+  const { readStylesheet } = await import("@/test/stylesheetSource");
+  const css = readStylesheet();
+  const start = css.indexOf("\n.lm-color-order-answer {");
+  expect(start).toBeGreaterThanOrEqual(0);
+  const body = css.slice(css.indexOf("{", start), css.indexOf("}", start));
+  expect(body).toMatch(/text-transform:\s*none/);
+  expect(body).toMatch(/font-size:\s*11px/);
+  // Declared after the button rules it overrides, in the same layer.
+  expect(start).toBeGreaterThan(css.indexOf("\n.lm-btn-md {"));
 });
 
 describe("strip settings", () => {

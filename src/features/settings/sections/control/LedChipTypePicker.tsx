@@ -121,6 +121,7 @@ export function LedChipTypePicker({
 }: LedChipTypePickerProps) {
   const { t } = useTranslation();
   const titleId = useId();
+  const descId = useId();
   const advertisedFromBus = useAdvertisedPixelLayout();
   const advertisedLayout = advertisedFromProp ?? advertisedFromBus;
   const [chipType, setChipType] = useState<LedChipType>(
@@ -203,10 +204,12 @@ export function LedChipTypePicker({
       : undefined;
 
   return (
-    <div className="lm-strip-setting" role="group" aria-labelledby={titleId}>
+    <div className="lm-strip-setting">
       <h3 className="lm-strip-setting-h" id={titleId}>{t("lights:led.chipType.label")}</h3>
-      <p className="lm-strip-setting-desc">{t("lights:led.chipType.description")}</p>
-      <div role="radiogroup" aria-label={t("lights:led.chipType.label")} className="lm-strip-tiles">
+      <p className="lm-strip-setting-desc" id={descId}>{t("lights:led.chipType.description")}</p>
+      {/* The radiogroup is the one named container: a group around it with
+          the same name had every screen reader say it twice. */}
+      <div role="radiogroup" aria-labelledby={titleId} aria-describedby={descId} className="lm-strip-tiles">
         <ChipTile
           chipType={LED_CHIP_TYPE.WS2812B_GRB}
           label={t("lights:led.chipType.options.ws2812b")}

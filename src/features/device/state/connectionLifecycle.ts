@@ -13,6 +13,13 @@ export interface ConnectionLifecycle {
   connectSelectedPort(): Promise<boolean>;
 }
 
+const RECOVERY_CANCELLED_CARD: DeviceStatusCard = {
+  variant: "info",
+  code: "RECOVERY_CANCELLED_BY_USER",
+  message: "Auto-recovery was cancelled by manual selection.",
+  detailsKey: "device:status.hints.recoveryCancelled",
+};
+
 export function createConnectionLifecycle(
   store: ConnectionStore,
   deps: DeviceConnectionControllerDeps,
@@ -22,12 +29,7 @@ export function createConnectionLifecycle(
   const selectPort = (portName: string | null) => {
     const state = store.getState();
     if (state.isReconnecting) {
-      callbacks.cancelRecovery({
-        variant: "info",
-        code: "RECOVERY_CANCELLED_BY_USER",
-        message: "Auto-recovery was cancelled by manual selection.",
-        detailsKey: "device:status.hints.recoveryCancelled",
-      });
+      callbacks.cancelRecovery(RECOVERY_CANCELLED_CARD);
     }
 
     store.setState((prev) => ({
@@ -48,7 +50,7 @@ export function createConnectionLifecycle(
     }
 
     if (state.isReconnecting) {
-      callbacks.cancelRecovery();
+      callbacks.cancelRecovery(RECOVERY_CANCELLED_CARD);
     }
 
     const token = store.beginOperation(DEVICE_OPERATION.MANUAL_CONNECT);
@@ -57,9 +59,11 @@ export function createConnectionLifecycle(
     }
 
     const targetPort = state.selectedPort;
+    // A connect that took over from auto-recovery says so while it runs:
+    // retries have stopped, and nothing resumes them if this attempt fails.
     store.setState((prev) => ({
       ...prev,
-      statusCard: null,
+      statusCard: prev.statusCard?.code === RECOVERY_CANCELLED_CARD.code ? prev.statusCard : null,
     }));
 
     // Opening the port asserts DTR, which resets an AVR bootloader for
@@ -101,6 +105,7 @@ export function createConnectionLifecycle(
       await applySuccessfulConnection(store, deps, connectionEventsBus, {
         connectedPortName,
         statusCard: toConnectionCard(connection),
+        userInitiated: true,
       });
       return true;
     }

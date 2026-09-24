@@ -413,14 +413,50 @@ describe("LightsSection — the local output row names what is actually bound", 
     await act(async () => {});
     const rows = view.container.querySelectorAll(".lm-out-row");
     expect(rows).toHaveLength(2);
+    const user = userEvent.setup();
     for (const row of rows) {
       expect(row).toHaveClass("is-unavailable");
       expect(row).toHaveAttribute("aria-pressed", "false");
+      await user.click(row);
     }
     expect(onOutputTargetsChange).not.toHaveBeenCalled();
 
     const css = readStylesheet();
     expect(css).toMatch(/\.lm-out-row\.is-unavailable \.tg::after\s*\{[^}]*left:\s*1px/);
+  });
+
+  // USB selected but unplugged, Hue live: Hue was the last output reaching
+  // anything, and it could still be switched off.
+  it("keeps the last output that can receive on, not the last one selected", async () => {
+    const onOutputTargetsChange = vi.fn<(targets: HueRuntimeTarget[]) => void>();
+    const renderOutputs = (localOutputConnected: boolean) => (
+      <LightsSection
+        mode={{ kind: "off" }}
+        outputTargets={["usb", "hue"]}
+        localOutputConnected={localOutputConnected}
+        localSink={localOutputConnected ? { transport: "serial", id: "/dev/cu.usbserial-1420" } : null}
+        hueConfigured
+        hueReachable
+        hueStreaming={false}
+        modeLockReason={null}
+        onModeChange={vi.fn<(next: LightingModeConfig) => void>()}
+        onOutputTargetsChange={onOutputTargetsChange}
+      />
+    );
+    const view = render(renderOutputs(false));
+    await act(async () => {});
+    const user = userEvent.setup();
+    const hueRow = () => view.container.querySelectorAll(".lm-out-row")[1];
+
+    expect(hueRow()).toBeDisabled();
+    await user.click(hueRow());
+    expect(onOutputTargetsChange).not.toHaveBeenCalled();
+
+    // With the strip back, USB also receives, so Hue may go.
+    view.rerender(renderOutputs(true));
+    expect(hueRow()).toBeEnabled();
+    await user.click(hueRow());
+    expect(onOutputTargetsChange).toHaveBeenCalledWith(["usb"]);
   });
 
   it("no longer carries the firmware profile, which moved to Devices → USB", async () => {

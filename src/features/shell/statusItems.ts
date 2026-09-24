@@ -78,9 +78,10 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
       nerdStat: true,
     },
     {
-      // The chip names the transport that is actually bound. "USB" is the
-      // label when nothing is, because the reconnect deep-link lands on the
-      // same screen either way and USB is the path a first-run user takes.
+      // The chip names the transport that is actually bound, and "USB" when
+      // nothing is. Only then does it offer a reconnect (a WLED chip is a
+      // bound, connected sink), so the deep link opens the USB category: the
+      // label on screen, and the path a first-run user takes.
       label: localSink?.transport === "wled" ? "WLED" : "USB",
       state: localConnected ? t("shell:statusBar.state.ok") : t("shell:statusBar.state.off"),
       kind: localConnected ? "ok" : "off",

@@ -63,6 +63,16 @@ describe("LedChipTypePicker — tile styling", () => {
     }
   });
 
+  // A group named by the heading wrapped a radiogroup with the same name, so
+  // every screen reader said "LED chip type" twice.
+  it("names the choice once, on the radiogroup", () => {
+    render(<LedChipTypePicker initialChipType={LED_CHIP_TYPE.WS2812B_GRB} />);
+    expect(screen.getByRole("radiogroup", { name: "lights:led.chipType.label" })).toHaveAccessibleDescription(
+      "lights:led.chipType.description",
+    );
+    expect(screen.queryByRole("group", { name: "lights:led.chipType.label" })).toBeNull();
+  });
+
   it("gives the tile a focus ring, a checked state and a forced-colors rule", () => {
     const css = readStylesheet();
     expect(css).toMatch(/\.lm-strip-tile:focus-visible\s*\{[^}]*var\(--lm-focus-ring\)/);

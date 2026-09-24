@@ -4,7 +4,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SHELL_COMMANDS, SHELL_STATE_SCHEMA_VERSION } from "@/shared/contracts/shell";
+import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
+import { SHELL_COMMANDS, SHELL_STATE_SCHEMA_VERSION, type ShellState } from "@/shared/contracts/shell";
 import { createFakeShellStateBackend } from "@/test/fakeShellStateBackend";
 
 type Invoke = (command: string, args?: unknown) => Promise<unknown>;
@@ -158,5 +159,68 @@ describe("the migration write-back", () => {
 
     expect(backend.replaces()).toHaveLength(0);
     expect(backend.revision()).toBe(0);
+  });
+});
+
+// A nested key saved with load-then-save reverts whatever another writer put
+// in it between the read and the save: a connect adding a USB strip took the
+// Hue channels a bridge sync had just written into `roomMap` with it.
+describe("update, the revision-guarded read-modify-write", () => {
+  const CHANNEL_A = { channelIndex: 0, x: 1, y: 1, z: 0 };
+  const CHANNEL_B = { channelIndex: 1, x: 2, y: 1, z: 0 };
+  const STRIP = { stripId: "usb-a", startX: 1, startY: 1, endX: 4, endY: 1, ledCount: 60, portName: "COM3" };
+
+  function seedRoomMap() {
+    backend.seed({
+      schemaVersion: SHELL_STATE_SCHEMA_VERSION,
+      roomMap: { ...DEFAULT_ROOM_MAP, hueChannels: [CHANNEL_A] },
+      roomMapVersion: 1,
+    });
+  }
+
+  it("re-reads and re-applies when another write lands between its read and its write", async () => {
+    seedRoomMap();
+    const main = await openWindow();
+    const other = await openWindow();
+    let raced = false;
+    invokeThrough = async (command, args) => {
+      const answer = await backend.invoke(command, args);
+      if (command === SHELL_COMMANDS.GET_SHELL_STATE && !raced) {
+        raced = true;
+        // A bridge sync writes a channel between this read and the write.
+        const current = await other.shellStore.load();
+        await other.shellStore.save({
+          roomMap: { ...current.roomMap, hueChannels: [CHANNEL_A, CHANNEL_B] } as ShellState["roomMap"],
+        });
+      }
+      return answer;
+    };
+    const heard: unknown[] = [];
+    main.shellStore.onSaved((saved) => heard.push(saved));
+    let calls = 0;
+
+    await main.shellStore.update((current) => {
+      calls += 1;
+      const roomMap = current.roomMap ?? DEFAULT_ROOM_MAP;
+      return { roomMap: { ...roomMap, usbStrips: [...roomMap.usbStrips, STRIP] }, roomMapVersion: 2 };
+    });
+
+    expect(calls).toBe(2);
+    const stored = backend.state() as Partial<ShellState>;
+    expect(stored.roomMap?.hueChannels).toEqual([CHANNEL_A, CHANNEL_B]);
+    expect(stored.roomMap?.usbStrips).toEqual([STRIP]);
+    // Its own write reaches its listeners once; the echo is dropped.
+    await flush();
+    expect(heard.filter((saved) => (saved as Partial<ShellState>).roomMapVersion === 2)).toHaveLength(1);
+  });
+
+  it("writes nothing when the update has nothing to change", async () => {
+    seedRoomMap();
+    const main = await openWindow();
+    const before = backend.revision();
+
+    await main.shellStore.update(() => null);
+
+    expect(backend.revision()).toBe(before);
   });
 });

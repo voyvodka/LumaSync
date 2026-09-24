@@ -18,7 +18,13 @@ import { applyModeMinSize, resizeToMode } from "./windowAnimator";
 import { persistWindowState, restoreWindowState, schedulePersistWindowState } from "./windowGeometry";
 import { loadShellState, saveShellState } from "./windowShellState";
 
-export { loadShellState, onShellStateSaved, saveShellState, type ShellStateSavedListener } from "./windowShellState";
+export {
+  loadShellState,
+  onShellStateSaved,
+  saveShellState,
+  updateShellState,
+  type ShellStateSavedListener,
+} from "./windowShellState";
 export {
   fitSizeToWorkArea,
   firstRunFullSize,

@@ -291,6 +291,16 @@ export function buildDeviceStatusCard(input: DeviceStatusCardInput): DeviceStatu
     };
   }
 
+  if (input.status === "connecting") {
+    return {
+      variant: "info",
+      code: "CONNECTING",
+      titleKey: "device:status.connectingTitle",
+      bodyKey: "device:status.connectingBody",
+      ...hint,
+    };
+  }
+
   if (input.status === "scanning") {
     return {
       variant: "info",

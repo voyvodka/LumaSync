@@ -1896,3 +1896,34 @@
     color: GrayText;
   }
 }
+
+/* Multi-strip canvas affordance — port name floats above each strip's
+   start handle so the user can tell which controller drives which run.
+   Sits 16 px above the status badge so the two never collide. */
+.lm-room-usb-port-label {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(7, 8, 10, 0.78);
+  border: 1px solid var(--lm-line-2);
+  backdrop-filter: blur(4px);
+  font-family: var(--lm-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  color: var(--lm-ink-dim);
+  pointer-events: none;
+  z-index: 22;
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (forced-colors: active) {
+  .lm-room-usb-port-label {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+}

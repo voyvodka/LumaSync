@@ -18,19 +18,22 @@
 .lm-paired-strips-unlisted-tx {
   flex: 1 1 240px;
 }
-/* Three cells: the actions share one, so a second button wraps inside it
-   instead of dropping under the icon and widening that column. */
+/* Icon, text, actions. The text keeps at least 160px, so a port path is never
+   broken mid-token beside the buttons (Turkish labels at 528px did that); when
+   the row cannot hold all three, the actions wrap below as one block, right-
+   aligned, and their buttons wrap inside it. */
 .lm-paired-strip {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid var(--lm-line);
   background: var(--lm-panel-2);
 }
 .lm-paired-strip-ic {
+  flex: none;
   width: 32px;
   height: 32px;
   display: grid;
@@ -45,6 +48,7 @@
   height: 18px;
 }
 .lm-paired-strip-tx {
+  flex: 1 1 160px;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -68,6 +72,8 @@
   overflow-wrap: anywhere;
 }
 .lm-paired-strip-actions {
+  flex: 0 1 auto;
+  margin-left: auto;
   display: flex;
   flex-wrap: wrap;
   align-items: center;

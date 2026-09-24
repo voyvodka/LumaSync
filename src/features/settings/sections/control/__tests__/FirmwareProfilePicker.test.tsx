@@ -86,9 +86,55 @@ describe("FirmwareProfilePicker — Bug H4 mismatch gating", () => {
 
     // The tile that matches the firmware-advertised profile is enabled.
     expect(v1Tile.getAttribute("aria-disabled")).toBeNull();
-    // The mismatched tile is aria-disabled with a tooltip via title.
+    // The mismatched tile is aria-disabled and says why on the tile, not in
+    // a hover title a keyboard or touch user never sees.
     expect(adalightTile.getAttribute("aria-disabled")).toBe("true");
-    expect(adalightTile.getAttribute("title")).toMatch(/mismatchTooltip/);
+    expect(adalightTile).not.toHaveAttribute("title");
+    expect(adalightTile).toHaveTextContent(/mismatchTooltip/);
+  });
+
+  // Adalight saved, v1 detected: the checked tile is the disabled one, and the
+  // other was unchecked, so Tab skipped the whole group.
+  it("keeps a tab stop in the group when the checked tile is the disabled one", async () => {
+    render(
+      <>
+        <button type="button">before</button>
+        <FirmwareProfilePicker
+          initialProfile={FIRMWARE_PROFILE.ADALIGHT}
+          advertisedFirmwareProfile={FIRMWARE_PROFILE.LUMASYNC_V1}
+          initialDontWarnFirmwareProfileMismatch={false}
+        />
+      </>,
+    );
+    const v1Tile = screen.getByRole("radio", { name: /lumasyncV1Label/ });
+    const adalightTile = screen.getByRole("radio", { name: /adalightLabel/ });
+    expect(adalightTile).toHaveAttribute("tabindex", "-1");
+    expect(v1Tile).toHaveAttribute("tabindex", "0");
+
+    const user = userEvent.setup();
+    screen.getByRole("button", { name: "before" }).focus();
+    await user.tab();
+    expect(v1Tile).toHaveFocus();
+
+    // Space picks it, as on any radio.
+    await user.keyboard(" ");
+    expect(v1Tile).toBeChecked();
+  });
+
+  it("toggles the override from its words, not only the switch", async () => {
+    render(
+      <FirmwareProfilePicker
+        initialProfile={FIRMWARE_PROFILE.LUMASYNC_V1}
+        advertisedFirmwareProfile={FIRMWARE_PROFILE.LUMASYNC_V1}
+        initialDontWarnFirmwareProfileMismatch={false}
+      />,
+    );
+    const toggle = screen.getByTestId("lm-fw-use-anyway");
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+
+    await userEvent.setup().click(screen.getByText("lights:led.firmwareProfile.useAnywayHint"));
+
+    expect(toggle).toHaveAttribute("aria-checked", "true");
   });
 
   it("leaves all profiles enabled when advertisedFirmwareProfile is undefined", () => {
@@ -247,6 +293,8 @@ describe("FirmwareProfilePicker — radio semantics", () => {
     );
 
     const group = screen.getByRole("radiogroup", { name: "lights:led.firmwareProfile.title" });
+    // One named container: a group around it with the same name was read twice.
+    expect(screen.queryByRole("group", { name: "lights:led.firmwareProfile.title" })).toBeNull();
     const v1Tile = screen.getByRole("radio", { name: /lumasyncV1Label/ });
     const adalightTile = screen.getByRole("radio", { name: /adalightLabel/ });
     expect(group).toContainElement(v1Tile);
