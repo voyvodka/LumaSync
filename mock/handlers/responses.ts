@@ -44,6 +44,11 @@ import type {
 } from "../../src/shared/contracts/updater";
 import type { FullTelemetrySnapshot } from "../../src/shared/contracts/telemetry";
 import type {
+  ApplyOutputsResult,
+  LightingRuntimeSnapshot,
+  RetuneLightingResult,
+} from "../../src/shared/contracts/lightingRuntime";
+import type {
   LaunchContext,
   ShellStateSnapshot,
   ShellStateWriteResult,
@@ -208,6 +213,10 @@ export interface CommandResponse {
   set_lighting_mode: ModeCommandResult;
   stop_lighting: ModeCommandResult;
   get_lighting_mode_status: ModeCommandResult;
+  apply_outputs: ApplyOutputsResult;
+  retune_lighting: RetuneLightingResult;
+  release_hue_output: ApplyOutputsResult;
+  get_lighting_runtime: LightingRuntimeSnapshot;
 
   /**
    * The one command whose bridge return type is NOT the wire type —

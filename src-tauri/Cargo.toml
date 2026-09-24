@@ -55,7 +55,10 @@ openssl = { version = "0.10", features = ["vendored"] }
 #
 # `macros` is `tokio::join!` in Hue discovery. tauri-plugin-store used to switch
 # it on for us; with the plugin gone, naming it here is what keeps it.
-tokio = { version = "1.52.3", features = ["rt", "signal", "sync", "macros"] }
+#
+# `time` is the boot Hue retry's poll (`lighting_mode::outputs`). reqwest turns
+# it on today; naming it keeps it if reqwest ever stops.
+tokio = { version = "1.52.3", features = ["rt", "signal", "sync", "macros", "time"] }
 # v1.5 W2-A1 — OS keychain abstraction for Hue credentials.
 # Enabled backends: macOS Security.framework, Windows CredMan, Linux Secret Service (libsecret via D-Bus).
 #
@@ -105,7 +108,8 @@ e2e = ["dep:tauri-plugin-wdio-webdriver"]
 # resolver v2 keeps the `test` feature out of the normal build graph, so the
 # shipped binary never links the mock runtime.
 tauri = { version = "2", features = ["test"] }
-tokio = { version = "1.52.3", features = ["rt", "macros", "sync", "time"] }
+# `test-util` is `tokio::time::pause` for the boot Hue retry's 25 s window.
+tokio = { version = "1.52.3", features = ["rt", "macros", "sync", "time", "test-util"] }
 
 [profile.release]
 lto = "thin"

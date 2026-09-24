@@ -14,7 +14,7 @@ use crate::commands::device_connection::ActiveSinkRegistry;
 use crate::commands::hue::commands::stop_hue_stream_before_exit;
 use crate::commands::hue::state_store::HueRuntimeStateStore;
 use crate::commands::launch::AUTOSTART_TRAY_ARG;
-use crate::commands::lighting_mode::stop_lighting_blocking;
+use crate::commands::lighting_mode::{stop_lighting_blocking, LightingRuntimeState};
 
 /// Hard-exit deadline for shutdown. The cleanup path joins worker threads,
 /// drops SCStream, deactivates DTLS — each of which can theoretically hang
@@ -80,12 +80,17 @@ pub(crate) struct CleanupSteps {
     pub clear_sink: Box<dyn FnOnce() + Send>,
 }
 
-fn app_cleanup_steps<R: Runtime>(app: &AppHandle<R>) -> CleanupSteps {
+pub(crate) fn app_cleanup_steps<R: Runtime>(app: &AppHandle<R>) -> CleanupSteps {
     let lighting_app = app.clone();
     let hue_app = app.clone();
     let sink_app = app.clone();
     CleanupSteps {
-        stop_lighting: Box::new(move || stop_lighting_blocking(&lighting_app).map(|_| ())),
+        // Closing first: a mode start already past the transition queue is
+        // refused under the runtime lock rather than started after this stop.
+        stop_lighting: Box::new(move || {
+            lighting_app.state::<LightingRuntimeState>().mark_closing();
+            stop_lighting_blocking(&lighting_app).map(|_| ())
+        }),
         stop_hue: Box::new(move |deadline| {
             stop_hue_stream_before_exit(&hue_app.state::<HueRuntimeStateStore>(), deadline)
                 .status

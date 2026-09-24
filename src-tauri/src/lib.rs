@@ -84,6 +84,8 @@ use commands::led_preview::{
     close_led_twin_overlay, hide_led_control_popup, open_led_control_popup, open_led_twin_overlay,
     show_led_control_popup, LedTwinState,
 };
+use commands::lighting_mode::outputs::{apply_outputs, get_lighting_runtime, release_hue_output};
+use commands::lighting_mode::tuning::retune_lighting;
 use commands::lighting_mode::{
     get_led_preview_status, get_lighting_mode_status, set_lighting_mode, start_led_test_pattern,
     stop_led_test_pattern, stop_lighting, LightingRuntimeState,
@@ -783,6 +785,10 @@ pub fn run() {
             get_shell_state,
             patch_shell_state,
             replace_shell_state,
+            apply_outputs,
+            retune_lighting,
+            release_hue_output,
+            get_lighting_runtime,
         ])
         .build(app_context())
         .expect("error while building tauri application");

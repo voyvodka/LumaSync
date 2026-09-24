@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-lighting-runtime"
+description = "Enables the get_lighting_runtime command without any pre-configured scope."
+commands.allow = ["get_lighting_runtime"]
+
+[[permission]]
+identifier = "deny-get-lighting-runtime"
+description = "Denies the get_lighting_runtime command without any pre-configured scope."
+commands.deny = ["get_lighting_runtime"]
