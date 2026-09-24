@@ -1072,7 +1072,10 @@ mod tests {
         // matrix has to match `linear_rgb_to_xy`.
         let (r, g, b) = xy_to_linear_rgb(0.692, 0.308, 0.283_881);
         assert!(r > 0.9, "expected near-saturated red, got r={r}");
-        assert!(g < 0.05 && b < 0.05, "expected red-dominant, got ({r}, {g}, {b})");
+        assert!(
+            g < 0.05 && b < 0.05,
+            "expected red-dominant, got ({r}, {g}, {b})"
+        );
     }
 
     // -----------------------------------------------------------------------

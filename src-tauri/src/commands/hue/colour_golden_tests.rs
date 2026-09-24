@@ -39,8 +39,8 @@ use super::sender::{HueGamutType, HueLightMetadata};
 use crate::commands::led_output::EncoderPlan;
 
 const AREA: &str = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
-/// `powf` comes from the platform's libm, which may differ by an ulp; one
-/// wire step either way covers that and nothing a real regression does.
+/// `powf` comes from the platform's libm, which may differ by an ulp; two
+/// wire steps either way cover that and nothing a real regression does.
 const WIRE_TOLERANCE: i32 = 2;
 
 fn channel() -> HueAreaChannel {
@@ -169,7 +169,12 @@ fn the_primaries_are_clipped_in_linear_light() {
             [40_191, 48_272, 2_708],
             [4_702, 0, 62_963],
         ),
-        (C, [62_637, 1_237, 0], [3, 65_286, 3_462], [2_124, 9, 52_754]),
+        (
+            C,
+            [62_637, 1_237, 0],
+            [3, 65_286, 3_462],
+            [2_124, 9, 52_754],
+        ),
     ] {
         assert_wire("red", RED, Some(gamut), red);
         assert_wire("green", GREEN, Some(gamut), green);
