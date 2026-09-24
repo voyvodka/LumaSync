@@ -409,9 +409,10 @@ probes the area's readiness every 3 s for up to 25 s and, the moment the area is
   window closes first.
 
 **Lights return to their pre-stream state when Hue output ends.** Ending entertainment
-(`action: stop`) makes the bridge put each light's colour back but leave it **on** — a lamp that was
-off before Ambilight stayed on afterwards (seen on hardware, 2026-09-23). Hue Sync puts it back
-off, and so do we now (`commands/hue/light_restore.rs`).
+(`action: stop`) makes the bridge put its own post-stream state on each light and leave it **on** —
+a lamp that was off before Ambilight stayed on afterwards (seen on hardware, 2026-09-23), and a lamp
+that was on came back at another brightness and colour temperature than it had (2026-09-24). Hue
+Sync puts it back as it was, and so do we now (`commands/hue/light_restore.rs`).
 
 - **Snapshot point.** The start already GETs every area light (`/clip/v2/resource/light/{id}`) for
   its gamut right before the sender PUTs `action: start`; the same response now yields `on`,
@@ -433,9 +434,38 @@ off, and so do we now (`commands/hue/light_restore.rs`).
   its sender was being built restores too, because that stop found nothing to deactivate or restore.
 - **Order.** The restore runs after the stop's deactivate and after the sender has signalled exit
   (it signals only after its own deactivate): during entertainment the bridge overrides light
-  writes and then puts its own state back. If off lamps ever come back on with every restore PUT
-  logged as successful, the bridge's own post-stream restore is landing after ours and needs a
-  settle delay — that has not been seen, and none is added.
+  writes. A stop that finds the token already held by the sender skips its own PUT — the
+  `deactivate_with_token: skip` debug line, expected — and the sender's PUT is then awaited through
+  the shutdown wait. If that PUT failed, the sender handed the token back and nobody else would send
+  one, so the stop sends it again after the wait, before restoring — unless the stop's own PUT had
+  already failed, since a bridge that did not answer once would only double the wait.
+- **The bridge's own post-stream state lands after ours, so the restore watches.** Acknowledging
+  `action: stop` is not the end of it. On a BSB002 (2026-09-24, two lights at 56.92 % / 446 mirek
+  before the stream, polled every ~300 ms) the restore landed — a read straight after it showed our
+  values — and 300–600 ms later the bridge put its own post-stream state on both lights
+  (30.83 % / 367 mirek, *not* their pre-stream state) and kept it. After a DTLS drop the same state
+  was on the lights at the drop, and after the reconnected session's stop it landed on top of the
+  restore again. Waiting for it before writing was rejected: nothing says when it has landed — when
+  it happens to equal the snapshot there is no change to wait for — and a fixed settle delay is a
+  guess that also postpones switching an off lamp off. So the restore writes at once and then
+  watches: every 250 ms one `GET /clip/v2/resource/light` (every light in one request, so no light
+  budget) compares each light with its snapshot (1 % brightness, 2 mirek, 0.01 xy), and a light that
+  no longer reads as it is written again through the same pacer. The watch ends once every light
+  has been written again and read back holding — about a second after the stop on that bridge — or
+  `HUE_LIGHT_RESTORE_WATCH` (1.5 s) after the first pass; a bridge that never undoes the restore
+  costs the whole window. A light is written again at most twice (`HUE_LIGHT_RESTORE_MAX_REAPPLY`),
+  so a change made in the Hue app during the window is fought at most twice. The log shows the
+  first pass (`restored n/n light(s)`) and then the watch (`watched …, re-applied n write(s) the
+  bridge undid`). `FakeHue::after_stop_bridge_sets` plays the measured bridge in the tests.
+- **Never under another stream.** Before writing, the restore reads the area (`status` /
+  `active_streamer`, as readiness does). Our stream is over by then, so an active area is another
+  app — or a reconnect of ours the stop overtook, which gives it back within moments — and the
+  restore waits up to the watch window for it to come free, then leaves the lights alone. During the
+  watch a light reading `mode: streaming` is never written, and if the area is active the watch
+  ends. A restore also asks the runtime before every write and read: once a newer session of ours
+  has begun (`Starting`, `Running`, `Reconnecting`) it writes nothing more. `stop_hue_stream`
+  already holds starts back (next entry); the guard covers an abandoned start's restore, which has
+  no such gate.
 - **A start waits for a stop's restore.** `stop_with_timeout` leaves the runtime `Idle` at once,
   and the deactivate, the sender wait and the restore all run after it, so a start issued in that
   window (another webview, the test lease, a tray action) used to read the lights while the restore
@@ -444,6 +474,8 @@ off, and so do we now (`commands/hue/light_restore.rs`).
   `HueRuntimeStateStore::stop_in_flight` from its first lock until the restore returns, and
   `start_hue_stream` / `restart_hue_stream` wait for it before they read the bridge. They only
   wait — nothing is held across a start, so a stop can still overtake a start as described above.
+  The wait includes the watch, so a start issued right after Off waits up to ~1.6 s longer than it
+  used to, and it reads the lights as restored rather than as the bridge was about to leave them.
   The quit path does not take it: nothing starts after it.
 - **The sender exits only when every handle is gone.** Both senders (DTLS and HTTP fallback) leave
   their loop once the frame mailbox closes, which happens when the last `HueColorSender` clone
@@ -529,7 +561,8 @@ off, and so do we now (`commands/hue/light_restore.rs`).
   end, so an off light it drove keeps the last streamed colour for its next switch-on.
 - **Pacing and bounds.** One PUT per light through the fallback's `RequestPacer` at the ~10 req/s
   light budget, so ten lights take about a second. An interactive stop gives the restore
-  `HUE_LIGHT_RESTORE_BUDGET` (2.5 s); `stop_hue_stream` is `async` for this, because a sync command
+  `HUE_LIGHT_RESTORE_BUDGET` (4 s: a first pass over ~25 lights, then the watch in what is left);
+  `stop_hue_stream` is `async` for this, because a sync command
   runs on the main thread and froze the window. A refused key (the classifier's `AuthInvalid`,
   #418's HTML page included) or an unanswered request ends the restore; a throttle is retried once;
   a light rejected on its merits is skipped. None of it changes the stop's status: logged, never
@@ -537,7 +570,9 @@ off, and so do we now (`commands/hue/light_restore.rs`).
 - **Quit.** `[shutdown]` step 2 calls `stop_hue_stream_before_exit` with a deadline 3.3 s after
   cleanup starts; the deactivate PUT, the sender wait and every restore request honour it, so a
   slow bridge ends the step at that deadline rather than at the 4 s watchdog, and the thread is
-  abandoned 100 ms after it regardless. A slow step 1 leaves step 2 about 1.8 s.
+  abandoned 100 ms after it regardless. A slow step 1 leaves step 2 about 1.8 s. The watch honours
+  the same deadline: on the measured bridge it adds about a second to step 2, at most the 1.5 s
+  window, and a slow step 1 cuts it short rather than moving the exit.
 - **Unclean exit cannot restore.** A crash or kill never reaches the stop; the bridge times the
   session out and the lights stay on in their restored colour. Accepted — nothing on disk carries the
   snapshot to the next launch, and a snapshot taken then would read the lights already on.

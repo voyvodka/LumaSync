@@ -1,13 +1,15 @@
 //! Put an entertainment area's lights back the way they were before we
 //! streamed to them.
 //!
-//! Ending entertainment (`action: stop`) makes the bridge restore each light's
-//! colour but leave it **on** — a light that was off before Ambilight is on
-//! afterwards. So the state is read before the stream starts and written back
-//! once Hue output ends. When each of those happens, and when neither may, is
-//! in docs/architecture/hue.md ("Lights return to their pre-stream state").
+//! Ending entertainment (`action: stop`) makes the bridge put its own
+//! post-stream state on each light — always **on**, and not necessarily the
+//! brightness or colour it had — and that lands a few hundred ms *after* the
+//! stop is acknowledged. So the state is read before the stream starts,
+//! written back once Hue output ends, and written again where the bridge
+//! undoes it. When each of those happens, and when none may, is in
+//! docs/architecture/hue.md ("Lights return to their pre-stream state").
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
 
 use log::{info, warn};
@@ -19,9 +21,26 @@ use super::sender::{RequestPacer, HUE_HTTP_FALLBACK_MAX_REQUESTS_PER_SEC};
 use super::state_store::HueRuntimeOwner;
 use super::transport::{blocking_client_for_key, read_body_blocking, send_error_text};
 
-/// Ceiling on one interactive restore. At the ~10 req/s light budget this
-/// covers ~25 lights; a bigger area is restored as far as the budget reaches.
-pub(crate) const HUE_LIGHT_RESTORE_BUDGET: Duration = Duration::from_millis(2_500);
+/// Ceiling on one interactive restore: a first pass over ~25 lights at the
+/// ~10 req/s light budget, then the watch. A bigger area is restored as far
+/// as the budget reaches.
+pub(crate) const HUE_LIGHT_RESTORE_BUDGET: Duration = Duration::from_millis(4_000);
+
+/// How long after the first pass the lights are watched for the bridge's own
+/// post-entertainment state landing on top of ours. Measured on a BSB002 at
+/// 300–600 ms after our writes; see docs/architecture/hue.md.
+pub(crate) const HUE_LIGHT_RESTORE_WATCH: Duration = Duration::from_millis(1_500);
+
+/// Gap between two reads of the lights during the watch.
+const HUE_LIGHT_RESTORE_POLL_INTERVAL: Duration = Duration::from_millis(250);
+
+/// A light the bridge keeps changing back is written again at most this many
+/// times, so a user adjusting it in the Hue app is not fought for long.
+const HUE_LIGHT_RESTORE_MAX_REAPPLY: u8 = 2;
+
+const HUE_LIGHT_RESTORE_BRIGHTNESS_TOLERANCE: f64 = 1.0;
+const HUE_LIGHT_RESTORE_MIREK_TOLERANCE: u16 = 2;
+const HUE_LIGHT_RESTORE_XY_TOLERANCE: f64 = 0.01;
 
 /// Longest one restore PUT may take. A bridge that stops answering costs one
 /// of these, not the whole budget: a send failure ends the restore.
@@ -211,18 +230,25 @@ pub(crate) fn take_light_restore_for_abandoned_start(
 // The restore itself
 // ---------------------------------------------------------------------------
 
-/// Why a restore stopped before every light was written.
+/// Why a restore stopped before it was done.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum HueLightRestoreStop {
     Deadline,
     AuthInvalid,
     Unreachable(String),
     NoClient(String),
+    /// Another streamer holds the area; its lights are not ours to write.
+    AreaTaken,
+    /// A newer session of ours began; writing now would paint under it.
+    Superseded,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct HueLightRestoreReport {
+    /// Lights the first pass wrote.
     pub(crate) restored: usize,
+    /// Writes the watch repeated because the bridge had changed a light back.
+    pub(crate) reapplied: usize,
     pub(crate) total: usize,
     pub(crate) stopped: Option<HueLightRestoreStop>,
 }
@@ -235,21 +261,39 @@ enum PutOutcome {
     Unreachable(String),
 }
 
+/// What one watch poll read for a light.
+enum LightReading {
+    State(HueLightState),
+    Streaming,
+}
+
+enum ReadFailure {
+    /// Ends the restore, as it would a write.
+    Stop(HueLightRestoreStop),
+    /// This read is lost; the next one may land.
+    Skip,
+}
+
 /// Write each snapshot back, paced to the bridge's light budget
-/// (`HUE_HTTP_FALLBACK_MAX_REQUESTS_PER_SEC`), and return by `deadline`
-/// whatever the bridge does. Blocking; never fatal — every outcome is logged
-/// and reported, none is raised.
+/// (`HUE_HTTP_FALLBACK_MAX_REQUESTS_PER_SEC`), then watch the lights and
+/// write again any the bridge changes back. Returns by `deadline` whatever the
+/// bridge does. Blocking; never fatal — every outcome is logged and reported,
+/// none is raised.
 ///
 /// Must run after the area's `action: stop` has landed: during entertainment
-/// the bridge overrides these writes and then puts its own state back.
+/// the bridge overrides these writes. `superseded` is asked before every write
+/// and every poll; once it answers `true` nothing more is written.
+/// docs/architecture/hue.md ("Lights return to their pre-stream state").
 pub(crate) fn restore_lights(
     restore: &HueLightRestore,
     deadline: Instant,
+    superseded: &dyn Fn() -> bool,
 ) -> HueLightRestoreReport {
     let started = Instant::now();
     let total = restore.lights.len();
     let mut report = HueLightRestoreReport {
         restored: 0,
+        reapplied: 0,
         total,
         stopped: None,
     };
@@ -267,66 +311,26 @@ pub(crate) fn restore_lights(
             return report;
         }
     };
+    let mut run = RestoreRun {
+        client: &client,
+        restore,
+        deadline,
+        superseded,
+        pacer: RequestPacer::new(HUE_HTTP_FALLBACK_MAX_REQUESTS_PER_SEC),
+    };
 
-    let mut pacer = RequestPacer::new(HUE_HTTP_FALLBACK_MAX_REQUESTS_PER_SEC);
-    let mut queue: VecDeque<(&HueLightSnapshot, u8)> =
-        restore.lights.iter().map(|light| (light, 0)).collect();
-
-    while let Some((light, attempts)) = queue.pop_front() {
-        let now = Instant::now();
-        let slot_at = now + pacer.time_until_slot(now);
-        if deadline.saturating_duration_since(slot_at) < HUE_LIGHT_RESTORE_MIN_REQUEST_WINDOW {
-            report.stopped = Some(HueLightRestoreStop::Deadline);
-            break;
-        }
-        std::thread::sleep(slot_at.saturating_duration_since(now));
-        let now = Instant::now();
-        pacer.consume(now);
-        let timeout =
-            HUE_LIGHT_RESTORE_REQUEST_TIMEOUT.min(deadline.saturating_duration_since(now));
-
-        match put_light_state(&client, restore, light, timeout) {
-            PutOutcome::Restored => {
-                report.restored += 1;
-                pacer.on_success();
-            }
-            PutOutcome::Throttled(retry_after_ms) => {
-                pacer.on_throttle(retry_after_ms);
-                if attempts + 1 < HUE_LIGHT_RESTORE_MAX_ATTEMPTS {
-                    queue.push_back((light, attempts + 1));
-                } else {
-                    warn!(
-                        "[hue-restore] light {} still throttled, left as is",
-                        light.light_id
-                    );
-                }
-            }
-            PutOutcome::Rejected(reason) => {
-                warn!(
-                    "[hue-restore] light {} refused the restore: {reason}",
-                    light.light_id
-                );
-            }
-            PutOutcome::AuthInvalid => {
-                warn!(
-                    "[hue-restore] the bridge refused the application key (re-pair required); \
-                     area {} left as the bridge restored it",
-                    restore.area_id
-                );
-                report.stopped = Some(HueLightRestoreStop::AuthInvalid);
-                break;
-            }
-            PutOutcome::Unreachable(reason) => {
-                warn!(
-                    "[hue-restore] bridge unreachable, area {} left as is: {reason}",
-                    restore.area_id
-                );
-                report.stopped = Some(HueLightRestoreStop::Unreachable(reason));
-                break;
-            }
-        }
+    if let Err(stop) = run.wait_for_area_free(deadline.min(started + HUE_LIGHT_RESTORE_WATCH)) {
+        warn!(
+            "[hue-restore] area {} left as is: {stop:?}",
+            restore.area_id
+        );
+        report.stopped = Some(stop);
+        return report;
     }
 
+    let (written, stopped) = run.write(restore.lights.iter().collect());
+    report.restored = written.len();
+    report.stopped = stopped;
     let elapsed = started.elapsed();
     if report.restored == total {
         info!(
@@ -339,7 +343,350 @@ pub(crate) fn restore_lights(
             restore.area_id, report.restored, total, report.stopped
         );
     }
+
+    if report.stopped.is_none() && !written.is_empty() {
+        let watch_started = Instant::now();
+        run.watch(&written, &mut report);
+        info!(
+            "[hue-restore] area {}: watched {:?}, re-applied {} write(s) the bridge undid ({:?})",
+            restore.area_id,
+            watch_started.elapsed(),
+            report.reapplied,
+            report.stopped
+        );
+    }
     report
+}
+
+struct RestoreRun<'a> {
+    client: &'a reqwest::blocking::Client,
+    restore: &'a HueLightRestore,
+    deadline: Instant,
+    superseded: &'a dyn Fn() -> bool,
+    pacer: RequestPacer,
+}
+
+struct Watched<'a> {
+    light: &'a HueLightSnapshot,
+    reapplied: u8,
+    holds: bool,
+    gave_up: bool,
+}
+
+impl Watched<'_> {
+    fn settled(&self) -> bool {
+        self.gave_up || (self.reapplied > 0 && self.holds)
+    }
+}
+
+impl RestoreRun<'_> {
+    /// Time one request may take before `end`, or `None` when too little is
+    /// left for one to complete.
+    fn request_window(end: Instant) -> Option<Duration> {
+        let left = end.saturating_duration_since(Instant::now());
+        (left >= HUE_LIGHT_RESTORE_MIN_REQUEST_WINDOW)
+            .then(|| HUE_LIGHT_RESTORE_REQUEST_TIMEOUT.min(left))
+    }
+
+    /// Sleep one poll interval, unless `end` comes first. `false` means stop.
+    fn wait_for_next_poll(end: Instant) -> bool {
+        let poll_at = Instant::now() + HUE_LIGHT_RESTORE_POLL_INTERVAL;
+        if end.saturating_duration_since(poll_at) < HUE_LIGHT_RESTORE_MIN_REQUEST_WINDOW {
+            return false;
+        }
+        std::thread::sleep(poll_at.saturating_duration_since(Instant::now()));
+        true
+    }
+
+    /// Our own stream has ended by now, so a busy area is another streamer —
+    /// or a reconnect of ours the stop overtook, which gives it back within
+    /// moments. Waits until `end` for it to come free.
+    fn wait_for_area_free(&mut self, end: Instant) -> Result<(), HueLightRestoreStop> {
+        loop {
+            if (self.superseded)() {
+                return Err(HueLightRestoreStop::Superseded);
+            }
+            match self.area_is_active(end) {
+                Ok(false) | Err(ReadFailure::Skip) => return Ok(()),
+                Err(ReadFailure::Stop(stop)) => return Err(stop),
+                Ok(true) => {}
+            }
+            if !Self::wait_for_next_poll(end) {
+                return Err(HueLightRestoreStop::AreaTaken);
+            }
+        }
+    }
+
+    /// PUT each light, paced, retrying a throttled one once. Returns the
+    /// lights the bridge took, and why it stopped early if it did.
+    fn write<'l>(
+        &mut self,
+        lights: Vec<&'l HueLightSnapshot>,
+    ) -> (Vec<&'l HueLightSnapshot>, Option<HueLightRestoreStop>) {
+        let mut written = Vec::with_capacity(lights.len());
+        let mut queue: VecDeque<(&HueLightSnapshot, u8)> =
+            lights.into_iter().map(|light| (light, 0)).collect();
+
+        while let Some((light, attempts)) = queue.pop_front() {
+            let now = Instant::now();
+            let slot_at = now + self.pacer.time_until_slot(now);
+            if self.deadline.saturating_duration_since(slot_at)
+                < HUE_LIGHT_RESTORE_MIN_REQUEST_WINDOW
+            {
+                return (written, Some(HueLightRestoreStop::Deadline));
+            }
+            std::thread::sleep(slot_at.saturating_duration_since(now));
+            if (self.superseded)() {
+                return (written, Some(HueLightRestoreStop::Superseded));
+            }
+            let now = Instant::now();
+            self.pacer.consume(now);
+            let timeout =
+                HUE_LIGHT_RESTORE_REQUEST_TIMEOUT.min(self.deadline.saturating_duration_since(now));
+
+            match put_light_state(self.client, self.restore, light, timeout) {
+                PutOutcome::Restored => {
+                    written.push(light);
+                    self.pacer.on_success();
+                }
+                PutOutcome::Throttled(retry_after_ms) => {
+                    self.pacer.on_throttle(retry_after_ms);
+                    if attempts + 1 < HUE_LIGHT_RESTORE_MAX_ATTEMPTS {
+                        queue.push_back((light, attempts + 1));
+                    } else {
+                        warn!(
+                            "[hue-restore] light {} still throttled, left as is",
+                            light.light_id
+                        );
+                    }
+                }
+                PutOutcome::Rejected(reason) => {
+                    warn!(
+                        "[hue-restore] light {} refused the restore: {reason}",
+                        light.light_id
+                    );
+                }
+                PutOutcome::AuthInvalid => {
+                    warn!(
+                        "[hue-restore] the bridge refused the application key (re-pair required); \
+                         area {} left as the bridge restored it",
+                        self.restore.area_id
+                    );
+                    return (written, Some(HueLightRestoreStop::AuthInvalid));
+                }
+                PutOutcome::Unreachable(reason) => {
+                    warn!(
+                        "[hue-restore] bridge unreachable, area {} left as is: {reason}",
+                        self.restore.area_id
+                    );
+                    return (written, Some(HueLightRestoreStop::Unreachable(reason)));
+                }
+            }
+        }
+        (written, None)
+    }
+
+    /// After leaving entertainment the bridge puts its own idea of each
+    /// light's state back, and on a real bridge that lands a few hundred ms
+    /// *after* our writes. Poll the lights and write again any that no longer
+    /// read as their snapshot, until every light has been written again and
+    /// read back holding, or the watch window ends.
+    fn watch(&mut self, written: &[&HueLightSnapshot], report: &mut HueLightRestoreReport) {
+        let end = self.deadline.min(Instant::now() + HUE_LIGHT_RESTORE_WATCH);
+        let mut watched: Vec<Watched> = written
+            .iter()
+            .map(|light| Watched {
+                light,
+                reapplied: 0,
+                holds: true,
+                gave_up: false,
+            })
+            .collect();
+
+        while Self::wait_for_next_poll(end) {
+            if (self.superseded)() {
+                report.stopped = Some(HueLightRestoreStop::Superseded);
+                return;
+            }
+            let readings = match self.read_lights(end) {
+                Ok(readings) => readings,
+                Err(ReadFailure::Skip) => continue,
+                Err(ReadFailure::Stop(stop)) => {
+                    report.stopped = Some(stop);
+                    return;
+                }
+            };
+            let streaming = watched.iter().any(|w| {
+                matches!(
+                    readings.get(&w.light.light_id),
+                    Some(LightReading::Streaming)
+                )
+            });
+            if streaming && matches!(self.area_is_active(end), Ok(true)) {
+                report.stopped = Some(HueLightRestoreStop::AreaTaken);
+                return;
+            }
+
+            let mut undone = Vec::new();
+            for w in watched.iter_mut().filter(|w| !w.gave_up) {
+                w.holds = match readings.get(&w.light.light_id) {
+                    Some(LightReading::State(state)) => reads_as(&w.light.state, state),
+                    // Not written until the bridge says the light left streaming.
+                    Some(LightReading::Streaming) => continue,
+                    None => continue,
+                };
+                if w.holds {
+                    continue;
+                }
+                if w.reapplied < HUE_LIGHT_RESTORE_MAX_REAPPLY {
+                    undone.push(w.light);
+                } else {
+                    w.gave_up = true;
+                    warn!(
+                        "[hue-restore] light {} changed again after {} re-writes; left as it is",
+                        w.light.light_id, w.reapplied
+                    );
+                }
+            }
+            if !undone.is_empty() {
+                let (again, stopped) = self.write(undone);
+                report.reapplied += again.len();
+                for light in again {
+                    if let Some(w) = watched
+                        .iter_mut()
+                        .find(|w| w.light.light_id == light.light_id)
+                    {
+                        w.reapplied += 1;
+                        w.holds = false;
+                    }
+                }
+                if stopped.is_some() {
+                    report.stopped = stopped;
+                    return;
+                }
+            }
+            if watched.iter().all(Watched::settled) {
+                return;
+            }
+        }
+    }
+
+    /// One `GET /clip/v2/resource/light` — every light on the bridge in a
+    /// single request, so the watch costs no light budget.
+    fn read_lights(&self, end: Instant) -> Result<HashMap<String, LightReading>, ReadFailure> {
+        let timeout = Self::request_window(end).ok_or(ReadFailure::Skip)?;
+        let endpoint = format!("https://{}/clip/v2/resource/light", self.restore.bridge_ip);
+        let body = self.get(&endpoint, timeout)?;
+        let wanted: HashSet<&str> = self
+            .restore
+            .lights
+            .iter()
+            .map(|light| light.light_id.as_str())
+            .collect();
+        let mut readings = HashMap::new();
+        for item in body
+            .get("data")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let Some(id) = item.get("id").and_then(Value::as_str) else {
+                continue;
+            };
+            if !wanted.contains(id) {
+                continue;
+            }
+            let reading = if item.get("mode").and_then(Value::as_str) == Some("streaming") {
+                Some(LightReading::Streaming)
+            } else {
+                parse_light_state(item).map(LightReading::State)
+            };
+            if let Some(reading) = reading {
+                readings.insert(id.to_string(), reading);
+            }
+        }
+        Ok(readings)
+    }
+
+    /// Does anyone stream to the area? Read the way readiness reads it.
+    fn area_is_active(&self, end: Instant) -> Result<bool, ReadFailure> {
+        if !is_safe_resource_id(&self.restore.area_id) {
+            return Err(ReadFailure::Skip);
+        }
+        let timeout = Self::request_window(end).ok_or(ReadFailure::Skip)?;
+        let endpoint = format!(
+            "https://{}/clip/v2/resource/entertainment_configuration/{}",
+            self.restore.bridge_ip, self.restore.area_id
+        );
+        let body = self.get(&endpoint, timeout)?;
+        let Some(area) = body
+            .get("data")
+            .and_then(Value::as_array)
+            .and_then(|data| data.first())
+        else {
+            return Err(ReadFailure::Skip);
+        };
+        Ok(area.get("status").and_then(Value::as_str) == Some("active")
+            || area
+                .get("active_streamer")
+                .is_some_and(|streamer| !streamer.is_null()))
+    }
+
+    fn get(&self, endpoint: &str, timeout: Duration) -> Result<Value, ReadFailure> {
+        let response = self
+            .client
+            .get(endpoint)
+            .timeout(timeout)
+            .header("hue-application-key", &self.restore.username)
+            .send()
+            .map_err(|err| {
+                ReadFailure::Stop(HueLightRestoreStop::Unreachable(send_error_text(&err)))
+            })?;
+        match classify_hue_response_blocking(response) {
+            Ok(response) => read_body_blocking(response)
+                .ok()
+                .and_then(|body| serde_json::from_str(&body).ok())
+                .ok_or(ReadFailure::Skip),
+            Err(HueHttpFault::AuthInvalid) => {
+                Err(ReadFailure::Stop(HueLightRestoreStop::AuthInvalid))
+            }
+            Err(_) => Err(ReadFailure::Skip),
+        }
+    }
+}
+
+/// Does what the bridge reports read as the snapshot? Loose enough for the
+/// bridge's own quantising of brightness (1/254 steps) and colour.
+pub(crate) fn reads_as(snapshot: &HueLightState, reading: &HueLightState) -> bool {
+    if snapshot.on != reading.on {
+        return false;
+    }
+    if !snapshot.on {
+        return true;
+    }
+    if let Some(want) = snapshot.brightness.filter(|b| *b > 0.0) {
+        match reading.brightness {
+            Some(have)
+                if (have - want.min(100.0)).abs() <= HUE_LIGHT_RESTORE_BRIGHTNESS_TOLERANCE => {}
+            _ => return false,
+        }
+    }
+    match (snapshot.color, reading.color) {
+        (None, _) => true,
+        (Some(HueLightColor::Mirek(want)), Some(HueLightColor::Mirek(have))) => {
+            want.abs_diff(have) <= HUE_LIGHT_RESTORE_MIREK_TOLERANCE
+        }
+        (Some(HueLightColor::Xy { x, y }), Some(HueLightColor::Xy { x: hx, y: hy })) => {
+            (x - hx).abs() <= HUE_LIGHT_RESTORE_XY_TOLERANCE
+                && (y - hy).abs() <= HUE_LIGHT_RESTORE_XY_TOLERANCE
+        }
+        _ => false,
+    }
+}
+
+/// An id from the bridge, spliced into a path.
+fn is_safe_resource_id(id: &str) -> bool {
+    !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
 fn put_light_state(
@@ -348,12 +695,7 @@ fn put_light_state(
     light: &HueLightSnapshot,
     timeout: Duration,
 ) -> PutOutcome {
-    // The id came from the bridge, but it is spliced into a path.
-    if !light
-        .light_id
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '-')
-    {
+    if !is_safe_resource_id(&light.light_id) {
         return PutOutcome::Rejected(format!("invalid light id `{}`", light.light_id));
     }
     let endpoint = format!(
@@ -504,6 +846,39 @@ mod tests {
                 "dimming": { "brightness": 55.0 },
                 "color": { "xy": { "x": 0.2, "y": 0.3 } }
             })
+        );
+    }
+
+    /// The watch compares what the bridge reports with the snapshot: close
+    /// enough for the bridge's own quantising, not for its post-stream state.
+    #[test]
+    fn a_light_reads_as_its_snapshot_within_the_bridges_rounding_only() {
+        let ct = |on, brightness, mirek| HueLightState {
+            on,
+            brightness: Some(brightness),
+            color: Some(HueLightColor::Mirek(mirek)),
+        };
+        let before = ct(true, 56.92, 446);
+        assert!(reads_as(&before, &ct(true, 57.09, 447)));
+        // What a BSB002 put on the lights after the stop, 2026-09-24.
+        assert!(!reads_as(&before, &ct(true, 30.83, 367)));
+        assert!(!reads_as(&before, &ct(true, 56.92, 367)));
+        assert!(!reads_as(&before, &ct(false, 56.92, 446)));
+
+        // An off light only has to be off.
+        assert!(reads_as(&ct(false, 10.0, 200), &ct(false, 90.0, 400)));
+
+        let xy = HueLightState {
+            on: true,
+            brightness: Some(40.0),
+            color: Some(HueLightColor::Xy { x: 0.30, y: 0.30 }),
+        };
+        let mut near = xy.clone();
+        near.color = Some(HueLightColor::Xy { x: 0.305, y: 0.296 });
+        assert!(reads_as(&xy, &near));
+        assert!(
+            !reads_as(&xy, &ct(true, 40.0, 367)),
+            "left in ct mode is not the xy colour"
         );
     }
 

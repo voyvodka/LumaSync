@@ -387,8 +387,11 @@ https://keepachangelog.com/en/1.1.0/
   only puts the colour back. Lights that were off now turn off again, and lights that were on get
   their earlier brightness and colour or white tone. Switching between Ambilight and Solid colour
   or a short reconnect does not touch them. If the app crashes or is force-quit the lights stay on,
-  as before. Switching lighting off can take up to about a second longer on a large area while the
-  lights are put back; the app window no longer stalls while it waits for a slow bridge to stop.
+  as before. A moment after Hue stops, the bridge puts its own brightness and white tone on the
+  lights over what the app put back, so the app watches them for up to a second and a half and puts
+  them back again; switching lighting off or quitting takes about that much longer, and longer on
+  a large area. Lights another app has started streaming to are left alone. The app window no
+  longer stalls while it waits for a slow bridge to stop.
 - Hue: switching lighting off no longer writes an error to the log when the bridge ends the
   stream as part of that stop. In development builds the log now says the Hue key came from the
   development credentials file rather than from the system keychain.
