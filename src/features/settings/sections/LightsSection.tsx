@@ -96,25 +96,6 @@ interface LightsSectionProps {
   isModeTransitioning?: boolean;
   onModeChange: (nextMode: LightingModeConfig) => void;
   onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
-  /**
-   * Fired when the user picks a new Hue intensity preset. The parent
-   * persists to shellStore AND hot-reloads the running worker so the new
-   * preset takes effect without a mode toggle.
-   */
-  onHueIntensityPresetChange?: (preset: HueIntensityPreset) => void;
-  /**
-   * Fired when the ColorCorrectionPanel commits a new config (the panel
-   * already persists internally; this hook is reserved for future
-   * worker-hot-reload — current v1.4 Rust path reads persisted state on
-   * the next set_lighting_mode so no explicit invoke is required here).
-   */
-  onColorCorrectionChange?: (next: ColorCorrectionConfig) => void;
-  /**
-   * Fired when the FirmwareProfilePicker commits a new profile. Parent
-   * mirrors the ref + hot-reloads via set_lighting_mode so the Rust
-   * encoder swap takes effect on the next frame without a mode toggle.
-   */
-  onFirmwareProfileChange?: (next: FirmwareProfile) => void;
 }
 
 /**
@@ -148,9 +129,6 @@ export function LightsSection({
   isModeTransitioning = false,
   onModeChange,
   onOutputTargetsChange,
-  onHueIntensityPresetChange,
-  onColorCorrectionChange,
-  onFirmwareProfileChange,
 }: LightsSectionProps) {
   const { t } = useTranslation();
   // Why the mode buttons are dim — calibration, no output, still checking — is
@@ -480,10 +458,7 @@ export function LightsSection({
             {advancedHydrated && (
               <LightingSmoothingPresetControl
                 initialPreset={initialHueIntensityPreset}
-                onPresetChange={(next) => {
-                  setInitialHueIntensityPreset(next);
-                  onHueIntensityPresetChange?.(next);
-                }}
+                onPresetChange={setInitialHueIntensityPreset}
               />
             )}
             <div className="lm-profile">
@@ -625,17 +600,11 @@ export function LightsSection({
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <FirmwareProfilePicker
               initialProfile={firmwareProfile}
-              onProfileChange={(next) => {
-                setFirmwareProfile(next);
-                onFirmwareProfileChange?.(next);
-              }}
+              onProfileChange={setFirmwareProfile}
             />
             <ColorCorrectionPanel
               initialConfig={initialColorCorrection}
-              onConfigChange={(next) => {
-                setInitialColorCorrection(next);
-                onColorCorrectionChange?.(next);
-              }}
+              onConfigChange={setInitialColorCorrection}
             />
           </div>
         )}

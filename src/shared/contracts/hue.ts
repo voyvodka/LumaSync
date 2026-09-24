@@ -3,7 +3,6 @@
  */
 
 import {
-  DEFAULT_LIGHTING_SMOOTHING_PRESET,
   LIGHTING_SMOOTHING_PRESET_COEFFICIENTS,
   type LightingSmoothingPreset,
 } from "./lighting";
@@ -550,12 +549,6 @@ export type HueIntensityPreset = LightingSmoothingPreset;
 export const HUE_INTENSITY_PRESET_COEFFICIENTS: Readonly<
   Record<LightingSmoothingPreset, number>
 > = LIGHTING_SMOOTHING_PRESET_COEFFICIENTS;
-
-/**
- * @deprecated Use `DEFAULT_LIGHTING_SMOOTHING_PRESET` from `./lighting.ts`.
- */
-export const DEFAULT_HUE_INTENSITY_PRESET: LightingSmoothingPreset =
-  DEFAULT_LIGHTING_SMOOTHING_PRESET;
 
 /** Which output surface a runtime telemetry row describes. */
 export type HueRuntimeTarget = "hue" | "usb";

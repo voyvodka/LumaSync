@@ -1,15 +1,6 @@
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useState } from "react";
 
-import {
-  LIGHTING_MODE_KIND,
-  type LightingModeConfig,
-} from "@/shared/contracts/mode";
-import type { LightingModeDispatcher } from "@/features/mode/state/useLightingModeDispatch";
-import {
-  HUE_RUNTIME_STATES,
-  type HueRuntimeState,
-  type HueRuntimeTarget,
-} from "@/shared/contracts/hue";
+import { HUE_RUNTIME_STATES, type HueRuntimeState } from "@/shared/contracts/hue";
 
 import { readHueStreamStatus, subscribeHueStreamStatusInvalidation } from "../hueReadCache";
 
@@ -21,21 +12,15 @@ import { readHueStreamStatus, subscribeHueStreamStatusInvalidation } from "../hu
  */
 const HUE_STREAM_HEALTH_POLL_MS = 5_000;
 /**
- * Cadence once the stream is dead. Polling continues so the target can be
- * restored without a mode transition; on THIS path the backend short-circuits
- * before any network call, so it costs one IPC hop and no bridge traffic.
+ * Cadence once the stream is dead. Polling continues so the chip sees it come
+ * back; on THIS path the backend short-circuits before any network call, so it
+ * costs one IPC hop and no bridge traffic.
  */
 const HUE_STREAM_HEALTH_RECOVERY_POLL_MS = 15_000;
 
 export interface HueStreamHealthInput {
   /** The only dep, deliberately a boolean rather than the target array. */
   hueTargetSelected: boolean;
-  activeOutputTargetsRef: RefObject<HueRuntimeTarget[]>;
-  lightingModeRef: RefObject<LightingModeConfig>;
-  selectedOutputTargetsRef: RefObject<HueRuntimeTarget[]>;
-  /** Called through a ref so re-applying never restarts the poll loop. */
-  dispatchRef: RefObject<LightingModeDispatcher | null>;
-  setActiveOutputTargets: (update: (prev: HueRuntimeTarget[]) => HueRuntimeTarget[]) => void;
 }
 
 export interface HueStreamHealth {
@@ -45,9 +30,9 @@ export interface HueStreamHealth {
 
 /**
  * Whether a Hue session the app still owns is actually delivering frames.
- * RECONNECTING keeps "hue" in `activeOutputTargets` — the backend is retrying
- * and a bridge can stay unreachable for hours — so membership alone would
- * report a stream that sends nothing.
+ * RECONNECTING keeps "hue" in the snapshot's `activeTargets` — the backend is
+ * retrying and a bridge can stay unreachable for hours — so membership alone
+ * would report a stream that sends nothing.
  */
 export function isHueSessionReconnecting(
   sessionActive: boolean,
@@ -62,20 +47,23 @@ export function isHueStreamFailed(runtimeState: HueRuntimeState | null): boolean
   return runtimeState === HUE_RUNTIME_STATES.FAILED;
 }
 
-// Two-way Hue health reconciler. The restore direction is the fix: the poll
-// used to `return` on the first dead reading, stranding "hue" out of
-// `activeOutputTargets` forever so every Solid colour change was dropped.
-export function useHueStreamHealth({
-  hueTargetSelected,
-  activeOutputTargetsRef,
-  lightingModeRef,
-  selectedOutputTargetsRef,
-  dispatchRef,
-  setActiveOutputTargets,
-}: HueStreamHealthInput): HueStreamHealth {
+/**
+ * Whether the backend reports no live stream: failed, or idle. The snapshot
+ * keeps "hue" driven until a stop confirms, so the chip reads this beside it.
+ */
+export function isHueStreamDead(runtimeState: HueRuntimeState | null): boolean {
+  return runtimeState === HUE_RUNTIME_STATES.FAILED || runtimeState === HUE_RUNTIME_STATES.IDLE;
+}
+
+/**
+ * Reads the Hue stream's health for the status chip. Read-only: the running
+ * worker follows the live stream slot through every reconnect, so a stream
+ * that comes back needs no re-apply (docs/architecture/hue.md), and what is
+ * driven is the runtime snapshot's to say.
+ */
+export function useHueStreamHealth({ hueTargetSelected }: HueStreamHealthInput): HueStreamHealth {
   const [runtimeState, setRuntimeState] = useState<HueRuntimeState | null>(null);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refs and the setter are read at call time; any other dep restarts the poll loop and storms the bridge
   useEffect(() => {
     if (!hueTargetSelected) {
       setRuntimeState(null);
@@ -99,40 +87,9 @@ export function useHueStreamHealth({
         const result = await readHueStreamStatus();
         if (!active) return;
         setRuntimeState(result.status.state);
-
-        const backendDead =
-          result.status.state === HUE_RUNTIME_STATES.FAILED ||
-          result.status.state === HUE_RUNTIME_STATES.IDLE;
-        const targetActive = activeOutputTargetsRef.current.includes("hue");
-        nextDelayMs = backendDead
+        nextDelayMs = isHueStreamDead(result.status.state)
           ? HUE_STREAM_HEALTH_RECOVERY_POLL_MS
           : HUE_STREAM_HEALTH_POLL_MS;
-
-        if (backendDead && targetActive) {
-          console.warn(
-            `[LumaSync] Hue stream health check: backend reported ${result.status.state}. ` +
-              `Message: ${result.status.message}. Removing "hue" from active targets.`,
-          );
-          setActiveOutputTargets((prev) => prev.filter((t) => t !== "hue"));
-        } else if (!backendDead && !targetActive) {
-          const mode = lightingModeRef.current;
-          if (mode.kind !== LIGHTING_MODE_KIND.OFF) {
-            console.info(
-              `[LumaSync] Hue stream recovered (${result.status.state}). Restoring "hue" as an active target.`,
-            );
-            setActiveOutputTargets((prev) =>
-              prev.includes("hue") ? prev : [...prev, "hue" as HueRuntimeTarget],
-            );
-            // The running ambilight worker captured `hue_output=None` when the
-            // stream was down; only a forced re-apply hands it the live context.
-            void dispatchRef.current?.(
-              { ...mode, targets: selectedOutputTargetsRef.current },
-              { force: true },
-            ).catch((error) => {
-              console.error("[LumaSync] Hue recovery mode re-apply failed:", error);
-            });
-          }
-        }
       } catch (err) {
         console.warn("[LumaSync] Hue stream health poll failed (transient, keeping target):", err);
       } finally {
@@ -160,8 +117,7 @@ export function useHueStreamHealth({
     };
 
     // `Failed` holds until a start or stop, and the dead-stream cadence is slow:
-    // a held Failed must not outlive the mutation that may have ended it. Only
-    // the reading is dropped; the next poll still owns the target reconcile.
+    // a held Failed must not outlive the mutation that may have ended it.
     const unsubscribeInvalidation = subscribeHueStreamStatusInvalidation(() => {
       if (!active) return;
       setRuntimeState((prev) => (prev === HUE_RUNTIME_STATES.FAILED ? null : prev));
@@ -179,8 +135,8 @@ export function useHueStreamHealth({
       }
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-    // ONLY dep on purpose — taking `dispatch` or the target array itself would
-    // restart the loop on every identity change and storm the bridge.
+    // ONLY dep on purpose — taking the target array itself would restart the
+    // loop on every identity change and storm the bridge.
   }, [hueTargetSelected]);
 
   return { runtimeState };

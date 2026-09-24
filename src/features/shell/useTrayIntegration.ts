@@ -1,7 +1,6 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef } from "react";
 
 import { i18next } from "@/features/i18n/i18n";
-import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/shared/contracts/mode";
 import {
   openLedControlPopup,
   openLedTwinOverlay,
@@ -12,23 +11,12 @@ import {
   twinOverlayOpenFailure,
   type PreviewOpenFailure,
 } from "@/features/preview/previewOpenFailure";
-import {
-  listenTrayLightsOff,
-  listenTrayResumeLastMode,
-  listenTrayShowLedPreview,
-  listenTraySolidColor,
-} from "@/features/tray/trayController";
+import { listenTrayShowLedPreview } from "@/features/tray/trayController";
 import { updateTrayLabels } from "@/features/tray/trayApi";
-import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 
 import { loadShellState, saveShellState } from "./windowLifecycle";
 
 export interface TrayIntegrationInput {
-  onLightingModeChange: (mode: LightingModeConfig) => Promise<void>;
-  lightingModeRef: RefObject<LightingModeConfig>;
-  lastNonOffModeRef: RefObject<LightingModeConfig | null>;
-  selectedOutputTargetsRef: RefObject<HueRuntimeTarget[]>;
-  getSelectedDisplayId: () => string | undefined;
   /** The popup or overlay the tray asked for did not appear. */
   onPreviewOpenFailed?: (failure: PreviewOpenFailure) => void;
 }
@@ -46,21 +34,11 @@ function pushTrayLabels() {
 }
 
 /**
- * Registers the tray's three listener sets once. Every handler reads refs
- * rather than state, which is what keeps the `[]` dep arrays honest.
+ * The tray's labels and its "Show LED Preview" item. The three lighting items
+ * (off, resume, solid) run the lighting transaction in Rust and never reach a
+ * window, so they work with the window unloaded.
  */
-export function useTrayIntegration({
-  onLightingModeChange,
-  lightingModeRef,
-  lastNonOffModeRef,
-  selectedOutputTargetsRef,
-  getSelectedDisplayId,
-  onPreviewOpenFailed,
-}: TrayIntegrationInput): void {
-  // Assigned during render, never in an effect: a tray event arriving before
-  // the effect flush must still reach the current handler.
-  const lightingModeChangeRef = useRef(onLightingModeChange);
-  lightingModeChangeRef.current = onLightingModeChange;
+export function useTrayIntegration({ onPreviewOpenFailed }: TrayIntegrationInput): void {
   const previewOpenFailedRef = useRef(onPreviewOpenFailed);
   previewOpenFailedRef.current = onPreviewOpenFailed;
 
@@ -70,62 +48,6 @@ export function useTrayIntegration({
     i18next.on("languageChanged", handler);
     return () => { i18next.off("languageChanged", handler); };
   }, []);
-
-  // Tray quick action listeners (registered once, use refs for fresh state)
-  useEffect(() => {
-    let alive = true;
-    let unlistenOff: (() => void) | null = null;
-    let unlistenResume: (() => void) | null = null;
-    let unlistenSolid: (() => void) | null = null;
-
-    void Promise.all([
-      listenTrayLightsOff(() => {
-        const handler = lightingModeChangeRef.current;
-        if (handler) void handler({ kind: LIGHTING_MODE_KIND.OFF });
-      }),
-      listenTrayResumeLastMode(() => {
-        const handler = lightingModeChangeRef.current;
-        const mode = lastNonOffModeRef.current ?? lightingModeRef.current;
-        if (handler && mode.kind !== LIGHTING_MODE_KIND.OFF) {
-          void handler({ ...mode, targets: selectedOutputTargetsRef.current });
-        }
-      }),
-      listenTraySolidColor(() => {
-        const handler = lightingModeChangeRef.current;
-        const currentMode = lightingModeRef.current;
-        if (handler) {
-          void handler({
-            kind: LIGHTING_MODE_KIND.SOLID,
-            solid: currentMode.solid ?? { r: 255, g: 255, b: 255, brightness: 1 },
-            targets: selectedOutputTargetsRef.current,
-          });
-        }
-      }),
-    ])
-      .then(([u1, u2, u3]) => {
-        // Same unmount-wins-the-race hazard as the effect below: without the
-        // guard StrictMode's double-mount leaks a duplicate handler per tray action.
-        if (alive) {
-          unlistenOff = u1;
-          unlistenResume = u2;
-          unlistenSolid = u3;
-        } else {
-          u1();
-          u2();
-          u3();
-        }
-      })
-      .catch((err) => {
-        console.error("[LumaSync] tray quick-action listeners failed to register:", err);
-      });
-
-    return () => {
-      alive = false;
-      unlistenOff?.();
-      unlistenResume?.();
-      unlistenSolid?.();
-    };
-  }, [lastNonOffModeRef, lightingModeRef, selectedOutputTargetsRef]);
 
   // v1.6 — tray "Show LED Preview" opens (or focuses) the control popup
   // and, when enabled, the digital-twin overlay. Registered once.
@@ -150,7 +72,7 @@ export function useTrayIntegration({
           const state = await loadShellState();
           if (state.ledTwinEnabledTest) {
             report(twinOverlayOpenFailure(
-              await openLedTwinOverlay({ scope: "test", displayId: getSelectedDisplayId() }),
+              await openLedTwinOverlay({ scope: "test", displayId: state.selectedDisplayId || undefined }),
             ));
           }
         } catch (err) {
@@ -175,7 +97,7 @@ export function useTrayIntegration({
       alive = false;
       unlisten?.();
     };
-  }, [getSelectedDisplayId]);
+  }, []);
 }
 
 export { pushTrayLabels };

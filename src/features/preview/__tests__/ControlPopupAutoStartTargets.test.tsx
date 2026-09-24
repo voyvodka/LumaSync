@@ -1,13 +1,13 @@
 // The popup's auto-start fires on reveal with no user gesture, so it must never
 // light Hue: it targets the strip ("usb", which also covers WLED) and nothing
-// else. Driven through the real popup, runner, preview API and Hue test lease;
-// only `invoke` answers.
+// else. Driven through the real popup, runner, preview API and the Hue test
+// lease's request; only `invoke` answers.
 
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HUE_COMMANDS, HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
+import { LIGHTING_RUNTIME_COMMANDS, type ApplyOutputsRequest } from "@/shared/contracts/lightingRuntime";
 import {
   LED_TEST_STATUS,
   PREVIEW_COMMANDS,
@@ -15,7 +15,6 @@ import {
   type StartLedTestPatternPayload,
 } from "@/shared/contracts/preview";
 import { LIGHTING_MODE_KIND } from "@/shared/contracts/mode";
-import { __resetHueTestLease } from "@/features/hue/state/hueTestLease";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -51,8 +50,15 @@ let syncState: {
   preview: LedPreviewStatus | null;
 };
 
-vi.mock("../state/useLightingModeSync", () => ({
-  useLightingModeSync: () => syncState,
+vi.mock("@/features/mode/state/useLightingRuntime", () => ({
+  useLightingRuntime: () => ({
+    snapshot: syncState.mode ? { revision: 1, mode: syncState.mode } : null,
+    adopt: () => {},
+  }),
+}));
+
+vi.mock("../state/usePreviewStatusSync", () => ({
+  usePreviewStatusSync: () => syncState.preview,
 }));
 
 /** Whether the backend would find a strip — decides STARTED vs PREVIEW_ONLY. */
@@ -99,12 +105,16 @@ function testStarts(): StartLedTestPatternPayload[] {
     .map(([, args]) => (args as { payload: StartLedTestPatternPayload }).payload);
 }
 
+/** Requests for the Hue test lease that ask it to bring the stream up. */
 function hueStreamStarts() {
-  return invokeMock.mock.calls.filter(([command]) => command === HUE_COMMANDS.START_STREAM);
+  return invokeMock.mock.calls.filter(([command, args]) => {
+    if (command !== LIGHTING_RUNTIME_COMMANDS.APPLY_OUTPUTS) return false;
+    const request = (args as { request: ApplyOutputsRequest }).request;
+    return request.origin === "leaseHue" && (request.targets ?? []).includes("hue");
+  });
 }
 
 beforeEach(() => {
-  __resetHueTestLease();
   stripConnected = true;
   // A paired bridge with an area: the lease would open a stream for any run
   // that asks for Hue, so a missing `start_hue_stream` proves nobody asked.
@@ -121,10 +131,12 @@ beforeEach(() => {
     if (command === PREVIEW_COMMANDS.START_TEST_PATTERN) {
       return Promise.resolve(answerStart((args as { payload: StartLedTestPatternPayload }).payload));
     }
-    if (command === HUE_COMMANDS.START_STREAM) {
+    if (command === LIGHTING_RUNTIME_COMMANDS.APPLY_OUTPUTS) {
       return Promise.resolve({
-        active: true,
-        status: { state: "Running", code: HUE_RUNTIME_STATUS.STREAM_RUNNING, message: "" },
+        status: { code: "OUTPUTS_APPLIED", message: "", details: null },
+        requestId: 1,
+        snapshot: { revision: 1 },
+        outcome: {},
       });
     }
     return Promise.resolve(undefined);
@@ -216,7 +228,7 @@ describe("ControlPopupApp explicit pattern choice", () => {
     // The lease opens the stream before the pattern is sent to it.
     expect(hueStreamStarts()).toHaveLength(1);
     const order = invokeMock.mock.calls.map(([command]) => command);
-    expect(order.indexOf(HUE_COMMANDS.START_STREAM)).toBeLessThan(
+    expect(order.indexOf(LIGHTING_RUNTIME_COMMANDS.APPLY_OUTPUTS)).toBeLessThan(
       order.lastIndexOf(PREVIEW_COMMANDS.START_TEST_PATTERN),
     );
     await waitFor(() =>

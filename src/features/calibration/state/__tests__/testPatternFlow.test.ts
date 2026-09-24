@@ -20,7 +20,8 @@ vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: { load: () => Promise.resolve(storeState) },
 }));
 
-vi.mock("@/features/hue/state/hueTestLease", () => ({
+vi.mock("@/features/mode/modeApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/features/mode/modeApi")>()),
   acquireHueForTest: vi.fn().mockResolvedValue(undefined),
   releaseHueAfterTest: vi.fn().mockResolvedValue(undefined),
 }));
@@ -28,7 +29,7 @@ vi.mock("@/features/hue/state/hueTestLease", () => ({
 const previewApi = await import("@/features/preview/previewApi");
 const startLedTestPatternMock = vi.mocked(previewApi.startLedTestPattern);
 const stopLedTestPatternMock = vi.mocked(previewApi.stopLedTestPattern);
-const hueTestLease = await import("@/features/hue/state/hueTestLease");
+const hueTestLease = await import("@/features/mode/modeApi");
 const acquireHueForTestMock = vi.mocked(hueTestLease.acquireHueForTest);
 const releaseHueAfterTestMock = vi.mocked(hueTestLease.releaseHueAfterTest);
 

@@ -92,11 +92,7 @@ vi.mock("../HueChannelMapPanel", () => ({
 // Path was `./control/…`, which resolves under `__tests__/` and so matched no
 // module in the graph — the real picker rendered here for as long as it existed.
 vi.mock("../control/LedChipTypePicker", () => ({
-  LedChipTypePicker: ({ onChipTypeChange }: { onChipTypeChange?: (next: string) => void }) => (
-    <button type="button" onClick={() => onChipTypeChange?.("sk6812-rgbw")}>
-      stub:selectChipType
-    </button>
-  ),
+  LedChipTypePicker: () => <span>stub:chipTypePicker</span>,
 }));
 
 function defaultDeviceConnectionState() {
@@ -578,26 +574,6 @@ describe("DeviceSection — USB and Hue persist banners are independent", () => 
   }, 15000);
 });
 
-describe("DeviceSection — chip type forwarding", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
-    useHueOnboardingMock.mockReturnValue(createHueHookState());
-  });
-
-  // Without this hop the picker only writes shellStore, so the running encoder
-  // keeps the boot-time byte width — 3 bytes per pixel for an RGBW strip.
-  it("hands the chip-type choice to its own caller", async () => {
-    const onChipTypeChange = vi.fn();
-    const user = userEvent.setup();
-    render(<DeviceSection onChipTypeChange={onChipTypeChange} onStopHueOutput={stopHueOutputMock} />);
-
-    await user.click(await screen.findByText("stub:selectChipType"));
-
-    expect(onChipTypeChange).toHaveBeenCalledWith("sk6812-rgbw");
-  });
-});
-
 describe("DeviceSection — colour order", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -635,17 +611,19 @@ describe("DeviceSection — colour order", () => {
     expect(screen.queryByText("lights:led.colorOrder.wledHint")).toBeNull();
   });
 
-  it("hands a manual order to its own caller after saving", async () => {
-    const onColorOrderChange = vi.fn();
+  // The save is all that reaches a running strip: Rust re-applies the mode
+  // once a setting it reads is saved (docs/architecture/lighting-transaction.md).
+  it("saves a manual order", async () => {
+    const { shellStore } = await import("@/features/persistence/shellStore");
     const user = userEvent.setup();
-    render(<DeviceSection onColorOrderChange={onColorOrderChange} onStopHueOutput={stopHueOutputMock} />);
+    render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
 
     await user.selectOptions(
       await screen.findByLabelText("lights:led.colorOrder.manualLabel"),
       "grb",
     );
 
-    await waitFor(() => expect(onColorOrderChange).toHaveBeenCalledWith("grb"));
+    await waitFor(() => expect(shellStore.save).toHaveBeenCalledWith({ ledColorOrder: "grb" }));
   });
 });
 

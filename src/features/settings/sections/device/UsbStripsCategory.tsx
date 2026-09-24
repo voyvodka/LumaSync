@@ -7,7 +7,6 @@ import type { RoomMapConfig, UsbStripPlacement } from "@/shared/contracts/roomMa
 import { shellStore } from "@/features/persistence/shellStore";
 import { buildDeviceStatusCard } from "@/features/device/deviceStatusCard";
 import type { UseDeviceConnectionResult } from "@/features/device/useDeviceConnection";
-import type { LedChipType, LedColorOrder } from "@/shared/contracts/device";
 import { deriveLocalSink } from "@/features/device/localSink";
 import { LedChipTypePicker } from "../control/LedChipTypePicker";
 import { LedColorOrderControl } from "../control/LedColorOrderControl";
@@ -45,11 +44,6 @@ export interface UsbStripsCategoryProps {
   flagPersistError: () => void;
   clearPersistError: () => void;
   onNavigateToRoomMap?: () => void;
-  /** Inert when omitted — and then the picker only writes shellStore, leaving the
-   *  running encoder on the boot-time byte width until the next reconnect. */
-  onChipTypeChange?: (next: LedChipType) => void;
-  /** Retunes the running output after the colour-order control has saved. */
-  onColorOrderChange?: (next: LedColorOrder) => void;
   /** The bound WLED panel, if any: its colour order is set on the device. */
   activeWledIp?: string | null;
 }
@@ -63,8 +57,6 @@ export function UsbStripsCategory({
   flagPersistError,
   clearPersistError,
   onNavigateToRoomMap,
-  onChipTypeChange,
-  onColorOrderChange,
   activeWledIp = null,
 }: UsbStripsCategoryProps) {
   const { t } = useTranslation();
@@ -483,11 +475,10 @@ export function UsbStripsCategory({
       </div>
 
       {/* Chip type selector — USB sink strip config */}
-      <LedChipTypePicker onChipTypeChange={onChipTypeChange} />
+      <LedChipTypePicker />
 
       <LedColorOrderControl
         localTransport={localSink?.transport ?? null}
-        onColorOrderChange={onColorOrderChange}
       />
 
       {/* Paired strips. Lists every

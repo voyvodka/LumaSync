@@ -1,6 +1,6 @@
 import { LED_TEST_STATUS, type LedTestPatternResult, type LedTestStatusCode } from "@/shared/contracts/preview";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
-import { acquireHueForTest, releaseHueAfterTest } from "@/features/hue/state/hueTestLease";
+import { acquireHueForTest, releaseHueAfterTest } from "@/features/mode/modeApi";
 import { shellStore } from "@/features/persistence/shellStore";
 
 import { startLedTestPattern, stopLedTestPattern } from "../../preview/previewApi";

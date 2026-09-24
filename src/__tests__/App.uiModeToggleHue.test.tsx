@@ -30,9 +30,6 @@ vi.mock("@tauri-apps/api/window", () => ({
 }));
 
 vi.mock("../features/tray/trayController", () => ({
-  listenTrayLightsOff: () => Promise.resolve(() => {}),
-  listenTrayResumeLastMode: () => Promise.resolve(() => {}),
-  listenTraySolidColor: () => Promise.resolve(() => {}),
   listenTrayShowLedPreview: () => Promise.resolve(() => {}),
   listenStartupToggle: () => Promise.resolve(() => {}),
 }));

@@ -10,13 +10,16 @@ use serde_json::json;
 use tauri::test::MockRuntime;
 use tauri::App;
 
-use super::{invoke, main_webview, mock_app, status_code};
+use super::{grant_main_for_tests, invoke, main_webview, mock_app, status_code};
 
 fn app() -> App<MockRuntime> {
-    mock_app(tauri::generate_handler![
+    let app = mock_app(tauri::generate_handler![
         crate::commands::hue::commands::set_hue_solid_color,
         crate::commands::hue::commands::get_hue_stream_status
-    ])
+    ]);
+    // No window sets a Hue colour directly since the lighting transaction.
+    grant_main_for_tests(&app, &["allow-set-hue-solid-color"]);
+    app
 }
 
 /// Mirrors `HUE_SOLID_COLOR_STATUS` in `src/shared/contracts/hue.ts`.

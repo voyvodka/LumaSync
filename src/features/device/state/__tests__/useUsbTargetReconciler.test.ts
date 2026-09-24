@@ -11,17 +11,14 @@ import {
   type UsbTargetReconcilerInput,
 } from "../useUsbTargetReconciler";
 
-const saveShellStateMock = vi.fn();
-
-vi.mock("@/features/shell/windowLifecycle", () => ({
-  saveShellState: (patch: unknown) => saveShellStateMock(patch),
-}));
-
 function harness(overrides: Partial<UsbTargetReconcilerInput> = {}) {
-  const onAutoAddUsbTarget = vi.fn();
-  const onDropUsbTarget = vi.fn();
+  // Pairing and the unsupported-port fallback are both saved choices now: Rust
+  // writes `lastOutputTargets` on arrival, so one callback serves both.
+  const onSelectTargets = vi.fn().mockResolvedValue(undefined);
+  const onAutoAddUsbTarget = onSelectTargets;
+  const onFallbackTargets = onSelectTargets;
+  const onDropUsbTarget = vi.fn().mockResolvedValue(undefined);
   const onLastTargetUnplugged = vi.fn().mockResolvedValue(true);
-  const onFallbackTargets = vi.fn();
   const selectedOutputTargetsRef = createRef<HueRuntimeTarget[]>() as {
     current: HueRuntimeTarget[];
   };
@@ -34,10 +31,9 @@ function harness(overrides: Partial<UsbTargetReconcilerInput> = {}) {
     selectedOutputTargets: ["usb"],
     selectedOutputTargetsRef,
     hueStartConfigRef,
-    onAutoAddUsbTarget,
+    onSelectTargets,
     onDropUsbTarget,
     onLastTargetUnplugged,
-    onFallbackTargets,
     ...overrides,
   };
 
@@ -66,7 +62,6 @@ const unsupported = {
 describe("useUsbTargetReconciler", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    saveShellStateMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -108,7 +103,6 @@ describe("useUsbTargetReconciler", () => {
 
       expect(onAutoAddUsbTarget).toHaveBeenCalledWith(["usb", "hue"]);
       expect(onDropUsbTarget).not.toHaveBeenCalled();
-      expect(saveShellStateMock).toHaveBeenCalledWith({ lastOutputTargets: ["usb", "hue"] });
     });
 
     it("does not re-add usb when it is already selected", () => {
@@ -205,7 +199,6 @@ describe("useUsbTargetReconciler", () => {
 
       // normalizeOutputTargets([]) would have returned ["usb"] here.
       expect(onFallbackTargets).toHaveBeenCalledWith([]);
-      expect(saveShellStateMock).toHaveBeenCalledWith({ lastOutputTargets: [] });
     });
 
     // No bridge is paired, so nothing took over: "switched to Hue-only" would be false.
@@ -261,7 +254,6 @@ describe("useUsbTargetReconciler", () => {
         connectionEvents.emit(unsupported);
       });
       expect(onFallbackTargets).not.toHaveBeenCalled();
-      expect(saveShellStateMock).not.toHaveBeenCalled();
     });
 
     it("ignores connected events and rejections without an unsupported reason", () => {

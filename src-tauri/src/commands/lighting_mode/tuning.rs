@@ -188,6 +188,12 @@ impl TuningCell {
         inner.stored.generation += 1;
     }
 
+    /// A saved setting the running mode reads changed, so the next transaction
+    /// re-applies even when its request names nothing new.
+    pub(crate) fn mark_stale(&self) {
+        self.lock().applied = None;
+    }
+
     /// Before a transaction's first stop: nothing reaches the outputs again
     /// until it commits. `awaiting` is the kind it is bringing up.
     pub(crate) async fn close(&self, awaiting: Option<LightingModeKind>) {

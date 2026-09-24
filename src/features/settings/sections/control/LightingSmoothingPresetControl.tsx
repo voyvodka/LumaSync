@@ -13,10 +13,9 @@
  * `AmbilightLiveSettings::smoothing_alpha` + the Hue EWMA path.
  *
  * Persisted to `shellStore.lightingIntensityPreset` (field name kept
- * generic — always covered both branches). On change the parent
- * hot-reloads the active ambilight worker through `set_lighting_mode` so
- * the new preset rides the next frame without a mode toggle (see
- * `withAmbilightLightingSmoothingPreset` in modePayloadHydration.ts).
+ * generic — always covered both branches). The save is what reaches the
+ * running worker: Rust re-applies the mode once a setting it reads is saved
+ * (docs/architecture/lighting-transaction.md, "Settings refresh").
  *
  * Accessibility:
  *   - `role="radiogroup"` and per-tile `role="radio"` semantics.
@@ -41,10 +40,7 @@ const PRESET_ORDER: LightingSmoothingPreset[] = ["subtle", "moderate", "intense"
 export interface LightingSmoothingPresetControlProps {
   /** Initial preset from shellStore — parent hydrates before first paint. */
   initialPreset?: LightingSmoothingPreset;
-  /**
-   * Fired after persistence completes so the parent can hot-reload the
-   * running ambilight worker.
-   */
+  /** Fired after the save is requested, for a parent that mirrors the choice. */
   onPresetChange?: (next: LightingSmoothingPreset) => void;
 }
 

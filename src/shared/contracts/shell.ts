@@ -298,7 +298,8 @@ export interface ShellState {
   lastFullSize?: { width: number; height: number };
   /**
    * User-facing intensity preset (v1.4) that maps to an EWMA coefficient
-   * on the Hue runtime pump. Absent ⇒ `DEFAULT_HUE_INTENSITY_PRESET`.
+   * on the Hue runtime pump. Absent ⇒ `DEFAULT_LIGHTING_SMOOTHING_PRESET`,
+   * which Rust applies itself (`LightingSmoothingPreset::default()`).
    */
   lightingIntensityPreset?: HueIntensityPreset;
   /**

@@ -6,15 +6,9 @@ import { LightsSection } from "./sections/LightsSection";
 import type { DeviceCategoryRequest } from "./sections/DeviceSection";
 import { SystemSection } from "./sections/SystemSection";
 import type { LedCalibrationConfig, LedSegmentCounts } from "../calibration/model/contracts";
-import type {
-  ColorCorrectionConfig,
-  FirmwareProfile,
-  LedChipType,
-  LedColorOrder,
-} from "@/shared/contracts/device";
 import type { ModeGuardReason } from "../mode/state/modeGuard";
 import type { LightingModeConfig } from "@/shared/contracts/mode";
-import type { HueIntensityPreset, HueRuntimeTarget, HueRuntimeTriggerSource } from "@/shared/contracts/hue";
+import type { HueRuntimeTarget, HueRuntimeTriggerSource } from "@/shared/contracts/hue";
 import type { UpdaterState } from "../updater/useAutoUpdater";
 import type { HueProbeVerdict } from "../hue/state/useHueBridgeReachability";
 import { resetToManual } from "../calibration/model/templates";
@@ -86,33 +80,6 @@ interface SettingsLayoutProps {
   onCheckForUpdates: () => void;
   isCheckingForUpdates: boolean;
   devSetUpdaterState?: (state: UpdaterState) => void;
-  /**
-   * Forwarded to LightsSection so the user's Hue intensity preset
-   * selection can hot-reload the running ambilight worker through the
-   * shared shell helper in App.tsx. Optional so the compact-only path can
-   * drop it without complaining.
-   */
-  onHueIntensityPresetChange?: (preset: HueIntensityPreset) => void;
-  /**
-   * Forwarded to LightsSection so color correction edits in the
-   * ColorCorrectionPanel can hot-reload the running worker via
-   * set_lighting_mode. Mirrors the onHueIntensityPresetChange pattern.
-   */
-  onColorCorrectionChange?: (next: ColorCorrectionConfig) => void;
-  /**
-   * Forwarded to LightsSection so firmware profile swaps in
-   * the FirmwareProfilePicker can hot-reload the running encoder via
-   * set_lighting_mode. Mirrors the onHueIntensityPresetChange pattern.
-   */
-  onFirmwareProfileChange?: (next: FirmwareProfile) => void;
-  /** Forwarded to the chip-type picker in DEVICES; same hot-reload contract as
-   *  `onFirmwareProfileChange`, because chip type is also a wire-format change. */
-  onChipTypeChange?: (next: LedChipType) => void;
-  /** Forwarded to the colour-order control in DEVICES; retuned in place, no force. */
-  onColorOrderChange?: (next: LedColorOrder) => void;
-  /** Forwarded to LED Setup's display picker. Without it a mid-session monitor
-   *  switch persists but never reaches the running capture session. */
-  onSelectedDisplayIdChange?: (next: string) => void;
   /** A notice asked for one Devices category; forwarded to the rail. */
   deviceCategoryRequest?: DeviceCategoryRequest | null;
 }
@@ -141,12 +108,6 @@ export const SettingsLayout = memo(function SettingsLayout({
   onCheckForUpdates,
   isCheckingForUpdates,
   devSetUpdaterState,
-  onHueIntensityPresetChange,
-  onColorCorrectionChange,
-  onFirmwareProfileChange,
-  onChipTypeChange,
-  onColorOrderChange,
-  onSelectedDisplayIdChange,
   deviceCategoryRequest = null,
 }: SettingsLayoutProps) {
   const localOutputConnected = localSink !== null;
@@ -167,7 +128,6 @@ export const SettingsLayout = memo(function SettingsLayout({
         isModeTransitioning={isModeTransitioning}
         modeLockReason={modeLockReason}
         onLightingModeChange={onLightingModeChange}
-        onHueIntensityPresetChange={onHueIntensityPresetChange}
       />
     );
   }
@@ -197,9 +157,6 @@ export const SettingsLayout = memo(function SettingsLayout({
                 isModeTransitioning={isModeTransitioning}
                 onModeChange={onLightingModeChange}
                 onOutputTargetsChange={onOutputTargetsChange}
-                onHueIntensityPresetChange={onHueIntensityPresetChange}
-                onColorCorrectionChange={onColorCorrectionChange}
-                onFirmwareProfileChange={onFirmwareProfileChange}
               />
             </div>
           )}
@@ -220,7 +177,6 @@ export const SettingsLayout = memo(function SettingsLayout({
                 setPendingZoneCounts(null);
                 onCalibrationSaved(cfg);
               }}
-              onDisplayChange={onSelectedDisplayIdChange}
             />
           )}
 
@@ -228,8 +184,6 @@ export const SettingsLayout = memo(function SettingsLayout({
             <div className="h-full overflow-hidden">
               <DeviceSection.Component
                 onNavigateToRoomMap={() => void onSectionChange(SECTION_IDS.ROOM_MAP)}
-                onChipTypeChange={onChipTypeChange}
-                onColorOrderChange={onColorOrderChange}
                 onStopHueOutput={onStopHueOutput}
                 categoryRequest={deviceCategoryRequest}
               />

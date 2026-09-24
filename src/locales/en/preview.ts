@@ -12,6 +12,7 @@ export default {
     closeHint: "Close the LED preview — the test pattern stops and your lighting returns to normal. Reopen it with Test & Preview in LED Setup.",
     reopenHint: "LED preview closed. Reopen it any time with Test & Preview in LED Setup, or from the tray menu.",
     dragHint: "Drag the header to move this popup.",
+    calibrationRequired: "The LED strip needs a calibration first. Set it up in LED Setup, then pick the mode again.",
     autoStart: {
       stripOnly: "Testing the LED strip only. Pick a pattern to include your Hue lights.",
       noStrip: "No LED strip is connected, so the pattern shows in the overlay only. Pick a pattern to include your Hue lights.",
