@@ -8,7 +8,7 @@
 //! Readiness cannot be driven this way — `validate_bridge_addr` refuses a
 //! loopback address with a port, and that guard stays.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -286,46 +286,40 @@ pub(crate) fn light_json(on: bool, brightness: f64, mirek: Option<u16>, xy: (f64
     })
 }
 
+/// What a real bridge does once an area leaves entertainment: after `delay`,
+/// it puts its own state on these lights — which need not be the state they
+/// had before the stream.
+#[derive(Clone)]
+struct PostStream {
+    delay: Duration,
+    lights: Vec<(String, Value)>,
+}
+
+#[derive(Default)]
+struct FakeHueState {
+    lights: HashMap<String, Value>,
+    /// Areas someone streams to: `action: start` adds one, `stop` removes it.
+    active: HashSet<String>,
+    post_stream: Option<PostStream>,
+}
+
 pub(crate) struct FakeHue {
     pub(crate) bridge: TestBridge,
-    /// What the bridge reports for each light; a test edits it to play the
-    /// stream (or the bridge's post-stream restore) changing a light.
-    lights: Arc<Mutex<HashMap<String, Value>>>,
+    /// What the bridge reports; a test edits it to play the stream, the
+    /// bridge's post-stream restore, or another app taking the area.
+    state: Arc<Mutex<FakeHueState>>,
 }
 
 impl FakeHue {
     /// `areas` maps an area id to its lights, each on its own channel and
     /// reached the way a real bridge links them: channel member →
-    /// entertainment service → owning device → light service.
+    /// entertainment service → owning device → light service. A light PUT
+    /// the route answers with a 2xx changes what the next GET reports, as a
+    /// real bridge's does.
     pub(crate) fn start<P>(
         areas: &[(&str, &[&str])],
         lights: &[(&str, Value)],
         put_light: P,
-    ) -> Self
-    where
-        P: Fn(&str) -> Reply + Send + Sync + 'static,
-    {
-        Self::with_puts(areas, lights, put_light, false)
-    }
-
-    /// Like [`FakeHue::start`], but a light PUT the route answers with a 2xx
-    /// also changes what the next GET reports, as a real bridge's does.
-    pub(crate) fn start_applying_puts<P>(
-        areas: &[(&str, &[&str])],
-        lights: &[(&str, Value)],
-        put_light: P,
-    ) -> Self
-    where
-        P: Fn(&str) -> Reply + Send + Sync + 'static,
-    {
-        Self::with_puts(areas, lights, put_light, true)
-    }
-
-    fn with_puts<P>(
-        areas: &[(&str, &[&str])],
-        lights: &[(&str, Value)],
-        put_light: P,
-        apply_puts: bool,
     ) -> Self
     where
         P: Fn(&str) -> Reply + Send + Sync + 'static,
@@ -339,70 +333,55 @@ impl FakeHue {
                 )
             })
             .collect();
-        let table: Arc<Mutex<HashMap<String, Value>>> = Arc::new(Mutex::new(
-            lights
+        let state = Arc::new(Mutex::new(FakeHueState {
+            lights: lights
                 .iter()
                 .map(|(id, state)| (id.to_string(), state.clone()))
                 .collect(),
-        ));
+            ..FakeHueState::default()
+        }));
         let put_light: Arc<LightPutRoute> = Arc::new(put_light);
-        let route_table = Arc::clone(&table);
-        let not_found = || Reply::json(404, json!({ "errors": [{ "description": "not found" }] }));
+        let route_state = Arc::clone(&state);
         let bridge = TestBridge::start(move |method, path, body| {
-            let rest = path.strip_prefix("/clip/v2/resource/").unwrap_or_default();
-            let (rtype, id) = rest.split_once('/').unwrap_or((rest, ""));
-            let data = |item: Value| Reply::json(200, json!({ "errors": [], "data": [item] }));
-            match (method, rtype) {
-                ("GET", "entertainment_configuration") => match areas.get(id) {
-                    Some(ids) => data(json!({
-                        "id": id,
-                        "channels": ids.iter().enumerate().map(|(index, light)| json!({
-                            "channel_id": index,
-                            "position": { "x": 0.0, "y": 0.8, "z": 0.0 },
-                            "members": [{
-                                "service": { "rid": format!("ent-{light}"), "rtype": "entertainment" },
-                                "index": 0
-                            }]
-                        })).collect::<Vec<_>>()
-                    })),
-                    None => not_found(),
-                },
-                ("GET", "entertainment") => data(json!({
-                    "id": id,
-                    "owner": { "rid": format!("dev-{}", id.trim_start_matches("ent-")), "rtype": "device" }
-                })),
-                ("GET", "device") => data(json!({
-                    "id": id,
-                    "services": [{ "rid": id.trim_start_matches("dev-"), "rtype": "light" }]
-                })),
-                ("GET", "light") => match route_table.lock().unwrap().get(id) {
-                    Some(state) => data(state.clone()),
-                    None => not_found(),
-                },
-                ("PUT", "entertainment_configuration") => Reply::ok(),
-                ("PUT", "light") => {
-                    let reply = put_light(id);
-                    if apply_puts && (200..300).contains(&reply.status) {
-                        let written: Value = serde_json::from_str(body).unwrap_or(Value::Null);
-                        if let (Some(state), Some(on)) =
-                            (route_table.lock().unwrap().get_mut(id), written.get("on"))
-                        {
-                            state["on"] = on.clone();
-                        }
-                    }
-                    reply
-                }
-                _ => not_found(),
-            }
+            route(&route_state, &areas, put_light.as_ref(), method, path, body)
         });
-        Self {
-            bridge,
-            lights: table,
-        }
+        Self { bridge, state }
     }
 
     pub(crate) fn set_light(&self, id: &str, state: Value) {
-        self.lights.lock().unwrap().insert(id.to_string(), state);
+        self.state
+            .lock()
+            .unwrap()
+            .lights
+            .insert(id.to_string(), state);
+    }
+
+    pub(crate) fn light(&self, id: &str) -> Value {
+        self.state.lock().unwrap().lights[id].clone()
+    }
+
+    /// From now on, every `action: stop` makes the bridge put `lights` on
+    /// after `delay`, the way a BSB002 was measured doing.
+    pub(crate) fn after_stop_bridge_sets(&self, delay: Duration, lights: &[(&str, Value)]) {
+        self.state.lock().unwrap().post_stream = Some(PostStream {
+            delay,
+            lights: lights
+                .iter()
+                .map(|(id, value)| (id.to_string(), value.clone()))
+                .collect(),
+        });
+    }
+
+    /// Another app streams to `area`: the area reads active and these lights
+    /// read `mode: streaming`.
+    pub(crate) fn another_app_streams(&self, area: &str, lights: &[&str]) {
+        let mut state = self.state.lock().unwrap();
+        state.active.insert(area.to_string());
+        for id in lights {
+            if let Some(light) = state.lights.get_mut(*id) {
+                light["mode"] = json!("streaming");
+            }
+        }
     }
 
     /// Every restore PUT, as `(light id, body)` in arrival order.
@@ -415,5 +394,128 @@ impl FakeHue {
                 (id, r.json())
             })
             .collect()
+    }
+}
+
+fn route(
+    state: &Arc<Mutex<FakeHueState>>,
+    areas: &HashMap<String, Vec<String>>,
+    put_light: &LightPutRoute,
+    method: &str,
+    path: &str,
+    body: &str,
+) -> Reply {
+    let not_found = || Reply::json(404, json!({ "errors": [{ "description": "not found" }] }));
+    let rest = path.strip_prefix("/clip/v2/resource/").unwrap_or_default();
+    let (rtype, id) = rest.split_once('/').unwrap_or((rest, ""));
+    let data = |item: Value| Reply::json(200, json!({ "errors": [], "data": [item] }));
+    match (method, rtype) {
+        ("GET", "entertainment_configuration") => match areas.get(id) {
+            Some(ids) => {
+                let active = state.lock().unwrap().active.contains(id);
+                data(json!({
+                    "id": id,
+                    "status": if active { "active" } else { "inactive" },
+                    "active_streamer": if active {
+                        json!({ "rid": "another-app", "rtype": "auth_v1" })
+                    } else {
+                        Value::Null
+                    },
+                    "channels": ids.iter().enumerate().map(|(index, light)| json!({
+                        "channel_id": index,
+                        "position": { "x": 0.0, "y": 0.8, "z": 0.0 },
+                        "members": [{
+                            "service": { "rid": format!("ent-{light}"), "rtype": "entertainment" },
+                            "index": 0
+                        }]
+                    })).collect::<Vec<_>>()
+                }))
+            }
+            None => not_found(),
+        },
+        ("GET", "entertainment") => data(json!({
+            "id": id,
+            "owner": { "rid": format!("dev-{}", id.trim_start_matches("ent-")), "rtype": "device" }
+        })),
+        ("GET", "device") => data(json!({
+            "id": id,
+            "services": [{ "rid": id.trim_start_matches("dev-"), "rtype": "light" }]
+        })),
+        ("GET", "light") if id.is_empty() => {
+            let mut all: Vec<(String, Value)> = state
+                .lock()
+                .unwrap()
+                .lights
+                .iter()
+                .map(|(id, light)| (id.clone(), light.clone()))
+                .collect();
+            all.sort_by(|a, b| a.0.cmp(&b.0));
+            let all: Vec<Value> = all
+                .into_iter()
+                .map(|(id, mut light)| {
+                    light["id"] = json!(id);
+                    light
+                })
+                .collect();
+            Reply::json(200, json!({ "errors": [], "data": all }))
+        }
+        ("GET", "light") => match state.lock().unwrap().lights.get(id) {
+            Some(light) => data(light.clone()),
+            None => not_found(),
+        },
+        ("PUT", "entertainment_configuration") => {
+            let action = serde_json::from_str::<Value>(body)
+                .ok()
+                .and_then(|body| Some(body.get("action")?.as_str()?.to_string()));
+            let mut held = state.lock().unwrap();
+            match action.as_deref() {
+                Some("start") => {
+                    held.active.insert(id.to_string());
+                }
+                Some("stop") => {
+                    held.active.remove(id);
+                    if let Some(post) = held.post_stream.clone() {
+                        let later = Arc::clone(state);
+                        std::thread::spawn(move || {
+                            std::thread::sleep(post.delay);
+                            let mut held = later.lock().unwrap();
+                            for (light, value) in post.lights {
+                                held.lights.insert(light, value);
+                            }
+                        });
+                    }
+                }
+                _ => {}
+            }
+            Reply::ok()
+        }
+        ("PUT", "light") => {
+            let reply = put_light(id);
+            if (200..300).contains(&reply.status) {
+                let written: Value = serde_json::from_str(body).unwrap_or(Value::Null);
+                if let Some(light) = state.lock().unwrap().lights.get_mut(id) {
+                    apply_light_put(light, &written);
+                }
+            }
+            reply
+        }
+        _ => not_found(),
+    }
+}
+
+/// What a light PUT changes in the light's reported state.
+fn apply_light_put(light: &mut Value, written: &Value) {
+    if let Some(on) = written.get("on") {
+        light["on"] = on.clone();
+    }
+    if let Some(brightness) = written.pointer("/dimming/brightness") {
+        light["dimming"]["brightness"] = brightness.clone();
+    }
+    if let Some(mirek) = written.pointer("/color_temperature/mirek") {
+        light["color_temperature"] = json!({ "mirek": mirek, "mirek_valid": true });
+    }
+    if let Some(xy) = written.pointer("/color/xy") {
+        light["color"]["xy"] = xy.clone();
+        light["color_temperature"] = json!({ "mirek": null, "mirek_valid": false });
     }
 }

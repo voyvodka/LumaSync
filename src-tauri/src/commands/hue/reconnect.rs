@@ -948,4 +948,112 @@ mod tests {
         let held = owner.light_restore.as_ref().expect("snapshot survives");
         assert!(!held.lights[0].state.on);
     }
+
+    /// A stream that dropped and reconnected, then Off. The bridge puts its
+    /// own post-stream state on the lights at the drop and again after the
+    /// stop; the session's first snapshot has to be what the lights end on.
+    #[tokio::test]
+    async fn after_a_reconnect_the_stop_still_outlasts_the_bridges_post_stream_state() {
+        use super::super::commands::stop_hue_runtime;
+        use super::super::light_restore::{
+            parse_light_state, reads_as, HueLightRestore, HueLightSnapshot,
+        };
+        use super::super::sender::signal_shutdown_complete;
+        use super::super::state_store::test_helpers::dummy_active_stream_context;
+        use super::super::test_bridge::{light_json, FakeHue, Reply};
+
+        // As read off a BSB002 (2026-09-24): before the stream, and what the
+        // bridge put on both lights after every drop or stop.
+        let before = light_json(true, 56.92, Some(446), (0.5190, 0.4152));
+        let post_stream = light_json(true, 30.83, Some(367), (0.4583, 0.4099));
+        let hue = FakeHue::start(
+            &[("living-room", &["left", "right"])],
+            &[("left", before.clone()), ("right", before.clone())],
+            |_| Reply::ok(),
+        );
+        hue.after_stop_bridge_sets(
+            Duration::from_millis(300),
+            &[("left", post_stream.clone()), ("right", post_stream)],
+        );
+        let mut request = test_request();
+        request.bridge_ip = hue.bridge.authority.clone();
+        let snapshot = parse_light_state(&before).unwrap();
+
+        let store = HueRuntimeStateStore::default();
+        let runtime = store.runtime_arc();
+        {
+            let mut owner = acquire_hue_runtime(&runtime);
+            let _ = start_with_evidence(
+                &mut owner,
+                &strict_gate_ready(),
+                HueRuntimeTriggerSource::ModeControl,
+            );
+            let mut context = dummy_active_stream_context();
+            context.bridge_ip = request.bridge_ip.clone();
+            context.username = request.username.clone();
+            context.area_id = request.area_id.clone();
+            context.uses_dtls = true;
+            owner.active_stream = Some(context);
+            owner.light_restore = Some(HueLightRestore {
+                bridge_ip: request.bridge_ip.clone(),
+                username: request.username.clone(),
+                area_id: request.area_id.clone(),
+                lights: ["left", "right"]
+                    .into_iter()
+                    .map(|light| HueLightSnapshot {
+                        light_id: light.to_string(),
+                        state: snapshot.clone(),
+                    })
+                    .collect(),
+            });
+        }
+        let build: HueSenderBuild = Arc::new(|_request, channels, _metadata, _counter| {
+            let (color_sender, rx) = HueColorSender::with_mailbox(channels.len());
+            let shutdown = new_shutdown_signal();
+            let signal = Arc::clone(&shutdown);
+            std::thread::spawn(move || {
+                while rx.recv().is_ok() {}
+                signal_shutdown_complete(&signal);
+            });
+            SpawnedHueSender {
+                color_sender,
+                uses_dtls: true,
+                shutdown_signal: shutdown,
+                cipher_name: None,
+                deactivate_token: DeactivateToken::new(),
+            }
+        });
+
+        let outcome =
+            internal_restart_stream(&runtime, &request, &ReconnectDeps::assume_ready(build)).await;
+        assert!(matches!(outcome, RestartOutcome::Restarted), "{outcome:?}");
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let drifted = parse_light_state(&hue.light("left")).unwrap();
+        assert!(
+            !reads_as(&snapshot, &drifted),
+            "the drop should have left the bridge's own state on the lights"
+        );
+        assert!(
+            hue.light_puts().is_empty(),
+            "a reconnect is not a stop and restores nothing"
+        );
+
+        let stop_runtime = Arc::clone(&runtime);
+        let stopped = tokio::task::spawn_blocking(move || {
+            stop_hue_runtime(&stop_runtime, HueRuntimeTriggerSource::ModeControl, None)
+        })
+        .await
+        .unwrap();
+        tokio::time::sleep(Duration::from_millis(800)).await;
+
+        assert_eq!(stopped.status.code, "HUE_STREAM_STOPPED");
+        for light in ["left", "right"] {
+            let now = parse_light_state(&hue.light(light)).unwrap();
+            assert!(
+                reads_as(&snapshot, &now),
+                "{light} was left as the bridge put it: {now:?}"
+            );
+        }
+        assert!(acquire_hue_runtime(&runtime).light_restore.is_none());
+    }
 }

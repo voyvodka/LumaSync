@@ -360,7 +360,12 @@ where
             &request.area_id,
         );
         if let Some(other) = other {
-            restore_lights_off_thread(other, Instant::now() + HUE_LIGHT_RESTORE_BUDGET).await;
+            // Nothing of this start is on the bridge yet, so nothing to
+            // paint under: `Starting` here is this start's own state.
+            let _ = tokio::task::spawn_blocking(move || {
+                restore_lights(&other, Instant::now() + HUE_LIGHT_RESTORE_BUDGET, &|| false)
+            })
+            .await;
         }
     }
 
@@ -487,7 +492,7 @@ where
     let final_result = match stored {
         Ok(result) => result,
         Err((result, spawned, restore)) => {
-            settle_abandoned_start(spawned, restore).await;
+            settle_abandoned_start(runtime, spawned, restore).await;
             return result;
         }
     };
@@ -510,22 +515,36 @@ where
 /// A start that a stop overtook: nothing will ever store or stop its sender,
 /// and it may have activated the area. Dropping the handle ends the sender,
 /// which deactivates the area itself before it signals; then the lights go back.
-async fn settle_abandoned_start(spawned: SpawnedHueSender, restore: HueLightRestore) {
+async fn settle_abandoned_start(
+    runtime: &Arc<Mutex<HueRuntimeOwner>>,
+    spawned: SpawnedHueSender,
+    restore: HueLightRestore,
+) {
     let SpawnedHueSender {
         color_sender,
         shutdown_signal,
         ..
     } = spawned;
     drop(color_sender);
+    let runtime = Arc::clone(runtime);
     let _ = tokio::task::spawn_blocking(move || {
         wait_for_shutdown(&shutdown_signal, Duration::from_secs(HUE_STOP_TIMEOUT_SECS));
-        restore_lights(&restore, Instant::now() + HUE_LIGHT_RESTORE_BUDGET);
+        restore_lights(&restore, Instant::now() + HUE_LIGHT_RESTORE_BUDGET, &|| {
+            a_newer_session_began(&runtime)
+        });
     })
     .await;
 }
 
-async fn restore_lights_off_thread(restore: HueLightRestore, deadline: Instant) {
-    let _ = tokio::task::spawn_blocking(move || restore_lights(&restore, deadline)).await;
+/// A stop leaves the runtime `Idle`; any of these means a start has begun
+/// since, and a restore still running must not write under it. The stop
+/// command's own gate (`stop_in_flight`) already holds starts back; an
+/// abandoned start's restore and the quit path have no such gate.
+fn a_newer_session_began(runtime: &Arc<Mutex<HueRuntimeOwner>>) -> bool {
+    matches!(
+        acquire_hue_runtime(runtime).state,
+        HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
+    )
 }
 
 /// Stop the Hue entertainment stream with a bounded wait for the background
@@ -642,15 +661,15 @@ pub(crate) fn stop_hue_runtime(
     // Best-effort, dedupe-aware DTLS deactivation outside the lock to avoid
     // blocking the mutex. If the sender thread's close_notify cleanup path
     // already drained the token, this call is a fast in-process no-op.
-    if let Some((ip, username, area_id, token)) = dtls_deactivate {
+    let deactivate = |(ip, username, area_id, token): &(String, String, String, Arc<_>)| {
         let request_timeout =
             remaining(Duration::from_millis(HUE_HTTP_TIMEOUT_MS)).max(Duration::from_millis(100));
-        if let Ok(client) =
-            blocking_client_with_timeout(&trust_for_app_key(&username), request_timeout)
-        {
-            let _ = deactivate_with_token(&token, &client, &ip, &username, &area_id);
-        }
-    }
+        blocking_client_with_timeout(&trust_for_app_key(username), request_timeout)
+            .and_then(|client| deactivate_with_token(token, &client, ip, username, area_id))
+    };
+    let our_deactivate_failed = dtls_deactivate
+        .as_ref()
+        .is_some_and(|params| deactivate(params).is_err());
 
     // 2. If there was an active stream, wait for the sender thread to confirm
     //    shutdown within HUE_STOP_TIMEOUT_SECS. The sender signals only after
@@ -662,6 +681,18 @@ pub(crate) fn stop_hue_runtime(
             remaining(Duration::from_secs(HUE_STOP_TIMEOUT_SECS)),
         )
     });
+
+    // The deactivate above skips when the sender holds the token; if the
+    // sender's PUT then failed it handed the token back, and nobody else will
+    // send one. Without it the area stays in entertainment and the restore's
+    // writes are overridden. Not after our own PUT failed: that bridge is
+    // not answering, and a second try only doubles the wait.
+    if let Some(params) = dtls_deactivate
+        .as_ref()
+        .filter(|params| !our_deactivate_failed && !params.3.was_acquired())
+    {
+        let _ = deactivate(params);
+    }
 
     let result = {
         let mut owner = acquire_hue_runtime(runtime);
@@ -684,7 +715,9 @@ pub(crate) fn stop_hue_runtime(
     if let Some(restore) = light_restore {
         let restore_deadline =
             deadline.unwrap_or_else(|| Instant::now() + HUE_LIGHT_RESTORE_BUDGET);
-        restore_lights(&restore, restore_deadline);
+        restore_lights(&restore, restore_deadline, &|| {
+            a_newer_session_began(runtime)
+        });
     }
 
     result
@@ -1162,10 +1195,16 @@ mod tests {
 #[cfg(test)]
 mod light_restore_flow {
 
+    use std::sync::atomic::{AtomicBool, Ordering};
+
     use serde_json::{json, Value};
     use tauri::Manager;
 
     use super::super::frame::HueColorSender;
+    use super::super::light_restore::{
+        parse_light_state, reads_as, HueLightRestoreStop, HueLightSnapshot, HueLightState,
+        HUE_LIGHT_RESTORE_WATCH,
+    };
     use super::super::retry::start_with_evidence;
     use super::super::sender::{new_shutdown_signal, signal_shutdown_complete, DeactivateToken};
     use super::super::state_store::test_helpers::strict_gate_ready;
@@ -1391,6 +1430,11 @@ mod light_restore_flow {
             false,
             HueRuntimeTriggerSource::DeviceSurface,
         );
+        // `restart_hue_stream` deactivates and reads readiness here; the old
+        // session's reconnect monitor sees `Idle` meanwhile and lets go. With
+        // no gap it would find the new start's `Starting` and claim a
+        // reconnect in the middle of it.
+        tokio::time::sleep(Duration::from_millis(50)).await;
 
         start(&runtime, &request(&hue, "area-2"), BringUpKind::Restart).await;
 
@@ -1607,7 +1651,7 @@ mod light_restore_flow {
             ("light-3", light_json(false, 50.0, None, (0.30, 0.30))),
         ];
         let ids: Vec<&str> = lights.iter().map(|(id, _)| *id).collect();
-        FakeHue::start_applying_puts(&[(AREA, &ids)], &lights, |_| {
+        FakeHue::start(&[(AREA, &ids)], &lights, |_| {
             Reply::ok().after(Duration::from_millis(150))
         })
     }
@@ -1704,6 +1748,282 @@ mod light_restore_flow {
         });
 
         assert_eq!(sent, 3, "the restart ran inside the restore");
+    }
+
+    // ── the bridge's own post-stream state landing after ours ────────────
+
+    /// Both lights before the stream, as read off a BSB002 on 2026-09-24.
+    fn before_stream() -> Value {
+        light_json(true, 56.92, Some(446), (0.5190, 0.4152))
+    }
+
+    /// What that bridge put on both lights a few hundred ms after every stop,
+    /// on top of a restore it had already acknowledged.
+    fn bridge_post_stream() -> Value {
+        light_json(true, 30.83, Some(367), (0.4583, 0.4099))
+    }
+
+    fn measured_bridge() -> FakeHue {
+        let hue = FakeHue::start(
+            &[(AREA, &["left", "right"])],
+            &[("left", before_stream()), ("right", before_stream())],
+            |_| Reply::ok(),
+        );
+        hue.after_stop_bridge_sets(
+            Duration::from_millis(400),
+            &[
+                ("left", bridge_post_stream()),
+                ("right", bridge_post_stream()),
+            ],
+        );
+        hue
+    }
+
+    fn reads_as_before_stream(hue: &FakeHue, light: &str) -> bool {
+        let want = parse_light_state(&before_stream()).unwrap();
+        parse_light_state(&hue.light(light)).is_some_and(|have| reads_as(&want, &have))
+    }
+
+    /// Past the bridge's post-stream write, however the stop ended.
+    async fn once_the_bridge_is_done() {
+        tokio::time::sleep(Duration::from_millis(800)).await;
+    }
+
+    /// The bridge acknowledges `action: stop`, takes our restore, and then
+    /// puts its own state on the lights anyway. The restore has to be the
+    /// last write.
+    #[tokio::test]
+    async fn the_restore_outlasts_the_bridges_own_post_stream_state() {
+        let hue = measured_bridge();
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+
+        let started = Instant::now();
+        let stopped = stop_hue_stream(None, app.state()).await.unwrap();
+        let took = started.elapsed();
+        once_the_bridge_is_done().await;
+
+        assert_eq!(stopped.status.code, "HUE_STREAM_STOPPED");
+        for light in ["left", "right"] {
+            assert!(
+                reads_as_before_stream(&hue, light),
+                "{light} was left as the bridge put it: {}",
+                hue.light(light)
+            );
+        }
+        // Once per light, and once more after the bridge undid it.
+        assert_eq!(hue.light_puts().len(), 4, "{:?}", hue.light_puts());
+        // Every light written again and read back holding ends the watch
+        // before its window does.
+        assert!(took < HUE_LIGHT_RESTORE_WATCH, "{took:?}");
+    }
+
+    /// The stop skips its own `action: stop` while the sender holds the token.
+    /// When the sender's PUT then fails it hands the token back, and the stop
+    /// has to send one itself before restoring — or the area stays in
+    /// entertainment and overrides every restore write.
+    #[tokio::test]
+    async fn a_stop_sends_the_deactivate_the_sender_failed_to_land() {
+        let hue = one_area(&[("light-1", light_json(false, 30.0, Some(367), (0.45, 0.41)))]);
+        let app = app();
+        let runtime = runtime_of(&app);
+        let result = start_with_evidence(
+            &mut acquire_hue_runtime(&runtime),
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        let build = |channels: Vec<HueAreaChannel>, _metadata, _counter| {
+            let (color_sender, rx) = HueColorSender::with_mailbox(channels.len());
+            let shutdown = new_shutdown_signal();
+            let signal = Arc::clone(&shutdown);
+            // Taken up front, so the stop's own deactivate always finds it
+            // held — as it does when the sender's PUT is already on its way.
+            let token = DeactivateToken::new();
+            assert!(token.try_acquire());
+            let held = Arc::clone(&token);
+            std::thread::spawn(move || {
+                while rx.recv().is_ok() {}
+                // That PUT fails, and the token goes back.
+                std::thread::sleep(Duration::from_millis(100));
+                held.release();
+                signal_shutdown_complete(&signal);
+            });
+            SpawnedHueSender {
+                color_sender,
+                uses_dtls: true,
+                shutdown_signal: shutdown,
+                cipher_name: None,
+                deactivate_token: token,
+            }
+        };
+        bring_up_stream(
+            &runtime,
+            &request(&hue, AREA),
+            result,
+            BringUpKind::Start,
+            build,
+        )
+        .await;
+        let stopped = stop_hue_stream(None, app.state()).await.unwrap();
+
+        assert_eq!(stopped.status.code, "HUE_STREAM_STOPPED");
+        let stop_puts = hue.bridge.puts_to(STOP_PUT);
+        let light_puts = hue.bridge.puts_to(LIGHT_PUT);
+        assert_eq!(
+            stop_puts.len(),
+            1,
+            "nobody took the area out of entertainment"
+        );
+        assert!(stop_puts[0].at <= light_puts[0].at);
+    }
+
+    /// The quit path gets the same restore inside its own deadline.
+    #[tokio::test]
+    async fn the_quit_path_restore_outlasts_the_bridges_post_stream_state() {
+        let hue = measured_bridge();
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+
+        let started = Instant::now();
+        // `[shutdown]` step 2's deadline when step 1 is quick.
+        let deadline = started + Duration::from_millis(3_200);
+        let result = tokio::task::spawn_blocking(move || {
+            stop_hue_stream_before_exit(&app.state::<HueRuntimeStateStore>(), deadline)
+        })
+        .await
+        .unwrap();
+        assert!(Instant::now() <= deadline, "{:?}", started.elapsed());
+        once_the_bridge_is_done().await;
+
+        assert_eq!(result.status.code, "HUE_STREAM_STOPPED");
+        for light in ["left", "right"] {
+            assert!(
+                reads_as_before_stream(&hue, light),
+                "{light} was left as the bridge put it: {}",
+                hue.light(light)
+            );
+        }
+    }
+
+    /// A start issued while a stop is still watching waits for it, reads the
+    /// lights as they were before the stream, and nothing of the stop's
+    /// restore lands once it has begun.
+    #[tokio::test]
+    async fn a_start_right_after_stop_waits_out_the_watch_and_is_never_painted_over() {
+        let hue = measured_bridge();
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+
+        let store = app.state::<HueRuntimeStateStore>();
+        let (stopped, puts_when_the_start_began) =
+            tokio::join!(stop_hue_stream(None, app.state()), async {
+                once_the_restore_has_begun(&hue).await;
+                store.wait_for_stop_to_settle().await;
+                let puts = hue.light_puts().len();
+                start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+                puts
+            });
+        once_the_bridge_is_done().await;
+        let puts_while_streaming = hue.light_puts().len();
+        let held: Vec<Option<HueLightState>> = ["left", "right"]
+            .into_iter()
+            .map(|light| {
+                acquire_hue_runtime(&runtime)
+                    .light_restore
+                    .as_ref()?
+                    .lights
+                    .iter()
+                    .find(|l| l.light_id == light)
+                    .map(|l| l.state.clone())
+            })
+            .collect();
+        stop_hue_stream(None, app.state()).await.unwrap();
+
+        assert_eq!(stopped.unwrap().status.code, "HUE_STREAM_STOPPED");
+        assert_eq!(
+            puts_while_streaming, puts_when_the_start_began,
+            "the stop's restore wrote under the new session"
+        );
+        let want = parse_light_state(&before_stream()).unwrap();
+        for state in held {
+            let state = state.expect("the new session holds a snapshot");
+            assert!(reads_as(&want, &state), "snapshotted {state:?}");
+        }
+    }
+
+    /// Another app took the area after ours ended (here: while the runtime
+    /// sat `Failed`). Its lights belong to that stream, so nothing is written.
+    #[tokio::test]
+    async fn a_restore_leaves_an_area_another_app_streams_to() {
+        let hue = measured_bridge();
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+        {
+            let mut owner = acquire_hue_runtime(&runtime);
+            owner.set_active_stream(None);
+            owner.persistent_sender = None;
+            owner.state = HueRuntimeState::Failed;
+        }
+        hue.another_app_streams(AREA, &["left", "right"]);
+
+        let stopped = stop_hue_stream(None, app.state()).await.unwrap();
+
+        assert_eq!(stopped.status.code, "HUE_STREAM_STOPPED");
+        assert!(hue.light_puts().is_empty(), "{:?}", hue.light_puts());
+        assert!(acquire_hue_runtime(&runtime).light_restore.is_none());
+    }
+
+    /// Whatever a restore is doing, once a newer session has begun it writes
+    /// nothing more — the watch included, though the bridge undid the lights.
+    #[tokio::test]
+    async fn a_restore_stops_writing_once_a_newer_session_began() {
+        let hue = measured_bridge();
+        let restore = HueLightRestore {
+            bridge_ip: hue.bridge.authority.clone(),
+            username: "app-key".to_string(),
+            area_id: AREA.to_string(),
+            lights: ["left", "right"]
+                .into_iter()
+                .map(|light| HueLightSnapshot {
+                    light_id: light.to_string(),
+                    state: parse_light_state(&before_stream()).unwrap(),
+                })
+                .collect(),
+        };
+        for light in ["left", "right"] {
+            hue.set_light(light, bridge_post_stream());
+        }
+        let newer = Arc::new(AtomicBool::new(false));
+
+        let (report, _) = tokio::join!(
+            {
+                let newer = Arc::clone(&newer);
+                tokio::task::spawn_blocking(move || {
+                    restore_lights(&restore, Instant::now() + HUE_LIGHT_RESTORE_BUDGET, &|| {
+                        newer.load(Ordering::SeqCst)
+                    })
+                })
+            },
+            async {
+                while hue.light_puts().len() < 2 {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+                newer.store(true, Ordering::SeqCst);
+                // The bridge's post-stream state lands under the new session.
+                for light in ["left", "right"] {
+                    hue.set_light(light, bridge_post_stream());
+                }
+            }
+        );
+
+        let report = report.unwrap();
+        assert_eq!(report.stopped, Some(HueLightRestoreStop::Superseded));
+        assert_eq!(report.reapplied, 0);
+        assert_eq!(hue.light_puts().len(), 2);
     }
 
     #[tokio::test]
