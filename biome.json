@@ -73,6 +73,8 @@
         "src/**/*Api.ts",
         "src/main.tsx",
         "src/features/shell/windowLifecycle.ts",
+        "src/features/shell/windowGeometry.ts",
+        "src/features/shell/windowAnimator.ts",
         "src/features/tray/trayController.ts"
       ],
       "linter": {
