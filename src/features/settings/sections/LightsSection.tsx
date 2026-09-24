@@ -1,5 +1,5 @@
 import type { LocalSink } from "@/features/device/localSink";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useTranslation, Trans } from "react-i18next";
 
 import {
@@ -8,6 +8,7 @@ import {
 } from "@/features/mode/state/modeGuard";
 import {
   LIGHTING_MODE_KIND,
+  OUTPUT_TARGETS,
   normalizeLightingModeConfig,
   normalizeAmbilightPayload,
   type LightingModeConfig,
@@ -68,6 +69,16 @@ export function hueUnavailableSubKey(
 ): (typeof HUE_UNAVAILABLE_SUB_KEYS)[HueUnavailableReason] {
   if (!bootstrapDone) return HUE_UNAVAILABLE_SUB_KEYS.checking;
   return HUE_UNAVAILABLE_SUB_KEYS[hueUnavailableReason(hueConfigured, false, verdict) ?? "checking"];
+}
+
+interface OutputRowView {
+  available: boolean;
+  /** A live stream state the row reports while selected. */
+  liveState?: "is-reconnecting" | "is-failed";
+  name: string;
+  detail: string;
+  detailLang?: string;
+  sub: ReactNode;
 }
 
 interface LightsSectionProps {
@@ -258,9 +269,7 @@ export function LightsSection({
     });
   };
 
-  // Compute USB/Hue availability + selection.
   const usbSelected = outputTargets.includes("usb");
-  const hueSelected = outputTargets.includes("hue");
   const hueAvailable = hueConfigured && hueReachable;
   const roomAware = roomAwareStatus(tvAnchor, outputTargets, {
     configured: hueConfigured,
@@ -331,6 +340,62 @@ export function LightsSection({
   // so the slider tooltip surfaces the firmware reason while transient
   // mode-transition disables stay generic.
   const ambilightBrightnessLocked = isAdalight || slidersDisabled;
+
+  // One dock row per output target: a new target fails to compile until it has one.
+  const outputRows = {
+    usb: {
+      available: localOutputConnected,
+      name:
+        localSink?.transport === "wled"
+          ? t("lights:dock.rows.wledName")
+          : t("lights:dock.rows.usbName"),
+      // The identity of the thing actually bound. For WLED that is its LAN
+      // address — the persisted sink config keeps no friendly name — and for
+      // serial it is the USB product string the OS reported, when it reported
+      // one. Both are device-supplied, so they are uppercased by English rules
+      // — "CH340 USB SERİAL" under `lang="tr"` otherwise.
+      detail:
+        localSink?.transport === "wled"
+          ? localSink.id
+          : (localSink?.product ?? t("lights:dock.rows.usbType")),
+      detailLang: localSink?.transport === "wled" || localSink?.product ? "en" : undefined,
+      sub: localOutputConnected ? (
+        <Trans
+          i18nKey={
+            localSink?.transport === "wled" ? "lights:dock.rows.wledSub" : "lights:dock.rows.usbSub"
+          }
+          values={{ count: totalLeds ?? 0 }}
+          components={{ b: <b /> }}
+        />
+      ) : (
+        t("lights:dock.rows.usbSubUnavailable")
+      ),
+    },
+    hue: {
+      available: hueAvailable,
+      liveState: hueReconnecting ? "is-reconnecting" : hueStreamFailed ? "is-failed" : undefined,
+      name: t("lights:dock.rows.hueName"),
+      detail: t("lights:dock.rows.hueType"),
+      sub: !hueAvailable ? (
+        <Trans
+          i18nKey={hueUnavailableSubKey(hueConfigured, hueProbeVerdict, bootstrapDone)}
+          components={{ b: <b /> }}
+        />
+      ) : hueReconnecting ? (
+        <Trans i18nKey="lights:dock.rows.hueSubReconnecting" components={{ b: <b /> }} />
+      ) : hueStreamFailed ? (
+        <Trans i18nKey="lights:dock.rows.hueSubFailed" components={{ b: <b /> }} />
+      ) : hueStreaming ? (
+        <Trans
+          i18nKey="lights:dock.rows.hueSubStreaming"
+          values={{ hz: HUE_STREAM_MAX_HZ }}
+          components={{ b: <b /> }}
+        />
+      ) : (
+        <Trans i18nKey="lights:dock.rows.hueSubIdle" components={{ b: <b /> }} />
+      ),
+    },
+  } satisfies Record<HueRuntimeTarget, OutputRowView>;
 
   return (
     <div className="lm-lights-page">
@@ -552,112 +617,31 @@ export function LightsSection({
             </button>
           </h4>
           <div className="lm-out-list">
-            {/* USB row */}
-            <button
-              type="button"
-              className={`lm-out-row ${
-                !localOutputConnected ? "is-unavailable" : usbSelected ? "" : "is-off"
-              }`}
-              disabled={modeSelectorDisabled || !localOutputConnected || (usbSelected && outputTargets.length === 1)}
-              onClick={() => toggleTarget("usb", usbSelected)}
-              aria-pressed={usbSelected}
-            >
-              <span className="st" />
-              <div className="tx">
-                <div className="n">
-                  {localSink?.transport === "wled"
-                    ? t("lights:dock.rows.wledName")
-                    : t("lights:dock.rows.usbName")}{" "}
-                  {/* The identity of the thing actually bound. For WLED that is
-                      its LAN address — the persisted sink config keeps no
-                      friendly name — and for serial it is the USB product
-                      string the OS reported, when it reported one. Both are
-                      device-supplied, so they are uppercased by English rules
-                      — "CH340 USB SERİAL" under `lang="tr"` otherwise. */}
-                  <em
-                    lang={
-                      localSink?.transport === "wled" || localSink?.product ? "en" : undefined
-                    }
-                  >
-                    {localSink?.transport === "wled"
-                      ? localSink.id
-                      : localSink?.product ?? t("lights:dock.rows.usbType")}
-                  </em>
-                </div>
-                <div className="s">
-                  {localOutputConnected ? (
-                    <Trans
-                      i18nKey={
-                        localSink?.transport === "wled"
-                          ? "lights:dock.rows.wledSub"
-                          : "lights:dock.rows.usbSub"
-                      }
-                      values={{ count: totalLeds ?? 0 }}
-                      components={{ b: <b /> }}
-                    />
-                  ) : (
-                    t("lights:dock.rows.usbSubUnavailable")
-                  )}
-                </div>
-              </div>
-              <span className="tg" />
-            </button>
-            {/* Hue row */}
-            <button
-              type="button"
-              className={`lm-out-row ${
-                !hueAvailable
-                  ? "is-unavailable"
-                  : !hueSelected
-                    ? "is-off"
-                    : hueReconnecting
-                      ? "is-reconnecting"
-                      : hueStreamFailed
-                        ? "is-failed"
-                        : ""
-              }`}
-              disabled={modeSelectorDisabled || !hueAvailable || (hueSelected && outputTargets.length === 1)}
-              onClick={() => toggleTarget("hue", hueSelected)}
-              aria-pressed={hueSelected}
-            >
-              <span className="st" />
-              <div className="tx">
-                <div className="n">
-                  {t("lights:dock.rows.hueName")}{" "}
-                  <em>{t("lights:dock.rows.hueType")}</em>
-                </div>
-                <div className="s">
-                  {!hueAvailable ? (
-                    <Trans
-                      i18nKey={hueUnavailableSubKey(hueConfigured, hueProbeVerdict, bootstrapDone)}
-                      components={{ b: <b /> }}
-                    />
-                  ) : hueReconnecting ? (
-                    <Trans
-                      i18nKey="lights:dock.rows.hueSubReconnecting"
-                      components={{ b: <b /> }}
-                    />
-                  ) : hueStreamFailed ? (
-                    <Trans
-                      i18nKey="lights:dock.rows.hueSubFailed"
-                      components={{ b: <b /> }}
-                    />
-                  ) : hueStreaming ? (
-                    <Trans
-                      i18nKey="lights:dock.rows.hueSubStreaming"
-                      values={{ hz: HUE_STREAM_MAX_HZ }}
-                      components={{ b: <b /> }}
-                    />
-                  ) : (
-                    <Trans
-                      i18nKey="lights:dock.rows.hueSubIdle"
-                      components={{ b: <b /> }}
-                    />
-                  )}
-                </div>
-              </div>
-              <span className="tg" />
-            </button>
+            {OUTPUT_TARGETS.map((target) => {
+              const row: OutputRowView = outputRows[target];
+              const selected = outputTargets.includes(target);
+              return (
+                <button
+                  key={target}
+                  type="button"
+                  className={`lm-out-row ${
+                    !row.available ? "is-unavailable" : !selected ? "is-off" : (row.liveState ?? "")
+                  }`}
+                  disabled={modeSelectorDisabled || !row.available || (selected && outputTargets.length === 1)}
+                  onClick={() => toggleTarget(target, selected)}
+                  aria-pressed={selected}
+                >
+                  <span className="st" />
+                  <div className="tx">
+                    <div className="n">
+                      {row.name} <em lang={row.detailLang}>{row.detail}</em>
+                    </div>
+                    <div className="s">{row.sub}</div>
+                  </div>
+                  <span className="tg" />
+                </button>
+              );
+            })}
             {roomAware && <RoomAwareIndicator variant="inline" status={roomAware} />}
           </div>
         </div>

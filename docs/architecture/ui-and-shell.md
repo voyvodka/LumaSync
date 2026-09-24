@@ -102,6 +102,18 @@ without a pixel moving. A slider that commits while it moves goes through `useTh
 the value the user let go on. A new control that needs one of these behaviours uses the primitive;
 a feature that is touched for another reason migrates its hand-rolled copy then.
 
+**A closed set of kinds is a table, not a scattered `switch`.** Sections (`SECTION_REGISTRY` in
+`SettingsLayout.tsx`), Devices rail categories (`DEVICE_CATEGORIES`), lighting mode kinds
+(`MODE_KINDS` in `features/mode/model/modeKinds.ts`), output targets (`OUTPUT_TARGETS` in the mode
+contract, and the Lights dock's rows) and room-map object kinds (`ROOM_OBJECT_KINDS` in
+`features/room-map/model/roomObjectKinds.ts`) are each one object declared `satisfies Record<Kind,
+…>`, so adding a kind is a compile error until every row exists — the room map alone used to branch
+on the object kind in about fifty places. A row may hold `null` for "this kind cannot"; the caller
+skips it rather than testing the kind. The one cast per table sits in its accessor
+(`roomObjectAdapter`, `modeKind`, `sectionEntry`), which ties a parsed kind to its row's parameter
+types. `__tests__` pin each table's key set and prove, with `@ts-expect-error`, that a missing row
+does not compile.
+
 **Inline feedback is a `Callout`, not a card.** A message about the control right above it — a save
 that failed, a duplicate answer, a preview that would not open — uses the notice strip's vocabulary:
 a tone dot whose shape (disc, diamond, ring, square) survives forced colours, one sentence, at most

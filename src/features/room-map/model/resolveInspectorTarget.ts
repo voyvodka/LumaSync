@@ -7,8 +7,8 @@ import type {
   TvAnchorPlacement,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
-import { findHueChannel } from "@/shared/contracts/roomMap";
 import { parseObjectId } from "./objectId";
+import { roomObjectAdapter } from "./roomObjectKinds";
 
 /**
  * Resolve the active selection from the dock's `selectedId` shape and
@@ -37,33 +37,9 @@ export function resolveInspectorTarget(
   selectedId: string | null,
   activeHueZoneId: string | null,
 ): InspectorTarget {
-  if (selectedId) {
-    const parsed = parseObjectId(selectedId);
-    if (parsed?.kind === "tv" && config.tvAnchor) {
-      return { kind: "tv", tv: config.tvAnchor };
-    }
-    if (parsed?.kind === "furniture") {
-      const item = config.furniture.find((f) => f.id === parsed.furnitureId);
-      if (item) return { kind: "furniture", item };
-    }
-    if (parsed?.kind === "usb") {
-      const strip = config.usbStrips.find((s) => s.stripId === parsed.stripId);
-      if (strip) return { kind: "usb", strip };
-    }
-    if (parsed?.kind === "hue") {
-      const channel = findHueChannel(config.hueChannels, parsed.channelIndex);
-      if (channel) {
-        const zoneName = channel.zoneId
-          ? config.zones.find((z) => z.id === channel.zoneId)?.name ?? null
-          : null;
-        return { kind: "hueChannel", channel, zoneName };
-      }
-    }
-    if (parsed?.kind === "image") {
-      const layer = config.imageLayers.find((l) => l.id === parsed.layerId);
-      if (layer) return { kind: "image", layer };
-    }
-  }
+  const ref = selectedId ? parseObjectId(selectedId) : null;
+  const target = ref ? roomObjectAdapter(ref).inspect(config, ref) : null;
+  if (target) return target;
   // No concrete object selected — fall back to the active Hue zone.
   if (activeHueZoneId) {
     const zone = config.zones.find((z) => z.id === activeHueZoneId);

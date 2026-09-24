@@ -14,12 +14,23 @@ export const hueChannelObjectId = (channelIndex: number): string =>
   `${HUE_PREFIX}${channelIndex}`;
 export const imageLayerObjectId = (layerId: string): string => `${IMAGE_PREFIX}${layerId}`;
 
-export type ParsedObjectId =
-  | { kind: "tv" }
-  | { kind: "furniture"; furnitureId: string }
-  | { kind: "usb"; stripId: string }
-  | { kind: "hue"; channelIndex: number }
-  | { kind: "image"; layerId: string };
+/** What identifies one object of each kind inside the room map config. */
+interface RoomObjectKeys {
+  tv: Record<never, never>;
+  furniture: { furnitureId: string };
+  usb: { stripId: string };
+  hue: { channelIndex: number };
+  image: { layerId: string };
+}
+
+export type RoomObjectKind = keyof RoomObjectKeys;
+
+/** A parsed object id, narrowed to one kind when `K` is. */
+export type RoomObjectRef<K extends RoomObjectKind = RoomObjectKind> = {
+  [P in K]: { kind: P } & RoomObjectKeys[P];
+}[K];
+
+export type ParsedObjectId = RoomObjectRef;
 
 /** A malformed `hue-` suffix yields `channelIndex: NaN`, not null — rejecting it would skip branches callers currently enter. */
 export function parseObjectId(objectId: string): ParsedObjectId | null {

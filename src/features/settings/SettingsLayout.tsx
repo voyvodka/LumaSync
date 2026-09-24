@@ -1,5 +1,5 @@
-import { useState, memo, useEffect, useCallback, Suspense } from "react";
-import { SECTION_IDS, type UIMode } from "@/shared/contracts/shell";
+import { useState, memo, useEffect, useCallback, Suspense, type ReactNode } from "react";
+import { SECTION_IDS, SECTION_ORDER, type SectionId, type UIMode } from "@/shared/contracts/shell";
 import { preloadableComponent } from "@/shared/lib/preloadableComponent";
 import { shallowEqual } from "@/shared/lib/store";
 import { LightsSection } from "./sections/LightsSection";
@@ -29,14 +29,13 @@ const DeviceSection = preloadableComponent("DeviceSection", () =>
 const RoomMapEditor = preloadableComponent<RoomMapEditorProps>("RoomMapEditor", () =>
   import("@/features/room-map/ui/RoomMapEditor").then((m) => m.RoomMapEditor),
 );
-const FULL_ONLY_SECTIONS = [CalibrationPage, DeviceSection, RoomMapEditor];
 
 /** Warms the full-only chunks once full mode has painted, so a tab switch rarely meets the fallback. */
 function useFullOnlySectionPreload(uiMode: UIMode) {
   useEffect(() => {
     if (uiMode !== "full") return;
     const preloadAll = () => {
-      for (const section of FULL_ONLY_SECTIONS) section.preload();
+      for (const id of SECTION_ORDER) sectionEntry(id).preload?.();
     };
     if (typeof window.requestIdleCallback === "function") {
       const handle = window.requestIdleCallback(preloadAll, { timeout: 1000 });
@@ -209,6 +208,57 @@ const RoomMapPanel = memo(function RoomMapPanel({
   );
 });
 
+interface SectionPanelContext {
+  hue: Required<SettingsLayoutProps>;
+  pendingZoneCounts: LedSegmentCounts | null;
+  setPendingZoneCounts: (counts: LedSegmentCounts | null) => void;
+}
+
+export interface SectionEntry {
+  render: (context: SectionPanelContext) => ReactNode;
+  /** Warms a split-out chunk; set for the full-only sections that are lazy. */
+  preload?: () => void;
+}
+
+/** One row per section: a new `SectionId` fails to compile until it has a panel. */
+export const SECTION_REGISTRY = {
+  [SECTION_IDS.LIGHTS]: {
+    render: ({ hue }) => <LightsPanel {...hue} />,
+  },
+  [SECTION_IDS.LED_SETUP]: {
+    render: ({ pendingZoneCounts, setPendingZoneCounts }) => (
+      <CalibrationPanel
+        key="calibration-page"
+        pendingZoneCounts={pendingZoneCounts}
+        onPendingZoneCountsChange={setPendingZoneCounts}
+      />
+    ),
+    preload: CalibrationPage.preload,
+  },
+  [SECTION_IDS.DEVICES]: {
+    render: () => <DevicesPanel />,
+    preload: DeviceSection.preload,
+  },
+  [SECTION_IDS.SYSTEM]: {
+    render: () => <SystemPanel />,
+  },
+  [SECTION_IDS.ROOM_MAP]: {
+    render: ({ hue, setPendingZoneCounts }) => (
+      <RoomMapPanel
+        hueReachable={hue.hueReachable}
+        hueConfigured={hue.hueConfigured}
+        hueProbeVerdict={hue.hueProbeVerdict}
+        onZoneCountsConfirmed={setPendingZoneCounts}
+      />
+    ),
+    preload: RoomMapEditor.preload,
+  },
+} satisfies Record<SectionId, SectionEntry>;
+
+function sectionEntry(id: SectionId): SectionEntry {
+  return SECTION_REGISTRY[id];
+}
+
 export const SettingsLayout = memo(function SettingsLayout({
   hueConfigured,
   hueReachable = true,
@@ -238,37 +288,18 @@ export const SettingsLayout = memo(function SettingsLayout({
       {/* Main content */}
       <main className="min-h-0 min-w-0 flex-1 overflow-hidden" role="main" data-testid={`section-panel-${activeSection}`}>
         <Suspense fallback={<SectionPlaceholder />}>
-          {activeSection === SECTION_IDS.LIGHTS && (
-            <LightsPanel
-              hueConfigured={hueConfigured}
-              hueReachable={hueReachable}
-              hueProbeVerdict={hueProbeVerdict}
-              hueStreaming={hueStreaming}
-              hueReconnecting={hueReconnecting}
-              hueStreamFailed={hueStreamFailed}
-            />
-          )}
-
-          {activeSection === SECTION_IDS.LED_SETUP && (
-            <CalibrationPanel
-              key="calibration-page"
-              pendingZoneCounts={pendingZoneCounts}
-              onPendingZoneCountsChange={setPendingZoneCounts}
-            />
-          )}
-
-          {activeSection === SECTION_IDS.DEVICES && <DevicesPanel />}
-
-          {activeSection === SECTION_IDS.SYSTEM && <SystemPanel />}
-
-          {activeSection === SECTION_IDS.ROOM_MAP && (
-            <RoomMapPanel
-              hueReachable={hueReachable}
-              hueConfigured={hueConfigured}
-              hueProbeVerdict={hueProbeVerdict}
-              onZoneCountsConfirmed={setPendingZoneCounts}
-            />
-          )}
+          {sectionEntry(activeSection).render({
+            hue: {
+              hueConfigured,
+              hueReachable,
+              hueProbeVerdict,
+              hueStreaming,
+              hueReconnecting,
+              hueStreamFailed,
+            },
+            pendingZoneCounts,
+            setPendingZoneCounts,
+          })}
         </Suspense>
       </main>
     </div>
