@@ -35,6 +35,7 @@ import {
 } from "@/features/device/wledApi";
 import type { WledRestoreOutcome } from "@/features/device/wledSinkRestore";
 import { parseCommandError } from "@/shared/contracts/status";
+import { Button } from "@/shared/ui/Button";
 import { Callout, type CalloutTone } from "@/shared/ui/Callout";
 import { EmptyState } from "@/shared/ui/EmptyState";
 import { StatusPill } from "@/shared/ui/StatusPill";
@@ -309,11 +310,10 @@ export function WledDevicePicker({
                 </Callout>
               )}
               <div className="lm-dcard-actions">
-                <button
-                  type="button"
-                  className="lm-dcard-act"
+                <Button
+                  size="card"
                   disabled={isBusy}
-                  aria-busy={isBusy && rowState.kind === "busy" && rowState.action === "connect"}
+                  busy={rowState.kind === "busy" && rowState.action === "connect"}
                   onClick={() => { void handleConnect(device); }}
                 >
                   {rowState.kind === "busy" && rowState.action === "connect"
@@ -321,18 +321,17 @@ export function WledDevicePicker({
                     : isActive
                       ? t("device:page.wled.reconnectAction")
                       : t("device:page.wled.connectAction")}
-                </button>
-                <button
-                  type="button"
-                  className="lm-dcard-act"
+                </Button>
+                <Button
+                  size="card"
                   disabled={isBusy}
-                  aria-busy={isBusy && rowState.kind === "busy" && rowState.action === "test"}
+                  busy={rowState.kind === "busy" && rowState.action === "test"}
                   onClick={() => { void handleTest(device); }}
                 >
                   {rowState.kind === "busy" && rowState.action === "test"
                     ? t("device:page.wled.testing")
                     : t("device:page.wled.testAction")}
-                </button>
+                </Button>
               </div>
             </div>
           );

@@ -117,7 +117,6 @@ export default {
       ledSetup: "LED setup",
       lights: "Lights",
       systemSettings: "System Settings",
-      stopHue: "Stop Hue",
       checkAgain: "Check again",
       checking: "Checking…",
     },

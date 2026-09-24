@@ -17,6 +17,7 @@ import { IconCheck, IconInfo } from "@/shared/ui/icons";
 import type { StatusPillTone } from "@/shared/ui/StatusPill";
 
 import { HueAreaPicker } from "./HueAreaPicker";
+import type { HueAreaChoice } from "./useHueAreaChoice";
 
 /** Everything a card state reads to draw itself. Built once per render. */
 export interface HueCardContext {
@@ -32,6 +33,7 @@ export interface HueCardContext {
   };
   /** Not `stopHue`: a running mode that names Hue has to let go of it first. */
   onStopHue: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
+  areaChoice: HueAreaChoice;
 }
 
 type HueCardText = TranslationKey | ((ctx: HueCardContext) => string);
@@ -68,6 +70,7 @@ export interface HueCardActionSpec {
   disabled?: boolean;
   busy?: boolean;
   danger?: boolean;
+  primary?: boolean;
 }
 
 /**
@@ -113,11 +116,22 @@ const repairAction = ({ t, hue }: HueCardContext): HueCardActionSpec => ({
 });
 
 export const HUE_CARD_ACTIONS = {
-  changeArea: ({ t, hue, gates }) => ({
+  changeArea: ({ t, hue, gates, areaChoice }) => ({
     label: t("hue:page.changeArea"),
-    onClick: () => { void hue.refreshAreas(); },
+    onClick: areaChoice.start,
     disabled: gates.areasDisabled,
     busy: hue.isLoadingAreas,
+  }),
+  confirmArea: ({ t, hue, gates, areaChoice }) => ({
+    label: hue.isCheckingReadiness ? t("hue:actions.checkingReadiness") : t("hue:page.confirmArea"),
+    onClick: areaChoice.confirm,
+    disabled: areaChoice.draftId === null || gates.areasDisabled,
+    busy: hue.isCheckingReadiness,
+    primary: true,
+  }),
+  cancelAreaChange: ({ t, areaChoice }) => ({
+    label: t("hue:page.cancel"),
+    onClick: areaChoice.cancel,
   }),
   refreshAreas: ({ t, hue, gates }) => ({
     label: hue.isLoadingAreas ? t("hue:actions.loadingAreas") : t("hue:actions.refreshAreas"),
@@ -160,8 +174,9 @@ export const HUE_CARD_ACTIONS = {
     busy: ctx.hue.isRuntimeMutating,
     danger: true,
   }),
-  retryStop: (ctx) => ({
-    label: ctx.t("hue:page.retryStop"),
+  // The shell's stop-failed notice runs the same stop under the same label.
+  stopHue: (ctx) => ({
+    label: ctx.t("hue:actions.stop"),
     onClick: () => { stopFromCard(ctx); },
     busy: ctx.hue.isRuntimeMutating,
   }),
@@ -431,7 +446,7 @@ export const HUE_CARD_VIEW = {
         code={hue.runtimeStatus?.code ?? null}
       />
     ),
-    actions: ["retryStop", "forceForget"],
+    actions: ["stopHue", "forceForget"],
   },
   gateBlocked: {
     subtitle: "hue:runtime.checklist.title",
@@ -562,7 +577,20 @@ export const HUE_CARD_VIEW = {
     pill: { tone: "ok", label: "hue:page.pill.paired" },
     lead: null,
     cells: NO_CELLS,
-    detail: ({ hue, gates }) => <HueAreaPicker hue={hue} readinessDisabled={gates.readinessDisabled} />,
-    actions: ["refreshAreas"],
+    detail: ({ hue, areaChoice }) => <HueAreaPicker areaGroups={hue.areaGroups} choice={areaChoice} />,
+    actions: ["confirmArea", "refreshAreas"],
   },
 } satisfies Record<HueBridgeCardState, HueCardView>;
+
+/**
+ * "Change area" lays the list over whichever state offered it: the state keeps
+ * its header, lead and cells; the list and its two ways out replace the detail
+ * and the footer.
+ */
+export function withAreaChange(view: HueCardView): HueCardView {
+  return {
+    ...view,
+    detail: ({ hue, areaChoice }) => <HueAreaPicker areaGroups={hue.areaGroups} choice={areaChoice} />,
+    actions: ["confirmArea", "cancelAreaChange"],
+  };
+}

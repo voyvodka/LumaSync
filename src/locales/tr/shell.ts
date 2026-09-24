@@ -118,7 +118,6 @@ const shell: Catalogue<typeof enShell> = {
       ledSetup: "LED kurulumu",
       lights: "Işıklar",
       systemSettings: "Sistem Ayarları",
-      stopHue: "Hue'yu durdur",
       checkAgain: "Yeniden dene",
       checking: "Kontrol ediliyor…",
     },

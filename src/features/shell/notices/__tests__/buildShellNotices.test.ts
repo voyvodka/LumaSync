@@ -7,7 +7,7 @@ import { HUE_LEFT_OUT_REASON } from "@/shared/contracts/lighting";
 import { SECTION_IDS } from "@/shared/contracts/shell";
 
 import { buildShellNotices, type ShellNoticeInput } from "../buildShellNotices";
-import { NOTICE_SEVERITY, NOTICE_TIER, SHELL_NOTICE_IDS } from "../noticeModel";
+import { NOTICE_SEVERITY, NOTICE_TIER, NOTICE_VIEW, SHELL_NOTICE_IDS } from "../noticeModel";
 import { keyT, makeHandlers, QUIET_INPUT } from "./noticeFixtures";
 
 function build(overrides: Partial<ShellNoticeInput> = {}, handlers = makeHandlers()) {
@@ -210,6 +210,31 @@ describe("buildShellNotices", () => {
       expect(
         byId({ hueColorNotice: HUE_SOLID_COLOR_STATUS.APPLY_SKIPPED }, SHELL_NOTICE_IDS.HUE_COLOR).action,
       ).toBeUndefined();
+    });
+
+    // The card offers the same stop; two labels for one action read as two actions.
+    it("labels the stop retry with the Hue card's own stop label", () => {
+      expect(byId({ stopFailedTargets: ["hue"] }, SHELL_NOTICE_IDS.STOP_FAILED).action?.label).toBe("hue:actions.stop");
+    });
+
+    // Devices → Hue shows each of these as the card's state (#475's overlap table).
+    it.each<[string, Partial<ShellNoticeInput>, string]>([
+      ...Object.values(HUE_LEFT_OUT_REASON).map(
+        (reason) => [`left out: ${reason}`, { hueLeftOut: reason }, SHELL_NOTICE_IDS.HUE_LEFT_OUT] as [string, Partial<ShellNoticeInput>, string],
+      ),
+      ["boot retry: waiting", { hueBootRetry: "waiting" }, SHELL_NOTICE_IDS.HUE_BOOT_RETRY],
+      ["boot retry: gave up", { hueBootRetry: "gaveUp" }, SHELL_NOTICE_IDS.HUE_BOOT_RETRY],
+      ["stop failed: Hue", { stopFailedTargets: ["hue"] }, SHELL_NOTICE_IDS.STOP_FAILED],
+      ["colour: stream offline", { hueColorNotice: HUE_SOLID_COLOR_STATUS.APPLY_SKIPPED }, SHELL_NOTICE_IDS.HUE_COLOR],
+      ["colour: no lights", { hueColorNotice: HUE_SOLID_COLOR_STATUS.APPLY_SKIPPED_NO_LIGHTS }, SHELL_NOTICE_IDS.HUE_COLOR],
+    ])("defers to Devices → Hue — %s", (_name, input, id) => {
+      expect(byId(input, id).shownBy).toBe(NOTICE_VIEW.DEVICES_HUE);
+    });
+
+    // The card knows nothing about the strip, so that half of the message stays.
+    it("keeps a stop failure that names the strip on every screen", () => {
+      expect(byId({ stopFailedTargets: ["hue", "usb"] }, SHELL_NOTICE_IDS.STOP_FAILED).shownBy).toBeUndefined();
+      expect(byId({ stopFailedTargets: ["usb"] }, SHELL_NOTICE_IDS.STOP_FAILED).shownBy).toBeUndefined();
     });
   });
 

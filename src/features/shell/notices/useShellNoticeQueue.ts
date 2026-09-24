@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FocusEvent } from "react";
 
-import { orderNotices, type ShellNotice } from "./noticeModel";
+import { isShownByView, orderNotices, type NoticeView, type ShellNotice } from "./noticeModel";
 
 /** An event first seen while the queue was held back gets at least this long on screen. */
 export const NOTICE_MIN_VISIBLE_MS = 4_000;
@@ -76,6 +76,11 @@ function noticeSignature(notice: ShellNotice): string {
 export interface ShellNoticeQueueOptions {
   /** A modal owns the screen: nothing here is shown, spoken, or allowed to expire. */
   suppressed: boolean;
+  /**
+   * The screen on view. A notice it already shows is left out of `entries`
+   * but keeps its occurrence, so a × or a retained event outlasts the visit.
+   */
+  view?: NoticeView | null;
 }
 
 /**
@@ -85,7 +90,7 @@ export interface ShellNoticeQueueOptions {
  */
 export function useShellNoticeQueue(
   candidates: ShellNotice[],
-  { suppressed }: ShellNoticeQueueOptions,
+  { suppressed, view = null }: ShellNoticeQueueOptions,
 ): ShellNoticeQueue {
   const occurrencesRef = useRef(new Map<string, { n: number; source: unknown; present: boolean }>());
 
@@ -195,13 +200,14 @@ export function useShellNoticeQueue(
   }, [holding, retained]);
 
   const entries = useMemo(() => {
-    const shown = live.filter((entry) => !dismissed.has(entry.key));
+    const visible = (entry: QueuedNotice) => !dismissed.has(entry.key) && !isShownByView(entry.notice, view);
+    const shown = live.filter(visible);
     for (const kept of currentRetained.values()) {
-      if (!dismissed.has(kept.entry.key)) shown.push(kept.entry);
+      if (visible(kept.entry)) shown.push(kept.entry);
     }
     // Stable, so a kept event sorts after the live ones of its own tier.
     return orderNotices(shown.map((entry) => ({ entry, tier: entry.notice.tier }))).map(({ entry }) => entry);
-  }, [live, currentRetained, dismissed]);
+  }, [live, currentRetained, dismissed, view]);
 
   useEffect(() => {
     if (suppressed) return;
