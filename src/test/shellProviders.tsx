@@ -1,4 +1,4 @@
-// The three shell stores for a test that renders SettingsLayout or a panel
+// The four shell stores for a test that renders SettingsLayout or a panel
 // without App. Every store is driven from outside the rendered tree, so a
 // test can move one and count who re-renders.
 
@@ -6,6 +6,10 @@ import { act, render, type RenderResult } from "@testing-library/react";
 import { useState, type ReactElement, type ReactNode } from "react";
 import { vi } from "vitest";
 
+import {
+  HueShellStatusProvider,
+  type HueShellStatus,
+} from "@/features/hue/state/hueShellStatus";
 import {
   LightingControlProvider,
   type LightingControlActions,
@@ -36,9 +40,20 @@ export const DEFAULT_LIGHTING_STATE: LightingControlState = {
   bootstrapDone: true,
 };
 
+/** A paired, reachable bridge with nothing streaming. */
+export const DEFAULT_HUE_STATUS: HueShellStatus = {
+  configured: true,
+  reachable: true,
+  probeVerdict: "reachable",
+  streaming: false,
+  reconnecting: false,
+  streamFailed: false,
+};
+
 export interface ShellTestOptions {
   navigation?: Partial<NavigationState>;
   lighting?: Partial<LightingControlState>;
+  hue?: Partial<HueShellStatus>;
   lightingActions?: Partial<LightingControlActions>;
   navigationActions?: Partial<NavigationActions>;
   updater?: Partial<UpdaterSnapshot>;
@@ -53,6 +68,8 @@ export interface ShellTestControls {
   updaterActions: UpdaterActions;
   /** A new lighting snapshot, as App publishes one after a runtime revision. */
   setLighting: (patch: Partial<LightingControlState>) => void;
+  /** A new Hue status, as App publishes one after a health snapshot. */
+  setHue: (patch: Partial<HueShellStatus>) => void;
   /** New props for the tree under the stores, as App re-rendering it would pass. */
   rerenderUi: (ui: ReactElement) => void;
 }
@@ -91,6 +108,7 @@ export function renderWithShellStores(
   };
 
   let setLightingState: (next: (prev: LightingControlState) => LightingControlState) => void = () => {};
+  let setHueState: (next: (prev: HueShellStatus) => HueShellStatus) => void = () => {};
 
   // `children` is created once, outside this component, so a harness render
   // reaches the tree only through the stores — the same boundary App has.
@@ -100,11 +118,13 @@ export function renderWithShellStores(
       ...options.lighting,
     });
     setLightingState = setLighting;
+    const [hue, setHue] = useState<HueShellStatus>({ ...DEFAULT_HUE_STATUS, ...options.hue });
+    setHueState = setHue;
     return (
       <UpdaterStoreProvider store={updater} actions={updaterActions}>
         <NavigationProvider store={navigation} actions={navigationActions}>
           <LightingControlProvider state={lighting} actions={lightingActions}>
-            {children}
+            <HueShellStatusProvider status={hue}>{children}</HueShellStatusProvider>
           </LightingControlProvider>
         </NavigationProvider>
       </UpdaterStoreProvider>
@@ -121,6 +141,9 @@ export function renderWithShellStores(
     updaterActions,
     setLighting: (patch) => {
       act(() => setLightingState((prev) => ({ ...prev, ...patch })));
+    },
+    setHue: (patch) => {
+      act(() => setHueState((prev) => ({ ...prev, ...patch })));
     },
     rerenderUi: (next) => {
       result.rerender(<Harness>{next}</Harness>);

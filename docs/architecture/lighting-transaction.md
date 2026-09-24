@@ -185,7 +185,7 @@ calibration gate: the main window opens LED Setup and the popup says the strip n
 an older build let through does not start refusing every mode after an update.
 
 **What stays in the frontend.** The notice copy and its timers, the screen-recording preflight
-(it only chooses a notice; the start is what asks), unplug detection, the Hue status poll for
+(it only chooses a notice; the start is what asks), unplug detection, the Hue status read for
 the chip (read-only: it no longer forces a re-apply when a stream comes back, since the worker
 follows the live slot), and the retune coalescer.
 

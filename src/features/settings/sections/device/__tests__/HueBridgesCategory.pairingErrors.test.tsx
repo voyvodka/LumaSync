@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useHueOnboardingCore } from "@/features/hue/state/useHueOnboardingCore";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
-import { __resetHueReadCacheForTests } from "@/features/hue/hueReadCache";
+import { __resetHueHealthStoreForTests } from "@/features/hue/state/hueHealthStore";
 import { HueBridgesCategory } from "../HueBridgesCategory";
 
 vi.mock("react-i18next", () => ({
@@ -106,7 +106,7 @@ function expectNoCredentialFault() {
 describe("HueBridgesCategory — named pairing refusals", () => {
   beforeEach(() => {
     pairBridgeMock.mockReset();
-    __resetHueReadCacheForTests();
+    __resetHueHealthStoreForTests();
   });
 
   it("tells the user to wait when the bridge is busy", async () => {

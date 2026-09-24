@@ -25,10 +25,11 @@ use super::outputs::{
 };
 use super::snapshot::{BootHueRetryState, HueLeftOutReason, LightingPhase, OutputTarget};
 use super::test_support::{Rig, RigSetup};
+use super::transition::set_lighting_mode_blocking;
 use super::tuning::{retune_lighting, LightingTuning};
 use super::{
-    set_lighting_mode_blocking, stop_lighting_blocking, AmbilightPayload, LightingModeConfig,
-    LightingModeKind, SolidColorPayload, ACTIVE_AMBILIGHT_WORKERS,
+    stop_lighting_blocking, AmbilightPayload, LightingModeConfig, LightingModeKind,
+    SolidColorPayload, ACTIVE_AMBILIGHT_WORKERS,
 };
 use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionState};
 use crate::commands::hue::state_store::HueRuntimeTriggerSource;

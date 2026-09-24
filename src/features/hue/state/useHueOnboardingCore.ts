@@ -52,11 +52,11 @@ export interface UseHueOnboardingCoreResult {
   selectedArea: HueAreaRow | null;
   isReadinessStale: boolean;
   canStartHue: boolean;
-  selectedAreaIsBlocked: boolean;
   publishStatus: (status: HueOnboardingStatus) => void;
   applyBackgroundReadiness: (
     areaId: string,
     response: Awaited<ReturnType<typeof checkHueStreamReadiness>>,
+    checkedAt: number,
   ) => void;
   discover: () => Promise<void>;
   selectBridge: (bridgeId: string | null) => void;
@@ -175,6 +175,8 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
       options?: {
         publishStatus?: boolean;
         persistReadyStep?: boolean;
+        /** When the bridge answered; defaults to now. */
+        checkedAt?: number;
       },
     ) => {
       const readiness: HueAreaReadiness = {
@@ -193,7 +195,7 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
 
       setReadinessCheckedAtById((prev) => {
         const next = new Map(prev);
-        next.set(areaId, Date.now());
+        next.set(areaId, options?.checkedAt ?? Date.now());
         return next;
       });
 
@@ -585,17 +587,18 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
       }));
     }
   }, [applyReadinessResult, patchState, selectedBridge, state.credentials, state.selectedAreaId]);
-  const selectedAreaIsBlocked = useMemo(
-    () =>
-      flattenAreaGroups(state.areaGroups).some(
-        (area) => area.id === state.selectedAreaId && area.activeStreamer === true,
-      ),
-    [state.areaGroups, state.selectedAreaId],
-  );
 
   const applyBackgroundReadiness = useCallback(
-    (areaId: string, response: Awaited<ReturnType<typeof checkHueStreamReadiness>>) => {
-      applyReadinessResult(areaId, response, { publishStatus: false, persistReadyStep: false });
+    (
+      areaId: string,
+      response: Awaited<ReturnType<typeof checkHueStreamReadiness>>,
+      checkedAt: number,
+    ) => {
+      applyReadinessResult(areaId, response, {
+        publishStatus: false,
+        persistReadyStep: false,
+        checkedAt,
+      });
     },
     [applyReadinessResult],
   );
@@ -725,7 +728,6 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
     selectedArea,
     isReadinessStale,
     canStartHue,
-    selectedAreaIsBlocked,
     publishStatus,
     applyBackgroundReadiness,
     discover,

@@ -7,6 +7,8 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HUE_COMMANDS } from "@/shared/contracts/hue";
+import { HUE_HEALTH_COMMANDS } from "@/shared/contracts/hueHealth";
+import { idleHealth } from "../features/hue/__tests__/fakeHueHealth";
 import { KEYBIND_ACTIONS, getKeybindDefinition, type ShellState } from "@/shared/contracts/shell";
 
 vi.mock("react-i18next", () => ({
@@ -111,12 +113,10 @@ function hueIpc(command: string): unknown {
       };
     case HUE_COMMANDS.CHECK_STREAM_READINESS:
       return { status: ok("HUE_STREAM_READY"), readiness: { ready: true, reasons: [] } };
-    case HUE_COMMANDS.GET_STREAM_STATUS:
-      return {
-        active: false,
-        lastSolidColor: null,
-        status: { state: "Idle", code: "HUE_STREAM_IDLE", message: "", details: null, triggerSource: "system" },
-      };
+    case HUE_HEALTH_COMMANDS.GET_HUE_HEALTH:
+    case HUE_HEALTH_COMMANDS.WATCH_HUE_HEALTH:
+    case HUE_HEALTH_COMMANDS.RETRY_HUE_HEALTH:
+      return idleHealth();
     case HUE_COMMANDS.GET_AREA_CHANNELS:
       return {
         status: ok("HUE_AREA_CHANNELS_OK"),

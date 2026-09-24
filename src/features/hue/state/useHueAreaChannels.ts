@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { getHueStreamStatus } from "@/features/mode/modeApi";
 import {
   HUE_AREA_CHANNELS_STATUS,
   HUE_RUNTIME_STATES,
@@ -14,6 +13,7 @@ import {
   type HueBridgeSummary,
   type HuePairingCredentials,
 } from "../hueOnboardingApi";
+import { getHueHealth } from "../hueHealthApi";
 import { parseCommandError } from "@/shared/contracts/status";
 import type { HueAreaChannelsRead } from "../model/onboardingTypes";
 
@@ -37,10 +37,11 @@ export interface UseHueAreaChannelsResult {
 
 async function runtimeIsIdle(): Promise<boolean> {
   try {
-    const result = await getHueStreamStatus();
-    return result?.status?.state === HUE_RUNTIME_STATES.IDLE;
+    // A local runtime read in Rust — no bridge call.
+    const health = await getHueHealth();
+    return health?.stream?.status?.state === HUE_RUNTIME_STATES.IDLE;
   } catch (error) {
-    // `getHueStreamStatus` rejects with a plain `{ code, message }`, not an Error.
+    // A rejected invoke may carry a plain `{ code, message }`, not an Error.
     const reason =
       error !== null && typeof error === "object" && "message" in error
         ? String((error as { message: unknown }).message)

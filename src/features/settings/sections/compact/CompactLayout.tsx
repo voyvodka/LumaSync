@@ -27,7 +27,7 @@ import {
   useLightingControlState,
   type LightingControlState,
 } from "@/features/mode/state/lightingControl";
-import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
+import { useHueShellStatus, type HueShellStatus } from "@/features/hue/state/hueShellStatus";
 import { shallowEqual } from "@/shared/lib/store";
 import { outputAvailability } from "@/features/mode/model/outputAvailability";
 import { FIRMWARE_PROFILE, type FirmwareProfile } from "@/shared/contracts/device";
@@ -39,13 +39,12 @@ import { shellStore } from "@/features/persistence/shellStore";
 import { CompactSolidSection } from "./CompactSolidSection";
 import { SelfContainedBrightnessRow } from "./SelfContainedBrightnessRow";
 
-/** The Hue status is still a prop until the Hue health store replaces the shell's polls. */
-interface CompactLayoutProps {
-  hueConfigured: boolean;
-  hueReachable: boolean;
-  /** What the last bridge probe found; `null` while the first one is in flight. */
-  hueProbeVerdict?: HueProbeVerdict | null;
-}
+const selectCompactHue = (status: HueShellStatus) => ({
+  hueConfigured: status.configured,
+  hueReachable: status.reachable,
+  // What the last bridge probe found; `null` while the first one is in flight.
+  hueProbeVerdict: status.probeVerdict,
+});
 
 const selectCompactLighting = (state: LightingControlState) => ({
   lightingMode: state.lightingMode,
@@ -64,12 +63,12 @@ const DEFAULT_AMBILIGHT = {
   blackBorderDetection: false,
 } as const;
 
-export const CompactLayout = memo(function CompactLayout({
-  hueConfigured,
-  hueReachable,
-  hueProbeVerdict = null,
-}: CompactLayoutProps) {
+export const CompactLayout = memo(function CompactLayout() {
   const { t } = useTranslation();
+  const { hueConfigured, hueReachable, hueProbeVerdict } = useHueShellStatus(
+    selectCompactHue,
+    shallowEqual,
+  );
   const {
     lightingMode,
     outputTargets,

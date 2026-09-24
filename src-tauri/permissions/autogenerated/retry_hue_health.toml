@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-retry-hue-health"
+description = "Enables the retry_hue_health command without any pre-configured scope."
+commands.allow = ["retry_hue_health"]
+
+[[permission]]
+identifier = "deny-retry-hue-health"
+description = "Denies the retry_hue_health command without any pre-configured scope."
+commands.deny = ["retry_hue_health"]

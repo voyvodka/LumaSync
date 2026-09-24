@@ -169,7 +169,7 @@ fn path_shaped_port_names_are_refused_without_becoming_the_status_port() {
 fn refused_connect_does_not_arm_usb_output() {
     let app = mock_app(tauri::generate_handler![
         crate::commands::device_connection::connect_serial_port,
-        crate::commands::lighting_mode::set_lighting_mode
+        crate::commands::lighting_mode::transition::set_lighting_mode
     ]);
     grant_main_for_tests(&app, &["allow-set-lighting-mode"]);
     let webview = main_webview(&app);

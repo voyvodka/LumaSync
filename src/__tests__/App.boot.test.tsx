@@ -6,7 +6,6 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEVICE_COMMANDS } from "@/shared/contracts/device";
-import { HUE_COMMANDS } from "@/shared/contracts/hue";
 
 import {
   bootDone,
@@ -37,14 +36,17 @@ vi.mock("../features/mode/modeApi", async () => (await import("./support/appHarn
 vi.mock("../features/mode/lightingRuntimeEventsApi", async () => (await import("./support/appHarness")).mockLightingRuntimeEvents);
 vi.mock("../features/shell/StatusBar", async () => (await import("./support/appHarness")).mockStatusBar);
 vi.mock("../features/settings/SettingsLayout", async () => (await import("./support/appHarness")).mockSettingsLayout);
+vi.mock("../features/hue/hueHealthApi", async () => (await import("../features/hue/__tests__/fakeHueHealth")).fakeHueHealthApi);
 
 import App from "../App";
-import { __resetHueReadCacheForTests } from "../features/hue/hueReadCache";
+import { __resetHueHealthStoreForTests } from "../features/hue/state/hueHealthStore";
+import { publishHealth, resetHealth, setHealth } from "../features/hue/__tests__/fakeHueHealth";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Module-level cache: without this a prior test's status leaks into the next one.
-  __resetHueReadCacheForTests();
+  // Module-level store: without this a prior test's snapshot leaks into the next one.
+  __resetHueHealthStoreForTests();
+  resetHealth();
   resetAppHarness();
 });
 
@@ -164,7 +166,12 @@ describe("App boot", () => {
         lastHueAreaId: "area-1",
       });
       // The last guard resolves well after bootstrap, in a tick of its own.
-      delay(HUE_COMMANDS.VALIDATE_CREDENTIALS, 400);
+      setHealth({ bridge: { verdict: null, probing: true } });
+      setTimeout(() => {
+        act(() => {
+          publishHealth({ bridge: { verdict: "reachable", probing: false } });
+        });
+      }, 400);
       const banner = watchForBanner();
 
       render(<App />);

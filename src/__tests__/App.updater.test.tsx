@@ -30,14 +30,17 @@ vi.mock("../features/mode/modeApi", async () => (await import("./support/appHarn
 vi.mock("../features/mode/lightingRuntimeEventsApi", async () => (await import("./support/appHarness")).mockLightingRuntimeEvents);
 vi.mock("../features/shell/StatusBar", async () => (await import("./support/appHarness")).mockStatusBar);
 vi.mock("../features/settings/SettingsLayout", async () => (await import("./support/appHarness")).mockSettingsLayout);
+vi.mock("../features/hue/hueHealthApi", async () => (await import("../features/hue/__tests__/fakeHueHealth")).fakeHueHealthApi);
 
 import App from "../App";
-import { __resetHueReadCacheForTests } from "../features/hue/hueReadCache";
+import { __resetHueHealthStoreForTests } from "../features/hue/state/hueHealthStore";
+import { resetHealth } from "../features/hue/__tests__/fakeHueHealth";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Module-level cache: without this a prior test's status leaks into the next one.
-  __resetHueReadCacheForTests();
+  // Module-level store: without this a prior test's snapshot leaks into the next one.
+  __resetHueHealthStoreForTests();
+  resetHealth();
   resetAppHarness();
 });
 

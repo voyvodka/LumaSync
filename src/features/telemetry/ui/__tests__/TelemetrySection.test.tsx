@@ -258,7 +258,7 @@ const SYSTEM_SECTION = {
 
 describe("Settings telemetry wiring", () => {
   it("renders TelemetrySection when system section is active", async () => {
-    renderWithShellStores(<SettingsLayout hueConfigured={false} hueStreaming={false} />, SYSTEM_SECTION);
+    renderWithShellStores(<SettingsLayout />, SYSTEM_SECTION);
 
     await waitFor(() => {
       expect(screen.getByText("Runtime telemetry")).toBeInTheDocument();
@@ -268,7 +268,7 @@ describe("Settings telemetry wiring", () => {
   // The picker moved from a two-button segmented control to a dropdown so more
   // locales can be added without the row outgrowing its width.
   it("offers every supported language by endonym in a dropdown", async () => {
-    renderWithShellStores(<SettingsLayout hueConfigured={false} hueStreaming={false} />, SYSTEM_SECTION);
+    renderWithShellStores(<SettingsLayout />, SYSTEM_SECTION);
 
     const picker = await screen.findByRole("combobox", { name: "Interface language" });
     const options = within(picker).getAllByRole("option");

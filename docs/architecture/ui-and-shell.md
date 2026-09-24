@@ -43,7 +43,7 @@ imports, or a lazy section would drop out of the main window's required grants.
 **Shell state reaches sections through stores.** `App.tsx` used to hand `SettingsLayout` every
 lighting value, the navigation state and the updater's, two of them as fresh closures, so the
 layout's `memo` never held: every render of the shell — a Hue poll, a runtime revision, each
-download-progress event — re-rendered the whole page. Now three stores carry it, each a
+download-progress event — re-rendered the whole page. Now four stores carry it, each a
 `createStore` (`src/shared/lib/store.ts`) read through `useSyncExternalStore` with a selector, so a
 consumer re-renders only when its own slice changes:
 
@@ -55,13 +55,16 @@ consumer re-renders only when its own slice changes:
 - *Updater* (`updater/UpdaterProvider.tsx`): `useAutoUpdater` sits in a provider *above* the shell,
   so a progress event re-renders the provider and `UpdateModalHost` and stops there; the shell
   reads only the status, the failed-check notice and whether the modal is up.
+- *Hue status* (`hue/state/hueShellStatus.tsx`): what the sections show about Hue — configured,
+  reachable, the probe's verdict, streaming, reconnecting, failed — as the shell folds the health
+  monitor's snapshot (`hue/state/useHueHealth.ts`) with the saved pairing and the driven outputs.
+  The Devices card reads the snapshot itself through `useHueHealth` selectors (`hue.md`).
 
 Each provider wraps its actions with `useStableHandlers`, so the actions object never changes
 identity and the caller may pass fresh closures. A hook-owned value is mirrored with
 `useMirroredStore`, which writes in a layout effect: subscribers re-render in the same frame,
 before paint. Every section in `SettingsLayout` is a memoised panel that selects its own slices;
-the layout itself takes only the Hue status, as props, until the Hue health store replaces the
-shell's Hue polls. `SettingsLayout.renders.test.tsx` and the render-boundary tests in
+the layout itself takes no props, and neither does `CompactLayout`. `SettingsLayout.renders.test.tsx` and the render-boundary tests in
 `src/__tests__/` count renders and fail if a boundary leaks. A value put into a store must keep its
 identity between renders when unchanged — `localSink` is memoised for exactly this — or every
 reader of it re-renders.
@@ -157,12 +160,14 @@ below. Letting the plugin restore size or visibility would show and size the win
 bootstrap has, and two restorers disagreeing is a visible jump on every cold start.
 
 **Background polls are visibility-aware, and that is a repo-wide convention, not a per-hook
-choice.** The Hue reachability, readiness, and runtime-status loops and `useRuntimeTelemetry` all
-use a recursive `setTimeout` rather than `setInterval`, pause while `document.visibilityState` is
-`hidden`, and re-arm with an immediate tick on `visibilitychange`. The tray window can sit hidden
-for hours with the React tree mounted, so an unconditional interval keeps firing bridge requests
-nobody can see; the immediate resume tick is what makes a chip look fresh the instant the window
-comes back. A new poll that skips this is a regression even though nothing will fail.
+choice.** `useRuntimeTelemetry` uses a recursive `setTimeout` rather than `setInterval`, pauses
+while `document.visibilityState` is `hidden`, and re-arms with an immediate tick on
+`visibilitychange`. Hue health has no frontend poll left: its store tells the Rust health monitor on
+every `visibilitychange` whether the window is visible, and the monitor stops asking the bridge
+while it is not (`hue.md`, "One health monitor"). The tray window can sit hidden for hours with the
+React tree mounted, so an unconditional interval keeps firing requests nobody can see; the immediate
+resume is what makes a chip look fresh the instant the window comes back. A new poll that skips this
+is a regression even though nothing will fail.
 
 **Every window's lighting choices go to one Rust transaction.** The main window, the LED control
 popup, the tray and the launch restore all send `apply_outputs`, and every window renders the same

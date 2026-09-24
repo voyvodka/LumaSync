@@ -119,7 +119,7 @@ pub struct HueEntertainmentAreaListResponse {
 }
 
 /// Whether the selected area can currently start a stream, plus why not.
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct HueStreamReadiness {
     pub ready: bool,

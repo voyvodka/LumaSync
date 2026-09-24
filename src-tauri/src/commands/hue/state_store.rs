@@ -82,7 +82,7 @@ pub enum HueRuntimeActionHint {
 
 /// Coded status describing the current (or most recent) Hue runtime state,
 /// returned by every stream-lifecycle command.
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct HueRuntimeStatus {
     pub state: HueRuntimeState,
@@ -297,6 +297,7 @@ impl HueRuntimeOwner {
         self.output_live
             .publish(stream.as_ref().map(HueActiveStreamContext::output_context));
         self.active_stream = stream;
+        super::health::wake();
     }
 }
 
