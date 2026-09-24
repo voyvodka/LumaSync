@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { HueChannelPlacementOverride, HueRuntimeTriggerSource } from "@/shared/contracts/hue";
@@ -20,10 +20,12 @@ import {
   HUE_CARD_TONE_CLASS,
   HUE_CARD_VIEW,
   resolveHueCardText,
+  withAreaChange,
   type HueCardActionSpec,
   type HueCardContext,
   type HueCardView,
 } from "./hueCardView";
+import { useHueAreaChoice } from "./useHueAreaChoice";
 
 export interface HueBridgesCategoryProps {
   isActive: boolean;
@@ -40,7 +42,7 @@ export interface HueBridgesCategoryProps {
   /** Room-map zones, so the channel map can project through a bound channel's
    *  zone instead of writing the absolute pair the runtime ignores. */
   zones: readonly HueZone[];
-  /** Stop retrying and Retry stop. Not `stopHue`: a running mode that names Hue
+  /** Stop retrying and Stop Hue. Not `stopHue`: a running mode that names Hue
    *  has to let go of it first, which only the mode orchestrator can do. */
   onStopHue: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
 }
@@ -87,7 +89,6 @@ export function HueBridgesCategory({
     channelsFromBridge,
     refreshChannels,
     discover,
-    selectBridge,
     setManualIp,
     submitManualIp,
     pair,
@@ -109,6 +110,9 @@ export function HueBridgesCategory({
     isReadinessStale,
   });
 
+  const stateView: HueCardView | null = hueBridgeState ? HUE_CARD_VIEW[hueBridgeState] : null;
+  const areaChoice = useHueAreaChoice(hue, stateView?.actions.includes("changeArea") ?? false);
+
   const cardContext: HueCardContext = {
     t,
     hue,
@@ -125,8 +129,9 @@ export function HueBridgesCategory({
         || isRuntimeMutating,
     },
     onStopHue,
+    areaChoice,
   };
-  const view: HueCardView | null = hueBridgeState ? HUE_CARD_VIEW[hueBridgeState] : null;
+  const view = stateView && areaChoice.changing ? withAreaChange(stateView) : stateView;
 
   const hueIsDiscoveryFailed = !isHueDiscovering && !selectedBridgeId && hueStatus?.code === "HUE_DISCOVERY_FAILED";
   const hueIsDiscoveryEmpty = !isHueDiscovering && !selectedBridgeId && hueStatus !== null && bridges.length === 0 && !hueIsDiscoveryFailed;
@@ -164,30 +169,9 @@ export function HueBridgesCategory({
             /* Bridge list — pick one to pair */
             <>
               {bridges.map((bridge) => (
-                <div
-                  key={bridge.id}
-                  role="button"
-                  tabIndex={0}
-                  className="lm-dcard is-ghost"
-                  onClick={() => { selectBridge(bridge.id); }}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectBridge(bridge.id); } }}
-                >
-                  <div className="lm-dcard-head">
-                    <div className="lm-dcard-ic"><IconHueBridgeGlyph /></div>
-                    <div className="lm-dcard-tx">
-                      <div className="lm-dcard-name">
-                        <span>{bridge.name}</span>
-                        <StatusPill tone="warn">{t("hue:page.pill.discovered")}</StatusPill>
-                      </div>
-                      <div className="lm-dcard-sub">{bridge.ip}</div>
-                    </div>
-                  </div>
-                  <div className="lm-dcard-actions">
-                    <Button size="card" onClick={(e) => { e.stopPropagation(); void pair(bridge.id); }}>
-                      {t("hue:page.addBridge")}
-                    </Button>
-                  </div>
-                </div>
+                <FoundBridgeCard key={bridge.id} bridge={bridge} pairLabel={t("hue:page.addBridge")} onPair={() => { void pair(bridge.id); }}>
+                  <StatusPill tone="warn">{t("hue:page.pill.discovered")}</StatusPill>
+                </FoundBridgeCard>
               ))}
             </>
           ) : hueIsDiscoveryFailed ? (
@@ -296,6 +280,44 @@ function HueHero({ icon, title, body, children }: HueHeroProps) {
   );
 }
 
+interface FoundBridgeCardProps {
+  bridge: { id: string; name: string; ip: string };
+  pairLabel: string;
+  onPair: () => void;
+  /** The pill beside the name. */
+  children: ReactNode;
+}
+
+/**
+ * A bridge discovery found. Static, with "+ Pair" as its one control: the
+ * card itself used to be a `role="button"` wrapped round that button, and it
+ * did something else — it selected the bridge without pairing, which an
+ * unpaired machine showed as expired credentials. The button names the bridge
+ * it pairs, since a list of them all reads "+ Pair".
+ */
+function FoundBridgeCard({ bridge, pairLabel, onPair, children }: FoundBridgeCardProps) {
+  const nameId = useId();
+  return (
+    <div className="lm-dcard is-ghost">
+      <div className="lm-dcard-head">
+        <div className="lm-dcard-ic"><IconHueBridgeGlyph /></div>
+        <div className="lm-dcard-tx">
+          <div className="lm-dcard-name">
+            <span id={nameId}>{bridge.name}</span>
+            {children}
+          </div>
+          <div className="lm-dcard-sub">{bridge.ip}</div>
+        </div>
+      </div>
+      <div className="lm-dcard-actions">
+        <Button size="card" onClick={onPair} aria-describedby={nameId}>
+          {pairLabel}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 interface HueBridgeCardProps {
   name: string;
   ip: string;
@@ -310,6 +332,18 @@ function HueBridgeCard({ name, ip, view, ctx }: HueBridgeCardProps) {
     const action: HueCardActionSpec | null = HUE_CARD_ACTIONS[id](ctx);
     return action ? [{ id, ...action }] : [];
   });
+
+  // Confirm and Cancel unmount with the list; hand focus back to the button
+  // that opened it rather than to the document.
+  const footerRef = useRef<HTMLDivElement | null>(null);
+  const changing = ctx.areaChoice.changing;
+  const wasChanging = useRef(changing);
+  useEffect(() => {
+    const closed = wasChanging.current && !changing;
+    wasChanging.current = changing;
+    if (!closed || (document.activeElement !== null && document.activeElement !== document.body)) return;
+    footerRef.current?.querySelector<HTMLElement>('[data-action="changeArea"]')?.focus();
+  }, [changing]);
   return (
     <div className={cx("lm-dcard", view.tone && HUE_CARD_TONE_CLASS[view.tone])}>
       <div className="lm-dcard-head">
@@ -340,15 +374,16 @@ function HueBridgeCard({ name, ip, view, ctx }: HueBridgeCardProps) {
 
       {view.detail?.(ctx)}
 
-      <div className="lm-dcard-actions">
-        {actions.map(({ id, label, onClick, disabled, busy, danger }) => (
+      <div className="lm-dcard-actions" ref={footerRef}>
+        {actions.map(({ id, label, onClick, disabled, busy, danger, primary }) => (
           <Button
             key={id}
             size="card"
-            variant={danger ? "danger" : "secondary"}
+            variant={danger ? "danger" : primary ? "primary" : "secondary"}
             onClick={onClick}
             disabled={disabled}
             busy={busy}
+            data-action={id}
           >
             {label}
           </Button>

@@ -7,6 +7,8 @@
  */
 
 import type { TranslationKey } from "@/features/i18n/catalogue";
+import type { DeviceCategory } from "@/features/settings/sections/DeviceSection";
+import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/shell";
 
 export const NOTICE_SEVERITY = {
   ERROR: "error",
@@ -60,6 +62,35 @@ export const SHELL_NOTICE_IDS = {
 
 export type ShellNoticeId = (typeof SHELL_NOTICE_IDS)[keyof typeof SHELL_NOTICE_IDS];
 
+/**
+ * A screen that shows a condition on its own surface. A notice that names one
+ * in `shownBy` stays out of the strip while that screen is on view, and comes
+ * back as the same occurrence — a × still holds — once the user leaves it.
+ */
+export const NOTICE_VIEW = {
+  /** Full mode, Devices → Hue: the bridge card and channel map. */
+  DEVICES_HUE: "devices/hue",
+} as const;
+
+export type NoticeView = (typeof NOTICE_VIEW)[keyof typeof NOTICE_VIEW];
+
+export interface NoticeViewInput {
+  uiMode: UIMode;
+  activeSection: SectionId;
+  /** The category the mounted Devices page shows, or `null` when it is not mounted. */
+  visibleDeviceCategory: DeviceCategory | null;
+}
+
+/** The screen on view, if it is one a notice can defer to. Compact has none. */
+export function currentNoticeView({ uiMode, activeSection, visibleDeviceCategory }: NoticeViewInput): NoticeView | null {
+  if (uiMode !== "full" || activeSection !== SECTION_IDS.DEVICES) return null;
+  return visibleDeviceCategory === "hue" ? NOTICE_VIEW.DEVICES_HUE : null;
+}
+
+export function isShownByView(notice: Pick<ShellNotice, "shownBy">, view: NoticeView | null): boolean {
+  return view !== null && notice.shownBy === view;
+}
+
 export interface NoticeAction {
   label: string;
   onClick: () => void;
@@ -99,6 +130,8 @@ export interface ShellNotice {
   source: unknown;
   testId: string;
   data?: Record<`data-${string}`, string>;
+  /** The screen that already says this; see `NOTICE_VIEW`. */
+  shownBy?: NoticeView;
 }
 
 /** Tier first, then the order the builder listed them in. Stable. */

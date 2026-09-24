@@ -10,7 +10,12 @@ import {
   useLightingControlState,
   type LightingControlState,
 } from "../mode/state/lightingControl";
-import { useNavigationActions, useNavigationState, type NavigationState } from "../shell/navigationStore";
+import {
+  useNavigationActions,
+  useNavigationState,
+  useVisibleDeviceCategoryReporter,
+  type NavigationState,
+} from "../shell/navigationStore";
 import { useUpdaterActions, useUpdaterState, type UpdaterSnapshot } from "../updater/UpdaterProvider";
 import { useHueShellStatus, type HueShellStatus } from "../hue/state/hueShellStatus";
 import { resetToManual } from "../calibration/model/templates";
@@ -126,6 +131,7 @@ const selectDeviceCategoryRequest = (state: NavigationState) => state.deviceCate
 
 const DevicesPanel = memo(function DevicesPanel() {
   const categoryRequest = useNavigationState(selectDeviceCategoryRequest);
+  const reportVisibleCategory = useVisibleDeviceCategoryReporter();
   const { goToSection } = useNavigationActions();
   const { stopHueOutput } = useLightingActions();
   const openRoomMap = useCallback(() => void goToSection(SECTION_IDS.ROOM_MAP), [goToSection]);
@@ -135,6 +141,7 @@ const DevicesPanel = memo(function DevicesPanel() {
         onNavigateToRoomMap={openRoomMap}
         onStopHueOutput={stopHueOutput}
         categoryRequest={categoryRequest}
+        onVisibleCategoryChange={reportVisibleCategory}
       />
     </div>
   );

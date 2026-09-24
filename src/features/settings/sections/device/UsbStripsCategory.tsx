@@ -369,17 +369,17 @@ export function UsbStripsCategory({
 
                 {isConnectedCard ? (
                   <div className="lm-dcard-actions">
-                    <button
-                      type="button"
-                      className="lm-dcard-act"
+                    <Button
+                      size="card"
                       onClick={(event) => {
                         event.stopPropagation();
                         void runHealthCheck();
                       }}
-                      disabled={healthActionDisabled} aria-busy={isHealthChecking}
+                      disabled={healthActionDisabled}
+                      busy={isHealthChecking}
                     >
                       {isHealthChecking ? t("device:healthCheck.runningAction") : t("device:healthCheck.runAction")}
-                    </button>
+                    </Button>
                   </div>
                 ) : (
                   <button

@@ -15,6 +15,7 @@ const hue: Catalogue<typeof enHue> = {
     loadingAreas: "Alanlar yükleniyor...",
     checkingReadiness: "Hazırlık kontrol ediliyor...",
     start: "Hue'yu başlat",
+    stop: "Hue'yu durdur",
   },
   bridge: {
     unreachable: "Ulaşılamıyor",
@@ -185,7 +186,7 @@ const hue: Catalogue<typeof enHue> = {
     },
     partialStop: {
       title: "Kısmi durdurma",
-      body: "Hue durdurma tamamen bitmedi. Temizliği tamamlamak için yeniden durdur dene.",
+      body: "Hue tam olarak durmadı. Temizliği bitirmek için Hue'yu yeniden durdur.",
     },
     timeout: {
       title: "Durdurma zaman aşımı",
@@ -223,7 +224,6 @@ const hue: Catalogue<typeof enHue> = {
     validate: "Yeniden Doğrula",
     reconnectNow: "Yeniden Bağlan",
     startAgain: "Yeniden Başlat",
-    retryStop: "Durdurmayı Tekrarla",
     stopRetrying: "Durdur",
     enterIp: "IP Doğrula",
     scanAgain: "Tekrar Tara",
