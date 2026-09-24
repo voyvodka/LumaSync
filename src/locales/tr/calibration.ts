@@ -14,6 +14,8 @@ const calibration: Catalogue<typeof enCalibration> = {
     dockLedCountPerEdge: "Kenar başına LED",
     dockStandGap: "Monitör ayak boşluğu",
     dockStartAnchor: "Başlangıç noktası",
+    startEdgeGroup: "Başlangıç kenarı",
+    anchorGroup: "Kenardaki konum",
     dockDirection: "Yön",
     dockDirectionCw: "CW ↻",
     dockDirectionCcw: "CCW ↺",

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+
+import { Toggle } from "@/shared/ui/Toggle";
 import { TelemetrySection } from "@/features/telemetry/ui/TelemetrySection";
 import {
   changeLanguage,
@@ -119,14 +121,12 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
             <div className="lm-settings-row-desc">{t("settings:startupTray.launchAtLoginDescription")}</div>
           </div>
           <div className="lm-settings-row-r">
-            <button
-              type="button"
-              className="lm-settings-tg"
-              onClick={() => { void handleStartupToggle(); }}
+            <Toggle
+              checked={startupEnabled}
+              onChange={() => { void handleStartupToggle(); }}
               disabled={startupLoading}
-              aria-busy={startupLoading}
-              aria-pressed={startupEnabled}
-              aria-label={t("settings:startupTray.launchAtLogin")}
+              busy={startupLoading}
+              label={t("settings:startupTray.launchAtLogin")}
             />
           </div>
         </div>
@@ -192,12 +192,10 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
             <div className="lm-settings-row-desc">{t("updater:betaChannelDescription")}</div>
           </div>
           <div className="lm-settings-row-r">
-            <button
-              type="button"
-              className="lm-settings-tg"
-              onClick={() => { void handleChannelToggle(); }}
-              aria-pressed={updateChannel === "beta"}
-              aria-label={t("updater:betaChannel")}
+            <Toggle
+              checked={updateChannel === "beta"}
+              onChange={() => { void handleChannelToggle(); }}
+              label={t("updater:betaChannel")}
             />
           </div>
         </div>

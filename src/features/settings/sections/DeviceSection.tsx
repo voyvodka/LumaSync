@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { DisplayInfo } from "@/shared/contracts/display";
@@ -29,8 +29,42 @@ import {
   IconPencil,
 } from "@/shared/ui/icons";
 import { parseCommandError } from "@/shared/contracts/status";
+import type { TranslationKey } from "@/features/i18n/catalogue";
 
 export type DeviceCategory = "usb" | "hue" | "wled" | "displays" | "manual";
+
+type RailGroup = "connected" | "other";
+
+export interface DeviceCategoryDescriptor {
+  group: RailGroup;
+  Icon: ComponentType;
+  labelKey: TranslationKey;
+}
+
+/** The Devices rail in order, one row per category: a new category fails to compile until it has one. */
+export const DEVICE_CATEGORIES = {
+  usb: { group: "connected", Icon: IconUsb, labelKey: "device:page.rail.usbStrips" },
+  hue: { group: "connected", Icon: IconHueBridgeGlyph, labelKey: "device:page.rail.hueBridges" },
+  wled: { group: "connected", Icon: IconWledGlyph, labelKey: "device:page.rail.wled" },
+  displays: { group: "connected", Icon: IconDisplayGlyph, labelKey: "device:page.rail.displays" },
+  manual: { group: "other", Icon: IconPencil, labelKey: "device:page.rail.manualEntry" },
+} satisfies Record<DeviceCategory, DeviceCategoryDescriptor>;
+
+function deviceCategory(category: DeviceCategory): DeviceCategoryDescriptor {
+  return DEVICE_CATEGORIES[category];
+}
+
+const RAIL_GROUP_HEADINGS = {
+  connected: "device:page.rail.connected",
+  other: "device:page.rail.other",
+} satisfies Record<RailGroup, TranslationKey>;
+
+const DEVICE_RAIL_GROUPS = (Object.keys(RAIL_GROUP_HEADINGS) as RailGroup[]).map((group) => ({
+  headingKey: RAIL_GROUP_HEADINGS[group],
+  categories: (Object.keys(DEVICE_CATEGORIES) as DeviceCategory[]).filter(
+    (category) => deviceCategory(category).group === group,
+  ),
+}));
 
 /** A deep link into one category. The nonce makes asking twice for the same one count. */
 export interface DeviceCategoryRequest {
@@ -257,57 +291,39 @@ export function DeviceSection({
     [selectedAreaId],
   );
 
+  const railCounts: Record<DeviceCategory, number> = {
+    usb: supportedPortCount,
+    hue: selectedBridge ? 1 : 0,
+    wled: activeWledIp === null ? 0 : 1,
+    displays: displays.length,
+    manual: 0,
+  };
+
   return (
     <div className="lm-device-page">
       {/* ── Left category rail ───────────────────────────────── */}
       <nav className="lm-device-rail">
-        <div className="lm-device-rail-h">{t("device:page.rail.connected")}</div>
-        <RailButton
-          category="usb"
-          icon={<IconUsb />}
-          label={t("device:page.rail.usbStrips")}
-          count={supportedPortCount}
-          countLabel={t("device:page.rail.countLabel", { count: supportedPortCount })}
-          active={activeCategory === "usb"}
-          onClick={() => setActiveCategory("usb")}
-        />
-        <RailButton
-          category="hue"
-          icon={<IconHueBridgeGlyph />}
-          label={t("device:page.rail.hueBridges")}
-          count={selectedBridge ? 1 : 0}
-          countLabel={t("device:page.rail.countLabel", { count: 1 })}
-          active={activeCategory === "hue"}
-          onClick={() => setActiveCategory("hue")}
-        />
-        <RailButton
-          category="wled"
-          icon={<IconWledGlyph />}
-          label={t("device:page.rail.wled")}
-          count={activeWledIp === null ? 0 : 1}
-          countLabel={t("device:page.rail.countLabel", { count: 1 })}
-          active={activeCategory === "wled"}
-          onClick={() => setActiveCategory("wled")}
-        />
-        <RailButton
-          category="displays"
-          icon={<IconDisplayGlyph />}
-          label={t("device:page.rail.displays")}
-          count={displays.length}
-          countLabel={t("device:page.rail.countLabel", { count: displays.length })}
-          active={activeCategory === "displays"}
-          onClick={() => setActiveCategory("displays")}
-        />
-
-        <div className="lm-device-rail-h">{t("device:page.rail.other")}</div>
-        <RailButton
-          category="manual"
-          icon={<IconPencil />}
-          label={t("device:page.rail.manualEntry")}
-          count={0}
-          active={activeCategory === "manual"}
-          onClick={() => setActiveCategory("manual")}
-        />
+        {DEVICE_RAIL_GROUPS.map(({ headingKey, categories }) => (
+          <Fragment key={headingKey}>
+            <div className="lm-device-rail-h">{t(headingKey)}</div>
+            {categories.map((category) => {
+              const { Icon, labelKey } = deviceCategory(category);
+              const count = railCounts[category];
+              return (
+                <RailButton
+                  key={category}
+                  category={category}
+                  icon={<Icon />}
+                  label={t(labelKey)}
+                  count={count}
+                  countLabel={t("device:page.rail.countLabel", { count })}
+                  active={activeCategory === category}
+                  onClick={() => setActiveCategory(category)}
+                />
+              );
+            })}
+          </Fragment>
+        ))}
       </nav>
 
       {/* ── Main content area ────────────────────────────────── */}

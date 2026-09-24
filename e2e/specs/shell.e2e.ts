@@ -54,7 +54,7 @@ describe("app shell", () => {
 
     const pressed = await Promise.all(
       MODE_KINDS.map((kind) =>
-        attribute(`[data-testid="mode-button-${kind}"]`, "aria-pressed"),
+        attribute(`[data-testid="mode-button-${kind}"]`, "aria-checked"),
       ),
     );
 
@@ -71,7 +71,7 @@ describe("app shell", () => {
       async () =>
         (await attribute(
           `[data-testid="mode-button-${LIGHTING_MODE_KIND.OFF}"]`,
-          "aria-pressed",
+          "aria-checked",
         )) === "true",
       { timeout: 15_000, interval: 100, timeoutMsg: "Off never became active" },
     );

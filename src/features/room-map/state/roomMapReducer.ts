@@ -1,6 +1,7 @@
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 import { parseObjectId } from "../model/objectId";
+import { roomObjectAdapter } from "../model/roomObjectKinds";
 
 export const MAX_HISTORY = 50;
 
@@ -72,21 +73,8 @@ function resolvePatch(patch: RoomMapPatch, config: RoomMapConfig): Partial<RoomM
 }
 
 function objectExists(config: RoomMapConfig, objectId: string): boolean {
-  const parsed = parseObjectId(objectId);
-  switch (parsed?.kind) {
-    case "tv":
-      return config.tvAnchor !== undefined;
-    case "furniture":
-      return config.furniture.some((f) => f.id === parsed.furnitureId);
-    case "usb":
-      return config.usbStrips.some((s) => s.stripId === parsed.stripId);
-    case "hue":
-      return config.hueChannels.some((c) => c.channelIndex === parsed.channelIndex);
-    case "image":
-      return config.imageLayers.some((l) => l.id === parsed.layerId);
-    default:
-      return false;
-  }
+  const ref = parseObjectId(objectId);
+  return ref ? roomObjectAdapter(ref).exists(config, ref) : false;
 }
 
 /** Undo can take away the very object that is selected; a selection pointing

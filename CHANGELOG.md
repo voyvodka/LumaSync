@@ -27,6 +27,16 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Keyboard: the mode buttons — on the Lights page, in the compact window and in the LED test
+  popup — are one group you Tab into once and move through with the arrow keys, Home and End. The
+  same goes for the test pattern tiles and speeds, and for LED Setup's start edge, start point and
+  direction. Screen readers announce each group as a set of choices and the Settings toggles as
+  switches, and the brightness and saturation sliders on the Lights page show a focus ring.
+- Inline error messages — in LED Setup and in the USB strip color order step — have one look: a
+  small dot and one sentence under the control they are about, without the red box or side bar.
+- The confirmations for leaving LED Setup with unsaved changes and for overriding the firmware
+  profile look like the rest of the app's dialogs. Clicking outside the LED Setup one keeps
+  editing, like Escape.
 - Hue: the app checks the bridge less often and from one place, so opening Devices beside the
   main view no longer doubles the traffic, and nothing asks the bridge at all while the app sits in
   the tray with Hue off. The Hue chip, the Devices card and the notices now follow a stream started

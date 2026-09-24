@@ -16,6 +16,14 @@ const common: Catalogue<typeof enCommon> = {
     solidColor: "Sabit renk",
     brightness: "Parlaklık",
   },
+  callout: {
+    tone: {
+      error: "Hata",
+      warning: "Uyarı",
+      info: "Bilgi",
+      ok: "Tamam",
+    },
+  },
   compact: {
     sections: {
       mode: "Mod",

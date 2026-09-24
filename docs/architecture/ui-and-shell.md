@@ -88,11 +88,40 @@ component rather than through this list, and unlayered it cannot lose to a compo
 on the `lm-settings-group` card it sits on, whatever order the bundler emits.
 
 **Selection state is styled from ARIA where the element carries it.** A tab's selected look is
-`[aria-selected="true"]`, a toggle's `[aria-pressed="true"]`, a radio's `[aria-checked="true"]`, the
+`[aria-selected="true"]`, a toggle button's `[aria-pressed="true"]`, a radio's or a switch's `[aria-checked="true"]`, the
 device rail's `[aria-current="page"]` — the attribute a screen reader announces is the same one the
 stylesheet reads, so the two cannot disagree. Where the element has no such attribute, the class is
 `is-on`; `is-sel` and `is-selected` are gone. `is-active` survives only for things that are not
 selection: a step tracker's current step and the status bar's tone scale.
+
+**Controls come from `src/shared/ui/`, looks stay with their surface.** `Button`/`IconButton`,
+`Toggle` (a `role="switch"`), `Segmented` (a radio group), `RangeRow`, `ConfirmDialog`, `Callout`,
+`EmptyState` and `StatusPill` own the behaviour and the accessibility contract — one tab stop per
+radio group with arrow keys, Home and End (`useRadioGroup`), a name on every icon-only button, a
+focus trap in every dialog — while each call site keeps the class that draws it. That split is what
+let the three mode strips (`features/mode/ui/ModeStrip.tsx`) and the pattern picker gain arrow keys
+without a pixel moving. A slider that commits while it moves goes through `useThrottledCommit`
+(leading and trailing, flushed on release), so a drag neither floods the lighting runtime nor drops
+the value the user let go on. A new control that needs one of these behaviours uses the primitive;
+a feature that is touched for another reason migrates its hand-rolled copy then.
+
+**A closed set of kinds is a table, not a scattered `switch`.** Sections (`SECTION_REGISTRY` in
+`SettingsLayout.tsx`), Devices rail categories (`DEVICE_CATEGORIES`), lighting mode kinds
+(`MODE_KINDS` in `features/mode/model/modeKinds.ts`), output targets (`OUTPUT_TARGETS` in the mode
+contract, and the Lights dock's rows) and room-map object kinds (`ROOM_OBJECT_KINDS` in
+`features/room-map/model/roomObjectKinds.ts`) are each one object declared `satisfies Record<Kind,
+…>`, so adding a kind is a compile error until every row exists — the room map alone used to branch
+on the object kind in about fifty places. A row may hold `null` for "this kind cannot"; the caller
+skips it rather than testing the kind. The one cast per table sits in its accessor
+(`roomObjectAdapter`, `modeKind`, `sectionEntry`), which ties a parsed kind to its row's parameter
+types. `__tests__` pin each table's key set and prove, with `@ts-expect-error`, that a missing row
+does not compile.
+
+**Inline feedback is a `Callout`, not a card.** A message about the control right above it — a save
+that failed, a duplicate answer, a preview that would not open — uses the notice strip's vocabulary:
+a tone dot whose shape (disc, diamond, ring, square) survives forced colours, one sentence, at most
+one text-link action. No tinted box and no coloured side bar; a list of them sits in one container
+that is the live region, with `announce={false}` on each so a screen reader reads the list once.
 
 **The compact/full mode transition is sequential, never a cross-fade.** `useUIMode.ts`: fade the
 current content out, resize the window to the target mode, then mount the incoming layout and fade

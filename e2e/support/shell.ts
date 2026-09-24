@@ -246,14 +246,14 @@ export async function isDisabled(selector: string): Promise<boolean> {
 }
 
 /** The lighting-mode kind whose `[data-testid="mode-button-<kind>"]` currently
- *  carries `aria-pressed="true"`, or `null` if the compact mode strip is not
- *  mounted (i.e. the app is in full mode) or nothing is pressed yet. */
+ *  carries `aria-checked="true"`, or `null` if the compact mode strip is not
+ *  mounted (i.e. the app is in full mode) or nothing is checked yet. */
 export async function activeModeKind(): Promise<string | null> {
   return browser.execute(() => {
     const buttons = Array.from(
       document.querySelectorAll<HTMLElement>('[data-testid^="mode-button-"]'),
     );
-    const active = buttons.find((b) => b.getAttribute("aria-pressed") === "true");
+    const active = buttons.find((b) => b.getAttribute("aria-checked") === "true");
     return active?.getAttribute("data-testid")?.replace("mode-button-", "") ?? null;
   });
 }

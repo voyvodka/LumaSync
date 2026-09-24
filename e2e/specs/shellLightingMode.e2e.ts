@@ -17,24 +17,24 @@ const MODE_KINDS = Object.values(LIGHTING_MODE_KIND);
 
 async function waitForModePressed(kind: string): Promise<void> {
   await browser.waitUntil(
-    async () => (await attribute(`[data-testid="mode-button-${kind}"]`, "aria-pressed")) === "true",
+    async () => (await attribute(`[data-testid="mode-button-${kind}"]`, "aria-checked")) === "true",
     { timeout: 15_000, interval: 100, timeoutMsg: `${kind} never became active` },
   );
 }
 
 async function expectExactlyOnePressed(): Promise<void> {
   const pressed = await Promise.all(
-    MODE_KINDS.map((kind) => attribute(`[data-testid="mode-button-${kind}"]`, "aria-pressed")),
+    MODE_KINDS.map((kind) => attribute(`[data-testid="mode-button-${kind}"]`, "aria-checked")),
   );
   expect(pressed.filter((value) => value === "true")).toHaveLength(1);
 }
 
 /**
  * Off/Ambilight/Solid driven through the mode strip and read back through
- * `aria-pressed` — the UI's own reflection of `get_lighting_mode_status`,
+ * `aria-checked` — the UI's own reflection of `get_lighting_mode_status`,
  * and the only avenue available here: the IPC boundary cannot be hooked from
  * a spec (`testing-and-verification.md`). The mode strip only carries
- * `data-testid`s in compact mode (`ModeButton.tsx`); the equivalent full-mode
+ * `data-testid`s in compact mode (`ModeStrip.tsx`); the equivalent full-mode
  * buttons in `LightsSection.tsx` have none, so this spec drives compact.
  *
  * Hardware / bridge safety: this spec must never open a real Hue stream.
@@ -72,7 +72,7 @@ describe("lighting mode switch", () => {
     await switchUiMode(startUiMode);
   });
 
-  it("drives Off from the mode strip and reads it back through aria-pressed", async () => {
+  it("drives Off from the mode strip and reads it back through aria-checked", async () => {
     await clickTestId(`mode-button-${LIGHTING_MODE_KIND.OFF}`);
     await waitForModePressed(LIGHTING_MODE_KIND.OFF);
     await expectExactlyOnePressed();

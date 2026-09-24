@@ -21,12 +21,10 @@
  *   - `role="radiogroup"` and per-tile `role="radio"` semantics.
  *   - Amber focus ring via `.lm-settings-seg button:focus-visible`.
  *   - Description line gives context-free copy for screen readers.
- *   - Arrow-key navigation follows the same roving-tabindex pattern as
- *     FirmwareProfilePicker so keyboard users can cycle presets without
- *     leaving the radio group.
+ *   - Arrow keys, Home and End move within the group (`Segmented`).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -34,6 +32,7 @@ import {
   type LightingSmoothingPreset,
 } from "@/shared/contracts/lighting";
 import { shellStore } from "@/features/persistence/shellStore";
+import { Segmented } from "@/shared/ui/Segmented";
 
 const PRESET_ORDER: LightingSmoothingPreset[] = ["subtle", "moderate", "intense"];
 
@@ -52,11 +51,6 @@ export function LightingSmoothingPresetControl({
   const [preset, setPreset] = useState<LightingSmoothingPreset>(
     initialPreset ?? DEFAULT_LIGHTING_SMOOTHING_PRESET,
   );
-  const buttonRefs = useRef<Record<LightingSmoothingPreset, HTMLButtonElement | null>>({
-    subtle: null,
-    moderate: null,
-    intense: null,
-  });
 
   useEffect(() => {
     if (initialPreset) return;
@@ -97,21 +91,6 @@ export function LightingSmoothingPresetControl({
     [onPresetChange, preset],
   );
 
-  const handleKeyNavigate = useCallback(
-    (event: React.KeyboardEvent<HTMLButtonElement>, current: LightingSmoothingPreset) => {
-      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
-      event.preventDefault();
-      const idx = PRESET_ORDER.indexOf(current);
-      const delta = event.key === "ArrowRight" ? 1 : -1;
-      const nextIdx = (idx + delta + PRESET_ORDER.length) % PRESET_ORDER.length;
-      const nextPreset = PRESET_ORDER[nextIdx];
-      if (nextPreset === undefined) return;
-      commit(nextPreset);
-      buttonRefs.current[nextPreset]?.focus();
-    },
-    [commit],
-  );
-
   const presetLabels: Record<LightingSmoothingPreset, string> = useMemo(
     () => ({
       subtle: t("lights:signal.smoothing.subtle"),
@@ -127,31 +106,16 @@ export function LightingSmoothingPresetControl({
         <span>{t("lights:signal.smoothing.title")}</span>
         <b>{presetLabels[preset]}</b>
       </div>
-      <div
+      <Segmented
         className="lm-settings-seg"
-        role="radiogroup"
-        aria-label={t("lights:signal.smoothing.title")}
-      >
-        {PRESET_ORDER.map((candidate) => {
-          const isActive = candidate === preset;
-          return (
-            <button
-              key={candidate}
-              ref={(el) => {
-                buttonRefs.current[candidate] = el;
-              }}
-              type="button"
-              role="radio"
-              aria-checked={isActive}
-              tabIndex={isActive ? 0 : -1}
-              onClick={() => commit(candidate)}
-              onKeyDown={(e) => handleKeyNavigate(e, candidate)}
-            >
-              {presetLabels[candidate]}
-            </button>
-          );
-        })}
-      </div>
+        ariaLabel={t("lights:signal.smoothing.title")}
+        value={preset}
+        onChange={commit}
+        options={PRESET_ORDER.map((candidate) => ({
+          value: candidate,
+          label: presetLabels[candidate],
+        }))}
+      />
     </div>
   );
 }

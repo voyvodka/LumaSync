@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { IconButton } from "@/shared/ui/Button";
 
 import { IconGear, IconGrid, IconUndo, IconRedo, IconInfoAlt } from "@/shared/ui/icons";
 import type { RoomAwareStatus } from "../model/roomAware";
@@ -67,26 +68,22 @@ export function RoomMapToolbar({
       <span className="lm-room-toolbar-sep" aria-hidden />
 
       {/* Undo / Redo */}
-      <button
-        type="button"
+      <IconButton
         className={`${TOOLBAR_BTN} is-icon ${!canUndo ? "is-disabled" : ""}`}
         onClick={canUndo ? onUndo : undefined}
         aria-disabled={!canUndo}
-        aria-label={t("roomMap:toolbar.undo")}
+        label={t("roomMap:toolbar.undo")}
         title={`${t("roomMap:toolbar.undo")} (${navigator.platform.includes("Mac") ? "⌘" : "Ctrl+"}Z)`}
-      >
-        <IconUndo />
-      </button>
-      <button
-        type="button"
+        icon={<IconUndo />}
+      />
+      <IconButton
         className={`${TOOLBAR_BTN} is-icon ${!canRedo ? "is-disabled" : ""}`}
         onClick={canRedo ? onRedo : undefined}
         aria-disabled={!canRedo}
-        aria-label={t("roomMap:toolbar.redo")}
+        label={t("roomMap:toolbar.redo")}
         title={`${t("roomMap:toolbar.redo")} (${navigator.platform.includes("Mac") ? "⌘" : "Ctrl+"}${navigator.platform.includes("Mac") ? "⇧" : "Shift+"}Z)`}
-      >
-        <IconRedo />
-      </button>
+        icon={<IconRedo />}
+      />
 
       <div className="flex-1" />
 
@@ -94,15 +91,13 @@ export function RoomMapToolbar({
 
       <ShortcutsHelpButton />
 
-      <button
-        type="button"
+      <IconButton
         className={`${TOOLBAR_BTN} is-icon`}
         onClick={onToggleSettings}
-        aria-label={t("roomMap:toolbar.settingsAriaLabel")}
+        label={t("roomMap:toolbar.settingsAriaLabel")}
         aria-pressed={settingsOpen}
-      >
-        <IconGear />
-      </button>
+        icon={<IconGear />}
+      />
     </div>
   );
 }
@@ -157,17 +152,14 @@ function ShortcutsHelpButton() {
 
   return (
     <div className="relative">
-      <button
+      <IconButton
         ref={btnRef}
-        type="button"
         className={`${TOOLBAR_BTN} is-icon`}
         onClick={() => setOpen((v) => !v)}
-        aria-label={t("roomMap:shortcuts.title")}
+        label={t("roomMap:shortcuts.title")}
         aria-expanded={open}
-        title={t("roomMap:shortcuts.title")}
-      >
-        <IconInfoAlt />
-      </button>
+        icon={<IconInfoAlt />}
+      />
       {open && (
         <div
           ref={popoverRef}

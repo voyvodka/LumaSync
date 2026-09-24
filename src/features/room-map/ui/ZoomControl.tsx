@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { IconButton } from "@/shared/ui/Button";
 
 export const ZOOM_MIN = 0.3;
 export const ZOOM_MAX = 3;
@@ -47,16 +48,13 @@ export function ZoomControl({
       role="group"
       aria-label={t("roomMap:zoomControl.label")}
     >
-      <button
-        type="button"
+      <IconButton
         className="lm-room-viewport-btn"
         onClick={() => step(-ZOOM_STEP)}
         disabled={zoom <= ZOOM_MIN}
-        aria-label={t("roomMap:zoomControl.out")}
-        title={t("roomMap:zoomControl.out")}
-      >
-        −
-      </button>
+        label={t("roomMap:zoomControl.out")}
+        icon="−"
+      />
       <button
         type="button"
         className="lm-room-viewport-btn lm-room-viewport-btn--readout"
@@ -66,16 +64,13 @@ export function ZoomControl({
       >
         {Math.round(zoom * 100)}%
       </button>
-      <button
-        type="button"
+      <IconButton
         className="lm-room-viewport-btn"
         onClick={() => step(ZOOM_STEP)}
         disabled={zoom >= ZOOM_MAX}
-        aria-label={t("roomMap:zoomControl.in")}
-        title={t("roomMap:zoomControl.in")}
-      >
-        +
-      </button>
+        label={t("roomMap:zoomControl.in")}
+        icon="+"
+      />
     </div>
   );
 }

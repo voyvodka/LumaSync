@@ -17,6 +17,7 @@
 @import "./styles/theme.css";
 @import "./styles/tokens.css" layer(base);
 @import "./styles/base.css" layer(base);
+@import "./styles/primitives.css" layer(components);
 @import "./styles/shell.css" layer(components);
 @import "./styles/compact.css" layer(components);
 @import "./styles/notices.css" layer(components);

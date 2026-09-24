@@ -12,6 +12,9 @@ import { LedChipTypePicker } from "../control/LedChipTypePicker";
 import { LedColorOrderControl } from "../control/LedColorOrderControl";
 import { cx } from "@/shared/ui/cx";
 import { IconRefresh, IconUsb } from "@/shared/ui/icons";
+import { Button } from "@/shared/ui/Button";
+import { EmptyState } from "@/shared/ui/EmptyState";
+import { StatusPill } from "@/shared/ui/StatusPill";
 
 function portDisplayName(portName: string, product?: string, manufacturer?: string): string {
   if (product && manufacturer) {
@@ -269,15 +272,10 @@ export function UsbStripsCategory({
           </div>
         </div>
         <div className="lm-device-head-actions">
-          <button
-            type="button"
-            className="lm-device-btn"
-            onClick={() => { void refreshPorts(); }}
-            disabled={isScanning} aria-busy={isScanning}
-          >
+          <Button onClick={() => { void refreshPorts(); }} busy={isScanning}>
             <IconRefresh />
             <span>{isScanning ? t("device:actions.scanning") : t("device:page.actions.rescan")}</span>
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -306,10 +304,10 @@ export function UsbStripsCategory({
         </p>
       <div className="lm-device-grid">
         {ports.length === 0 ? (
-          <div className="lm-device-empty">
-            <h3>{t("device:page.usb.empty.title")}</h3>
-            <p>{t("device:page.usb.empty.body")}</p>
-          </div>
+          <EmptyState
+            title={t("device:page.usb.empty.title")}
+            body={t("device:page.usb.empty.body")}
+          />
         ) : (
           ports.map((port) => {
             const isConnectedCard = connectedPort === port.portName;
@@ -317,7 +315,7 @@ export function UsbStripsCategory({
             const pillLabel = isConnectedCard
               ? t("device:page.usb.pill.online")
               : t("device:page.usb.pill.discovered");
-            const pillClass = isConnectedCard ? "is-ok" : "is-warn";
+            const pillTone = isConnectedCard ? "ok" : "warn";
             // Selection is `aria-pressed`, which the CSS reads; `is-on` marks the live port.
             const cardStateClass = isConnectedCard ? "is-on" : isSelectedCard ? "" : "is-ghost";
             return (
@@ -342,7 +340,7 @@ export function UsbStripsCategory({
                   <div className="lm-dcard-tx">
                     <div className="lm-dcard-name">
                       <span>{portDisplayName(port.portName, port.product, port.manufacturer)}</span>
-                      <span className={`lm-dcard-pill ${pillClass}`}>{pillLabel}</span>
+                      <StatusPill tone={pillTone}>{pillLabel}</StatusPill>
                     </div>
                     <div className="lm-dcard-sub">{port.portName}</div>
                   </div>

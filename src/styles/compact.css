@@ -125,14 +125,14 @@
   text-transform: uppercase;
   color: var(--lm-ink-dim);
 }
-.lm-compact-mbtn[aria-pressed="true"] {
+.lm-compact-mbtn[aria-checked="true"] {
   background: linear-gradient(180deg, rgba(255, 176, 32, 0.14), rgba(255, 176, 32, 0.03));
   border-color: rgba(255, 176, 32, 0.45);
   box-shadow:
     0 0 0 1px rgba(255, 176, 32, 0.18),
     0 0 18px -4px rgba(255, 176, 32, 0.35);
 }
-.lm-compact-mbtn[aria-pressed="true"] .ico,
-.lm-compact-mbtn[aria-pressed="true"] .tn {
+.lm-compact-mbtn[aria-checked="true"] .ico,
+.lm-compact-mbtn[aria-checked="true"] .tn {
   color: var(--lm-amber);
 }

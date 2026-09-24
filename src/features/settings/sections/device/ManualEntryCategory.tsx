@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next";
 
+import { EmptyState } from "@/shared/ui/EmptyState";
+
 export interface ManualEntryCategoryProps {
   isActive: boolean;
 }
@@ -15,9 +17,7 @@ export function ManualEntryCategory({ isActive }: ManualEntryCategoryProps) {
           <div className="lm-device-head-sub">{t("device:page.header.manualSub")}</div>
         </div>
       </div>
-      <div className="lm-device-empty">
-        <p>{t("device:page.manual.body")}</p>
-      </div>
+      <EmptyState body={t("device:page.manual.body")} />
     </div>
   );
 }

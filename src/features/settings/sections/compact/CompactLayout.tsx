@@ -20,7 +20,6 @@
 import { memo, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { IconOff, IconAmbilight, IconSolid } from "@/shared/ui/icons";
 import { LIGHTING_MODE_KIND, type LightingModeKind } from "@/shared/contracts/mode";
 import { MODE_GUARD_REASONS } from "@/features/mode/state/modeGuard";
 import {
@@ -33,10 +32,11 @@ import { shallowEqual } from "@/shared/lib/store";
 import { outputAvailability } from "@/features/mode/model/outputAvailability";
 import { FIRMWARE_PROFILE, type FirmwareProfile } from "@/shared/contracts/device";
 import { SCENE_PRESETS, type ScenePreset } from "@/features/mode/model/scenePresets";
+import { modeKind } from "@/features/mode/model/modeKinds";
+import { ModeStrip } from "@/features/mode/ui/ModeStrip";
 import { LightingSmoothingPresetControl } from "../control/LightingSmoothingPresetControl";
 import { shellStore } from "@/features/persistence/shellStore";
 import { CompactSolidSection } from "./CompactSolidSection";
-import { ModeButton } from "./ModeButton";
 import { SelfContainedBrightnessRow } from "./SelfContainedBrightnessRow";
 
 const selectCompactHue = (status: HueShellStatus) => ({
@@ -105,7 +105,6 @@ export const CompactLayout = memo(function CompactLayout() {
 
   const incomingSolid = lightingMode.solid ?? DEFAULT_SOLID;
   const ambilightConfig = lightingMode.ambilight ?? DEFAULT_AMBILIGHT;
-  const isOff = lightingMode.kind === LIGHTING_MODE_KIND.OFF;
   const isSolid = lightingMode.kind === LIGHTING_MODE_KIND.SOLID;
   const isAmbilight = lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT;
 
@@ -123,24 +122,13 @@ export const CompactLayout = memo(function CompactLayout() {
   const calibrationLocked = modeLockReason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED;
   const nonOffDisabled = isModeTransitioning || activationBlocked || calibrationLocked;
 
+  // Solid carries the saved targets; the other kinds apply to whatever is live.
   const handleModeClick = useCallback(
     (kind: LightingModeKind) => {
-      if (kind === LIGHTING_MODE_KIND.OFF) {
-        onLightingModeChange({ kind: LIGHTING_MODE_KIND.OFF });
-        return;
-      }
-      if (kind === LIGHTING_MODE_KIND.AMBILIGHT) {
-        onLightingModeChange({
-          kind: LIGHTING_MODE_KIND.AMBILIGHT,
-          ambilight: ambilightConfig,
-        });
-        return;
-      }
-      onLightingModeChange({
-        kind: LIGHTING_MODE_KIND.SOLID,
-        solid: incomingSolid,
-        targets: outputTargets,
-      });
+      const config = modeKind(kind).config({ solid: incomingSolid, ambilight: ambilightConfig });
+      onLightingModeChange(
+        kind === LIGHTING_MODE_KIND.SOLID ? { ...config, targets: outputTargets } : config,
+      );
     },
     [ambilightConfig, incomingSolid, outputTargets, onLightingModeChange],
   );
@@ -195,33 +183,14 @@ export const CompactLayout = memo(function CompactLayout() {
         {/* ── Mode strip ─────────────────────────────────────────── */}
         <div>
           <div className="lm-compact-section-title">{t("common:compact.sections.mode")}</div>
-          <div className="lm-compact-mode-strip">
-            <ModeButton
-              kind={LIGHTING_MODE_KIND.OFF}
-              active={isOff}
-              disabled={isModeTransitioning}
-              label={t("common:mode.options.off")}
-              icon={<IconOff />}
-              onClick={handleModeClick}
-            />
-            <ModeButton
-              kind={LIGHTING_MODE_KIND.AMBILIGHT}
-              active={isAmbilight}
-              disabled={nonOffDisabled}
-              label={t("common:mode.options.ambilight")}
-              labelLang="en"
-              icon={<IconAmbilight />}
-              onClick={handleModeClick}
-            />
-            <ModeButton
-              kind={LIGHTING_MODE_KIND.SOLID}
-              active={isSolid}
-              disabled={nonOffDisabled}
-              label={t("common:mode.options.solid")}
-              icon={<IconSolid />}
-              onClick={handleModeClick}
-            />
-          </div>
+          <ModeStrip
+            variant="compact"
+            value={lightingMode.kind}
+            isDisabled={(kind) =>
+              kind === LIGHTING_MODE_KIND.OFF ? isModeTransitioning : nonOffDisabled
+            }
+            onSelect={handleModeClick}
+          />
         </div>
 
         {/* ── Active mode card ──────────────────────────────────── */}

@@ -1,5 +1,5 @@
 import type { LocalSink } from "@/features/device/localSink";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useTranslation, Trans } from "react-i18next";
 
 import {
@@ -8,6 +8,7 @@ import {
 } from "@/features/mode/state/modeGuard";
 import {
   LIGHTING_MODE_KIND,
+  OUTPUT_TARGETS,
   normalizeLightingModeConfig,
   normalizeAmbilightPayload,
   type LightingModeConfig,
@@ -29,12 +30,6 @@ import {
   type ColorCorrectionConfig,
   type FirmwareProfile,
 } from "@/shared/contracts/device";
-import {
-  KEYBIND_ACTIONS,
-  type KeybindAction,
-  getKeybindDefinition,
-  resolveKeybindPlatform,
-} from "@/shared/contracts/shell";
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import { useFullTelemetryPoll } from "@/features/telemetry/hooks/useFullTelemetryPoll";
 import { hasSerialLinkBudget } from "@/shared/contracts/telemetry";
@@ -46,7 +41,10 @@ import {
 } from "@/features/hue/model/hueAvailability";
 import { shellStore } from "@/features/persistence/shellStore";
 import { outputAvailability } from "@/features/mode/model/outputAvailability";
-import { IconOff, IconAmbilight, IconSolid } from "@/shared/ui/icons";
+import { MODE_KINDS } from "@/features/mode/model/modeKinds";
+import { ModeStrip } from "@/features/mode/ui/ModeStrip";
+import { RangeRow } from "@/shared/ui/RangeRow";
+import { Toggle } from "@/shared/ui/Toggle";
 
 import { SolidColorPanel } from "./control/SolidColorPanel";
 import { ColorCorrectionPanel } from "./control/ColorCorrectionPanel";
@@ -73,6 +71,16 @@ export function hueUnavailableSubKey(
   return HUE_UNAVAILABLE_SUB_KEYS[hueUnavailableReason(hueConfigured, false, verdict) ?? "checking"];
 }
 
+interface OutputRowView {
+  available: boolean;
+  /** A live stream state the row reports while selected. */
+  liveState?: "is-reconnecting" | "is-failed";
+  name: string;
+  detail: string;
+  detailLang?: string;
+  sub: ReactNode;
+}
+
 interface LightsSectionProps {
   mode: LightingModeConfig;
   outputTargets: HueRuntimeTarget[];
@@ -96,20 +104,6 @@ interface LightsSectionProps {
   isModeTransitioning?: boolean;
   onModeChange: (nextMode: LightingModeConfig) => void;
   onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
-}
-
-/**
- * Render a keybind badge (modifier + key) for a mode button. Badge labels
- * come from the shared KEYBIND_REGISTRY so StatusBar + LightsSection stay
- * in sync with the handler map wired in `useGlobalKeybinds`.
- */
-function ModeKeybindBadge({ action }: { action: KeybindAction }) {
-  const platform = useMemo(() => resolveKeybindPlatform(), []);
-  const definition = useMemo(
-    () => getKeybindDefinition(action, platform),
-    [action, platform],
-  );
-  return <span className="kb">{definition.badge.join("")}</span>;
 }
 
 export function LightsSection({
@@ -148,7 +142,6 @@ export function LightsSection({
   const nonOffModeDisabled = modeSelectorDisabled || availability !== "ready";
   const normalizedMode = normalizeLightingModeConfig(mode);
   const activeKind = normalizedMode.kind;
-  const isOff = activeKind === LIGHTING_MODE_KIND.OFF;
   const isSolid = activeKind === LIGHTING_MODE_KIND.SOLID;
   const isAmbilight = activeKind === LIGHTING_MODE_KIND.AMBILIGHT;
   const incomingSolid = normalizedMode.solid ?? { r: 255, g: 255, b: 255, brightness: 1 };
@@ -276,9 +269,7 @@ export function LightsSection({
     });
   };
 
-  // Compute USB/Hue availability + selection.
   const usbSelected = outputTargets.includes("usb");
-  const hueSelected = outputTargets.includes("hue");
   const hueAvailable = hueConfigured && hueReachable;
   const roomAware = roomAwareStatus(tvAnchor, outputTargets, {
     configured: hueConfigured,
@@ -341,7 +332,6 @@ export function LightsSection({
     liveUsb !== null && hasSerialLinkBudget(liveUsb) && liveUsb.linkConstrained;
 
   const saturationValue = Math.round((incomingAmbilight.saturation ?? 1) * 100);
-  const saturationFillPercent = Math.round(((saturationValue - 50) / 150) * 100);
   const blackBorderOn = incomingAmbilight.blackBorderDetection ?? false;
 
   const slidersDisabled = !isAmbilight || modeSelectorDisabled;
@@ -350,6 +340,62 @@ export function LightsSection({
   // so the slider tooltip surfaces the firmware reason while transient
   // mode-transition disables stay generic.
   const ambilightBrightnessLocked = isAdalight || slidersDisabled;
+
+  // One dock row per output target: a new target fails to compile until it has one.
+  const outputRows = {
+    usb: {
+      available: localOutputConnected,
+      name:
+        localSink?.transport === "wled"
+          ? t("lights:dock.rows.wledName")
+          : t("lights:dock.rows.usbName"),
+      // The identity of the thing actually bound. For WLED that is its LAN
+      // address — the persisted sink config keeps no friendly name — and for
+      // serial it is the USB product string the OS reported, when it reported
+      // one. Both are device-supplied, so they are uppercased by English rules
+      // — "CH340 USB SERİAL" under `lang="tr"` otherwise.
+      detail:
+        localSink?.transport === "wled"
+          ? localSink.id
+          : (localSink?.product ?? t("lights:dock.rows.usbType")),
+      detailLang: localSink?.transport === "wled" || localSink?.product ? "en" : undefined,
+      sub: localOutputConnected ? (
+        <Trans
+          i18nKey={
+            localSink?.transport === "wled" ? "lights:dock.rows.wledSub" : "lights:dock.rows.usbSub"
+          }
+          values={{ count: totalLeds ?? 0 }}
+          components={{ b: <b /> }}
+        />
+      ) : (
+        t("lights:dock.rows.usbSubUnavailable")
+      ),
+    },
+    hue: {
+      available: hueAvailable,
+      liveState: hueReconnecting ? "is-reconnecting" : hueStreamFailed ? "is-failed" : undefined,
+      name: t("lights:dock.rows.hueName"),
+      detail: t("lights:dock.rows.hueType"),
+      sub: !hueAvailable ? (
+        <Trans
+          i18nKey={hueUnavailableSubKey(hueConfigured, hueProbeVerdict, bootstrapDone)}
+          components={{ b: <b /> }}
+        />
+      ) : hueReconnecting ? (
+        <Trans i18nKey="lights:dock.rows.hueSubReconnecting" components={{ b: <b /> }} />
+      ) : hueStreamFailed ? (
+        <Trans i18nKey="lights:dock.rows.hueSubFailed" components={{ b: <b /> }} />
+      ) : hueStreaming ? (
+        <Trans
+          i18nKey="lights:dock.rows.hueSubStreaming"
+          values={{ hz: HUE_STREAM_MAX_HZ }}
+          components={{ b: <b /> }}
+        />
+      ) : (
+        <Trans i18nKey="lights:dock.rows.hueSubIdle" components={{ b: <b /> }} />
+      ),
+    },
+  } satisfies Record<HueRuntimeTarget, OutputRowView>;
 
   return (
     <div className="lm-lights-page">
@@ -360,67 +406,29 @@ export function LightsSection({
           <div className="lm-lights-slab">
             {t("lights:slab.modeText")} <b>{t("lights:slab.modeAccent")}</b>
           </div>
-          <div className="lm-mstrip" role="group">
-            <button
-              type="button"
-              className="lm-mbtn"
-              disabled={modeSelectorDisabled}
-              aria-pressed={isOff}
-              onClick={() => onModeChange({ kind: LIGHTING_MODE_KIND.OFF })}
-            >
-              <span className="ico"><IconOff /></span>
-              <span className="tx">
-                <span className="tn">{t("lights:mode.off.title")}</span>
-                <span className="ts">{t("lights:mode.off.subtitle")}</span>
-              </span>
-              <ModeKeybindBadge action={KEYBIND_ACTIONS.MODE_OFF} />
-            </button>
-            <button
-              type="button"
-              className="lm-mbtn"
-              disabled={nonOffModeDisabled}
-              aria-pressed={isAmbilight}
-              onClick={() =>
-                onModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT, ambilight: incomingAmbilight })
-              }
-            >
-              <span className="ico"><IconAmbilight /></span>
-              <span className="tx">
-                {/* A brand name: English casing rules, or `lang="tr"` uppercases it to "AMBİLİGHT". */}
-                <span className="tn" lang="en">{t("lights:mode.ambilight.title")}</span>
-                <span className="ts">
-                  {typeof totalLeds === "number" && totalLeds > 0
-                    ? t("lights:mode.ambilight.subtitle", { count: totalLeds })
-                    : t("lights:mode.ambilight.subtitleFallback")}
-                </span>
-              </span>
-              <ModeKeybindBadge action={KEYBIND_ACTIONS.MODE_AMBILIGHT} />
-            </button>
-            <button
-              type="button"
-              className="lm-mbtn"
-              disabled={nonOffModeDisabled}
-              aria-pressed={isSolid}
-              onClick={() =>
-                onModeChange({
-                  kind: LIGHTING_MODE_KIND.SOLID,
-                  solid: { ...incomingSolid },
-                })
-              }
-            >
-              <span className="ico"><IconSolid /></span>
-              <span className="tx">
-                <span className="tn">{t("lights:mode.solid.title")}</span>
-                <span className="ts">
-                  {t("lights:mode.solid.subtitle", {
-                    hex: solidHex.toUpperCase(),
-                    brightness: solidBrightnessPct,
-                  })}
-                </span>
-              </span>
-              <ModeKeybindBadge action={KEYBIND_ACTIONS.MODE_SOLID} />
-            </button>
-          </div>
+          <ModeStrip
+            variant="full"
+            value={activeKind}
+            isDisabled={(kind) =>
+              kind === LIGHTING_MODE_KIND.OFF ? modeSelectorDisabled : nonOffModeDisabled
+            }
+            subtitles={{
+              [LIGHTING_MODE_KIND.OFF]: t("lights:mode.off.subtitle"),
+              [LIGHTING_MODE_KIND.AMBILIGHT]:
+                typeof totalLeds === "number" && totalLeds > 0
+                  ? t("lights:mode.ambilight.subtitle", { count: totalLeds })
+                  : t("lights:mode.ambilight.subtitleFallback"),
+              [LIGHTING_MODE_KIND.SOLID]: t("lights:mode.solid.subtitle", {
+                hex: solidHex.toUpperCase(),
+                brightness: solidBrightnessPct,
+              }),
+            }}
+            onSelect={(kind) =>
+              onModeChange(
+                MODE_KINDS[kind].config({ solid: { ...incomingSolid }, ambilight: incomingAmbilight }),
+              )
+            }
+          />
         </div>
 
         {/* Solid color picker — inline when solid mode is active */}
@@ -467,55 +475,34 @@ export function LightsSection({
                   control falls into a visible-but-disabled state with the
                   shared firmware-profile tooltip — same parity logic as
                   the SolidColorPanel brightness slider. */}
-              <div className="lm-psl">
-                <div className="row">
-                  <span>{t("lights:signal.profile.brightness")}</span>
-                  <b>{ambilightBrightnessPct}%</b>
-                </div>
-                <div className="tr">
-                  <div className="tr-track">
-                    <span className="tr-fill" style={{ width: `${ambilightBrightnessPct}%` }} />
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={ambilightBrightnessPct}
-                    disabled={ambilightBrightnessLocked}
-                    aria-disabled={ambilightBrightnessLocked}
-                    aria-label={t("lights:signal.profile.brightness")}
-                    title={
-                      isAdalight
-                        ? t("lights:led.firmwareProfile.brightnessDisabledTooltip")
-                        : undefined
-                    }
-                    onChange={(e) => handleAmbilightBrightnessChange(parseInt(e.target.value, 10))}
-                  />
-                </div>
-              </div>
+              <RangeRow
+                variant="profile"
+                label={t("lights:signal.profile.brightness")}
+                valueLabel={`${ambilightBrightnessPct}%`}
+                min={0}
+                max={100}
+                step={1}
+                value={ambilightBrightnessPct}
+                disabled={ambilightBrightnessLocked}
+                title={
+                  isAdalight
+                    ? t("lights:led.firmwareProfile.brightnessDisabledTooltip")
+                    : undefined
+                }
+                onChange={handleAmbilightBrightnessChange}
+              />
               {/* Saturation — wired to AmbilightPayload.saturation (0.5–2.0). */}
-              <div className="lm-psl">
-                <div className="row">
-                  <span>{t("lights:signal.profile.saturation")}</span>
-                  <b>{saturationValue}%</b>
-                </div>
-                <div className="tr">
-                  <div className="tr-track">
-                    <span className="tr-fill" style={{ width: `${saturationFillPercent}%` }} />
-                  </div>
-                  <input
-                    type="range"
-                    min={50}
-                    max={200}
-                    step={1}
-                    value={saturationValue}
-                    disabled={slidersDisabled}
-                    aria-label={t("lights:signal.profile.saturation")}
-                    onChange={(e) => handleSaturationChange(parseInt(e.target.value, 10))}
-                  />
-                </div>
-              </div>
+              <RangeRow
+                variant="profile"
+                label={t("lights:signal.profile.saturation")}
+                valueLabel={`${saturationValue}%`}
+                min={50}
+                max={200}
+                step={1}
+                value={saturationValue}
+                disabled={slidersDisabled}
+                onChange={handleSaturationChange}
+              />
               {/* Black border — toggle */}
               <div className="lm-psl is-toggle">
                 <div className="row">
@@ -527,13 +514,12 @@ export function LightsSection({
                   </b>
                 </div>
                 <div className="tr">
-                  <button
-                    type="button"
+                  <Toggle
                     className="tr-toggle"
                     disabled={slidersDisabled}
-                    aria-pressed={blackBorderOn}
-                    aria-label={t("lights:signal.profile.blackBorder")}
-                    onClick={toggleBlackBorder}
+                    checked={blackBorderOn}
+                    label={t("lights:signal.profile.blackBorder")}
+                    onChange={toggleBlackBorder}
                   >
                     <div className="tr-track" style={{ width: "100%" }}>
                       <span
@@ -541,7 +527,7 @@ export function LightsSection({
                         style={{ width: blackBorderOn ? "100%" : "0%" }}
                       />
                     </div>
-                  </button>
+                  </Toggle>
                 </div>
               </div>
             </div>
@@ -631,112 +617,31 @@ export function LightsSection({
             </button>
           </h4>
           <div className="lm-out-list">
-            {/* USB row */}
-            <button
-              type="button"
-              className={`lm-out-row ${
-                !localOutputConnected ? "is-unavailable" : usbSelected ? "" : "is-off"
-              }`}
-              disabled={modeSelectorDisabled || !localOutputConnected || (usbSelected && outputTargets.length === 1)}
-              onClick={() => toggleTarget("usb", usbSelected)}
-              aria-pressed={usbSelected}
-            >
-              <span className="st" />
-              <div className="tx">
-                <div className="n">
-                  {localSink?.transport === "wled"
-                    ? t("lights:dock.rows.wledName")
-                    : t("lights:dock.rows.usbName")}{" "}
-                  {/* The identity of the thing actually bound. For WLED that is
-                      its LAN address — the persisted sink config keeps no
-                      friendly name — and for serial it is the USB product
-                      string the OS reported, when it reported one. Both are
-                      device-supplied, so they are uppercased by English rules
-                      — "CH340 USB SERİAL" under `lang="tr"` otherwise. */}
-                  <em
-                    lang={
-                      localSink?.transport === "wled" || localSink?.product ? "en" : undefined
-                    }
-                  >
-                    {localSink?.transport === "wled"
-                      ? localSink.id
-                      : localSink?.product ?? t("lights:dock.rows.usbType")}
-                  </em>
-                </div>
-                <div className="s">
-                  {localOutputConnected ? (
-                    <Trans
-                      i18nKey={
-                        localSink?.transport === "wled"
-                          ? "lights:dock.rows.wledSub"
-                          : "lights:dock.rows.usbSub"
-                      }
-                      values={{ count: totalLeds ?? 0 }}
-                      components={{ b: <b /> }}
-                    />
-                  ) : (
-                    t("lights:dock.rows.usbSubUnavailable")
-                  )}
-                </div>
-              </div>
-              <span className="tg" />
-            </button>
-            {/* Hue row */}
-            <button
-              type="button"
-              className={`lm-out-row ${
-                !hueAvailable
-                  ? "is-unavailable"
-                  : !hueSelected
-                    ? "is-off"
-                    : hueReconnecting
-                      ? "is-reconnecting"
-                      : hueStreamFailed
-                        ? "is-failed"
-                        : ""
-              }`}
-              disabled={modeSelectorDisabled || !hueAvailable || (hueSelected && outputTargets.length === 1)}
-              onClick={() => toggleTarget("hue", hueSelected)}
-              aria-pressed={hueSelected}
-            >
-              <span className="st" />
-              <div className="tx">
-                <div className="n">
-                  {t("lights:dock.rows.hueName")}{" "}
-                  <em>{t("lights:dock.rows.hueType")}</em>
-                </div>
-                <div className="s">
-                  {!hueAvailable ? (
-                    <Trans
-                      i18nKey={hueUnavailableSubKey(hueConfigured, hueProbeVerdict, bootstrapDone)}
-                      components={{ b: <b /> }}
-                    />
-                  ) : hueReconnecting ? (
-                    <Trans
-                      i18nKey="lights:dock.rows.hueSubReconnecting"
-                      components={{ b: <b /> }}
-                    />
-                  ) : hueStreamFailed ? (
-                    <Trans
-                      i18nKey="lights:dock.rows.hueSubFailed"
-                      components={{ b: <b /> }}
-                    />
-                  ) : hueStreaming ? (
-                    <Trans
-                      i18nKey="lights:dock.rows.hueSubStreaming"
-                      values={{ hz: HUE_STREAM_MAX_HZ }}
-                      components={{ b: <b /> }}
-                    />
-                  ) : (
-                    <Trans
-                      i18nKey="lights:dock.rows.hueSubIdle"
-                      components={{ b: <b /> }}
-                    />
-                  )}
-                </div>
-              </div>
-              <span className="tg" />
-            </button>
+            {OUTPUT_TARGETS.map((target) => {
+              const row: OutputRowView = outputRows[target];
+              const selected = outputTargets.includes(target);
+              return (
+                <button
+                  key={target}
+                  type="button"
+                  className={`lm-out-row ${
+                    !row.available ? "is-unavailable" : !selected ? "is-off" : (row.liveState ?? "")
+                  }`}
+                  disabled={modeSelectorDisabled || !row.available || (selected && outputTargets.length === 1)}
+                  onClick={() => toggleTarget(target, selected)}
+                  aria-pressed={selected}
+                >
+                  <span className="st" />
+                  <div className="tx">
+                    <div className="n">
+                      {row.name} <em lang={row.detailLang}>{row.detail}</em>
+                    </div>
+                    <div className="s">{row.sub}</div>
+                  </div>
+                  <span className="tg" />
+                </button>
+              );
+            })}
             {roomAware && <RoomAwareIndicator variant="inline" status={roomAware} />}
           </div>
         </div>
