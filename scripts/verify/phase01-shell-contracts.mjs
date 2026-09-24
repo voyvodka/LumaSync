@@ -1286,8 +1286,8 @@ console.log("\n[ Lighting transaction — Rust → lightingRuntime.ts parity ]")
 // ---------------------------------------------------------------------------
 console.log("\n[ LED colour order — Rust ↔ device.ts parity ]");
 const rustLedOutputSource = readOrEmpty(
-  resolve(ROOT, "src-tauri/src/commands/led_output.rs"),
-  "rust led_output"
+  resolve(ROOT, "src-tauri/src/commands/led_output/wire.rs"),
+  "rust led_output wire"
 );
 const rustColorOrderBlock = rustLedOutputSource.match(
   /pub enum LedColorOrder\s*\{([\s\S]*?)\n\}/
@@ -2014,7 +2014,7 @@ for (const reason of emittedCaptureReasons) {
 // The non-capture tenant of the same field. Derived, not a single hardcoded
 // check: LedOutputError::as_reason() puts every one of these into status.details.
 console.log("\n[ LED output reasons — Rust → capture.ts parity ]");
-const LED_OUTPUT_RUST_FILE = resolve(ROOT, "src-tauri/src/commands/led_output.rs");
+const LED_OUTPUT_RUST_FILE = resolve(ROOT, "src-tauri/src/commands/led_output/serial.rs");
 const emittedLedOutputReasons = [
   ...new Set(
     [
@@ -2027,7 +2027,7 @@ const emittedLedOutputReasons = [
 const EXPECTED_LED_OUTPUT_REASON_COUNT = 7;
 check(
   emittedLedOutputReasons.length === EXPECTED_LED_OUTPUT_REASON_COUNT,
-  `harvested exactly ${EXPECTED_LED_OUTPUT_REASON_COUNT} LED output reasons from led_output.rs`,
+  `harvested exactly ${EXPECTED_LED_OUTPUT_REASON_COUNT} LED output reasons from led_output/serial.rs`,
   `HARVEST COUNT DRIFT: expected ${EXPECTED_LED_OUTPUT_REASON_COUNT}, got `
     + `${emittedLedOutputReasons.length} [${emittedLedOutputReasons.join(", ")}] — update the pin deliberately`
 );

@@ -2,7 +2,8 @@
 
 The output sinks other than Hue: USB LED controllers over serial, and WLED devices over UDP.
 Implementation in `src-tauri/src/commands/` — `device_connection.rs`, `led_sink.rs`,
-`led_output.rs`, `wled_sink.rs`, `device_handshake.rs`.
+`led_output/` (wire format, colour pipeline, encoders, serial writer, `SerialSink`), `wled_sink.rs`,
+`device_handshake.rs`.
 
 The serial wire format itself — data frames, pixel layouts, the handshake, and what the planned
 firmware adds — is specified in [`serial-protocol.md`](serial-protocol.md). This file holds the
@@ -51,8 +52,8 @@ by Adalight's own convention, so it could never move. `a_164_led_strip_is_capped
 pins the arithmetic so the next person meets the explanation instead of the number alone.
 
 **The serial write never blocks the worker.** Each open port gets a writer thread
-(`WriterSession`, `led_output.rs`). `send` copies the packet into a latest-wins slot and returns;
-the writer takes the newest packet, writes it, and waits out its wire time plus 2 % before taking
+(`WriterSession`, `led_output/serial.rs`). `send` copies the packet into a latest-wins slot and
+returns; the writer takes the newest packet, writes it, and waits out its wire time plus 2 % before taking
 another. Before, the worker wrote and then flushed — `tcdrain`, a wait for every byte to leave —
 so each frame cost its ~43 ms of wire time on the capture thread, the quality controller counted
 that as frame cost and stretched the interval, and a 164-LED strip got about 15 fps from a link
@@ -79,7 +80,7 @@ strip the serial path cannot drive yet — APA102 and SK9822
 ([`serial-protocol.md`](serial-protocol.md) §4).
 
 **Serial colour order is a host-side correction, relative to the firmware.** `LedColorOrder`
-(`led_output.rs`, persisted as `ledColorOrder`) permutes the three colour bytes after the
+(`led_output/wire.rs`, persisted as `ledColorOrder`) permutes the three colour bytes after the
 correction LUTs. It says how to fix what the firmware already sends, not what order the strip's
 datasheet names — so a strip showing red and green swapped wants `grb` regardless of its chip —
 because the host cannot see what order a flashed build compiled in, and an absolute value would be
@@ -130,7 +131,7 @@ alternative is a guaranteed handshake failure on every Arduino-class board.
 - **macOS exposes every USB adapter under two paths, and only one of them works.** `/dev/cu.*` is the call-out device and is correct; its `/dev/tty.*` sibling is a blocking terminal device that waits on DCD, and CH340/FTDI/CP2102/Arduino boards never assert it — so the `tty.*` port opens successfully and then stalls, producing "Connect and verify: Pass" followed by a handshake timeout. Real incident, 2026-04-26. All `/dev/tty.*` paths are filtered, including `usbmodem*`, because the `cu.*` sibling always exists. The filter used to cover only the listing: connect looked names up in the raw inventory, where the `tty.*` sibling carries the same allowlisted VID:PID, so a stale or directly invoked name still opened it. Connect and the health check now refuse an enumerated `tty.*` path with `PORT_UNSUPPORTED` and name the `cu.*` path in `details`, rather than silently opening the sibling — the caller asked for a path, and quietly substituting another would hide the stale value instead of surfacing it. The filter stays macOS-only; no other platform names a serial device `/dev/tty.<name>`.
 - **A test pattern must use the same output settings as everything else** — chip type, firmware profile, colour correction, and colour order. Bypassing them means the test lights nothing, or the wrong colours, on exactly the hardware it exists to verify. This shipped broken once.
   **One exception: `channelProbe` pins the identity colour order.** It lights a single wire slot pure red, green or blue so the user can report which colour that slot shows, and the answer is only meaningful when nothing reorders the slots — under a saved order the probe would confirm the saved order instead of measuring the firmware. Only the order is overridden (set on the test config, and hydration is caller-wins); chip type, profile and correction still apply. A slot above 2 is refused with `LED_TEST_PATTERN_INVALID_PARAMS`.
-- **Every serial encoder corrects pixels through one `EncoderPlan`** (`led_output.rs`), built from the colour correction when a `SerialSink` is constructed and once per Solid write — never per frame, because a gamma other than 2.2 costs 768 `powf`s to tabulate. A colour correction change restarts the worker, so a running sink never needs to rebuild it. The colour order is the one field patched in place (`SerialSink::set_color_order`), which touches nothing else in the plan. Before the plan existed each encoder derived its own corrections, and the default one (LumaSync v1 + WS2812B) quietly hardcoded gamma 2.2, so the gamma sliders did nothing on the most common setup. A new per-pixel stage belongs in the plan, not in one encoder.
+- **Every serial encoder corrects pixels through one `EncoderPlan`** (`led_output/correction.rs`), built from the colour correction when a `SerialSink` is constructed and once per Solid write — never per frame, because a gamma other than 2.2 costs 768 `powf`s to tabulate. A colour correction change restarts the worker, so a running sink never needs to rebuild it. The colour order is the one field patched in place (`SerialSink::set_color_order`), which touches nothing else in the plan. Before the plan existed each encoder derived its own corrections, and the default one (LumaSync v1 + WS2812B) quietly hardcoded gamma 2.2, so the gamma sliders did nothing on the most common setup. A new per-pixel stage belongs in the plan, not in one encoder.
 - **Adalight carries no brightness, so the host scales the pixels.** Third-party Adalight firmware has no brightness input, so the Adalight encoder multiplies the corrected pixels by brightness, the same way `CorrectedWledSink` does. Only LumaSync v1 frames carry a brightness byte. The slider used to do nothing under Adalight.
 - **The frame budget sizes pixels by what the encoder actually writes, not by the chip type.** `WirePixelLayout::for_output` decides both the encoder dispatch and the 115 200-baud budget. SK6812 under Adalight is sent as 3-byte pixels, because Adalight has no RGBW frame, and sizing it at 4 bytes held it a quarter below the frame rate the link can carry.
 - **`lastSuccessfulPort` and `lastWledSink` are mutually exclusive, and the code that writes one clears the other.** `ActiveSinkRegistry` holds one sink per output channel, so a serial connect evicts WLED in Rust and vice versa. If both were persisted, both boot paths would fire: the WLED restore lands first, then the serial auto-reconnect evicts it — the 2 s `BOOTLOADER_SETTLE_DELAY_MS` guarantees serial finishes last. The user would see a "connected" WLED device receiving nothing. Mirroring the eviction in persisted state is what keeps the restore honest; there is no separate "which family is active" flag to drift.

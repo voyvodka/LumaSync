@@ -136,9 +136,9 @@ release, the ambience memory, the σ envelope) are rescaled to the real gap betw
 frames, so they mean the same at 20 and 30 Hz. The histogram change signal is not: it compares
 consecutive frames, so a slow pan reads slightly smaller at 30 Hz. A cut reads the same.
 
-**One colour pipeline.** `EncoderPlan` in `led_output.rs` holds every per-pixel correction —
-device-calibration saturation, Kelvin multipliers (computed once, never per pixel), per-channel
-gamma LUTs, colour order — built once per sink or worker. The serial encoders, `CorrectedWledSink`,
+**One colour pipeline.** `EncoderPlan` in `led_output/correction.rs` holds every per-pixel
+correction — device-calibration saturation, Kelvin multipliers (computed once, never per pixel),
+per-channel gamma LUTs, colour order — built once per sink or worker. The serial encoders, `CorrectedWledSink`,
 the Hue channels and the twin overlay all go through it; `apply_color_correction_rgb` is a one-off
 wrapper for Solid colours. Saturation has one implementation (`apply_saturation_to_pixel`) and
 host-side brightness one (`scale_brightness`, for Adalight, WLED and the twin). The order is the
@@ -253,7 +253,8 @@ serial writer with a counting port behind it, asserts:
 - **none on the writer thread.** The port counts from inside `write`, on the writer thread, what
   that thread allocated since its previous write.
 - **no gamma or sRGB LUT tabulation.** Both tables live on the stack, so the allocator cannot see a
-  rebuild; the thread-local build counters in `led_output.rs` and `ambilight_scene.rs` can.
+  rebuild; the thread-local build counters in `led_output/correction.rs` and `ambilight_scene.rs`
+  can.
 
 `CorrectedWledSink` has its own pin, `WLED_ALLOCS_PER_FRAME` (four: the corrected strip, the
 datagram list, the chunk list, one datagram), over a loopback socket nothing reads.
