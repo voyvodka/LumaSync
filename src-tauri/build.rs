@@ -67,6 +67,7 @@ const APP_COMMANDS: &[&str] = &[
     "get_hue_health",
     "watch_hue_health",
     "retry_hue_health",
+    "get_main_window_visibility",
 ];
 
 fn main() {

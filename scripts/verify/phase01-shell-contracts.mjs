@@ -2527,7 +2527,9 @@ const checkedPairs = nullabilityPairs.filter(
 // moved into contracts or gained an alias; the other 3 (`StartHueStreamRequest`,
 // `SetHueSolidColorRequest`, `TestPatternConfig`) never left Rust serialised
 // and lost the `Serialize` derive instead.
-const EXPECTED_NULLABILITY_PAIR_COUNT = 83;
+// 83 → 84: `MainWindowVisibility`, the `get_main_window_visibility` response
+// and `shell://main-window-visibility` payload.
+const EXPECTED_NULLABILITY_PAIR_COUNT = 84;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

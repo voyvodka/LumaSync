@@ -11,10 +11,13 @@
  *   - A failed tick keeps the last-known snapshot and reports the error.
  *   - Polling pauses while the document is hidden and resumes on
  *     `visibilitychange`.
+ *   - Polling also pauses while Rust says the window is hidden, though the
+ *     document still reads visible (WebView2 hidden to the tray).
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { MainWindowVisibility } from "@/shared/contracts/shell";
 import type { FullTelemetrySnapshot } from "@/shared/contracts/telemetry";
 
 const getFullTelemetrySnapshotMock = vi.fn<typeof telemetryApiModule.getFullTelemetrySnapshot>();
@@ -23,7 +26,21 @@ vi.mock("../telemetryApi", () => ({
   getFullTelemetrySnapshot: () => getFullTelemetrySnapshotMock(),
 }));
 
-import { __resetTelemetrySourceForTests, subscribeTelemetry } from "../telemetrySource";
+let pushWindowVisibility: ((visibility: MainWindowVisibility) => void) | null = null;
+vi.mock("@/features/shell/windowVisibilityApi", () => ({
+  getMainWindowVisibility: () => Promise.resolve({ visible: true }),
+}));
+vi.mock("@/features/shell/windowVisibilityEventsApi", () => ({
+  listenMainWindowVisibility: (handler: (visibility: MainWindowVisibility) => void) => {
+    pushWindowVisibility = handler;
+    return Promise.resolve(() => {
+      pushWindowVisibility = null;
+    });
+  },
+}));
+
+import { __resetWindowVisibilityForTests } from "@/features/shell/windowVisibility";
+import { __resetTelemetrySourceForTests, subscribeTelemetry, type TelemetrySourceListener } from "../telemetrySource";
 import type * as telemetryApiModule from "../telemetryApi";
 
 function makeSnapshot(captureFps = 60): FullTelemetrySnapshot {
@@ -66,6 +83,7 @@ describe("telemetrySource", () => {
 
   afterEach(() => {
     __resetTelemetrySourceForTests();
+    __resetWindowVisibilityForTests();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -163,12 +181,32 @@ describe("telemetrySource", () => {
     expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
 
     setVisibility("hidden");
+    document.dispatchEvent(new Event("visibilitychange"));
     await vi.advanceTimersByTimeAsync(5000);
     await flush();
     expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
 
     setVisibility("visible");
     document.dispatchEvent(new Event("visibilitychange"));
+    await flush();
+    expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(2);
+
+    off();
+  });
+
+  it("pauses while Rust says the window is hidden, though the document reads visible", async () => {
+    const off = subscribeTelemetry(1000, vi.fn<TelemetrySourceListener>());
+    await flush();
+    expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
+    expect(pushWindowVisibility).not.toBeNull();
+
+    pushWindowVisibility?.({ visible: false });
+    await vi.advanceTimersByTimeAsync(5000);
+    await flush();
+    expect(document.visibilityState).toBe("visible");
+    expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
+
+    pushWindowVisibility?.({ visible: true });
     await flush();
     expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(2);
 

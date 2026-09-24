@@ -46,6 +46,8 @@ export const SHELL_COMMANDS = {
   /** Swap the whole object, only if nothing was written since `expectedRevision`.
    * The migration write-back; main window only. */
   REPLACE_SHELL_STATE: "replace_shell_state",
+  /** Whether the main window is on screen, read from the native window. */
+  GET_MAIN_WINDOW_VISIBILITY: "get_main_window_visibility",
 } as const;
 
 export type ShellCommand = (typeof SHELL_COMMANDS)[keyof typeof SHELL_COMMANDS];
@@ -488,10 +490,25 @@ export const SHELL_STATE_CHANGED_EVENT = "shell://state-changed";
  */
 export const SHELL_CLOSE_TO_TRAY_EVENT = "shell:close-to-tray" as const;
 
+/**
+ * Emitted to the main window when the native window is shown, hidden,
+ * minimised or restored. WebView2 can keep `document.visibilityState` at
+ * "visible" while the window sits hidden in the tray, so a background poll
+ * reads this as well as the document.
+ */
+export const SHELL_MAIN_WINDOW_VISIBILITY_EVENT = "shell://main-window-visibility" as const;
+
 export const SHELL_EVENTS = {
   STATE_CHANGED: SHELL_STATE_CHANGED_EVENT,
   CLOSE_TO_TRAY: SHELL_CLOSE_TO_TRAY_EVENT,
+  MAIN_WINDOW_VISIBILITY: SHELL_MAIN_WINDOW_VISIBILITY_EVENT,
 } as const;
+
+/** `get_main_window_visibility` response and `SHELL_EVENTS.MAIN_WINDOW_VISIBILITY`
+ * payload. A minimised window is not visible. */
+export interface MainWindowVisibility {
+  visible: boolean;
+}
 
 export type ShellEventName = (typeof SHELL_EVENTS)[keyof typeof SHELL_EVENTS];
 

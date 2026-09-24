@@ -35,6 +35,7 @@ mod commands {
     pub mod status;
     pub mod test_pattern;
     pub mod updater;
+    pub mod window_visibility;
     pub mod wled_discovery;
     pub mod wled_sink;
 }
@@ -112,6 +113,7 @@ use commands::shell_state::{
     get_shell_state, patch_shell_state, replace_shell_state, ShellStateStore,
 };
 use commands::updater::{check_for_update, download_and_install_update, PendingUpdate};
+use commands::window_visibility::{get_main_window_visibility, MainWindowVisibilityState};
 use commands::wled_discovery::{
     connect_wled_sink, discover_wled_devices, get_wled_sink_status, test_wled_bridge,
 };
@@ -155,6 +157,7 @@ fn show_and_focus_settings<R: Runtime>(app: &AppHandle<R>) {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
+        commands::window_visibility::refresh(app);
     }
 }
 
@@ -215,6 +218,7 @@ fn register_runtime_health_emitter<R: Runtime>(app: &AppHandle<R>) {
 
 fn hide_to_tray<R: Runtime>(window: &tauri::Window<R>) {
     let _ = window.hide();
+    commands::window_visibility::refresh(window.app_handle());
     // Target the main shell webview only — overlay windows must not receive
     // tray/shell lifecycle events. The `Window` here is already the main
     // window (filtered in the on_window_event handler) so a window-scoped
@@ -570,6 +574,7 @@ pub fn run() {
             app.manage(HueRuntimeStateStore::default());
             app.manage(RuntimeTelemetryState::default());
             app.manage(PendingUpdate::default());
+            app.manage(MainWindowVisibilityState::default());
             register_runtime_health_emitter(app.handle());
             // After the shell state and the Hue runtime: its first pass reads both.
             commands::hue::health::install(app.handle());
@@ -701,9 +706,18 @@ pub fn run() {
             let label = window.label();
             // Main shell: red-X / Cmd+W hides to tray instead of quitting.
             if label == "main" {
-                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    hide_to_tray(window);
+                match event {
+                    tauri::WindowEvent::CloseRequested { api, .. } => {
+                        api.prevent_close();
+                        hide_to_tray(window);
+                    }
+                    // Nothing reports show, hide or minimise as such; a
+                    // minimise or restore resizes (Windows) and a window
+                    // coming or going moves focus, so either re-reads it.
+                    tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Focused(_) => {
+                        commands::window_visibility::refresh(window.app_handle());
+                    }
+                    _ => {}
                 }
                 return;
             }
@@ -802,6 +816,7 @@ pub fn run() {
             get_hue_health,
             watch_hue_health,
             retry_hue_health,
+            get_main_window_visibility,
         ])
         .build(app_context())
         .expect("error while building tauri application");

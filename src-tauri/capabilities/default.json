@@ -100,6 +100,7 @@
     "allow-check-for-update",
     "allow-download-and-install-update",
     "allow-get-launch-context",
+    "allow-get-main-window-visibility",
     "allow-get-shell-state",
     "allow-patch-shell-state",
     "allow-replace-shell-state"

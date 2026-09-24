@@ -5,11 +5,14 @@
  * subscribers over this one loop. Preserved from the per-hook versions:
  * recursive setTimeout (never overlapping calls), pause-while-hidden with an
  * immediate tick on resume, and last-known snapshot surviving a failed tick.
+ * "Hidden" is `isWindowVisible`, not the document alone: WebView2 can report a
+ * window hidden in the tray as visible.
  */
 
 import type { FullTelemetrySnapshot } from "@/shared/contracts/telemetry";
 import { getFullTelemetrySnapshot } from "./telemetryApi";
 import { parseCommandError } from "@/shared/contracts/status";
+import { isWindowVisible, subscribeWindowVisible } from "@/features/shell/windowVisibility";
 
 export interface TelemetrySourceState {
   snapshot: FullTelemetrySnapshot | null;
@@ -35,7 +38,7 @@ const subscribers = new Map<symbol, Subscriber>();
 let state: TelemetrySourceState = INITIAL_STATE;
 let timeoutId: number | null = null;
 let inFlight = false;
-let visibilityBound = false;
+let releaseVisibility: (() => void) | null = null;
 
 function effectiveIntervalMs(): number {
   let min = Number.POSITIVE_INFINITY;
@@ -54,7 +57,7 @@ function publish(next: TelemetrySourceState): void {
 
 function scheduleNext(): void {
   if (subscribers.size === 0) return;
-  if (document.visibilityState === "hidden") return;
+  if (!isWindowVisible()) return;
   if (timeoutId !== null) return;
   timeoutId = window.setTimeout(() => {
     timeoutId = null;
@@ -65,7 +68,7 @@ function scheduleNext(): void {
 async function tick(): Promise<void> {
   if (subscribers.size === 0) return;
   if (inFlight) return;
-  if (document.visibilityState === "hidden") return;
+  if (!isWindowVisible()) return;
   inFlight = true;
   try {
     const snapshot = await getFullTelemetrySnapshot();
@@ -82,9 +85,9 @@ async function tick(): Promise<void> {
   }
 }
 
-function handleVisibilityChange(): void {
+function handleVisibilityChange(visible: boolean): void {
   if (subscribers.size === 0) return;
-  if (document.visibilityState === "visible" && timeoutId === null && !inFlight) {
+  if (visible && timeoutId === null && !inFlight) {
     void tick();
   }
 }
@@ -94,10 +97,8 @@ function teardown(): void {
     window.clearTimeout(timeoutId);
     timeoutId = null;
   }
-  if (visibilityBound) {
-    document.removeEventListener("visibilitychange", handleVisibilityChange);
-    visibilityBound = false;
-  }
+  releaseVisibility?.();
+  releaseVisibility = null;
   // Drop the snapshot so a later subscriber never opens on minutes-old data.
   state = INITIAL_STATE;
 }
@@ -115,10 +116,7 @@ export function subscribeTelemetry(
   const wasIdle = subscribers.size === 0;
   subscribers.set(key, { intervalMs, listener });
 
-  if (!visibilityBound) {
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    visibilityBound = true;
-  }
+  releaseVisibility ??= subscribeWindowVisible(handleVisibilityChange);
 
   listener(state);
 

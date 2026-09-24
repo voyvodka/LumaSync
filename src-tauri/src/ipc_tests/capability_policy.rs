@@ -131,6 +131,7 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     // The main window only.
     ("update_tray_labels", MAIN_ONLY),
     ("get_launch_context", MAIN_ONLY),
+    ("get_main_window_visibility", MAIN_ONLY),
     ("list_serial_ports", MAIN_ONLY),
     ("connect_serial_port", MAIN_ONLY),
     ("get_serial_connection_status", MAIN_ONLY),

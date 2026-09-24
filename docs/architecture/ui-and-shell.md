@@ -169,6 +169,18 @@ React tree mounted, so an unconditional interval keeps firing requests nobody ca
 resume is what makes a chip look fresh the instant the window comes back. A new poll that skips this
 is a regression even though nothing will fail.
 
+**`document.visibilityState` alone is not enough on Windows.** WebView2 can keep reporting
+`visible` while the window sits hidden in the tray, so the telemetry loop and
+`useCapturePermissionRecheck` read `isWindowVisible` / `useWindowVisible`
+(`features/shell/windowVisibility.ts`) instead: the document *and* Rust's answer for the native main
+window (shown and not minimised). Rust re-reads the window after every show or hide it makes itself,
+and on the main window's `Resized` and `Focused` events, since nothing reports show, hide or minimise
+as such; a change is emitted as `shell://main-window-visibility`. A `show()` the frontend makes (the
+boot show) is not seen by Rust, so the store asks `get_main_window_visibility` again whenever the
+document turns visible or the window takes focus. Until Rust answers, and on any failed read, the
+native half counts as visible — a missing signal falls back to the document, never to a poll stopped
+for good. The Hue health store still declares visibility from the document alone.
+
 **Telemetry is read only while "Show stats for nerds" is on.** The setting (`ShellState.showNerdStats`,
 absent ⇒ off) gates by *mounting*: off, the status bar leaves out the FPS pill and every item marked
 `nerdStat` (CAP), and the General section leaves out the telemetry readout, so no subscriber of the

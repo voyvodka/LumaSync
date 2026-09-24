@@ -125,6 +125,9 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Windows: with "Show stats for nerds" on, live stats stop updating while the app sits in the tray
+  or is minimised. Windows could keep telling the app its window was on screen after it was hidden,
+  so the numbers kept being fetched for a window nobody could see.
 - LED Setup: while the test pattern's overlay is moving to a monitor, the monitor list and the test
   pattern button now wait for it, as an earlier release said they would; they never did. Picking a
   monitor in that moment saved it as the capture source while the overlay landed on the other

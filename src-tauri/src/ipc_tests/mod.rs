@@ -19,6 +19,7 @@ mod serial_admission;
 mod serial_firmware;
 mod shell_state_commands;
 mod telemetry_commands;
+mod window_visibility_commands;
 mod wled_commands;
 
 use serde_json::Value;
@@ -36,6 +37,7 @@ use crate::commands::led_preview::LedTwinState;
 use crate::commands::lighting_mode::LightingRuntimeState;
 use crate::commands::runtime_telemetry::RuntimeTelemetryState;
 use crate::commands::shell_state::ShellStateStore;
+use crate::commands::window_visibility::MainWindowVisibilityState;
 
 /// Builds a mock app carrying the same managed state `lib.rs` registers, with
 /// `handler` supplying the command subset under test.
@@ -72,6 +74,7 @@ where
     app.manage(HueRuntimeStateStore::default());
     app.manage(RuntimeTelemetryState::default());
     app.manage(ShellStateStore::in_memory());
+    app.manage(MainWindowVisibilityState::default());
     app
 }
 

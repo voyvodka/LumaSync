@@ -97,6 +97,7 @@ import type {
 } from "./roomMap";
 import type {
   LaunchContext,
+  MainWindowVisibility,
   SHELL_COMMANDS,
   ShellStatePatchRequest,
   ShellStateReplaceRequest,
@@ -227,6 +228,7 @@ export interface CommandMap {
   // --- shell --------------------------------------------------------------
   update_tray_labels: Command<{ labels: TrayLabels }, null>;
   get_launch_context: NoArgs<LaunchContext>;
+  get_main_window_visibility: NoArgs<MainWindowVisibility>;
   get_shell_state: NoArgs<ShellStateSnapshot>;
   patch_shell_state: Command<{ patch: ShellStatePatchRequest }, ShellStateWriteResult>;
   replace_shell_state: Command<{ request: ShellStateReplaceRequest }, ShellStateWriteResult>;

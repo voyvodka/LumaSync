@@ -181,6 +181,8 @@ export const shellHandlers = {
 
   // A browser tab has no autostart; the window it would hide is the page.
   [SHELL_COMMANDS.GET_LAUNCH_CONTEXT]: () => ({ startHidden: false, e2eBuild: false }),
+  // A browser tab has no tray; the document's own visibility is the whole story.
+  [SHELL_COMMANDS.GET_MAIN_WINDOW_VISIBILITY]: () => ({ visible: true }),
 
   [SHELL_COMMANDS.GET_SHELL_STATE]: () => {
     ensureSeeded();
