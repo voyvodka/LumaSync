@@ -85,9 +85,10 @@ function isVisible(): boolean {
   return typeof document === "undefined" || document.visibilityState !== "hidden";
 }
 
+// The area flag is sent as is, hidden or not: Rust reads the area only while
+// the window is visible, and tells a view mounting from a window showing by it.
 function currentWatch(): HueHealthWatch {
-  const visible = isVisible();
-  return { visible, areaReadiness: visible && areaWatchers > 0 };
+  return { visible: isVisible(), areaReadiness: areaWatchers > 0 };
 }
 
 function declare(): void {

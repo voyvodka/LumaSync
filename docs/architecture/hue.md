@@ -306,6 +306,9 @@ Wi-Fi network used to be polled for the whole session with nothing on screen to 
 and the area check each keep a failure budget (`FailureBudget` in `health.rs`): **4 consecutive
 failures *and* a 90 s unbroken streak**, after which that signal stops and the snapshot's
 `bridge.gaveUp` puts a manual retry on the notice. `retry_hue_health` re-arms both and reads at once.
+The loops they replace also started over whenever their effect re-ran, and those restarts are kept:
+the probe on a pairing change and when a live stream ends, the area check when the Devices view
+mounts again. A window merely showing again restarts neither.
 
 Both terms are load-bearing. A count alone gives up after 12 s on the 3 s blocked cadence; a
 duration alone gives up on the first failed tick of a slow one. Telling a user their bridge is gone

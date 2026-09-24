@@ -471,19 +471,28 @@ impl HueHealthMonitor {
         Arc::clone(&self.0.wake)
     }
 
-    /// One window's demand. A rising area watch reads the area at once, as the
-    /// Devices view's own loop did on mount.
+    /// One window's demand. A view that starts watching the area reads it at
+    /// once with a fresh budget, as the Devices view's own loop did on every
+    /// mount; the window merely showing again reads it only if it is due and
+    /// has not given up.
     pub(crate) fn watch(&self, window: &str, watch: HueHealthWatch) {
         let now = Instant::now();
         {
             let mut inner = self.lock();
+            let mounted = watch.area_readiness
+                && !inner
+                    .watches
+                    .get(window)
+                    .is_some_and(|held| held.area_readiness);
             let area_before = inner.area_wanted();
             if watch == HueHealthWatch::default() {
                 inner.watches.remove(window);
             } else {
                 inner.watches.insert(window.to_string(), watch);
             }
-            if !area_before && inner.area_wanted() && !inner.area.stopped {
+            if mounted {
+                inner.area.rearm(now);
+            } else if !area_before && inner.area_wanted() && !inner.area.stopped {
                 inner.area.due = Some(now);
             }
         }

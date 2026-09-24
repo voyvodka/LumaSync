@@ -105,7 +105,7 @@ describe("hueHealthStore", () => {
     release();
   });
 
-  it("asks for the area only while a view watches it, and never while hidden", async () => {
+  it("asks for the area only while a view watches it, and says so while hidden too", async () => {
     const release = subscribeHueHealth(() => {});
     await flush();
 
@@ -115,9 +115,10 @@ describe("hueHealthStore", () => {
     expect(lastDeclared()).toEqual({ visible: true, areaReadiness: true });
     expect(declared()).toHaveLength(2);
 
+    // Rust tells the view mounting from the window showing again by this flag.
     setVisibility("hidden");
     await flush();
-    expect(lastDeclared()).toEqual({ visible: false, areaReadiness: false });
+    expect(lastDeclared()).toEqual({ visible: false, areaReadiness: true });
     setVisibility("visible");
     await flush();
 

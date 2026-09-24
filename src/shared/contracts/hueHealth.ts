@@ -76,6 +76,8 @@ export interface HueHealthSnapshot {
 /** `watch_hue_health`'s argument, per window. */
 export interface HueHealthWatch {
   visible: boolean;
-  /** The Devices view shows the area's readiness. */
+  /** The Devices view is mounted, visible or not. Rust reads the area only
+   * while the window is visible; the flag rising means a view mounted, which
+   * starts a check that had given up over. */
   areaReadiness: boolean;
 }

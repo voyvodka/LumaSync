@@ -546,6 +546,24 @@ async fn a_silent_bridge_slows_the_area_check_and_then_stops_it() {
     // 0 s, then +15, +30, +60: the fourth failure at 105 s is past 90 s.
     assert_eq!(reads, vec![15, 45, 105]);
     assert_eq!(backend.calls().readiness, 4);
+
+    // The window hiding and showing again does not wake a check that gave up…
+    monitor.watch(
+        "main",
+        HueHealthWatch {
+            visible: false,
+            area_readiness: true,
+        },
+    );
+    monitor.watch("main", VISIBLE_WITH_AREA);
+    pass_after(&monitor, Duration::from_secs(60)).await;
+    assert_eq!(backend.calls().readiness, 4);
+
+    // …but the Devices view mounting again starts it over, as its loop did.
+    monitor.watch("main", VISIBLE);
+    monitor.watch("main", VISIBLE_WITH_AREA);
+    monitor.run_once().await;
+    assert_eq!(backend.calls().readiness, 5);
 }
 
 // ---------------------------------------------------------------------------
