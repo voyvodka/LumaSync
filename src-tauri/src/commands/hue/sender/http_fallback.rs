@@ -203,7 +203,9 @@ impl LightState {
     }
 
     fn to_put_args(self) -> (f64, f64, f64) {
-        let (x, y, _big_y) = super::super::frame::rgb_to_xy(self.r, self.g, self.b);
+        // Linear already (after the gamma stage): no second EOTF.
+        let [r, g, b] = [self.r, self.g, self.b].map(|v| f64::from(v) / 255.0);
+        let (x, y, _big_y) = super::super::frame::linear_rgb_to_xy(r, g, b);
         (x, y, f64::from(self.brightness_q) / 255.0 * 100.0)
     }
 }
