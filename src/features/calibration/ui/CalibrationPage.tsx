@@ -52,6 +52,7 @@ import {
 } from "@/shared/contracts/display";
 import { LED_TEST_STATUS } from "@/shared/contracts/preview";
 import { clamp } from "@/shared/lib/math";
+import { Callout } from "@/shared/ui/Callout";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { Segmented } from "@/shared/ui/Segmented";
 import type { TranslationKey } from "@/features/i18n/catalogue";
@@ -447,24 +448,29 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
     <div className="flex h-full min-h-0 flex-col">
       {/* Error strip */}
       {(testPatternError || previewOpenFailure || displayTarget.blocked || (validationErrors && validationErrors.length > 0)) && (
-        <div
-          role="alert"
-          aria-live="polite"
-          className="shrink-0 mx-4 mt-3 flex flex-col gap-1 rounded-lg border border-red/25 bg-red/10 px-3.5 py-2.5"
-        >
+        <div role="alert" className="shrink-0 mx-4 mt-3 flex flex-col gap-1">
           {displayTarget.blocked && (
-            <ErrorLine text={t("calibration:overlay.blockedReason", {
-              code: displayTarget.blockedCode ?? DISPLAY_OVERLAY_STATUS.OPEN_FAILED,
-              reason: displayTarget.blockedReason ?? t("calibration:overlay.blockedReasonUnknown"),
-            })} />
+            <Callout tone="error" announce={false}>
+              {t("calibration:overlay.blockedReason", {
+                code: displayTarget.blockedCode ?? DISPLAY_OVERLAY_STATUS.OPEN_FAILED,
+                reason: displayTarget.blockedReason ?? t("calibration:overlay.blockedReasonUnknown"),
+              })}
+            </Callout>
           )}
-          {testPatternError && <ErrorLine text={testPatternError} />}
-          {previewOpenFailure && <ErrorLine text={t(PREVIEW_OPEN_FAILURE_COPY[previewOpenFailure])} />}
+          {testPatternError && (
+            <Callout tone="error" announce={false}>
+              {testPatternError}
+            </Callout>
+          )}
+          {previewOpenFailure && (
+            <Callout tone="error" announce={false}>
+              {t(PREVIEW_OPEN_FAILURE_COPY[previewOpenFailure])}
+            </Callout>
+          )}
           {validationErrors?.map((error) => (
-            <ErrorLine
-              key={`${error.code}:${error.field}`}
-              text={t(VALIDATION_MESSAGE_KEYS[error.code], { field: error.field })}
-            />
+            <Callout key={`${error.code}:${error.field}`} tone="error" announce={false}>
+              {t(VALIDATION_MESSAGE_KEYS[error.code], { field: error.field })}
+            </Callout>
           ))}
         </div>
       )}
@@ -928,17 +934,5 @@ function StandGapStepper({ value, max, onChange }: { value: number; max: number;
         </button>
       </div>
     </div>
-  );
-}
-
-function ErrorLine({ text }: { text: string }) {
-  return (
-    <p className="flex items-start gap-2 text-xs text-red">
-      <svg className="mt-0.5 h-3.5 w-3.5 shrink-0" viewBox="0 0 16 16" fill="none">
-        <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4" />
-        <path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-      </svg>
-      <span>{text}</span>
-    </p>
   );
 }

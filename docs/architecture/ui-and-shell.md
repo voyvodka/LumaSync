@@ -92,7 +92,7 @@ stylesheet reads, so the two cannot disagree. Where the element has no such attr
 selection: a step tracker's current step and the status bar's tone scale.
 
 **Controls come from `src/shared/ui/`, looks stay with their surface.** `Button`/`IconButton`,
-`Toggle` (a `role="switch"`), `Segmented` (a radio group), `RangeRow`, `ConfirmDialog`,
+`Toggle` (a `role="switch"`), `Segmented` (a radio group), `RangeRow`, `ConfirmDialog`, `Callout`,
 `EmptyState` and `StatusPill` own the behaviour and the accessibility contract — one tab stop per
 radio group with arrow keys, Home and End (`useRadioGroup`), a name on every icon-only button, a
 focus trap in every dialog — while each call site keeps the class that draws it. That split is what
@@ -101,6 +101,12 @@ without a pixel moving. A slider that commits while it moves goes through `useTh
 (leading and trailing, flushed on release), so a drag neither floods the lighting runtime nor drops
 the value the user let go on. A new control that needs one of these behaviours uses the primitive;
 a feature that is touched for another reason migrates its hand-rolled copy then.
+
+**Inline feedback is a `Callout`, not a card.** A message about the control right above it — a save
+that failed, a duplicate answer, a preview that would not open — uses the notice strip's vocabulary:
+a tone dot whose shape (disc, diamond, ring, square) survives forced colours, one sentence, at most
+one text-link action. No tinted box and no coloured side bar; a list of them sits in one container
+that is the live region, with `announce={false}` on each so a screen reader reads the list once.
 
 **The compact/full mode transition is sequential, never a cross-fade.** `useUIMode.ts`: fade the
 current content out, resize the window to the target mode, then mount the incoming layout and fade

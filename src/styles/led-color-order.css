@@ -108,14 +108,6 @@
 .lm-color-order-swatch.is-other {
   border: 1px dashed var(--lm-ink-faint);
 }
-.lm-color-order-error {
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--lm-ink);
-  padding-left: 10px;
-  border-left: 2px solid var(--lm-red);
-}
 .lm-color-order-actions {
   display: flex;
   flex-wrap: wrap;
@@ -141,8 +133,7 @@
   .lm-color-order-tag {
     border-color: CanvasText;
   }
-  .lm-color-order-step.is-error,
-  .lm-color-order-error {
+  .lm-color-order-step.is-error {
     border-left-color: CanvasText;
   }
   /* The swatches are the only thing tying an answer to a colour on screen, so

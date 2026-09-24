@@ -9,6 +9,7 @@ import {
 } from "@/shared/contracts/device";
 import { shellStore } from "@/features/persistence/shellStore";
 import { Button } from "@/shared/ui/Button";
+import { Callout } from "@/shared/ui/Callout";
 import { normalizeColorOrder } from "@/shared/contracts/mode";
 
 import {
@@ -236,9 +237,7 @@ export function LedColorOrderControl({
           </select>
         </div>
         {manualSaveFailed ? (
-          <p role="alert" className="lm-color-order-error">
-            {t("lights:led.colorOrder.identify.errors.saveFailed")}
-          </p>
+          <Callout tone="error">{t("lights:led.colorOrder.identify.errors.saveFailed")}</Callout>
         ) : null}
       </div>
     </section>
@@ -290,11 +289,11 @@ function IdentifyStep({
           ))}
         </div>
         {state.duplicate ? (
-          <p role="alert" className="lm-color-order-error">
+          <Callout tone="error">
             {t("lights:led.colorOrder.identify.duplicate", {
               color: t(COLOR_ANSWER_KEYS[state.duplicate]),
             })}
-          </p>
+          </Callout>
         ) : null}
         <div className="lm-color-order-actions">
           <Button size="md" onClick={onCancel}>

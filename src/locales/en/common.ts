@@ -13,6 +13,14 @@ export default {
     solidColor: "Solid color",
     brightness: "Brightness",
   },
+  callout: {
+    tone: {
+      error: "Error",
+      warning: "Warning",
+      info: "Note",
+      ok: "Done",
+    },
+  },
   compact: {
     sections: {
       mode: "Mode",

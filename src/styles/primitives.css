@@ -189,6 +189,83 @@
   margin-top: 12px;
 }
 
+/* Callout — inline feedback in the notice strip's vocabulary (notices.css):
+   error a disc, warning a diamond, info a ring, ok a square. */
+.lm-callout {
+  --lm-callout-tone: var(--lm-ink-dim);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--lm-ink);
+  font-family: var(--lm-sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+.lm-callout.is-error {
+  --lm-callout-tone: var(--lm-red);
+}
+.lm-callout.is-warning {
+  --lm-callout-tone: var(--lm-amber);
+}
+.lm-callout.is-ok {
+  --lm-callout-tone: var(--lm-green);
+}
+.lm-callout-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  /* The first line's centre: (11.5px × 1.45 − 6px) / 2. */
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--lm-callout-tone);
+}
+.lm-callout.is-warning .lm-callout-dot {
+  border-radius: 1px;
+  transform: rotate(45deg) scale(0.9);
+}
+.lm-callout.is-info .lm-callout-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--lm-callout-tone);
+}
+.lm-callout.is-ok .lm-callout-dot {
+  border-radius: 1px;
+}
+.lm-callout-message {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+/* A text link with a 32 px hit area that does not push the line apart. */
+.lm-callout-action {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  margin: -7.5px 0;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--lm-amber);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.lm-callout-action:hover:not(:disabled) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.lm-callout-action:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.lm-callout-action:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .lm-btn,
   .lm-device-btn,
@@ -215,6 +292,20 @@
   .lm-toggle::after {
     background: CanvasText;
   }
+  .lm-callout,
+  .lm-callout-message {
+    color: CanvasText;
+  }
+  .lm-callout-dot {
+    background: CanvasText;
+  }
+  .lm-callout.is-info .lm-callout-dot {
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px CanvasText;
+  }
+  .lm-callout-action {
+    color: LinkText;
+  }
   .lm-toggle[aria-checked="true"] {
     border-color: Highlight;
   }
@@ -224,7 +315,8 @@
   .lm-btn:focus-visible,
   .lm-device-btn:focus-visible,
   .lm-btn-md:focus-visible,
-  .lm-toggle:focus-visible {
+  .lm-toggle:focus-visible,
+  .lm-callout-action:focus-visible {
     outline: 2px solid Highlight;
     outline-offset: 2px;
   }
