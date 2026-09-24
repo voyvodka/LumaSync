@@ -184,7 +184,7 @@ pub(super) struct LightSlot {
 /// Colour a light should be showing, quantised so equality is exact and a
 /// light already displaying the target never costs a request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct LightState {
+pub(super) struct LightState {
     r: u8,
     g: u8,
     b: u8,
@@ -192,7 +192,7 @@ struct LightState {
 }
 
 impl LightState {
-    fn new(color: HueRgb, brightness: f32) -> Self {
+    pub(super) fn new(color: HueRgb, brightness: f32) -> Self {
         let [r, g, b] = color.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
         Self {
             r,
@@ -202,7 +202,7 @@ impl LightState {
         }
     }
 
-    fn to_put_args(self) -> (f64, f64, f64) {
+    pub(super) fn to_put_args(self) -> (f64, f64, f64) {
         // Linear already (after the gamma stage): no second EOTF.
         let [r, g, b] = [self.r, self.g, self.b].map(|v| f64::from(v) / 255.0);
         let (x, y, _big_y) = super::super::frame::linear_rgb_to_xy(r, g, b);
