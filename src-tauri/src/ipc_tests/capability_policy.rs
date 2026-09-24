@@ -147,7 +147,10 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     ("start_hue_stream", MAIN_ONLY),
     ("restart_hue_stream", MAIN_ONLY),
     ("release_hue_output", MAIN_ONLY),
-    ("get_hue_stream_status", MAIN_ONLY),
+    // The one Hue health source; nothing else polls the bridge.
+    ("get_hue_health", MAIN_ONLY),
+    ("watch_hue_health", MAIN_ONLY),
+    ("retry_hue_health", MAIN_ONLY),
     ("get_hue_area_channels", MAIN_ONLY),
     ("get_runtime_telemetry", MAIN_ONLY),
     ("get_screen_capture_permission", MAIN_ONLY),
@@ -183,6 +186,8 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     ("get_lighting_mode_status", NO_WINDOW),
     ("stop_hue_stream", NO_WINDOW),
     ("set_hue_solid_color", NO_WINDOW),
+    // Read by the health monitor in Rust; its test grants it.
+    ("get_hue_stream_status", NO_WINDOW),
 ];
 
 /// The commands a compromised overlay or popup page must never reach, named so

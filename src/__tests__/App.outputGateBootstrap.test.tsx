@@ -7,7 +7,8 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEVICE_COMMANDS } from "@/shared/contracts/device";
-import { HUE_COMMANDS } from "@/shared/contracts/hue";
+import { HUE_HEALTH_COMMANDS } from "@/shared/contracts/hueHealth";
+import { idleHealth } from "../features/hue/__tests__/fakeHueHealth";
 import type { ShellState, UIMode } from "@/shared/contracts/shell";
 
 vi.mock("react-i18next", () => ({
@@ -140,9 +141,8 @@ beforeEach(() => {
       await serialStatus;
       return { connected: false, status: ok("OK"), ports: [] };
     }
-    if (command === HUE_COMMANDS.VALIDATE_CREDENTIALS) {
-      return { valid: true, status: ok("HUE_CREDENTIAL_VALID") };
-    }
+    // The health monitor's answer: a paired bridge whose probe found it.
+    if (command === HUE_HEALTH_COMMANDS.WATCH_HUE_HEALTH) return idleHealth();
     if (command === "list_displays") return [];
     return { connected: false, status: ok("OK"), ports: [] };
   });
@@ -177,9 +177,9 @@ describe("output gate during shell boot", () => {
       await act(async () => {
         releaseSerialStatus();
       });
-      // Settles on a usable bridge once the probe answers.
+      // Settles on a usable bridge once the monitor's probe verdict arrives.
       await waitFor(() =>
-        expect(invokeMock).toHaveBeenCalledWith(HUE_COMMANDS.VALIDATE_CREDENTIALS, expect.anything()),
+        expect(invokeMock).toHaveBeenCalledWith(HUE_HEALTH_COMMANDS.WATCH_HUE_HEALTH, expect.anything()),
       );
       await waitFor(() => expect(screen.queryByTestId("output-checking")).not.toBeInTheDocument());
       expect(screen.queryByText(OFFLINE_TITLE)).not.toBeInTheDocument();

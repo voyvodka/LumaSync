@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LightingModeConfig } from "@/shared/contracts/mode";
 import type { LocalSink } from "../features/device/localSink";
 import { DEVICE_COMMANDS } from "@/shared/contracts/device";
-import { HUE_COMMANDS, HUE_STATUS } from "@/shared/contracts/hue";
 import type {
   ApplyOutputsOutcome,
   ApplyOutputsRequest,
@@ -128,7 +127,6 @@ vi.mock("../features/mode/state/modeGuard", () => ({
   canEnableLedMode: () => ({ canEnable: true, reason: null }),
 }));
 
-const getHueStreamStatusMock = vi.fn();
 const applyOutputsMock = vi.fn();
 const retuneLightingMock = vi.fn();
 const releaseHueOutputMock = vi.fn();
@@ -139,12 +137,14 @@ vi.mock("../features/mode/modeApi", () => ({
   retuneLighting: (tuning: unknown) => retuneLightingMock(tuning),
   releaseHueOutput: (trigger: string) => releaseHueOutputMock(trigger),
   getLightingRuntime: () => getLightingRuntimeMock(),
-  getHueStreamStatus: () => getHueStreamStatusMock(),
   startHue: vi.fn(),
   restartHue: vi.fn(),
   acquireHueForTest: vi.fn(),
   releaseHueAfterTest: vi.fn(),
 }));
+
+// The Rust health monitor: the probe's verdict and the stream's state.
+vi.mock("../features/hue/hueHealthApi", async () => (await import("../features/hue/__tests__/fakeHueHealth")).fakeHueHealthApi);
 
 let publishRuntime: ((snapshot: LightingRuntimeSnapshot) => void) | null = null;
 vi.mock("../features/mode/lightingRuntimeEventsApi", () => ({
@@ -256,7 +256,14 @@ vi.mock("../features/settings/SettingsLayout", () => ({
 }));
 
 import App from "../App";
-import { __resetHueReadCacheForTests } from "../features/hue/hueReadCache";
+import { __resetHueHealthStoreForTests } from "../features/hue/state/hueHealthStore";
+import {
+  fakeHueHealthApi,
+  publishHealth,
+  resetHealth,
+  runtimeStatus,
+  setHealth,
+} from "../features/hue/__tests__/fakeHueHealth";
 
 /** Serial status is the only per-test variable; every other command keeps the
  * shape its contract declares. Overriding invokeMock wholesale used to discard
@@ -264,11 +271,6 @@ import { __resetHueReadCacheForTests } from "../features/hue/hueReadCache";
 function installInvokeDispatch(serialConnected: boolean): void {
   invokeMock.mockImplementation((command: string) => {
     switch (command) {
-      case HUE_COMMANDS.VALIDATE_CREDENTIALS:
-        return Promise.resolve({
-          status: { code: HUE_STATUS.CREDENTIAL_VALID, message: "ok", details: null },
-          valid: true,
-        });
       case DEVICE_COMMANDS.GET_RUNTIME_TELEMETRY:
         return Promise.resolve({
           usb: {
@@ -379,17 +381,17 @@ const PAIRED = {
   lastHueAreaId: "area-1",
 };
 
-const hueStatus = (state: "Running" | "Reconnecting" | "Failed" | "Idle") => ({
-  active: state === "Running",
-  lastSolidColor: null,
-  status: { state, code: `HUE_${state.toUpperCase()}`, message: state, details: null },
+/** The stream as the health monitor reports it. */
+const hueStream = (state: "Running" | "Reconnecting" | "Failed" | "Idle") => ({
+  stream: { active: state === "Running" || state === "Reconnecting", status: runtimeStatus(state) },
 });
 
 describe("App", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Module-level cache: without this a prior test's status leaks into the next one.
-    __resetHueReadCacheForTests();
+    // Module-level store: without this a prior test's snapshot leaks into the next one.
+    __resetHueHealthStoreForTests();
+    resetHealth();
     vi.useRealTimers();
     mockIsConnected = true;
     mockActiveWledIp = null;
@@ -400,7 +402,6 @@ describe("App", () => {
     revision = 0;
     runtime = snapshot();
     installInvokeDispatch(true);
-    getHueStreamStatusMock.mockResolvedValue(hueStatus("Idle"));
     getLightingRuntimeMock.mockImplementation(() => Promise.resolve(runtime));
     applyOutputsMock.mockImplementation(() => Promise.resolve(reply("OUTPUTS_APPLIED", runtime)));
     retuneLightingMock.mockResolvedValue({ status: { code: "RETUNE_APPLIED", message: "", details: null } });
@@ -564,7 +565,7 @@ describe("App", () => {
   describe("the Hue chip reads the snapshot and the stream's health", () => {
     it("calls a driven, running stream streaming", async () => {
       loadShellStateMock.mockResolvedValue({ lastSection: "general", ...PAIRED, lastOutputTargets: ["hue"] });
-      getHueStreamStatusMock.mockResolvedValue(hueStatus("Running"));
+      setHealth(hueStream("Running"));
       nextApplyRuns({
         mode: { kind: "ambilight", targets: ["hue"] },
         active: true,
@@ -579,7 +580,7 @@ describe("App", () => {
 
     it("reads a retrying bridge as reconnecting, not streaming", async () => {
       loadShellStateMock.mockResolvedValue({ lastSection: "general", ...PAIRED, lastOutputTargets: ["hue"] });
-      getHueStreamStatusMock.mockResolvedValue(hueStatus("Reconnecting"));
+      setHealth(hueStream("Reconnecting"));
       nextApplyRuns({
         mode: { kind: "ambilight", targets: ["hue"] },
         active: true,
@@ -594,7 +595,7 @@ describe("App", () => {
 
     it("does not call a stream the backend reports dead a session", async () => {
       loadShellStateMock.mockResolvedValue({ lastSection: "general", ...PAIRED, lastOutputTargets: ["hue"] });
-      getHueStreamStatusMock.mockResolvedValue(hueStatus("Failed"));
+      setHealth(hueStream("Failed"));
       nextApplyRuns({
         mode: { kind: "ambilight", targets: ["hue"] },
         active: true,
@@ -604,7 +605,7 @@ describe("App", () => {
 
       render(<App />);
 
-      await waitFor(() => expect(getHueStreamStatusMock).toHaveBeenCalled());
+      await waitFor(() => expect(fakeHueHealthApi.watchHueHealth).toHaveBeenCalled());
       await waitFor(() => expect(screen.getByTestId("hue-shown-state")).toHaveTextContent("none"));
       // The health poll only reads: the re-apply it used to force was redundant.
       expect(choices()).toEqual([{ origin: "boot" }]);
@@ -778,7 +779,12 @@ describe("App", () => {
         lastHueAreaId: "area-1",
       });
       // The last guard resolves well after bootstrap, in a tick of its own.
-      delay(HUE_COMMANDS.VALIDATE_CREDENTIALS, 400);
+      setHealth({ bridge: { verdict: null, probing: true } });
+      setTimeout(() => {
+        act(() => {
+          publishHealth({ bridge: { verdict: "reachable", probing: false } });
+        });
+      }, 400);
       const banner = watchForBanner();
 
       render(<App />);

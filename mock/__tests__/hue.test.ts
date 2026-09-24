@@ -2,10 +2,10 @@
  * `validate_hue_credentials` used to answer with the `HUE_IP_*` /
  * `AUTH_INVALID_RE_PAIR_REQUIRED` codes borrowed from other onboarding
  * handlers, never the `HUE_CREDENTIAL_*` family the real Rust command
- * (`hue_onboarding.rs`) and `useHueBridgeReachability` actually speak. The
- * hook checks `code === HUE_STATUS.CREDENTIAL_VALID` to flip reachability on,
- * so the mock could never report a reachable bridge — every fixture-backed
- * session sat "unreachable" no matter what the world said.
+ * (`hue_onboarding.rs`) and the health monitor (`commands/hue/health.rs`)
+ * actually speak. The monitor checks for `HUE_CREDENTIAL_VALID` to call the
+ * bridge reachable, so the mock could never report a reachable bridge — every
+ * fixture-backed session sat "unreachable" no matter what the world said.
  */
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -25,6 +25,7 @@ import type {
 import { isHueStopCodeOk } from "../../src/features/hue/model/hueStartConfig";
 import type { HueRuntimeCommandResult, ModeCommandResult } from "../../src/features/mode/modeApi";
 import { DEVICE_COMMANDS } from "../../src/shared/contracts/device";
+import { HUE_HEALTH_COMMANDS, type HueHealthSnapshot } from "../../src/shared/contracts/hueHealth";
 import { dispatch } from "../dispatch";
 import { handlerFor } from "../handlers";
 import { SCENARIOS } from "../scenarios";
@@ -70,21 +71,20 @@ describe("validate_hue_credentials answers with the HUE_CREDENTIAL_* family", ()
   });
 });
 
-describe("useHueBridgeReachability's own reading of the codes above", () => {
+describe("the health monitor's own reading of the codes above", () => {
   beforeEach(() => {
     setWorld(SCENARIOS.furnished.build());
   });
 
-  it("only HUE_CREDENTIAL_VALID counts as reachable — the hook's exact check", () => {
+  it("only HUE_CREDENTIAL_VALID counts as reachable — the monitor's exact check", () => {
     const result = call(HUE_COMMANDS.VALIDATE_CREDENTIALS) as HueValidateCredentialsResponse;
-    // Mirrors `setHueReachable(code === HUE_STATUS.CREDENTIAL_VALID)` in
-    // `useHueBridgeReachability.ts` — asserted against the literal the hook
-    // compares against, not just "truthy", so a future rename of either side
-    // still fails loudly here instead of drifting apart silently.
+    // Mirrors `verdict_for` in `commands/hue/health.rs` — asserted against the
+    // literal it compares against, not just "truthy", so a future rename of
+    // either side still fails loudly here instead of drifting apart silently.
     expect(result.status.code === HUE_STATUS.CREDENTIAL_VALID).toBe(true);
   });
 
-  it("HUE_CREDENTIAL_CHECK_FAILED is the only code the hook's retry budget counts against", () => {
+  it("HUE_CREDENTIAL_CHECK_FAILED is the only code the monitor's give-up budget counts against", () => {
     setWorld(SCENARIOS["hue-unreachable"].build());
     const result = call(HUE_COMMANDS.VALIDATE_CREDENTIALS) as HueValidateCredentialsResponse;
     expect(result.status.code === HUE_STATUS.CREDENTIAL_CHECK_FAILED).toBe(true);
@@ -334,5 +334,50 @@ describe("a held entertainment area", () => {
     expect(apply(["usb", "hue"]).mode).toEqual(
       expect.objectContaining({ kind: "ambilight", targets: ["usb", "hue"] }),
     );
+  });
+});
+
+/**
+ * The health snapshot is derived from the same world the fixtures above read,
+ * so the chip, the Devices card and the notices cannot disagree with them.
+ */
+describe("the health monitor fixture reads the world the other Hue fixtures read", () => {
+  const health = () => call(HUE_HEALTH_COMMANDS.WATCH_HUE_HEALTH, { watch: { visible: true, areaReadiness: true } }) as HueHealthSnapshot;
+
+  it("calls a paired, reachable bridge reachable and reads the saved area", () => {
+    setWorld(SCENARIOS.furnished.build());
+    const snapshot = health();
+
+    expect(snapshot.configured).toBe(true);
+    expect(snapshot.bridge.verdict).toBe("reachable");
+    expect(snapshot.area?.status.code).toBe(HUE_STATUS.STREAM_READY);
+  });
+
+  it("tells a refused key from a bridge that is gone", () => {
+    setWorld(SCENARIOS["hue-key-expired"].build());
+    expect(health().bridge.verdict).toBe("credentialRejected");
+
+    setWorld(SCENARIOS["hue-unreachable"].build());
+    expect(health().bridge.verdict).toBe("unreachable");
+  });
+
+  it("reports nothing to probe when never paired", () => {
+    setWorld(SCENARIOS.empty.build());
+    const snapshot = health();
+
+    expect(snapshot.configured).toBe(false);
+    expect(snapshot.bridge.verdict).toBeNull();
+    expect(snapshot.area).toBeNull();
+  });
+
+  it("moves the revision when the world changes, and only then", () => {
+    setWorld(SCENARIOS.furnished.build());
+    const first = health().revision;
+    expect(health().revision).toBe(first);
+
+    mutate((w) => {
+      w.hue.reachable = false;
+    });
+    expect(health().revision).toBeGreaterThan(first);
   });
 });

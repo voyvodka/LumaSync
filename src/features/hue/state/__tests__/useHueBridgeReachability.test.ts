@@ -1,16 +1,12 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import { HUE_STATUS } from "@/shared/contracts/hue";
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { HueStartConfig } from "../../model/hueStartConfig";
+import { __resetHueHealthStoreForTests } from "../hueHealthStore";
 import { useHueBridgeReachability } from "../useHueBridgeReachability";
+import { fakeHueHealthApi, publishHealth, resetHealth, setHealth } from "../../__tests__/fakeHueHealth";
 
-const validateHueCredentialsMock = vi.fn();
-
-vi.mock("../../hueOnboardingApi", () => ({
-  validateHueCredentials: (...args: unknown[]) => validateHueCredentialsMock(...args),
-}));
+vi.mock("../../hueHealthApi", async () => (await import("../../__tests__/fakeHueHealth")).fakeHueHealthApi);
 
 const config: HueStartConfig = {
   bridgeIp: "192.168.1.10",
@@ -19,92 +15,106 @@ const config: HueStartConfig = {
   areaId: "area-1",
 };
 
-const valid = { status: { code: HUE_STATUS.CREDENTIAL_VALID } };
+const flush = async () => {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0);
+  });
+};
 
+// The probe itself, its 30 s cadence, its give-up budget and the retry's
+// re-arm are Rust's (`commands/hue/health.rs`, tested there). This hook only
+// reads the verdict and keeps the frontend's own masking.
 describe("useHueBridgeReachability (INV-30)", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    validateHueCredentialsMock.mockResolvedValue(valid);
+    vi.useFakeTimers();
+    __resetHueHealthStoreForTests();
+    resetHealth();
   });
 
-  it("does not poll without a paired bridge", () => {
+  afterEach(() => {
+    __resetHueHealthStoreForTests();
+    vi.useRealTimers();
+  });
+
+  it("reports nothing without a paired bridge, whatever the snapshot holds", async () => {
+    setHealth({ bridge: { verdict: "reachable", gaveUp: true, probing: true } });
     const { result } = renderHook(() => useHueBridgeReachability(null, false));
-    expect(validateHueCredentialsMock).not.toHaveBeenCalled();
+    await flush();
+
     expect(result.current.reachable).toBe(false);
+    expect(result.current.verdict).toBeNull();
+    expect(result.current.gaveUp).toBe(false);
+    expect(result.current.probing).toBe(false);
   });
 
-  it("does not poll while the stream is live — the stream is its own proof", () => {
-    renderHook(() => useHueBridgeReachability(config, true));
-    expect(validateHueCredentialsMock).not.toHaveBeenCalled();
-  });
-
-  it("ticks immediately on mount and reports a valid credential as reachable", async () => {
+  it("reports a valid credential as reachable", async () => {
     const { result } = renderHook(() => useHueBridgeReachability(config, false));
-    await waitFor(() => expect(result.current.reachable).toBe(true));
-    expect(validateHueCredentialsMock).toHaveBeenCalledWith(
-      "192.168.1.10",
-      "app-user",
-      "AABBCCDD",
-    );
-  });
+    await flush();
 
-  it("reports unreachable when the bridge answers with a non-valid code", async () => {
-    validateHueCredentialsMock.mockResolvedValue({ status: { code: "HUE_CREDENTIAL_INVALID" } });
-    const { result } = renderHook(() => useHueBridgeReachability(config, false));
-    await waitFor(() => expect(validateHueCredentialsMock).toHaveBeenCalled());
-    expect(result.current.reachable).toBe(false);
+    expect(result.current.reachable).toBe(true);
+    expect(result.current.verdict).toBe("reachable");
   });
 
   // The Lights dock read "Not configured" for a paired bridge whose key was
   // rejected; the verdict is what lets it say "re-pair" instead.
   it("tells a rejected key apart from a bridge that never answered", async () => {
+    setHealth({ bridge: { verdict: null } });
     const { result } = renderHook(() => useHueBridgeReachability(config, false));
+    await flush();
     expect(result.current.verdict).toBeNull();
-    await waitFor(() => expect(result.current.verdict).toBe("reachable"));
 
-    validateHueCredentialsMock.mockResolvedValue({ status: { code: "HUE_CREDENTIAL_INVALID" } });
-    const rejected = renderHook(() => useHueBridgeReachability(config, false));
-    await waitFor(() => expect(rejected.result.current.verdict).toBe("credentialRejected"));
-
-    // A refused certificate answered too, and pairing again is its way back.
-    validateHueCredentialsMock.mockResolvedValue({ status: { code: "HUE_BRIDGE_IDENTITY_MISMATCH" } });
-    const impostor = renderHook(() => useHueBridgeReachability(config, false));
-    await waitFor(() => expect(impostor.result.current.verdict).toBe("credentialRejected"));
-
-    validateHueCredentialsMock.mockResolvedValue({ status: { code: "HUE_CREDENTIAL_CHECK_FAILED" } });
-    const silent = renderHook(() => useHueBridgeReachability(config, false));
-    await waitFor(() => expect(silent.result.current.verdict).toBe("unreachable"));
-
-    validateHueCredentialsMock.mockRejectedValue(new Error("network down"));
-    const thrown = renderHook(() => useHueBridgeReachability(config, false));
-    await waitFor(() => expect(thrown.result.current.verdict).toBe("unreachable"));
+    for (const verdict of ["credentialRejected", "unreachable", "reachable"] as const) {
+      act(() => {
+        publishHealth({ bridge: { verdict } });
+      });
+      await flush();
+      expect(result.current.verdict).toBe(verdict);
+      expect(result.current.reachable).toBe(verdict === "reachable");
+    }
   });
 
-  it("reports unreachable when the probe rejects", async () => {
-    validateHueCredentialsMock.mockRejectedValue(new Error("network down"));
+  it("offers the retry once the probe gave up, and never while the stream is live", async () => {
+    setHealth({ bridge: { verdict: "unreachable", gaveUp: true } });
+    const idle = renderHook(() => useHueBridgeReachability(config, false));
+    const streaming = renderHook(() => useHueBridgeReachability(config, true));
+    await flush();
+
+    expect(idle.result.current.gaveUp).toBe(true);
+    expect(idle.result.current.reachable).toBe(false);
+    // An active stream is proof enough on its own: nothing to retry.
+    expect(streaming.result.current.gaveUp).toBe(false);
+    expect(streaming.result.current.verdict).toBe("unreachable");
+  });
+
+  it("sends the retry to Rust, which re-arms the probe", async () => {
+    setHealth({ bridge: { verdict: "unreachable", gaveUp: true } });
     const { result } = renderHook(() => useHueBridgeReachability(config, false));
-    await waitFor(() => expect(validateHueCredentialsMock).toHaveBeenCalled());
-    expect(result.current.reachable).toBe(false);
-  });
+    await flush();
 
-  it("skips the mount tick while the window is hidden and catches up when it returns", async () => {
-    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
-    renderHook(() => useHueBridgeReachability(config, false));
-    expect(validateHueCredentialsMock).not.toHaveBeenCalled();
+    act(() => result.current.retry());
+    await flush();
+    expect(fakeHueHealthApi.retryHueHealth).toHaveBeenCalledOnce();
 
-    visibility.mockReturnValue("visible");
     act(() => {
-      document.dispatchEvent(new Event("visibilitychange"));
+      publishHealth({ bridge: { probing: true } });
     });
-    await waitFor(() => expect(validateHueCredentialsMock).toHaveBeenCalledOnce());
-    visibility.mockRestore();
+    await flush();
+    expect(result.current.probing).toBe(true);
+    expect(result.current.gaveUp).toBe(true);
+
+    act(() => {
+      publishHealth({ bridge: { probing: false, gaveUp: false, verdict: "reachable" } });
+    });
+    await flush();
+    expect(result.current.gaveUp).toBe(false);
+    expect(result.current.reachable).toBe(true);
   });
 
-  it("stops probing once unmounted", async () => {
-    const { unmount } = renderHook(() => useHueBridgeReachability(config, false));
-    await waitFor(() => expect(validateHueCredentialsMock).toHaveBeenCalledOnce());
-    unmount();
-    document.dispatchEvent(new Event("visibilitychange"));
-    expect(validateHueCredentialsMock).toHaveBeenCalledOnce();
+  it("keeps one retry identity across renders", async () => {
+    const { result, rerender } = renderHook(() => useHueBridgeReachability(config, false));
+    await flush();
+    const first = result.current.retry;
+    rerender();
+    expect(result.current.retry).toBe(first);
   });
 });

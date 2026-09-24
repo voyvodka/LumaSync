@@ -51,8 +51,8 @@ Home Assistant's `aiohue` goes further and treats any CLIP v2 403 as unauthorize
 bridge answers the v1 config for *any* key with its public subset, `bridgeid` included, so that
 probe validated a bogus key ("Hue credentials validated" in the log, `HUE ● OK` in the status bar).
 The v2 bridge resource is served only to a working key; a refusal comes back through the
-classifier as `HUE_CREDENTIAL_INVALID`, which `useHueBridgeReachability` and the boot validation
-already route to the re-pair card. A 2xx is valid only with a `data[].bridge_id`; a 2xx carrying a
+classifier as `HUE_CREDENTIAL_INVALID`, which the health monitor's probe and the Devices view's boot
+validation already route to the re-pair card. A 2xx is valid only with a `data[].bridge_id`; a 2xx carrying a
 v1 `error.type 1` envelope or a v2 auth `errors[]` is still a refusal.
 
 **The HTTP fallback must never run on a request whose response carries a secret.** The pairing POST
@@ -211,23 +211,22 @@ drive the DTLS handshake into a PSK negotiation with no key — a hard connect f
 working legacy path. The ~10 lines of overlap are the price of not touching the DTLS path inside a
 credential change.
 
-**The entertainment-area snapshot is cached process-wide, single-flight.** Two independent frontend
-polling loops converge on the same bridge payload through different commands — the App health
-reconciler via `get_hue_stream_status`, the Devices-tab loop via `check_hue_stream_readiness` — and
-the frontend coalescer can only dedupe *within* one command, not across both. `area_cache.rs`
-removes the duplication on this side of the IPC boundary instead: a caller arriving mid-fetch waits
-on the slot and reuses the leader's result, a bridge-side mutation bumps a generation counter so a
-fetch issued before it can never be served after, and every read gating a mutation asks for `Force`
-to bypass the cache outright.
+**The entertainment-area snapshot is cached process-wide, single-flight.** Several readers want the
+same bridge payload through different paths — the health monitor's live-stream check and its area
+check, the user's "Validate again", the launch restore's busy-area wait — and they can land within a
+second of each other. `area_cache.rs` removes the duplication on this side of the IPC boundary: a
+caller arriving mid-fetch waits on the slot and reuses the leader's result, a bridge-side mutation
+bumps a generation counter so a fetch issued before it can never be served after, and every read
+gating a mutation asks for `Force` to bypass the cache outright.
 
 **The area-cache TTL is derived, not tuned — 1.5 s.** `HUE_AREA_CACHE_TTL_MS` in `area_cache.rs`.
-The co-firing this cache exists to remove lands within ~1.1 s of itself every few ticks, and the
-next arrival after that is >2 s away either way, so any TTL at or above ~1.1 s catches all of it and
-a larger one catches nothing more. 1.5 s also matches the frontend's own accepted staleness for the
-same data (`HUE_READINESS_MAX_AGE_MS`), so this layer never becomes the staleness bottleneck.
-Worst-case composed staleness is 3.5 s — below the 5 s health-poll period and well under the
-bridge's ~10 s entertainment inactivity close. The value is purely observational: stream liveness is
-read from the local `is_shutdown_signaled` probe and the reconnect monitor, never from this cache.
+It was sized against two frontend loops that co-fired within ~1.1 s of each other every few ticks;
+any TTL at or above ~1.1 s caught all of it and a larger one caught nothing more. With one monitor
+the co-firing is rarer, but the 3 s blocked-area cadence and a user's revalidate still meet it, and
+1.5 s stays under that cadence, so a blocked area is never read off a snapshot older than the tick
+before. Worst-case staleness is well under the 5 s live-stream check and the bridge's ~10 s
+entertainment inactivity close. The value is purely observational: stream liveness is read from the
+local `is_shutdown_signaled` probe and the reconnect monitor, never from this cache.
 
 **Colour is clipped per-bulb to its gamut.** Hue bulbs come in gamuts A, B, and C, and a colour
 outside a given bulb's triangle is not merely inaccurate — the bridge clamps it somewhere
@@ -253,29 +252,78 @@ deleted is worse than the original bug — but here nothing in any released buil
 id and reuses `migrateLegacyHueZone`, so a corrupt record is dropped with a warning rather than
 half-migrated.
 
-**Background bridge polling gives up; it never re-discovers on its own.** Two frontend loops probe
-the bridge while nothing is streaming — `useHueBridgeReachability` (30 s, feeds the "no reachable
-output" banner) and `useHueReadinessPolling` (15 s, 3 s while a foreign streamer holds the area).
-Both used to retry forever, so a bridge paired on another Wi-Fi network was polled for the whole
-session with nothing on screen to say so. They now share one failure budget
-(`model/pollBudget.ts`): **4 consecutive failures *and* a 90 s unbroken streak**, after which the
-loop stops and the banner offers a manual retry.
+**One health monitor, in Rust, is the only thing that asks the bridge how it is.**
+`commands/hue/health.rs` runs a single background task that owns bridge reachability, the stored
+key's validity, the saved area's readiness (with the active streamer) and the stream's own state,
+and publishes them as one `HueHealthSnapshot` with a revision — on `hue://health` to every window and
+from `get_hue_health`. The frontend holds a copy in an external store
+(`features/hue/state/hueHealthStore.ts`) and reads it through `useHueHealth(selector)`, so the status
+chip, the Devices card and the notices re-render only on the slice they read. It replaced four
+frontend loops (App's stream health and bridge probe, the Devices view's runtime status and area
+readiness), a read cache and a restart bus. Those loops lived in different React trees, each with its
+own cadence, visibility handling and give-up rules, and each asked the bridge on its own: two of them
+could hit the same endpoint seconds apart, the dedupe had to be rebuilt twice (a frontend coalescer,
+then `area_cache.rs`), and the runtime's state only reached a loop that happened to be awake. One
+task sees the runtime directly, so it knows when a stream is live and when nothing needs asking.
+
+What it reads, and when:
+
+| Signal | Runs while | Cadence | Bridge call |
+|---|---|---|---|
+| Stream, local | Hue is live (Starting, Running, Reconnecting) | 1 s with a window visible, 5 s without | none — the runtime lock, the dead-sender probe, the pending-colour flush |
+| Stream, readiness | Hue is live and a window is visible | 5 s | `GET …/entertainment_configuration` (area cache, `Ours`) |
+| Bridge probe | configured, not live, a window visible, not given up | 30 s | `GET /clip/v2/resource/bridge` |
+| Area readiness | configured, the Devices view mounted, a window visible, not fed by a live stream | 15 s; 3 s while another session holds the area; 15 → 30 → 60 → 120 s while the bridge does not answer | `GET …/entertainment_configuration` (area cache, `Ours` or `Foreign`) |
+
+- **It idles when nothing needs it.** With no bridge, area and pairing saved (the `toHueStartConfig`
+  rule, read in Rust through `hue_start_request`) nothing is scheduled. With no window visible and
+  no live stream the task parks on a `Notify` and makes no call at all, however long the app sits in
+  the tray; a live stream in the tray gets the 5 s local read only, which is what flushes a colour
+  the tray queued while the stream was starting. The window says what it needs with
+  `watch_hue_health({ visible, areaReadiness })` on every `visibilitychange` — the old convention,
+  moved from each loop into the one store — and the Devices view adds `areaReadiness` while it is
+  mounted. What wakes it: a window's watch, a start, stop or restart finishing (`WakeOnDrop` on
+  those three commands and a wake in `set_active_stream`), a window saving one of the pairing keys
+  (`lastHueBridge`, `lastHueAreaId`, `hueAppKey`, `hueClientKey`, `credentialStorageBackend`), and
+  the manual retry. A snapshot is published only when its content moved.
+- **A live stream is proof enough on its own**, so the credential probe stops while one runs and is
+  re-armed the moment it ends, and a live stream on the watched area feeds the area slice from its
+  own readiness check instead of a second read.
+- **The 5 s live-stream check is load-bearing beyond the chip.** Its answer goes through
+  `status_refresh_with_evidence`, which moves the runtime to `Reconnecting` on a transport fault,
+  to `Failed` on a refused key, and counts a transient fault against the reconnect budget. Changing
+  the cadence changes how fast a flaky bridge exhausts that budget; 5 s is the App chip cadence it
+  replaced.
+- **Hidden means nothing new.** The old loops paused while hidden too, so the idle tray costs what
+  it cost before — nothing — and now also with the Devices view open behind it.
+- **`get_hue_health` never calls the bridge.** It runs the local part of the runtime refresh first,
+  so a caller that has just started or stopped the stream itself (the Devices card's Start and
+  Start Again) reads the result rather than the state it changed away from. `get_hue_stream_status`
+  stays registered for its tests; no window is granted it.
+
+**Background bridge probing gives up; it never re-discovers on its own.** A bridge paired on another
+Wi-Fi network used to be polled for the whole session with nothing on screen to say so. The probe
+and the area check each keep a failure budget (`FailureBudget` in `health.rs`): **4 consecutive
+failures *and* a 90 s unbroken streak**, after which that signal stops and the snapshot's
+`bridge.gaveUp` puts a manual retry on the notice. `retry_hue_health` re-arms both and reads at once.
 
 Both terms are load-bearing. A count alone gives up after 12 s on the 3 s blocked cadence; a
 duration alone gives up on the first failed tick of a slow one. Telling a user their bridge is gone
 because the Wi-Fi hiccupped for ten seconds is worse than the over-polling being fixed, so any
-success resets the streak — two failures, a success, then two more is not four failures.
+success resets the streak — two failures, a success, then two more is not four failures. The area
+check also backs off (15 → 30 → 60 → 120 s) while the bridge does not answer, so it gives up at
+105 s rather than at the seventh 15 s tick.
 
 Only a bridge that did not *answer* counts (`HUE_CREDENTIAL_CHECK_FAILED`,
-`HUE_STREAM_READINESS_FAILED`, or a rejected `invoke`). `HUE_CREDENTIAL_INVALID` and
+`HUE_STREAM_READINESS_FAILED`). `HUE_CREDENTIAL_INVALID`, `HUE_BRIDGE_IDENTITY_MISMATCH` and
 `HUE_STREAM_NOT_READY` are answers from a reachable bridge, with their own recovery paths (re-pair,
 release the area) — counting them would put a "check again" button in front of a problem retrying
-cannot fix.
+cannot fix. `gaveUp` survives the retry until the bridge answers: clearing it on the press made the
+retry button delete itself the instant it was pressed.
 
-There is deliberately **no network-change listener** and no slow background heartbeat: the app
-retries on launch, which covers returning to the right network later. The retry gesture is shared
-through a module store (`state/huePollRestart.ts`) because the two loops live in different React
-trees from the control that re-arms them.
+There is deliberately **no network-change listener** and no slow background heartbeat: a window
+coming back, a pairing change or the next launch re-arms the probe, which covers returning to the
+right network later.
 
 **Hue is not retried in the background — except once, at launch, for a busy area.** The rule is that
 a Hue start the bridge refuses is settled on the spot (Off, or USB alone with a notice) and only the
@@ -431,15 +479,15 @@ off, and so do we now (`commands/hue/light_restore.rs`).
 ## Gotchas
 
 - **Hue `+y` is the TV wall, and it is drawn at the *top* of the room-map canvas.** `x` is left/right, `y` is depth with `+1` at the screen and `-1` behind the viewer, `z` is height. Three comments in `HueChannelOverlay.tsx` used to say `+y` was the canvas *bottom*; the code never agreed with them — `hueToMetres(-worldY, …)` maps `+1` to `0 px`. No first-party Signify statement is quotable here: the Entertainment reference is behind a developer-portal login and OpenHue types the field with no description, so the axis is established from two independent implementations — diyHue synthesises the TV-mounted gradient strip at a constant `y = 0.8`, and HyperHDR treats `y >= 0.75` at TV height as the screen's own edge. Note also that without a TV anchor the runtime collapses this depth axis onto screen *vertical*: `+y` samples the top of the screen, `-y` the bottom. With one, height (`z`) picks the vertical band instead and depth only feeds the ambience blend — see `room-map.md`. Anything naming that axis must therefore name it for the room (far/near), not for the screen.
-- **`get_hue_area_channels` does not always answer with the bridge's own numbers.** It has a fast path (`channels_to_info_via_owner`) that serves the running stream's channel list instead of fetching, and that list is the one `apply_channel_placements` overwrote with the user's local placements before `store_active_stream_context` stored it. The persistent sender does the same for a solid-colour session. So **while lighting is on, the "bridge positions" it returns are ours**, and any code comparing local placement against them compares our numbers with themselves — reporting "in sync" most confidently at exactly the moment a user is looking. So a read counts as the bridge's only when the runtime was `Idle` on both sides of it: `useHueAreaChannels` asks `get_hue_stream_status` before and after the fetch and exposes the answer as `channelsFromBridge`, and a failed status read counts as not idle. (The Devices view's own runtime status is polled only while streaming and otherwise waits for a start/stop/restart invalidation, so the hook asks fresh on both sides of the fetch rather than trusting it.) A trusted read is what the channel map's "does the bridge have this arrangement" verdict compares against, and it is persisted as `ShellState.hueBridgeSyncedPositions` (per area) — the bridge's arrangement as last known — which the verdict falls back to while lighting is on. Comparing against a snapshot of the last push instead meant the verdict never noticed a layout changed in the Hue app. The list is re-read when the runtime returns to `Idle`, on "Revalidate", after every save, and before every pull: "Take bridge's" adopts only a fresh read that is the bridge's own and refuses otherwise, since the same fact that rules out the verdict rules out adopting a list fetched mid-stream — it would pull our own placements back and look like it worked. The pull takes the bridge's height too, stamped `zOrigin: "bridge"` (a zone-bound channel's `zoneRelativePosition` is re-derived through its zone, clamping where the zone cannot reach the bridge's position, and the panel names those channels); a channel the bridge reports no height for keeps its own. The snapshot it records is the bridge's read, so a pull always settles the verdict unless a zone clamped. A save records what it sent for the channels the bridge took and the bridge's previous position for the ones it skipped — the skipped ids exist only in the English prose of `details` (`skipped_details`), which `hueWritebackResult.ts` parses — and the re-read that follows corrects the record either way. The bridge quantises what it stores slightly; the verdict's 0.005 tolerance assumes that stays below it.
+- **`get_hue_area_channels` does not always answer with the bridge's own numbers.** It has a fast path (`channels_to_info_via_owner`) that serves the running stream's channel list instead of fetching, and that list is the one `apply_channel_placements` overwrote with the user's local placements before `store_active_stream_context` stored it. The persistent sender does the same for a solid-colour session. So **while lighting is on, the "bridge positions" it returns are ours**, and any code comparing local placement against them compares our numbers with themselves — reporting "in sync" most confidently at exactly the moment a user is looking. So a read counts as the bridge's only when the runtime was `Idle` on both sides of it: `useHueAreaChannels` asks `get_hue_health` — a local runtime read, no bridge call — before and after the fetch and exposes the answer as `channelsFromBridge`, and a failed status read counts as not idle. (The snapshot the Devices view holds may lag an event behind, so the hook asks fresh on both sides of the fetch rather than trusting it.) A trusted read is what the channel map's "does the bridge have this arrangement" verdict compares against, and it is persisted as `ShellState.hueBridgeSyncedPositions` (per area) — the bridge's arrangement as last known — which the verdict falls back to while lighting is on. Comparing against a snapshot of the last push instead meant the verdict never noticed a layout changed in the Hue app. The list is re-read when the runtime returns to `Idle`, on "Revalidate", after every save, and before every pull: "Take bridge's" adopts only a fresh read that is the bridge's own and refuses otherwise, since the same fact that rules out the verdict rules out adopting a list fetched mid-stream — it would pull our own placements back and look like it worked. The pull takes the bridge's height too, stamped `zOrigin: "bridge"` (a zone-bound channel's `zoneRelativePosition` is re-derived through its zone, clamping where the zone cannot reach the bridge's position, and the panel names those channels); a channel the bridge reports no height for keeps its own. The snapshot it records is the bridge's read, so a pull always settles the verdict unless a zone clamped. A save records what it sent for the channels the bridge took and the bridge's previous position for the ones it skipped — the skipped ids exist only in the English prose of `details` (`skipped_details`), which `hueWritebackResult.ts` parses — and the re-read that follows corrects the record either way. The bridge quantises what it stores slightly; the verdict's 0.005 tolerance assumes that stays below it.
 
 - **A channel's position is written through `locations`, never through `channels`.** A PUT carrying `channels` is refused with HTTP 400 (`Property [channels] cannot be specified for this request type`) — checked on a real bridge on 2026-09-23 — so until then "Save to bridge" had never saved anything. The official CLIP reference describes a channel's `position` as *the average position of its members*: it is derived, and the writable source is `locations.service_locations[].positions`, one entry per entertainment service. `update_hue_channel_positions` therefore GETs the area, replaces positions inside the full list, and PUTs the whole list back (the bridge answers 200 and re-derives the channel, quantising the value slightly). The mapping is taken only when it is unambiguous: the channel has exactly one member, that member is segment `index` 0, no other channel references the same service, and the service has exactly one position. Anything else — a gradient strip (two positions spread over several segment channels, which the bridge interpolates), a channel grouping several services — is skipped and reported, never approximated; the lights beside it still save. A height of unknown origin (`zOrigin` absent) keeps the bridge's own `z` rather than writing the seeding placeholder. A 2xx whose `errors[]` is non-empty counts as a rejection, and a Hue-shaped 401/403 on either request is the usual re-pair signal. A 404 is the area itself gone (deleted in the Hue app, or an id from another bridge) and answers `CHAN_WB_AREA_NOT_FOUND`, not a network error. The command is `async` and runs its keychain read and two blocking HTTP calls on the blocking pool: as a sync command Tauri ran it on the main thread, and the window froze for up to ~10 s against a slow bridge.
 
 - **Placement is authored in one place, and it is the room map.** The Devices page carried a drag pad, then five coarse presets; both are gone. It lists what the bridge reports — the channel's own id, its bulb count, its zone — and owns the bridge sync, because that is bridge-side. Two writers for one value is what the earlier surfaces were, and the smaller of the two could not express distance and height in metres, which is what placement is for. The room map fetches the channel list itself (`useRoomMapHueChannels`) rather than waiting for the Devices page to have been opened; seeding is shared between both surfaces through `room-map/model/hueChannelSeeding.ts` so they cannot disagree about which channel is which.
 
 - **`hueCredentialEvents.ts` exists because pairing is invisible to everything outside `useHueOnboardingCore`.** App owns the `hueStartConfig` mirror — the projection the reachability probe and the USB reconciler both read — and until this bus it was written on boot and on a lighting-mode change and nowhere else. So pairing a bridge, or picking an area, left every one of those consumers on `null` until the user happened to switch modes. Subscribers deliberately re-read `shellStore` rather than trusting a payload: no single emit site holds the whole projection (pairing knows the bridge and credentials but not the area; area selection knows the reverse), and a diff assembled from partial knowledge is how the mirror drifts. Emit *after* the write resolves, never beside it — firing early hands the subscriber the value the write is replacing. Third bus of this shape, after `connectionEvents.ts` and `firmwareProfileEvents.ts`; when a fourth is needed, the shared-instance question in `device-output.md` is the one to reopen instead.
-- **A rejected runtime-status read is not a runtime state.** `get_hue_stream_status` never answers with an error, so an `invoke` that rejects means the read itself failed — it says nothing about whether the stream is up. `useHueRuntimeStatus` used to mint a `Failed` status for it, which conflated the two: the bridge card, finding no Running/Reconnecting, fell through to Ready, and the Devices-tab loop, which polls only in Starting/Running/Reconnecting, went silent — one IPC blip mid-stream left the card on Ready until a start/stop invalidation. The hook now keeps the last status the backend reported and holds the rejection beside it (`runtimeStatusReadFailure`, code `HUE_STREAM_STATUS_UNAVAILABLE`). While it is set, `deriveHueBridgeCardState` ignores the stale status for the runtime-derived states and shows `statusUnknown` where it would have said Ready, and the loop keeps polling whatever state it last held, backing off 2 → 4 → 8 → 16 → 30 s (`runtimeStatusRetryDelayMs`) until a read lands. A backend-reported `Failed` is a real answer and keeps its own mapping (next entry). This is not under the bridge poll budget above: it is a local IPC read, and giving up would bring back the stuck card.
-- **A backend-reported `Failed` is a stopped stream, not a Ready bridge.** The runtime enters `Failed` with three codes: `TRANSIENT_RETRY_EXHAUSTED` (the reconnect budget ran out, `retry.rs`), `HUE_STREAM_START_ABORTED` (the start unwound before a stream context existed, `StartAbortGuard` in `reconnect.rs`) and `AUTH_INVALID_CREDENTIALS` (the bridge refused the key at start or mid-stream). It stays there until the next start or stop, and `deriveHueBridgeCardState` used to have no branch for it: the card fell through to Ready, and `TRANSIENT_RETRY_EXHAUSTED`, matching the `TRANSIENT_` prefix, to a reconnect that was no longer happening. It now maps to `streamFailed` — FAILED pill, the code's own text via `hueStreamFailureReasonKey` (a generic "stream stopped" line for any code without one), and Start Again, which calls `restart_hue_stream` because that re-reads readiness itself, so a stale check on the card cannot block the way back. Re-pair is added only when the status carries the repair hint; the runtime auth failure does not flip `credentialState`, and routing it to `authError` would keep asking for a re-pair after one had succeeded, since the runtime stays `Failed` until the next start. An unreachable bridge, a refused credential, a pairing run and a missing area keep their own cards ahead of it, and `statusUnknown` stays separate: a rejected read over a held `Failed` shows as unknown. The status bar (FAILED, red, deep-link to Devices) and the Lights Hue row ("stream stopped", red dot) read the same state from `useHueStreamHealth`, which only reports it while Hue is a selected output and drops a held `Failed` on any start/stop invalidation so it does not outlive the mutation that ended it by a 15 s dead-stream poll.
+- **A rejected runtime-status read is not a runtime state.** The health commands never answer with an error, so an `invoke` that rejects means the read itself failed — it says nothing about whether the stream is up. `useHueRuntimeStatus` once minted a `Failed` status for it, which conflated the two: the bridge card, finding no Running/Reconnecting, fell through to Ready, and the Devices-tab loop of the time, which polled only in Starting/Running/Reconnecting, went silent — one IPC blip mid-stream left the card on Ready. The health store keeps the last snapshot Rust published and holds the rejection beside it (`readFailure`, surfaced as `runtimeStatusReadFailure`, code `HUE_STREAM_STATUS_UNAVAILABLE`). While it is set, `deriveHueBridgeCardState` ignores the stale status for the runtime-derived states and shows `statusUnknown` where it would have said Ready, and the store re-asks, backing off 2 → 4 → 8 → 16 → 30 s (`runtimeStatusRetryDelayMs`) until a read lands; an event from Rust clears it too. A backend-reported `Failed` is a real answer and keeps its own mapping (next entry). This is not under the bridge give-up budget above: it is a local IPC read, and giving up would bring back the stuck card.
+- **A backend-reported `Failed` is a stopped stream, not a Ready bridge.** The runtime enters `Failed` with three codes: `TRANSIENT_RETRY_EXHAUSTED` (the reconnect budget ran out, `retry.rs`), `HUE_STREAM_START_ABORTED` (the start unwound before a stream context existed, `StartAbortGuard` in `reconnect.rs`) and `AUTH_INVALID_CREDENTIALS` (the bridge refused the key at start or mid-stream). It stays there until the next start or stop, and `deriveHueBridgeCardState` used to have no branch for it: the card fell through to Ready, and `TRANSIENT_RETRY_EXHAUSTED`, matching the `TRANSIENT_` prefix, to a reconnect that was no longer happening. It now maps to `streamFailed` — FAILED pill, the code's own text via `hueStreamFailureReasonKey` (a generic "stream stopped" line for any code without one), and Start Again, which calls `restart_hue_stream` because that re-reads readiness itself, so a stale check on the card cannot block the way back. Re-pair is added only when the status carries the repair hint; the runtime auth failure does not flip `credentialState`, and routing it to `authError` would keep asking for a re-pair after one had succeeded, since the runtime stays `Failed` until the next start. An unreachable bridge, a refused credential, a pairing run and a missing area keep their own cards ahead of it, and `statusUnknown` stays separate: a rejected read over a held `Failed` shows as unknown. The status bar (FAILED, red, deep-link to Devices) and the Lights Hue row ("stream stopped", red dot) read the same state from `useHueStreamHealth`, which only reports it while Hue is a selected output. A held `Failed` cannot outlive the start or stop that ended it: the health monitor publishes the runtime's new state as that command returns, where it used to wait out a 15 s dead-stream poll or an invalidation bus.
 - **Hue availability is read from the live stream, so a test pattern started with the mode off sees no bridge.** `start_led_test_pattern` asks `snapshot_hue_output_context`, which answers only while `active_stream` is `Some`. USB and WLED are read from the connection and the sink registry, which survive a mode change — so the same run reports a disconnected strip as available and a paired, reachable bridge as absent, and degrades to preview-only. The test lease does exactly that, in Rust: LED Setup's test and the popup's pattern tiles send `apply_outputs` with `origin: "leaseHue"` (`acquireHueForTest` / `releaseHueAfterTest` in `modeApi.ts`), and the transaction brings a stream up for the run from the saved bridge, area and pairing (`commands/hue/hue_config.rs`) and stops it afterwards ([`lighting-transaction.md`](lighting-transaction.md)). It must stop *only* what it opened — a stream that was already up belongs to a live mode or another surface, and releasing that switches off lights the test never turned on. It lives in Rust rather than in a window because LED Setup and the control popup are separate webviews with no shared React tree. What it opened can change hands: a mode started during the run (tray, shortcut, the popup's mode strip) finds the stream up and its worker drives it. So the release reads what runs first and leaves the stream to a running mode whose targets name Hue; a stop there would end that mode's Hue output (see "The worker follows the live stream").
 - **The LED control popup's auto-start never reaches Hue.** Revealing the popup (tray, LED Setup's Test & Preview) starts a pattern with no gesture from the user, and it used to send it to `lastOutputTargets` — so a Hue-only setup with no strip lit the lamps the moment the window opened. The auto-start now sends `targets: ["usb"]` explicitly (the "usb" channel is serial or WLED): the lease sees no Hue and opens no stream, and with no strip the backend answers `PATTERN_PREVIEW_ONLY` and the pattern stays in the twin. Colour, brightness and speed changes retune the run in progress with that run's targets, so dragging a colour cannot widen a strip-only test onto Hue. Picking a pattern tile is the explicit gesture and still uses the saved targets, Hue included; the popup has no target selector. While a saved Hue target is left out, the popup says so and points at the tiles, instead of the generic preview-only text, which claims no device is connected. LED Setup's own Run test button is a gesture too and keeps the saved targets.
 - **A bridge allows one active entertainment streamer at a time.** `HUE_STREAM_NOT_READY_ACTIVE_STREAMER` in the log means something else holds the session — often a previous instance of this app that did not shut down cleanly, or the official Hue Sync app. It is not a pairing failure and must not be reported as one.
