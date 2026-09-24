@@ -493,6 +493,17 @@
   border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
+/* The one action that commits, e.g. Confirm area — the look of the area
+   list's old in-body Confirm button. */
+.lm-dcard-act.is-primary {
+  border-color: rgba(255, 176, 32, 0.35);
+  background: rgba(255, 176, 32, 0.06);
+  color: var(--lm-amber);
+}
+.lm-dcard-act.is-primary:hover:not(:disabled) {
+  background: rgba(255, 176, 32, 0.12);
+}
+
 /* Danger action button */
 .lm-dcard-act.is-danger:hover:not(:disabled) {
   border-color: var(--lm-red);
@@ -687,27 +698,6 @@
   text-transform: uppercase;
   flex-shrink: 0;
 }
-.lm-hue-area-confirm {
-  all: unset;
-  box-sizing: border-box;
-  display: block;
-  margin-top: 4px;
-  padding: 8px 12px;
-  border: 1px solid rgba(255, 176, 32, 0.35);
-  border-radius: 7px;
-  background: rgba(255, 176, 32, 0.06);
-  color: var(--lm-amber);
-  font-family: var(--lm-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  cursor: pointer;
-  text-align: center;
-  font-weight: 500;
-  transition: background 120ms ease;
-}
-.lm-hue-area-confirm:hover:not(:disabled) { background: rgba(255, 176, 32, 0.12); }
-.lm-hue-area-confirm:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ── Repair / info banner (States E, Q, K2) ─────────────────────────── */
 .lm-hue-repair {

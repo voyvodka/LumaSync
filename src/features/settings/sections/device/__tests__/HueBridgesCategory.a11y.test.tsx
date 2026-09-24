@@ -125,13 +125,53 @@ describe("entertainment-area list", () => {
     expect(held).toHaveAccessibleDescription("hue:areas.channels:2 hue:areas.activeStreamer");
   });
 
-  it("picks a free area and ignores one another app holds", () => {
+  it("highlights a free area, ignores one another app holds, and commits on Confirm", () => {
     const selectArea = vi.fn<UseHueOnboardingResult["selectArea"]>();
     renderCard(hueState({ areaGroups, selectArea }));
+    const confirm = screen.getByRole("button", { name: "hue:page.confirmArea" });
+    expect(confirm).toBeDisabled();
+
     fireEvent.click(screen.getByRole("button", { name: "Desk" }));
-    expect(selectArea).not.toHaveBeenCalled();
+    expect(confirm).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "TV Area" }));
+    expect(screen.getByRole("button", { name: "TV Area" })).toHaveAttribute("aria-pressed", "true");
+    expect(selectArea).not.toHaveBeenCalled();
+
+    fireEvent.click(confirm);
     expect(selectArea).toHaveBeenCalledWith("free");
+  });
+});
+
+// The card was a `role="button"` holding the "+ Pair" button, and the two did
+// different things: the card selected the bridge unpaired, which read as
+// expired credentials.
+describe("found-bridge card", () => {
+  const found = { ...noBridge, bridges: [bridge, { id: "bridge-2", ip: "192.168.1.11", name: "Office" }] };
+
+  it("is static, with + Pair as its only control, named for its bridge", () => {
+    const { container } = renderCard(hueState(found));
+    const cards = container.querySelectorAll(".lm-dcard");
+    expect(cards).toHaveLength(2);
+    for (const card of cards) {
+      expect(card).not.toHaveAttribute("role");
+      expect(card).not.toHaveAttribute("tabindex");
+      expect(within(card as HTMLElement).getAllByRole("button")).toHaveLength(1);
+    }
+    const pairButtons = screen.getAllByRole("button", { name: "hue:page.addBridge" });
+    expect(pairButtons[0]).toHaveAccessibleDescription("Test Bridge");
+    expect(pairButtons[1]).toHaveAccessibleDescription("Office");
+  });
+
+  it("pairs from the button and does nothing from the card body", () => {
+    const pair = vi.fn<UseHueOnboardingResult["pair"]>(async () => {});
+    const selectBridge = vi.fn<UseHueOnboardingResult["selectBridge"]>();
+    const { container } = renderCard(hueState({ ...found, pair, selectBridge }));
+    fireEvent.click(container.querySelector(".lm-dcard") as HTMLElement);
+    expect(pair).not.toHaveBeenCalled();
+    expect(selectBridge).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "hue:page.addBridge" })[1] as HTMLElement);
+    expect(pair).toHaveBeenCalledWith("bridge-2");
   });
 });
 

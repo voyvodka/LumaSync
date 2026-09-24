@@ -128,6 +128,16 @@ https://keepachangelog.com/en/1.1.0/
 - Windows: with "Show stats for nerds" on, live stats stop updating while the app sits in the tray
   or is minimised. Windows could keep telling the app its window was on screen after it was hidden,
   so the numbers kept being fetched for a window nobody could see.
+- Devices → Hue Bridges: the page no longer shows the same Hue problem twice. While it is open,
+  the notice strip leaves out Hue messages the bridge card already shows, and they come back when
+  you leave the page. A stop failure that also names the USB strip still shows there.
+- Devices → Hue Bridges: Change Area now opens the list of entertainment areas with the current
+  one highlighted. Confirm switches to the area you picked and checks it; Cancel keeps the old one.
+  Before, the button only reloaded the list without showing it, so the area could not be changed.
+- Hue: stopping Hue after a stop that did not finish has one label, Stop Hue, both in the notice
+  and on the bridge card, which called it Retry Stop.
+- Devices → Hue Bridges: a bridge found on the network has one button, + Pair. Clicking the rest
+  of its card used to select the bridge without pairing it, which showed its key as expired.
 - LED Setup: while the test pattern's overlay is moving to a monitor, the monitor list and the test
   pattern button now wait for it, as an earlier release said they would; they never did. Picking a
   monitor in that moment saved it as the capture source while the overlay landed on the other

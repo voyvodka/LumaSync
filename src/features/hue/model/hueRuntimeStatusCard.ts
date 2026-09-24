@@ -43,7 +43,7 @@ export function deriveFamilyActionHints(code: string | null | undefined): HueRun
   // Specific code matches (take priority over family prefixes).
   // `HUE_STOP_TIMEOUT_PARTIAL` surfaces when a stop request times out mid-flight;
   // the natural recovery is to invoke `stop_lighting` again — same path as the
-  // DeviceSection inline "Retry Stop" CTA.
+  // Hue card's partial-stop "Stop Hue" action.
   if (code === "HUE_STOP_TIMEOUT_PARTIAL") {
     return [HUE_RUNTIME_ACTION_HINT.RETRY];
   }

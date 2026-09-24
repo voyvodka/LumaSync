@@ -25,6 +25,7 @@ import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/she
 import {
   NOTICE_SEVERITY,
   NOTICE_TIER,
+  NOTICE_VIEW,
   orderNotices,
   SHELL_NOTICE_IDS,
   type ShellNotice,
@@ -222,11 +223,14 @@ export function buildShellNotices(
         ? t("shell:notices.messages.stopFailedUsb", { targets })
         : t("shell:notices.messages.stopFailed", { targets }),
       action: stopFailedTargets.includes("hue")
-        ? { label: t("shell:notices.actions.stopHue"), onClick: handlers.retryHueStop, testId: "stop-failed-retry" }
+        ? { label: t("hue:actions.stop"), onClick: handlers.retryHueStop, testId: "stop-failed-retry" }
         : undefined,
       dismissible: true,
       source: input.stopFailedTargets,
       testId: "stop-failed-notice",
+      // The Hue card's partial-stop state offers the same button. A strip that
+      // did not stop is news the card does not carry, so that copy stays.
+      shownBy: stopFailedTargets.every((target) => target === "hue") ? NOTICE_VIEW.DEVICES_HUE : undefined,
     });
   }
   if (input.previewOpenFailure) {
@@ -243,6 +247,8 @@ export function buildShellNotices(
   }
 
   // ── Hue and USB ──────────────────────────────────────────────────────
+  // Each Hue notice here is also the state of the Devices → Hue card, so the
+  // strip defers to that page while it is open (`shownBy`).
   if (input.hueLeftOut) {
     // Busy describes a wait still under way, which the retry replaces or clears.
     const waiting = input.hueLeftOut === HUE_LEFT_OUT_REASON.BUSY;
@@ -260,6 +266,7 @@ export function buildShellNotices(
       dismissible: !waiting,
       source: input.hueLeftOut,
       testId: "hue-left-out-notice",
+      shownBy: NOTICE_VIEW.DEVICES_HUE,
       data: { "data-reason": input.hueLeftOut },
     });
   }
@@ -275,6 +282,7 @@ export function buildShellNotices(
       dismissible: !waiting,
       source: input.hueBootRetry,
       testId: "hue-boot-retry-notice",
+      shownBy: NOTICE_VIEW.DEVICES_HUE,
       data: { "data-state": input.hueBootRetry },
     });
   }
@@ -322,6 +330,7 @@ export function buildShellNotices(
       dismissible: true,
       source: input.hueColorNotice,
       testId: "hue-color-notice",
+      shownBy: NOTICE_VIEW.DEVICES_HUE,
     });
   }
 

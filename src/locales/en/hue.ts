@@ -12,6 +12,7 @@ export default {
     loadingAreas: "Loading areas...",
     checkingReadiness: "Checking readiness...",
     start: "Start Hue",
+    stop: "Stop Hue",
   },
   bridge: {
     unreachable: "Unreachable",
@@ -182,7 +183,7 @@ export default {
     },
     partialStop: {
       title: "Partial stop",
-      body: "Hue stop did not fully finish. Retry stop to complete cleanup.",
+      body: "Hue did not fully stop. Stop Hue again to finish the cleanup.",
     },
     timeout: {
       title: "Stop timeout",
@@ -220,7 +221,6 @@ export default {
     validate: "Revalidate",
     reconnectNow: "Reconnect",
     startAgain: "Start Again",
-    retryStop: "Retry Stop",
     stopRetrying: "Stop",
     enterIp: "Verify IP",
     scanAgain: "Scan Again",

@@ -29,6 +29,7 @@ import {
 } from "./features/hue/state/useHueStreamHealth";
 import { buildStatusItems, resolveHueHeldOut } from "./features/shell/statusItems";
 import { buildShellNotices, type ShellNoticeHandlers } from "./features/shell/notices/buildShellNotices";
+import { currentNoticeView } from "./features/shell/notices/noticeModel";
 import { useShellNoticeQueue } from "./features/shell/notices/useShellNoticeQueue";
 import { ShellNoticeAnnouncer, ShellNoticeSlot } from "./features/shell/notices/ShellNoticeSlot";
 import { useOnboardingStep } from "./features/onboarding/state/useOnboardingStep";
@@ -93,6 +94,7 @@ import {
 const CALIBRATION_AUTO_OPENED_KEY = "lumasync_calibration_opened";
 
 const selectActiveSection = (state: NavigationState) => state.activeSection;
+const selectNoticeView = (state: NavigationState) => currentNoticeView(state);
 const selectUpdaterStatus = (snapshot: UpdaterSnapshot) => snapshot.state.status;
 const selectUpdateCheckFailedNotice = (snapshot: UpdaterSnapshot) => snapshot.checkFailedNotice;
 const selectUpdateModalShown = (snapshot: UpdaterSnapshot) =>
@@ -114,6 +116,7 @@ function Shell() {
   } = useUIMode();
   const [navigation] = useState(createNavigationStore);
   const activeSection = useStoreSelector(navigation, selectActiveSection);
+  const noticeView = useStoreSelector(navigation, selectNoticeView);
   const { setActiveSection } = navigation;
   useLayoutEffect(() => {
     navigation.setUIMode(currentMode);
@@ -470,7 +473,7 @@ function Shell() {
       t,
     ],
   );
-  const noticeQueue = useShellNoticeQueue(noticeCandidates, { suppressed: updateModalShown });
+  const noticeQueue = useShellNoticeQueue(noticeCandidates, { suppressed: updateModalShown, view: noticeView });
 
   const statusItems = buildStatusItems(
     {

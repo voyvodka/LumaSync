@@ -11,6 +11,11 @@ export interface NavigationState {
   activeSection: SectionId;
   /** A notice asked for one Devices category; forwarded to the rail. */
   deviceCategoryRequest: DeviceCategoryRequest | null;
+  /**
+   * Reported by the mounted Devices page, `null` while it is not mounted. The
+   * rail owns the choice; this copy lets the shell tell which screen is up.
+   */
+  visibleDeviceCategory: DeviceCategory | null;
 }
 
 export interface NavigationStore extends Store<NavigationState> {
@@ -19,6 +24,7 @@ export interface NavigationStore extends Store<NavigationState> {
   /** Section and category in one write, so no render sees one without the other. */
   openSection: (sectionId: SectionId, deviceCategory?: DeviceCategory) => void;
   setUIMode: (uiMode: UIMode) => void;
+  setVisibleDeviceCategory: (category: DeviceCategory | null) => void;
 }
 
 export function createNavigationStore(): NavigationStore {
@@ -26,6 +32,7 @@ export function createNavigationStore(): NavigationStore {
     uiMode: "compact",
     activeSection: SECTION_IDS.LIGHTS,
     deviceCategoryRequest: null,
+    visibleDeviceCategory: null,
   });
   const patch = (next: Partial<NavigationState>) => {
     const current = store.get();
@@ -44,6 +51,7 @@ export function createNavigationStore(): NavigationStore {
           deviceCategory === undefined ? null : { category: deviceCategory, nonce: Date.now() },
       }),
     setUIMode: (uiMode) => patch({ uiMode }),
+    setVisibleDeviceCategory: (visibleDeviceCategory) => patch({ visibleDeviceCategory }),
   };
 }
 
@@ -89,6 +97,11 @@ export function useNavigationState<S>(
   isEqual?: (a: S, b: S) => boolean,
 ): S {
   return useStoreSelector(useNavigation().store, selector, isEqual);
+}
+
+/** For the Devices page to report its rail. Identity-stable. */
+export function useVisibleDeviceCategoryReporter(): NavigationStore["setVisibleDeviceCategory"] {
+  return useNavigation().store.setVisibleDeviceCategory;
 }
 
 /** Identity-stable for the provider's lifetime. */

@@ -3,7 +3,14 @@ import type { FocusEvent } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { vi } from "vitest";
 
-import { NOTICE_SEVERITY, NOTICE_TIER, type ShellNotice, type ShellNoticeId } from "../noticeModel";
+import {
+  NOTICE_SEVERITY,
+  NOTICE_TIER,
+  NOTICE_VIEW,
+  type NoticeView,
+  type ShellNotice,
+  type ShellNoticeId,
+} from "../noticeModel";
 import { NOTICE_MIN_VISIBLE_MS, NOTICE_RELEASE_GRACE_MS, useShellNoticeQueue } from "../useShellNoticeQueue";
 
 function notice(id: ShellNoticeId, overrides: Partial<ShellNotice> = {}): ShellNotice {
@@ -199,5 +206,41 @@ describe("useShellNoticeQueue", () => {
 
     rerender({ candidates: [offline("Open Hue", true)], suppressed: false });
     expect(result.current.entries[0]?.notice.secondaryAction?.pending).toBe(true);
+  });
+  // Devices → Hue draws these as the card's state; the strip said them again.
+  describe("deferring to the screen on view", () => {
+    function setupWithView(initial: ShellNotice[], view: NoticeView | null) {
+      return renderHook(
+        ({ candidates, view }) => useShellNoticeQueue(candidates, { suppressed: false, view }),
+        { initialProps: { candidates: initial, view } },
+      );
+    }
+    const hueNotice = notice("hue-left-out", { shownBy: NOTICE_VIEW.DEVICES_HUE });
+
+    it("hides a notice the screen shows, and only that one", () => {
+      const { result } = setupWithView([hueNotice, notice("usb-disconnected")], NOTICE_VIEW.DEVICES_HUE);
+      expect(ids(result.current.entries)).toEqual(["usb-disconnected"]);
+      expect(result.current.announced?.notice.id).toBe("usb-disconnected");
+    });
+
+    it("brings the same occurrence back when the user leaves", () => {
+      const { result, rerender } = setupWithView([hueNotice], null);
+      const key = result.current.entries[0]?.key;
+
+      rerender({ candidates: [hueNotice], view: NOTICE_VIEW.DEVICES_HUE });
+      expect(result.current.entries).toEqual([]);
+
+      rerender({ candidates: [hueNotice], view: null });
+      expect(result.current.entries.map((entry) => entry.key)).toEqual([key]);
+    });
+
+    it("keeps a dismissed notice dismissed across the visit", () => {
+      const { result, rerender } = setupWithView([hueNotice], null);
+      act(() => result.current.dismiss(result.current.entries[0]));
+
+      rerender({ candidates: [hueNotice], view: NOTICE_VIEW.DEVICES_HUE });
+      rerender({ candidates: [hueNotice], view: null });
+      expect(result.current.entries).toEqual([]);
+    });
   });
 });
