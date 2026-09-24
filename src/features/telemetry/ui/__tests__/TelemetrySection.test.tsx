@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SECTION_IDS } from "@/shared/contracts/shell";
@@ -67,6 +67,8 @@ vi.mock("react-i18next", () => ({
 }));
 
 import { TelemetrySection } from "../TelemetrySection";
+import { __resetTelemetrySourceForTests } from "../../telemetrySource";
+import { __resetShowNerdStatsForTests } from "../../nerdStatsSetting";
 
 describe("TelemetrySection", () => {
   beforeEach(() => {
@@ -247,8 +249,14 @@ vi.mock("@/features/i18n/i18n", () => ({
   changeLanguage: vi.fn(),
 }));
 
+const { shellSaveMock } = vi.hoisted(() => ({ shellSaveMock: vi.fn() }));
+
 vi.mock("@/features/persistence/shellStore", () => ({
-  shellStore: { save: vi.fn() },
+  shellStore: {
+    save: (partial: unknown) => shellSaveMock(partial),
+    load: () => Promise.resolve({}),
+    onSaved: () => () => {},
+  },
 }));
 
 const SYSTEM_SECTION = {
@@ -257,6 +265,49 @@ const SYSTEM_SECTION = {
 };
 
 describe("Settings telemetry wiring", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    __resetTelemetrySourceForTests();
+    __resetShowNerdStatsForTests();
+    shellSaveMock.mockResolvedValue(undefined);
+    getFullTelemetrySnapshotMock.mockResolvedValue({
+      usb: { captureFps: 60, sendFps: 58, queueHealth: "healthy" },
+      hue: null,
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    __resetTelemetrySourceForTests();
+    __resetShowNerdStatsForTests();
+  });
+
+  it("keeps the readout unmounted, and polls nothing, with stats for nerds off", async () => {
+    renderWithShellStores(<SettingsLayout hueConfigured={false} hueStreaming={false} />, SYSTEM_SECTION);
+
+    const toggle = await screen.findByTestId("nerd-stats-toggle");
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(screen.queryByTestId("telemetry-readout")).not.toBeInTheDocument();
+    expect(getFullTelemetrySnapshotMock).not.toHaveBeenCalled();
+  });
+
+  it("turning it on shows the readout, starts the poll and saves the choice", async () => {
+    renderWithShellStores(<SettingsLayout hueConfigured={false} hueStreaming={false} />, SYSTEM_SECTION);
+    const toggle = await screen.findByTestId("nerd-stats-toggle");
+
+    await act(async () => {
+      toggle.click();
+    });
+
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(shellSaveMock).toHaveBeenCalledWith({ showNerdStats: true });
+    await waitFor(() => expect(screen.getByText("60.00")).toBeInTheDocument());
+    expect(getFullTelemetrySnapshotMock).toHaveBeenCalled();
+  });
+
   it("renders TelemetrySection when system section is active", async () => {
     renderWithShellStores(<SettingsLayout hueConfigured={false} hueStreaming={false} />, SYSTEM_SECTION);
 

@@ -45,4 +45,8 @@ export default {
     launchAtLogin: "Launch at login",
     launchAtLoginDescription: "Start LumaSync automatically when you log in.",
   },
+  nerdStats: {
+    label: "Show stats for nerds",
+    description: "Show frame rate and live output numbers in the status bar. Off saves a little work.",
+  },
 };

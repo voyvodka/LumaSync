@@ -135,6 +135,15 @@ for hours with the React tree mounted, so an unconditional interval keeps firing
 nobody can see; the immediate resume tick is what makes a chip look fresh the instant the window
 comes back. A new poll that skips this is a regression even though nothing will fail.
 
+**Telemetry is read only while "Show stats for nerds" is on.** The setting (`ShellState.showNerdStats`,
+absent ⇒ off) gates by *mounting*: off, the status bar leaves out the FPS pill and every item marked
+`nerdStat` (CAP), and the General section leaves out the telemetry readout, so no subscriber of the
+shared telemetry loop exists and nothing polls. Hiding them with CSS would have kept the IPC running.
+What must show regardless — the capture-stall notice and the serial link-budget note — reads the
+pushed `RuntimeHealth` instead ([`capture-and-pipeline.md`](capture-and-pipeline.md)). One store
+(`telemetry/nerdStatsSetting.ts`) holds the value for both readers and follows other windows' writes,
+so a flip takes effect at once.
+
 **Every window's lighting choices go to one Rust transaction.** The main window, the LED control
 popup, the tray and the launch restore all send `apply_outputs`, and every window renders the same
 runtime snapshot (`useLightingRuntime`). The ordering rules, the Hue start and stop, the saving and

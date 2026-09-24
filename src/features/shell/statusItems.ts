@@ -74,6 +74,7 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
       label: "CAP",
       state: ambilightActive ? t("shell:statusBar.state.ok") : "—",
       kind: ambilightActive ? "ok" : "idle",
+      nerdStat: true,
     },
     {
       // The chip names the transport that is actually bound. "USB" is the

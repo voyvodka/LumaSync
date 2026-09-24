@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TelemetrySection } from "@/features/telemetry/ui/TelemetrySection";
+import { setShowNerdStats, useShowNerdStats } from "@/features/telemetry/nerdStatsSetting";
 import {
   changeLanguage,
   I18N_LANGUAGE_NAMES,
@@ -32,6 +33,7 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
   const [startupEnabled, setStartupEnabled] = useState(false);
   const [updateChannel, setUpdateChannel] = useState<UpdateChannel>(DEFAULT_UPDATE_CHANNEL);
   const [startupLoading, setStartupLoading] = useState(true);
+  const showNerdStats = useShowNerdStats();
 
   useEffect(() => {
     let unlistenFn: (() => void) | null = null;
@@ -221,9 +223,29 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
         </div>
       </section>
 
-      {/* Telemetry (preserved) */}
+      {/* Telemetry — the readout mounts only with stats for nerds on */}
       <section className="lm-settings-group">
-        <TelemetrySection localOutputConnected={localOutputConnected} />
+        <div className="lm-settings-group-h">
+          <span className="t">{t("telemetry:title")}</span>
+          <span className="sub">{t("settings:groups.telemetry.sub")}</span>
+        </div>
+        <div className="lm-settings-row">
+          <div className="lm-settings-row-l">
+            <div className="lm-settings-row-name">{t("settings:nerdStats.label")}</div>
+            <div className="lm-settings-row-desc">{t("settings:nerdStats.description")}</div>
+          </div>
+          <div className="lm-settings-row-r">
+            <button
+              type="button"
+              className="lm-settings-tg"
+              data-testid="nerd-stats-toggle"
+              onClick={() => { void setShowNerdStats(!showNerdStats); }}
+              aria-pressed={showNerdStats}
+              aria-label={t("settings:nerdStats.label")}
+            />
+          </div>
+        </div>
+        {showNerdStats && <TelemetrySection localOutputConnected={localOutputConnected} />}
       </section>
     </div>
   );

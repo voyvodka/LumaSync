@@ -48,6 +48,10 @@ const settings: Catalogue<typeof enSettings> = {
     launchAtLogin: "Girişte başlat",
     launchAtLoginDescription: "LumaSync'i oturum açtığınızda otomatik başlatın.",
   },
+  nerdStats: {
+    label: "Meraklısı için istatistikler",
+    description: "Durum çubuğunda kare hızını ve canlı çıkış değerlerini gösterir. Kapalıyken uygulama biraz daha az iş yapar.",
+  },
 };
 
 export default settings;

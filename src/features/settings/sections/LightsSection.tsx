@@ -36,8 +36,9 @@ import {
   resolveKeybindPlatform,
 } from "@/shared/contracts/shell";
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
-import { useFullTelemetryPoll } from "@/features/telemetry/hooks/useFullTelemetryPoll";
-import { hasSerialLinkBudget } from "@/shared/contracts/telemetry";
+import { useRuntimeHealth } from "@/features/telemetry/runtimeHealthSource";
+import { hasSerialLinkBudget, type RuntimeHealth } from "@/shared/contracts/telemetry";
+import { shallowEqual } from "@/shared/lib/store";
 import { HUE_STREAM_MAX_HZ } from "@/features/hue/model/streamRate";
 import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
 import {
@@ -53,7 +54,10 @@ import { ColorCorrectionPanel } from "./control/ColorCorrectionPanel";
 import { FirmwareProfilePicker } from "./control/FirmwareProfilePicker";
 import { LightingSmoothingPresetControl } from "./control/LightingSmoothingPresetControl";
 
-const TELEMETRY_POLL_INTERVAL_MS = 1000;
+const selectLinkBudget = (health: RuntimeHealth) => ({
+  linkConstrained: health.linkConstrained,
+  linkMaxFps: health.linkMaxFps,
+});
 
 const HUE_UNAVAILABLE_SUB_KEYS = {
   notConfigured: "lights:dock.rows.hueSubUnavailable",
@@ -325,20 +329,14 @@ export function LightsSection({
 
   const totalLeds = calibration?.totalLeds;
 
-  // Polled only for the serial link-budget note, so it runs only while
-  // Ambilight is driving the local output. The shared hook pauses while the
-  // tray window is hidden and re-arms with an immediate tick on resume.
-  const { snapshot: liveTelemetry } = useFullTelemetryPoll(
-    isAmbilight && usbSelected,
-    TELEMETRY_POLL_INTERVAL_MS,
-  );
-  const liveUsb = liveTelemetry?.usb ?? null;
+  // Pushed by the worker, not polled: the note shows with stats for nerds off.
+  const linkBudget = useRuntimeHealth(selectLinkBudget, shallowEqual);
 
   // Gate on the flag, never on `linkMaxFps < 30` — the 0 sentinel means "no
   // serial link this session", so a raw comparison would paint every Hue-only
   // and WLED-only session as maximally constrained.
   const linkConstrained =
-    liveUsb !== null && hasSerialLinkBudget(liveUsb) && liveUsb.linkConstrained;
+    isAmbilight && usbSelected && hasSerialLinkBudget(linkBudget) && linkBudget.linkConstrained;
 
   const saturationValue = Math.round((incomingAmbilight.saturation ?? 1) * 100);
   const saturationFillPercent = Math.round(((saturationValue - 50) / 150) * 100);
@@ -548,13 +546,13 @@ export function LightsSection({
             {/* role="status", never "alert": `linkMaxFps` is derived once at
                 worker start from LED count + chip type and never re-sampled,
                 so this is a steady-state condition, announced once. */}
-            {linkConstrained && liveUsb ? (
+            {linkConstrained ? (
               <div className="lm-signal-note" role="status">
                 <span className="lm-signal-note-dot" aria-hidden />
                 <span>
                   <b>
                     {t("lights:signal.linkBudget.constrained", {
-                      fps: Math.round(liveUsb.linkMaxFps),
+                      fps: Math.round(linkBudget.linkMaxFps),
                     })}
                   </b>{" "}
                   {t("lights:signal.linkBudget.hint")}

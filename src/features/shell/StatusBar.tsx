@@ -20,6 +20,10 @@
  * red + "Low FPS" text — text label avoids a color-only state). While
  * Ambilight is inactive the pill shows "FPS —" as a neutral placeholder.
  *
+ * The FPS pill and every item marked `nerdStat` (CAP) render only with
+ * Settings → General "Show stats for nerds" on. Off, the pill is not mounted,
+ * so its poll does not exist — hiding it would have kept the IPC running.
+ *
  * Offline `StatusItem`s may opt-in to a "Reconnect" affordance
  * via `onReconnect`. When set, the pill renders a small icon button after
  * the value text that deep-links into the DEVICES section (or runs a
@@ -38,6 +42,7 @@ import {
   resolveKeybindPlatform,
 } from "@/shared/contracts/shell";
 import { useRuntimeTelemetry } from "../telemetry/hooks/useRuntimeTelemetry";
+import { useShowNerdStats } from "../telemetry/nerdStatsSetting";
 
 export const STATUS_BAR_HEIGHT_FULL_PX = 24;
 export const STATUS_BAR_HEIGHT_COMPACT_PX = 22;
@@ -68,6 +73,8 @@ export interface StatusItem {
    * `onReconnect` is set so the icon-only control is always announced.
    */
   reconnectAriaLabel?: string;
+  /** Shown only with "Show stats for nerds" on. */
+  nerdStat?: boolean;
 }
 
 interface StatusBarProps {
@@ -91,6 +98,8 @@ export function StatusBar({ items, uiMode, lightingActive = true }: StatusBarPro
   const { t } = useTranslation();
   const isCompact = uiMode === "compact";
   const platform = useMemo(() => resolveKeybindPlatform(), []);
+  const showNerdStats = useShowNerdStats();
+  const shownItems = showNerdStats ? items : items.filter((item) => item.nerdStat !== true);
 
   // Mode badge renders the digit as a "1-3" span so the hint stays compact.
   // Pull the modifier portion (⌥ / Alt) from the MODE_OFF definition — all
@@ -115,11 +124,12 @@ export function StatusBar({ items, uiMode, lightingActive = true }: StatusBarPro
       className={`lm-statusbar${isCompact ? " is-compact" : ""}`}
       style={{ height: `${statusBarHeightPx(uiMode)}px` }}
       data-testid="status-bar"
+      data-nerd-stats={showNerdStats ? "on" : "off"}
     >
-      {items.map((item) => (
+      {shownItems.map((item) => (
         <StatusPill key={item.label} item={item} />
       ))}
-      <FpsPill isCompact={isCompact} enabled={lightingActive} />
+      {showNerdStats && <FpsPill isCompact={isCompact} enabled={lightingActive} />}
       <div className="lm-statusbar-spacer" />
       {!isCompact && (
         <>
@@ -149,7 +159,7 @@ function StatusPill({ item }: { item: StatusItem }) {
     (item.kind === "off" || item.kind === "idle" || item.kind === "error");
 
   return (
-    <div className="lm-statusbar-pair">
+    <div className="lm-statusbar-pair" data-testid={`status-chip-${item.label}`}>
       <span className="lm-statusbar-label">{item.label}</span>
       <span className={`lm-statusbar-value is-${item.kind}`}>
         <span aria-hidden>●</span> {item.state}
@@ -196,9 +206,9 @@ function ReconnectIcon() {
 
 /**
  * FPS / latency runtime pill. Renders as the 4th StatusBar chip after
- * CAP / USB / HUE and is always mounted — an inactive Ambilight pipeline
- * shows a neutral "FPS —" placeholder rather than hiding the pill so the
- * HUD layout stays stable.
+ * CAP / USB / HUE, mounted whenever stats for nerds is on — an inactive
+ * Ambilight pipeline shows a neutral "FPS —" placeholder rather than hiding
+ * the pill so the HUD layout stays stable.
  *
  * Threshold color mapping (fixed, no user preference):
  *   >= 45 FPS → `is-ok` (green)
@@ -272,11 +282,13 @@ function FpsPill({ isCompact, enabled }: FpsPillProps) {
     : t("shell:fpsHud.inactive");
 
   return (
-    <div className="lm-statusbar-pair" aria-label={ariaLabel}>
+    <div className="lm-statusbar-pair" aria-label={ariaLabel} data-testid="status-fps">
       <span className="lm-statusbar-label">{label}</span>
       <span className={`lm-statusbar-value is-${kind}`}>
         <span aria-hidden>●</span>
-        <span className="lm-statusbar-fps">{fpsDisplay}</span>
+        <span className="lm-statusbar-fps" data-testid="status-fps-value">
+          {fpsDisplay}
+        </span>
         {lowFpsLabel ? <span className="lm-statusbar-lowfps">{lowFpsLabel}</span> : null}
         {latencySuffix ? <span className="lm-statusbar-latency">{latencySuffix}</span> : null}
       </span>

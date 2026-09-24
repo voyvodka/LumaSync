@@ -25,6 +25,7 @@ import type {
   ApplyOutputsResult,
   LightingRuntimeSnapshot,
 } from "@/shared/contracts/lightingRuntime";
+import type { RuntimeHealth } from "@/shared/contracts/telemetry";
 
 // ---------------------------------------------------------------------------
 // Per-test state. Reset by `resetAppHarness()` in every file's beforeEach.
@@ -40,6 +41,7 @@ export const env = {
   /** Re-renders the component holding the mocked `useAutoUpdater`, as a real state change would. */
   rerenderUpdater: null as (() => void) | null,
   publishRuntime: null as ((snapshot: LightingRuntimeSnapshot) => void) | null,
+  pushHealth: null as ((health: RuntimeHealth) => void) | null,
   lastLayoutProps: {} as Record<string, unknown>,
   lastLightingActions: null as LightingControlActions | null,
   /** Renders of the memoised layout itself: App handing it new props. */
@@ -189,6 +191,13 @@ export const mockModeApi = {
 export const mockLightingRuntimeEvents = {
   listenLightingRuntime: (listener: (snapshot: LightingRuntimeSnapshot) => void) => {
     env.publishRuntime = listener;
+    return Promise.resolve(() => {});
+  },
+};
+
+export const mockRuntimeHealthEvents = {
+  listenRuntimeHealth: (listener: (health: RuntimeHealth) => void) => {
+    env.pushHealth = listener;
     return Promise.resolve(() => {});
   },
 };
@@ -444,6 +453,7 @@ export function resetAppHarness(): void {
   env.checkFailedNotice = null;
   env.rerenderUpdater = null;
   env.publishRuntime = null;
+  env.pushHealth = null;
   env.lastLayoutProps = {};
   env.lastLightingActions = null;
   env.layoutRenders = 0;

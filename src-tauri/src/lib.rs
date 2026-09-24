@@ -98,7 +98,10 @@ use commands::room_map::hue_zone::{
     assign_channel_to_hue_zone, create_hue_zone, delete_hue_zone, update_hue_zone,
 };
 use commands::room_map::save_load::{copy_background_image, update_hue_channel_positions};
-use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
+use commands::runtime_telemetry::{
+    get_runtime_telemetry, register_runtime_health_sink, RuntimeHealth, RuntimeTelemetryState,
+    RUNTIME_HEALTH_CHANGED_EVENT,
+};
 use commands::screen_capture_permission::{
     get_screen_capture_permission, open_screen_capture_settings,
 };
@@ -190,6 +193,20 @@ pub(crate) fn close_all_overlays<R: Runtime>(app: &AppHandle<R>) {
     }
 
     show_and_focus_settings(app);
+}
+
+/// Main window only: the stall notice and the link-budget note live there.
+fn register_runtime_health_emitter<R: Runtime>(app: &AppHandle<R>) {
+    let app = app.clone();
+    register_runtime_health_sink(std::sync::Arc::new(move |health: &RuntimeHealth| {
+        if let Err(error) = app.emit_to(
+            EventTarget::webview_window(MAIN_WINDOW_LABEL),
+            RUNTIME_HEALTH_CHANGED_EVENT,
+            health,
+        ) {
+            log::warn!("[runtime-health] emit failed: {error}");
+        }
+    }));
 }
 
 fn hide_to_tray<R: Runtime>(window: &tauri::Window<R>) {
@@ -549,6 +566,7 @@ pub fn run() {
             app.manage(HueRuntimeStateStore::default());
             app.manage(RuntimeTelemetryState::default());
             app.manage(PendingUpdate::default());
+            register_runtime_health_emitter(app.handle());
 
             // After the `manage` calls, not next to `LUMASYNC_NO_DEVTOOLS`: the
             // hook resolves `OverlayState` when it fires.

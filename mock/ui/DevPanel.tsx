@@ -32,6 +32,7 @@ import {
   SHELL_EVENTS,
   emitLightingModeChanged,
   emitMockEvent,
+  emitRuntimeHealth,
   emitUpdateDownload,
   getEdgeSignalStream,
   startEdgeSignalStream,
@@ -1080,7 +1081,7 @@ export function DevPanel({ onReloadApp }: PanelProps) {
               <Pick
                 value="—"
                 options={["—", "healthy", "degraded", "stalled", "zero"] as const}
-                onChange={(v) =>
+                onChange={(v) => {
                   mutate((w) => {
                     if (v === "healthy") {
                       w.telemetry = { captureFps: 58.4, sendFps: 58.1, queueHealth: "healthy", frameLatencyMs: 4.2, linkConstrained: false, linkMaxFps: 74, lastCaptureErrorCode: null, lastCaptureErrorAtSecs: null };
@@ -1093,8 +1094,10 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                     } else if (v === "zero") {
                       w.telemetry = { captureFps: 0, sendFps: 0, queueHealth: "healthy", frameLatencyMs: 0, linkConstrained: false, linkMaxFps: 0, lastCaptureErrorCode: null, lastCaptureErrorAtSecs: null };
                     }
-                  })
-                }
+                  });
+                  // The stall notice and the link note follow the push, not the poll.
+                  void emitRuntimeHealth();
+                }}
               />
               <div style={{ color: FAINT, fontSize: 9, lineHeight: 1.35, marginTop: 2 }}>
                 With no USB connected `linkMaxFps` reports the absent sentinel

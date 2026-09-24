@@ -1,5 +1,11 @@
 //! Frame-rate and queue-health telemetry surfaced to the frontend — the USB
 //! worker's rolling window plus a point-in-time read of Hue runtime health.
+//!
+//! Two consumers, two paths. The numbers (`get_runtime_telemetry`) are only
+//! read while "stats for nerds" is on. The part the UI needs regardless — a
+//! capture stall and the serial link budget — is pushed as `RuntimeHealth`
+//! when it changes, so nothing polls for it. See
+//! docs/architecture/capture-and-pipeline.md.
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -10,6 +16,14 @@ use tauri::State;
 use super::hue::state_store::{acquire_hue_runtime, HueRuntimeStateStore};
 
 const TELEMETRY_WINDOW: Duration = Duration::from_secs(1);
+
+/// `RUNTIME_HEALTH_CHANGED_EVENT` in `src/shared/contracts/telemetry.ts`.
+pub const RUNTIME_HEALTH_CHANGED_EVENT: &str = "telemetry://health-changed";
+
+/// `CAPTURE_FAILURE_ONGOING_MAX_AGE_SECS` in `src/shared/contracts/telemetry.ts`:
+/// two windows plus slack, since one window can pass before a fresh failure
+/// is flushed and a one-window threshold would flicker.
+pub const CAPTURE_FAILURE_ONGOING_MAX_AGE_SECS: u64 = 3;
 
 /// Slot-overwrite pressure band, derived from `RuntimeTelemetryWindow`'s
 /// overwrite ratio for the last flush window.
@@ -65,6 +79,42 @@ impl Default for RuntimeTelemetrySnapshot {
             last_capture_error_at_secs: None,
         }
     }
+}
+
+/// What the UI shows whether or not stats for nerds is on. Pushed through
+/// `RUNTIME_HEALTH_CHANGED_EVENT` when it changes; `RuntimeHealth` in
+/// `telemetry.ts`. The default is "nothing to report".
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeHealth {
+    /// Reason capture is failing *now* (last failure within
+    /// `CAPTURE_FAILURE_ONGOING_MAX_AGE_SECS`), `None` once it recovers.
+    pub capture_failure_code: Option<String>,
+    pub link_constrained: bool,
+    /// 0.0 means "no serial link in play", as in `RuntimeTelemetrySnapshot`.
+    pub link_max_fps: f32,
+}
+
+pub type RuntimeHealthSink = Arc<dyn Fn(&RuntimeHealth) + Send + Sync>;
+
+/// Process-wide, like the telemetry state itself: the worker is handed only the
+/// snapshot `Arc`, and a registered sink keeps its signature free of an emitter.
+static RUNTIME_HEALTH_SINK: Mutex<Option<RuntimeHealthSink>> = Mutex::new(None);
+
+/// Set once from `lib.rs` setup. Workers started before it publish nothing.
+pub fn register_runtime_health_sink(sink: RuntimeHealthSink) {
+    let previous = RUNTIME_HEALTH_SINK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .replace(sink);
+    drop(previous);
+}
+
+fn registered_runtime_health_sink() -> Option<RuntimeHealthSink> {
+    RUNTIME_HEALTH_SINK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone()
 }
 
 /// Tauri-managed holder for the shared USB telemetry snapshot.
@@ -226,10 +276,18 @@ pub struct RuntimeTelemetryWindow {
     /// Last capture failure, sticky across flushes like the link budget: a
     /// counter reset would erase the only evidence of an ongoing outage.
     last_capture_error: Option<(String, Instant)>,
+    health_sink: Option<RuntimeHealthSink>,
+    /// `None` until this worker's first flush, so that flush always publishes
+    /// and overwrites whatever the previous worker left behind.
+    published_health: Option<RuntimeHealth>,
 }
 
 impl RuntimeTelemetryWindow {
     pub fn new(started_at: Instant) -> Self {
+        Self::with_health_sink(started_at, registered_runtime_health_sink())
+    }
+
+    fn with_health_sink(started_at: Instant, health_sink: Option<RuntimeHealthSink>) -> Self {
         Self {
             started_at,
             capture_count: 0,
@@ -239,6 +297,8 @@ impl RuntimeTelemetryWindow {
             link_constrained: false,
             link_max_fps: 0.0,
             last_capture_error: None,
+            health_sink,
+            published_health: None,
         }
     }
 
@@ -302,6 +362,13 @@ impl RuntimeTelemetryWindow {
             ),
             None => (None, None),
         };
+        let capture_failure_code = match (&last_capture_error_code, last_capture_error_at_secs) {
+            (Some(code), Some(age)) if age <= CAPTURE_FAILURE_ONGOING_MAX_AGE_SECS => {
+                Some(code.clone())
+            }
+            _ => None,
+        };
+        let link_max_fps = round_two_decimals(self.link_max_fps);
 
         write_runtime_telemetry(
             snapshot,
@@ -311,11 +378,16 @@ impl RuntimeTelemetryWindow {
                 queue_health: queue_health_from_ratio(overwrite_ratio),
                 frame_latency_ms: round_two_decimals(self.latest_latency_ms),
                 link_constrained: self.link_constrained,
-                link_max_fps: round_two_decimals(self.link_max_fps),
+                link_max_fps,
                 last_capture_error_code,
                 last_capture_error_at_secs,
             },
         )?;
+        self.publish_health(RuntimeHealth {
+            capture_failure_code,
+            link_constrained: self.link_constrained,
+            link_max_fps,
+        });
 
         self.started_at = now;
         self.capture_count = 0;
@@ -323,6 +395,33 @@ impl RuntimeTelemetryWindow {
         self.slot_overwrite_count = 0;
 
         Ok(())
+    }
+
+    /// At most once per flush, and only on a change — a steady worker emits
+    /// once, at its first flush.
+    fn publish_health(&mut self, health: RuntimeHealth) {
+        let Some(sink) = &self.health_sink else {
+            return;
+        };
+        if self.published_health.as_ref() == Some(&health) {
+            return;
+        }
+        sink(&health);
+        self.published_health = Some(health);
+    }
+}
+
+impl Drop for RuntimeTelemetryWindow {
+    /// The worker is ending: a stall or a link budget it reported must not
+    /// outlive it on screen.
+    fn drop(&mut self) {
+        let reported_something = self
+            .published_health
+            .as_ref()
+            .is_some_and(|health| *health != RuntimeHealth::default());
+        if let (true, Some(sink)) = (reported_something, &self.health_sink) {
+            sink(&RuntimeHealth::default());
+        }
     }
 }
 
@@ -343,8 +442,9 @@ fn round_two_decimals(value: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::{
-        queue_health_from_ratio, read_runtime_telemetry, RuntimeTelemetrySnapshot,
-        RuntimeTelemetryWindow, SharedRuntimeTelemetry, TelemetryQueueHealth,
+        queue_health_from_ratio, read_runtime_telemetry, RuntimeHealth, RuntimeHealthSink,
+        RuntimeTelemetrySnapshot, RuntimeTelemetryWindow, SharedRuntimeTelemetry,
+        TelemetryQueueHealth,
     };
     use std::sync::{Arc, Mutex};
     use std::thread;
@@ -352,6 +452,142 @@ mod tests {
 
     fn shared() -> SharedRuntimeTelemetry {
         Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default()))
+    }
+
+    type Published = Arc<Mutex<Vec<RuntimeHealth>>>;
+
+    fn recording_window(base: Instant) -> (RuntimeTelemetryWindow, Published) {
+        let published: Published = Arc::default();
+        let sink_log = Arc::clone(&published);
+        let sink: RuntimeHealthSink = Arc::new(move |health: &RuntimeHealth| {
+            sink_log
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .push(health.clone());
+        });
+        (
+            RuntimeTelemetryWindow::with_health_sink(base, Some(sink)),
+            published,
+        )
+    }
+
+    /// A copy, so no assertion holds the lock the window's `Drop` publishes through.
+    fn published_so_far(published: &Published) -> Vec<RuntimeHealth> {
+        published.lock().unwrap().clone()
+    }
+
+    fn stall(code: &str) -> RuntimeHealth {
+        RuntimeHealth {
+            capture_failure_code: Some(code.to_string()),
+            ..RuntimeHealth::default()
+        }
+    }
+
+    #[test]
+    fn a_steady_worker_publishes_its_health_once() {
+        // The first flush always publishes — it replaces whatever the previous
+        // worker left on screen — and an unchanged one never again.
+        let metrics = shared();
+        let base = Instant::now();
+        let (mut window, published) = recording_window(base);
+        window.set_link_budget(22.996, true);
+
+        for second in 1..=5 {
+            window.record_capture();
+            window
+                .flush_if_due(base + Duration::from_secs(second), &metrics)
+                .expect("flush should succeed");
+        }
+
+        assert_eq!(
+            published_so_far(&published),
+            vec![RuntimeHealth {
+                capture_failure_code: None,
+                link_constrained: true,
+                link_max_fps: 23.0,
+            }]
+        );
+    }
+
+    #[test]
+    fn a_capture_stall_is_published_when_it_starts_and_when_it_clears() {
+        let metrics = shared();
+        let base = Instant::now();
+        let (mut window, published) = recording_window(base);
+
+        window.record_capture();
+        window
+            .flush_if_due(base + Duration::from_secs(1), &metrics)
+            .expect("flush should succeed");
+        for second in 2..=4 {
+            let at = base + Duration::from_secs(second);
+            window.record_capture_error("AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND", at);
+            window
+                .flush_if_due(at, &metrics)
+                .expect("flush should succeed");
+        }
+        // Recovered at 4 s; still "now" at 7 s, cleared once the age passes 3 s.
+        for second in 5..=8 {
+            window.record_capture();
+            window
+                .flush_if_due(base + Duration::from_secs(second), &metrics)
+                .expect("flush should succeed");
+        }
+
+        assert_eq!(
+            published_so_far(&published),
+            vec![
+                RuntimeHealth::default(),
+                stall("AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND"),
+                RuntimeHealth::default(),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_worker_that_ends_mid_stall_clears_it() {
+        let metrics = shared();
+        let base = Instant::now();
+        let (mut window, published) = recording_window(base);
+        window.record_capture_error("AMBILIGHT_CAPTURE_PERMISSION_DENIED", base);
+        window
+            .flush_if_due(base + Duration::from_secs(1), &metrics)
+            .expect("flush should succeed");
+
+        drop(window);
+
+        assert_eq!(
+            published_so_far(&published),
+            vec![
+                stall("AMBILIGHT_CAPTURE_PERMISSION_DENIED"),
+                RuntimeHealth::default()
+            ]
+        );
+    }
+
+    #[test]
+    fn a_worker_with_nothing_to_report_ends_silently() {
+        let metrics = shared();
+        let base = Instant::now();
+        let (mut window, published) = recording_window(base);
+        window.record_capture();
+        window
+            .flush_if_due(base + Duration::from_secs(1), &metrics)
+            .expect("flush should succeed");
+
+        drop(window);
+
+        assert_eq!(published_so_far(&published), vec![RuntimeHealth::default()]);
+    }
+
+    #[test]
+    fn runtime_health_serializes_as_camel_case() {
+        let json = serde_json::to_string(&stall("AMBILIGHT_CAPTURE_FRAME_UNAVAILABLE"))
+            .expect("health should serialize");
+        assert_eq!(
+            json,
+            r#"{"captureFailureCode":"AMBILIGHT_CAPTURE_FRAME_UNAVAILABLE","linkConstrained":false,"linkMaxFps":0.0}"#
+        );
     }
 
     #[test]

@@ -375,6 +375,14 @@ export interface ShellState {
    * degrades to `"stable"` which matches v1.4 behaviour exactly.
    */
   updateChannel?: UpdateChannel;
+  /**
+   * Settings → General "Show stats for nerds". `true` shows the FPS and CAP
+   * pills and the telemetry readout, and runs the `get_runtime_telemetry`
+   * poll behind them; anything else — absent included — shows the status
+   * chips only and polls nothing. Additive, no schema bump: absent is the
+   * default for new installs and upgraders alike.
+   */
+  showNerdStats?: boolean;
   // -------------------------------------------------------------------------
   // v1.6 — LED Preview & Test Experience (all OPTIONAL / additive; no schema
   // bump — absence degrades to the documented default below).

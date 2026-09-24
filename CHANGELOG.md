@@ -24,6 +24,10 @@ https://keepachangelog.com/en/1.1.0/
   the strip one color at a time and asks what you see, then saves the right order and lets you
   undo it if the colors still look wrong. The order can also be picked by hand. WLED devices set
   their color order in WLED itself, so the setting is hidden for them.
+- Settings → General: "Show stats for nerds" shows frame rate and live output numbers in the
+  status bar and the telemetry readout. It is off by default, and while it is off the app no longer
+  asks for those numbers at all; the status bar shows just the connection chips. A capture that
+  stops mid-stream is still reported either way.
 
 ### Changed
 
