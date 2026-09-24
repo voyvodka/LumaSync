@@ -235,6 +235,14 @@ function requiredCommands(entries) {
     for (const command of commandsIn(text)) {
       if (!required.has(command)) required.set(command, `${file.slice(ROOT.length)} (${name})`);
     }
+    // A lazily loaded section is still code this window runs. Which export the
+    // `.then` picks is not tracked, so the whole module counts as live.
+    for (const m of text.matchAll(/\bimport\(\s*["']([^"']+)["']\s*\)/g)) {
+      const target = resolveSpecifier(file, m[1]);
+      if (!target) continue;
+      mark(target, MODULE);
+      for (const segment of parse(target).segments.keys()) mark(target, segment);
+    }
     for (const [local, [target, imported]] of mod.imports) {
       if (!new RegExp(`\\b${local}\\b`).test(text)) continue;
       const targetModule = parse(target);

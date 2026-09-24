@@ -246,10 +246,6 @@ const hue: Catalogue<typeof enHue> = {
       discovered: "KEŞFEDİLDİ",
     },
   },
-  colorNotApplied: {
-    streamOffline: "Hue akışı kapalı — renk kuyruğa alındı, bağlantı geri geldiğinde gönderilecek.",
-    noLights: "Adreslenebilir Hue ışığı bulunamadı — eğlence alanını yeniden doğrulayın.",
-  },
 };
 
 export default hue;

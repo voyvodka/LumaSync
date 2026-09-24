@@ -1,9 +1,9 @@
 import type { LocalSink } from "@/features/device/localSink";
-import { useState, memo } from "react";
+import { useState, memo, useEffect, Suspense } from "react";
 import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/shell";
+import { preloadableComponent } from "@/shared/lib/preloadableComponent";
 import { LightsSection } from "./sections/LightsSection";
-import { CalibrationPage } from "../calibration/ui/CalibrationPage";
-import { DeviceSection, type DeviceCategoryRequest } from "./sections/DeviceSection";
+import type { DeviceCategoryRequest } from "./sections/DeviceSection";
 import { SystemSection } from "./sections/SystemSection";
 import type { LedCalibrationConfig, LedSegmentCounts } from "../calibration/model/contracts";
 import type {
@@ -17,9 +17,44 @@ import type { LightingModeConfig } from "@/shared/contracts/mode";
 import type { HueIntensityPreset, HueRuntimeTarget, HueRuntimeTriggerSource } from "@/shared/contracts/hue";
 import type { UpdaterState } from "../updater/useAutoUpdater";
 import type { HueProbeVerdict } from "../hue/state/useHueBridgeReachability";
-import { RoomMapEditor } from "@/features/room-map/ui/RoomMapEditor";
 import { resetToManual } from "../calibration/model/templates";
 import { CompactLayout } from "./sections/compact/CompactLayout";
+import type { RoomMapEditorProps } from "@/features/room-map/ui/RoomMapEditor";
+
+// The three full-only sections that each outweigh the rest of the shell are
+// split out, so the compact window never parses them. See
+// docs/architecture/ui-and-shell.md, "Per-window bundles".
+const CalibrationPage = preloadableComponent("CalibrationPage", () =>
+  import("../calibration/ui/CalibrationPage").then((m) => m.CalibrationPage),
+);
+const DeviceSection = preloadableComponent("DeviceSection", () =>
+  import("./sections/DeviceSection").then((m) => m.DeviceSection),
+);
+const RoomMapEditor = preloadableComponent<RoomMapEditorProps>("RoomMapEditor", () =>
+  import("@/features/room-map/ui/RoomMapEditor").then((m) => m.RoomMapEditor),
+);
+const FULL_ONLY_SECTIONS = [CalibrationPage, DeviceSection, RoomMapEditor];
+
+/** Warms the full-only chunks once full mode has painted, so a tab switch rarely meets the fallback. */
+function useFullOnlySectionPreload(uiMode: UIMode) {
+  useEffect(() => {
+    if (uiMode !== "full") return;
+    const preloadAll = () => {
+      for (const section of FULL_ONLY_SECTIONS) section.preload();
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      const handle = window.requestIdleCallback(preloadAll, { timeout: 1000 });
+      return () => window.cancelIdleCallback(handle);
+    }
+    const handle = window.setTimeout(preloadAll, 200);
+    return () => window.clearTimeout(handle);
+  }, [uiMode]);
+}
+
+/** Blank on purpose: a local chunk resolves in milliseconds, and a spinner would only flash. */
+function SectionPlaceholder() {
+  return <div className="h-full" aria-busy="true" data-testid="section-loading" />;
+}
 
 
 interface SettingsLayoutProps {
@@ -116,6 +151,7 @@ export const SettingsLayout = memo(function SettingsLayout({
 }: SettingsLayoutProps) {
   const localOutputConnected = localSink !== null;
   const [pendingZoneCounts, setPendingZoneCounts] = useState<LedSegmentCounts | null>(null);
+  useFullOnlySectionPreload(uiMode);
 
   // ── Compact mode ──────────────────────────────────────────────────────
   if (uiMode === "compact") {
@@ -141,88 +177,89 @@ export const SettingsLayout = memo(function SettingsLayout({
     <div className="relative flex h-full w-full flex-col overflow-hidden" data-testid="full-layout" style={{ background: "var(--lm-bg)", color: "var(--lm-ink)" }}>
       {/* Main content */}
       <main className="min-h-0 min-w-0 flex-1 overflow-hidden" role="main" data-testid={`section-panel-${activeSection}`}>
-        {activeSection === SECTION_IDS.LIGHTS && (
-          <div className="h-full overflow-hidden">
-            <LightsSection
-              mode={lightingMode}
-              outputTargets={outputTargets}
-              localOutputConnected={localOutputConnected}
-              localSink={localSink}
-              hueConfigured={hueConfigured}
-              bootstrapDone={bootstrapDone}
-              hueReachable={hueReachable}
-              hueProbeVerdict={hueProbeVerdict}
-              hueStreaming={hueStreaming}
-              hueReconnecting={hueReconnecting}
-              hueStreamFailed={hueStreamFailed}
-              calibration={calibration}
-              modeLockReason={modeLockReason}
-              isModeTransitioning={isModeTransitioning}
-              onModeChange={onLightingModeChange}
-              onOutputTargetsChange={onOutputTargetsChange}
-              onHueIntensityPresetChange={onHueIntensityPresetChange}
-              onColorCorrectionChange={onColorCorrectionChange}
-              onFirmwareProfileChange={onFirmwareProfileChange}
+        <Suspense fallback={<SectionPlaceholder />}>
+          {activeSection === SECTION_IDS.LIGHTS && (
+            <div className="h-full overflow-hidden">
+              <LightsSection
+                mode={lightingMode}
+                outputTargets={outputTargets}
+                localOutputConnected={localOutputConnected}
+                localSink={localSink}
+                hueConfigured={hueConfigured}
+                bootstrapDone={bootstrapDone}
+                hueReachable={hueReachable}
+                hueProbeVerdict={hueProbeVerdict}
+                hueStreaming={hueStreaming}
+                hueReconnecting={hueReconnecting}
+                hueStreamFailed={hueStreamFailed}
+                calibration={calibration}
+                modeLockReason={modeLockReason}
+                isModeTransitioning={isModeTransitioning}
+                onModeChange={onLightingModeChange}
+                onOutputTargetsChange={onOutputTargetsChange}
+                onHueIntensityPresetChange={onHueIntensityPresetChange}
+                onColorCorrectionChange={onColorCorrectionChange}
+                onFirmwareProfileChange={onFirmwareProfileChange}
+              />
+            </div>
+          )}
+
+          {activeSection === SECTION_IDS.LED_SETUP && (
+            <CalibrationPage.Component
+              key="calibration-page"
+              initialConfig={
+                pendingZoneCounts
+                  ? { ...(calibration ?? resetToManual()), counts: pendingZoneCounts }
+                  : calibration
+              }
+              onNavigateBack={() => {
+                setPendingZoneCounts(null);
+                void onSectionChange(SECTION_IDS.LIGHTS);
+              }}
+              onSaved={(cfg) => {
+                setPendingZoneCounts(null);
+                onCalibrationSaved(cfg);
+              }}
+              onDisplayChange={onSelectedDisplayIdChange}
             />
-          </div>
-        )}
+          )}
 
-        {activeSection === SECTION_IDS.LED_SETUP && (
-          <CalibrationPage
-            key="calibration-page"
-            initialConfig={
-              pendingZoneCounts
-                ? { ...(calibration ?? resetToManual()), counts: pendingZoneCounts }
-                : calibration
-            }
-            onNavigateBack={() => {
-              setPendingZoneCounts(null);
-              void onSectionChange(SECTION_IDS.LIGHTS);
-            }}
-            onSaved={(cfg) => {
-              setPendingZoneCounts(null);
-              onCalibrationSaved(cfg);
-            }}
-            onDisplayChange={onSelectedDisplayIdChange}
-          />
-        )}
+          {activeSection === SECTION_IDS.DEVICES && (
+            <div className="h-full overflow-hidden">
+              <DeviceSection.Component
+                onNavigateToRoomMap={() => void onSectionChange(SECTION_IDS.ROOM_MAP)}
+                onChipTypeChange={onChipTypeChange}
+                onColorOrderChange={onColorOrderChange}
+                onStopHueOutput={onStopHueOutput}
+                categoryRequest={deviceCategoryRequest}
+              />
+            </div>
+          )}
 
-        {activeSection === SECTION_IDS.DEVICES && (
-          <div className="h-full overflow-hidden">
-            <DeviceSection
-              onNavigateToRoomMap={() => void onSectionChange(SECTION_IDS.ROOM_MAP)}
-              onChipTypeChange={onChipTypeChange}
-              onColorOrderChange={onColorOrderChange}
-              onStopHueOutput={onStopHueOutput}
-              categoryRequest={deviceCategoryRequest}
-            />
-          </div>
-        )}
+          {activeSection === SECTION_IDS.SYSTEM && (
+            <div className="h-full overflow-hidden">
+              <SystemSection
+                onCheckForUpdates={onCheckForUpdates}
+                isCheckingForUpdates={isCheckingForUpdates}
+                devSetUpdaterState={devSetUpdaterState}
+                localOutputConnected={localOutputConnected}
+              />
+            </div>
+          )}
 
-        {activeSection === SECTION_IDS.SYSTEM && (
-          <div className="h-full overflow-hidden">
-            <SystemSection
-              onCheckForUpdates={onCheckForUpdates}
-              isCheckingForUpdates={isCheckingForUpdates}
-              devSetUpdaterState={devSetUpdaterState}
-              localOutputConnected={localOutputConnected}
-            />
-          </div>
-        )}
-
-        {activeSection === SECTION_IDS.ROOM_MAP && (
-          <div className="h-full overflow-hidden">
-            <RoomMapEditor
-              onZoneCountsConfirmed={setPendingZoneCounts}
-              onNavigateToDevices={() => void onSectionChange(SECTION_IDS.DEVICES)}
-              hueReachable={hueReachable}
-              outputTargets={outputTargets}
-              hueConfigured={hueConfigured}
-              hueProbeVerdict={hueProbeVerdict}
-            />
-          </div>
-        )}
-
+          {activeSection === SECTION_IDS.ROOM_MAP && (
+            <div className="h-full overflow-hidden">
+              <RoomMapEditor.Component
+                onZoneCountsConfirmed={setPendingZoneCounts}
+                onNavigateToDevices={() => void onSectionChange(SECTION_IDS.DEVICES)}
+                hueReachable={hueReachable}
+                outputTargets={outputTargets}
+                hueConfigured={hueConfigured}
+                hueProbeVerdict={hueProbeVerdict}
+              />
+            </div>
+          )}
+        </Suspense>
       </main>
     </div>
   );

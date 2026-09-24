@@ -29,7 +29,6 @@ const updater: Catalogue<typeof enUpdater> = {
     checkTitle: "Güncelleme sunucusuna ulaşılamadı",
     checkBody: "Hiçbir şey değişmedi — çalıştırdığınız sürümdesiniz. Bu genelde bağlantı olmadığı ya da ağda bir şeyin isteği engellediği anlamına gelir.",
     detailTitle: "Teknik ayrıntı",
-    backgroundCheckBody: "Hiçbir şey değişmedi. LumaSync bir sonraki açılışta yeniden kontrol edecek.",
   },
   actions: {
     later: "Sonra",

@@ -1,15 +1,15 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { type RefObject, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { NoticeCard } from "./NoticeCard";
 import { NOTICE_SEVERITY_LABEL } from "./noticeModel";
+import { NoticeRow } from "./NoticeRow";
 import type { QueuedNotice, ShellNoticeQueue } from "./useShellNoticeQueue";
 
 interface ShellNoticeSlotProps {
   /**
-   * Both sit in flow at the top of the content, so a notice pushes the page
-   * down and never covers it. `compact` shows a one-line headline; `full`
-   * shows the body, with the actions at the card's right edge.
+   * Both sit in flow at the top of the content, flush to its edges, so a
+   * notice pushes the page down and never covers it. `compact` keeps a second
+   * action for the expanded strip; `full` has room for it on the line.
    */
   variant: "compact" | "full";
   queue: ShellNoticeQueue;
@@ -24,8 +24,34 @@ interface ShellNoticeSlotProps {
 }
 
 /**
- * The one place the shell's notices appear: the top notice, and the rest
- * behind a "+N" that expands in place. See docs/architecture/ui-and-shell.md.
+ * Tracks whether a one-line message is cut by its ellipsis. Measures only
+ * while the line is unwrapped — wrapped, it never overflows — so the answer
+ * from before the toggle wrapped it keeps that toggle on screen to unwrap it.
+ */
+function useLineOverflow(
+  ref: RefObject<HTMLElement | null>,
+  active: boolean,
+  content: string,
+  setOverflowing: (overflowing: boolean) => void,
+) {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `content` is the trigger — a new message needs a new measurement
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element || !active) return;
+    // Rounding can put scrollWidth a pixel past a line that fits.
+    const measure = () => setOverflowing(element.scrollWidth > element.clientWidth + 1);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref, active, content, setOverflowing]);
+}
+
+/**
+ * The one place the shell's notices appear: the top notice as a single strip
+ * line, and the rest behind a "+N" that expands them in place. See
+ * docs/architecture/ui-and-shell.md.
  */
 export function ShellNoticeSlot({
   variant,
@@ -46,14 +72,18 @@ export function ShellNoticeSlot({
   useEffect(() => releaseHold, [releaseHold]);
 
   const compact = variant === "compact";
+  const messageRef = useRef<HTMLParagraphElement | null>(null);
+  const [overflowing, setOverflowing] = useState(false);
+  // A cut sentence can expand on its own, so the whole of it is reachable
+  // without a pointer to hover the tooltip.
+  const canExpand = rest.length > 0 || overflowing;
+  const shownExpanded = expanded && canExpand;
+  useLineOverflow(messageRef, !shownExpanded, top ? `${top.key}\u0001${top.notice.message}` : "", setOverflowing);
+
   const reserve = top === undefined && holdSpace && occupied;
   if (top === undefined && !reserve) return null;
 
-  // Compact's headline hides the body, so even a lone notice can expand.
-  const canExpand = rest.length > 0 || (compact && Boolean(top?.notice.body));
-  const shownExpanded = expanded && canExpand;
   const toggle = {
-    variant: compact ? ("icon" as const) : ("text" as const),
     count: rest.length,
     expanded: shownExpanded,
     controls: slotId,
@@ -86,16 +116,21 @@ export function ShellNoticeSlot({
       {top === undefined ? (
         <div className="lm-notice-placeholder" aria-hidden="true" data-testid="notice-placeholder" />
       ) : (
-        <NoticeCard
+        <NoticeRow
           key={top.key}
           entry={top}
-          layout={compact && !shownExpanded ? "headline" : "detail"}
+          wrapped={shownExpanded}
+          showSecondary={!compact || shownExpanded}
           onDismiss={handleDismiss}
           toggle={canExpand ? toggle : undefined}
+          messageRef={messageRef}
+          overflowing={overflowing}
         />
       )}
       {shownExpanded &&
-        rest.map((entry) => <NoticeCard key={entry.key} entry={entry} layout="detail" onDismiss={handleDismiss} />)}
+        rest.map((entry) => (
+          <NoticeRow key={entry.key} entry={entry} wrapped showSecondary onDismiss={handleDismiss} />
+        ))}
     </section>
   );
 }
@@ -109,7 +144,7 @@ export function ShellNoticeAnnouncer({ queue }: { queue: Pick<ShellNoticeQueue, 
   const notice = queue.announced?.notice;
   return (
     <div className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="shell-notice-announcer">
-      {notice ? `${t(NOTICE_SEVERITY_LABEL[notice.severity])}: ${notice.title}. ${notice.body ?? ""}` : ""}
+      {notice ? `${t(NOTICE_SEVERITY_LABEL[notice.severity])}: ${notice.message}` : ""}
     </div>
   );
 }

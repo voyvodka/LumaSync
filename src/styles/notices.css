@@ -1,55 +1,35 @@
 /* ─────────────────────────────────────────────────────────────────────
-   Shell notices — one queue, one slot, one visual language. Both modes put
-   the slot in flow above the content (`.lm-notice-slot`), so it pushes the
-   controls rather than covering them; full (`.is-wide`) shows the body with
-   the actions at the right edge. Severity comes from a token and a glyph
-   shape, never from colour alone. docs/architecture/ui-and-shell.md
+   Shell notices — one queue, one slot, one line per notice. The slot sits
+   in flow above the content, flush to its edges (`.lm-notice-slot`), so it
+   pushes the controls rather than covering them; each notice is a 32 px
+   strip line: a severity dot, one sentence, a text-link action. Severity is
+   a dot shape as well as a colour, and a spoken label, never colour alone.
+   docs/architecture/ui-and-shell.md
    ───────────────────────────────────────────────────────────────────── */
 .lm-notice-slot {
+  /* The horizontal inset matches the content below: compact's 12 px body. */
+  --lm-notice-inset: 12px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  /* Matches the compact body's 12 px inset. */
-  padding: 10px 12px 0;
+  border-bottom: 1px solid var(--lm-line);
+  background: var(--lm-panel);
   /* Expanded, the rest scroll here rather than shove the controls off screen. */
   max-height: 60%;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 .lm-notice-slot.is-wide {
-  /* Matches the full pages' 22 px gutter. */
-  padding: 14px 22px 0;
+  /* The full pages' 22 px gutter. */
+  --lm-notice-inset: 22px;
   max-height: 45%;
-}
-/* 900 px is wide enough for the copy and its buttons on one row, which keeps
-   a notice about as tall as the banners it replaced. */
-.lm-notice-slot.is-wide .lm-notice.is-detail {
-  align-items: center;
-}
-.lm-notice-slot.is-wide .lm-notice.is-detail .lm-notice-text {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  column-gap: 16px;
-  align-items: center;
-}
-.lm-notice-slot.is-wide .lm-notice-title,
-.lm-notice-slot.is-wide .lm-notice-body {
-  grid-column: 1;
-}
-.lm-notice-slot.is-wide .lm-notice.is-detail .lm-notice-actions {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  margin-top: 0;
-  flex-wrap: nowrap;
 }
 .lm-notice-slot:focus-visible {
   outline: none;
   box-shadow: var(--lm-focus-ring-inset);
-  border-radius: 10px;
 }
 .lm-notice-placeholder {
-  min-height: 44px;
+  min-height: 32px;
 }
 
 .lm-notice {
@@ -58,145 +38,135 @@
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
-  min-height: 44px;
-  padding: 5px 6px 5px 10px;
-  border: 1px solid var(--lm-line-2);
-  border-left: 3px solid var(--lm-notice-tone);
-  border-radius: 10px;
-  background: var(--lm-panel-2);
+  min-height: 32px;
+  /* The trailing 32 px buttons carry their own air on the right. */
+  padding: 0 max(2px, calc(var(--lm-notice-inset) - 10px)) 0 var(--lm-notice-inset);
   color: var(--lm-ink);
   font-family: var(--lm-sans);
 }
+.lm-notice + .lm-notice {
+  border-top: 1px solid var(--lm-line);
+}
 .lm-notice.is-error {
   --lm-notice-tone: var(--lm-red);
+  background: rgba(239, 91, 91, 0.06);
 }
 .lm-notice.is-warning {
   --lm-notice-tone: var(--lm-amber);
+  background: rgba(255, 176, 32, 0.045);
 }
-.lm-notice.is-detail {
+.lm-notice.is-wrapped {
   align-items: flex-start;
-  padding-top: 7px;
-  padding-right: 10px;
-  padding-bottom: 7px;
 }
-.lm-notice-glyph {
+
+/* Error a disc, warning a diamond, info a ring: the shape survives forced colours. */
+.lm-notice-dot {
   flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  color: var(--lm-notice-tone);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lm-notice-tone);
 }
-.lm-notice.is-detail .lm-notice-glyph {
-  margin-top: 1px;
+.lm-notice.is-warning .lm-notice-dot {
+  border-radius: 1px;
+  transform: rotate(45deg) scale(0.9);
 }
-.lm-notice-glyph svg {
-  width: 14px;
-  height: 14px;
+.lm-notice.is-info .lm-notice-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--lm-notice-tone);
 }
-.lm-notice-text {
+/* The first text line's centre, once the row has more than one. */
+.lm-notice.is-wrapped .lm-notice-dot {
+  margin-top: 13px;
+}
+
+.lm-notice-message {
   flex: 1;
   min-width: 0;
-}
-.lm-notice-title {
   margin: 0;
   font-size: 11.5px;
-  font-weight: 600;
-  line-height: 1.3;
+  font-weight: 500;
+  line-height: 1.35;
   color: var(--lm-ink);
-  overflow-wrap: anywhere;
-}
-/* Two lines, then the toggle beside it opens the rest. */
-.lm-notice.is-headline .lm-notice-title {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lm-notice.is-wrapped .lm-notice-message {
+  padding: 8px 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .lm-notice-step {
-  display: inline-block;
   margin-right: 6px;
-  padding: 0 4px;
-  border: 1px solid rgba(255, 176, 32, 0.4);
-  border-radius: 4px;
   font-family: var(--lm-mono);
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 500;
-  letter-spacing: 0.06em;
-  color: var(--lm-amber);
-  vertical-align: 1px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-faint);
 }
-.lm-notice-body {
-  margin: 3px 0 0;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--lm-ink-dim);
-  overflow-wrap: anywhere;
-}
+
+/* A text link, but a 32 px tall one: the row's full height is the hit area. */
 .lm-notice-action {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   min-height: 32px;
-  padding: 0 10px;
-  border: 1px solid rgba(255, 176, 32, 0.4);
-  border-radius: 6px;
-  background: rgba(255, 176, 32, 0.1);
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
   color: var(--lm-amber);
-  font-family: var(--lm-mono);
-  font-size: 9.5px;
+  font-family: var(--lm-sans);
+  font-size: 11.5px;
   font-weight: 500;
-  letter-spacing: 0.08em;
-  line-height: 1.15;
-  text-transform: uppercase;
+  white-space: nowrap;
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
 }
-/* At 320 px a one-line "SYSTEM SETTINGS" leaves the title a word; wrapping
-   the label onto two lines gives the title its two back. */
-.lm-notice.is-headline .lm-notice-action {
-  max-width: 34%;
-  padding: 3px 8px;
+.lm-notice-action.is-secondary {
+  color: var(--lm-ink-dim);
 }
 .lm-notice-action:hover:not(:disabled) {
-  background: rgba(255, 176, 32, 0.18);
-  border-color: rgba(255, 176, 32, 0.55);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.lm-notice-action.is-secondary:hover:not(:disabled) {
+  color: var(--lm-ink);
 }
 .lm-notice-action:disabled {
   opacity: 0.6;
   cursor: progress;
 }
-.lm-notice-action.is-secondary {
-  border-color: var(--lm-line-2);
-  background: transparent;
-  color: var(--lm-ink-dim);
+.lm-notice-arrow {
+  display: inline-block;
+  transition: transform 120ms ease;
 }
-.lm-notice-action.is-secondary:hover:not(:disabled) {
-  border-color: rgba(255, 176, 32, 0.4);
-  background: rgba(255, 176, 32, 0.06);
-  color: var(--lm-ink);
+.lm-notice-action:hover:not(:disabled) .lm-notice-arrow {
+  transform: translateX(2px);
 }
+
 .lm-notice-icon-btn {
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  width: 32px;
+  min-width: 32px;
   height: 32px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
   background: transparent;
-  color: var(--lm-ink-dim);
+  color: var(--lm-ink-faint);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition: color 120ms ease;
 }
 .lm-notice-icon-btn svg {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   transition: transform 150ms ease;
 }
 .lm-notice-icon-btn:hover {
   color: var(--lm-ink);
-  background: rgba(255, 255, 255, 0.04);
 }
 .lm-notice-toggle.is-expanded svg {
   transform: rotate(180deg);
@@ -208,75 +178,63 @@
   letter-spacing: 0.04em;
   color: var(--lm-amber);
 }
-.lm-notice-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 12px;
-  margin-top: 6px;
-}
-.lm-notice-more {
-  display: inline-flex;
-  align-items: center;
-  min-height: 32px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--lm-amber);
-  font-family: var(--lm-mono);
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
+
+/* Inset, because the slot scrolls and would clip a ring drawn outside. */
 .lm-notice-action:focus-visible,
-.lm-notice-icon-btn:focus-visible,
-.lm-notice-more:focus-visible {
+.lm-notice-icon-btn:focus-visible {
   outline: none;
-  box-shadow: var(--lm-focus-ring);
+  box-shadow: var(--lm-focus-ring-inset);
 }
 .lm-notice-icon-btn:focus-visible {
   color: var(--lm-amber);
 }
 @media (prefers-reduced-motion: reduce) {
-  .lm-notice-action,
+  .lm-notice-arrow,
   .lm-notice-icon-btn,
   .lm-notice-icon-btn svg {
     transition: none;
   }
+  .lm-notice-action:hover:not(:disabled) .lm-notice-arrow {
+    transform: none;
+  }
 }
 @media (forced-colors: active) {
+  .lm-notice-slot {
+    border-bottom-color: CanvasText;
+  }
   .lm-notice {
     forced-color-adjust: none;
     background: Canvas;
     color: CanvasText;
-    border-color: CanvasText;
   }
-  .lm-notice-glyph,
-  .lm-notice-title,
-  .lm-notice-body,
+  .lm-notice + .lm-notice {
+    border-top-color: CanvasText;
+  }
+  .lm-notice-dot {
+    background: CanvasText;
+  }
+  .lm-notice.is-info .lm-notice-dot {
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px CanvasText;
+  }
+  .lm-notice-message,
   .lm-notice-step,
   .lm-notice-count {
     color: CanvasText;
   }
-  .lm-notice-step {
-    border-color: CanvasText;
-  }
   .lm-notice-action,
-  .lm-notice-action.is-secondary,
-  .lm-notice-icon-btn,
-  .lm-notice-more {
+  .lm-notice-action.is-secondary {
+    color: LinkText;
+    background: Canvas;
+  }
+  .lm-notice-icon-btn {
     color: ButtonText;
     background: ButtonFace;
-    border-color: ButtonText;
   }
   .lm-notice-action:focus-visible,
   .lm-notice-icon-btn:focus-visible,
-  .lm-notice-more:focus-visible,
   .lm-notice-slot:focus-visible {
     outline: 2px solid Highlight;
-    outline-offset: 1px;
+    outline-offset: -2px;
   }
 }
