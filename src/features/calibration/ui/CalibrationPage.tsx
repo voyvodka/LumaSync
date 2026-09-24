@@ -64,9 +64,6 @@ interface CalibrationPageProps {
   initialConfig?: LedCalibrationConfig;
   onNavigateBack: () => void;
   onSaved: (config: LedCalibrationConfig) => void;
-  /** Mirrors the choice into the mode runtime cache, the same way `onSaved` does
-   *  for the layout. Persisting alone leaves the live capture on the old monitor. */
-  onDisplayChange?: (displayId: string) => void;
 }
 
 function buildInitialEditorState(initialConfig?: LedCalibrationConfig): CalibrationEditorState {
@@ -126,7 +123,7 @@ const VALIDATION_MESSAGE_KEYS = {
   // still fails to compile if a code is added to the union without a string.
 } as const satisfies Record<CalibrationValidationCode, string>;
 
-export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisplayChange }: CalibrationPageProps) {
+export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: CalibrationPageProps) {
   const { t } = useTranslation();
 
   const [editorState, setEditorState] = useState<CalibrationEditorState>(() =>
@@ -293,12 +290,9 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
   const handleSelectDisplay = useCallback(async (display: DisplayInfo) => {
     const selected = displayTargetRef.current.selectDisplay(display.id);
     setDisplayTarget(selected);
-    // Persist so the next set_lighting_mode call binds the ambilight
-    // worker to the user's chosen capture source.
+    // The save is what moves a running capture: Rust re-applies the mode
+    // once a setting it reads is saved (lighting-transaction.md).
     void shellStore.save({ selectedDisplayId: display.id });
-    // Synchronous, for the same reason `onSaved` is: shellStore only feeds the
-    // next boot, so without this the live payload keeps the old monitor.
-    onDisplayChange?.(display.id);
 
     // Auto-derive default counts only when the user hasn't customized yet
     // (fresh manual default → totalLeds === 0).
@@ -323,7 +317,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
       const reason = parseCommandError(error).message;
       setTestPatternError(t("calibration:overlay.errors.displaySwitchFailed", { reason }));
     }
-  }, [editorState, overlayPreviewPayload, testPattern.isEnabled, t, onDisplayChange]);
+  }, [editorState, overlayPreviewPayload, testPattern.isEnabled, t]);
 
   // Accept the absolute next value, not a delta. Stepper buttons
   // pass `value + 1` / `value - 1` so the +/- affordance is preserved
