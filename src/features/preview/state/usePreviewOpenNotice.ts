@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { isWindowVisible, subscribeWindowVisible } from "@/features/shell/windowVisibility";
+
 import type { PreviewOpenFailure } from "../previewOpenFailure";
 
 export const PREVIEW_OPEN_NOTICE_MS = 6_000;
@@ -12,8 +14,9 @@ export interface PreviewOpenNotice {
 /**
  * Sole writer of the "LED preview did not open" toast. The tray action that
  * raises it usually fires with the main window hidden, so the countdown only
- * runs while the document is visible — otherwise the toast would expire
- * before anyone could read it.
+ * runs while the window is on screen — otherwise the toast would expire
+ * before anyone could read it. The window, not the document: WebView2 keeps
+ * the document "visible" in the tray.
  */
 export function usePreviewOpenNotice(): PreviewOpenNotice {
   const [notice, setNotice] = useState<PreviewOpenFailure | null>(null);
@@ -28,7 +31,7 @@ export function usePreviewOpenNotice(): PreviewOpenNotice {
 
   const armTimer = useCallback(() => {
     clearTimer();
-    if (document.visibilityState === "hidden") return;
+    if (!isWindowVisible()) return;
     timeoutRef.current = window.setTimeout(() => {
       timeoutRef.current = null;
       setNotice(null);
@@ -43,14 +46,14 @@ export function usePreviewOpenNotice(): PreviewOpenNotice {
     [armTimer],
   );
 
+  // Hidden again before it ran out, it waits for the next look in full.
   useEffect(() => {
     if (notice === null) return;
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible" && timeoutRef.current === null) armTimer();
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [notice, armTimer]);
+    return subscribeWindowVisible((visible) => {
+      if (!visible) clearTimer();
+      else if (timeoutRef.current === null) armTimer();
+    });
+  }, [notice, armTimer, clearTimer]);
 
   useEffect(() => clearTimer, [clearTimer]);
 

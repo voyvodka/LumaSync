@@ -10,7 +10,7 @@ import { error as logError, info as logInfo, warn as logWarn } from "@tauri-apps
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./styles.css";
 import { Providers } from "./app/providers";
-import { resolveInitialLanguage } from "./features/i18n/languagePolicy";
+import { followSavedLanguage, resolveInitialLanguage } from "./features/i18n/languagePolicy";
 import { initI18n } from "./features/i18n/i18n";
 import { GlobalErrorBoundaryWithI18n } from "./features/shell/GlobalErrorBoundary";
 import { TwinErrorBoundary } from "./features/preview/ui/TwinErrorBoundary";
@@ -193,6 +193,9 @@ async function bootstrap() {
 
   // 2. Initialise i18next with resolved language
   await initI18n(language);
+  // The popup is hidden and reused, never rebuilt, so it would keep the
+  // language it was created in; the main window switches itself.
+  if (windowKind === WINDOW_KIND.POPUP) followSavedLanguage();
 
   // 3. Mount React once this window's root module is in
   renderRoot(await windowRoot);

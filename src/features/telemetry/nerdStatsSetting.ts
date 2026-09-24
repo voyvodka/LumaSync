@@ -48,16 +48,19 @@ export function useShowNerdStats(): boolean {
   return useStoreSelector(store, selectValue);
 }
 
-/** Optimistic, reverted if the save fails — a setting that did not stick must not look on. */
+/**
+ * Applies at once and holds for the session even when the save fails: it is a
+ * view preference nothing reads from disk, and the shell's "settings can't be
+ * saved" notice says a change lasts until quit — a switch that snapped back
+ * would contradict it.
+ */
 export async function setShowNerdStats(next: boolean): Promise<void> {
-  const previous = store.get();
   chosenBeforeLoad = true;
   store.set(next);
   try {
     await shellStore.save({ showNerdStats: next });
   } catch (err) {
     console.error("[LumaSync] shellStore.save(showNerdStats) failed:", err);
-    store.set(previous);
   }
 }
 

@@ -25,6 +25,7 @@ import { needsCalibration } from "@/features/mode/state/modeApplyOutcome";
 import { createRetuneCoalescer } from "@/features/mode/state/retuneCoalescer";
 import { useLightingRuntime } from "@/features/mode/state/useLightingRuntime";
 import {
+  DEFAULT_SOLID_COLOR,
   LIGHTING_MODE_KIND,
   normalizeSolidColorPayload,
   type LightingModeKind,
@@ -55,7 +56,6 @@ function savedTargetsFrom(targets: HueRuntimeTarget[] | undefined): HueRuntimeTa
   return targets && targets.length > 0 ? targets : ["usb"];
 }
 
-const DEFAULT_SOLID = { r: 255, g: 255, b: 255, brightness: 1 };
 
 /** Nobody asked for the reveal, so it never lights Hue: with no strip it runs
  * preview-only. A pattern-tile click is the gesture that reaches saved Hue. */
@@ -204,10 +204,10 @@ export function ControlPopupApp() {
   // ── Solid color draft (shared HSV picker + throttled brightness) ─────────
   const incomingSolid = useMemo(
     () => ({
-      r: mode?.solid?.r ?? DEFAULT_SOLID.r,
-      g: mode?.solid?.g ?? DEFAULT_SOLID.g,
-      b: mode?.solid?.b ?? DEFAULT_SOLID.b,
-      brightness: mode?.solid?.brightness ?? DEFAULT_SOLID.brightness,
+      r: mode?.solid?.r ?? DEFAULT_SOLID_COLOR.r,
+      g: mode?.solid?.g ?? DEFAULT_SOLID_COLOR.g,
+      b: mode?.solid?.b ?? DEFAULT_SOLID_COLOR.b,
+      brightness: mode?.solid?.brightness ?? DEFAULT_SOLID_COLOR.brightness,
     }),
     [mode?.solid?.r, mode?.solid?.g, mode?.solid?.b, mode?.solid?.brightness],
   );

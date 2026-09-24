@@ -8,6 +8,7 @@
  */
 
 import { shellStore } from "../persistence/shellStore";
+import { changeLanguage, i18next } from "./i18n";
 
 // ---------------------------------------------------------------------------
 // Supported language codes
@@ -48,4 +49,24 @@ export async function resolveInitialLanguage(): Promise<SupportedLanguage> {
 
   // ── ENFORCE_ENGLISH_FIRST_LAUNCH ── see module header.
   return DEFAULT_LANGUAGE;
+}
+
+function isSupportedLanguage(value: unknown): value is SupportedLanguage {
+  return typeof value === "string" && (SUPPORTED_LANGUAGES as readonly string[]).includes(value);
+}
+
+/**
+ * Keeps a secondary window on the language the user picks in Settings. The
+ * control popup is hidden and reused, never rebuilt, so the language it read
+ * at creation stayed until the app restarted. Returns the unsubscribe.
+ */
+export function followSavedLanguage(): () => void {
+  return shellStore.onSaved((saved) => {
+    if (!Object.prototype.hasOwnProperty.call(saved, "language")) return;
+    const next = saved.language;
+    if (!isSupportedLanguage(next) || next === i18next.language) return;
+    changeLanguage(next).catch((err: unknown) => {
+      console.error(`[LumaSync] following the saved language (${next}) failed:`, err);
+    });
+  });
 }

@@ -36,6 +36,8 @@ export const QUIET_INPUT: ShellNoticeInput = {
   onboardingStep: null,
   ledSetupNext: null,
   localTargetConfigured: true,
+  localTransport: "serial",
+  settingsWriteFailing: false,
   updateCheckFailed: null,
   updateChecking: false,
 };

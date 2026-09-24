@@ -10,6 +10,7 @@ import {
   type ShellStateChanged,
 } from "@/shared/contracts/shell";
 import { migrateShellState } from "../persistence/migrations";
+import { reportShellStateWrite } from "../persistence/writeHealth";
 import {
   getShellState,
   onShellStateChanged,
@@ -150,7 +151,13 @@ function notifyShellStateSaved(saved: Partial<ShellState>): void {
  * are not ordered with each other. An `undefined` value deletes the key. */
 export async function saveShellState(state: Partial<ShellState>): Promise<void> {
   const write = shellWriteQueue.then(async () => {
-    await patchShellState(toShellStatePatch(state, WRITER_ID));
+    try {
+      await patchShellState(toShellStatePatch(state, WRITER_ID));
+    } catch (error) {
+      reportShellStateWrite(false);
+      throw error;
+    }
+    reportShellStateWrite(true);
     notifyShellStateSaved(state);
   });
 
@@ -184,8 +191,15 @@ export async function updateShellState(
       if (!partial) return current;
 
       const next: ShellState = { ...current, ...partial };
-      const result = await replaceShellState({ state: next, expectedRevision: revision, writerId: WRITER_ID });
+      let result: Awaited<ReturnType<typeof replaceShellState>>;
+      try {
+        result = await replaceShellState({ state: next, expectedRevision: revision, writerId: WRITER_ID });
+      } catch (error) {
+        reportShellStateWrite(false);
+        throw error;
+      }
       if (result.applied) {
+        reportShellStateWrite(true);
         notifyShellStateSaved(partial);
         return next;
       }

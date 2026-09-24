@@ -209,6 +209,9 @@ const device: Catalogue<typeof enDevice> = {
       empty: "Ekran bulunamadı.",
       cellId: "ID",
       cellScale: "Ölçek",
+      capturing: "Yakalanıyor",
+      captureSource: "Yakalama kaynağı",
+      chooseInLedSetup: "Yakalanan ekranı LED Kurulumu'nda seç",
     },
     manual: {
       body: "Manuel cihaz girişi henüz yok. Şerit eklemek için USB Şeritleri'nde yeniden tara; bir WLED cihazını IP adresiyle ekleyebilirsin.",

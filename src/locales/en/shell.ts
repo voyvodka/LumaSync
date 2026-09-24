@@ -36,8 +36,13 @@ export default {
       leftOut: "LEFT OUT",
     },
     reconnect: {
-      usbAriaLabel: "Reconnect USB device",
-      hueAriaLabel: "Reconnect Hue bridge",
+      usbAriaLabel: "Open Devices → USB",
+      hueAriaLabel: "Open Devices → Hue",
+    },
+    // Nothing was ever set up here: not an outage, so no reconnect glyph.
+    setUp: {
+      localAriaLabel: "Set up a USB strip or WLED — opens Devices",
+      hueAriaLabel: "Set up a Hue bridge — opens Devices",
     },
   },
   titleBar: {
@@ -85,11 +90,11 @@ export default {
         popup: "The control popup didn't open",
       },
       hueLeftOut: {
-        unreachable: "Can't reach the Hue bridge — running on USB only",
-        auth: "Hue needs pairing again — running on USB only",
-        config: "Hue isn't set up — running on USB only",
+        unreachable: "Can't reach the Hue bridge — running on {{output}} only",
+        auth: "Hue needs pairing again — running on {{output}} only",
+        config: "Hue isn't set up — running on {{output}} only",
         busy: "The Hue bridge is held by an earlier session — Hue joins once it lets go",
-        busyGaveUp: "The Hue bridge stayed busy — running on USB only until you turn Hue back on",
+        busyGaveUp: "The Hue bridge stayed busy — running on {{output}} only until you turn Hue back on",
       },
       hueBootRetry: {
         waiting: "The Hue bridge is held by an earlier session — lighting resumes once it lets go",
@@ -101,7 +106,7 @@ export default {
       usbUnsupportedNoFallback: "USB device not recognised, and no other output is set up",
       hueColorStreamOffline: "The Hue stream is offline — the colour is sent once it reconnects",
       hueColorNoLights: "Hue colour not applied — no addressable lights in the entertainment area",
-      outputNone: "No reachable output — add a USB strip or Hue",
+      outputNone: "No reachable output — add a USB strip, WLED or Hue",
       outputNoneStopped: "The Hue bridge didn't answer on this network — stopped looking for it",
       outputChecking: "Checking outputs…",
       calibrationRequired: "Calibration required — finish the LED layout to use this mode",
@@ -112,6 +117,7 @@ export default {
         ledSetup: "Tell LumaSync how many LEDs sit on each screen edge",
       },
       updateCheckFailed: "Couldn't check for updates — LumaSync tries again next launch",
+      settingsNotSaved: "Settings can't be saved — changes last until you quit",
     },
     actions: {
       devices: "Devices",

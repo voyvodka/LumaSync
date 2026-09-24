@@ -125,6 +125,7 @@ export const mockAutoUpdater = {
       checkForUpdates: checkForUpdatesMock,
       checkForUpdatesInBackground: checkForUpdatesInBackgroundMock,
       checkFailedNotice: env.checkFailedNotice,
+      upToDateAt: null,
       downloadAndInstall: vi.fn().mockResolvedValue(undefined),
       dismiss: vi.fn(),
       devSetState: vi.fn(),

@@ -149,4 +149,26 @@ describe("App navigation", () => {
 
     expect(env.heldLeave).toBeNull();
   });
+
+  it("holds the settings shortcut behind the leave guard too", async () => {
+    const user = userEvent.setup();
+    loadShellStateMock.mockResolvedValue({ lastSection: "led-setup", uiMode: "full", ledCalibration: CALIBRATION });
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId("active-section")).toHaveTextContent("led-setup"));
+
+    await user.click(screen.getByText("hold-leave"));
+    for (const modifier of [{ metaKey: true }, { ctrlKey: true }]) {
+      act(() => {
+        document.dispatchEvent(
+          new KeyboardEvent("keydown", { bubbles: true, cancelable: true, code: "Comma", key: ",", ...modifier }),
+        );
+      });
+    }
+
+    expect(env.heldLeave).not.toBeNull();
+    expect(screen.getByTestId("active-section")).toHaveTextContent("led-setup");
+    await act(async () => env.heldLeave?.());
+    await waitFor(() => expect(screen.getByTestId("active-section")).toHaveTextContent("system"));
+  });
 });
+

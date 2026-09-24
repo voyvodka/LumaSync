@@ -43,11 +43,11 @@ async function expectExactlyOnePressed(): Promise<void> {
  * - Ambilight and Solid are only exercised when the app's own gate already
  *   allows it (`hasAnyOutput` in `CompactLayout.tsx` — read here via the
  *   button's `disabled` attribute, never bypassed) AND the StatusBar's HUE
- *   pill reads `is-off`, meaning no bridge is paired at all. A local run can
- *   have a real bridge reachable on the LAN; the second check is what stops
- *   this spec from ever driving a live DTLS stream to it. A configured-but-
- *   unreachable bridge (`is-idle`) is treated the same as reachable and
- *   skipped too, out of caution.
+ *   pill offers its set-up link, meaning no bridge is paired at all. A local
+ *   run can have a real bridge reachable on the LAN; the second check is what
+ *   stops this spec from ever driving a live DTLS stream to it. A
+ *   configured-but-unreachable bridge (a reconnect link) is treated the same
+ *   as reachable and skipped too, out of caution.
  * - A locally connected WLED target is not specifically excluded: driving
  *   Solid at it for the duration of one assertion, then returning to Off, is
  *   treated as an acceptable side effect of a real local run — it carries

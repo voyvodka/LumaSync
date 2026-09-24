@@ -53,6 +53,7 @@ const common: Catalogue<typeof enCommon> = {
       usb: "USB",
       hue: "Hue",
     },
+    wledLabel: "WLED",
   },
 };
 
