@@ -85,11 +85,22 @@ component rather than through this list, and unlayered it cannot lose to a compo
 on the `lm-settings-group` card it sits on, whatever order the bundler emits.
 
 **Selection state is styled from ARIA where the element carries it.** A tab's selected look is
-`[aria-selected="true"]`, a toggle's `[aria-pressed="true"]`, a radio's `[aria-checked="true"]`, the
+`[aria-selected="true"]`, a toggle button's `[aria-pressed="true"]`, a radio's or a switch's `[aria-checked="true"]`, the
 device rail's `[aria-current="page"]` — the attribute a screen reader announces is the same one the
 stylesheet reads, so the two cannot disagree. Where the element has no such attribute, the class is
 `is-on`; `is-sel` and `is-selected` are gone. `is-active` survives only for things that are not
 selection: a step tracker's current step and the status bar's tone scale.
+
+**Controls come from `src/shared/ui/`, looks stay with their surface.** `Button`/`IconButton`,
+`Toggle` (a `role="switch"`), `Segmented` (a radio group), `RangeRow`, `ConfirmDialog`,
+`EmptyState` and `StatusPill` own the behaviour and the accessibility contract — one tab stop per
+radio group with arrow keys, Home and End (`useRadioGroup`), a name on every icon-only button, a
+focus trap in every dialog — while each call site keeps the class that draws it. That split is what
+let the three mode strips (`features/mode/ui/ModeStrip.tsx`) and the pattern picker gain arrow keys
+without a pixel moving. A slider that commits while it moves goes through `useThrottledCommit`
+(leading and trailing, flushed on release), so a drag neither floods the lighting runtime nor drops
+the value the user let go on. A new control that needs one of these behaviours uses the primitive;
+a feature that is touched for another reason migrates its hand-rolled copy then.
 
 **The compact/full mode transition is sequential, never a cross-fade.** `useUIMode.ts`: fade the
 current content out, resize the window to the target mode, then mount the incoming layout and fade

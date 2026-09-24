@@ -2,6 +2,8 @@ import { useTranslation } from "react-i18next";
 
 import type { DisplayInfo } from "@/shared/contracts/display";
 import { IconDisplayGlyph } from "@/shared/ui/icons";
+import { EmptyState } from "@/shared/ui/EmptyState";
+import { StatusPill } from "@/shared/ui/StatusPill";
 
 export interface DisplaysCategoryProps {
   isActive: boolean;
@@ -21,9 +23,7 @@ export function DisplaysCategory({ isActive, displays }: DisplaysCategoryProps) 
       </div>
       <div className="lm-device-grid">
         {displays.length === 0 ? (
-          <div className="lm-device-empty">
-            <p>{t("device:page.displays.empty")}</p>
-          </div>
+          <EmptyState body={t("device:page.displays.empty")} />
         ) : (
           displays.map((display) => (
             <div key={display.id} className="lm-dcard is-ghost">
@@ -33,7 +33,7 @@ export function DisplaysCategory({ isActive, displays }: DisplaysCategoryProps) 
                   <div className="lm-dcard-name">
                     <span>{display.label}</span>
                     {display.isPrimary ? (
-                      <span className="lm-dcard-pill is-ok">{t("device:page.displays.primary")}</span>
+                      <StatusPill tone="ok">{t("device:page.displays.primary")}</StatusPill>
                     ) : null}
                   </div>
                   <div className="lm-dcard-sub">{`${display.width} × ${display.height}`}</div>

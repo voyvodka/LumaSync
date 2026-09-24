@@ -58,11 +58,11 @@ vi.mock("@/features/calibration/ui/CalibrationPage", () => ({
   },
 }));
 
-// Three per CompactLayout render, so it counts the compact layout.
-vi.mock("../sections/compact/ModeButton", () => ({
-  ModeButton: ({ kind, disabled }: { kind: string; disabled: boolean }) => {
-    count("compactModeButton");
-    return <button type="button" data-testid={`mode-button-${kind}`} disabled={disabled} />;
+// One per CompactLayout render, so it counts the compact layout.
+vi.mock("@/features/mode/ui/ModeStrip", () => ({
+  ModeStrip: ({ isDisabled }: { isDisabled?: (kind: string) => boolean }) => {
+    count("compactModeStrip");
+    return <button type="button" data-testid="mode-button-off" disabled={isDisabled?.("off")} />;
   },
 }));
 
@@ -191,7 +191,7 @@ describe("SettingsLayout render boundaries", () => {
       lighting: { localSink: { transport: "serial", id: "/dev/cu.test" } },
     });
     await act(async () => {});
-    const before = renders.compactModeButton;
+    const before = renders.compactModeStrip;
 
     shell.setLighting({
       calibration: {
@@ -205,10 +205,10 @@ describe("SettingsLayout render boundaries", () => {
         totalLeds: 4,
       },
     });
-    expect(renders.compactModeButton).toBe(before);
+    expect(renders.compactModeStrip).toBe(before);
 
     shell.setLighting({ isModeTransitioning: true });
-    expect(renders.compactModeButton).toBe(before + 3);
+    expect(renders.compactModeStrip).toBe(before + 1);
     expect(screen.getByTestId("mode-button-off")).toBeDisabled();
   });
 });

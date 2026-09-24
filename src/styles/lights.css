@@ -195,21 +195,21 @@
     letter-spacing: 0.12em;
   }
 }
-.lm-mbtn[aria-pressed="true"] {
+.lm-mbtn[aria-checked="true"] {
   background: linear-gradient(180deg, rgba(255, 176, 32, 0.09), rgba(255, 176, 32, 0.02));
 }
-.lm-mbtn[aria-pressed="true"] .tn {
+.lm-mbtn[aria-checked="true"] .tn {
   color: var(--lm-amber);
 }
-.lm-mbtn[aria-pressed="true"] .ts {
+.lm-mbtn[aria-checked="true"] .ts {
   color: #c9a568;
 }
-.lm-mbtn[aria-pressed="true"] .ico {
+.lm-mbtn[aria-checked="true"] .ico {
   background: rgba(255, 176, 32, 0.12);
   border-color: rgba(255, 176, 32, 0.35);
   color: var(--lm-amber);
 }
-.lm-mbtn[aria-pressed="true"]::after {
+.lm-mbtn[aria-checked="true"]::after {
   content: "";
   position: absolute;
   left: 0;
@@ -354,6 +354,10 @@
 }
 .lm-psl .tr input[type="range"]:disabled {
   cursor: not-allowed;
+}
+/* The input is invisible over the drawn track, so keyboard focus rings the thumb. */
+.lm-psl .tr:has(input:focus-visible) .tr-fill::after {
+  box-shadow: var(--lm-focus-ring), 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 .lm-psl.is-toggle .tr-toggle {
   width: 100%;

@@ -52,7 +52,9 @@ import {
 } from "@/shared/contracts/display";
 import { LED_TEST_STATUS } from "@/shared/contracts/preview";
 import { clamp } from "@/shared/lib/math";
-import { useDialogFocus } from "@/shared/ui/useDialogFocus";
+import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
+import { Segmented } from "@/shared/ui/Segmented";
+import type { TranslationKey } from "@/features/i18n/catalogue";
 import { parseCommandError } from "@/shared/contracts/status";
 
 function reclaimFocus() {
@@ -131,12 +133,6 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
   );
   const [isSaving, setIsSaving] = useState(false);
 
-  // Escape means "keep editing" — the safe answer for a dialog whose other
-  // option throws work away.
-  const { containerRef: discardDialogRef, handleKeyDown: handleDiscardKeyDown } = useDialogFocus(
-    editorState.confirmDiscard,
-    { onClose: () => setEditorState((prev) => keepEditing(prev)) },
-  );
   const flowRef = useRef(createDefaultTestPatternFlow(initialConfig));
   const [testPattern, setTestPattern] = useState<TestPatternSnapshot>(flowRef.current.getSnapshot());
   const displayTargetRef = useRef(
@@ -413,6 +409,10 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
   const { counts, bottomMissing, startAnchor, direction, totalLeds } = editorState.current;
   const currentEdge = edgeOfAnchor(startAnchor);
   const currentEndpoint = endpointOfAnchor(startAnchor);
+  const endpointOptions: AnchorEndpoint[] =
+    currentEdge === "bottom" && bottomMissing > 0
+      ? ["start", "gap-right", "gap-left", "end"]
+      : ["start", "end"];
   const meterLength = (totalLeds / 60).toFixed(1);
   const powerWatts = (totalLeds * 0.06).toFixed(1); // ~0.06W per LED at medium brightness
 
@@ -626,29 +626,53 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
           )}
 
           <DockSection title={t("calibration:page.dockStartAnchor")}>
-            <div className="grid grid-cols-4 gap-1">
-              <EdgeTab edge="top" label={t("calibration:page.startEdgeTop")} active={currentEdge === "top"} disabled={counts.top === 0} onClick={handleEdgeChange} />
-              <EdgeTab edge="right" label={t("calibration:page.startEdgeRight")} active={currentEdge === "right"} disabled={counts.right === 0} onClick={handleEdgeChange} />
-              <EdgeTab edge="bottom" label={t("calibration:page.startEdgeBottom")} active={currentEdge === "bottom"} disabled={counts.bottom === 0} onClick={handleEdgeChange} />
-              <EdgeTab edge="left" label={t("calibration:page.startEdgeLeft")} active={currentEdge === "left"} disabled={counts.left === 0} onClick={handleEdgeChange} />
-            </div>
-            <div className="mt-2 flex flex-wrap gap-1">
-              <EndpointButton endpoint="start" label={t("calibration:page.anchorStart")} active={currentEndpoint === "start"} onClick={handleEndpointChange} />
-              {currentEdge === "bottom" && bottomMissing > 0 && (
-                <>
-                  <EndpointButton endpoint="gap-right" label={t("calibration:page.anchorGapRight")} active={currentEndpoint === "gap-right"} onClick={handleEndpointChange} />
-                  <EndpointButton endpoint="gap-left" label={t("calibration:page.anchorGapLeft")} active={currentEndpoint === "gap-left"} onClick={handleEndpointChange} />
-                </>
-              )}
-              <EndpointButton endpoint="end" label={t("calibration:page.anchorEnd")} active={currentEndpoint === "end"} onClick={handleEndpointChange} />
-            </div>
+            <Segmented
+              className="grid grid-cols-4 gap-1"
+              ariaLabel={t("calibration:page.startEdgeGroup")}
+              value={currentEdge}
+              onChange={handleEdgeChange}
+              options={(["top", "right", "bottom", "left"] as const).map((edge) => ({
+                value: edge,
+                label: t(START_EDGE_LABEL_KEYS[edge]),
+                disabled: counts[edge] === 0,
+                className: dockChoiceClass(
+                  currentEdge === edge,
+                  "px-1.5 font-mono text-[9px] uppercase disabled:cursor-not-allowed disabled:opacity-35",
+                ),
+              }))}
+            />
+            <Segmented
+              className="mt-2 flex flex-wrap gap-1"
+              ariaLabel={t("calibration:page.anchorGroup")}
+              value={currentEndpoint}
+              onChange={handleEndpointChange}
+              options={endpointOptions.map((endpoint) => ({
+                value: endpoint,
+                label: t(ENDPOINT_LABEL_KEYS[endpoint]),
+                className: dockChoiceClass(
+                  currentEndpoint === endpoint,
+                  "flex-1 px-2 font-mono text-[9px] uppercase",
+                ),
+              }))}
+            />
           </DockSection>
 
           <DockSection title={t("calibration:page.dockDirection")}>
-            <div className="grid grid-cols-2 gap-1">
-              <DirectionButton direction="cw" label={t("calibration:page.dockDirectionCw")} active={direction === "cw"} onClick={handleDirectionChange} />
-              <DirectionButton direction="ccw" label={t("calibration:page.dockDirectionCcw")} active={direction === "ccw"} onClick={handleDirectionChange} />
-            </div>
+            <Segmented
+              className="grid grid-cols-2 gap-1"
+              ariaLabel={t("calibration:page.dockDirection")}
+              value={direction}
+              onChange={handleDirectionChange}
+              options={(["cw", "ccw"] as const).map((candidate) => ({
+                value: candidate,
+                label: t(
+                  candidate === "cw"
+                    ? "calibration:page.dockDirectionCw"
+                    : "calibration:page.dockDirectionCcw",
+                ),
+                className: dockChoiceClass(direction === candidate, "px-2 font-mono text-[10px]"),
+              }))}
+            />
           </DockSection>
 
           </div>
@@ -676,46 +700,23 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
       </div>
 
       {/* Discard confirmation */}
+      {/* Escape means "keep editing" — the safe answer for a dialog whose other
+          option throws work away. */}
       {editorState.confirmDiscard && (
-        <div
-          ref={discardDialogRef}
-          onKeyDown={handleDiscardKeyDown}
-          tabIndex={-1}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="lm-discard-title"
-          className="lm-modal-scrim"
-        >
-          <div className="w-full max-w-md rounded-xl border border-line-2 bg-panel p-5 shadow-xl">
-            <h3 id="lm-discard-title" className="text-base font-semibold text-ink">
-              {t("calibration:overlay.unsavedTitle")}
-            </h3>
-            <p className="mt-2 text-sm text-ink">
-              {t("calibration:overlay.unsavedDescription")}
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setEditorState((prev) => keepEditing(prev))}
-                className="rounded-md border border-line-2 px-3 py-1.5 text-sm font-medium text-ink"
-              >
-                {t("calibration:overlay.keepEditing")}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setEditorState((prev) => discardEditorChanges(prev));
-                  void flowRef.current.dispose();
-                  setTestPattern(flowRef.current.getSnapshot());
-                  onNavigateBack();
-                }}
-                className="rounded-md bg-red px-3 py-1.5 text-sm font-semibold text-white"
-              >
-                {t("calibration:overlay.discard")}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          tone="danger"
+          title={t("calibration:overlay.unsavedTitle")}
+          body={t("calibration:overlay.unsavedDescription")}
+          cancelLabel={t("calibration:overlay.keepEditing")}
+          confirmLabel={t("calibration:overlay.discard")}
+          onCancel={() => setEditorState((prev) => keepEditing(prev))}
+          onConfirm={() => {
+            setEditorState((prev) => discardEditorChanges(prev));
+            void flowRef.current.dispose();
+            setTestPattern(flowRef.current.getSnapshot());
+            onNavigateBack();
+          }}
+        />
       )}
     </div>
   );
@@ -827,56 +828,27 @@ function CountStepper({ label, value, onChange }: { label: string; value: number
   );
 }
 
-function EdgeTab({ edge, label, active, disabled, onClick }: { edge: AnchorEdge; label: string; active: boolean; disabled: boolean; onClick: (e: AnchorEdge) => void }) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => onClick(edge)}
-      aria-pressed={active}
-      className={`rounded-md border px-1.5 py-1.5 font-mono text-[9px] uppercase tracking-[0.1em] transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
-        active
-          ? "border-amber/40 bg-amber/10 text-amber"
-          : "border-line-2 bg-panel text-ink-dim hover:border-line-2"
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
+const START_EDGE_LABEL_KEYS = {
+  top: "calibration:page.startEdgeTop",
+  right: "calibration:page.startEdgeRight",
+  bottom: "calibration:page.startEdgeBottom",
+  left: "calibration:page.startEdgeLeft",
+} as const satisfies Record<AnchorEdge, TranslationKey>;
 
-function EndpointButton({ endpoint, label, active, onClick }: { endpoint: AnchorEndpoint; label: string; active: boolean; onClick: (e: AnchorEndpoint) => void }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onClick(endpoint)}
-      aria-pressed={active}
-      className={`flex-1 rounded-md border px-2 py-1.5 font-mono text-[9px] uppercase tracking-[0.1em] transition-colors ${
-        active
-          ? "border-amber/40 bg-amber/10 text-amber"
-          : "border-line-2 bg-panel text-ink-dim hover:border-line-2"
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
+const ENDPOINT_LABEL_KEYS = {
+  start: "calibration:page.anchorStart",
+  "gap-right": "calibration:page.anchorGapRight",
+  "gap-left": "calibration:page.anchorGapLeft",
+  end: "calibration:page.anchorEnd",
+} as const satisfies Record<AnchorEndpoint, TranslationKey>;
 
-function DirectionButton({ direction, label, active, onClick }: { direction: LedDirection; label: string; active: boolean; onClick: (d: LedDirection) => void }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onClick(direction)}
-      aria-pressed={active}
-      className={`rounded-md border px-2 py-1.5 font-mono text-[10px] tracking-[0.1em] transition-colors ${
-        active
-          ? "border-amber/40 bg-amber/10 text-amber"
-          : "border-line-2 bg-panel text-ink-dim hover:border-line-2"
-      }`}
-    >
-      {label}
-    </button>
-  );
+/** One option of a dock choice group; `layout` carries what differs between the groups. */
+function dockChoiceClass(active: boolean, layout: string): string {
+  return `rounded-md border py-1.5 tracking-[0.1em] transition-colors ${layout} ${
+    active
+      ? "border-amber/40 bg-amber/10 text-amber"
+      : "border-line-2 bg-panel text-ink-dim hover:border-line-2"
+  }`;
 }
 
 // Same keyboard-input pattern as CountStepper, with the

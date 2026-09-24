@@ -13,6 +13,8 @@
 
 import { useTranslation } from "react-i18next";
 
+import { Segmented } from "@/shared/ui/Segmented";
+
 import {
   LED_TEST_PATTERN_KIND,
   type LedTestPatternKind,
@@ -79,45 +81,32 @@ export function PatternPicker({
         )}
       </div>
 
-      <div className="lm-pattern-grid" role="radiogroup" aria-label={t("preview:test.title")}>
-        {PICKER_PATTERN_KINDS.map((kind) => {
-          const on = kind === selectedKind;
-          return (
-            <button
-              key={kind}
-              type="button"
-              role="radio"
-              aria-checked={on}
-              disabled={disabled}
-              className="lm-pattern-tile"
-              onClick={() => onSelectKind(kind)}
-            >
+      <Segmented
+        className="lm-pattern-grid"
+        itemClassName="lm-pattern-tile"
+        ariaLabel={t("preview:test.title")}
+        value={selectedKind}
+        onChange={onSelectKind}
+        disabled={disabled}
+        options={PICKER_PATTERN_KINDS.map((kind) => ({
+          value: kind,
+          label: (
+            <>
               <span className="swatch" style={{ background: SWATCH[kind] }} aria-hidden="true" />
               <span>{t(`preview:pattern.${kind}`)}</span>
-            </button>
-          );
-        })}
-      </div>
+            </>
+          ),
+        }))}
+      />
 
-      <div
+      <Segmented
         className="lm-pattern-speed"
-        role="radiogroup"
-        aria-label={t("preview:test.speed.label")}
-        aria-disabled={speedDisabled}
-      >
-        {SPEEDS.map((s) => (
-          <button
-            key={s}
-            type="button"
-            role="radio"
-            aria-checked={s === speed}
-            disabled={speedDisabled}
-            onClick={() => onSpeedChange(s)}
-          >
-            {t(`preview:test.speed.${s}`)}
-          </button>
-        ))}
-      </div>
+        ariaLabel={t("preview:test.speed.label")}
+        value={speed}
+        onChange={onSpeedChange}
+        disabled={speedDisabled}
+        options={SPEEDS.map((s) => ({ value: s, label: t(`preview:test.speed.${s}`) }))}
+      />
     </div>
   );
 }

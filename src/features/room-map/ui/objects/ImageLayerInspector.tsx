@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { RangeRow } from "@/shared/ui/RangeRow";
 
 import type { ImageLayer } from "@/shared/contracts/roomMap";
 import { Header } from "./InspectorPrimitives";
@@ -69,27 +70,17 @@ export function ImageLayerInspector({
           }}
         />
       </div>
-      <div className="lm-room-dock-field">
-        <label className="lm-room-dock-field-label" htmlFor={`img-opacity-${layer.id}`}>
-          {t("roomMap:inspector.imageOpacityLabel")}
-        </label>
-        <input
-          id={`img-opacity-${layer.id}`}
-          type="range"
-          min={0}
-          max={100}
-          step={1}
-          value={opacity}
-          disabled={locked}
-          onChange={(e) => onUpdate({ opacity: parseInt(e.target.value, 10) })}
-          className="lm-room-dock-slider"
-          aria-label={t("roomMap:inspector.imageOpacityLabel")}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={opacity}
-        />
-        <span className="lm-room-dock-field-value">{opacity}%</span>
-      </div>
+      <RangeRow
+        variant="dock"
+        label={t("roomMap:inspector.imageOpacityLabel")}
+        min={0}
+        max={100}
+        step={1}
+        value={opacity}
+        disabled={locked}
+        onChange={(next) => onUpdate({ opacity: Math.trunc(next) })}
+        valueLabel={`${opacity}%`}
+      />
       <button
         type="button"
         className="lm-room-dock-inspect-action"

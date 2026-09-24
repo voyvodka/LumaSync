@@ -192,7 +192,7 @@ describe("LightsSection", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /Ambilight/ }));
+    await user.click(screen.getByRole("radio", { name: /Ambilight/ }));
 
     expect(onModeChange).toHaveBeenCalledWith({
       kind: "ambilight",
@@ -266,8 +266,8 @@ describe("LightsSection", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: /Ambilight/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Solid/ })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /Ambilight/ })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /Solid/ })).toBeDisabled();
 
     expect(screen.queryByText("shell:notices.messages.calibrationRequired")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "shell:notices.actions.ledSetup" })).not.toBeInTheDocument();
@@ -415,10 +415,10 @@ describe("LightsSection — output availability gate", () => {
     const onModeChange = vi.fn();
     await renderWithOutputs({ onModeChange });
 
-    expect(screen.getByRole("button", { name: /Ambilight/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Solid/ })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /Ambilight/ })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /Solid/ })).toBeDisabled();
     // Off parks the outputs — always safe, never gated on having one.
-    expect(screen.getByRole("button", { name: /Off/ })).toBeEnabled();
+    expect(screen.getByRole("radio", { name: /Off/ })).toBeEnabled();
 
     expect(screen.queryByText("shell:notices.messages.outputNone")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "shell:notices.actions.devices" })).not.toBeInTheDocument();
@@ -440,8 +440,8 @@ describe("LightsSection — output availability gate", () => {
       hueProbeVerdict: "unreachable",
     });
 
-    expect(screen.getByRole("button", { name: /Ambilight/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Solid/ })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /Ambilight/ })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /Solid/ })).toBeDisabled();
   });
 
   // Seen on launch: the Outputs card read "Bridge · checking…" while the banner
@@ -452,16 +452,16 @@ describe("LightsSection — output availability gate", () => {
 
     expect(screen.getByText("lights:dock.rows.hueSubChecking")).toBeInTheDocument();
     expect(screen.queryByTestId("output-checking")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Ambilight/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Solid/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Off/ })).toBeEnabled();
+    expect(screen.getByRole("radio", { name: /Ambilight/ })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /Solid/ })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /Off/ })).toBeEnabled();
   });
 
   it("enables the non-Off modes once a reachable bridge is the only output", async () => {
     await renderWithOutputs({ hueConfigured: true, hueReachable: true });
 
-    expect(screen.getByRole("button", { name: /Ambilight/ })).toBeEnabled();
-    expect(screen.getByRole("button", { name: /Solid/ })).toBeEnabled();
+    expect(screen.getByRole("radio", { name: /Ambilight/ })).toBeEnabled();
+    expect(screen.getByRole("radio", { name: /Solid/ })).toBeEnabled();
   });
 });
 
@@ -674,7 +674,7 @@ describe("LightsSection — Ambilight mode settings card", () => {
     expect(await screen.findByText("lights:slab.modeSettingsText")).toBeInTheDocument();
     expect(screen.getByRole("slider", { name: "lights:signal.profile.brightness" })).toBeInTheDocument();
     expect(screen.getByRole("slider", { name: "lights:signal.profile.saturation" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "lights:signal.profile.blackBorder" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "lights:signal.profile.blackBorder" })).toBeInTheDocument();
     expect(
       await screen.findByRole("radiogroup", { name: "lights:signal.smoothing.title" }),
     ).toBeInTheDocument();

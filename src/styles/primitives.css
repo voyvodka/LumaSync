@@ -1,0 +1,231 @@
+/* ─────────────────────────────────────────────────────────────────────
+   Shared control primitives — the classes `src/shared/ui/` renders.
+   First in the components layer, so a feature sheet can still adjust a
+   primitive inside its own surface (`.lm-color-order-answer`, say).
+   ───────────────────────────────────────────────────────────────────── */
+
+/* Button — small (mono caps) and medium. `.lm-device-btn` is the old name
+   the Hue card still renders; drop it once that card adopts <Button>. */
+.lm-btn,
+.lm-device-btn {
+  all: unset;
+  box-sizing: border-box;
+  padding: 7px 13px;
+  border-radius: 7px;
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim);
+  background: var(--lm-panel);
+  border: 1px solid var(--lm-line-2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 500;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+.lm-btn:hover:not(:disabled),
+.lm-device-btn:hover:not(:disabled) {
+  border-color: var(--lm-amber);
+  color: var(--lm-amber);
+}
+.lm-btn:disabled,
+.lm-device-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.lm-btn svg,
+.lm-device-btn svg {
+  width: 12px;
+  height: 12px;
+}
+.lm-btn.is-primary,
+.lm-device-btn.is-primary {
+  background: rgba(255, 176, 32, 0.1);
+  border-color: rgba(255, 176, 32, 0.4);
+  color: var(--lm-amber);
+}
+.lm-btn.is-primary:hover:not(:disabled),
+.lm-device-btn.is-primary:hover:not(:disabled) {
+  background: rgba(255, 176, 32, 0.18);
+}
+.lm-btn.is-danger {
+  background: rgba(239, 91, 91, 0.1);
+  border-color: rgba(239, 91, 91, 0.4);
+  color: var(--lm-red);
+}
+.lm-btn.is-danger:hover:not(:disabled) {
+  background: rgba(239, 91, 91, 0.18);
+  border-color: var(--lm-red);
+  color: var(--lm-red);
+}
+.lm-btn:focus-visible,
+.lm-device-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+
+.lm-btn-md {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--lm-line-2);
+  border-radius: 7px;
+  background: var(--lm-panel-2);
+  color: var(--lm-ink);
+  font-family: var(--lm-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.lm-btn-md:hover:not(:disabled) {
+  border-color: rgba(255, 176, 32, 0.32);
+}
+.lm-btn-md.is-primary {
+  color: var(--lm-amber);
+  border-color: rgba(255, 176, 32, 0.45);
+  background: rgba(255, 176, 32, 0.12);
+}
+.lm-btn-md.is-primary:hover:not(:disabled) {
+  background: rgba(255, 176, 32, 0.18);
+}
+.lm-btn-md.is-danger {
+  color: var(--lm-red);
+  border-color: rgba(239, 91, 91, 0.45);
+  background: rgba(239, 91, 91, 0.1);
+}
+.lm-btn-md:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-btn-md:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Icon button — the look is the caller's; this only guarantees the hit area. */
+.lm-icon-btn {
+  min-width: 32px;
+  min-height: 32px;
+}
+
+/* Toggle — a 30 × 16 pill; `::before` widens the hit area to 32 × 32
+   without moving a pixel of what is drawn. */
+.lm-toggle {
+  width: 30px;
+  height: 16px;
+  border-radius: 10px;
+  background: #1a1d23;
+  border: 1px solid var(--lm-line-2);
+  position: relative;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+  flex-shrink: 0;
+}
+.lm-toggle::before {
+  content: "";
+  position: absolute;
+  inset: -9px -2px;
+}
+.lm-toggle::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #3a3f48;
+  transition: transform 160ms cubic-bezier(0.33, 1, 0.68, 1), background 120ms ease, box-shadow 120ms ease;
+}
+.lm-toggle[aria-checked="true"] {
+  background: rgba(255, 176, 32, 0.15);
+  border-color: rgba(255, 176, 32, 0.4);
+}
+.lm-toggle[aria-checked="true"]::after {
+  transform: translateX(13px);
+  background: var(--lm-amber);
+  box-shadow: 0 0 6px rgba(255, 176, 32, 0.6);
+}
+.lm-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Empty state */
+.lm-empty {
+  grid-column: 1 / -1;
+  border: 1px dashed var(--lm-line-2);
+  border-radius: 10px;
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--lm-ink-dim);
+}
+.lm-empty h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lm-ink);
+}
+.lm-empty p {
+  margin: 0;
+  font-family: var(--lm-mono);
+  font-size: 10.5px;
+  color: var(--lm-ink-faint);
+}
+.lm-empty-action {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lm-btn,
+  .lm-device-btn,
+  .lm-btn-md,
+  .lm-toggle,
+  .lm-toggle::after {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .lm-btn,
+  .lm-device-btn,
+  .lm-btn-md,
+  .lm-toggle,
+  .lm-empty {
+    border-color: CanvasText;
+  }
+  .lm-btn.is-primary,
+  .lm-btn-md.is-primary,
+  .lm-btn.is-danger,
+  .lm-btn-md.is-danger {
+    outline: 1px solid Highlight;
+  }
+  .lm-toggle::after {
+    background: CanvasText;
+  }
+  .lm-toggle[aria-checked="true"] {
+    border-color: Highlight;
+  }
+  .lm-toggle[aria-checked="true"]::after {
+    background: Highlight;
+  }
+  .lm-btn:focus-visible,
+  .lm-device-btn:focus-visible,
+  .lm-btn-md:focus-visible,
+  .lm-toggle:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}

@@ -29,8 +29,8 @@
  *     `title` + `aria-describedby` pointing at the tooltip text.
  *   - Arrow-key navigation skips disabled tiles unless the override
  *     toggle is on.
- *   - Override dialog: `role="dialog"`, `aria-modal="true"`,
- *     `aria-labelledby`, focus trap, ESC = cancel, Enter = confirm.
+ *   - Override dialog: the shared `ConfirmDialog` — focus trap, ESC =
+ *     cancel, and Enter cancels unless Confirm itself has focus.
  *   - Tap targets ≥ 32 px (tile padding 12+12=24 + content height ≥ 8).
  *   - Forced-colors / reduced-motion respected via `lm-fw-tile` class
  *     rules in `src/styles.css`.
@@ -53,7 +53,7 @@ import {
 } from "@/shared/contracts/device";
 import { useAdvertisedFirmwareProfile } from "@/features/device/useAdvertisedFirmwareProfile";
 import { shellStore } from "@/features/persistence/shellStore";
-import { useDialogFocus } from "@/shared/ui/useDialogFocus";
+import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 
 const DEFAULT_PROFILE: FirmwareProfile = FIRMWARE_PROFILE.LUMASYNC_V1;
 
@@ -222,165 +222,34 @@ function OverrideWarningDialog({
   onCancel,
 }: OverrideWarningDialogProps) {
   const { t } = useTranslation();
-  const titleId = useId();
-  const bodyId = useId();
   const [dontAskAgain, setDontAskAgain] = useState(false);
-  const confirmRef = useRef<HTMLButtonElement | null>(null);
-
-  const { containerRef, handleKeyDown } = useDialogFocus<HTMLDivElement>(true, {
-    onClose: onCancel,
-  });
 
   // Enter is NOT "confirm" here. The dialog guards a destructive override, so
   // the only way through it is an explicit click or Enter on a focused Confirm
-  // — anything else cancels. The shared hook owns Escape and the Tab cycle;
-  // this is the one rule that is specific to this dialog.
-  const handleDialogKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === "Enter" && document.activeElement !== confirmRef.current) {
-        event.preventDefault();
-        onCancel();
-        return;
-      }
-      handleKeyDown(event);
-    },
-    [handleKeyDown, onCancel],
-  );
-
+  // — anything else cancels (`enterCancels`).
   return (
-    <div
-      ref={containerRef}
-      onKeyDown={handleDialogKeyDown}
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
-      aria-describedby={bodyId}
-      data-testid="lm-fw-override-dialog"
-      style={{
-        position: "fixed",
-        // Below the title bar, not `inset: 0`: a full-viewport backdrop covers
-        // the drag region and the window controls underneath it.
-        inset: "var(--lm-titlebar-h) 0 0 0",
-        zIndex: 9000,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "rgba(0, 0, 0, 0.55)",
-        padding: 16,
-      }}
-      onClick={(e) => {
-        // Backdrop click cancels.
-        if (e.target === e.currentTarget) onCancel();
-      }}
+    <ConfirmDialog
+      title={t("lights:led.firmwareProfile.overrideWarningTitle")}
+      body={t("lights:led.firmwareProfile.overrideWarningBody", { advertised, attempted })}
+      confirmLabel={t("lights:led.firmwareProfile.overrideWarningConfirm", { attempted })}
+      cancelLabel={t("lights:led.firmwareProfile.overrideWarningCancel")}
+      onConfirm={() => onConfirm(dontAskAgain)}
+      onCancel={onCancel}
+      enterCancels
+      testId="lm-fw-override-dialog"
+      confirmTestId="lm-fw-override-confirm"
+      cancelTestId="lm-fw-override-cancel"
     >
-      <div
-        className="lm-settings-group"
-        style={{
-          maxWidth: 460,
-          width: "100%",
-          background: "var(--lm-panel)",
-          borderRadius: 12,
-          padding: 18,
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
-          border: "1px solid var(--lm-line-2)",
-        }}
-      >
-        <div
-          id={titleId}
-          style={{
-            fontSize: 14,
-            fontWeight: 600,
-            color: "var(--lm-amber)",
-          }}
-        >
-          {t("lights:led.firmwareProfile.overrideWarningTitle")}
-        </div>
-        <div
-          id={bodyId}
-          style={{
-            fontSize: 12,
-            color: "var(--lm-ink-dim)",
-            lineHeight: 1.55,
-          }}
-        >
-          {t("lights:led.firmwareProfile.overrideWarningBody", {
-            advertised,
-            attempted,
-          })}
-        </div>
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            fontSize: 12,
-            color: "var(--lm-ink)",
-            cursor: "pointer",
-            minHeight: 32,
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={dontAskAgain}
-            onChange={(e) => setDontAskAgain(e.target.checked)}
-            data-testid="lm-fw-override-dont-ask"
-          />
-          {t("lights:led.firmwareProfile.overrideWarningDontAskAgain")}
-        </label>
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            justifyContent: "flex-end",
-            marginTop: 4,
-          }}
-        >
-          <button
-            type="button"
-            onClick={onCancel}
-            data-testid="lm-fw-override-cancel"
-            style={{
-              all: "unset",
-              padding: "8px 14px",
-              minHeight: 32,
-              borderRadius: 6,
-              border: "1px solid var(--lm-line-2)",
-              background: "transparent",
-              color: "var(--lm-ink)",
-              cursor: "pointer",
-              fontSize: 12,
-            }}
-          >
-            {t("lights:led.firmwareProfile.overrideWarningCancel")}
-          </button>
-          <button
-            ref={confirmRef}
-            type="button"
-            onClick={() => onConfirm(dontAskAgain)}
-            data-testid="lm-fw-override-confirm"
-            style={{
-              all: "unset",
-              padding: "8px 14px",
-              minHeight: 32,
-              borderRadius: 6,
-              border: "1px solid rgba(255, 176, 32, 0.45)",
-              background: "rgba(255, 176, 32, 0.12)",
-              color: "var(--lm-amber)",
-              cursor: "pointer",
-              fontSize: 12,
-              fontWeight: 600,
-            }}
-          >
-            {t("lights:led.firmwareProfile.overrideWarningConfirm", {
-              attempted,
-            })}
-          </button>
-        </div>
-      </div>
-    </div>
+      <label className="flex min-h-8 cursor-pointer items-center gap-2 text-xs text-ink">
+        <input
+          type="checkbox"
+          checked={dontAskAgain}
+          onChange={(e) => setDontAskAgain(e.target.checked)}
+          data-testid="lm-fw-override-dont-ask"
+        />
+        {t("lights:led.firmwareProfile.overrideWarningDontAskAgain")}
+      </label>
+    </ConfirmDialog>
   );
 }
 

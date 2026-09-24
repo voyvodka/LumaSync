@@ -35,6 +35,8 @@ import {
 } from "@/features/device/wledApi";
 import type { WledRestoreOutcome } from "@/features/device/wledSinkRestore";
 import { parseCommandError } from "@/shared/contracts/status";
+import { EmptyState } from "@/shared/ui/EmptyState";
+import { StatusPill } from "@/shared/ui/StatusPill";
 
 interface WledDevicePickerProps {
   /** Currently active sink reference (used to highlight the connected card). */
@@ -243,10 +245,10 @@ export function WledDevicePicker({
       {/* Device cards */}
       <div className="lm-device-grid mt-3">
         {devices.length === 0 && !isDiscovering && discoveryStatus && (
-          <div className="lm-device-empty">
-            <h3>{t("device:page.wled.empty.title")}</h3>
-            <p>{t("device:page.wled.empty.body")}</p>
-          </div>
+          <EmptyState
+            title={t("device:page.wled.empty.title")}
+            body={t("device:page.wled.empty.body")}
+          />
         )}
         {devices.map((device) => {
           const rowState = rowStates[device.ip] ?? ({ kind: "idle" } as RowState);
@@ -270,13 +272,13 @@ export function WledDevicePicker({
                   <div className="lm-dcard-name">
                     <span>{device.name ?? device.ip}</span>
                     {isActive ? (
-                      <span className="lm-dcard-pill is-streaming">
+                      <StatusPill tone="streaming">
                         {t("device:page.wled.pill.connected")}
-                      </span>
+                      </StatusPill>
                     ) : (
-                      <span className="lm-dcard-pill is-warn">
+                      <StatusPill tone="warn">
                         {t("device:page.wled.pill.discovered")}
-                      </span>
+                      </StatusPill>
                     )}
                   </div>
                   <div className="lm-dcard-sub">{device.ip}</div>

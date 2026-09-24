@@ -27,6 +27,14 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Keyboard: the mode buttons — on the Lights page, in the compact window and in the LED test
+  popup — are one group you Tab into once and move through with the arrow keys, Home and End. The
+  same goes for the test pattern tiles and speeds, and for LED Setup's start edge, start point and
+  direction. Screen readers announce each group as a set of choices and the Settings toggles as
+  switches, and the brightness and saturation sliders on the Lights page show a focus ring.
+- The confirmations for leaving LED Setup with unsaved changes and for overriding the firmware
+  profile look like the rest of the app's dialogs. Clicking outside the LED Setup one keeps
+  editing, like Escape.
 - Notices at the top of the window are now a thin one-line strip: a coloured dot, one short
   sentence and a link such as "Devices →". In the compact window a sentence that does not fit ends
   in "…", and the full text is in its tooltip or one click away.

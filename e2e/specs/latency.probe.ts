@@ -20,7 +20,7 @@ describe("bridge capability probe", () => {
     await time("execute(1)", () => browser.execute(() => 1));
     await time("$().isExisting", () => $('[data-testid="compact-layout"]').isExisting());
     await time("$().getAttribute", () =>
-      $('[data-testid="mode-button-off"]').getAttribute("aria-pressed"),
+      $('[data-testid="mode-button-off"]').getAttribute("aria-checked"),
     );
     await time("$().click", () => $('[data-testid="mode-button-off"]').click());
     await time("getTitle", () => browser.getTitle());
