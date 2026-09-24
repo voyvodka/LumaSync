@@ -72,7 +72,8 @@ import {
   UI_MODE_FADE_DURATION_MS,
   UI_MODE_FADE_TIMING,
 } from "./features/shell/useUIMode";
-import { useGlobalKeybinds } from "./features/shell/useGlobalKeybinds";
+import { useGlobalKeybinds, type KeybindHandlers } from "./features/shell/useGlobalKeybinds";
+import { MODE_KIND_ORDER, modeKind } from "./features/mode/model/modeKinds";
 import {
   createNavigationStore,
   NavigationProvider,
@@ -286,26 +287,23 @@ function Shell() {
   // Global keyboard shortcuts — the behaviour behind every `<kbd>` badge in
   // `KEYBIND_REGISTRY`. The hook is disabled during a UI-mode fade: firing
   // ⌥1/⌥2/⌥3 mid-transition is what produced the "ghost mode flash".
-  const keybindHandlers = useMemo(
-    () => ({
-      [KEYBIND_ACTIONS.MODE_OFF]: () => {
-        void handleLightingModeChange({ kind: LIGHTING_MODE_KIND.OFF });
-      },
-      // The kind alone: Rust keeps the last colour and Ambilight settings.
-      [KEYBIND_ACTIONS.MODE_AMBILIGHT]: () => {
-        void handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
-      },
-      [KEYBIND_ACTIONS.MODE_SOLID]: () => {
-        void handleLightingModeChange({ kind: LIGHTING_MODE_KIND.SOLID });
-      },
+  const keybindHandlers = useMemo(() => {
+    const handlers: KeybindHandlers = {
       [KEYBIND_ACTIONS.OPEN_SETTINGS]: () => {
         // ⌘, / Ctrl+, is the canonical open-settings shortcut on all three
         // platforms; the section change switches compact to full itself.
         void handleSectionChange(SECTION_IDS.SYSTEM);
       },
-    }),
-    [handleLightingModeChange, handleSectionChange],
-  );
+    };
+    for (const kind of MODE_KIND_ORDER) {
+      const descriptor = modeKind(kind);
+      // The kind alone: Rust keeps the last colour and Ambilight settings.
+      handlers[descriptor.keybind] = () => {
+        void handleLightingModeChange(descriptor.config({}));
+      };
+    }
+    return handlers;
+  }, [handleLightingModeChange, handleSectionChange]);
 
   useGlobalKeybinds(keybindHandlers, { disabled: !isContentVisible });
 

@@ -8,6 +8,8 @@ import {
   type LedColorOrder,
 } from "@/shared/contracts/device";
 import { shellStore } from "@/features/persistence/shellStore";
+import { Button } from "@/shared/ui/Button";
+import { Callout } from "@/shared/ui/Callout";
 import { normalizeColorOrder } from "@/shared/contracts/mode";
 
 import {
@@ -178,16 +180,17 @@ export function LedColorOrderControl({
           {order === DEFAULT_LED_COLOR_ORDER ? (
             <span className="lm-color-order-tag">{t("lights:led.colorOrder.defaultTag")}</span>
           ) : null}
-          <button
+          <Button
+            size="md"
+            variant="primary"
             ref={identifyButtonRef}
-            type="button"
-            className="lm-color-order-btn is-primary lm-color-order-identify"
+            className="lm-color-order-identify"
             onClick={identify.begin}
             disabled={!canIdentify || flowOpen}
             aria-describedby={canIdentify ? undefined : hintId}
           >
             {t("lights:led.colorOrder.identify.button")}
-          </button>
+          </Button>
         </div>
         {!canIdentify ? (
           <p id={hintId} className="lm-color-order-note">
@@ -234,9 +237,7 @@ export function LedColorOrderControl({
           </select>
         </div>
         {manualSaveFailed ? (
-          <p role="alert" className="lm-color-order-error">
-            {t("lights:led.colorOrder.identify.errors.saveFailed")}
-          </p>
+          <Callout tone="error">{t("lights:led.colorOrder.identify.errors.saveFailed")}</Callout>
         ) : null}
       </div>
     </section>
@@ -275,29 +276,29 @@ function IdentifyStep({
         </p>
         <div className="lm-color-order-answers" aria-busy={state.pending}>
           {ANSWERS.map(({ answer, key }) => (
-            <button
+            <Button
+              size="md"
               key={answer}
-              type="button"
-              className={`lm-color-order-btn lm-color-order-answer${answer === "other" ? " is-other" : ""}`}
+              className={`lm-color-order-answer${answer === "other" ? " is-other" : ""}`}
               onClick={() => onAnswer(answer)}
               disabled={state.pending}
             >
               <span className={`lm-color-order-swatch is-${answer}`} aria-hidden="true" />
               {t(key)}
-            </button>
+            </Button>
           ))}
         </div>
         {state.duplicate ? (
-          <p role="alert" className="lm-color-order-error">
+          <Callout tone="error">
             {t("lights:led.colorOrder.identify.duplicate", {
               color: t(COLOR_ANSWER_KEYS[state.duplicate]),
             })}
-          </p>
+          </Callout>
         ) : null}
         <div className="lm-color-order-actions">
-          <button type="button" className="lm-color-order-btn" onClick={onCancel}>
+          <Button size="md" onClick={onCancel}>
             {t("lights:led.colorOrder.identify.cancel")}
-          </button>
+          </Button>
         </div>
       </>
     );
@@ -310,18 +311,17 @@ function IdentifyStep({
           {t("lights:led.colorOrder.identify.result", { order: orderCode(state.order) })}
         </p>
         <div className="lm-color-order-actions">
-          <button
-            type="button"
-            className="lm-color-order-btn is-primary"
+          <Button
+            size="md"
+            variant="primary"
             onClick={onApply}
-            disabled={state.pending}
-            aria-busy={state.pending}
+            busy={state.pending}
           >
             {t("lights:led.colorOrder.identify.apply", { order: orderCode(state.order) })}
-          </button>
-          <button type="button" className="lm-color-order-btn" onClick={onCancel} disabled={state.pending}>
+          </Button>
+          <Button size="md" onClick={onCancel} disabled={state.pending}>
             {t("lights:led.colorOrder.identify.cancel")}
-          </button>
+          </Button>
         </div>
       </>
     );
@@ -335,23 +335,21 @@ function IdentifyStep({
         </p>
         <p className="lm-color-order-note">{t("lights:led.colorOrder.identify.verifyHint")}</p>
         <div className="lm-color-order-actions">
-          <button
-            type="button"
-            className="lm-color-order-btn is-primary"
+          <Button
+            size="md"
+            variant="primary"
             onClick={onKeep}
             disabled={state.pending}
           >
             {t("lights:led.colorOrder.identify.keep")}
-          </button>
-          <button
-            type="button"
-            className="lm-color-order-btn"
+          </Button>
+          <Button
+            size="md"
             onClick={onUndo}
-            disabled={state.pending}
-            aria-busy={state.pending}
+            busy={state.pending}
           >
             {t("lights:led.colorOrder.identify.undo", { order: orderCode(state.previous) })}
-          </button>
+          </Button>
         </div>
       </>
     );
@@ -364,13 +362,13 @@ function IdentifyStep({
       </p>
       <div className="lm-color-order-actions">
         {state.reason === "stopFailed" ? (
-          <button type="button" className="lm-color-order-btn is-primary" onClick={onApply}>
+          <Button size="md" variant="primary" onClick={onApply}>
             {t("lights:led.colorOrder.identify.retry")}
-          </button>
+          </Button>
         ) : null}
-        <button type="button" className="lm-color-order-btn" onClick={onCancel}>
+        <Button size="md" onClick={onCancel}>
           {t("lights:led.colorOrder.identify.close")}
-        </button>
+        </Button>
       </div>
     </>
   );

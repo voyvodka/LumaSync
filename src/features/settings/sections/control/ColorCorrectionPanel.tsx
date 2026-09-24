@@ -33,6 +33,7 @@ import {
 } from "@/shared/contracts/device";
 import { shellStore } from "@/features/persistence/shellStore";
 import { clamp } from "@/shared/lib/math";
+import { RangeRow } from "@/shared/ui/RangeRow";
 
 const PERSIST_DEBOUNCE_MS = 200;
 
@@ -49,58 +50,6 @@ function isDefaultCorrection(config: ColorCorrectionConfig): boolean {
     Math.abs(config.gammaB - DEFAULT_COLOR_CORRECTION.gammaB) < 1e-3 &&
     Math.abs(config.kelvin - DEFAULT_COLOR_CORRECTION.kelvin) < 1 &&
     Math.abs(config.saturation - DEFAULT_COLOR_CORRECTION.saturation) < 1e-3
-  );
-}
-
-interface SliderRowProps {
-  label: string;
-  min: number;
-  max: number;
-  step: number;
-  value: number;
-  valueLabel: string;
-  ariaLabel: string;
-  onChange: (next: number) => void;
-}
-
-function SliderRow({
-  label,
-  min,
-  max,
-  step,
-  value,
-  valueLabel,
-  ariaLabel,
-  onChange,
-}: SliderRowProps) {
-  // Local percent for the amber fill track — matches `lm-psl` pattern used
-  // in LightsSection so the look is identical to the Ambilight profile
-  // block directly above this panel.
-  const percent = ((value - min) / (max - min)) * 100;
-  return (
-    <div className="lm-psl">
-      <div className="row">
-        <span>{label}</span>
-        <b>{valueLabel}</b>
-      </div>
-      <div className="tr">
-        <div className="tr-track">
-          <span className="tr-fill" style={{ width: `${percent}%` }} />
-        </div>
-        <input
-          type="range"
-          min={min}
-          max={max}
-          step={step}
-          value={value}
-          aria-label={ariaLabel}
-          onChange={(e) => {
-            const next = Number.parseFloat(e.target.value);
-            if (Number.isFinite(next)) onChange(next);
-          }}
-        />
-      </div>
-    </div>
   );
 }
 
@@ -222,7 +171,8 @@ export function ColorCorrectionPanel({
           className="lm-profile"
           style={{ padding: 14 }}
         >
-          <SliderRow
+          <RangeRow
+            variant="profile"
             label={t("lights:led.colorCorrection.gammaR")}
             ariaLabel={t("lights:led.colorCorrection.gammaR")}
             min={GAMMA_RANGE.min}
@@ -234,7 +184,8 @@ export function ColorCorrectionPanel({
               commit({ ...config, gammaR: clamp(next, GAMMA_RANGE.min, GAMMA_RANGE.max) })
             }
           />
-          <SliderRow
+          <RangeRow
+            variant="profile"
             label={t("lights:led.colorCorrection.gammaG")}
             ariaLabel={t("lights:led.colorCorrection.gammaG")}
             min={GAMMA_RANGE.min}
@@ -246,7 +197,8 @@ export function ColorCorrectionPanel({
               commit({ ...config, gammaG: clamp(next, GAMMA_RANGE.min, GAMMA_RANGE.max) })
             }
           />
-          <SliderRow
+          <RangeRow
+            variant="profile"
             label={t("lights:led.colorCorrection.gammaB")}
             ariaLabel={t("lights:led.colorCorrection.gammaB")}
             min={GAMMA_RANGE.min}
@@ -258,7 +210,8 @@ export function ColorCorrectionPanel({
               commit({ ...config, gammaB: clamp(next, GAMMA_RANGE.min, GAMMA_RANGE.max) })
             }
           />
-          <SliderRow
+          <RangeRow
+            variant="profile"
             label={t("lights:led.colorCorrection.kelvin")}
             ariaLabel={`${t("lights:led.colorCorrection.kelvin")} — ${t("lights:led.colorCorrection.kelvinHint")}`}
             min={KELVIN_RANGE_K.min}
@@ -273,7 +226,8 @@ export function ColorCorrectionPanel({
               })
             }
           />
-          <SliderRow
+          <RangeRow
+            variant="profile"
             label={t("lights:led.colorCorrection.saturation")}
             ariaLabel={t("lights:led.colorCorrection.saturation")}
             min={SATURATION_RANGE.min}

@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { findHueChannel } from "@/shared/contracts/roomMap";
-import { parseObjectId } from "../model/objectId";
+import { parseObjectId, type RoomObjectKind, type RoomObjectRef } from "../model/objectId";
 import { resolveHueChannelWorld } from "../model/hueChannelPosition";
 import { IconLock, IconUnlock, IconOpacity } from "@/shared/ui/icons";
 
@@ -33,39 +33,33 @@ interface FieldValues {
   aspectLocked?: boolean;
 }
 
-function getFieldValues(config: RoomMapConfig, id: string | null): FieldValues | null {
-  if (!id) return null;
-
-  const parsed = parseObjectId(id);
-
-  if (parsed?.kind === "tv" && config.tvAnchor) {
+/** What the bar shows for each kind; a new kind fails to compile until it has a row. */
+const FIELD_READERS = {
+  tv: (config) => {
     const tv = config.tvAnchor;
+    if (!tv) return null;
     return { x: tv.x.toFixed(2), y: tv.y.toFixed(2), w: tv.width.toFixed(2), h: tv.height.toFixed(2), r: "", locked: !!tv.locked };
-  }
-
-  if (parsed?.kind === "furniture") {
-    const f = config.furniture.find((item) => item.id === parsed.furnitureId);
+  },
+  furniture: (config, ref) => {
+    const f = config.furniture.find((item) => item.id === ref.furnitureId);
     if (!f) return null;
     return { x: f.x.toFixed(2), y: f.y.toFixed(2), w: f.width.toFixed(2), h: f.height.toFixed(2), r: String(f.rotation ?? 0), locked: !!f.locked };
-  }
-
-  if (parsed?.kind === "usb") {
-    const s = config.usbStrips.find((item) => item.stripId === parsed.stripId);
+  },
+  usb: (config, ref) => {
+    const s = config.usbStrips.find((item) => item.stripId === ref.stripId);
     if (!s) return null;
     return { x: s.startX.toFixed(2), y: s.startY.toFixed(2), w: "", h: "", r: "", locked: !!s.locked };
-  }
-
-  if (parsed?.kind === "hue") {
-    const ch = findHueChannel(config.hueChannels, parsed.channelIndex);
+  },
+  hue: (config, ref) => {
+    const ch = findHueChannel(config.hueChannels, ref.channelIndex);
     if (!ch) return null;
     // Zone-bound channels render from `zoneRelativePosition`; reading `ch.x/y`
     // here showed a coordinate the dot was not at.
     const world = resolveHueChannelWorld(ch, config.zones);
     return { x: world.x.toFixed(2), y: world.y.toFixed(2), w: "", h: "", r: "", locked: !!ch.locked };
-  }
-
-  if (parsed?.kind === "image") {
-    const layer = config.imageLayers.find((l) => l.id === parsed.layerId);
+  },
+  image: (config, ref) => {
+    const layer = config.imageLayers.find((l) => l.id === ref.layerId);
     if (!layer) return null;
     const sx = layer.scaleX ?? layer.scale;
     const sy = layer.scaleY ?? layer.scale;
@@ -80,9 +74,14 @@ function getFieldValues(config: RoomMapConfig, id: string | null): FieldValues |
       opacity: String(layer.opacity ?? 100),
       aspectLocked: layer.aspectLocked !== false,
     };
-  }
+  },
+} satisfies { [K in RoomObjectKind]: (config: RoomMapConfig, ref: RoomObjectRef<K>) => FieldValues | null };
 
-  return null;
+function getFieldValues(config: RoomMapConfig, id: string | null): FieldValues | null {
+  const ref = id ? parseObjectId(id) : null;
+  if (!ref) return null;
+  const read = FIELD_READERS[ref.kind] as (config: RoomMapConfig, ref: RoomObjectRef) => FieldValues | null;
+  return read(config, ref);
 }
 
 function NumberInput({

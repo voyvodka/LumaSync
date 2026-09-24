@@ -11,6 +11,8 @@ export default {
     dockLedCountPerEdge: "LEDs per edge",
     dockStandGap: "Monitor stand gap",
     dockStartAnchor: "Start anchor",
+    startEdgeGroup: "Start edge",
+    anchorGroup: "Position on the edge",
     dockDirection: "Direction",
     dockDirectionCw: "CW ↻",
     dockDirectionCcw: "CCW ↺",

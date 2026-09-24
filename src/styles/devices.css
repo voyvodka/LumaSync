@@ -123,50 +123,6 @@
   gap: 8px;
   flex-shrink: 0;
 }
-.lm-device-btn {
-  all: unset;
-  box-sizing: border-box;
-  padding: 7px 13px;
-  border-radius: 7px;
-  font-family: var(--lm-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--lm-ink-dim);
-  background: var(--lm-panel);
-  border: 1px solid var(--lm-line-2);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-weight: 500;
-  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
-}
-.lm-device-btn:hover:not(:disabled) {
-  border-color: var(--lm-amber);
-  color: var(--lm-amber);
-}
-.lm-device-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.lm-device-btn svg {
-  width: 12px;
-  height: 12px;
-}
-.lm-device-btn.is-primary {
-  background: rgba(255, 176, 32, 0.1);
-  border-color: rgba(255, 176, 32, 0.4);
-  color: var(--lm-amber);
-}
-.lm-device-btn.is-primary:hover:not(:disabled) {
-  background: rgba(255, 176, 32, 0.18);
-}
-.lm-device-btn:focus-visible {
-  outline: none;
-  box-shadow: var(--lm-focus-ring-soft);
-}
-
 /* Category body — each rail category has its own content column */
 .lm-device-cat-body {
   display: flex;
@@ -463,28 +419,6 @@
 .lm-dcard-pair:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.35);
-}
-
-/* Empty state */
-.lm-device-empty {
-  grid-column: 1 / -1;
-  border: 1px dashed var(--lm-line-2);
-  border-radius: 10px;
-  padding: 32px 20px;
-  text-align: center;
-  color: var(--lm-ink-dim);
-}
-.lm-device-empty h3 {
-  margin: 0 0 4px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--lm-ink);
-}
-.lm-device-empty p {
-  margin: 0;
-  font-family: var(--lm-mono);
-  font-size: 10.5px;
-  color: var(--lm-ink-faint);
 }
 
 /* ── Hue bridge card — additional state variants ───────────────────── */

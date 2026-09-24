@@ -278,7 +278,19 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
 /** Output sink a fresh install starts on. */
 export const DEFAULT_OUTPUT_TARGETS: HueRuntimeTarget[] = ["usb"];
 
-/** Coerce a persisted output-target list into a deduped, stably ordered `usb,hue` set. */
+/** Each output target's place in a normalised list. A new target fails to compile until it has one. */
+const OUTPUT_TARGET_RANK = { usb: 0, hue: 1 } satisfies Record<HueRuntimeTarget, number>;
+
+/** Every output target, in the stable order the UI lists them and a normalised list keeps. */
+export const OUTPUT_TARGETS: readonly HueRuntimeTarget[] = (
+  Object.keys(OUTPUT_TARGET_RANK) as HueRuntimeTarget[]
+).sort((a, b) => OUTPUT_TARGET_RANK[a] - OUTPUT_TARGET_RANK[b]);
+
+function isOutputTarget(value: unknown): value is HueRuntimeTarget {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(OUTPUT_TARGET_RANK, value);
+}
+
+/** Coerce a persisted output-target list into a deduped set in `OUTPUT_TARGETS` order. */
 export function normalizeOutputTargets(value: unknown): HueRuntimeTarget[] {
   // First-install case (`undefined` / non-array shape from the persisted
   // store): fall back to DEFAULT_OUTPUT_TARGETS so a fresh user lands on a
@@ -287,8 +299,6 @@ export function normalizeOutputTargets(value: unknown): HueRuntimeTarget[] {
   // return `[]`. The previous unconditional DEFAULT fallback re-added the
   // very target we had just removed and stranded the auto-deselect path.
   if (!Array.isArray(value)) return [...DEFAULT_OUTPUT_TARGETS];
-  const targetSet = new Set(
-    value.filter((t): t is HueRuntimeTarget => t === "usb" || t === "hue"),
-  );
-  return ["usb", "hue"].filter((t): t is HueRuntimeTarget => targetSet.has(t as HueRuntimeTarget));
+  const targetSet = new Set(value.filter(isOutputTarget));
+  return OUTPUT_TARGETS.filter((t) => targetSet.has(t));
 }

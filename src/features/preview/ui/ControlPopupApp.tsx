@@ -5,7 +5,7 @@
 // strip is a lighting choice like the main window's: the Rust transaction
 // runs it, on the saved outputs, and saves it.
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { shellStore } from "@/features/persistence/shellStore";
@@ -17,7 +17,8 @@ import {
 } from "@/features/shell/windowApi";
 import { parseHex, rgbToHex } from "@/shared/lib/color";
 import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
-import { IconOff, IconAmbilight, IconSolidDot } from "@/shared/ui/icons";
+import { modeKind } from "@/features/mode/model/modeKinds";
+import { ModeStrip } from "@/features/mode/ui/ModeStrip";
 import { applyOutputs, retuneLighting } from "@/features/mode/modeApi";
 import { needsCalibration } from "@/features/mode/state/modeApplyOutcome";
 import { createRetuneCoalescer } from "@/features/mode/state/retuneCoalescer";
@@ -317,10 +318,9 @@ export function ControlPopupApp() {
           // The kind alone for Off and Ambilight: Rust keeps the last Ambilight
           // settings. Solid carries the colour on screen.
           const result = await applyOutputs({
-            mode:
-              next === LIGHTING_MODE_KIND.SOLID
-                ? { kind: next, solid: { r: draft.r, g: draft.g, b: draft.b, brightness: draft.brightness } }
-                : { kind: next },
+            mode: modeKind(next).config({
+              solid: { r: draft.r, g: draft.g, b: draft.b, brightness: draft.brightness },
+            }),
             origin: LIGHTING_ORIGIN.POPUP,
           });
           adopt(result.snapshot);
@@ -457,29 +457,11 @@ export function ControlPopupApp() {
         {/* Mode strip */}
         <div>
           <div className="lm-control-section-title">{t("common:mode.title")}</div>
-          <div className="lm-control-mode-strip" role="radiogroup" aria-label={t("common:mode.title")}>
-            <ModeButton
-              kind={LIGHTING_MODE_KIND.OFF}
-              active={!testActive && kind === LIGHTING_MODE_KIND.OFF}
-              label={t("common:mode.options.off")}
-              icon={<IconOff />}
-              onClick={handleModeClick}
-            />
-            <ModeButton
-              kind={LIGHTING_MODE_KIND.AMBILIGHT}
-              active={!testActive && kind === LIGHTING_MODE_KIND.AMBILIGHT}
-              label={t("common:mode.options.ambilight")}
-              icon={<IconAmbilight />}
-              onClick={handleModeClick}
-            />
-            <ModeButton
-              kind={LIGHTING_MODE_KIND.SOLID}
-              active={!testActive && isSolid}
-              label={t("common:mode.options.solid")}
-              icon={<IconSolidDot />}
-              onClick={handleModeClick}
-            />
-          </div>
+          <ModeStrip
+            variant="popup"
+            value={testActive ? null : kind}
+            onSelect={handleModeClick}
+          />
         </div>
 
         {/* Colour editor — drives Solid mode, or the running solid/chase test */}
@@ -585,31 +567,3 @@ export function ControlPopupApp() {
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Mode button + icons
-// ---------------------------------------------------------------------------
-
-interface ModeButtonProps {
-  kind: LightingModeKind;
-  active: boolean;
-  label: string;
-  icon: ReactNode;
-  onClick: (kind: LightingModeKind) => void;
-}
-
-function ModeButton({ kind, active, label, icon, onClick }: ModeButtonProps) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={active}
-      className="lm-control-mbtn"
-      onClick={() => onClick(kind)}
-    >
-      <span aria-hidden="true">{icon}</span>
-      <span>{label}</span>
-    </button>
-  );
-}
-

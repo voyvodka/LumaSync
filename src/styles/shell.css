@@ -333,7 +333,7 @@
     background: Canvas;
     forced-color-adjust: none;
   }
-  .lm-compact-mbtn[aria-pressed="true"] {
+  .lm-compact-mbtn[aria-checked="true"] {
     color: Highlight;
     border-color: Highlight;
   }

@@ -35,7 +35,7 @@ import { ContextMenu, type ContextMenuAction } from "./ContextMenu";
 import { LeftToolbar } from "./LeftToolbar";
 import { MouseCoordinateDisplay } from "./MouseCoordinateDisplay";
 import { ZoomControl } from "./ZoomControl";
-import { canDeleteObjectKind } from "../model/objectCapability";
+import { roomObjectAdapter } from "../model/roomObjectKinds";
 import { PropertyBar } from "./PropertyBar";
 import { RenameDialog } from "./RenameDialog";
 import { TemplateSelector } from "./TemplateSelector";
@@ -475,8 +475,8 @@ export function RoomMapEditor({
     const actions: ContextMenuAction[] = [];
 
     const parsed = parseObjectId(id);
-    const canDuplicate = parsed?.kind === "furniture" || parsed?.kind === "usb";
-    if (canDuplicate) {
+    const adapter = parsed ? roomObjectAdapter(parsed) : null;
+    if (adapter?.duplicate) {
       actions.push({
         label: t("roomMap:contextMenu.duplicate"),
         shortcut: IS_MAC ? "\u2318D" : "Ctrl+D",
@@ -484,15 +484,15 @@ export function RoomMapEditor({
       });
     }
 
-    if (parsed?.kind === "furniture") {
-      const furnitureId = parsed.furnitureId;
+    const rename = adapter?.rename;
+    if (parsed && rename) {
       actions.push({
         label: t("roomMap:contextMenu.rename"),
-        onClick: () => {
-          const current = config.furniture.find((f) => f.id === furnitureId);
-          setRenameTarget({ id: furnitureId, currentLabel: current?.label ?? "" });
-        },
+        onClick: () => setRenameTarget({ id, currentLabel: rename.current(config, parsed) }),
       });
+    }
+
+    if (adapter?.rotateBy) {
       actions.push({
         label: t("roomMap:contextMenu.rotate"),
         shortcut: "R",
@@ -503,18 +503,7 @@ export function RoomMapEditor({
       });
     }
 
-    if (parsed?.kind === "image") {
-      const imageId = parsed.layerId;
-      const current = config.imageLayers.find((l) => l.id === imageId);
-      actions.push({
-        label: t("roomMap:contextMenu.rename"),
-        onClick: () => {
-          setRenameTarget({ id: imageLayerObjectId(imageId), currentLabel: current?.label ?? "" });
-        },
-      });
-    }
-
-    if (canDeleteObjectKind(parsed?.kind)) {
+    if (adapter?.remove) {
       actions.push({
         label: t("roomMap:contextMenu.delete"),
         shortcut: IS_MAC ? "\u232B" : "Del",
@@ -524,7 +513,7 @@ export function RoomMapEditor({
     }
 
     return actions;
-  }, [contextMenu, t, handleDuplicate, handleRotate, deleteById, select, config.furniture, config.imageLayers]);
+  }, [contextMenu, t, handleDuplicate, handleRotate, deleteById, select, config]);
 
   if (loading) {
     return (
@@ -761,23 +750,9 @@ export function RoomMapEditor({
             onDelete={deleteById}
             onRenameFurniture={handleRenameFurniture}
             onToggleLock={(id) => {
-              const parsed = parseObjectId(id);
-              if (parsed?.kind === "tv" && config.tvAnchor) {
-                apply({ tvAnchor: { ...config.tvAnchor, locked: !config.tvAnchor.locked } });
-              } else if (parsed?.kind === "furniture") {
-                apply({ furniture: config.furniture.map((f) => (f.id === parsed.furnitureId ? { ...f, locked: !f.locked } : f)) });
-              } else if (parsed?.kind === "usb") {
-                apply({ usbStrips: config.usbStrips.map((s) => (s.stripId === parsed.stripId ? { ...s, locked: !s.locked } : s)) });
-              } else if (parsed?.kind === "hue") {
-                const target = visibleHueChannels.find((ch: HueChannelPlacement) => ch.channelIndex === parsed.channelIndex);
-                if (target) {
-                  apply({
-                    hueChannels: replaceHueChannel(config.hueChannels, { ...target, locked: !target.locked }),
-                  });
-                }
-              } else if (parsed?.kind === "image") {
-                apply({ imageLayers: config.imageLayers.map((l) => (l.id === parsed.layerId ? { ...l, locked: !l.locked } : l)) });
-              }
+              const ref = parseObjectId(id);
+              const patch = ref ? roomObjectAdapter(ref).toggleLock(config, ref, visibleHueChannels) : null;
+              if (patch) apply(patch);
             }}
             hueZones={hueZones}
             activeHueZoneId={activeHueZoneId}
@@ -891,13 +866,9 @@ export function RoomMapEditor({
           currentLabel={renameTarget.currentLabel}
           promptText={t("roomMap:contextMenu.renamePrompt")}
           onConfirm={(newName) => {
-            // Image rows carry a prefixed object id here; furniture rows carry a bare id.
-            const parsed = parseObjectId(renameTarget.id);
-            if (parsed?.kind === "image") {
-              handleRenameImage(parsed.layerId, newName);
-            } else {
-              handleRenameFurniture(renameTarget.id, newName);
-            }
+            const ref = parseObjectId(renameTarget.id);
+            const rename = ref ? roomObjectAdapter(ref).rename : null;
+            if (ref && rename) apply(rename.apply(config, ref, newName));
             setRenameTarget(null);
           }}
           onCancel={() => setRenameTarget(null)}
