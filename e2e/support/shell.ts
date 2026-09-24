@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { browser } from "@wdio/globals";
 
-import { SHELL_STORE_KEY, type SectionId, type UIMode } from "../../src/shared/contracts/shell";
+import { SHELL_STORE_KEY, type SectionId, type ShellState, type UIMode } from "../../src/shared/contracts/shell";
 import { LIGHTING_MODE_KIND } from "../../src/shared/contracts/mode";
 
 // `browser.execute` only, never `$()`: the embedded provider answers execute
@@ -276,21 +276,14 @@ export async function activeSectionTab(): Promise<SectionId | null> {
  * regardless of section or UI mode) reads anything other than `is-off` —
  * i.e. a bridge is paired, whether or not it is currently reachable.
  *
- * Read structurally rather than through a `data-testid`: the pill has none,
- * and this file intentionally avoids adding one to Hue-adjacent product code
- * while other work is in flight there (see the spec files that use this).
- * The label text "HUE" and the `is-<kind>` class are hardcoded, non-i18n
- * strings (`buildStatusItems` in `statusItems.ts`), so this is stable across
- * locales.
+ * `status-chip-HUE` is keyed by the chip's label, a hardcoded non-i18n
+ * string (`buildStatusItems` in `statusItems.ts`), as is the `is-<kind>`
+ * class, so this is stable across locales.
  */
 export async function hueConfigured(): Promise<boolean> {
   return browser.execute(() => {
-    const pairs = Array.from(document.querySelectorAll(".lm-statusbar-pair"));
-    const huePair = pairs.find(
-      (el) => el.querySelector(".lm-statusbar-label")?.textContent?.trim() === "HUE",
-    );
-    const value = huePair?.querySelector(".lm-statusbar-value");
-    return value !== null && value !== undefined && !value.classList.contains("is-off");
+    const value = document.querySelector('[data-testid="status-chip-HUE"] .lm-statusbar-value');
+    return value !== null && !value.classList.contains("is-off");
   });
 }
 
@@ -336,15 +329,24 @@ function shellStatePath(): string {
   return join(home, ".local", "share", "com.lumasync.app", `${SHELL_STORE_KEY}.json`);
 }
 
+function persistedShellState(): Partial<ShellState> | null {
+  try {
+    const raw = JSON.parse(readFileSync(shellStatePath(), "utf-8")) as Record<string, unknown>;
+    return (raw[SHELL_STORE_KEY] ?? raw) as Partial<ShellState>;
+  } catch {
+    return null;
+  }
+}
+
 /** The stored UI mode, or `null` on a machine that has never run the app — which
  *  is every CI runner, and the reason a spec must not hard-code either answer.
  *  Read from disk rather than the webview: the store is not on `window`. */
 export function persistedUiMode(): UIMode | null {
-  try {
-    const raw = JSON.parse(readFileSync(shellStatePath(), "utf-8")) as Record<string, unknown>;
-    const state = (raw[SHELL_STORE_KEY] ?? raw) as { uiMode?: UIMode };
-    return state.uiMode ?? null;
-  } catch {
-    return null;
-  }
+  return persistedShellState()?.uiMode ?? null;
+}
+
+/** The stored "Show stats for nerds" choice; absent, like a never-run machine,
+ *  is `false` — the same reading the app gives it. */
+export function persistedShowNerdStats(): boolean {
+  return persistedShellState()?.showNerdStats === true;
 }

@@ -38,6 +38,7 @@ vi.mock("../features/calibration/state/entryFlow", async () => (await import("./
 vi.mock("../features/mode/state/modeGuard", async () => (await import("./support/appHarness")).mockModeGuard);
 vi.mock("../features/mode/modeApi", async () => (await import("./support/appHarness")).mockModeApi);
 vi.mock("../features/mode/lightingRuntimeEventsApi", async () => (await import("./support/appHarness")).mockLightingRuntimeEvents);
+vi.mock("../features/telemetry/runtimeHealthEventsApi", async () => (await import("./support/appHarness")).mockRuntimeHealthEvents);
 vi.mock("../features/shell/StatusBar", async () => (await import("./support/appHarness")).mockStatusBar);
 vi.mock("../features/settings/SettingsLayout", async () => (await import("./support/appHarness")).mockSettingsLayout);
 vi.mock("../features/hue/hueHealthApi", async () => (await import("../features/hue/__tests__/fakeHueHealth")).fakeHueHealthApi);
@@ -45,12 +46,15 @@ vi.mock("../features/hue/hueHealthApi", async () => (await import("../features/h
 import App from "../App";
 import { __resetHueHealthStoreForTests } from "../features/hue/state/hueHealthStore";
 import { fakeHueHealthApi, resetHealth, setHealth } from "../features/hue/__tests__/fakeHueHealth";
+import { __resetRuntimeHealthForTests } from "../features/telemetry/runtimeHealthSource";
 
 beforeEach(() => {
   vi.clearAllMocks();
   // Module-level store: without this a prior test's snapshot leaks into the next one.
   __resetHueHealthStoreForTests();
   resetHealth();
+  // Module-level too: the runtime-health listener is attached once, by the first App mount.
+  __resetRuntimeHealthForTests();
   resetAppHarness();
 });
 
@@ -365,7 +369,7 @@ describe("App lighting", () => {
       expect(env.layoutRenders).toBe(layoutBefore);
     });
 
-    it("does not re-render the shell for a telemetry tick that changes nothing it shows", async () => {
+    it("does not re-render the shell for a pushed runtime health that changes nothing it shows", async () => {
       nextApplyRuns({
         mode: { kind: "ambilight", ambilight: { brightness: 1 } },
         active: true,
@@ -373,18 +377,56 @@ describe("App lighting", () => {
       });
       render(<App />);
       await waitFor(() => expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight"));
-      await waitFor(() => expect(telemetryPolls()).toBeGreaterThan(0));
-      const ticksBefore = telemetryPolls();
+      await waitFor(() => expect(env.pushHealth).not.toBeNull());
       const appBefore = env.statusBarRenders;
       const layoutBefore = env.layoutRenders;
       const probeBefore = env.layoutProbeRenders;
 
-      // The stall-notice poll runs at 1 Hz; two more ticks land well inside this.
-      await waitFor(() => expect(telemetryPolls()).toBeGreaterThanOrEqual(ticksBefore + 2), { timeout: 3_500 });
+      // A link budget moves the Lights note, not the shell's stall notice.
+      act(() => {
+        env.pushHealth?.({ captureFailureCode: null, linkConstrained: true, linkMaxFps: 23 });
+      });
 
       expect(env.statusBarRenders).toBe(appBefore);
       expect(env.layoutRenders).toBe(layoutBefore);
       expect(env.layoutProbeRenders).toBe(probeBefore);
+    });
+  });
+
+  describe("capture stall notice", () => {
+    const stallQueue = () => screen.queryByTestId("shell-notice-slot")?.getAttribute("data-queue") ?? "";
+
+    it("raises the stall from the worker's push and polls no telemetry for it", async () => {
+      nextApplyRuns({
+        mode: { kind: "ambilight", ambilight: { brightness: 1 } },
+        active: true,
+        activeTargets: ["usb"],
+      });
+      render(<App />);
+      await waitFor(() => expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight"));
+      await waitFor(() => expect(env.pushHealth).not.toBeNull());
+      // Only the one read that seeds the listener.
+      await waitFor(() => expect(telemetryPolls()).toBe(1));
+
+      act(() => {
+        env.pushHealth?.({
+          captureFailureCode: "AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND",
+          linkConstrained: false,
+          linkMaxFps: 0,
+        });
+      });
+      await waitFor(() => expect(stallQueue()).toContain("capture-stalled"));
+
+      act(() => {
+        env.pushHealth?.({ captureFailureCode: null, linkConstrained: false, linkMaxFps: 0 });
+      });
+      await waitFor(() => expect(stallQueue()).not.toContain("capture-stalled"));
+
+      // The old stall check polled at 1 Hz; two of its ticks would land in this.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 2_200));
+      });
+      expect(telemetryPolls()).toBe(1);
     });
   });
 });

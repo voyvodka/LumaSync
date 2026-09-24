@@ -11,6 +11,10 @@ vi.mock("../../telemetry/hooks/useRuntimeTelemetry", () => ({
   useRuntimeTelemetry: () => ({ fps: 58.4, latencyMs: 4 }),
 }));
 
+vi.mock("@/features/persistence/shellStore", () => ({
+  shellStore: { load: () => Promise.resolve({}), save: vi.fn(), onSaved: () => () => {} },
+}));
+
 describe("StatusBar", () => {
   // The whole bar was `aria-live`, so a screen reader heard the FPS pill every
   // second. Chip changes worth hearing arrive through the notice queue.

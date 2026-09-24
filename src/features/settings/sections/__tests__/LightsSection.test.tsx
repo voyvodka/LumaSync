@@ -9,18 +9,39 @@ import { DEFAULT_ROOM_MAP, type HueZone, type RoomMapConfig } from "@/shared/con
 import type { ShellState } from "@/shared/contracts/shell";
 import type { LocalSink } from "@/features/device/localSink";
 import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
+import { __resetRuntimeHealthForTests } from "@/features/telemetry/runtimeHealthSource";
+import { NO_RUNTIME_HEALTH_ISSUES, type RuntimeHealth } from "@/shared/contracts/telemetry";
 import { LightsSection, hueUnavailableSubKey } from "../LightsSection";
 
-const { shellStateRef, saveMock, createHueZoneMock, telemetryMock } = vi.hoisted(() => ({
+const { shellStateRef, saveMock, createHueZoneMock, telemetryMock, healthListeners } = vi.hoisted(() => ({
   shellStateRef: { current: {} as Partial<ShellState> },
   saveMock: vi.fn(),
   createHueZoneMock: vi.fn(),
   telemetryMock: vi.fn(),
+  healthListeners: [] as Array<(health: RuntimeHealth) => void>,
 }));
 
 vi.mock("@/features/telemetry/telemetryApi", () => ({
   getFullTelemetrySnapshot: () => telemetryMock(),
 }));
+
+vi.mock("@/features/telemetry/runtimeHealthEventsApi", () => ({
+  listenRuntimeHealth: (listener: (health: RuntimeHealth) => void) => {
+    healthListeners.push(listener);
+    return Promise.resolve(() => {});
+  },
+}));
+
+beforeEach(() => {
+  healthListeners.length = 0;
+  __resetRuntimeHealthForTests();
+});
+
+function pushHealth(health: Partial<RuntimeHealth>) {
+  act(() => {
+    for (const listener of healthListeners) listener({ ...NO_RUNTIME_HEALTH_ISSUES, ...health });
+  });
+}
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
@@ -565,20 +586,6 @@ describe("LightsSection — Add Hue zone", () => {
 });
 
 describe("LightsSection — serial link budget note", () => {
-  function snapshot(linkConstrained: boolean, linkMaxFps: number) {
-    return {
-      usb: {
-        captureFps: 60,
-        sendFps: 19,
-        queueHealth: "healthy" as const,
-        frameLatencyMs: 12,
-        linkConstrained,
-        linkMaxFps,
-      },
-      hue: null,
-    };
-  }
-
   function renderAmbilight() {
     return render(
       <LightsSection
@@ -595,16 +602,25 @@ describe("LightsSection — serial link budget note", () => {
     );
   }
 
+  async function settle() {
+    await act(async () => {
+      for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    });
+  }
+
   beforeEach(() => {
     telemetryMock.mockReset();
+    telemetryMock.mockResolvedValue({ usb: { ...NO_RUNTIME_HEALTH_ISSUES }, hue: null });
     shellStateRef.current = {};
   });
 
   it("explains the shortfall next to the FPS readout when the link is constrained", async () => {
-    telemetryMock.mockResolvedValue(snapshot(true, 19.01));
     renderAmbilight();
+    await settle();
 
-    const note = await screen.findByRole("status");
+    pushHealth({ linkConstrained: true, linkMaxFps: 19.01 });
+
+    const note = screen.getByRole("status");
     expect(note).toHaveTextContent(
       "USB link limit — at 115,200 baud this strip carries about 19 fps.",
     );
@@ -614,19 +630,39 @@ describe("LightsSection — serial link budget note", () => {
   it("stays silent on a session with no serial link, whatever the flag says", async () => {
     // The 0 sentinel is "no serial link", not "zero fps" — gating on
     // `linkMaxFps < 30` instead of the helper would show the note here.
-    telemetryMock.mockResolvedValue(snapshot(true, 0));
     renderAmbilight();
+    await settle();
 
-    await waitFor(() => expect(telemetryMock).toHaveBeenCalled());
+    pushHealth({ linkConstrained: true, linkMaxFps: 0 });
+
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("stays silent on a healthy strip", async () => {
-    telemetryMock.mockResolvedValue(snapshot(false, 58.2));
     renderAmbilight();
+    await settle();
 
-    await waitFor(() => expect(telemetryMock).toHaveBeenCalled());
+    pushHealth({ linkConstrained: false, linkMaxFps: 58.2 });
+
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("reads the pushed budget and never polls for it", async () => {
+    vi.useFakeTimers();
+    try {
+      renderAmbilight();
+      await settle();
+      pushHealth({ linkConstrained: true, linkMaxFps: 19.01 });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+
+      expect(screen.getByRole("status")).toBeInTheDocument();
+      // The one read seeds the store at first mount; nothing ticks after it.
+      expect(telemetryMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -679,17 +715,18 @@ describe("LightsSection — Ambilight mode settings card", () => {
       await screen.findByRole("radiogroup", { name: "lights:signal.smoothing.title" }),
     ).toBeInTheDocument();
 
-    await waitFor(() => expect(telemetryMock).toHaveBeenCalled());
     expect(screen.queryByText(/\bfps\b|pkt\/s|\d+ms\b/)).not.toBeInTheDocument();
   });
 
-  it("does not poll telemetry when no local output is a target", async () => {
+  it("shows no link note when no local output is a target, whatever was pushed", async () => {
     telemetryMock.mockResolvedValue(usbSnapshot());
     await act(async () => {
       renderAmbilight(["hue"]);
     });
 
-    expect(telemetryMock).not.toHaveBeenCalled();
+    pushHealth({ linkConstrained: true, linkMaxFps: 19.01 });
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });
 

@@ -34,6 +34,7 @@ vi.mock("../features/calibration/state/entryFlow", async () => (await import("./
 vi.mock("../features/mode/state/modeGuard", async () => (await import("./support/appHarness")).mockModeGuard);
 vi.mock("../features/mode/modeApi", async () => (await import("./support/appHarness")).mockModeApi);
 vi.mock("../features/mode/lightingRuntimeEventsApi", async () => (await import("./support/appHarness")).mockLightingRuntimeEvents);
+vi.mock("../features/telemetry/runtimeHealthEventsApi", async () => (await import("./support/appHarness")).mockRuntimeHealthEvents);
 vi.mock("../features/shell/StatusBar", async () => (await import("./support/appHarness")).mockStatusBar);
 vi.mock("../features/settings/SettingsLayout", async () => (await import("./support/appHarness")).mockSettingsLayout);
 vi.mock("../features/hue/hueHealthApi", async () => (await import("../features/hue/__tests__/fakeHueHealth")).fakeHueHealthApi);

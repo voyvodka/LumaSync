@@ -34,6 +34,11 @@ import {
   type LedTestPatternKind,
 } from "../src/shared/contracts/preview";
 import { UPDATER_PROGRESS_EVENT, type UpdateDownloadProgress } from "../src/shared/contracts/updater";
+import {
+  LINK_MAX_FPS_ABSENT,
+  RUNTIME_HEALTH_CHANGED_EVENT,
+  runtimeHealthFromSnapshot,
+} from "../src/shared/contracts/telemetry";
 import { getWorld } from "./state";
 
 /** ~10 Hz. The real worker feeds an open twin at ~30 Hz; the mock does not need to. */
@@ -274,6 +279,20 @@ function patternPayload(
 
 export async function emitPreviewState(): Promise<void> {
   await emitMockEvent(PREVIEW_STATE_CHANGED_EVENT, currentPreviewStatus());
+}
+
+/**
+ * The worker's push of the stall and link budget. The real one fires when they
+ * change; here the panel's "Signal state" pick is the change. Uses the same
+ * absent-link rule as the `get_runtime_telemetry` fixture.
+ */
+export async function emitRuntimeHealth(): Promise<void> {
+  const w = getWorld();
+  const usb = {
+    ...w.telemetry,
+    linkMaxFps: w.serial.connectedPort !== null ? w.telemetry.linkMaxFps : LINK_MAX_FPS_ABSENT,
+  };
+  await emitMockEvent(RUNTIME_HEALTH_CHANGED_EVENT, runtimeHealthFromSnapshot(usb));
 }
 
 export async function emitLightingModeChanged(): Promise<void> {

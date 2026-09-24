@@ -50,7 +50,8 @@ export interface RuntimeTelemetrySnapshot {
 }
 
 /** Two telemetry windows plus slack — one window can elapse before a fresh
- *  failure is flushed, so a one-window threshold would flicker. */
+ *  failure is flushed, so a one-window threshold would flicker. Mirrors the
+ *  Rust constant of the same name, which decides {@link RuntimeHealth}. */
 export const CAPTURE_FAILURE_ONGOING_MAX_AGE_SECS = 3;
 
 /** Whether the worker is failing to capture *right now*, as opposed to having
@@ -59,6 +60,38 @@ export function isCaptureFailingNow(snapshot: RuntimeTelemetrySnapshot): boolean
   if (snapshot.lastCaptureErrorCode === null) return false;
   const age = snapshot.lastCaptureErrorAtSecs;
   return age !== null && age <= CAPTURE_FAILURE_ONGOING_MAX_AGE_SECS;
+}
+
+/**
+ * Pushed by Rust when {@link RuntimeHealth} changes: once at each Ambilight
+ * worker's first flush, on a capture stall starting or clearing, and when the
+ * worker ends having reported something. Main window only. Unlike
+ * `get_runtime_telemetry` it is never polled, so it runs with stats for nerds off.
+ */
+export const RUNTIME_HEALTH_CHANGED_EVENT = "telemetry://health-changed";
+
+/** What the UI must show whether or not stats for nerds is on. */
+export interface RuntimeHealth {
+  /** `AmbilightCaptureReason` while capture is failing *now*, else `null`. */
+  captureFailureCode: string | null;
+  linkConstrained: boolean;
+  /** {@link LINK_MAX_FPS_ABSENT} when no serial link is in play. */
+  linkMaxFps: number;
+}
+
+export const NO_RUNTIME_HEALTH_ISSUES: RuntimeHealth = {
+  captureFailureCode: null,
+  linkConstrained: false,
+  linkMaxFps: LINK_MAX_FPS_ABSENT,
+};
+
+/** The same verdict Rust publishes, derived from a polled snapshot. */
+export function runtimeHealthFromSnapshot(snapshot: RuntimeTelemetrySnapshot): RuntimeHealth {
+  return {
+    captureFailureCode: isCaptureFailingNow(snapshot) ? snapshot.lastCaptureErrorCode : null,
+    linkConstrained: snapshot.linkConstrained,
+    linkMaxFps: snapshot.linkMaxFps,
+  };
 }
 
 /** Per-frame Hue entertainment stream health snapshot, sampled for the telemetry HUD. */
@@ -84,7 +117,7 @@ export interface FullTelemetrySnapshot {
 }
 
 /** False for Hue-only sessions, where `linkMaxFps` carries no measurement. */
-export function hasSerialLinkBudget(snapshot: RuntimeTelemetrySnapshot): boolean {
+export function hasSerialLinkBudget(snapshot: Pick<RuntimeTelemetrySnapshot, "linkMaxFps">): boolean {
   return snapshot.linkMaxFps > LINK_MAX_FPS_ABSENT;
 }
 

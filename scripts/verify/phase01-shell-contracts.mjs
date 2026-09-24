@@ -108,6 +108,8 @@ const REQUIRED_V15_STATE_FIELDS = [
   "dontWarnFirmwareProfileMismatch",
   // Colour-order correction; additive like the rest, absent ⇒ "rgb".
   "ledColorOrder",
+  // Stats for nerds; additive, absent ⇒ off and no telemetry poll.
+  "showNerdStats",
 ];
 
 /** v1.5 contract surface that must be exported alongside the new fields. */
@@ -1408,6 +1410,7 @@ const EXPECTED_TELEMETRY_FIELD_COUNTS = {
   RuntimeTelemetrySnapshot: 8,
   HueTelemetrySnapshot: 11,
   FullTelemetrySnapshot: 2,
+  RuntimeHealth: 3,
 };
 for (const [structName, expectedCount] of Object.entries(EXPECTED_TELEMETRY_FIELD_COUNTS)) {
   const fields = rustStructFields(rustTelemetrySource, structName);
@@ -1464,6 +1467,30 @@ check(
     + `(${rustLinkThreshold ? rustLinkThreshold[1] : "?"})`,
   `THRESHOLD DRIFT: Rust LINK_CONSTRAINED_FPS=${rustLinkThreshold ? rustLinkThreshold[1] : "?"} `
     + `vs telemetry.ts LINK_CONSTRAINED_FPS_THRESHOLD=${tsLinkThreshold ? tsLinkThreshold[1] : "?"}`
+);
+
+// The stall notice and link note ride this push once the poll is gone, so a
+// renamed event or a drifted "failing now" window would silence them quietly.
+console.log("\n[ Runtime health push — Rust ↔ telemetry.ts parity ]");
+const rustHealthEvent = rustTelemetrySource.match(
+  /RUNTIME_HEALTH_CHANGED_EVENT:\s*&str\s*=\s*"([^"]+)"/
+);
+const tsHealthEvent = telemetrySource.match(/RUNTIME_HEALTH_CHANGED_EVENT\s*=\s*"([^"]+)"/);
+check(
+  rustHealthEvent !== null && tsHealthEvent !== null && rustHealthEvent[1] === tsHealthEvent[1],
+  `RUNTIME_HEALTH_CHANGED_EVENT matches ("${rustHealthEvent ? rustHealthEvent[1] : "?"}")`,
+  `EVENT DRIFT: Rust RUNTIME_HEALTH_CHANGED_EVENT=${rustHealthEvent ? rustHealthEvent[1] : "?"} `
+    + `vs telemetry.ts ${tsHealthEvent ? tsHealthEvent[1] : "?"}`
+);
+const rustOngoingAge = rustTelemetrySource.match(
+  /CAPTURE_FAILURE_ONGOING_MAX_AGE_SECS:\s*u64\s*=\s*([0-9]+)/
+);
+const tsOngoingAge = telemetrySource.match(/CAPTURE_FAILURE_ONGOING_MAX_AGE_SECS\s*=\s*([0-9]+)/);
+check(
+  rustOngoingAge !== null && tsOngoingAge !== null && rustOngoingAge[1] === tsOngoingAge[1],
+  `CAPTURE_FAILURE_ONGOING_MAX_AGE_SECS matches (${rustOngoingAge ? rustOngoingAge[1] : "?"})`,
+  `THRESHOLD DRIFT: Rust CAPTURE_FAILURE_ONGOING_MAX_AGE_SECS=${rustOngoingAge ? rustOngoingAge[1] : "?"} `
+    + `vs telemetry.ts ${tsOngoingAge ? tsOngoingAge[1] : "?"}`
 );
 
 // ---------------------------------------------------------------------------
@@ -2487,7 +2514,8 @@ const checkedPairs = nullabilityPairs.filter(
 // `LightingRuntimeSnapshot` and `RetuneLightingResult`.
 // 57 → 61: the Hue health monitor's `HueHealthSnapshot`, `HueBridgeHealth`,
 // `HueAreaHealth` and `HueStreamHealth`.
-const EXPECTED_NULLABILITY_PAIR_COUNT = 61;
+// 61 → 62: `RuntimeHealth`, the `telemetry://health-changed` payload.
+const EXPECTED_NULLABILITY_PAIR_COUNT = 62;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

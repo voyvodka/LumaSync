@@ -52,8 +52,9 @@ interface TelemetrySectionProps {
 }
 
 /**
- * Renders the CONTENTS of a `lm-settings-group` — the caller owns the section
- * element, so this matches the Language / Updates / About cards around it.
+ * The readout under the "Show stats for nerds" row — the caller owns the
+ * section element and the group header, and mounts this only while the
+ * setting is on, so its poll does not exist otherwise.
  */
 export function TelemetrySection({ localOutputConnected }: TelemetrySectionProps) {
   const { t } = useTranslation();
@@ -72,12 +73,7 @@ export function TelemetrySection({ localOutputConnected }: TelemetrySectionProps
 
   return (
     <>
-      <div className="lm-settings-group-h">
-        <span className="t">{t("telemetry:title")}</span>
-        <span className="sub">{t("settings:groups.telemetry.sub")}</span>
-      </div>
-
-      <div className="lm-tele-body">
+      <div className="lm-tele-body" data-testid="telemetry-readout">
         <p className="lm-tele-desc">{t("telemetry:description")}</p>
 
         {isLoading ? <p className="lm-tele-note">{t("telemetry:states.loading")}</p> : null}
