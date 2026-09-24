@@ -5,7 +5,11 @@ import {
   HUE_STATUS,
   type HueCredentialStatus,
 } from "@/shared/contracts/hue";
-import type { HueOnboardingStatus, HueRuntimeStatusView } from "./onboardingStatusCodes";
+import {
+  HUE_PAIRING_PENDING_LINK_BUTTON,
+  type HueOnboardingStatus,
+  type HueRuntimeStatusView,
+} from "./onboardingStatusCodes";
 
 const PAIRING_ERROR_DESCRIPTIONS: Partial<Record<string, TranslationKey>> = {
   [HUE_STATUS.PAIRING_DEVICETYPE_INVALID]: "hue:pairing.errors.DEVICETYPE_INVALID.description",
@@ -113,7 +117,7 @@ export function deriveHueBridgeCardState({
   }
   if (isPairing) {
     // Minted by useHueOnboardingCore between polls; Rust never sends it.
-    return hueStatus?.code === "HUE_PAIRING_PENDING_LINK_BUTTON" ? "pairingLinkButton" : "pairing";
+    return hueStatus?.code === HUE_PAIRING_PENDING_LINK_BUTTON ? "pairingLinkButton" : "pairing";
   }
   if (credentialState === "valid") {
     if (!selectedAreaId) return "areaSelect";

@@ -8,14 +8,14 @@ import { __resetHueHealthStoreForTests } from "../state/hueHealthStore";
 import { publishHealth, resetHealth } from "./fakeHueHealth";
 
 const shellLoadMock = vi.fn();
-const listAreasMock = vi.fn();
-const checkReadinessMock = vi.fn();
+const listAreasMock = vi.fn<typeof hueOnboardingApiModule.listHueEntertainmentAreas>();
+const checkReadinessMock = vi.fn<typeof hueOnboardingApiModule.checkHueStreamReadiness>();
 
 vi.mock("../hueHealthApi", async () => (await import("./fakeHueHealth")).fakeHueHealthApi);
 
 vi.mock("@/features/mode/modeApi", () => ({
-  restartHue: vi.fn(),
-  startHue: vi.fn(),
+  restartHue: vi.fn<typeof modeApiModule.restartHue>(),
+  startHue: vi.fn<typeof modeApiModule.startHue>(),
 }));
 
 vi.mock("@/features/persistence/shellStore", () => ({
@@ -26,26 +26,28 @@ vi.mock("@/features/persistence/shellStore", () => ({
 }));
 
 vi.mock("../hueOnboardingApi", () => ({
-  checkHueStreamReadiness: (...args: unknown[]) => checkReadinessMock(...args),
-  discoverHueBridges: vi.fn(),
-  getHueAreaChannels: vi.fn().mockResolvedValue({
+  checkHueStreamReadiness: (...args: Parameters<typeof checkReadinessMock>) => checkReadinessMock(...args),
+  discoverHueBridges: vi.fn<typeof hueOnboardingApiModule.discoverHueBridges>(),
+  getHueAreaChannels: vi.fn<typeof hueOnboardingApiModule.getHueAreaChannels>().mockResolvedValue({
     status: { code: "HUE_AREA_CHANNELS_EMPTY", message: "", details: null },
     channels: [],
   }),
-  listHueEntertainmentAreas: (...args: unknown[]) => listAreasMock(...args),
-  migrateHueCredentials: vi.fn().mockResolvedValue({
-    status: { code: "HUE_CREDENTIAL_MIGRATION_FAILED", message: "no keychain" },
+  listHueEntertainmentAreas: (...args: Parameters<typeof listAreasMock>) => listAreasMock(...args),
+  migrateHueCredentials: vi.fn<typeof hueOnboardingApiModule.migrateHueCredentials>().mockResolvedValue({
+    status: { code: "HUE_CREDENTIAL_MIGRATION_FAILED", message: "no keychain", details: null },
     backend: "plaintext-legacy",
   }),
-  pairHueBridge: vi.fn(),
-  validateHueCredentials: vi.fn().mockResolvedValue({
+  pairHueBridge: vi.fn<typeof hueOnboardingApiModule.pairHueBridge>(),
+  validateHueCredentials: vi.fn<typeof hueOnboardingApiModule.validateHueCredentials>().mockResolvedValue({
     valid: true,
     status: { code: "HUE_CREDENTIAL_VALID", message: "valid", details: null },
   }),
-  verifyHueBridgeIp: vi.fn(),
+  verifyHueBridgeIp: vi.fn<typeof hueOnboardingApiModule.verifyHueBridgeIp>(),
 }));
 
 import { useHueOnboarding } from "../useHueOnboarding";
+import type * as modeApiModule from "@/features/mode/modeApi";
+import type * as hueOnboardingApiModule from "../hueOnboardingApi";
 
 function areaHealth(blocked: boolean, areaId = "area-1"): HueAreaHealth {
   return {

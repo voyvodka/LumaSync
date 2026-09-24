@@ -1,14 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { SHELL_COMMANDS } from "@/shared/contracts/shell";
-import { readE2eBuild, readStartHidden, type LaunchInvoker } from "../launchApi";
+import type { LaunchContext } from "@/shared/contracts/shell";
+import { mockCommands } from "@/test/mockCommands";
+import { readE2eBuild, readStartHidden } from "../launchApi";
 
-function invokerReturning(value: unknown): LaunchInvoker {
-  return (<T,>(command: string) => {
-    expect(command).toBe(SHELL_COMMANDS.GET_LAUNCH_CONTEXT);
-    return Promise.resolve(value as T);
-  }) as LaunchInvoker;
+// `undefined` is off the contract on purpose: it is what an older or mocked
+// backend answers, and the read must survive it.
+function invokerReturning(value: LaunchContext | undefined) {
+  return mockCommands({ get_launch_context: value as LaunchContext });
 }
+
+const failing = mockCommands({
+  get_launch_context: () => Promise.reject(new Error("no such command")),
+});
 
 describe("readStartHidden", () => {
   afterEach(() => {
@@ -16,8 +20,8 @@ describe("readStartHidden", () => {
   });
 
   it("follows the backend's answer", async () => {
-    await expect(readStartHidden(invokerReturning({ startHidden: true }))).resolves.toBe(true);
-    await expect(readStartHidden(invokerReturning({ startHidden: false }))).resolves.toBe(false);
+    await expect(readStartHidden(invokerReturning({ startHidden: true, e2eBuild: false }))).resolves.toBe(true);
+    await expect(readStartHidden(invokerReturning({ startHidden: false, e2eBuild: false }))).resolves.toBe(false);
   });
 
   it("shows the window when the answer is missing", async () => {
@@ -26,7 +30,6 @@ describe("readStartHidden", () => {
 
   it("shows the window, and says why, when the read fails", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const failing: LaunchInvoker = () => Promise.reject(new Error("no such command"));
 
     await expect(readStartHidden(failing)).resolves.toBe(false);
     expect(warn).toHaveBeenCalledWith(
@@ -52,7 +55,6 @@ describe("readE2eBuild", () => {
 
   it("assumes a normal build, and says why, when the read fails", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const failing: LaunchInvoker = () => Promise.reject(new Error("no such command"));
 
     await expect(readE2eBuild(failing)).resolves.toBe(false);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("[LumaSync] [startup]"), expect.any(Error));

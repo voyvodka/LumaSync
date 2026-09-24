@@ -5,7 +5,7 @@ import { SECTION_IDS } from "@/shared/contracts/shell";
 import { SettingsLayout } from "@/features/settings/SettingsLayout";
 import { renderWithShellStores } from "@/test/shellProviders";
 
-const getFullTelemetrySnapshotMock = vi.fn();
+const getFullTelemetrySnapshotMock = vi.fn<typeof telemetryApiModule.getFullTelemetrySnapshot>();
 
 vi.mock("@/features/telemetry/telemetryApi", () => ({
   getFullTelemetrySnapshot: () => getFullTelemetrySnapshotMock(),
@@ -69,12 +69,29 @@ vi.mock("react-i18next", () => ({
 import { TelemetrySection } from "../TelemetrySection";
 import { __resetTelemetrySourceForTests } from "../../telemetrySource";
 import { __resetShowNerdStatsForTests } from "../../nerdStatsSetting";
+import type * as telemetryApiModule from "@/features/telemetry/telemetryApi";
+import type { RuntimeTelemetrySnapshot } from "@/shared/contracts/telemetry";
+
+// Every field Rust sends; a test overrides only what it is about.
+function usbSnapshot(overrides: Partial<RuntimeTelemetrySnapshot>): RuntimeTelemetrySnapshot {
+  return {
+    captureFps: 0,
+    sendFps: 0,
+    queueHealth: "healthy",
+    frameLatencyMs: 0,
+    linkConstrained: false,
+    linkMaxFps: 0,
+    lastCaptureErrorCode: null,
+    lastCaptureErrorAtSecs: null,
+    ...overrides,
+  };
+}
 
 describe("TelemetrySection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getFullTelemetrySnapshotMock.mockResolvedValue({
-      usb: { captureFps: 60, sendFps: 58, queueHealth: "healthy" },
+      usb: usbSnapshot({ captureFps: 60, sendFps: 58 }),
       hue: null,
     });
   });
@@ -143,7 +160,7 @@ describe("TelemetrySection", () => {
 
   it("renders Hue Stream section when hue telemetry is present", async () => {
     getFullTelemetrySnapshotMock.mockResolvedValue({
-      usb: { captureFps: 60, sendFps: 58, queueHealth: "healthy" },
+      usb: usbSnapshot({ captureFps: 60, sendFps: 58 }),
       hue: {
         state: "Running",
         uptimeSecs: 754,
@@ -185,14 +202,13 @@ describe("TelemetrySection", () => {
 
   it("renders the link ceiling as absent, never as 0 fps, without a serial link", async () => {
     getFullTelemetrySnapshotMock.mockResolvedValue({
-      usb: {
+      usb: usbSnapshot({
         captureFps: 60,
         sendFps: 58,
-        queueHealth: "healthy",
         frameLatencyMs: 12,
         linkConstrained: false,
         linkMaxFps: 0,
-      },
+      }),
       hue: null,
     });
 
@@ -208,14 +224,13 @@ describe("TelemetrySection", () => {
 
   it("tints the link ceiling as a warning when the strip is link-constrained", async () => {
     getFullTelemetrySnapshotMock.mockResolvedValue({
-      usb: {
+      usb: usbSnapshot({
         captureFps: 60,
         sendFps: 19,
-        queueHealth: "healthy",
         frameLatencyMs: 12,
         linkConstrained: true,
         linkMaxFps: 19.01,
-      },
+      }),
       hue: null,
     });
 
@@ -271,7 +286,7 @@ describe("Settings telemetry wiring", () => {
     __resetShowNerdStatsForTests();
     shellSaveMock.mockResolvedValue(undefined);
     getFullTelemetrySnapshotMock.mockResolvedValue({
-      usb: { captureFps: 60, sendFps: 58, queueHealth: "healthy" },
+      usb: usbSnapshot({ captureFps: 60, sendFps: 58 }),
       hue: null,
     });
   });

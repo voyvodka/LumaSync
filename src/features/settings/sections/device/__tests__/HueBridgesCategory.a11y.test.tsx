@@ -15,7 +15,8 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-vi.mock("@/features/mode/modeApi", () => ({ stopHue: vi.fn() }));
+// Stubbed so nothing here can reach the Tauri transport.
+vi.mock("@/features/mode/modeApi", () => ({}));
 vi.mock("../../HueChannelMapPanel", () => ({ HueChannelMapPanel: () => null }));
 
 const bridge: HueBridgeSummary = { id: "bridge-1", ip: "192.168.1.10", name: "Test Bridge" };
@@ -125,7 +126,7 @@ describe("entertainment-area list", () => {
   });
 
   it("picks a free area and ignores one another app holds", () => {
-    const selectArea = vi.fn();
+    const selectArea = vi.fn<UseHueOnboardingResult["selectArea"]>();
     renderCard(hueState({ areaGroups, selectArea }));
     fireEvent.click(screen.getByRole("button", { name: "Desk" }));
     expect(selectArea).not.toHaveBeenCalled();

@@ -11,8 +11,8 @@ function baseDeps(overrides: Partial<DeviceConnectionControllerDeps> = {}): Devi
   return {
     listSerialPorts: vi.fn<() => Promise<SerialPortListResponse>>(),
     connectSerialPort: vi.fn<() => Promise<SerialConnectionStatus>>(),
-    getSerialConnectionStatus: vi.fn(),
-    persistLastSuccessfulPort: vi.fn().mockResolvedValue(undefined),
+    getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>(),
+    persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>().mockResolvedValue(undefined),
     ...overrides,
   };
 }

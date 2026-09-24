@@ -3,8 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import { WledDevicePicker } from "../WledDevicePicker";
+import type * as wledApiModule from "@/features/device/wledApi";
 
-const discoverWledDevicesMock = vi.fn();
+const discoverWledDevicesMock = vi.fn<typeof wledApiModule.discoverWledDevices>();
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -13,9 +14,9 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("@/features/device/wledApi", () => ({
-  discoverWledDevices: (...args: unknown[]) => discoverWledDevicesMock(...args),
-  connectWledSink: vi.fn(),
-  testWledBridge: vi.fn(),
+  discoverWledDevices: (...args: Parameters<typeof discoverWledDevicesMock>) => discoverWledDevicesMock(...args),
+  connectWledSink: vi.fn<typeof wledApiModule.connectWledSink>(),
+  testWledBridge: vi.fn<typeof wledApiModule.testWledBridge>(),
 }));
 
 beforeEach(() => {

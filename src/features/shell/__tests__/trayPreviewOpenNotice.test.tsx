@@ -3,6 +3,7 @@
 // faked. A refused open used to leave the user with nothing at all.
 
 import { act, render, screen, waitFor } from "@testing-library/react";
+import { TWIN_OVERLAY_STATUS, type ControlPopupResult } from "@/shared/contracts/preview";
 import { useMemo } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -16,6 +17,7 @@ import { ShellNoticeSlot } from "../notices/ShellNoticeSlot";
 import { useShellNoticeQueue } from "../notices/useShellNoticeQueue";
 import { keyT, makeHandlers, QUIET_INPUT } from "../notices/__tests__/noticeFixtures";
 import { useTrayIntegration } from "../useTrayIntegration";
+import type * as previewApiModule from "@/features/preview/previewApi";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -40,16 +42,16 @@ vi.mock("../windowLifecycle", () => ({
   saveShellState: (partial: unknown) => saveShellStateMock(partial),
 }));
 
-const openOverlayMock = vi.fn();
-const openPopupMock = vi.fn();
-const showPopupMock = vi.fn();
+const openOverlayMock = vi.fn<typeof previewApiModule.openLedTwinOverlay>();
+const openPopupMock = vi.fn<typeof previewApiModule.openLedControlPopup>();
+const showPopupMock = vi.fn<typeof previewApiModule.showLedControlPopup>();
 vi.mock("@/features/preview/previewApi", () => ({
-  openLedTwinOverlay: (...args: unknown[]) => openOverlayMock(...args),
+  openLedTwinOverlay: (...args: Parameters<typeof openOverlayMock>) => openOverlayMock(...args),
   openLedControlPopup: () => openPopupMock(),
   showLedControlPopup: () => showPopupMock(),
 }));
 
-const POPUP_OK = { ok: true, code: "CONTROL_POPUP_SHOWN", message: "", visible: true };
+const POPUP_OK: ControlPopupResult = { ok: true, code: "CONTROL_POPUP_SHOWN", message: "", visible: true };
 
 function Harness() {
   const preview = usePreviewOpenNotice();
@@ -83,7 +85,7 @@ describe("tray Show LED Preview — a refused open is reported", () => {
     setVisibility("visible");
     vi.spyOn(console, "error").mockImplementation(() => {});
     saveShellStateMock.mockReset().mockResolvedValue(undefined);
-    openOverlayMock.mockReset().mockResolvedValue({ ok: true, code: "TWIN_OVERLAY_OPENED", message: "" });
+    openOverlayMock.mockReset().mockResolvedValue({ ok: true, code: TWIN_OVERLAY_STATUS.OPENED, message: "" });
     openPopupMock.mockReset().mockResolvedValue(POPUP_OK);
     showPopupMock.mockReset().mockResolvedValue(POPUP_OK);
   });

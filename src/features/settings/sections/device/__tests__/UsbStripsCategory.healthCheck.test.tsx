@@ -132,6 +132,9 @@ describe("UsbStripsCategory — health check steps in the user's language", () =
     healthCheck = {
       pass: false,
       checkedAtUnixMs: 0,
+      roundTripMs: null,
+      firmwareVersion: null,
+      advertisedFirmwareProfile: null,
       steps: rustSteps({
         step: "HANDSHAKE",
         pass: false,
@@ -164,6 +167,9 @@ describe("UsbStripsCategory — health check steps in the user's language", () =
     healthCheck = {
       pass: false,
       checkedAtUnixMs: 0,
+      roundTripMs: null,
+      firmwareVersion: null,
+      advertisedFirmwareProfile: null,
       steps: [
         {
           step: "HEALTH_CHECK_WORKER",
@@ -187,6 +193,9 @@ describe("UsbStripsCategory — health check steps in the user's language", () =
     healthCheck = {
       pass: false,
       checkedAtUnixMs: 0,
+      roundTripMs: null,
+      firmwareVersion: null,
+      advertisedFirmwareProfile: null,
       steps: rustSteps({
         step: "HANDSHAKE",
         pass: false,

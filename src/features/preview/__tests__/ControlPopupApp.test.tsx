@@ -5,8 +5,19 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LED_TEST_STATUS, type LedPreviewStatus } from "@/shared/contracts/preview";
+import {
+  CONTROL_POPUP_STATUS,
+  LED_TEST_STATUS,
+  TWIN_OVERLAY_STATUS,
+  type LedPreviewStatus,
+  type LedTestPatternResult,
+  type LedTestStatusCode,
+} from "@/shared/contracts/preview";
+import type { LightingOutputsStatusCode } from "@/shared/contracts/lightingRuntime";
+import { outputsResult, runtimeSnapshot } from "@/test/lightingRuntime";
 import { LIGHTING_MODE_KIND } from "@/shared/contracts/mode";
+import type * as previewApiModule from "../previewApi";
+import type * as modeApiModule from "@/features/mode/modeApi";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -18,39 +29,34 @@ vi.mock("@/shared/ui/HsvColorPicker", () => ({
   ),
 }));
 
-const startLedTestPattern = vi.fn();
-const stopLedTestPattern = vi.fn();
-const closeLedTwinOverlay = vi.fn();
-const hideLedControlPopup = vi.fn();
+const startLedTestPattern = vi.fn<typeof previewApiModule.startLedTestPattern>();
+const stopLedTestPattern = vi.fn<typeof previewApiModule.stopLedTestPattern>();
+const closeLedTwinOverlay = vi.fn<typeof previewApiModule.closeLedTwinOverlay>();
+const hideLedControlPopup = vi.fn<typeof previewApiModule.hideLedControlPopup>();
 
 vi.mock("../previewApi", () => ({
-  startLedTestPattern: (...args: unknown[]) => startLedTestPattern(...args),
-  stopLedTestPattern: (...args: unknown[]) => stopLedTestPattern(...args),
-  closeLedTwinOverlay: (...args: unknown[]) => closeLedTwinOverlay(...args),
-  hideLedControlPopup: (...args: unknown[]) => hideLedControlPopup(...args),
+  startLedTestPattern: (...args: Parameters<typeof startLedTestPattern>) => startLedTestPattern(...args),
+  stopLedTestPattern: (...args: Parameters<typeof stopLedTestPattern>) => stopLedTestPattern(...args),
+  closeLedTwinOverlay: (...args: Parameters<typeof closeLedTwinOverlay>) => closeLedTwinOverlay(...args),
+  hideLedControlPopup: (...args: Parameters<typeof hideLedControlPopup>) => hideLedControlPopup(...args),
 }));
 
-const applyOutputs = vi.fn();
-const retuneLighting = vi.fn();
+const applyOutputs = vi.fn<typeof modeApiModule.applyOutputs>();
+const retuneLighting = vi.fn<typeof modeApiModule.retuneLighting>();
 // The runner borrows Hue around every run; Rust owns the lease.
-const acquireHueForTest = vi.fn();
-const releaseHueAfterTest = vi.fn();
+const acquireHueForTest = vi.fn<typeof modeApiModule.acquireHueForTest>();
+const releaseHueAfterTest = vi.fn<typeof modeApiModule.releaseHueAfterTest>();
 
 vi.mock("@/features/mode/modeApi", () => ({
-  applyOutputs: (...args: unknown[]) => applyOutputs(...args),
-  retuneLighting: (...args: unknown[]) => retuneLighting(...args),
-  acquireHueForTest: (...args: unknown[]) => acquireHueForTest(...args),
-  releaseHueAfterTest: (...args: unknown[]) => releaseHueAfterTest(...args),
+  applyOutputs: (...args: Parameters<typeof applyOutputs>) => applyOutputs(...args),
+  retuneLighting: (...args: Parameters<typeof retuneLighting>) => retuneLighting(...args),
+  acquireHueForTest: (...args: Parameters<typeof acquireHueForTest>) => acquireHueForTest(...args),
+  releaseHueAfterTest: (...args: Parameters<typeof releaseHueAfterTest>) => releaseHueAfterTest(...args),
 }));
 
 /** What `apply_outputs` answers; the code is all the popup reads besides the snapshot. */
-function outputsReply(code = "OUTPUTS_APPLIED") {
-  return {
-    status: { code, message: "", details: null },
-    requestId: 1,
-    snapshot: { revision: 1 },
-    outcome: {},
-  };
+function outputsReply(code: LightingOutputsStatusCode = "OUTPUTS_APPLIED") {
+  return outputsResult(code, runtimeSnapshot());
 }
 
 const storeSave = vi.fn();
@@ -59,14 +65,14 @@ let storeState: Record<string, unknown> = {};
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => Promise.resolve(storeState),
-    save: (...args: unknown[]) => storeSave(...args),
+    save: (...args: Parameters<typeof storeSave>) => storeSave(...args),
   },
 }));
 
 const invokeMock = vi.fn();
 
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: (...args: unknown[]) => invokeMock(...args),
+  invoke: (...args: Parameters<typeof invokeMock>) => invokeMock(...args),
 }));
 
 /** Captured `onMoved` handler so a test can simulate the user dragging the popup. */
@@ -119,8 +125,8 @@ function previewStatus(overrides: Partial<LedPreviewStatus> = {}): LedPreviewSta
   };
 }
 
-function startResult(code: string = LED_TEST_STATUS.PATTERN_STARTED) {
-  return { active: true, previewOnly: false, status: { code, message: "" } };
+function startResult(code: LedTestStatusCode = LED_TEST_STATUS.PATTERN_STARTED): LedTestPatternResult {
+  return { active: true, previewOnly: false, status: { code, message: "", details: null } };
 }
 
 /** Latest payload handed to `start_led_test_pattern`. */
@@ -141,10 +147,15 @@ beforeEach(() => {
   stopLedTestPattern.mockResolvedValue({
     active: false,
     previewOnly: false,
-    status: { code: LED_TEST_STATUS.PATTERN_STOPPED, message: "" },
+    status: { code: LED_TEST_STATUS.PATTERN_STOPPED, message: "", details: null },
   });
-  closeLedTwinOverlay.mockResolvedValue({ ok: true });
-  hideLedControlPopup.mockResolvedValue({ ok: true });
+  closeLedTwinOverlay.mockResolvedValue({ ok: true, code: TWIN_OVERLAY_STATUS.CLOSED, message: "" });
+  hideLedControlPopup.mockResolvedValue({
+    ok: true,
+    code: CONTROL_POPUP_STATUS.HIDDEN,
+    message: "",
+    visible: false,
+  });
   applyOutputs.mockResolvedValue(outputsReply());
   retuneLighting.mockResolvedValue({ status: { code: "RETUNE_APPLIED", message: "", details: null } });
   acquireHueForTest.mockResolvedValue(undefined);
@@ -191,7 +202,7 @@ describe("ControlPopupApp auto-start", () => {
     startLedTestPattern.mockResolvedValue({
       active: false,
       previewOnly: false,
-      status: { code: LED_TEST_STATUS.PATTERN_NO_CALIBRATION, message: "" },
+      status: { code: LED_TEST_STATUS.PATTERN_NO_CALIBRATION, message: "", details: null },
     });
     render(<ControlPopupApp />);
 
@@ -355,7 +366,7 @@ describe("ControlPopupApp mode strip", () => {
     await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
     await user.click(screen.getByRole("radio", { name }));
     await waitFor(() => expect(applyOutputs).toHaveBeenCalledTimes(1));
-    return applyOutputs.mock.calls[0][0] as { mode: Record<string, unknown>; origin: string };
+    return applyOutputs.mock.calls[0][0];
   }
 
   it("sends Off to the transaction, which stops Hue as well as the strip", async () => {
@@ -387,7 +398,7 @@ describe("ControlPopupApp mode strip", () => {
   it("takes the snapshot the transaction answered with", async () => {
     await clickMode(/common:mode\.options\.ambilight/);
 
-    await waitFor(() => expect(adopt).toHaveBeenCalledWith({ revision: 1 }));
+    await waitFor(() => expect(adopt).toHaveBeenCalledWith(runtimeSnapshot()));
   });
 
   it("says a strip needs calibrating when the transaction refuses for it", async () => {

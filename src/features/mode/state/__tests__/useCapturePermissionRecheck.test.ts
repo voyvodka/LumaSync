@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SCREEN_CAPTURE_PERMISSION_STATUS } from "@/shared/contracts/capture";
 
 import { CAPTURE_PERMISSION_RECHECK_MS, useCapturePermissionRecheck } from "../useCapturePermissionRecheck";
+import type * as captureApiModule from "../../captureApi";
 
-const getScreenCapturePermissionMock = vi.fn();
+const getScreenCapturePermissionMock = vi.fn<typeof captureApiModule.getScreenCapturePermission>();
 vi.mock("../../captureApi", () => ({
   getScreenCapturePermission: () => getScreenCapturePermissionMock(),
 }));

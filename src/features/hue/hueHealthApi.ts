@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "@/shared/ipcApi";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import {
@@ -10,17 +10,17 @@ import {
 
 /** The snapshot after a local runtime read; never touches the bridge. */
 export async function getHueHealth(): Promise<HueHealthSnapshot> {
-  return invoke<HueHealthSnapshot>(HUE_HEALTH_COMMANDS.GET_HUE_HEALTH);
+  return invokeCommand(HUE_HEALTH_COMMANDS.GET_HUE_HEALTH);
 }
 
 /** Tell the monitor what this window needs; answers with the snapshot. */
 export async function watchHueHealth(watch: HueHealthWatch): Promise<HueHealthSnapshot> {
-  return invoke<HueHealthSnapshot>(HUE_HEALTH_COMMANDS.WATCH_HUE_HEALTH, { watch });
+  return invokeCommand(HUE_HEALTH_COMMANDS.WATCH_HUE_HEALTH, { watch });
 }
 
 /** The manual "check again": re-arms whatever gave up. */
 export async function retryHueHealth(): Promise<HueHealthSnapshot> {
-  return invoke<HueHealthSnapshot>(HUE_HEALTH_COMMANDS.RETRY_HUE_HEALTH);
+  return invokeCommand(HUE_HEALTH_COMMANDS.RETRY_HUE_HEALTH);
 }
 
 /** Every published snapshot. Ordering is the store's job: Rust emits after

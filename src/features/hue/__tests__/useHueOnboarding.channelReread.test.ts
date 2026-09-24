@@ -13,14 +13,17 @@ import { HUE_CREDENTIAL_STATUS } from "@/shared/contracts/hue";
 import { __resetHueHealthStoreForTests } from "../state/hueHealthStore";
 import { resetHealth, runtimeStatus, setHealth } from "./fakeHueHealth";
 
-const getAreaChannelsMock = vi.fn();
+const getAreaChannelsMock = vi.fn<typeof hueOnboardingApiModule.getHueAreaChannels>();
 
 vi.mock("../hueHealthApi", async () => (await import("./fakeHueHealth")).fakeHueHealthApi);
 
-vi.mock("@/features/mode/modeApi", () => ({
-  restartHue: vi.fn(),
-  startHue: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock("@/features/mode/modeApi", async () => {
+  const { runtimeResult } = await import("./fakeHueHealth");
+  return {
+    restartHue: vi.fn<typeof modeApiModule.restartHue>(),
+    startHue: vi.fn<typeof modeApiModule.startHue>().mockResolvedValue(runtimeResult()),
+  };
+});
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
@@ -36,26 +39,26 @@ vi.mock("@/features/persistence/shellStore", () => ({
 }));
 
 vi.mock("../hueOnboardingApi", () => ({
-  checkHueStreamReadiness: vi.fn().mockResolvedValue({
+  checkHueStreamReadiness: vi.fn<typeof hueOnboardingApiModule.checkHueStreamReadiness>().mockResolvedValue({
     status: { code: "HUE_STREAM_READY", message: "ok", details: null },
     readiness: { ready: true, reasons: [] },
   }),
-  discoverHueBridges: vi.fn(),
-  getHueAreaChannels: (...args: unknown[]) => getAreaChannelsMock(...args),
-  listHueEntertainmentAreas: vi.fn().mockResolvedValue({
+  discoverHueBridges: vi.fn<typeof hueOnboardingApiModule.discoverHueBridges>(),
+  getHueAreaChannels: (...args: Parameters<typeof getAreaChannelsMock>) => getAreaChannelsMock(...args),
+  listHueEntertainmentAreas: vi.fn<typeof hueOnboardingApiModule.listHueEntertainmentAreas>().mockResolvedValue({
     status: { code: "HUE_AREA_LIST_OK", message: "ok", details: null },
-    areas: [{ id: "area-1", name: "Living Room", roomName: "Salon", channelCount: 1 }],
+    areas: [{ id: "area-1", name: "Living Room", roomName: "Salon", channelCount: 1, activeStreamer: false }],
   }),
-  migrateHueCredentials: vi.fn().mockResolvedValue({
-    status: { code: "HUE_CREDENTIAL_MIGRATION_FAILED", message: "no keychain" },
+  migrateHueCredentials: vi.fn<typeof hueOnboardingApiModule.migrateHueCredentials>().mockResolvedValue({
+    status: { code: "HUE_CREDENTIAL_MIGRATION_FAILED", message: "no keychain", details: null },
     backend: "plaintext-legacy",
   }),
-  pairHueBridge: vi.fn(),
-  validateHueCredentials: vi.fn().mockResolvedValue({
+  pairHueBridge: vi.fn<typeof hueOnboardingApiModule.pairHueBridge>(),
+  validateHueCredentials: vi.fn<typeof hueOnboardingApiModule.validateHueCredentials>().mockResolvedValue({
     valid: true,
     status: { code: "HUE_CREDENTIAL_VALID", message: "valid", details: null },
   }),
-  verifyHueBridgeIp: vi.fn(),
+  verifyHueBridgeIp: vi.fn<typeof hueOnboardingApiModule.verifyHueBridgeIp>(),
 }));
 
 function streamIs(state: "Idle" | "Running") {
@@ -63,6 +66,8 @@ function streamIs(state: "Idle" | "Running") {
 }
 
 import { useHueOnboarding } from "../useHueOnboarding";
+import type * as modeApiModule from "@/features/mode/modeApi";
+import type * as hueOnboardingApiModule from "../hueOnboardingApi";
 
 async function mountWithArea() {
   const view = renderHook(() => useHueOnboarding());

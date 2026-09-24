@@ -82,7 +82,7 @@ export function createPortDiscovery(
               variant: "info",
               code: "SELECTED_PORT_MISSING",
               message: "Previously selected port is no longer available.",
-              details: "Pick another port and try Connect again.",
+              detailsKey: "device:status.hints.selectedPortMissing",
             }
           : prev.statusCard,
       }));
@@ -126,7 +126,7 @@ export function createPortDiscovery(
           variant: "info",
           code: "REFRESH_RATE_LIMITED",
           message: "Refresh is temporarily limited.",
-          details: "Please wait a moment and try again.",
+          detailsKey: "device:status.hints.refreshRateLimited",
         },
       }));
       return;

@@ -1,11 +1,11 @@
-import type { ModeCommandResult } from "@/features/mode/modeApi";
+import type { LightingModeCommandResult } from "@/features/mode/modeApi";
 import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/shared/contracts/mode";
 import { LIGHTING_MODE_STATUS } from "@/shared/contracts/lighting";
 
 /** Accepted `set_lighting_mode` reply, typed as the real result so a mock cannot
  *  drift into a shape the backend can never send. The orchestrator decides
  *  acceptance by reading `mode`, so omitting it is a false green. */
-export function appliedResult(payload: LightingModeConfig): ModeCommandResult {
+export function appliedResult(payload: LightingModeConfig): LightingModeCommandResult {
   const code =
     payload.kind === LIGHTING_MODE_KIND.OFF
       ? LIGHTING_MODE_STATUS.LIGHTING_MODE_STOPPED
@@ -17,5 +17,6 @@ export function appliedResult(payload: LightingModeConfig): ModeCommandResult {
     active: payload.kind !== LIGHTING_MODE_KIND.OFF,
     mode: payload,
     status: { code, message: "Applied.", details: null },
+    wledAdvisory: null,
   };
 }

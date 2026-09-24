@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { SerialPortListResponse } from "../deviceConnectionApi";
 import { createDeviceConnectionController } from "../state/deviceConnectionController";
 import { createConnectionEventBus } from "../connectionEvents";
+import type { DeviceConnectionControllerDeps } from "@/features/device/state/connectionTypes";
 
 /**
  * Bug 10A + 10B regression tests.
@@ -39,24 +40,24 @@ const SUPPORTED_PORT = {
 
 describe("Bug 10A — auto-reconnect on init", () => {
   it("calls connectSerialPort with the persisted port when Rust reports disconnected", async () => {
-    const connectSerialPort = vi.fn().mockResolvedValue({
+    const connectSerialPort = vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>().mockResolvedValue({
       connected: true,
       portName: "COM3",
       updatedAtUnixMs: Date.now(),
       status: { code: "CONNECT_OK", message: "Connected", details: null },
     });
 
-    const getSerialConnectionStatus = vi.fn().mockResolvedValue({
+    const getSerialConnectionStatus = vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
       connected: false,
       portName: null,
       updatedAtUnixMs: Date.now(),
       status: { code: "NOT_CONNECTED", message: "Idle", details: null },
     });
 
-    const persistLastSuccessfulPort = vi.fn();
+    const persistLastSuccessfulPort = vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>();
 
     const controller = createDeviceConnectionController({
-      listSerialPorts: vi.fn().mockResolvedValue(listResponse([SUPPORTED_PORT])),
+      listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(listResponse([SUPPORTED_PORT])),
       connectSerialPort,
       getSerialConnectionStatus,
       persistLastSuccessfulPort,
@@ -79,11 +80,11 @@ describe("Bug 10A — auto-reconnect on init", () => {
   });
 
   it("skips auto-reconnect when persisted port is no longer visible", async () => {
-    const connectSerialPort = vi.fn();
+    const connectSerialPort = vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>();
 
     const controller = createDeviceConnectionController({
       // Persisted port is "COM3" but the live scan only sees "COM7".
-      listSerialPorts: vi.fn().mockResolvedValue(
+      listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(
         listResponse([
           {
             ...SUPPORTED_PORT,
@@ -92,13 +93,13 @@ describe("Bug 10A — auto-reconnect on init", () => {
         ]),
       ),
       connectSerialPort,
-      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
         connected: false,
         portName: null,
         updatedAtUnixMs: Date.now(),
         status: { code: "NOT_CONNECTED", message: "Idle", details: null },
       }),
-      persistLastSuccessfulPort: vi.fn(),
+      persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       initialLastSuccessfulPort: "COM3",
       autoReconnectOnInit: true,
     });
@@ -110,18 +111,18 @@ describe("Bug 10A — auto-reconnect on init", () => {
   });
 
   it("skips auto-reconnect when feature flag is off", async () => {
-    const connectSerialPort = vi.fn();
+    const connectSerialPort = vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>();
 
     const controller = createDeviceConnectionController({
-      listSerialPorts: vi.fn().mockResolvedValue(listResponse([SUPPORTED_PORT])),
+      listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(listResponse([SUPPORTED_PORT])),
       connectSerialPort,
-      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
         connected: false,
         portName: null,
         updatedAtUnixMs: Date.now(),
         status: { code: "NOT_CONNECTED", message: "Idle", details: null },
       }),
-      persistLastSuccessfulPort: vi.fn(),
+      persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       initialLastSuccessfulPort: "COM3",
       // autoReconnectOnInit defaults to false — keeps existing fixtures
       // (recoveryFlow, manualConnectFlow, etc.) opt-out.
@@ -133,7 +134,7 @@ describe("Bug 10A — auto-reconnect on init", () => {
   });
 
   it("falls through silently when Rust rejects the auto-connect attempt", async () => {
-    const connectSerialPort = vi.fn().mockResolvedValue({
+    const connectSerialPort = vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>().mockResolvedValue({
       connected: false,
       portName: "COM3",
       updatedAtUnixMs: Date.now(),
@@ -141,15 +142,15 @@ describe("Bug 10A — auto-reconnect on init", () => {
     });
 
     const controller = createDeviceConnectionController({
-      listSerialPorts: vi.fn().mockResolvedValue(listResponse([SUPPORTED_PORT])),
+      listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(listResponse([SUPPORTED_PORT])),
       connectSerialPort,
-      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
         connected: false,
         portName: null,
         updatedAtUnixMs: Date.now(),
         status: { code: "NOT_CONNECTED", message: "Idle", details: null },
       }),
-      persistLastSuccessfulPort: vi.fn(),
+      persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       initialLastSuccessfulPort: "COM3",
       autoReconnectOnInit: true,
     });
@@ -168,18 +169,18 @@ describe("Bug 10A — auto-reconnect on init", () => {
     // Cold-launch path where Rust kept the session warm (e.g. fast restart
     // window). Auto-reconnect should be a no-op because the hydration step
     // already promotes us to CONNECTED.
-    const connectSerialPort = vi.fn();
+    const connectSerialPort = vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>();
 
     const controller = createDeviceConnectionController({
-      listSerialPorts: vi.fn().mockResolvedValue(listResponse([SUPPORTED_PORT])),
+      listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(listResponse([SUPPORTED_PORT])),
       connectSerialPort,
-      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
         connected: true,
         portName: "COM3",
         updatedAtUnixMs: Date.now(),
         status: { code: "CONNECT_OK", message: "Connected", details: null },
       }),
-      persistLastSuccessfulPort: vi.fn(),
+      persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       initialLastSuccessfulPort: "COM3",
       autoReconnectOnInit: true,
     });
@@ -198,20 +199,20 @@ describe("Bug 10B — sibling controller propagation via connectionEvents", () =
     events.subscribe((event) => observed.push(event));
 
     const controller = createDeviceConnectionController({
-      listSerialPorts: vi.fn().mockResolvedValue(listResponse([SUPPORTED_PORT])),
-      connectSerialPort: vi.fn().mockResolvedValue({
+      listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(listResponse([SUPPORTED_PORT])),
+      connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>().mockResolvedValue({
         connected: true,
         portName: "COM3",
         updatedAtUnixMs: Date.now(),
         status: { code: "CONNECT_OK", message: "Connected", details: null },
       }),
-      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
         connected: false,
         portName: null,
         updatedAtUnixMs: Date.now(),
         status: { code: "NOT_CONNECTED", message: "Idle", details: null },
       }),
-      persistLastSuccessfulPort: vi.fn(),
+      persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       connectionEvents: events,
     });
 
@@ -234,15 +235,15 @@ describe("Bug 10B — sibling controller propagation via connectionEvents", () =
     });
 
     const siblingA = createDeviceConnectionController({
-      listSerialPorts: vi.fn().mockResolvedValue(listResponse([SUPPORTED_PORT])),
+      listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(listResponse([SUPPORTED_PORT])),
       connectSerialPort: siblingAConnect,
-      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
         connected: false,
         portName: null,
         updatedAtUnixMs: Date.now(),
         status: { code: "NOT_CONNECTED", message: "Idle", details: null },
       }),
-      persistLastSuccessfulPort: vi.fn(),
+      persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       connectionEvents: events,
     });
 
@@ -266,11 +267,11 @@ describe("Bug 10B — sibling controller propagation via connectionEvents", () =
       });
 
     const siblingB = createDeviceConnectionController({
-      listSerialPorts: vi.fn().mockResolvedValue(listResponse([SUPPORTED_PORT])),
+      listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(listResponse([SUPPORTED_PORT])),
       // Sibling B never calls connectSerialPort itself — it's just observing.
-      connectSerialPort: vi.fn(),
+      connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>(),
       getSerialConnectionStatus: siblingBStatusMock,
-      persistLastSuccessfulPort: vi.fn(),
+      persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       connectionEvents: events,
     });
 
@@ -307,10 +308,10 @@ describe("Bug 10B — sibling controller propagation via connectionEvents", () =
     });
 
     const sibling = createDeviceConnectionController({
-      listSerialPorts: vi.fn().mockResolvedValue(listResponse([SUPPORTED_PORT])),
-      connectSerialPort: vi.fn(),
+      listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(listResponse([SUPPORTED_PORT])),
+      connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>(),
       getSerialConnectionStatus: siblingBStatusMock,
-      persistLastSuccessfulPort: vi.fn(),
+      persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       connectionEvents: events,
     });
 

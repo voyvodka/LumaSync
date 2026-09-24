@@ -19,6 +19,17 @@ export default {
     missingBody: "Your previous selection is no longer available. Pick another port and retry.",
     errorTitle: "Connection attempt failed",
     errorBody: "Connection was not completed. Refresh, pick another port, and try again.",
+    // What the connection controller advises beside a status it minted itself.
+    hints: {
+      selectedPortMissing: "Pick another port and try Connect again.",
+      refreshRateLimited: "Please wait a moment and try again.",
+      recoveryInProgress: "You can pick a port and connect manually at any time.",
+      recoveryCancelled: "Continue with manual connect when ready.",
+      recoveryTimedOut: "Refresh ports, choose the active cable port, then connect manually.",
+      healthCheckInProgress: "This validates visibility, support, and connection status.",
+      healthCheckPassed: "All validation steps completed successfully.",
+      healthCheckFailed: "Try refresh, select another port, then retry.",
+    },
   },
   healthCheck: {
     runAction: "Run Health Check",

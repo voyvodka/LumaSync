@@ -22,6 +22,16 @@ const device: Catalogue<typeof enDevice> = {
     missingBody: "Önceki seçimin artık görünmüyor. Yeni bir port seçip tekrar dene.",
     errorTitle: "Bağlantı denemesi başarısız",
     errorBody: "Bağlantı tamamlanamadı. Yenile, farklı bir port seç ve tekrar dene.",
+    hints: {
+      selectedPortMissing: "Başka bir port seçip Bağlan'ı tekrar dene.",
+      refreshRateLimited: "Biraz bekleyip tekrar dene.",
+      recoveryInProgress: "İstediğin an bir port seçip manuel bağlanabilirsin.",
+      recoveryCancelled: "Hazır olduğunda manuel bağlanmaya devam et.",
+      recoveryTimedOut: "Portları yenile, kablonun takılı olduğu portu seç ve manuel bağlan.",
+      healthCheckInProgress: "Görünürlük, destek ve bağlantı durumu doğrulanıyor.",
+      healthCheckPassed: "Tüm doğrulama adımları başarıyla tamamlandı.",
+      healthCheckFailed: "Yenile, başka bir port seç ve tekrar dene.",
+    },
   },
   healthCheck: {
     runAction: "Sağlık Kontrolü Çalıştır",

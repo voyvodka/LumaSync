@@ -3,13 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_ROOM_MAP, ROOM_MAP_BACKGROUND_ERROR } from "@/shared/contracts/roomMap";
 import { useRoomMapImageLayers } from "../useRoomMapImageLayers";
+import type * as roomMapApiModule from "../../roomMapApi";
 
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
 
 const mockOpen = vi.fn();
-const mockCopyBackgroundImage = vi.fn();
+const mockCopyBackgroundImage = vi.fn<typeof roomMapApiModule.copyBackgroundImage>();
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: (options: unknown) => mockOpen(options),

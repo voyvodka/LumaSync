@@ -1,5 +1,6 @@
 import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hue";
-import type { LightingSmoothingPreset } from "@/shared/contracts/lighting";
+import type { LightingModeStatusCode, LightingSmoothingPreset } from "@/shared/contracts/lighting";
+import type { CommandStatusOf } from "@/shared/contracts/status";
 import type { DisplayId } from "@/shared/contracts/display";
 import type { LedCalibrationConfig } from "@/shared/contracts/calibration";
 import type { RoomGeometry } from "@/shared/contracts/roomMap";
@@ -15,6 +16,7 @@ import {
   LED_COLOR_ORDER,
   type LedChipType,
   type LedColorOrder,
+  type WledLiveFrameAdvisory,
 } from "@/shared/contracts/device";
 
 export const LIGHTING_MODE_KIND = {
@@ -128,6 +130,16 @@ export interface LightingModeChangedPayload {
   config: LightingModeConfig;
   /** Whether lighting is actively driving sinks (false when `kind === "off"` / stopped). */
   active: boolean;
+}
+
+/** `set_lighting_mode`, `stop_lighting` and `get_lighting_mode_status`. */
+export interface LightingModeCommandResult {
+  active: boolean;
+  mode: LightingModeConfig;
+  status: CommandStatusOf<LightingModeStatusCode>;
+  /** Non-fatal: the stream started but part of the WLED strip will not track.
+   * Rides alongside a success status rather than replacing it. */
+  wledAdvisory: WledLiveFrameAdvisory | null;
 }
 
 export function isLightingModeKind(value: unknown): value is LightingModeKind {

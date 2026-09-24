@@ -10,21 +10,22 @@ import type {
 } from "@/shared/contracts/roomMap";
 import { useRoomMapHueZones } from "../useRoomMapHueZones";
 import { useRoomMapState } from "../useRoomMapState";
+import type * as roomMapApiModule from "../../roomMapApi";
 
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
 
-const mockCreate = vi.fn();
-const mockUpdate = vi.fn();
-const mockDelete = vi.fn();
-const mockAssign = vi.fn();
+const mockCreate = vi.fn<typeof roomMapApiModule.createHueZone>();
+const mockUpdate = vi.fn<typeof roomMapApiModule.updateHueZone>();
+const mockDelete = vi.fn<typeof roomMapApiModule.deleteHueZone>();
+const mockAssign = vi.fn<typeof roomMapApiModule.assignChannelToHueZone>();
 
 vi.mock("../../roomMapApi", () => ({
-  createHueZone: (p: unknown) => mockCreate(p),
-  updateHueZone: (p: unknown) => mockUpdate(p),
-  deleteHueZone: (p: unknown) => mockDelete(p),
-  assignChannelToHueZone: (p: unknown) => mockAssign(p),
+  createHueZone: (...args: Parameters<typeof mockCreate>) => mockCreate(...args),
+  updateHueZone: (...args: Parameters<typeof mockUpdate>) => mockUpdate(...args),
+  deleteHueZone: (...args: Parameters<typeof mockDelete>) => mockDelete(...args),
+  assignChannelToHueZone: (...args: Parameters<typeof mockAssign>) => mockAssign(...args),
 }));
 
 const SHELL = vi.hoisted(() => ({
@@ -149,8 +150,8 @@ describe("useRoomMapHueZones — pre-mutation payloads", () => {
     const payload = mockAssign.mock.calls[0][0];
     // With the optimistic list the backend saw the channel already present,
     // so `already_in_zone` was always true and the cap check never ran.
-    expect(payload.existingZones[0].channelIndices).toEqual([]);
-    expect(payload.channels[0].zoneId).toBeUndefined();
+    expect(payload.existingZones?.[0]?.channelIndices).toEqual([]);
+    expect(payload.channels?.[0]?.zoneId).toBeUndefined();
   });
 });
 

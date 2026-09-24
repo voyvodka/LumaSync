@@ -12,11 +12,12 @@ import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachabil
 import { __resetRuntimeHealthForTests } from "@/features/telemetry/runtimeHealthSource";
 import { NO_RUNTIME_HEALTH_ISSUES, type RuntimeHealth } from "@/shared/contracts/telemetry";
 import { LightsSection, hueUnavailableSubKey } from "../LightsSection";
+import type * as roomMapApiModule from "@/features/room-map/roomMapApi";
 
 const { shellStateRef, saveMock, createHueZoneMock, telemetryMock, healthListeners } = vi.hoisted(() => ({
   shellStateRef: { current: {} as Partial<ShellState> },
   saveMock: vi.fn(),
-  createHueZoneMock: vi.fn(),
+  createHueZoneMock: vi.fn<typeof roomMapApiModule.createHueZone>(),
   telemetryMock: vi.fn(),
   healthListeners: [] as Array<(health: RuntimeHealth) => void>,
 }));
@@ -54,7 +55,7 @@ vi.mock("@/features/persistence/shellStore", () => ({
 }));
 
 vi.mock("@/features/room-map/roomMapApi", () => ({
-  createHueZone: (...args: unknown[]) => {
+  createHueZone: (...args: Parameters<typeof createHueZoneMock>) => {
     createHueZoneMock(...args);
     return Promise.resolve({ status: { code: "HUE_ZONE_CREATED", message: "", details: null }, zones: [], channels: [] });
   },

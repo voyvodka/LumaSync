@@ -81,11 +81,9 @@ export const HUE_STATUS = {
   IP_INVALID: "HUE_IP_INVALID",
   IP_UNREACHABLE: "HUE_IP_UNREACHABLE",
   PAIRING_OK: "HUE_PAIRING_OK",
-  /**
-   * Frontend-minted, never on the wire: the onboarding hook holds it while it
-   * re-asks a bridge that answered `PAIRING_LINK_BUTTON_NOT_PRESSED`.
-   */
-  PAIRING_PENDING_LINK_BUTTON: "HUE_PAIRING_PENDING_LINK_BUTTON",
+  // `HUE_PAIRING_PENDING_LINK_BUTTON` is not here on purpose: the onboarding
+  // hook mints it between polls, so it lives with the other minted codes in
+  // features/hue/model/onboardingStatusCodes.ts, outside every wire union.
   /**
    * Catch-all pairing failure. Kept for backwards compatibility with
    * frontends that shipped before the specific pairing
@@ -590,7 +588,7 @@ export interface HuePairingCredentials {
 
 /** Result of `pair_hue_bridge`. */
 export interface HuePairBridgeResponse {
-  status: HueCommandStatus;
+  status: CommandStatusOf<HuePairBridgeStatusCode>;
   credentials: HuePairingCredentials | null;
   /** Only the literal `"keychain"` licenses deleting the plaintext PSK; absent
    * and unrecognised read as legacy — see docs/architecture/hue.md. */
@@ -618,4 +616,132 @@ export interface HueEntertainmentAreaSummary {
 export interface HueStreamReadiness {
   ready: boolean;
   reasons: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Onboarding command responses — mirrors of `hue_onboarding.rs`
+//
+// Each command's own codes, read off its handler. `HueOnboardingWireStatusCode`
+// is their union; a response typed against the union would let a fixture answer
+// `validate_hue_credentials` with `verify_hue_bridge_ip`'s `HUE_IP_VALID`.
+// ---------------------------------------------------------------------------
+
+export type HueDiscoveryStatusCode = Extract<
+  HueOnboardingWireStatusCode,
+  "HUE_DISCOVERY_OK" | "HUE_DISCOVERY_EMPTY" | "HUE_DISCOVERY_FAILED"
+>;
+
+export type HueVerifyBridgeIpStatusCode = Extract<
+  HueOnboardingWireStatusCode,
+  "HUE_IP_INVALID" | "HUE_IP_UNREACHABLE" | "HUE_IP_VALID" | "HUE_BRIDGE_IDENTITY_MISMATCH"
+>;
+
+/** Never `AUTH_INVALID_RE_PAIR_REQUIRED`: there is no key yet to reject. */
+export type HuePairBridgeStatusCode = Extract<
+  HueStatusCode,
+  | "HUE_IP_INVALID"
+  | "HUE_PAIRING_OK"
+  | "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED"
+  | "HUE_PAIRING_DEVICETYPE_INVALID"
+  | "HUE_PAIRING_BRIDGE_BUSY"
+  | "HUE_PAIRING_RATE_LIMITED"
+  | "HUE_PAIRING_FAILED"
+  | "HUE_BRIDGE_IDENTITY_MISMATCH"
+>;
+
+export type HueValidateCredentialsStatusCode = Extract<
+  HueOnboardingWireStatusCode,
+  | "HUE_IP_INVALID"
+  | "HUE_CREDENTIAL_VALID"
+  | "HUE_CREDENTIAL_INVALID"
+  | "HUE_CREDENTIAL_CHECK_FAILED"
+  | "HUE_BRIDGE_IDENTITY_MISMATCH"
+>;
+
+export type HueAreaListStatusCode = Extract<
+  HueOnboardingWireStatusCode,
+  | "HUE_IP_INVALID"
+  | "AUTH_INVALID_RE_PAIR_REQUIRED"
+  | "HUE_AREA_LIST_OK"
+  | "HUE_AREA_LIST_EMPTY"
+  | "HUE_AREA_LIST_FAILED"
+>;
+
+export type HueStreamReadinessStatusCode = Extract<
+  HueOnboardingWireStatusCode,
+  | "HUE_IP_INVALID"
+  | "AUTH_INVALID_RE_PAIR_REQUIRED"
+  | "HUE_STREAM_READY"
+  | "HUE_STREAM_NOT_READY"
+  | "HUE_STREAM_READINESS_FAILED"
+>;
+
+/** `discover_hue_bridges` — cloud + mDNS, deduped by id. */
+export interface HueDiscoveryResponse {
+  status: CommandStatusOf<HueDiscoveryStatusCode>;
+  bridges: HueBridgeSummary[];
+}
+
+/** `verify_hue_bridge_ip` — the bridge at that address, if it is well-formed and answers. */
+export interface HueVerifyBridgeIpResponse {
+  status: CommandStatusOf<HueVerifyBridgeIpStatusCode>;
+  bridge: HueBridgeSummary | null;
+}
+
+/** `validate_hue_credentials` — whether the stored username/clientKey still authenticate. */
+export interface HueValidateCredentialsResponse {
+  status: CommandStatusOf<HueValidateCredentialsStatusCode>;
+  valid: boolean;
+}
+
+/** `list_hue_entertainment_areas`. */
+export interface HueEntertainmentAreaListResponse {
+  status: CommandStatusOf<HueAreaListStatusCode>;
+  areas: HueEntertainmentAreaSummary[];
+}
+
+/** `check_hue_stream_readiness`. */
+export interface HueStreamReadinessResponse {
+  status: CommandStatusOf<HueStreamReadinessStatusCode>;
+  readiness: HueStreamReadiness;
+}
+
+// ---------------------------------------------------------------------------
+// Runtime command responses — mirrors of `hue/state_store.rs`
+// ---------------------------------------------------------------------------
+
+/** Last solid colour applied (or pending) on the Hue lights. */
+export interface HueSolidColorSnapshot {
+  r: number;
+  g: number;
+  b: number;
+  brightness: number;
+}
+
+/** `start_hue_stream`, `stop_hue_stream`, `restart_hue_stream`,
+ * `set_hue_solid_color` and `get_hue_stream_status`. */
+export interface HueRuntimeCommandResult {
+  active: boolean;
+  status: HueRuntimeStatus;
+  lastSolidColor: HueSolidColorSnapshot | null;
+}
+
+/** The `request` of `start_hue_stream` / `restart_hue_stream`. */
+export interface StartHueStreamRequest {
+  bridgeIp: string;
+  username: string;
+  clientKey: string;
+  areaId: string;
+  triggerSource: HueRuntimeTriggerSource;
+  /** The user's own placements for the area, addressed by the bridge's channel id. */
+  channelPlacements?: HueChannelPlacementOverride[];
+}
+
+/** The `request` of `set_hue_solid_color`. */
+export interface SetHueSolidColorRequest {
+  r: number;
+  g: number;
+  b: number;
+  brightness?: number;
+  triggerSource: HueRuntimeTriggerSource;
 }

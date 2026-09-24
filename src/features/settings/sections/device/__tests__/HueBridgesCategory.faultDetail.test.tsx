@@ -16,7 +16,8 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("@/features/mode/modeApi", () => ({ stopHue: vi.fn() }));
+// Stubbed so nothing here can reach the Tauri transport.
+vi.mock("@/features/mode/modeApi", () => ({}));
 vi.mock("../../HueChannelMapPanel", () => ({ HueChannelMapPanel: () => null }));
 
 const bridge: HueBridgeSummary = { id: "bridge-1", ip: "192.168.1.10", name: "Test Bridge" };

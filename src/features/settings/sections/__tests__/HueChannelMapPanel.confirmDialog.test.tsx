@@ -17,7 +17,7 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-const invoke = vi.hoisted(() => vi.fn());
+const invoke = vi.hoisted(() => vi.fn<typeof import("@tauri-apps/api/core").invoke>());
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
 const channels: HueAreaChannelInfo[] = [0, 2].map((channelId, index) => ({

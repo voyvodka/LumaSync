@@ -541,21 +541,11 @@ const RUST_HEALTH_CHECK_RESULT_FILE = resolve(
   ROOT,
   "src-tauri/src/commands/device_connection.rs"
 );
-const RUST_HEALTH_CHECK_API_FILE = resolve(
-  ROOT,
-  "src/features/device/deviceConnectionApi.ts"
-);
 const rustHealthSource = readOrEmpty(RUST_HEALTH_CHECK_RESULT_FILE, "rust device_connection");
-const tsHealthApiSource = readOrEmpty(RUST_HEALTH_CHECK_API_FILE, "ts deviceConnectionApi");
 check(
-  deviceSource.includes("advertisedFirmwareProfile?: FirmwareProfile"),
-  "device.ts SerialHealthReport.advertisedFirmwareProfile field declared",
-  "MISSING device.ts SerialHealthReport.advertisedFirmwareProfile field"
-);
-check(
-  tsHealthApiSource.includes("advertisedFirmwareProfile?: FirmwareProfile"),
-  "deviceConnectionApi HealthCheckResult.advertisedFirmwareProfile field declared",
-  "MISSING deviceConnectionApi HealthCheckResult.advertisedFirmwareProfile field"
+  deviceSource.includes("advertisedFirmwareProfile: FirmwareProfile | null"),
+  "device.ts HealthCheckResult.advertisedFirmwareProfile field declared",
+  "MISSING device.ts HealthCheckResult.advertisedFirmwareProfile field"
 );
 check(
   rustHealthSource.includes("pub advertised_firmware_profile: Option<FirmwareProfile>"),
@@ -971,12 +961,9 @@ check(
   "Old WledDiscoveryResponse.device: Option<> removed",
   "STILL PRESENT: old WledDiscoveryResponse.device: Option<> — A1.1 migration incomplete"
 );
-const WLED_API_FILE = resolve(ROOT, "src/features/device/wledApi.ts");
-const wledApiTsSource = readOrEmpty(WLED_API_FILE, "wledApi.ts");
 check(
-  deviceSource.includes("devices: WledDeviceInfo[]") ||
-    wledApiTsSource.includes("devices: WledDeviceInfo[]"),
-  "TS WledDiscoveryResponse.devices is WledDeviceInfo[] (wledApi.ts or device.ts)",
+  deviceSource.includes("devices: WledDeviceInfo[]"),
+  "TS WledDiscoveryResponse.devices is WledDeviceInfo[] (device.ts)",
   "MISSING: TS WledDiscoveryResponse.devices array field"
 );
 
@@ -1878,6 +1865,12 @@ for (const code of phantomBaseline) {
     `BASELINE STALE: "${code}" now HAS a Rust producer — delete its line from `
       + `contract-phantom-baseline.txt (the file may only shrink)`
   );
+  check(
+    contractDeclared.has(code),
+    `baseline entry "${code}" is still declared in a contract`,
+    `BASELINE STALE: "${code}" is no longer declared in any contract — delete its `
+      + `line from contract-phantom-baseline.txt (the file may only shrink)`
+  );
 }
 check(
   declaredWithoutProducer.filter((c) => !phantomBaseline.has(c)).length === 0,
@@ -2342,6 +2335,11 @@ const NULLABILITY_NAME_ALIASES = {
   // `commands/status.rs` — the one Rust envelope, pinned single below.
   CommandStatus: "CommandStatusOf",
   DisplayInfoPayload: "DisplayInfo",
+  // Serialised into the calibration overlay window, not returned by a command.
+  OverlayPreviewCountsPayload: "OverlayPreviewCounts",
+  OverlayPreviewSequenceItemPayload: "OverlayPreviewSequenceItem",
+  WledSinkStatusResponse: "WledSinkStatus",
+  WledSinkSnapshot: "WledUdpSinkConfig",
 };
 
 /**
@@ -2515,7 +2513,11 @@ const checkedPairs = nullabilityPairs.filter(
 // 57 → 61: the Hue health monitor's `HueHealthSnapshot`, `HueBridgeHealth`,
 // `HueAreaHealth` and `HueStreamHealth`.
 // 61 → 62: `RuntimeHealth`, the `telemetry://health-changed` payload.
-const EXPECTED_NULLABILITY_PAIR_COUNT = 62;
+// 62 → 83: the unpaired-struct baseline emptied. 21 feature-module mirrors
+// moved into contracts or gained an alias; the other 3 (`StartHueStreamRequest`,
+// `SetHueSolidColorRequest`, `TestPatternConfig`) never left Rust serialised
+// and lost the `Serialize` derive instead.
+const EXPECTED_NULLABILITY_PAIR_COUNT = 83;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

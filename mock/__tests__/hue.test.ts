@@ -23,7 +23,7 @@ import type {
   HueValidateCredentialsResponse,
 } from "../../src/features/hue/hueOnboardingApi";
 import { isHueStopCodeOk } from "../../src/features/hue/model/hueStartConfig";
-import type { HueRuntimeCommandResult, ModeCommandResult } from "../../src/features/mode/modeApi";
+import type { HueRuntimeCommandResult, LightingModeCommandResult } from "../../src/features/mode/modeApi";
 import { DEVICE_COMMANDS } from "../../src/shared/contracts/device";
 import { HUE_HEALTH_COMMANDS, type HueHealthSnapshot } from "../../src/shared/contracts/hueHealth";
 import { dispatch } from "../dispatch";
@@ -319,7 +319,7 @@ describe("a held entertainment area", () => {
   it("with a strip plugged in, gates [usb, hue] on Hue but runs [usb], then takes Hue once freed", () => {
     setWorld(SCENARIOS["usb-hue-busy-at-boot"].build());
     const apply = (targets: string[]) =>
-      call(DEVICE_COMMANDS.SET_LIGHTING_MODE, { payload: { kind: "ambilight", targets } }) as ModeCommandResult;
+      call(DEVICE_COMMANDS.SET_LIGHTING_MODE, { payload: { kind: "ambilight", targets } }) as LightingModeCommandResult;
 
     expect((call(HUE_COMMANDS.START_STREAM) as HueRuntimeCommandResult).status.code).toBe(
       HUE_RUNTIME_STATUS.CONFIG_NOT_READY_GATE_BLOCKED,

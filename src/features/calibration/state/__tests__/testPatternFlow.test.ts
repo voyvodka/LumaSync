@@ -8,10 +8,12 @@ import {
   createTestPatternFlow,
   isTestPatternFailure,
 } from "../testPatternFlow";
+import type * as previewApiModule from "@/features/preview/previewApi";
+import type * as modeApiModule from "@/features/mode/modeApi";
 
 vi.mock("@/features/preview/previewApi", () => ({
-  startLedTestPattern: vi.fn(),
-  stopLedTestPattern: vi.fn(),
+  startLedTestPattern: vi.fn<typeof previewApiModule.startLedTestPattern>(),
+  stopLedTestPattern: vi.fn<typeof previewApiModule.stopLedTestPattern>(),
 }));
 
 let storeState: Record<string, unknown> = {};
@@ -22,8 +24,8 @@ vi.mock("@/features/persistence/shellStore", () => ({
 
 vi.mock("@/features/mode/modeApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/features/mode/modeApi")>()),
-  acquireHueForTest: vi.fn().mockResolvedValue(undefined),
-  releaseHueAfterTest: vi.fn().mockResolvedValue(undefined),
+  acquireHueForTest: vi.fn<typeof modeApiModule.acquireHueForTest>().mockResolvedValue(undefined),
+  releaseHueAfterTest: vi.fn<typeof modeApiModule.releaseHueAfterTest>().mockResolvedValue(undefined),
 }));
 
 const previewApi = await import("@/features/preview/previewApi");

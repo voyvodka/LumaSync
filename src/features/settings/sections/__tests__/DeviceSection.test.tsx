@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
 import { DeviceSection } from "../DeviceSection";
+import type * as calibrationApiModule from "@/features/calibration/calibrationApi";
+import type * as wledApiModule from "@/features/device/wledApi";
 
 const stopHueMock = vi.fn();
 const stopHueOutputMock = vi.fn(async () => {});
@@ -19,7 +21,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("@/features/mode/modeApi", () => ({
-  stopHue: (...args: unknown[]) => stopHueMock(...args),
+  stopHue: (...args: Parameters<typeof stopHueMock>) => stopHueMock(...args),
 }));
 
 vi.mock("@/features/device/useDeviceConnection", () => ({
@@ -52,17 +54,17 @@ vi.mock("@/features/persistence/shellStore", () => ({
 
 // Stub calibrationApi.listDisplays so DeviceSection mounts without a Tauri backend.
 vi.mock("@/features/calibration/calibrationApi", () => ({
-  listDisplays: vi.fn().mockResolvedValue([]),
+  listDisplays: vi.fn<typeof calibrationApiModule.listDisplays>().mockResolvedValue([]),
 }));
 
 // WledCategory mounts useActiveWledSink, which reaches the Tauri boundary on
 // mount. Unmocked it throws into the hook's own catch, so the section still
 // rendered but every test measured the failure branch.
 vi.mock("@/features/device/wledApi", () => ({
-  discoverWledDevices: vi.fn(),
-  connectWledSink: vi.fn(),
-  testWledBridge: vi.fn(),
-  getWledSinkStatus: vi.fn().mockResolvedValue({ connected: false, sink: null }),
+  discoverWledDevices: vi.fn<typeof wledApiModule.discoverWledDevices>(),
+  connectWledSink: vi.fn<typeof wledApiModule.connectWledSink>(),
+  testWledBridge: vi.fn<typeof wledApiModule.testWledBridge>(),
+  getWledSinkStatus: vi.fn<typeof wledApiModule.getWledSinkStatus>().mockResolvedValue({ connected: false, sink: null }),
 }));
 
 // Stub heavy sub-components that make their own invoke calls.

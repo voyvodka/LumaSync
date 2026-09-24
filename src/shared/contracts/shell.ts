@@ -50,6 +50,19 @@ export const SHELL_COMMANDS = {
 
 export type ShellCommand = (typeof SHELL_COMMANDS)[keyof typeof SHELL_COMMANDS];
 
+/** `update_tray_labels` — the current locale's tray menu labels. Every field is
+ * required: Rust's `TrayLabels` has no serde defaults, so a missing key fails
+ * the whole call. */
+export interface TrayLabels {
+  openSettings: string;
+  lightsOff: string;
+  resumeLastMode: string;
+  solidColor: string;
+  showLedPreview: string;
+  closeOverlays: string;
+  quit: string;
+}
+
 /** Response from `get_launch_context`. A plain read that cannot fail, so no status. */
 export interface LaunchContext {
   /**
