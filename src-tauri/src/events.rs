@@ -49,3 +49,7 @@ pub const RUNTIME_HEALTH_CHANGED_EVENT: &str = "telemetry://health-changed";
 /// `UPDATER_EVENTS.DOWNLOAD_PROGRESS` in `src/shared/contracts/updater.ts`.
 /// Used directly from `commands::updater`.
 pub const UPDATER_PROGRESS_EVENT: &str = "updater://download-progress";
+
+/// `SHELL_EVENTS.MAIN_WINDOW_VISIBILITY` in `src/shared/contracts/shell.ts`.
+/// Re-exported from `commands::window_visibility`.
+pub const MAIN_WINDOW_VISIBILITY_EVENT: &str = "shell://main-window-visibility";

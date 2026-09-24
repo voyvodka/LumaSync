@@ -6,6 +6,7 @@
  * decides what to read. See docs/architecture/hue.md, "One health monitor".
  */
 
+import { isWindowVisible, subscribeWindowVisible } from "@/features/shell/windowVisibility";
 import type { HueHealthSnapshot, HueHealthWatch } from "@/shared/contracts/hueHealth";
 import type { Store } from "@/shared/lib/store";
 import { parseCommandError } from "@/shared/contracts/status";
@@ -57,6 +58,7 @@ let areaWatchers = 0;
 /** Bumped on every start and stop, so an answer from a torn-down session is dropped. */
 let session = 0;
 let unlisten: (() => void) | null = null;
+let releaseVisibility: (() => void) | null = null;
 let readFailures = 0;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -101,14 +103,12 @@ function noteReadFailure(error: unknown, again: () => void): void {
   }, runtimeStatusRetryDelayMs(readFailures));
 }
 
-function isVisible(): boolean {
-  return typeof document === "undefined" || document.visibilityState !== "hidden";
-}
-
 // The area flag is sent as is, hidden or not: Rust reads the area only while
 // the window is visible, and tells a view mounting from a window showing by it.
+// Visible is the document *and* Rust's read of the native window: WebView2 can
+// report a window hidden in the tray as visible (ui-and-shell.md).
 function currentWatch(): HueHealthWatch {
-  return { visible: isVisible(), areaReadiness: areaWatchers > 0 };
+  return { visible: isWindowVisible(), areaReadiness: areaWatchers > 0 };
 }
 
 function declare(): void {
@@ -136,7 +136,7 @@ function start(): void {
     .catch((error: unknown) => {
       console.error("[LumaSync] Hue health listen failed:", error);
     });
-  document.addEventListener("visibilitychange", declare);
+  releaseVisibility = subscribeWindowVisible(() => declare());
   // After the listener is requested, so a publish between the two is not
   // lost: the revision check drops whichever of the two is older.
   declare();
@@ -146,7 +146,8 @@ function stop(): void {
   session += 1;
   unlisten?.();
   unlisten = null;
-  document.removeEventListener("visibilitychange", declare);
+  releaseVisibility?.();
+  releaseVisibility = null;
   clearRetry();
   readFailures = 0;
   // Nothing here needs the monitor any more; without this it would keep
@@ -234,7 +235,8 @@ export function __resetHueHealthStoreForTests(): void {
   session += 1;
   unlisten?.();
   unlisten = null;
-  document.removeEventListener("visibilitychange", declare);
+  releaseVisibility?.();
+  releaseVisibility = null;
   clearRetry();
   readFailures = 0;
   listeners.clear();

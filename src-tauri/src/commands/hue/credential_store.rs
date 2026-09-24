@@ -42,6 +42,7 @@
 //!   keeps the plaintext fallback so the bridge stays usable.
 
 use log::{debug, info, warn};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 #[cfg(any(debug_assertions, test))]
 use std::path::PathBuf;
@@ -122,6 +123,30 @@ impl CredentialBackend {
             CredentialBackend::PlaintextLegacy => "the plaintext fallback",
             CredentialBackend::Noop => "the no-op store",
             CredentialBackend::DevFile => "dev-credentials.json (debug DevFileStore)",
+        }
+    }
+}
+
+/// Where the frontend is told the pair now lives — `HueCredentialBackend` in
+/// `hue.ts`, and only on the pairing and migration responses. It has no
+/// `noop`: a `NoopStore` can never report a pair as persisted, so that label
+/// has nothing to tell the frontend and no way onto the wire.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HueCredentialBackend {
+    #[serde(rename = "keychain")]
+    Keychain,
+    #[serde(rename = "plaintext-legacy")]
+    PlaintextLegacy,
+    #[serde(rename = "dev-file")]
+    DevFile,
+}
+
+impl HueCredentialBackend {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            HueCredentialBackend::Keychain => "keychain",
+            HueCredentialBackend::PlaintextLegacy => "plaintext-legacy",
+            HueCredentialBackend::DevFile => "dev-file",
         }
     }
 }
@@ -607,11 +632,19 @@ impl MigrationOutcome {
     /// The label is the store's own, not a constant: a debug build writes to
     /// `DevFileStore`, and reporting that as `keychain` would license the
     /// frontend to delete a plaintext copy that only a dev-only file replaces.
-    /// `NoopStore` cannot reach the success arms — its `set` always fails.
-    pub fn backend(&self, store: &dyn SecretStore) -> CredentialBackend {
+    /// `NoopStore` cannot reach the success arms: its `set` always fails and
+    /// its `get` never holds a pair to skip on. Were one to, "keep the
+    /// plaintext copy" is the only safe thing to report.
+    pub fn backend(&self, store: &dyn SecretStore) -> HueCredentialBackend {
         match self {
-            MigrationOutcome::Migrated | MigrationOutcome::Skipped => store.backend(),
-            MigrationOutcome::Failed => CredentialBackend::PlaintextLegacy,
+            MigrationOutcome::Migrated | MigrationOutcome::Skipped => match store.backend() {
+                CredentialBackend::Keychain => HueCredentialBackend::Keychain,
+                CredentialBackend::DevFile => HueCredentialBackend::DevFile,
+                CredentialBackend::PlaintextLegacy | CredentialBackend::Noop => {
+                    HueCredentialBackend::PlaintextLegacy
+                }
+            },
+            MigrationOutcome::Failed => HueCredentialBackend::PlaintextLegacy,
         }
     }
 }
@@ -1042,6 +1075,40 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn a_noop_store_never_reports_a_persisted_pair() {
+        let store = NoopStore::new();
+        let outcome =
+            migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "user-123", "deadbeef");
+        assert_eq!(outcome, MigrationOutcome::Failed);
+        assert_eq!(
+            outcome.backend(&store),
+            HueCredentialBackend::PlaintextLegacy
+        );
+        // Not even a success arm can put `noop` on the wire.
+        for outcome in [MigrationOutcome::Migrated, MigrationOutcome::Skipped] {
+            assert_eq!(
+                outcome.backend(&store),
+                HueCredentialBackend::PlaintextLegacy
+            );
+        }
+    }
+
+    #[test]
+    fn the_wire_backend_serializes_to_the_contract_literals() {
+        for (backend, literal) in [
+            (HueCredentialBackend::Keychain, "keychain"),
+            (HueCredentialBackend::PlaintextLegacy, "plaintext-legacy"),
+            (HueCredentialBackend::DevFile, "dev-file"),
+        ] {
+            assert_eq!(
+                serde_json::to_value(backend).unwrap(),
+                serde_json::json!(literal)
+            );
+            assert_eq!(backend.as_str(), literal);
+        }
+    }
+
+    #[test]
     fn in_memory_store_round_trips_and_overwrites() {
         let store = InMemoryStore::default();
         assert_eq!(store.get(KEY_HUE_APP_KEY).unwrap(), None);
@@ -1226,7 +1293,7 @@ pub(crate) mod tests {
         assert_eq!(outcome, MigrationOutcome::Migrated);
         // Never `keychain`: the frontend clears its plaintext copy on that
         // literal alone, and a release build cannot read this file.
-        assert_eq!(outcome.backend(&store), CredentialBackend::DevFile);
+        assert_eq!(outcome.backend(&store), HueCredentialBackend::DevFile);
 
         let resolved = resolve_hue_credentials(&store, "", "", "").unwrap();
         assert_eq!(resolved.username, "user-123");
@@ -1260,7 +1327,7 @@ pub(crate) mod tests {
             migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "user-123", "deadbeef");
         assert_eq!(outcome, MigrationOutcome::Migrated);
         assert_eq!(outcome.status_code(), "HUE_CREDENTIAL_MIGRATION_OK");
-        assert_eq!(outcome.backend(&store), CredentialBackend::Keychain);
+        assert_eq!(outcome.backend(&store), HueCredentialBackend::Keychain);
         assert_eq!(
             store.get(KEY_HUE_APP_KEY).unwrap().as_deref(),
             Some("user-123")
@@ -1280,7 +1347,7 @@ pub(crate) mod tests {
             migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "user-123", "deadbeef");
         assert_eq!(outcome, MigrationOutcome::Skipped);
         assert_eq!(outcome.status_code(), "HUE_CREDENTIAL_MIGRATION_SKIPPED");
-        assert_eq!(outcome.backend(&store), CredentialBackend::Keychain);
+        assert_eq!(outcome.backend(&store), HueCredentialBackend::Keychain);
     }
 
     #[test]
@@ -1323,7 +1390,10 @@ pub(crate) mod tests {
             migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "user-123", "deadbeef");
         assert_eq!(outcome, MigrationOutcome::Failed);
         assert_eq!(outcome.status_code(), "HUE_CREDENTIAL_MIGRATION_FAILED");
-        assert_eq!(outcome.backend(&store), CredentialBackend::PlaintextLegacy);
+        assert_eq!(
+            outcome.backend(&store),
+            HueCredentialBackend::PlaintextLegacy
+        );
         // First set was the app-key, which failed before any write happened.
         assert_eq!(store.get(KEY_HUE_APP_KEY).unwrap(), None);
         assert_eq!(store.get(KEY_HUE_CLIENT_KEY).unwrap(), None);
@@ -1367,7 +1437,10 @@ pub(crate) mod tests {
         assert_eq!(store.inner.get(KEY_HUE_APP_KEY).unwrap(), None);
         assert_eq!(store.inner.get(KEY_HUE_CLIENT_KEY).unwrap(), None);
         // The frontend keys its delete decision on this value.
-        assert_eq!(outcome.backend(&store), CredentialBackend::PlaintextLegacy);
+        assert_eq!(
+            outcome.backend(&store),
+            HueCredentialBackend::PlaintextLegacy
+        );
     }
 
     #[test]
@@ -1399,7 +1472,10 @@ pub(crate) mod tests {
         let outcome =
             migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "user-123", "deadbeef");
         assert_eq!(outcome, MigrationOutcome::Failed);
-        assert_eq!(outcome.backend(&store), CredentialBackend::PlaintextLegacy);
+        assert_eq!(
+            outcome.backend(&store),
+            HueCredentialBackend::PlaintextLegacy
+        );
         // No half-written entry survives a failed verification.
         assert_eq!(store.inner.get(KEY_HUE_APP_KEY).unwrap(), None);
         assert_eq!(store.inner.get(KEY_HUE_CLIENT_KEY).unwrap(), None);
@@ -1848,7 +1924,10 @@ pub(crate) mod tests {
         let outcome =
             migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "user-123", "deadbeef");
         assert_eq!(outcome, MigrationOutcome::Failed);
-        assert_eq!(outcome.backend(&store), CredentialBackend::PlaintextLegacy);
+        assert_eq!(
+            outcome.backend(&store),
+            HueCredentialBackend::PlaintextLegacy
+        );
     }
 
     #[test]

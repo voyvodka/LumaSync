@@ -198,11 +198,8 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
     [],
   );
 
-  const handlePreviewToggle = useCallback(async () => {
-    // Read from the store, not the render: a second press can land before React
-    // has re-rendered with the in-flight snapshot.
-    if (displayTargetRef.current.getSnapshot().isSwitching) return;
-    const shouldEnable = !testPattern.isEnabled;
+  const runPreviewToggle = useCallback(async () => {
+    const shouldEnable = !flowRef.current.getSnapshot().isEnabled;
     try {
       if (shouldEnable) {
         if (displayTarget.blocked) {
@@ -264,12 +261,33 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
         console.debug(`[LumaSync] Overlay close after failure did not complete: ${parseCommandError(rollbackError).message}`);
       }
     }
-  }, [testPattern.isEnabled, displayTarget, overlayPreviewPayload, beginDisplaySwitch, t]);
+  }, [displayTarget, overlayPreviewPayload, beginDisplaySwitch, t]);
+
+  // Raised for the whole run of a press — the switch, the start or stop (seconds
+  // on Hue), and the overlay close after it. The ref is the guard; the state
+  // only lets the page show the buttons as waiting.
+  const previewToggleRunningRef = useRef(false);
+  const [isTogglingTestPattern, setIsTogglingTestPattern] = useState(false);
+
+  const handlePreviewToggle = useCallback(async () => {
+    // Read from the store, not the render: a second press can land before React
+    // has re-rendered with the in-flight snapshot.
+    if (previewToggleRunningRef.current || displayTargetRef.current.getSnapshot().isSwitching) return;
+    previewToggleRunningRef.current = true;
+    setIsTogglingTestPattern(true);
+    try {
+      await runPreviewToggle();
+    } finally {
+      previewToggleRunningRef.current = false;
+      setIsTogglingTestPattern(false);
+    }
+  }, [runPreviewToggle]);
 
   const handleSelectDisplay = useCallback(async (display: DisplayInfo) => {
     // A pick mid-switch would be saved as the capture source while the overlay
-    // lands on the display the switch was already heading for.
-    if (displayTargetRef.current.getSnapshot().isSwitching) return;
+    // lands on the display the switch was already heading for. Mid-toggle the
+    // same: a start opens the overlay on the display selected when it began.
+    if (previewToggleRunningRef.current || displayTargetRef.current.getSnapshot().isSwitching) return;
     const selected = displayTargetRef.current.selectDisplay(display.id);
     setDisplayTarget(selected);
     // The save is what moves a running capture: Rust re-applies the mode
@@ -435,6 +453,7 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
     confirmDiscard: editorState.confirmDiscard,
     isSaving,
     testPattern,
+    isTogglingTestPattern,
     displayTarget,
     validationErrors,
     testPatternError,

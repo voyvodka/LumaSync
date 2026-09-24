@@ -560,6 +560,7 @@ pub(crate) fn hide_main_for_preview<R: Runtime>(app: &AppHandle<R>, twin_state: 
     if main.hide().is_ok() {
         twin_state.remember_main_hidden(true);
     }
+    crate::commands::window_visibility::refresh(app);
 }
 
 /// Put it back, but only if this preview is what took it away.
@@ -576,6 +577,7 @@ pub(crate) fn restore_main_after_preview<R: Runtime>(
     let _ = main.show();
     let _ = main.unminimize();
     let _ = main.set_focus();
+    crate::commands::window_visibility::refresh(app);
 }
 
 /// Show and focus an already-created control popup window.

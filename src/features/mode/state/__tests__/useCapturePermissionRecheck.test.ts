@@ -1,7 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { __resetWindowVisibilityForTests } from "@/features/shell/windowVisibility";
 import { SCREEN_CAPTURE_PERMISSION_STATUS } from "@/shared/contracts/capture";
+import type { MainWindowVisibility } from "@/shared/contracts/shell";
 
 import { CAPTURE_PERMISSION_RECHECK_MS, useCapturePermissionRecheck } from "../useCapturePermissionRecheck";
 import type * as captureApiModule from "../../captureApi";
@@ -9,6 +11,19 @@ import type * as captureApiModule from "../../captureApi";
 const getScreenCapturePermissionMock = vi.fn<typeof captureApiModule.getScreenCapturePermission>();
 vi.mock("../../captureApi", () => ({
   getScreenCapturePermission: () => getScreenCapturePermissionMock(),
+}));
+
+let pushWindowVisibility: ((visibility: MainWindowVisibility) => void) | null = null;
+vi.mock("@/features/shell/windowVisibilityApi", () => ({
+  getMainWindowVisibility: () => Promise.resolve({ visible: true }),
+}));
+vi.mock("@/features/shell/windowVisibilityEventsApi", () => ({
+  listenMainWindowVisibility: (handler: (visibility: MainWindowVisibility) => void) => {
+    pushWindowVisibility = handler;
+    return Promise.resolve(() => {
+      pushWindowVisibility = null;
+    });
+  },
 }));
 
 function setVisibility(state: DocumentVisibilityState) {
@@ -28,6 +43,7 @@ describe("useCapturePermissionRecheck", () => {
     getScreenCapturePermissionMock.mockReset().mockResolvedValue({ code: SCREEN_CAPTURE_PERMISSION_STATUS.DENIED });
   });
   afterEach(() => {
+    __resetWindowVisibilityForTests();
     vi.useRealTimers();
   });
 
@@ -76,5 +92,26 @@ describe("useCapturePermissionRecheck", () => {
     renderHook(() => useCapturePermissionRecheck(true, vi.fn()));
     await tick(CAPTURE_PERMISSION_RECHECK_MS * 3);
     expect(getScreenCapturePermissionMock).not.toHaveBeenCalled();
+  });
+
+  it("does not poll while Rust says the window is hidden, though the document reads visible", async () => {
+    const onGranted = vi.fn<() => void>();
+    renderHook(() => useCapturePermissionRecheck(true, onGranted));
+    await tick(0);
+    expect(pushWindowVisibility).not.toBeNull();
+
+    await act(async () => {
+      pushWindowVisibility?.({ visible: false });
+    });
+    await tick(CAPTURE_PERMISSION_RECHECK_MS * 3);
+    expect(document.visibilityState).toBe("visible");
+    expect(getScreenCapturePermissionMock).not.toHaveBeenCalled();
+
+    getScreenCapturePermissionMock.mockResolvedValue({ code: SCREEN_CAPTURE_PERMISSION_STATUS.GRANTED });
+    await act(async () => {
+      pushWindowVisibility?.({ visible: true });
+    });
+    expect(getScreenCapturePermissionMock).toHaveBeenCalledOnce();
+    expect(onGranted).toHaveBeenCalledOnce();
   });
 });

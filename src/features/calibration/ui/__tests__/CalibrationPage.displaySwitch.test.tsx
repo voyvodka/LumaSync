@@ -3,7 +3,9 @@
 // switch from the start, but only the settled snapshot ever reached React —
 // by then the flag was already cleared — so neither control ever held still:
 // a monitor picked mid-open was saved as the capture source while the overlay
-// landed on the other screen, and a second press started a second test.
+// landed on the other screen, and a second press started a second test. The
+// start itself (seconds on Hue) held nothing, so a press after the overlay had
+// landed but before the start answered started a second test too.
 
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -64,13 +66,21 @@ let openedOn: string[] = [];
 let startCount = 0;
 /** Settles every overlay open still waiting. */
 let finishOpening: () => void = () => {};
+/** When set, `start_led_test_pattern` waits for `finishStarting`. */
+let holdStart = false;
+let finishStarting: () => void = () => {};
 
 beforeEach(() => {
   openedOn = [];
   startCount = 0;
+  holdStart = false;
   const pending: Array<() => void> = [];
   finishOpening = () => {
     for (const settle of pending.splice(0)) settle();
+  };
+  const pendingStarts: Array<() => void> = [];
+  finishStarting = () => {
+    for (const settle of pendingStarts.splice(0)) settle();
   };
   saveMock.mockReset().mockResolvedValue(undefined);
   vi.mocked(invoke).mockImplementation(
@@ -86,11 +96,15 @@ beforeEach(() => {
       update_display_overlay_preview: { ...OVERLAY_OPENED, code: DISPLAY_OVERLAY_STATUS.PREVIEW_SYNCED },
       start_led_test_pattern: () => {
         startCount += 1;
-        return {
+        const started = {
           active: true,
           previewOnly: true,
           status: { code: LED_TEST_STATUS.PATTERN_PREVIEW_ONLY, message: "", details: null },
         };
+        if (!holdStart) return started;
+        return new Promise<typeof started>((resolve) => {
+          pendingStarts.push(() => resolve(started));
+        });
       },
       stop_led_test_pattern: {
         active: false,
@@ -102,7 +116,7 @@ beforeEach(() => {
 });
 
 function monitorButton(label: string): HTMLElement {
-  return screen.getByRole("button", { name: new RegExp(label) });
+  return screen.getByRole("radio", { name: new RegExp(label) });
 }
 
 function runButton(): HTMLElement {
@@ -165,5 +179,58 @@ describe("CalibrationPage — while the overlay switches display", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(startCount).toBe(1);
+  });
+});
+
+describe("CalibrationPage — while the test pattern starts", () => {
+  it("starts one test pattern, not two, when the button is pressed again after the overlay landed", async () => {
+    holdStart = true;
+    const user = await startTestWithOverlayOpening();
+    await act(async () => finishOpening());
+    await waitFor(() => expect(startCount).toBe(1));
+
+    await user.click(runButton());
+    // Had the press begun a second run, its overlay open would be waiting here.
+    await act(async () => finishOpening());
+    await act(async () => finishStarting());
+    await act(async () => finishOpening());
+    await act(async () => finishStarting());
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "calibration:page.stopTestPattern" })).toBeInTheDocument());
+    expect(startCount).toBe(1);
+    expect(openedOn).toEqual(["display-1"]);
+  });
+
+  it("marks the test button busy until the start answers", async () => {
+    holdStart = true;
+    await startTestWithOverlayOpening();
+    await act(async () => finishOpening());
+    await waitFor(() => expect(startCount).toBe(1));
+
+    expect(runButton()).toHaveAttribute("aria-disabled", "true");
+    expect(runButton()).not.toBeDisabled();
+
+    await act(async () => finishStarting());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "calibration:page.stopTestPattern" })).not.toHaveAttribute("aria-disabled"),
+    );
+  });
+});
+
+describe("CalibrationPage — the monitor picker", () => {
+  it("is one radio group whose checked option is the selected monitor", async () => {
+    const user = userEvent.setup();
+    render(<CalibrationPage onNavigateBack={() => {}} onSaved={() => {}} />);
+    await screen.findByText("Display 2");
+
+    expect(screen.getByRole("radiogroup", { name: "calibration:page.dockCaptureSource" })).toBeInTheDocument();
+    await waitFor(() => expect(monitorButton("Display 1")).toHaveAttribute("aria-checked", "true"));
+    expect(monitorButton("Display 2")).toHaveAttribute("aria-checked", "false");
+
+    await user.click(monitorButton("Display 2"));
+
+    expect(monitorButton("Display 2")).toHaveAttribute("aria-checked", "true");
+    expect(monitorButton("Display 1")).toHaveAttribute("aria-checked", "false");
+    expect(saveMock).toHaveBeenCalledWith({ selectedDisplayId: "display-2" });
   });
 });

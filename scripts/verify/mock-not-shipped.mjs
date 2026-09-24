@@ -95,6 +95,31 @@ const marker = sentinel();
   }
 }
 
+// (a2) The Hue fault injector is reachable from the dev surface only. Its debug
+// arm drops a live DTLS stream on purpose; a production call site would hand
+// that to every user of a debug build. The two contracts declare it (hue.ts
+// names it, ipc.ts types it) and tests may drive it; nothing else under src/.
+{
+  const DECLARED_IN = new Set(["src/shared/contracts/hue.ts", "src/shared/contracts/ipc.ts"]);
+  const isTest = (rel) =>
+    rel.includes("/__tests__/") || /\.test\.tsx?$/.test(rel) || rel.startsWith("src/test/");
+  const stripComments = (text) =>
+    text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/[^\n]*/g, "$1");
+  const referencing = walk(join(ROOT, "src"))
+    .filter((f) => [".ts", ".tsx", ".js", ".jsx"].includes(extname(f)))
+    .map((f) => ({ file: f, rel: f.replace(ROOT, "") }))
+    .filter(({ rel }) => !DECLARED_IN.has(rel) && !isTest(rel))
+    .filter(({ file }) => /\bsimulate_hue_fault\b|\bHUE_DEBUG_COMMANDS\b/.test(stripComments(readFileSync(file, "utf-8"))))
+    .map(({ rel }) => rel);
+  if (referencing.length === 0) {
+    pass("no non-test src/ file references simulate_hue_fault outside its contract declarations");
+  } else {
+    fail(
+      `simulate_hue_fault is dev-only (mock/ui/DevPanel.tsx), but these src/ files reference it: ${referencing.join(", ")}`,
+    );
+  }
+}
+
 // (b) Run into the build guard.
 {
   const r = spawnSync("bunx", ["vite", "build"], {

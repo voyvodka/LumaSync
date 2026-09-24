@@ -133,16 +133,6 @@ describe("useHueOnboarding credential persistence", () => {
     expect(saved.credentialStorageBackend).toBe(HUE_CREDENTIAL_BACKENDS.PLAINTEXT_LEGACY);
   });
 
-  it("treats an unrecognised backend as legacy and keeps both plaintext secrets", async () => {
-    // Rust's CredentialBackend::as_str can emit "noop", which is outside the
-    // TS union — it must never be read as permission to delete.
-    const saved = await pairWith("noop" as HueCredentialBackend);
-
-    expect(saved.hueClientKey).toBe("psk-deadbeef");
-    expect(saved.hueAppKey).toBe("app-key-abc");
-    expect(saved.credentialStorageBackend).toBe(HUE_CREDENTIAL_BACKENDS.PLAINTEXT_LEGACY);
-  });
-
   it("keeps both plaintext secrets when a debug build stored them in its dev file", async () => {
     // A dev-only file no release build can read is not permission to delete
     // the copy that release build would need.

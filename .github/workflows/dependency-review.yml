@@ -24,16 +24,19 @@ jobs:
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
-          # Deny strong copyleft licenses — switched from allow-list because
-          # legacy Rust crates still declare "MIT/Apache-2.0" (deprecated SPDX
-          # slash syntax) which GitHub's parser flags as LicenseRef-bad-*,
-          # blocking otherwise-compatible transitive deps. Deny-list approach
-          # stays faithful to the DNA rule (MIT/Apache/BSD/ISC only — GPL/
-          # EUPL/AGPL rejected) without tripping on parser quirks.
-          deny-licenses: GPL-1.0, GPL-2.0, GPL-3.0, LGPL-2.0, LGPL-2.1, LGPL-3.0, AGPL-1.0, AGPL-3.0, EUPL-1.1, EUPL-1.2, SSPL-1.0
+          # Permissive only: the union of `src-tauri/deny.toml` `allow` (Rust)
+          # and license-scan.yml's npm `--onlyAllow`, so this gate refuses
+          # nothing the full-tree scan accepts. GPL, LGPL, AGPL, EUPL and SSPL
+          # are rejected by being absent. `deny-licenses` is deprecated upstream
+          # (#938), hence the allow-list. Its cost: a changed dependency whose
+          # licence GitHub cannot map to one of these (a legacy "MIT/Apache-2.0"
+          # slash string becomes a LicenseRef) fails here and is named in the
+          # log; add its purl below with a reason rather than widening the list.
+          allow-licenses: MIT, MIT-0, Apache-2.0, Apache-2.0 WITH LLVM-exception, BSD-2-Clause, BSD-3-Clause, 0BSD, ISC, CC0-1.0, CDLA-Permissive-2.0, MPL-2.0, Unicode-3.0, Unlicense, Zlib, BlueOak-1.0.0, Python-2.0, OFL-1.1
           # unescaper (via serialport) and jszip (via webdriverio) are dual
-          # "MIT OR GPL-3.0-*" — we take the MIT arm; the action matches inside
-          # OR and cannot see that. Swatinem/rust-cache (LGPL-3.0) is a CI
-          # action: it runs on the runner and is never linked or shipped.
+          # "MIT OR GPL-3.0-*" and we take the MIT arm; an allow-list already
+          # resolves the OR that way, so these two stay only as a record of the
+          # decision. Swatinem/rust-cache (LGPL-3.0) is a CI action: it runs on
+          # the runner and is never linked or shipped.
           allow-dependencies-licenses: pkg:cargo/unescaper, pkg:npm/jszip, pkg:githubactions/Swatinem/rust-cache
           comment-summary-in-pr: on-failure

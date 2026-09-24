@@ -322,8 +322,10 @@ What it reads, and when:
   no live stream the task parks on a `Notify` and makes no call at all, however long the app sits in
   the tray; a live stream in the tray gets the 5 s local read only, which is what flushes a colour
   the tray queued while the stream was starting. The window says what it needs with
-  `watch_hue_health({ visible, areaReadiness })` on every `visibilitychange` — the old convention,
-  moved from each loop into the one store — and the Devices view adds `areaReadiness` while it is
+  `watch_hue_health({ visible, areaReadiness })` whenever its visibility changes — the old convention,
+  moved from each loop into the one store. `visible` is `isWindowVisible` (the document and Rust's
+  read of the native window, `ui-and-shell.md`), since WebView2 can report a window hidden in the
+  tray as visible — and the Devices view adds `areaReadiness` while it is
   mounted. What wakes it: a window's watch, a start, stop or restart finishing (`WakeOnDrop` on
   those three commands and a wake in `set_active_stream`), a window saving one of the pairing keys
   (`lastHueBridge`, `lastHueAreaId`, `hueAppKey`, `hueClientKey`, `credentialStorageBackend`), and
