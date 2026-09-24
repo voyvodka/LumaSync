@@ -101,7 +101,7 @@ _Note: This can be tested by editing the store file directly and setting windowX
 1. On macOS, open settings window
 2. Enter native fullscreen mode
 3. Click the window close button (X)
-4. Reopen the window from tray using **Open Settings**
+4. Reopen the window from tray using **Open LumaSync**
 5. Repeat steps 2-4 at least 3 cycles
 
 - [ ] Window exits fullscreen and hides to tray cleanly
@@ -125,8 +125,8 @@ _Note: This can be tested by editing the store file directly and setting windowX
 
 ## 6. Tray Menu Actions
 
-### 6.1 Open Settings from tray menu
-- [ ] Right-click tray icon → "Open Settings" opens / focuses the window
+### 6.1 Open LumaSync from tray menu
+- [ ] Right-click tray icon → "Open LumaSync" opens / focuses the window
 - [ ] If window is already open, it comes to focus (not duplicated)
 
 ### 6.2 Startup Toggle from tray menu

@@ -24,12 +24,12 @@
  * Settings → General "Show stats for nerds" on. Off, the pill is not mounted,
  * so its poll does not exist — hiding it would have kept the IPC running.
  *
- * Offline `StatusItem`s may opt-in to a "Reconnect" affordance
- * via `onReconnect`. When set, the pill renders a small icon button after
- * the value text that deep-links into the DEVICES section (or runs a
- * caller-supplied retry). The button is keyboard-focusable, exposes an
- * `aria-label`, and sits inside the same chip so the offline state never
- * leaves the user on a dead-end pill.
+ * A `StatusItem` that needs attention may carry a link via `onReconnect`: a
+ * small icon button after the value text that deep-links into the DEVICES
+ * section. ↻ for an output that was set up and is down, + for one never set
+ * up. The builder decides when a chip has one; the button is
+ * keyboard-focusable, names where it goes, and sits inside the same chip so
+ * the state never leaves the user on a dead-end pill.
  */
 
 import { useMemo } from "react";
@@ -61,18 +61,18 @@ export interface StatusItem {
   /** Drives the dot + value color. */
   kind: StatusKind;
   /**
-   * When present, an inline "Reconnect" icon button is
-   * rendered next to the state text. Typically wired to a section
-   * deep-link (DEVICES) or a backend retry. Only meaningful for chips
-   * whose `kind` is `off` / `idle`; ignored otherwise so a healthy chip
-   * never sprouts a stray retry icon.
+   * When present, an inline icon button is rendered next to the state text,
+   * wired to a section deep-link (DEVICES). Ignored on an `ok` chip, so a
+   * healthy chip never sprouts a stray link.
    */
   onReconnect?: () => void;
   /**
-   * Localized aria-label for the reconnect button. Required when
-   * `onReconnect` is set so the icon-only control is always announced.
+   * Localized aria-label for the link button — where it goes, not "reconnect",
+   * since it only opens Devices. Required when `onReconnect` is set.
    */
   reconnectAriaLabel?: string;
+  /** ↻ for an output that is down, + for one never set up. Defaults to ↻. */
+  linkKind?: "reconnect" | "setUp";
   /** Shown only with "Show stats for nerds" on. */
   nerdStat?: boolean;
 }
@@ -151,12 +151,9 @@ export function StatusBar({ items, uiMode, lightingActive = true }: StatusBarPro
 }
 
 function StatusPill({ item }: { item: StatusItem }) {
-  // Reconnect icon only shows when the caller actually supplied a handler
-  // AND the chip is in an offline-ish state. Healthy chips never grow a
-  // retry button — that would imply something is wrong when nothing is.
-  const showReconnect =
-    typeof item.onReconnect === "function" &&
-    (item.kind === "off" || item.kind === "idle" || item.kind === "error");
+  // Healthy chips never grow a link — that would imply something is wrong
+  // when nothing is.
+  const showReconnect = typeof item.onReconnect === "function" && item.kind !== "ok";
 
   return (
     <div className="lm-statusbar-pair" data-testid={`status-chip-${item.label}`}>
@@ -170,8 +167,9 @@ function StatusPill({ item }: { item: StatusItem }) {
             onClick={item.onReconnect}
             aria-label={item.reconnectAriaLabel ?? ""}
             title={item.reconnectAriaLabel}
+            data-link-kind={item.linkKind ?? "reconnect"}
           >
-            <ReconnectIcon />
+            {item.linkKind === "setUp" ? <SetUpIcon /> : <ReconnectIcon />}
           </button>
         )}
       </span>
@@ -200,6 +198,24 @@ function ReconnectIcon() {
     >
       <path d="M9.5 5.2A4 4 0 1 0 10 7" />
       <path d="M9.7 2.4v2.8h-2.8" />
+    </svg>
+  );
+}
+
+/** A plus, for an output nobody has set up yet: an offer, not an outage. */
+function SetUpIcon() {
+  return (
+    <svg
+      viewBox="0 0 12 12"
+      width="10"
+      height="10"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M6 2.5v7M2.5 6h7" />
     </svg>
   );
 }

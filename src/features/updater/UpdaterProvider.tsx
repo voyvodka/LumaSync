@@ -11,6 +11,8 @@ export interface UpdaterSnapshot {
   state: UpdaterState;
   isModalOpen: boolean;
   checkFailedNotice: UpdateCheckFailure | null;
+  /** When a check the user asked for last found nothing newer; `null` otherwise. */
+  upToDateAt: number | null;
 }
 
 type AutoUpdater = ReturnType<typeof useAutoUpdater>;
@@ -38,6 +40,7 @@ export function UpdaterProvider({ children }: { children: ReactNode }) {
     state: updater.state,
     isModalOpen: updater.isModalOpen,
     checkFailedNotice: updater.checkFailedNotice,
+    upToDateAt: updater.upToDateAt,
   });
   return (
     <UpdaterStoreProvider

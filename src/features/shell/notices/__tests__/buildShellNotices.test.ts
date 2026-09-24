@@ -173,10 +173,26 @@ describe("buildShellNotices", () => {
       const handlers = makeHandlers();
       const notice = byId({ hueLeftOut: reason }, SHELL_NOTICE_IDS.HUE_LEFT_OUT, handlers);
 
-      expect(notice.message).toBe(key);
+      expect(notice.message).toBe(`${key}[output=common:hotplug.targetLabel.usb]`);
       expect(notice.data).toEqual({ "data-reason": reason });
       notice.action?.onClick();
       expect(handlers.openDevices).toHaveBeenCalledWith("hue");
+    });
+
+    // A WLED user was told Hue had left them "on USB only".
+    it("names the local output that is actually running when Hue is left out", () => {
+      const notice = byId(
+        { hueLeftOut: HUE_LEFT_OUT_REASON.UNREACHABLE, localTransport: "wled" },
+        SHELL_NOTICE_IDS.HUE_LEFT_OUT,
+      );
+      expect(notice.message).toBe("shell:notices.messages.hueLeftOut.unreachable[output=common:hotplug.wledLabel]");
+    });
+
+    it("names a WLED panel that did not stop as WLED, not USB", () => {
+      const notice = byId({ stopFailedTargets: ["usb", "hue"], localTransport: "wled" }, SHELL_NOTICE_IDS.STOP_FAILED);
+      expect(notice.message).toBe(
+        "shell:notices.messages.stopFailedUsb[targets=common:hotplug.wledLabel, common:hotplug.targetLabel.hue]",
+      );
     });
 
     it("keeps the busy wait up as a condition, with nothing to click", () => {
@@ -445,6 +461,23 @@ describe("buildShellNotices", () => {
       expect(
         build({ ...next, activeSection: SECTION_IDS.LIGHTS, calibrationRequired: true }).map((n) => n.id),
       ).toEqual([SHELL_NOTICE_IDS.CALIBRATION_REQUIRED]);
+    });
+  });
+
+  describe("settings that could not be saved", () => {
+    it("says so once, as a dismissible warning condition", () => {
+      const notice = byId({ settingsWriteFailing: true }, SHELL_NOTICE_IDS.SETTINGS_NOT_SAVED);
+
+      expect(notice.kind).toBe("condition");
+      expect(notice.severity).toBe(NOTICE_SEVERITY.WARNING);
+      expect(notice.tier).toBe(NOTICE_TIER.WARNING);
+      expect(notice.dismissible).toBe(true);
+      expect(notice.message).toBe("shell:notices.messages.settingsNotSaved");
+      expect(build({ settingsWriteFailing: true }).filter((n) => n.id === SHELL_NOTICE_IDS.SETTINGS_NOT_SAVED)).toHaveLength(1);
+    });
+
+    it("says nothing once a write lands again", () => {
+      expect(build({ settingsWriteFailing: false })).toEqual([]);
     });
   });
 

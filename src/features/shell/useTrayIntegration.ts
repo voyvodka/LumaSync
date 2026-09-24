@@ -1,6 +1,9 @@
 import { useEffect, useRef } from "react";
+import type { TFunction } from "i18next";
 
 import { i18next } from "@/features/i18n/i18n";
+import { modeKind } from "@/features/mode/model/modeKinds";
+import { LIGHTING_MODE_KIND, type LightingModeKind } from "@/shared/contracts/mode";
 import {
   openLedControlPopup,
   openLedTwinOverlay,
@@ -16,20 +19,54 @@ import { updateTrayLabels } from "@/features/tray/trayApi";
 
 import { loadShellState, saveShellState } from "./windowLifecycle";
 
+/** An output as the tray names it: the `usb` target is WLED when a panel drives it. */
+export type TrayOutput = "usb" | "wled" | "hue";
+
+/** What the tray's status line says: the running mode and what it reaches. */
+export interface TrayStatus {
+  mode: LightingModeKind;
+  outputs: readonly TrayOutput[];
+}
+
+const TRAY_OUTPUT_LABEL = {
+  usb: "common:hotplug.targetLabel.usb",
+  wled: "common:hotplug.wledLabel",
+  hue: "common:hotplug.targetLabel.hue",
+} as const satisfies Record<TrayOutput, string>;
+
+/** The tray's status line, e.g. "● Ambilight · USB + Hue". Pure, for tests. */
+export function trayStatusLabel(status: TrayStatus, t: TFunction): string {
+  if (status.mode === LIGHTING_MODE_KIND.OFF) return t("tray:status.off");
+  const mode = t(modeKind(status.mode).labelKey);
+  if (status.outputs.length === 0) return t("tray:status.runningNoOutputs", { mode });
+  const outputs = status.outputs.map((output) => t(TRAY_OUTPUT_LABEL[output])).join(" + ");
+  return t("tray:status.running", { mode, outputs });
+}
+
 export interface TrayIntegrationInput {
   /** The popup or overlay the tray asked for did not appear. */
   onPreviewOpenFailed?: (failure: PreviewOpenFailure) => void;
+  /** What the tray's status line reports; pushed whenever it changes. */
+  status?: TrayStatus;
 }
 
+// Module state because the boot path pushes the labels too, before any mode
+// is known; that push must not reset a status a render already set.
+let trayStatus: TrayStatus = { mode: LIGHTING_MODE_KIND.OFF, outputs: [] };
+
 function pushTrayLabels() {
-  void updateTrayLabels({
-    openSettings: i18next.t("tray:openSettings"),
-    lightsOff: i18next.t("tray:lightsOff"),
-    resumeLastMode: i18next.t("tray:resumeLastMode"),
-    solidColor: i18next.t("tray:solidColor"),
-    showLedPreview: i18next.t("preview:tray.show"),
-    closeOverlays: i18next.t("tray:closeOverlays"),
-    quit: i18next.t("tray:quit"),
+  const t = i18next.t.bind(i18next) as TFunction;
+  updateTrayLabels({
+    openSettings: t("tray:openSettings"),
+    status: trayStatusLabel(trayStatus, t),
+    lightsOff: t("tray:lightsOff"),
+    resumeLastMode: t("tray:resumeLastMode"),
+    solidColor: t("tray:solidColor"),
+    showLedPreview: t("preview:tray.show"),
+    closeOverlays: t("tray:closeOverlays"),
+    quit: t("tray:quit"),
+  }).catch((err: unknown) => {
+    console.error("[LumaSync] pushing the tray labels failed:", err);
   });
 }
 
@@ -38,9 +75,20 @@ function pushTrayLabels() {
  * (off, resume, solid) run the lighting transaction in Rust and never reach a
  * window, so they work with the window unloaded.
  */
-export function useTrayIntegration({ onPreviewOpenFailed }: TrayIntegrationInput): void {
+export function useTrayIntegration({ onPreviewOpenFailed, status }: TrayIntegrationInput): void {
   const previewOpenFailedRef = useRef(onPreviewOpenFailed);
   previewOpenFailedRef.current = onPreviewOpenFailed;
+
+  const statusMode = status?.mode ?? null;
+  const statusOutputs = status?.outputs.join(",") ?? "";
+  useEffect(() => {
+    if (statusMode === null) return;
+    trayStatus = {
+      mode: statusMode,
+      outputs: statusOutputs === "" ? [] : (statusOutputs.split(",") as TrayOutput[]),
+    };
+    pushTrayLabels();
+  }, [statusMode, statusOutputs]);
 
   // Register i18n languageChanged hook to re-push tray labels
   useEffect(() => {

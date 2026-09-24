@@ -240,6 +240,26 @@ describe("TelemetrySection", () => {
     expect(value).toHaveClass("is-warn");
   });
 
+  // The status bar showed a Hue-only user's FPS while this panel stayed empty.
+  it("polls for a Hue-only session, and reads the local tiles as absent, never 0", async () => {
+    render(<TelemetrySection localOutputConnected={false} hueActive />);
+
+    await waitFor(() => expect(getFullTelemetrySnapshotMock).toHaveBeenCalled());
+    expect(await screen.findByText("60.00")).toBeInTheDocument();
+    expect(screen.queryByText("58.00")).not.toBeInTheDocument();
+    expect(screen.getAllByLabelText("telemetry:local.absentTitle")).toHaveLength(2);
+  });
+
+  it("polls nothing with no output at all, and says there is no activity", async () => {
+    render(<TelemetrySection localOutputConnected={false} />);
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(getFullTelemetrySnapshotMock).not.toHaveBeenCalled();
+    expect(screen.getByText("No runtime activity yet.")).toBeInTheDocument();
+  });
+
   it("renders error fallback when telemetry request fails", async () => {
     getFullTelemetrySnapshotMock.mockRejectedValueOnce(new Error("boom"));
 
@@ -253,8 +273,7 @@ describe("TelemetrySection", () => {
 
 vi.mock("@/features/tray/trayController", () => ({
   getStartupEnabled: vi.fn().mockResolvedValue(false),
-  setStartupTrayChecked: vi.fn().mockResolvedValue(undefined),
-  toggleStartup: vi.fn().mockResolvedValue(true),
+  setStartup: vi.fn<(enabled: boolean) => Promise<boolean>>().mockResolvedValue(true),
 }));
 
 vi.mock("@/features/i18n/i18n", () => ({

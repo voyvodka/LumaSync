@@ -129,6 +129,7 @@ const TRAY_ICON_ID: &str = "main-tray";
 
 struct TrayState<R: Runtime> {
     open_settings: MenuItem<R>,
+    status: MenuItem<R>,
     lights_off: MenuItem<R>,
     resume_last_mode: MenuItem<R>,
     solid_color: MenuItem<R>,
@@ -141,6 +142,9 @@ struct TrayState<R: Runtime> {
 #[serde(rename_all = "camelCase")]
 struct TrayLabels {
     open_settings: String,
+    /// The disabled line under "Open LumaSync": the running mode and outputs,
+    /// localized by the frontend, which is where the mode is known.
+    status: String,
     lights_off: String,
     resume_last_mode: String,
     solid_color: String,
@@ -236,9 +240,20 @@ fn update_tray_labels(
     tray_state: State<'_, TrayState<tauri::Wry>>,
     labels: TrayLabels,
 ) -> Result<(), String> {
+    apply_tray_labels(&tray_state, &labels)
+}
+
+fn apply_tray_labels<R: Runtime>(
+    tray_state: &TrayState<R>,
+    labels: &TrayLabels,
+) -> Result<(), String> {
     tray_state
         .open_settings
         .set_text(&labels.open_settings)
+        .map_err(|e| e.to_string())?;
+    tray_state
+        .status
+        .set_text(&labels.status)
         .map_err(|e| e.to_string())?;
     tray_state
         .lights_off
@@ -271,9 +286,10 @@ fn update_tray_labels(
 // Build tray menu
 // ---------------------------------------------------------------------------
 fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, TrayState<R>)> {
-    let open = MenuItem::with_id(app, "open-settings", "Open Settings", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open-settings", "Open LumaSync", true, None::<&str>)?;
     let separator1 = PredefinedMenuItem::separator(app)?;
-    let status = MenuItem::with_id(app, "status-indicator", "● Idle", false, None::<&str>)?;
+    // Neutral until the frontend pushes the real, localized line.
+    let status = MenuItem::with_id(app, "status-indicator", "LumaSync", false, None::<&str>)?;
     let separator2 = PredefinedMenuItem::separator(app)?;
     let lights_off = MenuItem::with_id(app, "tray-lights-off", "Lights Off", true, None::<&str>)?;
     let resume_last = MenuItem::with_id(
@@ -321,6 +337,7 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
 
     let tray_state = TrayState {
         open_settings: open,
+        status,
         lights_off,
         resume_last_mode: resume_last,
         solid_color,

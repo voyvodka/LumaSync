@@ -39,6 +39,12 @@ export interface StatusItemsInput {
   ambilightActive: boolean;
   /** The bound local output, or null. Null is "nothing bound", not "no USB". */
   localSink: LocalSink | null;
+  /**
+   * A strip or WLED panel was ever set up — bound now, remembered, or bound
+   * earlier this session. Without one an unbound local output is not an
+   * outage: a Hue-only user read "USB OFF ↻" for good. Defaults to true.
+   */
+  localEverConfigured?: boolean;
   hueStreaming: boolean;
   /** The app owns a Hue session but the backend is retrying the bridge. Wins over `hueStreaming`. */
   hueReconnecting: boolean;
@@ -58,6 +64,7 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
   const {
     ambilightActive,
     localSink,
+    localEverConfigured = true,
     hueStreaming,
     hueReconnecting,
     hueFailed,
@@ -79,14 +86,22 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
     },
     {
       // The chip names the transport that is actually bound, and "USB" when
-      // nothing is. Only then does it offer a reconnect (a WLED chip is a
-      // bound, connected sink), so the deep link opens the USB category: the
-      // label on screen, and the path a first-run user takes.
+      // nothing is. Only then does it offer a link (a WLED chip is a bound,
+      // connected sink), so the deep link opens the USB category: the label
+      // on screen, and the path a first-run user takes. The link only opens
+      // Devices, and says so — it reconnects nothing itself.
       label: localSink?.transport === "wled" ? "WLED" : "USB",
-      state: localConnected ? t("shell:statusBar.state.ok") : t("shell:statusBar.state.off"),
-      kind: localConnected ? "ok" : "off",
+      state: localConnected
+        ? t("shell:statusBar.state.ok")
+        : localEverConfigured
+          ? t("shell:statusBar.state.off")
+          : "—",
+      kind: localConnected ? "ok" : localEverConfigured ? "off" : "idle",
       onReconnect: localConnected ? undefined : () => onOpenDevices("usb"),
-      reconnectAriaLabel: t("shell:statusBar.reconnect.usbAriaLabel"),
+      reconnectAriaLabel: localEverConfigured
+        ? t("shell:statusBar.reconnect.usbAriaLabel")
+        : t("shell:statusBar.setUp.localAriaLabel"),
+      linkKind: localEverConfigured ? "reconnect" : "setUp",
     },
     {
       label: "HUE",
@@ -106,25 +121,27 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
                   ? t("shell:statusBar.state.ok")
                   : hueConfigured
                     ? t("shell:statusBar.state.idle")
-                    : t("shell:statusBar.state.off"),
+                    : "—",
       // Amber, not green, while retrying or waiting; no reconnect button, because
-      // the app is already doing exactly that.
-      kind: hueReconnecting || hueStreaming || hueWaiting
+      // the app is already doing exactly that. Left out is amber too: the lights
+      // run on the other outputs, and the notice beside it is a warning.
+      kind: hueReconnecting || hueStreaming || hueWaiting || hueLeftOut
         ? "active"
-        : hueFailed || hueLeftOut
+        : hueFailed
           ? "error"
           : hueReachable
             ? "ok"
-            : hueConfigured
-              ? "idle"
-              : "off",
+            : "idle",
       // A failed stream or a left-out Hue links to Devices even with the bridge
       // reachable: the bridge card is where either is dealt with.
       onReconnect:
         hueReconnecting || hueStreaming || hueWaiting || (hueReachable && !hueFailed && !hueLeftOut)
           ? undefined
           : () => onOpenDevices("hue"),
-      reconnectAriaLabel: t("shell:statusBar.reconnect.hueAriaLabel"),
+      reconnectAriaLabel: hueConfigured
+        ? t("shell:statusBar.reconnect.hueAriaLabel")
+        : t("shell:statusBar.setUp.hueAriaLabel"),
+      linkKind: hueConfigured ? "reconnect" : "setUp",
     },
   ];
 }

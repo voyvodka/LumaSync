@@ -49,6 +49,8 @@ function LinkMaxTile({ usb }: LinkMaxTileProps) {
 
 interface TelemetrySectionProps {
   localOutputConnected: boolean;
+  /** The app owns a Hue session. A Hue-only setup has numbers too — the status bar showed its FPS while this stayed empty. */
+  hueActive?: boolean;
 }
 
 /**
@@ -56,20 +58,22 @@ interface TelemetrySectionProps {
  * section element and the group header, and mounts this only while the
  * setting is on, so its poll does not exist otherwise.
  */
-export function TelemetrySection({ localOutputConnected }: TelemetrySectionProps) {
+export function TelemetrySection({ localOutputConnected, hueActive = false }: TelemetrySectionProps) {
   const { t } = useTranslation();
-  const { snapshot, error, isLoading } = useFullTelemetryPoll(localOutputConnected, POLL_INTERVAL_MS);
+  const polling = localOutputConnected || hueActive;
+  const { snapshot, error, isLoading } = useFullTelemetryPoll(polling, POLL_INTERVAL_MS);
   // Only an error once a tick failed AND no snapshot ever landed: a transient
   // failure must not yank live values off screen for one poll interval.
   const hasError = error !== null && snapshot === null;
 
   const showEmpty =
-    !isLoading
-    && !hasError
-    && snapshot !== null
-    && snapshot.usb.captureFps === 0
-    && snapshot.usb.sendFps === 0
-    && snapshot.hue === null;
+    !polling
+    || (!isLoading
+      && !hasError
+      && snapshot !== null
+      && snapshot.usb.captureFps === 0
+      && snapshot.usb.sendFps === 0
+      && snapshot.hue === null);
 
   return (
     <>
@@ -90,15 +94,29 @@ export function TelemetrySection({ localOutputConnected }: TelemetrySectionProps
               <span className="k">{t("telemetry:metrics.captureFps")}</span>
               <span className="v">{formatFps(snapshot.usb.captureFps)}</span>
             </article>
+            {/* Send and queue describe the local strip's path; with none bound
+                they carry no measurement, so they read "—", never 0. */}
             <article className="lm-tele-tile">
               <span className="k">{t("telemetry:metrics.sendFps")}</span>
-              <span className="v">{formatFps(snapshot.usb.sendFps)}</span>
+              {localOutputConnected ? (
+                <span className="v">{formatFps(snapshot.usb.sendFps)}</span>
+              ) : (
+                <span className="v" title={t("telemetry:local.absentTitle")} aria-label={t("telemetry:local.absentTitle")}>
+                  {t("telemetry:link.absent")}
+                </span>
+              )}
             </article>
             <article className="lm-tele-tile">
               <span className="k">{t("telemetry:metrics.queueHealth")}</span>
-              <span className={`v ${queueHealthTint(snapshot.usb.queueHealth)}`}>
-                {t(`telemetry:queueHealth.${snapshot.usb.queueHealth}`)}
-              </span>
+              {localOutputConnected ? (
+                <span className={`v ${queueHealthTint(snapshot.usb.queueHealth)}`}>
+                  {t(`telemetry:queueHealth.${snapshot.usb.queueHealth}`)}
+                </span>
+              ) : (
+                <span className="v" title={t("telemetry:local.absentTitle")} aria-label={t("telemetry:local.absentTitle")}>
+                  {t("telemetry:link.absent")}
+                </span>
+              )}
             </article>
             <LinkMaxTile usb={snapshot.usb} />
           </div>

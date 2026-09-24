@@ -1,5 +1,6 @@
 import type { TFunction } from "i18next";
 
+import type { LocalSink } from "@/features/device/localSink";
 import type { TranslationKey } from "@/features/i18n/catalogue";
 import type { BootHueRetryState } from "@/shared/contracts/lightingRuntime";
 import type { OutputAvailability } from "@/features/mode/model/outputAvailability";
@@ -57,6 +58,13 @@ export interface ShellNoticeInput {
   ledSetupNext: string | null;
   /** A USB strip or WLED panel is bound — the only outputs calibration applies to. */
   localTargetConfigured: boolean;
+  /**
+   * The bound local output's transport, so a notice names what is running —
+   * "USB" to a WLED user was wrong. `null` reads as USB, the channel's name.
+   */
+  localTransport: LocalSink["transport"] | null;
+  /** This window's last shell-state write failed; the next one that lands clears it. */
+  settingsWriteFailing: boolean;
   /** The startup update check failed; a check the user starts reports through the modal instead. */
   updateCheckFailed: UpdateCheckFailure | null;
   updateChecking: boolean;
@@ -130,6 +138,8 @@ export function buildShellNotices(
 ): ShellNotice[] {
   const notices: ShellNotice[] = [];
   const compact = input.uiMode === "compact";
+  const localOutputLabel =
+    input.localTransport === "wled" ? t("common:hotplug.wledLabel") : t("common:hotplug.targetLabel.usb");
   const devicesAction = (category?: DeviceCategory) => ({
     label: t("shell:notices.actions.devices"),
     onClick: () => handlers.openDevices(category),
@@ -212,8 +222,9 @@ export function buildShellNotices(
   }
   const stopFailedTargets = input.stopFailedTargets ?? [];
   if (stopFailedTargets.length > 0) {
+    // `usb` is the local channel, which a WLED panel drives too.
     const targets = stopFailedTargets
-      .map((target) => t(`common:hotplug.targetLabel.${target}` as const))
+      .map((target) => (target === "usb" ? localOutputLabel : t(`common:hotplug.targetLabel.${target}` as const)))
       .join(", ");
     notices.push({
       id: SHELL_NOTICE_IDS.STOP_FAILED,
@@ -263,7 +274,7 @@ export function buildShellNotices(
       tier: NOTICE_TIER.WARNING,
       severity: NOTICE_SEVERITY.WARNING,
       kind: waiting ? "condition" : "event",
-      message: t(HUE_LEFT_OUT_MESSAGE[input.hueLeftOut]),
+      message: t(HUE_LEFT_OUT_MESSAGE[input.hueLeftOut], { output: localOutputLabel }),
       action: opensDevices ? devicesAction("hue") : undefined,
       dismissible: !waiting,
       source: input.hueLeftOut,
@@ -445,6 +456,22 @@ export function buildShellNotices(
       onDismiss: handlers.completeOnboarding,
       source: step,
       testId: "onboarding-notice",
+    });
+  }
+
+  // ── Settings ─────────────────────────────────────────────────────────
+  // A condition, but dismissible: once read there is nothing the user can do
+  // about it, and every write that lands clears it anyway.
+  if (input.settingsWriteFailing) {
+    notices.push({
+      id: SHELL_NOTICE_IDS.SETTINGS_NOT_SAVED,
+      tier: NOTICE_TIER.WARNING,
+      severity: NOTICE_SEVERITY.WARNING,
+      kind: "condition",
+      message: t("shell:notices.messages.settingsNotSaved"),
+      dismissible: true,
+      source: true,
+      testId: "settings-not-saved-notice",
     });
   }
 

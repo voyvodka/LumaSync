@@ -178,9 +178,19 @@ describe("useShellNoticeQueue", () => {
     rerender({ candidates: [high, low], suppressed: false });
     expect(result.current.announced?.notice.id).toBe("capture-permission");
 
-    // Back on top, but already spoken.
+    // Back on top, but already spoken: not said again, and the notice that
+    // left is not left standing in the region either.
     rerender({ candidates: [low], suppressed: false });
-    expect(result.current.announced?.notice.id).toBe("capture-permission");
+    expect(result.current.announced).toBeNull();
+  });
+
+  it("clears the live region once the announced notice leaves", () => {
+    const checking = notice("output-checking", { kind: "condition", dismissible: false });
+    const { result, rerender } = setup([checking]);
+    expect(result.current.announced?.notice.id).toBe("output-checking");
+
+    rerender({ candidates: [], suppressed: false });
+    expect(result.current.announced).toBeNull();
   });
 
   it("collapses once nothing is left to expand into", () => {

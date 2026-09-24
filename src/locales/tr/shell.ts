@@ -38,8 +38,12 @@ const shell: Catalogue<typeof enShell> = {
       leftOut: "DIŞARIDA",
     },
     reconnect: {
-      usbAriaLabel: "USB cihazını yeniden bağla",
-      hueAriaLabel: "Hue köprüsünü yeniden bağla",
+      usbAriaLabel: "Cihazlar → USB'yi aç",
+      hueAriaLabel: "Cihazlar → Hue'yu aç",
+    },
+    setUp: {
+      localAriaLabel: "USB şerit ya da WLED kur — Cihazlar'ı açar",
+      hueAriaLabel: "Hue köprüsü kur — Cihazlar'ı açar",
     },
   },
   titleBar: {
@@ -86,11 +90,11 @@ const shell: Catalogue<typeof enShell> = {
         popup: "Kontrol penceresi açılmadı",
       },
       hueLeftOut: {
-        unreachable: "Hue köprüsüne ulaşılamıyor — yalnızca USB ile çalışıyor",
-        auth: "Hue yeniden eşleştirilmeli — yalnızca USB ile çalışıyor",
-        config: "Hue kurulmamış — yalnızca USB ile çalışıyor",
+        unreachable: "Hue köprüsüne ulaşılamıyor — yalnızca {{output}} ile çalışıyor",
+        auth: "Hue yeniden eşleştirilmeli — yalnızca {{output}} ile çalışıyor",
+        config: "Hue kurulmamış — yalnızca {{output}} ile çalışıyor",
         busy: "Hue köprüsü önceki bir oturumu tutuyor — bıraktığında Hue kendiliğinden katılır",
-        busyGaveUp: "Hue köprüsü meşgul kaldı — Hue'yu yeniden açana dek yalnızca USB ile çalışıyor",
+        busyGaveUp: "Hue köprüsü meşgul kaldı — Hue'yu yeniden açana dek yalnızca {{output}} ile çalışıyor",
       },
       hueBootRetry: {
         waiting: "Hue köprüsü önceki bir oturumu tutuyor — bıraktığında aydınlatma kendiliğinden sürer",
@@ -102,7 +106,7 @@ const shell: Catalogue<typeof enShell> = {
       usbUnsupportedNoFallback: "USB cihazı tanınmadı ve kurulu başka çıkış yok",
       hueColorStreamOffline: "Hue akışı kapalı — renk, bağlantı gelince gönderilecek",
       hueColorNoLights: "Hue rengi uygulanmadı — eğlence alanında adreslenebilir ışık yok",
-      outputNone: "Ulaşılabilir çıkış yok — USB şerit ya da Hue ekle",
+      outputNone: "Ulaşılabilir çıkış yok — USB şerit, WLED ya da Hue ekle",
       outputNoneStopped: "Hue köprüsü bu ağda yanıt vermedi — arama durduruldu",
       outputChecking: "Çıkışlar kontrol ediliyor…",
       calibrationRequired: "Kalibrasyon gerekli — bu mod için LED düzenini tamamla",
@@ -113,6 +117,7 @@ const shell: Catalogue<typeof enShell> = {
         ledSetup: "Her ekran kenarında kaç LED olduğunu LumaSync'e bildir",
       },
       updateCheckFailed: "Güncellemeler kontrol edilemedi — LumaSync sonraki açılışta yeniden dener",
+      settingsNotSaved: "Ayarlar kaydedilemiyor — değişiklikler çıkana dek geçerli",
     },
     actions: {
       devices: "Cihazlar",

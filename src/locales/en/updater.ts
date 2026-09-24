@@ -2,7 +2,7 @@ export default {
   available: {
     eyebrow: "Update ready",
     title: "A new version is available",
-    body: "LumaSync <b>v{{version}}</b> is ready to download. It will be installed on next relaunch.",
+    body: "LumaSync <b>v{{version}}</b> is ready. Install it now and LumaSync relaunches on the new version.",
   },
   downloading: {
     eyebrow: "Downloading",
@@ -46,5 +46,6 @@ export default {
   betaChannel: "Beta channel",
   betaChannelDescription:
     "Receive prereleases as well as stable versions. Prereleases are built and tested by CI, but the packaged installer itself is never launch-tested — expect rough edges.",
-  checking: "Checking...",
+  checking: "Checking…",
+  upToDate: "You're on the latest version · checked {{time}}",
 };

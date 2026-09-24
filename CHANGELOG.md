@@ -138,6 +138,26 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Settings: "Launch at login" now sets what you asked for instead of flipping whatever the system
+  last reported, and says so when it cannot. "Check for updates" tells you when you are already on
+  the latest version. When settings cannot be saved, one notice says so instead of switches quietly
+  snapping back or a language quietly reverting on the next launch. The language picker no longer
+  claims a restart is needed, and the LED test popup now follows a language change at once. The
+  page is titled Settings, About is the last group, group titles are real headings and each switch
+  is described by its row. Stats for nerds shows numbers for a Hue-only setup too.
+- Notices no longer expire unseen while the window sits in the tray, and a screen reader no longer
+  finds an old notice (such as "Checking outputs…") left in the announcement area. Notices name
+  WLED when a WLED panel is what keeps running, instead of saying USB.
+- Status bar: a Hue left out of the running mode is amber like its notice, not red. The small
+  buttons beside a chip say they open Devices rather than promising a reconnect, and an output you
+  never set up reads as a neutral "—" with a set-up button instead of "OFF" — a Hue-only setup no
+  longer shows USB as switched off forever.
+- The tray's status line shows the running mode and its outputs in your language instead of a
+  fixed "● Idle", and its first item reads "Open LumaSync". ⌥1–⌥3 do nothing while the matching
+  mode button is disabled, and Solid starts from the same white in the compact window as
+  everywhere else. The "+" beside Outputs on the Lights page opens Devices instead of adding an
+  empty Hue zone to the room map. Devices → Displays marks the display being captured and links to
+  the display picker in LED Setup.
 - Devices → USB Strips: serial ports that cannot drive LEDs, such as the Bluetooth port every Mac
   lists, are no longer offered for connecting. They sit under a collapsed "Other serial ports",
   and when nothing else is found the page says so and names the USB chips LumaSync supports. A

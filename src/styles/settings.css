@@ -40,6 +40,7 @@
   gap: 12px;
 }
 .lm-settings-group-h .t {
+  margin: 0;
   font-family: var(--lm-mono);
   font-size: 10px;
   letter-spacing: 0.14em;
@@ -95,6 +96,24 @@
 }
 .lm-settings-row-r {
   flex-shrink: 0;
+}
+/* Inline outcome of a row's own action: a failed write, a finished check. */
+.lm-settings-row-error,
+.lm-settings-row-result {
+  margin: 4px 0 0;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+.lm-settings-row-error {
+  color: var(--lm-red);
+}
+.lm-settings-row-result {
+  color: var(--lm-green);
+}
+.lm-settings-row-result:empty {
+  display: none;
 }
 
 /* Segmented (2-up for language) */
@@ -218,6 +237,32 @@
 .lm-settings-about-tx-s b {
   color: var(--lm-ink-dim);
   font-weight: 500;
+}
+/* The page's only link read as plain caption text. */
+.lm-settings-about-tx-s a {
+  color: var(--lm-amber);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  border-radius: 3px;
+}
+.lm-settings-about-tx-s a:hover {
+  color: var(--lm-amber-2);
+}
+.lm-settings-about-tx-s a:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+@media (forced-colors: active) {
+  .lm-settings-about-tx-s a {
+    color: LinkText;
+  }
+  .lm-settings-about-tx-s a:focus-visible {
+    outline: 2px solid Highlight;
+  }
+  .lm-settings-row-error,
+  .lm-settings-row-result {
+    color: CanvasText;
+  }
 }
 .lm-settings-about-v {
   font-family: var(--lm-mono);
