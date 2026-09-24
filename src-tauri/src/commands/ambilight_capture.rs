@@ -63,11 +63,29 @@ fn subsample_rgb(src: &[u8], width: usize, height: usize, stride: usize) -> Vec<
     pixels_rgb
 }
 
+static NEXT_FRAME_SEQ: AtomicU64 = AtomicU64::new(1);
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CapturedFrame {
     pub width: u32,
     pub height: u32,
     pub pixels_rgb: Vec<[u8; 3]>,
+    /// Unique per captured frame and kept by a clone, so a source handing out
+    /// the same frame twice is recognisable. Never 0.
+    pub seq: u64,
+    pub captured_at: Instant,
+}
+
+impl CapturedFrame {
+    pub fn new(width: u32, height: u32, pixels_rgb: Vec<[u8; 3]>) -> Self {
+        Self {
+            width,
+            height,
+            pixels_rgb,
+            seq: NEXT_FRAME_SEQ.fetch_add(1, Ordering::Relaxed),
+            captured_at: Instant::now(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -92,10 +110,76 @@ impl AmbilightCaptureError {
     }
 }
 
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::{Duration, Instant};
 
 pub trait AmbilightFrameSource: Send {
     fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError>;
+
+    /// `Some` when the OS pushes frames into the source, so the worker can
+    /// sleep until one arrives. `None` is a pull source: every call captures,
+    /// and the worker paces the calls.
+    fn frame_signal(&self) -> Option<Arc<LatestFrame>> {
+        None
+    }
+}
+
+/// The newest frame a capture callback produced, and the wake-up for the
+/// worker waiting on it.
+#[derive(Debug, Default)]
+pub struct LatestFrame {
+    slot: Mutex<Option<Arc<CapturedFrame>>>,
+    ready: Condvar,
+}
+
+// Only the macOS and Windows sources push frames; Linux capture is a pull source.
+#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
+impl LatestFrame {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self::default())
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Option<Arc<CapturedFrame>>> {
+        self.slot.lock().unwrap_or_else(|err| err.into_inner())
+    }
+
+    pub fn publish(&self, frame: CapturedFrame) {
+        let replaced = self.lock().replace(Arc::new(frame));
+        self.ready.notify_all();
+        drop(replaced);
+    }
+
+    pub fn latest(&self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
+        self.slot
+            .lock()
+            .map_err(|_| {
+                AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_FRAME_LOCK_FAILED")
+            })?
+            .clone()
+            .ok_or(AmbilightCaptureError::FrameUnavailable)
+    }
+
+    /// Wait at most `timeout` for a frame whose `seq` is not `seen`. `true`
+    /// when there is one; the caller reads it with `capture_frame`.
+    pub fn wait_newer(&self, seen: u64, timeout: Duration) -> bool {
+        let deadline = Instant::now() + timeout;
+        let mut slot = self.lock();
+        loop {
+            if slot.as_ref().is_some_and(|frame| frame.seq != seen) {
+                return true;
+            }
+            let now = Instant::now();
+            if now >= deadline {
+                return false;
+            }
+            slot = self
+                .ready
+                .wait_timeout(slot, deadline - now)
+                .unwrap_or_else(|err| err.into_inner())
+                .0;
+        }
+    }
 }
 
 /// Stable handle for a capture target enumerated by the platform adapter.
@@ -157,45 +241,29 @@ pub fn select_display_index(
     Some(0)
 }
 
+/// 20 Hz: the Hue streaming floor, and what capture ran at before the rate
+/// followed the output plan.
+pub const DEFAULT_CAPTURE_INTERVAL: Duration = Duration::from_millis(50);
+
 pub fn create_live_frame_source(
     display_id: Option<&str>,
 ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
-    platform::create_live_frame_source(display_id)
+    create_live_frame_source_at(display_id, DEFAULT_CAPTURE_INTERVAL)
 }
 
-pub struct StaticFrameSource {
-    frame: CapturedFrame,
-}
-
-impl StaticFrameSource {
-    pub fn new(frame: CapturedFrame) -> Self {
-        Self { frame }
-    }
-
-    pub fn default_frame() -> CapturedFrame {
-        CapturedFrame {
-            width: 4,
-            height: 1,
-            pixels_rgb: vec![[18, 30, 44], [42, 60, 80], [96, 108, 120], [150, 162, 174]],
-        }
-    }
-}
-
-impl Default for StaticFrameSource {
-    fn default() -> Self {
-        Self::new(Self::default_frame())
-    }
-}
-
-impl AmbilightFrameSource for StaticFrameSource {
-    fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
-        Ok(Arc::new(self.frame.clone()))
-    }
+/// `interval` is the shortest gap the OS is asked to leave between frames
+/// (see `capture_interval_for` in `lighting_mode`). A pull source ignores it:
+/// the worker paces its calls.
+pub fn create_live_frame_source_at(
+    display_id: Option<&str>,
+    interval: Duration,
+) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
+    platform::create_live_frame_source(display_id, interval)
 }
 
 #[cfg(target_os = "windows")]
 mod platform {
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     use std::time::Duration;
 
     use windows_capture::capture::{
@@ -211,10 +279,10 @@ mod platform {
 
     use super::{
         select_display_index, AmbilightCaptureError, AmbilightFrameSource, CapturedFrame,
-        DisplayCandidate,
+        DisplayCandidate, LatestFrame,
     };
 
-    type SharedFrame = Arc<Mutex<Option<Arc<CapturedFrame>>>>;
+    type SharedFrame = Arc<LatestFrame>;
 
     /// Resolve a `Monitor` for the requested capture display.
     ///
@@ -283,15 +351,16 @@ mod platform {
 
     pub(super) fn create_live_frame_source(
         display_id: Option<&str>,
+        interval: Duration,
     ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
-        let latest_frame = Arc::new(Mutex::new(None));
+        let latest_frame = LatestFrame::new();
         let monitor = resolve_monitor(display_id)?;
-        // 20 Hz, matching the macOS stream above and the Hue streaming floor.
+        // The rate the output plan asks for (20 or 30 Hz), same as macOS.
         //
         // `Default` leaves the WGC interval alone, which means `on_frame_arrived`
         // fires at the compositor's rate — 60, 144, 240 Hz — and every one of
         // those calls allocates a staging texture and does a full-resolution
-        // GPU-to-CPU `CopyResource`. The worker's own sleep paces what we
+        // GPU-to-CPU `CopyResource`. The worker paces what we
         // *consume*, not what Windows *produces*, so that cost never appeared in
         // the frame budget while being by far the largest thing in it. On a
         // 144 Hz display this is roughly a sevenfold reduction in readback for
@@ -301,7 +370,7 @@ mod platform {
             CursorCaptureSettings::Default,
             DrawBorderSettings::Default,
             SecondaryWindowSettings::Default,
-            MinimumUpdateIntervalSettings::Custom(Duration::from_millis(50)),
+            MinimumUpdateIntervalSettings::Custom(interval),
             DirtyRegionSettings::Default,
             ColorFormat::Rgba8,
             Arc::clone(&latest_frame),
@@ -370,13 +439,11 @@ mod platform {
 
     impl AmbilightFrameSource for WindowsLiveFrameSource {
         fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
-            let frame_guard = self.latest_frame.lock().map_err(|_| {
-                AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_FRAME_LOCK_FAILED")
-            })?;
+            self.latest_frame.latest()
+        }
 
-            frame_guard
-                .clone()
-                .ok_or(AmbilightCaptureError::FrameUnavailable)
+        fn frame_signal(&self) -> Option<Arc<LatestFrame>> {
+            Some(Arc::clone(&self.latest_frame))
         }
     }
 
@@ -443,15 +510,8 @@ mod platform {
                 stride,
             );
 
-            let mut frame_guard = self
-                .latest_frame
-                .lock()
-                .map_err(|_| "AMBILIGHT_CAPTURE_FRAME_LOCK_FAILED")?;
-            *frame_guard = Some(Arc::new(CapturedFrame {
-                width: out_w,
-                height: out_h,
-                pixels_rgb,
-            }));
+            self.latest_frame
+                .publish(CapturedFrame::new(out_w, out_h, pixels_rgb));
 
             Ok(())
         }
@@ -460,7 +520,8 @@ mod platform {
 
 #[cfg(target_os = "macos")]
 mod platform {
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
+    use std::time::Duration;
 
     use screencapturekit::cv::CVPixelBufferLockFlags;
     use screencapturekit::prelude::*;
@@ -468,10 +529,10 @@ mod platform {
     use super::super::screen_capture_permission::ensure_screen_capture_access;
     use super::{
         select_display_index, AmbilightCaptureError, AmbilightFrameSource, CapturedFrame,
-        DisplayCandidate,
+        DisplayCandidate, LatestFrame,
     };
 
-    type SharedFrame = Arc<Mutex<Option<Arc<CapturedFrame>>>>;
+    type SharedFrame = Arc<LatestFrame>;
 
     /// Resolve the SCDisplay matching the persisted `display_id` hint,
     /// falling back to the primary (main) display on any mismatch.
@@ -565,6 +626,7 @@ mod platform {
 
     pub(super) fn create_live_frame_source(
         display_id: Option<&str>,
+        interval: Duration,
     ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
         let display = select_display(display_id)?;
 
@@ -587,8 +649,8 @@ mod platform {
             (native_w, native_h)
         };
 
-        // 20 Hz = 50ms interval, matching Hue streaming constraint
-        let frame_interval = CMTime::new(1, 20);
+        // The output plan's rate (20 Hz for Hue alone, 30 with a strip).
+        let frame_interval = CMTime::new(interval.as_millis().clamp(1, 1000) as i64, 1000);
 
         let config = SCStreamConfiguration::new()
             .with_width(capture_width)
@@ -597,7 +659,7 @@ mod platform {
             .with_shows_cursor(false)
             .with_minimum_frame_interval(&frame_interval);
 
-        let latest_frame: SharedFrame = Arc::new(Mutex::new(None));
+        let latest_frame: SharedFrame = LatestFrame::new();
         let frame_writer = Arc::clone(&latest_frame);
 
         let mut stream = SCStream::new(&filter, &config);
@@ -651,13 +713,7 @@ mod platform {
                     }
                 }
 
-                if let Ok(mut frame_guard) = frame_writer.lock() {
-                    *frame_guard = Some(Arc::new(CapturedFrame {
-                        width,
-                        height,
-                        pixels_rgb,
-                    }));
-                }
+                frame_writer.publish(CapturedFrame::new(width, height, pixels_rgb));
             },
             SCStreamOutputType::Screen,
         );
@@ -707,14 +763,11 @@ mod platform {
 
     impl AmbilightFrameSource for MacOSLiveFrameSource {
         fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
-            let frame_guard = self.latest_frame.lock().map_err(|_| {
-                AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_FRAME_LOCK_FAILED")
-            })?;
+            self.latest_frame.latest()
+        }
 
-            // Arc::clone is 8 bytes (refcount bump) vs full CapturedFrame clone (~768 KB).
-            frame_guard
-                .clone()
-                .ok_or(AmbilightCaptureError::FrameUnavailable)
+        fn frame_signal(&self) -> Option<Arc<LatestFrame>> {
+            Some(Arc::clone(&self.latest_frame))
         }
     }
 
@@ -790,6 +843,7 @@ mod platform {
 
     pub(super) fn create_live_frame_source(
         display_id: Option<&str>,
+        _interval: std::time::Duration,
     ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
         let monitor = resolve_monitor(display_id)?;
         Ok(Box::new(LinuxFrameSource {
@@ -801,9 +855,9 @@ mod platform {
     /// Pull-mode frame source. xcap does not expose a streaming/callback
     /// API on Linux (X11 / Wayland share the same blocking
     /// `capture_image` surface), so each `capture_frame` call performs a
-    /// fresh xrandr-driven grab. The ambilight worker already paces calls
-    /// at the Hue 20 Hz cadence, so this matches the macOS + Windows
-    /// "latest frame on demand" contract from the worker's point of view.
+    /// fresh xrandr-driven grab. The ambilight worker paces calls at the
+    /// output plan's capture rate, the same rate macOS and Windows are asked
+    /// for.
     ///
     /// X11 is the supported configuration. xcap auto-detects Wayland and
     /// falls through to PipeWire / xdg-desktop-portal underneath; we do not
@@ -865,11 +919,7 @@ mod platform {
                 stride,
             );
 
-            Ok(Arc::new(CapturedFrame {
-                width: out_w,
-                height: out_h,
-                pixels_rgb,
-            }))
+            Ok(Arc::new(CapturedFrame::new(out_w, out_h, pixels_rgb)))
         }
     }
 }
@@ -880,6 +930,7 @@ mod platform {
 
     pub(super) fn create_live_frame_source(
         _display_id: Option<&str>,
+        _interval: std::time::Duration,
     ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
         Err(AmbilightCaptureError::InvalidFrame(
             "AMBILIGHT_CAPTURE_UNSUPPORTED_PLATFORM",
