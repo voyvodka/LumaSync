@@ -16,7 +16,8 @@ use crate::commands::hue::state_store::{
     HueActiveOutputContext, HueChannelPlacementOverride, HueOutputLive,
 };
 use crate::commands::led_calibration::{
-    build_led_sequence, sample_frame_for_sequence, LedSegmentCounts, LedSequenceItem,
+    build_led_sequence, sample_frame_for_sequence, sample_frame_within_insets, LedSegment,
+    LedSegmentCounts, LedSequenceItem,
 };
 use crate::commands::led_output::{
     apply_color_correction_rgb_with_luts, gamma_luts_for, GammaLuts, LedOutputError,
@@ -231,7 +232,9 @@ const PORT: &str = "perf-port";
 // Reference: the worker loop body as it stood before the per-frame step was
 // extracted, with I/O replaced by recording. It is the yardstick both the
 // threaded worker and the extracted step are held to — change it only
-// together with the worker, and say why.
+// together with the worker, and say why. Changed since: the strip samples
+// inside the black-border insets, refreshed before it samples (the strip used
+// to see the whole frame while Hue was cropped).
 // ---------------------------------------------------------------------------
 
 /// Per-channel colours and the brightness they were sent with.
@@ -363,18 +366,19 @@ impl ReferenceLoop {
         raw_frame: &CapturedFrame,
         live_settings: &AmbilightLiveSettings,
     ) -> ReferenceFrame {
-        let mut sampled = sample_frame_for_sequence(
+        self.border_cache.update_if_due(raw_frame);
+        let mut sampled = sample_frame_within_insets(
             raw_frame,
             &self.led_sequence,
             &self.led_counts,
             self.sample_window,
+            self.border_cache.insets(),
         );
         self.border_cache
             .set_enabled(live_settings.read_black_border_detection());
         let brightness = live_settings.read_brightness();
         let color_order = live_settings.read_color_order();
         let saturation = live_settings.read_saturation();
-        self.border_cache.update_if_due(raw_frame);
         let alpha_ceiling = live_settings.read_smoothing_alpha();
         let frame_alpha = if self.scene_enabled {
             self.scene
@@ -605,6 +609,8 @@ fn worker_output_matches_reference_adalight_ws2812b() {
 /// serial sink, in the worker's order.
 struct PipelineRun {
     pipeline: AmbilightFramePipeline,
+    led_sequence: Vec<LedSequenceItem>,
+    led_counts: LedSegmentCounts,
     quality_state: AmbilightWorkerQualityState,
     frame_slot: RuntimeFrameSlot,
     sink: SerialSink,
@@ -635,8 +641,9 @@ impl PipelineRun {
             color_correction(),
             chip_type,
         );
+        let led_sequence = build_led_sequence(led_calibration);
         let pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
-            led_sequence: build_led_sequence(led_calibration),
+            led_sequence: led_sequence.clone(),
             led_counts: led_calibration.counts.clone(),
             sample_window: LIVE_SAMPLE_WINDOW,
             scene_enabled: true,
@@ -648,6 +655,8 @@ impl PipelineRun {
         });
         Self {
             pipeline,
+            led_sequence,
+            led_counts: led_calibration.counts.clone(),
             quality_state: AmbilightWorkerQualityState::new(quality_config),
             frame_slot: RuntimeFrameSlot::new(),
             sink,
@@ -662,8 +671,15 @@ impl PipelineRun {
         }
     }
 
+    /// The worker samples its warm-up frame before the pipeline exists, so
+    /// uncropped and without touching the border cache.
     fn warmup(&mut self, frame: &CapturedFrame, live_settings: &AmbilightLiveSettings) {
-        let sampled = self.pipeline.sample_strip(frame);
+        let sampled = sample_frame_for_sequence(
+            frame,
+            &self.led_sequence,
+            &self.led_counts,
+            LIVE_SAMPLE_WINDOW,
+        );
         self.quality_state
             .queue_processed_frame(&mut self.frame_slot, sampled.as_slice());
         self.send_latest(
@@ -767,6 +783,123 @@ fn extracted_step_matches_reference_300_leds_640x400() {
     let frames = scene_frames(640, 400, LOOP_FRAMES + 1);
     for (profile, chip_type) in WIRE_COMBOS {
         assert_step_matches_reference(&strip_300(), &frames, profile, chip_type);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Black-border crop on the strip
+// ---------------------------------------------------------------------------
+
+const PICTURE_TOP: [u8; 3] = [200, 40, 40];
+const PICTURE_MIDDLE: [u8; 3] = [60, 160, 60];
+const PICTURE_BOTTOM: [u8; 3] = [40, 40, 200];
+
+/// A 2.39:1 picture letterboxed into a 640×360 frame — 46-row bars — whose
+/// top quarter is red and bottom quarter blue. A top LED that samples the
+/// picture reads red; one that samples the bar reads black.
+fn letterboxed_frame() -> CapturedFrame {
+    let (w, h) = (FRAME_W as usize, FRAME_H as usize);
+    let picture_h = (w as f32 / 2.39).round() as usize;
+    let bar = (h - picture_h) / 2;
+    let band = picture_h / 4;
+    let mut pixels_rgb = Vec::with_capacity(w * h);
+    for y in 0..h {
+        let pixel = if y < bar || y >= h - bar {
+            [0, 0, 0]
+        } else if y < bar + band {
+            PICTURE_TOP
+        } else if y >= h - bar - band {
+            PICTURE_BOTTOM
+        } else {
+            PICTURE_MIDDLE
+        };
+        pixels_rgb.extend(std::iter::repeat_n(pixel, w));
+    }
+    CapturedFrame {
+        width: FRAME_W,
+        height: FRAME_H,
+        pixels_rgb,
+    }
+}
+
+/// The strip colours the pipeline queues for the sink on its first frame.
+/// Scene stage off and alpha 1.0, so they are the samples themselves.
+fn first_strip_frame(
+    led_calibration: &LedCalibrationConfig,
+    black_border_detection: bool,
+    frame: &CapturedFrame,
+) -> Vec<[u8; 3]> {
+    let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
+        led_sequence: build_led_sequence(led_calibration),
+        led_counts: led_calibration.counts.clone(),
+        sample_window: LIVE_SAMPLE_WINDOW,
+        scene_enabled: false,
+        strip_topology: strip_topology_for(Some(led_calibration)),
+        hue_channels: None,
+        room_geometry: RoomGeometryLive::new(None),
+        black_border_detection,
+        color_correction: ColorCorrectionConfig::default(),
+    });
+    let mut quality_state = AmbilightWorkerQualityState::new(RuntimeQualityConfig {
+        smoothing_alpha: 1.0,
+        ..RuntimeQualityConfig::default()
+    });
+    let mut frame_slot = RuntimeFrameSlot::new();
+    let sampled = pipeline.sample_strip(frame);
+    pipeline.process(
+        frame,
+        sampled,
+        FrameSettings {
+            black_border_detection,
+            alpha_ceiling: 1.0,
+            saturation: 1.0,
+        },
+        &mut quality_state,
+        &mut frame_slot,
+    );
+    frame_slot.take_latest().expect("queued strip frame")
+}
+
+fn colors_on(
+    led_calibration: &LedCalibrationConfig,
+    strip: &[[u8; 3]],
+    segment: LedSegment,
+) -> Vec<[u8; 3]> {
+    build_led_sequence(led_calibration)
+        .iter()
+        .zip(strip)
+        .filter(|(item, _)| item.segment == segment)
+        .map(|(_, color)| *color)
+        .collect()
+}
+
+#[test]
+fn letterboxed_strip_takes_the_picture_edge_not_the_bars() {
+    let frame = letterboxed_frame();
+    for led_calibration in [calibration(24, 10, 24, 10), strip_164()] {
+        let strip = first_strip_frame(&led_calibration, true, &frame);
+        let top = colors_on(&led_calibration, &strip, LedSegment::Top);
+        let bottom = colors_on(&led_calibration, &strip, LedSegment::Bottom);
+        assert!(
+            top.iter().all(|&color| color == PICTURE_TOP),
+            "top LEDs must take the picture's top edge: {top:?}"
+        );
+        assert!(
+            bottom.iter().all(|&color| color == PICTURE_BOTTOM),
+            "bottom LEDs must take the picture's bottom edge: {bottom:?}"
+        );
+
+        // The same frame without detection: the bars are what the top and
+        // bottom LEDs see, which is what makes the assertion above mean anything.
+        let uncropped = first_strip_frame(&led_calibration, false, &frame);
+        for segment in [LedSegment::Top, LedSegment::Bottom] {
+            assert!(
+                colors_on(&led_calibration, &uncropped, segment)
+                    .iter()
+                    .all(|&color| color == [0, 0, 0]),
+                "{segment:?} LEDs sample the bar with detection off"
+            );
+        }
     }
 }
 
@@ -1145,14 +1278,16 @@ fn report_scenario(
     print_timing("whole step (sample, process, encode)", &full);
 
     let sequence = build_led_sequence(led_calibration);
+    let insets = detect_black_borders(frame_at(0), BLACK_BORDER_THRESHOLD);
     print_timing(
-        "  strip sampling",
+        "  strip sampling (inside the border insets)",
         &time_calls(ITERATIONS, |i| {
-            std::hint::black_box(sample_frame_for_sequence(
+            std::hint::black_box(sample_frame_within_insets(
                 frame_at(i),
                 &sequence,
                 &led_calibration.counts,
                 LIVE_SAMPLE_WINDOW,
+                &insets,
             ));
         }),
     );
@@ -1162,7 +1297,6 @@ fn report_scenario(
             std::hint::black_box(detect_black_borders(frame_at(i), BLACK_BORDER_THRESHOLD));
         }),
     );
-    let insets = detect_black_borders(frame_at(0), BLACK_BORDER_THRESHOLD);
     let mut scene = SceneAnalyzer::new();
     print_timing(
         "  scene: frame histogram + mean",

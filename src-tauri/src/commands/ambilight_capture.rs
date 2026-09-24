@@ -890,14 +890,35 @@ mod platform {
 /// Detected black border insets, expressed as fractions of the frame dimensions.
 ///
 /// Each field is in [0.0, 0.5]. A zero value means no border was found on
-/// that edge. Both the USB and Hue sampling paths shrink their sampling
-/// bounds by these insets.
+/// that edge. The strip, Hue and scene-stage sampling all shrink their bounds
+/// by these insets.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct BlackBorderInsets {
     pub top: f32,
     pub bottom: f32,
     pub left: f32,
     pub right: f32,
+}
+
+impl BlackBorderInsets {
+    /// The picture inside the bars of a `width`×`height` frame, as half-open
+    /// pixel ranges `(rows, cols)`. Never empty, so a frame the detector
+    /// reads as all border still has one row and column to sample.
+    pub fn content_bounds(
+        &self,
+        width: usize,
+        height: usize,
+    ) -> (std::ops::Range<usize>, std::ops::Range<usize>) {
+        let top = (height as f32 * self.top) as usize;
+        let bottom = height
+            .saturating_sub((height as f32 * self.bottom) as usize)
+            .max(top + 1);
+        let left = (width as f32 * self.left) as usize;
+        let right = width
+            .saturating_sub((width as f32 * self.right) as usize)
+            .max(left + 1);
+        (top..bottom, left..right)
+    }
 }
 
 const BORDER_SCAN_STEP: usize = 8;

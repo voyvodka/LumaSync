@@ -37,6 +37,34 @@ two private KVC keys (`drawsBackground`, `fullScreenEnabled`), not linked privat
 **One capture worker drives every configured output at once.** Hue, serial, and WLED are fed from
 the same frame rather than each running its own capture.
 
+**Every sampler crops the same black borders.** `BlackBorderCache` re-detects letterbox and
+pillarbox bars at most every 2.5 s, and the strip, the scene stage and Hue all sample inside those
+insets: `sample_frame_within_insets` maps each LED onto the picture rectangle and keeps its window
+out of the bars, so on a 2.39:1 film the top and bottom LEDs take the picture's edge instead of
+black. `AmbilightFramePipeline::sample_strip` is where the cache is refreshed, because it is the
+first thing the pipeline sees of a frame; the three consumers therefore read one answer per frame.
+From the per-LED sampler in 1.4.0 until this was fixed the strip sampled the whole frame while Hue
+was cropped. Three edges are deliberate:
+
+- The setting is read after capture, so switching detection off reaches the strip one frame after
+  Hue and the scene stage.
+- The worker's warm-up frame is sampled before the pipeline exists and is never cropped; the
+  strip's smoother fades away from it over roughly the first second.
+- A synthetic test frame is mostly black and the detector would crop it. Test patterns stay exact
+  only because `start_led_test_pattern` builds its payload from `AmbilightPayload::default()`,
+  which leaves detection off.
+
+**Strip geometry is one answer, pinned on both sides.** Where each LED sits in strip order
+(`build_led_sequence` / `buildLedSequence`) and where it samples (`led_to_screen_pos` /
+`ledScreenPosition`) are held to one fixture,
+`src/features/preview/__tests__/ledScreenGeometry.golden.json`, read by `cargo test` through
+`include_str!` and by vitest. Rust is the authority — it decides what the LEDs show — and the
+fixture is regenerated from it by the ignored `write_led_screen_geometry_golden` test. The twin
+overlay draws each dot at its LED's sampling position, pulled in from the viewport edge. Two
+consequences are the sampler's, not the twin's: `bottomMissing` does not move bottom LEDs (they
+spread across the whole bottom edge, while the calibration editor draws the physical gap), and a
+one-LED edge samples its local-0 corner.
+
 **The macOS screen-recording permission is probed, never inferred.**
 `src-tauri/src/commands/screen_capture_permission.rs` owns two CoreGraphics calls with very
 different side effects, and the split between them is the whole design:
