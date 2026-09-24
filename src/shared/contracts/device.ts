@@ -387,40 +387,92 @@ export type SerialHealthStepCode =
   | SerialHealthStepWireCode
   | typeof HEALTH_CHECK_NOT_AVAILABLE;
 
+// ---------------------------------------------------------------------------
+// Serial command wire shapes — mirrors of `device_connection.rs`
+// ---------------------------------------------------------------------------
+
+/** USB identity of a serial port, when the OS reports one. */
+export interface UsbPortMetadata {
+  vid: number;
+  pid: number;
+  manufacturer: string | null;
+  product: string | null;
+  serialNumber: string | null;
+}
+
+/** One enumerated serial port, with the VID/PID allowlist verdict already applied. */
+export interface SerialPortDescriptor {
+  name: string;
+  kind: string;
+  isSupported: boolean;
+  supportReason: string;
+  usb: UsbPortMetadata | null;
+}
+
+/** `list_serial_ports`. */
+export interface SerialPortListResponse {
+  status: SerialCommandStatus;
+  ports: SerialPortDescriptor[];
+}
+
 /**
- * Report returned by `run_serial_health_check`. Exactly one report per
- * invocation; the `step` field records the last health-check stage that
- * produced a verdict so the UI can step through the health modal.
- *
- * NOTE: the live runtime surface is `HealthCheckResult` in
- * `src/features/device/deviceConnectionApi.ts` — this declaration is the
- * forward-looking shape kept in sync with the same Rust struct so that
- * future re-platforming onto a single per-step report is non-breaking.
+ * Current serial connection state. `portName` is the port that was opened and
+ * is `null` whenever `connected` is false; a refused or failed attempt's name
+ * appears only in `status.details`, as `port="..."`.
  */
-export interface SerialHealthReport {
+export interface SerialConnectionStatus {
+  portName: string | null;
+  connected: boolean;
+  status: SerialCommandStatus;
+  updatedAtUnixMs: number;
+  /** The PONG answered to the connect-time PING. Absent when the device did
+   *  not answer or answered garbage — unknown firmware, and connect still
+   *  succeeds. */
+  firmware?: SerialFirmwareInfo;
+}
+
+/** One step of `run_serial_health_check`. */
+export interface HealthStepResult {
   step: DeviceHealthStep;
-  code: SerialHealthCode;
+  pass: boolean;
+  code: SerialHealthStepWireCode;
   message: string;
-  /** Firmware self-reported semantic version, e.g. `"1.4.0"`. Populated when the handshake returned a version frame. */
-  firmwareVersion?: string;
+  details: string | null;
+}
+
+/**
+ * `run_serial_health_check`. The three handshake fields are `null` unless the
+ * HANDSHAKE step completed with `SERIAL_HEALTH_OK` — not run yet,
+ * `SERIAL_HEALTH_HANDSHAKE_TIMEOUT`, `SERIAL_HEALTH_PROTOCOL_ERROR`, or legacy
+ * firmware with no profile byte all leave them `null`.
+ */
+export interface HealthCheckResult {
+  pass: boolean;
+  steps: HealthStepResult[];
+  checkedAtUnixMs: number;
+  /** Wall-clock latency of the handshake round trip in milliseconds. */
+  roundTripMs: number | null;
+  /** Firmware self-reported version, e.g. `"1.4"`. */
+  firmwareVersion: string | null;
   /**
    * Firmware profile **advertised by the device** in the PONG profile byte.
-   *
-   * Distinct from `ShellState.firmwareProfile`, which is the user-selected
-   * encoder. The UI compares the two to detect Bug H4 — the user chose
-   * Adalight in Settings but the connected firmware advertised LumaSyncV1
-   * (or vice versa), causing the USB sink to silently no-op while Hue
-   * keeps streaming. (v1.5 H4)
-   *
-   * Absence semantics: undefined whenever Step 4 (HANDSHAKE) did not
-   * complete with `SERIAL_HEALTH_OK`, including timeout, protocol error,
-   * unknown profile byte, or legacy firmware that ships no profile byte.
-   * The UI MUST treat undefined as "unknown — do not gate the dropdown".
+   * Distinct from `ShellState.firmwareProfile`, the user-selected encoder: the
+   * Settings UI compares the two so the dropdown can disable the incompatible
+   * option (Bug H4 — Adalight silently no-ops on USB while Hue keeps
+   * streaming). `null` means "unknown — do not gate the profile dropdown";
+   * only a concrete value carries authority for disabling the mismatched one.
    */
-  advertisedFirmwareProfile?: FirmwareProfile;
-  /** Wall-clock latency of the handshake round trip. Populated on `SERIAL_HEALTH_OK`. */
-  roundTripMs?: number;
+  advertisedFirmwareProfile: FirmwareProfile | null;
+  /** The whole accepted PONG, pixel layout included. Absent on the same terms. */
+  firmware?: SerialFirmwareInfo;
 }
+
+/** A health step as the UI holds it: a wire step, or the one the frontend mints
+ * when no health-check bridge was injected ({@link HEALTH_CHECK_NOT_AVAILABLE}). */
+export type HealthStepView = Omit<HealthStepResult, "code"> & { code: SerialHealthStepCode };
+
+/** A health check as the UI holds it — see {@link HealthStepView}. */
+export type HealthCheckView = Omit<HealthCheckResult, "steps"> & { steps: HealthStepView[] };
 
 // ---------------------------------------------------------------------------
 // Sink reference (TS mirror of the Rust `LedSink` trait)
@@ -605,3 +657,14 @@ export type WledWireStatusCode = Exclude<
 >;
 
 export type WledCommandStatus = CommandStatusOf<WledWireStatusCode>;
+
+/** `discover_wled_devices` — every WLED instance found at (or probed on) the address. */
+export interface WledDiscoveryResponse {
+  status: WledCommandStatus;
+  devices: WledDeviceInfo[];
+}
+
+/** `connect_wled_sink`. */
+export interface WledConnectResponse {
+  status: WledCommandStatus;
+}

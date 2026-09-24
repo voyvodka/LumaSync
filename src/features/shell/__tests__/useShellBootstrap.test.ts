@@ -3,7 +3,7 @@ import { StrictMode, createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const loadShellStateMock = vi.fn();
-const getSerialConnectionStatusMock = vi.fn();
+const getSerialConnectionStatusMock = vi.fn<typeof deviceConnectionApiModule.getSerialConnectionStatus>();
 
 vi.mock("../windowLifecycle", () => ({
   initWindowLifecycle: vi.fn(() => Promise.resolve()),
@@ -16,6 +16,19 @@ vi.mock("@/features/device/deviceConnectionApi", () => ({
 }));
 
 import { useShellBootstrap, type ShellBootstrapSink } from "../useShellBootstrap";
+import type * as deviceConnectionApiModule from "@/features/device/deviceConnectionApi";
+import type { SerialConnectionStatus } from "@/shared/contracts/device";
+
+function connectionStatus(connected: boolean): SerialConnectionStatus {
+  return {
+    portName: connected ? "COM3" : null,
+    connected,
+    status: connected
+      ? { code: "CONNECT_OK", message: "Connected", details: null }
+      : { code: "NOT_CONNECTED", message: "Not connected", details: null },
+    updatedAtUnixMs: 0,
+  };
+}
 
 function sink(overrides: Partial<ShellBootstrapSink> = {}): ShellBootstrapSink {
   return {
@@ -48,7 +61,7 @@ describe("useShellBootstrap", () => {
       lightingMode: { kind: "ambilight", ambilight: { brightness: 0.6 } },
       lastOutputTargets: ["usb", "hue"],
     });
-    getSerialConnectionStatusMock.mockResolvedValue({ connected: true });
+    getSerialConnectionStatusMock.mockResolvedValue(connectionStatus(true));
   });
 
   it("asks for the restore once, with the saved mode, before it reports done", async () => {
@@ -86,7 +99,7 @@ describe("useShellBootstrap", () => {
   });
 
   it("arms the USB edge detector from the live status before the restore", async () => {
-    getSerialConnectionStatusMock.mockResolvedValue({ connected: false });
+    getSerialConnectionStatusMock.mockResolvedValue(connectionStatus(false));
     const bag = sink();
 
     renderHook(() => useShellBootstrap(bag));

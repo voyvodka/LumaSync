@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { SerialPortListResponse } from "../deviceConnectionApi";
 import { createDeviceConnectionController } from "../state/deviceConnectionController";
+import type { DeviceConnectionControllerDeps } from "@/features/device/state/connectionTypes";
 
 function listResponse(ports: SerialPortListResponse["ports"]): SerialPortListResponse {
   return {
@@ -16,9 +17,9 @@ function listResponse(ports: SerialPortListResponse["ports"]): SerialPortListRes
 
 describe("selection memory", () => {
   it("persists lastSuccessfulPort only after successful connect", async () => {
-    const persistLastSuccessfulPort = vi.fn();
+    const persistLastSuccessfulPort = vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>();
     const controller = createDeviceConnectionController({
-      listSerialPorts: vi.fn().mockResolvedValue(
+      listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(
         listResponse([
           {
             name: "COM3",
@@ -35,7 +36,7 @@ describe("selection memory", () => {
           },
         ]),
       ),
-      connectSerialPort: vi.fn().mockResolvedValue({
+      connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>().mockResolvedValue({
         connected: true,
         portName: "COM3",
         updatedAtUnixMs: Date.now(),
@@ -45,7 +46,7 @@ describe("selection memory", () => {
           details: null,
         },
       }),
-      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
         connected: false,
         portName: null,
         updatedAtUnixMs: 0,
@@ -62,9 +63,9 @@ describe("selection memory", () => {
   });
 
   it("does not persist when connect attempt fails", async () => {
-    const persistLastSuccessfulPort = vi.fn();
+    const persistLastSuccessfulPort = vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>();
     const controller = createDeviceConnectionController({
-      listSerialPorts: vi.fn().mockResolvedValue(
+      listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(
         listResponse([
           {
             name: "COM3",
@@ -81,7 +82,7 @@ describe("selection memory", () => {
           },
         ]),
       ),
-      connectSerialPort: vi.fn().mockResolvedValue({
+      connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>().mockResolvedValue({
         connected: false,
         portName: "COM3",
         updatedAtUnixMs: Date.now(),
@@ -91,7 +92,7 @@ describe("selection memory", () => {
           details: "busy",
         },
       }),
-      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
         connected: false,
         portName: null,
         updatedAtUnixMs: 0,

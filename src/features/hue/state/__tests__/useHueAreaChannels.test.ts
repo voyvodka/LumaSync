@@ -2,29 +2,37 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HUE_AREA_CHANNELS_STATUS, HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
-import type { HueAreaChannelInfo } from "@/shared/contracts/hue";
+import type {
+  HueAreaChannelInfo,
+  HueAreaChannelListResponse,
+  HueAreaChannelsWireStatusCode,
+  HueRuntimeState,
+} from "@/shared/contracts/hue";
+import type { HueHealthSnapshot } from "@/shared/contracts/hueHealth";
+
+import { idleHealth, runtimeStatus } from "../../__tests__/fakeHueHealth";
 
 import { useHueAreaChannels } from "../useHueAreaChannels";
+import type * as hueHealthApiModule from "../../hueHealthApi";
+import type * as hueOnboardingApiModule from "../../hueOnboardingApi";
 
-const getAreaChannelsMock = vi.fn();
+const getAreaChannelsMock = vi.fn<typeof hueOnboardingApiModule.getHueAreaChannels>();
 
 vi.mock("../../hueOnboardingApi", () => ({
-  getHueAreaChannels: (...args: unknown[]) => getAreaChannelsMock(...args),
+  getHueAreaChannels: (...args: Parameters<typeof getAreaChannelsMock>) => getAreaChannelsMock(...args),
 }));
 
 // The runtime-idle check reads the health monitor's local runtime state.
-const getHueHealthMock = vi.fn();
+const getHueHealthMock = vi.fn<typeof hueHealthApiModule.getHueHealth>();
 
 vi.mock("../../hueHealthApi", () => ({
-  getHueHealth: (...args: unknown[]) => getHueHealthMock(...args),
+  getHueHealth: (...args: Parameters<typeof getHueHealthMock>) => getHueHealthMock(...args),
 }));
 
-function runtimeIn(state: string) {
+function runtimeIn(state: HueRuntimeState): HueHealthSnapshot {
   return {
-    stream: {
-      active: state !== "Idle",
-      status: { state, code: "HUE_STREAM_IDLE", message: "", details: null, triggerSource: "system" },
-    },
+    ...idleHealth(),
+    stream: { active: state !== "Idle", status: runtimeStatus(state, "HUE_STREAM_IDLE") },
   };
 }
 
@@ -42,7 +50,11 @@ const CHANNEL: HueAreaChannelInfo = {
 };
 
 /** The command never throws — every arm resolves with this envelope. */
-function response(code: string, channels: HueAreaChannelInfo[] = [], details: string | null = null) {
+function response(
+  code: HueAreaChannelsWireStatusCode,
+  channels: HueAreaChannelInfo[] = [],
+  details: string | null = null,
+): HueAreaChannelListResponse {
   return { status: { code, message: `stub ${code}`, details }, channels };
 }
 

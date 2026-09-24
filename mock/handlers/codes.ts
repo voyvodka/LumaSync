@@ -14,7 +14,7 @@
  */
 
 import type { CommandStatusOf } from "../../src/shared/contracts/status";
-import type { CommandResponse } from "./responses";
+import type { CommandName, CommandResult } from "../../src/shared/contracts/ipc";
 
 /**
  * The status code an envelope carries, wherever it keeps it.
@@ -31,7 +31,7 @@ export type StatusCodeOf<R> = R extends { status: CommandStatusOf<infer C> }
       ? C
       : never;
 
-export type InjectableCode<C extends keyof CommandResponse> = StatusCodeOf<CommandResponse[C]>;
+export type InjectableCode<C extends CommandName> = StatusCodeOf<CommandResult<C>>;
 
 /**
  * The codes worth offering, per command.
@@ -95,7 +95,7 @@ export const OFFERED_CODES = {
     "DEVICE_NOT_CONNECTED",
     "HUE_NOT_READY",
   ],
-} satisfies { [K in keyof CommandResponse]?: InjectableCode<K>[] };
+} satisfies { [K in CommandName]?: InjectableCode<K>[] };
 
 export type InjectableCommand = keyof typeof OFFERED_CODES;
 

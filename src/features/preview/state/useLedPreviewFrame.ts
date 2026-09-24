@@ -7,7 +7,7 @@
  * with the full per-LED buffer (`leds`), the calibrated `ledCount`, sparse
  * `hueChannels`, the frame `source`/`pattern`, a `seq` counter, and the
  * `displayId` the frame was sampled from (see
- * `features/mode/model/edgeSignal.ts > EdgeSignalPayload`).
+ * `shared/contracts/preview.ts > EdgeSignalPayload`).
  *
  * The twin overlay window is bound to ONE display, so this hook filters by
  * `displayId`: a frame is accepted only when the caller did not request a

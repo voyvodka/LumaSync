@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { HealthCheckResult, SerialPortListResponse } from "../deviceConnectionApi";
 import { createDeviceConnectionController } from "../state/deviceConnectionController";
+import type { DeviceConnectionControllerDeps } from "@/features/device/state/connectionTypes";
 
 // Every test here installs fake timers; without this the patch leaks to whatever
 // Vitest schedules next on the same worker, and `waitFor` there spins on
@@ -25,6 +26,9 @@ function createHealthPass(): HealthCheckResult {
   return {
     pass: true,
     checkedAtUnixMs: Date.now(),
+    roundTripMs: null,
+    firmwareVersion: null,
+    advertisedFirmwareProfile: null,
     steps: [
       { step: "PORT_VISIBLE", pass: true, code: "PORT_VISIBLE", message: "ok", details: null },
       { step: "PORT_SUPPORTED", pass: true, code: "PORT_SUPPORTED", message: "ok", details: null },
@@ -82,14 +86,14 @@ describe("recovery flow", () => {
     const controller = createDeviceConnectionController({
       listSerialPorts,
       connectSerialPort,
-      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
         connected: false,
         portName: null,
         updatedAtUnixMs: 0,
         status: { code: "NOT_CONNECTED", message: "Idle", details: null },
       }),
-      persistLastSuccessfulPort: vi.fn(),
-      runSerialHealthCheck: vi.fn().mockResolvedValue(createHealthPass()),
+      persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
+      runSerialHealthCheck: vi.fn<Required<DeviceConnectionControllerDeps>["runSerialHealthCheck"]>().mockResolvedValue(createHealthPass()),
       refreshMinIntervalMs: 0,
       recoveryFastDelayMs: 10,
       recoveryRetryDelayMs: 20,
@@ -141,20 +145,20 @@ describe("recovery flow", () => {
 
     const controller = createDeviceConnectionController({
       listSerialPorts,
-      connectSerialPort: vi.fn().mockResolvedValue({
+      connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>().mockResolvedValue({
         connected: true,
         portName: "COM3",
         updatedAtUnixMs: Date.now(),
         status: { code: "CONNECT_OK", message: "Connected", details: null },
       }),
-      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
         connected: false,
         portName: null,
         updatedAtUnixMs: 0,
         status: { code: "NOT_CONNECTED", message: "Idle", details: null },
       }),
-      persistLastSuccessfulPort: vi.fn(),
-      runSerialHealthCheck: vi.fn().mockResolvedValue(createHealthPass()),
+      persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
+      runSerialHealthCheck: vi.fn<Required<DeviceConnectionControllerDeps>["runSerialHealthCheck"]>().mockResolvedValue(createHealthPass()),
       refreshMinIntervalMs: 0,
       recoveryFastDelayMs: 10,
       recoveryRetryDelayMs: 20,
@@ -177,7 +181,7 @@ describe("recovery flow", () => {
   it("rejects health check while recovery is active", async () => {
     vi.useFakeTimers();
 
-    const runSerialHealthCheck = vi.fn().mockResolvedValue(createHealthPass());
+    const runSerialHealthCheck = vi.fn<Required<DeviceConnectionControllerDeps>["runSerialHealthCheck"]>().mockResolvedValue(createHealthPass());
     const listSerialPorts = vi
       .fn<() => Promise<SerialPortListResponse>>()
       .mockResolvedValueOnce(
@@ -195,19 +199,19 @@ describe("recovery flow", () => {
 
     const controller = createDeviceConnectionController({
       listSerialPorts,
-      connectSerialPort: vi.fn().mockResolvedValue({
+      connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>().mockResolvedValue({
         connected: true,
         portName: "COM3",
         updatedAtUnixMs: Date.now(),
         status: { code: "CONNECT_OK", message: "Connected", details: null },
       }),
-      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
         connected: false,
         portName: null,
         updatedAtUnixMs: 0,
         status: { code: "NOT_CONNECTED", message: "Idle", details: null },
       }),
-      persistLastSuccessfulPort: vi.fn(),
+      persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       runSerialHealthCheck,
       refreshMinIntervalMs: 0,
       recoveryFastDelayMs: 100,

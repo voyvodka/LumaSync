@@ -29,6 +29,9 @@ describe("device status card mapping", () => {
       latestHealthCheck: {
         pass: false,
         checkedAtUnixMs: Date.now(),
+        roundTripMs: null,
+        firmwareVersion: null,
+        advertisedFirmwareProfile: null,
         steps: [
           { step: "PORT_VISIBLE", pass: true, code: "PORT_VISIBLE", message: "visible", details: null },
           { step: "PORT_SUPPORTED", pass: false, code: "PORT_UNSUPPORTED", message: "choose another port", details: null },
@@ -93,6 +96,9 @@ describe("device status card mapping", () => {
       latestHealthCheck: {
         pass: true,
         checkedAtUnixMs: Date.now(),
+        roundTripMs: null,
+        firmwareVersion: null,
+        advertisedFirmwareProfile: null,
         steps: [
           { step: "CONNECT_AND_VERIFY", pass: true, code: "CONNECT_OK", message: "connected", details: null },
           { step: "PORT_VISIBLE", pass: true, code: "PORT_VISIBLE", message: "visible", details: null },
@@ -118,6 +124,9 @@ describe("device status card mapping", () => {
       latestHealthCheck: {
         pass: false,
         checkedAtUnixMs: 0,
+        roundTripMs: null,
+        firmwareVersion: null,
+        advertisedFirmwareProfile: null,
         steps: [
           { step: "PORT_VISIBLE", pass: false, code: "HEALTH_CHECK_NOT_AVAILABLE", message: "bridge missing", details: null },
         ],
@@ -143,6 +152,9 @@ describe("device status card mapping", () => {
       latestHealthCheck: {
         pass: false,
         checkedAtUnixMs: Date.now(),
+        roundTripMs: null,
+        firmwareVersion: null,
+        advertisedFirmwareProfile: null,
         steps: [
           { step: "PORT_VISIBLE", pass: true, code: "PORT_VISIBLE", message: "visible", details: null },
           { step: "PORT_SUPPORTED", pass: false, code: "PORT_UNSUPPORTED", message: "unsupported", details: null },
@@ -153,5 +165,47 @@ describe("device status card mapping", () => {
 
     expect(card.code).toBe("RECOVERY_IN_PROGRESS");
     expect(card.variant).toBe("info");
+  });
+
+  // Advice the controller minted is a catalogue key, so it reaches the user
+  // translated; only backend text (an OS error) is shown verbatim.
+  it("renders minted advice through i18n and keeps backend text verbatim", () => {
+    const minted = buildDeviceStatusCard({
+      status: "error",
+      statusCard: {
+        variant: "error",
+        code: "RECOVERY_MANUAL_REQUIRED",
+        message: "Auto-recovery timed out.",
+        detailsKey: "device:status.hints.recoveryTimedOut",
+      },
+      connectedPort: null,
+    });
+    expect(minted.detailsKey).toBe("device:status.hints.recoveryTimedOut");
+    expect(minted.details).toBeUndefined();
+
+    const missing = buildDeviceStatusCard({
+      status: "ready",
+      statusCard: {
+        variant: "info",
+        code: "SELECTED_PORT_MISSING",
+        message: "Previously selected port is no longer available.",
+        detailsKey: "device:status.hints.selectedPortMissing",
+      },
+      connectedPort: null,
+    });
+    expect(missing.detailsKey).toBe("device:status.hints.selectedPortMissing");
+
+    const backend = buildDeviceStatusCard({
+      status: "error",
+      statusCard: {
+        variant: "error",
+        code: "CONNECT_FAILED",
+        message: "Could not connect to the selected port.",
+        details: "Access is denied. (os error 5)",
+      },
+      connectedPort: null,
+    });
+    expect(backend.details).toBe("Access is denied. (os error 5)");
+    expect(backend.detailsKey).toBeUndefined();
   });
 });

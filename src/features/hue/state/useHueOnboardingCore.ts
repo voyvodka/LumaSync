@@ -20,6 +20,7 @@ import { dedupeBridges, normalizeIpValue, resolveManualIpError } from "../model/
 import { deriveStep, toPersistedStep, toStepFromPersisted } from "../model/onboardingStep";
 import {
   HUE_ONBOARDING_TRANSPORT_CODES as CODE,
+  HUE_PAIRING_PENDING_LINK_BUTTON,
   type HueOnboardingStatus,
 } from "../model/onboardingStatusCodes";
 import {
@@ -460,7 +461,7 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
             bridgeUnreachable: false,
             isPairing: true,
             status: {
-              code: HUE_STATUS.PAIRING_PENDING_LINK_BUTTON,
+              code: HUE_PAIRING_PENDING_LINK_BUTTON,
               message: "Waiting for the bridge link button to be pressed.",
               details: null,
             },

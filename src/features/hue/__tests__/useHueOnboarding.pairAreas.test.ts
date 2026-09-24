@@ -5,42 +5,44 @@ import { HUE_CREDENTIAL_STATUS } from "@/shared/contracts/hue";
 import { __resetHueHealthStoreForTests } from "../state/hueHealthStore";
 import { resetHealth } from "./fakeHueHealth";
 import { useHueOnboarding } from "../useHueOnboarding";
+import type * as modeApiModule from "@/features/mode/modeApi";
+import type * as hueOnboardingApiModule from "../hueOnboardingApi";
 
 const shellLoadMock = vi.fn();
 const shellSaveMock = vi.fn();
-const discoverBridgesMock = vi.fn();
-const pairBridgeMock = vi.fn();
-const listAreasMock = vi.fn();
-const validateCredentialsMock = vi.fn();
-const migrateCredentialsMock = vi.fn();
-const checkReadinessMock = vi.fn();
+const discoverBridgesMock = vi.fn<typeof hueOnboardingApiModule.discoverHueBridges>();
+const pairBridgeMock = vi.fn<typeof hueOnboardingApiModule.pairHueBridge>();
+const listAreasMock = vi.fn<typeof hueOnboardingApiModule.listHueEntertainmentAreas>();
+const validateCredentialsMock = vi.fn<typeof hueOnboardingApiModule.validateHueCredentials>();
+const migrateCredentialsMock = vi.fn<typeof hueOnboardingApiModule.migrateHueCredentials>();
+const checkReadinessMock = vi.fn<typeof hueOnboardingApiModule.checkHueStreamReadiness>();
 
 vi.mock("../hueHealthApi", async () => (await import("./fakeHueHealth")).fakeHueHealthApi);
 
 vi.mock("@/features/mode/modeApi", () => ({
-  restartHue: vi.fn(),
-  startHue: vi.fn(),
+  restartHue: vi.fn<typeof modeApiModule.restartHue>(),
+  startHue: vi.fn<typeof modeApiModule.startHue>(),
 }));
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => shellLoadMock(),
-    save: (...args: unknown[]) => shellSaveMock(...args),
+    save: (...args: Parameters<typeof shellSaveMock>) => shellSaveMock(...args),
   },
 }));
 
 vi.mock("../hueOnboardingApi", () => ({
-  checkHueStreamReadiness: (...args: unknown[]) => checkReadinessMock(...args),
-  discoverHueBridges: (...args: unknown[]) => discoverBridgesMock(...args),
-  getHueAreaChannels: vi.fn().mockResolvedValue({
+  checkHueStreamReadiness: (...args: Parameters<typeof checkReadinessMock>) => checkReadinessMock(...args),
+  discoverHueBridges: (...args: Parameters<typeof discoverBridgesMock>) => discoverBridgesMock(...args),
+  getHueAreaChannels: vi.fn<typeof hueOnboardingApiModule.getHueAreaChannels>().mockResolvedValue({
     status: { code: "HUE_AREA_CHANNELS_EMPTY", message: "", details: null },
     channels: [],
   }),
-  listHueEntertainmentAreas: (...args: unknown[]) => listAreasMock(...args),
-  migrateHueCredentials: (...args: unknown[]) => migrateCredentialsMock(...args),
-  pairHueBridge: (...args: unknown[]) => pairBridgeMock(...args),
-  validateHueCredentials: (...args: unknown[]) => validateCredentialsMock(...args),
-  verifyHueBridgeIp: vi.fn(),
+  listHueEntertainmentAreas: (...args: Parameters<typeof listAreasMock>) => listAreasMock(...args),
+  migrateHueCredentials: (...args: Parameters<typeof migrateCredentialsMock>) => migrateCredentialsMock(...args),
+  pairHueBridge: (...args: Parameters<typeof pairBridgeMock>) => pairBridgeMock(...args),
+  validateHueCredentials: (...args: Parameters<typeof validateCredentialsMock>) => validateCredentialsMock(...args),
+  verifyHueBridgeIp: vi.fn<typeof hueOnboardingApiModule.verifyHueBridgeIp>(),
 }));
 
 const BRIDGE = { id: "bridge-1", ip: "192.168.1.20", name: "Test Bridge" };
@@ -66,10 +68,10 @@ describe("useHueOnboarding — pairing lists areas with the key it just received
     });
     listAreasMock.mockResolvedValue({
       status: { code: "HUE_AREA_LIST_OK", message: "ok", details: null },
-      areas: [{ id: "area-1", name: "Living Room", roomName: "Salon", channelCount: 3 }],
+      areas: [{ id: "area-1", name: "Living Room", roomName: "Salon", channelCount: 3, activeStreamer: false }],
     });
     migrateCredentialsMock.mockResolvedValue({
-      status: { code: "HUE_CREDENTIAL_MIGRATION_FAILED", message: "no keychain" },
+      status: { code: "HUE_CREDENTIAL_MIGRATION_FAILED", message: "no keychain", details: null },
       backend: "plaintext-legacy",
     });
     checkReadinessMock.mockResolvedValue({

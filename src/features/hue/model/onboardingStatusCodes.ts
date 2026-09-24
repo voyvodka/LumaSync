@@ -23,10 +23,16 @@ export const HUE_ONBOARDING_TRANSPORT_CODES = {
 export type HueOnboardingTransportCode =
   (typeof HUE_ONBOARDING_TRANSPORT_CODES)[keyof typeof HUE_ONBOARDING_TRANSPORT_CODES];
 
+/** Held between link-button polls while the bridge keeps answering
+ * `HUE_PAIRING_LINK_BUTTON_NOT_PRESSED` (#337). Rust never sends it. */
+export const HUE_PAIRING_PENDING_LINK_BUTTON = "HUE_PAIRING_PENDING_LINK_BUTTON" as const;
+
 /** What the onboarding UI state holds: the wire union plus the codes above.
  * Kept out of the API surface so a minted code can never pose as a wire one. */
 export type HueOnboardingStatus = CommandStatusOf<
-  HueOnboardingWireStatusCode | HueOnboardingTransportCode
+  | HueOnboardingWireStatusCode
+  | HueOnboardingTransportCode
+  | typeof HUE_PAIRING_PENDING_LINK_BUTTON
 >;
 
 /** What the Devices tab holds as the runtime status: only ever an answer the

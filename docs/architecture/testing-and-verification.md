@@ -98,6 +98,22 @@ it, and a test that stubs `console.error` swallows the warning before any report
 Under an AI coding agent, vitest detects the agent and switches to its `minimal` reporter, which
 prints no console output at all — the warnings are still counted, just not shown.
 
+## Typed test doubles, and the untyped-mock ratchet
+
+A bare `vi.fn()` is `Mock<Procedure>`, assignable to any function: a double on the Tauri boundary
+can resolve a shape the backend never sends and the test still passes. On the command boundary use
+`mockCommands({...})` from `src/test/mockCommands.ts` — its fixtures are typed by `CommandMap`, and
+a command without a fixture rejects naming itself — or `invokeFromCommands({...})` as the
+implementation of a mocked `invoke`. For a mocked bridge function, `vi.fn<typeof api.fn>()`.
+
+Typing the boundary doubles (665 bare `vi.fn()` down to 383) found fixtures no backend could
+produce: a `HUE_CREDENTIAL_OK` that no producer has ever emitted, runtime results without the fields
+Rust always sends as `null`, a twin-overlay reply of `{ ok: true }`, a serial status of
+`{ connected: true }`. `verify:untyped-mocks` (in `check:all`) counts the bare `vi.fn()` left under
+`src/`, `mock/` and `e2e/`, comments excluded, against `scripts/verify/untyped-mock-baseline.txt`.
+The count is static, so it is exact: above the baseline fails, and below it fails until the file is
+lowered. Callback props (`onChange: vi.fn()`) make up most of what remains.
+
 ## The quietest failure CSS has
 
 A reference to an undefined custom property does not warn, does not fall back to
@@ -239,11 +255,15 @@ contract types, and `mock/hotplug.ts` imports two runtime singletons on purpose.
 
 Four things about it are not obvious and each cost a cycle:
 
-- **Fixtures are bound to the real response types.** `handlers/responses.ts` ties each command to
-  its `*Api.ts` return type and `handlers/index.ts` derives its coverage guard from the handler
-  keys, so a new Rust command stops the mock compiling rather than answering `undefined` for a
-  week. The first version was written from command names instead of DTOs and every shape was wrong
-  in a way nothing caught.
+- **Fixtures are bound to the real command map.** `TypedHandlers` (`handlers/types.ts`) types every
+  handler from `CommandMap` in `src/shared/contracts/ipc.ts` — the same table `invokeCommand` and
+  the test helper `mockCommands` (`src/test/mockCommands.ts`) use — on both the args it reads and
+  the value it returns. `handlers/index.ts` derives its coverage guard from the handler keys, so a
+  new Rust command stops the mock compiling rather than answering `undefined` for a week. The
+  first version was written from command names instead of DTOs and every shape was wrong in a way
+  nothing caught; typing it from the map found four more (health-check and runtime results
+  omitting fields Rust sends as `null`, and both notification commands answering shapes
+  `notifications.rs` never sends).
 - **Events are a third of the surface and none of them is an `invoke`.** The twin overlay, the
   tray menu, the update bar and the cross-window mode sync are all pushed from Rust.
   `mock/events.ts` drives them, sizing each frame from the live calibration rather than a constant

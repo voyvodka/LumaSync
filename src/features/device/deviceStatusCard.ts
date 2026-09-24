@@ -1,11 +1,9 @@
 import type { TranslationKey } from "@/features/i18n/catalogue";
-import type { SerialHealthStepCode } from "@/shared/contracts/device";
-
-import type { HealthCheckResult } from "./deviceConnectionApi";
+import type { HealthCheckView, SerialHealthStepCode } from "@/shared/contracts/device";
 
 const HEALTH_STEP_ORDER = ["PORT_VISIBLE", "PORT_SUPPORTED", "CONNECT_AND_VERIFY"] as const;
 
-type HealthStep = HealthCheckResult["steps"][number];
+type HealthStep = HealthCheckView["steps"][number];
 
 interface HealthCodeCopy {
   labelKey: TranslationKey;
@@ -142,7 +140,7 @@ export interface DeviceStatusCardModel {
   healthSteps?: DeviceStatusHealthStepModel[];
 }
 
-function mapHealthSteps(healthCheck: HealthCheckResult): DeviceStatusHealthStepModel[] {
+function mapHealthSteps(healthCheck: HealthCheckView): DeviceStatusHealthStepModel[] {
   const rank = new Map<string, number>(HEALTH_STEP_ORDER.map((step, index) => [step, index]));
   return [...healthCheck.steps]
     .sort((left, right) => {
@@ -181,11 +179,19 @@ export interface DeviceStatusCardInput {
     code: string;
     message: string;
     details?: string;
+    detailsKey?: TranslationKey;
   } | null;
   connectedPort: string | null;
   isReconnecting?: boolean;
   isHealthChecking?: boolean;
-  latestHealthCheck?: HealthCheckResult | null;
+  latestHealthCheck?: HealthCheckView | null;
+}
+
+// Minted advice renders through i18n; backend text stays verbatim.
+function statusCardDetails(
+  card: NonNullable<DeviceStatusCardInput["statusCard"]>,
+): Pick<DeviceStatusCardModel, "details" | "detailsKey"> {
+  return card.detailsKey ? { detailsKey: card.detailsKey } : { details: card.details };
 }
 
 export function buildDeviceStatusCard(input: DeviceStatusCardInput): DeviceStatusCardModel {
@@ -239,7 +245,7 @@ export function buildDeviceStatusCard(input: DeviceStatusCardInput): DeviceStatu
       code: "SELECTED_PORT_MISSING",
       titleKey: "device:status.missingTitle",
       bodyKey: "device:status.missingBody",
-      details: input.statusCard.details,
+      ...statusCardDetails(input.statusCard),
     };
   }
 
@@ -249,7 +255,7 @@ export function buildDeviceStatusCard(input: DeviceStatusCardInput): DeviceStatu
       code: input.statusCard.code,
       titleKey: "device:status.errorTitle",
       bodyKey: "device:status.errorBody",
-      details: input.statusCard.details,
+      ...statusCardDetails(input.statusCard),
     };
   }
 

@@ -2,20 +2,25 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HUE_AREA_CHANNELS_STATUS } from "@/shared/contracts/hue";
-import type { HueAreaChannelInfo } from "@/shared/contracts/hue";
+import type {
+  HueAreaChannelInfo,
+  HueAreaChannelListResponse,
+  HueAreaChannelsWireStatusCode,
+} from "@/shared/contracts/hue";
 import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap";
 
 import { useRoomMapHueChannels } from "../useRoomMapHueChannels";
+import type * as hueOnboardingApiModule from "@/features/hue/hueOnboardingApi";
 
 const shellLoadMock = vi.fn();
-const getAreaChannelsMock = vi.fn();
+const getAreaChannelsMock = vi.fn<typeof hueOnboardingApiModule.getHueAreaChannels>();
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: { load: () => shellLoadMock() },
 }));
 
 vi.mock("@/features/hue/hueOnboardingApi", () => ({
-  getHueAreaChannels: (...args: unknown[]) => getAreaChannelsMock(...args),
+  getHueAreaChannels: (...args: Parameters<typeof getAreaChannelsMock>) => getAreaChannelsMock(...args),
 }));
 
 /** Gapped bridge ids — an ordinal substituted anywhere shows up as a wrong id. */
@@ -30,7 +35,10 @@ const CHANNELS: HueAreaChannelInfo[] = [0, 2, 5].map((channelId, i) => ({
   autoRegion: "center",
 }));
 
-function response(code: string, channels: HueAreaChannelInfo[] = []) {
+function response(
+  code: HueAreaChannelsWireStatusCode,
+  channels: HueAreaChannelInfo[] = [],
+): HueAreaChannelListResponse {
   return { status: { code, message: `stub ${code}`, details: null }, channels };
 }
 

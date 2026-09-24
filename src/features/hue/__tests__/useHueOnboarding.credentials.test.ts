@@ -1,51 +1,58 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HUE_CREDENTIAL_BACKENDS, HUE_CREDENTIAL_STATUS } from "@/shared/contracts/hue";
+import {
+  HUE_CREDENTIAL_BACKENDS,
+  HUE_CREDENTIAL_STATUS,
+  type HueCredentialBackend,
+  type HuePairBridgeResponse,
+} from "@/shared/contracts/hue";
 import { __resetHueHealthStoreForTests } from "../state/hueHealthStore";
 import { resetHealth } from "./fakeHueHealth";
 import { useHueOnboarding } from "../useHueOnboarding";
+import type * as modeApiModule from "@/features/mode/modeApi";
+import type * as hueOnboardingApiModule from "../hueOnboardingApi";
 
 const shellLoadMock = vi.fn();
 const shellSaveMock = vi.fn();
-const discoverBridgesMock = vi.fn();
-const pairBridgeMock = vi.fn();
-const listAreasMock = vi.fn();
-const validateCredentialsMock = vi.fn();
-const migrateCredentialsMock = vi.fn();
+const discoverBridgesMock = vi.fn<typeof hueOnboardingApiModule.discoverHueBridges>();
+const pairBridgeMock = vi.fn<typeof hueOnboardingApiModule.pairHueBridge>();
+const listAreasMock = vi.fn<typeof hueOnboardingApiModule.listHueEntertainmentAreas>();
+const validateCredentialsMock = vi.fn<typeof hueOnboardingApiModule.validateHueCredentials>();
+const migrateCredentialsMock = vi.fn<typeof hueOnboardingApiModule.migrateHueCredentials>();
 
 vi.mock("../hueHealthApi", async () => (await import("./fakeHueHealth")).fakeHueHealthApi);
 
 vi.mock("@/features/mode/modeApi", () => ({
-  restartHue: vi.fn(),
-  startHue: vi.fn(),
+  restartHue: vi.fn<typeof modeApiModule.restartHue>(),
+  startHue: vi.fn<typeof modeApiModule.startHue>(),
 }));
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => shellLoadMock(),
-    save: (...args: unknown[]) => shellSaveMock(...args),
+    save: (...args: Parameters<typeof shellSaveMock>) => shellSaveMock(...args),
   },
 }));
 
 vi.mock("../hueOnboardingApi", () => ({
-  checkHueStreamReadiness: vi.fn(),
-  discoverHueBridges: (...args: unknown[]) => discoverBridgesMock(...args),
-  getHueAreaChannels: vi.fn().mockResolvedValue({
+  checkHueStreamReadiness: vi.fn<typeof hueOnboardingApiModule.checkHueStreamReadiness>(),
+  discoverHueBridges: (...args: Parameters<typeof discoverBridgesMock>) => discoverBridgesMock(...args),
+  getHueAreaChannels: vi.fn<typeof hueOnboardingApiModule.getHueAreaChannels>().mockResolvedValue({
     status: { code: "HUE_AREA_CHANNELS_EMPTY", message: "", details: null },
     channels: [],
   }),
-  listHueEntertainmentAreas: (...args: unknown[]) => listAreasMock(...args),
-  migrateHueCredentials: (...args: unknown[]) => migrateCredentialsMock(...args),
-  pairHueBridge: (...args: unknown[]) => pairBridgeMock(...args),
-  validateHueCredentials: (...args: unknown[]) => validateCredentialsMock(...args),
-  verifyHueBridgeIp: vi.fn(),
+  listHueEntertainmentAreas: (...args: Parameters<typeof listAreasMock>) => listAreasMock(...args),
+  migrateHueCredentials: (...args: Parameters<typeof migrateCredentialsMock>) => migrateCredentialsMock(...args),
+  pairHueBridge: (...args: Parameters<typeof pairBridgeMock>) => pairBridgeMock(...args),
+  validateHueCredentials: (...args: Parameters<typeof validateCredentialsMock>) => validateCredentialsMock(...args),
+  verifyHueBridgeIp: vi.fn<typeof hueOnboardingApiModule.verifyHueBridgeIp>(),
 }));
 
 const BRIDGE = { id: "bridge-1", ip: "192.168.1.20", name: "Test Bridge" };
-const OK_STATUS = { code: "HUE_PAIRING_OK", message: "Paired." };
+const OK_STATUS = { code: "HUE_PAIRING_OK", message: "Paired.", details: null } as const;
 
-function pairResponse(credentialStorageBackend?: string) {
+function pairResponse(credentialStorageBackend?: HueCredentialBackend): HuePairBridgeResponse {
   return {
     status: OK_STATUS,
     credentials: { username: "app-key-abc", clientKey: "psk-deadbeef" },
@@ -54,9 +61,9 @@ function pairResponse(credentialStorageBackend?: string) {
 }
 
 /** Drive the hook through discover → selectBridge → pair. */
-async function pairWith(credentialStorageBackend?: string) {
+async function pairWith(credentialStorageBackend?: HueCredentialBackend) {
   discoverBridgesMock.mockResolvedValue({
-    status: { code: "HUE_DISCOVERY_OK", message: "ok" },
+    status: { code: "HUE_DISCOVERY_OK", message: "ok", details: null },
     bridges: [BRIDGE],
   });
   pairBridgeMock.mockResolvedValue(pairResponse(credentialStorageBackend));
@@ -89,11 +96,11 @@ describe("useHueOnboarding credential persistence", () => {
     shellLoadMock.mockResolvedValue({});
     shellSaveMock.mockResolvedValue(undefined);
     listAreasMock.mockResolvedValue({
-      status: { code: "HUE_AREA_LIST_OK", message: "ok" },
+      status: { code: "HUE_AREA_LIST_OK", message: "ok", details: null },
       areas: [],
     });
     migrateCredentialsMock.mockResolvedValue({
-      status: { code: "HUE_CREDENTIAL_MIGRATION_FAILED", message: "no keychain" },
+      status: { code: "HUE_CREDENTIAL_MIGRATION_FAILED", message: "no keychain", details: null },
       backend: HUE_CREDENTIAL_BACKENDS.PLAINTEXT_LEGACY,
     });
   });
@@ -129,7 +136,7 @@ describe("useHueOnboarding credential persistence", () => {
   it("treats an unrecognised backend as legacy and keeps both plaintext secrets", async () => {
     // Rust's CredentialBackend::as_str can emit "noop", which is outside the
     // TS union — it must never be read as permission to delete.
-    const saved = await pairWith("noop");
+    const saved = await pairWith("noop" as HueCredentialBackend);
 
     expect(saved.hueClientKey).toBe("psk-deadbeef");
     expect(saved.hueAppKey).toBe("app-key-abc");
@@ -154,7 +161,7 @@ describe("useHueOnboarding credential persistence", () => {
       hueCredentialStatus: HUE_CREDENTIAL_STATUS.VALID,
     });
     validateCredentialsMock.mockResolvedValue({
-      status: { code: "HUE_CREDENTIAL_OK", message: "ok" },
+      status: { code: "HUE_CREDENTIAL_VALID", message: "ok", details: null },
       valid: true,
     });
 
@@ -177,7 +184,7 @@ describe("useHueOnboarding credential persistence", () => {
       credentialStorageBackend: HUE_CREDENTIAL_BACKENDS.KEYCHAIN,
     });
     validateCredentialsMock.mockResolvedValue({
-      status: { code: "HUE_CREDENTIAL_OK", message: "ok" },
+      status: { code: "HUE_CREDENTIAL_VALID", message: "ok", details: null },
       valid: true,
     });
 
@@ -194,7 +201,7 @@ describe("useHueOnboarding credential persistence", () => {
       hueCredentialStatus: HUE_CREDENTIAL_STATUS.VALID,
     });
     validateCredentialsMock.mockResolvedValue({
-      status: { code: "HUE_CREDENTIAL_OK", message: "ok" },
+      status: { code: "HUE_CREDENTIAL_VALID", message: "ok", details: null },
       valid: true,
     });
 
@@ -226,11 +233,11 @@ describe("useHueOnboarding credential persistence", () => {
       hueClientKey: "psk-deadbeef",
     });
     validateCredentialsMock.mockResolvedValue({
-      status: { code: "HUE_CREDENTIAL_OK", message: "ok" },
+      status: { code: "HUE_CREDENTIAL_VALID", message: "ok", details: null },
       valid: true,
     });
     migrateCredentialsMock.mockResolvedValue({
-      status: { code: "HUE_CREDENTIAL_MIGRATION_OK", message: "ok" },
+      status: { code: "HUE_CREDENTIAL_MIGRATION_OK", message: "ok", details: null },
       backend: HUE_CREDENTIAL_BACKENDS.KEYCHAIN,
     });
 
@@ -253,7 +260,7 @@ describe("useHueOnboarding credential persistence", () => {
       hueClientKey: "psk-deadbeef",
     });
     validateCredentialsMock.mockResolvedValue({
-      status: { code: "HUE_CREDENTIAL_OK", message: "ok" },
+      status: { code: "HUE_CREDENTIAL_VALID", message: "ok", details: null },
       valid: true,
     });
 
@@ -273,7 +280,7 @@ describe("useHueOnboarding credential persistence", () => {
       hueClientKey: "psk-deadbeef",
     });
     validateCredentialsMock.mockResolvedValue({
-      status: { code: "HUE_CREDENTIAL_OK", message: "ok" },
+      status: { code: "HUE_CREDENTIAL_VALID", message: "ok", details: null },
       valid: true,
     });
     migrateCredentialsMock.mockRejectedValue(new Error("command not found"));

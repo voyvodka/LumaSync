@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FullTelemetrySnapshot } from "@/shared/contracts/telemetry";
 
 const { getFullTelemetrySnapshotMock, saveMock } = vi.hoisted(() => ({
-  getFullTelemetrySnapshotMock: vi.fn(),
+  getFullTelemetrySnapshotMock: vi.fn<typeof telemetryApiModule.getFullTelemetrySnapshot>(),
   saveMock: vi.fn(),
 }));
 
@@ -36,6 +36,7 @@ import {
 } from "@/features/telemetry/nerdStatsSetting";
 
 import { StatusBar, type StatusItem } from "../StatusBar";
+import type * as telemetryApiModule from "@/features/telemetry/telemetryApi";
 
 const ITEMS: StatusItem[] = [
   { label: "CAP", state: "OK", kind: "ok", nerdStat: true },

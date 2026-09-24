@@ -17,13 +17,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FullTelemetrySnapshot } from "@/shared/contracts/telemetry";
 
-const getFullTelemetrySnapshotMock = vi.fn();
+const getFullTelemetrySnapshotMock = vi.fn<typeof telemetryApiModule.getFullTelemetrySnapshot>();
 
 vi.mock("../telemetryApi", () => ({
   getFullTelemetrySnapshot: () => getFullTelemetrySnapshotMock(),
 }));
 
 import { __resetTelemetrySourceForTests, subscribeTelemetry } from "../telemetrySource";
+import type * as telemetryApiModule from "../telemetryApi";
 
 function makeSnapshot(captureFps = 60): FullTelemetrySnapshot {
   return {

@@ -8,7 +8,7 @@
  */
 
 import type {
-  HueOnboardingCommandStatus,
+  HueStreamReadinessResponse,
   HueRuntimeStatus,
   HueStreamReadiness,
 } from "./hue";
@@ -51,7 +51,7 @@ export interface HueBridgeHealth {
  * `check_hue_stream_readiness` gives it. */
 export interface HueAreaHealth {
   areaId: string;
-  status: HueOnboardingCommandStatus;
+  status: HueStreamReadinessResponse["status"];
   readiness: HueStreamReadiness;
   /** Wall-clock milliseconds of the answer. */
   checkedAtMs: number;

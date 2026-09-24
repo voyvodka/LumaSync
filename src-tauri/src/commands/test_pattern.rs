@@ -155,8 +155,7 @@ impl TestPatternKind {
 /// Resolved synthetic-pattern request carried from `start_led_test_pattern`
 /// into the frame-source factory and stored on the lighting runtime for
 /// `get_led_preview_status`.
-#[derive(Clone, Debug, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TestPatternConfig {
     pub kind: TestPatternKind,
     /// Master brightness scalar (0..1). Applied downstream by the worker /

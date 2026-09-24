@@ -9,29 +9,3 @@
 # Before this file existed these structs were not excluded, they were invisible:
 # the pairing loop skipped them with a bare `continue`, so they never reached the
 # coverage pin or the exclusion table.
-# Not fixable by moving it: its mirror (features/mode/model/edgeSignal.ts) keeps
-# fields Rust always sends optional on purpose, which rule 3 would reject.
-EdgeSignalPayload
-HealthCheckResult
-HealthStepResult
-HueDiscoveryResponse
-HueEntertainmentAreaListResponse
-HueRuntimeCommandResult
-HueSolidColorSnapshot
-HueStreamReadinessResponse
-HueValidateCredentialsResponse
-HueVerifyBridgeIpResponse
-LightingModeCommandResult
-OverlayPreviewCountsPayload
-OverlayPreviewSequenceItemPayload
-SerialConnectionStatus
-SerialPortDescriptor
-SerialPortListResponse
-SetHueSolidColorRequest
-StartHueStreamRequest
-TestPatternConfig
-UsbPortMetadata
-WledConnectResponse
-WledDiscoveryResponse
-WledSinkSnapshot
-WledSinkStatusResponse

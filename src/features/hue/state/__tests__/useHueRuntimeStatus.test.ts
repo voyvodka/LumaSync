@@ -10,19 +10,21 @@ import {
   fakeHueHealthApi,
   publishHealth,
   resetHealth,
+  runtimeResult,
   runtimeStatus,
   setHealth,
 } from "../../__tests__/fakeHueHealth";
+import type * as modeApiModule from "@/features/mode/modeApi";
 
-const startHueMock = vi.fn();
-const restartHueMock = vi.fn();
+const startHueMock = vi.fn<typeof modeApiModule.startHue>();
+const restartHueMock = vi.fn<typeof modeApiModule.restartHue>();
 const shellLoadMock = vi.fn();
 
 vi.mock("../../hueHealthApi", async () => (await import("../../__tests__/fakeHueHealth")).fakeHueHealthApi);
 
 vi.mock("@/features/mode/modeApi", () => ({
-  startHue: (...args: unknown[]) => startHueMock(...args),
-  restartHue: (...args: unknown[]) => restartHueMock(...args),
+  startHue: (...args: Parameters<typeof startHueMock>) => startHueMock(...args),
+  restartHue: (...args: Parameters<typeof restartHueMock>) => restartHueMock(...args),
 }));
 
 vi.mock("@/features/persistence/shellStore", () => ({
@@ -82,6 +84,7 @@ describe("useHueRuntimeStatus", () => {
   it("reads afresh after its own start, so the card never paints the state it left", async () => {
     startHueMock.mockImplementation(async () => {
       setHealth(running);
+      return runtimeResult();
     });
     const { result } = mount();
     await flush();
@@ -101,7 +104,7 @@ describe("useHueRuntimeStatus", () => {
     await flush();
 
     fakeHueHealthApi.getHueHealth.mockRejectedValueOnce(new Error("IPC channel closed"));
-    startHueMock.mockResolvedValue(undefined);
+    startHueMock.mockResolvedValue(runtimeResult());
     await act(async () => {
       await result.current.startRuntime();
     });
@@ -174,8 +177,8 @@ describe("useHueRuntimeStatus", () => {
   it("ignores a second startRuntime call while the first is still mutating", async () => {
     let resolveStart!: () => void;
     startHueMock.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        resolveStart = resolve;
+      new Promise((resolve) => {
+        resolveStart = () => resolve(runtimeResult());
       }),
     );
     const { result } = mount();

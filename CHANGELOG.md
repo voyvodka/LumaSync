@@ -125,6 +125,8 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- USB strips: the hint under a missing port or a timed-out reconnect was always in English. It now
+  follows the app language.
 - Ambilight: the saturation slider now reaches Hue lamps too; it only affected the strip before.
 - Hue: the spinners while pairing and reconnecting now slow down when Reduce Motion is on; the
   setting never reached them before.

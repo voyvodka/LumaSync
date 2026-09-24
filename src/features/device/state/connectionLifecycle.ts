@@ -25,7 +25,7 @@ export function createConnectionLifecycle(
         variant: "info",
         code: "RECOVERY_CANCELLED_BY_USER",
         message: "Auto-recovery was cancelled by manual selection.",
-        details: "Continue with manual connect when ready.",
+        detailsKey: "device:status.hints.recoveryCancelled",
       });
     }
 

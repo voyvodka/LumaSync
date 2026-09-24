@@ -8,7 +8,7 @@ import {
 } from "@/shared/contracts/telemetry";
 
 const { getFullTelemetrySnapshotMock, healthListeners } = vi.hoisted(() => ({
-  getFullTelemetrySnapshotMock: vi.fn(),
+  getFullTelemetrySnapshotMock: vi.fn<typeof telemetryApiModule.getFullTelemetrySnapshot>(),
   healthListeners: [] as Array<(health: RuntimeHealth) => void>,
 }));
 
@@ -25,6 +25,7 @@ vi.mock("@/features/telemetry/runtimeHealthEventsApi", () => ({
 
 import { __resetRuntimeHealthForTests } from "../../runtimeHealthSource";
 import { useCaptureStallNotice } from "../useCaptureStallNotice";
+import type * as telemetryApiModule from "@/features/telemetry/telemetryApi";
 
 function makeSnapshot(partial?: Partial<FullTelemetrySnapshot["usb"]>): FullTelemetrySnapshot {
   return {
