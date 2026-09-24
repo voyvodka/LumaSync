@@ -74,8 +74,9 @@ describe("buildShellNotices", () => {
 
       expect(notice.kind).toBe("condition");
       expect(notice.dismissible).toBe(false);
-      expect(notice.body).toBe("common:captureFailed.permission");
+      expect(notice.message).toBe("shell:notices.messages.capturePermission");
       expect(notice.action?.testId).toBe("capture-permission-settings-button");
+      expect(notice.action?.navigates).toBe(true);
       notice.action?.onClick();
       expect(handlers.openCaptureSettings).toHaveBeenCalledOnce();
     });
@@ -98,7 +99,7 @@ describe("buildShellNotices", () => {
         { startFailure: { bucket: CAPTURE_FAILURE_BUCKET.INTERNAL, reason: "" } },
         SHELL_NOTICE_IDS.START_FAILED,
       );
-      expect(notice.body).toBe("common:captureFailed.internalNoReason");
+      expect(notice.message).toBe("shell:notices.messages.startFailed.internalNoReason");
     });
 
     it("keeps the reason when the backend sent one", () => {
@@ -106,7 +107,16 @@ describe("buildShellNotices", () => {
         { startFailure: { bucket: CAPTURE_FAILURE_BUCKET.INTERNAL, reason: "BOOM" } },
         SHELL_NOTICE_IDS.START_FAILED,
       );
-      expect(notice.body).toBe("common:captureFailed.internal[reason=BOOM]");
+      expect(notice.message).toBe("shell:notices.messages.startFailed.internal[reason=BOOM]");
+    });
+
+    it.each([
+      [CAPTURE_FAILURE_BUCKET.DISPLAY, "shell:notices.messages.startFailed.display"],
+      [CAPTURE_FAILURE_BUCKET.TRANSIENT, "shell:notices.messages.startFailed.transient"],
+      [CAPTURE_FAILURE_BUCKET.UNSUPPORTED, "shell:notices.messages.startFailed.unsupported"],
+      [CAPTURE_FAILURE_BUCKET.OUTPUT, "shell:notices.messages.startFailed.output"],
+    ])("says why a %s start failed in one sentence", (bucket, key) => {
+      expect(byId({ startFailure: { bucket, reason: "X" } }, SHELL_NOTICE_IDS.START_FAILED).message).toBe(key);
     });
 
     it("sends a vanished display to LED setup, where the copy says to pick another", () => {
@@ -139,7 +149,7 @@ describe("buildShellNotices", () => {
         { captureStalled: { bucket: CAPTURE_FAILURE_BUCKET.INTERNAL, reason: "" } },
         SHELL_NOTICE_IDS.CAPTURE_STALLED,
       );
-      expect(notice.body).toBe("common:captureStalled.genericNoReason");
+      expect(notice.message).toBe("shell:notices.messages.captureStalled.genericNoReason");
       expect(notice.kind).toBe("condition");
     });
 
@@ -156,14 +166,14 @@ describe("buildShellNotices", () => {
 
   describe("Hue", () => {
     it.each([
-      [HUE_LEFT_OUT_REASON.UNREACHABLE, "common:hueLeftOut.unreachable"],
-      [HUE_LEFT_OUT_REASON.AUTH, "common:hueLeftOut.auth"],
-      [HUE_LEFT_OUT_REASON.CONFIG, "common:hueLeftOut.config"],
+      [HUE_LEFT_OUT_REASON.UNREACHABLE, "shell:notices.messages.hueLeftOut.unreachable"],
+      [HUE_LEFT_OUT_REASON.AUTH, "shell:notices.messages.hueLeftOut.auth"],
+      [HUE_LEFT_OUT_REASON.CONFIG, "shell:notices.messages.hueLeftOut.config"],
     ])("says why Hue was left out for the %s reason and opens the Hue devices", (reason, key) => {
       const handlers = makeHandlers();
       const notice = byId({ hueLeftOut: reason }, SHELL_NOTICE_IDS.HUE_LEFT_OUT, handlers);
 
-      expect(notice.body).toBe(key);
+      expect(notice.message).toBe(key);
       expect(notice.data).toEqual({ "data-reason": reason });
       notice.action?.onClick();
       expect(handlers.openDevices).toHaveBeenCalledWith("hue");
@@ -182,14 +192,14 @@ describe("buildShellNotices", () => {
 
       notice.action?.onClick();
       expect(handlers.retryHueStop).toHaveBeenCalledOnce();
-      expect(notice.body).not.toContain("stopFailedUsbHint");
+      expect(notice.message).toBe("shell:notices.messages.stopFailed[targets=common:hotplug.targetLabel.hue]");
     });
 
     // The only button reaches Hue; claiming a retry for the strip would be false.
     it("tells the user how to stop a strip that would not, instead of offering a button", () => {
       const notice = byId({ stopFailedTargets: ["usb"] }, SHELL_NOTICE_IDS.STOP_FAILED);
       expect(notice.action).toBeUndefined();
-      expect(notice.body).toContain("common:hotplug.stopFailedUsbHint");
+      expect(notice.message).toBe("shell:notices.messages.stopFailedUsb[targets=common:hotplug.targetLabel.usb]");
     });
 
     it("opens the Hue devices when no light resolved, and offers nothing for a queued colour", () => {
@@ -206,7 +216,7 @@ describe("buildShellNotices", () => {
   describe("USB", () => {
     it("says lighting is off, not that it continues, when the unplugged strip was the only output", () => {
       const notice = byId({ usbDisconnectedLightingOff: true }, SHELL_NOTICE_IDS.USB_DISCONNECTED);
-      expect(notice.body).toBe("common:hotplug.usbDisconnectedLightingOff");
+      expect(notice.message).toBe("shell:notices.messages.usbDisconnectedLightingOff");
       expect(notice.testId).toBe("usb-disconnect-notice");
     });
 
@@ -217,7 +227,7 @@ describe("buildShellNotices", () => {
         SHELL_NOTICE_IDS.USB_UNSUPPORTED,
         handlers,
       );
-      expect(notice.body).toBe("common:hotplug.unsupportedNoFallback");
+      expect(notice.message).toBe("shell:notices.messages.usbUnsupportedNoFallback");
       notice.action?.onClick();
       expect(handlers.openDevices).toHaveBeenCalledWith("usb");
     });
@@ -267,8 +277,9 @@ describe("buildShellNotices", () => {
     it("sends the user to Devices while the probe is still trying, with no retry", () => {
       const handlers = makeHandlers();
       const notice = byId({ availability: "none", uiMode: "full" }, SHELL_NOTICE_IDS.OUTPUT_NONE, handlers);
-      expect(notice.body).toBe("common:output.offline.body");
-      expect(notice.action?.label).toBe("common:output.offline.action");
+      expect(notice.message).toBe("shell:notices.messages.outputNone");
+      expect(notice.action?.label).toBe("shell:notices.actions.devices");
+      expect(notice.action?.navigates).toBe(true);
       expect(notice.secondaryAction).toBeUndefined();
       notice.action?.onClick();
       expect(handlers.openDevices).toHaveBeenCalledOnce();
@@ -278,11 +289,13 @@ describe("buildShellNotices", () => {
     it("offers a retry once the bridge probe gave up, and shows it pending while it runs", () => {
       const handlers = makeHandlers();
       const notice = byId({ availability: "none", hueProbeGaveUp: true }, SHELL_NOTICE_IDS.OUTPUT_NONE, handlers);
-      expect(notice.body).toBe("common:output.offline.stoppedBody");
+      expect(notice.message).toBe("shell:notices.messages.outputNoneStopped");
+      // A retry stays where it is, so it carries no arrow.
+      expect(notice.action?.navigates).toBeUndefined();
       notice.action?.onClick();
       expect(handlers.retryHueProbe).toHaveBeenCalledOnce();
       // Devices stays one click away beside the retry, as the full-mode banner had it.
-      expect(notice.secondaryAction?.label).toBe("common:output.offline.action");
+      expect(notice.secondaryAction?.label).toBe("shell:notices.actions.devices");
       notice.secondaryAction?.onClick();
       expect(handlers.openDevices).toHaveBeenCalledOnce();
 
@@ -291,7 +304,7 @@ describe("buildShellNotices", () => {
         SHELL_NOTICE_IDS.OUTPUT_NONE,
       );
       expect(pending.action?.pending).toBe(true);
-      expect(pending.action?.label).toBe("common:output.offline.retrying");
+      expect(pending.action?.label).toBe("shell:notices.actions.checking");
     });
 
     it("leaves calibration unsaid while there is no output to calibrate for", () => {
@@ -314,8 +327,8 @@ describe("buildShellNotices", () => {
     it.each(["compact", "full"] as const)("explains the calibration lock and opens LED setup (%s)", (uiMode) => {
       const handlers = makeHandlers();
       const notice = byId({ calibrationRequired: true, uiMode }, SHELL_NOTICE_IDS.CALIBRATION_REQUIRED, handlers);
-      expect(notice.title).toBe("lights:calibrationBanner.title");
-      expect(notice.body).toBe("lights:calibrationBanner.sub");
+      expect(notice.message).toBe("shell:notices.messages.calibrationRequired");
+      expect(notice.action?.label).toBe("shell:notices.actions.ledSetup");
       notice.action?.onClick();
       expect(handlers.openLedSetup).toHaveBeenCalledOnce();
     });
@@ -389,10 +402,9 @@ describe("buildShellNotices", () => {
       expect(notice.severity).toBe(NOTICE_SEVERITY.INFO);
       expect(notice.kind).toBe("event");
       expect(notice.dismissible).toBe(true);
-      expect(notice.title).toBe("shell:notices.titles.updateCheckFailed");
-      expect(notice.body).toBe("updater:error.backgroundCheckBody");
+      expect(notice.message).toBe("shell:notices.messages.updateCheckFailed");
       // The raw message embeds the feed URL and is not the explanation.
-      expect(notice.body).not.toContain(FAILURE.message);
+      expect(notice.message).not.toContain(FAILURE.message);
       expect(notice.action?.label).toBe("updater:actions.retry");
       expect(notice.action?.pending).toBe(false);
       notice.action?.onClick();

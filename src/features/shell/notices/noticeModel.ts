@@ -16,7 +16,7 @@ export const NOTICE_SEVERITY = {
 
 export type NoticeSeverity = (typeof NOTICE_SEVERITY)[keyof typeof NOTICE_SEVERITY];
 
-/** Spoken and read ahead of every title, so severity never rests on colour alone. */
+/** Spoken and read ahead of every message, so severity never rests on colour alone. */
 export const NOTICE_SEVERITY_LABEL: Record<NoticeSeverity, TranslationKey> = {
   [NOTICE_SEVERITY.ERROR]: "shell:notices.severity.error",
   [NOTICE_SEVERITY.WARNING]: "shell:notices.severity.warning",
@@ -63,6 +63,8 @@ export type ShellNoticeId = (typeof SHELL_NOTICE_IDS)[keyof typeof SHELL_NOTICE_
 export interface NoticeAction {
   label: string;
   onClick: () => void;
+  /** Goes to another screen, which the strip marks with a trailing arrow. */
+  navigates?: boolean;
   /** Keeps the button on screen, inert, while its work is in flight. */
   pending?: boolean;
   testId?: string;
@@ -73,15 +75,17 @@ export interface ShellNotice {
   tier: NoticeTier;
   severity: NoticeSeverity;
   kind: NoticeKind;
-  /** Short enough for the compact headline, which shows nothing else. */
-  title: string;
-  body?: string;
+  /**
+   * One sentence — the strip's only text. Compact cuts it with an ellipsis
+   * and offers the rest behind the toggle, so lead with what happened.
+   */
+  message: string;
   /** Onboarding's "1/3". */
   step?: string;
   action?: NoticeAction;
   /**
-   * A second way out, shown only where the body is: never in the compact
-   * headline, which has room for one button.
+   * A second way out, shown only where the strip has room: full mode, or an
+   * expanded compact slot — never the compact line, which has room for one.
    */
   secondaryAction?: NoticeAction;
   /** Shows a ×. Events always have one; the only dismissible condition is onboarding. */

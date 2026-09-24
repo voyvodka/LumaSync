@@ -1495,7 +1495,7 @@ describe("App mode orchestration", () => {
       await waitFor(() => {
         expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
         expect(screen.getByTestId("usb-disconnect-notice")).toHaveTextContent(
-          "common:hotplug.usbDisconnectedLightingOff",
+          "shell:notices.messages.usbDisconnectedLightingOff",
         );
       });
       await act(async () => {
@@ -2653,7 +2653,7 @@ describe("App mode orchestration", () => {
           expect(screen.getByTestId("hue-boot-retry-notice")).toHaveAttribute("data-state", "waiting");
         });
         expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
-        expect(screen.getByTestId("hue-boot-retry-notice")).toHaveTextContent("common:hueBootRetry.waiting");
+        expect(screen.getByTestId("hue-boot-retry-notice")).toHaveTextContent("shell:notices.messages.hueBootRetry.waiting");
         expect(hueChip()).toHaveTextContent("shell:statusBar.state.waiting");
 
         bridgeAnswer = "free";
@@ -2860,7 +2860,7 @@ describe("App mode orchestration", () => {
           ["usb"],
         ]);
         await waitForBusyNotice();
-        expect(leftOutNotice()).toHaveTextContent("common:hueLeftOut.busy");
+        expect(leftOutNotice()).toHaveTextContent("shell:notices.messages.hueLeftOut.busy");
         // Lighting runs, so the Off-only notice would be false.
         expect(screen.queryByTestId("hue-boot-retry-notice")).not.toBeInTheDocument();
 
@@ -2940,7 +2940,7 @@ describe("App mode orchestration", () => {
         await waitFor(() => {
           expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
           expect(screen.getByTestId("usb-disconnect-notice")).toHaveTextContent(
-            "common:hotplug.usbDisconnectedLightingOff",
+            "shell:notices.messages.usbDisconnectedLightingOff",
           );
         });
         expect(stopLightingMock).toHaveBeenCalledTimes(1);
@@ -3051,7 +3051,7 @@ describe("App mode orchestration", () => {
         await waitFor(() => {
           expect(leftOutNotice()).toHaveAttribute("data-reason", "busyGaveUp");
         });
-        expect(leftOutNotice()).toHaveTextContent("common:hueLeftOut.busyGaveUp");
+        expect(leftOutNotice()).toHaveTextContent("shell:notices.messages.hueLeftOut.busyGaveUp");
         expect(startHueMock).toHaveBeenCalledTimes(1);
         expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
         expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight");
@@ -3280,7 +3280,7 @@ describe("App mode orchestration", () => {
       await act(async () => {
         screen.getByTestId("notice-toggle").click();
       });
-      expect(screen.getByTestId("onboarding-notice")).toHaveTextContent("common:ui.onboarding.step1.title");
+      expect(screen.getByTestId("onboarding-notice")).toHaveTextContent("shell:notices.messages.onboarding.lights");
     });
   });
 
