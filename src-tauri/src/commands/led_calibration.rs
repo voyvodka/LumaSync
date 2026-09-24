@@ -7,6 +7,8 @@
 /// breaking deserialization — the encoder validates them at use-time.
 use serde::{Deserialize, Serialize};
 
+use crate::commands::ambilight_capture::BlackBorderInsets;
+
 // ---------------------------------------------------------------------------
 // LED segment counts
 // ---------------------------------------------------------------------------
@@ -352,14 +354,37 @@ pub fn sample_frame_for_sequence(
     counts: &LedSegmentCounts,
     window_frac: f32,
 ) -> Vec<[u8; 3]> {
+    sample_frame_within_insets(
+        frame,
+        sequence,
+        counts,
+        window_frac,
+        &BlackBorderInsets::default(),
+    )
+}
+
+/// `sample_frame_for_sequence` over the picture inside the black-border
+/// `insets`: LED positions map onto the content rectangle, and no window
+/// reaches into the bars, so on letterboxed content the top and bottom LEDs
+/// take the picture's edge rather than going dark. Zero insets give exactly
+/// the full-frame answer.
+pub fn sample_frame_within_insets(
+    frame: &crate::commands::ambilight_capture::CapturedFrame,
+    sequence: &[LedSequenceItem],
+    counts: &LedSegmentCounts,
+    window_frac: f32,
+    insets: &BlackBorderInsets,
+) -> Vec<[u8; 3]> {
     let w = frame.width as usize;
     let h = frame.height as usize;
     if w == 0 || h == 0 || frame.pixels_rgb.is_empty() {
         return vec![[0, 0, 0]; sequence.len()];
     }
+    let (rows, cols) = insets.content_bounds(w, h);
+    let (content_w, content_h) = (cols.len(), rows.len());
 
-    let half_w = ((w as f32 * window_frac) / 2.0).max(1.0) as usize;
-    let half_h = ((h as f32 * window_frac) / 2.0).max(1.0) as usize;
+    let half_w = ((content_w as f32 * window_frac) / 2.0).max(1.0) as usize;
+    let half_h = ((content_h as f32 * window_frac) / 2.0).max(1.0) as usize;
     // Stride 4 left ~24 samples per LED at 640×360 (half the window is off-frame
     // on an edge LED); that noise floor read as "sharp". Stride 2 is ~100.
     const STEP: usize = 2;
@@ -368,13 +393,13 @@ pub fn sample_frame_for_sequence(
         .iter()
         .map(|item| {
             let (nx, ny) = led_to_screen_pos(item, counts);
-            let cx = (nx * (w as f32 - 1.0)).round() as usize;
-            let cy = (ny * (h as f32 - 1.0)).round() as usize;
+            let cx = cols.start + (nx * (content_w as f32 - 1.0)).round() as usize;
+            let cy = rows.start + (ny * (content_h as f32 - 1.0)).round() as usize;
 
-            let row_start = cy.saturating_sub(half_h);
-            let row_end = (cy + half_h + 1).min(h);
-            let col_start = cx.saturating_sub(half_w);
-            let col_end = (cx + half_w + 1).min(w);
+            let row_start = cy.saturating_sub(half_h).max(rows.start);
+            let row_end = (cy + half_h + 1).min(rows.end);
+            let col_start = cx.saturating_sub(half_w).max(cols.start);
+            let col_end = (cx + half_w + 1).min(cols.end);
 
             let mut sum_r = 0u32;
             let mut sum_g = 0u32;
@@ -667,5 +692,189 @@ mod tests {
         for (i, item) in seq.iter().enumerate() {
             assert_eq!(item.index, i, "index must be contiguous");
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Shared geometry fixture — also read by the twin overlay's vitest suite
+    // (src/features/preview/__tests__/ledScreenGeometry.test.ts), so strip
+    // order and sampling position cannot drift between Rust and TS.
+    // ---------------------------------------------------------------------
+
+    const GOLDEN_GEOMETRY_PATH: &str =
+        "../src/features/preview/__tests__/ledScreenGeometry.golden.json";
+    const GOLDEN_GEOMETRY: &str =
+        include_str!("../../../src/features/preview/__tests__/ledScreenGeometry.golden.json");
+
+    #[derive(Deserialize)]
+    struct GoldenGeometry {
+        cases: Vec<GoldenCase>,
+    }
+
+    #[derive(Deserialize)]
+    struct GoldenCase {
+        name: String,
+        config: LedCalibrationConfig,
+        leds: Vec<(String, u16, f32, f32)>,
+    }
+
+    fn segment_key(segment: LedSegment) -> &'static str {
+        match segment {
+            LedSegment::Top => "top",
+            LedSegment::Right => "right",
+            LedSegment::Bottom => "bottom",
+            LedSegment::Left => "left",
+        }
+    }
+
+    const ANCHORS: [&str; 10] = [
+        "top-start",
+        "top-end",
+        "right-start",
+        "right-end",
+        "bottom-start",
+        "bottom-end",
+        "bottom-gap-right",
+        "bottom-gap-left",
+        "left-start",
+        "left-end",
+    ];
+
+    fn golden_config(
+        (top, right, bottom, left): (u16, u16, u16, u16),
+        bottom_missing: u16,
+        start_anchor: &str,
+        direction: &str,
+    ) -> LedCalibrationConfig {
+        LedCalibrationConfig {
+            template_id: None,
+            counts: LedSegmentCounts {
+                top,
+                right,
+                bottom,
+                left,
+            },
+            bottom_missing,
+            corner_ownership: "horizontal".to_string(),
+            visual_preset: "subtle".to_string(),
+            start_anchor: start_anchor.to_string(),
+            direction: direction.to_string(),
+            total_leds: top + right + bottom + left,
+        }
+    }
+
+    /// Every anchor both ways on an uneven strip with a bottom gap, the
+    /// non-gap anchors on an uneven strip without one, then the degenerate
+    /// shapes: one-LED edges, an empty edge, an odd bottom around a gap, and
+    /// the worker's one-LED fallback.
+    fn golden_configs() -> Vec<(String, LedCalibrationConfig)> {
+        let mut configs = Vec::new();
+        for direction in ["cw", "ccw"] {
+            for anchor in ANCHORS {
+                configs.push((
+                    format!("gap 9/5/8-3/4 {anchor} {direction}"),
+                    golden_config((9, 5, 8, 4), 3, anchor, direction),
+                ));
+            }
+            for anchor in ANCHORS.iter().filter(|anchor| !anchor.contains("gap")) {
+                configs.push((
+                    format!("uneven 7/3/6/5 {anchor} {direction}"),
+                    golden_config((7, 3, 6, 5), 0, anchor, direction),
+                ));
+            }
+        }
+        configs.extend([
+            (
+                "one-LED sides 4/1/3/1 top-start cw".to_string(),
+                golden_config((4, 1, 3, 1), 0, "top-start", "cw"),
+            ),
+            (
+                "no left edge 5/3/5/0 right-end ccw".to_string(),
+                golden_config((5, 3, 5, 0), 0, "right-end", "ccw"),
+            ),
+            (
+                "odd bottom gap 6/4/7-2/4 bottom-gap-left ccw".to_string(),
+                golden_config((6, 4, 7, 4), 2, "bottom-gap-left", "ccw"),
+            ),
+            (
+                "worker fallback 1/0/0/0 top-start cw".to_string(),
+                golden_config((1, 0, 0, 0), 0, "top-start", "cw"),
+            ),
+        ]);
+        configs
+    }
+
+    fn rust_geometry(config: &LedCalibrationConfig) -> Vec<(&'static str, u16, f32, f32)> {
+        build_led_sequence(config)
+            .iter()
+            .map(|item| {
+                let (x, y) = led_to_screen_pos(item, &config.counts);
+                (segment_key(item.segment), item.local_index, x, y)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn led_screen_geometry_matches_the_shared_golden_fixture() {
+        let golden: GoldenGeometry =
+            serde_json::from_str(GOLDEN_GEOMETRY).expect("golden geometry parses");
+        let names: Vec<String> = golden.cases.iter().map(|case| case.name.clone()).collect();
+        let expected: Vec<String> = golden_configs().into_iter().map(|(name, _)| name).collect();
+        assert_eq!(
+            names, expected,
+            "the fixture's cases drifted from golden_configs(); regenerate it"
+        );
+        for case in &golden.cases {
+            let actual = rust_geometry(&case.config);
+            assert_eq!(actual.len(), case.leds.len(), "{}: LED count", case.name);
+            for (index, (got, want)) in actual.iter().zip(&case.leds).enumerate() {
+                let (segment, local, x, y) = want;
+                assert!(
+                    got.0 == segment
+                        && got.1 == *local
+                        && (got.2 - x).abs() < 1e-5
+                        && (got.3 - y).abs() < 1e-5,
+                    "{}: strip LED #{index} is {got:?}, the fixture says {want:?}",
+                    case.name
+                );
+            }
+        }
+    }
+
+    /// Regenerates the fixture from the Rust geometry. Run only when the
+    /// geometry changes on purpose, then bring the TS side along:
+    /// `cargo test --lib write_led_screen_geometry_golden -- --ignored`
+    #[test]
+    #[ignore = "writes the shared golden fixture"]
+    fn write_led_screen_geometry_golden() {
+        let round = |v: f32| ((f64::from(v) * 1e6).round() / 1e6).to_string();
+        let mut out = String::from(concat!(
+            "{\n  \"description\": \"Strip order and sampling position of every LED, from ",
+            "build_led_sequence + led_to_screen_pos. Generated by write_led_screen_geometry_golden ",
+            "in src-tauri/src/commands/led_calibration.rs; read by that file's tests and by ",
+            "ledScreenGeometry.test.ts. Each LED is [segment, localIndex, x, y], normalized ",
+            "with (0, 0) at the top-left.\",\n  \"cases\": [\n",
+        ));
+        let configs = golden_configs();
+        for (n, (name, config)) in configs.iter().enumerate() {
+            out.push_str(&format!(
+                "    {{\n      \"name\": {},\n      \"config\": {},\n      \"leds\": [\n",
+                serde_json::to_string(name).expect("name"),
+                serde_json::to_string(config).expect("config"),
+            ));
+            let leds = rust_geometry(config);
+            for (i, (segment, local, x, y)) in leds.iter().enumerate() {
+                let comma = if i + 1 < leds.len() { "," } else { "" };
+                out.push_str(&format!(
+                    "        [\"{segment}\", {local}, {}, {}]{comma}\n",
+                    round(*x),
+                    round(*y),
+                ));
+            }
+            let comma = if n + 1 < configs.len() { "," } else { "" };
+            out.push_str(&format!("      ]\n    }}{comma}\n"));
+        }
+        out.push_str("  ]\n}\n");
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(GOLDEN_GEOMETRY_PATH);
+        std::fs::write(path, out).expect("write golden geometry");
     }
 }

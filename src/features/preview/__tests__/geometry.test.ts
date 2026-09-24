@@ -32,7 +32,7 @@ import { computeTwinLedPositions } from "../geometry";
 // implementation changes these numbers, the tests break loudly).
 // ---------------------------------------------------------------------------
 const EDGE_INSET = 0.022;
-const CORNER_INSET = 0.03;
+const CORNER_INSET = 0.05;
 
 // ---------------------------------------------------------------------------
 // Fixture configs
@@ -48,7 +48,7 @@ const STANDARD_CONFIG: LedCalibrationConfig = {
   totalLeds: 30,
 };
 
-/** Config with a non-zero bottomMissing gap so the gap-packing branch fires. */
+/** A non-zero bottomMissing gap, which the twin (like the sampler) spreads across. */
 const GAP_CONFIG: LedCalibrationConfig = {
   counts: { top: 8, right: 5, bottom: 10, left: 5 },
   bottomMissing: 4,

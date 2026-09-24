@@ -1,36 +1,37 @@
 /**
  * Twin-overlay LED geometry.
  *
- * The digital-twin overlay must render LED #N at the same physical screen
- * edge position the real strip LED #N occupies. The canonical strip order is
- * owned by `buildLedSequence` (calibration/model/indexMapping) — the SAME
- * function the calibration editor + synthetic test generator consume — so we
- * REUSE it here verbatim instead of re-deriving the index→edge mapping. That
- * guarantees `twin LED #N === strip LED #N` (the highest-correctness
- * requirement of the overlay).
+ * The twin draws strip LED #N where LED #N takes its colour from. Two things
+ * are shared with the backend rather than re-derived here:
  *
- * `buildLedSequence` returns items in strip order (anchor-rotated, direction
- * applied). The enriched `EdgeSignalPayload.leds` buffer is emitted in that
- * exact same order, so the array position here IS the strip index that indexes
- * into `leds`. Each item also carries `{ segment, localIndex }` — the canonical
- * per-edge local coordinate, oriented exactly as documented in
- * `LedRoomCanvas.tsx`:
+ *   - strip order: `buildLedSequence` (calibration/model/indexMapping), the
+ *     mirror of `build_led_sequence` in led_calibration.rs. The enriched
+ *     `EdgeSignalPayload.leds` buffer is emitted in that order, so the array
+ *     position here IS the strip index into `leds`.
+ *   - screen position: `ledScreenPosition`, the mirror of `led_to_screen_pos`,
+ *     where the worker centres each LED's sampling window.
+ *
+ * Both are pinned by one golden fixture, `__tests__/ledScreenGeometry.golden.json`,
+ * read by vitest and by `cargo test`: a change on one side fails the other
+ * side's test until the fixture and both implementations move together.
+ *
+ * Canonical per-edge local coordinates (see `LedRoomCanvas.tsx`):
  *
  *   - Top edge:    local 0 = LEFT,   n-1 = RIGHT  (L → R)
  *   - Right edge:  local 0 = TOP,    m-1 = BOTTOM (T → B)
  *   - Bottom edge: local 0 = RIGHT,  p-1 = LEFT   (R → L)
  *   - Left edge:   local 0 = BOTTOM, q-1 = TOP    (B → T)
  *
- * We map each canonical local coordinate to a normalized 0..1 position on the
- * overlay viewport perimeter. The bottom-gap packing mirrors
- * `LedRoomCanvas.computeBottomDotXs` (left half packed from the left, right
- * half packed from the right, gap centred) so a bottom-gap strip lands its
- * dots where the physical strip does.
+ * The sampler ignores `bottomMissing` — bottom LEDs spread across the whole
+ * bottom edge — so the twin does too. The calibration editor still draws the
+ * physical gap: that is a picture of the strip, this is a picture of what each
+ * LED shows.
  */
 
-import { buildLedSequence } from "../calibration/model/indexMapping";
+import { buildLedSequence, type LedSequenceItem } from "../calibration/model/indexMapping";
 import type {
   LedCalibrationConfig,
+  LedSegmentCounts,
   LedSegmentKey,
 } from "../calibration/model/contracts";
 
@@ -53,34 +54,37 @@ export interface TwinLedPosition {
   y: number;
 }
 
-/** Evenly spread `count` points across [lo, hi] (inclusive endpoints). */
-function spread(count: number, lo: number, hi: number): number[] {
-  if (count <= 0) return [];
-  if (count === 1) return [(lo + hi) / 2];
-  const step = (hi - lo) / (count - 1);
-  return Array.from({ length: count }, (_, i) => lo + step * i);
+/**
+ * Normalized centre of the screen window an LED samples, `(0, 0)` top-left.
+ * A one-LED edge sits at its local-0 corner, as it does in the backend.
+ */
+export function ledScreenPosition(
+  item: Pick<LedSequenceItem, "segment" | "localIndex">,
+  counts: LedSegmentCounts,
+): { x: number; y: number } {
+  const count = counts[item.segment];
+  const frac = item.localIndex === 0 || count <= 1 ? 0 : item.localIndex / (count - 1);
+  switch (item.segment) {
+    case "top":
+      return { x: frac, y: 0 };
+    case "right":
+      return { x: 1, y: frac };
+    case "bottom":
+      return { x: 1 - frac, y: 1 };
+    case "left":
+    default:
+      return { x: 0, y: 1 - frac };
+  }
 }
 
-/**
- * Bottom-edge X coordinates in LEFT→RIGHT order, honouring `bottomMissing`.
- * Mirrors `LedRoomCanvas.computeBottomDotXs` exactly so the gap geometry
- * matches the calibration editor + physical strip.
- */
-function bottomXs(count: number, missing: number, lo: number, hi: number): number[] {
-  if (count <= 0) return [];
-  if (missing <= 0) return spread(count, lo, hi);
+/** Along an edge, pulled in from the corners so neighbouring edges' dots do not touch. */
+function alongEdge(value: number): number {
+  return CORNER_INSET + value * (1 - 2 * CORNER_INSET);
+}
 
-  const totalSlots = count + missing;
-  if (totalSlots <= 1) return spread(count, lo, hi);
-
-  const step = (hi - lo) / (totalSlots - 1);
-  const leftHalf = Math.floor(count / 2);
-  const out: number[] = [];
-  for (let i = 0; i < leftHalf; i += 1) out.push(lo + step * i);
-  for (let i = 0; i < count - leftHalf; i += 1) {
-    out.push(lo + step * (leftHalf + missing + i));
-  }
-  return out;
+/** Across an edge, pinned just inside the viewport border. */
+function acrossEdge(value: number): number {
+  return EDGE_INSET + value * (1 - 2 * EDGE_INSET);
 }
 
 /**
@@ -88,50 +92,15 @@ function bottomXs(count: number, missing: number, lo: number, hi: number): numbe
  * `result[N]` is the screen position of strip LED #N.
  */
 export function computeTwinLedPositions(config: LedCalibrationConfig): TwinLedPosition[] {
-  const sequence = buildLedSequence(config);
-  const { counts, bottomMissing } = config;
-
-  const hi = 1 - CORNER_INSET;
-  const lo = CORNER_INSET;
-  const topXs = spread(counts.top, lo, hi);
-  const rightYs = spread(counts.right, lo, hi);
-  const leftYs = spread(counts.left, lo, hi);
-  const botXs = bottomXs(counts.bottom, bottomMissing, lo, hi);
-
-  return sequence.map((item, stripIndex) => {
-    const { segment, localIndex } = item;
-    switch (segment) {
-      case "top":
-        return {
-          index: stripIndex,
-          edge: segment,
-          x: topXs[localIndex] ?? 0.5,
-          y: EDGE_INSET,
-        };
-      case "right":
-        return {
-          index: stripIndex,
-          edge: segment,
-          x: 1 - EDGE_INSET,
-          y: rightYs[localIndex] ?? 0.5,
-        };
-      case "bottom":
-        // canonical local 0 = RIGHT → reverse the L→R array.
-        return {
-          index: stripIndex,
-          edge: segment,
-          x: botXs[botXs.length - 1 - localIndex] ?? 0.5,
-          y: 1 - EDGE_INSET,
-        };
-      case "left":
-      default:
-        // canonical local 0 = BOTTOM → reverse the T→B array.
-        return {
-          index: stripIndex,
-          edge: segment,
-          x: EDGE_INSET,
-          y: leftYs[leftYs.length - 1 - localIndex] ?? 0.5,
-        };
-    }
+  const { counts } = config;
+  return buildLedSequence(config).map((item, stripIndex) => {
+    const { x, y } = ledScreenPosition(item, counts);
+    const horizontal = item.segment === "top" || item.segment === "bottom";
+    return {
+      index: stripIndex,
+      edge: item.segment,
+      x: horizontal ? alongEdge(x) : acrossEdge(x),
+      y: horizontal ? acrossEdge(y) : alongEdge(y),
+    };
   });
 }
