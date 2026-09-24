@@ -2080,7 +2080,9 @@ for (const reason of emittedLedOutputReasons) {
 console.log("\n[ Hue transport reasons — Rust → hue.ts parity ]");
 const HUE_TRANSPORT_RUST_FILES = [
   resolve(ROOT, "src-tauri/src/commands/hue/dtls.rs"),
-  resolve(ROOT, "src-tauri/src/commands/hue/sender.rs"),
+  resolve(ROOT, "src-tauri/src/commands/hue/sender/entertainment.rs"),
+  resolve(ROOT, "src-tauri/src/commands/hue/sender/dtls_loop.rs"),
+  resolve(ROOT, "src-tauri/src/commands/hue/sender/builder.rs"),
 ];
 const emittedHueTransportReasons = [
   ...new Set(
