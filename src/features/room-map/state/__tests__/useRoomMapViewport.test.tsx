@@ -119,7 +119,7 @@ describe("useRoomMapViewport", () => {
   });
 
   it("fits the room that finished loading, not the placeholder it opened with", () => {
-    // `useRoomMapPersist` seeds DEFAULT_ROOM_MAP (5×4) and swaps in the stored
+    // `useRoomMapState` seeds DEFAULT_ROOM_MAP (5×4) and swaps in the stored
     // room a commit later, so a dimension change arriving while `loading` IS the
     // room the user opened. Framing the first-render value instead meant every
     // map was fitted as a 5×4 and a larger one overflowed the canvas.

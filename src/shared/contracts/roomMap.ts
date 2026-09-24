@@ -25,7 +25,7 @@ import type { CommandStatusOf } from "./status";
 // ---------------------------------------------------------------------------
 
 /** Room-map persistence is not on this surface — the config round-trips through
- * the shellStore (`useRoomMapPersist`), so the only room-map command is the
+ * the shellStore (`useRoomMapState`), so the only room-map command is the
  * background-image copy, which needs filesystem access the webview lacks. */
 export const ROOM_MAP_COMMANDS = {
   COPY_BACKGROUND_IMAGE: "copy_background_image",

@@ -27,6 +27,28 @@ can see the change. A failed invoke is logged, never swallowed, but the local ed
 it would flicker the canvas, and the next save round reconciles. That is why a handler that returns
 early on an invoke failure is wrong here even though it would be right elsewhere.
 
+**The editor's config, undo history and selection are one reducer, and a gesture reaches it once.**
+`state/roomMapReducer.ts` holds all three; `useRoomMapState` drives it and owns saving. Its actions
+are `apply` (a user edit: one undo entry, one save), `adopt` (a write the user did not make — the
+bridge seed, a refused Hue zone mutation's pre-image — which saves but stays out of history, or
+Cmd+Z would restore what the backend refused), `undo`/`redo`, and the two selections. An `apply`
+may carry a gesture key: consecutive applies under the same key within `GESTURE_COALESCE_MS`, or
+flagged as a key auto-repeat, fold into one undo step, and their save waits until the gesture goes
+quiet (unmount flushes it). Arrow nudges, the Hue zone size slider and colour picker, the channel
+height slider, the image opacity slider and wheel, and the on-canvas LED count use it. A pointer
+drag does not need it: every canvas object keeps its in-flight position in local state or the DOM
+and calls back once, on release. Undo can remove the selected object, so the reducer drops a
+selection that no longer resolves. History is snapshots, so undoing past an `adopt` also takes the
+adopted change back; the adopts that exist are rare and re-run on the next bridge read.
+
+**A pan moves one transform; the objects never render for it.** The canvas writes the object
+layer's `transform` straight to the DOM on every pointer move and commits the offset on release.
+The canvas objects are `memo` components and the editor hands them only stable callbacks, so that
+one commit re-renders none of them either. An inline closure in their props undoes this silently —
+`RoomMapEditor.pan.test.tsx` counts their renders. The grid is drawn a canvas-width past the view
+on each side, so the part a pan reveals before it commits is already there. Snap guides live in the
+editor, so `useSnapGuides` stores a new list only when it differs from the last one.
+
 **Channel-to-zone assignment keeps three shapes in sync by hand.** One handler serves drag-drop onto
 a zone header, drag-drop onto the unassigned bucket, and the "Move to →" popover, because all three
 have to write the same three fields: the channel's `zoneId` (the join key), its
@@ -66,13 +88,13 @@ bridge position, never re-route a light.
 
 **A channel placement names its entertainment area, because `channelIndex` is unique only inside one.** `HueZone` has carried `entertainmentAreaId` since v1.5 (and the since-retired `hueChannelRegionOverrides` was keyed by it); `hueChannels` was the one place that was not, so two areas' channel 0 were a single record and the second area's placements overwrote the first's. The `4 → 5` migration backfills from `lastHueAreaId` — sound because one bridge is paired at a time and, until this landed, a second area *overwrote* rather than joined. A state with no `lastHueAreaId` is left unscoped rather than bound to an invented area, and an unscoped record is adopted by whichever area is being viewed. Treat empty as unscoped rather than testing for `undefined`: the field is nullable like `zoneId` because the Rust mirror echoes `None` back as `null`, and a strict `=== undefined` hides every round-tripped record from every area.
 
-**The editor shows one area at a time, and the object-id scheme is why.** Room-map object ids are `hue-<index>` with no area (`model/objectId.ts`), so rendering two areas at once makes a selection ambiguous — every mutation matching on `channelIndex` alone would hit the same-numbered channel in the other area. `RoomMapEditor` filters to the active `hueAreaId` and writes back through `replaceHueChannel`, which matches area *and* index against the full stored list. Placing several areas independently is P3 work and needs a wider id first.
+**The editor shows one area at a time, and the object-id scheme is why.** Room-map object ids are `hue-<index>` with no area (`model/objectId.ts`), so rendering two areas at once makes a selection ambiguous — every mutation matching on `channelIndex` alone would hit the same-numbered channel in the other area. `RoomMapEditor` filters to the active `hueAreaId` and writes back through `replaceHueChannel`, which matches area *and* index against the full stored list. The filter has to cover every reader and writer keyed on an object id, not just the canvas: the object list, the inspector and the property bar once read the unfiltered config, and the nudge, typed-position, lock and zone-assignment paths matched on the index alone, so another area's same-numbered channel was listed, shown or moved. They all go through `model/hueChannelScope.ts` or the editor's area-scoped config now. Placing several areas independently is P3 work and needs a wider id first.
 
 **Anything the Rust zone commands echo back has to exist on the Rust struct, or the round trip erases it.** The four `hue_zone` commands return the channel list and `useRoomMapHueZones` re-applies it wholesale, so a field present in TypeScript and absent from `models/room_map.rs` is silently dropped the moment a channel is assigned to a zone. `locked` had been lost that way since it was added; `entertainmentAreaId` would have joined it. Both are mirrored now, and a channel synthesised by `assign_channel_to_hue_zone` inherits its area from the zone, which belongs to exactly one.
 
 **An editor's output is a subset, so it is merged into `hueChannels`, never assigned over it.** The panel only ever sees the channels one bridge is currently reporting. Assigning that array onto the config deleted every placement outside the view — another area's, and all of them while the bridge was unreachable. `mergeHueChannels` keeps the untouched records, which is the same rule as "the editor never deletes a Hue channel" applied to the save path rather than to a delete button.
 
-**The one-shot fit has to read the dimensions live, not the ones present at first render.** `useRoomMapPersist` seeds `DEFAULT_ROOM_MAP` and swaps in the stored room a commit later, and the canvas container only mounts once loading ends — so a ref captured at first render always held the 5×4 placeholder, and *every* map was framed as if it were 5×4. A larger room then opened zoomed too far in, overflowing the canvas instead of sitting centred in it. The guard against re-fitting under a user who is editing the room size is `initialFitDone`, not a stale ref; the two were conflated, and a test had pinned the stale read as intentional with the reasoning that "a dimension change arriving before the container mounts must not become the basis of the fit" — but that change *is* the room finishing loading.
+**The one-shot fit has to read the dimensions live, not the ones present at first render.** `useRoomMapState` seeds `DEFAULT_ROOM_MAP` and swaps in the stored room a commit later, and the canvas container only mounts once loading ends — so a ref captured at first render always held the 5×4 placeholder, and *every* map was framed as if it were 5×4. A larger room then opened zoomed too far in, overflowing the canvas instead of sitting centred in it. The guard against re-fitting under a user who is editing the room size is `initialFitDone`, not a stale ref; the two were conflated, and a test had pinned the stale read as intentional with the reasoning that "a dimension change arriving before the container mounts must not become the basis of the fit" — but that change *is* the room finishing loading.
 
 **A zone is a physical square in metres, which means its two cube-space scales diverge in a
 non-square room.** The inspector edits one edge length; `scaleX` and `scaleY` are derived from it

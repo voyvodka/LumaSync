@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { memo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TvAnchorPlacement } from "@/shared/contracts/roomMap";
 import { ResizeHandle } from "./ResizeHandle";
@@ -20,7 +20,7 @@ interface TvAnchorObjectProps {
   onSnapDragEnd?: () => void;
 }
 
-export function TvAnchorObject({
+export const TvAnchorObject = memo(function TvAnchorObject({
   placement,
   pxPerMeter,
   selected,
@@ -240,4 +240,4 @@ export function TvAnchorObject({
       )}
     </div>
   );
-}
+});
