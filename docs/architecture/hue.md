@@ -12,8 +12,8 @@ the bridge sync, but do not place them; that is the room map's, and only the roo
 ## Decisions
 
 **The streaming interval floor is 50 ms (20 Hz).** `HUE_SENDER_MIN_INTERVAL_MS` in
-`commands/hue/sender.rs`. Going faster does not give a faster response — the bridge throttles and
-drops the stream. Treat it as a protocol constant.
+`commands/hue/sender/dtls_loop.rs`. Going faster does not give a faster response — the bridge
+throttles and drops the stream. Treat it as a protocol constant.
 
 **Transport is HTTPS-first.** Bridge Pro serves its local API over HTTPS only, so every bridge call
 goes to HTTPS first; only IP verification may then fall back to plain HTTP for older bridges (see

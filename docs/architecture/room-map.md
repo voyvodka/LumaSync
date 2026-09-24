@@ -73,7 +73,7 @@ the one place a placement meets its live channel, so it stamps `channelId`; the 
 room-aware sampling (`toChannelPlacements` → `apply_channel_placements`) and the write-back
 (`merge_service_locations`) all match on it and skip a record without one. Which light gets which
 colour still comes from the bridge's channel array (`flatten_light_slots` in
-`commands/hue/sender.rs`), so a bad placement can move a real channel's sampled region or its
+`commands/hue/sender/http_fallback.rs`), so a bad placement can move a real channel's sampled region or its
 bridge position, never re-route a light.
 
 **The Devices channel map writes the same `hueChannels` the room map does, so it has to carry the whole record rather than flatten it.** It no longer edits positions — placement is authored here — but it still seeds, pushes and takes the bridge's arrangement. Its rebuild once emitted a bare `{channelIndex, x, y, z}` literal, dropping `label`, `locked`, `zoneId` and `zoneRelativePosition` on every save: a zone-bound channel came back detached, and with no area attribution a second entertainment area's placements overwrote the first's. `resolveChannelPlacement` returns the stored record with its world position resolved through the zone, and every position write (drag, nudge, the height inspector, "Take bridge's") goes through `model/hueChannelPosition.ts` so a bound channel's `zoneRelativePosition` moves with it — writing only the absolute pair would leave the runtime resolving the old position. Height has its own helper (`setHueChannelWorldZ`) because Rust resolves `center_z + scale_z * relative.z` too.

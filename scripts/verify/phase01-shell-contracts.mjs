@@ -399,7 +399,10 @@ check(
 console.log("\n[ Hue pairing response — Rust → hue.ts field parity ]");
 // credentialStorageBackend was dropped here once already and the DTLS
 // pre-shared key stayed in plaintext as a result — docs/architecture/hue.md.
-const HUE_ONBOARDING_RUST_FILE = resolve(ROOT, "src-tauri/src/commands/hue_onboarding.rs");
+const HUE_ONBOARDING_RUST_FILE = resolve(
+  ROOT,
+  "src-tauri/src/commands/hue_onboarding/pairing.rs"
+);
 const hueOnboardingRustSource = readOrEmpty(HUE_ONBOARDING_RUST_FILE, "rust hue_onboarding");
 const HUE_CREDENTIAL_STORE_RUST_FILE = resolve(
   ROOT,
@@ -2073,7 +2076,9 @@ for (const reason of emittedLedOutputReasons) {
 console.log("\n[ Hue transport reasons — Rust → hue.ts parity ]");
 const HUE_TRANSPORT_RUST_FILES = [
   resolve(ROOT, "src-tauri/src/commands/hue/dtls.rs"),
-  resolve(ROOT, "src-tauri/src/commands/hue/sender.rs"),
+  resolve(ROOT, "src-tauri/src/commands/hue/sender/entertainment.rs"),
+  resolve(ROOT, "src-tauri/src/commands/hue/sender/dtls_loop.rs"),
+  resolve(ROOT, "src-tauri/src/commands/hue/sender/builder.rs"),
 ];
 const emittedHueTransportReasons = [
   ...new Set(
