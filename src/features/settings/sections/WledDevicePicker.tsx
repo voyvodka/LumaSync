@@ -35,6 +35,7 @@ import {
 } from "@/features/device/wledApi";
 import type { WledRestoreOutcome } from "@/features/device/wledSinkRestore";
 import { parseCommandError } from "@/shared/contracts/status";
+import { Callout, type CalloutTone } from "@/shared/ui/Callout";
 import { EmptyState } from "@/shared/ui/EmptyState";
 import { StatusPill } from "@/shared/ui/StatusPill";
 
@@ -230,16 +231,9 @@ export function WledDevicePicker({
 
       {/* Discovery result status */}
       {discoveryStatus && (
-        <div
-          role="status"
-          aria-live="polite"
-          className={[
-            "lm-status-banner mt-2 rounded px-3 py-2 text-[11px]",
-            discoveryStatus.code === WLED_STATUS.DISCOVERY_OK ? "is-ok" : "is-err",
-          ].join(" ")}
-        >
+        <Callout tone={discoveryStatus.code === WLED_STATUS.DISCOVERY_OK ? "ok" : "error"} className="mt-2">
           {translateWledStatusCode(discoveryStatus.code, t) ?? discoveryStatus.message}
-        </div>
+        </Callout>
       )}
 
       {/* Device cards */}
@@ -310,16 +304,9 @@ export function WledDevicePicker({
               </div>
               {/* Status note from the latest action */}
               {resultStatus && (
-                <div
-                  role="status"
-                  aria-live="polite"
-                  className={[
-                    "lm-status-banner rounded px-2 py-1 text-[10px] mt-1",
-                    resultStatus.code === "WLED_DISCOVERY_OK" ? "is-ok" : "is-warn",
-                  ].join(" ")}
-                >
+                <Callout tone={resultStatus.code === "WLED_DISCOVERY_OK" ? "ok" : "warning"} className="mt-1">
                   {translateWledStatusCode(resultStatus.code, t) ?? resultStatus.message}
-                </div>
+                </Callout>
               )}
               <div className="lm-dcard-actions">
                 <button
@@ -365,8 +352,8 @@ function WledRestoreBanner({
 }) {
   if (outcome.kind === "idle" || outcome.kind === "no-saved-device") return null;
 
-  const tone =
-    outcome.kind === "failed" ? "is-err" : outcome.kind === "restored" ? "is-ok" : "is-warn";
+  const tone: CalloutTone =
+    outcome.kind === "failed" ? "error" : outcome.kind === "restored" ? "ok" : "info";
 
   // Keep every `t()` call out of a template literal — the i18n orphan
   // verifier consumes a backtick literal whole and never sees a key inside it.
@@ -383,14 +370,10 @@ function WledRestoreBanner({
       : null;
 
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className={["lm-status-banner mb-2 rounded px-3 py-2 text-[11px]", tone].join(" ")}
-    >
+    <Callout tone={tone} className="mb-2">
       {headline}
       {reason ? " " + reason : null}
-    </div>
+    </Callout>
   );
 }
 

@@ -16,6 +16,7 @@ import {
   type UnlistenFn,
 } from "@/features/shell/windowApi";
 import { parseHex, rgbToHex } from "@/shared/lib/color";
+import { Callout } from "@/shared/ui/Callout";
 import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
 import { modeKind } from "@/features/mode/model/modeKinds";
 import { ModeStrip } from "@/features/mode/ui/ModeStrip";
@@ -522,18 +523,16 @@ export function ControlPopupApp() {
             </p>
           )}
           {!runError && hueLeftOut && (
-            <p className="lm-control-info" role="status">
-              <span className="lm-control-info-dot" aria-hidden="true" />
+            <Callout tone="info" className="mt-2">
               {previewOnly
                 ? t("preview:control.autoStart.noStrip")
                 : t("preview:control.autoStart.stripOnly")}
-            </p>
+            </Callout>
           )}
           {!runError && !hueLeftOut && previewOnly && (
-            <p className="lm-control-info" role="status">
-              <span className="lm-control-info-dot" aria-hidden="true" />
+            <Callout tone="info" className="mt-2">
               {t("preview:status.LED_TEST_PATTERN_PREVIEW_ONLY")}
-            </p>
+            </Callout>
           )}
         </div>
 

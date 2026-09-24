@@ -35,15 +35,17 @@ describe("status banner convention", () => {
     }
   });
 
-  it("routes every converted banner through the shared class", () => {
-    for (const file of CONVERTED) {
-      expect(src(file)).toContain("lm-status-banner");
-    }
+  it("routes every converted banner through the shared class or a Callout", () => {
+    expect(src("features/settings/sections/device/UsbStripsCategory.tsx")).toContain("lm-status-banner");
+    // One-sentence notices moved to <Callout>; the banner class must not creep back.
+    const wled = src("features/settings/sections/WledDevicePicker.tsx");
+    expect(wled).toContain("<Callout");
+    expect(wled).not.toContain("lm-status-banner");
   });
 
   it("defines a tone for each state the banners use", () => {
     const css = readStylesheet();
-    for (const tone of ["is-ok", "is-warn", "is-err", "is-info"]) {
+    for (const tone of ["is-ok", "is-err", "is-info"]) {
       expect(css, `.lm-status-banner.${tone} is missing`).toContain(
         `.lm-status-banner.${tone}`,
       );
@@ -51,10 +53,6 @@ describe("status banner convention", () => {
   });
 
   it("keeps the shared banner legible under forced colors", () => {
-    const css = readStylesheet();
-    const block = css.slice(css.indexOf(".lm-status-banner {"));
-    expect(block.slice(0, block.indexOf(".lm-chmap-feedback {"))).toContain(
-      "forced-colors: active",
-    );
+    expect(readStylesheet()).toMatch(/@media \(forced-colors: active\) \{\s*\.lm-status-banner \{/);
   });
 });

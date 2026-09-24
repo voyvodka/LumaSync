@@ -56,7 +56,8 @@ export function MovePopover({
     >
       <button
         type="button"
-        role="menuitem"
+        role="menuitemradio"
+        aria-checked={currentZoneId === null}
         className={`lm-room-dock-move-item ${currentZoneId === null ? "is-on" : ""}`}
         onClick={() => {
           onPick(null);
@@ -74,7 +75,8 @@ export function MovePopover({
         <button
           key={z.id}
           type="button"
-          role="menuitem"
+          role="menuitemradio"
+          aria-checked={currentZoneId === z.id}
           className={`lm-room-dock-move-item ${currentZoneId === z.id ? "is-on" : ""}`}
           onClick={() => {
             onPick(z.id);

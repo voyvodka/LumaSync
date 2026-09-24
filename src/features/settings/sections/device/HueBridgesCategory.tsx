@@ -1,25 +1,29 @@
+import { useId, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { HUE_RUNTIME_ACTION_HINT, HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
 import type { HueChannelPlacementOverride, HueRuntimeTriggerSource } from "@/shared/contracts/hue";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import {
   deriveHueBridgeCardState,
   huePairingErrorDescriptionKey,
-  hueStreamFailureReasonKey,
 } from "@/features/hue/model/hueBridgeCardState";
-import { HUE_STREAM_MAX_HZ } from "@/features/hue/model/streamRate";
 import { buildHueRuntimeStatusCard } from "@/features/hue/model/hueRuntimeStatusCard";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
+import { Button } from "@/shared/ui/Button";
+import { cx } from "@/shared/ui/cx";
+import { IconBridge, IconHueBridgeGlyph, IconRefresh, IconWifi } from "@/shared/ui/icons";
+import { StatusPill } from "@/shared/ui/StatusPill";
 import { HueChannelMapPanel } from "../HueChannelMapPanel";
 import {
-  IconBridge,
-  IconCheck,
-  IconHueBridgeGlyph,
-  IconInfo,
-  IconRefresh,
-  IconWifi,
-} from "@/shared/ui/icons";
+  HUE_CARD_ACTIONS,
+  HUE_CARD_CELL_TONE_CLASS,
+  HUE_CARD_TONE_CLASS,
+  HUE_CARD_VIEW,
+  resolveHueCardText,
+  type HueCardActionSpec,
+  type HueCardContext,
+  type HueCardView,
+} from "./hueCardView";
 
 export interface HueBridgesCategoryProps {
   isActive: boolean;
@@ -54,6 +58,7 @@ export function HueBridgesCategory({
   onStopHue,
 }: HueBridgesCategoryProps) {
   const { t } = useTranslation();
+  const manualIpFieldId = useId();
   const {
     bridges,
     selectedBridgeId,
@@ -62,7 +67,6 @@ export function HueBridgesCategory({
     manualIpError,
     credentialState,
     bridgeUnreachable,
-    areaGroups,
     selectedAreaId,
     selectedArea,
     canStartHue,
@@ -76,7 +80,6 @@ export function HueBridgesCategory({
     status: hueStatus,
     runtimeStatus,
     runtimeStatusReadFailure,
-    runtimeTargets,
     isRuntimeMutating,
     areaChannels,
     isLoadingChannels,
@@ -88,26 +91,11 @@ export function HueBridgesCategory({
     setManualIp,
     submitManualIp,
     pair,
-    refreshAreas,
-    selectArea,
-    revalidateArea,
-    startRuntime,
-    retryRuntimeTarget,
   } = hue;
 
   const hueManualIpDisabled = isHueDiscovering || !manualIp || Boolean(manualIpError);
-  const hueAreasDisabled = !selectedBridge || credentialState !== "valid" || isLoadingAreas;
-  const hueReadinessDisabled = !selectedBridge || !selectedAreaId || credentialState !== "valid" || isCheckingReadiness;
-  const hueStartDisabled =
-    !canStartHue
-    || isValidatingCredential
-    || credentialState !== "valid"
-    || isReadinessStale
-    || isRuntimeMutating;
-
-  const hueRuntimeModel = buildHueRuntimeStatusCard({
-    status: runtimeStatus,
-  });
+  const manualIpDescriptionId = `${manualIpFieldId}-description`;
+  const manualIpErrorId = `${manualIpFieldId}-error`;
 
   const hueBridgeState = deriveHueBridgeCardState({
     selectedBridgeId,
@@ -121,10 +109,24 @@ export function HueBridgesCategory({
     isReadinessStale,
   });
 
-  const pairingErrorKey = huePairingErrorDescriptionKey(hueStatus?.code);
-  // Re-pair is offered only when the runtime itself says the key was refused.
-  const streamFailedNeedsRepair =
-    hueBridgeState === "streamFailed" && hueRuntimeModel.actionHints.includes(HUE_RUNTIME_ACTION_HINT.REPAIR);
+  const cardContext: HueCardContext = {
+    t,
+    hue,
+    runtimeModel: buildHueRuntimeStatusCard({ status: runtimeStatus }),
+    pairingErrorKey: huePairingErrorDescriptionKey(hueStatus?.code),
+    gates: {
+      areasDisabled: !selectedBridge || credentialState !== "valid" || isLoadingAreas,
+      readinessDisabled: !selectedBridge || !selectedAreaId || credentialState !== "valid" || isCheckingReadiness,
+      startDisabled:
+        !canStartHue
+        || isValidatingCredential
+        || credentialState !== "valid"
+        || isReadinessStale
+        || isRuntimeMutating,
+    },
+    onStopHue,
+  };
+  const view: HueCardView | null = hueBridgeState ? HUE_CARD_VIEW[hueBridgeState] : null;
 
   const hueIsDiscoveryFailed = !isHueDiscovering && !selectedBridgeId && hueStatus?.code === "HUE_DISCOVERY_FAILED";
   const hueIsDiscoveryEmpty = !isHueDiscovering && !selectedBridgeId && hueStatus !== null && bridges.length === 0 && !hueIsDiscoveryFailed;
@@ -135,49 +137,14 @@ export function HueBridgesCategory({
         <div>
           <h1>{t("device:page.header.hueTitle")}</h1>
           <div className="lm-device-head-sub" role="status" aria-live="polite">
-            {hueBridgeState === "streaming"
-              ? t("hue:card.subtitleStreaming", { area: selectedArea?.name ?? "—" })
-              : hueBridgeState === "idle"
-              ? `${selectedArea?.name ?? "—"} · ${t("hue:page.pill.ready").toLowerCase()}`
-              : hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton"
-              ? t("hue:wizard.pairingStep")
-              : hueBridgeState === "pairingTimedOut"
-              ? t("hue:pair.timedOutTitle")
-              : hueBridgeState === "pairingDeferred"
-              ? t("hue:pair.deferredTitle")
-              : hueBridgeState === "areaSelect"
-              ? t("hue:wizard.areaStep")
-              : hueBridgeState === "authError"
-              ? t("hue:credential.needsRepair")
-              : hueBridgeState === "pairingFailed"
-              ? t("hue:wizard.pairingFailed")
-              : hueBridgeState === "offline"
-              ? t("hue:bridge.unreachable")
-              : hueBridgeState === "reconnecting"
-              ? t("hue:runtime.reconnectingTitle")
-              : hueBridgeState === "streamFailed"
-              ? t("hue:runtime.failed.title")
-              : hueBridgeState === "statusUnknown"
-              ? t("hue:runtime.statusUnavailable.title")
-              : hueBridgeState === "stale"
-              ? t("hue:runtime.checklist.revalidate")
-              : hueBridgeState === "gateBlocked"
-              ? t("hue:runtime.checklist.title")
-              : hueBridgeState === "stopPartial"
-              ? t("hue:runtime.timeout.title")
-              : t("device:page.header.hueSub")}
+            {view ? resolveHueCardText(view.subtitle, cardContext) : t("device:page.header.hueSub")}
           </div>
         </div>
         <div className="lm-device-head-actions">
-          <button
-            type="button"
-            className="lm-device-btn"
-            onClick={() => { void discover(); }}
-            disabled={isHueDiscovering} aria-busy={isHueDiscovering}
-          >
+          <Button onClick={() => { void discover(); }} busy={isHueDiscovering}>
             <IconRefresh />
             <span>{isHueDiscovering ? t("hue:page.scanning") : t("hue:page.scanNetwork")}</span>
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -188,7 +155,7 @@ export function HueBridgesCategory({
           isHueDiscovering ? (
             /* State J: Discovering ghost card */
             <div className="lm-hue-scan-card">
-              <span className="lm-hue-wait-sp" />
+              <span className="lm-hue-wait-sp" aria-hidden="true" />
               <span style={{ fontFamily: "var(--lm-mono)", fontSize: "10px", color: "var(--lm-ink-faint)", letterSpacing: "0.04em" }}>
                 {t("hue:page.scanningDetail")}
               </span>
@@ -210,608 +177,38 @@ export function HueBridgesCategory({
                     <div className="lm-dcard-tx">
                       <div className="lm-dcard-name">
                         <span>{bridge.name}</span>
-                        <span className="lm-dcard-pill is-warn">{t("hue:page.pill.discovered")}</span>
+                        <StatusPill tone="warn">{t("hue:page.pill.discovered")}</StatusPill>
                       </div>
                       <div className="lm-dcard-sub">{bridge.ip}</div>
                     </div>
                   </div>
                   <div className="lm-dcard-actions">
-                    <button
-                      type="button"
-                      className="lm-dcard-act"
-                      onClick={(e) => { e.stopPropagation(); void pair(bridge.id); }}
-                    >
+                    <Button size="card" onClick={(e) => { e.stopPropagation(); void pair(bridge.id); }}>
                       {t("hue:page.addBridge")}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))}
             </>
           ) : hueIsDiscoveryFailed ? (
             /* State K2: Discovery failed */
-            <div className="lm-hue-hero">
-              <div className="lm-hue-hero-ic"><IconWifi /></div>
-              <p className="lm-hue-hero-title">{t("hue:page.scanFailed")}</p>
-              <p className="lm-hue-hero-sub">{t("hue:page.scanFailedBody")}</p>
-              <div className="lm-hue-hero-btns">
-                <button type="button" className="lm-dcard-act" onClick={() => { void discover(); }}>
-                  {t("hue:page.scanAgain")}
-                </button>
-              </div>
-            </div>
+            <HueHero icon={<IconWifi />} title={t("hue:page.scanFailed")} body={t("hue:page.scanFailedBody")}>
+              <Button size="card" onClick={() => { void discover(); }}>{t("hue:page.scanAgain")}</Button>
+            </HueHero>
           ) : hueIsDiscoveryEmpty ? (
             /* State K1: Discovery empty */
-            <div className="lm-hue-hero">
-              <div className="lm-hue-hero-ic"><IconBridge /></div>
-              <p className="lm-hue-hero-title">{t("hue:page.noResult")}</p>
-              <p className="lm-hue-hero-sub">{t("hue:page.noResultBody")}</p>
-              <div className="lm-hue-hero-btns">
-                <button type="button" className="lm-dcard-act" onClick={() => { void discover(); }}>
-                  {t("hue:page.scanAgain")}
-                </button>
-              </div>
-            </div>
+            <HueHero icon={<IconBridge />} title={t("hue:page.noResult")} body={t("hue:page.noResultBody")}>
+              <Button size="card" onClick={() => { void discover(); }}>{t("hue:page.scanAgain")}</Button>
+            </HueHero>
           ) : (
             /* State I: Empty hero — initial state */
-            <div className="lm-hue-hero">
-              <div className="lm-hue-hero-ic"><IconBridge /></div>
-              <p className="lm-hue-hero-title">{t("hue:wizard.emptyTitle")}</p>
-              <p className="lm-hue-hero-sub">{t("hue:wizard.emptyBody")}</p>
-              <div className="lm-hue-hero-btns">
-                <button type="button" className="lm-dcard-act" onClick={() => { void discover(); }}>
-                  {t("hue:wizard.emptyAction")}
-                </button>
-              </div>
-            </div>
+            <HueHero icon={<IconBridge />} title={t("hue:wizard.emptyTitle")} body={t("hue:wizard.emptyBody")}>
+              <Button size="card" onClick={() => { void discover(); }}>{t("hue:wizard.emptyAction")}</Button>
+            </HueHero>
           )
-        ) : selectedBridge ? (
-          /* ── Bridge selected: card management panel ── */
+        ) : selectedBridge && view ? (
           <>
-            <div className={`lm-dcard${
-              hueBridgeState === "streaming" ? " is-on" :
-              hueBridgeState === "offline" ? " is-offline" :
-              hueBridgeState === "authError" || hueBridgeState === "pairingFailed" || hueBridgeState === "stopPartial" || hueBridgeState === "streamFailed" ? " is-error-state" :
-              hueBridgeState === "reconnecting" || hueBridgeState === "statusUnknown" || hueBridgeState === "stale" || hueBridgeState === "pairingTimedOut" || hueBridgeState === "pairingDeferred" ? " is-warn-state" :
-              hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton" || hueBridgeState === "areaSelect" ? " is-ghost" :
-              ""
-            }`}>
-              {/* Card header */}
-              <div className="lm-dcard-head">
-                <div className="lm-dcard-ic"><IconHueBridgeGlyph /></div>
-                <div className="lm-dcard-tx">
-                  <div className="lm-dcard-name">
-                    <span>{selectedBridge.name}</span>
-                    <span className={`lm-dcard-pill${
-                      hueBridgeState === "streaming" ? " is-streaming" :
-                      hueBridgeState === "idle" ? " is-idle" :
-                      hueBridgeState === "areaSelect" ? " is-ok" :
-                      hueBridgeState === "offline" || hueBridgeState === "authError" || hueBridgeState === "pairingFailed" || hueBridgeState === "stopPartial" || hueBridgeState === "streamFailed" ? " is-error" :
-                      " is-warn"
-                    }`}>
-                      {hueBridgeState === "streaming" ? t("hue:page.pill.streaming") :
-                       hueBridgeState === "idle" ? t("hue:page.pill.ready") :
-                       hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton" ? t("hue:page.pill.awaiting") :
-                       hueBridgeState === "pairingFailed" ? t("hue:page.pill.failed") :
-                       hueBridgeState === "pairingTimedOut" ? t("hue:page.pill.timedOut") :
-                       hueBridgeState === "pairingDeferred" ? t("hue:page.pill.wait") :
-                       hueBridgeState === "areaSelect" ? t("hue:page.pill.paired") :
-                       hueBridgeState === "authError" ? t("hue:page.pill.authError") :
-                       hueBridgeState === "offline" ? t("hue:bridge.unreachable") :
-                       hueBridgeState === "reconnecting" ? t("hue:page.pill.reconnecting") :
-                       hueBridgeState === "statusUnknown" ? t("hue:page.pill.checking") :
-                       hueBridgeState === "stale" || hueBridgeState === "gateBlocked" ? t("hue:page.pill.awaiting") :
-                       hueBridgeState === "stopPartial" || hueBridgeState === "streamFailed" ? t("hue:page.pill.failed") :
-                       ""}
-                    </span>
-                  </div>
-                  <div className="lm-dcard-sub">{selectedBridge.ip}</div>
-                </div>
-              </div>
-
-              {/* Traffic bar — streaming state only */}
-              {hueBridgeState === "streaming" ? (
-                <div className="lm-hue-traffic">
-                  <div className="lm-hue-traffic-bar">
-                    <div className="lm-hue-traffic-fill" />
-                  </div>
-                  <div className="lm-hue-traffic-label">
-                    <span>{t("hue:card.trafficLabel")}</span>
-                    <b>DTLS · {t("hue:card.rateHz", { hz: HUE_STREAM_MAX_HZ })}</b>
-                  </div>
-                </div>
-              ) : null}
-
-              {/* State E: Auth error banner — shown BEFORE data cells. Its one
-                  action, Re-pair, sits in the footer as in every other state. */}
-              {hueBridgeState === "authError" ? (
-                <div className="lm-hue-repair is-error" role="status" aria-live="polite" data-testid="hue-auth-error">
-                  <IconInfo />
-                  <div className="lm-hue-repair-tx">
-                    <div className="lm-hue-repair-title">{t("hue:credential.needsRepair")}</div>
-                    <div className="lm-hue-repair-sub">{t("hue:credential.repairHint")}</div>
-                    <StatusCodeDetail code={hueStatus?.code} />
-                  </div>
-                </div>
-              ) : null}
-
-              {/* Stats body — state-specific 4-cell layout */}
-              {hueBridgeState === "streaming" ? (
-                <div className="lm-dcard-body">
-                  <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
-                    <div className="lm-dcard-cell-v is-am">{selectedArea?.name ?? "—"}</div>
-                  </div>
-                  <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellProtocol")}</div>
-                    <div className="lm-dcard-cell-v is-dim">DTLS</div>
-                  </div>
-                  {selectedArea?.channelCount !== undefined ? (
-                    <div className="lm-dcard-cell">
-                      <div className="lm-dcard-cell-k">{t("hue:card.cellCh")}</div>
-                      <div className="lm-dcard-cell-v">{selectedArea.channelCount}</div>
-                    </div>
-                  ) : null}
-                  <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellRate")}</div>
-                    <div className="lm-dcard-cell-v is-am">{t("hue:card.rateHz", { hz: HUE_STREAM_MAX_HZ })}</div>
-                  </div>
-                </div>
-              ) : hueBridgeState === "idle" ? (
-                <div className="lm-dcard-body">
-                  <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
-                    <div className="lm-dcard-cell-v">{selectedArea?.name ?? "—"}</div>
-                  </div>
-                  <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellProtocol")}</div>
-                    <div className="lm-dcard-cell-v is-dim">DTLS</div>
-                  </div>
-                  {selectedArea?.channelCount !== undefined ? (
-                    <div className="lm-dcard-cell">
-                      <div className="lm-dcard-cell-k">{t("hue:card.cellCh")}</div>
-                      <div className="lm-dcard-cell-v">{selectedArea.channelCount}</div>
-                    </div>
-                  ) : null}
-                  <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellStatus")}</div>
-                    <div className="lm-dcard-cell-v is-ok">{t("hue:page.pill.ready")}</div>
-                  </div>
-                </div>
-              ) : hueBridgeState === "statusUnknown" ? (
-                <div className="lm-dcard-body">
-                  <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
-                    <div className="lm-dcard-cell-v is-dim">{selectedArea?.name ?? "—"}</div>
-                  </div>
-                  <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellStatus")}</div>
-                    <div className="lm-dcard-cell-v is-warn">{t("hue:page.pill.checking")}</div>
-                  </div>
-                </div>
-              ) : hueBridgeState === "stale" ? (
-                <div className="lm-dcard-body">
-                  <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
-                    <div className="lm-dcard-cell-v">{selectedArea?.name ?? "—"}</div>
-                  </div>
-                  <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellProtocol")}</div>
-                    <div className="lm-dcard-cell-v is-dim">DTLS</div>
-                  </div>
-                  {selectedArea?.channelCount !== undefined ? (
-                    <div className="lm-dcard-cell">
-                      <div className="lm-dcard-cell-k">{t("hue:card.cellCh")}</div>
-                      <div className="lm-dcard-cell-v">{selectedArea.channelCount}</div>
-                    </div>
-                  ) : null}
-                  <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellStatus")}</div>
-                    <div className="lm-dcard-cell-v is-warn">{t("hue:page.pill.awaiting")}</div>
-                  </div>
-                </div>
-              ) : hueBridgeState === "reconnecting" ? (
-                <div className="lm-dcard-body">
-                  <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
-                    <div className="lm-dcard-cell-v is-dim">{selectedArea?.name ?? "—"}</div>
-                  </div>
-                  {hueRuntimeModel.retry?.remainingAttempts !== undefined ? (
-                    <div className="lm-dcard-cell">
-                      <div className="lm-dcard-cell-k">{t("hue:card.cellRetries")}</div>
-                      <div className="lm-dcard-cell-v is-am">{hueRuntimeModel.retry.remainingAttempts}</div>
-                    </div>
-                  ) : null}
-                  {hueRuntimeModel.retry?.nextAttemptMs !== undefined ? (
-                    <div className="lm-dcard-cell">
-                      <div className="lm-dcard-cell-k">{t("hue:card.cellNext")}</div>
-                      <div className="lm-dcard-cell-v is-am">{(hueRuntimeModel.retry.nextAttemptMs / 1000).toFixed(1)} s</div>
-                    </div>
-                  ) : null}
-                </div>
-              ) : hueBridgeState === "streamFailed" ? (
-                <div className="lm-dcard-body">
-                  <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
-                    <div className="lm-dcard-cell-v is-dim">{selectedArea?.name ?? "—"}</div>
-                  </div>
-                </div>
-              ) : hueBridgeState === "stopPartial" && selectedArea ? (
-                <div className="lm-dcard-body">
-                  <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
-                    <div className="lm-dcard-cell-v is-dim">{selectedArea.name}</div>
-                  </div>
-                </div>
-              ) : hueBridgeState === "gateBlocked" ? (
-                <div className="lm-dcard-body">
-                  {selectedArea ? (
-                    <div className="lm-dcard-cell">
-                      <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
-                      <div className="lm-dcard-cell-v is-dim">{selectedArea.name}</div>
-                    </div>
-                  ) : null}
-                  <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellProtocol")}</div>
-                    <div className="lm-dcard-cell-v is-dim">DTLS</div>
-                  </div>
-                </div>
-              ) : hueBridgeState === "authError" ? (
-                <div className="lm-dcard-body">
-                  {selectedArea ? (
-                    <div className="lm-dcard-cell">
-                      <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
-                      <div className="lm-dcard-cell-v is-dim">{selectedArea.name}</div>
-                    </div>
-                  ) : null}
-                  <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellCredential")}</div>
-                    <div className="lm-dcard-cell-v is-error">{t("hue:card.cellCredentialInvalid")}</div>
-                  </div>
-                </div>
-              ) : null}
-
-              {/* ── State-specific body content ── */}
-
-              {/* State C/M: Pairing steps (4-step tracker) */}
-              {hueBridgeState === "pairing" ? (
-                <div className="lm-hue-steps">
-                  <div className="lm-hue-step is-done">
-                    <span className="lm-hue-step-dot"><IconCheck /></span>
-                    <span>{t("hue:steps.discover")}</span>
-                  </div>
-                  <div className="lm-hue-step-line is-done" />
-                  <div className="lm-hue-step is-active">
-                    <span className="lm-hue-step-dot" />
-                    <span>{t("hue:steps.pair")}</span>
-                  </div>
-                  <div className="lm-hue-step-line" />
-                  <div className="lm-hue-step">
-                    <span className="lm-hue-step-dot" />
-                    <span>{t("hue:steps.area")}</span>
-                  </div>
-                  <div className="lm-hue-step-line" />
-                  <div className="lm-hue-step">
-                    <span className="lm-hue-step-dot" />
-                    <span>{t("hue:steps.ready")}</span>
-                  </div>
-                </div>
-              ) : hueBridgeState === "pairingFailed" ? (
-                <div className="lm-hue-steps">
-                  <div className="lm-hue-step is-done">
-                    <span className="lm-hue-step-dot"><IconCheck /></span>
-                    <span>{t("hue:steps.discover")}</span>
-                  </div>
-                  <div className="lm-hue-step-line is-done" />
-                  <div className="lm-hue-step is-fail">
-                    <span className="lm-hue-step-dot" />
-                    <span>{t("hue:steps.pair")}</span>
-                  </div>
-                  <div className="lm-hue-step-line" />
-                  <div className="lm-hue-step">
-                    <span className="lm-hue-step-dot" />
-                    <span>{t("hue:steps.area")}</span>
-                  </div>
-                  <div className="lm-hue-step-line" />
-                  <div className="lm-hue-step">
-                    <span className="lm-hue-step-dot" />
-                    <span>{t("hue:steps.ready")}</span>
-                  </div>
-                </div>
-              ) : null}
-
-              {/* State C: Link button wait */}
-              {hueBridgeState === "pairingLinkButton" ? (
-                <div className="lm-hue-wait" role="status" aria-live="polite">
-                  <span className="lm-hue-wait-sp" aria-hidden="true" />
-                  <span>{t("hue:pair.linkButtonHint")}</span>
-                </div>
-              ) : null}
-
-              {hueBridgeState === "pairingTimedOut" ? (
-                <div className="lm-hue-repair" role="status" aria-live="polite">
-                  <IconInfo />
-                  <div className="lm-hue-repair-tx">
-                    <div className="lm-hue-repair-title">{t("hue:pair.timedOutTitle")}</div>
-                    <div className="lm-hue-repair-sub">{t("hue:pair.timedOutHint")}</div>
-                  </div>
-                </div>
-              ) : null}
-
-              {hueBridgeState === "pairingDeferred" && pairingErrorKey ? (
-                <div className="lm-hue-repair" role="status" aria-live="polite" data-testid="hue-pairing-deferred">
-                  <IconInfo />
-                  <div className="lm-hue-repair-tx">
-                    <div className="lm-hue-repair-title">{t("hue:pair.deferredTitle")}</div>
-                    <div className="lm-hue-repair-sub">{t(pairingErrorKey)}</div>
-                  </div>
-                </div>
-              ) : null}
-
-              {hueBridgeState === "pairingFailed" && pairingErrorKey ? (
-                <div className="lm-hue-repair is-error" role="status" aria-live="polite" data-testid="hue-pairing-failed-reason">
-                  <IconInfo />
-                  <div className="lm-hue-repair-tx">
-                    <div className="lm-hue-repair-title">{t("hue:wizard.pairingFailed")}</div>
-                    <div className="lm-hue-repair-sub">{t(pairingErrorKey)}</div>
-                  </div>
-                </div>
-              ) : null}
-
-              {/* State D/G: Area selection */}
-              {hueBridgeState === "areaSelect" ? (
-                <div className="lm-hue-areas">
-                  <div className="lm-hue-areas-label">{t("hue:areas.selectLabel")}</div>
-                  {areaGroups.length === 0 ? (
-                    <p style={{ fontFamily: "var(--lm-mono)", fontSize: "10px", color: "var(--lm-ink-faint)", padding: "4px 0" }}>
-                      {t("hue:areas.empty")}
-                    </p>
-                  ) : (
-                    <div className="lm-hue-area-list">
-                      {areaGroups.map((group) =>
-                        group.areas.map((area) => (
-                          <button
-                            key={area.id}
-                            type="button"
-                            className={`lm-hue-area-item${selectedAreaId === area.id ? " is-on" : ""}${area.activeStreamer ? " is-blocked" : ""}`}
-                            onClick={() => { if (!area.activeStreamer) selectArea(area.id); }}
-                          >
-                            <span className="lm-hue-area-ic" />
-                            <span className="lm-hue-area-name">{area.name}</span>
-                            <span className="lm-hue-area-ch">{t("hue:areas.channels", { count: area.channelCount ?? 0 })}</span>
-                            {area.activeStreamer ? (
-                              <span className="lm-hue-area-badge">{t("hue:areas.activeStreamer")}</span>
-                            ) : null}
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
-                  {/* State G: Active streamer conflict warning */}
-                  {areaGroups.some((g) => g.areas.some((a) => a.activeStreamer && selectedAreaId === a.id)) ? (
-                    <div className="lm-hue-repair is-error" style={{ marginTop: "6px" }}>
-                      <IconInfo />
-                      <div className="lm-hue-repair-tx">
-                        <div className="lm-hue-repair-title">{t("hue:areas.conflictTitle")}</div>
-                        <div className="lm-hue-repair-sub">{t("hue:areas.conflictHint")}</div>
-                      </div>
-                    </div>
-                  ) : null}
-                  {selectedAreaId ? (
-                    <button
-                      type="button"
-                      className="lm-hue-area-confirm"
-                      onClick={() => { void revalidateArea(); }}
-                      disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}
-                    >
-                      {isCheckingReadiness ? t("hue:actions.checkingReadiness") : `${t("hue:page.confirmArea")} →`}
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {/* State F: Offline reasons */}
-              {hueBridgeState === "offline" ? (
-                <div className="lm-hue-offline">
-                  <div className="lm-hue-offline-title">{t("hue:wizard.offlineReasonsTitle")}</div>
-                  <div className="lm-hue-offline-item">{t("hue:wizard.offlineReason1")}</div>
-                  <div className="lm-hue-offline-item">{t("hue:wizard.offlineReason2")}</div>
-                  <div className="lm-hue-offline-item">{t("hue:wizard.offlineReason3")}</div>
-                </div>
-              ) : null}
-
-              {/* State H: Reconnecting retry progress */}
-              {hueBridgeState === "reconnecting" ? (
-                <div className="lm-hue-retry">
-                  <span className="lm-hue-retry-sp" />
-                  <span className="lm-hue-retry-tx">
-                    {hueRuntimeModel.retry
-                      ? t(hueRuntimeModel.retry.labelKey, {
-                          remaining: hueRuntimeModel.retry.remainingAttempts ?? "—",
-                          nextMs: hueRuntimeModel.retry.nextAttemptMs ?? "—",
-                        })
-                      : t("hue:runtime.reconnectingTitle")}
-                    <StatusCodeDetail code={hueStatus?.code} />
-                  </span>
-                </div>
-              ) : null}
-
-              {hueBridgeState === "statusUnknown" ? (
-                <div className="lm-hue-retry" role="status" aria-live="polite" data-testid="hue-status-unavailable">
-                  <span className="lm-hue-retry-sp" aria-hidden="true" />
-                  <span className="lm-hue-retry-tx">
-                    {t("hue:runtime.statusUnavailable.body")}
-                    <StatusCodeDetail code={runtimeStatusReadFailure?.code} />
-                  </span>
-                </div>
-              ) : null}
-
-              {hueBridgeState === "streamFailed" ? (
-                <div className="lm-hue-repair is-error" role="status" aria-live="polite" data-testid="hue-stream-failed">
-                  <IconInfo />
-                  <div className="lm-hue-repair-tx">
-                    <div className="lm-hue-repair-title">{t("hue:runtime.failed.title")}</div>
-                    <div className="lm-hue-repair-sub">{t(hueStreamFailureReasonKey(runtimeStatus?.code))}</div>
-                    <StatusCodeDetail code={runtimeStatus?.code} />
-                  </div>
-                </div>
-              ) : null}
-
-              {/* State N: Stale readiness — Validate lives in the footer. */}
-              {hueBridgeState === "stale" ? (
-                <div className="lm-hue-stale" data-testid="hue-stale">
-                  <IconInfo />
-                  <span className="lm-hue-stale-tx">{t("hue:runtime.checklist.revalidate")}</span>
-                </div>
-              ) : null}
-
-              {/* State P: Gate blocked checklist — Validate lives in the footer. */}
-              {hueBridgeState === "gateBlocked" ? (
-                <div className="lm-hue-checklist" data-testid="hue-gate-blocked">
-                  <div className="lm-hue-checklist-title">{t("hue:runtime.checklist.title")}</div>
-                  {isReadinessStale ? (
-                    <div className="lm-hue-checklist-item">
-                      <IconInfo />
-                      <span>{t("hue:runtime.checklist.revalidate")}</span>
-                    </div>
-                  ) : null}
-                  <StatusCodeDetail code={runtimeStatus?.code} />
-                </div>
-              ) : null}
-
-              {/* State Q: Stop timeout fault */}
-              {hueBridgeState === "stopPartial" ? (
-                <div className="lm-hue-repair is-error" role="status" aria-live="polite">
-                  <IconInfo />
-                  <div className="lm-hue-repair-tx">
-                    <div className="lm-hue-repair-title">{t("hue:runtime.partialStop.title")}</div>
-                    <div className="lm-hue-repair-sub">{t("hue:runtime.partialStop.body")}</div>
-                    <StatusCodeDetail code={runtimeStatus?.code} />
-                  </div>
-                </div>
-              ) : null}
-
-              {/* ── Action buttons footer ── */}
-              <div className="lm-dcard-actions">
-                {hueBridgeState === "streaming" ? (
-                  <>
-                    <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled} aria-busy={isLoadingAreas}>
-                      {t("hue:page.changeArea")}
-                    </button>
-                    <button type="button" className="lm-dcard-act" onClick={() => { void startRuntime(); }} disabled={isRuntimeMutating || hueStartDisabled} aria-busy={isRuntimeMutating}>
-                      {t("hue:page.reconnectNow")}
-                    </button>
-                    <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                      {t("hue:page.forgotBridge")}
-                    </button>
-                  </>
-                ) : hueBridgeState === "idle" || hueBridgeState === "statusUnknown" ? (
-                  <>
-                    <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled} aria-busy={isLoadingAreas}>
-                      {t("hue:page.changeArea")}
-                    </button>
-                    <button type="button" className="lm-dcard-act" onClick={() => { void revalidateArea(); }} disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}>
-                      {isCheckingReadiness ? t("hue:actions.checkingReadiness") : t("hue:page.validate")}
-                    </button>
-                    <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                      {t("hue:page.forgotBridge")}
-                    </button>
-                  </>
-                ) : hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton" ? (
-                  <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                    {t("hue:page.cancel")}
-                  </button>
-                ) : hueBridgeState === "pairingTimedOut" || hueBridgeState === "pairingDeferred" ? (
-                  <>
-                    <button type="button" className="lm-dcard-act" onClick={() => { void pair(); }}>
-                      {t("hue:pair.tryAgain")}
-                    </button>
-                    <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                      {t("hue:page.cancel")}
-                    </button>
-                  </>
-                ) : hueBridgeState === "areaSelect" ? (
-                  <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled} aria-busy={isLoadingAreas}>
-                    {isLoadingAreas ? t("hue:actions.loadingAreas") : t("hue:actions.refreshAreas")}
-                  </button>
-                ) : hueBridgeState === "authError" || hueBridgeState === "pairingFailed" ? (
-                  <>
-                    <button type="button" className="lm-dcard-act" onClick={() => { void pair(); }} disabled={isHuePairing} aria-busy={isHuePairing}>
-                      {isHuePairing ? t("hue:actions.pairing") : t("hue:runtime.actions.repair")}
-                    </button>
-                    <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                      {t("hue:page.forgotBridge")}
-                    </button>
-                  </>
-                ) : hueBridgeState === "offline" ? (
-                  <>
-                    <button type="button" className="lm-dcard-act" onClick={() => { void discover(); }} disabled={isHueDiscovering} aria-busy={isHueDiscovering}>
-                      {isHueDiscovering ? t("hue:actions.discovering") : t("hue:wizard.offlineRediscover")}
-                    </button>
-                    <button type="button" className="lm-dcard-act" onClick={() => { setManualIp(""); }}>
-                      {t("hue:page.tryDifferentIp")}
-                    </button>
-                    <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                      {t("hue:page.forgotBridge")}
-                    </button>
-                  </>
-                ) : hueBridgeState === "reconnecting" ? (
-                  <>
-                    <button type="button" className="lm-dcard-act" onClick={() => { void retryRuntimeTarget(runtimeTargets[0]?.target ?? "hue"); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
-                      {t("hue:page.reconnectNow")}
-                    </button>
-                    <button type="button" className="lm-dcard-act is-danger" onClick={() => { void onStopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
-                      {t("hue:page.stopRetrying")}
-                    </button>
-                  </>
-                ) : hueBridgeState === "streamFailed" ? (
-                  <>
-                    {streamFailedNeedsRepair ? (
-                      <button type="button" className="lm-dcard-act" onClick={() => { void pair(); }} disabled={isHuePairing} aria-busy={isHuePairing}>
-                        {isHuePairing ? t("hue:actions.pairing") : t("hue:runtime.actions.repair")}
-                      </button>
-                    ) : null}
-                    {/* Restart, not start: it re-reads readiness itself, so a stale
-                        check on this card cannot block the way back. */}
-                    <button type="button" className="lm-dcard-act" onClick={() => { void retryRuntimeTarget(runtimeTargets[0]?.target ?? "hue"); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
-                      {t("hue:page.startAgain")}
-                    </button>
-                    <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                      {t("hue:page.forgotBridge")}
-                    </button>
-                  </>
-                ) : hueBridgeState === "stale" ? (
-                  <>
-                    <button type="button" className="lm-dcard-act" onClick={() => { void revalidateArea(); }} disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}>
-                      {isCheckingReadiness ? t("hue:actions.checkingReadiness") : t("hue:page.validate")}
-                    </button>
-                    <button type="button" className="lm-dcard-act" onClick={() => { void startRuntime(); }} disabled={hueStartDisabled}>
-                      {t("hue:actions.start")}
-                    </button>
-                    <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                      {t("hue:page.forgotBridge")}
-                    </button>
-                  </>
-                ) : hueBridgeState === "gateBlocked" ? (
-                  <>
-                    <button type="button" className="lm-dcard-act" onClick={() => { void revalidateArea(); }} disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}>
-                      {isCheckingReadiness ? t("hue:actions.checkingReadiness") : t("hue:page.validate")}
-                    </button>
-                    <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled} aria-busy={isLoadingAreas}>
-                      {t("hue:page.changeArea")}
-                    </button>
-                  </>
-                ) : hueBridgeState === "stopPartial" ? (
-                  <>
-                    <button type="button" className="lm-dcard-act" onClick={() => { void onStopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
-                      {t("hue:page.retryStop")}
-                    </button>
-                    <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                      {t("hue:page.forceForget")}
-                    </button>
-                  </>
-                ) : null}
-              </div>
-            </div>
+            <HueBridgeCard name={selectedBridge.name} ip={selectedBridge.ip} view={view} ctx={cardContext} />
 
             {/* Channel map panel — shown when area is selected and credentials valid */}
             {selectedAreaId && credentialState === "valid" ? (
@@ -843,7 +240,7 @@ export function HueBridgesCategory({
           <div className="lm-hue-ip-form">
             <div>
               <div className="lm-hue-ip-form-title">{t("hue:manualIp.title")}</div>
-              <div className="lm-hue-ip-form-sub">{t("hue:manualIp.description")}</div>
+              <div className="lm-hue-ip-form-sub" id={manualIpDescriptionId}>{t("hue:manualIp.description")}</div>
             </div>
             <div className="lm-hue-ip-row">
               <input
@@ -857,6 +254,11 @@ export function HueBridgesCategory({
                   }
                 }}
                 placeholder={t("hue:manualIp.placeholder")}
+                aria-label={t("hue:manualIp.inputLabel")}
+                aria-describedby={manualIpError ? `${manualIpDescriptionId} ${manualIpErrorId}` : manualIpDescriptionId}
+                aria-invalid={manualIpError ? true : undefined}
+                spellCheck={false}
+                autoComplete="off"
               />
               <button
                 type="button"
@@ -867,7 +269,7 @@ export function HueBridgesCategory({
                 {t("hue:page.enterIp")}
               </button>
             </div>
-            {manualIpError ? <div className="lm-hue-ip-error">{t(manualIpError)}</div> : null}
+            {manualIpError ? <div className="lm-hue-ip-error" id={manualIpErrorId}>{t(manualIpError)}</div> : null}
           </div>
         ) : null}
       </div>
@@ -875,18 +277,83 @@ export function HueBridgesCategory({
   );
 }
 
-interface StatusCodeDetailProps {
-  code: string | null | undefined;
+interface HueHeroProps {
+  icon: ReactNode;
+  title: string;
+  body: string;
+  /** The one next step. */
+  children: ReactNode;
 }
 
-/** The raw status code as a small caption under the message: readable for
- *  support, never the card's headline. */
-function StatusCodeDetail({ code }: StatusCodeDetailProps) {
-  const { t } = useTranslation();
-  if (!code) return null;
+function HueHero({ icon, title, body, children }: HueHeroProps) {
   return (
-    <span className="lm-hue-code" data-testid="hue-fault-code">
-      <span className="lm-hue-code-k">{t("hue:card.codeLabel")}</span> <code>{code}</code>
-    </span>
+    <div className="lm-hue-hero">
+      <div className="lm-hue-hero-ic">{icon}</div>
+      <p className="lm-hue-hero-title">{title}</p>
+      <p className="lm-hue-hero-sub">{body}</p>
+      <div className="lm-hue-hero-btns">{children}</div>
+    </div>
+  );
+}
+
+interface HueBridgeCardProps {
+  name: string;
+  ip: string;
+  view: HueCardView;
+  ctx: HueCardContext;
+}
+
+/** The selected bridge's card, drawn entirely from its state's row in `HUE_CARD_VIEW`. */
+function HueBridgeCard({ name, ip, view, ctx }: HueBridgeCardProps) {
+  const cells = view.cells(ctx);
+  const actions = view.actions.flatMap((id) => {
+    const action: HueCardActionSpec | null = HUE_CARD_ACTIONS[id](ctx);
+    return action ? [{ id, ...action }] : [];
+  });
+  return (
+    <div className={cx("lm-dcard", view.tone && HUE_CARD_TONE_CLASS[view.tone])}>
+      <div className="lm-dcard-head">
+        <div className="lm-dcard-ic"><IconHueBridgeGlyph /></div>
+        <div className="lm-dcard-tx">
+          <div className="lm-dcard-name">
+            <span>{name}</span>
+            <StatusPill tone={view.pill.tone}>{ctx.t(view.pill.label)}</StatusPill>
+          </div>
+          <div className="lm-dcard-sub">{ip}</div>
+        </div>
+      </div>
+
+      {view.lead?.(ctx)}
+
+      {cells.length > 0 ? (
+        <div className="lm-dcard-body">
+          {cells.map((cell) => (
+            <div key={cell.label} className="lm-dcard-cell">
+              <div className="lm-dcard-cell-k">{ctx.t(cell.label)}</div>
+              <div className={cx("lm-dcard-cell-v", cell.tone && HUE_CARD_CELL_TONE_CLASS[cell.tone])}>
+                {cell.value}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {view.detail?.(ctx)}
+
+      <div className="lm-dcard-actions">
+        {actions.map(({ id, label, onClick, disabled, busy, danger }) => (
+          <Button
+            key={id}
+            size="card"
+            variant={danger ? "danger" : "secondary"}
+            onClick={onClick}
+            disabled={disabled}
+            busy={busy}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+    </div>
   );
 }

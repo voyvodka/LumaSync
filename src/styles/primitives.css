@@ -4,10 +4,9 @@
    primitive inside its own surface (`.lm-color-order-answer`, say).
    ───────────────────────────────────────────────────────────────────── */
 
-/* Button — small (mono caps) and medium. `.lm-device-btn` is the old name
-   the Hue card still renders; drop it once that card adopts <Button>. */
-.lm-btn,
-.lm-device-btn {
+/* Button — small (mono caps) and medium. A device card's footer action
+   (`size="card"`) draws with `.lm-dcard-act` in devices.css. */
+.lm-btn {
   all: unset;
   box-sizing: border-box;
   padding: 7px 13px;
@@ -26,29 +25,24 @@
   font-weight: 500;
   transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
 }
-.lm-btn:hover:not(:disabled),
-.lm-device-btn:hover:not(:disabled) {
+.lm-btn:hover:not(:disabled) {
   border-color: var(--lm-amber);
   color: var(--lm-amber);
 }
-.lm-btn:disabled,
-.lm-device-btn:disabled {
+.lm-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.lm-btn svg,
-.lm-device-btn svg {
+.lm-btn svg {
   width: 12px;
   height: 12px;
 }
-.lm-btn.is-primary,
-.lm-device-btn.is-primary {
+.lm-btn.is-primary {
   background: rgba(255, 176, 32, 0.1);
   border-color: rgba(255, 176, 32, 0.4);
   color: var(--lm-amber);
 }
-.lm-btn.is-primary:hover:not(:disabled),
-.lm-device-btn.is-primary:hover:not(:disabled) {
+.lm-btn.is-primary:hover:not(:disabled) {
   background: rgba(255, 176, 32, 0.18);
 }
 .lm-btn.is-danger {
@@ -61,8 +55,7 @@
   border-color: var(--lm-red);
   color: var(--lm-red);
 }
-.lm-btn:focus-visible,
-.lm-device-btn:focus-visible {
+.lm-btn:focus-visible {
   outline: none;
   box-shadow: var(--lm-focus-ring-soft);
 }
@@ -268,7 +261,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .lm-btn,
-  .lm-device-btn,
   .lm-btn-md,
   .lm-toggle,
   .lm-toggle::after {
@@ -277,7 +269,6 @@
 }
 @media (forced-colors: active) {
   .lm-btn,
-  .lm-device-btn,
   .lm-btn-md,
   .lm-toggle,
   .lm-empty {
@@ -313,7 +304,6 @@
     background: Highlight;
   }
   .lm-btn:focus-visible,
-  .lm-device-btn:focus-visible,
   .lm-btn-md:focus-visible,
   .lm-toggle:focus-visible,
   .lm-callout-action:focus-visible {
