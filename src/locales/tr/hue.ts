@@ -22,6 +22,7 @@ const hue: Catalogue<typeof enHue> = {
   manualIp: {
     title: "Manuel IP girişi",
     description: "Otomatik keşif köprünüzü bulamadıysa IP adresini elle girin.",
+    inputLabel: "Köprü IP adresi",
     placeholder: "örn. 192.168.1.50",
     invalid: "Göndermeden önce geçerli bir IPv4 adresi gir.",
   },
