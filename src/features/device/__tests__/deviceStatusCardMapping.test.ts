@@ -29,6 +29,9 @@ describe("device status card mapping", () => {
       latestHealthCheck: {
         pass: false,
         checkedAtUnixMs: Date.now(),
+        roundTripMs: null,
+        firmwareVersion: null,
+        advertisedFirmwareProfile: null,
         steps: [
           { step: "PORT_VISIBLE", pass: true, code: "PORT_VISIBLE", message: "visible", details: null },
           { step: "PORT_SUPPORTED", pass: false, code: "PORT_UNSUPPORTED", message: "choose another port", details: null },
@@ -93,6 +96,9 @@ describe("device status card mapping", () => {
       latestHealthCheck: {
         pass: true,
         checkedAtUnixMs: Date.now(),
+        roundTripMs: null,
+        firmwareVersion: null,
+        advertisedFirmwareProfile: null,
         steps: [
           { step: "CONNECT_AND_VERIFY", pass: true, code: "CONNECT_OK", message: "connected", details: null },
           { step: "PORT_VISIBLE", pass: true, code: "PORT_VISIBLE", message: "visible", details: null },
@@ -118,6 +124,9 @@ describe("device status card mapping", () => {
       latestHealthCheck: {
         pass: false,
         checkedAtUnixMs: 0,
+        roundTripMs: null,
+        firmwareVersion: null,
+        advertisedFirmwareProfile: null,
         steps: [
           { step: "PORT_VISIBLE", pass: false, code: "HEALTH_CHECK_NOT_AVAILABLE", message: "bridge missing", details: null },
         ],
@@ -143,6 +152,9 @@ describe("device status card mapping", () => {
       latestHealthCheck: {
         pass: false,
         checkedAtUnixMs: Date.now(),
+        roundTripMs: null,
+        firmwareVersion: null,
+        advertisedFirmwareProfile: null,
         steps: [
           { step: "PORT_VISIBLE", pass: true, code: "PORT_VISIBLE", message: "visible", details: null },
           { step: "PORT_SUPPORTED", pass: false, code: "PORT_UNSUPPORTED", message: "unsupported", details: null },

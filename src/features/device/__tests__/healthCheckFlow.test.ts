@@ -20,6 +20,9 @@ function healthResult(pass: boolean): HealthCheckResult {
   return {
     pass,
     checkedAtUnixMs: Date.now(),
+    roundTripMs: null,
+    firmwareVersion: null,
+    advertisedFirmwareProfile: null,
     steps: [
       {
         step: "PORT_VISIBLE",

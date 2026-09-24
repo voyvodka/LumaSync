@@ -72,7 +72,7 @@ export type LightingModeGateStatusCode =
   (typeof LIGHTING_MODE_GATE_STATUS)[keyof typeof LIGHTING_MODE_GATE_STATUS];
 
 /**
- * Exhaustive `ModeCommandResult.status.code` set — `verify:shell-contracts` derives
+ * Exhaustive `LightingModeCommandResult.status.code` set — `verify:shell-contracts` derives
  * the Rust `command_status(...)` literals and fails on an undeclared one. Preview
  * codes stay in `preview.ts` even though `lighting_mode.rs` emits them.
  */

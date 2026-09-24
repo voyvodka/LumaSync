@@ -20,11 +20,6 @@ OVERLAY_NO_DISPLAY
 # declaration — it was always frontend-minted, just undeclared.
 HEALTH_CHECK_NOT_AVAILABLE
 
-# Legitimate, same category: `useHueOnboardingCore.ts` holds it while it re-asks
-# a bridge that answered HUE_PAIRING_LINK_BUTTON_NOT_PRESSED (#337). Was listed
-# as a MISSING PRODUCER until the frontend started minting it.
-HUE_PAIRING_PENDING_LINK_BUTTON
-
 # No producer, but EN+TR strings exist under device.health.codes.*. Rust never
 # sees the selected profile; the pickers compare the advertised one themselves.
 SERIAL_HEALTH_FIRMWARE_MISMATCH

@@ -25,6 +25,9 @@ function createHealthPass(): HealthCheckResult {
   return {
     pass: true,
     checkedAtUnixMs: Date.now(),
+    roundTripMs: null,
+    firmwareVersion: null,
+    advertisedFirmwareProfile: null,
     steps: [
       { step: "PORT_VISIBLE", pass: true, code: "PORT_VISIBLE", message: "ok", details: null },
       { step: "PORT_SUPPORTED", pass: true, code: "PORT_SUPPORTED", message: "ok", details: null },

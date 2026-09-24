@@ -53,9 +53,6 @@ shell.ts SHELL_STATE_ERROR_CODES
 # nothing under src/ has a reason to name it.
 shell.ts SHELL_STORE_KEY
 
-# Debug-only command surface; the frontend must never invoke it.
-hue.ts HUE_DEBUG_COMMAND_CODES
-
 # The command name behind those codes. Its only consumer is `mock/dispatch.ts`,
 # which is outside src/ and so invisible to this check — deliberately: the dev
 # mock must reach it and production code must not. Unreached from src/ is the

@@ -1,11 +1,9 @@
 import type { TranslationKey } from "@/features/i18n/catalogue";
-import type { SerialHealthStepCode } from "@/shared/contracts/device";
-
-import type { HealthCheckResult } from "./deviceConnectionApi";
+import type { HealthCheckView, SerialHealthStepCode } from "@/shared/contracts/device";
 
 const HEALTH_STEP_ORDER = ["PORT_VISIBLE", "PORT_SUPPORTED", "CONNECT_AND_VERIFY"] as const;
 
-type HealthStep = HealthCheckResult["steps"][number];
+type HealthStep = HealthCheckView["steps"][number];
 
 interface HealthCodeCopy {
   labelKey: TranslationKey;
@@ -142,7 +140,7 @@ export interface DeviceStatusCardModel {
   healthSteps?: DeviceStatusHealthStepModel[];
 }
 
-function mapHealthSteps(healthCheck: HealthCheckResult): DeviceStatusHealthStepModel[] {
+function mapHealthSteps(healthCheck: HealthCheckView): DeviceStatusHealthStepModel[] {
   const rank = new Map<string, number>(HEALTH_STEP_ORDER.map((step, index) => [step, index]));
   return [...healthCheck.steps]
     .sort((left, right) => {
@@ -185,7 +183,7 @@ export interface DeviceStatusCardInput {
   connectedPort: string | null;
   isReconnecting?: boolean;
   isHealthChecking?: boolean;
-  latestHealthCheck?: HealthCheckResult | null;
+  latestHealthCheck?: HealthCheckView | null;
 }
 
 export function buildDeviceStatusCard(input: DeviceStatusCardInput): DeviceStatusCardModel {

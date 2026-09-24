@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "@/shared/ipcApi";
 
 import {
   CAPTURE_COMMANDS,
@@ -13,9 +13,7 @@ import { parseCommandError } from "@/shared/contracts/status";
  *  first-run user never sees the OS prompt the start path raises. */
 export async function getScreenCapturePermission(): Promise<ScreenCapturePermissionResult> {
   try {
-    return await invoke<ScreenCapturePermissionResult>(
-      CAPTURE_COMMANDS.GET_SCREEN_CAPTURE_PERMISSION,
-    );
+    return await invokeCommand(CAPTURE_COMMANDS.GET_SCREEN_CAPTURE_PERMISSION);
   } catch (error) {
     // An unreachable probe must not block a start that might well succeed.
     console.error("[LumaSync] screen capture permission probe failed:", error);
@@ -25,9 +23,7 @@ export async function getScreenCapturePermission(): Promise<ScreenCapturePermiss
 
 export async function openScreenCaptureSettings(): Promise<ScreenCaptureSettingsResult> {
   try {
-    return await invoke<ScreenCaptureSettingsResult>(
-      CAPTURE_COMMANDS.OPEN_SCREEN_CAPTURE_SETTINGS,
-    );
+    return await invokeCommand(CAPTURE_COMMANDS.OPEN_SCREEN_CAPTURE_SETTINGS);
   } catch (error) {
     const { message } = parseCommandError(error);
     console.error("[LumaSync] opening screen recording settings failed:", message);

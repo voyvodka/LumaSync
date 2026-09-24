@@ -1,5 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-
 import { DEVICE_COMMANDS } from "@/shared/contracts/device";
 import {
   TELEMETRY_QUEUE_HEALTH,
@@ -7,6 +5,7 @@ import {
   type HueTelemetrySnapshot,
   type RuntimeTelemetrySnapshot,
 } from "@/shared/contracts/telemetry";
+import { invokeCommand, type CommandInvoker } from "@/shared/ipcApi";
 
 interface RuntimeTelemetrySnapshotDto {
   captureFps: number;
@@ -37,11 +36,6 @@ interface FullTelemetrySnapshotDto {
   usb: RuntimeTelemetrySnapshotDto;
   hue: HueTelemetrySnapshotDto | null;
 }
-
-/** Injectable `invoke()` signature so telemetry commands can be unit-tested with a mock transport. */
-export type TelemetryInvoker = <T>(command: string, payload?: Record<string, unknown>) => Promise<T>;
-
-const defaultInvoke: TelemetryInvoker = (command, payload) => invoke(command, payload);
 
 function normalizeFps(value: unknown): number {
   if (typeof value !== "number" || Number.isNaN(value)) {
@@ -116,8 +110,8 @@ export function mapFullTelemetrySnapshot(dto: FullTelemetrySnapshotDto): FullTel
 
 /** Fetch the current runtime telemetry — USB capture/send FPS plus Hue stream stats when active. */
 export async function getFullTelemetrySnapshot(
-  invoker: TelemetryInvoker = defaultInvoke,
+  invoker: CommandInvoker = invokeCommand,
 ): Promise<FullTelemetrySnapshot> {
-  const snapshot = await invoker<FullTelemetrySnapshotDto>(DEVICE_COMMANDS.GET_RUNTIME_TELEMETRY);
+  const snapshot: FullTelemetrySnapshotDto = await invoker(DEVICE_COMMANDS.GET_RUNTIME_TELEMETRY);
   return mapFullTelemetrySnapshot(snapshot);
 }

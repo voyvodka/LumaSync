@@ -2,8 +2,6 @@
  * `PREVIEW_COMMANDS`, wrapped in try/catch to degrade a transport
  * rejection to a synthetic coded failure rather than throwing. */
 
-import { invoke } from "@tauri-apps/api/core";
-
 import {
   CONTROL_POPUP_STATUS,
   LED_TEST_STATUS,
@@ -18,14 +16,7 @@ import {
   type TwinOverlayResult,
 } from "@/shared/contracts/preview";
 import { parseCommandError } from "@/shared/contracts/status";
-
-/** Injectable `invoke()` signature so preview commands can be unit-tested with a mock transport. */
-export type PreviewInvoker = <T>(
-  command: string,
-  payload?: Record<string, unknown>,
-) => Promise<T>;
-
-const defaultInvoke: PreviewInvoker = (command, payload) => invoke(command, payload);
+import { invokeCommand, type CommandInvoker } from "@/shared/ipcApi";
 
 // ---------------------------------------------------------------------------
 // Synthetic fallbacks — returned (never thrown) when the transport rejects.
@@ -60,10 +51,10 @@ function idlePreviewStatus(): LedPreviewStatus {
 /** Start a synthetic LED test pattern, overriding whatever lighting mode is currently active. */
 export async function startLedTestPattern(
   payload: StartLedTestPatternPayload,
-  invoker: PreviewInvoker = defaultInvoke,
+  invoker: CommandInvoker = invokeCommand,
 ): Promise<LedTestPatternResult> {
   try {
-    return await invoker<LedTestPatternResult>(PREVIEW_COMMANDS.START_TEST_PATTERN, { payload });
+    return await invoker(PREVIEW_COMMANDS.START_TEST_PATTERN, { payload });
   } catch (error) {
     console.error("[LumaSync] start_led_test_pattern failed:", error);
     return failedTestResult(error);
@@ -72,10 +63,10 @@ export async function startLedTestPattern(
 
 /** Stop the active LED test pattern and restore whatever mode it was superseding. */
 export async function stopLedTestPattern(
-  invoker: PreviewInvoker = defaultInvoke,
+  invoker: CommandInvoker = invokeCommand,
 ): Promise<LedTestPatternResult> {
   try {
-    return await invoker<LedTestPatternResult>(PREVIEW_COMMANDS.STOP_TEST_PATTERN);
+    return await invoker(PREVIEW_COMMANDS.STOP_TEST_PATTERN);
   } catch (error) {
     console.error("[LumaSync] stop_led_test_pattern failed:", error);
     // A transport rejection means the test may still be running — reporting
@@ -85,10 +76,10 @@ export async function stopLedTestPattern(
 }
 
 export async function getLedPreviewStatus(
-  invoker: PreviewInvoker = defaultInvoke,
+  invoker: CommandInvoker = invokeCommand,
 ): Promise<LedPreviewStatus> {
   try {
-    return await invoker<LedPreviewStatus>(PREVIEW_COMMANDS.GET_PREVIEW_STATUS);
+    return await invoker(PREVIEW_COMMANDS.GET_PREVIEW_STATUS);
   } catch (error) {
     console.error("[LumaSync] get_led_preview_status failed:", error);
     return idlePreviewStatus();
@@ -102,10 +93,10 @@ export async function getLedPreviewStatus(
 /** Open the borderless digital-twin overlay window mirroring LED output on the given display. */
 export async function openLedTwinOverlay(
   payload: OpenLedTwinOverlayPayload,
-  invoker: PreviewInvoker = defaultInvoke,
+  invoker: CommandInvoker = invokeCommand,
 ): Promise<TwinOverlayResult> {
   try {
-    return await invoker<TwinOverlayResult>(PREVIEW_COMMANDS.OPEN_TWIN_OVERLAY, { payload });
+    return await invoker(PREVIEW_COMMANDS.OPEN_TWIN_OVERLAY, { payload });
   } catch (error) {
     console.error("[LumaSync] open_led_twin_overlay failed:", error);
     return {
@@ -121,10 +112,10 @@ export async function openLedTwinOverlay(
 /// "close every overlay" branch would fail with "invalid args" instead.
 export async function closeLedTwinOverlay(
   payload: CloseLedTwinOverlayPayload = {},
-  invoker: PreviewInvoker = defaultInvoke,
+  invoker: CommandInvoker = invokeCommand,
 ): Promise<TwinOverlayResult> {
   try {
-    return await invoker<TwinOverlayResult>(PREVIEW_COMMANDS.CLOSE_TWIN_OVERLAY, { payload });
+    return await invoker(PREVIEW_COMMANDS.CLOSE_TWIN_OVERLAY, { payload });
   } catch (error) {
     console.error("[LumaSync] close_led_twin_overlay failed:", error);
     return {
@@ -141,10 +132,10 @@ export async function closeLedTwinOverlay(
 
 /** Create the LED control popup window if it doesn't exist yet, or bring it to front if it does. */
 export async function openLedControlPopup(
-  invoker: PreviewInvoker = defaultInvoke,
+  invoker: CommandInvoker = invokeCommand,
 ): Promise<ControlPopupResult> {
   try {
-    return await invoker<ControlPopupResult>(PREVIEW_COMMANDS.OPEN_CONTROL_POPUP);
+    return await invoker(PREVIEW_COMMANDS.OPEN_CONTROL_POPUP);
   } catch (error) {
     console.error("[LumaSync] open_led_control_popup failed:", error);
     return { ok: false, code: CONTROL_POPUP_STATUS.FAILED, message: parseCommandError(error).message, visible: false };
@@ -153,10 +144,10 @@ export async function openLedControlPopup(
 
 /** Unminimize, show, and focus the LED control popup. Fails if it hasn't been created via `openLedControlPopup` yet. */
 export async function showLedControlPopup(
-  invoker: PreviewInvoker = defaultInvoke,
+  invoker: CommandInvoker = invokeCommand,
 ): Promise<ControlPopupResult> {
   try {
-    return await invoker<ControlPopupResult>(PREVIEW_COMMANDS.SHOW_CONTROL_POPUP);
+    return await invoker(PREVIEW_COMMANDS.SHOW_CONTROL_POPUP);
   } catch (error) {
     console.error("[LumaSync] show_led_control_popup failed:", error);
     return { ok: false, code: CONTROL_POPUP_STATUS.FAILED, message: parseCommandError(error).message, visible: false };
@@ -165,10 +156,10 @@ export async function showLedControlPopup(
 
 /** Hide the LED control popup window without destroying it — `showLedControlPopup` can bring it back. */
 export async function hideLedControlPopup(
-  invoker: PreviewInvoker = defaultInvoke,
+  invoker: CommandInvoker = invokeCommand,
 ): Promise<ControlPopupResult> {
   try {
-    return await invoker<ControlPopupResult>(PREVIEW_COMMANDS.HIDE_CONTROL_POPUP);
+    return await invoker(PREVIEW_COMMANDS.HIDE_CONTROL_POPUP);
   } catch (error) {
     console.error("[LumaSync] hide_led_control_popup failed:", error);
     return { ok: false, code: CONTROL_POPUP_STATUS.FAILED, message: parseCommandError(error).message, visible: false };

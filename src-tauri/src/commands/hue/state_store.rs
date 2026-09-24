@@ -105,7 +105,7 @@ pub struct HueRuntimeCommandResult {
 
 /// Parameters needed to start (or restart) the Hue entertainment stream for
 /// a given bridge and area.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartHueStreamRequest {
     pub bridge_ip: String,
@@ -149,7 +149,7 @@ pub struct HueChannelPlacementOverride {
 
 /// Requested solid color + optional brightness to push to every light in
 /// the active area.
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SetHueSolidColorRequest {
     pub r: u8,

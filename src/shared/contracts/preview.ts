@@ -11,7 +11,7 @@
  *   (label prefix `led-twin-overlay-`) and an interactive control popup
  *   (label `led-control-popup`).
  * - **Per-LED color stream** — enriches `ambilight://edge-signal`
- *   (`EdgeSignalPayload` in `features/mode/model/edgeSignal.ts`); owns the status surface.
+ *   (`EdgeSignalPayload` below); owns the status surface.
  */
 
 import type { LedCalibrationConfig } from "./calibration";
@@ -295,3 +295,30 @@ export const LED_CONTROL_POPUP_LABEL = "led-control-popup" as const;
  * polling `get_led_preview_status`.
  */
 export const PREVIEW_STATE_CHANGED_EVENT = "preview://state-changed" as const;
+
+/** Tauri event channel carrying the per-LED feed of the LED twin overlay. */
+export const EDGE_SIGNAL_EVENT = "ambilight://edge-signal" as const;
+
+/**
+ * Per-LED frame the Rust ambilight worker sends to open twin-overlay windows
+ * (`lighting_mode/preview.rs`). Sent only while a twin overlay is open, and
+ * only to twin windows. This is the exact wire shape; the one listener reads
+ * it as a `Partial`, so a frame without a `leds` buffer is ignored rather than
+ * trusted.
+ */
+export interface EdgeSignalPayload {
+  /** Full per-LED RGB buffer, ordered along the calibrated strip path. */
+  leds: Array<[number, number, number]>;
+  /** Length of `leds` — the calibrated total LED count for this frame. */
+  ledCount: number;
+  /** Per-Hue-channel RGB for the twin's Hue zone markers. Separate from `leds`
+   * because Hue channels are sparse room positions, not contiguous pixels. */
+  hueChannels?: Array<[number, number, number]>;
+  source: "test" | "live";
+  /** Active synthetic pattern kind when `source === "test"`. */
+  pattern?: LedTestPatternKind;
+  /** Monotonically increasing frame sequence number, for drop detection. */
+  seq: number;
+  /** Display the frame was sampled from, threaded through from the capture path. */
+  displayId?: DisplayId;
+}

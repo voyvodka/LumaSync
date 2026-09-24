@@ -2,8 +2,8 @@ import {
   DEVICE_OPERATION,
   DEVICE_STATUS,
   HEALTH_CHECK_NOT_AVAILABLE,
+  type HealthCheckView,
 } from "@/shared/contracts/device";
-import type { HealthCheckResult } from "../deviceConnectionApi";
 import type { FirmwareProfileEventBus } from "../firmwareProfileEvents";
 import type { ConnectionStore } from "./connectionStore";
 import type { DeviceConnectionControllerDeps } from "./connectionTypes";
@@ -19,11 +19,14 @@ export function createHealthCheck(
   firmwareProfileEventsBus: FirmwareProfileEventBus | null,
 ): HealthCheck {
   const now = deps.now ?? (() => Date.now());
-  const runHealthCheckRequest =
+  const runHealthCheckRequest: (portName: string) => Promise<HealthCheckView> =
     deps.runSerialHealthCheck ??
     (async () => ({
       pass: false,
       checkedAtUnixMs: now(),
+      roundTripMs: null,
+      firmwareVersion: null,
+      advertisedFirmwareProfile: null,
       steps: [
         {
           step: "PORT_VISIBLE",
@@ -60,7 +63,7 @@ export function createHealthCheck(
     // Health check runs the same DTR-reset + settle window as connect
     // (BOOTLOADER_SETTLE_DELAY_MS, device_connection.rs) — no client-side timeout.
     try {
-      const result: HealthCheckResult = await runHealthCheckRequest(targetPort);
+      const result = await runHealthCheckRequest(targetPort);
       if (!store.isCurrentToken(token)) {
         return;
       }
@@ -89,7 +92,7 @@ export function createHealthCheck(
       // Lets FirmwareProfilePicker read the advertised profile without
       // mounting its own controller (and running its own health check).
       firmwareProfileEventsBus?.emit({
-        advertisedFirmwareProfile: result.advertisedFirmwareProfile,
+        advertisedFirmwareProfile: result.advertisedFirmwareProfile ?? undefined,
         advertisedPixelLayout: result.firmware?.pixelLayout,
       });
     } catch (error) {

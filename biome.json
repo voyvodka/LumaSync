@@ -93,6 +93,31 @@
       }
     },
     {
+      "includes": ["src/shared/ipcApi.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@tauri-apps/plugin-store": "plugin-store is opened only by src/features/shell/windowLifecycle.ts; go through shellStore.",
+                  "@tauri-apps/plugin-fs": "plugin-fs is imported only by src/features/room-map/roomMapFilesApi.ts.",
+                  "@tauri-apps/plugin-dialog": "plugin-dialog is imported only by src/features/room-map/roomMapFilesApi.ts."
+                },
+                "patterns": [
+                  {
+                    "group": ["@/features/**", "**/features/**"],
+                    "message": "src/shared must not depend on src/features; move the shared piece into src/shared instead."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["src/features/shell/windowLifecycle.ts"],
       "linter": {
         "rules": {

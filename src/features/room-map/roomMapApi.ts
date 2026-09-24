@@ -1,5 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-
 import { HUE_COMMANDS, type HueChannelWritebackStatus } from "@/shared/contracts/hue";
 import {
   HUE_ZONE_COMMANDS,
@@ -11,10 +9,7 @@ import {
   type HueZoneCommandResult,
   type UpdateHueZoneRequest,
 } from "@/shared/contracts/roomMap";
-
-export type RoomMapInvoker = <T>(command: string, payload?: Record<string, unknown>) => Promise<T>;
-
-const defaultInvoke: RoomMapInvoker = (command, payload) => invoke(command, payload);
+import { invokeCommand, type CommandInvoker } from "@/shared/ipcApi";
 
 // Zone wrappers are pass-through on rejection — callers keep their existing
 // `.catch(e => console.error(...))` diagnostics; absorbing the error here
@@ -23,33 +18,33 @@ const defaultInvoke: RoomMapInvoker = (command, payload) => invoke(command, payl
 /** Create a Hue zone. Wraps the payload under `request` — the shape the Rust handler expects. */
 export async function createHueZone(
   payload: CreateHueZoneRequest,
-  invoker: RoomMapInvoker = defaultInvoke,
+  invoker: CommandInvoker = invokeCommand,
 ): Promise<HueZoneCommandResult> {
-  return invoker<HueZoneCommandResult>(HUE_ZONE_COMMANDS.CREATE_HUE_ZONE, { request: payload });
+  return invoker(HUE_ZONE_COMMANDS.CREATE_HUE_ZONE, { request: payload });
 }
 
 /** Update a Hue zone (matched by `zone.id`). */
 export async function updateHueZone(
   payload: UpdateHueZoneRequest,
-  invoker: RoomMapInvoker = defaultInvoke,
+  invoker: CommandInvoker = invokeCommand,
 ): Promise<HueZoneCommandResult> {
-  return invoker<HueZoneCommandResult>(HUE_ZONE_COMMANDS.UPDATE_HUE_ZONE, { request: payload });
+  return invoker(HUE_ZONE_COMMANDS.UPDATE_HUE_ZONE, { request: payload });
 }
 
 /** Delete a Hue zone; member channels detach to legacy absolute placement. */
 export async function deleteHueZone(
   payload: DeleteHueZoneRequest,
-  invoker: RoomMapInvoker = defaultInvoke,
+  invoker: CommandInvoker = invokeCommand,
 ): Promise<HueZoneCommandResult> {
-  return invoker<HueZoneCommandResult>(HUE_ZONE_COMMANDS.DELETE_HUE_ZONE, { request: payload });
+  return invoker(HUE_ZONE_COMMANDS.DELETE_HUE_ZONE, { request: payload });
 }
 
 /** Attach or detach a channel to/from a Hue zone (`zoneId: null` detaches). */
 export async function assignChannelToHueZone(
   payload: AssignChannelRequest,
-  invoker: RoomMapInvoker = defaultInvoke,
+  invoker: CommandInvoker = invokeCommand,
 ): Promise<HueZoneCommandResult> {
-  return invoker<HueZoneCommandResult>(HUE_ZONE_COMMANDS.ASSIGN_CHANNEL_TO_HUE_ZONE, { request: payload });
+  return invoker(HUE_ZONE_COMMANDS.ASSIGN_CHANNEL_TO_HUE_ZONE, { request: payload });
 }
 
 export interface UpdateHueChannelPositionsPayload {
@@ -62,9 +57,9 @@ export interface UpdateHueChannelPositionsPayload {
 /** Write channel positions back to the bridge. Flat args — `save_load.rs` takes four positional params, not an envelope. */
 export async function updateHueChannelPositions(
   payload: UpdateHueChannelPositionsPayload,
-  invoker: RoomMapInvoker = defaultInvoke,
+  invoker: CommandInvoker = invokeCommand,
 ): Promise<HueChannelWritebackStatus> {
-  return invoker<HueChannelWritebackStatus>(HUE_COMMANDS.UPDATE_CHANNEL_POSITIONS, {
+  return invoker(HUE_COMMANDS.UPDATE_CHANNEL_POSITIONS, {
     channels: payload.channels,
     bridgeIp: payload.bridgeIp,
     username: payload.username,
@@ -75,7 +70,7 @@ export async function updateHueChannelPositions(
 /** Copy a user-picked image into the app data dir; returns the destination path. */
 export async function copyBackgroundImage(
   srcPath: string,
-  invoker: RoomMapInvoker = defaultInvoke,
+  invoker: CommandInvoker = invokeCommand,
 ): Promise<string> {
-  return invoker<string>(ROOM_MAP_COMMANDS.COPY_BACKGROUND_IMAGE, { srcPath });
+  return invoker(ROOM_MAP_COMMANDS.COPY_BACKGROUND_IMAGE, { srcPath });
 }

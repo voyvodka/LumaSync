@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HUE_CREDENTIAL_STATUS, type HueOnboardingWireStatusCode } from "@/shared/contracts/hue";
+import { HUE_CREDENTIAL_STATUS, type HueStreamReadinessStatusCode } from "@/shared/contracts/hue";
 import { hueCredentialEvents } from "../../hueCredentialEvents";
 import { __resetHueHealthStoreForTests } from "../hueHealthStore";
 import { useHueOnboardingCore } from "../useHueOnboardingCore";
@@ -123,7 +123,7 @@ describe("useHueOnboardingCore — credential invariants", () => {
   });
 
   describe("a key refused mid-session", () => {
-    const readiness = (code: HueOnboardingWireStatusCode) => ({
+    const readiness = (code: HueStreamReadinessStatusCode) => ({
       status: { code, message: code, details: null },
       readiness: { ready: false, reasons: [] as string[] },
     });

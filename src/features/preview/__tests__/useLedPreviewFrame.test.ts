@@ -17,8 +17,8 @@
 import { renderHook, act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { EdgeSignalPayload } from "@/features/mode/model/edgeSignal";
-import { EDGE_SIGNAL_EVENT } from "@/features/mode/model/edgeSignal";
+import type { EdgeSignalPayload } from "@/shared/contracts/preview";
+import { EDGE_SIGNAL_EVENT } from "@/shared/contracts/preview";
 
 // ---------------------------------------------------------------------------
 // Mock @tauri-apps/api/event BEFORE the imports that depend on it.
@@ -36,7 +36,7 @@ import { useLedPreviewFrame } from "../state/useLedPreviewFrame";
 // ---------------------------------------------------------------------------
 
 /** Minimal callback shape captured from the `listen` call. */
-type ListenCallback = (event: { payload: EdgeSignalPayload }) => void;
+type ListenCallback = (event: { payload: Partial<EdgeSignalPayload> }) => void;
 
 /** Build a fully enriched EdgeSignalPayload with optional overrides. */
 function makeEnrichedPayload(

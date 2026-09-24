@@ -9,6 +9,20 @@ How the TypeScript and Rust halves agree on anything, and what survives a restar
 from it rather than from any summary, including this one. Run `bun run verify:shell-contracts` after
 touching either side; it checks that Rust handlers match the frontend definitions.
 
+**One typed command table.** `CommandMap` in `src/shared/contracts/ipc.ts` gives every command the
+contracts declare its `args` (the object `invoke()` sends, keyed by the Rust parameter names) and
+its `result`. Two type-level guards hold it equal to the `*_COMMANDS` maps in both directions.
+Bridges call `invokeCommand` (`src/shared/ipcApi.ts`), never `invoke`, so a misspelt command, a
+payload key the handler never reads, or a result typed against the wrong shape is a compile error.
+A bridge that wants an injectable transport takes a `CommandInvoker` — one type for every bridge —
+and tests hand it `mockCommands({...})` from `src/test/mockCommands.ts`, typed by the same map; the
+dev mock's `TypedHandlers` is too. The table is type-only on purpose: `verify:window-grants` reads
+every `*_COMMANDS.X` a window's live code names, so a runtime import of the whole table would make
+every window look like it invokes every command. Every `Serialize` struct that reaches the
+frontend has a same-named (or aliased) contract interface; the verifier's unpaired-struct ratchet
+is empty and a new unpaired struct fails. A struct that only ever *enters* Rust derives
+`Deserialize` alone.
+
 **Coded status, never a bare string.** A command returns a stable machine-readable status code
 alongside the human-readable message. Never a bare string error, and never a code invented at the
 call site — a code that exists in one place cannot be handled, translated, or searched for.
@@ -53,8 +67,8 @@ on Windows, `~/.local/share/com.lumasync.app/` on Linux. `ShellStateStore` in
 through `migrations.ts`. Stored keys follow `ShellState` in `shell.ts`.
 
 **Import layers are lint-enforced.** `biome.json` (`noRestrictedImports`, run by `bun run lint`)
-holds three rules. `@tauri-apps/*` is imported only by a feature's `*Api.ts` bridge, plus
-`main.tsx` (the log bridge and window-label routing, before any feature loads),
+holds three rules. `@tauri-apps/*` is imported only by a feature's `*Api.ts` bridge and
+`shared/ipcApi.ts` (the typed `invoke`), plus `main.tsx` (the log bridge and window-label routing, before any feature loads),
 `shell/windowLifecycle.ts` (window geometry and the store) and `tray/trayController.ts` (tray events
 and autostart) — a component or hook that wants the window, an event or a plugin goes through a
 bridge, so a test can mock one module and a capability audit has one caller to read. Events use a

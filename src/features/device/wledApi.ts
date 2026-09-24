@@ -6,35 +6,29 @@
  * shape: thin `invoke()` wrappers, never throws — every response carries
  * a `status.code` discriminator from `WLED_STATUS`.
  */
-import { invoke } from "@tauri-apps/api/core";
 import {
   DEVICE_COMMANDS,
-  type WledCommandStatus,
+  type WledConnectResponse,
   type WledDeviceInfo,
+  type WledDiscoveryResponse,
   type WledSinkStatus,
-  type WledTestResponse as ContractWledTestResponse,
+  type WledTestResponse,
   type WledUdpSinkConfig,
 } from "@/shared/contracts/device";
+import { invokeCommand } from "@/shared/ipcApi";
 
-export type { WledCommandStatus };
-
-/** Result of `discoverWledDevices` — every WLED instance found (or probed) on the network. */
-export interface WledDiscoveryResponse {
-  status: WledCommandStatus;
-  devices: WledDeviceInfo[];
-}
-
-export interface WledConnectResponse {
-  status: WledCommandStatus;
-}
+export type {
+  WledCommandStatus,
+  WledConnectResponse,
+  WledDiscoveryResponse,
+  WledTestResponse,
+} from "@/shared/contracts/device";
 
 /**
  * Port / protocol overrides for a connect. Omitted ⇒ Rust falls back to DDP
  * on 4048, so a restore must pass the persisted pair rather than rely on it.
  */
 export type WledTransportOverride = Pick<WledUdpSinkConfig, "port" | "protocol">;
-
-export type WledTestResponse = ContractWledTestResponse;
 
 // All three WLED handlers take a single struct parameter named `request`, and
 // Tauri matches top-level invoke keys to parameter names: flat args are
@@ -44,7 +38,7 @@ export type WledTestResponse = ContractWledTestResponse;
 export async function discoverWledDevices(
   ip: string,
 ): Promise<WledDiscoveryResponse> {
-  return invoke<WledDiscoveryResponse>(DEVICE_COMMANDS.DISCOVER_WLED_DEVICES, {
+  return invokeCommand(DEVICE_COMMANDS.DISCOVER_WLED_DEVICES, {
     request: { ip },
   });
 }
@@ -58,7 +52,7 @@ export async function connectWledSink(
   device: WledDeviceInfo,
   transport?: WledTransportOverride,
 ): Promise<WledConnectResponse> {
-  return invoke<WledConnectResponse>(DEVICE_COMMANDS.CONNECT_WLED_SINK, {
+  return invokeCommand(DEVICE_COMMANDS.CONNECT_WLED_SINK, {
     request: {
       device,
       port: transport?.port,
@@ -72,7 +66,7 @@ export async function connectWledSink(
  * `ShellState.lastWledSink`, which is only the restore intent.
  */
 export async function getWledSinkStatus(): Promise<WledSinkStatus> {
-  return invoke<WledSinkStatus>(DEVICE_COMMANDS.GET_WLED_SINK_STATUS);
+  return invokeCommand(DEVICE_COMMANDS.GET_WLED_SINK_STATUS);
 }
 
 /**
@@ -85,7 +79,7 @@ export async function getWledSinkStatus(): Promise<WledSinkStatus> {
 export async function testWledBridge(
   device: WledDeviceInfo,
 ): Promise<WledTestResponse> {
-  return invoke<WledTestResponse>(DEVICE_COMMANDS.TEST_WLED_BRIDGE, {
+  return invokeCommand(DEVICE_COMMANDS.TEST_WLED_BRIDGE, {
     request: { device },
   });
 }

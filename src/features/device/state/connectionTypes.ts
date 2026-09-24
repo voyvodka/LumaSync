@@ -1,4 +1,4 @@
-import type { DeviceOperation, DeviceStatus } from "@/shared/contracts/device";
+import type { DeviceOperation, DeviceStatus, HealthCheckView } from "@/shared/contracts/device";
 import type {
   HealthCheckResult,
   SerialConnectionStatus,
@@ -30,7 +30,7 @@ export interface DeviceConnectionControllerState {
   isReconnecting: boolean;
   isHealthChecking: boolean;
   activeOperation: DeviceOperation;
-  latestHealthCheck: HealthCheckResult | null;
+  latestHealthCheck: HealthCheckView | null;
 }
 
 export interface DeviceConnectionControllerDeps {

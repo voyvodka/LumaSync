@@ -1,7 +1,7 @@
 /** `invoke()` bridge for the shell-state commands. Rust owns `shell-state.json`;
  * see docs/architecture/contracts-and-state.md, "Shell-state ownership". */
 
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "@/shared/ipcApi";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import {
@@ -16,15 +16,15 @@ import {
 } from "@/shared/contracts/shell";
 
 export function getShellState(): Promise<ShellStateSnapshot> {
-  return invoke<ShellStateSnapshot>(SHELL_COMMANDS.GET_SHELL_STATE);
+  return invokeCommand(SHELL_COMMANDS.GET_SHELL_STATE);
 }
 
 export function patchShellState(patch: ShellStatePatchRequest): Promise<ShellStateWriteResult> {
-  return invoke<ShellStateWriteResult>(SHELL_COMMANDS.PATCH_SHELL_STATE, { patch });
+  return invokeCommand(SHELL_COMMANDS.PATCH_SHELL_STATE, { patch });
 }
 
 export function replaceShellState(request: ShellStateReplaceRequest): Promise<ShellStateWriteResult> {
-  return invoke<ShellStateWriteResult>(SHELL_COMMANDS.REPLACE_SHELL_STATE, { request });
+  return invokeCommand(SHELL_COMMANDS.REPLACE_SHELL_STATE, { request });
 }
 
 export function onShellStateChanged(
