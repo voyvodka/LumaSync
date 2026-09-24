@@ -13,8 +13,9 @@ use tauri::test::MockRuntime;
 use tauri::{App, AppHandle, Listener, Manager};
 
 use super::hue_driver::{HueAreaVerdict, HueDriver, HueDriverHandle, HueFuture};
+use super::runtime::LightingRuntimeOwner;
 use super::{
-    stop_lighting_blocking, LightingRuntimeOwner, LightingRuntimeState, ACTIVE_AMBILIGHT_WORKERS,
+    stop_lighting_blocking, LightingRuntimeState, ACTIVE_AMBILIGHT_WORKERS,
     LIGHTING_MODE_CHANGED_EVENT,
 };
 use crate::commands::ambilight_capture::{

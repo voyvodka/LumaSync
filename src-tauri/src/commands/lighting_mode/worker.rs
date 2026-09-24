@@ -14,13 +14,15 @@ use log::{info, warn};
 use super::frame_pipeline::{
     strip_topology_for, AmbilightFramePipeline, FramePipelineConfig, FrameSettings,
 };
-use super::{
-    resolve_quality_config, ActiveUsbSink, AmbilightLiveSettings, AmbilightWorkerQualityState,
-    EdgeSignalEmitter, EdgeSignalPayload, LightingWorkerRuntime, PreviewEmitContext,
-    RoomGeometryLive, UsbOutputPlan, ACTIVE_AMBILIGHT_WORKERS, AMBILIGHT_CAPTURE_ATTEMPTS,
-    AMBILIGHT_FRAME_ATTEMPTS, EDGE_SIGNAL_PREVIEW_INTERVAL_MS, LIVE_SAMPLE_WINDOW,
-    SYNTHETIC_SAMPLE_WINDOW,
+use super::live::{AmbilightLiveSettings, RoomGeometryLive};
+use super::pacing::{resolve_quality_config, AmbilightWorkerQualityState};
+use super::preview::{
+    EdgeSignalEmitter, EdgeSignalPayload, PreviewEmitContext, EDGE_SIGNAL_PREVIEW_INTERVAL_MS,
 };
+use super::runtime::LightingWorkerRuntime;
+use super::sampling::{LIVE_SAMPLE_WINDOW, SYNTHETIC_SAMPLE_WINDOW};
+use super::usb_output::{ActiveUsbSink, UsbOutputPlan};
+use super::{ACTIVE_AMBILIGHT_WORKERS, AMBILIGHT_CAPTURE_ATTEMPTS, AMBILIGHT_FRAME_ATTEMPTS};
 use crate::commands::ambilight_capture::{AmbilightFrameSource, CapturedFrame};
 use crate::commands::hue::frame::HueMotion;
 use crate::commands::hue::state_store::{
