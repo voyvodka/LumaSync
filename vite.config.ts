@@ -87,9 +87,9 @@ export default defineConfig(async ({ command }) => {
 
     build: {
       // Vite's 500 kB default warns about download cost, which a bundle read off
-      // local disk never pays. Kept just above the current size so it still
-      // ratchets — see docs/architecture/build-and-release.md.
-      chunkSizeWarningLimit: 900,
+      // local disk never pays. Kept just above the largest chunk (the entry every
+      // window parses) so it still ratchets — see docs/architecture/build-and-release.md.
+      chunkSizeWarningLimit: 300,
     },
 
     clearScreen: false,
