@@ -38,6 +38,8 @@
 
 pub mod area_cache;
 pub mod bridge_identity;
+#[cfg(test)]
+mod colour_golden_tests;
 pub mod commands;
 pub mod credential_store;
 pub mod dtls;

@@ -128,6 +128,21 @@ pub(super) fn apply_and_broadcast<R: Runtime>(
     Ok(result)
 }
 
+/// The ambilight settings a test pattern runs under, whatever the user's are.
+pub(super) fn test_pattern_ambilight(brightness: f32) -> AmbilightPayload {
+    AmbilightPayload {
+        brightness,
+        // A pattern is painted on black: the detector reads the unlit part of
+        // the frame as bars and crops it, and every LED lands somewhere else.
+        black_border_detection: false,
+        // Unsmoothed, unsaturated: the default 0.35 EWMA smears the chase
+        // band across neighbours, which is the ordering it exists to prove.
+        smoothing_alpha: Some(1.0),
+        saturation: Some(1.0),
+        ..AmbilightPayload::default()
+    }
+}
+
 /// Request payload for `start_led_test_pattern` — which synthetic pattern to
 /// run, at what speed/brightness, and which output channels to drive.
 #[derive(Deserialize)]
@@ -253,14 +268,7 @@ fn start_led_test_pattern_blocking<R: Runtime>(
     let mut config = LightingModeConfig {
         kind: LightingModeKind::Ambilight,
         solid: None,
-        ambilight: Some(AmbilightPayload {
-            brightness: payload.brightness,
-            // Unsmoothed, unsaturated: the default 0.35 EWMA smears the chase
-            // band across neighbours, which is the ordering it exists to prove.
-            smoothing_alpha: Some(1.0),
-            saturation: Some(1.0),
-            ..AmbilightPayload::default()
-        }),
+        ambilight: Some(test_pattern_ambilight(payload.brightness)),
         targets: Some(targets),
         display_id: None,
         led_calibration: payload.led_calibration.clone(),

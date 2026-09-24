@@ -13,7 +13,7 @@ use super::frame_pipeline::{
 use super::live::{AmbilightLiveSettings, RoomGeometryLive};
 use super::sampling::{
     hue_sample_table, sample_screen_position_avg, BlackBorderCache, HueSampleTable,
-    LIVE_SAMPLE_WINDOW,
+    LIVE_SAMPLE_WINDOW, SYNTHETIC_SAMPLE_WINDOW,
 };
 use super::smoothing::{alpha_for_interval, TimeSmoother, SMOOTHING_REFERENCE_INTERVAL};
 use super::usb_output::UsbOutputPlan;
@@ -40,6 +40,9 @@ use crate::commands::led_output::{
 };
 use crate::commands::led_sink::LedSink;
 use crate::commands::runtime_telemetry::RuntimeTelemetrySnapshot;
+use crate::commands::test_pattern::{
+    create_synthetic_frame_source, TestPatternConfig, TestPatternKind, TestPatternSpeed,
+};
 use crate::models::room_map::{RoomDimensions, RoomGeometry, TvAnchorPlacement};
 
 // ---------------------------------------------------------------------------
@@ -452,7 +455,10 @@ impl ReferenceLoop {
                                 raw_frame,
                                 sample_x,
                                 sample_y,
-                                self.border_cache.insets(),
+                                &self.border_cache.insets().content_bounds(
+                                    raw_frame.width as usize,
+                                    raw_frame.height as usize,
+                                ),
                             );
                             [r, g, b]
                         }),
@@ -1071,13 +1077,31 @@ fn first_strip_frame(
     black_border_detection: bool,
     frame: &CapturedFrame,
 ) -> Vec<[u8; 3]> {
+    first_outputs(
+        led_calibration,
+        black_border_detection,
+        frame,
+        LIVE_SAMPLE_WINDOW,
+        None,
+    )
+    .0
+}
+
+/// `first_strip_frame`, plus the Hue colours when `hue_channels` is given.
+fn first_outputs(
+    led_calibration: &LedCalibrationConfig,
+    black_border_detection: bool,
+    frame: &CapturedFrame,
+    sample_window: f32,
+    hue_channels: Option<Vec<HueAreaChannel>>,
+) -> (Vec<[u8; 3]>, Option<Vec<HueRgb>>) {
     let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
         led_sequence: build_led_sequence(led_calibration),
         led_counts: led_calibration.counts.clone(),
-        sample_window: LIVE_SAMPLE_WINDOW,
+        sample_window,
         scene_enabled: false,
         strip_topology: strip_topology_for(Some(led_calibration)),
-        hue_channels: None,
+        hue_channels,
         room_geometry: RoomGeometryLive::new(None),
         black_border_detection,
         color_correction: ColorCorrectionConfig::default(),
@@ -1095,7 +1119,10 @@ fn first_strip_frame(
         now,
     );
     pipeline.advance(now);
-    pipeline.strip_frame().to_vec()
+    (
+        pipeline.strip_frame().to_vec(),
+        pipeline.hue_colors().map(<[HueRgb]>::to_vec),
+    )
 }
 
 fn colors_on(
@@ -1141,6 +1168,110 @@ fn letterboxed_strip_takes_the_picture_edge_not_the_bars() {
     }
 }
 
+/// The Hue sampler used to derive the content rectangle from the insets
+/// itself, per channel. It now takes `content_bounds`, computed once per
+/// frame; this is the arithmetic it replaced, and the two must agree on every
+/// frame size and inset the detector can produce (0 to its 0.40 cap).
+#[test]
+fn hue_content_rectangle_is_the_one_the_inline_arithmetic_gave() {
+    let inline = |w: usize, h: usize, insets: &BlackBorderInsets| {
+        let ct = (h as f32 * insets.top) as usize;
+        let cb = h
+            .saturating_sub((h as f32 * insets.bottom) as usize)
+            .max(ct + 1);
+        let cl = (w as f32 * insets.left) as usize;
+        let cr = w
+            .saturating_sub((w as f32 * insets.right) as usize)
+            .max(cl + 1);
+        (ct..cb, cl..cr)
+    };
+    let fractions = [0.0, 0.0125, 0.1278, 0.25, 0.3333, 0.4];
+    for (w, h) in [(640, 360), (640, 400), (1, 1), (7, 3), (3840, 2160)] {
+        for &top in &fractions {
+            for &bottom in &fractions {
+                for &side in &fractions {
+                    let insets = BlackBorderInsets {
+                        top,
+                        bottom,
+                        left: side,
+                        right: side / 2.0,
+                    };
+                    assert_eq!(
+                        insets.content_bounds(w, h),
+                        inline(w, h, &insets),
+                        "{w}x{h} {insets:?}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Test patterns are never cropped
+// ---------------------------------------------------------------------------
+
+/// A test pattern is painted on black, so the detector reads its unlit part
+/// as letterbox bars. Cropped, every LED and every Hue channel would sample a
+/// shifted rectangle and the pattern would light the wrong places. The test's
+/// own settings keep detection off; this pins that, and shows on a real chase
+/// frame that it matters.
+#[test]
+fn black_border_detection_never_crops_a_test_pattern() {
+    let led_calibration = strip_164();
+    let mut source = create_synthetic_frame_source(
+        TestPatternConfig {
+            kind: TestPatternKind::Chase {
+                r: 255,
+                g: 255,
+                b: 255,
+            },
+            brightness: 1.0,
+            speed: TestPatternSpeed::Med,
+            display_aspect: 16.0 / 9.0,
+        },
+        Some(led_calibration.clone()),
+        None,
+        None,
+    );
+    let frame = source.capture_frame().expect("a synthetic frame");
+
+    let insets = detect_black_borders(&frame, BLACK_BORDER_THRESHOLD);
+    assert_ne!(
+        insets,
+        BlackBorderInsets::default(),
+        "the chase frame must read as bordered, or this test proves nothing"
+    );
+
+    let settings = led_test_pattern::test_pattern_ambilight(1.0);
+    assert!(
+        !settings.black_border_detection,
+        "a test pattern must run with black-border detection off"
+    );
+
+    let run = |detection: bool| {
+        first_outputs(
+            &led_calibration,
+            detection,
+            &frame,
+            SYNTHETIC_SAMPLE_WINDOW,
+            Some(hue_channels()),
+        )
+    };
+    let (strip, hue) = run(settings.black_border_detection);
+    let painted = sample_frame_for_sequence(
+        &frame,
+        &build_led_sequence(&led_calibration),
+        &led_calibration.counts,
+        SYNTHETIC_SAMPLE_WINDOW,
+    );
+    assert_eq!(strip, painted, "the strip shows the pattern as painted");
+
+    let (cropped_strip, cropped_hue) = run(true);
+    assert_ne!(cropped_strip, painted, "detection on would move the strip");
+    assert_ne!(cropped_hue, hue, "detection on would move Hue");
+}
+
 /// Review item 27, the intended change for Hue: the live saturation slider
 /// reached the strip only, and Hue was corrected before it was smoothed. Hue
 /// now gets the strip's order — sample, live saturation, smoothing, then the
@@ -1180,8 +1311,9 @@ fn live_saturation_reaches_hue() {
             .sample_points
             .iter()
             .map(|&(x, y)| {
-                let (r, g, b) =
-                    sample_screen_position_avg(&frame, x, y, &BlackBorderInsets::default());
+                let content = BlackBorderInsets::default()
+                    .content_bounds(frame.width as usize, frame.height as usize);
+                let (r, g, b) = sample_screen_position_avg(&frame, x, y, &content);
                 let saturated = apply_saturation_to_pixel([r, g, b], saturation);
                 plan.correct_precise(saturated.map(f32::from))
             })
@@ -1632,8 +1764,10 @@ fn report_scenario(
     print_timing(
         "  Hue sampling (room-aware sample points)",
         &time_calls(ITERATIONS, |i| {
+            let frame = frame_at(i);
+            let content = insets.content_bounds(frame.width as usize, frame.height as usize);
             for &(x, y) in &table.sample_points {
-                std::hint::black_box(sample_screen_position_avg(frame_at(i), x, y, &insets));
+                std::hint::black_box(sample_screen_position_avg(frame, x, y, &content));
             }
         }),
     );

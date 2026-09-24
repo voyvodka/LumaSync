@@ -421,10 +421,10 @@ pub(crate) fn clip_channels_to_gamut(
         // Bug H2: preserve the input's own luminance through the clip
         // instead of a hard-coded 1.0. See docs/architecture/hue.md.
         let [r, g, b] = color.map(|v| f64::from(v.clamp(0.0, 1.0)));
-        let (xy_x, xy_y, big_y) = rgb_to_xy_unit(r, g, b);
+        let (xy_x, xy_y, big_y) = linear_rgb_to_xy(r, g, b);
         let clipped = clip_xy_to_gamut((xy_x, xy_y), gamut);
         if (clipped.0 - xy_x).abs() > 1e-9 || (clipped.1 - xy_y).abs() > 1e-9 {
-            let (cr, cg, cb) = xy_to_rgb_unit(clipped.0, clipped.1, big_y);
+            let (cr, cg, cb) = xy_to_linear_rgb(clipped.0, clipped.1, big_y);
             color.copy_from_slice(&[cr as f32, cg as f32, cb as f32]);
         }
     }
@@ -483,44 +483,18 @@ pub(crate) fn encode_huestream_frame(
 // Colour-space conversions
 // ---------------------------------------------------------------------------
 
-/// Convert sRGB (0..255 per channel) to CIE 1931 chromaticity using the
-/// Hue-style gamma + linear-RGB→XYZ matrix.
+/// CIE 1931 chromaticity of a **linear-light** RGB triple (0–1 per component)
+/// through Hue's wide-gamut RGB → XYZ matrix. No transfer function: every
+/// colour reaching the Hue sender was already decoded by the pipeline's gamma
+/// stage, and applying the sRGB EOTF here too linearised it twice — see "Where
+/// a Hue colour is gamma-encoded and where it is linear" in
+/// docs/architecture/hue.md.
 ///
-/// Returns `(x, y, big_y)` where:
-/// - `(x, y)` is the chromaticity, bridge-ready for the `color.xy` field
-///   of CLIP v2 light PUTs.
-/// - `big_y` is the raw Y component prior to chromaticity normalisation, fed
-///   back through `xy_to_rgb` to preserve luminance across a gamut clip (Bug
-///   H2 — see docs/architecture/hue.md). Callers that only need chromaticity
-///   can ignore it.
-pub(crate) fn rgb_to_xy(r: u8, g: u8, b: u8) -> (f64, f64, f64) {
-    rgb_to_xy_unit(
-        f64::from(r) / 255.0,
-        f64::from(g) / 255.0,
-        f64::from(b) / 255.0,
-    )
-}
-
-/// [`rgb_to_xy`] on components already scaled to 0–1.
-pub(crate) fn rgb_to_xy_unit(red: f64, green: f64, blue: f64) -> (f64, f64, f64) {
-    let (mut red, mut green, mut blue) = (red, green, blue);
-
-    red = if red > 0.04045 {
-        ((red + 0.055) / 1.055).powf(2.4)
-    } else {
-        red / 12.92
-    };
-    green = if green > 0.04045 {
-        ((green + 0.055) / 1.055).powf(2.4)
-    } else {
-        green / 12.92
-    };
-    blue = if blue > 0.04045 {
-        ((blue + 0.055) / 1.055).powf(2.4)
-    } else {
-        blue / 12.92
-    };
-
+/// Returns `(x, y, big_y)`: `(x, y)` is the chromaticity, bridge-ready for a
+/// CLIP v2 `color.xy`; `big_y` is the luminance, fed back through
+/// [`xy_to_linear_rgb`] to preserve it across a gamut clip (Bug H2 — see
+/// docs/architecture/hue.md).
+pub(crate) fn linear_rgb_to_xy(red: f64, green: f64, blue: f64) -> (f64, f64, f64) {
     let x = red * 0.664_511 + green * 0.154_324 + blue * 0.162_028;
     let y = red * 0.283_881 + green * 0.668_433 + blue * 0.047_685;
     let z = red * 0.000_088 + green * 0.072_31 + blue * 0.986_039;
@@ -529,32 +503,20 @@ pub(crate) fn rgb_to_xy_unit(red: f64, green: f64, blue: f64) -> (f64, f64, f64)
     if sum <= f64::EPSILON {
         // D65 white-point fallback for true black input — matches the
         // pre-Bug-H2 behaviour. `big_y` is reported as 0.0 so callers
-        // who threadit into the inverse transform produce black.
+        // who thread it into the inverse transform produce black.
         return (0.3127, 0.3290, 0.0);
     }
 
     (x / sum, y / sum, y)
 }
 
-/// Inverse of [`rgb_to_xy`]: recover an sRGB triplet (8-bit per channel)
-/// from a CIE 1931 chromaticity `(x, y)` plus a target luminance
-/// `target_y` (the `big_y` returned by [`rgb_to_xy`]). Uses the Hue-style
-/// XYZ → linear-RGB matrix and gamma encode, then clamps to `[0, 255]`
-/// rather than renormalising (Bug H2 — see docs/architecture/hue.md) —
-/// some chromaticities land outside the sRGB cube even after the upstream
-/// gamut clip, and clamping is the correct response to that, not a redo.
-#[cfg(test)]
-pub(crate) fn xy_to_rgb(x: f64, y: f64, target_y: f64) -> (u8, u8, u8) {
-    let (r, g, b) = xy_to_rgb_unit(x, y, target_y);
-    (
-        (r * 255.0).round() as u8,
-        (g * 255.0).round() as u8,
-        (b * 255.0).round() as u8,
-    )
-}
-
-/// [`xy_to_rgb`] without the 8-bit rounding: components clamped to 0–1.
-pub(crate) fn xy_to_rgb_unit(x: f64, y: f64, target_y: f64) -> (f64, f64, f64) {
+/// Inverse of [`linear_rgb_to_xy`]: the linear-light RGB triple (0–1 per
+/// component) with chromaticity `(x, y)` and luminance `target_y`. Clamps
+/// each component to `[0, 1]` rather than renormalising (Bug H2 — see
+/// docs/architecture/hue.md) — some chromaticities land outside the RGB cube
+/// even after the upstream gamut clip, and clamping is the correct response to
+/// that, not a redo.
+pub(crate) fn xy_to_linear_rgb(x: f64, y: f64, target_y: f64) -> (f64, f64, f64) {
     // Treat negative or near-zero target luminance as "true black". This
     // keeps the EPSILON guard (the channel is unrenderable) but moves it
     // to the *target* luminance — never the input chromaticity's `y` —
@@ -576,24 +538,11 @@ pub(crate) fn xy_to_rgb_unit(x: f64, y: f64, target_y: f64) -> (f64, f64, f64) {
     let big_z = (big_y / y) * (1.0 - x - y);
 
     // Hue-published inverse of the linear-RGB → XYZ matrix used by
-    // `rgb_to_xy`. Coefficients sourced from the same Philips developer
+    // `linear_rgb_to_xy`. Coefficients sourced from the same Philips developer
     // documentation, accurate to 6 decimals.
-    let mut r = big_x * 1.656_492 + big_y * -0.354_851 + big_z * -0.255_038;
-    let mut g = big_x * -0.707_196 + big_y * 1.655_397 + big_z * 0.036_152;
-    let mut b = big_x * 0.051_713 + big_y * -0.121_364 + big_z * 1.011_530;
-
-    // Apply sRGB gamma encode (inverse of the linearisation in rgb_to_xy).
-    let encode = |c: f64| -> f64 {
-        let c = c.max(0.0);
-        if c <= 0.003_130_8 {
-            12.92 * c
-        } else {
-            1.055 * c.powf(1.0 / 2.4) - 0.055
-        }
-    };
-    r = encode(r);
-    g = encode(g);
-    b = encode(b);
+    let r = big_x * 1.656_492 + big_y * -0.354_851 + big_z * -0.255_038;
+    let g = big_x * -0.707_196 + big_y * 1.655_397 + big_z * 0.036_152;
+    let b = big_x * 0.051_713 + big_y * -0.121_364 + big_z * 1.011_530;
 
     // Bug H2: do NOT renormalise so the largest channel saturates —
     // that path strips the input luminance and lets the brightness
@@ -1116,34 +1065,32 @@ mod tests {
     }
 
     #[test]
-    fn xy_to_rgb_round_trip_on_gamut_c_red_corner_recovers_red_dominant_triplet() {
-        // Gamut C red corner (0.692, 0.308) must round-trip to a clearly
-        // red-dominant sRGB triplet — sanity check that the inverse
-        // matrix matches the forward `rgb_to_xy` and the gamma encode
-        // does not drown the chromaticity in green/blue.
-        //
-        // We feed `target_y = 0.21` (the approximate luminance of pure
-        // sRGB red, per the Hue forward matrix `0.283881 * 1.0 ≈ 0.284`
-        // pre-gamma; ~0.21 in encoded space) so the triplet recovers a
-        // saturated red rather than a washed-out one.
-        let (r, g, b) = xy_to_rgb(0.692, 0.308, 0.21);
-        assert!(r > g && r > b, "expected red-dominant, got ({r}, {g}, {b})");
-        assert!(r >= 200, "expected near-saturated red, got r={r}");
+    fn xy_to_linear_rgb_on_gamut_c_red_corner_recovers_red_dominant_triplet() {
+        // Gamut C red corner (0.692, 0.308) at the luminance of full red
+        // through the forward matrix (0.283881) must come back as a
+        // near-saturated red with next to no green or blue — the inverse
+        // matrix has to match `linear_rgb_to_xy`.
+        let (r, g, b) = xy_to_linear_rgb(0.692, 0.308, 0.283_881);
+        assert!(r > 0.9, "expected near-saturated red, got r={r}");
+        assert!(
+            g < 0.05 && b < 0.05,
+            "expected red-dominant, got ({r}, {g}, {b})"
+        );
     }
 
     // -----------------------------------------------------------------------
     // Bug H2 regression — gamut-clip luminance preservation
     // -----------------------------------------------------------------------
 
-    /// Pure unit test on the inverse transform: `xy_to_rgb` must return a
-    /// triplet whose recovered Y (via `rgb_to_xy`) is within 5% of the
-    /// requested `target_y`. This guards against a regression to the
-    /// pre-fix "max-channel saturate" normalisation, which silently
+    /// Pure unit test on the inverse transform: `xy_to_linear_rgb` must
+    /// return a triplet whose recovered Y (via `linear_rgb_to_xy`) is within
+    /// 5% of the requested `target_y`. This guards against a regression to
+    /// the pre-fix "max-channel saturate" normalisation, which silently
     /// stripped luminance information from the round-trip.
     ///
-    /// 5% tolerance = sRGB gamma round-trip + u8 quantisation.
+    /// 5% tolerance = u8 quantisation of the triplet.
     #[test]
-    fn xy_to_rgb_preserves_target_luminance() {
+    fn xy_to_linear_rgb_preserves_target_luminance() {
         // Probe several chromaticities at moderate luminance so we
         // exercise both forward and inverse transforms without bumping
         // into 0-clamp or 255-saturation.
@@ -1156,8 +1103,9 @@ mod tests {
             (0.33, 0.33, 0.50),
         ];
         for (x, y, target_y) in probes {
-            let (r, g, b) = xy_to_rgb(x, y, target_y);
-            let (_, _, recovered_y) = rgb_to_xy(r, g, b);
+            let (r, g, b) = xy_to_linear_rgb(x, y, target_y);
+            let [r, g, b] = [r, g, b].map(|c| (c * 255.0).round() / 255.0);
+            let (_, _, recovered_y) = linear_rgb_to_xy(r, g, b);
             let rel_err = (recovered_y - target_y).abs() / target_y.max(f64::EPSILON);
             assert!(
                 rel_err < 0.05,

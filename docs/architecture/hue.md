@@ -232,6 +232,48 @@ local `is_shutdown_signaled` probe and the reconnect monitor, never from this ca
 outside a given bulb's triangle is not merely inaccurate — the bridge clamps it somewhere
 unpredictable. Clip on our side so the result is deterministic.
 
+**Where a Hue colour is gamma-encoded and where it is linear.** The ambilight path, stage by stage
+(the strip shares stages 1–5 and its own copy of 6):
+
+| # | Stage | Code | Values |
+|---|---|---|---|
+| 1 | Capture | `ambilight_capture.rs`, `CapturedFrame::pixels_rgb` | `u8`, sRGB-encoded — what the display shows |
+| 2 | Sampling | `lighting_mode/sampling.rs`, `sample_screen_position_avg` | `u8`, encoded; the box average is taken on encoded values |
+| 3 | Scene stage | `ambilight_scene.rs`, `process` | `u8`, encoded |
+| 4 | Live saturation | `frame_pipeline.rs`, `saturate` (BT.601 blend) | `u8`, encoded |
+| 5 | Smoothing | `lighting_mode/smoothing.rs`, `TimeSmoother` | `f32` 0–255, encoded |
+| 6 | Colour correction | `EncoderPlan::correct_precise`: device saturation, Kelvin, then `(v/255)^γ` per channel (γ 2.2 by default) | saturation and Kelvin act on encoded values; the gamma stage outputs `f32` 0–1, **linear light** |
+| 7 | Mailbox → sender | `HueColorUpdate::channel_colors` | `f32` 0–1, linear |
+| 8 | Gamut clip | `frame.rs`, `clip_channels_to_gamut` → `linear_rgb_to_xy` / `xy_to_linear_rgb` | linear in, linear out: matrix only, no transfer function |
+| 9 | Easing | `hue/easing.rs`, `HueEasing` | `f32` 0–1, linear — a blend here is a physical mix |
+| 10 | Brightness, 16-bit | `frame.rs`, `encode_huestream_frame` | `v × brightness × 65535`, linear |
+| 11 | DTLS packet | colour-space byte `0x00` (RGB), 3 × `u16` BE per channel | the bridge converts RGB to xy + brightness per bulb |
+
+The Solid colour path joins at stage 7 with `apply_color_correction_rgb` (the same gamma, rounded
+to `u8`), so it is linear too. The HTTP fallback takes stage 7's value, rounds it to `u8`, and
+turns it into a CLIP v2 `color.xy` through `linear_rgb_to_xy`; its `dimming` is the brightness
+scalar alone, not the colour's own level.
+
+- **The clip used to linearise twice.** Until this was fixed, stage 8 ran the sRGB EOTF
+  (`((c+0.055)/1.055)^2.4`) on a value stage 6 had already decoded, and the inverse re-encoded the
+  result into the linear slot. A colour inside the bulb's triangle was left alone, so greys and
+  skin tones never changed; a clipped one gained a large share of the channels it lacked — pure red
+  on a gamut B bulb went out as `[62083, 16104, 0]` instead of `[57956, 3223, 0]` — and the
+  in-or-out test itself was made on a redder, more saturated chromaticity. The HTTP fallback's
+  `color.xy` had the same second EOTF with no clip to hide it, so its mid-tones were redder and
+  more saturated than the screen. `hue/colour_golden_tests.rs` pins the wire values.
+- **What the 16-bit RGB on the wire means is not documented.** Signify's Entertainment API page
+  says only that "RGB values are converted into xy+Brightness by the Hue bridge", that RGB gives
+  "the widest range of colors for each bulb", and that xy+brightness is the choice "to get full
+  color consistency over various types of lamps … and/or match with RGB values of typical
+  displays"; it names no transfer function. Implementations disagree: Q42's HueApi (Signify's
+  own app agency) streams display RGB bytes as they are, HyperHDR sends xy+brightness from
+  encoded values and linearises only as an opt-in, and we send stage 6's linear value. So the
+  wire stays linear here, and whether a mid-grey reads as mid-grey on a lamp is a bridge check
+  (grey ramp beside the screen), not something this code can settle. If the bridge turns out to
+  expect encoded RGB, the fix is at stage 6 for Hue alone, or to move to colour space `0x01`
+  (xy + brightness) and own the whole conversion; the strip's bytes must not move either way.
+
 **Zones are Hue-only.** The v1.5 W4-F unification collapsed a generic `Zone` discriminated by
 `zoneType` back to `HueZone` alone. "Logical zone" was dropped because nothing in the field models
 a name plus a channel-index list as a free-standing object — everyone models screen rectangles,
