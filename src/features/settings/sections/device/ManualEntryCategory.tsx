@@ -8,7 +8,7 @@ export function ManualEntryCategory({ isActive }: ManualEntryCategoryProps) {
   const { t } = useTranslation();
 
   return (
-    <div className={isActive ? "lm-device-cat-body" : "lm-device-cat-body hidden"} hidden={!isActive}>
+    <div className="lm-device-cat-body" hidden={!isActive}>
       <div className="lm-device-head">
         <div>
           <h1>{t("device:page.header.manualTitle")}</h1>

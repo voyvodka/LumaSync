@@ -148,7 +148,6 @@ export function LightingSmoothingPresetControl({
               role="radio"
               aria-checked={isActive}
               tabIndex={isActive ? 0 : -1}
-              className={isActive ? "is-on" : ""}
               onClick={() => commit(candidate)}
               onKeyDown={(e) => handleKeyNavigate(e, candidate)}
             >

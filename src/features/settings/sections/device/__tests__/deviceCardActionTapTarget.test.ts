@@ -8,8 +8,10 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { readStylesheet } from "@/test/stylesheetSource";
+
 const src = (path: string) => readFileSync(resolve(process.cwd(), "src", path), "utf8");
-const stylesCss = src("styles.css");
+const stylesCss = readStylesheet();
 
 function ruleBody(selector: string): string {
   const start = stylesCss.indexOf(`\n${selector} {`);

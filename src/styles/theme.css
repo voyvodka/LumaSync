@@ -1,0 +1,23 @@
+/* The `--lm-*` tokens as Tailwind theme values, so a utility names a token
+   (`text-ink`, `bg-panel`, `border-line-2`, `ring-amber/60`, `font-mono`)
+   instead of an arbitrary `[var(--lm-*)]`. `inline` emits the token reference
+   itself into each utility, so the tokens in tokens.css stay the one source. */
+@theme inline {
+  --color-bg: var(--lm-bg);
+  --color-panel: var(--lm-panel);
+  --color-panel-2: var(--lm-panel-2);
+  --color-line: var(--lm-line);
+  --color-line-2: var(--lm-line-2);
+  --color-ink: var(--lm-ink);
+  --color-ink-dim: var(--lm-ink-dim);
+  --color-ink-faint: var(--lm-ink-faint);
+  --color-amber: var(--lm-amber);
+  --color-amber-2: var(--lm-amber-2);
+  --color-green: var(--lm-green);
+  --color-red: var(--lm-red);
+
+  --font-mono: var(--lm-mono);
+  /* Preflight's `kbd`/`code`/`pre` face derives from `--font-mono`; pinned to
+     Tailwind's stock stack so remapping `font-mono` leaves those alone. */
+  --default-mono-font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}

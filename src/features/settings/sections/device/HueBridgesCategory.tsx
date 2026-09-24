@@ -130,7 +130,7 @@ export function HueBridgesCategory({
   const hueIsDiscoveryEmpty = !isHueDiscovering && !selectedBridgeId && hueStatus !== null && bridges.length === 0 && !hueIsDiscoveryFailed;
 
   return (
-    <div className={isActive ? "lm-device-cat-body" : "lm-device-cat-body hidden"} hidden={!isActive}>
+    <div className="lm-device-cat-body" hidden={!isActive}>
       <div className="lm-device-head">
         <div>
           <h1>{t("device:page.header.hueTitle")}</h1>
@@ -572,7 +572,7 @@ export function HueBridgesCategory({
                           <button
                             key={area.id}
                             type="button"
-                            className={`lm-hue-area-item${selectedAreaId === area.id ? " is-sel" : ""}${area.activeStreamer ? " is-blocked" : ""}`}
+                            className={`lm-hue-area-item${selectedAreaId === area.id ? " is-on" : ""}${area.activeStreamer ? " is-blocked" : ""}`}
                             onClick={() => { if (!area.activeStreamer) selectArea(area.id); }}
                           >
                             <span className="lm-hue-area-ic" />

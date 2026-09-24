@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { cx } from "@/shared/ui/cx";
 
 export interface ContextMenuAction {
   label: string;
@@ -92,13 +93,11 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
           type="button"
           role="menuitem"
           aria-label={action.label}
-          className={[
+          className={cx(
             "lm-context-menu-item",
             action.danger ? "is-danger" : "",
             action.disabled ? "is-disabled" : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
+          )}
           onClick={() => {
             if (action.disabled) return;
             action.onClick();

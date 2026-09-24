@@ -5,6 +5,7 @@ import { ObjectRow } from "./ObjectRow";
 import { buildObjectList, type ObjectRowEntry } from "../model/objectList";
 import { getZoneColor, TYPE_DOT_COLOR } from "../model/zoneColor";
 import { parseObjectId } from "../model/objectId";
+import { cx } from "@/shared/ui/cx";
 
 interface ObjectsTabProps {
   config: RoomMapConfig;
@@ -13,7 +14,7 @@ interface ObjectsTabProps {
   /**
    * ID of the currently
    * selected Hue zone in the room editor (mirrors `activeHueZoneId`
-   * upstream). Drives the "is-on" highlight on zone headers in the
+   * upstream). Drives the pressed highlight on zone headers in the
    * Objects list so the user can tell which zone the bottom inspector
    * belongs to.
    */
@@ -99,13 +100,10 @@ export function ObjectsTab(props: ObjectsTabProps) {
               as a toggle so a second click re-deselects the zone.
             */}
             <div
-              className={[
+              className={cx(
                 "lm-room-dock-h",
                 zoneSelectable ? "is-clickable" : "",
-                isZoneActive ? "is-on" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
+              )}
               role={zoneSelectable ? "button" : "heading"}
               aria-level={zoneSelectable ? undefined : 3}
               aria-pressed={zoneSelectable ? isZoneActive : undefined}

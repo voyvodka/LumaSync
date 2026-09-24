@@ -6,6 +6,7 @@ import { clamp } from "@/shared/lib/math";
 import { hueChannelObjectId } from "../model/objectId";
 import { resolveHueChannelWorld } from "../model/hueChannelPosition";
 import { hueChannelDotText, hueChannelName } from "../model/hueChannelLabel";
+import { cx } from "@/shared/ui/cx";
 
 interface HueChannelOverlayProps {
   channels: HueChannelPlacement[];
@@ -630,11 +631,11 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
               aria-pressed={zoneAssignMode ? isInActiveZone : isSelected}
               aria-label={dotLabel}
               title={dotLabel}
-              className={[
+              className={cx(
                 "flex items-center justify-center rounded-full border-2 text-[8px] font-bold select-none",
                 isSelected ? "w-4 h-4" : "w-3 h-3",
                 isGhost
-                  ? "lm-room-hue-dot--ghost"
+                  ? "lm-room-hue-dot--ghost border-dashed"
                   : isSelected
                     ? "bg-white border-white text-zinc-900"
                     : "bg-white/80 border-zinc-400 text-zinc-900",
@@ -642,9 +643,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
                 isUnassignedInZoneMode ? "opacity-50" : "",
                 dimmedByHueZone ? "opacity-30 cursor-not-allowed pointer-events-none" : "",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60",
-              ]
-                .filter(Boolean)
-                .join(" ")}
+              )}
               style={{ touchAction: "none", ...ringStyle }}
               onPointerDown={(e) => {
                 if (dimmedByHueZone) return;

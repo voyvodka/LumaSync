@@ -121,7 +121,7 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
           <div className="lm-settings-row-r">
             <button
               type="button"
-              className={`lm-settings-tg ${startupEnabled ? "is-on" : ""}`}
+              className="lm-settings-tg"
               onClick={() => { void handleStartupToggle(); }}
               disabled={startupLoading}
               aria-busy={startupLoading}
@@ -194,7 +194,7 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
           <div className="lm-settings-row-r">
             <button
               type="button"
-              className={`lm-settings-tg ${updateChannel === "beta" ? "is-on" : ""}`}
+              className="lm-settings-tg"
               onClick={() => { void handleChannelToggle(); }}
               aria-pressed={updateChannel === "beta"}
               aria-label={t("updater:betaChannel")}

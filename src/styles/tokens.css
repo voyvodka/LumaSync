@@ -1,0 +1,51 @@
+:root {
+  font-family: "IBM Plex Sans", "Segoe UI", "Trebuchet MS", system-ui, -apple-system, sans-serif;
+  /* Dark-only, whatever the OS says: native controls (select popups, number
+     spinners, checkboxes, scrollbars) take the dark system look. The twin
+     overlay resets this inline, since it must stay transparent. */
+  color-scheme: dark;
+
+  /* ─────────────────────────────────────────────────────────────────
+     LumaSync amber dark theme tokens (UI Mockup Rev 07).
+     Prefixed `--lm-*` so legacy slate/zinc Tailwind utilities can
+     keep coexisting while sections migrate phase by phase. The
+     palette is dark-only; light variants are intentionally absent
+     because the app is dark-mode-primary.
+     ───────────────────────────────────────────────────────────────── */
+  /* Mirrors `TITLE_BAR_HEIGHT_PX` — a modal scrim must start below the bar or
+     it swallows the drag region and the window controls. */
+  --lm-titlebar-h: 36px;
+  --lm-bg:        #07080a;
+  --lm-panel:     #0e1014;
+  --lm-panel-2:   #14171d;
+  --lm-line:      #1a1e25;
+  --lm-line-2:    #252b34;
+  --lm-ink:       #eaeef4;
+  --lm-ink-dim:   #8a94a3;
+  --lm-ink-faint: #4d5564;
+  --lm-amber:     #ffb020;
+  --lm-amber-2:   #ff7a1a;
+  --lm-cyan:      #22d3ee;
+  --lm-green:     #4ade80;
+  --lm-red:       #ef5b5b;
+  --lm-mono:      "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --lm-sans:      "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Room-map zone identity palette. Six perceptually-separated hues used
+     for zone badges (Tailwind .bg-{blue,emerald,purple,amber,rose,cyan}-500
+     in ZoneListPanel.ZONE_COLORS). Mirrored here so JS can read the same
+     hex via CSS custom properties for inline boxShadow rings on Hue dots. */
+  --lm-zone-1: #3b82f6; /* blue-500   */
+  --lm-zone-2: #10b981; /* emerald-500 */
+  --lm-zone-3: #a855f7; /* purple-500 */
+  --lm-zone-4: #f59e0b; /* amber-500  */
+  --lm-zone-5: #f43f5e; /* rose-500   */
+  --lm-zone-6: #06b6d4; /* cyan-500   */
+
+  /* Focus ring tokens — every interactive surface uses one of these so the
+     ring color stays in lockstep across the app. `box-shadow` is the
+     preferred carrier (no layout shift). UI Gap 7 a11y consistency.       */
+  --lm-focus-ring:       0 0 0 2px rgba(255, 176, 32, 0.45);
+  --lm-focus-ring-inset: inset 0 0 0 2px rgba(255, 176, 32, 0.45);
+  --lm-focus-ring-soft:  0 0 0 2px rgba(255, 176, 32, 0.35), 0 0 0 4px rgba(255, 176, 32, 0.12);
+}

@@ -89,10 +89,10 @@ export function TemplateSelector({ onSelect }: TemplateSelectorProps) {
   return (
     <div className="flex h-full items-center justify-center">
       <div className="max-w-[480px] px-4">
-        <h3 className="text-sm font-semibold text-[var(--lm-ink)] text-center mb-1">
+        <h3 className="text-sm font-semibold text-ink text-center mb-1">
           {t("roomMap:templates.title")}
         </h3>
-        <p className="text-[11px] text-[var(--lm-ink-dim)] text-center mb-4">
+        <p className="text-[11px] text-ink-dim text-center mb-4">
           {t("roomMap:templates.subtitle")}
         </p>
         <div className="grid grid-cols-2 gap-2">
@@ -101,14 +101,14 @@ export function TemplateSelector({ onSelect }: TemplateSelectorProps) {
               key={tmpl.id}
               type="button"
               aria-label={t(tmpl.nameKey)}
-              className="flex flex-col items-center gap-1.5 rounded-lg border border-[var(--lm-line)] bg-[var(--lm-panel)] px-3 py-3 hover:bg-[var(--lm-panel-2)] hover:border-[var(--lm-amber)]/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60"
+              className="flex flex-col items-center gap-1.5 rounded-lg border border-line bg-panel px-3 py-3 hover:bg-panel-2 hover:border-amber/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/60"
               onClick={() => onSelect(tmpl.config(t))}
             >
               <span className="text-2xl">{tmpl.icon}</span>
-              <span className="text-[11px] font-semibold text-[var(--lm-ink)]">
+              <span className="text-[11px] font-semibold text-ink">
                 {t(tmpl.nameKey)}
               </span>
-              <span className="text-[9px] text-[var(--lm-ink-faint)] text-center leading-tight">
+              <span className="text-[9px] text-ink-faint text-center leading-tight">
                 {t(tmpl.descKey)}
               </span>
             </button>

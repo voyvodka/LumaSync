@@ -285,7 +285,7 @@ export function CompactLayout({
                   type="button"
                   disabled={nonOffDisabled}
                   onClick={() => handleScenePresetClick(preset)}
-                  className={`lm-compact-scene-tile ${isSelected ? "is-selected" : ""}`}
+                  className={`lm-compact-scene-tile ${isSelected ? "is-on" : ""}`}
                   style={{ background: preset.gradient }}
                   title={t(preset.labelKey)}
                 >

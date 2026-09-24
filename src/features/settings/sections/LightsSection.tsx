@@ -385,7 +385,7 @@ export function LightsSection({
           <div className="lm-mstrip" role="group">
             <button
               type="button"
-              className={`lm-mbtn ${isOff ? "is-on" : ""}`}
+              className="lm-mbtn"
               disabled={modeSelectorDisabled}
               aria-pressed={isOff}
               onClick={() => onModeChange({ kind: LIGHTING_MODE_KIND.OFF })}
@@ -399,7 +399,7 @@ export function LightsSection({
             </button>
             <button
               type="button"
-              className={`lm-mbtn ${isAmbilight ? "is-on" : ""}`}
+              className="lm-mbtn"
               disabled={nonOffModeDisabled}
               aria-pressed={isAmbilight}
               onClick={() =>
@@ -420,7 +420,7 @@ export function LightsSection({
             </button>
             <button
               type="button"
-              className={`lm-mbtn ${isSolid ? "is-on" : ""}`}
+              className="lm-mbtn"
               disabled={nonOffModeDisabled}
               aria-pressed={isSolid}
               onClick={() =>
@@ -449,8 +449,8 @@ export function LightsSection({
         {isSolid && (
           <div
             style={{
-              background: "#0e1014",
-              border: "1px solid #1a1e25",
+              background: "var(--lm-panel)",
+              border: "1px solid var(--lm-line)",
               borderRadius: 10,
               padding: 14,
             }}
@@ -604,7 +604,7 @@ export function LightsSection({
                   key={preset.id}
                   type="button"
                   disabled={nonOffModeDisabled}
-                  className={`lm-sc ${isSelected ? "is-sel" : ""}`}
+                  className="lm-sc"
                   style={{ background: preset.gradient }}
                   aria-pressed={isSelected}
                   onClick={() => handleScenePresetClick(preset)}

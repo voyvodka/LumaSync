@@ -8,6 +8,8 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { readStylesheet } from "@/test/stylesheetSource";
+
 const src = (path: string) => readFileSync(resolve(process.cwd(), "src", path), "utf8");
 
 /** The raw palette the pre-Rev 07 banners used, bypassing the token layer. */
@@ -40,7 +42,7 @@ describe("status banner convention", () => {
   });
 
   it("defines a tone for each state the banners use", () => {
-    const css = src("styles.css");
+    const css = readStylesheet();
     for (const tone of ["is-ok", "is-warn", "is-err", "is-info"]) {
       expect(css, `.lm-status-banner.${tone} is missing`).toContain(
         `.lm-status-banner.${tone}`,
@@ -49,7 +51,7 @@ describe("status banner convention", () => {
   });
 
   it("keeps the shared banner legible under forced colors", () => {
-    const css = src("styles.css");
+    const css = readStylesheet();
     const block = css.slice(css.indexOf(".lm-status-banner {"));
     expect(block.slice(0, block.indexOf(".lm-chmap-feedback {"))).toContain(
       "forced-colors: active",

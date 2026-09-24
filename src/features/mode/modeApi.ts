@@ -14,6 +14,15 @@ import {
   type HueRuntimeTriggerSource,
 } from "@/shared/contracts/hue";
 import type { LightingModeStatusCode } from "@/shared/contracts/lighting";
+import {
+  LIGHTING_RUNTIME_COMMANDS,
+  type ApplyOutputsRequest,
+  type ApplyOutputsResult,
+  type LightingRuntimeSnapshot,
+  type LightingTuning,
+  type ReleaseHueTrigger,
+  type RetuneLightingResult,
+} from "@/shared/contracts/lightingRuntime";
 import { parseCommandError, type CommandStatusOf } from "@/shared/contracts/status";
 // Cyclic with hueReadCache (it wraps `getHueStreamStatus` below); safe because
 // neither side calls across the cycle at module-eval time.
@@ -227,5 +236,69 @@ export async function setHueSolidColor(
     });
   } catch (error) {
     throw mapModeApiError(HUE_COMMANDS.SET_SOLID_COLOR, error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The Rust lighting transaction (docs/architecture/lighting-transaction.md).
+// ---------------------------------------------------------------------------
+
+/** Reconcile the running mode and outputs toward the request; the reply's
+ * `snapshot` is what runs afterwards. Coded refusals ride `status`. */
+export async function applyOutputs(
+  request: ApplyOutputsRequest,
+  invoker: ModeInvoker = defaultInvoke,
+): Promise<ApplyOutputsResult> {
+  const mode = request.mode ? normalizeLightingModeConfig(request.mode) : request.mode;
+  try {
+    return await invoker<ApplyOutputsResult>(LIGHTING_RUNTIME_COMMANDS.APPLY_OUTPUTS, {
+      request: { ...request, mode },
+    });
+  } catch (error) {
+    throw mapModeApiError(LIGHTING_RUNTIME_COMMANDS.APPLY_OUTPUTS, error);
+  } finally {
+    // The transaction may have started or stopped the Hue stream.
+    invalidateHueStreamStatus();
+  }
+}
+
+/** A brightness or colour nudge within the running kind; never waits for a transition. */
+export async function retuneLighting(
+  tuning: LightingTuning,
+  invoker: ModeInvoker = defaultInvoke,
+): Promise<RetuneLightingResult> {
+  try {
+    return await invoker<RetuneLightingResult>(LIGHTING_RUNTIME_COMMANDS.RETUNE_LIGHTING, {
+      tuning,
+    });
+  } catch (error) {
+    throw mapModeApiError(LIGHTING_RUNTIME_COMMANDS.RETUNE_LIGHTING, error);
+  }
+}
+
+/** Take Hue out of the running mode and stop its stream, attributed to `triggerSource`. */
+export async function releaseHueOutput(
+  triggerSource: ReleaseHueTrigger,
+  invoker: ModeInvoker = defaultInvoke,
+): Promise<ApplyOutputsResult> {
+  try {
+    return await invoker<ApplyOutputsResult>(LIGHTING_RUNTIME_COMMANDS.RELEASE_HUE_OUTPUT, {
+      triggerSource,
+    });
+  } catch (error) {
+    throw mapModeApiError(LIGHTING_RUNTIME_COMMANDS.RELEASE_HUE_OUTPUT, error);
+  } finally {
+    invalidateHueStreamStatus();
+  }
+}
+
+/** The last published runtime snapshot; answers at once, even mid-transition. */
+export async function getLightingRuntime(
+  invoker: ModeInvoker = defaultInvoke,
+): Promise<LightingRuntimeSnapshot> {
+  try {
+    return await invoker<LightingRuntimeSnapshot>(LIGHTING_RUNTIME_COMMANDS.GET_LIGHTING_RUNTIME);
+  } catch (error) {
+    throw mapModeApiError(LIGHTING_RUNTIME_COMMANDS.GET_LIGHTING_RUNTIME, error);
   }
 }

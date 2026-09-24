@@ -11,6 +11,7 @@ mod device_commands;
 mod hue_commands;
 mod launch_commands;
 mod lighting_commands;
+mod lighting_outputs_commands;
 mod overlay_commands;
 mod preview_commands;
 mod room_map_commands;

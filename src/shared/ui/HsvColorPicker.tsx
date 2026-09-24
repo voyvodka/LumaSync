@@ -68,6 +68,7 @@ import { useTranslation } from "react-i18next";
 import { clamp } from "@/shared/lib/math";
 import { parseHex, rgbToHex, type Rgb } from "@/shared/lib/color";
 import { SectionLabel } from "@/shared/ui/SectionLabel";
+import { cx } from "@/shared/ui/cx";
 
 // ---------------------------------------------------------------------------
 // Color math
@@ -564,14 +565,12 @@ export function HsvColorPicker({
       role="group"
       aria-label={ariaLabel ?? t("common:ui.colorPicker.rootAriaLabel")}
       aria-disabled={disabled}
-      className={[
+      className={cx(
         "flex flex-col",
         compact ? "gap-1.5" : "gap-2",
         disabled ? "pointer-events-none opacity-60" : "",
         className ?? "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
+      )}
       style={wrapperStyle}
     >
       <svg
@@ -688,14 +687,14 @@ export function HsvColorPicker({
           </SectionLabel>
           <span
             className={[
-              "flex flex-1 items-center gap-0.5 rounded border border-[color:var(--lm-line-2)] [font-family:var(--lm-mono)]",
-              "focus-within:border-[color:var(--lm-amber)]",
-              "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--lm-amber)]/60",
+              "flex flex-1 items-center gap-0.5 rounded border border-line-2 font-mono",
+              "focus-within:border-amber",
+              "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-amber/60",
               "forced-colors:border-[color:CanvasText]",
               compact ? "min-w-0 px-1.5 py-0.5 text-[10.5px]" : "max-w-[120px] px-2 py-1 text-[11px]",
             ].join(" ")}
           >
-            <span aria-hidden="true" className="select-none text-[color:var(--lm-ink-faint)]">
+            <span aria-hidden="true" className="select-none text-ink-faint">
               #
             </span>
             <input
@@ -712,7 +711,7 @@ export function HsvColorPicker({
               pattern="[0-9A-Fa-f]{6}"
               placeholder={t("common:ui.colorPicker.hexPlaceholder")}
               aria-invalid={!hexDraftComplete}
-              className="w-full min-w-0 flex-1 border-0 bg-transparent p-0 font-[inherit] text-[length:inherit] text-[color:var(--lm-ink)] focus:outline-none"
+              className="w-full min-w-0 flex-1 border-0 bg-transparent p-0 font-[inherit] text-[length:inherit] text-ink focus:outline-none"
               onChange={(e) => setHexDraft(sanitizeHexInput(e.target.value))}
               onPaste={handleHexPaste}
               onBlur={commitHexDraft}
@@ -752,7 +751,7 @@ export function HsvColorPicker({
                 aria-label={t("common:ui.colorPicker.recentItemAriaLabel", { hex })}
                 title={hex.toUpperCase()}
                 className={[
-                  "shrink-0 rounded border border-[color:var(--lm-line-2)] transition-transform hover:scale-110 motion-reduce:transition-none motion-reduce:hover:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60",
+                  "shrink-0 rounded border border-line-2 transition-transform hover:scale-110 motion-reduce:transition-none motion-reduce:hover:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/60",
                   compact ? "h-5 w-5" : "h-6 w-6",
                 ].join(" ")}
                 style={{ background: hex }}

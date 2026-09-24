@@ -18,7 +18,7 @@ use crate::commands::ambilight_capture::CapturedFrame;
 use crate::commands::ambilight_scene::{LightSetState, LightTopology, SceneAnalyzer};
 use crate::commands::hue::frame::HueAreaChannel;
 use crate::commands::led_calibration::{
-    sample_frame_for_sequence, LedCalibrationConfig, LedSegmentCounts, LedSequenceItem,
+    sample_frame_within_insets, LedCalibrationConfig, LedSegmentCounts, LedSequenceItem,
 };
 use crate::commands::led_output::{
     apply_color_correction_rgb_with_luts, gamma_luts_for, ColorCorrectionConfig, GammaLuts,
@@ -145,14 +145,18 @@ impl AmbilightFramePipeline {
         self.hue_channels = channels;
     }
 
-    /// Per-LED colours of the strip, in physical order. The worker calls this
-    /// while it still holds the frame source.
-    pub(super) fn sample_strip(&self, frame: &CapturedFrame) -> Vec<[u8; 3]> {
-        sample_frame_for_sequence(
+    /// Per-LED colours of the strip, in physical order, sampled inside the
+    /// black-border insets. The worker calls this while it still holds the
+    /// frame source, before `process`, so the border cache is refreshed here:
+    /// the strip, the scene stage and Hue then crop the frame identically.
+    pub(super) fn sample_strip(&mut self, frame: &CapturedFrame) -> Vec<[u8; 3]> {
+        self.border_cache.update_if_due(frame);
+        sample_frame_within_insets(
             frame,
             &self.led_sequence,
             &self.led_counts,
             self.sample_window,
+            self.border_cache.insets(),
         )
     }
 
@@ -161,8 +165,8 @@ impl AmbilightFramePipeline {
         apply_color_correction_rgb_with_luts(rgb, &self.color_correction, &self.frame_luts)
     }
 
-    /// One frame: border cache, scene stage, strip smoothing into `frame_slot`,
-    /// then the Hue channels. Sending is the caller's.
+    /// One frame, after `sample_strip`: scene stage, strip smoothing into
+    /// `frame_slot`, then the Hue channels. Sending is the caller's.
     pub(super) fn process(
         &mut self,
         raw_frame: &CapturedFrame,
@@ -171,11 +175,11 @@ impl AmbilightFramePipeline {
         quality_state: &mut AmbilightWorkerQualityState,
         frame_slot: &mut RuntimeFrameSlot,
     ) -> FrameStep<'_> {
-        // Border cache is refreshed each iteration from live_settings.
+        // The setting is read after capture, so a toggle reaches the strip at
+        // the next `sample_strip`. Switching off clears the insets here, which
+        // lets Hue and the scene stage drop the crop one frame before the strip.
         self.border_cache
             .set_enabled(settings.black_border_detection);
-        // Update black border detection cache from the raw (uncropped) frame.
-        self.border_cache.update_if_due(raw_frame);
         // The preset is a ceiling; the scene stage decides how much of it this
         // frame gets to use, and every sink reads the same answer.
         let alpha_ceiling = settings.alpha_ceiling;

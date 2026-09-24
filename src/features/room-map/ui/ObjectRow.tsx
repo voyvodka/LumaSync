@@ -4,6 +4,7 @@ import { canDeleteObjectKind } from "../model/objectCapability";
 
 import { IconLockClosed, IconLockOpen } from "@/shared/ui/icons";
 import type { ObjectRowEntry } from "../model/objectList";
+import { cx } from "@/shared/ui/cx";
 
 export function ObjectRow({
   entry,
@@ -42,9 +43,7 @@ export function ObjectRow({
 
   return (
     <li
-      className={["lm-room-dock-row", selected ? "is-on" : "", nested ? "is-nested" : ""]
-        .filter(Boolean)
-        .join(" ")}
+      className={cx("lm-room-dock-row", nested ? "is-nested" : "")}
       role="button"
       tabIndex={0}
       aria-pressed={selected}

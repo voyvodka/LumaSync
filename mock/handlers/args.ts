@@ -40,6 +40,11 @@ import type {
 } from "../../src/shared/contracts/hue";
 import type { HueChannelPlacement } from "../../src/shared/contracts/roomMap";
 import type { LightingModeConfig } from "../../src/shared/contracts/mode";
+import type {
+  ApplyOutputsRequest,
+  LightingTuning,
+  ReleaseHueTrigger,
+} from "../../src/shared/contracts/lightingRuntime";
 import type { StartLedTestPatternPayload } from "../../src/shared/contracts/preview";
 import type {
   ShellStatePatchRequest,
@@ -76,6 +81,11 @@ export interface CommandArgs {
   // --- device: lighting mode -----------------------------------------------
   /** `setLightingMode` in `modeApi.ts` sends `{ payload }`, never `{ mode }`. */
   set_lighting_mode: { payload: LightingModeConfig };
+
+  // --- lighting transaction (`applyOutputs` & co. in `modeApi.ts`) -----------
+  apply_outputs: { request: ApplyOutputsRequest };
+  retune_lighting: { tuning: LightingTuning };
+  release_hue_output: { triggerSource: ReleaseHueTrigger };
 
   // --- preview: test patterns ------------------------------------------------
   /** `startLedTestPattern` in `previewApi.ts` sends `{ payload }`. */

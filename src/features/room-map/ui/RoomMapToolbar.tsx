@@ -22,8 +22,7 @@ interface RoomMapToolbarProps {
 }
 
 /* Shared button styling — amber Rev 07 tokens, 32px tap floor */
-const TOOLBAR_BTN =
-  "lm-room-toolbar-btn focus-visible:outline-none";
+const TOOLBAR_BTN = "lm-room-toolbar-btn";
 
 export function RoomMapToolbar({
   settingsOpen,
@@ -97,7 +96,7 @@ export function RoomMapToolbar({
 
       <button
         type="button"
-        className={`${TOOLBAR_BTN} is-icon ${settingsOpen ? "is-on" : ""}`}
+        className={`${TOOLBAR_BTN} is-icon`}
         onClick={onToggleSettings}
         aria-label={t("roomMap:toolbar.settingsAriaLabel")}
         aria-pressed={settingsOpen}
@@ -161,7 +160,7 @@ function ShortcutsHelpButton() {
       <button
         ref={btnRef}
         type="button"
-        className={`${TOOLBAR_BTN} is-icon ${open ? "is-on" : ""}`}
+        className={`${TOOLBAR_BTN} is-icon`}
         onClick={() => setOpen((v) => !v)}
         aria-label={t("roomMap:shortcuts.title")}
         aria-expanded={open}

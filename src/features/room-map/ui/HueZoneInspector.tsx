@@ -343,7 +343,7 @@ export function HueZoneInspector({
               title={t("roomMap:zoneProperties.swatchAriaLabel", { name: swatch.name })}
               aria-label={t("roomMap:zoneProperties.swatchAriaLabel", { name: swatch.name })}
               aria-pressed={active}
-              className={`lm-zone-inspector-swatch${active ? " is-active" : ""}`}
+              className="lm-zone-inspector-swatch"
               style={{ background: swatch.cssVar }}
               onClick={() => setBorder(swatch.hex)}
             />
