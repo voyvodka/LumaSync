@@ -192,6 +192,8 @@ export default {
         offline: "OFFLINE",
         portLabel: "Port",
         noOtherPort: "No other supported port. Plug in another controller and rescan.",
+        unlisted: "The strip on {{port}} is connected but not in this list yet.",
+        addConnected: "Add connected strip",
         persistError: "Could not save the strip. Try again.",
         openInMap: "Open in map",
         changePort: "Change port",

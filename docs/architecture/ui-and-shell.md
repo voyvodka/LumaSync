@@ -292,7 +292,9 @@ order) → Paired strips. There used to be two half-paths: "Pair as strip" only 
 for also makes sure the strip is in the roster (`device/usbStripRoster.ts`): nothing is written if a
 placement already names the port, a placement drawn before strips carried a port is adopted rather
 than duplicated, and a new one takes its LED count from the saved LED layout (60 before there is
-one). The boot auto-reconnect never writes, so an existing setup gains no strip it did not ask for.
+one). The boot auto-reconnect never writes, so an existing setup gains no strip it did not ask for; when
+it reconnects a strip the roster lacks, Paired strips says so and offers "Add connected strip",
+which runs the same function.
 The placement changes no light: output and capture never read `roomMap.usbStrips` — it is the
 roster and the room map's drawing — so the room map stays off the first-run path. The cost is that
 a user's first visit to the room map finds that strip drawn along the top wall instead of the

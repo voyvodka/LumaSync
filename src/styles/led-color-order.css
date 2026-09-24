@@ -87,7 +87,6 @@
 }
 .lm-color-order-answer {
   justify-content: flex-start;
-  font-size: 11px;
 }
 .lm-color-order-answer.is-other {
   color: var(--lm-ink-dim);

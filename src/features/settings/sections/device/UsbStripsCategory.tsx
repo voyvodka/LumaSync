@@ -1,4 +1,4 @@
-import { useCallback, useId } from "react";
+import { useCallback, useId, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -92,6 +92,23 @@ export function UsbStripsCategory({
     void refreshPorts();
   }, [refreshPorts]);
 
+  const [addingToRoster, setAddingToRoster] = useState(false);
+  const addToRoster = useCallback(
+    async (portName: string) => {
+      setAddingToRoster(true);
+      try {
+        setPairedStrips(await ensureStripForPort(portName));
+        clearPersistError();
+      } catch (e) {
+        console.error("[LumaSync] UsbStripsCategory: adding the connected strip to the roster failed", e);
+        flagPersistError();
+      } finally {
+        setAddingToRoster(false);
+      }
+    },
+    [setPairedStrips, clearPersistError, flagPersistError],
+  );
+
   // The one way a strip is added: connecting its controller. The roster entry
   // follows a connect the user asked for, never a boot auto-reconnect, so an
   // existing setup never gains a strip it did not ask for.
@@ -99,16 +116,9 @@ export function UsbStripsCategory({
     async (portName: string) => {
       selectPort(portName);
       const connected = await connectSelectedPort();
-      if (!connected) return;
-      try {
-        setPairedStrips(await ensureStripForPort(portName));
-        clearPersistError();
-      } catch (e) {
-        console.error("[LumaSync] UsbStripsCategory: adding the connected strip to the roster failed", e);
-        flagPersistError();
-      }
+      if (connected) await addToRoster(portName);
     },
-    [selectPort, connectSelectedPort, setPairedStrips, clearPersistError, flagPersistError],
+    [selectPort, connectSelectedPort, addToRoster],
   );
 
   return (
@@ -251,6 +261,10 @@ export function UsbStripsCategory({
         flagPersistError={flagPersistError}
         clearPersistError={clearPersistError}
         onRescan={rescan}
+        onAddConnected={() => {
+          if (connectedPort) void addToRoster(connectedPort);
+        }}
+        addingConnected={addingToRoster}
         onNavigateToRoomMap={onNavigateToRoomMap}
       />
     </div>

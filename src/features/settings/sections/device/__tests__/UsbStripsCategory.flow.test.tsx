@@ -67,14 +67,14 @@ function device(overrides: Partial<UseDeviceConnectionResult> = {}): UseDeviceCo
   };
 }
 
-async function renderCategory(connection: UseDeviceConnectionResult) {
+async function renderCategory(connection: UseDeviceConnectionResult, pairedStrips: UsbStripPlacement[] = []) {
   const setPairedStrips = vi.fn<(next: UsbStripPlacement[]) => void>();
   render(
     <UsbStripsCategory
       isActive
       device={connection}
-      pairedStrips={[]}
-      setPairedStrips={(next) => setPairedStrips(typeof next === "function" ? next([]) : next)}
+      pairedStrips={pairedStrips}
+      setPairedStrips={(next) => setPairedStrips(typeof next === "function" ? next(pairedStrips) : next)}
       persistError={false}
       flagPersistError={() => {}}
       clearPersistError={() => {}}
@@ -176,12 +176,58 @@ describe("Connect is the one way a strip is added", () => {
     expect(setPairedStrips).not.toHaveBeenCalled();
   });
 
+  // A setup from before the roster reconnects at boot with an empty list; the
+  // page said "No strips yet" under "Connection established".
+  it("says a connected strip is missing from the list, and adds it only when asked", async () => {
+    stateRef.current = { ledCalibration: { totalLeds: 120 } as ShellState["ledCalibration"] };
+    const connection = device({ ports: [STRIP_PORT], connectedPort: STRIP_PORT.portName, isConnected: true, status: "connected" });
+    const { setPairedStrips } = await renderCategory(connection);
+
+    const roster = screen.getByTestId("usb-paired-strips");
+    expect(within(roster).getByText("device:page.usb.paired.unlisted")).toBeInTheDocument();
+    expect(within(roster).queryByText("device:page.usb.paired.empty")).toBeNull();
+    expect(saveMock).not.toHaveBeenCalled();
+
+    await userEvent.setup().click(within(roster).getByRole("button", { name: "device:page.usb.paired.addConnected" }));
+
+    await waitFor(() => expect(saveMock).toHaveBeenCalledTimes(1));
+    expect(saveMock.mock.calls[0][0].roomMap?.usbStrips).toEqual([
+      expect.objectContaining({ portName: STRIP_PORT.portName, ledCount: 120 }),
+    ]);
+    expect(setPairedStrips).toHaveBeenCalledTimes(1);
+    expect(connection.connectSelectedPort).not.toHaveBeenCalled();
+  });
+
+  it("says nothing extra when the connected strip is listed", async () => {
+    const listed: UsbStripPlacement = {
+      stripId: "usb-a", startX: 1, startY: 1, endX: 4, endY: 1, ledCount: 60, portName: STRIP_PORT.portName,
+    };
+    await renderCategory(
+      device({ ports: [STRIP_PORT], connectedPort: STRIP_PORT.portName, isConnected: true, status: "connected" }),
+      [listed],
+    );
+    expect(screen.queryByTestId("usb-paired-unlisted")).toBeNull();
+    expect(screen.getAllByTestId("usb-paired-strip")).toHaveLength(1);
+  });
+
   it("offers no add-strip form beside the roster", async () => {
     await renderCategory(device({ ports: [STRIP_PORT] }));
     const roster = screen.getByTestId("usb-paired-strips");
     expect(within(roster).queryByRole("button")).toBeNull();
     expect(within(roster).getByText("device:page.usb.paired.empty")).toBeInTheDocument();
   });
+});
+
+// "CONNECT" and "Change port" sat side by side: every button size now shares one case.
+it("gives every button size on the page the same case", async () => {
+  const { readStylesheet } = await import("@/test/stylesheetSource");
+  const css = readStylesheet();
+  for (const selector of [".lm-btn", ".lm-btn-md", ".lm-dcard-act"]) {
+    const start = css.indexOf(`\n${selector} {`);
+    expect(start, selector).toBeGreaterThanOrEqual(0);
+    const body = css.slice(css.indexOf("{", start), css.indexOf("}", start));
+    expect(body, selector).toMatch(/text-transform:\s*uppercase/);
+  }
 });
 
 describe("strip settings", () => {

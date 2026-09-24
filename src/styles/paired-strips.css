@@ -7,6 +7,17 @@
   line-height: 1.45;
   color: var(--lm-ink-dim);
 }
+/* A strip that reconnected at boot but was never added: the sentence and its
+   one action on a line, wrapping under each other when narrow. */
+.lm-paired-strips-unlisted {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.lm-paired-strips-unlisted-tx {
+  flex: 1 1 240px;
+}
 /* Three cells: the actions share one, so a second button wraps inside it
    instead of dropping under the icon and widening that column. */
 .lm-paired-strip {

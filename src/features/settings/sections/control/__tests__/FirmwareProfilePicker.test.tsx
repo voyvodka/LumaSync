@@ -129,7 +129,11 @@ describe("FirmwareProfilePicker — Bug H4 mismatch gating", () => {
 
     // 1. Toggle "Use anyway" so the mismatched tile becomes selectable.
     const overrideToggle = screen.getByTestId("lm-fw-use-anyway");
+    // The shared switch, not a native checkbox.
+    expect(overrideToggle).toHaveAttribute("role", "switch");
+    expect(overrideToggle).toHaveAttribute("aria-checked", "false");
     await user.click(overrideToggle);
+    expect(overrideToggle).toHaveAttribute("aria-checked", "true");
 
     // 2. Click the (now-enabled) Adalight tile.
     const adalightTile = screen.getByRole("radio", {

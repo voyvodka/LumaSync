@@ -54,6 +54,7 @@ import {
 import { useAdvertisedFirmwareProfile } from "@/features/device/useAdvertisedFirmwareProfile";
 import { shellStore } from "@/features/persistence/shellStore";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
+import { Toggle } from "@/shared/ui/Toggle";
 
 const DEFAULT_PROFILE: FirmwareProfile = FIRMWARE_PROFILE.LUMASYNC_V1;
 
@@ -393,7 +394,7 @@ export function FirmwareProfilePicker({
   }, []);
 
   const showOverrideAffordance = advertised !== undefined;
-  const overrideToggleId = useId();
+  const overrideHintId = useId();
   const titleId = useId();
 
   return (
@@ -459,17 +460,17 @@ export function FirmwareProfilePicker({
 
       {showOverrideAffordance && (
         <div className="lm-strip-setting-check">
-          <input
-            id={overrideToggleId}
-            type="checkbox"
+          <p className="lm-strip-setting-check-tx">
+            <b>{t("lights:led.firmwareProfile.useAnywayLabel")}</b>{" "}
+            <span id={overrideHintId}>{t("lights:led.firmwareProfile.useAnywayHint")}</span>
+          </p>
+          <Toggle
             checked={overrideEnabled}
-            onChange={(e) => handleOverrideToggle(e.target.checked)}
+            onChange={handleOverrideToggle}
+            label={t("lights:led.firmwareProfile.useAnywayLabel")}
+            aria-describedby={overrideHintId}
             data-testid="lm-fw-use-anyway"
           />
-          <label htmlFor={overrideToggleId}>
-            <b>{t("lights:led.firmwareProfile.useAnywayLabel")}</b>{" "}
-            <span>{t("lights:led.firmwareProfile.useAnywayHint")}</span>
-          </label>
         </div>
       )}
 

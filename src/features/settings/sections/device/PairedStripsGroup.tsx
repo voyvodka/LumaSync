@@ -23,6 +23,9 @@ export interface PairedStripsGroupProps {
   flagPersistError: () => void;
   clearPersistError: () => void;
   onRescan: () => void;
+  /** Adds the connected strip to the roster; the page never does it on its own at boot. */
+  onAddConnected: () => void;
+  addingConnected?: boolean;
   onNavigateToRoomMap?: () => void;
 }
 
@@ -36,6 +39,8 @@ export function PairedStripsGroup({
   flagPersistError,
   clearPersistError,
   onRescan,
+  onAddConnected,
+  addingConnected = false,
   onNavigateToRoomMap,
 }: PairedStripsGroupProps) {
   const { t } = useTranslation();
@@ -49,6 +54,10 @@ export function PairedStripsGroup({
   const pairedPortNames = new Set(
     pairedStrips.map((s) => s.portName).filter((name): name is string => !!name),
   );
+  // A strip that reconnected at boot on a setup that predates the roster. A
+  // placement with no port already follows the live one, so it covers it.
+  const connectedUnlisted =
+    connectedPort !== null && !pairedStrips.some((s) => s.portName === connectedPort || !s.portName);
   const unpairedPortNames = supportedPorts
     .map((p) => p.portName)
     .filter((name) => !pairedPortNames.has(name));
@@ -119,8 +128,18 @@ export function PairedStripsGroup({
         <span className="sub">{t("device:page.usb.paired.count", { count: pairedStrips.length })}</span>
       </div>
       <div className="lm-usb-group-body">
+        {connectedUnlisted ? (
+          <div className="lm-paired-strips-unlisted" data-testid="usb-paired-unlisted">
+            <Callout tone="info" className="lm-paired-strips-unlisted-tx">
+              {t("device:page.usb.paired.unlisted", { port: connectedPort })}
+            </Callout>
+            <Button size="md" variant="primary" onClick={onAddConnected} busy={addingConnected}>
+              {t("device:page.usb.paired.addConnected")}
+            </Button>
+          </div>
+        ) : null}
         {pairedStrips.length === 0 ? (
-          <p className="lm-paired-strips-empty">{t("device:page.usb.paired.empty")}</p>
+          connectedUnlisted ? null : <p className="lm-paired-strips-empty">{t("device:page.usb.paired.empty")}</p>
         ) : (
           pairedStrips.map((strip) => {
             // A strip authored before strips carried a port follows whichever

@@ -193,6 +193,8 @@ const device: Catalogue<typeof enDevice> = {
         offline: "ÇEVRİMDIŞI",
         portLabel: "Port",
         noOtherPort: "Desteklenen başka port yok. Başka bir denetleyici takıp yeniden tara.",
+        unlisted: "{{port}} üzerindeki şerit bağlı ama henüz bu listede yok.",
+        addConnected: "Bağlı şeridi ekle",
         persistError: "Şerit kaydedilemedi. Tekrar dene.",
         openInMap: "Haritada aç",
         changePort: "Portu değiştir",

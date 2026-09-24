@@ -125,7 +125,8 @@ https://keepachangelog.com/en/1.1.0/
 - Devices → USB Strips is one path from top to bottom: the controller (your supported ports, each
   with a Connect button), then Strip settings (firmware profile, LED chip type and colour order
   together), then your paired strips. Connecting a controller adds its strip to the list, using the
-  LED count from LED Setup when there is one, so the separate "Add LED strip" form is gone. The
+  LED count from LED Setup when there is one, so the separate "Add LED strip" form is gone; a strip
+  that reconnected on its own but is not in the list yet gets an "Add connected strip" button. The
   firmware profile moved here from the Lights page. After the first connect the app stays on
   Devices and a notice points to LED Setup, instead of jumping there before you have seen the strip
   settings. The rail groups read Devices and Other, and each badge counts what is active: a
