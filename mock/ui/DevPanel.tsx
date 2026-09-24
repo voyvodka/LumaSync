@@ -30,6 +30,7 @@ import { OFFERED_CODES } from "../handlers/codes";
 import {
   EDGE_SIGNAL_INTERVAL_MS,
   SHELL_EVENTS,
+  TRAY_EVENTS,
   emitLightingModeChanged,
   emitMockEvent,
   emitRuntimeHealth,
@@ -1213,7 +1214,7 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                 ))}
                 {(
                   [
-                    [SHELL_EVENTS.TRAY_SHOW_LED_PREVIEW, "Tray → Show LED preview"],
+                    [TRAY_EVENTS.SHOW_LED_PREVIEW, "Tray → Show LED preview"],
                     [SHELL_EVENTS.CLOSE_TO_TRAY, "Window → Close to tray"],
                   ] as const
                 ).map(([event, label]) => (
@@ -1226,18 +1227,6 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                     {label}
                   </button>
                 ))}
-                <button
-                  type="button"
-                  style={{ ...btn, width: "100%", textAlign: "left" }}
-                  onClick={() =>
-                    void emitMockEvent(
-                      SHELL_EVENTS.TRAY_STARTUP_STATE_CHANGED,
-                      !world.shell.autostartEnabled,
-                    )
-                  }
-                >
-                  Tray → Autostart flipped to {world.shell.autostartEnabled ? "off" : "on"}
-                </button>
               </div>
               <div style={{ color: FAINT, fontSize: 9, lineHeight: 1.35, marginTop: 4 }}>
                 There is no tray in a browser tab and none of these has an `invoke` behind it, so

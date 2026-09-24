@@ -26,19 +26,21 @@
 
 import { emit } from "@tauri-apps/api/event";
 
-import { LIGHTING_MODE_CHANGED_EVENT, type LightingModeChangedPayload } from "../src/shared/contracts/mode";
-import { EDGE_SIGNAL_EVENT, type EdgeSignalPayload } from "../src/shared/contracts/preview";
+import { LIGHTING_EVENTS } from "../src/shared/contracts/lightingRuntime";
+import type { LightingModeChangedPayload } from "../src/shared/contracts/mode";
 import {
-  PREVIEW_STATE_CHANGED_EVENT,
+  PREVIEW_EVENTS,
+  type EdgeSignalPayload,
   type LedPreviewStatus,
   type LedTestPatternKind,
 } from "../src/shared/contracts/preview";
-import { UPDATER_PROGRESS_EVENT, type UpdateDownloadProgress } from "../src/shared/contracts/updater";
+import { UPDATER_EVENTS, type UpdateDownloadProgress } from "../src/shared/contracts/updater";
 import {
   LINK_MAX_FPS_ABSENT,
-  RUNTIME_HEALTH_CHANGED_EVENT,
+  TELEMETRY_EVENTS,
   runtimeHealthFromSnapshot,
 } from "../src/shared/contracts/telemetry";
+import { SHELL_EVENTS, TRAY_EVENTS } from "../src/shared/contracts/shell";
 import { getWorld } from "./state";
 
 /** ~10 Hz. The real worker feeds an open twin at ~30 Hz; the mock does not need to. */
@@ -48,20 +50,16 @@ type Rgb = [number, number, number];
 
 /**
  * The tray's preview item, the window close intercept, and the startup-state
- * echo.
+ * echo — re-exported so `DevPanel.tsx` has one import path for every event it
+ * can fire, `SHELL_EVENTS`/`TRAY_EVENTS` from `src/shared/contracts/shell`
+ * included.
  *
  * These have no `invoke` at all — the tray lives in Rust and there is no tray
  * in a browser tab, so before this list they had no reachable trigger anywhere
  * in the mock. The tray's three lighting items are not events: Rust runs them
  * itself, and the panel sends the request they make.
  */
-export const SHELL_EVENTS = {
-  TRAY_SHOW_LED_PREVIEW: "tray:show-led-preview",
-  TRAY_STARTUP_STATE_CHANGED: "tray:startup-state-changed",
-  CLOSE_TO_TRAY: "shell:close-to-tray",
-} as const;
-
-export type ShellEventName = (typeof SHELL_EVENTS)[keyof typeof SHELL_EVENTS];
+export { SHELL_EVENTS, TRAY_EVENTS };
 
 function reportEmitFailure(event: string, err: unknown): void {
   console.error(
@@ -219,7 +217,7 @@ function tick(): void {
   const drop = stream.dropEveryNthFrame;
   if (drop > 1 && frame % drop === 0) return;
   void emitMockEvent(
-    EDGE_SIGNAL_EVENT,
+    PREVIEW_EVENTS.EDGE_SIGNAL,
     buildEdgeSignalFrame(stream.pattern, frame, stream.source, stream.probeSlot),
   );
 }
@@ -278,7 +276,7 @@ function patternPayload(
 }
 
 export async function emitPreviewState(): Promise<void> {
-  await emitMockEvent(PREVIEW_STATE_CHANGED_EVENT, currentPreviewStatus());
+  await emitMockEvent(PREVIEW_EVENTS.STATE_CHANGED, currentPreviewStatus());
 }
 
 /**
@@ -292,13 +290,13 @@ export async function emitRuntimeHealth(): Promise<void> {
     ...w.telemetry,
     linkMaxFps: w.serial.connectedPort !== null ? w.telemetry.linkMaxFps : LINK_MAX_FPS_ABSENT,
   };
-  await emitMockEvent(RUNTIME_HEALTH_CHANGED_EVENT, runtimeHealthFromSnapshot(usb));
+  await emitMockEvent(TELEMETRY_EVENTS.HEALTH_CHANGED, runtimeHealthFromSnapshot(usb));
 }
 
 export async function emitLightingModeChanged(): Promise<void> {
   const mode = getWorld().lighting.mode;
   const payload: LightingModeChangedPayload = { config: mode, active: mode.kind !== "off" };
-  await emitMockEvent(LIGHTING_MODE_CHANGED_EVENT, payload);
+  await emitMockEvent(LIGHTING_EVENTS.MODE_CHANGED, payload);
 }
 
 /**
@@ -318,7 +316,7 @@ export async function emitUpdateDownload(options?: { withTotal?: boolean }): Pro
       totalBytes: options?.withTotal === false ? null : totalBytes,
       finished: i === steps,
     };
-    await emitMockEvent(UPDATER_PROGRESS_EVENT, payload);
+    await emitMockEvent(UPDATER_EVENTS.DOWNLOAD_PROGRESS, payload);
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
 }

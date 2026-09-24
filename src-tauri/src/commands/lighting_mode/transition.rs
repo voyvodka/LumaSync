@@ -871,9 +871,11 @@ pub fn get_lighting_mode_status(
     ))
 }
 
-/// Tauri event broadcast app-wide whenever the active lighting mode changes,
-/// so preview surfaces (and any window other than the issuer) reconcile.
-pub const LIGHTING_MODE_CHANGED_EVENT: &str = "lighting://mode-changed";
+/// `LIGHTING_EVENTS.MODE_CHANGED` in `src/shared/contracts/mode.ts`. Broadcast
+/// app-wide whenever the active lighting mode changes, so preview surfaces
+/// (and any window other than the issuer) reconcile. Defined in
+/// `crate::events`; re-exported here since this is the emit site.
+pub use crate::events::LIGHTING_MODE_CHANGED_EVENT;
 
 /// Payload for `LIGHTING_MODE_CHANGED_EVENT` — the new mode and whether it
 /// is active, broadcast to every window (not just the command's caller).

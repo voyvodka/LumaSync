@@ -17,8 +17,9 @@ use super::hue::state_store::{acquire_hue_runtime, HueRuntimeStateStore};
 
 const TELEMETRY_WINDOW: Duration = Duration::from_secs(1);
 
-/// `RUNTIME_HEALTH_CHANGED_EVENT` in `src/shared/contracts/telemetry.ts`.
-pub const RUNTIME_HEALTH_CHANGED_EVENT: &str = "telemetry://health-changed";
+/// `TELEMETRY_EVENTS.HEALTH_CHANGED` in `src/shared/contracts/telemetry.ts`.
+/// Defined in `crate::events`; re-exported here since this is the emit site.
+pub use crate::events::RUNTIME_HEALTH_CHANGED_EVENT;
 
 /// `CAPTURE_FAILURE_ONGOING_MAX_AGE_SECS` in `src/shared/contracts/telemetry.ts`:
 /// two windows plus slack, since one window can pass before a fresh failure

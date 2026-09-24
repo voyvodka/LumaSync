@@ -24,8 +24,9 @@ use crate::models::room_map::{RoomDimensions, TvAnchorPlacement};
 pub const SHELL_STATE_FILE: &str = "shell-state.json";
 /// `SHELL_STORE_KEY` in `src/shared/contracts/shell.ts`.
 pub const SHELL_STORE_KEY: &str = "shell-state";
-/// `SHELL_STATE_CHANGED_EVENT` in `src/shared/contracts/shell.ts`.
-pub const SHELL_STATE_CHANGED_EVENT: &str = "shell://state-changed";
+/// `SHELL_EVENTS.STATE_CHANGED` in `src/shared/contracts/shell.ts`. Defined in
+/// `crate::events`; re-exported here since this is the emit site.
+pub use crate::events::SHELL_STATE_CHANGED_EVENT;
 
 const SHELL_STATE_WRITE_FAILED: &str = "SHELL_STATE_WRITE_FAILED";
 

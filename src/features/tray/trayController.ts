@@ -7,12 +7,13 @@
  * - Label i18n: push translated strings to Rust via update_tray_labels
  * - Startup toggle: managed via plugin-autostart (no tray checkbox)
  *
- * Tray menu ID constants are imported from shell contracts — never hardcode strings here.
+ * Tray menu ID and event-name constants are imported from shell contracts —
+ * never hardcode strings here.
  */
 
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { TRAY_MENU_IDS } from "@/shared/contracts/shell";
+import { TRAY_EVENTS, TRAY_MENU_IDS } from "@/shared/contracts/shell";
 
 // ---------------------------------------------------------------------------
 // Startup toggle (no tray checkbox — managed in System settings only)
@@ -57,19 +58,7 @@ export async function setStartupTrayChecked(_checked: boolean): Promise<void> {}
 export async function listenTrayShowLedPreview(
   onTrigger: () => void
 ): Promise<UnlistenFn> {
-  return listen("tray:show-led-preview", () => onTrigger());
-}
-
-/**
- * Listen for startup state changes emitted from Rust (legacy: was triggered
- * by tray checkbox click). Now emitted only on external autostart changes.
- */
-export async function listenStartupToggle(
-  onToggle: (newState: boolean) => void
-): Promise<UnlistenFn> {
-  return listen<boolean>("tray:startup-state-changed", (event) => {
-    onToggle(event.payload);
-  });
+  return listen(TRAY_EVENTS.SHOW_LED_PREVIEW, () => onTrigger());
 }
 
 // ---------------------------------------------------------------------------

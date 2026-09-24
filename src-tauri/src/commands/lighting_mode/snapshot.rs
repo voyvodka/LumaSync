@@ -12,8 +12,9 @@ use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use super::{LightingModeConfig, LightingModeKind, LightingRuntimeState};
 
-/// `LIGHTING_RUNTIME_CHANGED_EVENT` in `src/shared/contracts/lightingRuntime.ts`.
-pub const LIGHTING_RUNTIME_CHANGED_EVENT: &str = "lighting://runtime-changed";
+/// `LIGHTING_EVENTS.RUNTIME_CHANGED` in `src/shared/contracts/lightingRuntime.ts`.
+/// Defined in `crate::events`; re-exported here since this is the emit site.
+pub use crate::events::LIGHTING_RUNTIME_CHANGED_EVENT;
 
 /// A drag retunes at up to 20 Hz; the windows only need to follow it at half that.
 pub(crate) const RETUNE_PUBLISH_INTERVAL: Duration = Duration::from_millis(100);

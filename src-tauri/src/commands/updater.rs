@@ -13,6 +13,7 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 
 use super::shell_state;
 use super::status::CommandStatus;
+use crate::events::UPDATER_PROGRESS_EVENT;
 use crate::MAIN_WINDOW_LABEL;
 
 /// Resolves through `/releases/latest`, which GitHub defines as the newest
@@ -24,8 +25,6 @@ const STABLE_ENDPOINT: &str =
 /// `docs/architecture/build-and-release.md` explains how it is published.
 const BETA_ENDPOINT: &str =
     "https://github.com/voyvodka/LumaSync/releases/download/beta-channel/latest-beta.json";
-
-const PROGRESS_EVENT: &str = "updater://download-progress";
 
 /// Every chunk used to be an event and every event an App re-render.
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
@@ -98,7 +97,7 @@ pub struct UpdateDownloadProgress {
 fn emit_progress<R: Runtime>(app: &AppHandle<R>, progress: UpdateDownloadProgress) {
     let _ = app.emit_to(
         EventTarget::webview_window(MAIN_WINDOW_LABEL),
-        PROGRESS_EVENT,
+        UPDATER_PROGRESS_EVENT,
         progress,
     );
 }

@@ -22,6 +22,12 @@ export type UpdaterCommand = (typeof UPDATER_COMMANDS)[keyof typeof UPDATER_COMM
  */
 export const UPDATER_PROGRESS_EVENT = "updater://download-progress";
 
+export const UPDATER_EVENTS = {
+  DOWNLOAD_PROGRESS: UPDATER_PROGRESS_EVENT,
+} as const;
+
+export type UpdaterEventName = (typeof UPDATER_EVENTS)[keyof typeof UPDATER_EVENTS];
+
 export const UPDATER_STATUS = {
   /** A newer version exists on the resolved channel; `update` is populated. */
   UPDATE_AVAILABLE: "UPDATER_UPDATE_AVAILABLE",

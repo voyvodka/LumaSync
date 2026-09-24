@@ -8,7 +8,7 @@
 import { HUE_COMMANDS, HUE_RUNTIME_STATES, type HueRuntimeStatus } from "../../src/shared/contracts/hue";
 import {
   HUE_BRIDGE_VERDICT,
-  HUE_HEALTH_CHANGED_EVENT,
+  HUE_EVENTS,
   HUE_HEALTH_COMMANDS,
   type HueBridgeVerdict,
   type HueHealthSnapshot,
@@ -73,7 +73,7 @@ function startPublishing(): void {
   subscribe(() => {
     const before = revision;
     const next = current();
-    if (next.revision !== before) void emitMockEvent(HUE_HEALTH_CHANGED_EVENT, next);
+    if (next.revision !== before) void emitMockEvent(HUE_EVENTS.HEALTH_CHANGED, next);
   });
 }
 

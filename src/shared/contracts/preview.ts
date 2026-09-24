@@ -299,6 +299,13 @@ export const PREVIEW_STATE_CHANGED_EVENT = "preview://state-changed" as const;
 /** Tauri event channel carrying the per-LED feed of the LED twin overlay. */
 export const EDGE_SIGNAL_EVENT = "ambilight://edge-signal" as const;
 
+export const PREVIEW_EVENTS = {
+  STATE_CHANGED: PREVIEW_STATE_CHANGED_EVENT,
+  EDGE_SIGNAL: EDGE_SIGNAL_EVENT,
+} as const;
+
+export type PreviewEventName = (typeof PREVIEW_EVENTS)[keyof typeof PREVIEW_EVENTS];
+
 /**
  * Per-LED frame the Rust ambilight worker sends to open twin-overlay windows
  * (`lighting_mode/preview.rs`). Sent only while a twin overlay is open, and

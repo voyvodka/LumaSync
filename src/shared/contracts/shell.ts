@@ -102,6 +102,23 @@ export const TRAY_MENU_IDS = {
 export type TrayMenuId = (typeof TRAY_MENU_IDS)[keyof typeof TRAY_MENU_IDS];
 
 // ---------------------------------------------------------------------------
+// Tray events — pushed from Rust, distinct from the menu-item IDs above
+// ---------------------------------------------------------------------------
+
+/**
+ * Companion to `TRAY_MENU_IDS.SHOW_LED_PREVIEW`: the tray's menu-click handler
+ * (`lib.rs`) emits this once it has matched the item ID, so a frontend that
+ * never sees Tauri menu events still reacts to the click.
+ */
+export const TRAY_SHOW_LED_PREVIEW_EVENT = "tray:show-led-preview" as const;
+
+export const TRAY_EVENTS = {
+  SHOW_LED_PREVIEW: TRAY_SHOW_LED_PREVIEW_EVENT,
+} as const;
+
+export type TrayEventName = (typeof TRAY_EVENTS)[keyof typeof TRAY_EVENTS];
+
+// ---------------------------------------------------------------------------
 // Settings Sidebar Section IDs
 // ---------------------------------------------------------------------------
 
@@ -463,6 +480,20 @@ export const SHELL_STATE_ERROR_CODES = {
 
 /** Emitted to every window after each accepted write, in write order. */
 export const SHELL_STATE_CHANGED_EVENT = "shell://state-changed";
+
+/**
+ * Emitted to the main window when it is hidden to the tray instead of closed
+ * (`hide_to_tray` in `lib.rs`), so the shell can show the one-time
+ * "minimized to tray" hint.
+ */
+export const SHELL_CLOSE_TO_TRAY_EVENT = "shell:close-to-tray" as const;
+
+export const SHELL_EVENTS = {
+  STATE_CHANGED: SHELL_STATE_CHANGED_EVENT,
+  CLOSE_TO_TRAY: SHELL_CLOSE_TO_TRAY_EVENT,
+} as const;
+
+export type ShellEventName = (typeof SHELL_EVENTS)[keyof typeof SHELL_EVENTS];
 
 /** Response from `get_shell_state`. */
 export interface ShellStateSnapshot {

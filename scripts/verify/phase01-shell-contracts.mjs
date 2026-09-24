@@ -1380,8 +1380,10 @@ check(
 // ---------------------------------------------------------------------------
 const TELEMETRY_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/telemetry.ts");
 const RUST_TELEMETRY_FILE = resolve(ROOT, "src-tauri/src/commands/runtime_telemetry.rs");
+const RUST_EVENTS_FILE = resolve(ROOT, "src-tauri/src/events.rs");
 const telemetrySource = readOrEmpty(TELEMETRY_CONTRACT_FILE, "telemetry");
 const rustTelemetrySource = readOrEmpty(RUST_TELEMETRY_FILE, "rust runtime_telemetry");
+const rustEventsSource = readOrEmpty(RUST_EVENTS_FILE, "rust events");
 
 function rustStructFields(source, structName) {
   const block = source.match(
@@ -1461,10 +1463,13 @@ check(
 
 // The stall notice and link note ride this push once the poll is gone, so a
 // renamed event or a drifted "failing now" window would silence them quietly.
+// The string lives in events.rs (single source, `verify:event-names` pins it);
+// runtime_telemetry.rs only re-exports it, so that is checked first and
+// events.rs is the fallback — whichever form is currently in place.
 console.log("\n[ Runtime health push — Rust ↔ telemetry.ts parity ]");
-const rustHealthEvent = rustTelemetrySource.match(
-  /RUNTIME_HEALTH_CHANGED_EVENT:\s*&str\s*=\s*"([^"]+)"/
-);
+const rustHealthEvent =
+  rustTelemetrySource.match(/RUNTIME_HEALTH_CHANGED_EVENT:\s*&str\s*=\s*"([^"]+)"/)
+  ?? rustEventsSource.match(/RUNTIME_HEALTH_CHANGED_EVENT:\s*&str\s*=\s*"([^"]+)"/);
 const tsHealthEvent = telemetrySource.match(/RUNTIME_HEALTH_CHANGED_EVENT\s*=\s*"([^"]+)"/);
 check(
   rustHealthEvent !== null && tsHealthEvent !== null && rustHealthEvent[1] === tsHealthEvent[1],

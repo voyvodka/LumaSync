@@ -12,6 +12,7 @@
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { SHELL_EVENTS } from "@/shared/contracts/shell";
 import { readStartHidden } from "./launchApi";
 import { applyModeMinSize, resizeToMode } from "./windowAnimator";
 import { persistWindowState, restoreWindowState, schedulePersistWindowState } from "./windowGeometry";
@@ -82,7 +83,7 @@ export async function initCloseToTrayHint(
     unlistenCloseToTray = null;
   }
 
-  unlistenCloseToTray = await listen("shell:close-to-tray", () => {
+  unlistenCloseToTray = await listen(SHELL_EVENTS.CLOSE_TO_TRAY, () => {
     void (async () => {
       try {
         await persistWindowState();

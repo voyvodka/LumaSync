@@ -42,6 +42,8 @@ mod commands {
 #[cfg(target_os = "macos")]
 mod macos_window;
 
+// Single source for every Tauri event name — see its module doc.
+mod events;
 mod panic_log;
 mod shutdown;
 
@@ -113,6 +115,7 @@ use commands::updater::{check_for_update, download_and_install_update, PendingUp
 use commands::wled_discovery::{
     connect_wled_sink, discover_wled_devices, get_wled_sink_status, test_wled_bridge,
 };
+use events::{SHELL_CLOSE_TO_TRAY_EVENT, TRAY_SHOW_LED_PREVIEW_EVENT};
 
 /// Label of the primary settings webview window. Defined in
 /// `tauri.conf.json` (`app.windows[].label = "main"`). Hot-path Rust→JS
@@ -219,7 +222,7 @@ fn hide_to_tray<R: Runtime>(window: &tauri::Window<R>) {
     // symmetry with the tray menu emits below.
     let _ = window.emit_to(
         EventTarget::webview_window(MAIN_WINDOW_LABEL),
-        "shell:close-to-tray",
+        SHELL_CLOSE_TO_TRAY_EVENT,
         (),
     );
 }
@@ -651,7 +654,7 @@ pub fn run() {
                     "tray-show-led-preview" => {
                         let _ = app.emit_to(
                             EventTarget::webview_window(MAIN_WINDOW_LABEL),
-                            "tray:show-led-preview",
+                            TRAY_SHOW_LED_PREVIEW_EVENT,
                             (),
                         );
                     }

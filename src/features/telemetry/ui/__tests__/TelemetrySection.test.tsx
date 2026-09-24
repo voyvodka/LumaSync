@@ -253,7 +253,6 @@ describe("TelemetrySection", () => {
 
 vi.mock("@/features/tray/trayController", () => ({
   getStartupEnabled: vi.fn().mockResolvedValue(false),
-  listenStartupToggle: vi.fn().mockResolvedValue(() => {}),
   setStartupTrayChecked: vi.fn().mockResolvedValue(undefined),
   toggleStartup: vi.fn().mockResolvedValue(true),
 }));

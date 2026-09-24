@@ -74,7 +74,9 @@ impl PreviewEmitContext {
 // The twin overlay is the only listener, so the worker builds and emits this
 // only while a twin is open (`LedTwinState::preview_active`).
 
-pub const EDGE_SIGNAL_EVENT: &str = "ambilight://edge-signal";
+/// `PREVIEW_EVENTS.EDGE_SIGNAL` in `src/shared/contracts/preview.ts`. Defined
+/// in `crate::events`; re-exported here since this is the emit site.
+pub use crate::events::EDGE_SIGNAL_EVENT;
 /// ~30 Hz: at the top pattern speed a slower cadence lets the comet head travel
 /// further per frame than its own tail, leaving visible gaps in the twin.
 pub const EDGE_SIGNAL_PREVIEW_INTERVAL_MS: u64 = 33;

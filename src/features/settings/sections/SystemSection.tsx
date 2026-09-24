@@ -13,7 +13,6 @@ import {
 import { shellStore } from "@/features/persistence/shellStore";
 import {
   getStartupEnabled,
-  listenStartupToggle,
   setStartupTrayChecked,
   toggleStartup,
 } from "@/features/tray/trayController";
@@ -38,8 +37,6 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
   const showNerdStats = useShowNerdStats();
 
   useEffect(() => {
-    let unlistenFn: (() => void) | null = null;
-
     async function init() {
       try {
         const enabled = await getStartupEnabled();
@@ -57,18 +54,9 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
       } catch {
         setUpdateChannel(DEFAULT_UPDATE_CHANNEL);
       }
-
-      try {
-        unlistenFn = await listenStartupToggle((newState) => {
-          setStartupEnabled(newState);
-        });
-      } catch (err) {
-        console.error("[LumaSync] listenStartupToggle subscribe failed:", err);
-      }
     }
 
     void init();
-    return () => { unlistenFn?.(); };
   }, []);
 
   async function handleLanguageChange(lang: I18nLanguage) {
