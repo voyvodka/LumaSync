@@ -9,7 +9,8 @@ import { parseCommandError } from "@/shared/contracts/status";
 
 export interface ConnectionLifecycle {
   selectPort(portName: string | null): void;
-  connectSelectedPort(): Promise<void>;
+  /** Resolves `true` only when this call left the port connected. */
+  connectSelectedPort(): Promise<boolean>;
 }
 
 export function createConnectionLifecycle(
@@ -40,10 +41,10 @@ export function createConnectionLifecycle(
     }));
   };
 
-  const connectSelectedPort = async () => {
+  const connectSelectedPort = async (): Promise<boolean> => {
     const state = store.getState();
     if (!state.selectedPort || state.isScanning || state.isConnecting || state.isHealthChecking) {
-      return;
+      return false;
     }
 
     if (state.isReconnecting) {
@@ -52,7 +53,7 @@ export function createConnectionLifecycle(
 
     const token = store.beginOperation(DEVICE_OPERATION.MANUAL_CONNECT);
     if (!token) {
-      return;
+      return false;
     }
 
     const targetPort = state.selectedPort;
@@ -69,9 +70,10 @@ export function createConnectionLifecycle(
       connection = await deps.connectSerialPort(targetPort);
     } catch (error) {
       if (!store.isCurrentToken(token)) {
-        return;
+        return false;
       }
 
+      const parsed = parseCommandError(error);
       store.finishOperation(token);
       store.setState((prev) => ({
         ...prev,
@@ -79,16 +81,18 @@ export function createConnectionLifecycle(
         connectedPort: null,
         statusCard: {
           variant: "error",
-          code: SERIAL_CONNECT_STATUS.FAILED,
+          // A coded rejection keeps its code so the banner can name it in the
+          // user's language; uncoded text is the catch-all's detail.
+          code: parsed.code ?? SERIAL_CONNECT_STATUS.FAILED,
           message: "Could not connect to the selected port.",
-          details: parseCommandError(error).message,
+          details: parsed.details ?? parsed.message,
         },
       }));
-      return;
+      return false;
     }
 
     if (!store.isCurrentToken(token)) {
-      return;
+      return false;
     }
 
     if (connection.connected && connection.portName) {
@@ -98,7 +102,7 @@ export function createConnectionLifecycle(
         connectedPortName,
         statusCard: toConnectionCard(connection),
       });
-      return;
+      return true;
     }
 
     store.finishOperation(token);
@@ -108,6 +112,7 @@ export function createConnectionLifecycle(
       connectedPort: null,
       statusCard: toConnectionCard(connection),
     }));
+    return false;
   };
 
   return { selectPort, connectSelectedPort };

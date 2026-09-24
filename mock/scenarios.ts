@@ -24,6 +24,8 @@ export const SCENARIO_IDS = [
   "hue-link-button",
   "hue-busy-at-boot",
   "usb-hue-busy-at-boot",
+  "usb-first-connect",
+  "usb-unsupported-only",
   "capture-denied",
   "persist-failing",
 ] as const;
@@ -115,7 +117,22 @@ const PORTS: MockWorld["serial"]["ports"] = [
     firmwareProfile: "lumasync-v1",
     chipType: "ws2812b-grb",
   },
+  // What every Mac enumerates. It fails the allowlist, so Devices → USB must
+  // list it under "Other serial ports" and never offer to connect it.
+  {
+    name: "/dev/cu.Bluetooth-Incoming-Port",
+    supported: false,
+    vid: 0x0000,
+    pid: 0x0000,
+    manufacturer: null,
+    product: null,
+    connectOutcome: "FAILED",
+    firmwareProfile: "lumasync-v1",
+    chipType: "ws2812b-grb",
+  },
 ];
+
+const UNSUPPORTED_PORTS = PORTS.filter((port) => !port.supported);
 
 const BRIDGE = { id: "bridge-c8a76249", ip: "192.168.1.180", name: "Hue Bridge" };
 
@@ -326,6 +343,26 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
       const { lastWledSink: _unused, ...shellState } = w.shellState;
       w.shellState = { ...shellState, lastOutputTargets: ["usb", "hue"] };
       return { ...w, scenario: "usb-hue-busy-at-boot" };
+    },
+  },
+  "usb-first-connect": {
+    id: "usb-first-connect",
+    label: "USB strip, never connected",
+    summary: "A supported controller is plugged in and nothing is saved. The Connect path and the LED Setup prompt.",
+    build: () => {
+      const w = base();
+      w.serial = { ports: PORTS, connectedPort: null, healthFailsAt: null };
+      return { ...w, scenario: "usb-first-connect" };
+    },
+  },
+  "usb-unsupported-only": {
+    id: "usb-unsupported-only",
+    label: "Only unsupported serial ports",
+    summary: "Bluetooth and a debug console enumerate, no LED controller. The page must not offer to connect either.",
+    build: () => {
+      const w = base();
+      w.serial = { ports: UNSUPPORTED_PORTS, connectedPort: null, healthFailsAt: null };
+      return { ...w, scenario: "usb-unsupported-only" };
     },
   },
   "capture-denied": {

@@ -86,7 +86,8 @@ export interface DeviceConnectionController {
   initialize: () => Promise<void>;
   refreshPorts: () => Promise<void>;
   selectPort: (portName: string | null) => void;
-  connectSelectedPort: () => Promise<void>;
+  /** `true` only when this call left the port connected. */
+  connectSelectedPort: () => Promise<boolean>;
   runHealthCheck: () => Promise<void>;
   /**
    * Detach from the connection-event bus. Called by the React hook

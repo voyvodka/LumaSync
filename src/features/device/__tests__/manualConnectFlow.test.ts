@@ -208,7 +208,8 @@ describe("manual connect flow", () => {
     await controller.initialize();
     controller.selectPort("COM3");
 
-    await controller.connectSelectedPort();
+    // The Devices page adds a strip to the roster only on `true`.
+    await expect(controller.connectSelectedPort()).resolves.toBe(false);
 
     expect(connectSerialPort).toHaveBeenCalledTimes(1);
     expect(controller.getState().activeOperation).toBe("idle");
@@ -230,11 +231,49 @@ describe("manual connect flow", () => {
       },
     });
 
-    await controller.connectSelectedPort();
+    await expect(controller.connectSelectedPort()).resolves.toBe(true);
 
     expect(connectSerialPort).toHaveBeenCalledTimes(2);
     expect(controller.getState().status).toBe("connected");
     expect(controller.getState().connectedPort).toBe("COM3");
+  });
+
+  // An uncoded rejection used to be the only kind: its code is kept now, so
+  // the banner can say "port busy" in Turkish instead of Rust's English.
+  it("keeps the code of a coded rejection", async () => {
+    const controller = createDeviceConnectionController({
+      listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(
+        listResponse([
+          {
+            name: "COM3",
+            kind: "usb",
+            isSupported: true,
+            supportReason: "Supported USB serial adapter",
+            usb: { vid: 0x1a86, pid: 0x7523, manufacturer: null, product: null, serialNumber: null },
+          },
+        ]),
+      ),
+      connectSerialPort: vi
+        .fn<DeviceConnectionControllerDeps["connectSerialPort"]>()
+        .mockRejectedValue("CONNECT_PERMISSION_DENIED: Resource busy (os error 16)"),
+      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
+      persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
+    });
+
+    await controller.initialize();
+    controller.selectPort("COM3");
+    await expect(controller.connectSelectedPort()).resolves.toBe(false);
+
+    expect(controller.getState().statusCard).toMatchObject({
+      variant: "error",
+      code: "CONNECT_PERMISSION_DENIED",
+      details: "Resource busy (os error 16)",
+    });
   });
 
   it("clears stale selection when selected port is missing after refresh", async () => {

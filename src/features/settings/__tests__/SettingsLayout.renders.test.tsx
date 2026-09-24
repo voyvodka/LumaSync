@@ -43,9 +43,20 @@ vi.mock("../sections/SystemSection", () => ({
 }));
 
 vi.mock("../sections/DeviceSection", () => ({
-  DeviceSection: ({ categoryRequest }: { categoryRequest: { category: string } | null }) => {
+  DeviceSection: ({
+    categoryRequest,
+    hueActive,
+  }: {
+    categoryRequest: { category: string } | null;
+    hueActive?: boolean;
+  }) => {
     count("devices");
-    return <p data-testid="devices-category">{categoryRequest?.category ?? ""}</p>;
+    return (
+      <>
+        <p data-testid="devices-category">{categoryRequest?.category ?? ""}</p>
+        <p data-testid="devices-hue-active">{String(hueActive)}</p>
+      </>
+    );
   },
 }));
 
@@ -165,7 +176,7 @@ describe("SettingsLayout render boundaries", () => {
     expect(screen.getByTestId("system-checking")).toHaveTextContent("true");
   });
 
-  it.each([SECTION_IDS.SYSTEM, SECTION_IDS.DEVICES, SECTION_IDS.ROOM_MAP] as const)(
+  it.each([SECTION_IDS.SYSTEM, SECTION_IDS.ROOM_MAP] as const)(
     "does not re-render %s for a Hue status change it does not show",
     async (section) => {
       const shell = await renderFull(section);
@@ -176,6 +187,19 @@ describe("SettingsLayout render boundaries", () => {
       expect(renders[NAME[section]]).toBe(before);
     },
   );
+
+  // The rail's Hue badge counts an active bridge, and nothing else about Hue.
+  it("re-renders Devices when Hue starts streaming, and not for a probe it does not show", async () => {
+    const shell = await renderFull(SECTION_IDS.DEVICES);
+    const before = renders.devices;
+
+    shell.setHue({ probeVerdict: "unreachable", reconnecting: true });
+    expect(renders.devices).toBe(before);
+
+    shell.setHue({ streaming: true });
+    expect(screen.getByTestId("devices-hue-active")).toHaveTextContent("true");
+    expect(renders.devices).toBe(before + 1);
+  });
 
   it("re-renders the Lights page for a Hue status change, which it does show", async () => {
     const shell = await renderFull(SECTION_IDS.LIGHTS);

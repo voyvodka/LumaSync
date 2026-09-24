@@ -53,6 +53,8 @@ export interface ShellNoticeInput {
   hueColorNotice: HueSolidColorStatusCode | null;
   /** The step the onboarding flow would show now, or `null`. */
   onboardingStep: OnboardingStep | null;
+  /** The port a strip just connected on with no LED layout saved, or `null`. */
+  ledSetupNext: string | null;
   /** A USB strip or WLED panel is bound — the only outputs calibration applies to. */
   localTargetConfigured: boolean;
   /** The startup update check failed; a check the user starts reports through the modal instead. */
@@ -397,6 +399,30 @@ export function buildShellNotices(
     (step === ONBOARDING_STEPS.LED_SETUP && calibrationShown) ||
     // Calibration maps LEDs; a Hue-only setup has none to map.
     (step === ONBOARDING_STEPS.LED_SETUP && !input.localTargetConfigured);
+
+  // What the first connect used to do by switching screens: the user stays
+  // where they connected (Devices → USB), and this says what comes next.
+  // The onboarding step and the calibration notice say the same, so either wins.
+  const ledSetupNext = input.ledSetupNext;
+  if (
+    ledSetupNext !== null &&
+    input.activeSection !== SECTION_IDS.LED_SETUP &&
+    !calibrationShown &&
+    !(step === ONBOARDING_STEPS.LED_SETUP && !onboardingHidden)
+  ) {
+    notices.push({
+      id: SHELL_NOTICE_IDS.LED_SETUP_NEXT,
+      tier: NOTICE_TIER.INFO,
+      severity: NOTICE_SEVERITY.INFO,
+      kind: "event",
+      message: t("shell:notices.messages.ledSetupNext"),
+      action: ledSetupAction,
+      dismissible: true,
+      source: ledSetupNext,
+      testId: "led-setup-next-notice",
+    });
+  }
+
   if (!onboardingHidden) {
     const action =
       step === ONBOARDING_STEPS.LIGHTS

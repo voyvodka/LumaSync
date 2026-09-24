@@ -7,28 +7,33 @@ export default {
     missingHint: "{{port}} is no longer visible. Reconnect the device or choose another port.",
   },
   status: {
-    idleTitle: "Waiting for a selection",
-    idleBody: "Select a port and use Connect when ready.",
+    idleTitle: "No strip connected",
+    idleBody: "Press Connect on your controller below.",
+    noPortsTitle: "No USB controller found",
+    noPortsBody: "Plug in your LED controller, then press Rescan.",
+    noSupportedTitle: "No supported controller found",
+    // Mirrors the chip families in SUPPORTED_USB_DEVICE_ALLOWLIST (device_connection.rs); a test holds them together.
+    noSupportedBody: "The ports found here can't drive LEDs. LumaSync works with USB controllers built on CH340, CH341, CP2102, CP2104, FTDI FT232R/FT232H, PL2303 or an Arduino Uno.",
     scanningTitle: "Refreshing serial ports",
     scanningBody: "We keep your list visible while scan runs in the background.",
     reconnectingTitle: "Reconnecting to your last device",
-    reconnectingBody: "Auto-recovery is running with short retries. You can switch to manual connect anytime.",
+    reconnectingBody: "Auto-recovery is running with short retries. You can press Connect yourself at any time.",
     connectedTitle: "Connection established",
-    connectedBody: "Connected on {{port}}. You can keep using this port for the next start.",
+    connectedBody: "Connected on {{port}}. LumaSync reconnects to it on the next start.",
     missingTitle: "Previously selected port is missing",
     missingBody: "Your previous selection is no longer available. Pick another port and retry.",
     errorTitle: "Connection attempt failed",
-    errorBody: "Connection was not completed. Refresh, pick another port, and try again.",
+    errorBody: "Connection was not completed. Rescan and press Connect again.",
     // What the connection controller advises beside a status it minted itself.
     hints: {
       selectedPortMissing: "Pick another port and try Connect again.",
       refreshRateLimited: "Please wait a moment and try again.",
-      recoveryInProgress: "You can pick a port and connect manually at any time.",
-      recoveryCancelled: "Continue with manual connect when ready.",
-      recoveryTimedOut: "Refresh ports, choose the active cable port, then connect manually.",
+      recoveryInProgress: "You can press Connect on a port yourself at any time.",
+      recoveryCancelled: "Press Connect when you're ready.",
+      recoveryTimedOut: "Rescan, then press Connect on your controller.",
       healthCheckInProgress: "This validates visibility, support, and connection status.",
       healthCheckPassed: "All validation steps completed successfully.",
-      healthCheckFailed: "Try refresh, select another port, then retry.",
+      healthCheckFailed: "Rescan, pick another port, then retry.",
     },
   },
   healthCheck: {
@@ -39,7 +44,7 @@ export default {
     passTitle: "Health check passed",
     passBody: "All setup checks passed for the selected port.",
     failTitle: "Health check failed",
-    failBody: "Review the failed step details, then refresh, choose another port, or retry.",
+    failBody: "Review the failed step below, then rescan, pick another port, or retry.",
     steps: {
       labels: {
         PORT_VISIBLE: "Port visibility",
@@ -60,7 +65,7 @@ export default {
       },
       SERIAL_HEALTH_HANDSHAKE_TIMEOUT: {
         label: "No handshake response",
-        hint: "No reply within 2 s. If using non-LumaSync firmware, switch to the Adalight profile in Device settings.",
+        hint: "No reply within 2 s. If using non-LumaSync firmware, switch to the Adalight profile under Strip settings.",
       },
       SERIAL_HEALTH_VERSION_MISMATCH: {
         label: "Protocol version mismatch",
@@ -68,7 +73,7 @@ export default {
       },
       SERIAL_HEALTH_FIRMWARE_MISMATCH: {
         label: "Firmware profile mismatch",
-        hint: "Device advertised a different profile than selected. Change the Firmware Profile in Device settings.",
+        hint: "Device advertised a different profile than selected. Change the firmware profile under Strip settings.",
       },
       SERIAL_HEALTH_PROTOCOL_ERROR: {
         label: "Protocol error",
@@ -80,7 +85,7 @@ export default {
       },
       LIST_PORTS_FAILED: {
         label: "Could not read serial ports",
-        hint: "The system did not return a port list. Refresh, and check that no other app is holding the ports.",
+        hint: "The system did not return a port list. Rescan, and check that no other app is holding the ports.",
       },
       PORT_VISIBLE: {
         label: "Port found",
@@ -88,7 +93,7 @@ export default {
       },
       PORT_NOT_FOUND: {
         label: "Port not found",
-        hint: "The selected port is not listed. Check the cable, then refresh ports.",
+        hint: "The selected port is not listed. Check the cable, then rescan.",
       },
       PORT_SUPPORTED: {
         label: "Supported adapter",
@@ -104,7 +109,7 @@ export default {
       },
       CONNECT_FAILED: {
         label: "Could not open the port",
-        hint: "Refresh ports, reconnect the cable, and try again.",
+        hint: "Rescan, reconnect the cable, and try again.",
       },
       CONNECT_INVALID_INPUT: {
         label: "Port settings rejected",
@@ -126,14 +131,14 @@ export default {
   },
   page: {
     rail: {
-      connected: "Connected",
+      devices: "Devices",
       other: "Other",
       usbStrips: "USB Strips",
       hueBridges: "Hue Bridges",
       wled: "WLED",
       displays: "Displays",
       manualEntry: "Manual Entry",
-      countLabel: "{{count}} connected",
+      activeLabel: "{{count}} active",
     },
     header: {
       usbTitle: "USB Strips",
@@ -150,51 +155,46 @@ export default {
       rescan: "Rescan",
     },
     usb: {
+      connect: "Connect",
       pill: {
         online: "ONLINE",
-        discovered: "DISCOVERED",
+        ready: "READY",
+        unsupported: "NOT SUPPORTED",
       },
       stats: {
-        ledCount: "LED Count",
-        baud: "Baud",
-        protocol: "Protocol",
-        latency: "Latency",
+        usbId: "USB ID",
+        state: "State",
+        connected: "Connected",
+        notConnected: "Not connected",
         na: "—",
       },
-      pairAsStrip: "+ Pair as LED Strip",
-      empty: {
-        title: "No USB ports found",
-        body: "Plug in your controller and click Rescan.",
+      controller: {
+        title: "Controller",
+        count_one: "1 supported port",
+        count_other: "{{count}} supported ports",
       },
-      discover: {
-        title: "Discover ports",
-        count: "{{count}} ports",
-        countOne: "1 port",
-        hint: "Detected serial ports. The list below is the full strip roster — use this section only when you need to inspect or connect a raw port directly.",
+      other: {
+        title: "Other serial ports",
+        count_one: "1 port",
+        count_other: "{{count}} ports",
+        hint: "Found on this computer, but not LED controllers — Bluetooth serial ports, debug consoles and the like. LumaSync can't send light through them.",
+      },
+      settings: {
+        title: "Strip settings",
       },
       paired: {
         title: "Paired strips",
-        count: "{{count}} strips",
-        countOne: "1 strip",
-        empty: "No strips paired yet — add one to start building the room map.",
+        count_one: "1 strip",
+        count_other: "{{count}} strips",
+        empty: "No strips yet. Connect a controller above and its strip is added here.",
         stripName: "{{count}}-LED strip",
         noPort: "No port linked",
         offline: "OFFLINE",
-        ledCountLabel: "LEDs",
         portLabel: "Port",
-        addFirst: "+ Add LED strip",
-        addAnother: "+ Add another strip",
-        addDisabledNoPortsTooltip: "No serial ports detected. Plug in your controller and rescan.",
-        addDisabledAllPairedTooltip: "All discovered ports are already paired.",
-        formEmptyNoPorts: "No serial ports detected — plug in another USB controller and rescan.",
-        formEmptyAllPaired: "All discovered ports are already paired. Plug in another controller and rescan.",
-        rescan: "Rescan",
-        cancel: "Cancel",
-        confirmAdd: "Add",
+        noOtherPort: "No other supported port. Plug in another controller and rescan.",
         persistError: "Could not save the strip. Try again.",
         openInMap: "Open in map",
         changePort: "Change port",
-        changePortAriaLabel: "Change the USB port linked to this strip",
         changePortConfirm: "Save",
         changePortCancel: "Cancel",
       },
@@ -206,7 +206,7 @@ export default {
       cellScale: "Scale",
     },
     manual: {
-      body: "Manual device entry isn't available yet. Use Rescan above or check serial cables.",
+      body: "Manual device entry isn't available yet. To add a strip, rescan on USB Strips; a WLED device can be added by its IP address.",
     },
     wled: {
       title: "WLED Devices",

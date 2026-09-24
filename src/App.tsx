@@ -46,10 +46,8 @@ import { useCapturePermissionRecheck } from "./features/mode/state/useCapturePer
 import type { DeviceCategory } from "./features/settings/sections/DeviceSection";
 import { CAPTURE_FAILURE_BUCKET } from "./shared/contracts/capture";
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "./shared/contracts/hue";
-import {
-  shouldAutoOpenCalibrationOnConnection,
-  startCalibrationFromSettings,
-} from "./features/calibration/state/entryFlow";
+import { startCalibrationFromSettings } from "./features/calibration/state/entryFlow";
+import { useLedSetupPrompt } from "./features/calibration/state/useLedSetupPrompt";
 import { useDeviceConnection } from "./features/device/useDeviceConnection";
 import { useActiveWledSink, useWledSinkRestore } from "./features/device/useWledSink";
 import { deriveLocalSink } from "./features/device/localSink";
@@ -86,12 +84,6 @@ import {
   SECTION_IDS,
   type SectionId,
 } from "./shared/contracts/shell";
-
-/**
- * Marks that first-connect calibration has already been auto-opened. Session-scoped
- * so a WebView reload does not drop the user back into the editor unprompted.
- */
-const CALIBRATION_AUTO_OPENED_KEY = "lumasync_calibration_opened";
 
 const selectActiveSection = (state: NavigationState) => state.activeSection;
 const selectNoticeView = (state: NavigationState) => currentNoticeView(state);
@@ -143,12 +135,10 @@ function Shell() {
     () => deriveLocalSink(isConnected, connectedPort ?? null, activeWledIp, connectedProduct),
     [isConnected, connectedPort, activeWledIp, connectedProduct],
   );
-  const wasConnectedRef = useRef(false);
   // Defaults to `true` so a hydrating store never flashes the banner at a user
   // who has already dismissed it; bootstrap flips it false for a fresh install.
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(true);
   const [hasInteractedWithMode, setHasInteractedWithMode] = useState(false);
-  const autoOpenTriggeredRef = useRef(sessionStorage.getItem(CALIBRATION_AUTO_OPENED_KEY) === "1");
   const updateCheckRanRef = useRef(false);
 
   const { notice: hueColorNotice, report: reportHueSolidColorStatus } =
@@ -266,26 +256,14 @@ function Shell() {
     }
   }, [navigation, switchUIMode]);
 
-  // Auto-open calibration when device connects for the first time
-  useEffect(() => {
-    const shouldOpen = shouldAutoOpenCalibrationOnConnection({
-      connected: isConnected,
-      wasConnected: wasConnectedRef.current,
-      hasCalibration: Boolean(savedCalibration),
-      alreadyAutoOpened: autoOpenTriggeredRef.current,
-    });
-
-    if (shouldOpen) {
-      autoOpenTriggeredRef.current = true;
-      // The ref is seeded from this key on mount, so the write is what makes the
-      // guard outlive a WebView reload.
-      sessionStorage.setItem(CALIBRATION_AUTO_OPENED_KEY, "1");
-      setActiveSection(SECTION_IDS.LED_SETUP);
-    }
-
-    wasConnectedRef.current = isConnected;
-  }, [isConnected, savedCalibration, setActiveSection]);
-
+  // A first connect with no saved layout points at LED Setup; the user stays put.
+  const ledSetupNextPort = useLedSetupPrompt({
+    ready: bootstrapDone,
+    connected: isConnected,
+    connectedPort: connectedPort ?? null,
+    hasCalibration: savedCalibration !== undefined,
+    onLedSetup: activeSection === SECTION_IDS.LED_SETUP,
+  });
 
   // Global keyboard shortcuts — the behaviour behind every `<kbd>` badge in
   // `KEYBIND_REGISTRY`. The hook is disabled during a UI-mode fade: firing
@@ -371,7 +349,8 @@ function Shell() {
     onComplete: handleOnboardingComplete,
   });
 
-  const openDevicesSection = () => void handleSectionChange(SECTION_IDS.DEVICES);
+  const openDevicesSection = (category: DeviceCategory) =>
+    void handleSectionChange(SECTION_IDS.DEVICES, category);
 
   // The same inputs the layouts gate the mode buttons on, so the notice that
   // explains a dim button can never disagree with it.
@@ -439,6 +418,7 @@ function Shell() {
           usbUnsupportedHueFallback,
           hueColorNotice,
           onboardingStep: onboarding.step,
+          ledSetupNext: ledSetupNextPort,
           localTargetConfigured,
           updateCheckFailed: updateCheckFailedNotice,
           updateChecking: updaterStatus === "checking",
@@ -466,6 +446,7 @@ function Shell() {
       usbUnsupportedHueFallback,
       hueColorNotice,
       onboarding.step,
+      ledSetupNextPort,
       localTargetConfigured,
       updateCheckFailedNotice,
       updaterStatus,

@@ -122,8 +122,28 @@ https://keepachangelog.com/en/1.1.0/
   preview overlay (one per screen) and the test-pattern popup no longer load the settings screens,
   and the compact window no longer loads LED Setup, Devices or the room map until you open them.
   Only the interface language in use is loaded; the other one loads when you switch.
+- Devices → USB Strips is one path from top to bottom: the controller (your supported ports, each
+  with a Connect button), then Strip settings (firmware profile, LED chip type and colour order
+  together), then your paired strips. Connecting a controller adds its strip to the list, using the
+  LED count from LED Setup when there is one, so the separate "Add LED strip" form is gone. The
+  firmware profile moved here from the Lights page. After the first connect the app stays on
+  Devices and a notice points to LED Setup, instead of jumping there before you have seen the strip
+  settings. The rail groups read Devices and Other, and each badge counts what is active: a
+  connected strip, a streaming bridge, a bound WLED device.
 
 ### Fixed
+
+- Devices → USB Strips: serial ports that cannot drive LEDs, such as the Bluetooth port every Mac
+  lists, are no longer offered for connecting. They sit under a collapsed "Other serial ports",
+  and when nothing else is found the page says so and names the USB chips LumaSync supports. A
+  failed connect names the reason in your language (port busy, no permission, timed out) instead
+  of showing a generic error with English text, and a Rescan pressed too soon says to wait.
+  Port cards no longer show a made-up baud rate, protocol and latency. The SK6812 + Adalight
+  warning on the chip type now appears, the chip type tiles show a keyboard focus ring, and the
+  spacing and type on the page follow one rhythm.
+- Lights: the USB and Hue output toggles no longer look switched on beside "No strip connected"
+  or "Not configured". The saved choice is kept and shows again once the output is back.
+- The status bar's USB and Hue links open their own Devices category.
 
 - Windows: with "Show stats for nerds" on, live stats stop updating while the app sits in the tray
   or is minimised. Windows could keep telling the app its window was on screen after it was hidden,

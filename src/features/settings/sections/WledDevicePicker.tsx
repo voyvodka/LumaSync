@@ -232,13 +232,13 @@ export function WledDevicePicker({
 
       {/* Discovery result status */}
       {discoveryStatus && (
-        <Callout tone={discoveryStatus.code === WLED_STATUS.DISCOVERY_OK ? "ok" : "error"} className="mt-2">
+        <Callout tone={discoveryStatus.code === WLED_STATUS.DISCOVERY_OK ? "ok" : "error"}>
           {translateWledStatusCode(discoveryStatus.code, t) ?? discoveryStatus.message}
         </Callout>
       )}
 
       {/* Device cards */}
-      <div className="lm-device-grid mt-3">
+      <div className="lm-device-grid">
         {devices.length === 0 && !isDiscovering && discoveryStatus && (
           <EmptyState
             title={t("device:page.wled.empty.title")}
@@ -369,7 +369,7 @@ function WledRestoreBanner({
       : null;
 
   return (
-    <Callout tone={tone} className="mb-2">
+    <Callout tone={tone}>
       {headline}
       {reason ? " " + reason : null}
     </Callout>

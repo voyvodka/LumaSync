@@ -4,4 +4,6 @@
 # RoomMapEditor.test.tsx (50), LightsSection.test.tsx (48), DeviceSection.test.tsx (24).
 # 2026-09-24: LightsSection.test.tsx 48 → 24 — its link note stopped polling
 # telemetry, and the poll's ticks were what landed outside act.
-98
+# 2026-09-24: DeviceSection.test.tsx 24 → 0 — its rail tests settle the page's
+# store reads inside act.
+74

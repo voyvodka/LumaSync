@@ -1,6 +1,7 @@
 import type { TFunction } from "i18next";
 
 import type { LocalSink } from "@/features/device/localSink";
+import type { DeviceCategory } from "@/features/settings/sections/DeviceSection";
 import type { BootHueRetryState } from "@/shared/contracts/lightingRuntime";
 import { HUE_LEFT_OUT_REASON, type HueLeftOutReason } from "@/shared/contracts/lighting";
 import type { StatusItem } from "./StatusBar";
@@ -47,8 +48,8 @@ export interface StatusItemsInput {
   hueHeldOut?: HueHeldOut | null;
   hueReachable: boolean;
   hueConfigured: boolean;
-  /** Deep-link offered by any chip that is not in a healthy state. */
-  onOpenDevices: () => void;
+  /** Deep-link offered by any chip that is not in a healthy state, to that chip's category. */
+  onOpenDevices: (category: DeviceCategory) => void;
 }
 
 /** Status items for the bottom StatusBar, in mockup order (CAP / USB / HUE).
@@ -83,7 +84,7 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
       label: localSink?.transport === "wled" ? "WLED" : "USB",
       state: localConnected ? t("shell:statusBar.state.ok") : t("shell:statusBar.state.off"),
       kind: localConnected ? "ok" : "off",
-      onReconnect: localConnected ? undefined : onOpenDevices,
+      onReconnect: localConnected ? undefined : () => onOpenDevices("usb"),
       reconnectAriaLabel: t("shell:statusBar.reconnect.usbAriaLabel"),
     },
     {
@@ -121,7 +122,7 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
       onReconnect:
         hueReconnecting || hueStreaming || hueWaiting || (hueReachable && !hueFailed && !hueLeftOut)
           ? undefined
-          : onOpenDevices,
+          : () => onOpenDevices("hue"),
       reconnectAriaLabel: t("shell:statusBar.reconnect.hueAriaLabel"),
     },
   ];

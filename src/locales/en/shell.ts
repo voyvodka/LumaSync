@@ -105,6 +105,7 @@ export default {
       outputNoneStopped: "The Hue bridge didn't answer on this network — stopped looking for it",
       outputChecking: "Checking outputs…",
       calibrationRequired: "Calibration required — finish the LED layout to use this mode",
+      ledSetupNext: "Strip connected — next, tell LumaSync how many LEDs sit on each screen edge",
       onboarding: {
         lights: "Welcome — pick a lighting mode to get started",
         devices: "Connect a USB strip, WLED or Hue so the modes can send light",

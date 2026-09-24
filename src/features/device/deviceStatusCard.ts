@@ -185,6 +185,8 @@ export interface DeviceStatusCardInput {
   isReconnecting?: boolean;
   isHealthChecking?: boolean;
   latestHealthCheck?: HealthCheckView | null;
+  /** What enumerated, so the idle copy can say why there is nothing to connect. */
+  ports?: ReadonlyArray<{ isSupported: boolean }>;
 }
 
 // Minted advice renders through i18n; backend text stays verbatim.
@@ -250,22 +252,42 @@ export function buildDeviceStatusCard(input: DeviceStatusCardInput): DeviceStatu
   }
 
   if (input.statusCard?.variant === "error") {
+    const card = input.statusCard;
+    const known = card.detailsKey ? null : healthCodeCopy(card.code);
+    // A known connect code names itself in the user's language; only Rust's
+    // data (an OS error, a VID/PID) stays verbatim beneath it.
+    if (known) {
+      return {
+        variant: "error",
+        code: card.code,
+        titleKey: known.labelKey,
+        bodyKey: known.hintKey,
+        details: known.showDetails ? card.details : undefined,
+      };
+    }
     return {
       variant: "error",
-      code: input.statusCard.code,
+      code: card.code,
       titleKey: "device:status.errorTitle",
       bodyKey: "device:status.errorBody",
-      ...statusCardDetails(input.statusCard),
+      ...statusCardDetails(card),
     };
   }
+
+  // An info card the controller minted (a Rescan too soon, a cancelled
+  // recovery) is advice about the state below it, not a state of its own.
+  const hint =
+    input.statusCard?.variant === "info" && input.statusCard.detailsKey
+      ? { detailsKey: input.statusCard.detailsKey }
+      : {};
 
   if (input.statusCard?.variant === "success" || input.status === "connected") {
     return {
       variant: "success",
-      code: input.statusCard?.code ?? "CONNECTED",
+      code: input.statusCard?.variant === "success" ? input.statusCard.code : "CONNECTED",
       titleKey: "device:status.connectedTitle",
       bodyKey: "device:status.connectedBody",
-      details: input.connectedPort ?? undefined,
+      ...hint,
     };
   }
 
@@ -278,10 +300,31 @@ export function buildDeviceStatusCard(input: DeviceStatusCardInput): DeviceStatu
     };
   }
 
+  if (input.ports && input.ports.length === 0) {
+    return {
+      variant: "info",
+      code: "NO_PORTS",
+      titleKey: "device:status.noPortsTitle",
+      bodyKey: "device:status.noPortsBody",
+      ...hint,
+    };
+  }
+
+  if (input.ports && !input.ports.some((port) => port.isSupported)) {
+    return {
+      variant: "info",
+      code: "NO_SUPPORTED_PORTS",
+      titleKey: "device:status.noSupportedTitle",
+      bodyKey: "device:status.noSupportedBody",
+      ...hint,
+    };
+  }
+
   return {
     variant: "info",
     code: "IDLE",
     titleKey: "device:status.idleTitle",
     bodyKey: "device:status.idleBody",
+    ...hint,
   };
 }

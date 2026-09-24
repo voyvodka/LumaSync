@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import {
   deriveCalibrationOverlayEntry,
-  shouldAutoOpenCalibrationOnConnection,
+  shouldPromptLedSetupOnConnection,
   startCalibrationFromSettings,
 } from "../entryFlow";
 import {
@@ -33,40 +33,40 @@ const EXISTING_CALIBRATION: LedCalibrationConfig = {
 };
 
 describe("calibration entry flow", () => {
-  it("auto-open triggers once on first connection when calibration is missing", () => {
-    const firstConnect = shouldAutoOpenCalibrationOnConnection({
+  it("prompts on first connection when calibration is missing", () => {
+    const firstConnect = shouldPromptLedSetupOnConnection({
       connected: true,
       wasConnected: false,
       hasCalibration: false,
-      alreadyAutoOpened: false,
+      alreadyPrompted: false,
     });
 
     expect(firstConnect).toBe(true);
   });
 
-  it("hasCalibration bypass prevents auto-open on connection", () => {
-    const hasCalibration = shouldAutoOpenCalibrationOnConnection({
+  it("does not prompt when a calibration is saved", () => {
+    const hasCalibration = shouldPromptLedSetupOnConnection({
       connected: true,
       wasConnected: false,
       hasCalibration: true,
-      alreadyAutoOpened: false,
+      alreadyPrompted: false,
     });
 
     expect(hasCalibration).toBe(false);
   });
 
-  it("first connection transition only auto-opens once and ignores rerender", () => {
-    const firstTransition = shouldAutoOpenCalibrationOnConnection({
+  it("prompts on the first connection transition only and ignores rerender", () => {
+    const firstTransition = shouldPromptLedSetupOnConnection({
       connected: true,
       wasConnected: false,
       hasCalibration: false,
-      alreadyAutoOpened: false,
+      alreadyPrompted: false,
     });
-    const rerenderWhileConnected = shouldAutoOpenCalibrationOnConnection({
+    const rerenderWhileConnected = shouldPromptLedSetupOnConnection({
       connected: true,
       wasConnected: true,
       hasCalibration: false,
-      alreadyAutoOpened: true,
+      alreadyPrompted: true,
     });
 
     expect(firstTransition).toBe(true);

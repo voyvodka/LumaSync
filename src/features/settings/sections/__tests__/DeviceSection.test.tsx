@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -96,6 +96,18 @@ vi.mock("../HueChannelMapPanel", () => ({
 vi.mock("../control/LedChipTypePicker", () => ({
   LedChipTypePicker: () => <span>stub:chipTypePicker</span>,
 }));
+
+// The group's own store read and its profile/chip pickers are covered in
+// UsbStripsCategory.flow.test.tsx; here only the colour order control is
+// under test, so it is mounted directly with the transport the page derives.
+vi.mock("../device/UsbStripSettings", async () => {
+  const { LedColorOrderControl } = await import("../control/LedColorOrderControl");
+  return {
+    UsbStripSettings: ({ localTransport }: { localTransport: "serial" | "wled" | null }) => (
+      <LedColorOrderControl localTransport={localTransport} />
+    ),
+  };
+});
 
 function defaultDeviceConnectionState() {
   return {
@@ -413,37 +425,38 @@ describe("DeviceSection hue runtime controls", () => {
 // DeviceSection persist banner visibility
 // ---------------------------------------------------------------------------
 
+const SUPPORTED_PORT = { portName: "COM3", product: "CH340", manufacturer: "WCH", isSupported: true };
+
+/** A connected controller whose strip then fails to save into the roster. */
+function connectingDeviceState() {
+  return {
+    ...defaultDeviceConnectionState(),
+    ports: [SUPPORTED_PORT],
+    connectSelectedPort: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
+  };
+}
+
+async function connectFirstPort(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: "device:page.usb.connect" }));
+}
+
 describe("DeviceSection USB tab — persistError banner (A3.6)", () => {
   beforeEach(() => {
-    useDeviceConnectionMock.mockReturnValue({
-      ...defaultDeviceConnectionState(),
-      // One discovered port so the "Add strip" button is enabled.
-      ports: [{ portName: "COM3", product: "CH340", manufacturer: "WCH" }],
-    });
+    useDeviceConnectionMock.mockReturnValue(connectingDeviceState());
     useHueOnboardingMock.mockReturnValue(createHueHookState());
   });
 
-  it("shows persist error banner when shellStore.save rejects during USB strip add", async () => {
+  it("shows the persist error when the connected strip cannot be saved to the roster", async () => {
     const { shellStore } = await import("@/features/persistence/shellStore");
     vi.mocked(shellStore.save).mockRejectedValueOnce(new Error("disk full"));
 
     const user = userEvent.setup();
     render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
 
-    // USB tab is active by default. Click "Add first strip" to open the form.
-    const addBtn = await screen.findByText("device:page.usb.paired.addFirst");
-    await user.click(addBtn);
+    await connectFirstPort(user);
 
-    // Port pre-selected (COM3 from mock). Click "Confirm add" to trigger handleAddStrip.
-    const confirmBtn = await screen.findByText("device:page.usb.paired.confirmAdd");
-    await user.click(confirmBtn);
-
-    // persistError banner renders with role="status" aria-live="polite".
-    // t() returns the key directly (react-i18next mock above).
     await waitFor(() => {
-      expect(
-        screen.getByText("device:page.usb.paired.persistError")
-      ).toBeInTheDocument();
+      expect(screen.getByText("device:page.usb.paired.persistError")).toBeInTheDocument();
     });
   });
 
@@ -454,30 +467,17 @@ describe("DeviceSection USB tab — persistError banner (A3.6)", () => {
     const user = userEvent.setup();
     render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
 
-    const addBtn = await screen.findByText("device:page.usb.paired.addFirst");
-    await user.click(addBtn);
-    const confirmBtn = await screen.findByText("device:page.usb.paired.confirmAdd");
-    await user.click(confirmBtn);
+    await connectFirstPort(user);
 
-    // Wait for banner to appear with real timers (so waitFor works normally).
     await waitFor(() => {
-      expect(
-        screen.getByText("device:page.usb.paired.persistError")
-      ).toBeInTheDocument();
+      expect(screen.getByText("device:page.usb.paired.persistError")).toBeInTheDocument();
     });
 
-    // Wait for the 3 s auto-dismiss timer with real timers. Fake timers
-    // would have to be mounted BEFORE the click that triggers
-    // setTimeout(...3000) in setPersistError, which collides with
-    // userEvent + waitFor's expectation of real timers during the
-    // async click + render handshake. Sleeping ~3.1s here is the
-    // simplest correct path; the test still completes well under
-    // vitest's 10 s default timeout.
+    // Real timers: fake ones would have to be installed before the click that
+    // arms the 3 s dismissal, which collides with userEvent + waitFor.
     await waitFor(
       () => {
-        expect(
-          screen.queryByText("device:page.usb.paired.persistError"),
-        ).not.toBeInTheDocument();
+        expect(screen.queryByText("device:page.usb.paired.persistError")).not.toBeInTheDocument();
       },
       { timeout: 4000, interval: 100 },
     );
@@ -496,17 +496,11 @@ describe("DeviceSection — USB and Hue persist banners are independent", () => 
     const { shellStore } = await import("@/features/persistence/shellStore");
     vi.mocked(shellStore.save).mockReset().mockResolvedValue(undefined);
 
-    useDeviceConnectionMock.mockReturnValue({
-      ...defaultDeviceConnectionState(),
-      ports: [{ portName: "COM3", product: "CH340", manufacturer: "WCH" }],
-    });
+    useDeviceConnectionMock.mockReturnValue(connectingDeviceState());
     useHueOnboardingMock.mockReturnValue(createHueHookState());
   });
 
-  async function failUsbStripAdd(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(await screen.findByText("device:page.usb.paired.addFirst"));
-    await user.click(await screen.findByText("device:page.usb.paired.confirmAdd"));
-  }
+  const failUsbStripAdd = connectFirstPort;
 
   async function failHueChannelMove(user: ReturnType<typeof userEvent.setup>) {
     await user.click(await screen.findByText("stub:moveChannel"));
@@ -668,51 +662,96 @@ describe("the category rail counts what its labels say", () => {
   const badgeFor = (labelKey: string) =>
     screen.getByText(labelKey).closest("button")!.querySelector(".lm-device-cat-cnt");
 
+  // The page reads the store on mount; settling it inside act keeps those
+  // updates from landing after the assertion.
+  async function renderSettled(hueActive = false) {
+    const view = render(<DeviceSection onStopHueOutput={stopHueOutputMock} hueActive={hueActive} />);
+    await act(async () => {});
+    return view;
+  }
+
   beforeEach(() => {
     activeWledIpMock = null;
     useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
     useHueOnboardingMock.mockReturnValue(createHueHookState());
   });
 
-  it("counts strips, not every port that enumerates", () => {
-    // The badge sits on a button labelled "USB Strips". Counting the
-    // allowlist-rejected `/dev/cu.debug-console` alongside a real strip put a
-    // "2" next to a header reading "1 connected" on the same screen.
+  // Every badge means "active". A supported port that is merely plugged in
+  // put a "1" beside a header reading "No strips connected".
+  it("counts the connected strip, not the ports that enumerate", async () => {
     useDeviceConnectionMock.mockReturnValue({
       ...defaultDeviceConnectionState(),
       ports: [
-        { name: "/dev/cu.usbserial-1420", isSupported: true },
-        { name: "/dev/cu.debug-console", isSupported: false },
+        { portName: "/dev/cu.usbserial-1420", isSupported: true },
+        { portName: "/dev/cu.debug-console", isSupported: false },
       ],
     });
 
-    render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
+    const { unmount } = await renderSettled();
+    expect(badgeFor("device:page.rail.usbStrips")).toBeNull();
+    unmount();
 
-    expect(badgeFor("device:page.rail.usbStrips")).toHaveTextContent("1");
-  });
-
-  it("shows no strip badge when every port is unsupported", () => {
     useDeviceConnectionMock.mockReturnValue({
       ...defaultDeviceConnectionState(),
-      ports: [{ name: "/dev/cu.Bluetooth-Incoming-Port", isSupported: false }],
+      ports: [{ portName: "/dev/cu.usbserial-1420", isSupported: true }],
+      connectedPort: "/dev/cu.usbserial-1420",
+      isConnected: true,
+    });
+    await renderSettled();
+    expect(badgeFor("device:page.rail.usbStrips")).toHaveTextContent("1");
+    expect(screen.getByTestId("device-category-usb")).toHaveTextContent("device:page.rail.activeLabel");
+  });
+
+  it("shows no strip badge when every port is unsupported", async () => {
+    useDeviceConnectionMock.mockReturnValue({
+      ...defaultDeviceConnectionState(),
+      ports: [{ portName: "/dev/cu.Bluetooth-Incoming-Port", isSupported: false }],
     });
 
-    render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
+    await renderSettled();
 
     // Zero renders no badge at all, rather than a "0" chip.
     expect(badgeFor("device:page.rail.usbStrips")).toBeNull();
   });
 
-  it("counts a bound WLED panel, which was hardcoded to zero", () => {
+  // A paired bridge that is not streaming used to count too.
+  it("counts Hue only while it is active", async () => {
+    const { unmount } = await renderSettled();
+    expect(badgeFor("device:page.rail.hueBridges")).toBeNull();
+    unmount();
+
+    await renderSettled(true);
+    expect(badgeFor("device:page.rail.hueBridges")).toHaveTextContent("1");
+  });
+
+  it("never badges displays, which have no active state", async () => {
+    const { listDisplays } = await import("@/features/calibration/calibrationApi");
+    vi.mocked(listDisplays).mockResolvedValueOnce([
+      { id: "d1", label: "Built-in", width: 1920, height: 1080, x: 0, y: 0, scaleFactor: 2, isPrimary: true },
+    ]);
+
+    await renderSettled();
+
+    expect(await screen.findByText("Built-in")).toBeInTheDocument();
+    expect(badgeFor("device:page.rail.displays")).toBeNull();
+  });
+
+  it("heads the rail groups Devices and Other", async () => {
+    await renderSettled();
+    expect(screen.getByText("device:page.rail.devices")).toBeInTheDocument();
+    expect(screen.getByText("device:page.rail.other")).toBeInTheDocument();
+  });
+
+  it("counts a bound WLED panel, which was hardcoded to zero", async () => {
     activeWledIpMock = "192.168.1.42";
 
-    render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
+    await renderSettled();
 
     expect(badgeFor("device:page.rail.wled")).toHaveTextContent("1");
   });
 
-  it("shows no WLED badge when nothing is bound", () => {
-    render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
+  it("shows no WLED badge when nothing is bound", async () => {
+    await renderSettled();
 
     expect(badgeFor("device:page.rail.wled")).toBeNull();
   });

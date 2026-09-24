@@ -597,7 +597,10 @@
   box-shadow: 0 0 6px rgba(255, 176, 32, 0.6);
   transition: left 0.15s ease, background 0.15s ease;
 }
-.lm-out-row.is-off .tg::after {
+/* Unavailable reads as off whatever the saved selection says: nothing is
+   sent to an output that is not there. */
+.lm-out-row.is-off .tg::after,
+.lm-out-row.is-unavailable .tg::after {
   left: 1px;
   background: #3a3f48;
   box-shadow: none;

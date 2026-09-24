@@ -17,7 +17,7 @@ export interface UseDeviceConnectionResult extends DeviceConnectionControllerSta
   isConnected: boolean;
   refreshPorts: () => Promise<void>;
   selectPort: (portName: string | null) => void;
-  connectSelectedPort: () => Promise<void>;
+  connectSelectedPort: () => Promise<boolean>;
   runHealthCheck: () => Promise<void>;
 }
 

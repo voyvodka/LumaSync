@@ -20,10 +20,8 @@
    ────────────────────────────────────────────────────────────────── */
 
 /* Outer card sits in the same DeviceSection column as `.lm-settings-group`
-   and adopts the same shell so they read as one continuous surface. */
-.lm-chmap {
-  margin-top: 12px;
-}
+   and adopts the same shell so they read as one continuous surface. Its
+   spacing is the grid's gap, never a margin of its own. */
 .lm-chmap-body {
   display: flex;
   flex-direction: column;

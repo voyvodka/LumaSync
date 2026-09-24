@@ -128,9 +128,11 @@ const CalibrationPanel = memo(function CalibrationPanel({
 });
 
 const selectDeviceCategoryRequest = (state: NavigationState) => state.deviceCategoryRequest;
+const selectHueActive = (status: HueShellStatus) => status.configured && status.streaming;
 
 const DevicesPanel = memo(function DevicesPanel() {
   const categoryRequest = useNavigationState(selectDeviceCategoryRequest);
+  const hueActive = useHueShellStatus(selectHueActive);
   const reportVisibleCategory = useVisibleDeviceCategoryReporter();
   const { goToSection } = useNavigationActions();
   const { stopHueOutput } = useLightingActions();
@@ -142,6 +144,7 @@ const DevicesPanel = memo(function DevicesPanel() {
         onStopHueOutput={stopHueOutput}
         categoryRequest={categoryRequest}
         onVisibleCategoryChange={reportVisibleCategory}
+        hueActive={hueActive}
       />
     </div>
   );

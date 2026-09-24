@@ -11,11 +11,11 @@ interface DeriveCalibrationOverlayEntryInput {
   savedCalibration?: LedCalibrationConfig;
 }
 
-interface AutoOpenOnConnectionInput {
+interface PromptOnConnectionInput {
   connected: boolean;
   wasConnected: boolean;
   hasCalibration: boolean;
-  alreadyAutoOpened: boolean;
+  alreadyPrompted: boolean;
 }
 
 export function deriveCalibrationOverlayEntry(
@@ -45,10 +45,15 @@ export function startCalibrationFromSettings(
   };
 }
 
-export function shouldAutoOpenCalibrationOnConnection(
-  input: AutoOpenOnConnectionInput,
+/**
+ * A strip just connected and no LED layout is saved: the moment to point at
+ * LED Setup. A prompt, never a navigation — the user stays on the page they
+ * connected from.
+ */
+export function shouldPromptLedSetupOnConnection(
+  input: PromptOnConnectionInput,
 ): boolean {
-  if (input.alreadyAutoOpened || input.hasCalibration) {
+  if (input.alreadyPrompted || input.hasCalibration) {
     return false;
   }
 

@@ -130,8 +130,11 @@
   gap: 18px;
   min-height: 0;
 }
+/* The gap is the vertical rhythm: a child that adds its own block margin
+   doubles it for that one seam. */
 .lm-device-cat-body > * {
   flex-shrink: 0;
+  margin-block: 0;
 }
 .lm-device-main > * {
   flex-shrink: 0;
@@ -163,23 +166,6 @@
 .lm-dcard.is-on {
   border-color: rgba(255, 176, 32, 0.3);
   background: linear-gradient(180deg, rgba(255, 176, 32, 0.04), transparent 40%);
-}
-.lm-dcard[aria-pressed="true"]:not(.is-on) {
-  border-color: rgba(255, 176, 32, 0.55);
-  background: linear-gradient(180deg, rgba(255, 176, 32, 0.07), transparent 50%);
-  box-shadow: 0 0 0 1px rgba(255, 176, 32, 0.35), 0 8px 24px -12px rgba(255, 176, 32, 0.4);
-}
-.lm-dcard[role="button"] {
-  cursor: pointer;
-  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
-}
-.lm-dcard[role="button"]:hover:not(.is-on):not([aria-pressed="true"]) {
-  border-color: #2c3440;
-  background: #101319;
-}
-.lm-dcard[role="button"]:focus-visible {
-  outline: none;
-  box-shadow: var(--lm-focus-ring);
 }
 .lm-dcard::after {
   content: "";
@@ -387,38 +373,6 @@
     outline-offset: 1px;
     box-shadow: none;
   }
-}
-
-/* Ghost card pair button */
-.lm-dcard-pair {
-  all: unset;
-  box-sizing: border-box;
-  display: block;
-  margin-top: 4px;
-  padding: 9px;
-  text-align: center;
-  border: 1px solid rgba(255, 176, 32, 0.35);
-  border-radius: 7px;
-  color: var(--lm-amber);
-  background: rgba(255, 176, 32, 0.05);
-  font-family: var(--lm-mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  cursor: pointer;
-  font-weight: 500;
-  transition: background 120ms ease;
-}
-.lm-dcard-pair:hover:not(:disabled) {
-  background: rgba(255, 176, 32, 0.12);
-}
-.lm-dcard-pair:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.lm-dcard-pair:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.35);
 }
 
 /* ── Hue bridge card — additional state variants ───────────────────── */
@@ -958,3 +912,187 @@
 .lm-hue-ip-submit:hover:not(:disabled) { background: rgba(255, 176, 32, 0.12); }
 .lm-hue-ip-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 .lm-hue-ip-error { font-family: var(--lm-mono); font-size: 10px; color: var(--lm-red); letter-spacing: 0.04em; }
+
+/* ── Devices → USB ──────────────────────────────────────────────────── */
+/* A group body on the Devices page: the same inset as the group header. */
+.lm-usb-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px 16px;
+}
+/* The connection banner: group radius, header inset. Tone comes from
+   `.lm-status-banner` (hue-channel-map.css). */
+.lm-usb-status {
+  border-radius: 10px;
+  padding: 11px 16px;
+}
+.lm-usb-status-title {
+  margin: 0;
+  font-family: var(--lm-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--lm-ink);
+}
+.lm-usb-status-body {
+  margin: 3px 0 0;
+  font-family: var(--lm-sans);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--lm-ink-dim);
+}
+/* Backend data (an OS error, a VID/PID), never prose. */
+.lm-usb-status-detail {
+  margin: 4px 0 0;
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--lm-ink-faint);
+  overflow-wrap: anywhere;
+}
+.lm-usb-status-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.lm-usb-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--lm-line-2);
+  border-radius: 7px;
+  background: var(--lm-panel-2);
+}
+.lm-usb-step-tx {
+  flex: 1;
+  min-width: 0;
+}
+.lm-usb-step-name {
+  margin: 0;
+  font-family: var(--lm-sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--lm-ink);
+}
+.lm-usb-step-line {
+  margin: 2px 0 0;
+  font-family: var(--lm-sans);
+  font-size: 11px;
+  color: var(--lm-ink-dim);
+}
+.lm-usb-step-hint {
+  margin: 2px 0 0;
+  font-family: var(--lm-sans);
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--lm-ink-faint);
+}
+.lm-usb-step-outcome {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.lm-usb-step-outcome.is-pass {
+  color: var(--lm-green);
+  background: rgba(74, 222, 128, 0.12);
+}
+.lm-usb-step-outcome.is-fail {
+  color: var(--lm-red);
+  background: rgba(239, 91, 91, 0.12);
+}
+
+/* "Other serial ports": a disclosure whose marker leads the title, as in the
+   settings groups, with the count pushed to the far edge. */
+.lm-usb-other {
+  border: 1px solid var(--lm-line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.015);
+}
+.lm-usb-other-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim);
+}
+.lm-usb-other-h::-webkit-details-marker {
+  display: none;
+}
+.lm-usb-other-h::before {
+  content: "\25B8";
+  color: var(--lm-ink-faint);
+  transition: transform 120ms ease-out;
+}
+.lm-usb-other[open] > .lm-usb-other-h::before {
+  transform: rotate(90deg);
+}
+.lm-usb-other-h:hover {
+  color: var(--lm-ink);
+}
+.lm-usb-other-h:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring);
+}
+.lm-usb-other-count {
+  margin-left: auto;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--lm-ink-faint);
+}
+.lm-usb-other-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 2px 14px 14px;
+}
+/* Cards keep their own height: a long port name wrapping in one must not
+   stretch the other into an empty box. */
+.lm-usb-other-body .lm-device-grid {
+  align-items: start;
+}
+.lm-usb-other-hint {
+  margin: 0;
+  font-family: var(--lm-sans);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--lm-ink-dim);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-usb-other-h::before {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .lm-usb-other,
+  .lm-usb-step {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .lm-usb-other-h:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+    box-shadow: none;
+  }
+  .lm-usb-step-outcome {
+    border: 1px solid CanvasText;
+  }
+}

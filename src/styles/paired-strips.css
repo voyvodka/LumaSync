@@ -1,64 +1,49 @@
-/* ─────────────────────────────────────────────────────────────────────
-   Devices section "Paired strips" sub-card
-   ─────────────────────────────────────────────────────────────────────
-   Surfaces every persisted UsbStripPlacement under the USB ports grid,
-   with a live connection chip and a deep-link to open the strip in the
-   room map editor. Reuses the existing `.lm-dcard` shell so the
-   styling stays consistent with the rest of the Devices grid.
-   ────────────────────────────────────────────────────────────────── */
-.lm-paired-strips {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 8px;
-}
-.lm-paired-strips-h {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--lm-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+/* Devices → USB, "Paired strips": every persisted UsbStripPlacement with the
+   port that drives it. Type follows the device cards, not a smaller scale. */
+.lm-paired-strips-empty {
+  margin: 0;
+  font-family: var(--lm-sans);
+  font-size: 11.5px;
+  line-height: 1.45;
   color: var(--lm-ink-dim);
 }
-.lm-paired-strips-h-count {
-  margin-left: auto;
-  font-size: 9.5px;
-  letter-spacing: 0.04em;
-  color: var(--lm-ink-faint);
-  text-transform: none;
-}
+/* Three cells: the actions share one, so a second button wraps inside it
+   instead of dropping under the icon and widening that column. */
 .lm-paired-strip {
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 6px;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
   border: 1px solid var(--lm-line);
-  background: var(--lm-panel);
+  background: var(--lm-panel-2);
 }
 .lm-paired-strip-ic {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
-  border-radius: 5px;
+  border-radius: 7px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--lm-line-2);
   color: var(--lm-ink-dim);
 }
+.lm-paired-strip-ic svg {
+  width: 18px;
+  height: 18px;
+}
 .lm-paired-strip-tx {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
 }
 .lm-paired-strip-name {
   font-family: var(--lm-sans);
-  font-size: 11.5px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--lm-ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -66,62 +51,45 @@
 }
 .lm-paired-strip-sub {
   font-family: var(--lm-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.04em;
-  color: var(--lm-ink-faint);
-}
-/* Inline port editor inside a paired-strip card. Replaces
-   the read-only `.lm-paired-strip-sub` line with a dropdown when the
-   user clicks Change port. The select sits flush with the strip name
-   above it; Save / Cancel buttons reuse the action-button row that
-   normally renders the connection chip and Open-in-map link. */
-.lm-paired-strip-port-editor {
-  display: flex;
-  align-items: center;
-  margin-top: 2px;
-}
-.lm-paired-strip-port-editor .lm-paired-strip-form-select {
-  flex: 1 1 auto;
-  min-height: 26px;
-  font-size: 10.5px;
-}
-.lm-paired-strip-action {
-  all: unset;
-  cursor: pointer;
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: 6px;
-  border: 1px solid var(--lm-line-2);
-  background: rgba(255, 255, 255, 0.02);
-  color: var(--lm-ink-dim);
-  font-family: var(--lm-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.lm-paired-strip-action:hover {
-  color: var(--lm-amber);
-  border-color: rgba(255, 176, 32, 0.32);
-  background: rgba(255, 176, 32, 0.08);
-}
-.lm-paired-strip-action:focus-visible {
-  outline: none;
-  box-shadow: var(--lm-focus-ring-soft);
-}
-.lm-paired-strips-empty {
-  padding: 14px 10px;
-  text-align: center;
-  font-family: var(--lm-mono);
   font-size: 10px;
-  color: var(--lm-ink-faint);
   letter-spacing: 0.02em;
+  color: var(--lm-ink-faint);
+  overflow-wrap: anywhere;
+}
+.lm-paired-strip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.lm-paired-strip-select {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 0 8px;
+  border-radius: 7px;
+  border: 1px solid var(--lm-line-2);
+  background: var(--lm-bg);
+  color: var(--lm-ink);
+  font-family: var(--lm-mono);
+  font-size: 10.5px;
+  outline: none;
+}
+.lm-paired-strip-select:focus-visible {
+  border-color: rgba(255, 176, 32, 0.55);
+  box-shadow: var(--lm-focus-ring-soft);
 }
 @media (forced-colors: active) {
   .lm-paired-strip,
-  .lm-paired-strip-action,
-  .lm-paired-strip-ic {
+  .lm-paired-strip-ic,
+  .lm-paired-strip-select {
     border-color: CanvasText;
     background: Canvas;
     color: CanvasText;
+  }
+  .lm-paired-strip-select:focus-visible {
+    outline: 2px solid Highlight;
+    box-shadow: none;
   }
 }

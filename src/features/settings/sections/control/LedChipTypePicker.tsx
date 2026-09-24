@@ -5,12 +5,13 @@
  * (3-byte, default, backward-compat) and SK6812 RGBW (4-byte with
  * host-side W = min(R,G,B) extraction).
  *
- * Selection is persisted to `shellStore.selectedChipType`. On next
- * `connect_serial_port` the chip type is read from the store and forwarded
- * to `SerialSink::with_chip_type` on the Rust side.
+ * Selection is persisted to `shellStore.selectedChipType`. The save alone
+ * reaches a running strip: Rust re-applies the mode once a setting it reads
+ * is saved, and rebuilds the encoder from the stored chip type
+ * (docs/architecture/lighting-transaction.md).
  *
  * Constraint: SK6812 RGBW + Adalight profile is a firmware mismatch.
- * When the user selects SK6812 while Adalight is active, a tooltip warning
+ * When the user selects SK6812 while Adalight is active, a warning line
  * is surfaced (the Rust fallback path already handles this gracefully by
  * falling back to WS2812B encoding — this is a visible hint only).
  *
@@ -23,7 +24,7 @@
  *   - Arrow-key navigation between tiles (Left/Right, Up/Down).
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -75,69 +76,22 @@ function ChipTile({
       onKeyDown={onKeyNavigate}
       data-chip-type={chipType}
       data-mismatched={firmwareMismatch ? "true" : undefined}
-      style={{
-        all: "unset",
-        cursor: "pointer",
-        display: "flex",
-        flexDirection: "column",
-        gap: 6,
-        padding: "12px 14px",
-        borderRadius: 8,
-        border: `1px solid ${checked ? "rgba(255, 176, 32, 0.4)" : "var(--lm-line-2)"}`,
-        background: checked ? "rgba(255, 176, 32, 0.08)" : "#0a0c0f",
-        color: checked ? "var(--lm-amber)" : "var(--lm-ink)",
-        flex: 1,
-        minWidth: 0,
-      }}
+      className="lm-strip-tile"
     >
-      <div
-        style={{
-          fontSize: 12.5,
-          fontWeight: 600,
-          letterSpacing: "-0.005em",
-          color: checked ? "var(--lm-amber)" : "var(--lm-ink)",
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          fontFamily: "var(--lm-mono)",
-          fontSize: 10,
-          color: "var(--lm-ink-dim)",
-          lineHeight: 1.45,
-        }}
-      >
-        {description}
-      </div>
-      {warning && (
-        <div
-          style={{
-            fontFamily: "var(--lm-mono)",
-            fontSize: 9.5,
-            color: checked ? "var(--lm-amber)" : "var(--lm-ink-faint)",
-            letterSpacing: "0.02em",
-            marginTop: 2,
-          }}
-          title={warning}
-        >
-          {"⚠ "}{warning}
-        </div>
-      )}
-      {firmwareMismatch && (
-        <div
-          style={{
-            fontFamily: "var(--lm-mono)",
-            fontSize: 9.5,
-            color: "var(--lm-amber)",
-            letterSpacing: "0.02em",
-            marginTop: 2,
-          }}
-          title={firmwareMismatch}
-        >
-          {"⚠ "}{firmwareMismatch}
-        </div>
-      )}
+      <span className="lm-strip-tile-name">{label}</span>
+      <span className="lm-strip-tile-desc is-data">{description}</span>
+      {warning ? (
+        <span className="lm-strip-tile-note is-warn">
+          <span aria-hidden="true">⚠ </span>
+          {warning}
+        </span>
+      ) : null}
+      {firmwareMismatch ? (
+        <span className="lm-strip-tile-note is-warn">
+          <span aria-hidden="true">⚠ </span>
+          {firmwareMismatch}
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -147,7 +101,7 @@ export interface LedChipTypePickerProps {
   initialChipType?: LedChipType;
   /**
    * Current firmware profile — used to surface the SK6812+Adalight
-   * compatibility warning tooltip. Does not block selection.
+   * compatibility warning. Does not block selection.
    */
   firmwareProfile?: FirmwareProfile;
   /**
@@ -166,6 +120,7 @@ export function LedChipTypePicker({
   onChipTypeChange,
 }: LedChipTypePickerProps) {
   const { t } = useTranslation();
+  const titleId = useId();
   const advertisedFromBus = useAdvertisedPixelLayout();
   const advertisedLayout = advertisedFromProp ?? advertisedFromBus;
   const [chipType, setChipType] = useState<LedChipType>(
@@ -248,21 +203,10 @@ export function LedChipTypePicker({
       : undefined;
 
   return (
-    <section className="lm-settings-group">
-      <div className="lm-settings-group-h">
-        <span className="t">{t("lights:led.chipType.label")}</span>
-        <span className="sub">{t("lights:led.chipType.description")}</span>
-      </div>
-      <div
-        role="radiogroup"
-        aria-label={t("lights:led.chipType.label")}
-        style={{
-          display: "flex",
-          gap: 10,
-          padding: 14,
-          flexWrap: "wrap",
-        }}
-      >
+    <div className="lm-strip-setting" role="group" aria-labelledby={titleId}>
+      <h3 className="lm-strip-setting-h" id={titleId}>{t("lights:led.chipType.label")}</h3>
+      <p className="lm-strip-setting-desc">{t("lights:led.chipType.description")}</p>
+      <div role="radiogroup" aria-label={t("lights:led.chipType.label")} className="lm-strip-tiles">
         <ChipTile
           chipType={LED_CHIP_TYPE.WS2812B_GRB}
           label={t("lights:led.chipType.options.ws2812b")}
@@ -289,6 +233,6 @@ export function LedChipTypePicker({
           tileRef={sk6812Ref}
         />
       </div>
-    </section>
+    </div>
   );
 }

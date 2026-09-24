@@ -1,19 +1,16 @@
-/* LED colour order (Devices → USB). Narrow-first: every row wraps, so the
-   flow fits a 320 px window as well as the full devices pane. */
+/* LED colour order (Devices → USB, a Strip settings block). Narrow-first:
+   every row wraps, so the flow fits a 320 px window as well as the full
+   devices pane. */
 .lm-color-order-body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px 14px 14px;
-}
-.lm-color-order > .lm-color-order-note {
-  padding: 12px 14px 14px;
 }
 .lm-color-order-note {
   margin: 0;
-  font-family: var(--lm-mono);
-  font-size: 10px;
-  line-height: 1.5;
+  font-family: var(--lm-sans);
+  font-size: 11px;
+  line-height: 1.45;
   color: var(--lm-ink-dim);
 }
 .lm-color-order-current {
@@ -121,8 +118,8 @@
   gap: 8px;
   padding-top: 10px;
   border-top: 1px solid var(--lm-line);
-  font-family: var(--lm-mono);
-  font-size: 10px;
+  font-family: var(--lm-sans);
+  font-size: 11px;
   color: var(--lm-ink-dim);
 }
 .lm-color-order-manual .lm-settings-select {

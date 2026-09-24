@@ -154,24 +154,20 @@ export function LedColorOrderControl({
 
   if (localTransport === "wled") {
     return (
-      <section className="lm-settings-group lm-color-order" aria-labelledby={titleId}>
-        <div className="lm-settings-group-h">
-          <span className="t" id={titleId}>{t("lights:led.colorOrder.label")}</span>
-        </div>
-        <p className="lm-color-order-note">{t("lights:led.colorOrder.wledHint")}</p>
-      </section>
+      <div className="lm-strip-setting lm-color-order" role="group" aria-labelledby={titleId}>
+        <h3 className="lm-strip-setting-h" id={titleId}>{t("lights:led.colorOrder.label")}</h3>
+        <p className="lm-strip-setting-desc">{t("lights:led.colorOrder.wledHint")}</p>
+      </div>
     );
   }
 
   const canIdentify = localTransport === "serial";
 
   return (
-    <section className="lm-settings-group lm-color-order" aria-labelledby={titleId}>
-      <div className="lm-settings-group-h">
-        <span className="t" id={titleId}>{t("lights:led.colorOrder.label")}</span>
-      </div>
+    <div className="lm-strip-setting lm-color-order" role="group" aria-labelledby={titleId}>
+      <h3 className="lm-strip-setting-h" id={titleId}>{t("lights:led.colorOrder.label")}</h3>
       <div className="lm-color-order-body">
-        <p className="lm-color-order-note">{t("lights:led.colorOrder.description")}</p>
+        <p className="lm-strip-setting-desc">{t("lights:led.colorOrder.description")}</p>
 
         <div className="lm-color-order-current">
           <span className="lm-color-order-code" aria-label={t("lights:led.colorOrder.currentAria", { order: orderCode(order) })}>
@@ -180,9 +176,10 @@ export function LedColorOrderControl({
           {order === DEFAULT_LED_COLOR_ORDER ? (
             <span className="lm-color-order-tag">{t("lights:led.colorOrder.defaultTag")}</span>
           ) : null}
+          {/* Amber only while it can run: a disabled primary still reads as the next step. */}
           <Button
             size="md"
-            variant="primary"
+            variant={canIdentify && !flowOpen ? "primary" : "secondary"}
             ref={identifyButtonRef}
             className="lm-color-order-identify"
             onClick={identify.begin}
@@ -240,7 +237,7 @@ export function LedColorOrderControl({
           <Callout tone="error">{t("lights:led.colorOrder.identify.errors.saveFailed")}</Callout>
         ) : null}
       </div>
-    </section>
+    </div>
   );
 }
 

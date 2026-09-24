@@ -211,6 +211,13 @@ describe("LedColorOrderControl surface", () => {
     const button = await screen.findByRole("button", { name: `${K}.button` });
     expect(button).toBeDisabled();
     expect(button).toHaveAccessibleDescription(`${K}.needsStrip`);
+    // A disabled amber button was the one primary on the page, pointing at a dead end.
+    expect(button).not.toHaveClass("is-primary");
+  });
+
+  it("is the primary action once a strip can run it", async () => {
+    renderControl("serial");
+    expect(await screen.findByRole("button", { name: `${K}.button` })).toHaveClass("is-primary");
   });
 
   it("the manual selector saves before it retunes", async () => {

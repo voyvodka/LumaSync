@@ -78,7 +78,7 @@ export default {
       kelvinHint: "Lower = warmer, higher = cooler",
     },
     chipType: {
-      label: "LED Chip Type",
+      label: "LED chip type",
       description: "SK6812 RGBW strips include a dedicated white LED for cleaner whites.",
       options: {
         ws2812b: "WS2812B / WS2811 (3-channel)",
@@ -132,7 +132,7 @@ export default {
       },
     },
     firmwareProfile: {
-      title: "Firmware Profile",
+      title: "Firmware profile",
       description: "Choose the serial protocol that matches your LED controller firmware.",
       lumasyncV1Label: "LumaSync v1",
       lumasyncV1Description: "Native LumaSync protocol with health check and telemetry.",

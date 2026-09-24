@@ -31,6 +31,7 @@
 @import "./styles/paired-strips.css" layer(components);
 @import "./styles/room-map-menu.css" layer(components);
 @import "./styles/strip-pairing.css" layer(components);
+@import "./styles/strip-settings.css" layer(components);
 @import "./styles/preview.css" layer(components);
 @import "./styles/telemetry.css" layer(components);
 @import "./styles/led-color-order.css" layer(components);
