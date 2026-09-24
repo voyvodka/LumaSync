@@ -41,6 +41,11 @@ https://keepachangelog.com/en/1.1.0/
 - The confirmations for leaving LED Setup with unsaved changes and for overriding the firmware
   profile look like the rest of the app's dialogs. Clicking outside the LED Setup one keeps
   editing, like Escape.
+- Hue, Lights and WLED messages have the app's one inline look, a small dot and one sentence:
+  the results of saving or reading Hue channel positions on the bridge, the Hue note in the LED
+  test popup, the USB link-limit note on the Lights page, and the WLED discovery and restore
+  messages. The bridge save and read confirmations use the app's shared dialog, and the Hue page's
+  buttons and status pills match the other device pages.
 - Hue: the app checks the bridge less often and from one place, so opening Devices beside the
   main view no longer doubles the traffic, and nothing asks the bridge at all while the app sits in
   the tray with Hue off. The Hue chip, the Devices card and the notices now follow a stream started
@@ -121,6 +126,12 @@ https://keepachangelog.com/en/1.1.0/
 ### Fixed
 
 - Ambilight: the saturation slider now reaches Hue lamps too; it only affected the strip before.
+- Hue: the spinners while pairing and reconnecting now slow down when Reduce Motion is on; the
+  setting never reached them before.
+- Screen readers: the manual bridge IP field on the Hue page has a name, and the entertainment-area
+  list, the compact window's scene tiles and the room map's "Move to" menu say which item is
+  chosen instead of showing it only by colour. An area another app is streaming to is announced
+  as unavailable.
 - Ambilight: at the heaviest smoothing a strip could stop a few steps short of the colour on
   screen and stay there. It now always arrives.
 - LED control popup: Off now turns your Hue lights off as well as the strip, Solid and Ambilight
