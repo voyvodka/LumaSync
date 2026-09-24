@@ -125,6 +125,11 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- LED Setup: while the test pattern's overlay is moving to a monitor, the monitor list and the test
+  pattern button now wait for it, as an earlier release said they would; they never did. Picking a
+  monitor in that moment saved it as the capture source while the overlay landed on the other
+  screen, and a second press of the button started a second test. The buttons stay focusable, so a
+  keyboard user is not sent back to the top of the page.
 - USB strips: the hint under a missing port or a timed-out reconnect was always in English. It now
   follows the app language.
 - Ambilight: the saturation slider now reaches Hue lamps too; it only affected the strip before.

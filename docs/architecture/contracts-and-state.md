@@ -69,7 +69,9 @@ through `migrations.ts`. Stored keys follow `ShellState` in `shell.ts`.
 **Import layers are lint-enforced.** `biome.json` (`noRestrictedImports`, run by `bun run lint`)
 holds three rules. `@tauri-apps/*` is imported only by a feature's `*Api.ts` bridge and
 `shared/ipcApi.ts` (the typed `invoke`), plus `main.tsx` (the log bridge and window-label routing, before any feature loads),
-`shell/windowLifecycle.ts` (window geometry and the store) and `tray/trayController.ts` (tray events
+the main window's driver — `shell/windowLifecycle.ts`, `windowGeometry.ts` and `windowAnimator.ts`
+(boot, geometry and the mode resize; the store behind them, `windowShellState.ts`, goes through
+`persistence/shellStateApi.ts`) — and `tray/trayController.ts` (tray events
 and autostart) — a component or hook that wants the window, an event or a plugin goes through a
 bridge, so a test can mock one module and a capability audit has one caller to read. Events use a
 `*EventsApi.ts` beside the command bridge. `plugin-store` is opened only by `windowLifecycle.ts`,
