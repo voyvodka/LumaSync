@@ -1,6 +1,7 @@
 //! Where the worker samples the screen: the black-border cache, the Hue
 //! position windows and the per-channel sample table.
 
+use std::ops::Range;
 use std::time::{Duration, Instant};
 
 use log::{info, warn};
@@ -62,6 +63,10 @@ impl BlackBorderCache {
     }
 }
 
+/// The picture inside the black-border bars as half-open `(rows, cols)` pixel
+/// ranges — what [`BlackBorderInsets::content_bounds`] returns.
+pub(super) type ContentBounds = (Range<usize>, Range<usize>);
+
 /// Continuous position-based colour sampling for Hue entertainment channels.
 ///
 /// Instead of mapping to 5 discrete regions (Top/Bottom/Left/Right/Center),
@@ -75,11 +80,15 @@ impl BlackBorderCache {
 ///
 /// The sampling window is 30% of content area dimensions, centered on the
 /// position. Sub-sampled every 8 pixels for speed.
+///
+/// `content` is [`BlackBorderInsets::content_bounds`] for this frame. The
+/// caller computes it once per frame and hands it to every channel, rather
+/// than each channel re-deriving the same rectangle from the insets.
 pub(super) fn sample_screen_position_avg(
     frame: &CapturedFrame,
     pos_x: f32,
     pos_y: f32,
-    insets: &BlackBorderInsets,
+    content: &ContentBounds,
 ) -> (u8, u8, u8) {
     let w = frame.width as usize;
     let h = frame.height as usize;
@@ -90,15 +99,8 @@ pub(super) fn sample_screen_position_avg(
     const WINDOW_FRAC: f32 = 0.30; // 30% of content dimension
     const STEP: usize = 8;
 
-    // Content area bounds (excluding black borders).
-    let ct = (h as f32 * insets.top) as usize;
-    let cb = h
-        .saturating_sub((h as f32 * insets.bottom) as usize)
-        .max(ct + 1);
-    let cl = (w as f32 * insets.left) as usize;
-    let cr = w
-        .saturating_sub((w as f32 * insets.right) as usize)
-        .max(cl + 1);
+    let (rows, cols) = content;
+    let (ct, cb, cl, cr) = (rows.start, rows.end, cols.start, cols.end);
     let cw = (cr - cl) as f32;
     let ch = (cb - ct) as f32;
 

@@ -9,9 +9,34 @@ use std::time::{Duration, Instant};
 
 use super::super::frame::{HueAreaChannel, HueColorSender, HueMotion, HueScreenRegion};
 use super::http_fallback::{
-    flatten_light_slots, run_http_fallback_loop, LightPutOutcome, LightPutSink, RequestPacer,
-    HUE_HTTP_FALLBACK_MAX_INTERVAL_MS,
+    flatten_light_slots, run_http_fallback_loop, LightPutOutcome, LightPutSink, LightState,
+    RequestPacer, HUE_HTTP_FALLBACK_MAX_INTERVAL_MS,
 };
+use crate::commands::led_output::EncoderPlan;
+
+/// The fallback's `color.xy` is the chromaticity of the linear colour it was
+/// handed. Reference: skin tone (224, 172, 105) → `(v/255)^2.2` =
+/// (0.7519, 0.4205, 0.1420) → Hue's wide-gamut matrix → (0.4666, 0.3981);
+/// the fallback's `u8` rounding moves that by under 0.002. Before the fix a
+/// second EOTF made it (0.5750, 0.3816), a saturated orange, and mid-grey kept
+/// its white point only because equal channels stay equal.
+#[test]
+fn http_fallback_xy_is_the_chromaticity_of_the_linear_colour() {
+    let plan = EncoderPlan::default();
+    for (srgb, (ex, ey)) in [
+        ([224u8, 172, 105], (0.4666, 0.3981)),
+        ([255, 128, 0], (0.6100, 0.3761)),
+        ([128, 128, 128], (0.3227, 0.3290)),
+    ] {
+        let linear = plan.correct_precise(srgb.map(f32::from));
+        let (x, y, dimming) = LightState::new(linear, 0.5).to_put_args();
+        assert!(
+            (x - ex).abs() < 2e-3 && (y - ey).abs() < 2e-3,
+            "{srgb:?}: xy ({x:.4}, {y:.4}), expected ({ex}, {ey})"
+        );
+        assert!((dimming - 50.2).abs() < 0.1, "dimming {dimming}");
+    }
+}
 
 // -----------------------------------------------------------------------
 // HTTP-fallback request budget

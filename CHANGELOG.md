@@ -143,6 +143,12 @@ https://keepachangelog.com/en/1.1.0/
 - USB strips: the hint under a missing port or a timed-out reconnect was always in English. It now
   follows the app language.
 - Ambilight: the saturation slider now reaches Hue lamps too; it only affected the strip before.
+- Hue: strong reds, greens and blues now stay that colour on the lamps. The step that fits a colour
+  into what a lamp can show worked on the wrong brightness scale and mixed in the missing colours,
+  so a pure red could come out orange-red, a green yellowish and a deep blue purple. Greys, skin
+  tones and other softer colours look the same as before. When Hue runs without an entertainment
+  stream (updating each light in turn), oranges, skin tones and other mid-tones are no longer
+  redder and more saturated on the lamps than on the screen.
 - Hue: the spinners while pairing and reconnecting now slow down when Reduce Motion is on; the
   setting never reached them before.
 - Screen readers: the manual bridge IP field on the Hue page has a name, and the entertainment-area

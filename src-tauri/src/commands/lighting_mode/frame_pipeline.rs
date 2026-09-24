@@ -272,6 +272,10 @@ impl AmbilightFramePipeline {
             self.room_generation = seen;
             self.hue_table = hue_sample_table(channels, geometry.as_ref());
         }
+        let content = self
+            .border_cache
+            .insets()
+            .content_bounds(raw_frame.width as usize, raw_frame.height as usize);
         self.hue_scene_scratch.clear();
         self.hue_scene_scratch
             .extend(
@@ -279,12 +283,8 @@ impl AmbilightFramePipeline {
                     .sample_points
                     .iter()
                     .map(|&(sample_x, sample_y)| {
-                        let (r, g, b) = sample_screen_position_avg(
-                            raw_frame,
-                            sample_x,
-                            sample_y,
-                            self.border_cache.insets(),
-                        );
+                        let (r, g, b) =
+                            sample_screen_position_avg(raw_frame, sample_x, sample_y, &content);
                         [r, g, b]
                     }),
             );
