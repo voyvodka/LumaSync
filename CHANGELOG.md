@@ -120,6 +120,8 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- USB strips: the hint under a missing port or a timed-out reconnect was always in English. It now
+  follows the app language.
 - Ambilight: the saturation slider now reaches Hue lamps too; it only affected the strip before.
 - Ambilight: at the heaviest smoothing a strip could stop a few steps short of the colour on
   screen and stay there. It now always arrives.

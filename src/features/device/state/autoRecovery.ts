@@ -65,7 +65,7 @@ export function createAutoRecovery(
         variant: "info",
         code: "RECOVERY_IN_PROGRESS",
         message: "Connection interrupted. Reconnecting with bounded retries.",
-        details: "You can pick a port and connect manually at any time.",
+        detailsKey: "device:status.hints.recoveryInProgress",
       },
     }));
 
@@ -93,7 +93,7 @@ export function createAutoRecovery(
                 variant: "error",
                 code: "RECOVERY_MANUAL_REQUIRED",
                 message: "Auto-recovery timed out.",
-                details: "Refresh ports, choose the active cable port, then connect manually.",
+                detailsKey: "device:status.hints.recoveryTimedOut",
               },
             }));
             return;
@@ -134,7 +134,7 @@ export function createAutoRecovery(
               variant: "error",
               code: "RECOVERY_MANUAL_REQUIRED",
               message: "Auto-recovery timed out.",
-              details: "Refresh ports, choose the active cable port, then connect manually.",
+              detailsKey: "device:status.hints.recoveryTimedOut",
             },
           }));
           return;

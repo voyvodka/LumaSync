@@ -179,11 +179,19 @@ export interface DeviceStatusCardInput {
     code: string;
     message: string;
     details?: string;
+    detailsKey?: TranslationKey;
   } | null;
   connectedPort: string | null;
   isReconnecting?: boolean;
   isHealthChecking?: boolean;
   latestHealthCheck?: HealthCheckView | null;
+}
+
+// Minted advice renders through i18n; backend text stays verbatim.
+function statusCardDetails(
+  card: NonNullable<DeviceStatusCardInput["statusCard"]>,
+): Pick<DeviceStatusCardModel, "details" | "detailsKey"> {
+  return card.detailsKey ? { detailsKey: card.detailsKey } : { details: card.details };
 }
 
 export function buildDeviceStatusCard(input: DeviceStatusCardInput): DeviceStatusCardModel {
@@ -237,7 +245,7 @@ export function buildDeviceStatusCard(input: DeviceStatusCardInput): DeviceStatu
       code: "SELECTED_PORT_MISSING",
       titleKey: "device:status.missingTitle",
       bodyKey: "device:status.missingBody",
-      details: input.statusCard.details,
+      ...statusCardDetails(input.statusCard),
     };
   }
 
@@ -247,7 +255,7 @@ export function buildDeviceStatusCard(input: DeviceStatusCardInput): DeviceStatu
       code: input.statusCard.code,
       titleKey: "device:status.errorTitle",
       bodyKey: "device:status.errorBody",
-      details: input.statusCard.details,
+      ...statusCardDetails(input.statusCard),
     };
   }
 

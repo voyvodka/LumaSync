@@ -1,3 +1,4 @@
+import type { TranslationKey } from "@/features/i18n/catalogue";
 import type { DeviceOperation, DeviceStatus, HealthCheckView } from "@/shared/contracts/device";
 import type {
   HealthCheckResult,
@@ -14,7 +15,10 @@ export interface DeviceStatusCard {
   variant: "success" | "error" | "info";
   code: string;
   message: string;
+  /** Backend text (an OS error, a port name): shown verbatim, never translated. */
   details?: string;
+  /** Advice this controller minted itself; rendered through i18n, and wins over `details`. */
+  detailsKey?: TranslationKey;
 }
 
 export interface DeviceConnectionControllerState {

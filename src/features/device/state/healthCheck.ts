@@ -56,7 +56,7 @@ export function createHealthCheck(
         variant: "info",
         code: "HEALTH_CHECK_IN_PROGRESS",
         message: "Running health check...",
-        details: "This validates visibility, support, and connection status.",
+        detailsKey: "device:status.hints.healthCheckInProgress",
       },
     }));
 
@@ -79,13 +79,15 @@ export function createHealthCheck(
               variant: "success",
               code: "HEALTH_CHECK_PASS",
               message: "Health check passed.",
-              details: "All validation steps completed successfully.",
+              detailsKey: "device:status.hints.healthCheckPassed",
             }
           : {
               variant: "error",
               code: "HEALTH_CHECK_FAIL",
               message: "Health check failed.",
-              details: firstFailedStep?.message ?? "Try refresh, select another port, then retry.",
+              ...(firstFailedStep
+                ? { details: firstFailedStep.message }
+                : { detailsKey: "device:status.hints.healthCheckFailed" }),
             },
       }));
 
