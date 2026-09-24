@@ -1,11 +1,12 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/shared/contracts/mode";
-import type { LightingModeDispatcher } from "@/features/mode/state/useLightingModeDispatch";
-import type { HueRuntimeTarget } from "@/shared/contracts/hue";
-
-import { isHueSessionReconnecting, isHueStreamFailed, useHueStreamHealth } from "../useHueStreamHealth";
+import {
+  isHueSessionReconnecting,
+  isHueStreamDead,
+  isHueStreamFailed,
+  useHueStreamHealth,
+} from "../useHueStreamHealth";
 
 const readHueStreamStatusMock = vi.fn();
 const invalidationListeners = new Set<() => void>();
@@ -36,40 +37,9 @@ const reconnectingStatus = () => ({
   status: { state: "Reconnecting", code: "X", message: "bridge unreachable", details: null },
 });
 
-const ambilightMode: LightingModeConfig = {
-  kind: LIGHTING_MODE_KIND.AMBILIGHT,
-  targets: ["hue"],
-} as LightingModeConfig;
-const offMode: LightingModeConfig = { kind: LIGHTING_MODE_KIND.OFF, targets: [] } as LightingModeConfig;
-
-function mount(opts: {
-  activeOutputTargets: HueRuntimeTarget[];
-  mode: LightingModeConfig;
-  selectedOutputTargets?: HueRuntimeTarget[];
-  hueTargetSelected?: boolean;
-}) {
-  const activeOutputTargetsRef = { current: opts.activeOutputTargets };
-  const lightingModeRef = { current: opts.mode };
-  const selectedOutputTargetsRef = { current: opts.selectedOutputTargets ?? opts.activeOutputTargets };
-  const dispatchMock = vi.fn<LightingModeDispatcher>().mockResolvedValue(null);
-  const dispatchRef = { current: dispatchMock as LightingModeDispatcher | null };
-
-  const setActiveOutputTargets = vi.fn((updater: (prev: HueRuntimeTarget[]) => HueRuntimeTarget[]) => {
-    activeOutputTargetsRef.current = updater(activeOutputTargetsRef.current);
-  });
-
-  const view = renderHook(() =>
-    useHueStreamHealth({
-      hueTargetSelected: opts.hueTargetSelected ?? true,
-      activeOutputTargetsRef,
-      lightingModeRef,
-      selectedOutputTargetsRef,
-      dispatchRef,
-      setActiveOutputTargets,
-    }),
-  );
-
-  return { view, activeOutputTargetsRef, selectedOutputTargetsRef, lightingModeRef, dispatchMock, setActiveOutputTargets };
+function mount(opts: { hueTargetSelected?: boolean } = {}) {
+  const view = renderHook(() => useHueStreamHealth({ hueTargetSelected: opts.hueTargetSelected ?? true }));
+  return { view };
 }
 
 const flush = async (ms = 0) => {
@@ -97,55 +67,48 @@ describe("useHueStreamHealth", () => {
     vi.restoreAllMocks();
   });
 
-  it("drops hue from active targets the moment the backend reports Failed", async () => {
-    readHueStreamStatusMock.mockResolvedValue(failedStatus());
-    const { activeOutputTargetsRef } = mount({ activeOutputTargets: ["hue"], mode: ambilightMode });
-
-    await flush(0);
-
-    expect(activeOutputTargetsRef.current).toEqual([]);
-  });
-
-  it("restores hue and force re-applies the mode once the stream recovers", async () => {
+  // Read-only since the transaction: the worker follows the live stream slot
+  // through every reconnect, so a stream that comes back is re-applied by
+  // nobody. The re-apply this poll used to force was one of the storms.
+  it("reads a stream dying and coming back without asking for anything", async () => {
     readHueStreamStatusMock.mockResolvedValueOnce(failedStatus());
-    const { activeOutputTargetsRef, dispatchMock, selectedOutputTargetsRef } = mount({
-      activeOutputTargets: ["hue"],
-      mode: ambilightMode,
-    });
+    const { view } = mount();
 
     await flush(0);
-    expect(activeOutputTargetsRef.current).toEqual([]);
+    expect(isHueStreamDead(view.result.current.runtimeState)).toBe(true);
 
-    // Dead cadence is 15 s (HUE_STREAM_HEALTH_RECOVERY_POLL_MS) — advance
-    // exactly that far to trigger the next tick.
+    // Dead cadence is 15 s (HUE_STREAM_HEALTH_RECOVERY_POLL_MS).
     readHueStreamStatusMock.mockResolvedValueOnce(runningStatus());
     await flush(15_000);
 
-    expect(activeOutputTargetsRef.current).toEqual(["hue"]);
-    expect(dispatchMock).toHaveBeenCalledWith(
-      { ...ambilightMode, targets: selectedOutputTargetsRef.current },
-      { force: true },
-    );
+    expect(view.result.current.runtimeState).toBe("Running");
+    expect(isHueStreamDead(view.result.current.runtimeState)).toBe(false);
+    expect(readHueStreamStatusMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("clears its reading when Hue is not a selected output", async () => {
+    readHueStreamStatusMock.mockResolvedValue(runningStatus());
+    const { view } = mount({ hueTargetSelected: false });
+
+    await flush(0);
+
+    expect(view.result.current.runtimeState).toBeNull();
+    expect(readHueStreamStatusMock).not.toHaveBeenCalled();
   });
 
   // A bridge unreachable for hours stays RECONNECTING with "hue" still in the
   // active targets, so the shell read membership as STREAMING the whole time.
   it("reports RECONNECTING so the shell can stop calling the session live", async () => {
     readHueStreamStatusMock.mockResolvedValue(reconnectingStatus());
-    const { view, activeOutputTargetsRef } = mount({ activeOutputTargets: ["hue"], mode: ambilightMode });
+    const { view } = mount();
 
     await flush(0);
 
-    // The backend is still retrying, so the target is kept…
-    expect(activeOutputTargetsRef.current).toEqual(["hue"]);
+    // The backend is still retrying, so a reconnecting stream is not dead…
+    expect(isHueStreamDead(view.result.current.runtimeState)).toBe(false);
     // …but the state it reports is what the UI must show.
     expect(view.result.current.runtimeState).toBe("Reconnecting");
-    expect(
-      isHueSessionReconnecting(
-        activeOutputTargetsRef.current.includes("hue"),
-        view.result.current.runtimeState,
-      ),
-    ).toBe(true);
+    expect(isHueSessionReconnecting(true, view.result.current.runtimeState)).toBe(true);
 
     readHueStreamStatusMock.mockResolvedValue(runningStatus());
     await flush(5_000);
@@ -156,7 +119,7 @@ describe("useHueStreamHealth", () => {
   // restart from the Devices card would otherwise leave FAILED up that long.
   it("reports Failed until a start or stop invalidates the status", async () => {
     readHueStreamStatusMock.mockResolvedValue(failedStatus());
-    const { view } = mount({ activeOutputTargets: ["hue"], mode: ambilightMode });
+    const { view } = mount();
 
     await flush(0);
     expect(isHueStreamFailed(view.result.current.runtimeState)).toBe(true);
@@ -168,7 +131,7 @@ describe("useHueStreamHealth", () => {
 
   it("keeps a non-Failed reading through an invalidation", async () => {
     readHueStreamStatusMock.mockResolvedValue(reconnectingStatus());
-    const { view } = mount({ activeOutputTargets: ["hue"], mode: ambilightMode });
+    const { view } = mount();
 
     await flush(0);
     invalidate();
@@ -181,19 +144,6 @@ describe("useHueStreamHealth", () => {
     expect(isHueSessionReconnecting(true, null)).toBe(false);
   });
 
-  it("does not restore hue while the lighting mode is off", async () => {
-    readHueStreamStatusMock.mockResolvedValue(runningStatus());
-    const { setActiveOutputTargets, dispatchMock } = mount({
-      activeOutputTargets: [],
-      mode: offMode,
-    });
-
-    await flush(0);
-
-    expect(setActiveOutputTargets).not.toHaveBeenCalled();
-    expect(dispatchMock).not.toHaveBeenCalled();
-  });
-
   it("never calls the backend while the tray is hidden", async () => {
     Object.defineProperty(document, "visibilityState", {
       configurable: true,
@@ -201,7 +151,7 @@ describe("useHueStreamHealth", () => {
     });
     readHueStreamStatusMock.mockResolvedValue(runningStatus());
 
-    mount({ activeOutputTargets: ["hue"], mode: ambilightMode });
+    mount();
     await flush(30_000);
 
     expect(readHueStreamStatusMock).not.toHaveBeenCalled();
@@ -220,7 +170,7 @@ describe("useHueStreamHealth", () => {
    * That makes it look like a false guard under a one-line mutation, and it
    * is not one — delete both and it fails, alone. Keep it. The behaviour it
    * pins is real: a concurrent poll means two reads of the stream racing to
-   * mutate the same target list. The one-line-mutation heuristic is a way of
+   * set the same reading. The one-line-mutation heuristic is a way of
    * finding weak tests, not a definition of what a test must be, and applied
    * literally here it deletes a regression guard because the source happens
    * to be defensively doubled. If a later refactor collapses the two checks
@@ -234,7 +184,7 @@ describe("useHueStreamHealth", () => {
       }),
     );
 
-    mount({ activeOutputTargets: ["hue"], mode: ambilightMode });
+    mount();
     await flush(0);
     expect(readHueStreamStatusMock).toHaveBeenCalledOnce();
 

@@ -1,7 +1,7 @@
 import type { TFunction } from "i18next";
 
 import type { TranslationKey } from "@/features/i18n/catalogue";
-import type { BootHueRetryNotice } from "@/features/mode/state/bootHueRetry";
+import type { BootHueRetryState } from "@/shared/contracts/lightingRuntime";
 import type { OutputAvailability } from "@/features/mode/model/outputAvailability";
 import {
   ONBOARDING_STEPS,
@@ -39,7 +39,7 @@ export interface ShellNoticeInput {
   stopFailedTargets: HueRuntimeTarget[] | null;
   previewOpenFailure: PreviewOpenFailure | null;
   hueLeftOut: HueLeftOutReason | null;
-  hueBootRetry: BootHueRetryNotice | null;
+  hueBootRetry: BootHueRetryState | null;
   usbDisconnected: boolean;
   usbDisconnectedLightingOff: boolean;
   usbUnsupported: boolean;
@@ -81,12 +81,12 @@ const HUE_LEFT_OUT_COPY: Record<HueLeftOutReason, TranslationKey> = {
   [HUE_LEFT_OUT_REASON.BUSY_GAVE_UP]: "common:hueLeftOut.busyGaveUp",
 };
 
-const HUE_BOOT_RETRY_TITLE: Record<BootHueRetryNotice, TranslationKey> = {
+const HUE_BOOT_RETRY_TITLE: Record<BootHueRetryState, TranslationKey> = {
   waiting: "shell:notices.titles.hueWaiting",
   gaveUp: "shell:notices.titles.hueBusy",
 };
 
-const HUE_BOOT_RETRY_COPY: Record<BootHueRetryNotice, TranslationKey> = {
+const HUE_BOOT_RETRY_COPY: Record<BootHueRetryState, TranslationKey> = {
   waiting: "common:hueBootRetry.waiting",
   gaveUp: "common:hueBootRetry.gaveUp",
 };

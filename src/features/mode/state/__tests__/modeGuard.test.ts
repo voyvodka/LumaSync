@@ -27,6 +27,16 @@ describe("canEnableLedMode", () => {
     });
   });
 
+  // Rust refuses a layout past the cap before it sizes a frame, so offering
+  // the mode would only fail: it reads as a calibration to redo.
+  it("returns CALIBRATION_REQUIRED for a layout past the LED cap", () => {
+    const counts = { top: 2000, right: 100, bottom: 2000, left: 100 };
+    expect(canEnableLedMode({ ...CALIBRATION, counts, totalLeds: 4200 }, ["usb"])).toEqual({
+      canEnable: false,
+      reason: "CALIBRATION_REQUIRED",
+    });
+  });
+
   it("returns canEnable when calibration exists", () => {
     expect(canEnableLedMode(CALIBRATION)).toEqual({
       canEnable: true,

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
 import { normalizeOutputTargets } from "@/shared/contracts/mode";
-import { saveShellState } from "@/features/shell/windowLifecycle";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 
 import { connectionEvents } from "../connectionEvents";
@@ -18,13 +17,12 @@ export interface UsbTargetReconcilerInput {
   /** Read by the `[]`-dep connection-event subscriber, which must not re-subscribe. */
   selectedOutputTargetsRef: RefObject<HueRuntimeTarget[]>;
   hueStartConfigRef: RefObject<unknown>;
-  /** Direct target write — deliberately NOT the general target-change handler. */
-  onAutoAddUsbTarget: (targets: HueRuntimeTarget[]) => void;
-  /** The delta-stop pipeline, session-only: an unplug never rewrites `lastOutputTargets`. */
-  onDropUsbTarget: (targets: HueRuntimeTarget[]) => void;
+  /** A saved output choice, as if the user made it: pairing a strip, the unsupported-port fallback. */
+  onSelectTargets: (targets: HueRuntimeTarget[]) => Promise<void>;
+  /** Session-only: an unplug never rewrites `lastOutputTargets`. */
+  onDropUsbTarget: (targets: HueRuntimeTarget[]) => Promise<void>;
   /** The same, when USB was the only selected target. Resolves whether a running mode ended. */
   onLastTargetUnplugged: () => Promise<boolean>;
-  onFallbackTargets: (targets: HueRuntimeTarget[]) => void;
 }
 
 export interface UsbTargetReconciler {
@@ -50,10 +48,9 @@ export function useUsbTargetReconciler({
   selectedOutputTargets,
   selectedOutputTargetsRef,
   hueStartConfigRef,
-  onAutoAddUsbTarget,
+  onSelectTargets,
   onDropUsbTarget,
   onLastTargetUnplugged,
-  onFallbackTargets,
 }: UsbTargetReconcilerInput): UsbTargetReconciler {
   // Hot-plug detection ref — null until bootstrap arms it.
   const prevUsbConnectedRef = useRef<boolean | null>(null);
@@ -76,15 +73,10 @@ export function useUsbTargetReconciler({
     const wasConnected = prevUsbConnectedRef.current;
 
     if (wasConnected === false && isConnected) {
-      // Pairing is itself the "I want USB output" intent, and the target is
-      // added directly rather than through `handleOutputTargetsChange`.
-      // Both halves are load-bearing — docs/architecture/ui-and-shell.md.
+      // Pairing is itself the "I want USB output" intent: it is saved, and a
+      // running mode starts on the strip. See docs/architecture/ui-and-shell.md.
       if (!selectedOutputTargets.includes("usb")) {
-        const nextTargets = normalizeOutputTargets([...selectedOutputTargets, "usb"]);
-        onAutoAddUsbTarget(nextTargets);
-        void saveShellState({ lastOutputTargets: nextTargets }).catch((err) => {
-          console.error("[LumaSync] saveShellState(lastOutputTargets) on auto-add failed:", err);
-        });
+        void onSelectTargets(normalizeOutputTargets([...selectedOutputTargets, "usb"]));
       }
     }
 
@@ -93,7 +85,7 @@ export function useUsbTargetReconciler({
       if (selectedOutputTargets.includes("usb")) {
         const nextTargets = selectedOutputTargets.filter((t) => t !== "usb");
         if (nextTargets.length > 0) {
-          onDropUsbTarget(nextTargets);
+          void onDropUsbTarget(nextTargets);
           setUsbDisconnectNotice("continuing");
         } else {
           // Nothing else to run on, so a running mode ends and the selection
@@ -111,7 +103,7 @@ export function useUsbTargetReconciler({
     }
 
     prevUsbConnectedRef.current = isConnected;
-  }, [isConnected, selectedOutputTargets, onAutoAddUsbTarget, onDropUsbTarget, onLastTargetUnplugged, bootstrapDone]);
+  }, [isConnected, selectedOutputTargets, onSelectTargets, onDropUsbTarget, onLastTargetUnplugged, bootstrapDone]);
 
   // Own effect keyed on the flag it clears — the hot-plug effect above re-runs
   // whenever `selectedOutputTargets` changes, which its own unplug branch causes.
@@ -124,7 +116,7 @@ export function useUsbTargetReconciler({
 
   // Bug 10D — drop "usb" when auto-reconnect reports the port structurally
   // unavailable, or every later mode change dies silently in the Rust gate. Why
-  // only those codes, and not via `handleOutputTargetsChange`: ui-and-shell.md.
+  // only those codes: ui-and-shell.md.
   useEffect(() => {
     let unsupportedNoticeTimerId: number | null = null;
     const unsubscribe = connectionEvents.subscribe((event) => {
@@ -144,15 +136,9 @@ export function useUsbTargetReconciler({
       // needed) skip without persisting / toasting.
       if (!includedUsb && !wantsHueAutoAdd) return;
       const nextTargets: HueRuntimeTarget[] = wantsHueAutoAdd ? ["hue"] : filtered;
-      onFallbackTargets(nextTargets);
+      void onSelectTargets(nextTargets);
       // "Switched to Hue" is only true when Hue is what is left.
       setUsbUnsupportedHueFallback(nextTargets.includes("hue"));
-      void saveShellState({ lastOutputTargets: nextTargets }).catch((err) => {
-        console.error(
-          "[LumaSync] saveShellState(lastOutputTargets) on unsupported-port fallback failed:",
-          err,
-        );
-      });
       setUsbUnsupportedNotice(true);
       unsupportedNoticeTimerId = window.setTimeout(
         () => setUsbUnsupportedNotice(false),
@@ -166,7 +152,7 @@ export function useUsbTargetReconciler({
         unsupportedNoticeTimerId = null;
       }
     };
-  }, [selectedOutputTargetsRef, hueStartConfigRef, onFallbackTargets]);
+  }, [selectedOutputTargetsRef, hueStartConfigRef, onSelectTargets]);
 
   return {
     usbDisconnectNotice: usbDisconnectNotice === "continuing",

@@ -15,6 +15,7 @@ const preview: Catalogue<typeof enPreview> = {
     closeHint: "LED önizlemesini kapat — test deseni durur ve aydınlatmanız normale döner. LED Kurulumu'ndaki Test ve Önizleme ile yeniden açabilirsiniz.",
     reopenHint: "LED önizlemesi kapatıldı. İstediğiniz zaman LED Kurulumu'ndaki Test ve Önizleme ile veya tepsi menüsünden yeniden açabilirsiniz.",
     dragHint: "Pencereyi taşımak için başlığı sürükleyin.",
+    calibrationRequired: "LED şeridin önce kalibre edilmesi gerekiyor. LED Kurulumu'ndan ayarlayın, sonra modu yeniden seçin.",
     autoStart: {
       stripOnly: "Yalnızca LED şerit test ediliyor. Hue ışıklarınızı da eklemek için bir desen seçin.",
       noStrip: "Bağlı LED şerit yok, bu yüzden desen yalnızca kaplamada görünür. Hue ışıklarınızı da eklemek için bir desen seçin.",

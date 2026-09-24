@@ -279,22 +279,19 @@ trees from the control that re-arms them.
 
 **Hue is not retried in the background — except once, at launch, for a busy area.** The rule is that
 a Hue start the bridge refuses is settled on the spot (Off, or USB alone with a notice) and only the
-user or the next launch tries again. The one exception is `mode/state/bootHueRetry.ts` (ported to
-Rust with the lighting transaction, `origin: "boot"`, and not yet called from there). After an
+user or the next launch tries again. The one exception is the launch restore's wait, in the
+lighting transaction (`lighting_mode/outputs.rs`, `origin: "boot"`). After an
 unclean exit the bridge keeps counting the dead process as the area's streamer for 10–20 s, so a
 relaunch inside that window has its restore refused and used to land on Off for no reason the user
-could see or fix. When `start_hue_stream` answered `CONFIG_NOT_READY_GATE_BLOCKED` at boot, the
-frontend polls `check_hue_stream_readiness` every 3 s for up to 25 s and, the moment the area is
-free, acts once. What it does depends on how the restore ended:
+could see or fix. When the Hue start answered `CONFIG_NOT_READY_GATE_BLOCKED` at boot, Rust
+probes the area's readiness every 3 s for up to 25 s and, the moment the area is free, acts once. What it does depends on how the restore ended:
 
-- **Off (a Hue-only restore) — resume.** The mode is re-run through the interactive handler.
+- **Off (a Hue-only restore) — resume.** The restore runs again, once.
 - **Running on USB with Hue left out (a `[usb, hue]` restore) — rejoin.** USB runs at once, as the
-  A2 rule says, and Hue is added back through the delta-start path the user's own Hue toggle takes
-  (`startHue`, then a forced `set_lighting_mode` with both targets). That path restarts the running
-  worker, since `set_lighting_mode` retunes in place only when the targets are unchanged — the same
-  brief glitch the user's own add costs. The rejoin enters below the toggle's handler, so it
-  neither cancels itself nor writes `lastOutputTargets`: the drop was session-only, and the saved
-  set still holds Hue.
+  A2 rule says, and Hue is added back to the session's selection: the transaction brings the stream
+  up and re-applies the mode on both targets, which restarts the running worker — the same brief
+  glitch the user's own add costs. It never writes `lastOutputTargets`: the drop was session-only,
+  and the saved set still holds Hue.
 - **Busy is decided by readiness, not by the start code.** The gate code also covers an unreachable
   bridge and an unusable area, and its `details` only name the missing prerequisite. Busy means
   the readiness reasons are exactly the `HUE_STREAM_NOT_READY_ACTIVE_STREAMER` sentinel; any other
@@ -305,13 +302,13 @@ free, acts once. What it does depends on how the restore ended:
   whole wait; any other answer raises the notice the restore would have raised.
 - **Boot only.** The interactive paths never schedule either retry; an interactive `[usb, hue]`
   start the gate refuses keeps A2's notice and waits for the user.
-- **The user always wins.** Any lighting-mode choice, any output-target change, or any `stopHue`
-  call cancels the wait — the resume keeps running through a target change that still includes Hue,
-  the rejoin does not. A slider tweak of the running mode is not a mode choice and cancels nothing.
+- **The user always wins.** Any lighting-mode choice, any output-target change, or any Hue
+  release cancels the wait — the resume keeps running through a target change that still includes
+  Hue, the rejoin does not. A retune of the running mode is not a mode choice and cancels nothing.
   Unplugging the strip a rejoin was waiting beside ends the mode and cancels the rejoin with it,
-  since there is no running mode left to add Hue to (`ui-and-shell.md`).
-  The `stopHue` hook is attached to the command wrapper in `modeApi.ts`, the same way
-  `stop_hue_stream` cancels the backend's own reconnect retry. The resume's notice says lighting
+  since there is no running mode left to add Hue to (`ui-and-shell.md`). A choice made after the
+  wait already gave up takes the gave-up notice down as well; it used to outlive the choice
+  whenever the wait ended first. The resume's notice says lighting
   will resume by itself and, if the window closes first, that it stayed off; the rejoin's says Hue
   will join, is cleared when it does, and turns into "stayed busy, running on USB only" if the
   window closes first.
@@ -360,9 +357,9 @@ off, and so do we now (`commands/hue/light_restore.rs`).
   stop under a worker that still drove Hue waited out `HUE_STOP_TIMEOUT_SECS`, reported
   `HUE_STOP_TIMEOUT_PARTIAL`, and restored with the sender still running — the fallback's next
   light PUT undid the restore. The worker now follows the runtime's live output slot instead (next
-  entry), and lets go of the handle within a frame of the stop. What follows is the frontend
-  ordering that made the stop safe before the slot existed; it is still in place, and the next
-  entry says which parts Rust now guarantees on its own. `apply_mode_change` hands the worker the
+  entry), and lets go of the handle within a frame of the stop. What follows is the ordering that
+  made the stop safe before the slot existed; the lighting transaction keeps it
+  (`lighting-transaction.md`), and the next entry says which parts the slot now guarantees on its own. `apply_mode_change` hands the worker the
   Hue slot only when `targets` names Hue, and removing
   Hue from `[usb, hue]` re-applies the mode on `[usb]` and awaits it before the stop
   (`ui-and-shell.md`). Off awaits `stop_lighting` before `stop_hue_stream` whenever a mode is
@@ -373,8 +370,8 @@ off, and so do we now (`commands/hue/light_restore.rs`).
   the two stops side by side, which held only because the worker's join landed inside the stop's
   wait; it is sequential now as well. The quit path already had this order (`[shutdown]` step 1
   stops the worker, step 2 stops Hue). The Devices card's Stop retrying and Retry stop go through
-  the same removal (`stopHueOutput`, `ui-and-shell.md`); they used to call `stop_hue_stream`
-  directly. A Retry stop comes after a partial stop, so the runtime already reads `Idle` and the
+  the same removal (`release_hue_output`, `lighting-transaction.md`); they used to call
+  `stop_hue_stream` directly. A Retry stop comes after a partial stop, so the runtime already reads `Idle` and the
   health poll has dropped `hue` from the active set, but a worker whose mode still names Hue keeps
   its handle: that, not the active set, decides whether the mode has to let go first. The retry
   itself is unchanged — a second `stop_hue_stream`, which finds no stream to deactivate and no
@@ -443,7 +440,7 @@ off, and so do we now (`commands/hue/light_restore.rs`).
 - **`hueCredentialEvents.ts` exists because pairing is invisible to everything outside `useHueOnboardingCore`.** App owns the `hueStartConfig` mirror — the projection the reachability probe and the USB reconciler both read — and until this bus it was written on boot and on a lighting-mode change and nowhere else. So pairing a bridge, or picking an area, left every one of those consumers on `null` until the user happened to switch modes. Subscribers deliberately re-read `shellStore` rather than trusting a payload: no single emit site holds the whole projection (pairing knows the bridge and credentials but not the area; area selection knows the reverse), and a diff assembled from partial knowledge is how the mirror drifts. Emit *after* the write resolves, never beside it — firing early hands the subscriber the value the write is replacing. Third bus of this shape, after `connectionEvents.ts` and `firmwareProfileEvents.ts`; when a fourth is needed, the shared-instance question in `device-output.md` is the one to reopen instead.
 - **A rejected runtime-status read is not a runtime state.** `get_hue_stream_status` never answers with an error, so an `invoke` that rejects means the read itself failed — it says nothing about whether the stream is up. `useHueRuntimeStatus` used to mint a `Failed` status for it, which conflated the two: the bridge card, finding no Running/Reconnecting, fell through to Ready, and the Devices-tab loop, which polls only in Starting/Running/Reconnecting, went silent — one IPC blip mid-stream left the card on Ready until a start/stop invalidation. The hook now keeps the last status the backend reported and holds the rejection beside it (`runtimeStatusReadFailure`, code `HUE_STREAM_STATUS_UNAVAILABLE`). While it is set, `deriveHueBridgeCardState` ignores the stale status for the runtime-derived states and shows `statusUnknown` where it would have said Ready, and the loop keeps polling whatever state it last held, backing off 2 → 4 → 8 → 16 → 30 s (`runtimeStatusRetryDelayMs`) until a read lands. A backend-reported `Failed` is a real answer and keeps its own mapping (next entry). This is not under the bridge poll budget above: it is a local IPC read, and giving up would bring back the stuck card.
 - **A backend-reported `Failed` is a stopped stream, not a Ready bridge.** The runtime enters `Failed` with three codes: `TRANSIENT_RETRY_EXHAUSTED` (the reconnect budget ran out, `retry.rs`), `HUE_STREAM_START_ABORTED` (the start unwound before a stream context existed, `StartAbortGuard` in `reconnect.rs`) and `AUTH_INVALID_CREDENTIALS` (the bridge refused the key at start or mid-stream). It stays there until the next start or stop, and `deriveHueBridgeCardState` used to have no branch for it: the card fell through to Ready, and `TRANSIENT_RETRY_EXHAUSTED`, matching the `TRANSIENT_` prefix, to a reconnect that was no longer happening. It now maps to `streamFailed` — FAILED pill, the code's own text via `hueStreamFailureReasonKey` (a generic "stream stopped" line for any code without one), and Start Again, which calls `restart_hue_stream` because that re-reads readiness itself, so a stale check on the card cannot block the way back. Re-pair is added only when the status carries the repair hint; the runtime auth failure does not flip `credentialState`, and routing it to `authError` would keep asking for a re-pair after one had succeeded, since the runtime stays `Failed` until the next start. An unreachable bridge, a refused credential, a pairing run and a missing area keep their own cards ahead of it, and `statusUnknown` stays separate: a rejected read over a held `Failed` shows as unknown. The status bar (FAILED, red, deep-link to Devices) and the Lights Hue row ("stream stopped", red dot) read the same state from `useHueStreamHealth`, which only reports it while Hue is a selected output and drops a held `Failed` on any start/stop invalidation so it does not outlive the mutation that ended it by a 15 s dead-stream poll.
-- **Hue availability is read from the live stream, so a test pattern started with the mode off sees no bridge.** `start_led_test_pattern` asks `snapshot_hue_output_context`, which answers only while `active_stream` is `Some`. USB and WLED are read from the connection and the sink registry, which survive a mode change — so the same run reports a disconnected strip as available and a paired, reachable bridge as absent, and degrades to preview-only. Rust can open that stream itself now — `commands/hue/hue_config.rs` builds the start request from the saved bridge, area and pairing, and the start resolves the key from the keychain — and the lease below has a Rust port, `apply_outputs` with `origin: "leaseHue"` ([`lighting-transaction.md`](lighting-transaction.md)). Nothing calls it yet, so until the callers switch over `features/hue/state/hueTestLease.ts` opens one for the run and stops it afterwards, and it must stop *only* what it opened — `HUE_START_NOOP_ALREADY_ACTIVE` means a live mode or the other webview owns the stream, and releasing that switches off lights the test never turned on. It is module state rather than a hook because LED Setup and the control popup are separate webviews with no shared React tree. What it opened can change hands: a mode started during the run (tray, shortcut, the popup's mode strip) finds the stream up, its start answers already-active, and its worker drives the stream. So the release asks `get_lighting_mode_status` first and leaves the stream to a running mode whose targets name Hue; a stop there would end that mode's Hue output (see "The worker follows the live stream"). A failed read releases as before.
+- **Hue availability is read from the live stream, so a test pattern started with the mode off sees no bridge.** `start_led_test_pattern` asks `snapshot_hue_output_context`, which answers only while `active_stream` is `Some`. USB and WLED are read from the connection and the sink registry, which survive a mode change — so the same run reports a disconnected strip as available and a paired, reachable bridge as absent, and degrades to preview-only. The test lease does exactly that, in Rust: LED Setup's test and the popup's pattern tiles send `apply_outputs` with `origin: "leaseHue"` (`acquireHueForTest` / `releaseHueAfterTest` in `modeApi.ts`), and the transaction brings a stream up for the run from the saved bridge, area and pairing (`commands/hue/hue_config.rs`) and stops it afterwards ([`lighting-transaction.md`](lighting-transaction.md)). It must stop *only* what it opened — a stream that was already up belongs to a live mode or another surface, and releasing that switches off lights the test never turned on. It lives in Rust rather than in a window because LED Setup and the control popup are separate webviews with no shared React tree. What it opened can change hands: a mode started during the run (tray, shortcut, the popup's mode strip) finds the stream up and its worker drives it. So the release reads what runs first and leaves the stream to a running mode whose targets name Hue; a stop there would end that mode's Hue output (see "The worker follows the live stream").
 - **The LED control popup's auto-start never reaches Hue.** Revealing the popup (tray, LED Setup's Test & Preview) starts a pattern with no gesture from the user, and it used to send it to `lastOutputTargets` — so a Hue-only setup with no strip lit the lamps the moment the window opened. The auto-start now sends `targets: ["usb"]` explicitly (the "usb" channel is serial or WLED): the lease sees no Hue and opens no stream, and with no strip the backend answers `PATTERN_PREVIEW_ONLY` and the pattern stays in the twin. Colour, brightness and speed changes retune the run in progress with that run's targets, so dragging a colour cannot widen a strip-only test onto Hue. Picking a pattern tile is the explicit gesture and still uses the saved targets, Hue included; the popup has no target selector. While a saved Hue target is left out, the popup says so and points at the tiles, instead of the generic preview-only text, which claims no device is connected. LED Setup's own Run test button is a gesture too and keeps the saved targets.
 - **A bridge allows one active entertainment streamer at a time.** `HUE_STREAM_NOT_READY_ACTIVE_STREAMER` in the log means something else holds the session — often a previous instance of this app that did not shut down cleanly, or the official Hue Sync app. It is not a pairing failure and must not be reported as one.
 - **Our own running stream is not a foreign streamer, and only our own running stream is exempt.** The bridge names the holder only by an `auth_v1` id, and learning ours costs a `GET /auth/v1`, so ownership is read from this process's runtime instead (`streams_area`): state `Running`, an active stream for the same bridge and area, and a sender that has not exited. Only then does readiness (`ActiveStreamerView::Ours`) drop the sentinel — for `get_hue_stream_status`'s health poll and for `check_hue_stream_readiness` from the frontend, which used to report our own area as held by another app and log it every ~5 s. Every gate about to start a session — start, restart, reconnect — passes `Foreign`. A session a previous run left on the bridge holds the area under the *same* key and must keep reading as busy: nobody has shown the bridge accepts a fresh start over it, and the boot retry waits on exactly that sentinel.

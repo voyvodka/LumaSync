@@ -22,16 +22,16 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { describeCaptureFailure } from "../../src/shared/contracts/capture";
 import { DEVICE_COMMANDS } from "../../src/shared/contracts/device";
-import { HUE_COMMANDS, HUE_RUNTIME_STATES, HUE_RUNTIME_STATUS } from "../../src/shared/contracts/hue";
+import { HUE_RUNTIME_STATES, HUE_RUNTIME_STATUS } from "../../src/shared/contracts/hue";
 import type { FullTelemetrySnapshot } from "../../src/shared/contracts/telemetry";
-import type { HueRuntimeCommandResult, ModeCommandResult } from "../../src/features/mode/modeApi";
+import type { ModeCommandResult } from "../../src/features/mode/modeApi";
 import {
-  hueLeftOutReason,
-  hueLeftOutRetryTargets,
-  shouldCancelHueAfterLeavingOut,
-} from "../../src/features/mode/state/modeApplyOutcome";
+  LIGHTING_RUNTIME_COMMANDS,
+  type ApplyOutputsResult,
+} from "../../src/shared/contracts/lightingRuntime";
 import { dispatch } from "../dispatch";
 import { handlerFor } from "../handlers";
+import { __resetMockLightingRuntime } from "../handlers/lighting";
 import { SCENARIOS } from "../scenarios";
 import { getWorld, setWorld } from "../state";
 
@@ -231,56 +231,77 @@ describe("set_lighting_mode's USB and Hue gates fire in the same order apply_mod
 });
 
 /**
- * The frontend's USB-only fallback, replayed against the mock in the order the
- * orchestrator issues it: start Hue, apply on [usb, hue], read the refusal with
- * the same helper the app uses, cancel Hue if it is retrying, re-apply on USB.
+ * The mock's `apply_outputs` keeps the transaction's USB-only fallback: Hue is
+ * started first, a `[usb, hue]` apply the Hue gate refuses runs again on USB,
+ * and a start left retrying is cancelled so it does not run on unseen.
  */
-describe("a [usb, hue] start with the bridge unreachable falls back to USB", () => {
-  async function runFallback(world: ReturnType<typeof SCENARIOS.furnished.build>) {
+describe("a [usb, hue] choice with the bridge unreachable falls back to USB", () => {
+  async function choose(world: ReturnType<typeof SCENARIOS.furnished.build>) {
     world.hue.reachable = false;
     world.hue.streaming = false;
     world.lighting.mode = { kind: "off" };
     setWorld(world);
-
-    const start = (await dispatch(HUE_COMMANDS.START_STREAM)) as HueRuntimeCommandResult;
-    const first = (await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
-      payload: { kind: "solid", targets: ["usb", "hue"] },
-    })) as ModeCommandResult;
-    const usbOnly = hueLeftOutRetryTargets(first, ["usb", "hue"]);
-    const cancel = shouldCancelHueAfterLeavingOut({ hueStartCode: start.status.code, hueActiveBefore: true });
-    if (cancel) await dispatch(HUE_COMMANDS.STOP_STREAM);
-    const retry = usbOnly
-      ? ((await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
-          payload: { kind: "solid", targets: usbOnly },
-        })) as ModeCommandResult)
-      : null;
-    return { start, first, usbOnly, cancel, retry };
+    __resetMockLightingRuntime();
+    return (await dispatch(LIGHTING_RUNTIME_COMMANDS.APPLY_OUTPUTS, {
+      request: { mode: { kind: "solid" }, targets: ["usb", "hue"], origin: "user" },
+    })) as ApplyOutputsResult;
   }
 
-  it("never-started runtime: gated start, HUE_NOT_READY, then USB runs with nothing to cancel", async () => {
+  it("never-started runtime: gated start, then USB runs with Hue left out", async () => {
     const world = SCENARIOS.furnished.build();
     world.hue.everActive = false;
 
-    const run = await runFallback(world);
+    const result = await choose(world);
 
-    expect(run.start.status.code).toBe(HUE_RUNTIME_STATUS.CONFIG_NOT_READY_GATE_BLOCKED);
-    expect(run.first.status.code).toBe("HUE_NOT_READY");
-    expect(run.first.mode.kind).toBe("off");
-    expect(run.usbOnly).toEqual(["usb"]);
-    expect(run.cancel).toBe(false);
-    expect(run.retry?.status.code).toBe("SOLID_MODE_APPLIED");
+    expect(result.outcome.hueStartCode).toBe(HUE_RUNTIME_STATUS.CONFIG_NOT_READY_GATE_BLOCKED);
+    expect(result.status.code).toBe("OUTPUTS_APPLIED_PARTIAL");
+    expect(result.outcome.hueLeftOut).toBe("unreachable");
+    expect(result.outcome.applyStatus?.code).toBe("SOLID_MODE_APPLIED");
+    expect(result.snapshot.activeTargets).toEqual(["usb"]);
     expect(getWorld().lighting.mode.kind).toBe("solid");
-    expect(hueLeftOutReason(true, run.start.status.code)).toBe("unreachable");
   });
 
   it("a runtime that was live reports a scheduled retry, which the fallback cancels", async () => {
-    const run = await runFallback(SCENARIOS["hue-unreachable"].build());
+    const result = await choose(SCENARIOS["hue-unreachable"].build());
 
-    expect(run.start.status.code).toBe(HUE_RUNTIME_STATUS.TRANSIENT_RETRY_SCHEDULED);
-    expect(run.first.status.code).toBe("HUE_NOT_READY");
-    expect(run.cancel).toBe(true);
-    expect(run.retry?.status.code).toBe("SOLID_MODE_APPLIED");
+    expect(result.outcome.hueStartCode).toBe(HUE_RUNTIME_STATUS.TRANSIENT_RETRY_SCHEDULED);
+    expect(result.outcome.hueLeftOut).toBe("unreachable");
+    expect(getWorld().lighting.mode.kind).toBe("solid");
     expect(getWorld().hue.streaming).toBe(false);
+  });
+});
+
+describe("the mock's apply_outputs keeps the rules a caller can see", () => {
+  beforeEach(() => {
+    setWorld(SCENARIOS.furnished.build());
+    __resetMockLightingRuntime();
+  });
+
+  it("Off stops the Hue stream as well as the strip", async () => {
+    await dispatch(LIGHTING_RUNTIME_COMMANDS.APPLY_OUTPUTS, {
+      request: { mode: { kind: "solid" }, targets: ["usb", "hue"], origin: "popup" },
+    });
+    expect(getWorld().hue.streaming).toBe(true);
+
+    await dispatch(LIGHTING_RUNTIME_COMMANDS.APPLY_OUTPUTS, {
+      request: { mode: { kind: "off" }, origin: "popup" },
+    });
+
+    expect(getWorld().lighting.mode.kind).toBe("off");
+    expect(getWorld().hue.streaming).toBe(false);
+  });
+
+  it("a choice is saved, a USB unplug is not", async () => {
+    await dispatch(LIGHTING_RUNTIME_COMMANDS.APPLY_OUTPUTS, {
+      request: { mode: { kind: "ambilight" }, targets: ["usb"], origin: "user" },
+    });
+    expect(getWorld().shellState?.lightingMode?.kind).toBe("ambilight");
+    expect(getWorld().shellState?.lastOutputTargets).toEqual(["usb"]);
+
+    await dispatch(LIGHTING_RUNTIME_COMMANDS.APPLY_OUTPUTS, {
+      request: { targets: [], origin: "usbUnplug" },
+    });
+    expect(getWorld().shellState?.lastOutputTargets).toEqual(["usb"]);
   });
 });
 

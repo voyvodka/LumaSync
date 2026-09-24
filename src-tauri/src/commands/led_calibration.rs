@@ -56,6 +56,69 @@ pub struct LedCalibrationConfig {
     pub total_leds: u16,
 }
 
+/// `LED_CALIBRATION_MAX_TOTAL_LEDS` in `src/shared/contracts/calibration.ts`.
+/// Every frame allocates per LED, and four `u16` edge counts reach 262 140, so
+/// the sum is capped well above any strip a screen can carry.
+pub const MAX_TOTAL_LEDS: u32 = 4096;
+
+const CORNER_OWNERSHIPS: &[&str] = &["horizontal", "vertical"];
+const VISUAL_PRESETS: &[&str] = &["subtle", "vivid"];
+const START_ANCHORS: &[&str] = &[
+    "top-start",
+    "top-end",
+    "right-start",
+    "right-end",
+    "bottom-start",
+    "bottom-end",
+    "bottom-gap-right",
+    "bottom-gap-left",
+    "left-start",
+    "left-end",
+];
+const DIRECTIONS: &[&str] = &["cw", "ccw"];
+
+impl LedCalibrationConfig {
+    /// The shape every consumer assumes. The frontend normalises what it saves
+    /// to this; a config that fails it came from somewhere else — a hand-edited
+    /// file, an old build, a caller that skipped the normaliser — and is refused
+    /// with the reason rather than sized into a frame.
+    pub fn validate(&self) -> Result<(), String> {
+        let counts = &self.counts;
+        let sum = u32::from(counts.top)
+            + u32::from(counts.right)
+            + u32::from(counts.bottom)
+            + u32::from(counts.left);
+        if sum != u32::from(self.total_leds) {
+            return Err(format!(
+                "totalLeds is {} but the edge counts add up to {sum}",
+                self.total_leds
+            ));
+        }
+        if sum > MAX_TOTAL_LEDS {
+            return Err(format!(
+                "{sum} LEDs is more than the {MAX_TOTAL_LEDS} a calibration may hold"
+            ));
+        }
+        if self.bottom_missing > counts.bottom {
+            return Err(format!(
+                "bottomMissing {} is more than the {} bottom LEDs",
+                self.bottom_missing, counts.bottom
+            ));
+        }
+        for (field, value, allowed) in [
+            ("cornerOwnership", &self.corner_ownership, CORNER_OWNERSHIPS),
+            ("visualPreset", &self.visual_preset, VISUAL_PRESETS),
+            ("startAnchor", &self.start_anchor, START_ANCHORS),
+            ("direction", &self.direction, DIRECTIONS),
+        ] {
+            if !allowed.contains(&value.as_str()) {
+                return Err(format!("{field} {value:?} is not one of {allowed:?}"));
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Canonical LED segment traversal order, matching the TypeScript constant
 /// `SEGMENT_ORDER = ["top", "right", "bottom", "left"]` in indexMapping.ts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

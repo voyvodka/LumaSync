@@ -1,7 +1,7 @@
 // ControlPopupApp — "no Run press needed" contract: auto-start on reveal, every
 // selection applies immediately, and the footer is the only run control.
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -30,23 +30,28 @@ vi.mock("../previewApi", () => ({
   hideLedControlPopup: (...args: unknown[]) => hideLedControlPopup(...args),
 }));
 
-const setLightingMode = vi.fn();
-const stopLighting = vi.fn();
-// Reached through `hueTestLease`, which the runner now calls around every run.
-const startHue = vi.fn();
-const stopHue = vi.fn();
-// The lease reads the running mode before it hands a stream back.
-const getLightingModeStatus = vi.fn(() =>
-  Promise.resolve({ active: false, mode: { kind: "off" }, status: { code: "LIGHTING_MODE_STATUS_OK", message: "" } }),
-);
+const applyOutputs = vi.fn();
+const retuneLighting = vi.fn();
+// The runner borrows Hue around every run; Rust owns the lease.
+const acquireHueForTest = vi.fn();
+const releaseHueAfterTest = vi.fn();
 
 vi.mock("@/features/mode/modeApi", () => ({
-  setLightingMode: (...args: unknown[]) => setLightingMode(...args),
-  stopLighting: (...args: unknown[]) => stopLighting(...args),
-  startHue: (...args: unknown[]) => startHue(...args),
-  stopHue: (...args: unknown[]) => stopHue(...args),
-  getLightingModeStatus: () => getLightingModeStatus(),
+  applyOutputs: (...args: unknown[]) => applyOutputs(...args),
+  retuneLighting: (...args: unknown[]) => retuneLighting(...args),
+  acquireHueForTest: (...args: unknown[]) => acquireHueForTest(...args),
+  releaseHueAfterTest: (...args: unknown[]) => releaseHueAfterTest(...args),
 }));
+
+/** What `apply_outputs` answers; the code is all the popup reads besides the snapshot. */
+function outputsReply(code = "OUTPUTS_APPLIED") {
+  return {
+    status: { code, message: "", details: null },
+    requestId: 1,
+    snapshot: { revision: 1 },
+    outcome: {},
+  };
+}
 
 const storeSave = vi.fn();
 let storeState: Record<string, unknown> = {};
@@ -87,9 +92,18 @@ let syncState: {
   active: boolean;
   preview: LedPreviewStatus | null;
 };
+const adopt = vi.fn();
 
-vi.mock("../state/useLightingModeSync", () => ({
-  useLightingModeSync: () => syncState,
+// The runtime snapshot every window holds, and the preview status beside it.
+vi.mock("@/features/mode/state/useLightingRuntime", () => ({
+  useLightingRuntime: () => ({
+    snapshot: syncState.mode ? { revision: 1, mode: syncState.mode } : null,
+    adopt,
+  }),
+}));
+
+vi.mock("../state/usePreviewStatusSync", () => ({
+  usePreviewStatusSync: () => syncState.preview,
 }));
 
 const { ControlPopupApp } = await import("../ui/ControlPopupApp");
@@ -131,8 +145,10 @@ beforeEach(() => {
   });
   closeLedTwinOverlay.mockResolvedValue({ ok: true });
   hideLedControlPopup.mockResolvedValue({ ok: true });
-  setLightingMode.mockResolvedValue({});
-  stopLighting.mockResolvedValue({});
+  applyOutputs.mockResolvedValue(outputsReply());
+  retuneLighting.mockResolvedValue({ status: { code: "RETUNE_APPLIED", message: "", details: null } });
+  acquireHueForTest.mockResolvedValue(undefined);
+  releaseHueAfterTest.mockResolvedValue(undefined);
   invokeMock.mockResolvedValue(undefined);
   syncState = {
     mode: { kind: LIGHTING_MODE_KIND.OFF },
@@ -282,7 +298,7 @@ describe("ControlPopupApp run controls", () => {
 
     // Hand the light back to a real mode, which disengages the test.
     await user.click(screen.getByRole("radio", { name: /common:mode\.options\.ambilight/ }));
-    await waitFor(() => expect(setLightingMode).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(applyOutputs).toHaveBeenCalledTimes(1));
 
     await user.click(screen.getByRole("button", { name: "preview:control.close" }));
 
@@ -321,83 +337,112 @@ describe("ControlPopupApp run controls", () => {
 
     await user.click(screen.getByRole("radio", { name: /common:mode\.options\.ambilight/ }));
 
-    await waitFor(() => expect(setLightingMode).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(applyOutputs).toHaveBeenCalledTimes(1));
     expect(startLedTestPattern).not.toHaveBeenCalled();
   });
 });
 
-describe("ControlPopupApp mode payload stamps", () => {
-  // The webview outlives every hide, so a mount-time copy of the output
-  // settings went stale — and it never carried the chip type at all, which
-  // restarted a running SK6812 worker onto the WS2812B encoder.
-  it("leaves the output stamps to the backend and reads the rest fresh", async () => {
+/**
+ * The mode strip is a lighting choice like the main window's. It used to call
+ * the mode commands directly, which left Hue up on Off, never started Hue for
+ * Solid or Ambilight, never saved the choice, and skipped the calibration gate.
+ * Rust now owns all four; the popup only has to send the choice as a choice.
+ */
+describe("ControlPopupApp mode strip", () => {
+  async function clickMode(name: RegExp) {
     const user = userEvent.setup();
-    storeState = {
-      ...storeState,
-      colorCorrection: { gammaR: 2.2, gammaG: 2.2, gammaB: 2.2, kelvin: 6500, saturation: 1 },
-      firmwareProfile: "lumasync-v1",
-      selectedChipType: "ws2812b-grb",
-      ledCalibration: { totalLeds: 30 },
-      lightingMode: { kind: "ambilight", ambilight: { brightness: 0.4 } },
-      selectedDisplayId: "display-1",
-    };
     render(<ControlPopupApp />);
     await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
+    await user.click(screen.getByRole("radio", { name }));
+    await waitFor(() => expect(applyOutputs).toHaveBeenCalledTimes(1));
+    return applyOutputs.mock.calls[0][0] as { mode: Record<string, unknown>; origin: string };
+  }
 
-    // Changed in the main window while the popup webview stayed alive.
-    storeState = {
-      ...storeState,
-      firmwareProfile: "adalight",
-      selectedChipType: "sk6812-rgbw",
-      lastOutputTargets: ["usb", "hue"],
-      lightingMode: { kind: "ambilight", ambilight: { brightness: 0.9 } },
-      selectedDisplayId: "display-2",
-    };
+  it("sends Off to the transaction, which stops Hue as well as the strip", async () => {
+    const request = await clickMode(/common:mode\.options\.off/);
 
-    await user.click(screen.getByRole("radio", { name: /common:mode\.options\.ambilight/ }));
-    await waitFor(() => expect(setLightingMode).toHaveBeenCalledTimes(1));
+    expect(request).toEqual({ mode: { kind: LIGHTING_MODE_KIND.OFF }, origin: "popup" });
+  });
 
-    const payload = setLightingMode.mock.calls[0][0] as Record<string, unknown>;
-    for (const key of ["colorCorrection", "firmwareProfile", "chipType", "ledCalibration"]) {
-      expect(payload[key], key).toBeUndefined();
-    }
-    expect(payload).toMatchObject({
-      kind: LIGHTING_MODE_KIND.AMBILIGHT,
-      targets: ["usb", "hue"],
-      displayId: "display-2",
-      ambilight: { brightness: 0.9 },
+  // Rust stamps the saved outputs, display, room geometry and output settings,
+  // and keeps the last Ambilight settings: a copy here would go stale, since
+  // the webview outlives every hide.
+  it("sends Ambilight as its kind alone, on the saved outputs Rust reads", async () => {
+    const request = await clickMode(/common:mode\.options\.ambilight/);
+
+    expect(request).toEqual({ mode: { kind: LIGHTING_MODE_KIND.AMBILIGHT }, origin: "popup" });
+  });
+
+  it("sends Solid with the colour on screen", async () => {
+    syncState.mode = { kind: LIGHTING_MODE_KIND.OFF, solid: { r: 1, g: 2, b: 3, brightness: 0.4 } };
+    const request = await clickMode(/common:mode\.options\.solid/);
+
+    expect(request.origin).toBe("popup");
+    expect(request.mode).toEqual({
+      kind: LIGHTING_MODE_KIND.SOLID,
+      solid: { r: 1, g: 2, b: 3, brightness: 0.4 },
     });
   });
 
-  // Rust does not hydrate the geometry, and an Ambilight payload without it
-  // puts a running worker back on legacy sampling.
-  it("stamps the room geometry projected from the freshly re-read room map", async () => {
-    const user = userEvent.setup();
-    const roomMap = (tvX: number) => ({
-      dimensions: { widthMeters: 5, depthMeters: 4, heightMeters: 2.5 },
-      hueChannels: [
-        { channelIndex: 0, channelId: 3, x: 0.2, y: 0.8, z: 0.5, zOrigin: "user", entertainmentAreaId: "area-1" },
-      ],
-      usbStrips: [],
-      furniture: [],
-      zones: [],
-      imageLayers: [],
-      tvAnchor: { x: tvX, y: 0, width: 2, height: 0.3, locked: true },
-    });
-    storeState = { ...storeState, lastHueAreaId: "area-1", roomMap: roomMap(1) };
+  it("takes the snapshot the transaction answered with", async () => {
+    await clickMode(/common:mode\.options\.ambilight/);
+
+    await waitFor(() => expect(adopt).toHaveBeenCalledWith({ revision: 1 }));
+  });
+
+  it("says a strip needs calibrating when the transaction refuses for it", async () => {
+    applyOutputs.mockResolvedValue(outputsReply("OUTPUTS_CALIBRATION_REQUIRED"));
+
+    await clickMode(/common:mode\.options\.ambilight/);
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent("preview:control.calibrationRequired"),
+    );
+  });
+});
+
+/**
+ * A colour drag in a running Solid is a retune, never a restart: at most one
+ * `retune_lighting` in flight, the newest value next, and no `apply_outputs`.
+ */
+describe("ControlPopupApp Solid drag", () => {
+  it("coalesces a burst of brightness commits into the first and the last", async () => {
+    syncState = {
+      ...syncState,
+      mode: { kind: LIGHTING_MODE_KIND.SOLID, solid: { r: 10, g: 20, b: 30, brightness: 1 } },
+    };
+    let answer!: () => void;
+    retuneLighting.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = () => resolve({ status: { code: "RETUNE_APPLIED", message: "", details: null } });
+        }),
+    );
     render(<ControlPopupApp />);
     await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
+    // Hand the light to the mode, which disengages the test.
+    fireEvent.click(screen.getByRole("radio", { name: /common:mode\.options\.solid/ }));
+    await waitFor(() => expect(applyOutputs).toHaveBeenCalledTimes(1));
+    applyOutputs.mockClear();
 
-    storeState = { ...storeState, roomMap: roomMap(1.5) };
-    await user.click(screen.getByRole("radio", { name: /common:mode\.options\.ambilight/ }));
-    await waitFor(() => expect(setLightingMode).toHaveBeenCalledTimes(1));
+    const slider = screen.getByRole("slider", { name: "common:mode.brightness" });
+    for (const value of [90, 80, 70, 60, 50, 40, 30, 20]) {
+      fireEvent.change(slider, { target: { value: String(value) } });
+      // Past the 50 ms commit floor of the colour draft, so every move commits.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      });
+    }
 
-    const payload = setLightingMode.mock.calls[0][0] as Record<string, unknown>;
-    expect(payload.roomGeometry).toEqual({
-      dimensions: { widthMeters: 5, depthMeters: 4, heightMeters: 2.5 },
-      tv: { x: 1.5, y: 0, width: 2, height: 0.3 },
-      huePlacements: [{ channelId: 3, positionX: 0.2, positionY: 0.8, positionZ: 0.5 }],
+    expect(retuneLighting).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      answer();
     });
+    await waitFor(() => expect(retuneLighting).toHaveBeenCalledTimes(2));
+    expect(retuneLighting.mock.calls[1][0]).toEqual({
+      solid: { r: 10, g: 20, b: 30, brightness: 0.2 },
+    });
+    expect(applyOutputs).not.toHaveBeenCalled();
   });
 });
 

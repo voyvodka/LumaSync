@@ -6,12 +6,10 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { useMemo } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/shared/contracts/mode";
 import {
   PREVIEW_OPEN_NOTICE_MS,
   usePreviewOpenNotice,
 } from "@/features/preview/state/usePreviewOpenNotice";
-import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 
 import { buildShellNotices } from "../notices/buildShellNotices";
 import { ShellNoticeSlot } from "../notices/ShellNoticeSlot";
@@ -25,9 +23,6 @@ vi.mock("react-i18next", () => ({
 
 let showPreview: (() => void) | null = null;
 vi.mock("@/features/tray/trayController", () => ({
-  listenTrayLightsOff: () => Promise.resolve(() => {}),
-  listenTrayResumeLastMode: () => Promise.resolve(() => {}),
-  listenTraySolidColor: () => Promise.resolve(() => {}),
   listenTrayShowLedPreview: (cb: () => void) => {
     showPreview = cb;
     return Promise.resolve(() => {});
@@ -41,7 +36,7 @@ vi.mock("@/features/tray/trayApi", () => ({
 const saveShellStateMock = vi.fn();
 let twinEnabled = false;
 vi.mock("../windowLifecycle", () => ({
-  loadShellState: () => Promise.resolve({ ledTwinEnabledTest: twinEnabled }),
+  loadShellState: () => Promise.resolve({ ledTwinEnabledTest: twinEnabled, selectedDisplayId: "display-2" }),
   saveShellState: (partial: unknown) => saveShellStateMock(partial),
 }));
 
@@ -58,14 +53,7 @@ const POPUP_OK = { ok: true, code: "CONTROL_POPUP_SHOWN", message: "", visible: 
 
 function Harness() {
   const preview = usePreviewOpenNotice();
-  useTrayIntegration({
-    onLightingModeChange: async () => {},
-    lightingModeRef: { current: { kind: LIGHTING_MODE_KIND.OFF } as LightingModeConfig },
-    lastNonOffModeRef: { current: null },
-    selectedOutputTargetsRef: { current: [] as HueRuntimeTarget[] },
-    getSelectedDisplayId: () => "display-2",
-    onPreviewOpenFailed: preview.report,
-  });
+  useTrayIntegration({ onPreviewOpenFailed: preview.report });
   const candidates = useMemo(
     () => buildShellNotices({ ...QUIET_INPUT, uiMode: "full", previewOpenFailure: preview.notice }, handlers, keyT),
     [preview.notice],

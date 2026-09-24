@@ -1,71 +1,81 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { HUE_COMMANDS, HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
-import type { LightingModeConfig } from "@/shared/contracts/mode";
 import {
+  acquireHueForTest,
+  applyOutputs,
   getHueStreamStatus,
-  getLightingModeStatus,
+  releaseHueAfterTest,
   restartHue,
-  setHueSolidColor,
+  retuneLighting,
   startHue,
-  setLightingMode,
-  stopHue,
-  stopLighting,
   type ModeApiError,
 } from "../modeApi";
 
-const SOLID_MODE: LightingModeConfig = {
-  kind: "solid",
-  solid: { r: 100, g: 50, b: 25, brightness: 0.7 },
+const APPLIED = {
+  status: { code: "OUTPUTS_APPLIED", message: "", details: null },
+  requestId: 1,
+  snapshot: {},
+  outcome: {},
 };
 
 describe("modeApi wrappers", () => {
-  it("invokes set_lighting_mode with payload contract", async () => {
-    const invokeMock = vi.fn().mockResolvedValue({
-      active: true,
-      mode: SOLID_MODE,
-      status: { code: "OK", message: "Set", details: null },
-    });
+  it("sends a choice as its kind and only the payload the caller has", async () => {
+    const invokeMock = vi.fn().mockResolvedValue(APPLIED);
 
-    await setLightingMode(SOLID_MODE, invokeMock);
-
-    expect(invokeMock).toHaveBeenCalledWith("set_lighting_mode", { payload: SOLID_MODE });
-  });
-
-  it("carries the room geometry through the normalize that strips it from persistence", async () => {
-    const invokeMock = vi.fn().mockResolvedValue({
-      active: true,
-      mode: { kind: "ambilight" },
-      status: { code: "AMBILIGHT_MODE_UPDATED", message: "", details: null },
-    });
-    const roomGeometry = {
-      dimensions: { widthMeters: 5, depthMeters: 4, heightMeters: 2.5 },
-      tv: { x: 1.5, y: 0, width: 2, height: 0.3 },
-      huePlacements: [{ channelId: 3, positionX: 0.2, positionY: 0.9 }],
-    };
-
-    await setLightingMode(
-      { kind: "ambilight", ambilight: { brightness: 1 }, roomGeometry },
+    await applyOutputs({ mode: { kind: "solid" }, origin: "tray" }, invokeMock);
+    await applyOutputs(
+      { mode: { kind: "solid", solid: { r: 300, g: 1, b: 2, brightness: 0.5 } }, origin: "user" },
       invokeMock,
     );
-    await setLightingMode({ kind: "ambilight", ambilight: { brightness: 1 } }, invokeMock);
 
-    expect(invokeMock.mock.calls[0][1].payload.roomGeometry).toEqual(roomGeometry);
-    expect(invokeMock.mock.calls[1][1].payload).not.toHaveProperty("roomGeometry");
+    // Absent keeps the last colour in Rust; a default filled in here would
+    // overwrite it with white.
+    expect(invokeMock.mock.calls[0]).toEqual([
+      "apply_outputs",
+      { request: { mode: { kind: "solid" }, origin: "tray" } },
+    ]);
+    expect(invokeMock.mock.calls[1][1].request.mode).toEqual({
+      kind: "solid",
+      solid: { r: 255, g: 1, b: 2, brightness: 0.5 },
+    });
   });
 
-  it("invokes stop_lighting and get_lighting_mode_status commands", async () => {
+  it("sends a target change without a mode", async () => {
+    const invokeMock = vi.fn().mockResolvedValue(APPLIED);
+
+    await applyOutputs({ targets: ["usb", "hue"], origin: "user" }, invokeMock);
+
+    expect(invokeMock).toHaveBeenCalledWith("apply_outputs", {
+      request: { targets: ["usb", "hue"], origin: "user", mode: undefined },
+    });
+  });
+
+  it("invokes retune_lighting with the tuning as given", async () => {
     const invokeMock = vi.fn().mockResolvedValue({
-      active: false,
-      mode: { kind: "off" },
-      status: { code: "OK", message: "Stopped", details: null },
+      status: { code: "RETUNE_APPLIED", message: "", details: null },
     });
 
-    await stopLighting(invokeMock);
-    await getLightingModeStatus(invokeMock);
+    await retuneLighting({ ambilight: { brightness: 0.4 } }, invokeMock);
 
-    expect(invokeMock).toHaveBeenNthCalledWith(1, "stop_lighting");
-    expect(invokeMock).toHaveBeenNthCalledWith(2, "get_lighting_mode_status");
+    expect(invokeMock).toHaveBeenCalledWith("retune_lighting", {
+      tuning: { ambilight: { brightness: 0.4 } },
+    });
+  });
+
+  it("borrows Hue for a test only when the test targets it, and always hands it back", async () => {
+    const invokeMock = vi.fn().mockResolvedValue(APPLIED);
+
+    await acquireHueForTest(["usb"], invokeMock);
+    expect(invokeMock).not.toHaveBeenCalled();
+
+    await acquireHueForTest(["usb", "hue"], invokeMock);
+    await releaseHueAfterTest(invokeMock);
+
+    expect(invokeMock.mock.calls).toEqual([
+      ["apply_outputs", { request: { targets: ["hue"], origin: "leaseHue", mode: undefined } }],
+      ["apply_outputs", { request: { targets: [], origin: "leaseHue", mode: undefined } }],
+    ]);
   });
 
   it("maps invoke errors to code/message/details shape", async () => {
@@ -75,7 +85,7 @@ describe("modeApi wrappers", () => {
       details: "solid payload missing rgb values",
     } satisfies ModeApiError);
 
-    await expect(setLightingMode(SOLID_MODE, invokeMock)).rejects.toEqual({
+    await expect(applyOutputs({ origin: "user" }, invokeMock)).rejects.toEqual({
       code: "PORT_UNSUPPORTED",
       message: "Invalid mode payload",
       details: "solid payload missing rgb values",
@@ -90,7 +100,7 @@ describe("modeApi wrappers", () => {
       message: "Invalid mode payload",
     });
 
-    await expect(setLightingMode(SOLID_MODE, invokeMock)).rejects.toEqual({
+    await expect(applyOutputs({ origin: "user" }, invokeMock)).rejects.toEqual({
       code: "UNKNOWN",
       message: "Invalid mode payload",
       details: undefined,
@@ -105,13 +115,13 @@ describe("modeApi wrappers", () => {
       .fn()
       .mockRejectedValue("LIGHTING_RUNTIME_STATE_LOCK_FAILED: poisoned lock");
 
-    await expect(stopLighting(invokeMock)).rejects.toEqual({
+    await expect(applyOutputs({ origin: "user" }, invokeMock)).rejects.toEqual({
       code: "UNKNOWN",
       message: "LIGHTING_RUNTIME_STATE_LOCK_FAILED: poisoned lock",
       details: "poisoned lock",
     });
     expect(errorSpy).toHaveBeenCalledWith(
-      "[LumaSync] stop_lighting rejected:",
+      "[LumaSync] apply_outputs rejected:",
       "LIGHTING_RUNTIME_STATE_LOCK_FAILED: poisoned lock",
     );
     errorSpy.mockRestore();
@@ -121,7 +131,7 @@ describe("modeApi wrappers", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const invokeMock = vi.fn().mockRejectedValue("PORT_NOT_FOUND: COM9");
 
-    await expect(setLightingMode(SOLID_MODE, invokeMock)).rejects.toMatchObject({
+    await expect(applyOutputs({ origin: "user" }, invokeMock)).rejects.toMatchObject({
       code: "PORT_NOT_FOUND",
     });
     errorSpy.mockRestore();
@@ -144,25 +154,6 @@ describe("modeApi wrappers", () => {
 
     await expect(getHueStreamStatus(invokeMock)).resolves.toEqual(commandResult);
     expect(invokeMock).toHaveBeenCalledWith(HUE_COMMANDS.GET_STREAM_STATUS);
-  });
-
-  it("invokes stop_hue_stream with device-surface trigger payload", async () => {
-    const invokeMock = vi.fn().mockResolvedValue({
-      active: false,
-      status: {
-        state: "Idle",
-        code: "HUE_STREAM_STOPPED",
-        message: "Hue stream is idle.",
-        details: null,
-        triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
-      },
-    });
-
-    await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE, invokeMock);
-
-    expect(invokeMock).toHaveBeenCalledWith(HUE_COMMANDS.STOP_STREAM, {
-      triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
-    });
   });
 
   it("keeps start_hue_stream wrapper behavior and default mode-control trigger", async () => {
@@ -227,39 +218,6 @@ describe("modeApi wrappers", () => {
         clientKey: "AABBCCDD11223344AABBCCDD11223344",
         areaId: "area-1",
         triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
-      },
-    });
-  });
-
-  it("invokes set_hue_solid_color with normalized payload", async () => {
-    const invokeMock = vi.fn().mockResolvedValue({
-      active: true,
-      status: {
-        state: "Running",
-        code: "HUE_COLOR_APPLIED",
-        message: "Hue solid color update applied.",
-        details: null,
-        triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
-      },
-    });
-
-    await setHueSolidColor(
-      {
-        r: 123.9,
-        g: 200.1,
-        b: 40,
-        brightness: 0.8,
-      },
-      invokeMock,
-    );
-
-    expect(invokeMock).toHaveBeenCalledWith(HUE_COMMANDS.SET_SOLID_COLOR, {
-      request: {
-        r: 123,
-        g: 200,
-        b: 40,
-        brightness: 0.8,
-        triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
       },
     });
   });

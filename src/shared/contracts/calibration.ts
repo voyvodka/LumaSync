@@ -58,6 +58,13 @@ export interface LedCalibrationConfig {
   totalLeds: number;
 }
 
+/**
+ * The most LEDs a calibration may hold. Rust refuses a larger one
+ * (`MAX_TOTAL_LEDS` in `led_calibration.rs`) before it sizes a frame, since
+ * four edge counts could otherwise ask for a quarter of a million.
+ */
+export const LED_CALIBRATION_MAX_TOTAL_LEDS = 4096;
+
 /** A named preset of calibration values, offered as a starting point in the editor. */
 export interface CalibrationTemplate {
   id: string;

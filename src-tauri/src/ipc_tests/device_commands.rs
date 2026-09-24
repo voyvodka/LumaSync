@@ -4,7 +4,9 @@ use serde_json::{json, Value};
 use tauri::test::MockRuntime;
 use tauri::App;
 
-use super::{assert_camel_case_keys, invoke, main_webview, mock_app, status_code};
+use super::{
+    assert_camel_case_keys, grant_main_for_tests, invoke, main_webview, mock_app, status_code,
+};
 
 fn app() -> App<MockRuntime> {
     mock_app(tauri::generate_handler![
@@ -169,6 +171,7 @@ fn refused_connect_does_not_arm_usb_output() {
         crate::commands::device_connection::connect_serial_port,
         crate::commands::lighting_mode::set_lighting_mode
     ]);
+    grant_main_for_tests(&app, &["allow-set-lighting-mode"]);
     let webview = main_webview(&app);
 
     invoke(

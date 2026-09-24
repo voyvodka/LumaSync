@@ -2,6 +2,7 @@
 //! take it from this cell and never from the runtime lock, which a transition
 //! holds for seconds. See docs/architecture/lighting-transaction.md.
 
+use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -17,12 +18,17 @@ pub const LIGHTING_RUNTIME_CHANGED_EVENT: &str = "lighting://runtime-changed";
 /// A drag retunes at up to 20 Hz; the windows only need to follow it at half that.
 pub(crate) const RETUNE_PUBLISH_INTERVAL: Duration = Duration::from_millis(100);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// Declared in the frontend's stable order: `Ord` is what keeps a
+/// `BTreeSet<OutputTarget>` iterating `usb, hue`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum OutputTarget {
     Usb,
     Hue,
 }
+
+/// A selection of outputs: deduped and ordered by construction.
+pub(crate) type OutputTargets = BTreeSet<OutputTarget>;
 
 impl OutputTarget {
     pub(crate) fn as_str(self) -> &'static str {
@@ -45,10 +51,25 @@ impl OutputTarget {
 pub(crate) fn normalize_targets(
     targets: impl IntoIterator<Item = OutputTarget>,
 ) -> Vec<OutputTarget> {
-    let targets: Vec<OutputTarget> = targets.into_iter().collect();
-    [OutputTarget::Usb, OutputTarget::Hue]
+    targets
         .into_iter()
-        .filter(|target| targets.contains(target))
+        .collect::<OutputTargets>()
+        .into_iter()
+        .collect()
+}
+
+/// Parses a wire selection. An unknown name is an error naming it, never a
+/// target silently dropped: a selection that lost its only real output would
+/// start a capture worker that drives nothing.
+pub(crate) fn parse_targets<S: AsRef<str>>(
+    targets: impl IntoIterator<Item = S>,
+) -> Result<OutputTargets, String> {
+    targets
+        .into_iter()
+        .map(|name| {
+            let name = name.as_ref();
+            OutputTarget::parse(name).ok_or_else(|| format!("unknown output target \"{name}\""))
+        })
         .collect()
 }
 

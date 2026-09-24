@@ -1,32 +1,20 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/shared/contracts/mode";
-import type { HueRuntimeTarget } from "@/shared/contracts/hue";
-
-import { useTrayIntegration, type TrayIntegrationInput } from "../useTrayIntegration";
+import { useTrayIntegration } from "../useTrayIntegration";
 
 type Listener = () => void;
-const registered: Record<string, Listener | undefined> = {};
+let previewListener: Listener | undefined;
 const unlisten = vi.fn();
+const listenTrayShowLedPreview = vi.fn((cb: Listener) => {
+  previewListener = cb;
+  return Promise.resolve(unlisten);
+});
 
+// Only the preview item is a window event. The lighting items (off, resume,
+// solid) run the transaction in Rust, so no window listens for them.
 vi.mock("@/features/tray/trayController", () => ({
-  listenTrayLightsOff: (cb: Listener) => {
-    registered.off = cb;
-    return Promise.resolve(unlisten);
-  },
-  listenTrayResumeLastMode: (cb: Listener) => {
-    registered.resume = cb;
-    return Promise.resolve(unlisten);
-  },
-  listenTraySolidColor: (cb: Listener) => {
-    registered.solid = cb;
-    return Promise.resolve(unlisten);
-  },
-  listenTrayShowLedPreview: (cb: Listener) => {
-    registered.preview = cb;
-    return Promise.resolve(unlisten);
-  },
+  listenTrayShowLedPreview: (cb: Listener) => listenTrayShowLedPreview(cb),
 }));
 
 vi.mock("@/features/tray/trayApi", () => ({
@@ -44,94 +32,24 @@ vi.mock("@/features/preview/previewApi", () => ({
   openLedTwinOverlay: () => Promise.resolve(),
 }));
 
-function harness(overrides: Partial<TrayIntegrationInput> = {}) {
-  const onLightingModeChange = vi.fn().mockResolvedValue(undefined);
-  const lightingModeRef = {
-    current: { kind: LIGHTING_MODE_KIND.SOLID, solid: { r: 1, g: 2, b: 3, brightness: 0.5 } },
-  } as { current: LightingModeConfig };
-  const lastNonOffModeRef = { current: null as LightingModeConfig | null };
-  const selectedOutputTargetsRef = { current: ["usb"] as HueRuntimeTarget[] };
-
-  const input: TrayIntegrationInput = {
-    onLightingModeChange,
-    lightingModeRef,
-    lastNonOffModeRef,
-    selectedOutputTargetsRef,
-    getSelectedDisplayId: () => undefined,
-    ...overrides,
-  };
-
-  const view = renderHook((props: TrayIntegrationInput) => useTrayIntegration(props), {
-    initialProps: input,
-  });
-  return { view, input, onLightingModeChange, lightingModeRef, lastNonOffModeRef };
-}
-
 describe("useTrayIntegration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    for (const key of Object.keys(registered)) delete registered[key];
+    previewListener = undefined;
   });
 
-  it("routes the tray Lights-Off action to the current handler", async () => {
-    const { onLightingModeChange } = harness();
-    await waitFor(() => expect(registered.off).toBeDefined());
+  it("listens for the preview item and nothing else", async () => {
+    renderHook(() => useTrayIntegration({}));
 
-    registered.off?.();
-    expect(onLightingModeChange).toHaveBeenCalledWith({ kind: LIGHTING_MODE_KIND.OFF });
+    await waitFor(() => expect(previewListener).toBeDefined());
+    expect(listenTrayShowLedPreview).toHaveBeenCalledOnce();
   });
 
-  it("reaches the latest handler after a re-render, not the one captured at mount", async () => {
-    const { view, input } = harness();
-    await waitFor(() => expect(registered.off).toBeDefined());
-
-    const nextHandler = vi.fn().mockResolvedValue(undefined);
-    view.rerender({ ...input, onLightingModeChange: nextHandler });
-
-    registered.off?.();
-    expect(nextHandler).toHaveBeenCalledOnce();
-    expect(input.onLightingModeChange).not.toHaveBeenCalled();
-  });
-
-  it("resumes the last non-off mode with the currently selected targets", async () => {
-    const { onLightingModeChange, lastNonOffModeRef } = harness();
-    await waitFor(() => expect(registered.resume).toBeDefined());
-    lastNonOffModeRef.current = { kind: LIGHTING_MODE_KIND.AMBILIGHT };
-
-    registered.resume?.();
-    expect(onLightingModeChange).toHaveBeenCalledWith({
-      kind: LIGHTING_MODE_KIND.AMBILIGHT,
-      targets: ["usb"],
-    });
-  });
-
-  it("does not resume when the last known mode is off", async () => {
-    const { onLightingModeChange, lightingModeRef } = harness();
-    await waitFor(() => expect(registered.resume).toBeDefined());
-    lightingModeRef.current = { kind: LIGHTING_MODE_KIND.OFF };
-
-    registered.resume?.();
-    expect(onLightingModeChange).not.toHaveBeenCalled();
-  });
-
-  it("falls back to white when the tray asks for Solid and no colour is set", async () => {
-    const { onLightingModeChange, lightingModeRef } = harness();
-    await waitFor(() => expect(registered.solid).toBeDefined());
-    lightingModeRef.current = { kind: LIGHTING_MODE_KIND.OFF };
-
-    registered.solid?.();
-    expect(onLightingModeChange).toHaveBeenCalledWith({
-      kind: LIGHTING_MODE_KIND.SOLID,
-      solid: { r: 255, g: 255, b: 255, brightness: 1 },
-      targets: ["usb"],
-    });
-  });
-
-  it("removes every listener on unmount", async () => {
-    const { view } = harness();
-    await waitFor(() => expect(registered.preview).toBeDefined());
+  it("removes its listener on unmount", async () => {
+    const view = renderHook(() => useTrayIntegration({}));
+    await waitFor(() => expect(previewListener).toBeDefined());
 
     view.unmount();
-    expect(unlisten).toHaveBeenCalledTimes(4);
+    expect(unlisten).toHaveBeenCalledOnce();
   });
 });

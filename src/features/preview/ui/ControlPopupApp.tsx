@@ -1,12 +1,14 @@
 // ControlPopupApp — root of the `led-control-popup` webview. Reachable only by
 // choosing test mode, so it auto-starts on reveal and applies every selection
 // immediately; `PATTERN_PREVIEW_ONLY` is a success, not an error. The
-// auto-start drives the strip only — see `docs/architecture/hue.md`.
+// auto-start drives the strip only — see `docs/architecture/hue.md`. Its mode
+// strip is a lighting choice like the main window's: the Rust transaction
+// runs it, on the saved outputs, and saves it.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { shellStore, type ShellState } from "@/features/persistence/shellStore";
+import { shellStore } from "@/features/persistence/shellStore";
 import { showNotification } from "@/features/platform/platformApi";
 import {
   onCurrentWindowMoved,
@@ -16,16 +18,15 @@ import {
 import { parseHex, rgbToHex } from "@/shared/lib/color";
 import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
 import { IconOff, IconAmbilight, IconSolidDot } from "@/shared/ui/icons";
-import { setLightingMode, stopLighting } from "@/features/mode/modeApi";
+import { applyOutputs, retuneLighting } from "@/features/mode/modeApi";
+import { createRetuneCoalescer } from "@/features/mode/state/retuneCoalescer";
+import { useLightingRuntime } from "@/features/mode/state/useLightingRuntime";
 import {
   LIGHTING_MODE_KIND,
-  type AmbilightPayload,
-  type LightingModeConfig,
+  normalizeSolidColorPayload,
   type LightingModeKind,
 } from "@/shared/contracts/mode";
-import type { DisplayId } from "@/shared/contracts/display";
-import type { RoomGeometry } from "@/shared/contracts/roomMap";
-import { toRoomGeometry } from "@/features/room-map/model/roomGeometry";
+import { LIGHTING_ORIGIN, LIGHTING_OUTPUTS_STATUS } from "@/shared/contracts/lightingRuntime";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 import {
   LED_TEST_STATUS,
@@ -36,7 +37,7 @@ import {
 } from "@/shared/contracts/preview";
 import { useSolidColorDraft } from "@/features/settings/sections/control/useSolidColorDraft";
 import { closeLedTwinOverlay, hideLedControlPopup } from "../previewApi";
-import { useLightingModeSync } from "../state/useLightingModeSync";
+import { usePreviewStatusSync } from "../state/usePreviewStatusSync";
 import {
   isTestPatternErrorCode,
   useTestPatternRunner,
@@ -44,28 +45,11 @@ import {
 } from "../state/useTestPatternRunner";
 import { isPickerPatternKind, PatternPicker, type PickerPatternKind } from "./PatternPicker";
 
-// Output stamps (calibration, colour correction, firmware profile, chip type)
-// are deliberately absent: `set_lighting_mode` hydrates them from disk, while
-// a copy here goes stale because the webview outlives every hide. The room
-// geometry is the exception: Rust does not hydrate it, and an Ambilight payload
-// without it switches a running worker back to legacy sampling.
-interface ModeStamps {
-  targets: HueRuntimeTarget[];
-  ambilight?: AmbilightPayload;
-  displayId?: DisplayId;
-  roomGeometry?: RoomGeometry;
-}
-
-function stampsFrom(state: ShellState): ModeStamps {
-  return {
-    targets:
-      state.lastOutputTargets && state.lastOutputTargets.length > 0
-        ? state.lastOutputTargets
-        : ["usb"],
-    ambilight: state.lightingMode?.ambilight ?? undefined,
-    displayId: state.selectedDisplayId,
-    roomGeometry: toRoomGeometry(state),
-  };
+/** The outputs a pattern-tile test lights: the ones the user last saved. A copy
+ * held here goes stale because the webview outlives every hide, so it is
+ * re-read before each use. Mode choices need none of it — Rust stamps them. */
+function savedTargetsFrom(targets: HueRuntimeTarget[] | undefined): HueRuntimeTarget[] {
+  return targets && targets.length > 0 ? targets : ["usb"];
 }
 
 const DEFAULT_SOLID = { r: 255, g: 255, b: 255, brightness: 1 };
@@ -104,9 +88,12 @@ function buildRunRequest(
 
 export function ControlPopupApp() {
   const { t } = useTranslation();
-  const { mode, preview } = useLightingModeSync();
+  const { snapshot, adopt } = useLightingRuntime();
+  const mode = snapshot?.mode ?? null;
+  const preview = usePreviewStatusSync();
+  const retunes = useMemo(() => createRetuneCoalescer((tuning) => retuneLighting(tuning)), []);
 
-  const stampsRef = useRef<ModeStamps>({ targets: ["usb"] });
+  const savedTargetsRef = useRef<HueRuntimeTarget[]>(["usb"]);
   // Targets of the run in progress. A colour or speed change retunes that run,
   // so it must not widen an auto-started strip-only test onto Hue.
   const runTargetsRef = useRef<HueRuntimeTarget[]>([...AUTO_START_TARGETS]);
@@ -127,7 +114,7 @@ export function ControlPopupApp() {
   // so a mount-time snapshot misses every settings change made since.
   const refreshStamps = useCallback(async () => {
     try {
-      stampsRef.current = stampsFrom(await shellStore.load());
+      savedTargetsRef.current = savedTargetsFrom((await shellStore.load()).lastOutputTargets);
     } catch (error) {
       console.error("[LumaSync] ControlPopupApp stamp refresh failed:", error);
     }
@@ -140,7 +127,7 @@ export function ControlPopupApp() {
       .load()
       .then((state) => {
         if (!alive) return;
-        stampsRef.current = stampsFrom(state);
+        savedTargetsRef.current = savedTargetsFrom(state.lastOutputTargets);
         const lastKind = state.lastLedTestPattern?.kind;
         if (lastKind && isPickerPatternKind(lastKind)) {
           setPatternKind(lastKind);
@@ -222,20 +209,6 @@ export function ControlPopupApp() {
     [mode?.solid?.r, mode?.solid?.g, mode?.solid?.b, mode?.solid?.brightness],
   );
 
-  const withStamps = useCallback((base: LightingModeConfig): LightingModeConfig => {
-    const s = stampsRef.current;
-    return {
-      ...base,
-      targets: base.targets ?? s.targets,
-      displayId: base.displayId ?? s.displayId,
-      ambilight: base.ambilight ?? s.ambilight,
-      roomGeometry:
-        base.kind === LIGHTING_MODE_KIND.AMBILIGHT
-          ? (base.roomGeometry ?? s.roomGeometry)
-          : base.roomGeometry,
-    };
-  }, []);
-
   // ── Test pattern runner ──────────────────────────────────────────────────
   const persistTimerRef = useRef<number | null>(null);
   const persistPatternRef = useRef<LedTestPattern | null>(null);
@@ -272,7 +245,7 @@ export function ControlPopupApp() {
       setRunError(null);
       setPreviewOnly(code === LED_TEST_STATUS.PATTERN_PREVIEW_ONLY || result.previewOnly === true);
       setHueLeftOut(
-        !request.targets?.includes("hue") && stampsRef.current.targets.includes("hue"),
+        !request.targets?.includes("hue") && savedTargetsRef.current.includes("hue"),
       );
       queuePersistPattern(request.pattern);
     },
@@ -284,21 +257,15 @@ export function ControlPopupApp() {
   const handleSolidCommit = useCallback(
     (next: SolidDraft) => {
       // While the test owns the light, a colour/brightness move must refresh
-      // the pattern — routing it to `setLightingMode` would kill the test.
+      // the pattern — a lighting retune would not reach it.
       if (testEngaged) {
         runner.refresh(buildRunRequest(patternKind, next, speed, runTargetsRef.current));
         return;
       }
       if (!isSolid) return;
-      void (async () => {
-        try {
-          await setLightingMode(withStamps({ kind: LIGHTING_MODE_KIND.SOLID, solid: next }));
-        } catch (error) {
-          console.error("[LumaSync] ControlPopupApp solid commit failed:", error);
-        }
-      })();
+      retunes.push({ solid: normalizeSolidColorPayload(next) });
     },
-    [isSolid, patternKind, runner, speed, testEngaged, withStamps],
+    [isSolid, patternKind, retunes, runner, speed, testEngaged],
   );
 
   const { draft, setColor, setBrightness } = useSolidColorDraft({
@@ -311,7 +278,7 @@ export function ControlPopupApp() {
     (next: PickerPatternKind) => {
       setPatternKind(next);
       setTestDesired(true);
-      runTargetsRef.current = stampsRef.current.targets;
+      runTargetsRef.current = savedTargetsRef.current;
       runner.apply(buildRunRequest(next, draft, speed, runTargetsRef.current));
     },
     [draft, runner, speed],
@@ -345,32 +312,34 @@ export function ControlPopupApp() {
           // pattern restart cannot resolve on top of the mode the user just chose.
           runner.cancel();
           await runner.settled();
-          await refreshStamps();
-          if (next === LIGHTING_MODE_KIND.OFF) {
-            await stopLighting();
-            return;
-          }
-          if (next === LIGHTING_MODE_KIND.AMBILIGHT) {
-            await setLightingMode(
-              withStamps({
-                kind: LIGHTING_MODE_KIND.AMBILIGHT,
-                ambilight: stampsRef.current.ambilight ?? { brightness: 1 },
-              }),
+          retunes.reset();
+          // The kind alone for Off and Ambilight: Rust keeps the last Ambilight
+          // settings. Solid carries the colour on screen.
+          const result = await applyOutputs({
+            mode:
+              next === LIGHTING_MODE_KIND.SOLID
+                ? { kind: next, solid: { r: draft.r, g: draft.g, b: draft.b, brightness: draft.brightness } }
+                : { kind: next },
+            origin: LIGHTING_ORIGIN.POPUP,
+          });
+          adopt(result.snapshot);
+          if (result.status.code === LIGHTING_OUTPUTS_STATUS.OUTPUTS_CALIBRATION_REQUIRED) {
+            setRunError(t("preview:control.calibrationRequired"));
+          } else if (
+            result.status.code === LIGHTING_OUTPUTS_STATUS.OUTPUTS_REFUSED ||
+            result.status.code === LIGHTING_OUTPUTS_STATUS.OUTPUTS_START_FAILED
+          ) {
+            console.warn(
+              `[LumaSync] ControlPopupApp mode ${next}: ${result.status.code}`,
+              result.status.details ?? "",
             );
-            return;
           }
-          await setLightingMode(
-            withStamps({
-              kind: LIGHTING_MODE_KIND.SOLID,
-              solid: { r: draft.r, g: draft.g, b: draft.b, brightness: draft.brightness },
-            }),
-          );
         } catch (error) {
           console.error("[LumaSync] ControlPopupApp mode change failed:", error);
         }
       })();
     },
-    [runner, refreshStamps, withStamps, draft.r, draft.g, draft.b, draft.brightness],
+    [adopt, retunes, runner, t, draft.r, draft.g, draft.b, draft.brightness],
   );
 
   // ── Auto-start ───────────────────────────────────────────────────────────

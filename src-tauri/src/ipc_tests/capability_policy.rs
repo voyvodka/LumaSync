@@ -114,14 +114,13 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     ("get_shell_state", BUNDLE_WINDOWS),
     ("patch_shell_state", MAIN_AND_POPUP),
     ("replace_shell_state", MAIN_ONLY),
-    // The popup drives modes, test patterns, and a Hue test lease.
-    ("set_lighting_mode", MAIN_AND_POPUP),
-    ("stop_lighting", MAIN_AND_POPUP),
-    ("get_lighting_mode_status", MAIN_AND_POPUP),
+    // The popup drives modes and test patterns through the lighting
+    // transaction, which also holds the Hue test lease.
+    ("apply_outputs", MAIN_AND_POPUP),
+    ("retune_lighting", MAIN_AND_POPUP),
+    ("get_lighting_runtime", MAIN_AND_POPUP),
     ("start_led_test_pattern", MAIN_AND_POPUP),
     ("stop_led_test_pattern", MAIN_AND_POPUP),
-    ("start_hue_stream", MAIN_AND_POPUP),
-    ("stop_hue_stream", MAIN_AND_POPUP),
     ("show_notification", MAIN_AND_POPUP),
     // GlobalErrorBoundary's "Show logs", mounted in both.
     ("open_log_dir", MAIN_AND_POPUP),
@@ -143,8 +142,11 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     ("migrate_hue_credentials", MAIN_ONLY),
     ("list_hue_entertainment_areas", MAIN_ONLY),
     ("check_hue_stream_readiness", MAIN_ONLY),
+    // The Devices card starts and restarts the stream beside a mode; its stop
+    // goes through the transaction, which lets a running mode go of Hue first.
+    ("start_hue_stream", MAIN_ONLY),
     ("restart_hue_stream", MAIN_ONLY),
-    ("set_hue_solid_color", MAIN_ONLY),
+    ("release_hue_output", MAIN_ONLY),
     ("get_hue_stream_status", MAIN_ONLY),
     ("get_hue_area_channels", MAIN_ONLY),
     ("get_runtime_telemetry", MAIN_ONLY),
@@ -173,12 +175,14 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     ("download_and_install_update", MAIN_ONLY),
     // Registered, but nothing in the frontend calls it.
     ("request_notification_permission", NO_WINDOW),
-    // The lighting transaction, registered ahead of its callers: a window is
-    // granted each one in the change that makes that window call it.
-    ("apply_outputs", NO_WINDOW),
-    ("retune_lighting", NO_WINDOW),
-    ("release_hue_output", NO_WINDOW),
-    ("get_lighting_runtime", NO_WINDOW),
+    // The mode commands the lighting transaction replaced. Still registered,
+    // and their tests grant them; a window calling one would skip the
+    // transaction's ordering and saving.
+    ("set_lighting_mode", NO_WINDOW),
+    ("stop_lighting", NO_WINDOW),
+    ("get_lighting_mode_status", NO_WINDOW),
+    ("stop_hue_stream", NO_WINDOW),
+    ("set_hue_solid_color", NO_WINDOW),
 ];
 
 /// The commands a compromised overlay or popup page must never reach, named so

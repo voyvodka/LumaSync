@@ -84,7 +84,9 @@ use commands::led_preview::{
     close_led_twin_overlay, hide_led_control_popup, open_led_control_popup, open_led_twin_overlay,
     show_led_control_popup, LedTwinState,
 };
-use commands::lighting_mode::outputs::{apply_outputs, get_lighting_runtime, release_hue_output};
+use commands::lighting_mode::outputs::{
+    apply_outputs, get_lighting_runtime, release_hue_output, run_tray_lighting, TrayLighting,
+};
 use commands::lighting_mode::tuning::retune_lighting;
 use commands::lighting_mode::{
     get_led_preview_status, get_lighting_mode_status, set_lighting_mode, start_led_test_pattern,
@@ -620,27 +622,11 @@ pub fn run() {
                 // Menu item actions
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "open-settings" => show_and_focus_settings(app),
-                    "tray-lights-off" => {
-                        let _ = app.emit_to(
-                            EventTarget::webview_window(MAIN_WINDOW_LABEL),
-                            "tray:lights-off",
-                            (),
-                        );
-                    }
+                    "tray-lights-off" => run_tray_lighting(app, TrayLighting::Off),
                     "tray-resume-last-mode" => {
-                        let _ = app.emit_to(
-                            EventTarget::webview_window(MAIN_WINDOW_LABEL),
-                            "tray:resume-last-mode",
-                            (),
-                        );
+                        run_tray_lighting(app, TrayLighting::ResumeLastMode)
                     }
-                    "tray-solid-color" => {
-                        let _ = app.emit_to(
-                            EventTarget::webview_window(MAIN_WINDOW_LABEL),
-                            "tray:solid-color",
-                            (),
-                        );
-                    }
+                    "tray-solid-color" => run_tray_lighting(app, TrayLighting::SolidColor),
                     "tray-show-led-preview" => {
                         let _ = app.emit_to(
                             EventTarget::webview_window(MAIN_WINDOW_LABEL),

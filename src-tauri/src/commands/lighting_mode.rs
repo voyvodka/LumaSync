@@ -49,6 +49,7 @@ use super::test_pattern::{
 use super::wled_sink::{CorrectedWledSink, WledSinkConfig};
 use crate::models::room_map::RoomGeometry;
 
+pub(crate) mod config_check;
 mod frame_pipeline;
 pub mod hue_driver;
 pub mod outputs;
@@ -1620,6 +1621,21 @@ fn apply_mode_change_inner(
         );
     }
 
+    // Refused before anything is read off it or torn down, like the gates below.
+    if normalized_next.kind != LightingModeKind::Off {
+        if let Err(reason) = config_check::check_mode_config(&normalized_next) {
+            warn!("[apply_mode_change] refused — {reason}");
+            return make_result(
+                owner.active_mode.clone(),
+                command_status(
+                    "LIGHTING_MODE_INVALID_CONFIG",
+                    "The lighting settings are not valid; the lighting mode was not changed.",
+                    Some(reason),
+                ),
+            );
+        }
+    }
+
     // Derive target flags from the requested targets list.
     // Empty/None targets = legacy behavior: USB is required (backward compat).
     let requested_targets = normalized_next.targets.clone().unwrap_or_default();
@@ -2397,6 +2413,7 @@ fn apply_and_broadcast<R: Runtime>(
 
     let edge_emitter = Some(build_edge_emitter(app));
 
+    let starts_a_test = test_pattern.is_some();
     let result = {
         let mut owner = runtime_state
             .runtime
@@ -2425,7 +2442,12 @@ fn apply_and_broadcast<R: Runtime>(
             active: result.active,
         },
     );
-    snapshot::publish_running(app, &result.mode);
+    // A test pattern is a preview, not the user's mode: every window's mirror
+    // keeps showing the mode it interrupted, which the test's stop restores
+    // and publishes.
+    if !starts_a_test {
+        snapshot::publish_running(app, &result.mode);
+    }
 
     Ok(result)
 }
@@ -2517,6 +2539,17 @@ fn start_led_test_pattern_blocking<R: Runtime>(
                 LED_TEST_PATTERN_INVALID_PARAMS,
                 "Test pattern brightness must be within 0..1.",
                 None,
+            ),
+        });
+    }
+    if let Some(Err(reason)) = payload.led_calibration.as_ref().map(|c| c.validate()) {
+        return Ok(LedTestPatternResult {
+            active: false,
+            preview_only: false,
+            status: command_status(
+                LED_TEST_PATTERN_INVALID_PARAMS,
+                "The LED layout for the test is not valid.",
+                Some(reason),
             ),
         });
     }
@@ -2877,6 +2910,9 @@ fn hue_topology_and_affinity(
 
 #[cfg(test)]
 mod frame_pipeline_tests;
+
+#[cfg(test)]
+mod callers_tests;
 
 #[cfg(test)]
 mod outputs_tests;

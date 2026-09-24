@@ -61,6 +61,8 @@ export const LIGHTING_OUTPUTS_STATUS = {
   OUTPUTS_CALIBRATION_REQUIRED: "OUTPUTS_CALIBRATION_REQUIRED",
   /** The app is quitting; nothing new is started. */
   OUTPUTS_SHUTTING_DOWN: "OUTPUTS_SHUTTING_DOWN",
+  /** `targets` named an output that does not exist; nothing was recorded, saved or touched. */
+  OUTPUTS_INVALID_REQUEST: "OUTPUTS_INVALID_REQUEST",
 } as const;
 
 export type LightingOutputsStatusCode =

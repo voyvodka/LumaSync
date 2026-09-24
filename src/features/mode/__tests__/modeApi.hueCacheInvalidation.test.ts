@@ -11,7 +11,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import { __resetHueReadCacheForTests, readHueStreamStatus } from "@/features/hue/hueReadCache";
 import { HUE_COMMANDS } from "@/shared/contracts/hue";
-import { restartHue, startHue, stopHue } from "../modeApi";
+import { applyOutputs, releaseHueOutput, restartHue, startHue } from "../modeApi";
 
 const START_PAYLOAD = {
   bridgeIp: "192.168.1.50",
@@ -48,7 +48,8 @@ describe("modeApi Hue mutations invalidate the shared status cache", () => {
 
   it.each([
     ["startHue", () => startHue(START_PAYLOAD)],
-    ["stopHue", () => stopHue()],
+    ["applyOutputs", () => applyOutputs({ mode: { kind: "off" }, origin: "user" })],
+    ["releaseHueOutput", () => releaseHueOutput("device_surface")],
     ["restartHue", () => restartHue(START_PAYLOAD)],
   ])("%s forces the next status read back to the bridge", async (_name, mutate) => {
     await readHueStreamStatus();

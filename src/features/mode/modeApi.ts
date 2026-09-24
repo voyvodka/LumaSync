@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import {
-  DEVICE_COMMANDS,
   DEVICE_ERROR_CODES,
   type DeviceErrorCode,
   type WledLiveFrameAdvisory,
@@ -10,11 +9,13 @@ import {
   HUE_COMMANDS,
   HUE_RUNTIME_TRIGGER_SOURCE,
   type HueChannelPlacementOverride,
+  type HueRuntimeTarget,
   type HueRuntimeStatus,
   type HueRuntimeTriggerSource,
 } from "@/shared/contracts/hue";
 import type { LightingModeStatusCode } from "@/shared/contracts/lighting";
 import {
+  LIGHTING_ORIGIN,
   LIGHTING_RUNTIME_COMMANDS,
   type ApplyOutputsRequest,
   type ApplyOutputsResult,
@@ -27,8 +28,11 @@ import { parseCommandError, type CommandStatusOf } from "@/shared/contracts/stat
 // Cyclic with hueReadCache (it wraps `getHueStreamStatus` below); safe because
 // neither side calls across the cycle at module-eval time.
 import { invalidateHueStreamStatus } from "../hue/hueReadCache";
-import { normalizeLightingModeConfig, type LightingModeConfig } from "@/shared/contracts/mode";
-import { cancelBootHueRetry } from "./state/bootHueRetry";
+import {
+  normalizeAmbilightPayload,
+  normalizeSolidColorPayload,
+  type LightingModeConfig,
+} from "@/shared/contracts/mode";
 
 /** Normalized shape every mode-command rejection is mapped to before being thrown. */
 export interface ModeApiError {
@@ -64,14 +68,6 @@ export interface StartHuePayload {
   channelPlacements?: HueChannelPlacementOverride[];
 }
 
-export interface HueSolidColorPayload {
-  r: number;
-  g: number;
-  b: number;
-  brightness?: number;
-  triggerSource?: HueRuntimeTriggerSource;
-}
-
 /** Last solid color successfully (or pending) applied to the Hue lights. */
 export interface HueSolidColorSnapshot {
   r: number;
@@ -104,45 +100,6 @@ function mapModeApiError(command: string, error: unknown): ModeApiError {
   };
 }
 
-/** Apply a USB lighting mode (Off/Ambilight/Solid) to the connected device. Throws a `ModeApiError` on failure. */
-export async function setLightingMode(
-  payload: LightingModeConfig,
-  invoker: ModeInvoker = defaultInvoke,
-): Promise<ModeCommandResult> {
-  // `normalizeLightingModeConfig` drops `roomGeometry` so a persisted mode can
-  // never carry it, and unlike the output stamps Rust does not hydrate it — so
-  // it is re-attached here, or no dispatch would ever reach room-aware sampling.
-  const normalized = normalizeLightingModeConfig(payload);
-  const wire = payload.roomGeometry
-    ? { ...normalized, roomGeometry: payload.roomGeometry }
-    : normalized;
-  try {
-    return await invoker<ModeCommandResult>(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
-      payload: wire,
-    });
-  } catch (error) {
-    throw mapModeApiError(DEVICE_COMMANDS.SET_LIGHTING_MODE, error);
-  }
-}
-
-/** Turn off USB lighting output, superseding any active test pattern. Throws a `ModeApiError` on failure. */
-export async function stopLighting(invoker: ModeInvoker = defaultInvoke): Promise<ModeCommandResult> {
-  try {
-    return await invoker<ModeCommandResult>(DEVICE_COMMANDS.STOP_LIGHTING);
-  } catch (error) {
-    throw mapModeApiError(DEVICE_COMMANDS.STOP_LIGHTING, error);
-  }
-}
-
-/** Read the currently active USB lighting mode without changing it. */
-export async function getLightingModeStatus(invoker: ModeInvoker = defaultInvoke): Promise<ModeCommandResult> {
-  try {
-    return await invoker<ModeCommandResult>(DEVICE_COMMANDS.GET_LIGHTING_MODE_STATUS);
-  } catch (error) {
-    throw mapModeApiError(DEVICE_COMMANDS.GET_LIGHTING_MODE_STATUS, error);
-  }
-}
-
 /** Start the Hue entertainment stream for the given bridge/area. Throws a `ModeApiError` on failure. */
 export async function startHue(
   payload: StartHuePayload,
@@ -164,25 +121,6 @@ export async function startHue(
   } finally {
     // Attached to the command, not to a call site: a stale status lets the App
     // health reconciler act on a pre-mutation answer and undo what just happened.
-    invalidateHueStreamStatus();
-  }
-}
-
-/** Stop the active Hue entertainment stream. Throws a `ModeApiError` on failure. */
-export async function stopHue(
-  triggerSource: HueRuntimeTriggerSource = HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
-  invoker: ModeInvoker = defaultInvoke,
-): Promise<HueRuntimeCommandResult> {
-  // Attached to the command, as `stop_hue_stream` cancels the backend's
-  // reconnect: a stop from any surface also ends a pending boot retry.
-  cancelBootHueRetry("Hue was stopped");
-  try {
-    return await invoker<HueRuntimeCommandResult>(HUE_COMMANDS.STOP_STREAM, {
-      triggerSource,
-    });
-  } catch (error) {
-    throw mapModeApiError(HUE_COMMANDS.STOP_STREAM, error);
-  } finally {
     invalidateHueStreamStatus();
   }
 }
@@ -219,26 +157,6 @@ export async function getHueStreamStatus(invoker: ModeInvoker = defaultInvoke): 
   }
 }
 
-/** Push a static RGB color to the Hue lights; queued for replay if the stream isn't running yet. */
-export async function setHueSolidColor(
-  payload: HueSolidColorPayload,
-  invoker: ModeInvoker = defaultInvoke,
-): Promise<HueRuntimeCommandResult> {
-  try {
-    return await invoker<HueRuntimeCommandResult>(HUE_COMMANDS.SET_SOLID_COLOR, {
-      request: {
-        r: Math.max(0, Math.min(255, Math.floor(payload.r))),
-        g: Math.max(0, Math.min(255, Math.floor(payload.g))),
-        b: Math.max(0, Math.min(255, Math.floor(payload.b))),
-        brightness: payload.brightness,
-        triggerSource: payload.triggerSource ?? HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
-      },
-    });
-  } catch (error) {
-    throw mapModeApiError(HUE_COMMANDS.SET_SOLID_COLOR, error);
-  }
-}
-
 // ---------------------------------------------------------------------------
 // The Rust lighting transaction (docs/architecture/lighting-transaction.md).
 // ---------------------------------------------------------------------------
@@ -249,7 +167,15 @@ export async function applyOutputs(
   request: ApplyOutputsRequest,
   invoker: ModeInvoker = defaultInvoke,
 ): Promise<ApplyOutputsResult> {
-  const mode = request.mode ? normalizeLightingModeConfig(request.mode) : request.mode;
+  // The kind and whichever payload the caller has, normalised. A payload left
+  // out keeps the last one in Rust, so it must not be filled with a default here.
+  const mode = request.mode
+    ? {
+        kind: request.mode.kind,
+        ...(request.mode.solid ? { solid: normalizeSolidColorPayload(request.mode.solid) } : {}),
+        ...(request.mode.ambilight ? { ambilight: normalizeAmbilightPayload(request.mode.ambilight) } : {}),
+      }
+    : request.mode;
   try {
     return await invoker<ApplyOutputsResult>(LIGHTING_RUNTIME_COMMANDS.APPLY_OUTPUTS, {
       request: { ...request, mode },
@@ -300,5 +226,34 @@ export async function getLightingRuntime(
     return await invoker<LightingRuntimeSnapshot>(LIGHTING_RUNTIME_COMMANDS.GET_LIGHTING_RUNTIME);
   } catch (error) {
     throw mapModeApiError(LIGHTING_RUNTIME_COMMANDS.GET_LIGHTING_RUNTIME, error);
+  }
+}
+
+/**
+ * Bring the Hue stream up for a test pattern that targets it. Rust owns the
+ * lease: it opens the stream only when nothing else has, and remembers that it
+ * did. A test that does not target Hue asks nothing.
+ */
+export async function acquireHueForTest(
+  targets: readonly HueRuntimeTarget[] | undefined,
+  invoker: ModeInvoker = defaultInvoke,
+): Promise<void> {
+  if (!targets?.includes("hue")) return;
+  try {
+    await applyOutputs({ targets: ["hue"], origin: LIGHTING_ORIGIN.LEASE_HUE }, invoker);
+  } catch (error) {
+    console.error("[LumaSync] Hue test lease could not start the stream:", error);
+  }
+}
+
+/**
+ * Hand the stream back after a test. Rust stops it only if the lease opened it
+ * and no mode started meanwhile has adopted it; safe to call unconditionally.
+ */
+export async function releaseHueAfterTest(invoker: ModeInvoker = defaultInvoke): Promise<void> {
+  try {
+    await applyOutputs({ targets: [], origin: LIGHTING_ORIGIN.LEASE_HUE }, invoker);
+  } catch (error) {
+    console.error("[LumaSync] Hue test lease could not hand the stream back:", error);
   }
 }

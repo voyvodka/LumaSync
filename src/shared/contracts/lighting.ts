@@ -14,8 +14,8 @@
  *   - `HueIntensityPreset` remains a deprecated alias for
  *     `LightingSmoothingPreset` so pre-v1.4 call sites keep compiling until
  *     the v1.5 clean-up removes them.
- *   - `HUE_INTENSITY_PRESET_COEFFICIENTS` / `DEFAULT_HUE_INTENSITY_PRESET`
- *     also re-exported from `./hue.ts` via identical deprecated aliases.
+ *   - `HUE_INTENSITY_PRESET_COEFFICIENTS` also re-exported from `./hue.ts`
+ *     via an identical deprecated alias.
  */
 
 /**
@@ -88,6 +88,13 @@ export const LIGHTING_MODE_STATUS = {
   LIGHTING_MODE_STATUS_OK: "LIGHTING_MODE_STATUS_OK",
   /** The app is quitting: a start is refused and the running mode is left to the quit path. */
   LIGHTING_MODE_SHUTTING_DOWN: "LIGHTING_MODE_SHUTTING_DOWN",
+  /**
+   * Refused before anything was touched: an unknown output target, a LED
+   * calibration whose counts do not add up to its total (or exceed
+   * `LED_CALIBRATION_MAX_TOTAL_LEDS`), or a colour correction outside the
+   * panel's ranges. `details` names which. `config_check.rs`.
+   */
+  LIGHTING_MODE_INVALID_CONFIG: "LIGHTING_MODE_INVALID_CONFIG",
 } as const;
 
 export type LightingModeStatusCode =

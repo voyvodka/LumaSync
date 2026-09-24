@@ -12,7 +12,9 @@ use serialport::{SerialPortInfo, SerialPortType, UsbPortInfo};
 use tauri::test::MockRuntime;
 use tauri::{App, Manager};
 
-use super::{invoke, main_webview, mock_app, mock_app_with_serial_ports, status_code};
+use super::{
+    grant_main_for_tests, invoke, main_webview, mock_app, mock_app_with_serial_ports, status_code,
+};
 use crate::commands::device_connection::{
     ActiveSinkRegistry, SerialConnectionState, SerialPortAccess, SerialPortIo, SettledPort,
 };
@@ -239,6 +241,7 @@ fn output_app(port_name: &str) -> (App<MockRuntime>, Arc<RecordingSender>) {
     let app = mock_app(tauri::generate_handler![
         crate::commands::lighting_mode::set_lighting_mode
     ]);
+    grant_main_for_tests(&app, &["allow-set-lighting-mode"]);
     {
         let state = app.state::<SerialConnectionState>();
         let mut status = state.last_status.lock().expect("status lock poisoned");

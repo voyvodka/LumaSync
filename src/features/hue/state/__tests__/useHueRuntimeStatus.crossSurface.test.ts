@@ -12,7 +12,8 @@ import { HUE_COMMANDS, HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue
 import { __resetHueReadCacheForTests } from "../../hueReadCache";
 import type { HueBridgeSummary, HuePairingCredentials } from "../../hueOnboardingApi";
 import { useHueRuntimeStatus } from "../useHueRuntimeStatus";
-import { startHue, stopHue } from "@/features/mode/modeApi";
+import { releaseHueOutput, startHue } from "@/features/mode/modeApi";
+import { LIGHTING_RUNTIME_COMMANDS } from "@/shared/contracts/lightingRuntime";
 
 const invokeMock = vi.fn();
 
@@ -74,7 +75,7 @@ describe("useHueRuntimeStatus follows a stream started from another surface", ()
     backendState = "Idle";
     invokeMock.mockImplementation(async (command: string) => {
       if (command === HUE_COMMANDS.START_STREAM) backendState = "Running";
-      if (command === HUE_COMMANDS.STOP_STREAM) backendState = "Idle";
+      if (command === LIGHTING_RUNTIME_COMMANDS.RELEASE_HUE_OUTPUT) backendState = "Idle";
       return statusResult();
     });
   });
@@ -118,7 +119,7 @@ describe("useHueRuntimeStatus follows a stream started from another surface", ()
     expect(result.current.runtimeStatus?.state).toBe("Running");
 
     await act(async () => {
-      await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
+      await releaseHueOutput(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
     });
     await flush(0);
 
@@ -146,7 +147,7 @@ describe("useHueRuntimeStatus follows a stream started from another surface", ()
     });
 
     await act(async () => {
-      await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
+      await releaseHueOutput(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
     });
     // The stop's re-read is now in flight with an Idle snapshot.
     await act(async () => {

@@ -352,11 +352,6 @@ check(
   "HUE_INTENSITY_PRESET_COEFFICIENTS map exported",
   "MISSING HUE_INTENSITY_PRESET_COEFFICIENTS"
 );
-check(
-  hueSource.includes("DEFAULT_HUE_INTENSITY_PRESET"),
-  "DEFAULT_HUE_INTENSITY_PRESET exported",
-  "MISSING DEFAULT_HUE_INTENSITY_PRESET"
-);
 
 console.log("\n[ Hue zone re-export surface (v1.5 W4-F2) ]");
 // Zones are Hue-only, so hue.ts re-exports the canonical Hue zone
@@ -1194,7 +1189,7 @@ const emittedLightingCodes = [
 // to a `const` (the shape led_preview.rs already uses) would silently drop it while
 // the other nine still matched. Bump this deliberately when a code is added.
 // 10 → 11: LIGHTING_MODE_SHUTTING_DOWN, a start refused once the quit began.
-const EXPECTED_LIGHTING_CODE_COUNT = 11;
+const EXPECTED_LIGHTING_CODE_COUNT = 12;
 check(
   emittedLightingCodes.length === EXPECTED_LIGHTING_CODE_COUNT,
   `harvested exactly ${EXPECTED_LIGHTING_CODE_COUNT} command_status codes from lighting_mode.rs`,
@@ -1245,7 +1240,7 @@ console.log("\n[ Lighting transaction — Rust → lightingRuntime.ts parity ]")
     "LightingOutputsStatusCode",
     literalCodes(rustOutputs, "outputs_status"),
     constMembers(lightingRuntimeSource, "LIGHTING_OUTPUTS_STATUS"),
-    7
+    8
   );
   checkWireUnion(
     "LightingRetuneStatusCode",

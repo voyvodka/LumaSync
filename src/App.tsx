@@ -13,19 +13,16 @@ import { useTrayIntegration } from "./features/shell/useTrayIntegration";
 import { useShellBootstrap } from "./features/shell/useShellBootstrap";
 import { openScreenCaptureSettings } from "./features/mode/captureApi";
 import { useCaptureStallNotice } from "./features/telemetry/hooks/useCaptureStallNotice";
-import { useModeRuntimeConfig } from "./features/mode/state/useModeRuntimeConfig";
 import { useHueSolidColorNotice } from "./features/mode/state/useHueSolidColorNotice";
 import { usePreviewOpenNotice } from "./features/preview/state/usePreviewOpenNotice";
-import { useModeHotReload } from "./features/mode/state/useModeHotReload";
-import { useRoomGeometrySync } from "./features/mode/state/useRoomGeometrySync";
 import { useLightingModeOrchestrator } from "./features/mode/state/useLightingModeOrchestrator";
 import { useHueBridgeReachability } from "./features/hue/state/useHueBridgeReachability";
 import {
   isHueSessionReconnecting,
+  isHueStreamDead,
   isHueStreamFailed,
   useHueStreamHealth,
 } from "./features/hue/state/useHueStreamHealth";
-import { useHueSolidBootstrapSync } from "./features/hue/state/useHueSolidBootstrapSync";
 import { buildStatusItems, resolveHueHeldOut } from "./features/shell/statusItems";
 import { buildShellNotices, type ShellNoticeHandlers } from "./features/shell/notices/buildShellNotices";
 import { useShellNoticeQueue } from "./features/shell/notices/useShellNoticeQueue";
@@ -124,7 +121,6 @@ function App() {
   const autoOpenTriggeredRef = useRef(sessionStorage.getItem(CALIBRATION_AUTO_OPENED_KEY) === "1");
   const updateCheckRanRef = useRef(false);
 
-  const runtimeConfig = useModeRuntimeConfig({ calibration: savedCalibration });
   const { notice: hueColorNotice, report: reportHueSolidColorStatus } =
     useHueSolidColorNotice();
   const { notice: previewOpenNotice, report: reportPreviewOpenFailure } = usePreviewOpenNotice();
@@ -137,10 +133,6 @@ function App() {
   }, [savedCalibration]);
 
   const mode = useLightingModeOrchestrator({
-    runtimeConfig,
-    savedCalibration,
-    hueStartConfig,
-    setHueStartConfig,
     onRequireCalibration: handleOpenCalibration,
     reportHueSolidColorStatus,
   });
@@ -165,28 +157,18 @@ function App() {
 
   const { runtimeState: hueRuntimeState } = useHueStreamHealth({
     hueTargetSelected: selectedOutputTargets.includes("hue"),
-    activeOutputTargetsRef: mode.activeOutputTargetsRef,
-    lightingModeRef: mode.lightingModeRef,
-    selectedOutputTargetsRef: mode.selectedOutputTargetsRef,
-    dispatchRef: mode.dispatchRef,
-    setActiveOutputTargets: mode.setActiveOutputTargets,
   });
 
   // Membership means the app owns a Hue session, not that frames reach the
   // bridge: RECONNECTING keeps the target. Only the shown state is split; the
-  // probe and the reachability fallbacks still key on the session.
-  const hueSessionActive = activeOutputTargets.includes("hue");
+  // probe and the reachability fallbacks still key on the session. A stream the
+  // backend reports dead is no session, whatever the snapshot still drives.
+  const hueSessionActive = activeOutputTargets.includes("hue") && !isHueStreamDead(hueRuntimeState);
   const hueReconnecting = isHueSessionReconnecting(hueSessionActive, hueRuntimeState);
   const hueStreaming = hueSessionActive && !hueReconnecting;
   const hueStreamFailed = isHueStreamFailed(hueRuntimeState);
   const hueProbe = useHueBridgeReachability(hueStartConfig, hueSessionActive);
   const hueReachable = hueProbe.reachable;
-
-  useHueSolidBootstrapSync({
-    activeOutputTargets,
-    lightingModeRef: mode.lightingModeRef,
-    onAdoptSolid: mode.adoptSolidColor,
-  });
 
   // The USB reconciler needs `bootstrapDone`, so it cannot be declared above
   // the boot sequence; arming reaches it through a ref rather than moving the
@@ -199,16 +181,9 @@ function App() {
     setSavedCalibration,
     setHasCompletedOnboarding,
     setHasInteractedWithMode,
-    setLightingMode: mode.setLightingMode,
-    setSelectedOutputTargets: mode.setSelectedOutputTargets,
-    setActiveOutputTargets: mode.setActiveOutputTargets,
     setHueStartConfig,
     armUsbConnected: (connected) => armUsbConnectedRef.current?.(connected),
-    runtimeConfig,
-    reportHueSolidColorStatus,
-    reportStartFailure: mode.reportStartFailure,
-    reportHueLeftOut: mode.reportHueLeftOut,
-    scheduleHueBusyRetry: mode.scheduleBootHueRetry,
+    restoreLighting: mode.restoreAtBoot,
   });
 
   const {
@@ -224,23 +199,15 @@ function App() {
       selectedOutputTargets,
       selectedOutputTargetsRef: mode.selectedOutputTargetsRef,
       hueStartConfigRef,
-      onAutoAddUsbTarget: mode.setSelectedOutputTargets,
+      onSelectTargets: handleOutputTargetsChange,
       onDropUsbTarget: mode.dropUnpluggedUsbTarget,
       onLastTargetUnplugged: mode.endLightingOnUsbUnplug,
-      onFallbackTargets: mode.setSelectedOutputTargets,
     });
   armUsbConnectedRef.current = armUsbConnected;
 
   useHueStartConfigSync(setHueStartConfig);
   useEffect(() => { hueStartConfigRef.current = hueStartConfig; }, [hueStartConfig]);
-  useTrayIntegration({
-    onLightingModeChange: handleLightingModeChange,
-    lightingModeRef: mode.lightingModeRef,
-    lastNonOffModeRef: mode.lastNonOffModeRef,
-    selectedOutputTargetsRef: mode.selectedOutputTargetsRef,
-    getSelectedDisplayId: runtimeConfig.getSelectedDisplayId,
-    onPreviewOpenFailed: reportPreviewOpenFailure,
-  });
+  useTrayIntegration({ onPreviewOpenFailed: reportPreviewOpenFailure });
 
   const handleSectionChange = useCallback(async (sectionId: SectionId, deviceCategory?: DeviceCategory) => {
     // Only a notice names a category; every other way in keeps the one open.
@@ -292,17 +259,12 @@ function App() {
       [KEYBIND_ACTIONS.MODE_OFF]: () => {
         void handleLightingModeChange({ kind: LIGHTING_MODE_KIND.OFF });
       },
+      // The kind alone: Rust keeps the last colour and Ambilight settings.
       [KEYBIND_ACTIONS.MODE_AMBILIGHT]: () => {
-        void handleLightingModeChange({
-          kind: LIGHTING_MODE_KIND.AMBILIGHT,
-          ambilight: lightingMode.ambilight,
-        });
+        void handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
       },
       [KEYBIND_ACTIONS.MODE_SOLID]: () => {
-        void handleLightingModeChange({
-          kind: LIGHTING_MODE_KIND.SOLID,
-          solid: lightingMode.solid ?? { r: 255, g: 255, b: 255, brightness: 1 },
-        });
+        void handleLightingModeChange({ kind: LIGHTING_MODE_KIND.SOLID });
       },
       [KEYBIND_ACTIONS.OPEN_SETTINGS]: () => {
         // ⌘, / Ctrl+, is the canonical open-settings shortcut on all three
@@ -310,18 +272,10 @@ function App() {
         void handleSectionChange(SECTION_IDS.SYSTEM);
       },
     }),
-    [
-      handleLightingModeChange,
-      handleSectionChange,
-      lightingMode.ambilight,
-      lightingMode.solid,
-    ],
+    [handleLightingModeChange, handleSectionChange],
   );
 
   useGlobalKeybinds(keybindHandlers, { disabled: !isContentVisible });
-
-  const hotReload = useModeHotReload(runtimeConfig, mode.dispatch, lightingMode);
-  useRoomGeometrySync(hotReload.onRoomGeometryChange);
 
   const modeGuard = canEnableLedMode(savedCalibration, selectedOutputTargets);
 
@@ -360,15 +314,10 @@ function App() {
     onStopHueOutput: mode.stopHueOutput,
     onCalibrationSaved: (config: LedCalibrationConfig) => {
       setSavedCalibration(config);
-      // Synchronous, because a save followed by an immediate mode toggle
-      // dispatches before the mirror effect flushes and would ship the old
-      // `totalLeds`.
-      runtimeConfig.setCalibration(config);
     },
     onCheckForUpdates: checkForUpdates,
     isCheckingForUpdates: updaterState.status === "checking",
     devSetUpdaterState,
-    ...hotReload,
     deviceCategoryRequest,
   } as const;
 
