@@ -256,11 +256,10 @@ function Shell() {
     }
   }, [navigation, switchUIMode]);
 
-  // A first connect with no saved layout points at LED Setup; the user stays put.
+  // A connect the user made with no saved layout points at LED Setup; the user stays put.
   const ledSetupNextPort = useLedSetupPrompt({
     ready: bootstrapDone,
     connected: isConnected,
-    connectedPort: connectedPort ?? null,
     hasCalibration: savedCalibration !== undefined,
     onLedSetup: activeSection === SECTION_IDS.LED_SETUP,
   });

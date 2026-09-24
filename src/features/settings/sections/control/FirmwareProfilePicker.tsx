@@ -10,7 +10,7 @@
  *
  * Bug H4 — when the last serial health check reported a definite
  * `advertisedFirmwareProfile`, the mismatched tile is rendered as
- * `aria-disabled` with a localized tooltip. This stops the silent
+ * `aria-disabled` and says why on the tile itself. This stops the silent
  * "Adalight selected, but firmware speaks LumaSync v1" failure mode where
  * USB no-ops while Hue keeps streaming. Power users with custom firmware
  * can flip an "Use anyway" override toggle, which re-enables every tile
@@ -25,8 +25,10 @@
  *
  * Accessibility:
  *   - `role="radiogroup"` + per-tile `role="radio"` + `aria-checked`.
- *   - Disabled tiles carry `aria-disabled="true"`, `tabIndex=-1`, and a
- *     `title` + `aria-describedby` pointing at the tooltip text.
+ *   - Disabled tiles carry `aria-disabled="true"` and `tabIndex=-1`; the
+ *     reason is visible text inside the tile, so it is part of its name.
+ *   - One tab stop: the checked tile, or the first enabled one when the
+ *     checked tile is the disabled one.
  *   - Arrow-key navigation skips disabled tiles unless the override
  *     toggle is on.
  *   - Override dialog: the shared `ConfirmDialog` — focus trap, ESC =
@@ -72,11 +74,13 @@ interface ProfileTileProps {
   /** Localized "Detected: …" badge (only on the advertised tile). */
   advertisedBadge?: string;
   checked: boolean;
+  /** Holds the group's one tab stop. */
+  tabStop: boolean;
   /** True when the firmware health check disagrees with this tile. */
   mismatched: boolean;
   /** When true, the tile is treated as un-clickable + un-focusable. */
   disabled: boolean;
-  /** Tooltip surfaced via `title` + `aria-describedby` on disabled tiles. */
+  /** Why the firmware check disagrees; shown on the tile, not in a hover title. */
   mismatchTooltip?: string;
   onSelect: (profile: FirmwareProfile) => void;
   onKeyNavigate: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
@@ -90,6 +94,7 @@ function ProfileTile({
   notice,
   advertisedBadge,
   checked,
+  tabStop,
   mismatched,
   disabled,
   mismatchTooltip,
@@ -97,49 +102,44 @@ function ProfileTile({
   onKeyNavigate,
   tileRef,
 }: ProfileTileProps) {
-  const tooltipId = useId();
-  const showTooltip = disabled && Boolean(mismatchTooltip);
   return (
-    <>
-      <button
-        ref={tileRef}
-        type="button"
-        role="radio"
-        aria-checked={checked}
-        aria-disabled={disabled || undefined}
-        aria-describedby={showTooltip ? tooltipId : undefined}
-        title={showTooltip ? mismatchTooltip : undefined}
-        tabIndex={disabled ? -1 : checked ? 0 : -1}
-        onClick={() => {
-          if (disabled) return;
-          onSelect(profile);
-        }}
-        onKeyDown={onKeyNavigate}
-        data-profile={profile}
-        data-mismatched={mismatched ? "true" : undefined}
-        className="lm-strip-tile"
-      >
-        <span className="lm-strip-tile-name">{label}</span>
-        <span className="lm-strip-tile-desc">{description}</span>
-        {advertisedBadge ? (
-          <span className="lm-strip-tile-note is-ok">
-            <span aria-hidden="true">● </span>
-            {advertisedBadge}
-          </span>
-        ) : null}
-        {notice ? (
-          <span className="lm-strip-tile-note is-warn">
-            <span aria-hidden="true">⚠ </span>
-            {notice}
-          </span>
-        ) : null}
-      </button>
-      {showTooltip && (
-        <span id={tooltipId} hidden>
+    <button
+      ref={tileRef}
+      type="button"
+      role="radio"
+      aria-checked={checked}
+      aria-disabled={disabled || undefined}
+      tabIndex={tabStop ? 0 : -1}
+      onClick={() => {
+        if (disabled) return;
+        onSelect(profile);
+      }}
+      onKeyDown={onKeyNavigate}
+      data-profile={profile}
+      data-mismatched={mismatched ? "true" : undefined}
+      className="lm-strip-tile"
+    >
+      <span className="lm-strip-tile-name">{label}</span>
+      <span className="lm-strip-tile-desc">{description}</span>
+      {advertisedBadge ? (
+        <span className="lm-strip-tile-note is-ok">
+          <span aria-hidden="true">● </span>
+          {advertisedBadge}
+        </span>
+      ) : null}
+      {notice ? (
+        <span className="lm-strip-tile-note is-warn">
+          <span aria-hidden="true">⚠ </span>
+          {notice}
+        </span>
+      ) : null}
+      {mismatchTooltip ? (
+        <span className="lm-strip-tile-note is-warn" data-testid={`lm-fw-mismatch-${profile}`}>
+          <span aria-hidden="true">⚠ </span>
           {mismatchTooltip}
         </span>
-      )}
-    </>
+      ) : null}
+    </button>
   );
 }
 
@@ -378,9 +378,11 @@ export function FirmwareProfilePicker({
             : 0;
       if (direction === 0) return;
       event.preventDefault();
-      const nextProfile = findNextEnabledProfile(profile, direction);
-      if (nextProfile === profile) return;
-      handleSelect(nextProfile);
+      // From the focused tile, which is not the checked one when that is disabled.
+      const focused = ORDERED_PROFILES.find((p) => p === event.currentTarget.dataset.profile) ?? profile;
+      const nextProfile = findNextEnabledProfile(focused, direction);
+      if (nextProfile === focused) return;
+      if (nextProfile !== profile) handleSelect(nextProfile);
       tileRefs[nextProfile].current?.focus();
     },
     [findNextEnabledProfile, handleSelect, profile, tileRefs],
@@ -395,15 +397,27 @@ export function FirmwareProfilePicker({
 
   const showOverrideAffordance = advertised !== undefined;
   const overrideHintId = useId();
+  const overrideToggleId = useId();
   const titleId = useId();
+  const descId = useId();
+
+  // Roving tabindex: the checked tile carries the tab stop, unless the
+  // firmware check disabled it (Adalight chosen, v1 detected) — then the first
+  // tile that can be chosen does, or the group has no tab stop at all.
+  const tabStopProfile: FirmwareProfile | undefined = !tileDisabled(profile)
+    ? profile
+    : ORDERED_PROFILES.find((p) => !tileDisabled(p));
 
   return (
-    <div className="lm-strip-setting" role="group" aria-labelledby={titleId}>
+    <div className="lm-strip-setting">
       <h3 className="lm-strip-setting-h" id={titleId}>{t("lights:led.firmwareProfile.title")}</h3>
-      <p className="lm-strip-setting-desc">{t("lights:led.firmwareProfile.description")}</p>
+      <p className="lm-strip-setting-desc" id={descId}>{t("lights:led.firmwareProfile.description")}</p>
+      {/* The radiogroup is the one named container: a group around it with
+          the same name had every screen reader say it twice. */}
       <div
         role="radiogroup"
-        aria-label={t("lights:led.firmwareProfile.title")}
+        aria-labelledby={titleId}
+        aria-describedby={descId}
         className="lm-strip-tiles"
       >
         {ORDERED_PROFILES.map((p) => {
@@ -426,6 +440,7 @@ export function FirmwareProfilePicker({
               label={t(labelKey)}
               description={t(descriptionKey)}
               checked={checked}
+              tabStop={p === tabStopProfile}
               mismatched={mismatched}
               disabled={disabled}
               advertisedBadge={
@@ -460,11 +475,13 @@ export function FirmwareProfilePicker({
 
       {showOverrideAffordance && (
         <div className="lm-strip-setting-check">
-          <p className="lm-strip-setting-check-tx">
+          {/* A label, so the words toggle the switch as the checkbox's did. */}
+          <label className="lm-strip-setting-check-tx" htmlFor={overrideToggleId}>
             <b>{t("lights:led.firmwareProfile.useAnywayLabel")}</b>{" "}
             <span id={overrideHintId}>{t("lights:led.firmwareProfile.useAnywayHint")}</span>
-          </p>
+          </label>
           <Toggle
+            id={overrideToggleId}
             checked={overrideEnabled}
             onChange={handleOverrideToggle}
             label={t("lights:led.firmwareProfile.useAnywayLabel")}

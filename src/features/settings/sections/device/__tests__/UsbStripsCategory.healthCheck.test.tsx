@@ -161,6 +161,11 @@ describe("UsbStripsCategory — health check steps in the user's language", () =
     expect(screen.queryByText(/serial inventory/)).toBeNull();
     // The banner's one-line summary names the failure in Turkish too.
     expect(screen.getAllByText(codes.SERIAL_HEALTH_HANDSHAKE_TIMEOUT.label)).toHaveLength(2);
+    // The live region announces that summary; the step list sits outside it,
+    // or every check would read a dozen nodes aloud.
+    const status = screen.getByTestId("usb-status");
+    expect(within(status).getByText(codes.SERIAL_HEALTH_HANDSHAKE_TIMEOUT.label)).toBeInTheDocument();
+    expect(status).not.toContainElement(handshake);
   });
 
   it("names a worker panic, which replaces the whole step list", async () => {

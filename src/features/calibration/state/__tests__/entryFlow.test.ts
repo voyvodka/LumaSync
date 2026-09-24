@@ -33,44 +33,29 @@ const EXISTING_CALIBRATION: LedCalibrationConfig = {
 };
 
 describe("calibration entry flow", () => {
-  it("prompts on first connection when calibration is missing", () => {
-    const firstConnect = shouldPromptLedSetupOnConnection({
-      connected: true,
-      wasConnected: false,
-      hasCalibration: false,
-      alreadyPrompted: false,
-    });
-
-    expect(firstConnect).toBe(true);
+  it("prompts on a connect the user made when calibration is missing", () => {
+    expect(
+      shouldPromptLedSetupOnConnection({ userInitiated: true, hasCalibration: false, alreadyPrompted: false }),
+    ).toBe(true);
   });
 
   it("does not prompt when a calibration is saved", () => {
-    const hasCalibration = shouldPromptLedSetupOnConnection({
-      connected: true,
-      wasConnected: false,
-      hasCalibration: true,
-      alreadyPrompted: false,
-    });
-
-    expect(hasCalibration).toBe(false);
+    expect(
+      shouldPromptLedSetupOnConnection({ userInitiated: true, hasCalibration: true, alreadyPrompted: false }),
+    ).toBe(false);
   });
 
-  it("prompts on the first connection transition only and ignores rerender", () => {
-    const firstTransition = shouldPromptLedSetupOnConnection({
-      connected: true,
-      wasConnected: false,
-      hasCalibration: false,
-      alreadyPrompted: false,
-    });
-    const rerenderWhileConnected = shouldPromptLedSetupOnConnection({
-      connected: true,
-      wasConnected: true,
-      hasCalibration: false,
-      alreadyPrompted: true,
-    });
+  // The boot auto-reconnect is not a first connect: it prompted on every launch.
+  it("does not prompt for a connect the app made on its own", () => {
+    expect(
+      shouldPromptLedSetupOnConnection({ userInitiated: false, hasCalibration: false, alreadyPrompted: false }),
+    ).toBe(false);
+  });
 
-    expect(firstTransition).toBe(true);
-    expect(rerenderWhileConnected).toBe(false);
+  it("prompts once", () => {
+    expect(
+      shouldPromptLedSetupOnConnection({ userInitiated: true, hasCalibration: false, alreadyPrompted: true }),
+    ).toBe(false);
   });
 
   it("auto-opens wizard overlay on first connected run when calibration is missing", () => {

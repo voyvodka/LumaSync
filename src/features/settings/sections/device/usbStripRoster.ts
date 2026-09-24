@@ -16,23 +16,30 @@ export function stripLedCount(calibration: LedCalibrationConfig | undefined): nu
 /**
  * The room map with a roster entry for `portName`, or the same map when one
  * already covers it. A placement authored before strips carried a port is
- * adopted rather than duplicated, so a map the user drew keeps its one strip.
+ * adopted rather than duplicated, so a map the user drew keeps its one strip —
+ * but only when that is unambiguous: it is the one unlinked placement, and no
+ * other port was driving the strip until now. `previousPort` is that port (the
+ * one connected, or last connected, before this connect); a second controller
+ * on another port gets its own strip instead of relabelling the first one's.
  */
 export function withStripForPort(
   roomMap: RoomMapConfig,
   portName: string,
   ledCount: number,
   newStripId: () => string,
+  previousPort: string | null = null,
 ): { roomMap: RoomMapConfig; changed: boolean } {
   const strips = roomMap.usbStrips;
   if (strips.some((strip) => strip.portName === portName)) return { roomMap, changed: false };
 
-  const unlinked = strips.find((strip) => !strip.portName);
-  if (unlinked) {
+  const unlinked = strips.filter((strip) => !strip.portName);
+  const adoptable = unlinked.length === 1 && (previousPort === null || previousPort === portName);
+  if (adoptable) {
+    const [placement] = unlinked;
     return {
       roomMap: {
         ...roomMap,
-        usbStrips: strips.map((strip) => (strip === unlinked ? { ...strip, portName } : strip)),
+        usbStrips: strips.map((strip) => (strip === placement ? { ...strip, portName } : strip)),
       },
       changed: true,
     };
@@ -56,20 +63,29 @@ export function withStripForPort(
  * connect, writing only when something changes. Resolves with the roster as
  * stored. Output never reads `roomMap.usbStrips` — see
  * docs/architecture/ui-and-shell.md, "Devices → USB has one add path".
+ *
+ * Goes through `shellStore.update`, not load-then-save: a save replaces the
+ * whole `roomMap` key, so channels or zones written between the read and the
+ * save would be reverted.
  */
-export async function ensureStripForPort(portName: string): Promise<UsbStripPlacement[]> {
-  const current = await shellStore.load();
-  const roomMap = current.roomMap ?? DEFAULT_ROOM_MAP;
-  const next = withStripForPort(
-    roomMap,
-    portName,
-    stripLedCount(current.ledCalibration),
-    () => `usb-${crypto.randomUUID()}`,
-  );
-  if (!next.changed) return roomMap.usbStrips;
-  await shellStore.save({
-    roomMap: next.roomMap,
-    roomMapVersion: (current.roomMapVersion ?? 0) + 1,
+export async function ensureStripForPort(
+  portName: string,
+  previousPort: string | null = null,
+): Promise<UsbStripPlacement[]> {
+  const newStripId = `usb-${crypto.randomUUID()}`;
+  let roster: UsbStripPlacement[] = [];
+  await shellStore.update((current) => {
+    const roomMap = current.roomMap ?? DEFAULT_ROOM_MAP;
+    const next = withStripForPort(
+      roomMap,
+      portName,
+      stripLedCount(current.ledCalibration),
+      () => newStripId,
+      previousPort,
+    );
+    roster = next.roomMap.usbStrips;
+    if (!next.changed) return null;
+    return { roomMap: next.roomMap, roomMapVersion: (current.roomMapVersion ?? 0) + 1 };
   });
-  return next.roomMap.usbStrips;
+  return roster;
 }

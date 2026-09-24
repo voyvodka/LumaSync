@@ -396,6 +396,7 @@ export function LightsSection({
       ),
     },
   } satisfies Record<HueRuntimeTarget, OutputRowView>;
+  const liveSelectedCount = outputTargets.filter((target) => outputRows[target].available).length;
 
   return (
     <div className="lm-lights-page">
@@ -609,6 +610,9 @@ export function LightsSection({
             {OUTPUT_TARGETS.map((target) => {
               const row: OutputRowView = outputRows[target];
               const selected = outputTargets.includes(target);
+              // The last output that can actually receive stays on: with USB
+              // selected but unplugged, turning Hue off would leave nothing lit.
+              const lastLiveOutput = selected && row.available && liveSelectedCount === 1;
               return (
                 <button
                   key={target}
@@ -616,7 +620,7 @@ export function LightsSection({
                   className={`lm-out-row ${
                     !row.available ? "is-unavailable" : !selected ? "is-off" : (row.liveState ?? "")
                   }`}
-                  disabled={modeSelectorDisabled || !row.available || (selected && outputTargets.length === 1)}
+                  disabled={modeSelectorDisabled || !row.available || lastLiveOutput}
                   onClick={() => toggleTarget(target, selected)}
                   // The saved selection is untouched; a missing output is just
                   // not shown as on, since nothing is sent to it.

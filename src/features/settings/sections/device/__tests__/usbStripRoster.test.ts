@@ -27,6 +27,15 @@ vi.mock("@/features/persistence/shellStore", () => ({
       stateRef.current = { ...stateRef.current, ...partial };
       return Promise.resolve();
     },
+    // The revision-guarded write, minus the guard: one writer here.
+    update: (fn: (current: ShellState) => Partial<ShellState> | null) => {
+      const partial = fn(stateRef.current as ShellState);
+      if (partial) {
+        saveMock(partial);
+        stateRef.current = { ...stateRef.current, ...partial };
+      }
+      return Promise.resolve(stateRef.current as ShellState);
+    },
   },
 }));
 
@@ -65,6 +74,27 @@ describe("withStripForPort", () => {
     const { roomMap: next, changed } = withStripForPort(roomMap([drawn]), PORT, 90, () => "usb-new");
     expect(changed).toBe(true);
     expect(next.usbStrips).toEqual([{ ...drawn, portName: PORT }]);
+  });
+
+  // A legacy drawn strip auto-reconnected on COM3 (nothing written); the user
+  // then connected COM4, and the COM3 strip was relabelled COM4.
+  it("leaves an unlinked strip to the port that was driving it", () => {
+    const drawn = strip();
+    const { roomMap: next } = withStripForPort(roomMap([drawn]), PORT, 90, () => "usb-new", "/dev/cu.usbserial-9");
+    expect(next.usbStrips).toEqual([drawn, expect.objectContaining({ stripId: "usb-new", portName: PORT })]);
+  });
+
+  it("adopts it when the port connecting is the one that was driving it", () => {
+    const drawn = strip();
+    const { roomMap: next } = withStripForPort(roomMap([drawn]), PORT, 90, () => "usb-new", PORT);
+    expect(next.usbStrips).toEqual([{ ...drawn, portName: PORT }]);
+  });
+
+  it("adopts none when two unlinked strips could each be this one", () => {
+    const a = strip({ stripId: "usb-a" });
+    const b = strip({ stripId: "usb-b" });
+    const { roomMap: next } = withStripForPort(roomMap([a, b]), PORT, 90, () => "usb-new");
+    expect(next.usbStrips).toEqual([a, b, expect.objectContaining({ stripId: "usb-new", portName: PORT })]);
   });
 
   it("adds a strip for a second controller beside one on another port", () => {

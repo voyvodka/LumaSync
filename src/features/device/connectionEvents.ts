@@ -34,6 +34,12 @@ export interface ConnectionEvent {
    * NOT set this so the caller doesn't strip USB on transient failures.
    */
   readonly unsupportedReason?: ConnectionRejectionCode;
+  /**
+   * `true` only on the success of a connect the user asked for
+   * (`connectSelectedPort`); absent for the boot auto-reconnect and recovery.
+   * The LED Setup nudge keys on it.
+   */
+  readonly userInitiated?: boolean;
 }
 
 export type ConnectionEventListener = (event: ConnectionEvent) => void;

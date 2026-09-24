@@ -45,6 +45,10 @@
   font-weight: 600;
   color: var(--lm-ink);
 }
+/* The words are the switch's label: clicking them flips it. */
+label.lm-strip-setting-check-tx {
+  cursor: pointer;
+}
 
 /* A radio tile. A real class rather than inline `all: unset`, which had
    stripped the keyboard focus ring along with everything else. */

@@ -2,9 +2,17 @@ import { DEVICE_STATUS, SERIAL_PORT_LIST_STATUS } from "@/shared/contracts/devic
 import { resolveInitialSelection, resolveSelectionAfterRefresh } from "../portSelection";
 import type { ConnectionStore } from "./connectionStore";
 import { nextStatusForReadyState, toDevicePort } from "./connectionStateHelpers";
-import type { DeviceConnectionControllerDeps } from "./connectionTypes";
+import type { DeviceConnectionControllerDeps, DeviceStatusCard } from "./connectionTypes";
 import type { DevicePort } from "../types";
 import { parseCommandError } from "@/shared/contracts/status";
+
+const REFRESH_RATE_LIMITED = "REFRESH_RATE_LIMITED";
+
+/** A completed refresh answers "wait a moment and try again", so that hint
+ *  ends with it; any other card is still about the state it describes. */
+function carriedStatusCard(card: DeviceStatusCard | null): DeviceStatusCard | null {
+  return card?.code === REFRESH_RATE_LIMITED ? null : card;
+}
 
 export interface PortDiscovery {
   runInitialScan(): Promise<void>;
@@ -84,7 +92,7 @@ export function createPortDiscovery(
               message: "Previously selected port is no longer available.",
               detailsKey: "device:status.hints.selectedPortMissing",
             }
-          : prev.statusCard,
+          : carriedStatusCard(prev.statusCard),
       }));
 
       const lastSuccessfulPort = store.getState().lastSuccessfulPort;
@@ -124,7 +132,7 @@ export function createPortDiscovery(
         ...prev,
         statusCard: {
           variant: "info",
-          code: "REFRESH_RATE_LIMITED",
+          code: REFRESH_RATE_LIMITED,
           message: "Refresh is temporarily limited.",
           detailsKey: "device:status.hints.refreshRateLimited",
         },

@@ -86,6 +86,10 @@ export function createDeviceConnectionController(
       await autoReconnect.tryAutoReconnect(state.lastSuccessfulPort);
     }
 
+    // Disposed during the awaits above (StrictMode's rehearsal unmount, a
+    // section left mid-scan): `dispose()` already ran its unsubscribe, so a
+    // listener added now would never be removed.
+    if (store.isDisposed()) return;
     siblingSync.subscribeToSiblings();
   };
 

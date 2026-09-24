@@ -127,6 +127,14 @@ Patching only the migrated keys cannot delete the legacy keys a step removes, an
 fatal: the migrated object is still returned, and the next load retries. The twin overlay has no
 grant for `replace_shell_state`, and it must still boot.
 
+**`shellStore.update` is the read-modify-write for a nested key.** A patch replaces a top-level
+key whole, so load-then-save of `roomMap` reverts any field another window or Rust wrote into it
+between the read and the save. `update(fn)` reads with `get_shell_state`, applies the partial `fn`
+derives from that state, and writes with `replace_shell_state` guarded by the revision it read; on a
+conflict it re-reads and re-runs `fn`, up to five attempts, then rejects. It runs in the window's
+write queue, and its listeners hear the partial once, as for a save. Main window only, like the
+migration write-back. The Devices → USB roster writes use it.
+
 **`shell://state-changed` carries `{ set, remove, revision, writerId }` to every window.** The
 facade feeds it to `onShellStateSaved` listeners, so a save in the popup reaches the main
 window's listeners too. Rust writes through the same store and the same event

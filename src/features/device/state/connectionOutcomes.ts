@@ -22,9 +22,9 @@ export async function applySuccessfulConnection(
   store: ConnectionStore,
   deps: DeviceConnectionControllerDeps,
   connectionEventsBus: ConnectionEventBus | null,
-  params: { connectedPortName: string; statusCard: DeviceStatusCard },
+  params: { connectedPortName: string; statusCard: DeviceStatusCard; userInitiated?: boolean },
 ): Promise<void> {
-  const { connectedPortName, statusCard } = params;
+  const { connectedPortName, statusCard, userInitiated } = params;
 
   store.setState((prev) => ({
     ...prev,
@@ -38,6 +38,10 @@ export async function applySuccessfulConnection(
   await persistSuccessfulPort(deps, connectedPortName);
 
   if (connectionEventsBus) {
-    connectionEventsBus.emit({ portName: connectedPortName, connected: true });
+    connectionEventsBus.emit({
+      portName: connectedPortName,
+      connected: true,
+      ...(userInitiated ? { userInitiated: true } : {}),
+    });
   }
 }

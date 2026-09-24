@@ -262,6 +262,28 @@ describe("advice the controller minted", () => {
     });
     expect(connected).toMatchObject({ variant: "success", titleKey: "device:status.connectedTitle", detailsKey });
   });
+
+  // A connect in flight read "No strip connected / Press Connect".
+  it("says a connect is running, with the recovery it took over from", () => {
+    const connecting = buildDeviceStatusCard({
+      status: "connecting",
+      statusCard: {
+        variant: "info",
+        code: "RECOVERY_CANCELLED_BY_USER",
+        message: "m",
+        detailsKey: "device:status.hints.recoveryCancelled",
+      },
+      connectedPort: null,
+      ports: [{ isSupported: true }],
+    });
+    expect(connecting).toMatchObject({
+      variant: "info",
+      code: "CONNECTING",
+      titleKey: "device:status.connectingTitle",
+      bodyKey: "device:status.connectingBody",
+      detailsKey: "device:status.hints.recoveryCancelled",
+    });
+  });
 });
 
 describe("the idle card", () => {
