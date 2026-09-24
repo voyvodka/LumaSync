@@ -10,6 +10,7 @@ import {
   CALIBRATION,
   PAIRED,
   bootDone,
+  env,
   loadShellStateMock,
   nextApplyRuns,
   resetAppHarness,
@@ -112,5 +113,40 @@ describe("App navigation", () => {
     expect(resizeToModeMock).toHaveBeenCalledTimes(1);
     expect(resizeToModeMock).toHaveBeenCalledWith("full");
     await waitFor(() => expect(saveShellStateMock).toHaveBeenCalledWith({ lastSection: "devices" }));
+  });
+
+  // LED Setup's draft used to vanish on a tab click or the compact toggle: the
+  // page unmounted and only its own Cancel ever asked.
+  it("asks the open screen's leave guard before a tab change or the compact switch", async () => {
+    const user = userEvent.setup();
+    loadShellStateMock.mockResolvedValue({ lastSection: "led-setup", uiMode: "full", ledCalibration: CALIBRATION });
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId("active-section")).toHaveTextContent("led-setup"));
+
+    await user.click(screen.getByText("hold-leave"));
+    await user.click(screen.getByTestId("section-tab-devices"));
+    expect(screen.getByTestId("active-section")).toHaveTextContent("led-setup");
+
+    await user.click(screen.getByTestId("ui-mode-toggle"));
+    // Longer than the fade-out, after which an unguarded switch would resize.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 500)));
+    expect(screen.getByTestId("ui-mode")).toHaveTextContent("full");
+    expect(resizeToModeMock).not.toHaveBeenCalled();
+
+    // The user agreed to leave: the last move asked for goes ahead.
+    await act(async () => env.heldLeave?.());
+    await waitFor(() => expect(screen.getByTestId("ui-mode")).toHaveTextContent("compact"));
+  });
+
+  it("does not ask when the tab is the one already open", async () => {
+    const user = userEvent.setup();
+    loadShellStateMock.mockResolvedValue({ lastSection: "led-setup", uiMode: "full", ledCalibration: CALIBRATION });
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId("active-section")).toHaveTextContent("led-setup"));
+
+    await user.click(screen.getByText("hold-leave"));
+    await user.click(screen.getByTestId("section-tab-led-setup"));
+
+    expect(env.heldLeave).toBeNull();
   });
 });

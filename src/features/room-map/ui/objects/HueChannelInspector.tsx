@@ -4,7 +4,7 @@ import { RangeRow } from "@/shared/ui/RangeRow";
 
 import { hueChannelIdLabel, hueChannelName } from "../../model/hueChannelLabel";
 
-import type { HueChannelPlacement } from "@/shared/contracts/roomMap";
+import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import { Header } from "./InspectorPrimitives";
 import type { UsbStripConnectionStatus } from "./UsbStripInspector";
 import { TYPE_DOT_COLOR } from "../../model/zoneColor";
@@ -31,6 +31,7 @@ export function HueChannelInspector({
   zoneName,
   bridgeStatus = "unknown",
   worldZ,
+  heightRange,
   roomHeightMeters,
   onHeightChange,
   lightCount,
@@ -42,6 +43,8 @@ export function HueChannelInspector({
   zoneName: string | null;
   /** Resolved height — a zone-bound channel's live value is zone-relative. */
   worldZ: number;
+  /** Heights the channel can reach; a bound zone narrows it. Default [-1, 1]. */
+  heightRange?: { min: number; max: number; zone: HueZone | null };
   roomHeightMeters: number;
   onHeightChange: (worldZ: number) => void;
   /**
@@ -71,6 +74,11 @@ export function HueChannelInspector({
     const external = hueChannelName(channel, t);
     if (external !== labelDraft) setLabelDraft(external);
   }
+
+  const minZ = heightRange?.min ?? -1;
+  const maxZ = heightRange?.max ?? 1;
+  const limitingZone = heightRange?.zone && (minZ > -1 || maxZ < 1) ? heightRange.zone : null;
+  const shownZ = Math.min(maxZ, Math.max(minZ, worldZ));
 
   const commitLabel = () => {
     setLabelDirty(false);
@@ -165,22 +173,31 @@ export function HueChannelInspector({
         className="lm-zone-inspector-slider-row"
         label={t("roomMap:inspector.hueHeightLabel")}
         ariaLabel={t("roomMap:inspector.hueHeightAriaLabel")}
-        min={-1}
-        max={1}
+        min={minZ}
+        max={maxZ}
         step={0.01}
-        value={worldZ}
-        disabled={locked}
+        value={shownZ}
+        disabled={locked || maxZ <= minZ}
         onChange={onHeightChange}
         // The raw -1..1 is meaningless read aloud; this is the whole reason the
         // control moved off the Devices strip, so do not drop it.
         ariaValueText={t("roomMap:inspector.hueHeightValueText", {
-          metres: heightMetres(worldZ, roomHeightMeters).toFixed(2),
-          label: t(heightBandKey(worldZ)),
+          metres: heightMetres(shownZ, roomHeightMeters).toFixed(2),
+          label: t(heightBandKey(shownZ)),
         })}
         valueLabel={t("roomMap:inspector.hueHeightReadout", {
-          metres: heightMetres(worldZ, roomHeightMeters).toFixed(2),
+          metres: heightMetres(shownZ, roomHeightMeters).toFixed(2),
         })}
       />
+      {limitingZone && (
+        <p className="lm-room-dock-field-hint" data-testid="hue-height-zone-limit">
+          {t("roomMap:inspector.hueHeightZoneLimit", {
+            name: limitingZone.name,
+            min: heightMetres(minZ, roomHeightMeters).toFixed(2),
+            max: heightMetres(maxZ, roomHeightMeters).toFixed(2),
+          })}
+        </p>
+      )}
       <div className="lm-room-dock-field">
         <span className="lm-room-dock-field-label">
           {t("roomMap:inspector.hueZoneLabel")}

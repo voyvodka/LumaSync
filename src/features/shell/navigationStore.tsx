@@ -18,6 +18,12 @@ export interface NavigationState {
   visibleDeviceCategory: DeviceCategory | null;
 }
 
+/**
+ * Asked before the open screen is taken away. Returns `true` to hold the move:
+ * the guard then owns `proceed` and calls it once the user agrees (or never).
+ */
+export type LeaveGuard = (proceed: () => void) => boolean;
+
 export interface NavigationStore extends Store<NavigationState> {
   /** Every way in except a notice keeps the Devices category that is open. */
   setActiveSection: (sectionId: SectionId) => void;
@@ -25,6 +31,10 @@ export interface NavigationStore extends Store<NavigationState> {
   openSection: (sectionId: SectionId, deviceCategory?: DeviceCategory) => void;
   setUIMode: (uiMode: UIMode) => void;
   setVisibleDeviceCategory: (category: DeviceCategory | null) => void;
+  /** One guard at a time — the mounted screen with unsaved work. `null` clears it. */
+  setLeaveGuard: (guard: LeaveGuard | null) => void;
+  /** Runs `proceed` now, or hands it to the registered guard to hold. */
+  requestLeave: (proceed: () => void) => void;
 }
 
 export function createNavigationStore(): NavigationStore {
@@ -34,6 +44,9 @@ export function createNavigationStore(): NavigationStore {
     deviceCategoryRequest: null,
     visibleDeviceCategory: null,
   });
+  // Not state: nothing renders from it, and a render must not be able to see
+  // a guard half-registered.
+  let leaveGuard: LeaveGuard | null = null;
   const patch = (next: Partial<NavigationState>) => {
     const current = store.get();
     const changed = (Object.keys(next) as (keyof NavigationState)[]).some(
@@ -52,6 +65,13 @@ export function createNavigationStore(): NavigationStore {
       }),
     setUIMode: (uiMode) => patch({ uiMode }),
     setVisibleDeviceCategory: (visibleDeviceCategory) => patch({ visibleDeviceCategory }),
+    setLeaveGuard: (guard) => {
+      leaveGuard = guard;
+    },
+    requestLeave: (proceed) => {
+      if (leaveGuard?.(proceed)) return;
+      proceed();
+    },
   };
 }
 
@@ -102,6 +122,11 @@ export function useNavigationState<S>(
 /** For the Devices page to report its rail. Identity-stable. */
 export function useVisibleDeviceCategoryReporter(): NavigationStore["setVisibleDeviceCategory"] {
   return useNavigation().store.setVisibleDeviceCategory;
+}
+
+/** For a screen holding unsaved work to register its guard. Identity-stable. */
+export function useLeaveGuardRegistrar(): NavigationStore["setLeaveGuard"] {
+  return useNavigation().store.setLeaveGuard;
 }
 
 /** Identity-stable for the provider's lifetime. */

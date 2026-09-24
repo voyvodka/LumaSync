@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import {
+  autofillEditorConfig,
   createCalibrationEditorState,
+  isSameCalibrationLayout,
   requestEditorClose,
   saveEditorCalibration,
   updateEditorConfig,
@@ -118,5 +120,46 @@ describe("calibrationEditorState", () => {
     const cleanCloseAttempt = requestEditorClose(saved);
     expect(cleanCloseAttempt.shouldClose).toBe(true);
     expect(cleanCloseAttempt.confirmDiscard).toBe(false);
+  });
+});
+
+describe("calibrationEditorState — automatic fills and handed-over counts", () => {
+  const ZERO: LedCalibrationConfig = {
+    ...BASELINE,
+    templateId: undefined,
+    counts: { top: 0, right: 0, bottom: 0, left: 0 },
+    bottomMissing: 0,
+    totalLeds: 0,
+  };
+  const DEFAULTS = { top: 30, right: 17, bottom: 30, left: 17 };
+
+  it("treats a display-derived fill on an untouched draft as the baseline, not an edit", () => {
+    const filled = autofillEditorConfig(createCalibrationEditorState(ZERO), { counts: DEFAULTS });
+    expect(filled.current.counts).toEqual(DEFAULTS);
+    expect(filled.baseline.counts).toEqual(DEFAULTS);
+    expect(filled.isDirty).toBe(false);
+    expect(requestEditorClose(filled).shouldClose).toBe(true);
+  });
+
+  it("lands the fill on the draft alone once the user has edited", () => {
+    const edited = updateEditorConfig(createCalibrationEditorState(ZERO), { direction: "ccw" });
+    const filled = autofillEditorConfig(edited, { counts: DEFAULTS });
+    expect(filled.baseline.counts).toEqual(ZERO.counts);
+    expect(filled.isDirty).toBe(true);
+  });
+
+  it("opens counts handed over from the room map as an unsaved draft over the saved layout", () => {
+    const counts = { top: 40, right: 20, bottom: 40, left: 20 };
+    const state = createCalibrationEditorState(BASELINE, counts);
+    expect(state.baseline).toEqual(BASELINE);
+    expect(state.current.counts).toEqual(counts);
+    expect(state.current.totalLeds).toBe(120);
+    expect(state.isDirty).toBe(true);
+    expect(requestEditorClose(state).confirmDiscard).toBe(true);
+  });
+
+  it("compares layouts by what normalisation keeps", () => {
+    expect(isSameCalibrationLayout(BASELINE, { ...BASELINE })).toBe(true);
+    expect(isSameCalibrationLayout(BASELINE, { ...BASELINE, direction: "ccw" })).toBe(false);
   });
 });

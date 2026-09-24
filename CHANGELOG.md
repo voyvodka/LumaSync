@@ -138,6 +138,17 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- LED Setup: unsaved changes are no longer lost when you switch tabs, go to compact or follow a
+  notice — you are asked to keep editing or discard first, and a page you have not touched no
+  longer asks at all. A running test pattern now follows your edits on the strip, a failed save
+  says so with a Retry, errors are explained in your language instead of raw error codes, the
+  power figure is the full-white maximum to size a power supply by, and the +/− buttons are
+  larger and keyboard-visible.
+- Room map: "Reset map" keeps your Hue lights, Hue zones and the strips connected in Devices.
+  "Derive Zones" is now "LED counts from map": it uses your saved LED total and opens LED Setup
+  with the counts as unsaved changes to review, rather than applying them silently later. Room
+  height can be edited, a Hue light's height slider inside a zone only covers the heights the zone
+  allows, and Hue lights are numbered the same in the list as on the map.
 - Devices → USB Strips: serial ports that cannot drive LEDs, such as the Bluetooth port every Mac
   lists, are no longer offered for connecting. They sit under a collapsed "Other serial ports",
   and when nothing else is found the page says so and names the USB chips LumaSync supports. A

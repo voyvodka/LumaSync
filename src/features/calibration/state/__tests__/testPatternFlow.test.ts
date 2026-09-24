@@ -204,3 +204,66 @@ describe("createDefaultTestPatternFlow", () => {
     expect(releaseHueAfterTestMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("createTestPatternFlow — the layout a running test shows", () => {
+  it("records the layout the test started with, and none after a refusal", async () => {
+    const flow = createTestPatternFlow({
+      startPattern: vi.fn<() => Promise<LedTestPatternResult>>(async () => result()),
+      stopPattern: vi.fn<() => Promise<LedTestPatternResult>>(async () => result({ active: false })),
+    });
+    const started = createConfig();
+    flow.setConfig(started);
+    expect((await flow.toggle(true)).layout).toEqual(started);
+
+    flow.setConfig(createConfig({ direction: "ccw" }));
+    // An edit alone does not reach the strip; only a (re)start does.
+    expect(flow.getSnapshot().layout).toEqual(started);
+    expect((await flow.toggle(false)).layout).toBeNull();
+  });
+
+  it("restarts a running test with the current layout", async () => {
+    const startPattern = vi.fn<() => Promise<LedTestPatternResult>>(async () => result());
+    const flow = createTestPatternFlow({
+      startPattern,
+      stopPattern: vi.fn<() => Promise<LedTestPatternResult>>(async () => result({ active: false })),
+    });
+    flow.setConfig(createConfig());
+    await flow.toggle(true);
+    const edited = createConfig({ direction: "ccw" });
+    flow.setConfig(edited);
+
+    const next = await flow.retune();
+
+    expect(startPattern).toHaveBeenCalledTimes(2);
+    expect(next.isEnabled).toBe(true);
+    expect(next.layout).toEqual(edited);
+  });
+
+  it("does nothing while no test runs", async () => {
+    const startPattern = vi.fn<() => Promise<LedTestPatternResult>>(async () => result());
+    const flow = createTestPatternFlow({ startPattern, stopPattern: vi.fn<() => Promise<LedTestPatternResult>>(async () => result()) });
+    await flow.retune();
+    expect(startPattern).not.toHaveBeenCalled();
+  });
+
+  // An early refusal leaves the old run going in Rust; left alone it would keep
+  // driving a layout the page no longer shows, with no Stop button to end it.
+  it("stops the test when the restart is refused", async () => {
+    const stopPattern = vi.fn<() => Promise<LedTestPatternResult>>(async () => result({ active: false }));
+    const startPattern = vi
+      .fn<() => Promise<LedTestPatternResult>>()
+      .mockResolvedValueOnce(result())
+      .mockResolvedValueOnce(
+        result({ active: false, status: { code: LED_TEST_STATUS.PATTERN_INVALID_PARAMS, message: "", details: null } }),
+      );
+    const flow = createTestPatternFlow({ startPattern, stopPattern });
+    flow.setConfig(createConfig());
+    await flow.toggle(true);
+
+    const next = await flow.retune();
+
+    expect(stopPattern).toHaveBeenCalledTimes(1);
+    expect(next.isEnabled).toBe(false);
+    expect(next.lastStatus).toBe(LED_TEST_STATUS.PATTERN_INVALID_PARAMS);
+  });
+});

@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback, useId } from "react";
 import { useTranslation } from "react-i18next";
-import type { RoomDimensions } from "@/shared/contracts/roomMap";
+import { DEFAULT_ROOM_DIMENSIONS, type RoomDimensions } from "@/shared/contracts/roomMap";
 import { clamp, roundTo } from "@/shared/lib/math";
 
 /** Numeric input that holds local string state and commits a clamped number on blur/Enter */
@@ -12,6 +12,7 @@ function NumericField({
   step,
   onChange,
   className,
+  describedBy,
 }: {
   id: string;
   value: number;
@@ -20,6 +21,7 @@ function NumericField({
   step: number;
   onChange: (v: number) => void;
   className?: string;
+  describedBy?: string;
 }) {
   const [local, setLocal] = useState(String(roundTo(value, 3)));
 
@@ -56,9 +58,14 @@ function NumericField({
         if (e.key === "Enter") commit();
       }}
       className={className}
+      aria-describedby={describedBy}
     />
   );
 }
+
+/** A low basement to a double-height room. */
+export const ROOM_HEIGHT_MIN_M = 1.5;
+export const ROOM_HEIGHT_MAX_M = 8;
 
 interface RoomMapSettingsPopoverProps {
   open: boolean;
@@ -177,6 +184,26 @@ export function RoomMapSettingsPopover({
           />
         </div>
 
+        {/* Room Height — drives Hue vertical sampling and every height readout. */}
+        <div>
+          <label className={labelClass} htmlFor={`${fieldId}-height`}>
+            {t("roomMap:settings.roomHeight")}
+          </label>
+          <NumericField
+            id={`${fieldId}-height`}
+            value={dimensions.heightMeters ?? DEFAULT_ROOM_DIMENSIONS.heightMeters}
+            min={ROOM_HEIGHT_MIN_M}
+            max={ROOM_HEIGHT_MAX_M}
+            step={0.1}
+            onChange={(v) => onDimensionsChange({ ...dimensions, heightMeters: v })}
+            className={inputClass}
+            describedBy={`${fieldId}-height-hint`}
+          />
+          <p id={`${fieldId}-height-hint`} className="mt-1 text-[10.5px] leading-snug text-ink-faint">
+            {t("roomMap:settings.roomHeightHint")}
+          </p>
+        </div>
+
         {/* Grid toggle */}
         <div>
           <label className="flex items-center gap-2 cursor-pointer text-sm text-ink">
@@ -242,11 +269,15 @@ export function RoomMapSettingsPopover({
                 : "border-red-800 text-red-400 hover:bg-red-950/20"
             }`}
             onClick={handleResetClick}
+            aria-describedby={`${fieldId}-reset-hint`}
           >
             {resetConfirming
               ? t("roomMap:settings.resetMapConfirm")
               : t("roomMap:settings.resetMap")}
           </button>
+          <p id={`${fieldId}-reset-hint`} className="mt-1 text-[10.5px] leading-snug text-ink-faint">
+            {t("roomMap:settings.resetMapHint")}
+          </p>
         </div>
       </div>
     </div>

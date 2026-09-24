@@ -203,3 +203,11 @@ describe("pointToSegmentDistance", () => {
     expect(pointToSegmentDistance(4, 5, 1, 1, 1, 1)).toBeCloseTo(5);
   });
 });
+
+describe("deriveZones - LED total", () => {
+  it("shares out the total it is given rather than the strip's own stamped count", () => {
+    const strip = makeStrip(1.5, 0.2, 3.5, 0.2, 60);
+    expect(deriveZones(strip, TV, 164).counts.top).toBe(164);
+    expect(deriveZones(strip, TV).counts.top).toBe(60);
+  });
+});

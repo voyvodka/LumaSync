@@ -23,7 +23,7 @@ import {
   UsbStripInspector,
   type UsbStripConnectionStatus,
 } from "./objects/UsbStripInspector";
-import { resolveHueChannelWorldZ } from "../model/hueChannelPosition";
+import { hueChannelZRange, resolveHueChannelWorldZ } from "../model/hueChannelPosition";
 import { resolveInspectorTarget } from "../model/resolveInspectorTarget";
 import {
   furnitureObjectId,
@@ -266,6 +266,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
             zoneName={inspectorTarget.zoneName}
             bridgeStatus={hueChannelStatus}
             worldZ={resolveHueChannelWorldZ(ch, config.zones)}
+            heightRange={hueChannelZRange(ch, config.zones)}
             roomHeightMeters={config.dimensions.heightMeters}
             onHeightChange={(worldZ) => onHueChannelHeightChange?.(ch.channelIndex, worldZ)}
             onRename={(label) =>

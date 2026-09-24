@@ -15,7 +15,7 @@ import {
   useLightingControlState,
   type LightingControlActions,
 } from "@/features/mode/state/lightingControl";
-import { useNavigationState } from "@/features/shell/navigationStore";
+import { useLeaveGuardRegistrar, useNavigationState } from "@/features/shell/navigationStore";
 import { useHueShellStatus } from "@/features/hue/state/hueShellStatus";
 import { runtimeStatus } from "@/features/hue/__tests__/fakeHueHealth";
 import { DEVICE_COMMANDS } from "@/shared/contracts/device";
@@ -52,6 +52,8 @@ export const env = {
   statusBarRenders: 0,
   revision: 0,
   runtime: null as unknown as LightingRuntimeSnapshot,
+  /** A move the probe's leave guard is holding, as LED Setup holds one over an unsaved draft. */
+  heldLeave: null as (() => void) | null,
 };
 
 export const loadShellStateMock = vi.fn();
@@ -233,6 +235,7 @@ function LayoutProbe() {
   const activeSection = useNavigationState((state) => state.activeSection);
   const uiMode = useNavigationState((state) => state.uiMode);
   const deviceCategory = useNavigationState((state) => state.deviceCategoryRequest?.category ?? "");
+  const registerLeaveGuard = useLeaveGuardRegistrar();
   env.lastLightingActions = actions;
   return (
     <div>
@@ -251,6 +254,17 @@ function LayoutProbe() {
       <p data-testid="calibration-leds">{lighting.calibration?.totalLeds ?? ""}</p>
       <button type="button" onClick={() => actions.changeOutputTargets(["hue"])}>
         set-hue-target
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          registerLeaveGuard((proceed) => {
+            env.heldLeave = proceed;
+            return true;
+          })
+        }
+      >
+        hold-leave
       </button>
       <button type="button" onClick={() => actions.changeOutputTargets(["usb", "hue"])}>
         set-both-targets
@@ -454,6 +468,7 @@ export function resetAppHarness(): void {
   env.layoutProbeRenders = 0;
   env.statusBarRenders = 0;
   env.revision = 0;
+  env.heldLeave = null;
   env.runtime = snapshot();
   installInvokeDispatch(true);
   getLightingRuntimeMock.mockImplementation(() => Promise.resolve(env.runtime));

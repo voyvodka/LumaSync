@@ -3,7 +3,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render } from "@testing-library/react";
 
-import { ZoneDeriveOverlay } from "../ZoneDeriveOverlay";
+import { ZoneDeriveActionBar, ZoneDeriveOverlay } from "../ZoneDeriveOverlay";
 import type { ZoneDeriveResult } from "../../model/deriveZones";
 import type { TvAnchorPlacement } from "@/shared/contracts/roomMap";
 
@@ -29,15 +29,13 @@ function makeResult(segments: ZoneDeriveResult["segments"]): ZoneDeriveResult {
   return { counts, segments };
 }
 
-function renderOverlay(
-  result: ZoneDeriveResult,
-  handlers: { onConfirm?: () => void; onDiscard?: () => void } = {},
-) {
+function renderOverlay(result: ZoneDeriveResult) {
+  return render(<ZoneDeriveOverlay result={result} tv={TV} pxPerMeter={PX_PER_METER} />);
+}
+
+function renderActionBar(handlers: { onConfirm?: () => void; onDiscard?: () => void } = {}) {
   return render(
-    <ZoneDeriveOverlay
-      result={result}
-      tv={TV}
-      pxPerMeter={PX_PER_METER}
+    <ZoneDeriveActionBar
       onConfirm={handlers.onConfirm ?? (() => {})}
       onDiscard={handlers.onDiscard ?? (() => {})}
     />,
@@ -103,22 +101,39 @@ describe("ZoneDeriveOverlay", () => {
     expect(container.querySelectorAll('[data-testid="zone-edge-top"]')).toHaveLength(1);
   });
 
+});
+
+describe("ZoneDeriveActionBar", () => {
   it("calls onConfirm and onDiscard from their own buttons", () => {
     const onConfirm = vi.fn();
     const onDiscard = vi.fn();
-    const { getByText } = renderOverlay(ALL_EDGES, { onConfirm, onDiscard });
+    const { getByText } = renderActionBar({ onConfirm, onDiscard });
 
-    fireEvent.click(getByText("roomMap:zones.confirmDeriveButton"));
+    fireEvent.click(getByText("roomMap:deriveCounts.confirm"));
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(onDiscard).not.toHaveBeenCalled();
 
-    fireEvent.click(getByText("roomMap:zones.cancelDeriveButton"));
+    fireEvent.click(getByText("roomMap:deriveCounts.cancel"));
     expect(onDiscard).toHaveBeenCalledTimes(1);
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
-  it("puts focus on the confirm button as soon as the overlay opens", () => {
-    const { getByText } = renderOverlay(ALL_EDGES);
-    expect(document.activeElement).toBe(getByText("roomMap:zones.confirmDeriveButton"));
+  it("puts focus on the confirm button as soon as the preview opens", () => {
+    const { getByText } = renderActionBar();
+    expect(document.activeElement).toBe(getByText("roomMap:deriveCounts.confirm"));
+  });
+
+  // The canvas clips with `overflow: hidden`; a focus that scrolls it into
+  // view shifted the whole map and nothing scrolled it back.
+  it("focuses without scrolling anything into view", () => {
+    const focusSpy = vi.spyOn(HTMLElement.prototype, "focus");
+    renderActionBar();
+    expect(focusSpy).toHaveBeenCalledWith({ preventScroll: true });
+    focusSpy.mockRestore();
+  });
+
+  it("is not drawn inside the map overlay, which pans and zooms with the room", () => {
+    const { container } = renderOverlay(ALL_EDGES);
+    expect(container.querySelector("button")).toBeNull();
   });
 });

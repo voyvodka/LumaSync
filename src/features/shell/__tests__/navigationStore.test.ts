@@ -64,3 +64,44 @@ describe("createNavigationStore", () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("leave guard", () => {
+  it("runs a move at once when no guard is registered", () => {
+    const store = createNavigationStore();
+    const proceed = vi.fn<() => void>();
+    store.requestLeave(proceed);
+    expect(proceed).toHaveBeenCalledTimes(1);
+  });
+
+  it("hands a held move to the guard, which decides when (or whether) it runs", () => {
+    const store = createNavigationStore();
+    let held: (() => void) | null = null;
+    store.setLeaveGuard((proceed) => {
+      held = proceed;
+      return true;
+    });
+    const proceed = vi.fn<() => void>();
+    store.requestLeave(proceed);
+    expect(proceed).not.toHaveBeenCalled();
+
+    held!();
+    expect(proceed).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a guard with nothing to protect wave the move through", () => {
+    const store = createNavigationStore();
+    store.setLeaveGuard(() => false);
+    const proceed = vi.fn<() => void>();
+    store.requestLeave(proceed);
+    expect(proceed).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops asking once the guard is cleared", () => {
+    const store = createNavigationStore();
+    store.setLeaveGuard(() => true);
+    store.setLeaveGuard(null);
+    const proceed = vi.fn<() => void>();
+    store.requestLeave(proceed);
+    expect(proceed).toHaveBeenCalledTimes(1);
+  });
+});

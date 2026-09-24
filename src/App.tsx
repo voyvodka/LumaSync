@@ -83,6 +83,7 @@ import {
   KEYBIND_ACTIONS,
   SECTION_IDS,
   type SectionId,
+  type UIMode,
 } from "./shared/contracts/shell";
 
 const selectActiveSection = (state: NavigationState) => state.activeSection;
@@ -238,7 +239,7 @@ function Shell() {
   useEffect(() => { hueStartConfigRef.current = hueStartConfig; }, [hueStartConfig]);
   useTrayIntegration({ onPreviewOpenFailed: reportPreviewOpenFailure });
 
-  const handleSectionChange = useCallback(async (sectionId: SectionId, deviceCategory?: DeviceCategory) => {
+  const runSectionChange = useCallback(async (sectionId: SectionId, deviceCategory?: DeviceCategory) => {
     // Only a notice names a category; every other way in keeps the one open.
     // Set before the switch so the full layout mounts on the target section;
     // CompactLayout ignores it meanwhile.
@@ -254,6 +255,28 @@ function Shell() {
     } catch (err) {
       console.error("[LumaSync] saveShellState(lastSection) failed:", err);
     }
+  }, [navigation, switchUIMode]);
+
+  // Every way off the open screen asks its leave guard first — LED Setup holds
+  // an unsaved draft that would otherwise unmount without a word. A held move
+  // resolves at once; it runs later, or never, on the user's answer.
+  const handleSectionChange = useCallback((sectionId: SectionId, deviceCategory?: DeviceCategory) => {
+    if (sectionId === navigation.get().activeSection) return runSectionChange(sectionId, deviceCategory);
+    let pending: Promise<void> = Promise.resolve();
+    navigation.requestLeave(() => {
+      pending = runSectionChange(sectionId, deviceCategory);
+    });
+    return pending;
+  }, [navigation, runSectionChange]);
+
+  // Compact never shows the full-only screens, so going there is a leave too.
+  const guardedSwitchUIMode = useCallback((nextMode: UIMode): Promise<void> => {
+    if (nextMode !== "compact") return switchUIMode(nextMode);
+    let pending: Promise<void> = Promise.resolve();
+    navigation.requestLeave(() => {
+      pending = switchUIMode(nextMode);
+    });
+    return pending;
   }, [navigation, switchUIMode]);
 
   // A connect the user made with no saved layout points at LED Setup; the user stays put.
@@ -323,7 +346,7 @@ function Shell() {
   };
   const navigationActions = {
     goToSection: handleSectionChange,
-    switchUIMode,
+    switchUIMode: guardedSwitchUIMode,
   };
 
   // Onboarding completion handler. Persists the flag and
@@ -486,7 +509,7 @@ function Shell() {
             decorations are disabled there. See TitleBar.tsx for details. */}
         <TitleBar
           uiMode={currentMode}
-          onSwitchUIMode={switchUIMode}
+          onSwitchUIMode={guardedSwitchUIMode}
           activeSection={activeSection}
           onSectionChange={(id) => void handleSectionChange(id)}
         />
