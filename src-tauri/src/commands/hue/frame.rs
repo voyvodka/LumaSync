@@ -101,11 +101,40 @@ pub struct HueAreaChannelInfo {
 // Background sender channel update payload + handle
 // ---------------------------------------------------------------------------
 
+/// One channel's colour on the wire's scale, 0–1 per component, before
+/// brightness. Kept in `f32` up to the frame so the 16-bit wire is used.
+pub(crate) type HueRgb = [f32; 3];
+
+/// How the sender takes a new target (docs/architecture/hue.md, "The sender
+/// eases between targets").
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum HueMotion {
+    /// Ambilight: glide from what the lamps show towards the target.
+    Ease,
+    /// Solid colour and test patterns: show it as it is.
+    Snap,
+}
+
 #[derive(Debug)]
 pub(crate) struct HueColorUpdate {
     /// Per-channel colours in channel order (one entry per `HueAreaChannel`).
-    pub(crate) channel_colors: Vec<(u8, u8, u8)>,
+    pub(crate) channel_colors: Vec<HueRgb>,
     pub(crate) brightness: f32,
+    pub(crate) motion: HueMotion,
+}
+
+#[cfg(test)]
+impl HueColorUpdate {
+    /// The colours rounded to 8 bits, for tests written against `u8` input.
+    pub(crate) fn rgb8(&self) -> Vec<(u8, u8, u8)> {
+        self.channel_colors
+            .iter()
+            .map(|c| {
+                let [r, g, b] = c.map(|v| (v * 255.0).round().clamp(0.0, 255.0) as u8);
+                (r, g, b)
+            })
+            .collect()
+    }
 }
 
 /// Newest-wins handoff from the frame producers to one sender thread. The
@@ -291,22 +320,30 @@ impl HueColorSender {
     /// Broadcast the same colour to every channel. Used by the solid-colour
     /// path. Never blocks; a frame the sender has not taken yet is replaced.
     pub fn try_send(&self, r: u8, g: u8, b: u8, brightness: f32) {
-        let channel_colors = vec![(r, g, b); self.channel_count.max(1)];
+        let rgb = [r, g, b].map(|v| f32::from(v) / 255.0);
+        let channel_colors = vec![rgb; self.channel_count.max(1)];
         self.tx.put(HueColorUpdate {
             channel_colors,
             brightness,
+            motion: HueMotion::Snap,
         });
     }
 
     /// Send individual colours per channel. `colors` must be indexed the same
     /// way as the `HueAreaChannel` list used when the sender was spawned.
-    pub fn try_send_channels(&self, colors: Vec<(u8, u8, u8)>, brightness: f32) {
+    pub(crate) fn try_send_channels(
+        &self,
+        colors: Vec<HueRgb>,
+        brightness: f32,
+        motion: HueMotion,
+    ) {
         if colors.is_empty() {
             return;
         }
         self.tx.put(HueColorUpdate {
             channel_colors: colors,
             brightness,
+            motion,
         });
     }
 }
@@ -339,6 +376,7 @@ impl HueColorSender {
 /// frame to the correct entertainment area when multiple sessions could be
 /// active. Without it the bridge cannot parse the channel data and ignores
 /// the frame entirely.
+#[cfg(test)]
 pub(crate) fn build_huestream_frame(
     area_id: &str,
     channels: &[HueAreaChannel],
@@ -346,10 +384,66 @@ pub(crate) fn build_huestream_frame(
     brightness: f32,
     light_metadata: &HashMap<String, HueLightMetadata>,
 ) -> Vec<u8> {
+    let mut colors: Vec<HueRgb> = channel_colors
+        .iter()
+        .map(|&(r, g, b)| [r, g, b].map(|v| f32::from(v) / 255.0))
+        .collect();
+    clip_channels_to_gamut(channels, &mut colors, light_metadata);
+    let mut frame = Vec::new();
+    encode_huestream_frame(area_id, channels, &colors, brightness, &mut frame);
+    frame
+}
+
+/// Per-bulb gamut triangle clip, in place. The sender runs it once per new
+/// target rather than per packet: an eased step between two in-gamut colours
+/// stays in gamut, the triangle being convex.
+///
+/// We resolve the channel's gamut from the first bulb in `light_ids` (a Hue
+/// entertainment channel's bulbs are typically the same archetype; mixed-gamut
+/// zones are rare and a per-channel min-gamut strategy is deferred to v2
+/// alongside the zone authoring surface). Cache misses + `HueGamutType::Other`
+/// are pass-through, preserving v1.4 behaviour for unknown bulbs.
+pub(crate) fn clip_channels_to_gamut(
+    channels: &[HueAreaChannel],
+    colors: &mut [HueRgb],
+    light_metadata: &HashMap<String, HueLightMetadata>,
+) {
+    for (channel, color) in channels.iter().zip(colors.iter_mut()) {
+        let gamut = channel
+            .light_ids
+            .first()
+            .and_then(|id| light_metadata.get(id))
+            .map(|meta| meta.gamut_type)
+            .unwrap_or(HueGamutType::Other);
+        if matches!(gamut, HueGamutType::Other) || *color == [0.0; 3] {
+            continue;
+        }
+        // Bug H2: preserve the input's own luminance through the clip
+        // instead of a hard-coded 1.0. See docs/architecture/hue.md.
+        let [r, g, b] = color.map(|v| f64::from(v.clamp(0.0, 1.0)));
+        let (xy_x, xy_y, big_y) = rgb_to_xy_unit(r, g, b);
+        let clipped = clip_xy_to_gamut((xy_x, xy_y), gamut);
+        if (clipped.0 - xy_x).abs() > 1e-9 || (clipped.1 - xy_y).abs() > 1e-9 {
+            let (cr, cg, cb) = xy_to_rgb_unit(clipped.0, clipped.1, big_y);
+            color.copy_from_slice(&[cr as f32, cg as f32, cb as f32]);
+        }
+    }
+}
+
+/// One HueStream packet into `frame` (cleared first, so a sender can reuse
+/// the buffer). Colours are taken as they are: clip them first.
+pub(crate) fn encode_huestream_frame(
+    area_id: &str,
+    channels: &[HueAreaChannel],
+    channel_colors: &[HueRgb],
+    brightness: f32,
+    frame: &mut Vec<u8>,
+) {
     const UUID_LEN: usize = 36;
     let header_len = 16;
     let entry_len = 7;
-    let mut frame = Vec::with_capacity(header_len + UUID_LEN + channels.len() * entry_len);
+    frame.clear();
+    frame.reserve(header_len + UUID_LEN + channels.len() * entry_len);
 
     // Header
     frame.extend_from_slice(HUESTREAM_MAGIC);
@@ -374,47 +468,15 @@ pub(crate) fn build_huestream_frame(
     let brightness_clamped = brightness.clamp(0.0, 1.0);
 
     for (i, channel) in channels.iter().enumerate() {
-        let (mut r, mut g, mut b) = channel_colors.get(i).copied().unwrap_or((0, 0, 0));
-
-        // Per-bulb gamut triangle clip.
-        //
-        // We resolve the channel's gamut from the first bulb in `light_ids`
-        // (a Hue entertainment channel's bulbs are typically the same
-        // archetype; mixed-gamut zones are rare and a per-channel min-gamut
-        // strategy is deferred to v2 alongside the zone authoring surface).
-        // Cache misses + `HueGamutType::Other` are pass-through, preserving
-        // v1.4 behaviour for unknown bulbs.
-        let gamut = channel
-            .light_ids
-            .first()
-            .and_then(|id| light_metadata.get(id))
-            .map(|meta| meta.gamut_type)
-            .unwrap_or(HueGamutType::Other);
-        if !matches!(gamut, HueGamutType::Other) && (r, g, b) != (0, 0, 0) {
-            // Bug H2: preserve the input's own luminance through the clip
-            // instead of a hard-coded 1.0. See docs/architecture/hue.md.
-            let (xy_x, xy_y, big_y) = rgb_to_xy(r, g, b);
-            let clipped = clip_xy_to_gamut((xy_x, xy_y), gamut);
-            if (clipped.0 - xy_x).abs() > 1e-9 || (clipped.1 - xy_y).abs() > 1e-9 {
-                let (cr, cg, cb) = xy_to_rgb(clipped.0, clipped.1, big_y);
-                r = cr;
-                g = cg;
-                b = cb;
-            }
-        }
-
-        // Scale 8-bit to 16-bit and apply brightness
-        let r16 = ((f32::from(r) / 255.0) * brightness_clamped * 65535.0) as u16;
-        let g16 = ((f32::from(g) / 255.0) * brightness_clamped * 65535.0) as u16;
-        let b16 = ((f32::from(b) / 255.0) * brightness_clamped * 65535.0) as u16;
+        let [r, g, b] = channel_colors.get(i).copied().unwrap_or([0.0; 3]);
+        // Scale to 16-bit and apply brightness
+        let wire = |c: f32| (c.clamp(0.0, 1.0) * brightness_clamped * 65535.0) as u16;
 
         frame.push(channel.channel_id);
-        frame.extend_from_slice(&r16.to_be_bytes());
-        frame.extend_from_slice(&g16.to_be_bytes());
-        frame.extend_from_slice(&b16.to_be_bytes());
+        frame.extend_from_slice(&wire(r).to_be_bytes());
+        frame.extend_from_slice(&wire(g).to_be_bytes());
+        frame.extend_from_slice(&wire(b).to_be_bytes());
     }
-
-    frame
 }
 
 // ---------------------------------------------------------------------------
@@ -432,9 +494,16 @@ pub(crate) fn build_huestream_frame(
 ///   H2 — see docs/architecture/hue.md). Callers that only need chromaticity
 ///   can ignore it.
 pub(crate) fn rgb_to_xy(r: u8, g: u8, b: u8) -> (f64, f64, f64) {
-    let mut red = f64::from(r) / 255.0;
-    let mut green = f64::from(g) / 255.0;
-    let mut blue = f64::from(b) / 255.0;
+    rgb_to_xy_unit(
+        f64::from(r) / 255.0,
+        f64::from(g) / 255.0,
+        f64::from(b) / 255.0,
+    )
+}
+
+/// [`rgb_to_xy`] on components already scaled to 0–1.
+pub(crate) fn rgb_to_xy_unit(red: f64, green: f64, blue: f64) -> (f64, f64, f64) {
+    let (mut red, mut green, mut blue) = (red, green, blue);
 
     red = if red > 0.04045 {
         ((red + 0.055) / 1.055).powf(2.4)
@@ -474,7 +543,18 @@ pub(crate) fn rgb_to_xy(r: u8, g: u8, b: u8) -> (f64, f64, f64) {
 /// rather than renormalising (Bug H2 — see docs/architecture/hue.md) —
 /// some chromaticities land outside the sRGB cube even after the upstream
 /// gamut clip, and clamping is the correct response to that, not a redo.
+#[cfg(test)]
 pub(crate) fn xy_to_rgb(x: f64, y: f64, target_y: f64) -> (u8, u8, u8) {
+    let (r, g, b) = xy_to_rgb_unit(x, y, target_y);
+    (
+        (r * 255.0).round() as u8,
+        (g * 255.0).round() as u8,
+        (b * 255.0).round() as u8,
+    )
+}
+
+/// [`xy_to_rgb`] without the 8-bit rounding: components clamped to 0–1.
+pub(crate) fn xy_to_rgb_unit(x: f64, y: f64, target_y: f64) -> (f64, f64, f64) {
     // Treat negative or near-zero target luminance as "true black". This
     // keeps the EPSILON guard (the channel is unrenderable) but moves it
     // to the *target* luminance — never the input chromaticity's `y` —
@@ -482,13 +562,13 @@ pub(crate) fn xy_to_rgb(x: f64, y: f64, target_y: f64) -> (u8, u8, u8) {
     // segment endpoint clamp produces a chromaticity with a sub-EPSILON
     // y-coordinate yet a perfectly valid target luminance.
     if target_y <= f64::EPSILON {
-        return (0, 0, 0);
+        return (0.0, 0.0, 0.0);
     }
     // Guard against degenerate chromaticity (y == 0) — divide-by-zero
     // protection. We treat it as unrenderable rather than fabricate a
     // colour, matching pre-fix behaviour for that pathological branch.
     if y <= f64::EPSILON {
-        return (0, 0, 0);
+        return (0.0, 0.0, 0.0);
     }
 
     let big_y = target_y;
@@ -521,11 +601,7 @@ pub(crate) fn xy_to_rgb(x: f64, y: f64, target_y: f64) -> (u8, u8, u8) {
     // sample. Instead clamp each channel into [0, 1] independently.
     // Out-of-gamut chromaticities are the caller's problem to project
     // (see `clip_xy_to_gamut`).
-    (
-        (r.clamp(0.0, 1.0) * 255.0).round() as u8,
-        (g.clamp(0.0, 1.0) * 255.0).round() as u8,
-        (b.clamp(0.0, 1.0) * 255.0).round() as u8,
-    )
+    (r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0))
 }
 
 // CIE xy vertices per Hue gamut (A/B/C, `Other` pass-through); see
@@ -682,10 +758,7 @@ mod tests {
         for r in 1..=3 {
             sender.try_send(r, 0, 0, 1.0);
         }
-        assert_eq!(
-            rx.try_recv().expect("a frame").channel_colors,
-            vec![(3, 0, 0)]
-        );
+        assert_eq!(rx.try_recv().expect("a frame").rgb8(), vec![(3, 0, 0)]);
         assert!(matches!(rx.try_recv(), Err(TryRecvError::Empty)));
     }
 
@@ -702,7 +775,7 @@ mod tests {
         assert_eq!(
             rx.recv_timeout(Duration::ZERO)
                 .expect("a frame put before the close is still handed out")
-                .channel_colors,
+                .rgb8(),
             vec![(9, 0, 0)]
         );
         assert!(matches!(

@@ -2,7 +2,6 @@ use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug)]
 pub struct RuntimeQualityConfig {
-    pub smoothing_alpha: f32,
     pub base_interval_ms: u64,
     pub min_interval_ms: u64,
     pub max_interval_ms: u64,
@@ -12,7 +11,6 @@ pub struct RuntimeQualityConfig {
 impl Default for RuntimeQualityConfig {
     fn default() -> Self {
         Self {
-            smoothing_alpha: 0.35,
             base_interval_ms: 16,
             min_interval_ms: 8,
             max_interval_ms: 80,
@@ -30,7 +28,6 @@ pub struct RuntimeTimingSample {
 #[derive(Debug)]
 pub struct RuntimeQualityController {
     config: RuntimeQualityConfig,
-    previous_frame: Vec<[u8; 3]>,
     observed_cost_ewma_ms: Option<f32>,
     last_sent_at: Option<Instant>,
 }
@@ -39,34 +36,9 @@ impl RuntimeQualityController {
     pub fn new(config: RuntimeQualityConfig) -> Self {
         Self {
             config,
-            previous_frame: Vec::new(),
             observed_cost_ewma_ms: None,
             last_sent_at: None,
         }
-    }
-
-    pub fn smooth(&mut self, target_frame: &[[u8; 3]]) -> Vec<[u8; 3]> {
-        if self.previous_frame.len() != target_frame.len() {
-            self.previous_frame = target_frame.to_vec();
-            return self.previous_frame.clone();
-        }
-
-        let alpha = self.config.smoothing_alpha.clamp(0.0, 1.0);
-        // Update previous_frame in-place and collect result in a single pass.
-        // Eliminates the extra clone() that the old version required.
-        self.previous_frame
-            .iter_mut()
-            .zip(target_frame.iter())
-            .map(|(previous, target)| {
-                let smoothed = [
-                    lerp_channel(previous[0], target[0], alpha),
-                    lerp_channel(previous[1], target[1], alpha),
-                    lerp_channel(previous[2], target[2], alpha),
-                ];
-                *previous = smoothed;
-                smoothed
-            })
-            .collect()
     }
 
     pub fn observe_timing(&mut self, capture_ms: f32, send_ms: f32) {
@@ -99,23 +71,6 @@ impl RuntimeQualityController {
         Duration::from_millis(adaptive_ms.clamp(min_interval_ms, max_interval_ms))
     }
 
-    pub fn set_smoothing_alpha(&mut self, alpha: f32) {
-        self.config.smoothing_alpha = alpha.clamp(0.0, 1.0);
-    }
-
-    /// Borrow the most recently smoothed (post-EWMA) per-LED buffer WITHOUT
-    /// consuming it.
-    ///
-    /// `smooth()` updates `previous_frame` in place, so after each
-    /// `queue_processed_frame` this slice holds the exact post-EWMA RGB the
-    /// strip is converging toward — in physical strip order. The v1.6 LED
-    /// Preview twin emit reads this to enrich the edge-signal without
-    /// disturbing the send pipeline (`RuntimeFrameSlot` still owns the copy
-    /// that goes to the sink). Empty before the first frame is smoothed.
-    pub fn last_smoothed(&self) -> &[[u8; 3]] {
-        &self.previous_frame
-    }
-
     /// Current smoothed capture+send cost in milliseconds. Returns 0.0 before
     /// the first observation lands.
     pub fn observed_cost_ms(&self) -> f32 {
@@ -137,69 +92,9 @@ impl RuntimeQualityController {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct RuntimeFrameSlot {
-    latest: Option<Vec<[u8; 3]>>,
-}
-
-impl RuntimeFrameSlot {
-    pub fn new() -> Self {
-        Self { latest: None }
-    }
-
-    pub fn push(&mut self, frame: Vec<[u8; 3]>) -> bool {
-        let replaced = self.latest.is_some();
-        self.latest = Some(frame);
-        replaced
-    }
-
-    pub fn take_latest(&mut self) -> Option<Vec<[u8; 3]>> {
-        self.latest.take()
-    }
-}
-
-fn lerp_channel(previous: u8, target: u8, alpha: f32) -> u8 {
-    let previous = previous as f32;
-    let target = target as f32;
-    (previous + alpha * (target - previous))
-        .round()
-        .clamp(0.0, 255.0) as u8
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{RuntimeFrameSlot, RuntimeQualityConfig, RuntimeQualityController};
-
-    #[test]
-    fn smoothes_step_changes() {
-        let mut controller = RuntimeQualityController::new(RuntimeQualityConfig {
-            smoothing_alpha: 0.5,
-            ..RuntimeQualityConfig::default()
-        });
-
-        let baseline = controller.smooth(&[[0, 0, 0]]);
-        assert_eq!(baseline, vec![[0, 0, 0]]);
-
-        let first_step = controller.smooth(&[[255, 255, 255]]);
-        assert_eq!(first_step, vec![[128, 128, 128]]);
-
-        let second_step = controller.smooth(&[[255, 255, 255]]);
-        assert!(second_step[0][0] > first_step[0][0]);
-        assert!(second_step[0][0] < 255);
-    }
-
-    #[test]
-    fn resets_on_led_count_change() {
-        let mut controller = RuntimeQualityController::new(RuntimeQualityConfig {
-            smoothing_alpha: 0.3,
-            ..RuntimeQualityConfig::default()
-        });
-
-        let _ = controller.smooth(&[[10, 10, 10], [20, 20, 20]]);
-        let changed = controller.smooth(&[[200, 100, 50]]);
-
-        assert_eq!(changed, vec![[200, 100, 50]]);
-    }
+    use super::{RuntimeQualityConfig, RuntimeQualityController};
 
     #[test]
     fn adapts_interval_under_pressure() {
@@ -208,7 +103,6 @@ mod tests {
             min_interval_ms: 8,
             max_interval_ms: 64,
             pressure_ewma_alpha: 1.0,
-            ..RuntimeQualityConfig::default()
         });
 
         let base_interval = controller.current_send_interval();
@@ -219,17 +113,5 @@ mod tests {
         let adapted_interval = controller.current_send_interval();
         assert!(adapted_interval > base_interval);
         assert!(adapted_interval.as_millis() <= 64);
-    }
-
-    #[test]
-    fn coalesces_to_latest_frame() {
-        let mut slot = RuntimeFrameSlot::new();
-
-        slot.push(vec![[1, 1, 1]]);
-        slot.push(vec![[2, 2, 2]]);
-        slot.push(vec![[3, 3, 3]]);
-
-        assert_eq!(slot.take_latest(), Some(vec![[3, 3, 3]]));
-        assert_eq!(slot.take_latest(), None);
     }
 }

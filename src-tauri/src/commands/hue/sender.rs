@@ -25,9 +25,10 @@ use super::super::hue_http::{classify_hue_response, classify_hue_response_blocki
 use super::super::hue_onboarding::AreaListError;
 use super::area_cache::invalidate_hue_area_cache;
 use super::dtls::connect_dtls;
+use super::easing::HueEasing;
 use super::frame::{
-    build_huestream_frame, channel_position_to_screen_region, HueAreaChannel, HueColorSender,
-    HueFrameRx,
+    channel_position_to_screen_region, clip_channels_to_gamut, encode_huestream_frame,
+    HueAreaChannel, HueColorSender, HueFrameRx, HueRgb,
 };
 use super::light_restore::{parse_light_state, HueLightSnapshot};
 use super::state_store::HueChannelPlacementOverride;
@@ -417,8 +418,8 @@ struct LightState {
 }
 
 impl LightState {
-    fn new(color: (u8, u8, u8), brightness: f32) -> Self {
-        let (r, g, b) = color;
+    fn new(color: HueRgb, brightness: f32) -> Self {
+        let [r, g, b] = color.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
         Self {
             r,
             g,
@@ -588,11 +589,19 @@ impl DtlsSendLoop<'_> {
         let mut last_sent_at = Instant::now()
             .checked_sub(self.min_interval)
             .unwrap_or_else(Instant::now);
-        let mut last_colors: Vec<(u8, u8, u8)> = vec![(0, 0, 0); self.channels.len()];
-        let mut last_brightness: f32 = 1.0;
+        // The easing time constant is one tick, so a step never lags the
+        // newest target by much more than one packet.
+        let mut easing = HueEasing::new(self.channels.len(), self.min_interval);
+        let mut frame = Vec::new();
 
         loop {
-            let waited = match rx.recv_timeout(self.keepalive) {
+            // Still gliding: the next tick is due whether or not a frame comes.
+            let wait = if easing.settled() {
+                self.keepalive
+            } else {
+                (last_sent_at + self.min_interval).saturating_duration_since(Instant::now())
+            };
+            let waited = match rx.recv_timeout(wait) {
                 Ok(update) => Some(update),
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => None,
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
@@ -606,18 +615,17 @@ impl DtlsSendLoop<'_> {
             // Taken after the pacing sleep, not before it: a frame that arrived
             // during the sleep is up to 50 ms newer than the one that woke us.
             let latest = rx.try_recv().ok().or(waited);
-            if let Some(update) = latest {
-                last_colors = update.channel_colors;
-                last_brightness = update.brightness;
+            if let Some(mut update) = latest {
+                clip_channels_to_gamut(
+                    self.channels,
+                    &mut update.channel_colors,
+                    self.light_metadata,
+                );
+                easing.retarget(&update.channel_colors, update.brightness, update.motion);
             }
 
-            let frame = build_huestream_frame(
-                self.area_id,
-                self.channels,
-                &last_colors,
-                last_brightness,
-                self.light_metadata,
-            );
+            let (colors, brightness) = easing.step(Instant::now());
+            encode_huestream_frame(self.area_id, self.channels, colors, brightness, &mut frame);
             if stream.write_all(&frame).is_err() {
                 if dtls_write_failed_during_stop(self.deactivate_token, rx) {
                     // A stop's deactivate PUT ends the bridge session under a
@@ -1514,7 +1522,7 @@ pub(crate) async fn fetch_lights_for_channels(
 
 #[cfg(test)]
 mod tests {
-    use super::super::frame::HueScreenRegion;
+    use super::super::frame::{build_huestream_frame, HueMotion, HueScreenRegion};
     use super::*;
 
     use std::thread;
@@ -1803,7 +1811,8 @@ mod tests {
                 let mut tick: u8 = 0;
                 while Instant::now() < deadline && !enough(sink) {
                     tick = tick.wrapping_add(7);
-                    tx.try_send_channels(vec![(tick, tick, tick); channel_count], 1.0);
+                    let level = f32::from(tick) / 255.0;
+                    tx.try_send_channels(vec![[level; 3]; channel_count], 1.0, HueMotion::Snap);
                     thread::sleep(Duration::from_millis(5));
                 }
                 drop(tx);

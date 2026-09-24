@@ -2,16 +2,20 @@
 //! step. See docs/architecture/capture-and-pipeline.md, "Measuring the frame
 //! budget".
 
+use std::sync::atomic::AtomicU32;
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use super::frame_pipeline::{
     strip_topology_for, AmbilightFramePipeline, FramePipelineConfig, FrameSettings,
 };
+use super::smoothing::{alpha_for_interval, TimeSmoother, SMOOTHING_REFERENCE_INTERVAL};
+use super::worker::WorkerPacing;
 use super::*;
 use crate::commands::ambilight_capture::AmbilightCaptureError;
 use crate::commands::ambilight_scene::{LightSetState, SceneAnalyzer};
-use crate::commands::hue::frame::{HueAreaChannel, HueColorSender, HueScreenRegion};
+use crate::commands::hue::frame::{HueAreaChannel, HueColorSender, HueRgb, HueScreenRegion};
 use crate::commands::hue::state_store::{
     HueActiveOutputContext, HueChannelPlacementOverride, HueOutputLive,
 };
@@ -19,10 +23,7 @@ use crate::commands::led_calibration::{
     build_led_sequence, sample_frame_for_sequence, sample_frame_within_insets, LedSegment,
     LedSegmentCounts, LedSequenceItem,
 };
-use crate::commands::led_output::{
-    apply_color_correction_rgb_with_luts, gamma_luts_for, GammaLuts, LedOutputError,
-    LedPacketSender,
-};
+use crate::commands::led_output::{apply_saturation_to_pixel, LedOutputError, LedPacketSender};
 use crate::commands::runtime_telemetry::RuntimeTelemetrySnapshot;
 use crate::models::room_map::{RoomDimensions, TvAnchorPlacement};
 
@@ -107,11 +108,7 @@ fn scene_frame(width: u32, height: u32, t: u32) -> CapturedFrame {
             });
         }
     }
-    CapturedFrame {
-        width,
-        height,
-        pixels_rgb,
-    }
+    CapturedFrame::new(width, height, pixels_rgb)
 }
 
 fn scene_frames(width: u32, height: u32, count: u32) -> Vec<Arc<CapturedFrame>> {
@@ -229,22 +226,44 @@ impl LedPacketSender for RecordingSender {
 const PORT: &str = "perf-port";
 
 // ---------------------------------------------------------------------------
-// Reference: the worker loop body as it stood before the per-frame step was
-// extracted, with I/O replaced by recording. It is the yardstick both the
-// threaded worker and the extracted step are held to — change it only
-// together with the worker, and say why. Changed since: the strip samples
-// inside the black-border insets, refreshed before it samples (the strip used
-// to see the whole frame while Hue was cropped).
+// Reference: the worker's per-frame glue written out inline, with I/O replaced
+// by recording and time fixed at one frame per `FRAME_GAP`. It is the
+// yardstick both the threaded worker and the extracted step are held to —
+// change it only together with the worker, and say why. Changed since the
+// extraction: the strip samples inside the black-border insets; smoothing is
+// time-based and runs on the smoothed-then-corrected order for every sink,
+// live saturation reaches Hue, and Hue keeps 16-bit precision (review items
+// 17 and 27, docs/architecture/capture-and-pipeline.md).
 // ---------------------------------------------------------------------------
 
+/// Time between analysed frames in the lock-step runs: the reference
+/// cadence, so the scene stage's per-frame rates are exactly the tuned ones.
+const FRAME_GAP: Duration = SMOOTHING_REFERENCE_INTERVAL;
+
 /// Per-channel colours and the brightness they were sent with.
-type HueSend = (Vec<(u8, u8, u8)>, f32);
+type HueSend = (Vec<HueRgb>, f32);
 
 struct ReferenceFrame {
     packet: Vec<u8>,
     /// Smoothed strip, before encoding.
     strip: Vec<[u8; 3]>,
     hue: Option<HueSend>,
+}
+
+/// `state += k · (target − state)` per channel.
+fn reference_step(state: &mut [[f32; 3]], target: &[[f32; 3]], k: f32) {
+    for (s, t) in state.iter_mut().zip(target) {
+        for c in 0..3 {
+            s[c] += k * (t[c] - s[c]);
+        }
+    }
+}
+
+fn reference_saturate(colors: &mut [[u8; 3]], saturation: f32) {
+    for pixel in colors.iter_mut() {
+        let saturated = apply_saturation_to_pixel(*pixel, saturation);
+        pixel.copy_from_slice(&saturated);
+    }
 }
 
 struct ReferenceLoop {
@@ -259,12 +278,13 @@ struct ReferenceLoop {
     hue_table: HueSampleTable,
     hue_scene_state: LightSetState,
     hue_scene_scratch: Vec<[u8; 3]>,
-    hue_channel_smoother: HueChannelSmoother,
     border_cache: BlackBorderCache,
-    color_correction: ColorCorrectionConfig,
-    frame_luts: std::borrow::Cow<'static, GammaLuts>,
-    quality_state: AmbilightWorkerQualityState,
-    frame_slot: RuntimeFrameSlot,
+    plan: EncoderPlan,
+    frame_alpha: f32,
+    strip_state: Vec<[f32; 3]>,
+    strip_target: Vec<[f32; 3]>,
+    hue_state: Vec<[f32; 3]>,
+    hue_target: Vec<[f32; 3]>,
     sink: SerialSink,
     sent: Arc<RecordingSender>,
     hue_channels: Vec<HueAreaChannel>,
@@ -281,14 +301,6 @@ impl ReferenceLoop {
         chip_type: LedChipType,
     ) -> Self {
         let color_correction = color_correction();
-        let usb_plan = Some(UsbOutputPlan::Serial(PORT.to_string()));
-        let (quality_config, _) = resolve_quality_config(
-            &usb_plan,
-            led_calibration.total_leds,
-            profile,
-            chip_type,
-            live_settings.read_smoothing_alpha(),
-        );
         let sent = Arc::new(RecordingSender::default());
         let sink = SerialSink::with_chip_type(
             LedOutputBridge::from_sender(sent.clone()),
@@ -322,12 +334,13 @@ impl ReferenceLoop {
             hue_table,
             hue_scene_state: LightSetState::default(),
             hue_scene_scratch: Vec::new(),
-            hue_channel_smoother: HueChannelSmoother::new(),
             border_cache: BlackBorderCache::new(live_settings.read_black_border_detection()),
-            frame_luts: gamma_luts_for(&color_correction),
-            color_correction,
-            quality_state: AmbilightWorkerQualityState::new(quality_config),
-            frame_slot: RuntimeFrameSlot::new(),
+            plan: EncoderPlan::new(&color_correction),
+            frame_alpha: 1.0,
+            strip_state: Vec::new(),
+            strip_target: Vec::new(),
+            hue_state: Vec::new(),
+            hue_target: Vec::new(),
             sink,
             sent,
             hue_channels,
@@ -344,7 +357,8 @@ impl ReferenceLoop {
             .expect("reference sink sent a packet")
     }
 
-    /// `start_ambilight_worker` before it spawns: sample, queue, send once.
+    /// `start_ambilight_worker` before it spawns: sample, send once, and the
+    /// strip smoother starts from it.
     fn warmup(&mut self, frame: &CapturedFrame, live_settings: &AmbilightLiveSettings) -> Vec<u8> {
         let initial_sampled = sample_frame_for_sequence(
             frame,
@@ -352,15 +366,17 @@ impl ReferenceLoop {
             &self.led_counts,
             self.sample_window,
         );
-        self.quality_state
-            .queue_processed_frame(&mut self.frame_slot, initial_sampled.as_slice());
+        self.strip_state = initial_sampled.iter().map(|c| c.map(f32::from)).collect();
+        self.strip_target = self.strip_state.clone();
         self.sink.set_brightness(live_settings.read_brightness());
         self.sink.set_color_order(live_settings.read_color_order());
-        let latest = self.frame_slot.take_latest().expect("queued warm-up frame");
-        self.sink.send_frame(&latest).expect("reference send");
+        self.sink
+            .send_frame(&initial_sampled)
+            .expect("reference send");
         self.take_packet()
     }
 
+    /// One frame, `FRAME_GAP` after the previous one.
     fn frame(
         &mut self,
         raw_frame: &CapturedFrame,
@@ -380,7 +396,13 @@ impl ReferenceLoop {
         let color_order = live_settings.read_color_order();
         let saturation = live_settings.read_saturation();
         let alpha_ceiling = live_settings.read_smoothing_alpha();
-        let frame_alpha = if self.scene_enabled {
+
+        // The gap since the previous frame, under the previous frame's targets.
+        let k = alpha_for_interval(self.frame_alpha, FRAME_GAP);
+        reference_step(&mut self.strip_state, &self.strip_target, k);
+        reference_step(&mut self.hue_state, &self.hue_target, k);
+
+        self.frame_alpha = if self.scene_enabled {
             self.scene
                 .observe_frame(raw_frame, self.border_cache.insets(), alpha_ceiling);
             self.scene.process(
@@ -393,16 +415,8 @@ impl ReferenceLoop {
         } else {
             alpha_ceiling
         };
-        self.quality_state.set_smoothing_alpha(frame_alpha);
-        apply_saturation_inplace(&mut sampled, saturation);
-        self.quality_state
-            .queue_processed_frame(&mut self.frame_slot, sampled.as_slice());
-
-        self.sink.set_brightness(brightness);
-        self.sink.set_color_order(color_order);
-        let latest = self.frame_slot.take_latest().expect("queued frame");
-        self.sink.send_frame(&latest).expect("reference send");
-        let packet = self.take_packet();
+        reference_saturate(&mut sampled, saturation);
+        self.strip_target = sampled.iter().map(|c| c.map(f32::from)).collect();
 
         let hue = if self.hue_channels.is_empty() {
             None
@@ -436,26 +450,34 @@ impl ReferenceLoop {
                     &mut self.hue_scene_state,
                 );
             }
-            let raw_colors: Vec<(u8, u8, u8)> = self
+            reference_saturate(&mut self.hue_scene_scratch, saturation);
+            self.hue_target = self
                 .hue_scene_scratch
                 .iter()
-                .map(|&[r, g, b]| {
-                    apply_color_correction_rgb_with_luts(
-                        (r, g, b),
-                        &self.color_correction,
-                        &self.frame_luts,
-                    )
-                })
+                .map(|c| c.map(f32::from))
                 .collect();
-            let smoothed = self.hue_channel_smoother.smooth(&raw_colors, frame_alpha);
-            Some((smoothed.to_vec(), brightness))
+            if self.hue_state.len() != self.hue_target.len() {
+                self.hue_state = self.hue_target.clone();
+            }
+            let colors = self
+                .hue_state
+                .iter()
+                .map(|&rgb| self.plan.correct_precise(rgb))
+                .collect();
+            Some((colors, brightness))
         };
 
-        ReferenceFrame {
-            packet,
-            strip: self.quality_state.last_smoothed().to_vec(),
-            hue,
-        }
+        let strip: Vec<[u8; 3]> = self
+            .strip_state
+            .iter()
+            .map(|c| c.map(|v| v.round().clamp(0.0, 255.0) as u8))
+            .collect();
+        self.sink.set_brightness(brightness);
+        self.sink.set_color_order(color_order);
+        self.sink.send_frame(&strip).expect("reference send");
+        let packet = self.take_packet();
+
+        ReferenceFrame { packet, strip, hue }
     }
 }
 
@@ -464,12 +486,16 @@ impl ReferenceLoop {
 // ---------------------------------------------------------------------------
 
 /// Serves `frames` in order, applying the script before each, then reports the
-/// display as gone so the worker idles without producing more output.
+/// display as gone so the worker idles without producing more output. Each
+/// frame served moves the worker's smoothing clock on by `FRAME_GAP`, so the
+/// threaded run smooths exactly as the lock-step reference does however its
+/// output steps fall.
 struct ScriptedFrameSource {
     frames: Vec<Arc<CapturedFrame>>,
     next: usize,
     live: Arc<AmbilightLiveSettings>,
     room: Arc<RoomGeometryLive>,
+    served: Arc<AtomicU32>,
 }
 
 impl AmbilightFrameSource for ScriptedFrameSource {
@@ -481,7 +507,20 @@ impl AmbilightFrameSource for ScriptedFrameSource {
         };
         apply_script(self.next, &self.live, &self.room, None);
         self.next += 1;
+        self.served.fetch_add(1, Ordering::SeqCst);
         Ok(Arc::clone(frame))
+    }
+}
+
+/// A smoothing clock that reads one `FRAME_GAP` per frame served. Frames are
+/// polled slower than the slowest strip's send gate (SK6812, 164 LEDs: 58 ms),
+/// so most of them reach the wire and the packet check below has teeth.
+fn scripted_clock(served: &Arc<AtomicU32>) -> WorkerPacing {
+    let base = Instant::now();
+    let served = Arc::clone(served);
+    WorkerPacing {
+        capture_interval: Duration::from_millis(70),
+        clock: Arc::new(move || base + FRAME_GAP * served.load(Ordering::SeqCst)),
     }
 }
 
@@ -518,7 +557,15 @@ fn reference_run(
 /// Frames after the warm-up capture. Enough to cross every scripted event.
 const LOOP_FRAMES: u32 = 30;
 
+/// The worker also steps its outputs between frames; with the smoothing
+/// clock standing still there, those repeat the last value.
+fn without_repeats<T: PartialEq>(mut items: Vec<T>) -> Vec<T> {
+    items.dedup();
+    items
+}
+
 fn assert_worker_matches_reference(profile: FirmwareProfile, chip_type: LedChipType) {
+    let _watchdog = Watchdog::arm("worker_output_matches_reference", Duration::from_secs(90));
     let _guard = WORKER_TEST_GUARD
         .lock()
         .unwrap_or_else(|err| err.into_inner());
@@ -535,6 +582,7 @@ fn assert_worker_matches_reference(profile: FirmwareProfile, chip_type: LedChipT
         channels: hue_channels(),
         color_sender,
     });
+    let served = Arc::new(AtomicU32::new(0));
     let runtime = start_ambilight_worker(
         LedOutputBridge::from_sender(sent.clone()),
         Some(UsbOutputPlan::Serial(PORT.to_string())),
@@ -545,6 +593,7 @@ fn assert_worker_matches_reference(profile: FirmwareProfile, chip_type: LedChipT
             next: 0,
             live: Arc::clone(&live),
             room: Arc::clone(&room),
+            served: Arc::clone(&served),
         }),
         Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default())),
         Some(hue_output),
@@ -554,31 +603,38 @@ fn assert_worker_matches_reference(profile: FirmwareProfile, chip_type: LedChipT
         chip_type,
         None,
         Arc::clone(&room),
+        scripted_clock(&served),
     )
     .expect("worker starts");
 
+    let expected_hue: Vec<HueSend> = without_repeats(
+        reference
+            .iter()
+            .map(|frame| frame.hue.clone().expect("hue output every frame"))
+            .collect(),
+    );
     let mut hue_updates = Vec::new();
     let deadline = Instant::now() + Duration::from_secs(20);
-    while hue_updates.len() < LOOP_FRAMES as usize && Instant::now() < deadline {
+    while Instant::now() < deadline {
         if let Ok(update) = rx.recv_timeout(Duration::from_millis(100)) {
             hue_updates.push((update.channel_colors, update.brightness));
+            if without_repeats(hue_updates.clone()).len() >= expected_hue.len() {
+                break;
+            }
         }
     }
     runtime.stop();
 
-    let expected_hue: Vec<_> = reference
-        .iter()
-        .map(|frame| frame.hue.clone().expect("hue output every frame"))
-        .collect();
     assert_eq!(
-        hue_updates, expected_hue,
+        without_repeats(hue_updates),
+        expected_hue,
         "every Hue update must match the reference frame for frame"
     );
 
     // Pacing decides which frames reach the wire, never what they contain: each
     // packet must be the reference packet of a later frame than the last one.
-    let packets = sent.packets.lock().expect("packets lock").clone();
-    assert!(packets.len() >= 3, "only {} packets sent", packets.len());
+    let packets = without_repeats(sent.packets.lock().expect("packets lock").clone());
+    assert!(packets.len() >= 10, "only {} packets sent", packets.len());
     assert_eq!(packets[0], reference_warmup, "warm-up packet");
     let mut expected = reference.iter().map(|frame| &frame.packet);
     for (n, packet) in packets[1..].iter().enumerate() {
@@ -605,15 +661,14 @@ fn worker_output_matches_reference_adalight_ws2812b() {
 // ---------------------------------------------------------------------------
 
 /// `start_ambilight_worker` without the thread, the capture or the telemetry:
-/// the same constructors, then per frame `sample_strip` → `process` → the
-/// serial sink, in the worker's order.
+/// the same constructors, then per frame `sample_strip` → `analyze` →
+/// `advance` → the serial sink, in the worker's order, one `FRAME_GAP` apart.
 struct PipelineRun {
     pipeline: AmbilightFramePipeline,
     led_sequence: Vec<LedSequenceItem>,
     led_counts: LedSegmentCounts,
-    quality_state: AmbilightWorkerQualityState,
-    frame_slot: RuntimeFrameSlot,
     sink: SerialSink,
+    now: Instant,
 }
 
 impl PipelineRun {
@@ -625,14 +680,6 @@ impl PipelineRun {
         chip_type: LedChipType,
         bridge: LedOutputBridge,
     ) -> Self {
-        let usb_plan = Some(UsbOutputPlan::Serial(PORT.to_string()));
-        let (quality_config, _) = resolve_quality_config(
-            &usb_plan,
-            led_calibration.total_leds,
-            profile,
-            chip_type,
-            live_settings.read_smoothing_alpha(),
-        );
         let sink = SerialSink::with_chip_type(
             bridge,
             Some(PORT.to_string()),
@@ -657,18 +704,17 @@ impl PipelineRun {
             pipeline,
             led_sequence,
             led_counts: led_calibration.counts.clone(),
-            quality_state: AmbilightWorkerQualityState::new(quality_config),
-            frame_slot: RuntimeFrameSlot::new(),
             sink,
+            now: Instant::now(),
         }
     }
 
-    fn send_latest(&mut self, brightness: f32, color_order: LedColorOrder) {
-        self.sink.set_brightness(brightness);
-        self.sink.set_color_order(color_order);
-        if let Some(latest) = self.frame_slot.take_latest() {
-            self.sink.send_frame(&latest).expect("send");
-        }
+    fn send(&mut self, live_settings: &AmbilightLiveSettings) {
+        self.sink.set_brightness(live_settings.read_brightness());
+        self.sink.set_color_order(live_settings.read_color_order());
+        self.sink
+            .send_frame(self.pipeline.strip_frame())
+            .expect("send");
     }
 
     /// The worker samples its warm-up frame before the pipeline exists, so
@@ -680,40 +726,34 @@ impl PipelineRun {
             &self.led_counts,
             LIVE_SAMPLE_WINDOW,
         );
-        self.quality_state
-            .queue_processed_frame(&mut self.frame_slot, sampled.as_slice());
-        self.send_latest(
-            live_settings.read_brightness(),
-            live_settings.read_color_order(),
-        );
+        self.pipeline.seed_strip(&sampled, self.now);
+        self.send(live_settings);
     }
 
     fn frame(
         &mut self,
         raw_frame: &CapturedFrame,
         live_settings: &AmbilightLiveSettings,
-    ) -> Option<&[(u8, u8, u8)]> {
+    ) -> Option<&[HueRgb]> {
+        self.now += FRAME_GAP;
         let sampled = self.pipeline.sample_strip(raw_frame);
-        let brightness = live_settings.read_brightness();
-        let color_order = live_settings.read_color_order();
         let settings = FrameSettings {
             black_border_detection: live_settings.read_black_border_detection(),
             alpha_ceiling: live_settings.read_smoothing_alpha(),
             saturation: live_settings.read_saturation(),
         };
-        let step = self.pipeline.process(
-            raw_frame,
-            sampled,
-            settings,
-            &mut self.quality_state,
-            &mut self.frame_slot,
-        );
-        self.sink.set_brightness(brightness);
-        self.sink.set_color_order(color_order);
-        if let Some(latest) = self.frame_slot.take_latest() {
-            self.sink.send_frame(&latest).expect("send");
-        }
-        step.hue_colors
+        self.pipeline
+            .analyze(raw_frame, sampled, settings, self.now);
+        self.pipeline.advance(self.now);
+        self.send(live_settings);
+        self.pipeline.hue_colors()
+    }
+
+    /// An output step with no new frame, `dt` after the last one.
+    fn tick(&mut self, dt: Duration, live_settings: &AmbilightLiveSettings) {
+        self.now += dt;
+        self.pipeline.advance(self.now);
+        self.send(live_settings);
     }
 }
 
@@ -758,7 +798,7 @@ fn assert_step_matches_reference(
             "Hue colours, frame {n} ({profile:?}/{chip_type:?})"
         );
         assert_eq!(
-            run.quality_state.last_smoothed(),
+            run.pipeline.strip_frame(),
             expected.strip.as_slice(),
             "smoothed strip, frame {n} ({profile:?}/{chip_type:?})"
         );
@@ -784,6 +824,197 @@ fn extracted_step_matches_reference_300_leds_640x400() {
     for (profile, chip_type) in WIRE_COMBOS {
         assert_step_matches_reference(&strip_300(), &frames, profile, chip_type);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Review item 17: one frame, analysed once; outputs that do not depend on how
+// often they are stepped
+// ---------------------------------------------------------------------------
+
+/// A strip and Hue fed frames at 20 Hz must show the same colours at the same
+/// moments whether the outputs are stepped at 20, 25 or 60 Hz — the strip-on
+/// and Hue-only cadences used to give one preset two different speeds.
+#[test]
+fn outputs_are_the_same_whatever_the_output_rate() {
+    let frames = scene_frames(FRAME_W, FRAME_H, 13);
+    let calibration = strip_164();
+    let frame_gap = Duration::from_millis(50);
+    let checkpoint_gap = Duration::from_millis(200);
+    let end = Duration::from_millis(600);
+    let settings = FrameSettings {
+        black_border_detection: true,
+        alpha_ceiling: 0.35,
+        saturation: 1.0,
+    };
+    // Frames, output steps and checkpoints merged in time order, as the
+    // worker meets them.
+    let run_at = |tick: Duration| -> Vec<(Vec<[f32; 3]>, Vec<HueRgb>)> {
+        let live = live_settings();
+        let mut run = PipelineRun::new(
+            &calibration,
+            &live,
+            RoomGeometryLive::new(None),
+            FirmwareProfile::LumaSyncV1,
+            LedChipType::Ws2812bGrb,
+            LedOutputBridge::from_sender(Arc::new(NullSender)),
+        );
+        let start = run.now;
+        run.warmup(&frames[0], &live);
+        let mut checkpoints = Vec::new();
+        let (mut next_frame, mut next_tick, mut next_checkpoint) = (1usize, tick, checkpoint_gap);
+        loop {
+            let frame_at = (next_frame < frames.len()).then(|| frame_gap * next_frame as u32);
+            let at = [frame_at, Some(next_tick), Some(next_checkpoint)]
+                .into_iter()
+                .flatten()
+                .min()
+                .expect("an event");
+            if at > end {
+                break;
+            }
+            let now = start + at;
+            if frame_at == Some(at) {
+                let frame = &frames[next_frame];
+                let sampled = run.pipeline.sample_strip(frame);
+                run.pipeline.analyze(frame, sampled, settings, now);
+                next_frame += 1;
+            }
+            run.pipeline.advance(now);
+            if next_tick == at {
+                next_tick += tick;
+            }
+            if next_checkpoint == at {
+                checkpoints.push((
+                    run.pipeline.strip_state().to_vec(),
+                    run.pipeline.hue_colors().expect("hue colours").to_vec(),
+                ));
+                next_checkpoint += checkpoint_gap;
+            }
+        }
+        checkpoints
+    };
+    let at_20 = run_at(Duration::from_millis(50));
+    assert_eq!(at_20.len(), 3);
+    for (label, tick) in [
+        ("25 Hz", Duration::from_millis(40)),
+        ("60 Hz", Duration::from_nanos(16_666_667)),
+    ] {
+        let other = run_at(tick);
+        assert_eq!(other.len(), at_20.len(), "{label}: checkpoints");
+        for ((strip_a, hue_a), (strip_b, hue_b)) in at_20.iter().zip(&other) {
+            for (a, b) in strip_a.iter().flatten().zip(strip_b.iter().flatten()) {
+                assert!((a - b).abs() < 0.05, "{label}: strip {a} vs {b}");
+            }
+            for (a, b) in hue_a.iter().flatten().zip(hue_b.iter().flatten()) {
+                assert!((a - b).abs() < 1e-4, "{label}: hue {a} vs {b}");
+            }
+        }
+    }
+}
+
+/// Serves one and the same frame on every call, and counts the calls.
+struct StillScreen {
+    frame: Arc<CapturedFrame>,
+    calls: Arc<AtomicUsize>,
+}
+
+impl AmbilightFrameSource for StillScreen {
+    fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(Arc::clone(&self.frame))
+    }
+}
+
+/// Review item 17: the worker used to re-run the whole step on whatever frame
+/// the source still held, several times per captured frame, and telemetry
+/// counted each pass as a captured frame. A frame is analysed once: a still
+/// screen polled a hundred times is two captures in the first window — the
+/// warm-up and the one analysis — not a hundred.
+#[test]
+fn a_frame_is_analysed_once_however_often_the_worker_looks() {
+    let _watchdog = Watchdog::arm(
+        "a_frame_is_analysed_once_however_often_the_worker_looks",
+        Duration::from_secs(60),
+    );
+    let _guard = WORKER_TEST_GUARD
+        .lock()
+        .unwrap_or_else(|err| err.into_inner());
+    let calls = Arc::new(AtomicUsize::new(0));
+    let telemetry = Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default()));
+    let (color_sender, hue_updates) = HueColorSender::recording(2);
+    let runtime = start_ambilight_worker(
+        LedOutputBridge::from_sender(Arc::new(NullSender)),
+        Some(UsbOutputPlan::Serial(PORT.to_string())),
+        Some(strip_164()),
+        live_settings(),
+        Box::new(StillScreen {
+            frame: Arc::new(scene_frame(FRAME_W, FRAME_H, 0)),
+            calls: Arc::clone(&calls),
+        }),
+        Arc::clone(&telemetry),
+        Some(HueOutputLive::holding(HueActiveOutputContext {
+            channels: hue_channels(),
+            color_sender,
+        })),
+        None,
+        color_correction(),
+        FirmwareProfile::LumaSyncV1,
+        LedChipType::Ws2812bGrb,
+        None,
+        RoomGeometryLive::new(None),
+        WorkerPacing::live(Duration::from_millis(2)),
+    )
+    .expect("worker starts");
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let flushed = loop {
+        let snapshot = telemetry.lock().expect("telemetry").clone();
+        if snapshot.send_fps > 0.0 {
+            break snapshot;
+        }
+        assert!(Instant::now() < deadline, "telemetry never flushed");
+        thread::sleep(Duration::from_millis(20));
+    };
+    runtime.stop();
+
+    let polled = calls.load(Ordering::SeqCst);
+    assert!(polled >= 50, "the source was only polled {polled} times");
+    assert!(
+        flushed.capture_fps <= 2.0,
+        "a still screen reported {} captured frames per second over {polled} polls",
+        flushed.capture_fps
+    );
+    // The outputs kept stepping on the one frame: the strip is resent and Hue
+    // keeps its newest target on hand.
+    assert!(flushed.send_fps >= 10.0, "send fps {}", flushed.send_fps);
+    assert!(hue_updates.try_iter().count() >= 10);
+}
+
+/// A push source wakes the worker when its callback publishes, instead of the
+/// worker sleeping a fixed interval and re-reading the slot.
+#[test]
+fn a_published_frame_wakes_a_waiting_reader_at_once() {
+    let latest = crate::commands::ambilight_capture::LatestFrame::new();
+    latest.publish(CapturedFrame::new(1, 1, vec![[0, 0, 0]]));
+    let seen = latest.latest().expect("frame").seq;
+    assert!(
+        !latest.wait_newer(seen, Duration::from_millis(5)),
+        "nothing newer yet"
+    );
+
+    let publisher = Arc::clone(&latest);
+    let started = Instant::now();
+    let handle = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(20));
+        publisher.publish(CapturedFrame::new(1, 1, vec![[9, 9, 9]]));
+    });
+    assert!(latest.wait_newer(seen, Duration::from_secs(10)));
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "woke on the timeout, not on the publish"
+    );
+    handle.join().expect("publisher");
+    assert_eq!(latest.latest().expect("frame").pixels_rgb, vec![[9, 9, 9]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -815,15 +1046,11 @@ fn letterboxed_frame() -> CapturedFrame {
         };
         pixels_rgb.extend(std::iter::repeat_n(pixel, w));
     }
-    CapturedFrame {
-        width: FRAME_W,
-        height: FRAME_H,
-        pixels_rgb,
-    }
+    CapturedFrame::new(FRAME_W, FRAME_H, pixels_rgb)
 }
 
-/// The strip colours the pipeline queues for the sink on its first frame.
-/// Scene stage off and alpha 1.0, so they are the samples themselves.
+/// The strip colours the pipeline hands the sink on its first frame. Scene
+/// stage off and alpha 1.0, so they are the samples themselves.
 fn first_strip_frame(
     led_calibration: &LedCalibrationConfig,
     black_border_detection: bool,
@@ -840,13 +1067,9 @@ fn first_strip_frame(
         black_border_detection,
         color_correction: ColorCorrectionConfig::default(),
     });
-    let mut quality_state = AmbilightWorkerQualityState::new(RuntimeQualityConfig {
-        smoothing_alpha: 1.0,
-        ..RuntimeQualityConfig::default()
-    });
-    let mut frame_slot = RuntimeFrameSlot::new();
+    let now = Instant::now();
     let sampled = pipeline.sample_strip(frame);
-    pipeline.process(
+    pipeline.analyze(
         frame,
         sampled,
         FrameSettings {
@@ -854,10 +1077,10 @@ fn first_strip_frame(
             alpha_ceiling: 1.0,
             saturation: 1.0,
         },
-        &mut quality_state,
-        &mut frame_slot,
+        now,
     );
-    frame_slot.take_latest().expect("queued strip frame")
+    pipeline.advance(now);
+    pipeline.strip_frame().to_vec()
 }
 
 fn colors_on(
@@ -901,6 +1124,59 @@ fn letterboxed_strip_takes_the_picture_edge_not_the_bars() {
             );
         }
     }
+}
+
+/// Review item 27, the intended change for Hue: the live saturation slider
+/// reached the strip only, and Hue was corrected before it was smoothed. Hue
+/// now gets the strip's order — sample, live saturation, smoothing, then the
+/// colour plan — at the wire's precision.
+#[test]
+fn live_saturation_reaches_hue() {
+    let frame = scene_frame(FRAME_W, FRAME_H, 3);
+    let hue_at = |saturation: f32| -> Vec<HueRgb> {
+        let calibration = strip_164();
+        let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
+            led_sequence: build_led_sequence(&calibration),
+            led_counts: calibration.counts.clone(),
+            sample_window: LIVE_SAMPLE_WINDOW,
+            scene_enabled: false,
+            strip_topology: strip_topology_for(Some(&calibration)),
+            hue_channels: Some(hue_channels()),
+            room_geometry: RoomGeometryLive::new(None),
+            black_border_detection: false,
+            color_correction: color_correction(),
+        });
+        let now = Instant::now();
+        let sampled = pipeline.sample_strip(&frame);
+        let settings = FrameSettings {
+            black_border_detection: false,
+            alpha_ceiling: 1.0,
+            saturation,
+        };
+        pipeline.analyze(&frame, sampled, settings, now);
+        pipeline.advance(now);
+        pipeline.hue_colors().expect("hue colours").to_vec()
+    };
+
+    let plan = EncoderPlan::new(&color_correction());
+    let table = hue_sample_table(&hue_channels(), None);
+    let expected = |saturation: f32| -> Vec<HueRgb> {
+        table
+            .sample_points
+            .iter()
+            .map(|&(x, y)| {
+                let (r, g, b) =
+                    sample_screen_position_avg(&frame, x, y, &BlackBorderInsets::default());
+                let saturated = apply_saturation_to_pixel([r, g, b], saturation);
+                plan.correct_precise(saturated.map(f32::from))
+            })
+            .collect()
+    };
+    let plain = hue_at(1.0);
+    let vivid = hue_at(1.6);
+    assert_eq!(plain, expected(1.0));
+    assert_eq!(vivid, expected(1.6));
+    assert_ne!(plain, vivid, "the slider must change what Hue shows");
 }
 
 // ---------------------------------------------------------------------------
@@ -978,10 +1254,14 @@ mod alloc_count {
 #[global_allocator]
 static COUNTING_ALLOCATOR: alloc_count::CountingAllocator = alloc_count::CountingAllocator;
 
-/// What one steady-state frame may allocate: the sampled strip, the smoothed
-/// strip queued for the sink, and the encoded packet. The Hue path, the scene
-/// stage and the border cache reuse their buffers and add nothing.
-const ALLOCS_PER_FRAME: usize = 3;
+/// What one steady-state frame may allocate: the sampled strip and the
+/// encoded packet. The smoothers, the Hue path, the scene stage and the border
+/// cache reuse their buffers and add nothing; the smoothed strip used to be a
+/// third, queued for the sink, and is now read in place.
+const ALLOCS_PER_FRAME: usize = 2;
+
+/// An output step with no new frame re-encodes the strip and nothing else.
+const ALLOCS_PER_TICK: usize = 1;
 
 /// Accepts the packet without keeping it, so the timing report's sink costs
 /// only its encode.
@@ -1081,7 +1361,7 @@ fn assert_steady_frames_within_budget(
 
     let leds = usize::from(led_calibration.total_leds);
     let packet_bytes = leds * WirePixelLayout::for_output(profile, chip_type).bytes_per_pixel() + 6;
-    let max_bytes = 2 * leds * 3 + packet_bytes;
+    let max_bytes = leds * 3 + packet_bytes;
     let before_steady = lut_builds();
     for (n, frame) in frames[WARM_FRAMES..].iter().enumerate() {
         let (allocs, bytes) = alloc_count::measure(|| {
@@ -1091,6 +1371,15 @@ fn assert_steady_frames_within_budget(
             allocs <= ALLOCS_PER_FRAME && bytes <= max_bytes,
             "steady frame {n} ({leds} LEDs, {profile:?}/{chip_type:?}) made {allocs} \
              allocations / {bytes} bytes; the budget is {ALLOCS_PER_FRAME} / {max_bytes}"
+        );
+        let (allocs, bytes) = alloc_count::measure(|| {
+            run.tick(Duration::from_millis(16), &live);
+        });
+        assert!(
+            allocs <= ALLOCS_PER_TICK && bytes <= packet_bytes,
+            "output step after frame {n} ({leds} LEDs, {profile:?}/{chip_type:?}) made \
+             {allocs} allocations / {bytes} bytes; the budget is {ALLOCS_PER_TICK} / \
+             {packet_bytes}"
         );
     }
     assert_eq!(
@@ -1275,7 +1564,11 @@ fn report_scenario(
     let full = time_calls(ITERATIONS, |i| {
         std::hint::black_box(run.frame(frame_at(i + 1), &live));
     });
-    print_timing("whole step (sample, process, encode)", &full);
+    print_timing("frame step (sample, analyse, advance, encode)", &full);
+    let tick = time_calls(ITERATIONS, |_| {
+        run.tick(Duration::from_millis(16), &live);
+    });
+    print_timing("output step (advance, Hue colour, encode)", &tick);
 
     let sequence = build_led_sequence(led_calibration);
     let insets = detect_black_borders(frame_at(0), BLACK_BORDER_THRESHOLD);
@@ -1329,12 +1622,13 @@ fn report_scenario(
             }
         }),
     );
-    let mut quality = AmbilightWorkerQualityState::new(RuntimeQualityConfig::default());
-    let mut slot = RuntimeFrameSlot::new();
+    let mut smoother = TimeSmoother::default();
+    smoother.seed(&sampled);
     print_timing(
-        "  strip smoothing",
+        "  strip smoothing (target + time step)",
         &time_calls(ITERATIONS, |_| {
-            quality.queue_processed_frame(&mut slot, &sampled);
+            smoother.set_target(&sampled);
+            smoother.advance(Duration::from_millis(16), 0.35);
         }),
     );
     let plan = EncoderPlan::new(&color_correction());
@@ -1353,9 +1647,14 @@ fn report_scenario(
         );
     }
     println!(
-        "  whole step, median: {:.3}% of a 16.7 ms (60 Hz) frame, {:.3}% of 50 ms (20 Hz capture)",
+        "  frame step, median: {:.3}% of a 16.7 ms (60 Hz) frame, {:.3}% of 50 ms (20 Hz capture)",
         full.median_us / 16_667.0 * 100.0,
         full.median_us / 50_000.0 * 100.0
+    );
+    println!(
+        "  per second at 30 Hz capture + 60 Hz output: {:.0} µs (frame steps) + {:.0} µs (output steps)",
+        full.median_us * 30.0,
+        tick.median_us * 30.0
     );
 }
 

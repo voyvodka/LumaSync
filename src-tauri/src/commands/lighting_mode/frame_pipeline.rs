@@ -1,31 +1,37 @@
-//! The ambilight worker's per-frame computation with every I/O edge cut off:
-//! no capture, no sink, no telemetry, no clock except the one timestamp the
-//! worker's cost figure needs. The worker and the frame-budget checks in
-//! `frame_pipeline_tests` drive this same code, which is what makes those
-//! checks mean anything — docs/architecture/capture-and-pipeline.md.
+//! The ambilight worker's computation with every I/O edge cut off: no capture,
+//! no sink, no telemetry. Two halves, run at different rates: `analyze` once
+//! per new frame (sampling, the scene stage, live saturation, the smoothing
+//! targets), and `advance` on every output step (time-based smoothing, then
+//! the colour pipeline for Hue). Time comes in as an argument, so the checks in
+//! `frame_pipeline_tests` drive the same code the worker does —
+//! docs/architecture/capture-and-pipeline.md.
 
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use log::info;
 
+use super::smoothing::{TimeSmoother, SMOOTHING_REFERENCE_INTERVAL};
 use super::{
-    apply_saturation_inplace, hue_sample_table, sample_screen_position_avg,
-    AmbilightWorkerQualityState, BlackBorderCache, HueChannelSmoother, HueSampleTable,
+    hue_sample_table, sample_screen_position_avg, BlackBorderCache, HueSampleTable,
     RoomGeometryLive,
 };
 use crate::commands::ambilight_capture::CapturedFrame;
 use crate::commands::ambilight_scene::{LightSetState, LightTopology, SceneAnalyzer};
-use crate::commands::hue::frame::HueAreaChannel;
+use crate::commands::hue::frame::{HueAreaChannel, HueRgb};
 use crate::commands::led_calibration::{
     sample_frame_within_insets, LedCalibrationConfig, LedSegmentCounts, LedSequenceItem,
 };
-use crate::commands::led_output::{
-    apply_color_correction_rgb_with_luts, gamma_luts_for, ColorCorrectionConfig, GammaLuts,
-};
-use crate::commands::runtime_quality::RuntimeFrameSlot;
+use crate::commands::led_output::{apply_saturation_to_pixel, ColorCorrectionConfig, EncoderPlan};
 
 const SCENE_LOG_EVERY: u32 = 600;
+
+fn saturate(colors: &mut [[u8; 3]], factor: f32) {
+    for pixel in colors {
+        let saturated = apply_saturation_to_pixel(*pixel, factor);
+        pixel.copy_from_slice(&saturated);
+    }
+}
 
 /// Chain topology of the calibrated strip: closed only for a full perimeter.
 pub(super) fn strip_topology_for(led_calibration: Option<&LedCalibrationConfig>) -> LightTopology {
@@ -57,22 +63,13 @@ pub(super) struct FramePipelineConfig {
     pub color_correction: ColorCorrectionConfig,
 }
 
-/// The `AmbilightLiveSettings` values the step reads, sampled once per frame
-/// by the worker.
-#[derive(Clone, Copy, Debug)]
+/// The `AmbilightLiveSettings` values the analysis reads, sampled once per
+/// frame by the worker.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct FrameSettings {
     pub black_border_detection: bool,
     pub alpha_ceiling: f32,
     pub saturation: f32,
-}
-
-pub(super) struct FrameStep<'a> {
-    /// End of the strip analysis — where the worker's capture cost stops.
-    pub analyzed_at: Instant,
-    /// The queued strip frame replaced one that was never sent.
-    pub slot_overwritten: bool,
-    /// Corrected, smoothed colour per Hue channel; `None` without channels.
-    pub hue_colors: Option<&'a [(u8, u8, u8)]>,
 }
 
 pub(super) struct AmbilightFramePipeline {
@@ -91,10 +88,15 @@ pub(super) struct AmbilightFramePipeline {
     hue_table: HueSampleTable,
     hue_scene_state: LightSetState,
     hue_scene_scratch: Vec<[u8; 3]>,
-    hue_corrected: Vec<(u8, u8, u8)>,
-    hue_channel_smoother: HueChannelSmoother,
-    color_correction: ColorCorrectionConfig,
-    frame_luts: std::borrow::Cow<'static, GammaLuts>,
+    plan: EncoderPlan,
+    /// The scene stage's α for the newest frame, per reference interval.
+    frame_alpha: f32,
+    last_analysis: Option<Instant>,
+    last_advance: Option<Instant>,
+    strip: TimeSmoother,
+    strip_out: Vec<[u8; 3]>,
+    hue: TimeSmoother,
+    hue_out: Vec<HueRgb>,
 }
 
 impl AmbilightFramePipeline {
@@ -106,10 +108,6 @@ impl AmbilightFramePipeline {
             .map_or_else(HueSampleTable::empty, |channels| {
                 hue_sample_table(channels, initial_geometry.as_ref())
             });
-        // Hoisted out of the frame loop: a non-2.2 gamma makes `gamma_luts_for`
-        // run 768 `powf`s, and color_correction is fixed for the worker's
-        // lifetime — any change forces a full restart (guard at apply_mode_change).
-        let frame_luts = gamma_luts_for(&config.color_correction);
         Self {
             led_sequence: config.led_sequence,
             led_counts: config.led_counts,
@@ -126,10 +124,16 @@ impl AmbilightFramePipeline {
             hue_table,
             hue_scene_state: LightSetState::default(),
             hue_scene_scratch: Vec::new(),
-            hue_corrected: Vec::new(),
-            hue_channel_smoother: HueChannelSmoother::new(),
-            color_correction: config.color_correction,
-            frame_luts,
+            // Built once: color_correction is fixed for the worker's lifetime
+            // (any change forces a restart, guard at apply_mode_change).
+            plan: EncoderPlan::new(&config.color_correction),
+            frame_alpha: 1.0,
+            last_analysis: None,
+            last_advance: None,
+            strip: TimeSmoother::default(),
+            strip_out: Vec::new(),
+            hue: TimeSmoother::default(),
+            hue_out: Vec::new(),
         }
     }
 
@@ -145,9 +149,19 @@ impl AmbilightFramePipeline {
         self.hue_channels = channels;
     }
 
+    /// A room-map change moved where the Hue channels sample since the last
+    /// analysis. The worker re-analyses the frame it has for it: a still
+    /// screen brings no new frame to carry the change.
+    pub(super) fn hue_resample_due(&self) -> bool {
+        self.hue_channels
+            .as_deref()
+            .is_some_and(|channels| !channels.is_empty())
+            && self.room_geometry.generation() != self.room_generation
+    }
+
     /// Per-LED colours of the strip, in physical order, sampled inside the
     /// black-border insets. The worker calls this while it still holds the
-    /// frame source, before `process`, so the border cache is refreshed here:
+    /// frame source, before `analyze`, so the border cache is refreshed here:
     /// the strip, the scene stage and Hue then crop the frame identically.
     pub(super) fn sample_strip(&mut self, frame: &CapturedFrame) -> Vec<[u8; 3]> {
         self.border_cache.update_if_due(frame);
@@ -160,32 +174,55 @@ impl AmbilightFramePipeline {
         )
     }
 
-    /// The same correction the Hue colours get, for the twin overlay's feed.
-    pub(super) fn correct_rgb(&self, rgb: (u8, u8, u8)) -> (u8, u8, u8) {
-        apply_color_correction_rgb_with_luts(rgb, &self.color_correction, &self.frame_luts)
+    /// The warm-up frame the worker sent before the pipeline existed: the
+    /// strip's smoother starts from it, at `now`.
+    pub(super) fn seed_strip(&mut self, sampled: &[[u8; 3]], now: Instant) {
+        self.strip.seed(sampled);
+        self.last_advance = Some(now);
+        self.refresh_strip_out();
     }
 
-    /// One frame, after `sample_strip`: scene stage, strip smoothing into
-    /// `frame_slot`, then the Hue channels. Sending is the caller's.
-    pub(super) fn process(
+    /// The correction the strip's sink applies, for the twin overlay's feed.
+    pub(super) fn correct_rgb(&self, rgb: [u8; 3]) -> [u8; 3] {
+        self.plan.correct(rgb)
+    }
+
+    /// One new frame, after `sample_strip`: the scene stage, live saturation,
+    /// and the new smoothing targets for the strip and Hue. Returns when the
+    /// analysis ended, where the worker's capture cost stops. Call once per
+    /// frame `seq`; `now` is the smoothing clock.
+    pub(super) fn analyze(
         &mut self,
         raw_frame: &CapturedFrame,
         mut sampled: Vec<[u8; 3]>,
         settings: FrameSettings,
-        quality_state: &mut AmbilightWorkerQualityState,
-        frame_slot: &mut RuntimeFrameSlot,
-    ) -> FrameStep<'_> {
+        now: Instant,
+    ) -> Instant {
         // The setting is read after capture, so a toggle reaches the strip at
         // the next `sample_strip`. Switching off clears the insets here, which
         // lets Hue and the scene stage drop the crop one frame before the strip.
         self.border_cache
             .set_enabled(settings.black_border_detection);
+        let since_previous = self
+            .last_analysis
+            .map_or(SMOOTHING_REFERENCE_INTERVAL, |at| {
+                now.saturating_duration_since(at)
+            });
+        self.last_analysis = Some(now);
+        // The old targets held until this moment: the smoothers get there
+        // under them before the switch, so when an output step happens to run
+        // never changes what the lights show.
+        self.step_smoothers(now);
         // The preset is a ceiling; the scene stage decides how much of it this
         // frame gets to use, and every sink reads the same answer.
         let alpha_ceiling = settings.alpha_ceiling;
-        let frame_alpha = if self.scene_enabled {
-            self.scene
-                .observe_frame(raw_frame, self.border_cache.insets(), alpha_ceiling);
+        self.frame_alpha = if self.scene_enabled {
+            self.scene.observe_frame_after(
+                raw_frame,
+                self.border_cache.insets(),
+                alpha_ceiling,
+                since_previous,
+            );
             self.scene.process(
                 &mut sampled,
                 &self.strip_topology,
@@ -210,31 +247,26 @@ impl AmbilightFramePipeline {
         } else {
             alpha_ceiling
         };
-        quality_state.set_smoothing_alpha(frame_alpha);
         let analyzed_at = Instant::now();
-        // Apply saturation before smoothing/sending so the quality gate sees
-        // the corrected colors and temporal smoothing operates on final values.
-        apply_saturation_inplace(&mut sampled, settings.saturation);
-        let slot_overwritten = quality_state.queue_processed_frame(frame_slot, sampled.as_slice());
-
-        FrameStep {
-            analyzed_at,
-            slot_overwritten,
-            hue_colors: self.hue_colors(raw_frame, frame_alpha),
-        }
+        // Live saturation lands on the smoothing target, before the smoother,
+        // for every sink alike; the device calibration's own saturation is a
+        // stage of `plan` and comes after it.
+        saturate(&mut sampled, settings.saturation);
+        self.strip.set_target(&sampled);
+        self.retarget_hue(raw_frame, settings.saturation);
+        analyzed_at
     }
 
     /// Runs after the strip, so the scene stage has already observed this
     /// frame and resolved its alpha.
-    fn hue_colors(
-        &mut self,
-        raw_frame: &CapturedFrame,
-        frame_alpha: f32,
-    ) -> Option<&[(u8, u8, u8)]> {
-        let channels = self
+    fn retarget_hue(&mut self, raw_frame: &CapturedFrame, saturation: f32) {
+        let Some(channels) = self
             .hue_channels
             .as_deref()
-            .filter(|channels| !channels.is_empty())?;
+            .filter(|channels| !channels.is_empty())
+        else {
+            return;
+        };
         if self.room_geometry.generation() != self.room_generation {
             let (seen, geometry) = self.room_geometry.snapshot();
             self.room_generation = seen;
@@ -264,18 +296,60 @@ impl AmbilightFramePipeline {
                 &mut self.hue_scene_state,
             );
         }
-        self.hue_corrected.clear();
-        self.hue_corrected
-            .extend(self.hue_scene_scratch.iter().map(|&[r, g, b]| {
-                apply_color_correction_rgb_with_luts(
-                    (r, g, b),
-                    &self.color_correction,
-                    &self.frame_luts,
-                )
-            }));
-        Some(
-            self.hue_channel_smoother
-                .smooth(&self.hue_corrected, frame_alpha),
-        )
+        saturate(&mut self.hue_scene_scratch, saturation);
+        self.hue.set_target(&self.hue_scene_scratch);
+    }
+
+    fn step_smoothers(&mut self, now: Instant) {
+        let dt = self
+            .last_advance
+            .map_or(Duration::ZERO, |at| now.saturating_duration_since(at));
+        self.last_advance = Some(now);
+        self.strip.advance(dt, self.frame_alpha);
+        self.hue.advance(dt, self.frame_alpha);
+    }
+
+    /// Move both smoothers to `now` — by the time that passed, not by the
+    /// number of calls — and refresh what `strip_frame` and `hue_colors` read.
+    pub(super) fn advance(&mut self, now: Instant) {
+        self.step_smoothers(now);
+        self.refresh_strip_out();
+        self.hue_out.clear();
+        let plan = &self.plan;
+        self.hue_out.extend(
+            self.hue
+                .state()
+                .iter()
+                .map(|&rgb| plan.correct_precise(rgb)),
+        );
+    }
+
+    fn refresh_strip_out(&mut self) {
+        self.strip_out.clear();
+        self.strip_out.extend(
+            self.strip
+                .state()
+                .iter()
+                .map(|rgb| rgb.map(|v| v.round().clamp(0.0, 255.0) as u8)),
+        );
+    }
+
+    #[cfg(test)]
+    pub(super) fn strip_state(&self) -> &[[f32; 3]] {
+        self.strip.state()
+    }
+
+    /// The smoothed strip, for the sink (which corrects and encodes it) and
+    /// the twin overlay.
+    pub(super) fn strip_frame(&self) -> &[[u8; 3]] {
+        &self.strip_out
+    }
+
+    /// Smoothed, corrected colour per Hue channel on the wire's 0–1 scale;
+    /// `None` without channels or before the first frame reached them.
+    pub(super) fn hue_colors(&self) -> Option<&[HueRgb]> {
+        let channels = self.hue_channels.as_deref()?;
+        (!channels.is_empty() && self.hue_out.len() == channels.len())
+            .then_some(self.hue_out.as_slice())
     }
 }
