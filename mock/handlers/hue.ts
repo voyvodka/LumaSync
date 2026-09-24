@@ -290,6 +290,7 @@ export const hueHandlers = {
     if (hue.streaming) {
       return {
         active: true,
+        lastSolidColor: null,
         status: runtimeStatus(
           HUE_RUNTIME_STATUS.START_NOOP_ALREADY_ACTIVE,
           HUE_RUNTIME_STATES.RUNNING,
@@ -302,6 +303,7 @@ export const hueHandlers = {
     if (hue.stopped && !hue.reachable) {
       return {
         active: false,
+        lastSolidColor: null,
         status: runtimeStatus(
           HUE_RUNTIME_STATUS.CONFIG_NOT_READY_GATE_BLOCKED,
           HUE_RUNTIME_STATES.IDLE,
@@ -315,7 +317,7 @@ export const hueHandlers = {
       });
     }
     if (!hue.reachable || !hue.credentialValid) {
-      return { active: false, status: currentRuntime() };
+      return { active: false, status: currentRuntime(), lastSolidColor: null };
     }
     // `start_with_evidence` fails its strict gate on a held area with the same
     // `details` shape Rust builds (see `CONFIG_NOT_READY_GATE_BLOCKED` in
@@ -323,6 +325,7 @@ export const hueHandlers = {
     if (activeStreamerHeld(hue)) {
       return {
         active: false,
+        lastSolidColor: null,
         status: {
           ...runtimeStatus(
             HUE_RUNTIME_STATUS.CONFIG_NOT_READY_GATE_BLOCKED,
@@ -338,7 +341,7 @@ export const hueHandlers = {
       w.hue.everActive = true;
       w.hue.stopped = false;
     });
-    return { active: true, status: currentRuntime() };
+    return { active: true, status: currentRuntime(), lastSolidColor: null };
   },
 
   // Local in Rust: the stop answers `HUE_STREAM_STOPPED` whatever the bridge
@@ -348,7 +351,7 @@ export const hueHandlers = {
       w.hue.streaming = false;
       w.hue.stopped = true;
     });
-    return { active: false, status: currentRuntime() };
+    return { active: false, status: currentRuntime(), lastSolidColor: null };
   },
 
   [HUE_COMMANDS.RESTART_STREAM]: () => {
@@ -360,12 +363,13 @@ export const hueHandlers = {
         w.hue.totalReconnects += 1;
       }
     });
-    return { active: getWorld().hue.streaming, status: currentRuntime() };
+    return { active: getWorld().hue.streaming, status: currentRuntime(), lastSolidColor: null };
   },
 
   [HUE_COMMANDS.GET_STREAM_STATUS]: () => ({
     active: getWorld().hue.streaming,
     status: currentRuntime(),
+    lastSolidColor: null,
   }),
 
   /**
@@ -446,6 +450,7 @@ export const hueHandlers = {
     if (hue.channels.length === 0) {
       return {
         active: hue.streaming,
+        lastSolidColor: null,
         status: runtimeStatus(
           HUE_RUNTIME_STATUS.CONFIG_NOT_READY_GATE_BLOCKED,
           HUE_RUNTIME_STATES.IDLE,
@@ -453,6 +458,6 @@ export const hueHandlers = {
         ),
       };
     }
-    return { active: hue.streaming, status: currentRuntime() };
+    return { active: hue.streaming, status: currentRuntime(), lastSolidColor: null };
   },
 } satisfies TypedHandlers;

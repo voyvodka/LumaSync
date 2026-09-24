@@ -23,7 +23,11 @@
  */
 
 import { DISPLAY_OVERLAY_COMMANDS, DISPLAY_OVERLAY_STATUS } from "../../src/shared/contracts/display";
-import { PLATFORM_COMMANDS } from "../../src/shared/contracts/platform";
+import {
+  NOTIFICATION_RESULT_CODES,
+  PLATFORM_COMMANDS,
+  type NotificationResult,
+} from "../../src/shared/contracts/platform";
 import { CONTROL_POPUP_STATUS, PREVIEW_COMMANDS } from "../../src/shared/contracts/preview";
 import type { ControlPopupResult, ControlPopupStatusCode } from "../../src/shared/contracts/preview";
 import { SHELL_COMMANDS } from "../../src/shared/contracts/shell";
@@ -51,6 +55,17 @@ const popup = (
   popupVisible = visible;
   return { ok: true, code, message, visible };
 };
+
+/** `notifications.rs` folds a prompt into `denied`, as the real command does. */
+function notificationResult(): NotificationResult {
+  return getWorld().shell.notificationPermission === "granted"
+    ? { status: "shown" }
+    : {
+        status: "denied",
+        code: NOTIFICATION_RESULT_CODES.PERMISSION_DENIED,
+        message: "Notification permission not yet granted",
+      };
+}
 
 export const windowlessHandlers = {
   [PREVIEW_COMMANDS.OPEN_CONTROL_POPUP]: () =>
@@ -83,10 +98,11 @@ export const windowlessHandlers = {
   }),
 
   // `plugin:notification|*` is answered separately and drives the permission
-  // state; these are the Rust-side commands, which return nothing.
-  [PLATFORM_COMMANDS.SHOW_NOTIFICATION]: () => null,
-  [PLATFORM_COMMANDS.REQUEST_NOTIFICATION_PERMISSION]: () =>
-    getWorld().shell.notificationPermission,
+  // state; these are the Rust-side commands, answered in `NotificationResult`
+  // terms read off the same permission. They used to return `null` and the
+  // raw permission string, shapes `notifications.rs` never sends.
+  [PLATFORM_COMMANDS.SHOW_NOTIFICATION]: () => notificationResult(),
+  [PLATFORM_COMMANDS.REQUEST_NOTIFICATION_PERMISSION]: () => notificationResult(),
   [PLATFORM_COMMANDS.OPEN_LOG_DIR]: () => null,
 
   /** Fired during bootstrap on every launch, which is how this was found. */

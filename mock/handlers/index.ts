@@ -7,24 +7,17 @@
  * one is missing — which is the whole point, because the alternative is a new
  * Rust command quietly answering `undefined` for a week.
  *
- * The union is derived from the same `*COMMANDS` maps that
- * `verify:shell-contracts` pins against `generate_handler!`, so the chain is
- * closed end to end: new Rust command → the verifier forces a contract entry →
- * the union grows → this file stops compiling until someone decides what the
- * mock should answer.
+ * The union is `ContractCommandName` from `src/shared/contracts/ipc.ts`,
+ * derived from the same `*COMMANDS` maps that `verify:shell-contracts` pins
+ * against `generate_handler!`, so the chain is closed end to end: new Rust
+ * command → the verifier forces a contract entry → the command map must type
+ * it → this file stops compiling until someone decides what the mock should
+ * answer.
  */
 
-import { CAPTURE_COMMANDS } from "../../src/shared/contracts/capture";
-import { DEVICE_COMMANDS } from "../../src/shared/contracts/device";
-import { DISPLAY_OVERLAY_COMMANDS } from "../../src/shared/contracts/display";
-import { HUE_COMMANDS, HUE_DEBUG_COMMANDS } from "../../src/shared/contracts/hue";
-import { HUE_HEALTH_COMMANDS } from "../../src/shared/contracts/hueHealth";
-import { LIGHTING_RUNTIME_COMMANDS } from "../../src/shared/contracts/lightingRuntime";
-import { PLATFORM_COMMANDS } from "../../src/shared/contracts/platform";
-import { PREVIEW_COMMANDS } from "../../src/shared/contracts/preview";
+import { HUE_DEBUG_COMMANDS } from "../../src/shared/contracts/hue";
+import type { ContractCommandName } from "../../src/shared/contracts/ipc";
 import { HUE_ZONE_COMMANDS, ROOM_MAP_COMMANDS } from "../../src/shared/contracts/roomMap";
-import { SHELL_COMMANDS } from "../../src/shared/contracts/shell";
-import { UPDATER_COMMANDS } from "../../src/shared/contracts/updater";
 
 import { deviceHandlers } from "./device";
 import { hueHandlers } from "./hue";
@@ -32,28 +25,10 @@ import { hueHealthHandlers } from "./hueHealth";
 import { lightingRuntimeHandlers } from "./lighting";
 import { pluginHandlers, shellHandlers, windowPluginHandler } from "./shell";
 import { windowlessHandlers } from "./windowless";
-import type { CommandResponse } from "./responses";
 import type { Handler } from "./types";
 
-const COMMAND_MAPS = [
-  CAPTURE_COMMANDS,
-  DEVICE_COMMANDS,
-  DISPLAY_OVERLAY_COMMANDS,
-  HUE_COMMANDS,
-  HUE_HEALTH_COMMANDS,
-  HUE_ZONE_COMMANDS,
-  LIGHTING_RUNTIME_COMMANDS,
-  PLATFORM_COMMANDS,
-  PREVIEW_COMMANDS,
-  ROOM_MAP_COMMANDS,
-  SHELL_COMMANDS,
-  UPDATER_COMMANDS,
-] as const;
-
-type ValuesOf<T> = T extends Readonly<Record<string, infer V>> ? V : never;
-
 /** Every command name the contracts declare. */
-export type TauriCommandName = ValuesOf<(typeof COMMAND_MAPS)[number]>;
+export type TauriCommandName = ContractCommandName;
 
 /**
  * Forwarded to the real backend even while everything else is mocked.
@@ -115,7 +90,7 @@ const staticHandlers = {
   ...pluginHandlers,
 };
 
-// `staticHandlers` now carries a per-command args type (see `args.ts`), so a
+// `staticHandlers` now carries a per-command args type (the command map in `src/shared/contracts/ipc.ts`), so a
 // handful of its members no longer structurally match the generic `Handler`
 // signature the dispatcher calls through — that mismatch is exactly the
 // protection `TypedHandlers` exists to add, and it is already enforced by the
@@ -152,12 +127,3 @@ type HandledCommandName = keyof typeof staticHandlers & TauriCommandName;
 // a passthrough entry, or a listed reason.
 export const EVERY_COMMAND_IS_ACCOUNTED_FOR: Uncovered extends never ? true : Uncovered = true;
 
-/**
- * `responses.ts` spells its keys as literals, so a command renamed in the
- * contracts would leave a stale entry there that nothing else notices. This
- * catches it: a key that is not a declared command name fails the build.
- */
-type UnknownResponseKey = Exclude<keyof CommandResponse, TauriCommandName>;
-export const NO_UNKNOWN_RESPONSE_KEY: UnknownResponseKey extends never
-  ? true
-  : UnknownResponseKey = true;

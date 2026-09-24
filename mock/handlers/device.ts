@@ -23,7 +23,7 @@ import {
 } from "../../src/shared/contracts/device";
 import { HUE_RUNTIME_STATES } from "../../src/shared/contracts/hue";
 import { LINK_MAX_FPS_ABSENT } from "../../src/shared/contracts/telemetry";
-import type { HealthStepResult } from "../../src/features/device/deviceConnectionApi";
+import type { HealthStepResult } from "../../src/shared/contracts/device";
 import { getWorld, mutate, type MockSerialPort } from "../state";
 import { hueRuntimeFault } from "./hue";
 import { status } from "./status";
@@ -159,9 +159,9 @@ export const deviceHandlers = {
       pass: !failed,
       steps,
       checkedAtUnixMs: now(),
-      roundTripMs: failed ? undefined : 12,
-      firmwareVersion: failed || port === undefined ? undefined : mockFirmware(port).version,
-      advertisedFirmwareProfile: failed ? undefined : port?.firmwareProfile,
+      roundTripMs: failed ? null : 12,
+      firmwareVersion: failed || port === undefined ? null : mockFirmware(port).version,
+      advertisedFirmwareProfile: failed ? null : (port?.firmwareProfile ?? null),
       firmware: failed || port === undefined ? undefined : mockFirmware(port),
     };
   },
@@ -242,6 +242,7 @@ export const deviceHandlers = {
       return {
         active: w.lighting.mode.kind !== "off",
         mode: w.lighting.mode,
+        wledAdvisory: null,
         status: status(
           "DEVICE_NOT_CONNECTED",
           "Cannot apply lighting mode while device is disconnected.",
@@ -264,6 +265,7 @@ export const deviceHandlers = {
       return {
         active: w.lighting.mode.kind !== "off",
         mode: w.lighting.mode,
+        wledAdvisory: null,
         status: status(
           "HUE_NOT_READY",
           "Hue streaming is not available. Ensure bridge is paired and entertainment area is selected.",
@@ -278,6 +280,7 @@ export const deviceHandlers = {
       return {
         active: false,
         mode: w.lighting.mode,
+        wledAdvisory: null,
         // `details` carries the bare capture reason, read by `describeCaptureFailure`
         // — Rust never leaves it `null` on this status (`lighting_mode.rs`).
         status: status(
@@ -295,6 +298,7 @@ export const deviceHandlers = {
     return {
       active: kind !== "off",
       mode: getWorld().lighting.mode,
+      wledAdvisory: null,
       status: status(
         kind === "ambilight" ? "AMBILIGHT_MODE_STARTED" : "SOLID_MODE_APPLIED",
         "Mode applied",
@@ -309,6 +313,7 @@ export const deviceHandlers = {
     return {
       active: false,
       mode: getWorld().lighting.mode,
+      wledAdvisory: null,
       status: status("LIGHTING_MODE_STOPPED", "Stopped"),
     };
   },
@@ -318,6 +323,7 @@ export const deviceHandlers = {
     return {
       active: w.lighting.mode.kind !== "off",
       mode: w.lighting.mode,
+      wledAdvisory: null,
       status: status("LIGHTING_MODE_STATUS_OK", "Current mode"),
     };
   },

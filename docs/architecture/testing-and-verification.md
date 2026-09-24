@@ -239,11 +239,15 @@ contract types, and `mock/hotplug.ts` imports two runtime singletons on purpose.
 
 Four things about it are not obvious and each cost a cycle:
 
-- **Fixtures are bound to the real response types.** `handlers/responses.ts` ties each command to
-  its `*Api.ts` return type and `handlers/index.ts` derives its coverage guard from the handler
-  keys, so a new Rust command stops the mock compiling rather than answering `undefined` for a
-  week. The first version was written from command names instead of DTOs and every shape was wrong
-  in a way nothing caught.
+- **Fixtures are bound to the real command map.** `TypedHandlers` (`handlers/types.ts`) types every
+  handler from `CommandMap` in `src/shared/contracts/ipc.ts` — the same table `invokeCommand` and
+  the test helper `mockCommands` (`src/test/mockCommands.ts`) use — on both the args it reads and
+  the value it returns. `handlers/index.ts` derives its coverage guard from the handler keys, so a
+  new Rust command stops the mock compiling rather than answering `undefined` for a week. The
+  first version was written from command names instead of DTOs and every shape was wrong in a way
+  nothing caught; typing it from the map found four more (health-check and runtime results
+  omitting fields Rust sends as `null`, and both notification commands answering shapes
+  `notifications.rs` never sends).
 - **Events are a third of the surface and none of them is an `invoke`.** The twin overlay, the
   tray menu, the update bar and the cross-window mode sync are all pushed from Rust.
   `mock/events.ts` drives them, sizing each frame from the live calibration rather than a constant
