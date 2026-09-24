@@ -232,6 +232,27 @@ local `is_shutdown_signaled` probe and the reconnect monitor, never from this ca
 outside a given bulb's triangle is not merely inaccurate — the bridge clamps it somewhere
 unpredictable. Clip on our side so the result is deterministic.
 
+**Where a Hue colour is gamma-encoded and where it is linear.** The ambilight path, stage by stage
+(the strip shares stages 1–5 and its own copy of 6):
+
+| # | Stage | Code | Values |
+|---|---|---|---|
+| 1 | Capture | `ambilight_capture.rs`, `CapturedFrame::pixels_rgb` | `u8`, sRGB-encoded — what the display shows |
+| 2 | Sampling | `lighting_mode/sampling.rs`, `sample_screen_position_avg` | `u8`, encoded; the box average is taken on encoded values |
+| 3 | Scene stage | `ambilight_scene.rs`, `process` | `u8`, encoded |
+| 4 | Live saturation | `frame_pipeline.rs`, `saturate` (BT.601 blend) | `u8`, encoded |
+| 5 | Smoothing | `lighting_mode/smoothing.rs`, `TimeSmoother` | `f32` 0–255, encoded |
+| 6 | Colour correction | `EncoderPlan::correct_precise`: device saturation, Kelvin, then `(v/255)^γ` per channel (γ 2.2 by default) | saturation and Kelvin act on encoded values; the gamma stage outputs `f32` 0–1, **linear light** |
+| 7 | Mailbox → sender | `HueColorUpdate::channel_colors` | `f32` 0–1, linear |
+| 8 | Gamut clip | `frame.rs`, `clip_channels_to_gamut` → `rgb_to_xy_unit` / `xy_to_rgb_unit` | **linear in, but the clip applied the sRGB EOTF to it again** (see below) |
+| 9 | Easing | `hue/easing.rs`, `HueEasing` | `f32` 0–1, linear — a blend here is a physical mix |
+| 10 | Brightness, 16-bit | `frame.rs`, `encode_huestream_frame` | `v × brightness × 65535`, linear |
+| 11 | DTLS packet | colour-space byte `0x00` (RGB), 3 × `u16` BE per channel | the bridge converts RGB to xy + brightness per bulb |
+
+The Solid colour path joins at stage 7 with `apply_color_correction_rgb` (the same gamma, rounded
+to `u8`), so it is linear too. The HTTP fallback takes stage 7's value, rounds it to `u8`, and
+turns it into a CLIP v2 `color.xy` through `rgb_to_xy` — the same EOTF-on-linear as stage 8.
+
 **Zones are Hue-only.** The v1.5 W4-F unification collapsed a generic `Zone` discriminated by
 `zoneType` back to `HueZone` alone. "Logical zone" was dropped because nothing in the field models
 a name plus a channel-index list as a free-standing object — everyone models screen rectangles,
