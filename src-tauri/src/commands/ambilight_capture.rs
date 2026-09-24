@@ -133,6 +133,8 @@ pub struct LatestFrame {
     ready: Condvar,
 }
 
+// Only the macOS and Windows sources push frames; Linux capture is a pull source.
+#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
 impl LatestFrame {
     pub fn new() -> Arc<Self> {
         Arc::new(Self::default())
