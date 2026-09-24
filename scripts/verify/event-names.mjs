@@ -19,9 +19,9 @@
  *      `@tauri-apps/api/event` binding) may pass a raw string literal that
  *      looks like an event name — it must go through a named constant.
  *
- * `tray:startup-state-changed` has no Rust producer (the tray checkbox that
- * used to emit it was removed) and is carried only as a TS-only allowlist
- * entry, with the reason next to it below — see `src/shared/contracts/shell.ts`.
+ * A TS `*_EVENTS` entry with no Rust producer fails unless it is in
+ * `TS_ONLY_ALLOWLIST` below, with a reason — an unallowlisted one means either
+ * Rust never emits it (dead code) or `events.rs` is missing the constant.
  *
  *   node scripts/verify/event-names.mjs
  */
@@ -48,15 +48,10 @@ const fail = (msg) => {
 const EVENT_NAME_PATTERN = /^[a-z][a-zA-Z0-9]*:(\/\/)?[a-zA-Z0-9-]+$/;
 
 /** Frontend-only events with no Rust producer today, and why. Every entry
- * here needs the same reason recorded next to its TS declaration. */
-const TS_ONLY_ALLOWLIST = new Map([
-  [
-    "tray:startup-state-changed",
-    "the tray startup checkbox that used to emit it was removed; the frontend " +
-      "listener (trayController.ts) is kept only for a possible future external-" +
-      "autostart-toggle re-wiring — see TRAY_STARTUP_STATE_CHANGED_EVENT in shell.ts",
-  ],
-]);
+ * here needs the same reason recorded next to its TS declaration. Empty
+ * today — the one past entry (`tray:startup-state-changed`) was a dead
+ * listener with no emitter on either side and was deleted, not allowlisted. */
+const TS_ONLY_ALLOWLIST = new Map([]);
 
 /** Third-party event names (e.g. a raw `tauri://...` window event) that are
  * legitimately never behind one of our own constants. Empty today. */

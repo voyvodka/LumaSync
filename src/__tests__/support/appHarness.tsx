@@ -100,7 +100,6 @@ export const mockTauriWindow = {
 
 export const mockTrayController = {
   listenTrayShowLedPreview: () => Promise.resolve(() => {}),
-  listenStartupToggle: () => Promise.resolve(() => {}),
 };
 
 export const mockTrayApi = {

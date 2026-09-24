@@ -1227,18 +1227,6 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                     {label}
                   </button>
                 ))}
-                <button
-                  type="button"
-                  style={{ ...btn, width: "100%", textAlign: "left" }}
-                  onClick={() =>
-                    void emitMockEvent(
-                      TRAY_EVENTS.STARTUP_STATE_CHANGED,
-                      !world.shell.autostartEnabled,
-                    )
-                  }
-                >
-                  Tray → Autostart flipped to {world.shell.autostartEnabled ? "off" : "on"}
-                </button>
               </div>
               <div style={{ color: FAINT, fontSize: 9, lineHeight: 1.35, marginTop: 4 }}>
                 There is no tray in a browser tab and none of these has an `invoke` behind it, so

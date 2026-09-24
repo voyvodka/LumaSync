@@ -9,12 +9,6 @@
 //! re-exported from there (`pub use crate::events::X;`) so existing import
 //! paths (`commands::shell_state::SHELL_STATE_CHANGED_EVENT`, etc.) keep
 //! working — read the constant's doc comment for where it is actually used.
-//!
-//! `tray:startup-state-changed` (`TRAY_EVENTS.STARTUP_STATE_CHANGED` in
-//! `src/shared/contracts/shell.ts`) has no entry here: the tray checkbox that
-//! used to emit it was removed, and the frontend listener is kept only for a
-//! possible future re-wiring to an external autostart-toggle event. It is
-//! allowlisted in the verifier as TS-only.
 
 /// `LIGHTING_EVENTS.RUNTIME_CHANGED` in `src/shared/contracts/lightingRuntime.ts`.
 /// Re-exported from `commands::lighting_mode::snapshot`.

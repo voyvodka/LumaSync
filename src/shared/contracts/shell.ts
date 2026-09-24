@@ -112,18 +112,8 @@ export type TrayMenuId = (typeof TRAY_MENU_IDS)[keyof typeof TRAY_MENU_IDS];
  */
 export const TRAY_SHOW_LED_PREVIEW_EVENT = "tray:show-led-preview" as const;
 
-/**
- * Startup-state broadcast. The tray's own startup checkbox was removed
- * (autostart toggling now lives only in the System settings section), which
- * also removed Rust's emit site — this listener is kept only in case autostart
- * toggling from outside the app needs a way back in. No Rust producer today;
- * `verify:event-names` allowlists it as TS-only for that reason.
- */
-export const TRAY_STARTUP_STATE_CHANGED_EVENT = "tray:startup-state-changed" as const;
-
 export const TRAY_EVENTS = {
   SHOW_LED_PREVIEW: TRAY_SHOW_LED_PREVIEW_EVENT,
-  STARTUP_STATE_CHANGED: TRAY_STARTUP_STATE_CHANGED_EVENT,
 } as const;
 
 export type TrayEventName = (typeof TRAY_EVENTS)[keyof typeof TRAY_EVENTS];

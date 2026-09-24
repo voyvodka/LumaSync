@@ -61,18 +61,6 @@ export async function listenTrayShowLedPreview(
   return listen(TRAY_EVENTS.SHOW_LED_PREVIEW, () => onTrigger());
 }
 
-/**
- * Listen for startup state changes emitted from Rust (legacy: was triggered
- * by tray checkbox click). Now emitted only on external autostart changes.
- */
-export async function listenStartupToggle(
-  onToggle: (newState: boolean) => void
-): Promise<UnlistenFn> {
-  return listen<boolean>(TRAY_EVENTS.STARTUP_STATE_CHANGED, (event) => {
-    onToggle(event.payload);
-  });
-}
-
 // ---------------------------------------------------------------------------
 // Re-export tray menu IDs for consumer convenience
 // ---------------------------------------------------------------------------
