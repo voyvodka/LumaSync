@@ -85,6 +85,10 @@ https://keepachangelog.com/en/1.1.0/
   Rediscover both at the top of the page and on its card. Action buttons on Hue, USB and WLED
   device cards are now at least 32 px tall and show the amber focus ring when reached with the
   keyboard.
+- Windows start faster and use less memory. Each window now loads only its own code: the LED
+  preview overlay (one per screen) and the test-pattern popup no longer load the settings screens,
+  and the compact window no longer loads LED Setup, Devices or the room map until you open them.
+  Only the interface language in use is loaded; the other one loads when you switch.
 
 ### Fixed
 
