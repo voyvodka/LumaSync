@@ -22,9 +22,7 @@
 use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
 use std::sync::atomic::{AtomicU8, Ordering};
 
-use super::led_output::{
-    apply_color_correction_rgb_with_luts, gamma_luts_for, ColorCorrectionConfig, GammaLuts,
-};
+use super::led_output::{scale_brightness, ColorCorrectionConfig, EncoderPlan};
 use super::led_sink::LedSink;
 
 const DDP_FLAGS_VERSION_1: u8 = 0x40;
@@ -227,20 +225,17 @@ impl WledSinkConfig {
 /// applies for the LED-twin preview buffer.
 pub struct CorrectedWledSink {
     inner: WledUdpSink,
-    corrections: ColorCorrectionConfig,
-    luts: std::borrow::Cow<'static, GammaLuts>,
+    plan: EncoderPlan,
     brightness: f32,
 }
 
 impl CorrectedWledSink {
-    /// Wrap a `WledUdpSink` with the shared correction pipeline, computing
-    /// gamma LUTs once from `corrections`.
+    /// Wrap a `WledUdpSink` with the shared correction pipeline, built once
+    /// from `corrections`.
     pub fn new(inner: WledUdpSink, corrections: ColorCorrectionConfig) -> Self {
-        let luts = gamma_luts_for(&corrections);
         Self {
             inner,
-            corrections,
-            luts,
+            plan: EncoderPlan::new(&corrections),
             brightness: 1.0,
         }
     }
@@ -262,15 +257,7 @@ impl LedSink for CorrectedWledSink {
         let brightness = self.brightness;
         let corrected: Vec<[u8; 3]> = colors
             .iter()
-            .map(|&[r, g, b]| {
-                let (cr, cg, cb) =
-                    apply_color_correction_rgb_with_luts((r, g, b), &self.corrections, &self.luts);
-                [
-                    (cr as f32 * brightness).round().clamp(0.0, 255.0) as u8,
-                    (cg as f32 * brightness).round().clamp(0.0, 255.0) as u8,
-                    (cb as f32 * brightness).round().clamp(0.0, 255.0) as u8,
-                ]
-            })
+            .map(|&pixel| scale_brightness(self.plan.correct(pixel), brightness))
             .collect();
         self.inner.send_frame(&corrected)
     }

@@ -85,8 +85,19 @@ https://keepachangelog.com/en/1.1.0/
   Rediscover both at the top of the page and on its card. Action buttons on Hue, USB and WLED
   device cards are now at least 32 px tall and show the amber focus ring when reached with the
   keyboard.
+- Ambilight: Hue lamps now glide between colours instead of stepping, dark scenes included. Each
+  update to the bridge is a small step towards the newest colour rather than a jump to it.
+- Ambilight: the strip and Hue lamps react at the same speed whatever outputs are on. Before, the
+  same smoothing setting was quicker with a USB strip connected than with Hue alone. With a strip
+  or WLED device the screen is now read 30 times a second instead of 20.
+- Ambilight: the capture rate shown in the runtime details counts real screen frames. It used to
+  count every pass over the same frame, which on a still screen read far higher than the truth.
 
 ### Fixed
+
+- Ambilight: the saturation slider now reaches Hue lamps too; it only affected the strip before.
+- Ambilight: at the heaviest smoothing a strip could stop a few steps short of the colour on
+  screen and stay there. It now always arrives.
 
 - Lighting: the window, and the LED control popup, could freeze for a few seconds when they asked
   which mode was running while a mode was switching. That answer no longer waits for the switch.

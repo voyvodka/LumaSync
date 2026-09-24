@@ -267,23 +267,6 @@ fn uses_default_gamma(corrections: &ColorCorrectionConfig) -> bool {
         && corrections.gamma_b == 2.2_f32
 }
 
-/// Return a reference to the pre-computed default 2.2/2.2/2.2 LUT when all
-/// three gamma values equal exactly 2.2, otherwise build and return a new LUT.
-///
-/// Used by the Hue worker and `CorrectedWledSink`, each of which calls it once
-/// per worker/sink lifetime. Serial encoders take an `EncoderPlan` instead.
-pub fn gamma_luts_for(corrections: &ColorCorrectionConfig) -> std::borrow::Cow<'static, GammaLuts> {
-    if uses_default_gamma(corrections) {
-        std::borrow::Cow::Borrowed(&**DEFAULT_GAMMA_LUTS)
-    } else {
-        std::borrow::Cow::Owned(build_gamma_luts(
-            corrections.gamma_r,
-            corrections.gamma_g,
-            corrections.gamma_b,
-        ))
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Kelvin white-balance
 // ---------------------------------------------------------------------------
@@ -374,94 +357,41 @@ pub fn apply_saturation_to_pixel(rgb: [u8; 3], saturation: f32) -> [u8; 3] {
 }
 
 // ---------------------------------------------------------------------------
-// Unified single-pixel colour correction — Hue pipeline helper
+// Single-pixel colour correction
 // ---------------------------------------------------------------------------
 
-/// Apply the full colour-correction pipeline to a single pixel.
-///
-/// Pipeline order: saturation → Kelvin → gamma LUT.
-///
-/// This mirrors the order used inside `EncoderPlan::correct`
-/// (the USB batch encoders) so that Hue single-pixel output and USB batch
-/// output produce identical colour rendering when given the same
-/// `ColorCorrectionConfig`. Any change to the USB encoder order **must**
-/// be reflected here to preserve LED-strip vs Hue bulb parity.
-///
-/// The function is intentionally allocation-free: it builds the gamma LUTs
-/// on each call. For the Hue path (called once per channel per frame, not
-/// per-LED on a 300-LED strip) this is negligible; pre-computed LUTs can be
-/// threaded through as a follow-up optimisation if profiling shows cost.
+/// One pixel through a plan built for the call. For one-off colours (Solid,
+/// the Hue solid path); anything per frame keeps an `EncoderPlan` instead, or
+/// it pays for the plan (and, off 2.2, 768 `powf`s) on every call.
 pub fn apply_color_correction_rgb(
     rgb: (u8, u8, u8),
     corrections: &ColorCorrectionConfig,
 ) -> (u8, u8, u8) {
-    // Step 1 — Saturation (BT.601 luminance blend).
-    let [r, g, b] = apply_saturation_to_pixel([rgb.0, rgb.1, rgb.2], corrections.saturation);
-
-    // Step 2 — Kelvin white-balance multipliers.
-    let kelvin_muls = kelvin_to_rgb_multipliers(corrections.kelvin);
-    let [r, g, b] = if corrections.kelvin == 6500 {
-        [r, g, b]
-    } else {
-        apply_kelvin_to_pixel([r, g, b], &kelvin_muls)
-    };
-
-    // Step 3 — Per-channel gamma LUT.
-    let luts = build_gamma_luts(
-        corrections.gamma_r,
-        corrections.gamma_g,
-        corrections.gamma_b,
-    );
-    (luts.r[r as usize], luts.g[g as usize], luts.b[b as usize])
+    let [r, g, b] = EncoderPlan::new(corrections).correct([rgb.0, rgb.1, rgb.2]);
+    (r, g, b)
 }
 
-/// Apply the full colour-correction pipeline to a single pixel using
-/// pre-computed gamma LUTs.
-///
-/// Identical pipeline to `apply_color_correction_rgb` (saturation → Kelvin →
-/// gamma LUT) but takes the LUTs as a parameter instead of building them.
-///
-/// This is the hot-path variant for the Hue ambilight worker: the worker
-/// builds the LUTs once before the channel `.map()` loop and passes them into
-/// every per-channel call, eliminating 768 `powf` calls per frame at 20 Hz.
-///
-/// The caller is responsible for passing LUTs that correspond to
-/// `corrections.gamma_r / gamma_g / gamma_b`. Use `gamma_luts_for(corrections)`
-/// or `build_gamma_luts(...)` to construct the argument.
-///
-/// All fast-paths (Kelvin == 6500 identity, saturation == 1.0 identity) are
-/// preserved byte-identically with `apply_color_correction_rgb`.
-pub fn apply_color_correction_rgb_with_luts(
-    rgb: (u8, u8, u8),
-    corrections: &ColorCorrectionConfig,
-    luts: &GammaLuts,
-) -> (u8, u8, u8) {
-    // Step 1 — Saturation (BT.601 luminance blend).
-    let [r, g, b] = apply_saturation_to_pixel([rgb.0, rgb.1, rgb.2], corrections.saturation);
-
-    // Step 2 — Kelvin white-balance multipliers.
-    let [r, g, b] = if corrections.kelvin == 6500 {
-        [r, g, b]
-    } else {
-        let kelvin_muls = kelvin_to_rgb_multipliers(corrections.kelvin);
-        apply_kelvin_to_pixel([r, g, b], &kelvin_muls)
-    };
-
-    // Step 3 — Per-channel gamma LUT (caller-supplied).
-    (luts.r[r as usize], luts.g[g as usize], luts.b[b as usize])
+/// Host-side brightness, for the outputs whose wire has no brightness field:
+/// Adalight, WLED, and the twin overlay's copy of the strip.
+#[inline(always)]
+pub fn scale_brightness(pixel: [u8; 3], brightness: f32) -> [u8; 3] {
+    pixel.map(|v| (v as f32 * brightness).round().clamp(0.0, 255.0) as u8)
 }
 
 // ---------------------------------------------------------------------------
 // Encoder plan — colour corrections derived once, applied per pixel
 // ---------------------------------------------------------------------------
 
-/// Everything the serial encoders apply per pixel, derived from a
-/// `ColorCorrectionConfig` once.
+/// Every colour correction an output applies per pixel, derived from a
+/// `ColorCorrectionConfig` once: the serial encoders, `CorrectedWledSink`, the
+/// Hue channels and the twin overlay all go through one. See
+/// docs/architecture/capture-and-pipeline.md, "One colour pipeline".
 ///
-/// Build it when the corrections change — `SerialSink` construction, or once
-/// per Solid write — never per frame: a non-default gamma costs 768 `powf`s.
-/// Every serial encoder takes the same plan, so a new per-pixel stage is one
-/// more field here plus one line in `correct`, and no encoder can skip it.
+/// Build it when the corrections change — sink or worker construction, or once
+/// per Solid write — never per frame: a non-default gamma costs 768 `powf`s,
+/// and a non-6500 K white point a `powf` and a `ln`. A new per-pixel stage is
+/// one more field here plus one line in `correct` and `correct_precise`, and no
+/// output can skip it.
 #[derive(Clone)]
 pub struct EncoderPlan {
     // Arc, not inline: 768 bytes inline would make `SerialSink` dwarf the
@@ -471,6 +401,8 @@ pub struct EncoderPlan {
     kelvin_muls: Option<[f32; 3]>,
     /// `None` at 1.0, the identity.
     saturation: Option<f32>,
+    /// The exponents behind `luts`, for `correct_precise`.
+    gamma: [f32; 3],
     /// Unlike the fields above, retunable on a running sink: it costs nothing
     /// to change, so it is patched in place rather than rebuilding the plan.
     color_order: LedColorOrder,
@@ -495,6 +427,11 @@ impl EncoderPlan {
             luts,
             kelvin_muls,
             saturation,
+            gamma: [
+                corrections.gamma_r,
+                corrections.gamma_g,
+                corrections.gamma_b,
+            ],
             color_order: LedColorOrder::Rgb,
         }
     }
@@ -519,10 +456,9 @@ impl EncoderPlan {
         }
     }
 
-    /// Pipeline order: saturation → Kelvin → gamma LUT — the same order as
-    /// `apply_color_correction_rgb`, so strip and Hue render alike.
+    /// Pipeline order: saturation → Kelvin → gamma LUT.
     #[inline(always)]
-    fn correct(&self, pixel: [u8; 3]) -> [u8; 3] {
+    pub fn correct(&self, pixel: [u8; 3]) -> [u8; 3] {
         let pixel = match self.saturation {
             Some(saturation) => apply_saturation_to_pixel(pixel, saturation),
             None => pixel,
@@ -535,6 +471,29 @@ impl EncoderPlan {
             self.luts.r[r as usize],
             self.luts.g[g as usize],
             self.luts.b[b as usize],
+        ]
+    }
+
+    /// `correct` without rounding between or after the stages, for Hue's
+    /// 16-bit wire: `u8` there would step visibly in a dark fade, where gamma
+    /// 2.2 leaves only a handful of levels. In 0–255 (gamma-encoded), out 0–1.
+    pub fn correct_precise(&self, pixel: [f32; 3]) -> [f32; 3] {
+        let [mut r, mut g, mut b] = pixel.map(|v| v.clamp(0.0, 255.0));
+        if let Some(saturation) = self.saturation {
+            let luma = 0.299_f32 * r + 0.587_f32 * g + 0.114_f32 * b;
+            r = (luma + saturation * (r - luma)).clamp(0.0, 255.0);
+            g = (luma + saturation * (g - luma)).clamp(0.0, 255.0);
+            b = (luma + saturation * (b - luma)).clamp(0.0, 255.0);
+        }
+        if let Some(muls) = &self.kelvin_muls {
+            r = (r * muls[0]).clamp(0.0, 255.0);
+            g = (g * muls[1]).clamp(0.0, 255.0);
+            b = (b * muls[2]).clamp(0.0, 255.0);
+        }
+        [
+            (r / 255.0).powf(self.gamma[0]),
+            (g / 255.0).powf(self.gamma[1]),
+            (b / 255.0).powf(self.gamma[2]),
         ]
     }
 
@@ -1197,7 +1156,6 @@ pub fn encode_adalight_packet(
     plan: &EncoderPlan,
 ) -> Vec<u8> {
     let brightness = brightness.clamp(0.0, 1.0);
-    let scale = |v: u8| (v as f32 * brightness).round().clamp(0.0, 255.0) as u8;
     let count = rgb_triplets.len();
     let count_minus_one = u16::try_from(count.saturating_sub(1)).unwrap_or(u16::MAX);
     let hi = (count_minus_one >> 8) as u8;
@@ -1214,8 +1172,7 @@ pub fn encode_adalight_packet(
     packet.push(header_checksum);
 
     for &pixel in rgb_triplets {
-        let [r, g, b] = plan.wire_rgb(pixel);
-        packet.extend_from_slice(&[scale(r), scale(g), scale(b)]);
+        packet.extend_from_slice(&scale_brightness(plan.wire_rgb(pixel), brightness));
     }
 
     packet
@@ -3028,5 +2985,193 @@ mod tests {
         let writes = sender.writes();
         assert_eq!(&writes[0].1[5..8], &[1, 2, 3]);
         assert_eq!(&writes[1].1[5..8], &[3, 2, 1]);
+    }
+}
+
+/// Review item 27 folded three saturation copies, three brightness copies and
+/// a per-pixel Kelvin into `EncoderPlan`. These hold every strip-side output to
+/// the code it replaced, copied here verbatim, byte for byte.
+#[cfg(test)]
+mod colour_pipeline_equivalence {
+    use super::*;
+
+    /// `lighting_mode::apply_saturation_rgb`, the live-saturation copy.
+    fn legacy_live_saturation(rgb: (u8, u8, u8), factor: f32) -> (u8, u8, u8) {
+        if (factor - 1.0).abs() < f32::EPSILON {
+            return rgb;
+        }
+        let r = rgb.0 as f32;
+        let g = rgb.1 as f32;
+        let b = rgb.2 as f32;
+        let l = 0.299 * r + 0.587 * g + 0.114 * b;
+        let nr = l + factor * (r - l);
+        let ng = l + factor * (g - l);
+        let nb = l + factor * (b - l);
+        (
+            nr.round().clamp(0.0, 255.0) as u8,
+            ng.round().clamp(0.0, 255.0) as u8,
+            nb.round().clamp(0.0, 255.0) as u8,
+        )
+    }
+
+    /// `apply_color_correction_rgb_with_luts`, which recomputed the Kelvin
+    /// multipliers for every pixel; WLED, Hue and the twin went through it.
+    fn legacy_correction(
+        rgb: (u8, u8, u8),
+        corrections: &ColorCorrectionConfig,
+        luts: &GammaLuts,
+    ) -> (u8, u8, u8) {
+        let [r, g, b] = apply_saturation_to_pixel([rgb.0, rgb.1, rgb.2], corrections.saturation);
+        let [r, g, b] = if corrections.kelvin == 6500 {
+            [r, g, b]
+        } else {
+            let kelvin_muls = kelvin_to_rgb_multipliers(corrections.kelvin);
+            apply_kelvin_to_pixel([r, g, b], &kelvin_muls)
+        };
+        (luts.r[r as usize], luts.g[g as usize], luts.b[b as usize])
+    }
+
+    /// `CorrectedWledSink::send_frame` and the twin feed's brightness step.
+    fn legacy_brightness(rgb: (u8, u8, u8), brightness: f32) -> [u8; 3] {
+        [
+            (rgb.0 as f32 * brightness).round().clamp(0.0, 255.0) as u8,
+            (rgb.1 as f32 * brightness).round().clamp(0.0, 255.0) as u8,
+            (rgb.2 as f32 * brightness).round().clamp(0.0, 255.0) as u8,
+        ]
+    }
+
+    fn corrections() -> Vec<ColorCorrectionConfig> {
+        let mut all = Vec::new();
+        for kelvin in [2700u16, 4000, 5000, 6500, 9000] {
+            for saturation in [0.0f32, 0.8, 1.0, 1.2, 1.8] {
+                for gamma in [(2.2f32, 2.2f32, 2.2f32), (2.4, 2.2, 2.0), (1.0, 1.8, 2.8)] {
+                    all.push(ColorCorrectionConfig {
+                        gamma_r: gamma.0,
+                        gamma_g: gamma.1,
+                        gamma_b: gamma.2,
+                        kelvin,
+                        saturation,
+                    });
+                }
+            }
+        }
+        all
+    }
+
+    fn pixels() -> impl Iterator<Item = [u8; 3]> {
+        (0..=255u16)
+            .step_by(5)
+            .flat_map(|r| [(r, 0u16, 255u16), (r, 128, 30), (r, r, r), (r, 255 - r, 90)])
+            .map(|(r, g, b)| [r as u8, g as u8, b as u8])
+    }
+
+    #[test]
+    fn live_saturation_is_the_calibration_saturation_byte_for_byte() {
+        for factor in [0.5f32, 0.8, 1.0, 1.3, 2.0] {
+            for [r, g, b] in pixels() {
+                let (lr, lg, lb) = legacy_live_saturation((r, g, b), factor);
+                assert_eq!(
+                    apply_saturation_to_pixel([r, g, b], factor),
+                    [lr, lg, lb],
+                    "{factor} on ({r},{g},{b})"
+                );
+            }
+        }
+    }
+
+    /// WLED and the twin: the plan's correction then `scale_brightness` is
+    /// the per-pixel-Kelvin correction and brightness they ran before.
+    #[test]
+    fn strip_bytes_match_the_pipeline_before_item_27() {
+        for config in corrections() {
+            let plan = EncoderPlan::new(&config);
+            let luts = build_gamma_luts(config.gamma_r, config.gamma_g, config.gamma_b);
+            for [r, g, b] in pixels() {
+                let legacy = legacy_correction((r, g, b), &config, &luts);
+                assert_eq!(
+                    plan.correct([r, g, b]),
+                    [legacy.0, legacy.1, legacy.2],
+                    "{config:?} on ({r},{g},{b})"
+                );
+                assert_eq!(
+                    apply_color_correction_rgb((r, g, b), &config),
+                    legacy,
+                    "one-off wrapper, {config:?}"
+                );
+                for brightness in [0.0f32, 0.37, 0.8, 1.0] {
+                    assert_eq!(
+                        scale_brightness(plan.correct([r, g, b]), brightness),
+                        legacy_brightness(legacy, brightness),
+                        "{config:?} at {brightness}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Adalight scaled its pixels with a closure of its own.
+    #[test]
+    fn adalight_packets_are_unchanged() {
+        let config = ColorCorrectionConfig {
+            gamma_r: 2.4,
+            gamma_g: 2.2,
+            gamma_b: 2.0,
+            kelvin: 5000,
+            saturation: 1.2,
+        };
+        let plan = EncoderPlan::new(&config);
+        let luts = build_gamma_luts(2.4, 2.2, 2.0);
+        let strip: Vec<[u8; 3]> = pixels().collect();
+        for brightness in [0.25f32, 0.8, 1.0] {
+            let packet = encode_adalight_packet(brightness, &strip, &plan);
+            let mut expected = packet[..6].to_vec();
+            for &[r, g, b] in &strip {
+                expected.extend_from_slice(&legacy_brightness(
+                    legacy_correction((r, g, b), &config, &luts),
+                    brightness,
+                ));
+            }
+            assert_eq!(packet, expected, "brightness {brightness}");
+        }
+    }
+
+    /// Hue takes the same stages without the rounding, so it lands on the
+    /// 8-bit result give or take the rounding the 8-bit path does between
+    /// stages — and in the dark, where gamma leaves the 8-bit table only a
+    /// handful of levels, it keeps every input level apart.
+    #[test]
+    fn hue_precision_follows_the_same_stages() {
+        for config in corrections() {
+            let plan = EncoderPlan::new(&config);
+            for pixel in pixels() {
+                let precise = plan.correct_precise(pixel.map(f32::from));
+                let rounded = plan.correct(pixel);
+                for c in 0..3 {
+                    let gamma = [config.gamma_r, config.gamma_g, config.gamma_b][c];
+                    // Saturation and Kelvin each round to a whole level before
+                    // the LUT; the LUT's slope is at most `gamma` levels per level.
+                    let allowed = 0.5 + gamma;
+                    assert!(
+                        (precise[c] * 255.0 - f32::from(rounded[c])).abs() <= allowed,
+                        "{config:?} {pixel:?} channel {c}: {} vs {}",
+                        precise[c] * 255.0,
+                        rounded[c]
+                    );
+                }
+            }
+        }
+        let plan = EncoderPlan::default();
+        let dark: Vec<u8> = (10..=30u8).map(|v| plan.correct([v, v, v])[0]).collect();
+        let precise: Vec<f32> = (10..=30u8)
+            .map(|v| plan.correct_precise([f32::from(v); 3])[0])
+            .collect();
+        assert!(
+            dark.windows(2).any(|w| w[0] == w[1]),
+            "the 8-bit table has flat steps here"
+        );
+        assert!(
+            precise.windows(2).all(|w| w[1] > w[0]),
+            "every level stays distinct"
+        );
     }
 }

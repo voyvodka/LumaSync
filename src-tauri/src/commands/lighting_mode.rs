@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime, State};
 
 use super::ambilight_capture::{
-    create_live_frame_source, detect_black_borders, AmbilightCaptureError, AmbilightFrameSource,
-    BlackBorderInsets, CapturedFrame, BLACK_BORDER_THRESHOLD,
+    create_live_frame_source_at, detect_black_borders, AmbilightCaptureError, AmbilightFrameSource,
+    BlackBorderInsets, CapturedFrame, BLACK_BORDER_THRESHOLD, DEFAULT_CAPTURE_INTERVAL,
 };
 use super::ambilight_scene::{hue_default_screen_affinity, LightTopology};
 use super::calibration::list_displays;
@@ -36,7 +36,7 @@ use super::led_preview::{
 };
 use super::led_sink::LedSink;
 use super::room_affinity::{room_aware_hue_samples, room_geometry_rejection};
-use super::runtime_quality::{RuntimeFrameSlot, RuntimeQualityConfig, RuntimeQualityController};
+use super::runtime_quality::{RuntimeQualityConfig, RuntimeQualityController};
 use super::runtime_telemetry::{
     RuntimeTelemetrySnapshot, RuntimeTelemetryState, SharedRuntimeTelemetry,
 };
@@ -52,12 +52,13 @@ use crate::models::room_map::RoomGeometry;
 mod frame_pipeline;
 pub mod hue_driver;
 pub mod outputs;
+pub(crate) mod smoothing;
 pub mod snapshot;
 pub mod tuning;
 mod worker;
 use snapshot::LightingSnapshotCell;
 use tuning::TuningCell;
-use worker::start_ambilight_worker;
+use worker::{start_ambilight_worker, WorkerPacing};
 
 static ACTIVE_AMBILIGHT_WORKERS: AtomicUsize = AtomicUsize::new(0);
 static SOLID_OUTPUT_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
@@ -95,6 +96,8 @@ pub struct AmbilightCaptureRequest {
     pub pattern_phase: Option<Arc<AtomicU32>>,
     /// Pattern + speed the source re-reads per frame, so a colour drag retunes.
     pub pattern_live: Option<TestPatternLiveSlot>,
+    /// Shortest gap the OS is asked to leave between frames: `capture_interval_for`.
+    pub frame_interval: Duration,
 }
 
 type AmbilightFrameSourceFactory = dyn Fn(AmbilightCaptureRequest) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError>
@@ -522,7 +525,7 @@ impl Default for LightingRuntimeOwner {
                         req.pattern_live,
                     ))
                 } else {
-                    create_live_frame_source(req.display_id.as_deref())
+                    create_live_frame_source_at(req.display_id.as_deref(), req.frame_interval)
                 }
             }),
             closing: Arc::default(),
@@ -1127,47 +1130,6 @@ pub struct EdgeSignalPayload {
 /// doesn't depend on the Tauri runtime type parameter.
 pub type EdgeSignalEmitter = Arc<dyn Fn(EdgeSignalPayload) + Send + Sync>;
 
-/// Apply luminance-preserving saturation to an RGB triple.
-///
-/// `factor`:
-///   - 1.0  → identity (returns input unchanged)
-///   - <1.0 → desaturate (pulls toward gray at luminance L)
-///   - >1.0 → saturate (pushes away from gray)
-///
-/// Luminance formula: `L = 0.299·R + 0.587·G + 0.114·B` (Rec.601).
-/// New channel: `C' = L + factor · (C - L)`, clamped to `[0, 255]`.
-#[inline]
-fn apply_saturation_rgb(rgb: (u8, u8, u8), factor: f32) -> (u8, u8, u8) {
-    if (factor - 1.0).abs() < f32::EPSILON {
-        return rgb;
-    }
-    let r = rgb.0 as f32;
-    let g = rgb.1 as f32;
-    let b = rgb.2 as f32;
-    let l = 0.299 * r + 0.587 * g + 0.114 * b;
-    let nr = l + factor * (r - l);
-    let ng = l + factor * (g - l);
-    let nb = l + factor * (b - l);
-    (
-        nr.round().clamp(0.0, 255.0) as u8,
-        ng.round().clamp(0.0, 255.0) as u8,
-        nb.round().clamp(0.0, 255.0) as u8,
-    )
-}
-
-#[inline]
-fn apply_saturation_inplace(colors: &mut [[u8; 3]], factor: f32) {
-    if (factor - 1.0).abs() < f32::EPSILON {
-        return;
-    }
-    for c in colors.iter_mut() {
-        let (r, g, b) = apply_saturation_rgb((c[0], c[1], c[2]), factor);
-        c[0] = r;
-        c[1] = g;
-        c[2] = b;
-    }
-}
-
 struct AmbilightWorkerQualityState {
     controller: RuntimeQualityController,
 }
@@ -1179,37 +1141,9 @@ impl AmbilightWorkerQualityState {
         }
     }
 
-    fn set_smoothing_alpha(&mut self, alpha: f32) {
-        self.controller.set_smoothing_alpha(alpha);
-    }
-
-    fn queue_processed_frame(
-        &mut self,
-        slot: &mut RuntimeFrameSlot,
-        sampled_frame: &[[u8; 3]],
-    ) -> bool {
-        slot.push(self.controller.smooth(sampled_frame))
-    }
-
-    fn try_send_latest<F>(
-        &mut self,
-        slot: &mut RuntimeFrameSlot,
-        now: Instant,
-        mut send_frame: F,
-    ) -> Result<bool, String>
-    where
-        F: FnMut(&[[u8; 3]]) -> Result<(), String>,
-    {
-        if !self.controller.should_send_now(now) {
-            return Ok(false);
-        }
-
-        let Some(frame) = slot.take_latest() else {
-            return Ok(false);
-        };
-
-        send_frame(frame.as_slice())?;
-        Ok(true)
+    /// The strip's send gate: `true` at most once per send interval.
+    fn should_send_now(&mut self, now: Instant) -> bool {
+        self.controller.should_send_now(now)
     }
 
     fn observe_capture_and_send_cost(&mut self, capture_ms: f32, send_ms: f32) {
@@ -1220,69 +1154,8 @@ impl AmbilightWorkerQualityState {
         self.controller.observed_cost_ms()
     }
 
-    fn last_smoothed(&self) -> &[[u8; 3]] {
-        self.controller.last_smoothed()
-    }
-
     fn current_send_interval(&self) -> Duration {
         self.controller.current_send_interval()
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Hue per-channel EWMA smoother
-// ---------------------------------------------------------------------------
-// Maintains a smoothed (r, g, b) per Hue entertainment channel.  Operates
-// independently from the USB LED smoothing (RuntimeQualityController) so that
-// Hue-only and mixed modes both get correct temporal smoothing.
-
-struct HueChannelSmoother {
-    previous: Vec<(f32, f32, f32)>,
-    /// Reusable buffer for the rounded u8 output — avoids per-frame allocation.
-    result: Vec<(u8, u8, u8)>,
-}
-
-impl HueChannelSmoother {
-    fn new() -> Self {
-        Self {
-            previous: Vec::new(),
-            result: Vec::new(),
-        }
-    }
-
-    /// Apply EWMA smoothing to incoming channel colors, returning a reference
-    /// to an internal buffer (zero allocation on the steady-state path).
-    ///
-    /// `alpha` in `[0.05, 1.0]`:
-    ///   - 1.0 = no smoothing (output equals input)
-    ///   - 0.05 = very slow, gradual transitions
-    fn smooth(&mut self, incoming: &[(u8, u8, u8)], alpha: f32) -> &[(u8, u8, u8)] {
-        let a = alpha.clamp(0.05, 1.0);
-
-        // Channel count changed → reset state (e.g. entertainment area switched).
-        if self.previous.len() != incoming.len() {
-            self.previous = incoming
-                .iter()
-                .map(|&(r, g, b)| (r as f32, g as f32, b as f32))
-                .collect();
-            self.result = incoming.to_vec();
-            return &self.result;
-        }
-
-        // Reuse result buffer (same capacity across frames).
-        self.result.resize(incoming.len(), (0, 0, 0));
-        for (i, (prev, &(tr, tg, tb))) in self.previous.iter_mut().zip(incoming.iter()).enumerate()
-        {
-            prev.0 += a * (tr as f32 - prev.0);
-            prev.1 += a * (tg as f32 - prev.1);
-            prev.2 += a * (tb as f32 - prev.2);
-            self.result[i] = (
-                prev.0.round().clamp(0.0, 255.0) as u8,
-                prev.1.round().clamp(0.0, 255.0) as u8,
-                prev.2.round().clamp(0.0, 255.0) as u8,
-            );
-        }
-        &self.result
     }
 }
 
@@ -1328,7 +1201,7 @@ impl SerialSendBudget {
         self.link_max_fps < LINK_CONSTRAINED_FPS
     }
 
-    fn into_quality_config(self, smoothing_alpha: f32) -> RuntimeQualityConfig {
+    fn into_quality_config(self) -> RuntimeQualityConfig {
         // `wire_ms` pins BOTH bounds: the 10 fps floor in the derive helper and
         // the 80 ms default cap each breach the baud budget on a long strip.
         let default_max_ms = RuntimeQualityConfig::default().max_interval_ms;
@@ -1336,7 +1209,6 @@ impl SerialSendBudget {
             base_interval_ms: self.requested_ms,
             min_interval_ms: self.wire_ms,
             max_interval_ms: default_max_ms.max(self.wire_ms),
-            smoothing_alpha,
             ..RuntimeQualityConfig::default()
         }
     }
@@ -1349,10 +1221,7 @@ impl SerialSendBudget {
 /// DDP/WARLS have no brightness field.
 enum ActiveUsbSink {
     Serial(SerialSink),
-    // Boxed: `CorrectedWledSink` carries a `GammaLuts` (768 bytes) inline,
-    // which would otherwise bloat every `ActiveUsbSink` (including the much
-    // more common `Serial` variant) to match its size.
-    Wled(Box<CorrectedWledSink>),
+    Wled(CorrectedWledSink),
 }
 
 impl ActiveUsbSink {
@@ -1407,7 +1276,6 @@ fn resolve_quality_config(
     total_leds: u16,
     profile: FirmwareProfile,
     chip_type: LedChipType,
-    smoothing_alpha: f32,
 ) -> (RuntimeQualityConfig, Option<SerialSendBudget>) {
     match usb_plan {
         Some(UsbOutputPlan::Serial(_)) => {
@@ -1431,17 +1299,13 @@ fn resolve_quality_config(
                     budget.exceeds_link_budget()
                 );
             }
-            (budget.into_quality_config(smoothing_alpha), Some(budget))
+            (budget.into_quality_config(), Some(budget))
         }
         Some(UsbOutputPlan::Wled(_)) => {
             // No baud budget to clamp against -- let capture-cost pacing
             // govern the rate via the plain defaults (~60 fps target).
             info!("[ambilight-worker] wled sink — unconstrained by a serial link budget");
-            let config = RuntimeQualityConfig {
-                smoothing_alpha,
-                ..RuntimeQualityConfig::default()
-            };
-            (config, None)
+            (RuntimeQualityConfig::default(), None)
         }
         None => {
             // Hue-only path. Bridge enforces 50 ms minimum (20 Hz); target
@@ -1451,11 +1315,29 @@ fn resolve_quality_config(
                 base_interval_ms: 40,
                 min_interval_ms: 30,
                 max_interval_ms: 100,
-                smoothing_alpha,
                 ..RuntimeQualityConfig::default()
             };
             (config, None)
         }
+    }
+}
+
+/// A strip is fed at 30 Hz — more than Hue's 20 Hz floor can use, and enough
+/// for the strip's own glide between frames — but never faster than its link
+/// takes a frame. Hue alone gets its floor. See
+/// docs/architecture/capture-and-pipeline.md, "Capture rate follows the output
+/// plan".
+const STRIP_CAPTURE_INTERVAL: Duration = Duration::from_millis(33);
+
+fn capture_interval_for(strip: Option<&UsbOutputPlan>, strip_budget_ms: Option<u64>) -> Duration {
+    match strip {
+        None => DEFAULT_CAPTURE_INTERVAL,
+        Some(_) => strip_budget_ms
+            .map(Duration::from_millis)
+            .map_or(STRIP_CAPTURE_INTERVAL, |wire| {
+                wire.max(STRIP_CAPTURE_INTERVAL)
+            })
+            .min(DEFAULT_CAPTURE_INTERVAL),
     }
 }
 
@@ -1930,6 +1812,19 @@ fn apply_mode_change_inner(
                 .as_ref()
                 .map(|cfg| Arc::new(Mutex::new(TestPatternLive::from_config(cfg))));
 
+            let strip_plan = usb_plan.as_ref().filter(|_| needs_usb);
+            let strip_budget_ms = match strip_plan {
+                Some(UsbOutputPlan::Serial(_)) => Some(
+                    SerialSendBudget::for_strip(
+                        frame_led_count_for(&normalized_next),
+                        normalized_next.firmware_profile.unwrap_or_default(),
+                        normalized_next.chip_type.unwrap_or_default(),
+                    )
+                    .wire_ms,
+                ),
+                _ => None,
+            };
+            let capture_interval = capture_interval_for(strip_plan, strip_budget_ms);
             let frame_source = {
                 let req = AmbilightCaptureRequest {
                     display_id: normalized_next.display_id.clone(),
@@ -1937,6 +1832,7 @@ fn apply_mode_change_inner(
                     test_pattern: test_pattern.clone(),
                     pattern_phase: Some(Arc::clone(&owner.preview.pattern_phase)),
                     pattern_live: pattern_live.clone(),
+                    frame_interval: capture_interval,
                 };
                 match (owner.frame_source_factory)(req) {
                     Ok(source) => {
@@ -2010,6 +1906,7 @@ fn apply_mode_change_inner(
                 chip,
                 preview_ctx,
                 Arc::clone(&room_geometry_live),
+                WorkerPacing::live(capture_interval),
             ) {
                 Ok(worker) => {
                     owner.worker = Some(worker);
@@ -2884,7 +2781,7 @@ mod outputs_tests;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
-pub(crate) use test_support::{calibration as calibration_for_tests, EventLog, FakeHue};
+pub(crate) use test_support::{calibration as calibration_for_tests, EventLog, FakeHue, Watchdog};
 
 #[cfg(test)]
 mod tests {
@@ -2898,7 +2795,7 @@ mod tests {
         AmbilightCaptureError, AmbilightFrameSource, CapturedFrame,
     };
     use crate::commands::led_output::{LedOutputBridge, LedOutputError, LedPacketSender};
-    use crate::commands::runtime_quality::{RuntimeFrameSlot, RuntimeQualityConfig};
+    use crate::commands::runtime_quality::RuntimeQualityConfig;
     use crate::commands::runtime_telemetry::RuntimeTelemetrySnapshot;
     use crate::commands::wled_sink::{WledProtocol, WledSinkConfig};
 
@@ -2920,7 +2817,7 @@ mod tests {
         for leds in [1u16, 30, 60, 100, 200, 320, 1000, 4000] {
             for chip in [LedChipType::Ws2812bGrb, LedChipType::Sk6812Rgbw] {
                 let config = SerialSendBudget::for_strip(leds, FirmwareProfile::LumaSyncV1, chip)
-                    .into_quality_config(0.35);
+                    .into_quality_config();
                 let wire_ms =
                     SerialSendBudget::for_strip(leds, FirmwareProfile::LumaSyncV1, chip).wire_ms;
                 let controller = AmbilightWorkerQualityState::new(config.clone());
@@ -3008,13 +2905,13 @@ mod tests {
 
         let long =
             SerialSendBudget::for_strip(4000, FirmwareProfile::LumaSyncV1, LedChipType::Ws2812bGrb);
-        let config = long.into_quality_config(0.35);
+        let config = long.into_quality_config();
         assert_eq!(config.min_interval_ms, 1043);
         assert_eq!(config.max_interval_ms, 1043);
 
         let short =
             SerialSendBudget::for_strip(60, FirmwareProfile::LumaSyncV1, LedChipType::Ws2812bGrb);
-        assert_eq!(short.into_quality_config(0.35).max_interval_ms, default_cap);
+        assert_eq!(short.into_quality_config().max_interval_ms, default_cap);
     }
 
     #[test]
@@ -3026,8 +2923,7 @@ mod tests {
         assert!(rgbw.wire_ms > grb.wire_ms);
         assert!(rgbw.link_max_fps < grb.link_max_fps);
         assert!(
-            rgbw.into_quality_config(0.35).min_interval_ms
-                > grb.into_quality_config(0.35).min_interval_ms
+            rgbw.into_quality_config().min_interval_ms > grb.into_quality_config().min_interval_ms
         );
     }
 
@@ -3050,7 +2946,7 @@ mod tests {
         // stops a cheap capture from driving the link past its budget.
         let mut controller = AmbilightWorkerQualityState::new(
             SerialSendBudget::for_strip(200, FirmwareProfile::LumaSyncV1, LedChipType::Ws2812bGrb)
-                .into_quality_config(0.35),
+                .into_quality_config(),
         );
         controller.observe_capture_and_send_cost(0.1, 0.1);
         assert_eq!(controller.current_send_interval().as_millis() as u64, 53);
@@ -3114,11 +3010,11 @@ mod tests {
             closing: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FakeFrameSource {
-                    frame: CapturedFrame {
-                        width: 2,
-                        height: 2,
-                        pixels_rgb: vec![[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
-                    },
+                    frame: CapturedFrame::new(
+                        2,
+                        2,
+                        vec![[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
+                    ),
                     fail_with_unavailable: false,
                 }))
             }),
@@ -3137,11 +3033,7 @@ mod tests {
             closing: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FakeFrameSource {
-                    frame: CapturedFrame {
-                        width: 1,
-                        height: 1,
-                        pixels_rgb: vec![[0, 0, 0]],
-                    },
+                    frame: CapturedFrame::new(1, 1, vec![[0, 0, 0]]),
                     fail_with_unavailable: true,
                 }))
             }),
@@ -3227,11 +3119,11 @@ mod tests {
             closing: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FakeFrameSource {
-                    frame: CapturedFrame {
-                        width: 2,
-                        height: 2,
-                        pixels_rgb: vec![[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
-                    },
+                    frame: CapturedFrame::new(
+                        2,
+                        2,
+                        vec![[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
+                    ),
                     fail_with_unavailable: false,
                 }))
             }),
@@ -3298,7 +3190,6 @@ mod tests {
             60,
             FirmwareProfile::LumaSyncV1,
             LedChipType::Ws2812bGrb,
-            0.35,
         );
         assert!(budget.is_some(), "a serial link must report a baud budget");
     }
@@ -3313,7 +3204,6 @@ mod tests {
             300,
             FirmwareProfile::LumaSyncV1,
             LedChipType::Ws2812bGrb,
-            0.35,
         );
         assert!(
             budget.is_none(),
@@ -3326,7 +3216,6 @@ mod tests {
         );
         assert_eq!(config.min_interval_ms, defaults.min_interval_ms);
         assert_eq!(config.max_interval_ms, defaults.max_interval_ms);
-        assert_eq!(config.smoothing_alpha, 0.35);
     }
 
     #[test]
@@ -3336,7 +3225,6 @@ mod tests {
             0,
             FirmwareProfile::LumaSyncV1,
             LedChipType::Ws2812bGrb,
-            0.35,
         );
         assert!(budget.is_none());
         assert_eq!(config.base_interval_ms, 40);
@@ -3534,6 +3422,7 @@ mod tests {
                         test_pattern: None,
                         pattern_phase: None,
                         pattern_live: None,
+                        frame_interval: Duration::from_millis(50),
                     })
                     .expect("frame source should be available"),
                     shared_runtime_telemetry(),
@@ -3544,6 +3433,7 @@ mod tests {
                     super::LedChipType::default(),
                     None,
                     super::RoomGeometryLive::new(None),
+                    super::WorkerPacing::live(Duration::from_millis(50)),
                 )
                 .expect("worker start should succeed"),
             ),
@@ -3849,65 +3739,25 @@ mod tests {
         );
     }
 
+    /// The strip's send gate, now that smoothing is out of it: open on the
+    /// first call, shut until the interval has passed, then open again.
     #[test]
-    fn quality_runtime_smoothes_frame_before_send_when_gate_opens() {
+    fn quality_runtime_gate_opens_once_per_interval() {
         let mut quality = AmbilightWorkerQualityState::new(RuntimeQualityConfig {
-            smoothing_alpha: 0.5,
-            base_interval_ms: 1,
-            min_interval_ms: 1,
-            max_interval_ms: 32,
-            pressure_ewma_alpha: 1.0,
-        });
-        let mut slot = RuntimeFrameSlot::new();
-        let base = Instant::now();
-
-        quality.queue_processed_frame(&mut slot, &[[0, 0, 0]]);
-        quality.queue_processed_frame(&mut slot, &[[255, 255, 255]]);
-
-        let mut sent = Vec::new();
-        let send_due =
-            quality.try_send_latest(&mut slot, base + Duration::from_millis(2), |frame| {
-                sent.push(frame.to_vec());
-                Ok(())
-            });
-
-        assert!(send_due.expect("send attempt should succeed"));
-        assert_eq!(sent.len(), 1);
-        assert_eq!(sent[0], vec![[128, 128, 128]]);
-    }
-
-    #[test]
-    fn quality_runtime_coalesces_to_latest_frame_when_gate_is_closed() {
-        let mut quality = AmbilightWorkerQualityState::new(RuntimeQualityConfig {
-            smoothing_alpha: 1.0,
             base_interval_ms: 60,
             min_interval_ms: 8,
             max_interval_ms: 120,
             pressure_ewma_alpha: 1.0,
         });
-        let mut slot = RuntimeFrameSlot::new();
         let base = Instant::now();
-
-        quality.queue_processed_frame(&mut slot, &[[10, 10, 10]]);
-        let first = quality
-            .try_send_latest(&mut slot, base, |_| Ok(()))
-            .expect("first send should succeed");
-        assert!(first);
-
-        quality.queue_processed_frame(&mut slot, &[[20, 20, 20]]);
-        quality.queue_processed_frame(&mut slot, &[[30, 30, 30]]);
-
-        let blocked = quality
-            .try_send_latest(&mut slot, base + Duration::from_millis(1), |_| Ok(()))
-            .expect("gate check should succeed");
-        assert!(!blocked);
-        assert_eq!(slot.take_latest(), Some(vec![[30, 30, 30]]));
+        assert!(quality.should_send_now(base));
+        assert!(!quality.should_send_now(base + Duration::from_millis(59)));
+        assert!(quality.should_send_now(base + Duration::from_millis(60)));
     }
 
     #[test]
     fn quality_runtime_adapts_send_interval_under_high_cost() {
         let mut quality = AmbilightWorkerQualityState::new(RuntimeQualityConfig {
-            smoothing_alpha: 1.0,
             base_interval_ms: 16,
             min_interval_ms: 8,
             max_interval_ms: 80,
@@ -3990,16 +3840,16 @@ mod tests {
             closing: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FakeFrameSource {
-                    frame: CapturedFrame {
-                        width: 4,
-                        height: 4,
+                    frame: CapturedFrame::new(
+                        4,
+                        4,
                         // 16 unique pixels so per-LED averaging in
                         // `sample_frame_for_sequence` produces non-zero output
                         // for every edge LED regardless of segment counts.
-                        pixels_rgb: (0..16)
+                        (0..16)
                             .map(|i| [(i * 16) as u8, ((i * 7) % 256) as u8, 200])
                             .collect(),
-                    },
+                    ),
                     fail_with_unavailable: false,
                 }))
             }),
@@ -4088,11 +3938,7 @@ mod tests {
             closing: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FakeFrameSource {
-                    frame: CapturedFrame {
-                        width: 4,
-                        height: 4,
-                        pixels_rgb: vec![[255, 0, 0]; 16],
-                    },
+                    frame: CapturedFrame::new(4, 4, vec![[255, 0, 0]; 16]),
                     fail_with_unavailable: false,
                 }))
             }),
@@ -4240,10 +4086,10 @@ mod tests {
             led_count: 2,
             protocol: WledProtocol::Ddp,
         };
-        let mut sink = super::ActiveUsbSink::Wled(Box::new(super::CorrectedWledSink::new(
+        let mut sink = super::ActiveUsbSink::Wled(super::CorrectedWledSink::new(
             config.build(),
             Default::default(),
-        )));
+        ));
         sink.start().expect("start");
 
         let pixels = |sink: &mut super::ActiveUsbSink| {
@@ -4331,11 +4177,11 @@ mod lighting_mode_tests {
             closing: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FakeFrameSource {
-                    frame: CapturedFrame {
-                        width: 2,
-                        height: 2,
-                        pixels_rgb: vec![[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
-                    },
+                    frame: CapturedFrame::new(
+                        2,
+                        2,
+                        vec![[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
+                    ),
                 }))
             }),
         }
@@ -4376,11 +4222,11 @@ mod lighting_mode_tests {
             closing: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FailsAfterFirstFrameSource {
-                    frame: CapturedFrame {
-                        width: 2,
-                        height: 2,
-                        pixels_rgb: vec![[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
-                    },
+                    frame: CapturedFrame::new(
+                        2,
+                        2,
+                        vec![[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
+                    ),
                     served: std::sync::atomic::AtomicBool::new(false),
                 }))
             }),
@@ -4890,11 +4736,7 @@ mod lighting_mode_tests {
                 })
                 .collect();
             Ok(Box::new(FakeFrameSource {
-                frame: CapturedFrame {
-                    width: w,
-                    height: h,
-                    pixels_rgb,
-                },
+                frame: CapturedFrame::new(w, h, pixels_rgb),
             }))
         });
         owner
@@ -4909,11 +4751,11 @@ mod lighting_mode_tests {
     impl AmbilightFrameSource for CyclingFrameSource {
         fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
             self.tick = self.tick.wrapping_add(47);
-            Ok(Arc::new(CapturedFrame {
-                width: 2,
-                height: 2,
-                pixels_rgb: vec![[self.tick, 255 - self.tick, 90]; 4],
-            }))
+            Ok(Arc::new(CapturedFrame::new(
+                2,
+                2,
+                vec![[self.tick, 255 - self.tick, 90]; 4],
+            )))
         }
     }
 
@@ -5193,6 +5035,10 @@ mod lighting_mode_tests {
     #[cfg(debug_assertions)]
     #[test]
     fn a_reconnect_hands_the_running_worker_the_new_sender() {
+        let _watchdog = super::Watchdog::arm(
+            "a_reconnect_hands_the_running_worker_the_new_sender",
+            Duration::from_secs(90),
+        );
         use std::sync::atomic::Ordering as AtomicOrdering;
         use tauri::Manager;
 
@@ -5399,7 +5245,7 @@ mod lighting_mode_tests {
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
             while std::time::Instant::now() < deadline {
                 if let Ok(update) = rx.recv_timeout(std::time::Duration::from_millis(100)) {
-                    let (r, _, b) = update.channel_colors[0];
+                    let [r, _, b] = update.channel_colors[0];
                     if (r > b) == want_red && r != b {
                         return true;
                     }
@@ -6215,11 +6061,11 @@ mod lighting_mode_tests {
             closing: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FakeFrameSource {
-                    frame: CapturedFrame {
-                        width: 2,
-                        height: 2,
-                        pixels_rgb: vec![[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
-                    },
+                    frame: CapturedFrame::new(
+                        2,
+                        2,
+                        vec![[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
+                    ),
                 }))
             }),
         };

@@ -655,11 +655,7 @@ mod tests {
                 pixels.push(px);
             }
         }
-        let frame = CapturedFrame {
-            width: 4,
-            height: 4,
-            pixels_rgb: pixels,
-        };
+        let frame = CapturedFrame::new(4, 4, pixels);
 
         // 1 top LED + 1 right LED
         let config = LedCalibrationConfig {

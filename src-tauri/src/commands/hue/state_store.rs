@@ -30,7 +30,7 @@ use log::error;
 use serde::{Deserialize, Serialize};
 
 use super::credential_store::REDACTED;
-use super::frame::{HueAreaChannel, HueColorSender};
+use super::frame::{HueAreaChannel, HueColorSender, HueMotion, HueRgb};
 use super::light_restore::HueLightRestore;
 use super::sender::{is_shutdown_signaled, DeactivateToken, ShutdownSignal};
 
@@ -625,17 +625,18 @@ pub fn apply_hue_color_with_context(
 /// Send individual colours per channel (ambilight path).
 /// `channel_colors` must be ordered the same as `context.channels`.
 /// Always returns `Ok(())` immediately -- never blocks the caller.
-pub fn apply_hue_channels_with_context(
+pub(crate) fn apply_hue_channels_with_context(
     context: &HueActiveOutputContext,
-    channel_colors: Vec<(u8, u8, u8)>,
+    channel_colors: Vec<HueRgb>,
     brightness: f32,
+    motion: HueMotion,
 ) -> Result<(), String> {
     if context.channels.is_empty() {
         return Err("HUE_COLOR_APPLY_SKIPPED_NO_LIGHTS".to_string());
     }
     context
         .color_sender
-        .try_send_channels(channel_colors, brightness);
+        .try_send_channels(channel_colors, brightness, motion);
     Ok(())
 }
 
@@ -833,7 +834,7 @@ mod tests {
 
         assert!(flush_pending_solid_color(&mut owner));
         let update = rx.try_recv().expect("color reached the sender");
-        assert_eq!(update.channel_colors[0], (42, 0, 0));
+        assert_eq!(update.rgb8()[0], (42, 0, 0));
         assert!(owner.pending_solid_color.is_none());
         assert_eq!(owner.last_solid_color.as_ref().map(|c| c.r), Some(42));
 
@@ -864,9 +865,7 @@ mod tests {
 
         assert!(flush_pending_solid_color(&mut owner));
         assert_eq!(
-            rx.try_recv()
-                .expect("color reached the sender")
-                .channel_colors[0],
+            rx.try_recv().expect("color reached the sender").rgb8()[0],
             (7, 0, 0)
         );
         // The lifecycle code must survive: `isHueStartCodeOk` keys off it.

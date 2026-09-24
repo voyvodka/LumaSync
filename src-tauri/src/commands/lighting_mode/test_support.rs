@@ -35,6 +35,47 @@ use super::snapshot::LIGHTING_RUNTIME_CHANGED_EVENT;
 
 pub(crate) const PORT: &str = "COM-TEST";
 
+/// Aborts the test binary when the test holding it outlives `limit`. A worker
+/// join, a sender wait or a drop that never returns otherwise holds `cargo
+/// test` until the CI job times out — one such run sat for 13 hours. Declare
+/// it first, so it is dropped last and covers the test's drops too.
+pub(crate) struct Watchdog {
+    done: Arc<(Mutex<bool>, std::sync::Condvar)>,
+}
+
+impl Watchdog {
+    pub(crate) fn arm(test: &'static str, limit: Duration) -> Self {
+        let done = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
+        let flag = Arc::clone(&done);
+        std::thread::spawn(move || {
+            let (lock, finished) = &*flag;
+            let guard = lock.lock().unwrap_or_else(|err| err.into_inner());
+            let (guard, _) = finished
+                .wait_timeout_while(guard, limit, |done| !*done)
+                .unwrap_or_else(|err| err.into_inner());
+            if !*guard {
+                // Not `eprintln!`: the harness captures that, and an abort
+                // throws the captured output away.
+                use std::io::Write;
+                let _ = writeln!(
+                    std::io::stderr(),
+                    "{test} still running after {limit:?}: aborting rather than hanging"
+                );
+                std::process::abort();
+            }
+        });
+        Self { done }
+    }
+}
+
+impl Drop for Watchdog {
+    fn drop(&mut self) {
+        let (lock, finished) = &*self.done;
+        *lock.lock().unwrap_or_else(|err| err.into_inner()) = true;
+        finished.notify_all();
+    }
+}
+
 /// Every test that can start an ambilight worker takes this, since workers
 /// share a process-wide counter other tests assert on.
 pub(crate) fn worker_test_guard() -> MutexGuard<'static, ()> {
@@ -108,11 +149,11 @@ struct StillFrame;
 impl AmbilightFrameSource for StillFrame {
     fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
         std::thread::sleep(Duration::from_millis(5));
-        Ok(Arc::new(CapturedFrame {
-            width: 2,
-            height: 2,
-            pixels_rgb: vec![[200, 40, 10], [10, 200, 40], [40, 10, 200], [90, 90, 90]],
-        }))
+        Ok(Arc::new(CapturedFrame::new(
+            2,
+            2,
+            vec![[200, 40, 10], [10, 200, 40], [40, 10, 200], [90, 90, 90]],
+        )))
     }
 }
 
