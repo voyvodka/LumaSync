@@ -1,10 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type RefObject, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
-import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
-import type { HueStartConfig } from "@/features/hue/model/hueStartConfig";
-import { isHueStartCodeOk, isHueStopCodeOk, toHueStartConfig } from "@/features/hue/model/hueStartConfig";
-import { loadShellState, saveShellState } from "@/features/shell/windowLifecycle";
-import { createLatestOperationGuard } from "@/shared/lib/latestOperation";
 import {
   AMBILIGHT_CAPTURE_REASON,
   CAPTURE_FAILURE_BUCKET,
@@ -12,42 +7,31 @@ import {
   isScreenCaptureBlocked,
   type CaptureFailureNotice,
 } from "@/shared/contracts/capture";
+import { HUE_SOLID_COLOR_STATUS, type HueRuntimeTarget, type HueRuntimeTriggerSource } from "@/shared/contracts/hue";
+import { HUE_LEFT_OUT_REASON, LIGHTING_MODE_STATUS, type HueLeftOutReason } from "@/shared/contracts/lighting";
 import {
-  HUE_RUNTIME_TRIGGER_SOURCE,
-  type HueRuntimeTarget,
-  type HueRuntimeTriggerSource,
-} from "@/shared/contracts/hue";
-import { HUE_LEFT_OUT_REASON, LIGHTING_MODE_GATE_STATUS, type HueLeftOutReason } from "@/shared/contracts/lighting";
-
-import { getScreenCapturePermission } from "../captureApi";
-import { setHueSolidColor, startHue, stopHue, stopLighting, type ModeCommandResult } from "../modeApi";
+  BOOT_HUE_RETRY_STATE,
+  LIGHTING_ORIGIN,
+  type ApplyOutputsRequest,
+  type ApplyOutputsResult,
+  type BootHueRetryState,
+  type LightingOrigin,
+} from "@/shared/contracts/lightingRuntime";
 import {
-  DEFAULT_OUTPUT_TARGETS,
   LIGHTING_MODE_KIND,
-  normalizeLightingModeConfig,
+  normalizeAmbilightPayload,
   normalizeOutputTargets,
+  normalizeSolidColorPayload,
+  type AmbilightPayload,
   type LightingModeConfig,
   type SolidColorPayload,
 } from "@/shared/contracts/mode";
-import {
-  applyRuntimeResultToTargets,
-  resolveHueRuntimePlan,
-  type HueTargetCommandResult,
-} from "./hueModeRuntimeFlow";
-import {
-  hueLeftOutReason,
-  hueLeftOutRetryTargets,
-  pickStartFailureNotice,
-  readModeApplyOutcome,
-  shouldCancelHueAfterLeavingOut,
-  shouldReleaseHueAfterRefusal,
-  usbStartRefusalNotice,
-} from "./modeApplyOutcome";
-import { useBootHueRetry, type BootHueRetryNotice, type BootHueRetryPlan } from "./bootHueRetry";
-import { useLightingModeDispatch, type LightingModeDispatcher } from "./useLightingModeDispatch";
-import { useLightingModePersistence } from "./useLightingModePersistence";
-import type { ModeRuntimeConfig } from "./useModeRuntimeConfig";
-import { parseCommandError } from "@/shared/contracts/status";
+
+import { getScreenCapturePermission } from "../captureApi";
+import { applyOutputs, releaseHueOutput, retuneLighting } from "../modeApi";
+import { isOutputsApplied, needsCalibration, pickStartFailureNotice, startFailureNotice } from "./modeApplyOutcome";
+import { createRetuneCoalescer } from "./retuneCoalescer";
+import { useLightingRuntime } from "./useLightingRuntime";
 
 /** How long the "stop failed for these targets" toast stays up. */
 const STOP_FAILED_NOTICE_MS = 5_000;
@@ -58,6 +42,11 @@ const START_FAILED_NOTICE_MS = 8_000;
 /** Same length as the start toast: the auth variant asks the user to re-pair. */
 const HUE_LEFT_OUT_NOTICE_MS = 8_000;
 
+/** Same length as the other notices that ask the user to act. */
+export const BOOT_HUE_RETRY_GAVE_UP_NOTICE_MS = 8_000;
+
+const OFF: LightingModeConfig = { kind: LIGHTING_MODE_KIND.OFF };
+
 function isPermissionNotice(notice: CaptureFailureNotice | null): boolean {
   return notice?.bucket === CAPTURE_FAILURE_BUCKET.PERMISSION;
 }
@@ -66,36 +55,29 @@ function withoutPermissionNotice(notice: CaptureFailureNotice | null): CaptureFa
   return isPermissionNotice(notice) ? null : notice;
 }
 
-/** An unplug of the only selected target; the delta path reports back through it. */
-interface LastTargetUnplug {
-  ended: boolean;
+/** The saved mode the launch restores, read by bootstrap before it asks. */
+export interface BootLightingInput {
+  lightingMode?: LightingModeConfig;
 }
 
 export interface LightingModeOrchestratorInput {
-  runtimeConfig: ModeRuntimeConfig;
-  savedCalibration: LedCalibrationConfig | undefined;
-  hueStartConfig: HueStartConfig | null;
-  setHueStartConfig: (config: HueStartConfig | null) => void;
   /** Calibration gate: a USB target with no calibration routes the user to the editor. */
   onRequireCalibration: () => void;
   reportHueSolidColorStatus: (code: string) => void;
 }
 
 export interface LightingModeOrchestrator {
+  /** What runs, with the last colour and Ambilight settings kept through Off. */
   lightingMode: LightingModeConfig;
   selectedOutputTargets: HueRuntimeTarget[];
   activeOutputTargets: HueRuntimeTarget[];
   isModeTransitioning: boolean;
   stopFailedNotice: HueRuntimeTarget[] | null;
   startFailedNotice: CaptureFailureNotice | null;
-  /** Lets the boot restore raise the same toast the interactive start does. */
-  reportStartFailure: (notice: CaptureFailureNotice) => void;
   /** The permission came back: the permission notice, a condition, is no longer true. */
   clearCapturePermissionNotice: () => void;
   /** A `[usb, hue]` start ran on USB alone this session; the reason picks the copy. */
   hueLeftOutNotice: HueLeftOutReason | null;
-  /** The boot restore's route to the same notice. */
-  reportHueLeftOut: (reason: HueLeftOutReason) => void;
   /**
    * Why Hue is out of the running mode, for the status chip. Raised with the
    * notice but not dismissed with it: it holds until Hue joins, or the user
@@ -103,12 +85,11 @@ export interface LightingModeOrchestrator {
    */
   hueHeldOutReason: HueLeftOutReason | null;
   /** A boot restore is waiting for the bridge to free its area, or gave up waiting. */
-  bootHueRetryNotice: BootHueRetryNotice | null;
-  /** Boot only: resume a restore, or add Hue back to one, that a held area refused. */
-  scheduleBootHueRetry: (plan: BootHueRetryPlan, config: HueStartConfig) => void;
+  bootHueRetryNotice: BootHueRetryState | null;
   handleLightingModeChange: (mode: LightingModeConfig) => Promise<void>;
+  /** A choice of outputs — the Lights toggles, pairing a strip, the unsupported-port fallback. */
   handleOutputTargetsChange: (targets: HueRuntimeTarget[]) => Promise<void>;
-  /** The same delta pipeline for a USB unplug, without writing `lastOutputTargets`. */
+  /** The same change for a USB unplug, which never writes `lastOutputTargets`. */
   dropUnpluggedUsbTarget: (targets: HueRuntimeTarget[]) => Promise<void>;
   /**
    * An unplug of the strip that was the only selected target. Resolves `true`
@@ -117,636 +98,84 @@ export interface LightingModeOrchestrator {
   endLightingOnUsbUnplug: () => Promise<boolean>;
   /** A Hue stop from outside the mode controls: a running mode lets go of Hue first. */
   stopHueOutput: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
-  /** Hot-reload props push a config nudge without going through a transition. */
-  dispatch: LightingModeDispatcher;
-  /** Bootstrap and the Hue solid sync write the mode without a transition. */
-  setLightingMode: (mode: LightingModeConfig) => void;
-  adoptSolidColor: (solid: SolidColorPayload) => void;
-  /** Direct target writes: bootstrap restore and the two USB reconciler paths. */
-  setSelectedOutputTargets: (targets: HueRuntimeTarget[]) => void;
-  setActiveOutputTargets: React.Dispatch<React.SetStateAction<HueRuntimeTarget[]>>;
-  lightingModeRef: RefObject<LightingModeConfig>;
-  lastNonOffModeRef: RefObject<LightingModeConfig | null>;
+  /** The launch restore, once per boot. */
+  restoreAtBoot: (saved: BootLightingInput) => Promise<void>;
   selectedOutputTargetsRef: RefObject<HueRuntimeTarget[]>;
-  activeOutputTargetsRef: RefObject<HueRuntimeTarget[]>;
-  dispatchRef: RefObject<LightingModeDispatcher | null>;
+}
+
+/** The request's mode: the kind, and a payload only when the caller has one. */
+function choiceOf(mode: LightingModeConfig): LightingModeConfig {
+  return {
+    kind: mode.kind,
+    ...(mode.solid ? { solid: mode.solid } : {}),
+    ...(mode.ambilight ? { ambilight: mode.ambilight } : {}),
+  };
 }
 
 /**
- * The mode transaction. Owns the four multi-writer slices and both handlers,
- * because the slow path's three phases share a mutable result map and the
- * ordering between them is the contract, not an implementation detail.
+ * The main window's half of the lighting transaction. Every choice goes to
+ * Rust as one `apply_outputs` (or one `retune_lighting` for a nudge within the
+ * running kind); what runs comes back as the runtime snapshot. What is left
+ * here is what only this window shows: the notices, their timers, and the
+ * screen-recording preflight. See docs/architecture/lighting-transaction.md.
  */
 export function useLightingModeOrchestrator({
-  runtimeConfig,
-  savedCalibration,
-  hueStartConfig,
-  setHueStartConfig,
-  onRequireCalibration: handleOpenCalibration,
+  onRequireCalibration,
   reportHueSolidColorStatus,
 }: LightingModeOrchestratorInput): LightingModeOrchestrator {
-  const [lightingMode, setLightingModeState] = useState<LightingModeConfig>({ kind: LIGHTING_MODE_KIND.OFF });
-  const [selectedOutputTargets, setSelectedOutputTargets] = useState<HueRuntimeTarget[]>([...DEFAULT_OUTPUT_TARGETS]);
-  const [activeOutputTargets, setActiveOutputTargets] = useState<HueRuntimeTarget[]>([]);
-  const outputTargetsGuardRef = useRef(createLatestOperationGuard());
-  const [isModeTransitioning, setIsModeTransitioning] = useState(false);
-  // Surfaces the targets whose stop_lighting / stop_hue_stream invoke
-  // failed during a delta-stop, so the chip stays active instead of silently
-  // lying about state. Banner auto-dismisses; user can retry by toggling.
+  const { snapshot, adopt } = useLightingRuntime();
+  // Surfaces the targets whose stop failed, so the chip stays active instead of
+  // silently lying about state. Banner auto-dismisses; user can retry by toggling.
   const [stopFailedNotice, setStopFailedNotice] = useState<HueRuntimeTarget[] | null>(null);
-  // Raised by the slow path below and, through `reportStartFailure`, by the boot
-  // restore — which filters the display bucket out, so a launch against an
-  // unplugged display must not toast.
+  // Raised by a choice's reply and by the boot restore — which filters the
+  // display bucket out, so a launch against an unplugged display must not toast.
   const [startFailedNotice, setStartFailedNotice] = useState<CaptureFailureNotice | null>(null);
-  // Unlike the start notice, the boot restore raises this one for every reason:
-  // the display-bucket filter is about capture, and this says what is running.
   const [hueLeftOutNotice, setHueLeftOutNotice] = useState<HueLeftOutReason | null>(null);
-  const [hueHeldOutReason, setHueHeldOutReason] = useState<HueLeftOutReason | null>(null);
-  // Every raise and every retry-driven clear goes to both; only the notice's
-  // own dismissal timer, and a user choice, touch one without the other.
-  const raiseHueLeftOut = useCallback((next: SetStateAction<HueLeftOutReason | null>) => {
-    setHueLeftOutNotice(next);
-    setHueHeldOutReason(next);
-  }, []);
+  const [bootHueRetryNotice, setBootHueRetryNotice] = useState<BootHueRetryState | null>(null);
+  const [pendingChoices, setPendingChoices] = useState(0);
+  // The kind the newest choice asked for, while it is in flight: a nudge of
+  // that kind is a retune the transaction applies when it lands, not a new choice.
+  const requestedKindRef = useRef<LightingModeConfig["kind"] | null>(null);
+  const choiceSeqRef = useRef(0);
 
-  const modeTransitionLockRef = useRef(false);
-  const pendingModeChangeRef = useRef<LightingModeConfig | null>(null);
-  const [queuedModeReplay, setQueuedModeReplay] = useState(0);
-  const activeOutputTargetsRef = useRef<HueRuntimeTarget[]>([]);
-  // Tray quick-action refs — always hold latest values for use in stable listeners
-  const lightingModeRef = useRef<LightingModeConfig>(lightingMode);
-  const lastNonOffModeRef = useRef<LightingModeConfig | null>(null);
+  // The snapshot says what runs; Off carries no payload. The last colour and
+  // Ambilight settings seen are kept so the controls show them while Off.
+  const rememberedRef = useRef<{ solid?: SolidColorPayload; ambilight?: AmbilightPayload }>({});
+  const running = snapshot?.mode ?? OFF;
+  const lightingMode = useMemo<LightingModeConfig>(() => {
+    if (running.solid) rememberedRef.current.solid = running.solid;
+    if (running.ambilight) rememberedRef.current.ambilight = running.ambilight;
+    return {
+      ...running,
+      solid: running.solid ?? rememberedRef.current.solid,
+      ambilight: running.ambilight ?? rememberedRef.current.ambilight,
+    };
+  }, [running]);
+  const lightingModeRef = useRef(lightingMode);
+  lightingModeRef.current = lightingMode;
+
+  const selectedOutputTargets = useMemo(() => snapshot?.selectedTargets ?? [], [snapshot?.selectedTargets]);
+  const activeOutputTargets = useMemo(() => snapshot?.activeTargets ?? [], [snapshot?.activeTargets]);
   const selectedOutputTargetsRef = useRef<HueRuntimeTarget[]>(selectedOutputTargets);
+  selectedOutputTargetsRef.current = selectedOutputTargets;
 
-  const hydrateModePayload = runtimeConfig.hydrate;
-  const {
-    dispatch: dispatchSetLightingMode,
-    resetSignature: resetLightingModeSignature,
-    dispatchRef,
-  } = useLightingModeDispatch(hydrateModePayload);
-  const scheduleLightingModePersist = useLightingModePersistence();
+  const hueHeldOutReason = snapshot?.hueHeldOutReason ?? null;
+  const bootHueRetry = snapshot?.bootHueRetry ?? null;
+
+  const retunes = useMemo(() => createRetuneCoalescer((tuning) => retuneLighting(tuning)), []);
+
+  // The notice follows the held-out reason: raised when it appears or
+  // changes, taken down when Hue joins or a choice answers it afresh.
+  useEffect(() => {
+    setHueLeftOutNotice(hueHeldOutReason);
+  }, [hueHeldOutReason]);
 
   useEffect(() => {
-    activeOutputTargetsRef.current = activeOutputTargets;
-  }, [activeOutputTargets]);
+    setBootHueRetryNotice(bootHueRetry);
+  }, [bootHueRetry]);
 
-  // Keep tray refs in sync with latest state
-  useEffect(() => { lightingModeRef.current = lightingMode; }, [lightingMode]);
-  useEffect(() => { selectedOutputTargetsRef.current = selectedOutputTargets; }, [selectedOutputTargets]);
-  // v1.5 H1 — keep the cached ambilight payload aligned with the live
-  // payload so subsequent dispatches (after the bootstrap prime) read
-  // the user's most recent slider commits, not stale post-bootstrap data.
-  useEffect(() => { runtimeConfig.setAmbilight(lightingMode.ambilight); }, [runtimeConfig, lightingMode.ambilight]);
-  useEffect(() => {
-    if (lightingMode.kind !== LIGHTING_MODE_KIND.OFF) {
-      lastNonOffModeRef.current = lightingMode;
-    }
-  }, [lightingMode]);
-
-  const handleLightingModeChangeRef = useRef<((mode: LightingModeConfig) => Promise<void>) | null>(null);
-  const applyOutputTargetsRef = useRef<
-    ((
-      targets: HueRuntimeTarget[],
-      persist: boolean,
-      hueStopTrigger?: HueRuntimeTriggerSource,
-      lastTargetUnplug?: LastTargetUnplug,
-    ) => Promise<void>) | null
-  >(null);
-  const resumeAfterBootHueRetry = useCallback(async (mode: LightingModeConfig) => {
-    // Anything that started a mode meanwhile has already had its say.
-    if (lightingModeRef.current.kind !== LIGHTING_MODE_KIND.OFF) return;
-    await handleLightingModeChangeRef.current?.({
-      kind: mode.kind,
-      ambilight: mode.ambilight,
-      solid: mode.solid,
-    });
-  }, []);
-  // No guard of its own: every mode or output choice cancels the wait first,
-  // and the delta path already starts nothing while Off.
-  const rejoinAfterBootHueRetry = useCallback(async () => {
-    // Not persisted: `lastOutputTargets` never lost Hue, since the drop was session-only.
-    await applyOutputTargetsRef.current?.([...selectedOutputTargetsRef.current, "hue"], false);
-  }, []);
-  const bootHueRetry = useBootHueRetry({
-    resume: resumeAfterBootHueRetry,
-    rejoin: rejoinAfterBootHueRetry,
-    setHueLeftOut: raiseHueLeftOut,
-  });
-  const cancelBootHueRetry = bootHueRetry.cancel;
-  const isBootHueRejoinPending = bootHueRetry.isRejoinPending;
-
-  // The delta path the user's own output toggle takes. The boot rejoin enters
-  // here directly: the same dispatch, without persisting or cancelling itself.
-  // `hueStopTrigger` marks a Hue release from outside the mode controls
-  // (`stopHueOutput`): Hue is stopped whatever the active set says, and the
-  // stop is attributed to that surface. `lastTargetUnplug` marks an unplug of
-  // the only selected target; `ended` reports whether the mode ended with it.
-  const applyOutputTargets = useCallback(async (
-    targets: HueRuntimeTarget[],
-    persist: boolean,
-    hueStopTrigger?: HueRuntimeTriggerSource,
-    lastTargetUnplug?: LastTargetUnplug,
-  ) => {
-    // The toggles stay live while this runs, so a user can remove Hue before
-    // the add that started first has finished. Without the guard that add
-    // lands afterwards and puts Hue back into the active set.
-    const isLatest = outputTargetsGuardRef.current.begin();
-    const normalizedTargets = normalizeOutputTargets(targets);
-    const prevTargets = selectedOutputTargets;
-    setSelectedOutputTargets(normalizedTargets);
-    if (persist) {
-      try {
-        await saveShellState({ lastOutputTargets: normalizedTargets });
-      } catch (err) {
-        console.error("[LumaSync] saveShellState(lastOutputTargets) failed:", err);
-      }
-    }
-
-    // Delta logic — only when a mode is actively running (not OFF)
-    if (lightingMode.kind === LIGHTING_MODE_KIND.OFF) return;
-
-    const currentActive = activeOutputTargetsRef.current;
-    const addedTargets = normalizedTargets.filter((t) => !prevTargets.includes(t));
-    const removedTargets = prevTargets.filter((t) => !normalizedTargets.includes(t));
-    const releasingHue = hueStopTrigger !== undefined;
-    // Nothing is left to re-apply the mode on, so the worker stops whatever the
-    // active set says: it captures and sends for as long as it runs.
-    const endingOnUnplug = lastTargetUnplug !== undefined && normalizedTargets.length === 0;
-    // A release stops Hue even when the selection had already dropped it.
-    if (releasingHue && !removedTargets.includes("hue")) removedTargets.push("hue");
-    // The health poll drops "hue" from the active set once the backend reports
-    // the stream dead (a partial stop included), but the worker keeps its handle
-    // on the sender for as long as the running mode's targets name Hue.
-    const workerHoldsHue = currentActive.includes("hue") || (lightingMode.targets ?? []).includes("hue");
-
-    // The live mode's targets are what every hot-reload re-dispatch sends. Left
-    // on the old set, the next setting change reads as a target change: the
-    // worker restarts, and a Solid re-apply sends Hue no colour. In memory only —
-    // the persisted mode and `lastOutputTargets` are not this path's to write.
-    const commitModeTargets = (targets: HueRuntimeTarget[]) => {
-      setLightingModeState((prev) => (prev.kind === lightingMode.kind ? { ...prev, targets } : prev));
-    };
-
-    // Per-target outcome, not `Promise.all`: only a target that actually stopped
-    // leaves active membership. Dropping one from the UI while its backend stream
-    // lived on is what produced HUE_STREAM_NOT_READY_ACTIVE_STREAMER next start.
-    // `tornDown`: a removal re-apply that stopped the old mode, then failed to start.
-    type StopOutcome = { target: HueRuntimeTarget; ok: boolean; tornDown?: ModeCommandResult };
-    type ReapplyOutcome = "dropped" | "refused" | { tornDown: ModeCommandResult };
-    // Re-apply the running mode on what stays live, without `removed`.
-    const reapplyWithout = async (
-      removed: HueRuntimeTarget,
-      stayLive: HueRuntimeTarget[],
-    ): Promise<ReapplyOutcome> => {
-      const label = removed === "usb" ? "USB" : "Hue";
-      let reapply: ModeCommandResult | null = null;
-      try {
-        reapply = await dispatchSetLightingMode({
-          kind: lightingMode.kind,
-          solid: lightingMode.solid,
-          ambilight: lightingMode.ambilight,
-          targets: stayLive,
-        }, { force: true });
-      } catch (err) {
-        console.error(`[LumaSync] ${label} delta-remove re-apply failed; stopping the lighting runtime:`, err);
-      }
-      if (reapply === null) return "refused";
-      // A gate refusal echoes the old mode, same kind, so `refused` alone
-      // reads it as accepted; the running targets must have lost the removed one.
-      // Absent or empty targets mean USB-required to the backend (legacy rule).
-      const running = reapply.mode.targets ?? [];
-      const dropped = running.length > 0 && !running.includes(removed);
-      if (!readModeApplyOutcome(reapply, lightingMode.kind).refused && dropped) return "dropped";
-      if (reapply.mode.kind === LIGHTING_MODE_KIND.OFF) return { tornDown: reapply };
-      // A gate refusal leaves the old mode, the removed target included, running.
-      console.error(
-        `[LumaSync] ${label} delta-remove re-apply was refused (${reapply.status.code}); stopping the lighting runtime.`,
-      );
-      return "refused";
-    };
-    // Removing both targets reaches `stop_lighting` from both branches; one call serves them.
-    let lightingStop: Promise<ModeCommandResult> | null = null;
-    const stopLightingOnce = () => (lightingStop ??= stopLighting());
-    const stopResults = await Promise.allSettled(
-      removedTargets.map(async (target): Promise<StopOutcome> => {
-        const releasedHue = releasingHue && target === "hue";
-        const unpluggedUsb = endingOnUnplug && target === "usb";
-        if (!currentActive.includes(target) && !releasedHue && !unpluggedUsb) return { target, ok: true };
-        if (target !== "usb" && target !== "hue") return { target, ok: true };
-        const stayLive = currentActive.filter((t) => t !== target && normalizedTargets.includes(t));
-        let tornDown: ModeCommandResult | undefined;
-        try {
-          if (target === "usb") {
-            // `stop_lighting` stops the whole worker, not just the strip: a Hue
-            // stream left running would hold the bridge's one streamer slot and
-            // keep-alive its last frame. Re-apply the mode on what stays live instead.
-            if (stayLive.length > 0) {
-              const outcome = await reapplyWithout("usb", stayLive);
-              if (outcome === "dropped") return { target, ok: true };
-              if (outcome !== "refused") return { target, ok: true, tornDown: outcome.tornDown };
-            }
-            await stopLightingOnce();
-            return { target, ok: true };
-          }
-          // The worker must let go of Hue BEFORE the stream stops: it holds a
-          // handle on the Hue sender, which exits only once every handle is gone.
-          // Stopped under a live worker, the sender outlives the stop, the #425
-          // restore runs under it, and the next frame paints the lights again.
-          // See docs/architecture/hue.md.
-          const outcome = !workerHoldsHue
-            ? "dropped"
-            : stayLive.length > 0
-              ? await reapplyWithout("hue", stayLive)
-              : "refused";
-          if (typeof outcome === "object") tornDown = outcome.tornDown;
-          if (outcome === "refused") {
-            try {
-              await stopLightingOnce();
-            } catch (err) {
-              // The stream is still released below; that stop waits for the sender.
-              console.error("[LumaSync] stop_lighting before the Hue stop failed:", err);
-            }
-          }
-          // System-attributed, not MODE_CONTROL default — this stop is a side
-          // effect of the target-set change, not a direct user mode toggle.
-          await stopHue(hueStopTrigger ?? HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
-          return { target, ok: true, tornDown };
-        } catch (err) {
-          console.error(
-            `[LumaSync] stop failed for target=${target}, retaining in activeOutputTargets:`,
-            err,
-          );
-          return { target, ok: false, tornDown };
-        }
-      })
-    );
-    const successfullyStopped = stopResults
-      .filter((r): r is PromiseFulfilledResult<StopOutcome> => r.status === "fulfilled" && r.value.ok)
-      .map((r) => r.value.target);
-    const failedToStop = stopResults
-      .filter((r): r is PromiseFulfilledResult<StopOutcome> => r.status === "fulfilled" && !r.value.ok)
-      .map((r) => r.value.target);
-    const tornDown = stopResults
-      .map((r) => (r.status === "fulfilled" ? r.value.tornDown : undefined))
-      .find((result): result is ModeCommandResult => result !== undefined);
-    if (!isLatest()) return;
-
-    // The strip that carried the mode alone is gone: end the mode the way Off
-    // does, keeping the selection. UI only — the persisted mode and
-    // `lastOutputTargets` stay, so the next launch restores it once it is back.
-    if (endingOnUnplug) {
-      setSelectedOutputTargets(prevTargets);
-      if (failedToStop.length > 0) {
-        setStopFailedNotice(failedToStop);
-        return;
-      }
-      setActiveOutputTargets((prev) => prev.filter((t) => t !== "usb"));
-      setLightingModeState({ ...lightingMode, kind: LIGHTING_MODE_KIND.OFF });
-      // "Running on USB only" stopped being true with the strip.
-      setHueLeftOutNotice(null);
-      lastTargetUnplug.ended = true;
-      return;
-    }
-
-    // A release that stopped the worker, or whose re-apply tore it down, ended
-    // the mode rather than a target: show Off and keep the selection, as Off
-    // does. UI only — the persisted mode and `lastOutputTargets` stay.
-    if (releasingHue && (lightingStop !== null || tornDown !== undefined)) {
-      const hueStillHeld = failedToStop.includes("hue");
-      if (hueStillHeld) setStopFailedNotice(["hue"]);
-      setActiveOutputTargets(hueStillHeld ? ["hue"] : []);
-      setSelectedOutputTargets(prevTargets);
-      setLightingModeState({ ...lightingMode, kind: LIGHTING_MODE_KIND.OFF });
-      const startFailure = tornDown ? readModeApplyOutcome(tornDown, lightingMode.kind).startFailure : null;
-      if (startFailure) setStartFailedNotice(startFailure);
-      return;
-    }
-
-    if (tornDown) {
-      // The re-apply stopped the old worker and its start failed, so nothing
-      // outputs. Settled as the USB delta-start teardown below: give back the
-      // Hue stream nothing feeds, and show Off. UI only; the persisted mode stays.
-      console.error(`[LumaSync] Delta-remove re-apply stopped the running mode (${tornDown.status.code}).`);
-      // A Hue removal already stopped the stream in its own branch.
-      let hueStillHeld = failedToStop.includes("hue");
-      if (hueStillHeld) setStopFailedNotice(["hue"]);
-      if (currentActive.includes("hue") && !removedTargets.includes("hue")) {
-        try {
-          const stopResult = await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
-          hueStillHeld = !isHueStopCodeOk(stopResult.status.code);
-        } catch (err) {
-          hueStillHeld = true;
-          console.error("[LumaSync] Hue release after the USB delta-remove stopped the mode failed:", err);
-        }
-        if (hueStillHeld) setStopFailedNotice(["hue"]);
-      }
-      if (!isLatest()) return;
-      setActiveOutputTargets(hueStillHeld ? ["hue"] : []);
-      setLightingModeState({ ...lightingMode, kind: LIGHTING_MODE_KIND.OFF });
-      const startFailure = readModeApplyOutcome(tornDown, lightingMode.kind).startFailure;
-      if (startFailure) setStartFailedNotice(startFailure);
-      return;
-    }
-
-    if (successfullyStopped.length > 0) {
-      const nextActive = currentActive.filter((t) => !successfullyStopped.includes(t));
-      setActiveOutputTargets(nextActive);
-    }
-    if (failedToStop.length > 0) {
-      setStopFailedNotice(failedToStop);
-    }
-    if (removedTargets.length > 0) {
-      commitModeTargets(prevTargets.filter((t) => normalizedTargets.includes(t)));
-    }
-
-    // What outputs once the stops above settle. The left-out notice says
-    // "running on USB only", which is only true while USB is live.
-    let liveTargets = successfullyStopped.length > 0
-      ? currentActive.filter((t) => !successfullyStopped.includes(t))
-      : currentActive;
-    // The targets each delta-start re-apply asks for; a refused USB add leaves it.
-    let requestTargets = normalizedTargets;
-
-    // Delta-start: for each added target, start the current mode on it.
-    // A target that fails to start never disturbs the ones already running.
-    for (const target of addedTargets) {
-      // Re-checked per target, not once: each iteration awaits, so a newer
-      // change can supersede this run partway through the list.
-      if (!isLatest()) return;
-      if (target === "usb") {
-        let applyResult: ModeCommandResult | null = null;
-        try {
-          applyResult = await dispatchSetLightingMode({
-            kind: lightingMode.kind,
-            solid: lightingMode.solid,
-            ambilight: lightingMode.ambilight,
-            targets: requestTargets,
-          }, { force: true });
-        } catch (err) {
-          console.error("[LumaSync] USB delta-start dispatch failed; the running targets continue:", err);
-        }
-        if (!isLatest()) return;
-
-        // Read as the Hue add below reads it: a gate refusal (DEVICE_NOT_CONNECTED)
-        // echoes the running mode, which has the same kind. Absent or empty
-        // targets mean USB-required to the backend (legacy rule).
-        const outcome = readModeApplyOutcome(applyResult, lightingMode.kind);
-        const runningTargets = applyResult?.mode.targets;
-        const usbDriven =
-          applyResult !== null &&
-          !outcome.refused &&
-          (runningTargets === undefined || runningTargets === null || runningTargets.length === 0 || runningTargets.includes("usb"));
-
-        if (usbDriven) {
-          setActiveOutputTargets((prev) => [...new Set([...prev, "usb" as HueRuntimeTarget])]);
-          liveTargets = [...new Set([...liveTargets, "usb" as HueRuntimeTarget])];
-          commitModeTargets(requestTargets);
-          continue;
-        }
-
-        // A later Hue add in this same change must not re-trip the USB gate.
-        requestTargets = requestTargets.filter((t) => t !== "usb");
-        const notice = applyResult === null ? null : usbStartRefusalNotice(applyResult);
-
-        if (applyResult !== null && outcome.refused && applyResult.mode.kind === LIGHTING_MODE_KIND.OFF) {
-          // The backend tore the running mode down before the start failed, so
-          // nothing outputs. The teardown leaves the Hue stream open with nothing
-          // feeding it, and the bridge admits one streamer — give back the one
-          // this session held, as the slow path does. UI only: the persisted
-          // mode stays for the next launch.
-          console.error(
-            `[LumaSync] USB delta-start re-apply stopped the running mode (${applyResult.status.code}).`,
-          );
-          let hueStillHeld = false;
-          if (liveTargets.includes("hue")) {
-            try {
-              const stopResult = await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
-              hueStillHeld = !isHueStopCodeOk(stopResult.status.code);
-            } catch (err) {
-              hueStillHeld = true;
-              console.error("[LumaSync] Hue release after the USB delta-start stopped the mode failed:", err);
-            }
-            if (hueStillHeld) setStopFailedNotice(["hue"]);
-          }
-          if (!isLatest()) return;
-          setActiveOutputTargets(hueStillHeld ? ["hue"] : []);
-          setLightingModeState({ ...lightingMode, kind: LIGHTING_MODE_KIND.OFF });
-          if (notice) setStartFailedNotice(notice);
-          return;
-        }
-
-        // The gate returns before teardown, so the running targets are
-        // untouched. Session-only, as for a left-out Hue: `lastOutputTargets`
-        // keeps the explicit add saved above, so the next launch retries USB.
-        console.error(
-          `[LumaSync] USB delta-start was not applied (${applyResult?.status.code ?? "dispatch threw"}); the running targets continue.`,
-        );
-        setSelectedOutputTargets((prev) => prev.filter((t) => t !== "usb"));
-        if (notice) setStartFailedNotice(notice);
-      }
-      if (target === "hue") {
-        let runtimeHueConfig = hueStartConfig;
-        try {
-          runtimeHueConfig = toHueStartConfig(await loadShellState()) ?? hueStartConfig;
-        } catch (err) {
-          console.error("[LumaSync] Hue delta-start could not read the shell state; using the cached config:", err);
-        }
-        if (!isLatest()) return;
-
-        let hueStartCode: string | undefined;
-        if (runtimeHueConfig) {
-          try {
-            hueStartCode = (await startHue(runtimeHueConfig)).status.code;
-          } catch (err) {
-            console.error("[LumaSync] Hue delta-start failed:", err);
-          }
-          if (!isLatest()) return;
-        }
-
-        // Re-apply so the running worker picks up the now-live Hue stream
-        // context; without it the worker has hue_output=None and never sends
-        // colours to Hue. A failed start is not dispatched: with no stream
-        // context the Rust Hue gate would refuse it anyway.
-        let applyResult: ModeCommandResult | null = null;
-        if (hueStartCode !== undefined && isHueStartCodeOk(hueStartCode)) {
-          try {
-            applyResult = await dispatchSetLightingMode({
-              kind: lightingMode.kind,
-              solid: lightingMode.solid,
-              ambilight: lightingMode.ambilight,
-              targets: requestTargets,
-            }, { force: true });
-          } catch (err) {
-            console.error("[LumaSync] Hue delta-start mode dispatch failed:", err);
-          }
-          if (!isLatest()) return;
-        }
-
-        // `mode` reports what the backend runs, so Hue counts as added only once
-        // it is in the running targets. A gate refusal reports the previous mode,
-        // which has the same kind — `refused` alone would read it as accepted.
-        const outcome = readModeApplyOutcome(applyResult, lightingMode.kind);
-        const hueDriven =
-          applyResult !== null && !outcome.refused && (applyResult.mode.targets ?? []).includes("hue");
-
-        if (hueDriven) {
-          setActiveOutputTargets((prev) => [...new Set([...prev, "hue" as HueRuntimeTarget])]);
-          liveTargets = [...new Set([...liveTargets, "hue" as HueRuntimeTarget])];
-          commitModeTargets(requestTargets);
-          if (lightingMode.kind === LIGHTING_MODE_KIND.SOLID && lightingMode.solid) {
-            try {
-              const colorResult = await setHueSolidColor({
-                r: lightingMode.solid.r,
-                g: lightingMode.solid.g,
-                b: lightingMode.solid.b,
-                brightness: lightingMode.solid.brightness,
-              });
-              reportHueSolidColorStatus(colorResult.status.code);
-            } catch (err) {
-              console.error("[LumaSync] Hue solid push on delta-start non-fatal failure:", err);
-            }
-          }
-          continue;
-        }
-
-        // Left out — settled as the slow path settles a [usb, hue] start the gate
-        // refuses. A stream or retry this session owns is cancelled, or the
-        // health poll re-adds "hue" behind the notice's back.
-        const hueActiveBefore = currentActive.includes("hue");
-        const cancelHue = shouldCancelHueAfterLeavingOut({ hueStartCode, hueActiveBefore });
-        let hueStillHeld = false;
-        if (cancelHue) {
-          try {
-            const stopResult = await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
-            hueStillHeld = !isHueStopCodeOk(stopResult.status.code);
-          } catch (err) {
-            hueStillHeld = true;
-            console.error("[LumaSync] Hue cancel after leaving it out of the delta-start failed:", err);
-          }
-          if (hueStillHeld) setStopFailedNotice(["hue"]);
-        }
-        if (!isLatest()) return;
-
-        if (applyResult !== null && outcome.refused && applyResult.mode.kind === LIGHTING_MODE_KIND.OFF) {
-          // The backend tore the running mode down before the restart failed, so
-          // nothing outputs and "running on USB only" would be false. UI only, as
-          // in the slow path: the persisted mode stays for the next launch.
-          console.error(
-            `[LumaSync] Hue delta-start re-apply stopped the running mode (${applyResult.status.code}).`,
-          );
-          setActiveOutputTargets(hueStillHeld ? ["hue"] : []);
-          setLightingModeState({ ...lightingMode, kind: LIGHTING_MODE_KIND.OFF });
-          if (outcome.startFailure) setStartFailedNotice(outcome.startFailure);
-          return;
-        }
-
-        if (cancelHue) {
-          // A stream that would not stop stays listed, as in the slow path.
-          setActiveOutputTargets((prev) =>
-            hueStillHeld
-              ? [...new Set([...prev, "hue" as HueRuntimeTarget])]
-              : prev.filter((t) => t !== "hue"),
-          );
-        }
-        // Session-only, as in the slow path. `lastOutputTargets` was saved above
-        // with the user's explicit add and keeps it, so the next launch retries Hue.
-        setSelectedOutputTargets((prev) => prev.filter((t) => t !== "hue"));
-
-        // The Hue gate returns before teardown, so the previous targets keep running.
-        const hueWasTheReason =
-          hueStartCode === undefined ||
-          !isHueStartCodeOk(hueStartCode) ||
-          hueLeftOutRetryTargets(applyResult, requestTargets) !== null;
-        if (hueWasTheReason && liveTargets.includes("usb")) {
-          raiseHueLeftOut(hueLeftOutReason(runtimeHueConfig !== null, hueStartCode));
-        } else {
-          console.error(
-            `[LumaSync] Hue delta-start left Hue out (start ${hueStartCode ?? "none"}, apply ${applyResult?.status.code ?? "none"}).`,
-          );
-        }
-      }
-    }
-  }, [lightingMode, selectedOutputTargets, hueStartConfig, dispatchSetLightingMode, reportHueSolidColorStatus, raiseHueLeftOut]);
-
-  useEffect(() => {
-    applyOutputTargetsRef.current = applyOutputTargets;
-  }, [applyOutputTargets]);
-
-  const changeOutputTargets = useCallback(
-    (
-      targets: HueRuntimeTarget[],
-      persist: boolean,
-      hueStopTrigger?: HueRuntimeTriggerSource,
-      lastTargetUnplug?: LastTargetUnplug,
-    ) => {
-      const normalizedTargets = normalizeOutputTargets(targets);
-      // An output change answers "is Hue in the mode" afresh; a Hue left out
-      // again raises it again.
-      setHueHeldOutReason(null);
-      if (!normalizedTargets.includes("hue")) {
-        cancelBootHueRetry("Hue was deselected");
-      } else if (isBootHueRejoinPending()) {
-        // The user turned Hue on themselves; their add answers for itself.
-        cancelBootHueRetry("the output targets changed");
-      }
-      return applyOutputTargets(normalizedTargets, persist, hueStopTrigger, lastTargetUnplug);
-    },
-    [applyOutputTargets, cancelBootHueRetry, isBootHueRejoinPending],
-  );
-  const handleOutputTargetsChange = useCallback(
-    (targets: HueRuntimeTarget[]) => changeOutputTargets(targets, true),
-    [changeOutputTargets],
-  );
-  // Session-only: a cable falling out is not the user choosing to stop using the strip.
-  const dropUnpluggedUsbTarget = useCallback(
-    (targets: HueRuntimeTarget[]) => changeOutputTargets(targets, false),
-    [changeOutputTargets],
-  );
-  // The same drop with nothing left to run on. The empty set also cancels a
-  // pending #441 rejoin, whose "running on USB only" would now be false.
-  const endLightingOnUsbUnplug = useCallback(async () => {
-    // Off already: nothing runs, and the delta path would clear the selection.
-    if (lightingModeRef.current.kind === LIGHTING_MODE_KIND.OFF) return false;
-    const unplug: LastTargetUnplug = { ended: false };
-    await changeOutputTargets([], false, undefined, unplug);
-    return unplug.ended;
-  }, [changeOutputTargets]);
-
-  // The Devices card's Stop retrying and Retry stop. A bare `stop_hue_stream`
-  // under a running mode that names Hue leaves its worker holding the sender
-  // (docs/architecture/hue.md), so Hue leaves the live mode through the delta
-  // path first. Session-only, as the A2 drops: `lastOutputTargets` keeps Hue.
-  const hueReleaseRef = useRef<Promise<void> | null>(null);
-  const stopHueOutput = useCallback(
-    (triggerSource: HueRuntimeTriggerSource) => {
-      if (hueReleaseRef.current !== null) return hueReleaseRef.current;
-      const release = (async () => {
-        try {
-          if (lightingModeRef.current.kind === LIGHTING_MODE_KIND.OFF) {
-            await stopHue(triggerSource);
-            return;
-          }
-          await changeOutputTargets(
-            selectedOutputTargetsRef.current.filter((t) => t !== "hue"),
-            false,
-            triggerSource,
-          );
-        } catch (err) {
-          console.error("[LumaSync] Hue stop from the Devices card failed:", err);
-        } finally {
-          hueReleaseRef.current = null;
-        }
-      })();
-      hueReleaseRef.current = release;
-      return release;
-    },
-    [changeOutputTargets],
-  );
-
-
-  // Same shape as the notice above. The dismissal used to be an untracked
-  // `window.setTimeout` inside the delta-stop path, so nothing cleared it on
-  // unmount and a second failure left two timers racing the same setter.
+  // Same shape as the notice below: a tracked timer, cleared on unmount, so a
+  // second failure never leaves two timers racing the same setter.
   useEffect(() => {
     if (!stopFailedNotice) return;
     const timerId = window.setTimeout(() => setStopFailedNotice(null), STOP_FAILED_NOTICE_MS);
@@ -770,463 +199,183 @@ export function useLightingModeOrchestrator({
     return () => window.clearTimeout(timerId);
   }, [hueLeftOutNotice]);
 
-  const handleLightingModeChange = useCallback(
-    async (nextMode: LightingModeConfig) => {
-      const normalizedNextMode = normalizeLightingModeConfig({
-        kind: nextMode.kind,
-        solid: nextMode.solid ?? lightingMode.solid,
-        ambilight: nextMode.ambilight ?? lightingMode.ambilight,
-        targets: selectedOutputTargets,
-      });
+  useEffect(() => {
+    if (bootHueRetryNotice !== BOOT_HUE_RETRY_STATE.GAVE_UP) return;
+    const timerId = window.setTimeout(() => setBootHueRetryNotice(null), BOOT_HUE_RETRY_GAVE_UP_NOTICE_MS);
+    return () => window.clearTimeout(timerId);
+  }, [bootHueRetryNotice]);
 
-      // Deliberately NOT gated on `isSameTargetSet(selected, active)` — see
-      // docs/architecture/ui-and-shell.md. Reconciling targets here breaks drags.
-      const isQuickSolidAdjustment =
-        normalizedNextMode.kind === LIGHTING_MODE_KIND.SOLID &&
-        lightingMode.kind === LIGHTING_MODE_KIND.SOLID;
-      const isQuickAmbilightAdjustment =
-        normalizedNextMode.kind === LIGHTING_MODE_KIND.AMBILIGHT &&
-        lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT;
-      const isQuickAdjustment = isQuickSolidAdjustment || isQuickAmbilightAdjustment;
-      // Any mode choice, the retry's own included, supersedes a pending boot
-      // retry. A slider tweak is not a choice: a rejoin adds Hue to the tweaked mode.
-      if (!isQuickAdjustment) {
-        cancelBootHueRetry("the lighting mode changed");
-        setHueHeldOutReason(null);
-      }
-
-      // Quick adjustments dispatch unconditionally; the lock-gate is
-      // strictly for kind-changing transitions. Queueing them behind it wedged
-      // `isModeTransitioning` true. See docs/architecture/ui-and-shell.md.
-      if (!isQuickAdjustment && modeTransitionLockRef.current) {
-        pendingModeChangeRef.current = nextMode;
+  /** Everything a reply can ask of this window. */
+  const readReply = useCallback(
+    (result: ApplyOutputsResult, options: { probeNotice?: CaptureFailureNotice | null; boot?: boolean } = {}) => {
+      adopt(result.snapshot);
+      if (needsCalibration(result)) {
+        onRequireCalibration();
         return;
       }
+      if (result.outcome.stopFailed.length > 0) setStopFailedNotice(result.outcome.stopFailed);
 
-      // Every path routes through `dispatchSetLightingMode` so its dedup ref stays
-      // the single source of truth — hot-reload and delta-start re-applies too.
+      const apply = result.outcome.applyStatus;
+      if (apply?.code === LIGHTING_MODE_STATUS.SOLID_MODE_HUE_OUTPUT_SKIPPED) {
+        reportHueSolidColorStatus(apply.details ?? HUE_SOLID_COLOR_STATUS.APPLY_SKIPPED);
+      } else if (apply?.code === LIGHTING_MODE_STATUS.SOLID_MODE_APPLIED) {
+        reportHueSolidColorStatus(HUE_SOLID_COLOR_STATUS.APPLIED);
+      }
 
-      if (isQuickSolidAdjustment && normalizedNextMode.solid) {
-        setLightingModeState(normalizedNextMode);
-        scheduleLightingModePersist(normalizedNextMode);
-
-        if (activeOutputTargets.includes("usb")) {
-          void dispatchSetLightingMode(normalizedNextMode).catch((error) => {
-            console.error("[LumaSync] Failed to push USB solid update:", error);
-          });
-        }
-
-        // Gated on the *selected* target: "hue" can be out of
-        // `activeOutputTargets` while the user still wants Hue output, and the
-        // backend queues the colour rather than dropping it.
-        if (selectedOutputTargets.includes("hue") || activeOutputTargets.includes("hue")) {
-          void setHueSolidColor({
-            r: normalizedNextMode.solid.r,
-            g: normalizedNextMode.solid.g,
-            b: normalizedNextMode.solid.b,
-            brightness: normalizedNextMode.solid.brightness,
-          })
-            .then((result) => {
-              reportHueSolidColorStatus(result.status.code);
-            })
-            .catch((error) => {
-              console.error("[LumaSync] Failed to push Hue solid update:", error);
-            });
+      const failure = startFailureNotice(result);
+      if (failure) {
+        if (!(options.boot && failure.bucket === CAPTURE_FAILURE_BUCKET.DISPLAY)) {
+          setStartFailedNotice(pickStartFailureNotice(options.probeNotice ?? null, failure));
         }
         return;
       }
-
-      // Rust updates live atomics in place for this case (AMBILIGHT_MODE_UPDATED),
-      // leaving the worker and SCStream alone. Same drag reasoning as the solid
-      // quick path above: a pending target reconcile must not promote it.
-      if (isQuickAmbilightAdjustment) {
-        setLightingModeState(normalizedNextMode);
-        scheduleLightingModePersist(normalizedNextMode);
-        void dispatchSetLightingMode(normalizedNextMode).catch((error) => {
-          console.error("[LumaSync] Failed to push Ambilight settings update:", error);
-        });
-        return;
+      // A start went through, so a permission notice — including the one the
+      // advisory probe raised for this very start — no longer holds.
+      if (isOutputsApplied(result) && result.snapshot.mode.kind !== LIGHTING_MODE_KIND.OFF) {
+        setStartFailedNotice(withoutPermissionNotice);
       }
+    },
+    [adopt, onRequireCalibration, reportHueSolidColorStatus],
+  );
 
-      // Slow path: real mode-kind transition. Take the lock + flip the
-      // transitioning flag so the dock surfaces a "switching outputs"
-      // affordance instead of accepting a second click mid-flight.
-      modeTransitionLockRef.current = true;
-      // Reset the dedupe signature: a kind transition changes the payload
-      // shape so the next quick adjustment after this completes must
-      // always reach the backend.
-      resetLightingModeSignature();
-      setIsModeTransitioning(true);
-
-      // USB target requires calibration; Hue-only does not
-      const usesUsb = selectedOutputTargets.includes("usb");
-      const requiresCalibration =
-        usesUsb && !savedCalibration && normalizedNextMode.kind !== LIGHTING_MODE_KIND.OFF;
-
-      if (requiresCalibration) {
-        handleOpenCalibration();
-        modeTransitionLockRef.current = false;
-        setIsModeTransitioning(false);
-        return;
-      }
-
+  const send = useCallback(
+    async (
+      request: ApplyOutputsRequest,
+      options: { probeNotice?: CaptureFailureNotice | null; boot?: boolean } = {},
+    ): Promise<ApplyOutputsResult | null> => {
       try {
-        const latestShellState = await loadShellState();
-        const runtimeHueStartConfig = toHueStartConfig(latestShellState) ?? hueStartConfig;
-        setHueStartConfig(runtimeHueStartConfig);
+        const result = await applyOutputs(request);
+        readReply(result, options);
+        return result;
+      } catch (error) {
+        console.error(`[LumaSync] apply_outputs (${request.origin}) failed:`, error);
+        return null;
+      }
+    },
+    [readReply],
+  );
 
-        if (normalizedNextMode.kind === LIGHTING_MODE_KIND.OFF) {
-          const runtimePlan = resolveHueRuntimePlan({
-            action: "stop",
-            selectedTargets: selectedOutputTargets,
-            activeTargets: activeOutputTargets,
-            userInitiated: true,
-            reconnectingTargets: activeOutputTargets,
-          });
-
-          const targetResults: Partial<Record<HueRuntimeTarget, HueTargetCommandResult>> = {};
-          // `stop_lighting` stops the worker whatever it drives, and it must finish
-          // before the Hue stop: the worker holds a handle on the Hue sender, which
-          // exits only once every handle is gone. A Hue-only mode has no "usb" in
-          // the plan, and its worker used to outlive the stop and the #425 restore.
-          // See docs/architecture/hue.md.
-          const stopsUsb = runtimePlan.stopTargets.includes("usb");
-          if (stopsUsb || lightingMode.kind !== LIGHTING_MODE_KIND.OFF) {
-            try {
-              await stopLighting();
-              if (stopsUsb) targetResults.usb = { ok: true };
-            } catch (error) {
-              const reason = parseCommandError(error).message;
-              if (stopsUsb) targetResults.usb = { ok: false, code: "USB_STOP_FAILED", message: reason };
-              // The stream is still released below; that stop waits for the sender.
-              console.error("[LumaSync] stop_lighting before the Hue stop failed:", error);
-            }
-          }
-
-          const shouldStopHue =
-            activeOutputTargets.includes("hue") ||
-            selectedOutputTargets.includes("hue") ||
-            Boolean(runtimeHueStartConfig);
-
-          if (shouldStopHue) {
-            try {
-              const hueResult = await stopHue();
-              targetResults.hue = {
-                ok: isHueStopCodeOk(hueResult.status.code),
-                code: hueResult.status.code,
-                message: hueResult.status.message,
-              };
-            } catch (error) {
-              const reason = parseCommandError(error).message;
-              targetResults.hue = { ok: false, code: "HUE_STOP_FAILED", message: reason };
-            }
-          }
-
-          const merged = applyRuntimeResultToTargets(runtimePlan, targetResults);
-          setActiveOutputTargets(merged.activeTargets);
-          setLightingModeState(normalizedNextMode);
-          scheduleLightingModePersist(normalizedNextMode);
-          return;
+  const handleLightingModeChange = useCallback(
+    async (next: LightingModeConfig) => {
+      const currentKind = requestedKindRef.current ?? lightingModeRef.current.kind;
+      // A nudge within the running kind never waits for a transition, and a
+      // drag commits many of them: they go through the coalescer as retunes.
+      if (next.kind === currentKind && next.kind !== LIGHTING_MODE_KIND.OFF) {
+        if (next.kind === LIGHTING_MODE_KIND.SOLID && next.solid) {
+          retunes.push({ solid: normalizeSolidColorPayload(next.solid) });
+        } else if (next.kind === LIGHTING_MODE_KIND.AMBILIGHT && next.ambilight) {
+          retunes.push({ ambilight: normalizeAmbilightPayload(next.ambilight) });
         }
+        return;
+      }
 
-        const runtimePlan = resolveHueRuntimePlan({
-          action: "start",
-          selectedTargets: selectedOutputTargets,
-          activeTargets: activeOutputTargets,
-        });
-
-        const targetResults: Partial<Record<HueRuntimeTarget, HueTargetCommandResult>> = {};
-
-        // Phase 1 must precede Phase 2: `snapshot_hue_output_context()` needs a
-        // live stream to hand the worker, or it comes up with `hue_output=None`.
-        if (runtimePlan.startTargets.includes("hue")) {
-          if (!runtimeHueStartConfig) {
-            targetResults.hue = {
-              ok: false,
-              code: "CONFIG_NOT_READY_GATE_BLOCKED",
-              message: "Hue start requires bridge, credential, and area configuration.",
-            };
-          } else {
-            try {
-              const hueResult = await startHue(runtimeHueStartConfig);
-              targetResults.hue = {
-                ok: isHueStartCodeOk(hueResult.status.code),
-                code: hueResult.status.code,
-                message: hueResult.status.message,
-              };
-            } catch (error) {
-              const reason = parseCommandError(error).message;
-              targetResults.hue = { ok: false, code: "HUE_MODE_APPLY_FAILED", message: reason };
-            }
-          }
-        }
-
-        // Phase 2 — this is what starts the ambilight worker, so it must run for
-        // Hue-only targets too or the stream comes up with no colour driver.
-        const hueStartedOk = targetResults.hue?.ok === true;
-        const hueStartCode = targetResults.hue?.code;
-        // A failed Hue start still attempts the apply, but a gated start leaves
-        // no stream context and nothing retrying it: the backend's Hue gate
-        // refuses (HUE_NOT_READY) and the commit below keeps the UI off — unless
-        // USB was requested too, in which case the apply is retried without Hue.
-        const hueTransientFail =
-          !hueStartedOk &&
-          normalizedNextMode.kind === LIGHTING_MODE_KIND.AMBILIGHT &&
-          runtimePlan.startTargets.includes("hue");
-        const needsLightingModeApply =
-          runtimePlan.startTargets.includes("usb") ||
-          (runtimePlan.startTargets.includes("hue") && hueStartedOk) ||
-          hueTransientFail;
-
-        // Set by Phase 2 when the backend reports it is not running the requested
-        // mode, so Phase 3's commit below can refuse to record a mode that never ran.
-        let applyRefused = false;
-        let startFailureRaised = false;
-        // What the backend is running after a refusal. A thrown apply reports
-        // nothing, so the previous mode is assumed to still be live.
-        let runningAfterRefusal: Pick<LightingModeConfig, "kind" | "targets"> = {
-          kind: lightingMode.kind,
-          targets: activeOutputTargets,
-        };
-        // Set when the Hue gate refused a [usb, hue] start and the retry ran
-        // without Hue. Session-only: `lastOutputTargets` is never rewritten.
-        let usbOnlyTargets: HueRuntimeTarget[] | null = null;
-        let hueReleased = false;
-        let hueReleaseFailed = false;
-
-        if (needsLightingModeApply) {
-          let probeNotice: CaptureFailureNotice | null = null;
-          // Advisory probe, never a gate: the OS prompt only appears from the
-          // Rust start path below, so short-circuiting here would leave a
-          // first-run user unable to ever grant the permission.
-          if (normalizedNextMode.kind === LIGHTING_MODE_KIND.AMBILIGHT) {
+      retunes.reset();
+      const seq = ++choiceSeqRef.current;
+      requestedKindRef.current = next.kind;
+      setPendingChoices((n) => n + 1);
+      try {
+        let probeNotice: CaptureFailureNotice | null = null;
+        // Advisory probe, never a gate: the OS prompt only appears from the
+        // Rust start path below, so short-circuiting here would leave a
+        // first-run user unable to ever grant the permission.
+        if (next.kind === LIGHTING_MODE_KIND.AMBILIGHT) {
+          try {
             const permission = await getScreenCapturePermission();
             if (isScreenCaptureBlocked(permission.code)) {
               probeNotice = describeCaptureFailure(AMBILIGHT_CAPTURE_REASON.PERMISSION_DENIED);
               setStartFailedNotice(probeNotice);
             }
-          }
-          try {
-            let applyResult = await dispatchSetLightingMode(normalizedNextMode, { force: true });
-            usbOnlyTargets = hueLeftOutRetryTargets(applyResult, normalizedNextMode.targets ?? []);
-            if (usbOnlyTargets !== null) {
-              targetResults.hue = {
-                ok: false,
-                code: LIGHTING_MODE_GATE_STATUS.HUE_NOT_READY,
-                message: applyResult?.status.message,
-              };
-              if (
-                shouldCancelHueAfterLeavingOut({
-                  hueStartCode,
-                  hueActiveBefore: runtimePlan.activeBefore.includes("hue"),
-                })
-              ) {
-                try {
-                  const stopResult = await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
-                  hueReleased = isHueStopCodeOk(stopResult.status.code);
-                } catch (error) {
-                  console.error("[LumaSync] Hue cancel after leaving it out of the start failed:", error);
-                }
-                hueReleaseFailed = !hueReleased;
-                if (hueReleaseFailed) setStopFailedNotice(["hue"]);
-              }
-              applyResult = await dispatchSetLightingMode(
-                { ...normalizedNextMode, targets: usbOnlyTargets },
-                { force: true },
-              );
-            }
-            const outcome = readModeApplyOutcome(applyResult, normalizedNextMode.kind);
-            if (outcome.startFailure) {
-              startFailureRaised = true;
-              setStartFailedNotice(pickStartFailureNotice(probeNotice, outcome.startFailure));
-            }
-            if (applyResult !== null && outcome.refused) {
-              applyRefused = true;
-              runningAfterRefusal = applyResult.mode;
-              if (runtimePlan.startTargets.includes("usb")) {
-                targetResults.usb = {
-                  ok: false,
-                  code: applyResult.status.code,
-                  message: applyResult.status.message,
-                };
-              }
-            } else if (runtimePlan.startTargets.includes("usb")) {
-              targetResults.usb = { ok: true };
-            }
           } catch (error) {
-            const reason = parseCommandError(error).message;
-            applyRefused = true;
-            if (runtimePlan.startTargets.includes("usb")) {
-              targetResults.usb = { ok: false, code: "USB_MODE_APPLY_FAILED", message: reason };
-            }
+            console.error("[LumaSync] screen-recording preflight failed:", error);
           }
         }
-
-        // A left-out Hue was already settled above, before the retry.
-        if (
-          usbOnlyTargets === null &&
-          applyRefused &&
-          shouldReleaseHueAfterRefusal({
-            hueStartedOk,
-            hueStartCode: targetResults.hue?.code,
-            hueActiveBefore: runtimePlan.activeBefore.includes("hue"),
-            runningMode: runningAfterRefusal,
-          })
-        ) {
-          try {
-            const stopResult = await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
-            hueReleased = isHueStopCodeOk(stopResult.status.code);
-          } catch (error) {
-            console.error("[LumaSync] Hue release after a refused mode apply failed:", error);
-          }
-          hueReleaseFailed = !hueReleased;
-          if (hueReleaseFailed) setStopFailedNotice(["hue"]);
-        }
-
-        // Phase 3: Push initial solid color to Hue (solid mode only).
-        // The backend set_lighting_mode already handles this via apply_hue_color_with_context,
-        // but an explicit push here guarantees the bridge receives the latest UI color.
-        if (
-          hueStartedOk &&
-          usbOnlyTargets === null &&
-          !applyRefused &&
-          normalizedNextMode.kind === LIGHTING_MODE_KIND.SOLID &&
-          normalizedNextMode.solid
-        ) {
-          try {
-            const colorResult = await setHueSolidColor({
-              r: normalizedNextMode.solid.r,
-              g: normalizedNextMode.solid.g,
-              b: normalizedNextMode.solid.b,
-              brightness: normalizedNextMode.solid.brightness,
-            });
-            reportHueSolidColorStatus(colorResult.status.code);
-          } catch (err) {
-            console.error("[LumaSync] Hue solid push after mode change non-fatal failure:", err);
-          }
-        }
-
-        const merged = applyRuntimeResultToTargets(runtimePlan, targetResults);
-        if (applyRefused && runningAfterRefusal.kind === LIGHTING_MODE_KIND.OFF) {
-          // The backend tore the previous mode down before the start failed, so
-          // nothing outputs; only a Hue stream that would not stop is still held.
-          setActiveOutputTargets(hueReleaseFailed ? ["hue"] : []);
-          // UI only, as on boot: the persisted mode stays for the next launch.
-          if (lightingMode.kind !== LIGHTING_MODE_KIND.OFF) {
-            setLightingModeState({ ...normalizedNextMode, kind: LIGHTING_MODE_KIND.OFF });
-          }
-        } else {
-          let nextActive = merged.activeTargets;
-          if (usbOnlyTargets !== null) {
-            // A left-out stream that would not stop stays listed, as on boot.
-            nextActive = nextActive.filter((t) => t !== "hue");
-            if (hueReleaseFailed) nextActive = [...nextActive, "hue"];
-          } else if (hueReleased) {
-            nextActive = nextActive.filter((t) => t !== "hue");
-          }
-          setActiveOutputTargets(nextActive);
-        }
-        // Only reflect user intent in the UI when at least one backend command was
-        // issued and the backend accepted it. A gate-blocked or failed start must
-        // not be shown as ON, nor persisted for the next launch to restore.
-        if (needsLightingModeApply && !applyRefused) {
-          if (usbOnlyTargets !== null) {
-            // The live mode carries the targets that ran, or every hot-reload
-            // re-dispatch would hit the Hue gate again. The persisted mode and
-            // `lastOutputTargets` keep Hue, so the next launch tries it again.
-            setLightingModeState({ ...normalizedNextMode, targets: usbOnlyTargets });
-            setSelectedOutputTargets((prev) => prev.filter((t) => t !== "hue"));
-            raiseHueLeftOut(hueLeftOutReason(runtimeHueStartConfig !== null, hueStartCode));
-          } else {
-            setLightingModeState(normalizedNextMode);
-          }
-          // A start went through, so a permission notice — including the one
-          // the advisory probe raised for this very start — no longer holds.
-          if (!startFailureRaised) setStartFailedNotice(withoutPermissionNotice);
-          scheduleLightingModePersist(normalizedNextMode);
-        }
-      } catch (error) {
-        console.error(`[LumaSync] Failed to switch lighting mode to ${normalizedNextMode.kind}:`, error);
+        await send({ mode: choiceOf(next), origin: LIGHTING_ORIGIN.USER }, { probeNotice });
       } finally {
-        if (pendingModeChangeRef.current) {
-          // Replayed once this transition's state commits, not from this
-          // closure: it still reads the mode and targets from before the
-          // transition, so a queued Off saw nothing running and left the worker
-          // it had just started. The lock stays held until then, so a newer
-          // choice replaces the queued one as before.
-          setQueuedModeReplay((tick) => tick + 1);
-        } else {
-          modeTransitionLockRef.current = false;
-          setIsModeTransitioning(false);
-        }
+        if (choiceSeqRef.current === seq) requestedKindRef.current = null;
+        setPendingChoices((n) => n - 1);
       }
     },
-    [
-      activeOutputTargets,
-      cancelBootHueRetry,
-      dispatchSetLightingMode,
-      handleOpenCalibration,
-      hueStartConfig,
-      lightingMode.ambilight,
-      lightingMode.kind,
-      lightingMode.solid,
-      raiseHueLeftOut,
-      reportHueSolidColorStatus,
-      resetLightingModeSignature,
-      savedCalibration,
-      scheduleLightingModePersist,
-      selectedOutputTargets,
-      setHueStartConfig,
-    ],
+    [retunes, send],
   );
 
-  useEffect(() => {
-    handleLightingModeChangeRef.current = handleLightingModeChange;
-  }, [handleLightingModeChange]);
+  const changeTargets = useCallback(
+    async (targets: HueRuntimeTarget[], origin: LightingOrigin) =>
+      send({ targets: normalizeOutputTargets(targets), origin }),
+    [send],
+  );
 
-  // After the ref effect above, so the replay runs the handler of this commit.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: queuedModeReplay is the replay tick; the queued mode itself lives in a ref
-  useEffect(() => {
-    const queued = pendingModeChangeRef.current;
-    if (!queued) return;
-    pendingModeChangeRef.current = null;
-    modeTransitionLockRef.current = false;
-    setIsModeTransitioning(false);
-    void handleLightingModeChangeRef.current?.(queued);
-  }, [queuedModeReplay]);
+  const handleOutputTargetsChange = useCallback(
+    async (targets: HueRuntimeTarget[]) => {
+      await changeTargets(targets, LIGHTING_ORIGIN.USER);
+    },
+    [changeTargets],
+  );
 
-  const adoptSolidColor = useCallback((solid: SolidColorPayload) => {
-    setLightingModeState({ kind: LIGHTING_MODE_KIND.SOLID, solid });
-  }, []);
+  // Session-only: a cable falling out is not the user choosing to stop using the strip.
+  const dropUnpluggedUsbTarget = useCallback(
+    async (targets: HueRuntimeTarget[]) => {
+      await changeTargets(targets, LIGHTING_ORIGIN.USB_UNPLUG);
+    },
+    [changeTargets],
+  );
+
+  const endLightingOnUsbUnplug = useCallback(async () => {
+    // Off already: nothing runs, and there is nothing to report.
+    if (lightingModeRef.current.kind === LIGHTING_MODE_KIND.OFF) return false;
+    const result = await send({ targets: [], origin: LIGHTING_ORIGIN.USB_UNPLUG });
+    return result?.outcome.modeEnded ?? false;
+  }, [send]);
+
+  // The Devices card's Stop retrying and Retry stop. A second press while the
+  // first is in flight joins it.
+  const hueReleaseRef = useRef<Promise<void> | null>(null);
+  const stopHueOutput = useCallback(
+    (triggerSource: HueRuntimeTriggerSource) => {
+      if (hueReleaseRef.current !== null) return hueReleaseRef.current;
+      const release = (async () => {
+        try {
+          readReply(await releaseHueOutput(triggerSource));
+        } catch (error) {
+          console.error("[LumaSync] Hue stop from the Devices card failed:", error);
+        } finally {
+          hueReleaseRef.current = null;
+        }
+      })();
+      hueReleaseRef.current = release;
+      return release;
+    },
+    [readReply],
+  );
+
+  const restoreAtBoot = useCallback(
+    async (saved: BootLightingInput) => {
+      // Off carries no payload in the snapshot; the saved mode has both.
+      if (saved.lightingMode?.solid) rememberedRef.current.solid = saved.lightingMode.solid;
+      if (saved.lightingMode?.ambilight) rememberedRef.current.ambilight = saved.lightingMode.ambilight;
+      await send({ origin: LIGHTING_ORIGIN.BOOT }, { boot: true });
+    },
+    [send],
+  );
 
   return {
     lightingMode,
     selectedOutputTargets,
     activeOutputTargets,
-    isModeTransitioning,
+    // This window's own choices only. The snapshot's phase also moves for a
+    // settings refresh, and disabling the sliders for one would drop a drag.
+    isModeTransitioning: pendingChoices > 0,
     stopFailedNotice,
     startFailedNotice,
-    reportStartFailure: setStartFailedNotice,
     clearCapturePermissionNotice,
     hueLeftOutNotice,
-    reportHueLeftOut: raiseHueLeftOut,
     hueHeldOutReason,
-    bootHueRetryNotice: bootHueRetry.notice,
-    scheduleBootHueRetry: bootHueRetry.schedule,
+    bootHueRetryNotice,
     handleLightingModeChange,
     handleOutputTargetsChange,
     dropUnpluggedUsbTarget,
     endLightingOnUsbUnplug,
     stopHueOutput,
-    dispatch: dispatchSetLightingMode,
-    setLightingMode: setLightingModeState,
-    adoptSolidColor,
-    setSelectedOutputTargets,
-    setActiveOutputTargets,
-    lightingModeRef,
-    lastNonOffModeRef,
+    restoreAtBoot,
     selectedOutputTargetsRef,
-    activeOutputTargetsRef,
-    dispatchRef,
   };
 }

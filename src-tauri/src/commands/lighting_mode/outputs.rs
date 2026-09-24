@@ -21,8 +21,8 @@ use tauri::{AppHandle, Manager, Runtime, State};
 
 use super::hue_driver::{hue_driver_for, HueAreaVerdict, HueDriver};
 use super::snapshot::{
-    normalize_targets, publish_running, BootHueRetryState, HueLeftOutReason, LightingPhase,
-    LightingRuntimeSnapshot, OutputTarget,
+    parse_targets, publish_running, BootHueRetryState, HueLeftOutReason, LightingPhase,
+    LightingRuntimeSnapshot, OutputTarget, OutputTargets,
 };
 use super::tuning::{accepting_for_running, StoredTuning};
 use super::{
@@ -41,6 +41,25 @@ pub(crate) const BOOT_HUE_RETRY_POLL: Duration = Duration::from_secs(3);
 /// The bridge drops a silent session after ~10 s; after a killed process it
 /// took 10–20 s.
 pub(crate) const BOOT_HUE_RETRY_WINDOW: Duration = Duration::from_secs(25);
+
+/// A settings save waits this long for the edit to settle before the running
+/// mode is re-applied: the room map saves on every drag move.
+pub(crate) const SETTINGS_REFRESH_DEBOUNCE: Duration = Duration::from_millis(300);
+
+/// Saved keys the running mode reads when it is applied. A save of any of them,
+/// from any window, re-applies what runs once the edit settles. The LED
+/// calibration is not here: it is saved while a test pattern owns the strip,
+/// and the test's own stop re-reads it.
+const SETTINGS_THE_MODE_READS: &[&str] = &[
+    "selectedDisplayId",
+    "lightingIntensityPreset",
+    "colorCorrection",
+    "firmwareProfile",
+    "selectedChipType",
+    "ledColorOrder",
+    "roomMap",
+    "lastHueAreaId",
+];
 
 // ---------------------------------------------------------------------------
 // Wire shapes — `src/shared/contracts/lightingRuntime.ts`
@@ -64,14 +83,23 @@ impl LightingOrigin {
     }
 }
 
+/// `targets` arrives as names so an unknown one is answered with a coded
+/// status, which a failed deserialisation could never carry.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApplyOutputsRequest {
     #[serde(default)]
     pub mode: Option<LightingModeConfig>,
     #[serde(default)]
-    pub targets: Option<Vec<OutputTarget>>,
+    pub targets: Option<Vec<String>>,
     pub origin: LightingOrigin,
+}
+
+/// A request whose targets parsed.
+struct Request {
+    mode: Option<LightingModeConfig>,
+    targets: Option<OutputTargets>,
+    origin: LightingOrigin,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -114,9 +142,9 @@ pub(crate) struct LightingIntent {
     known: bool,
     pub(crate) kind: LightingModeKind,
     /// The selection for this session; a left-out target drops from it.
-    pub(crate) targets: Vec<OutputTarget>,
+    pub(crate) targets: OutputTargets,
     /// What `lastOutputTargets` holds — the persisted mode carries these.
-    pub(crate) saved_targets: Vec<OutputTarget>,
+    pub(crate) saved_targets: OutputTargets,
     /// A choice asked for `kind` and it has not been saved yet. Level, not
     /// edge: a choice superseded by an unplug is saved by whichever
     /// transaction runs it.
@@ -181,6 +209,11 @@ pub(crate) struct OutputsState {
     lease: Mutex<LeaseState>,
     hue_stop_unconfirmed: AtomicBool,
     boot_retry: Mutex<Option<BootRetry>>,
+    /// What the tray's "resume last mode" brings back.
+    last_non_off: Mutex<Option<LightingModeKind>>,
+    /// Bumped by every save of a setting the mode reads; a refresh runs only
+    /// if no later save arrived during its debounce.
+    settings_generation: AtomicU64,
 }
 
 fn locked<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -214,6 +247,16 @@ impl OutputsState {
         self.hue_stop_unconfirmed.load(Ordering::SeqCst)
     }
 
+    pub(crate) fn last_non_off(&self) -> Option<LightingModeKind> {
+        locked(&self.last_non_off).to_owned()
+    }
+
+    fn note_ran(&self, kind: LightingModeKind) {
+        if kind != LightingModeKind::Off {
+            locked(&self.last_non_off).replace(kind);
+        }
+    }
+
     fn owner(&self) -> HueOwner {
         locked(&self.hue_owner).to_owned()
     }
@@ -234,17 +277,26 @@ impl OutputsState {
     /// the request is a choice that named them.
     fn record_arrival(
         &self,
-        request: &ApplyOutputsRequest,
+        request: &Request,
         running_kind: LightingModeKind,
         persisted: Option<&PersistedShellState>,
-    ) -> Option<Vec<OutputTarget>> {
+    ) -> Option<OutputTargets> {
         let saved = || {
             persisted
                 .and_then(PersistedShellState::last_output_targets)
                 .map(|targets| {
-                    normalize_targets(targets.iter().filter_map(|t| OutputTarget::parse(t)))
+                    targets
+                        .iter()
+                        .filter_map(|name| {
+                            let target = OutputTarget::parse(name);
+                            if target.is_none() {
+                                warn!("[outputs] saved output target {name:?} is unknown; ignored");
+                            }
+                            target
+                        })
+                        .collect()
                 })
-                .unwrap_or_else(|| vec![OutputTarget::Usb])
+                .unwrap_or_else(|| OutputTargets::from([OutputTarget::Usb]))
         };
         let mut intent = locked(&self.intent);
         if request.origin == LightingOrigin::Boot {
@@ -253,11 +305,8 @@ impl OutputsState {
                 .clone()
                 .or_else(|| persisted.and_then(PersistedShellState::lighting_mode))
                 .unwrap_or_default();
-            let targets = request
-                .targets
-                .clone()
-                .map(normalize_targets)
-                .unwrap_or_else(saved);
+            self.note_ran(mode.kind);
+            let targets = request.targets.clone().unwrap_or_else(saved);
             intent.clone_from(&LightingIntent {
                 known: true,
                 kind: mode.kind,
@@ -281,7 +330,7 @@ impl OutputsState {
             intent.kind = mode.kind;
             intent.persist_mode = request.origin.is_choice();
         }
-        let targets = request.targets.clone().map(normalize_targets)?;
+        let targets = request.targets.clone()?;
         intent.targets = targets.clone();
         if request.origin.is_choice() {
             intent.saved_targets = targets.clone();
@@ -311,6 +360,14 @@ impl OutputsState {
 fn cancel_boot_retry<R: Runtime>(app: &AppHandle<R>, reason: &str) {
     let state = app.state::<LightingRuntimeState>();
     let Some(retry) = state.outputs.take_boot_retry() else {
+        // A wait that already gave up still says so; the choice answers it as
+        // it would a pending one. Without this the notice outlived the choice
+        // whenever the wait ended first.
+        if state.snapshot.read().boot_hue_retry == Some(BootHueRetryState::GaveUp) {
+            state
+                .snapshot
+                .publish(app, |snapshot| snapshot.boot_hue_retry = None);
+        }
         return;
     };
     info!("[outputs] boot Hue retry cancelled: {reason}");
@@ -329,11 +386,15 @@ fn cancel_boot_retry<R: Runtime>(app: &AppHandle<R>, reason: &str) {
 // Small readers
 // ---------------------------------------------------------------------------
 
-fn target_strings(targets: &[OutputTarget]) -> Vec<String> {
-    targets.iter().map(|t| t.as_str().to_string()).collect()
+fn target_strings<'t>(targets: impl IntoIterator<Item = &'t OutputTarget>) -> Vec<String> {
+    targets
+        .into_iter()
+        .map(|t| t.as_str().to_string())
+        .collect()
 }
 
 /// The targets a running mode drives. Absent or empty is USB (legacy D-10).
+/// `apply_mode_change` refuses an unknown name, so none runs to be dropped here.
 fn running_targets(mode: &LightingModeConfig) -> Vec<OutputTarget> {
     if mode.kind == LightingModeKind::Off {
         return Vec::new();
@@ -342,7 +403,12 @@ fn running_targets(mode: &LightingModeConfig) -> Vec<OutputTarget> {
     if targets.is_empty() {
         return vec![OutputTarget::Usb];
     }
-    normalize_targets(targets.iter().filter_map(|t| OutputTarget::parse(t)))
+    targets
+        .iter()
+        .filter_map(|t| OutputTarget::parse(t))
+        .collect::<OutputTargets>()
+        .into_iter()
+        .collect()
 }
 
 /// `isHueStartCodeOk`: the stream is up, or on its way up.
@@ -370,10 +436,14 @@ fn hue_left_out_reason(had_config: bool, start_code: Option<&str>) -> HueLeftOut
     }
 }
 
+/// Refusals `apply_mode_change` returns before it touches the running mode.
 fn is_gate_code(code: &str) -> bool {
     matches!(
         code,
-        "DEVICE_NOT_CONNECTED" | "HUE_NOT_READY" | "LIGHTING_MODE_SHUTTING_DOWN"
+        "DEVICE_NOT_CONNECTED"
+            | "HUE_NOT_READY"
+            | "LIGHTING_MODE_SHUTTING_DOWN"
+            | "LIGHTING_MODE_INVALID_CONFIG"
     )
 }
 
@@ -444,7 +514,7 @@ fn persist_mode<R: Runtime>(
     app: &AppHandle<R>,
     kind: &LightingModeKind,
     stored: &StoredTuning,
-    saved_targets: &[OutputTarget],
+    saved_targets: &OutputTargets,
 ) {
     let mut mode = shell_state::persisted(app)
         .and_then(|state| state.lighting_mode_object())
@@ -484,7 +554,7 @@ fn persist_mode<R: Runtime>(
     }
 }
 
-fn persist_targets<R: Runtime>(app: &AppHandle<R>, targets: &[OutputTarget]) {
+fn persist_targets<R: Runtime>(app: &AppHandle<R>, targets: &OutputTargets) {
     let mut set = Map::new();
     set.insert(
         "lastOutputTargets".to_string(),
@@ -532,6 +602,17 @@ fn read_running<R: Runtime>(app: &AppHandle<R>) -> Result<LightingModeConfig, St
     Ok(owner.active_mode.clone())
 }
 
+/// A test pattern owns the strip: its own stop restores the mode, re-reading
+/// the saved settings, so a refresh leaves it alone.
+fn test_pattern_active<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {
+    let state = app.state::<LightingRuntimeState>();
+    let owner = state
+        .runtime
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    Ok(owner.preview.active_test_pattern.is_some())
+}
+
 // ---------------------------------------------------------------------------
 // The transaction
 // ---------------------------------------------------------------------------
@@ -544,12 +625,15 @@ enum TxKind {
     BootRetry,
     /// `previous` is the selection before the strip went away.
     UsbUnplug {
-        previous: Vec<OutputTarget>,
+        previous: OutputTargets,
     },
     Release {
         trigger: HueRuntimeTriggerSource,
-        previous: Vec<OutputTarget>,
+        previous: OutputTargets,
     },
+    /// A saved setting the running mode reads changed: re-apply what runs, on
+    /// what it runs on. Changes no intent and saves nothing.
+    Refresh,
 }
 
 impl TxKind {
@@ -566,7 +650,7 @@ impl TxKind {
 
     /// The selection to put back when the mode ends because its last target
     /// went: the user did not deselect anything.
-    fn selection_to_keep(&self) -> Option<Vec<OutputTarget>> {
+    fn selection_to_keep(&self) -> Option<OutputTargets> {
         match self {
             Self::UsbUnplug { previous } | Self::Release { previous, .. } => Some(previous.clone()),
             _ => None,
@@ -686,6 +770,13 @@ impl<'a, R: Runtime> Transaction<'a, R> {
 
     async fn reconcile(&mut self) -> Result<Ending, String> {
         let intent = self.state.outputs.intent();
+        if self.kind == TxKind::Refresh {
+            if self.state.is_closing() {
+                return Ok(Ending::ShuttingDown);
+            }
+            let running = blocking(self.app, read_running).await?;
+            return self.reconcile_refresh(&intent, &running).await;
+        }
         self.publish_phase(if intent.kind == LightingModeKind::Off {
             LightingPhase::Stopping
         } else {
@@ -1001,6 +1092,51 @@ impl<'a, R: Runtime> Transaction<'a, R> {
         Ok(Ending::Applied)
     }
 
+    /// Re-applies the running mode on what it runs on, so the payload is
+    /// stamped from the settings as saved now. A mode that ended, or a test
+    /// pattern that owns the strip, is left alone.
+    async fn reconcile_refresh(
+        &mut self,
+        intent: &LightingIntent,
+        running: &LightingModeConfig,
+    ) -> Result<Ending, String> {
+        if running.kind == LightingModeKind::Off || blocking(self.app, test_pattern_active).await? {
+            return Ok(Ending::Applied);
+        }
+        let targets = running_targets(running);
+        let hue_ran_before = targets.contains(&OutputTarget::Hue);
+        self.state.tuning.close(Some(running.kind)).await;
+        self.publish_phase(LightingPhase::Applying);
+        let result = match self.apply(&running.kind, &targets).await {
+            Ok(result) => result,
+            Err(error) => {
+                warn!("[outputs] settings refresh failed: {error}");
+                return self
+                    .refuse(
+                        intent,
+                        running,
+                        running.clone(),
+                        error,
+                        hue_ran_before,
+                        true,
+                    )
+                    .await;
+            }
+        };
+        if result.status.code == "LIGHTING_MODE_SHUTTING_DOWN" {
+            return Ok(Ending::ShuttingDown);
+        }
+        if is_gate_code(&result.status.code) || result.mode.kind != running.kind {
+            let reason = result.status.code.clone();
+            return self
+                .refuse(intent, running, result.mode, reason, hue_ran_before, true)
+                .await;
+        }
+        self.carried = true;
+        self.commit().await;
+        Ok(Ending::Applied)
+    }
+
     /// The mode did not run. What was running still runs — unless it drives a
     /// target the user has just deselected, which must not stay lit. A torn
     /// down mode (`running_after` Off) is a failed start, not a refusal.
@@ -1213,17 +1349,19 @@ impl<'a, R: Runtime> Transaction<'a, R> {
             let ticket = self.ticket;
             let hue_live = self.hue_live();
             let hue_unconfirmed = self.state.outputs.hue_stop_unconfirmed();
-            self.state.snapshot.publish(self.app, |snapshot| {
+            let published = self.state.snapshot.publish(self.app, |snapshot| {
                 // A Hue stop after the last apply changed what is driven.
                 let mode = snapshot.mode.clone();
                 snapshot.set_running(&mode, hue_live, hue_unconfirmed);
                 snapshot.phase = LightingPhase::Idle;
                 snapshot.request_id = Some(ticket);
-                snapshot.selected_targets = intent.targets.clone();
+                snapshot.selected_targets = intent.targets.iter().copied().collect();
                 if let Some(held_out) = held_out {
                     snapshot.hue_held_out_reason = held_out;
                 }
-            })
+            });
+            self.state.outputs.note_ran(published.mode.kind);
+            published
         };
         info!(
             "[outputs] #{} {} — running {:?} on {:?}",
@@ -1262,11 +1400,37 @@ async fn run_ticketed<R: Runtime>(
     }
 }
 
+/// A request that names an output this build does not know. Nothing was
+/// recorded, saved or touched.
+fn invalid_request<R: Runtime>(app: &AppHandle<R>, reason: String) -> ApplyOutputsResult {
+    let state = app.state::<LightingRuntimeState>();
+    warn!("[outputs] request refused: {reason}");
+    ApplyOutputsResult {
+        status: outputs_status(
+            "OUTPUTS_INVALID_REQUEST",
+            "The lighting request named an output that does not exist; nothing was changed.",
+            Some(reason),
+        ),
+        request_id: state.outputs.lease_id(),
+        snapshot: state.snapshot.read(),
+        outcome: ApplyOutputsOutcome::default(),
+    }
+}
+
 /// The body of `apply_outputs`, over an `AppHandle` so tests drive it directly.
 pub(crate) async fn apply_outputs_with<R: Runtime>(
     app: &AppHandle<R>,
     request: ApplyOutputsRequest,
 ) -> Result<ApplyOutputsResult, String> {
+    let targets = match request.targets.as_ref().map(parse_targets).transpose() {
+        Ok(targets) => targets,
+        Err(reason) => return Ok(invalid_request(app, reason)),
+    };
+    let request = Request {
+        mode: request.mode,
+        targets,
+        origin: request.origin,
+    };
     if request.origin == LightingOrigin::LeaseHue {
         return lease_hue(app, request).await;
     }
@@ -1329,6 +1493,118 @@ pub(crate) async fn apply_outputs_with<R: Runtime>(
     run_ticketed(app, ticket, kind).await
 }
 
+/// The body of the settings refresh, over an `AppHandle` so tests drive it
+/// directly. `None` when nothing runs to refresh.
+///
+/// It takes the newest ticket as it stands rather than a new one: a refresh
+/// must never supersede a choice in flight, and a choice arriving after it
+/// supersedes it — that choice re-applies anyway, since the save marked the
+/// running payload stale.
+pub(crate) async fn refresh_running_with<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<Option<ApplyOutputsResult>, String> {
+    let state = app.state::<LightingRuntimeState>();
+    if state.snapshot.read().mode.kind == LightingModeKind::Off {
+        return Ok(None);
+    }
+    let ticket = state.outputs.latest_ticket.load(Ordering::SeqCst);
+    run_ticketed(app, ticket, TxKind::Refresh).await.map(Some)
+}
+
+/// Called for every write a window makes to the shell state. A write naming a
+/// setting the running mode reads re-applies the mode once the edit settles.
+/// This replaces the per-setting re-dispatches each settings panel used to
+/// make, which reached only the window that made them.
+pub fn note_settings_saved<'k, R: Runtime>(
+    app: &AppHandle<R>,
+    keys: impl IntoIterator<Item = &'k str>,
+) {
+    if !keys
+        .into_iter()
+        .any(|key| SETTINGS_THE_MODE_READS.contains(&key))
+    {
+        return;
+    }
+    let Some(state) = app.try_state::<LightingRuntimeState>() else {
+        return;
+    };
+    let generation = state
+        .outputs
+        .settings_generation
+        .fetch_add(1, Ordering::SeqCst)
+        + 1;
+    state.tuning.mark_stale();
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(SETTINGS_REFRESH_DEBOUNCE).await;
+        let Some(state) = app.try_state::<LightingRuntimeState>() else {
+            return;
+        };
+        if state.outputs.settings_generation.load(Ordering::SeqCst) != generation {
+            return;
+        }
+        match refresh_running_with(&app).await {
+            Ok(Some(result)) => info!("[outputs] settings refresh: {}", result.status.code),
+            Ok(None) => {}
+            Err(error) => warn!("[outputs] settings refresh failed: {error}"),
+        }
+    });
+}
+
+/// The tray's three lighting items. They run the transaction from Rust, so
+/// they work whether or not a window is loaded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrayLighting {
+    Off,
+    ResumeLastMode,
+    SolidColor,
+}
+
+/// The request a tray item sends, or `None` when there is nothing to resume.
+pub(crate) fn tray_request<R: Runtime>(
+    app: &AppHandle<R>,
+    item: TrayLighting,
+) -> Option<ApplyOutputsRequest> {
+    let kind = match item {
+        TrayLighting::Off => LightingModeKind::Off,
+        TrayLighting::SolidColor => LightingModeKind::Solid,
+        TrayLighting::ResumeLastMode => app
+            .state::<LightingRuntimeState>()
+            .outputs
+            .last_non_off()
+            .or_else(|| {
+                shell_state::persisted(app)
+                    .and_then(|state| state.lighting_mode())
+                    .map(|mode| mode.kind)
+                    .filter(|kind| *kind != LightingModeKind::Off)
+            })?,
+    };
+    // The payloads are left out on purpose: the transaction keeps the last
+    // colour and the last Ambilight settings.
+    Some(ApplyOutputsRequest {
+        mode: Some(LightingModeConfig {
+            kind,
+            ..LightingModeConfig::default()
+        }),
+        targets: None,
+        origin: LightingOrigin::Tray,
+    })
+}
+
+pub fn run_tray_lighting<R: Runtime>(app: &AppHandle<R>, item: TrayLighting) {
+    let Some(request) = tray_request(app, item) else {
+        info!("[outputs] tray {item:?}: no earlier mode to resume");
+        return;
+    };
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        match apply_outputs_with(&app, request).await {
+            Ok(result) => info!("[outputs] tray {item:?}: {}", result.status.code),
+            Err(error) => warn!("[outputs] tray {item:?} failed: {error}"),
+        }
+    });
+}
+
 /// The body of `release_hue_output`.
 pub(crate) async fn release_hue_with<R: Runtime>(
     app: &AppHandle<R>,
@@ -1354,7 +1630,7 @@ pub(crate) async fn release_hue_with<R: Runtime>(
 /// lights the test never turned on.
 async fn lease_hue<R: Runtime>(
     app: &AppHandle<R>,
-    request: ApplyOutputsRequest,
+    request: Request,
 ) -> Result<ApplyOutputsResult, String> {
     let state = app.state::<LightingRuntimeState>();
     let _turn = state.transitions.lock().await;
@@ -1625,9 +1901,7 @@ async fn run_boot_retry<R: Runtime>(
                 }
                 BootRetryPlan::Rejoin { .. } => {
                     state.outputs.update_intent(|intent| {
-                        intent.targets = normalize_targets(
-                            intent.targets.iter().copied().chain([OutputTarget::Hue]),
-                        )
+                        intent.targets.insert(OutputTarget::Hue);
                     });
                 }
             }

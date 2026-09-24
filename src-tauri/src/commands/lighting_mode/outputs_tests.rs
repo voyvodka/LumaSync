@@ -76,7 +76,7 @@ fn request(
 ) -> ApplyOutputsRequest {
     ApplyOutputsRequest {
         mode,
-        targets: targets.map(<[OutputTarget]>::to_vec),
+        targets: targets.map(|targets| targets.iter().map(|t| t.as_str().to_string()).collect()),
         origin,
     }
 }
@@ -1552,8 +1552,54 @@ fn a_boot_restore_left_on_usb_adds_hue_back_once_the_area_frees() {
     assert!(rig.written_keys().is_empty(), "the rejoin is session-only");
 }
 
+/// A paused clock auto-advances whenever the runtime has nothing but timers to
+/// run — including while a transaction awaits `spawn_blocking` on Tauri's own
+/// runtime — so an unheld wait can burn its whole window in virtual time before
+/// the choice below arrives. The probe is held at the door instead: a held
+/// probe is not a timer, so the wait is still pending when the choice lands.
 #[test]
 fn a_user_choice_cancels_the_boot_wait() {
+    let rig = Rig::new(RigSetup {
+        state: json!({
+            "lightingMode": { "kind": "ambilight", "ambilight": { "brightness": 1 } },
+            "lastOutputTargets": ["hue"]
+        }),
+        ..RigSetup::default()
+    });
+    rig.hue.script_starts(&["CONFIG_NOT_READY_GATE_BLOCKED"]);
+    rig.hue.script_probes(&[HueAreaVerdict::Busy; 20]);
+    let probe_gate = rig.hue.hold_probes();
+    let handle = rig.handle();
+
+    paused_runtime().block_on(async {
+        apply_outputs_with(&handle, request(LightingOrigin::Boot, None, None))
+            .await
+            .unwrap();
+        while rig.hue.probes_made() == 0 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        apply_outputs_with(&handle, user(Some(off()), None))
+            .await
+            .unwrap();
+        // The held probe now answers busy; the wait must see the cancel.
+        probe_gate.add_permits(20);
+        tokio::time::sleep(BOOT_HUE_RETRY_WINDOW).await;
+        assert_eq!(rig.hue.probes_made(), 1, "the wait kept polling");
+    });
+    assert_eq!(rig.state().snapshot.read().boot_hue_retry, None);
+    assert!(
+        !rig.published()
+            .iter()
+            .any(|s| s["bootHueRetry"] == json!("waiting")),
+        "a cancelled wait still announced itself"
+    );
+    assert_eq!(rig.running().kind, LightingModeKind::Off);
+}
+
+/// The lag the paused clock produced on CI, forced: the wait gives up first,
+/// and the user's choice still takes its notice down.
+#[test]
+fn a_user_choice_after_the_wait_gave_up_takes_its_notice_down() {
     let rig = Rig::new(RigSetup {
         state: json!({
             "lightingMode": { "kind": "ambilight", "ambilight": { "brightness": 1 } },
@@ -1569,18 +1615,18 @@ fn a_user_choice_cancels_the_boot_wait() {
         apply_outputs_with(&handle, request(LightingOrigin::Boot, None, None))
             .await
             .unwrap();
-        while rig.hue.probes_made() == 0 {
-            tokio::time::sleep(Duration::from_millis(10)).await;
+        tokio::time::sleep(BOOT_HUE_RETRY_WINDOW + BOOT_HUE_RETRY_POLL).await;
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while rig.state().snapshot.read().boot_hue_retry != Some(BootHueRetryState::GaveUp) {
+            assert!(Instant::now() < deadline, "the wait never gave up");
+            tokio::time::sleep(Duration::from_millis(500)).await;
         }
+
         apply_outputs_with(&handle, user(Some(off()), None))
             .await
             .unwrap();
-        let probes = rig.hue.probes_made();
-        tokio::time::sleep(BOOT_HUE_RETRY_WINDOW).await;
-        assert_eq!(rig.hue.probes_made(), probes, "the wait kept polling");
     });
     assert_eq!(rig.state().snapshot.read().boot_hue_retry, None);
-    assert_eq!(rig.running().kind, LightingModeKind::Off);
 }
 
 #[test]

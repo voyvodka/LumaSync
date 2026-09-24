@@ -2,7 +2,8 @@
  * Tray Controller
  *
  * Frontend bridge for tray menu actions:
- * - Quick actions: lights off, resume last mode, solid color
+ * - Show LED Preview: opens the control popup (the lighting items — off,
+ *   resume, solid — run the lighting transaction in Rust, never in a window)
  * - Label i18n: push translated strings to Rust via update_tray_labels
  * - Startup toggle: managed via plugin-autostart (no tray checkbox)
  *
@@ -47,24 +48,6 @@ export async function setStartupTrayChecked(_checked: boolean): Promise<void> {}
 // ---------------------------------------------------------------------------
 // Tray quick action event listeners
 // ---------------------------------------------------------------------------
-
-export async function listenTrayLightsOff(
-  onTrigger: () => void
-): Promise<UnlistenFn> {
-  return listen("tray:lights-off", () => onTrigger());
-}
-
-export async function listenTrayResumeLastMode(
-  onTrigger: () => void
-): Promise<UnlistenFn> {
-  return listen("tray:resume-last-mode", () => onTrigger());
-}
-
-export async function listenTraySolidColor(
-  onTrigger: () => void
-): Promise<UnlistenFn> {
-  return listen("tray:solid-color", () => onTrigger());
-}
 
 /**
  * v1.6 — listen for the "Show LED Preview" tray action. The Rust tray handler

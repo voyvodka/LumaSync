@@ -38,13 +38,30 @@ import {
   stopEdgeSignalStream,
   subscribeToEdgeSignalStream,
 } from "../events";
+import { dispatch } from "../dispatch";
 import { rejectSerialPort, setSerialConnected, setWledBound } from "../hotplug";
 import { ROOM_MAP_PRESETS, ROOM_MAP_PRESET_IDS, type RoomMapPresetId } from "../roomMaps";
 import { PICKER_PATTERN_KINDS } from "../../src/features/preview/ui/PatternPicker";
+import { LIGHTING_ORIGIN, LIGHTING_RUNTIME_COMMANDS } from "../../src/shared/contracts/lightingRuntime";
 import { MOCK_HAS_REAL_IPC } from "../runtime";
 import { SCENARIOS, SCENARIO_IDS, type ScenarioId } from "../scenarios";
 import { clearStoredWorld, getWorld, mutate, setWorld, subscribe } from "../state";
 import type { MockWorld } from "../state";
+
+/**
+ * The tray's lighting items run the transaction in Rust and never reach a
+ * window, so the panel sends what `tray_request` in `outputs.rs` would. Resume
+ * reads the saved mode, as Rust does before anything has run this session.
+ */
+async function runTrayLighting(item: "off" | "resume" | "solid"): Promise<void> {
+  const saved = getWorld().shellState?.lightingMode?.kind;
+  const kind =
+    item === "off" ? "off" : item === "solid" ? "solid" : saved && saved !== "off" ? saved : null;
+  if (kind === null) return;
+  await dispatch(LIGHTING_RUNTIME_COMMANDS.APPLY_OUTPUTS, {
+    request: { mode: { kind }, origin: LIGHTING_ORIGIN.TRAY },
+  });
+}
 
 const STRIPES = "repeating-linear-gradient(45deg, #1c1917 0 8px, #451a03 8px 16px)";
 const FONT = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace';
@@ -1177,9 +1194,22 @@ export function DevPanel({ onReloadApp }: PanelProps) {
               <div style={{ display: "grid", gap: 4 }}>
                 {(
                   [
-                    [SHELL_EVENTS.TRAY_LIGHTS_OFF, "Tray → Lights off"],
-                    [SHELL_EVENTS.TRAY_RESUME_LAST_MODE, "Tray → Resume last mode"],
-                    [SHELL_EVENTS.TRAY_SOLID_COLOR, "Tray → Solid colour"],
+                    ["off", "Tray → Lights off"],
+                    ["resume", "Tray → Resume last mode"],
+                    ["solid", "Tray → Solid colour"],
+                  ] as const
+                ).map(([item, label]) => (
+                  <button
+                    key={item}
+                    type="button"
+                    style={{ ...btn, width: "100%", textAlign: "left" }}
+                    onClick={() => void runTrayLighting(item)}
+                  >
+                    {label}
+                  </button>
+                ))}
+                {(
+                  [
                     [SHELL_EVENTS.TRAY_SHOW_LED_PREVIEW, "Tray → Show LED preview"],
                     [SHELL_EVENTS.CLOSE_TO_TRAY, "Window → Close to tray"],
                   ] as const

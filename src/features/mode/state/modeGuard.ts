@@ -1,4 +1,5 @@
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
+import { LED_CALIBRATION_MAX_TOTAL_LEDS } from "@/shared/contracts/calibration";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 
 export const MODE_GUARD_REASONS = {
@@ -35,7 +36,9 @@ export function canEnableLedMode(
     selectedTargets.length === 0 ||
     selectedTargets.includes("usb");
 
-  if (usesUsb && !calibration) {
+  // Rust refuses a layout past the cap, so offering the mode would only fail.
+  const usable = calibration !== undefined && calibration.totalLeds <= LED_CALIBRATION_MAX_TOTAL_LEDS;
+  if (usesUsb && !usable) {
     return {
       canEnable: false,
       reason: MODE_GUARD_REASONS.CALIBRATION_REQUIRED,

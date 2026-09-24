@@ -31,7 +31,8 @@ vi.mock("@/features/calibration/calibrationApi", () => ({
   updateDisplayOverlayPreview: () => Promise.resolve({ ok: true }),
 }));
 
-vi.mock("@/features/hue/state/hueTestLease", () => ({
+vi.mock("@/features/mode/modeApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/features/mode/modeApi")>()),
   acquireHueForTest: vi.fn(),
   releaseHueAfterTest: vi.fn(),
 }));

@@ -30,7 +30,7 @@ import {
   MODE_GUARD_REASONS,
   type ModeGuardReason,
 } from "@/features/mode/state/modeGuard";
-import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hue";
+import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
 import { outputAvailability } from "@/features/mode/model/outputAvailability";
 import { FIRMWARE_PROFILE, type FirmwareProfile } from "@/shared/contracts/device";
@@ -54,14 +54,6 @@ interface CompactLayoutProps {
   isModeTransitioning: boolean;
   modeLockReason: ModeGuardReason | null;
   onLightingModeChange: (next: LightingModeConfig) => void;
-  /**
-   * Compact ↔ Full feature parity for the lighting
-   * smoothing preset. The compact ambilight card mounts the same
-   * `LightingSmoothingPresetControl` the Lights section uses, and forwards
-   * a chosen preset back to the parent so the running worker hot-reloads.
-   * Optional so test fixtures can mount the layout without wiring it.
-   */
-  onHueIntensityPresetChange?: (preset: HueIntensityPreset) => void;
 }
 
 const DEFAULT_SOLID = { r: 255, g: 220, b: 180, brightness: 1 } as const;
@@ -82,7 +74,6 @@ export function CompactLayout({
   isModeTransitioning,
   modeLockReason,
   onLightingModeChange,
-  onHueIntensityPresetChange,
 }: CompactLayoutProps) {
   const { t } = useTranslation();
 
@@ -248,9 +239,7 @@ export function CompactLayout({
                 preset hot-reloads the worker through App.tsx without a
                 mode toggle. */}
             <div className="lm-compact-smoothing">
-              <LightingSmoothingPresetControl
-                onPresetChange={(next) => onHueIntensityPresetChange?.(next)}
-              />
+              <LightingSmoothingPresetControl />
             </div>
           </div>
         )}

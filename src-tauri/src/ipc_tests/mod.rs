@@ -75,6 +75,26 @@ where
     app
 }
 
+/// Grants the main window commands no window's capability grants any more.
+/// The old mode commands stay registered, and their own tests still reach
+/// them over IPC; nothing in the frontend does.
+pub fn grant_main_for_tests(app: &App<MockRuntime>, permissions: &[&str]) {
+    let mut capability =
+        tauri::ipc::CapabilityBuilder::new("ungranted-under-test").window(crate::MAIN_WINDOW_LABEL);
+    for permission in permissions {
+        capability = capability.permission(*permission);
+    }
+    app.add_capability(capability)
+        .expect("the test capability resolves");
+}
+
+/// The permissions of the mode commands the transaction replaced.
+pub const OLD_MODE_COMMANDS: [&str; 3] = [
+    "allow-set-lighting-mode",
+    "allow-stop-lighting",
+    "allow-get-lighting-mode-status",
+];
+
 /// The webview every invoke is routed through. Labelled `main` to match
 /// `MAIN_WINDOW_LABEL`, since commands that call `emit_to` target it by name.
 pub fn main_webview(app: &App<MockRuntime>) -> WebviewWindow<MockRuntime> {

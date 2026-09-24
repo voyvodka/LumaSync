@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { LedChipType, LedColorOrder } from "@/shared/contracts/device";
 import type { DisplayInfo } from "@/shared/contracts/display";
 import type { HueChannelPlacementOverride, HueRuntimeTriggerSource } from "@/shared/contracts/hue";
 import { DEFAULT_ROOM_MAP, hueChannelsForArea, mergeHueChannels } from "@/shared/contracts/roomMap";
@@ -46,10 +45,6 @@ export interface DeviceSectionProps {
    * count live. Inert when omitted.
    */
   onNavigateToRoomMap?: () => void;
-  /** Forwarded to the chip-type picker; see `UsbStripsCategoryProps`. */
-  onChipTypeChange?: (next: LedChipType) => void;
-  /** Forwarded to the colour-order control; see `UsbStripsCategoryProps`. */
-  onColorOrderChange?: (next: LedColorOrder) => void;
   /** Forwarded to the Hue card; see `HueBridgesCategoryProps.onStopHue`. */
   onStopHueOutput: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
   /** Opens a category from outside, e.g. a notice's "Devices" action for Hue. */
@@ -108,8 +103,6 @@ function RailButton({ category, icon, label, count, countLabel, active, onClick 
 
 export function DeviceSection({
   onNavigateToRoomMap,
-  onChipTypeChange,
-  onColorOrderChange,
   onStopHueOutput,
   categoryRequest = null,
 }: DeviceSectionProps) {
@@ -330,8 +323,6 @@ export function DeviceSection({
           flagPersistError={usbPersistError.raise}
           clearPersistError={usbPersistError.clear}
           onNavigateToRoomMap={onNavigateToRoomMap}
-          onChipTypeChange={onChipTypeChange}
-          onColorOrderChange={onColorOrderChange}
           activeWledIp={activeWledIp}
         />
 

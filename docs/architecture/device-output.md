@@ -90,10 +90,11 @@ fast-path equality list that forces a restart, because a restart re-opens screen
 byte shuffle. WLED ignores it — WLED has its own per-output colour order, and applying both would
 correct twice.
 
-The main window stamps the order on every mode payload from `useModeRuntimeConfig` (primed from
-`ledColorOrder`, `rgb` when unset), so Rust only reads it off disk for callers that do not stamp.
-The stamp is caller-wins, unlike chip type and profile, which means nothing may put a `colorOrder`
-into the persisted `lightingMode` — `normalizeColorOrder` never invents one for that reason. The
+The lighting transaction stamps the order from `ledColorOrder` when it applies a mode (`rgb` when
+unset), and a save of `ledColorOrder` re-applies the running mode, which retunes the order in place
+(`lighting-transaction.md`, "Settings refresh"). The stamp is caller-wins for anything that does
+send one, unlike chip type and profile, which means nothing may put a `colorOrder` into the persisted
+`lightingMode` — `normalizeColorOrder` never invents one for that reason. The
 Identify flow (`useColorOrderIdentify.ts`) runs one `channelProbe` per slot and saves the three
 answers as read. It applies in a fixed order: save, then stop the probe, then retune. Stopping
 restores the prior mode with its stamps re-read from disk, so the save must land first; the retune

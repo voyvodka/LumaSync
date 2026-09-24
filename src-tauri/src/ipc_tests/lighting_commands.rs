@@ -1,17 +1,21 @@
-//! Lighting mode state machine over IPC.
+//! Lighting mode state machine over IPC. No window calls these commands since
+//! the lighting transaction took over; they stay registered, so the tests
+//! grant them to the test window.
 
 use serde_json::json;
 use tauri::test::MockRuntime;
 use tauri::App;
 
-use super::{invoke, main_webview, mock_app, status_code};
+use super::{grant_main_for_tests, invoke, main_webview, mock_app, status_code, OLD_MODE_COMMANDS};
 
 fn app() -> App<MockRuntime> {
-    mock_app(tauri::generate_handler![
+    let app = mock_app(tauri::generate_handler![
         crate::commands::lighting_mode::set_lighting_mode,
         crate::commands::lighting_mode::get_lighting_mode_status,
         crate::commands::lighting_mode::stop_lighting
-    ])
+    ]);
+    grant_main_for_tests(&app, &OLD_MODE_COMMANDS);
+    app
 }
 
 #[test]
@@ -108,7 +112,9 @@ mod transitions {
     use tauri::test::MockRuntime;
     use tauri::{App, Listener, Manager, WebviewWindow};
 
-    use super::super::{invoke, main_webview, mock_app, status_code};
+    use super::super::{
+        grant_main_for_tests, invoke, main_webview, mock_app, status_code, OLD_MODE_COMMANDS,
+    };
     use crate::commands::device_connection::ActiveSinkRegistry;
     use crate::commands::lighting_mode::{
         stop_lighting_blocking, LightingRuntimeState, LIGHTING_MODE_CHANGED_EVENT,
@@ -124,6 +130,7 @@ mod transitions {
             crate::commands::lighting_mode::stop_lighting,
             crate::commands::lighting_mode::get_lighting_mode_status
         ]);
+        grant_main_for_tests(&app, &OLD_MODE_COMMANDS);
         let receiver = UdpSocket::bind("127.0.0.1:0").expect("bind receiver");
         let config = WledSinkConfig {
             ip: "127.0.0.1".parse().expect("loopback"),

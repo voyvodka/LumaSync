@@ -42,18 +42,15 @@ export const EDGE_SIGNAL_INTERVAL_MS = 100;
 type Rgb = [number, number, number];
 
 /**
- * Tray menu items, the window close intercept, and the startup-state echo.
+ * The tray's preview item, the window close intercept, and the startup-state
+ * echo.
  *
  * These have no `invoke` at all — the tray lives in Rust and there is no tray
- * in a browser tab, so before this list the four tray actions and the
- * close-to-tray path had no reachable trigger anywhere in the mock. Naming
- * them here is the only way those handlers get exercised outside a packaged
- * build.
+ * in a browser tab, so before this list they had no reachable trigger anywhere
+ * in the mock. The tray's three lighting items are not events: Rust runs them
+ * itself, and the panel sends the request they make.
  */
 export const SHELL_EVENTS = {
-  TRAY_LIGHTS_OFF: "tray:lights-off",
-  TRAY_RESUME_LAST_MODE: "tray:resume-last-mode",
-  TRAY_SOLID_COLOR: "tray:solid-color",
   TRAY_SHOW_LED_PREVIEW: "tray:show-led-preview",
   TRAY_STARTUP_STATE_CHANGED: "tray:startup-state-changed",
   CLOSE_TO_TRAY: "shell:close-to-tray",

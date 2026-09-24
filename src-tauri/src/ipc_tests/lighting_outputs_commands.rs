@@ -1,28 +1,22 @@
-//! The lighting transaction's commands over IPC. No window is granted them
-//! yet — nothing in the frontend calls them until the callers switch over —
-//! so these tests add a capability for the main window at runtime.
+//! The lighting transaction's commands over IPC, through the main window's
+//! real grants. `get_lighting_mode_status` is no longer granted to any window;
+//! its lock-free read is still pinned here, so the test grants it.
 
 use std::sync::{mpsc, Arc};
 use std::time::Duration;
 
 use serde_json::{json, Value};
-use tauri::ipc::CapabilityBuilder;
 use tauri::test::MockRuntime;
 use tauri::{App, Manager, WebviewWindow};
 
-use super::{assert_camel_case_keys, invoke, main_webview, mock_app, status_code};
+use super::{
+    assert_camel_case_keys, grant_main_for_tests, invoke, main_webview, mock_app, status_code,
+};
 use crate::commands::device_connection::SerialConnectionState;
 use crate::commands::led_output::{LedOutputBridge, LedOutputError, LedPacketSender};
 use crate::commands::lighting_mode::hue_driver::HueDriverHandle;
 use crate::commands::lighting_mode::{EventLog, FakeHue, LightingRuntimeState};
 use crate::commands::shell_state::ShellStateStore;
-
-const COMMANDS: [&str; 4] = [
-    "allow-apply-outputs",
-    "allow-retune-lighting",
-    "allow-release-hue-output",
-    "allow-get-lighting-runtime",
-];
 
 struct SilentStrip;
 
@@ -45,13 +39,7 @@ fn app() -> App<MockRuntime> {
         crate::commands::lighting_mode::get_lighting_mode_status
     ]);
     app.manage(HueDriverHandle(FakeHue::new(Arc::new(EventLog::default()))));
-    let mut capability =
-        CapabilityBuilder::new("lighting-transaction-under-test").window(crate::MAIN_WINDOW_LABEL);
-    for permission in COMMANDS {
-        capability = capability.permission(permission);
-    }
-    app.add_capability(capability)
-        .expect("the test capability resolves");
+    grant_main_for_tests(&app, &["allow-get-lighting-mode-status"]);
     app.state::<LightingRuntimeState>()
         .replace_output_bridge_for_tests(LedOutputBridge::from_sender(Arc::new(SilentStrip)));
     {

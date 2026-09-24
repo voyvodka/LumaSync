@@ -72,8 +72,11 @@ impl PersistedShellState {
         )
     }
 
+    /// Clamped as the frontend's normaliser clamps it, so a value an older
+    /// build saved still runs rather than failing the mode's range check.
     pub fn color_correction(&self) -> Option<ColorCorrectionConfig> {
         self.read("colorCorrection")
+            .map(super::lighting_mode::config_check::clamp_color_correction)
     }
 
     pub fn firmware_profile(&self) -> Option<FirmwareProfile> {
@@ -616,6 +619,20 @@ pub async fn get_shell_state(
     Ok(store.snapshot())
 }
 
+/// A window's write: announced, and handed to the lighting runtime, which
+/// re-applies the running mode when a setting it reads changed.
+fn window_wrote<R: Runtime>(app: &AppHandle<R>, changed: &ShellStateChanged) {
+    emit_changed(app, changed);
+    super::lighting_mode::outputs::note_settings_saved(
+        app,
+        changed
+            .set
+            .keys()
+            .map(String::as_str)
+            .chain(changed.remove.iter().map(String::as_str)),
+    );
+}
+
 #[tauri::command]
 pub async fn patch_shell_state<R: Runtime>(
     app: AppHandle<R>,
@@ -623,7 +640,7 @@ pub async fn patch_shell_state<R: Runtime>(
     patch: ShellStatePatchRequest,
 ) -> Result<ShellStateWriteResult, String> {
     let revision = store.patch(patch.set, patch.remove, patch.writer_id, |changed| {
-        emit_changed(&app, changed)
+        window_wrote(&app, changed)
     })?;
     Ok(ShellStateWriteResult {
         applied: true,
@@ -641,7 +658,7 @@ pub async fn replace_shell_state<R: Runtime>(
         request.state,
         request.expected_revision,
         request.writer_id,
-        |changed| emit_changed(&app, changed),
+        |changed| window_wrote(&app, changed),
     )
 }
 

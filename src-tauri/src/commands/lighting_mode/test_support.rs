@@ -169,6 +169,7 @@ pub(crate) struct FakeHue {
     probes: Mutex<VecDeque<HueAreaVerdict>>,
     gate: Mutex<Option<Arc<tokio::sync::Semaphore>>>,
     stop_gate: Mutex<Option<Arc<tokio::sync::Semaphore>>>,
+    probe_gate: Mutex<Option<Arc<tokio::sync::Semaphore>>>,
     entered: AtomicUsize,
     stops_entered: AtomicUsize,
     probed: AtomicUsize,
@@ -186,6 +187,7 @@ impl FakeHue {
             probes: Mutex::default(),
             gate: Mutex::default(),
             stop_gate: Mutex::default(),
+            probe_gate: Mutex::default(),
             entered: AtomicUsize::new(0),
             stops_entered: AtomicUsize::new(0),
             probed: AtomicUsize::new(0),
@@ -225,6 +227,15 @@ impl FakeHue {
 
     pub(crate) fn stops_entered(&self) -> usize {
         self.stops_entered.load(Ordering::SeqCst)
+    }
+
+    /// Probes wait at the door until a permit is added to the returned gate. A
+    /// probe held there is not a timer, so a paused clock cannot run the area
+    /// wait past it.
+    pub(crate) fn hold_probes(&self) -> Arc<tokio::sync::Semaphore> {
+        let gate = Arc::new(tokio::sync::Semaphore::new(0));
+        self.probe_gate.lock().unwrap().replace(Arc::clone(&gate));
+        gate
     }
 
     pub(crate) fn probes_made(&self) -> usize {
@@ -336,6 +347,10 @@ impl HueDriver for FakeHue {
         Box::pin(async move {
             self.probed.fetch_add(1, Ordering::SeqCst);
             self.log.record("hue:probe");
+            let gate = self.probe_gate.lock().unwrap().clone();
+            if let Some(gate) = gate {
+                gate.acquire().await.expect("gate open").forget();
+            }
             self.probes
                 .lock()
                 .unwrap()

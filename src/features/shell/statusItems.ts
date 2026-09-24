@@ -1,7 +1,7 @@
 import type { TFunction } from "i18next";
 
 import type { LocalSink } from "@/features/device/localSink";
-import type { BootHueRetryNotice } from "@/features/mode/state/bootHueRetry";
+import type { BootHueRetryState } from "@/shared/contracts/lightingRuntime";
 import { HUE_LEFT_OUT_REASON, type HueLeftOutReason } from "@/shared/contracts/lighting";
 import type { StatusItem } from "./StatusBar";
 
@@ -14,7 +14,7 @@ export type HueHeldOut = "waiting" | "leftOut";
 export interface HueHeldOutInput {
   /** The orchestrator's latched reason, which outlives the left-out notice. */
   leftOutReason: HueLeftOutReason | null;
-  bootHueRetry: BootHueRetryNotice | null;
+  bootHueRetry: BootHueRetryState | null;
   lightingRunning: boolean;
   hueSessionActive: boolean;
 }

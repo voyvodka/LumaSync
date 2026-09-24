@@ -13,7 +13,7 @@ import {
   type TestPatternSpeed,
 } from "@/shared/contracts/preview";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
-import { acquireHueForTest, releaseHueAfterTest } from "@/features/hue/state/hueTestLease";
+import { acquireHueForTest, releaseHueAfterTest } from "@/features/mode/modeApi";
 import { startLedTestPattern, stopLedTestPattern } from "../previewApi";
 import { parseCommandError } from "@/shared/contracts/status";
 

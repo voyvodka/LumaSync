@@ -3,17 +3,34 @@
 How a lighting choice reaches the hardware: the mode, the outputs it runs on, the Hue stream, and
 the order they move in. Implementation in `src-tauri/src/commands/lighting_mode/` — `outputs.rs`
 (the transaction), `snapshot.rs` (what runs), `tuning.rs` (retunes), `hue_driver.rs` (Hue start and
-stop) — and `commands/hue/hue_config.rs` (the Hue start request from saved state). Contract in
+stop), `config_check.rs` (what a mode must pass before it starts) — and
+`commands/hue/hue_config.rs` (the Hue start request from saved state). Contract in
 `src/shared/contracts/lightingRuntime.ts`.
 
-**Status: built, not yet called.** The commands are registered, tested, and bound in `modeApi.ts`
-and `lightingRuntimeEventsApi.ts`, but nothing in the frontend calls them, and no window is granted
-them. The frontend orchestrator (`useLightingModeOrchestrator.ts`, the boot restore in
-`useShellBootstrap.ts`, `bootHueRetry.ts`, `hueTestLease.ts`) still does this work through
-`set_lighting_mode`, `stop_lighting`, `start_hue_stream` and `stop_hue_stream`. The change that
-moves the callers over grants each window the commands its code then calls — the window-grants
-verifier fails on a grant no code can reach, so granting them early is not an option. The old
-commands stay registered.
+## The callers
+
+Every surface that changes lighting sends the same request, and every window renders the same
+snapshot (`useLightingRuntime.ts`: seeded by `get_lighting_runtime`, kept by
+`lighting://runtime-changed`, older revisions dropped).
+
+| Surface | Sends |
+|---|---|
+| Main window mode buttons, shortcuts | `apply_outputs` `{ mode: { kind, payload if it has one }, origin: "user" }` |
+| Main window Outputs toggles, pairing a strip, the unsupported-port fallback | `apply_outputs` `{ targets, origin: "user" }` |
+| A strip unplugged | `apply_outputs` `{ targets, origin: "usbUnplug" }` — the rest, or `[]` when it was the only one |
+| Launch | `apply_outputs` `{ origin: "boot" }` — Rust reads the saved mode and outputs itself |
+| LED control popup mode strip | `apply_outputs` `{ mode, origin: "popup" }` |
+| Tray: Lights off, Resume last mode, Solid colour | built in Rust (`tray_request`), never through a window |
+| Test patterns (LED Setup, popup tiles) | `apply_outputs` `{ targets, origin: "leaseHue" }` around each run |
+| Devices card Stop retrying / Retry stop | `release_hue_output` |
+| A drag within the running kind (both windows) | `retune_lighting`, through `retuneCoalescer.ts` |
+| A saved setting the mode reads | nothing — Rust re-applies on the save (below) |
+
+The main window's orchestrator (`useLightingModeOrchestrator.ts`) is what is left of the frontend
+one: the notices and their timers, and the screen-recording preflight. `set_lighting_mode`,
+`stop_lighting`, `get_lighting_mode_status`, `stop_hue_stream` and `set_hue_solid_color` stay
+registered, and their tests grant them to the test window, but no window is granted them: a window
+calling one would skip the ordering and the saving below.
 
 ## Why it moved to Rust
 
@@ -22,8 +39,8 @@ so the worker is handed the stream; stop the worker before the Hue stream, becau
 only once every handle is gone (`hue.md`); give back a stream no running mode feeds, because the
 bridge admits one streamer. Each surface that changes lighting had to know them — the popup did not,
 and never stopped Hue on Off, never started it for Solid or Ambilight, and never saved its choice.
-A queued choice had to be replayed from a closure that still held the pre-transition state (see the
-replay entry in `ui-and-shell.md`). And every rule was reachable only through a mock of the backend,
+A queued choice had to be replayed from a closure that still held the pre-transition state (see "A
+newer choice supersedes" in `ui-and-shell.md`). And every rule was reachable only through a mock of the backend,
 so the tests proved the hook called the mocks in order, not that the hardware saw that order.
 
 In Rust the rules run once, in one place, against the real mode machine, and every surface sends
@@ -112,15 +129,17 @@ has answered, before bringing a stream up. The quit never takes `transitions`, s
 blocked on a Hue start cannot hold it up; when that start returns, the transaction sees the flag
 and ends `OUTPUTS_SHUTTING_DOWN` without starting a worker.
 
-**The one Hue retry without the user**, from `bootHueRetry.ts`: a launch restore the bridge
+**The one Hue retry without the user**, ported from the frontend's boot retry: a launch restore the bridge
 refused with `CONFIG_NOT_READY_GATE_BLOCKED` probes readiness every 3 s for up to 25 s (a Tokio
 task with a cancel token). Busy is decided by readiness, not by the start code. Once the area is
 free it resumes a restore that ended Off, or adds Hue back to one running on USB alone — once. Any
 mode choice, any target change without Hue, and any Hue release cancels it; a resume survives a
 target change that keeps Hue. The wait shows as `bootHueRetry` (resume) or the held-out reason
-`busy` (rejoin), and gives up as `gaveUp` / `busyGaveUp`.
+`busy` (rejoin), and gives up as `gaveUp` / `busyGaveUp`. A choice made after the wait gave up
+takes `gaveUp` down too: it used to outlive the choice whenever the wait ended first, which a paused
+test clock reproduced by running the whole window out while a transaction awaited blocking work.
 
-**The Hue test lease**, from `hueTestLease.ts`: `origin: "leaseHue"` with targets naming Hue brings
+**The Hue test lease**, ported from the frontend's: `origin: "leaseHue"` with targets naming Hue brings
 the stream up for a test run and remembers whether it opened it; any other targets hand it back —
 only if it opened it, and not if a mode started meanwhile adopted the stream.
 
@@ -132,9 +151,43 @@ port of `toRoomGeometry`. One JSON fixture
 (`src/features/hue/model/__tests__/fixtures/channelPlacements.parity.json`) is read by both the
 vitest suite and `cargo test`: change one side without the other and a suite fails.
 
+**Settings refresh.** A window's write to the shell state that names a key the running mode reads
+(`selectedDisplayId`, `lightingIntensityPreset`, `colorCorrection`, `firmwareProfile`,
+`selectedChipType`, `ledColorOrder`, `roomMap`, `lastHueAreaId`) schedules a re-apply of what runs,
+300 ms after the last such save (`note_settings_saved`, hooked into `patch_shell_state` and
+`replace_shell_state`). It replaces a re-dispatch every settings panel made from the main window,
+which the popup and every other writer of those keys never did. The refresh takes the newest
+ticket as it stands rather than a new one, so it never supersedes a choice in flight; the save
+also marks the running payload stale, so a choice that arrives after it re-applies even when its
+request names nothing new. It leaves a test pattern alone — the test's own stop restores the mode
+from the saved settings — and does nothing while Off. `ledCalibration` is not on the list: LED
+Setup saves it while a test owns the strip.
+
+**A test pattern is not the mode.** A test runs as an Ambilight worker over a synthetic source, but
+starting one publishes nothing: every window keeps showing the mode it interrupted, and the test's
+stop publishes the restored one. The main window used to render the test as Ambilight running.
+
+**Targets are a set, and an unknown one is an error.** The request carries target names; they parse
+into a `BTreeSet<OutputTarget>` (ordered `usb, hue`, deduped by construction), and a name this build
+does not know answers `OUTPUTS_INVALID_REQUEST` with nothing recorded, saved or touched. It used to
+be dropped, and a selection that lost its only real output started a capture worker driving
+nothing. `apply_mode_change` refuses the same way for a mode that reaches it by another road.
+
+**A config that cannot be trusted is refused before anything is torn down**
+(`LIGHTING_MODE_INVALID_CONFIG`, `config_check.rs`): a LED calibration whose edge counts do not add
+up to its total, holds more than `MAX_TOTAL_LEDS` (4096 — four `u16` edge counts reach 262 140,
+and every frame allocates per LED), has a bottom gap wider than the bottom edge, or carries an
+enum string this build does not know; or a colour correction outside the panel's ranges. It is a
+gate like the device and Hue gates, so the transaction answers `OUTPUTS_REFUSED` and what ran keeps
+running. A refused layout (`details` starting `ledCalibration`) is read by both windows as the
+calibration gate: the main window opens LED Setup and the popup says the strip needs calibrating
+(`needsCalibration` in `modeApplyOutcome.ts`). The saved colour correction is clamped as the frontend's normaliser clamps it, so a value
+an older build let through does not start refusing every mode after an update.
+
 **What stays in the frontend.** The notice copy and its timers, the screen-recording preflight
-(it only chooses a notice; the start is what asks), unplug detection, and the Hue status poll for
-the chip.
+(it only chooses a notice; the start is what asks), unplug detection, the Hue status poll for
+the chip (read-only: it no longer forces a re-apply when a stream comes back, since the worker
+follows the live slot), and the retune coalescer.
 
 ## Testing
 
