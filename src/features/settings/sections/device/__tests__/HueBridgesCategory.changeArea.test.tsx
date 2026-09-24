@@ -97,7 +97,7 @@ const openList = () => fireEvent.click(screen.getByRole("button", { name: "hue:p
 
 describe("HueBridgesCategory — Change area", () => {
   it("opens the list with the area in use highlighted and re-reads the bridge's areas", () => {
-    const refreshAreas = vi.fn(async () => {});
+    const refreshAreas = vi.fn<UseHueOnboardingResult["refreshAreas"]>(async () => {});
     render(card(hueState({ refreshAreas })));
     expect(areaList()).toBeNull();
 
@@ -127,7 +127,7 @@ describe("HueBridgesCategory — Change area", () => {
 
   it("switches on Confirm, then checks the new area once it is the selection", () => {
     const selectArea = vi.fn<UseHueOnboardingResult["selectArea"]>();
-    const revalidateArea = vi.fn(async () => {});
+    const revalidateArea = vi.fn<UseHueOnboardingResult["revalidateArea"]>(async () => {});
     const { rerender } = render(card(hueState({ selectArea, revalidateArea })));
     openList();
     fireEvent.click(screen.getByRole("button", { name: "Desk" }));

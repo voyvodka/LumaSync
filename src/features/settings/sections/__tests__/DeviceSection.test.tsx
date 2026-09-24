@@ -747,7 +747,7 @@ describe("the category rail is addressable by test id", () => {
   // The shell hides the Hue notices only while this page says they are up.
   it("reports the category on view, and none once it unmounts", async () => {
     const user = userEvent.setup();
-    const onVisibleCategoryChange = vi.fn();
+    const onVisibleCategoryChange = vi.fn<(category: string | null) => void>();
     const { unmount } = render(
       <DeviceSection onStopHueOutput={stopHueOutputMock} onVisibleCategoryChange={onVisibleCategoryChange} />,
     );

@@ -163,8 +163,8 @@ describe("found-bridge card", () => {
   });
 
   it("pairs from the button and does nothing from the card body", () => {
-    const pair = vi.fn(async () => {});
-    const selectBridge = vi.fn();
+    const pair = vi.fn<UseHueOnboardingResult["pair"]>(async () => {});
+    const selectBridge = vi.fn<UseHueOnboardingResult["selectBridge"]>();
     const { container } = renderCard(hueState({ ...found, pair, selectBridge }));
     fireEvent.click(container.querySelector(".lm-dcard") as HTMLElement);
     expect(pair).not.toHaveBeenCalled();
