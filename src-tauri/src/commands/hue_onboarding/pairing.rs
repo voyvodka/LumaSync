@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 
 use super::super::hue::area_cache::invalidate_hue_area_cache;
 use super::super::hue::bridge_identity::BridgeTrust;
-use super::super::hue::credential_store::effective_hue_app_key;
+use super::super::hue::credential_store::{effective_hue_app_key, HueCredentialBackend};
 use super::super::hue::transport::{
     answering_bridge_id, async_client, async_client_for_key, identity_rejection, read_body,
     send_error_text,
@@ -38,7 +38,7 @@ pub struct HuePairBridgeResponse {
     /// `"keychain"` ⇒ frontend SHOULD clear the legacy plaintext shellStore fields.
     /// `"plaintext-legacy"` ⇒ keychain unavailable, frontend keeps plaintext fallback.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub credential_storage_backend: Option<String>,
+    pub credential_storage_backend: Option<HueCredentialBackend>,
 }
 
 /// Response for `migrate_hue_credentials` — which backend now holds the
@@ -50,7 +50,7 @@ pub struct HueCredentialMigrationResponse {
     /// `"keychain"` only once the pair has been written AND read back, which is
     /// what licenses the caller to delete its plaintext copy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub backend: Option<String>,
+    pub backend: Option<HueCredentialBackend>,
 }
 
 /// Response for `validate_hue_credentials` — whether the stored bridge
@@ -162,7 +162,7 @@ pub(crate) async fn pair_bridge_at(
                     outcome.status_code(),
                     backend.as_str()
                 );
-                result.credential_storage_backend = Some(backend.as_str().to_string());
+                result.credential_storage_backend = Some(backend);
             }
             result
         }
@@ -304,7 +304,7 @@ fn migrate_hue_credentials_blocking(
             "Hue credential keychain migration completed.",
             None,
         ),
-        backend: Some(backend.as_str().to_string()),
+        backend: Some(backend),
     }
 }
 

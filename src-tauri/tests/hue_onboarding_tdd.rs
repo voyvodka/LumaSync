@@ -104,13 +104,16 @@ mod hue {
                 "STUB"
             }
             #[allow(dead_code)]
-            pub fn backend(&self, _store: &dyn SecretStore) -> Backend {
-                Backend
+            pub fn backend(&self, _store: &dyn SecretStore) -> HueCredentialBackend {
+                HueCredentialBackend::PlaintextLegacy
             }
         }
         #[allow(dead_code)]
-        pub struct Backend;
-        impl Backend {
+        #[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
+        pub enum HueCredentialBackend {
+            PlaintextLegacy,
+        }
+        impl HueCredentialBackend {
             #[allow(dead_code)]
             pub fn as_str(&self) -> &'static str {
                 "stub"

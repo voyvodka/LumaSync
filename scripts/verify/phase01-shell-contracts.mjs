@@ -444,21 +444,25 @@ if (!pairResponseFields || pairResponseFields.length === 0) {
 
 // The backend strings are a wire contract shared by two files; if they drift,
 // "keychain" stops being recognised and the plaintext copy is kept forever.
-check(
-  credentialStoreRustSource.includes('CredentialBackend::Keychain => "keychain"')
-    && credentialStoreRustSource.includes(
-      'CredentialBackend::PlaintextLegacy => "plaintext-legacy"'
-    ),
-  "Rust CredentialBackend emits the contracted backend literals",
-  "BACKEND LITERAL DRIFT: credential_store.rs no longer emits "
-    + '"keychain" / "plaintext-legacy" — hue.ts HUE_CREDENTIAL_BACKENDS would go stale'
+// The wire enum is `HueCredentialBackend`, not the internal `CredentialBackend`,
+// whose `Noop` can never report a pair as persisted and so has no wire value.
+const rustWireBackendBlock = credentialStoreRustSource.match(
+  /pub enum HueCredentialBackend\s*\{([\s\S]*?)\n\}/
 );
+const rustWireBackends = rustWireBackendBlock
+  ? [...rustWireBackendBlock[1].matchAll(/#\[serde\(rename = "([a-z-]+)"\)\]/g)].map((m) => m[1]).sort()
+  : [];
+const tsBackendBlock = hueSource.match(/export const HUE_CREDENTIAL_BACKENDS = \{([\s\S]*?)\}/);
+const tsBackends = tsBackendBlock
+  ? [...tsBackendBlock[1].matchAll(/:\s*"([a-z-]+)"/g)].map((m) => m[1]).sort()
+  : [];
 check(
-  hueSource.includes('KEYCHAIN: "keychain"')
-    && hueSource.includes('PLAINTEXT_LEGACY: "plaintext-legacy"'),
-  "hue.ts HUE_CREDENTIAL_BACKENDS pins the Rust backend literals",
-  "BACKEND LITERAL DRIFT: hue.ts HUE_CREDENTIAL_BACKENDS no longer matches "
-    + "CredentialBackend::as_str in credential_store.rs"
+  rustWireBackends.length > 0
+    && rustWireBackends.includes("keychain")
+    && JSON.stringify(rustWireBackends) === JSON.stringify(tsBackends),
+  `HUE_CREDENTIAL_BACKENDS equals Rust's wire HueCredentialBackend [${rustWireBackends.join(", ")}]`,
+  "BACKEND LITERAL DRIFT: Rust HueCredentialBackend "
+    + `[${rustWireBackends.join(", ")}] vs hue.ts HUE_CREDENTIAL_BACKENDS [${tsBackends.join(", ")}]`
 );
 
 // ---------------------------------------------------------------------------

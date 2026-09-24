@@ -452,7 +452,8 @@ export type HueFaultCode = (typeof HUE_FAULT_CODES)[keyof typeof HUE_FAULT_CODES
  * **Production code must never invoke this.** That was the reason it stayed
  * uncontracted until now, and the rule is unchanged — only its enforcement
  * moved, from "no name exists" to `scripts/verify/mock-not-shipped.mjs`, which
- * fails the build on any reference under `src/` outside the dev surface.
+ * fails `check:all` on any non-test file under `src/` that names the command or
+ * `HUE_DEBUG_COMMANDS`, other than this contract and the type-only `ipc.ts`.
  */
 export const HUE_DEBUG_COMMANDS = {
   SIMULATE_FAULT: "simulate_hue_fault",
@@ -518,6 +519,10 @@ export type HueTransportReason =
  *   reads exactly like `plaintext-legacy` on this side: it does not license
  *   clearing the plaintext copy, because no release build can read that file.
  *   Never persisted to `shellStore`; it only ever arrives on a response.
+ *
+ * Mirrors Rust's wire-only `HueCredentialBackend`, not `CredentialBackend`:
+ * the latter also has `noop` (no keychain on this machine), which can never
+ * report a pair as persisted and so has no wire value.
  */
 export const HUE_CREDENTIAL_BACKENDS = {
   KEYCHAIN: "keychain",
