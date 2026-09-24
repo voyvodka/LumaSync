@@ -23,6 +23,23 @@ woff2 is bundled and served over the local asset protocol, well inside the block
 paints once already in the right face. `optional` was rejected — it permanently drops a window to
 the fallback face on a cold-launch miss, which is worse than the bounded wait `block` accepts.
 
+**Per-window bundles.** Every window loads the same `index.html`, so everything `main.tsx` imports
+statically is parsed by the main window, the control popup, and one twin overlay per display. The
+entry holds only React, i18next, the console bridge, the error boundaries, and the label switch;
+each window's root (`App`, `ControlPopupApp`, `LedTwinOverlay`) is a dynamic `import()` started
+before the language read, so the chunk and the shell-state IPC load in parallel rather than one
+after the other. Inside the main window, `SettingsLayout` splits out the
+three full-only sections that outweigh the rest of the shell — `CalibrationPage`, `DeviceSection`,
+`RoomMapEditor` — through `preloadableComponent` (`src/shared/lib/`). Compact mode never renders
+them, so it never fetches them; full mode warms all three on idle after it paints, so a tab switch
+rarely meets the blank `SectionPlaceholder`. `LightsSection` and `SystemSection` stay in the `App`
+chunk: Lights is the page full mode opens on, and neither is big enough to be worth a first-paint
+wait. Locale catalogues load per language (`LOCALE_LOADERS` in `i18n.ts`); a switch fetches the
+other catalogue before `changeLanguage`, so no frame renders raw keys. A TR window does not fetch
+the EN fallback — key parity is a CI gate, so the fallback is never reached. The label switch lives
+in `main.tsx` alone, and `scripts/verify/window-grants.mjs` follows `import()` as well as static
+imports, or a lazy section would drop out of the main window's required grants.
+
 **Stylesheet layers.** `src/styles.css` is an ordered import list over `src/styles/`: tokens and
 the element rules go into Tailwind's `base` layer, every `lm-*` feature file into `components`.
 `theme.css` maps the colour tokens and `--lm-mono` into `@theme inline`, so a utility names the
