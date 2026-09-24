@@ -1,9 +1,9 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-import { RUNTIME_HEALTH_CHANGED_EVENT, type RuntimeHealth } from "@/shared/contracts/telemetry";
+import { TELEMETRY_EVENTS, type RuntimeHealth } from "@/shared/contracts/telemetry";
 
 export type { UnlistenFn };
 
 export function listenRuntimeHealth(handler: (health: RuntimeHealth) => void): Promise<UnlistenFn> {
-  return listen<RuntimeHealth>(RUNTIME_HEALTH_CHANGED_EVENT, (event) => handler(event.payload));
+  return listen<RuntimeHealth>(TELEMETRY_EVENTS.HEALTH_CHANGED, (event) => handler(event.payload));
 }

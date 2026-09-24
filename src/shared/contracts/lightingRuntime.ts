@@ -9,6 +9,7 @@
 
 import type { HueRuntimeTarget, HueRuntimeTriggerSource } from "./hue";
 import type { HueLeftOutReason, LightingModeStatusCode } from "./lighting";
+import { LIGHTING_MODE_CHANGED_EVENT } from "./mode";
 import type { AmbilightPayload, LightingModeConfig, SolidColorPayload } from "./mode";
 import type { CommandStatusOf } from "./status";
 
@@ -21,6 +22,15 @@ export const LIGHTING_RUNTIME_COMMANDS = {
 
 /** Broadcast to every window whenever the snapshot's revision moves. */
 export const LIGHTING_RUNTIME_CHANGED_EVENT = "lighting://runtime-changed";
+
+/** Groups both lighting events; `MODE_CHANGED` is re-exported from `./mode`,
+ * the finer-grained of the two, so it stays declared beside its payload type. */
+export const LIGHTING_EVENTS = {
+  MODE_CHANGED: LIGHTING_MODE_CHANGED_EVENT,
+  RUNTIME_CHANGED: LIGHTING_RUNTIME_CHANGED_EVENT,
+} as const;
+
+export type LightingEventName = (typeof LIGHTING_EVENTS)[keyof typeof LIGHTING_EVENTS];
 
 /**
  * Who asked. Decides what the transaction may persist and a few boot-only

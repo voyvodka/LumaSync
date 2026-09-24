@@ -47,8 +47,9 @@ pub const LED_TWIN_OVERLAY_LABEL_PREFIX: &str = "led-twin-overlay-";
 /// Fixed label for the single interactive control popup window.
 pub const LED_CONTROL_POPUP_LABEL: &str = "led-control-popup";
 
-/// Tauri event emitted whenever the preview runtime state changes.
-pub const PREVIEW_STATE_CHANGED_EVENT: &str = "preview://state-changed";
+/// `PREVIEW_EVENTS.STATE_CHANGED` in `src/shared/contracts/preview.ts`.
+/// Defined in `crate::events`; re-exported here since this is the emit site.
+pub use crate::events::PREVIEW_STATE_CHANGED_EVENT;
 
 // ---------------------------------------------------------------------------
 // Status codes

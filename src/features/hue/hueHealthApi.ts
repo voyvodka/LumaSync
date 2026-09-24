@@ -2,7 +2,7 @@ import { invokeCommand } from "@/shared/ipcApi";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import {
-  HUE_HEALTH_CHANGED_EVENT,
+  HUE_EVENTS,
   HUE_HEALTH_COMMANDS,
   type HueHealthSnapshot,
   type HueHealthWatch,
@@ -26,5 +26,5 @@ export async function retryHueHealth(): Promise<HueHealthSnapshot> {
 /** Every published snapshot. Ordering is the store's job: Rust emits after
  * releasing the lock that numbers them, so two can arrive out of order. */
 export function listenHueHealth(onSnapshot: (snapshot: HueHealthSnapshot) => void): Promise<UnlistenFn> {
-  return listen<HueHealthSnapshot>(HUE_HEALTH_CHANGED_EVENT, (event) => onSnapshot(event.payload));
+  return listen<HueHealthSnapshot>(HUE_EVENTS.HEALTH_CHANGED, (event) => onSnapshot(event.payload));
 }

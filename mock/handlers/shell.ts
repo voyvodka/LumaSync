@@ -14,7 +14,7 @@ import { LED_TEST_STATUS, PREVIEW_COMMANDS } from "../../src/shared/contracts/pr
 import { UPDATER_COMMANDS, UPDATER_STATUS } from "../../src/shared/contracts/updater";
 import {
   SHELL_COMMANDS,
-  SHELL_STATE_CHANGED_EVENT,
+  SHELL_EVENTS,
   type ShellState,
   type ShellStateChanged,
 } from "../../src/shared/contracts/shell";
@@ -66,7 +66,7 @@ function refuseWriteIfScenarioSaysSo(): void {
 }
 
 function announceShellStateChange(changed: ShellStateChanged): void {
-  void emitMockEvent(SHELL_STATE_CHANGED_EVENT, changed);
+  void emitMockEvent(SHELL_EVENTS.STATE_CHANGED, changed);
 }
 
 export const shellHandlers = {

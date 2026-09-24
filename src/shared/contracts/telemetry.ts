@@ -70,6 +70,12 @@ export function isCaptureFailingNow(snapshot: RuntimeTelemetrySnapshot): boolean
  */
 export const RUNTIME_HEALTH_CHANGED_EVENT = "telemetry://health-changed";
 
+export const TELEMETRY_EVENTS = {
+  HEALTH_CHANGED: RUNTIME_HEALTH_CHANGED_EVENT,
+} as const;
+
+export type TelemetryEventName = (typeof TELEMETRY_EVENTS)[keyof typeof TELEMETRY_EVENTS];
+
 /** What the UI must show whether or not stats for nerds is on. */
 export interface RuntimeHealth {
   /** `AmbilightCaptureReason` while capture is failing *now*, else `null`. */

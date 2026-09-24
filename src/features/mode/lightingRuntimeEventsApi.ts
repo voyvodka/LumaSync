@@ -1,7 +1,7 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import {
-  LIGHTING_RUNTIME_CHANGED_EVENT,
+  LIGHTING_EVENTS,
   type LightingRuntimeSnapshot,
 } from "@/shared/contracts/lightingRuntime";
 
@@ -14,7 +14,7 @@ export function listenLightingRuntime(
   onSnapshot: (snapshot: LightingRuntimeSnapshot) => void,
 ): Promise<UnlistenFn> {
   let newest = -1;
-  return listen<LightingRuntimeSnapshot>(LIGHTING_RUNTIME_CHANGED_EVENT, (event) => {
+  return listen<LightingRuntimeSnapshot>(LIGHTING_EVENTS.RUNTIME_CHANGED, (event) => {
     if (event.payload.revision <= newest) return;
     newest = event.payload.revision;
     onSnapshot(event.payload);

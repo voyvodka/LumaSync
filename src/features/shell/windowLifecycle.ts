@@ -13,6 +13,7 @@ import { getCurrentWindow, availableMonitors, LogicalSize, LogicalPosition, Phys
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   DEFAULT_SHELL_STATE,
+  SHELL_EVENTS,
   UI_MODE_SIZES,
   UI_MODE_MIN_SIZES,
   type ShellState,
@@ -260,7 +261,7 @@ export async function initCloseToTrayHint(
     unlistenCloseToTray = null;
   }
 
-  unlistenCloseToTray = await listen("shell:close-to-tray", () => {
+  unlistenCloseToTray = await listen(SHELL_EVENTS.CLOSE_TO_TRAY, () => {
     void (async () => {
       try {
         await persistWindowState();

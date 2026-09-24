@@ -32,8 +32,9 @@ use crate::commands::hue_onboarding::{
 use crate::commands::shell_state;
 use crate::commands::status::CommandStatus;
 
-/// `HUE_HEALTH_CHANGED_EVENT` in `src/shared/contracts/hueHealth.ts`.
-pub const HUE_HEALTH_EVENT: &str = "hue://health";
+/// `HUE_EVENTS.HEALTH_CHANGED` in `src/shared/contracts/hueHealth.ts`. Defined
+/// in `crate::events`; re-exported here since this is the emit site.
+pub use crate::events::HUE_HEALTH_CHANGED_EVENT;
 
 /// Local runtime read while a stream is live and a window shows it. No bridge I/O.
 pub(crate) const STREAM_LOCAL_VISIBLE: Duration = Duration::from_secs(1);
@@ -181,7 +182,7 @@ pub(crate) trait HealthSink: Send + Sync {
 
 impl<R: Runtime> HealthSink for AppHandle<R> {
     fn emit_health(&self, snapshot: &HueHealthSnapshot) {
-        if let Err(error) = self.emit(HUE_HEALTH_EVENT, snapshot) {
+        if let Err(error) = self.emit(HUE_HEALTH_CHANGED_EVENT, snapshot) {
             warn!(
                 "[hue-health] could not announce revision {}: {error}",
                 snapshot.revision

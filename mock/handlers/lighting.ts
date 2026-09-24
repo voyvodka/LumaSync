@@ -11,9 +11,9 @@
 import { DEVICE_COMMANDS } from "../../src/shared/contracts/device";
 import { HUE_COMMANDS, HUE_RUNTIME_STATUS, type HueRuntimeTarget } from "../../src/shared/contracts/hue";
 import { HUE_LEFT_OUT_REASON, type HueLeftOutReason } from "../../src/shared/contracts/lighting";
+import { LIGHTING_EVENTS } from "../../src/shared/contracts/lightingRuntime";
 import {
   LIGHTING_ORIGIN,
-  LIGHTING_RUNTIME_CHANGED_EVENT,
   LIGHTING_RUNTIME_COMMANDS,
   type ApplyOutputsOutcome,
   type ApplyOutputsResult,
@@ -63,7 +63,7 @@ function snapshot(): LightingRuntimeSnapshot {
 
 function publish(): LightingRuntimeSnapshot {
   const next = snapshot();
-  void emitMockEvent(LIGHTING_RUNTIME_CHANGED_EVENT, next);
+  void emitMockEvent(LIGHTING_EVENTS.RUNTIME_CHANGED, next);
   return next;
 }
 

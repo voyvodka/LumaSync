@@ -26,6 +26,12 @@ export const HUE_HEALTH_COMMANDS = {
 /** Broadcast whenever the snapshot's revision moves. */
 export const HUE_HEALTH_CHANGED_EVENT = "hue://health";
 
+export const HUE_EVENTS = {
+  HEALTH_CHANGED: HUE_HEALTH_CHANGED_EVENT,
+} as const;
+
+export type HueEventName = (typeof HUE_EVENTS)[keyof typeof HUE_EVENTS];
+
 /** What the last credential probe found. */
 export const HUE_BRIDGE_VERDICT = {
   REACHABLE: "reachable",
