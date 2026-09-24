@@ -3,8 +3,8 @@
 From a captured frame to bytes on a wire. This is the only hot path in the application: everything
 here runs per frame, and a regression in it is a defect rather than a tuning matter.
 
-Implementation in `src-tauri/src/commands/ambilight_capture.rs` and `lighting_mode.rs`; the worker
-thread itself is `lighting_mode/worker.rs`.
+Implementation in `src-tauri/src/commands/ambilight_capture.rs` and `lighting_mode/` (the façade
+`lighting_mode.rs` lists its modules); the worker thread itself is `lighting_mode/worker.rs`.
 
 ## Decisions
 
@@ -125,7 +125,7 @@ and glides. Smoothing state is `f32`; the `u8` state before it rounded every ste
 floor parked a strip a few levels short of the target for good. `HueIntensityPreset` is a
 deprecated alias kept so pre-v1.4 call sites compile.
 
-**Capture rate follows the output plan.** `capture_interval_for` in `lighting_mode.rs`: 20 Hz with
+**Capture rate follows the output plan.** `capture_interval_for` in `lighting_mode/pacing.rs`: 20 Hz with
 Hue alone — the bridge takes 20 frames a second, so more would be read back and thrown away — and
 30 Hz when a strip (serial or WLED) is in the plan, never faster than a serial strip's link takes a
 frame. 30 rather than 60: with the strip smoothed between frames on every output step, the next
@@ -136,9 +136,9 @@ release, the ambience memory, the σ envelope) are rescaled to the real gap betw
 frames, so they mean the same at 20 and 30 Hz. The histogram change signal is not: it compares
 consecutive frames, so a slow pan reads slightly smaller at 30 Hz. A cut reads the same.
 
-**One colour pipeline.** `EncoderPlan` in `led_output.rs` holds every per-pixel correction —
-device-calibration saturation, Kelvin multipliers (computed once, never per pixel), per-channel
-gamma LUTs, colour order — built once per sink or worker. The serial encoders, `CorrectedWledSink`,
+**One colour pipeline.** `EncoderPlan` in `led_output/correction.rs` holds every per-pixel
+correction — device-calibration saturation, Kelvin multipliers (computed once, never per pixel),
+per-channel gamma LUTs, colour order — built once per sink or worker. The serial encoders, `CorrectedWledSink`,
 the Hue channels and the twin overlay all go through it; `apply_color_correction_rgb` is a one-off
 wrapper for Solid colours. Saturation has one implementation (`apply_saturation_to_pixel`) and
 host-side brightness one (`scale_brightness`, for Adalight, WLED and the twin). The order is the
@@ -253,7 +253,8 @@ serial writer with a counting port behind it, asserts:
 - **none on the writer thread.** The port counts from inside `write`, on the writer thread, what
   that thread allocated since its previous write.
 - **no gamma or sRGB LUT tabulation.** Both tables live on the stack, so the allocator cannot see a
-  rebuild; the thread-local build counters in `led_output.rs` and `ambilight_scene.rs` can.
+  rebuild; the thread-local build counters in `led_output/correction.rs` and `ambilight_scene.rs`
+  can.
 
 `CorrectedWledSink` has its own pin, `WLED_ALLOCS_PER_FRAME` (four: the corrected strip, the
 datagram list, the chunk list, one datagram), over a loopback socket nothing reads.

@@ -36,7 +36,7 @@ fn app() -> App<MockRuntime> {
         crate::commands::lighting_mode::tuning::retune_lighting,
         crate::commands::lighting_mode::outputs::release_hue_output,
         crate::commands::lighting_mode::outputs::get_lighting_runtime,
-        crate::commands::lighting_mode::get_lighting_mode_status
+        crate::commands::lighting_mode::transition::get_lighting_mode_status
     ]);
     app.manage(HueDriverHandle(FakeHue::new(Arc::new(EventLog::default()))));
     grant_main_for_tests(&app, &["allow-get-lighting-mode-status"]);

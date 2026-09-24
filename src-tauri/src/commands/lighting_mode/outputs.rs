@@ -24,10 +24,11 @@ use super::snapshot::{
     parse_targets, publish_running, BootHueRetryState, HueLeftOutReason, LightingPhase,
     LightingRuntimeSnapshot, OutputTarget, OutputTargets,
 };
+use super::transition::apply_config_blocking;
 use super::tuning::{accepting_for_running, StoredTuning};
 use super::{
-    apply_config_blocking, stop_lighting_blocking, AmbilightPayload, LightingModeCommandResult,
-    LightingModeConfig, LightingModeKind, LightingRuntimeState,
+    stop_lighting_blocking, AmbilightPayload, LightingModeCommandResult, LightingModeConfig,
+    LightingModeKind, LightingRuntimeState,
 };
 use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionState};
 use crate::commands::hue::hue_config::{hue_start_request, room_geometry_from_state};
