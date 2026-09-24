@@ -179,7 +179,7 @@ as such; a change is emitted as `shell://main-window-visibility`. A `show()` the
 boot show) is not seen by Rust, so the store asks `get_main_window_visibility` again whenever the
 document turns visible or the window takes focus. Until Rust answers, and on any failed read, the
 native half counts as visible — a missing signal falls back to the document, never to a poll stopped
-for good. The Hue health store still declares visibility from the document alone.
+for good. The Hue health store declares `visible` to Rust's monitor from the same combined answer.
 
 **Telemetry is read only while "Show stats for nerds" is on.** The setting (`ShellState.showNerdStats`,
 absent ⇒ off) gates by *mounting*: off, the status bar leaves out the FPS pill and every item marked

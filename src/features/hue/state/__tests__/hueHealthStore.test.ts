@@ -1,6 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { __resetWindowVisibilityForTests } from "@/features/shell/windowVisibility";
+import type { MainWindowVisibility } from "@/shared/contracts/shell";
+
 import {
   __resetHueHealthStoreForTests,
   getHueHealthState,
@@ -24,6 +27,19 @@ import {
 } from "../../__tests__/fakeHueHealth";
 
 vi.mock("../../hueHealthApi", async () => (await import("../../__tests__/fakeHueHealth")).fakeHueHealthApi);
+
+let pushWindowVisibility: ((visibility: MainWindowVisibility) => void) | null = null;
+vi.mock("@/features/shell/windowVisibilityApi", () => ({
+  getMainWindowVisibility: () => Promise.resolve({ visible: true }),
+}));
+vi.mock("@/features/shell/windowVisibilityEventsApi", () => ({
+  listenMainWindowVisibility: (handler: (visibility: MainWindowVisibility) => void) => {
+    pushWindowVisibility = handler;
+    return Promise.resolve(() => {
+      pushWindowVisibility = null;
+    });
+  },
+}));
 
 let visibility: DocumentVisibilityState = "visible";
 
@@ -56,6 +72,7 @@ describe("hueHealthStore", () => {
 
   afterEach(() => {
     __resetHueHealthStoreForTests();
+    __resetWindowVisibilityForTests();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -97,6 +114,26 @@ describe("hueHealthStore", () => {
     setVisibility("visible");
     await flush();
 
+    expect(declared()).toEqual([
+      { visible: true, areaReadiness: false },
+      { visible: false, areaReadiness: false },
+      { visible: true, areaReadiness: false },
+    ]);
+    release();
+  });
+
+  it("declares the window hidden when Rust says so, though the document reads visible", async () => {
+    const release = subscribeHueHealth(() => {});
+    await flush();
+    expect(pushWindowVisibility).not.toBeNull();
+
+    pushWindowVisibility?.({ visible: false });
+    await flush();
+    expect(document.visibilityState).toBe("visible");
+    expect(lastDeclared()).toEqual({ visible: false, areaReadiness: false });
+
+    pushWindowVisibility?.({ visible: true });
+    await flush();
     expect(declared()).toEqual([
       { visible: true, areaReadiness: false },
       { visible: false, areaReadiness: false },
