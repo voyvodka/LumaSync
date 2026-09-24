@@ -17,21 +17,19 @@
  * cascading reconciliations during a drag.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { IconOff, IconAmbilight, IconSolid } from "@/shared/ui/icons";
+import { LIGHTING_MODE_KIND, type LightingModeKind } from "@/shared/contracts/mode";
+import { MODE_GUARD_REASONS } from "@/features/mode/state/modeGuard";
 import {
-  LIGHTING_MODE_KIND,
-  type LightingModeConfig,
-  type LightingModeKind,
-} from "@/shared/contracts/mode";
-import {
-  MODE_GUARD_REASONS,
-  type ModeGuardReason,
-} from "@/features/mode/state/modeGuard";
-import type { HueRuntimeTarget } from "@/shared/contracts/hue";
-import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
+  useLightingActions,
+  useLightingControlState,
+  type LightingControlState,
+} from "@/features/mode/state/lightingControl";
+import { useHueShellStatus, type HueShellStatus } from "@/features/hue/state/hueShellStatus";
+import { shallowEqual } from "@/shared/lib/store";
 import { outputAvailability } from "@/features/mode/model/outputAvailability";
 import { FIRMWARE_PROFILE, type FirmwareProfile } from "@/shared/contracts/device";
 import { SCENE_PRESETS, type ScenePreset } from "@/features/mode/model/scenePresets";
@@ -41,20 +39,22 @@ import { CompactSolidSection } from "./CompactSolidSection";
 import { ModeButton } from "./ModeButton";
 import { SelfContainedBrightnessRow } from "./SelfContainedBrightnessRow";
 
-interface CompactLayoutProps {
-  lightingMode: LightingModeConfig;
-  outputTargets: HueRuntimeTarget[];
-  localOutputConnected: boolean;
-  hueConfigured: boolean;
-  /** The shell boot has settled; until then `hueConfigured: false` is not yet known. */
-  bootstrapDone?: boolean;
-  hueReachable: boolean;
-  /** What the last bridge probe found; `null` while the first one is in flight. */
-  hueProbeVerdict?: HueProbeVerdict | null;
-  isModeTransitioning: boolean;
-  modeLockReason: ModeGuardReason | null;
-  onLightingModeChange: (next: LightingModeConfig) => void;
-}
+const selectCompactHue = (status: HueShellStatus) => ({
+  hueConfigured: status.configured,
+  hueReachable: status.reachable,
+  // What the last bridge probe found; `null` while the first one is in flight.
+  hueProbeVerdict: status.probeVerdict,
+});
+
+const selectCompactLighting = (state: LightingControlState) => ({
+  lightingMode: state.lightingMode,
+  outputTargets: state.outputTargets,
+  localOutputConnected: state.localSink !== null,
+  // The shell boot has settled; until then `hueConfigured: false` is not yet known.
+  bootstrapDone: state.bootstrapDone,
+  isModeTransitioning: state.isModeTransitioning,
+  modeLockReason: state.modeLockReason,
+});
 
 const DEFAULT_SOLID = { r: 255, g: 220, b: 180, brightness: 1 } as const;
 const DEFAULT_AMBILIGHT = {
@@ -63,19 +63,21 @@ const DEFAULT_AMBILIGHT = {
   blackBorderDetection: false,
 } as const;
 
-export function CompactLayout({
-  lightingMode,
-  outputTargets,
-  localOutputConnected,
-  hueConfigured,
-  bootstrapDone = true,
-  hueReachable,
-  hueProbeVerdict = null,
-  isModeTransitioning,
-  modeLockReason,
-  onLightingModeChange,
-}: CompactLayoutProps) {
+export const CompactLayout = memo(function CompactLayout() {
   const { t } = useTranslation();
+  const { hueConfigured, hueReachable, hueProbeVerdict } = useHueShellStatus(
+    selectCompactHue,
+    shallowEqual,
+  );
+  const {
+    lightingMode,
+    outputTargets,
+    localOutputConnected,
+    bootstrapDone,
+    isModeTransitioning,
+    modeLockReason,
+  } = useLightingControlState(selectCompactLighting, shallowEqual);
+  const { changeMode: onLightingModeChange } = useLightingActions();
 
   // Needed for brightness-lock parity with full mode: the Adalight wire format
   // has no brightness field, so without this the compact slider moves and the
@@ -287,4 +289,4 @@ export function CompactLayout({
       </div>
     </div>
   );
-}
+});

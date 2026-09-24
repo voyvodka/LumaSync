@@ -29,7 +29,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Window mock — richer than App.test.tsx; we need outerPosition, outerSize,
+// Window mock — richer than the App.*.test.tsx one; we need outerPosition, outerSize,
 // innerSize, setPosition, center, availableMonitors, onMoved, onResized.
 // ---------------------------------------------------------------------------
 

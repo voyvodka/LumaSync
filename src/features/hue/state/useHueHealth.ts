@@ -1,37 +1,24 @@
-import { useCallback, useRef, useSyncExternalStore } from "react";
-
 import type { HueRuntimeState } from "@/shared/contracts/hue";
 import type { HueAreaHealth, HueBridgeHealth } from "@/shared/contracts/hueHealth";
+import { useStoreSelector } from "@/shared/lib/store";
 
 import type {
   HueRuntimeStatusReadFailure,
   HueRuntimeStatusView,
 } from "../model/onboardingStatusCodes";
-import { getHueHealthState, subscribeHueHealth, type HueHealthState } from "./hueHealthStore";
+import { hueHealthStore, type HueHealthState } from "./hueHealthStore";
 
 /**
  * The one Hue health hook. `selector` picks a slice of the snapshot and the
  * component re-renders only when that slice changes by `isEqual` — every event
  * parses a fresh object, so an object slice needs a structural comparison.
+ * Selectors must be stable (module-level): a new one per render re-selects.
  */
 export function useHueHealth<T>(
   selector: (state: HueHealthState) => T,
   isEqual: (a: T, b: T) => boolean = Object.is,
 ): T {
-  const cache = useRef<{ state: HueHealthState; selected: T } | null>(null);
-  const getSelection = useCallback(() => {
-    const current = getHueHealthState();
-    const held = cache.current;
-    if (held && held.state === current) return held.selected;
-    const next = selector(current);
-    if (held && isEqual(held.selected, next)) {
-      cache.current = { state: current, selected: held.selected };
-      return held.selected;
-    }
-    cache.current = { state: current, selected: next };
-    return next;
-  }, [selector, isEqual]);
-  return useSyncExternalStore(subscribeHueHealth, getSelection, getSelection);
+  return useStoreSelector(hueHealthStore, selector, isEqual);
 }
 
 export const selectHueStreamState = (state: HueHealthState): HueRuntimeState | null =>

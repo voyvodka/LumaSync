@@ -1,12 +1,13 @@
 /**
- * This window's copy of the Rust health monitor's `HueHealthSnapshot`, as an
- * external store. Seeded by `watch_hue_health`, kept by `hue://health`, older
- * revisions dropped. It never polls: it tells Rust whether this window is
- * visible and whether a view shows the area, and Rust decides what to read.
- * See docs/architecture/hue.md, "One health monitor".
+ * This window's copy of the Rust health monitor's `HueHealthSnapshot`, as a
+ * `Store` (`shared/lib/store.ts`). Seeded by `watch_hue_health`, kept by
+ * `hue://health`, older revisions dropped. It never polls: it tells Rust
+ * whether this window is visible and whether a view shows the area, and Rust
+ * decides what to read. See docs/architecture/hue.md, "One health monitor".
  */
 
 import type { HueHealthSnapshot, HueHealthWatch } from "@/shared/contracts/hueHealth";
+import type { Store } from "@/shared/lib/store";
 import { parseCommandError } from "@/shared/contracts/status";
 
 import { getHueHealth, listenHueHealth, retryHueHealth, watchHueHealth } from "../hueHealthApi";
@@ -26,18 +27,38 @@ export interface HueHealthState {
 
 const INITIAL: HueHealthState = { snapshot: null, readFailure: null };
 
+// A `Store` by hand rather than `createStore`: going back to INITIAL when the
+// last subscriber leaves must not notify, or a test reset re-renders trees
+// outside `act` and an unmounting tree renders on the way out.
 let state: HueHealthState = INITIAL;
 const listeners = new Set<() => void>();
+const cell = {
+  get: (): HueHealthState => state,
+  set: (next: HueHealthState): void => {
+    if (Object.is(next, state)) return;
+    state = next;
+    for (const listener of [...listeners]) listener();
+  },
+  subscribe: (listener: () => void): (() => void) => {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  },
+};
+
+function resetQuietly(): void {
+  state = INITIAL;
+}
+let subscribers = 0;
+/** Bumped by the test reset, so a subscription from before it releases nothing after it. */
+let generation = 0;
 let areaWatchers = 0;
 /** Bumped on every start and stop, so an answer from a torn-down session is dropped. */
 let session = 0;
 let unlisten: (() => void) | null = null;
 let readFailures = 0;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
-
-function notify(): void {
-  for (const listener of [...listeners]) listener();
-}
 
 function clearRetry(): void {
   if (retryTimer !== null) {
@@ -49,12 +70,12 @@ function clearRetry(): void {
 function adopt(snapshot: HueHealthSnapshot): void {
   // Only a snapshot carries a revision; anything else is not an answer to keep.
   if (typeof snapshot?.revision !== "number") return;
+  const state = cell.get();
   const newer = state.snapshot === null || snapshot.revision > state.snapshot.revision;
   if (!newer && state.readFailure === null) return;
   readFailures = 0;
   clearRetry();
-  state = { snapshot: newer ? snapshot : state.snapshot, readFailure: null };
-  notify();
+  cell.set({ snapshot: newer ? snapshot : state.snapshot, readFailure: null });
 }
 
 // A rejected read keeps asking whatever the runtime last said — the read
@@ -65,15 +86,14 @@ function noteReadFailure(error: unknown, again: () => void): void {
   if (readFailures === 1) {
     console.warn(`[LumaSync] Hue health read failed: ${details}`);
   }
-  state = {
-    ...state,
+  cell.set({
+    ...cell.get(),
     readFailure: {
       code: CODE.STREAM_STATUS_UNAVAILABLE,
       message: "Could not fetch Hue runtime status.",
       details,
     },
-  };
-  notify();
+  });
   clearRetry();
   retryTimer = setTimeout(() => {
     retryTimer = null;
@@ -92,7 +112,7 @@ function currentWatch(): HueHealthWatch {
 }
 
 function declare(): void {
-  if (listeners.size === 0) return;
+  if (subscribers === 0) return;
   const mine = session;
   watchHueHealth(currentWatch())
     .then((snapshot) => {
@@ -135,22 +155,36 @@ function stop(): void {
     console.warn("[LumaSync] Hue health release failed:", parseCommandError(error).message);
   });
   // A later subscriber must not open on a snapshot no event has kept current.
-  state = INITIAL;
+  resetQuietly();
 }
 
-/** `useSyncExternalStore`'s subscribe. The first subscriber starts the
- * session, the last one ends it. */
-export function subscribeHueHealth(listener: () => void): () => void {
-  listeners.add(listener);
-  if (listeners.size === 1) start();
-  return () => {
-    if (!listeners.delete(listener)) return;
-    if (listeners.size === 0) stop();
-  };
-}
+/**
+ * The store `useHueHealth` selects from. The first subscriber starts the
+ * session — listen, then declare this window — and the last one ends it.
+ */
+export const hueHealthStore: Store<HueHealthState> = {
+  get: cell.get,
+  set: cell.set,
+  subscribe: (listener) => {
+    const unsubscribe = cell.subscribe(listener);
+    const mine = generation;
+    subscribers += 1;
+    if (subscribers === 1) start();
+    let released = false;
+    return () => {
+      unsubscribe();
+      if (released || mine !== generation) return;
+      released = true;
+      subscribers -= 1;
+      if (subscribers === 0) stop();
+    };
+  },
+};
+
+export const subscribeHueHealth = hueHealthStore.subscribe;
 
 export function getHueHealthState(): HueHealthState {
-  return state;
+  return cell.get();
 }
 
 /** Declares a view that shows the area's readiness, for as long as it is
@@ -158,9 +192,10 @@ export function getHueHealthState(): HueHealthState {
 export function watchHueAreaReadiness(): () => void {
   areaWatchers += 1;
   if (areaWatchers === 1) declare();
+  const mine = generation;
   let released = false;
   return () => {
-    if (released) return;
+    if (released || mine !== generation) return;
     released = true;
     areaWatchers -= 1;
     if (areaWatchers === 0) declare();
@@ -193,7 +228,8 @@ export function retryHueHealthProbe(): void {
 
 /** Test-only: drop every subscriber and go back to a cold store. */
 export function __resetHueHealthStoreForTests(): void {
-  listeners.clear();
+  generation += 1;
+  subscribers = 0;
   areaWatchers = 0;
   session += 1;
   unlisten?.();
@@ -201,5 +237,6 @@ export function __resetHueHealthStoreForTests(): void {
   document.removeEventListener("visibilitychange", declare);
   clearRetry();
   readFailures = 0;
-  state = INITIAL;
+  listeners.clear();
+  resetQuietly();
 }

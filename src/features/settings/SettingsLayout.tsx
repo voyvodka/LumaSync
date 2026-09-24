@@ -1,16 +1,18 @@
-import type { LocalSink } from "@/features/device/localSink";
-import { useState, memo, useEffect, Suspense } from "react";
-import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/shell";
+import { useState, memo, useEffect, useCallback, Suspense } from "react";
+import { SECTION_IDS, type UIMode } from "@/shared/contracts/shell";
 import { preloadableComponent } from "@/shared/lib/preloadableComponent";
+import { shallowEqual } from "@/shared/lib/store";
 import { LightsSection } from "./sections/LightsSection";
-import type { DeviceCategoryRequest } from "./sections/DeviceSection";
 import { SystemSection } from "./sections/SystemSection";
-import type { LedCalibrationConfig, LedSegmentCounts } from "../calibration/model/contracts";
-import type { ModeGuardReason } from "../mode/state/modeGuard";
-import type { LightingModeConfig } from "@/shared/contracts/mode";
-import type { HueRuntimeTarget, HueRuntimeTriggerSource } from "@/shared/contracts/hue";
-import type { UpdaterState } from "../updater/useAutoUpdater";
-import type { HueProbeVerdict } from "../hue/state/useHueBridgeReachability";
+import type { LedSegmentCounts } from "../calibration/model/contracts";
+import {
+  useLightingActions,
+  useLightingControlState,
+  type LightingControlState,
+} from "../mode/state/lightingControl";
+import { useNavigationActions, useNavigationState, type NavigationState } from "../shell/navigationStore";
+import { useUpdaterActions, useUpdaterState, type UpdaterSnapshot } from "../updater/UpdaterProvider";
+import { useHueShellStatus, type HueShellStatus } from "../hue/state/hueShellStatus";
 import { resetToManual } from "../calibration/model/templates";
 import { CompactLayout } from "./sections/compact/CompactLayout";
 import type { RoomMapEditorProps } from "@/features/room-map/ui/RoomMapEditor";
@@ -50,86 +52,152 @@ function SectionPlaceholder() {
   return <div className="h-full" aria-busy="true" data-testid="section-loading" />;
 }
 
+// Every panel below is memoised and reads its own slices, so a change only one
+// of them shows re-renders that one alone. See docs/architecture/ui-and-shell.md,
+// "Shell state reaches sections through stores".
 
-interface SettingsLayoutProps {
-  uiMode: UIMode;
-  activeSection: SectionId;
-  onSectionChange: (sectionId: SectionId) => Promise<void>;
-  calibration?: LedCalibrationConfig;
-  lightingMode: LightingModeConfig;
-  outputTargets: HueRuntimeTarget[];
-  /** The bound local output — serial strip or WLED panel — or `null` for none. */
-  localSink: LocalSink | null;
-  hueConfigured: boolean;
-  /** The shell boot has settled. Before it the saved pairing is unread, so the
-   *  output gate reports checking rather than "no reachable output". */
-  bootstrapDone: boolean;
-  hueReachable?: boolean;
-  hueProbeVerdict?: HueProbeVerdict | null;
-  hueStreaming: boolean;
-  /** Hue session owned but the backend is retrying the bridge; overrides `hueStreaming`. */
-  hueReconnecting?: boolean;
-  hueStreamFailed?: boolean;
-  modeLockReason: ModeGuardReason | null;
-  isModeTransitioning?: boolean;
-  onLightingModeChange: (nextMode: LightingModeConfig) => void;
-  onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
-  /** The Devices Hue card's stop, routed through the mode orchestrator. */
-  onStopHueOutput: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
-  onCalibrationSaved: (config: LedCalibrationConfig) => void;
-  onCheckForUpdates: () => void;
-  isCheckingForUpdates: boolean;
-  devSetUpdaterState?: (state: UpdaterState) => void;
-  /** A notice asked for one Devices category; forwarded to the rail. */
-  deviceCategoryRequest?: DeviceCategoryRequest | null;
-}
+const selectLayoutNavigation = (state: NavigationState) => ({
+  uiMode: state.uiMode,
+  activeSection: state.activeSection,
+});
 
-export const SettingsLayout = memo(function SettingsLayout({
-  uiMode,
-  activeSection,
-  onSectionChange,
-  calibration,
-  lightingMode,
-  outputTargets,
-  localSink,
-  hueConfigured,
-  bootstrapDone,
-  hueReachable = true,
-  hueProbeVerdict = null,
-  hueStreaming,
-  hueReconnecting = false,
-  hueStreamFailed = false,
-  modeLockReason,
-  isModeTransitioning = false,
-  onLightingModeChange,
-  onOutputTargetsChange,
-  onStopHueOutput,
-  onCalibrationSaved,
-  onCheckForUpdates,
-  isCheckingForUpdates,
-  devSetUpdaterState,
-  deviceCategoryRequest = null,
-}: SettingsLayoutProps) {
-  const localOutputConnected = localSink !== null;
+const selectLighting = (state: LightingControlState) => state;
+const selectHue = (status: HueShellStatus) => status;
+
+const LightsPanel = memo(function LightsPanel() {
+  const lighting = useLightingControlState(selectLighting);
+  const hue = useHueShellStatus(selectHue);
+  const { changeMode, changeOutputTargets } = useLightingActions();
+  return (
+    <div className="h-full overflow-hidden">
+      <LightsSection
+        mode={lighting.lightingMode}
+        outputTargets={lighting.outputTargets}
+        localOutputConnected={lighting.localSink !== null}
+        localSink={lighting.localSink}
+        hueConfigured={hue.configured}
+        bootstrapDone={lighting.bootstrapDone}
+        hueReachable={hue.reachable}
+        hueProbeVerdict={hue.probeVerdict}
+        hueStreaming={hue.streaming}
+        hueReconnecting={hue.reconnecting}
+        hueStreamFailed={hue.streamFailed}
+        calibration={lighting.calibration}
+        modeLockReason={lighting.modeLockReason}
+        isModeTransitioning={lighting.isModeTransitioning}
+        onModeChange={changeMode}
+        onOutputTargetsChange={changeOutputTargets}
+      />
+    </div>
+  );
+});
+
+const selectCalibration = (state: LightingControlState) => state.calibration;
+
+const CalibrationPanel = memo(function CalibrationPanel({
+  pendingZoneCounts,
+  onPendingZoneCountsChange,
+}: {
+  pendingZoneCounts: LedSegmentCounts | null;
+  onPendingZoneCountsChange: (counts: LedSegmentCounts | null) => void;
+}) {
+  const calibration = useLightingControlState(selectCalibration);
+  const { saveCalibration } = useLightingActions();
+  const { goToSection } = useNavigationActions();
+  return (
+    <CalibrationPage.Component
+      initialConfig={
+        pendingZoneCounts
+          ? { ...(calibration ?? resetToManual()), counts: pendingZoneCounts }
+          : calibration
+      }
+      onNavigateBack={() => {
+        onPendingZoneCountsChange(null);
+        void goToSection(SECTION_IDS.LIGHTS);
+      }}
+      onSaved={(cfg) => {
+        onPendingZoneCountsChange(null);
+        saveCalibration(cfg);
+      }}
+    />
+  );
+});
+
+const selectDeviceCategoryRequest = (state: NavigationState) => state.deviceCategoryRequest;
+
+const DevicesPanel = memo(function DevicesPanel() {
+  const categoryRequest = useNavigationState(selectDeviceCategoryRequest);
+  const { goToSection } = useNavigationActions();
+  const { stopHueOutput } = useLightingActions();
+  const openRoomMap = useCallback(() => void goToSection(SECTION_IDS.ROOM_MAP), [goToSection]);
+  return (
+    <div className="h-full overflow-hidden">
+      <DeviceSection.Component
+        onNavigateToRoomMap={openRoomMap}
+        onStopHueOutput={stopHueOutput}
+        categoryRequest={categoryRequest}
+      />
+    </div>
+  );
+});
+
+const selectLocalOutputConnected = (state: LightingControlState) => state.localSink !== null;
+const selectCheckingForUpdates = (snapshot: UpdaterSnapshot) => snapshot.state.status === "checking";
+
+const SystemPanel = memo(function SystemPanel() {
+  const localOutputConnected = useLightingControlState(selectLocalOutputConnected);
+  const isCheckingForUpdates = useUpdaterState(selectCheckingForUpdates);
+  const { checkForUpdates, devSetState } = useUpdaterActions();
+  return (
+    <div className="h-full overflow-hidden">
+      <SystemSection
+        onCheckForUpdates={checkForUpdates}
+        isCheckingForUpdates={isCheckingForUpdates}
+        devSetUpdaterState={devSetState}
+        localOutputConnected={localOutputConnected}
+      />
+    </div>
+  );
+});
+
+const selectOutputTargets = (state: LightingControlState) => state.outputTargets;
+const selectRoomMapHue = (status: HueShellStatus) => ({
+  reachable: status.reachable,
+  configured: status.configured,
+  probeVerdict: status.probeVerdict,
+});
+
+const RoomMapPanel = memo(function RoomMapPanel({
+  onZoneCountsConfirmed,
+}: {
+  onZoneCountsConfirmed: (counts: LedSegmentCounts) => void;
+}) {
+  const outputTargets = useLightingControlState(selectOutputTargets);
+  const hue = useHueShellStatus(selectRoomMapHue, shallowEqual);
+  const { goToSection } = useNavigationActions();
+  const openDevices = useCallback(() => void goToSection(SECTION_IDS.DEVICES), [goToSection]);
+  return (
+    <div className="h-full overflow-hidden">
+      <RoomMapEditor.Component
+        onZoneCountsConfirmed={onZoneCountsConfirmed}
+        onNavigateToDevices={openDevices}
+        hueReachable={hue.reachable}
+        outputTargets={outputTargets}
+        hueConfigured={hue.configured}
+        hueProbeVerdict={hue.probeVerdict}
+      />
+    </div>
+  );
+});
+
+export const SettingsLayout = memo(function SettingsLayout() {
+  const { uiMode, activeSection } = useNavigationState(selectLayoutNavigation, shallowEqual);
   const [pendingZoneCounts, setPendingZoneCounts] = useState<LedSegmentCounts | null>(null);
   useFullOnlySectionPreload(uiMode);
 
   // ── Compact mode ──────────────────────────────────────────────────────
   if (uiMode === "compact") {
-    return (
-      <CompactLayout
-        lightingMode={lightingMode}
-        outputTargets={outputTargets}
-        localOutputConnected={localOutputConnected}
-        hueConfigured={hueConfigured}
-        bootstrapDone={bootstrapDone}
-        hueReachable={hueReachable}
-        hueProbeVerdict={hueProbeVerdict}
-        isModeTransitioning={isModeTransitioning}
-        modeLockReason={modeLockReason}
-        onLightingModeChange={onLightingModeChange}
-      />
-    );
+    return <CompactLayout />;
   }
 
   // ── Full mode ─────────────────────────────────────────────────────────
@@ -139,79 +207,23 @@ export const SettingsLayout = memo(function SettingsLayout({
       <main className="min-h-0 min-w-0 flex-1 overflow-hidden" role="main" data-testid={`section-panel-${activeSection}`}>
         <Suspense fallback={<SectionPlaceholder />}>
           {activeSection === SECTION_IDS.LIGHTS && (
-            <div className="h-full overflow-hidden">
-              <LightsSection
-                mode={lightingMode}
-                outputTargets={outputTargets}
-                localOutputConnected={localOutputConnected}
-                localSink={localSink}
-                hueConfigured={hueConfigured}
-                bootstrapDone={bootstrapDone}
-                hueReachable={hueReachable}
-                hueProbeVerdict={hueProbeVerdict}
-                hueStreaming={hueStreaming}
-                hueReconnecting={hueReconnecting}
-                hueStreamFailed={hueStreamFailed}
-                calibration={calibration}
-                modeLockReason={modeLockReason}
-                isModeTransitioning={isModeTransitioning}
-                onModeChange={onLightingModeChange}
-                onOutputTargetsChange={onOutputTargetsChange}
-              />
-            </div>
+            <LightsPanel />
           )}
 
           {activeSection === SECTION_IDS.LED_SETUP && (
-            <CalibrationPage.Component
+            <CalibrationPanel
               key="calibration-page"
-              initialConfig={
-                pendingZoneCounts
-                  ? { ...(calibration ?? resetToManual()), counts: pendingZoneCounts }
-                  : calibration
-              }
-              onNavigateBack={() => {
-                setPendingZoneCounts(null);
-                void onSectionChange(SECTION_IDS.LIGHTS);
-              }}
-              onSaved={(cfg) => {
-                setPendingZoneCounts(null);
-                onCalibrationSaved(cfg);
-              }}
+              pendingZoneCounts={pendingZoneCounts}
+              onPendingZoneCountsChange={setPendingZoneCounts}
             />
           )}
 
-          {activeSection === SECTION_IDS.DEVICES && (
-            <div className="h-full overflow-hidden">
-              <DeviceSection.Component
-                onNavigateToRoomMap={() => void onSectionChange(SECTION_IDS.ROOM_MAP)}
-                onStopHueOutput={onStopHueOutput}
-                categoryRequest={deviceCategoryRequest}
-              />
-            </div>
-          )}
+          {activeSection === SECTION_IDS.DEVICES && <DevicesPanel />}
 
-          {activeSection === SECTION_IDS.SYSTEM && (
-            <div className="h-full overflow-hidden">
-              <SystemSection
-                onCheckForUpdates={onCheckForUpdates}
-                isCheckingForUpdates={isCheckingForUpdates}
-                devSetUpdaterState={devSetUpdaterState}
-                localOutputConnected={localOutputConnected}
-              />
-            </div>
-          )}
+          {activeSection === SECTION_IDS.SYSTEM && <SystemPanel />}
 
           {activeSection === SECTION_IDS.ROOM_MAP && (
-            <div className="h-full overflow-hidden">
-              <RoomMapEditor.Component
-                onZoneCountsConfirmed={setPendingZoneCounts}
-                onNavigateToDevices={() => void onSectionChange(SECTION_IDS.DEVICES)}
-                hueReachable={hueReachable}
-                outputTargets={outputTargets}
-                hueConfigured={hueConfigured}
-                hueProbeVerdict={hueProbeVerdict}
-              />
-            </div>
+            <RoomMapPanel onZoneCountsConfirmed={setPendingZoneCounts} />
           )}
         </Suspense>
       </main>

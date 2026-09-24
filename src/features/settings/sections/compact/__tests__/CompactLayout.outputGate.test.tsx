@@ -6,12 +6,13 @@
 // (checking, no output) is the notice queue's, and is covered in
 // `src/features/shell/notices/__tests__/buildShellNotices.test.ts` and through App.
 
-import { act, render, screen } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
 import { SECTION_IDS } from "@/shared/contracts/shell";
 import { SettingsLayout } from "../../../SettingsLayout";
+import { renderWithShellStores } from "@/test/shellProviders";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -34,28 +35,11 @@ async function renderCompact(
   bootstrapDone = true,
 ) {
   await act(async () => {
-    render(
-      <SettingsLayout
-        uiMode="compact"
-        activeSection={SECTION_IDS.LIGHTS}
-        onSectionChange={() => Promise.resolve()}
-        lightingMode={{ kind: "off" }}
-        outputTargets={["hue"]}
-        localSink={null}
-        hueConfigured={hue.configured}
-        bootstrapDone={bootstrapDone}
-        hueReachable={hue.reachable}
-        hueProbeVerdict={hue.verdict}
-        hueStreaming={false}
-        modeLockReason={null}
-        onLightingModeChange={vi.fn()}
-        onOutputTargetsChange={vi.fn()}
-        onStopHueOutput={async () => {}}
-        onCalibrationSaved={vi.fn()}
-        onCheckForUpdates={vi.fn()}
-        isCheckingForUpdates={false}
-      />,
-    );
+    renderWithShellStores(<SettingsLayout />, {
+      hue: { configured: hue.configured, reachable: hue.reachable, probeVerdict: hue.verdict },
+      navigation: { uiMode: "compact", activeSection: SECTION_IDS.LIGHTS },
+      lighting: { lightingMode: { kind: "off" }, outputTargets: ["hue"], localSink: null, bootstrapDone },
+    });
   });
 }
 

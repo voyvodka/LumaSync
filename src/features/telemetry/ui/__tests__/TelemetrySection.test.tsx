@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SECTION_IDS } from "@/shared/contracts/shell";
 import { SettingsLayout } from "@/features/settings/SettingsLayout";
+import { renderWithShellStores } from "@/test/shellProviders";
 
 const getFullTelemetrySnapshotMock = vi.fn();
 
@@ -250,28 +251,14 @@ vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: { save: vi.fn() },
 }));
 
+const SYSTEM_SECTION = {
+  navigation: { uiMode: "full" as const, activeSection: SECTION_IDS.SYSTEM },
+  lighting: { localSink: { transport: "serial" as const, id: "/dev/cu.usbserial-1420" } },
+};
+
 describe("Settings telemetry wiring", () => {
   it("renders TelemetrySection when system section is active", async () => {
-    render(
-      <SettingsLayout
-        uiMode="full"
-        activeSection={SECTION_IDS.SYSTEM}
-        onSectionChange={vi.fn()}
-        lightingMode={{ kind: "off" }}
-        outputTargets={["usb"]}
-        localSink={{ transport: "serial" as const, id: "/dev/cu.usbserial-1420" }}
-        hueConfigured={false}
-        bootstrapDone
-        hueStreaming={false}
-        modeLockReason={null}
-        onLightingModeChange={vi.fn()}
-        onOutputTargetsChange={vi.fn()}
-        onStopHueOutput={async () => {}}
-        onCalibrationSaved={vi.fn()}
-        onCheckForUpdates={vi.fn()}
-        isCheckingForUpdates={false}
-      />,
-    );
+    renderWithShellStores(<SettingsLayout />, SYSTEM_SECTION);
 
     await waitFor(() => {
       expect(screen.getByText("Runtime telemetry")).toBeInTheDocument();
@@ -281,26 +268,7 @@ describe("Settings telemetry wiring", () => {
   // The picker moved from a two-button segmented control to a dropdown so more
   // locales can be added without the row outgrowing its width.
   it("offers every supported language by endonym in a dropdown", async () => {
-    render(
-      <SettingsLayout
-        uiMode="full"
-        activeSection={SECTION_IDS.SYSTEM}
-        onSectionChange={vi.fn()}
-        lightingMode={{ kind: "off" }}
-        outputTargets={["usb"]}
-        localSink={{ transport: "serial" as const, id: "/dev/cu.usbserial-1420" }}
-        hueConfigured={false}
-        bootstrapDone
-        hueStreaming={false}
-        modeLockReason={null}
-        onLightingModeChange={vi.fn()}
-        onOutputTargetsChange={vi.fn()}
-        onStopHueOutput={async () => {}}
-        onCalibrationSaved={vi.fn()}
-        onCheckForUpdates={vi.fn()}
-        isCheckingForUpdates={false}
-      />,
-    );
+    renderWithShellStores(<SettingsLayout />, SYSTEM_SECTION);
 
     const picker = await screen.findByRole("combobox", { name: "Interface language" });
     const options = within(picker).getAllByRole("option");
