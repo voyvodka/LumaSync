@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HUE_CREDENTIAL_STATUS, type HueOnboardingWireStatusCode } from "@/shared/contracts/hue";
 import { hueCredentialEvents } from "../../hueCredentialEvents";
-import { __resetHueReadCacheForTests } from "../../hueReadCache";
+import { __resetHueHealthStoreForTests } from "../hueHealthStore";
 import { useHueOnboardingCore } from "../useHueOnboardingCore";
 
 const shellLoadMock = vi.fn();
@@ -60,7 +60,7 @@ async function selectBridgeAndPair() {
 describe("useHueOnboardingCore — credential invariants", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    __resetHueReadCacheForTests();
+    __resetHueHealthStoreForTests();
     shellLoadMock.mockResolvedValue({});
     shellSaveMock.mockResolvedValue(undefined);
     listAreasMock.mockResolvedValue({
@@ -145,7 +145,7 @@ describe("useHueOnboardingCore — credential invariants", () => {
       const result = await validatedCore();
 
       act(() => {
-        result.current.applyBackgroundReadiness("area-1", readiness("AUTH_INVALID_RE_PAIR_REQUIRED"));
+        result.current.applyBackgroundReadiness("area-1", readiness("AUTH_INVALID_RE_PAIR_REQUIRED"), Date.now());
       });
 
       expect(result.current.state.credentialState).toBe(HUE_CREDENTIAL_STATUS.NEEDS_REPAIR);
@@ -155,8 +155,8 @@ describe("useHueOnboardingCore — credential invariants", () => {
       const result = await validatedCore();
 
       act(() => {
-        result.current.applyBackgroundReadiness("area-1", readiness("HUE_STREAM_READINESS_FAILED"));
-        result.current.applyBackgroundReadiness("area-1", readiness("HUE_STREAM_NOT_READY"));
+        result.current.applyBackgroundReadiness("area-1", readiness("HUE_STREAM_READINESS_FAILED"), Date.now());
+        result.current.applyBackgroundReadiness("area-1", readiness("HUE_STREAM_NOT_READY"), Date.now());
       });
 
       expect(result.current.state.credentialState).toBe(HUE_CREDENTIAL_STATUS.VALID);
@@ -223,7 +223,7 @@ describe("useHueOnboardingCore — credential invariants", () => {
 describe("useHueOnboardingCore — pairing announces itself", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    __resetHueReadCacheForTests();
+    __resetHueHealthStoreForTests();
     shellLoadMock.mockResolvedValue({});
     shellSaveMock.mockResolvedValue(undefined);
     listAreasMock.mockResolvedValue({

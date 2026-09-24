@@ -17,8 +17,12 @@ fn app() -> App<MockRuntime> {
         crate::commands::hue::commands::set_hue_solid_color,
         crate::commands::hue::commands::get_hue_stream_status
     ]);
-    // No window sets a Hue colour directly since the lighting transaction.
-    grant_main_for_tests(&app, &["allow-set-hue-solid-color"]);
+    // No window sets a Hue colour directly since the lighting transaction, or
+    // reads the stream status since the health monitor.
+    grant_main_for_tests(
+        &app,
+        &["allow-set-hue-solid-color", "allow-get-hue-stream-status"],
+    );
     app
 }
 
@@ -89,4 +93,39 @@ fn stream_status_is_idle_before_any_start() {
         response["status"]["state"].is_string(),
         "status carries a state discriminator: {response}"
     );
+}
+
+fn health_app() -> App<MockRuntime> {
+    let app = mock_app(tauri::generate_handler![
+        crate::commands::hue::health::get_hue_health,
+        crate::commands::hue::health::watch_hue_health,
+        crate::commands::hue::health::retry_hue_health
+    ]);
+    crate::commands::hue::health::install(app.handle());
+    app
+}
+
+/// The health commands answer with the snapshot on every path; with nothing
+/// paired it says so and the runtime reads idle, without a bridge in sight.
+#[test]
+fn the_health_commands_answer_with_a_snapshot_and_never_reject() {
+    let app = health_app();
+    let webview = main_webview(&app);
+
+    let read = invoke(&webview, "get_hue_health", json!({})).expect("get_hue_health resolves");
+    assert_eq!(read["configured"], json!(false));
+    assert_eq!(read["stream"]["status"]["state"], json!("Idle"));
+    assert!(read["revision"].is_u64(), "{read}");
+    assert_eq!(read["bridge"]["verdict"], json!(null));
+    assert_eq!(read["area"], json!(null));
+
+    let watched = invoke(
+        &webview,
+        "watch_hue_health",
+        json!({ "watch": { "visible": true, "areaReadiness": true } }),
+    )
+    .expect("watch_hue_health resolves");
+    assert_eq!(watched["configured"], json!(false));
+
+    invoke(&webview, "retry_hue_health", json!({})).expect("retry_hue_health resolves");
 }

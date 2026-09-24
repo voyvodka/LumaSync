@@ -31,6 +31,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Hue: the app checks the bridge less often and from one place, so opening Devices beside the
+  main view no longer doubles the traffic, and nothing asks the bridge at all while the app sits in
+  the tray with Hue off. The Hue chip, the Devices card and the notices now follow a stream started
+  or stopped anywhere, including the tray, as soon as it happens instead of on the next check.
 - Notices at the top of the window are now a thin one-line strip: a coloured dot, one short
   sentence and a link such as "Devices →". In the compact window a sentence that does not fit ends
   in "…", and the full text is in its tooltip or one click away.

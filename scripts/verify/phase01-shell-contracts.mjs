@@ -1175,7 +1175,7 @@ for (const fn of REQUIRED_PREVIEW_COMMANDS) {
 // args count; the preview call sites pass a constant and belong to preview.ts.
 // ---------------------------------------------------------------------------
 const LIGHTING_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/lighting.ts");
-const RUST_LIGHTING_MODE_FILE = resolve(ROOT, "src-tauri/src/commands/lighting_mode.rs");
+const RUST_LIGHTING_MODE_FILE = resolve(ROOT, "src-tauri/src/commands/lighting_mode/transition.rs");
 const lightingSource = readOrEmpty(LIGHTING_CONTRACT_FILE, "lighting");
 const rustLightingSource = readOrEmpty(RUST_LIGHTING_MODE_FILE, "rust lighting_mode");
 
@@ -1194,7 +1194,7 @@ const emittedLightingCodes = [
 const EXPECTED_LIGHTING_CODE_COUNT = 12;
 check(
   emittedLightingCodes.length === EXPECTED_LIGHTING_CODE_COUNT,
-  `harvested exactly ${EXPECTED_LIGHTING_CODE_COUNT} command_status codes from lighting_mode.rs`,
+  `harvested exactly ${EXPECTED_LIGHTING_CODE_COUNT} command_status codes from lighting_mode/transition.rs`,
   `HARVEST COUNT DRIFT: expected ${EXPECTED_LIGHTING_CODE_COUNT} lighting codes, got `
     + `${emittedLightingCodes.length} [${emittedLightingCodes.join(", ")}] — a code was added, `
     + `removed, or refactored from a string literal into a constant (which this harvest cannot see)`
@@ -1236,6 +1236,13 @@ console.log("\n[ Lighting transaction — Rust → lightingRuntime.ts parity ]")
   const rustSnapshot = stripComments(
     readOrEmpty(resolve(ROOT, "src-tauri/src/commands/lighting_mode/snapshot.rs"), "rust snapshot")
   );
+  const rustHueHealth = stripComments(
+    readOrEmpty(resolve(ROOT, "src-tauri/src/commands/hue/health.rs"), "rust hue health")
+  );
+  const hueHealthSource = readOrEmpty(
+    resolve(ROOT, "src/shared/contracts/hueHealth.ts"),
+    "hueHealth"
+  );
   const literalCodes = (source, fn) =>
     [...source.matchAll(new RegExp(`${fn}\\(\\s*"([A-Z][A-Z0-9_]*)"`, "g"))].map((m) => m[1]);
   checkWireUnion(
@@ -1269,6 +1276,7 @@ console.log("\n[ Lighting transaction — Rust → lightingRuntime.ts parity ]")
     [rustSnapshot, "LightingPhase", lightingRuntimeSource, "LIGHTING_RUNTIME_PHASE"],
     [rustSnapshot, "BootHueRetryState", lightingRuntimeSource, "BOOT_HUE_RETRY_STATE"],
     [rustOutputs, "LightingOrigin", lightingRuntimeSource, "LIGHTING_ORIGIN"],
+    [rustHueHealth, "HueBridgeVerdict", hueHealthSource, "HUE_BRIDGE_VERDICT"],
   ]) {
     const rust = rustEnumValues(rustSource, rustName);
     const ts = tsValues(tsSource, tsName);
@@ -1288,8 +1296,8 @@ console.log("\n[ Lighting transaction — Rust → lightingRuntime.ts parity ]")
 // ---------------------------------------------------------------------------
 console.log("\n[ LED colour order — Rust ↔ device.ts parity ]");
 const rustLedOutputSource = readOrEmpty(
-  resolve(ROOT, "src-tauri/src/commands/led_output.rs"),
-  "rust led_output"
+  resolve(ROOT, "src-tauri/src/commands/led_output/wire.rs"),
+  "rust led_output wire"
 );
 const rustColorOrderBlock = rustLedOutputSource.match(
   /pub enum LedColorOrder\s*\{([\s\S]*?)\n\}/
@@ -1442,7 +1450,10 @@ check(
   "MISSING LINK_MAX_FPS_ABSENT in telemetry.ts — nothing stops a consumer "
     + "rendering a Hue-only session as \"0 fps\""
 );
-const rustLinkThreshold = rustLightingSource.match(
+const rustLinkThreshold = readOrEmpty(
+  resolve(ROOT, "src-tauri/src/commands/lighting_mode/pacing.rs"),
+  "rust pacing"
+).match(
   /const\s+LINK_CONSTRAINED_FPS\s*:\s*f32\s*=\s*([0-9.]+)/
 );
 const tsLinkThreshold = telemetrySource.match(
@@ -2038,7 +2049,7 @@ for (const reason of emittedCaptureReasons) {
 // The non-capture tenant of the same field. Derived, not a single hardcoded
 // check: LedOutputError::as_reason() puts every one of these into status.details.
 console.log("\n[ LED output reasons — Rust → capture.ts parity ]");
-const LED_OUTPUT_RUST_FILE = resolve(ROOT, "src-tauri/src/commands/led_output.rs");
+const LED_OUTPUT_RUST_FILE = resolve(ROOT, "src-tauri/src/commands/led_output/serial.rs");
 const emittedLedOutputReasons = [
   ...new Set(
     [
@@ -2051,7 +2062,7 @@ const emittedLedOutputReasons = [
 const EXPECTED_LED_OUTPUT_REASON_COUNT = 7;
 check(
   emittedLedOutputReasons.length === EXPECTED_LED_OUTPUT_REASON_COUNT,
-  `harvested exactly ${EXPECTED_LED_OUTPUT_REASON_COUNT} LED output reasons from led_output.rs`,
+  `harvested exactly ${EXPECTED_LED_OUTPUT_REASON_COUNT} LED output reasons from led_output/serial.rs`,
   `HARVEST COUNT DRIFT: expected ${EXPECTED_LED_OUTPUT_REASON_COUNT}, got `
     + `${emittedLedOutputReasons.length} [${emittedLedOutputReasons.join(", ")}] — update the pin deliberately`
 );
@@ -2501,8 +2512,10 @@ const checkedPairs = nullabilityPairs.filter(
 // 50 → 53: `ShellStateSnapshot`, `ShellStateWriteResult`, `ShellStateChanged`.
 // 53 → 57: the lighting transaction's `ApplyOutputsResult`, `ApplyOutputsOutcome`,
 // `LightingRuntimeSnapshot` and `RetuneLightingResult`.
-// 57 → 58: `RuntimeHealth`, the `telemetry://health-changed` payload.
-const EXPECTED_NULLABILITY_PAIR_COUNT = 58;
+// 57 → 61: the Hue health monitor's `HueHealthSnapshot`, `HueBridgeHealth`,
+// `HueAreaHealth` and `HueStreamHealth`.
+// 61 → 62: `RuntimeHealth`, the `telemetry://health-changed` payload.
+const EXPECTED_NULLABILITY_PAIR_COUNT = 62;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

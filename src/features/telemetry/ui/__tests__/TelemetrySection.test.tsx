@@ -283,7 +283,7 @@ describe("Settings telemetry wiring", () => {
   });
 
   it("keeps the readout unmounted, and polls nothing, with stats for nerds off", async () => {
-    renderWithShellStores(<SettingsLayout hueConfigured={false} hueStreaming={false} />, SYSTEM_SECTION);
+    renderWithShellStores(<SettingsLayout />, SYSTEM_SECTION);
 
     const toggle = await screen.findByTestId("nerd-stats-toggle");
     expect(toggle).toHaveAttribute("aria-pressed", "false");
@@ -295,7 +295,7 @@ describe("Settings telemetry wiring", () => {
   });
 
   it("turning it on shows the readout, starts the poll and saves the choice", async () => {
-    renderWithShellStores(<SettingsLayout hueConfigured={false} hueStreaming={false} />, SYSTEM_SECTION);
+    renderWithShellStores(<SettingsLayout />, SYSTEM_SECTION);
     const toggle = await screen.findByTestId("nerd-stats-toggle");
 
     await act(async () => {
@@ -309,7 +309,7 @@ describe("Settings telemetry wiring", () => {
   });
 
   it("renders TelemetrySection when system section is active", async () => {
-    renderWithShellStores(<SettingsLayout hueConfigured={false} hueStreaming={false} />, SYSTEM_SECTION);
+    renderWithShellStores(<SettingsLayout />, SYSTEM_SECTION);
 
     await waitFor(() => {
       expect(screen.getByText("Runtime telemetry")).toBeInTheDocument();
@@ -319,7 +319,7 @@ describe("Settings telemetry wiring", () => {
   // The picker moved from a two-button segmented control to a dropdown so more
   // locales can be added without the row outgrowing its width.
   it("offers every supported language by endonym in a dropdown", async () => {
-    renderWithShellStores(<SettingsLayout hueConfigured={false} hueStreaming={false} />, SYSTEM_SECTION);
+    renderWithShellStores(<SettingsLayout />, SYSTEM_SECTION);
 
     const picker = await screen.findByRole("combobox", { name: "Interface language" });
     const options = within(picker).getAllByRole("option");

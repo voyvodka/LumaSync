@@ -1,18 +1,23 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HUE_CREDENTIAL_STATUS, HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
-import { __resetHueReadCacheForTests } from "../hueReadCache";
+import {
+  HUE_CREDENTIAL_STATUS,
+  HUE_RUNTIME_TRIGGER_SOURCE,
+  type HueRuntimeStatus,
+} from "@/shared/contracts/hue";
+import { __resetHueHealthStoreForTests } from "../state/hueHealthStore";
+import { fakeHueHealthApi, resetHealth } from "./fakeHueHealth";
 
-const getHueStreamStatusMock = vi.fn();
 const restartHueMock = vi.fn();
 const shellLoadMock = vi.fn();
 const shellSaveMock = vi.fn();
 const listAreasMock = vi.fn();
 const validateCredentialsMock = vi.fn();
 
+vi.mock("../hueHealthApi", async () => (await import("./fakeHueHealth")).fakeHueHealthApi);
+
 vi.mock("@/features/mode/modeApi", () => ({
-  getHueStreamStatus: (...args: unknown[]) => getHueStreamStatusMock(...args),
   restartHue: (...args: unknown[]) => restartHueMock(...args),
   startHue: vi.fn(),
 }));
@@ -62,23 +67,17 @@ describe("useHueOnboarding runtime wiring", () => {
   let useHueOnboardingHook: () => Record<string, unknown>;
 
   beforeEach(async () => {
-    getHueStreamStatusMock.mockReset();
     restartHueMock.mockReset();
     shellLoadMock.mockReset();
     shellSaveMock.mockReset();
     listAreasMock.mockReset();
     validateCredentialsMock.mockReset();
-    // The hook reads status through the shared cache, whose entries outlive a
-    // single test.
-    __resetHueReadCacheForTests();
+    // The hook reads status through the shared store, which outlives a test.
+    __resetHueHealthStoreForTests();
+    resetHealth({ stream: { active: true, status: runtimeStatusFixture() as HueRuntimeStatus } });
 
     shellLoadMock.mockResolvedValue({});
     shellSaveMock.mockResolvedValue(undefined);
-    getHueStreamStatusMock.mockResolvedValue({
-      active: true,
-      status: runtimeStatusFixture(),
-      lastSolidColor: null,
-    });
     listAreasMock.mockResolvedValue({
       status: { code: "HUE_AREA_LIST_OK", message: "ok", details: null },
       areas: [
@@ -107,31 +106,28 @@ describe("useHueOnboarding runtime wiring", () => {
     return renderHook(() => useHueOnboardingHook());
   }
 
-  it("polls getHueStreamStatus on mount and arms a 10 s recursive setTimeout while streaming", async () => {
-    const setTimeoutSpy = vi.spyOn(window, "setTimeout");
+  // The Devices tab used to poll the runtime every 10 s while streaming. The
+  // health monitor publishes it instead; the tab only declares that it wants
+  // the area's readiness while it is mounted.
+  it("reads the runtime status the monitor publishes and declares its interest, without a poll", async () => {
+    const { result, unmount } = mountProbe();
 
-    mountProbe();
-
-    // First the mount tick fires once so the hook learns the runtime state.
-    // The backend mock reports `Reconnecting` (a streaming state), which
-    // causes the effect to remount with the streaming gate satisfied —
-    // that re-run also issues a mount tick. Either way the call count
-    // must be >= 1 after the mock resolves.
     await waitFor(() => {
-      expect(getHueStreamStatusMock.mock.calls.length).toBeGreaterThanOrEqual(1);
+      expect((result.current.runtimeStatus as { code?: string } | null)?.code).toBe(
+        "TRANSIENT_RETRY_SCHEDULED",
+      );
+    });
+    expect(fakeHueHealthApi.getHueHealth).not.toHaveBeenCalled();
+    expect(fakeHueHealthApi.watchHueHealth).toHaveBeenLastCalledWith({
+      visible: true,
+      areaReadiness: true,
     });
 
-    // The recursive setTimeout cadence is the public contract here:
-    // the polling frequency was tightened from 3 s → 10 s in v1.5.x to
-    // stop redundant Bridge HTTPS readiness probes piling on the live
-    // DTLS frame stream. Backend `spawn_reconnect_monitor` is the real
-    // dead-sender detector (200 ms tick); the frontend poll is purely
-    // visual reflection.
-    await waitFor(() => {
-      expect(setTimeoutSpy.mock.calls.some(([, delay]) => delay === 10_000)).toBe(true);
+    unmount();
+    expect(fakeHueHealthApi.watchHueHealth).toHaveBeenLastCalledWith({
+      visible: false,
+      areaReadiness: false,
     });
-
-    setTimeoutSpy.mockRestore();
   });
 
   it("maps runtime status to runtimeTargets with retry metadata", async () => {

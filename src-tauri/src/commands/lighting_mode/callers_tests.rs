@@ -329,7 +329,7 @@ fn start_test(rig: &Rig) {
     let handle = rig.handle();
     let mut mode = ambilight();
     mode.targets = Some(vec!["usb".to_string()]);
-    let result = super::apply_and_broadcast(
+    let result = super::led_test_pattern::apply_and_broadcast(
         &handle,
         mode,
         rig.state().inner(),

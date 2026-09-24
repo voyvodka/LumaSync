@@ -4,7 +4,6 @@ import { HUE_COMMANDS, HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue
 import {
   acquireHueForTest,
   applyOutputs,
-  getHueStreamStatus,
   releaseHueAfterTest,
   restartHue,
   retuneLighting,
@@ -135,25 +134,6 @@ describe("modeApi wrappers", () => {
       code: "PORT_NOT_FOUND",
     });
     errorSpy.mockRestore();
-  });
-
-  it("invokes get_hue_stream_status and returns full command result", async () => {
-    const runtimeStatus = {
-      state: "Running",
-      code: "HUE_STREAM_RUNNING",
-      message: "Hue stream is running.",
-      details: null,
-      triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
-    };
-    const commandResult = {
-      active: true,
-      status: runtimeStatus,
-      lastSolidColor: null,
-    };
-    const invokeMock = vi.fn().mockResolvedValue(commandResult);
-
-    await expect(getHueStreamStatus(invokeMock)).resolves.toEqual(commandResult);
-    expect(invokeMock).toHaveBeenCalledWith(HUE_COMMANDS.GET_STREAM_STATUS);
   });
 
   it("keeps start_hue_stream wrapper behavior and default mode-control trigger", async () => {

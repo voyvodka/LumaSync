@@ -96,15 +96,17 @@ beforeEach(() => {
   };
   invokeMock.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
     switch (command) {
-      case "get_hue_stream_status":
+      case "get_hue_health":
         return {
-          active: world.runtimeState !== "Idle",
-          status: {
-            state: world.runtimeState,
-            code: "HUE_STREAM_IDLE",
-            message: "",
-            details: null,
-            triggerSource: "system",
+          stream: {
+            active: world.runtimeState !== "Idle",
+            status: {
+              state: world.runtimeState,
+              code: "HUE_STREAM_IDLE",
+              message: "",
+              details: null,
+              triggerSource: "system",
+            },
           },
         };
       case "get_hue_area_channels":

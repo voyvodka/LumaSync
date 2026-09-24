@@ -236,10 +236,10 @@ impl LedPacketSender for RecordingSender {
 /// status is written directly: since #421 connect cannot produce it, which is
 /// exactly why the output side must not depend on connect alone.
 fn output_app(port_name: &str) -> (App<MockRuntime>, Arc<RecordingSender>) {
-    // `start_led_test_pattern` is covered in `lighting_mode.rs` instead: it
+    // `start_led_test_pattern` is covered in `lighting_mode/transition_tests.rs` instead: it
     // reads the monitor list, which `MockRuntime` leaves unimplemented.
     let app = mock_app(tauri::generate_handler![
-        crate::commands::lighting_mode::set_lighting_mode
+        crate::commands::lighting_mode::transition::set_lighting_mode
     ]);
     grant_main_for_tests(&app, &["allow-set-lighting-mode"]);
     {

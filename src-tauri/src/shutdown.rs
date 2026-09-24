@@ -92,6 +92,7 @@ pub(crate) fn app_cleanup_steps<R: Runtime>(app: &AppHandle<R>) -> CleanupSteps 
             stop_lighting_blocking(&lighting_app).map(|_| ())
         }),
         stop_hue: Box::new(move |deadline| {
+            crate::commands::hue::health::close(&hue_app);
             stop_hue_stream_before_exit(&hue_app.state::<HueRuntimeStateStore>(), deadline)
                 .status
                 .code

@@ -180,9 +180,10 @@ export const hueHandlers = {
   },
 
   // Its own three codes, distinct from the `HUE_IP_*` / `AUTH_INVALID_RE_PAIR_REQUIRED`
-  // families other handlers use — `useHueBridgeReachability` keys off exactly
-  // `HUE_CREDENTIAL_VALID` for reachability and `HUE_CREDENTIAL_CHECK_FAILED` for
-  // the retry budget, matching `validate_hue_credentials` in `hue_onboarding.rs`.
+  // families other handlers use — the health monitor (`commands/hue/health.rs`)
+  // keys off exactly `HUE_CREDENTIAL_VALID` for reachability and
+  // `HUE_CREDENTIAL_CHECK_FAILED` for the give-up budget, matching
+  // `validate_hue_credentials` in `hue_onboarding.rs`.
   [HUE_COMMANDS.VALIDATE_CREDENTIALS]: () => {
     const { hue } = getWorld();
     if (hue.appKey === null) {

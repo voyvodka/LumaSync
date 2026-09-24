@@ -1,61 +1,75 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HUE_CREDENTIAL_STATUS } from "@/shared/contracts/hue";
+import { HUE_CREDENTIAL_STATUS, HUE_READINESS_REASON } from "@/shared/contracts/hue";
+import type { HueAreaHealth } from "@/shared/contracts/hueHealth";
 
-const getHueStreamStatusMock = vi.fn();
-const restartHueMock = vi.fn();
+import { __resetHueHealthStoreForTests } from "../state/hueHealthStore";
+import { publishHealth, resetHealth } from "./fakeHueHealth";
+
 const shellLoadMock = vi.fn();
-const shellSaveMock = vi.fn();
 const listAreasMock = vi.fn();
-const validateCredentialsMock = vi.fn();
 const checkReadinessMock = vi.fn();
-const getAreaChannelsMock = vi.fn();
+
+vi.mock("../hueHealthApi", async () => (await import("./fakeHueHealth")).fakeHueHealthApi);
 
 vi.mock("@/features/mode/modeApi", () => ({
-  getHueStreamStatus: (...args: unknown[]) => getHueStreamStatusMock(...args),
-  restartHue: (...args: unknown[]) => restartHueMock(...args),
+  restartHue: vi.fn(),
   startHue: vi.fn(),
 }));
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => shellLoadMock(),
-    save: (...args: unknown[]) => shellSaveMock(...args),
+    save: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
 vi.mock("../hueOnboardingApi", () => ({
   checkHueStreamReadiness: (...args: unknown[]) => checkReadinessMock(...args),
   discoverHueBridges: vi.fn(),
-  getHueAreaChannels: (...args: unknown[]) => getAreaChannelsMock(...args),
+  getHueAreaChannels: vi.fn().mockResolvedValue({
+    status: { code: "HUE_AREA_CHANNELS_EMPTY", message: "", details: null },
+    channels: [],
+  }),
   listHueEntertainmentAreas: (...args: unknown[]) => listAreasMock(...args),
   migrateHueCredentials: vi.fn().mockResolvedValue({
     status: { code: "HUE_CREDENTIAL_MIGRATION_FAILED", message: "no keychain" },
     backend: "plaintext-legacy",
   }),
   pairHueBridge: vi.fn(),
-  validateHueCredentials: (...args: unknown[]) => validateCredentialsMock(...args),
+  validateHueCredentials: vi.fn().mockResolvedValue({
+    valid: true,
+    status: { code: "HUE_CREDENTIAL_VALID", message: "valid", details: null },
+  }),
   verifyHueBridgeIp: vi.fn(),
 }));
 
-const ACTIVE_STREAMER_REASON = "HUE_STREAM_NOT_READY_ACTIVE_STREAMER";
+import { useHueOnboarding } from "../useHueOnboarding";
+
+function areaHealth(blocked: boolean, areaId = "area-1"): HueAreaHealth {
+  return {
+    areaId,
+    status: blocked
+      ? { code: "HUE_STREAM_NOT_READY", message: "blocked", details: null }
+      : { code: "HUE_STREAM_READY", message: "ready", details: null },
+    readiness: {
+      ready: !blocked,
+      reasons: blocked ? [HUE_READINESS_REASON.ACTIVE_STREAMER] : [],
+    },
+    checkedAtMs: Date.now(),
+  };
+}
+
+type Row = { activeStreamer?: boolean; readiness: { ready: boolean } | null };
+const firstRow = (current: ReturnType<typeof useHueOnboarding>) =>
+  current.areaGroups[0]?.areas[0] as Row | undefined;
 
 describe("useHueOnboarding — A3.1 active-streamer banner auto-clear", () => {
-  let useHueOnboardingHook: () => Record<string, unknown>;
-
-  beforeEach(async () => {
-    vi.resetModules();
-    getHueStreamStatusMock.mockReset();
-    restartHueMock.mockReset();
-    shellLoadMock.mockReset();
-    shellSaveMock.mockReset();
-    listAreasMock.mockReset();
-    validateCredentialsMock.mockReset();
-    checkReadinessMock.mockReset();
-    getAreaChannelsMock.mockReset();
-
-    shellSaveMock.mockResolvedValue(undefined);
+  beforeEach(() => {
+    vi.clearAllMocks();
+    __resetHueHealthStoreForTests();
+    resetHealth();
     shellLoadMock.mockResolvedValue({
       lastHueBridge: { id: "bridge-1", ip: "192.168.1.20", name: "Bridge" },
       hueAppKey: "app-user",
@@ -63,99 +77,57 @@ describe("useHueOnboarding — A3.1 active-streamer banner auto-clear", () => {
       hueCredentialStatus: HUE_CREDENTIAL_STATUS.VALID,
       lastHueAreaId: "area-1",
     });
-
-    getHueStreamStatusMock.mockResolvedValue({
-      active: false,
-      status: { state: "Idle", code: "HUE_RUNTIME_IDLE", message: "idle", details: null, triggerSource: "user" },
-      lastSolidColor: null,
-    });
-
-    validateCredentialsMock.mockResolvedValue({
-      valid: true,
-      status: { code: "HUE_CREDENTIAL_VALID", message: "valid", details: null },
-    });
-
     // Initial area listing reports a foreign streamer attached.
     listAreasMock.mockResolvedValue({
       status: { code: "HUE_AREA_LIST_OK", message: "ok", details: null },
-      areas: [
-        {
-          id: "area-1",
-          name: "Living Room",
-          roomName: "Salon",
-          channelCount: 3,
-          activeStreamer: true,
-        },
-      ],
+      areas: [{ id: "area-1", name: "Living Room", roomName: "Salon", channelCount: 3, activeStreamer: true }],
     });
-
-    getAreaChannelsMock.mockResolvedValue({
-      status: { code: "HUE_AREA_CHANNELS_EMPTY", message: "", details: null },
-      channels: [],
-    });
-
-    const hookModule = await import("../useHueOnboarding");
-    useHueOnboardingHook = hookModule.useHueOnboarding as unknown as () => Record<string, unknown>;
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
+  // The monitor re-reads a held area every 3 s; each answer it publishes lands
+  // on the row, so the banner clears without the user pressing revalidate.
+  it("clears area.activeStreamer as soon as the monitor publishes the area free", async () => {
+    const { result } = renderHook(() => useHueOnboarding());
+    await waitFor(() => expect(firstRow(result.current)?.activeStreamer).toBe(true));
+
+    act(() => {
+      publishHealth({ area: areaHealth(true) });
+    });
+    await waitFor(() => expect(firstRow(result.current)?.readiness?.ready).toBe(false));
+    expect(firstRow(result.current)?.activeStreamer).toBe(true);
+
+    act(() => {
+      publishHealth({ area: areaHealth(false) });
+    });
+    await waitFor(() => expect(firstRow(result.current)?.readiness?.ready).toBe(true));
+    expect(firstRow(result.current)?.activeStreamer).toBe(false);
+    // Nothing here asked the bridge itself.
+    expect(checkReadinessMock).not.toHaveBeenCalled();
   });
 
-  it("clears area.activeStreamer on the first background readiness tick after the foreign streamer disconnects", async () => {
-    // First readiness probe — foreign streamer still attached.
-    // Subsequent probes — foreign streamer gone.
-    checkReadinessMock
-      .mockResolvedValueOnce({
-        status: { code: "HUE_STREAM_NOT_READY", message: "blocked", details: null },
-        readiness: { ready: false, reasons: [ACTIVE_STREAMER_REASON] },
-      })
-      .mockResolvedValue({
-        status: { code: "HUE_STREAM_READY", message: "ready", details: null },
-        readiness: { ready: true, reasons: [] },
-      });
+  it("leaves the row alone when the published readiness is for another area", async () => {
+    const { result } = renderHook(() => useHueOnboarding());
+    await waitFor(() => expect(firstRow(result.current)?.activeStreamer).toBe(true));
 
-    const { result } = renderHook(() => useHueOnboardingHook());
-
-    // Wait for hook initialization to load credentials and area list.
-    await waitFor(() => {
-      const groups = result.current.areaGroups as Array<{ areas: Array<{ activeStreamer?: boolean }> }>;
-      expect(groups[0]?.areas[0]?.activeStreamer).toBe(true);
+    act(() => {
+      publishHealth({ area: areaHealth(false, "area-2") });
     });
-
-    // First background readiness tick fires immediately on mount and reports
-    // the area is still blocked. The activeStreamer flag must remain true.
-    await waitFor(() => {
-      expect(checkReadinessMock).toHaveBeenCalled();
-    });
-
-    await waitFor(() => {
-      const groups = result.current.areaGroups as Array<{ areas: Array<{ activeStreamer?: boolean; readiness: { ready: boolean } | null }> }>;
-      const area = groups[0]?.areas[0];
-      expect(area?.readiness?.ready).toBe(false);
-      expect(area?.activeStreamer).toBe(true);
-    });
-
-    const callsAfterFirstTick = checkReadinessMock.mock.calls.length;
-
-    // Now the foreign streamer disconnects: subsequent readiness calls return
-    // ready=true with no reasons. The 3 s blocked-cadence timer should fire
-    // the next tick, the snapshot updates, and activeStreamer flips to false.
     await act(async () => {
-      // Allow the recursive setTimeout to fire — vitest fake timers would
-      // be ideal, but the hook uses real `window.setTimeout` from the JSDOM
-      // env, so we wait for the cadence wall-clock instead. The blocked
-      // cadence is 3 s, so allow a small buffer.
-      await new Promise((resolve) => setTimeout(resolve, 3500));
+      await Promise.resolve();
     });
+    expect(firstRow(result.current)?.readiness).toBeNull();
+    expect(firstRow(result.current)?.activeStreamer).toBe(true);
+  });
 
-    expect(checkReadinessMock.mock.calls.length).toBeGreaterThan(callsAfterFirstTick);
+  it("keeps the readiness fresh by the monitor's clock, not the time it arrived", async () => {
+    const { result } = renderHook(() => useHueOnboarding());
+    await waitFor(() => expect(firstRow(result.current)?.activeStreamer).toBe(true));
 
-    await waitFor(() => {
-      const groups = result.current.areaGroups as Array<{ areas: Array<{ activeStreamer?: boolean; readiness: { ready: boolean } | null }> }>;
-      const area = groups[0]?.areas[0];
-      expect(area?.readiness?.ready).toBe(true);
-      expect(area?.activeStreamer).toBe(false);
+    act(() => {
+      publishHealth({ area: { ...areaHealth(false), checkedAtMs: Date.now() - 60_000 } });
     });
-  }, 10_000);
+    await waitFor(() => expect(firstRow(result.current)?.readiness?.ready).toBe(true));
+    expect(result.current.isReadinessStale).toBe(true);
+    expect(result.current.canStartHue).toBe(false);
+  });
 });

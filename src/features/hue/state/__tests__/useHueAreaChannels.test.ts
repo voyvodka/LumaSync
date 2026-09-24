@@ -12,16 +12,19 @@ vi.mock("../../hueOnboardingApi", () => ({
   getHueAreaChannels: (...args: unknown[]) => getAreaChannelsMock(...args),
 }));
 
-const getHueStreamStatusMock = vi.fn();
+// The runtime-idle check reads the health monitor's local runtime state.
+const getHueHealthMock = vi.fn();
 
-vi.mock("@/features/mode/modeApi", () => ({
-  getHueStreamStatus: (...args: unknown[]) => getHueStreamStatusMock(...args),
+vi.mock("../../hueHealthApi", () => ({
+  getHueHealth: (...args: unknown[]) => getHueHealthMock(...args),
 }));
 
 function runtimeIn(state: string) {
   return {
-    active: state !== "Idle",
-    status: { state, code: "HUE_STREAM_IDLE", message: "", details: null, triggerSource: "system" },
+    stream: {
+      active: state !== "Idle",
+      status: { state, code: "HUE_STREAM_IDLE", message: "", details: null, triggerSource: "system" },
+    },
   };
 }
 
@@ -47,7 +50,7 @@ describe("useHueAreaChannels", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getAreaChannelsMock.mockResolvedValue(response(HUE_AREA_CHANNELS_STATUS.OK, [CHANNEL]));
-    getHueStreamStatusMock.mockResolvedValue(runtimeIn("Idle"));
+    getHueHealthMock.mockResolvedValue(runtimeIn("Idle"));
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
@@ -222,7 +225,7 @@ describe("useHueAreaChannels", () => {
     });
 
     it("is not, while lighting is on — the command answers with our placements", async () => {
-      getHueStreamStatusMock.mockResolvedValue(runtimeIn("Running"));
+      getHueHealthMock.mockResolvedValue(runtimeIn("Running"));
       const { result } = renderHook(() => useHueAreaChannels(BRIDGE, CREDENTIALS, "area-1"));
 
       await waitFor(() => expect(result.current.areaChannels).toEqual([CHANNEL]));
@@ -230,7 +233,7 @@ describe("useHueAreaChannels", () => {
     });
 
     it("is not, when a stream started while the read was in flight", async () => {
-      getHueStreamStatusMock
+      getHueHealthMock
         .mockResolvedValueOnce(runtimeIn("Idle"))
         .mockResolvedValueOnce(runtimeIn("Running"));
       const { result } = renderHook(() => useHueAreaChannels(BRIDGE, CREDENTIALS, "area-1"));
@@ -240,7 +243,7 @@ describe("useHueAreaChannels", () => {
     });
 
     it("is not, when the runtime state cannot be read", async () => {
-      getHueStreamStatusMock.mockRejectedValue({ code: "IPC", message: "torn down" });
+      getHueHealthMock.mockRejectedValue({ code: "IPC", message: "torn down" });
       const { result } = renderHook(() => useHueAreaChannels(BRIDGE, CREDENTIALS, "area-1"));
 
       await waitFor(() => expect(result.current.areaChannels).toEqual([CHANNEL]));

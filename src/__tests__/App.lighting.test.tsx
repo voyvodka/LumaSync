@@ -11,9 +11,8 @@ import {
   bootDone,
   choices,
   env,
-  getHueStreamStatusMock,
   hueChip,
-  hueStatus,
+  hueStream,
   installInvokeDispatch,
   loadShellStateMock,
   nextApplyRuns,
@@ -42,16 +41,19 @@ vi.mock("../features/mode/lightingRuntimeEventsApi", async () => (await import("
 vi.mock("../features/telemetry/runtimeHealthEventsApi", async () => (await import("./support/appHarness")).mockRuntimeHealthEvents);
 vi.mock("../features/shell/StatusBar", async () => (await import("./support/appHarness")).mockStatusBar);
 vi.mock("../features/settings/SettingsLayout", async () => (await import("./support/appHarness")).mockSettingsLayout);
+vi.mock("../features/hue/hueHealthApi", async () => (await import("../features/hue/__tests__/fakeHueHealth")).fakeHueHealthApi);
 
 import App from "../App";
-import { __resetHueReadCacheForTests } from "../features/hue/hueReadCache";
+import { __resetHueHealthStoreForTests } from "../features/hue/state/hueHealthStore";
+import { fakeHueHealthApi, resetHealth, setHealth } from "../features/hue/__tests__/fakeHueHealth";
 import { __resetRuntimeHealthForTests } from "../features/telemetry/runtimeHealthSource";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Module-level cache: without this a prior test's status leaks into the next one.
-  __resetHueReadCacheForTests();
-  // Module-level too: the listener is attached once, by the first App mount.
+  // Module-level store: without this a prior test's snapshot leaks into the next one.
+  __resetHueHealthStoreForTests();
+  resetHealth();
+  // Module-level too: the runtime-health listener is attached once, by the first App mount.
   __resetRuntimeHealthForTests();
   resetAppHarness();
 });
@@ -148,7 +150,7 @@ describe("App lighting", () => {
   describe("the Hue chip reads the snapshot and the stream's health", () => {
     it("calls a driven, running stream streaming", async () => {
       loadShellStateMock.mockResolvedValue({ lastSection: "general", ...PAIRED, lastOutputTargets: ["hue"] });
-      getHueStreamStatusMock.mockResolvedValue(hueStatus("Running"));
+      setHealth(hueStream("Running"));
       nextApplyRuns({
         mode: { kind: "ambilight", targets: ["hue"] },
         active: true,
@@ -163,7 +165,7 @@ describe("App lighting", () => {
 
     it("reads a retrying bridge as reconnecting, not streaming", async () => {
       loadShellStateMock.mockResolvedValue({ lastSection: "general", ...PAIRED, lastOutputTargets: ["hue"] });
-      getHueStreamStatusMock.mockResolvedValue(hueStatus("Reconnecting"));
+      setHealth(hueStream("Reconnecting"));
       nextApplyRuns({
         mode: { kind: "ambilight", targets: ["hue"] },
         active: true,
@@ -178,7 +180,7 @@ describe("App lighting", () => {
 
     it("does not call a stream the backend reports dead a session", async () => {
       loadShellStateMock.mockResolvedValue({ lastSection: "general", ...PAIRED, lastOutputTargets: ["hue"] });
-      getHueStreamStatusMock.mockResolvedValue(hueStatus("Failed"));
+      setHealth(hueStream("Failed"));
       nextApplyRuns({
         mode: { kind: "ambilight", targets: ["hue"] },
         active: true,
@@ -188,7 +190,7 @@ describe("App lighting", () => {
 
       render(<App />);
 
-      await waitFor(() => expect(getHueStreamStatusMock).toHaveBeenCalled());
+      await waitFor(() => expect(fakeHueHealthApi.watchHueHealth).toHaveBeenCalled());
       await waitFor(() => expect(screen.getByTestId("hue-shown-state")).toHaveTextContent("none"));
       // The health poll only reads: the re-apply it used to force was redundant.
       expect(choices()).toEqual([{ origin: "boot" }]);
@@ -363,7 +365,7 @@ describe("App lighting", () => {
       expect(env.statusBarRenders).toBeGreaterThan(appBefore);
       // …the store subscriber sees it…
       expect(env.layoutProbeRenders).toBeGreaterThan(probeBefore);
-      // …and the layout, whose props are Hue status only, is not re-rendered.
+      // …and the layout, which takes no props, is not re-rendered.
       expect(env.layoutRenders).toBe(layoutBefore);
     });
 
