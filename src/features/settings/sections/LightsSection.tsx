@@ -44,6 +44,7 @@ import { shellStore } from "@/features/persistence/shellStore";
 import { outputAvailability } from "@/features/mode/model/outputAvailability";
 import { MODE_KINDS } from "@/features/mode/model/modeKinds";
 import { ModeStrip } from "@/features/mode/ui/ModeStrip";
+import { Callout } from "@/shared/ui/Callout";
 import { RangeRow } from "@/shared/ui/RangeRow";
 import { Toggle } from "@/shared/ui/Toggle";
 
@@ -533,17 +534,12 @@ export function LightsSection({
                 worker start from LED count + chip type and never re-sampled,
                 so this is a steady-state condition, announced once. */}
             {linkConstrained ? (
-              <div className="lm-signal-note" role="status">
-                <span className="lm-signal-note-dot" aria-hidden />
-                <span>
-                  <b>
-                    {t("lights:signal.linkBudget.constrained", {
-                      fps: Math.round(linkBudget.linkMaxFps),
-                    })}
-                  </b>{" "}
-                  {t("lights:signal.linkBudget.hint")}
-                </span>
-              </div>
+              <Callout tone="warning" className="lm-signal-note">
+                {t("lights:signal.linkBudget.constrained", {
+                  fps: Math.round(linkBudget.linkMaxFps),
+                })}{" "}
+                {t("lights:signal.linkBudget.hint")}
+              </Callout>
             ) : null}
           </div>
         </div>}
