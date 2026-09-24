@@ -452,9 +452,6 @@
   .lm-updater-spinner::before {
     animation-duration: 2.2s;
   }
-  .lm-hue-wait-sp {
-    animation-duration: 2.2s;
-  }
 
   /* Decorative infinite loops — kill outright (UI Gap 7).
      Functional spinners (lm-spin) keep ticking but at a calmer cadence. */

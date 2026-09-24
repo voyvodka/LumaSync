@@ -6,7 +6,10 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+
+import { Button } from "@/shared/ui/Button";
 
 import { readStylesheet } from "@/test/stylesheetSource";
 
@@ -40,8 +43,19 @@ describe("device card footer actions", () => {
     expect(source).toContain('className="lm-dcard-actions"');
     const footers = source.split('className="lm-dcard-actions"').slice(1);
     for (const footer of footers) {
-      const firstButton = /<button[\s\S]*?className="([^"]+)"/.exec(footer)?.[1];
-      expect(firstButton?.split(" ")).toContain("lm-dcard-act");
+      // `<Button size="card">` renders the same class (pinned below).
+      const first = /<(button|Button)\b([\s\S]*?)>/.exec(footer);
+      const sized =
+        first?.[1] === "Button"
+          ? /\bsize="card"/.test(first[2])
+          : /className="([^"]*\blm-dcard-act\b[^"]*)"/.test(first?.[2] ?? "");
+      expect(sized, `first footer control: ${first?.[0].slice(0, 80)}`).toBe(true);
     }
+  });
+
+  it("<Button size=\"card\"> is the footer class", () => {
+    render(<Button size="card">x</Button>);
+    expect(screen.getByRole("button")).toHaveClass("lm-dcard-act");
+    expect(screen.getByRole("button")).not.toHaveClass("lm-btn");
   });
 });

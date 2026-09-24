@@ -226,33 +226,14 @@
   border-radius: 10px;
   overflow: hidden;
 }
-/* Serial link-budget note. Amber, not red: a baud ceiling is a limit the user
-   can act on, not a failure. Deliberately un-animated — the value behind it is
-   computed once at worker start and never re-sampled, so a fade-in would fire
-   on every mode toggle for text that has not changed. */
+/* Serial link-budget note: a <Callout tone="warning">, since a baud ceiling is
+   a limit the user can act on, not a failure. This rule only seats it in the
+   signal panel. Deliberately un-animated — the value behind it is computed
+   once at worker start, so a fade-in would fire on every mode toggle for text
+   that has not changed. */
 .lm-signal-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 7px;
   padding: 9px 14px 10px;
   border-top: 1px solid var(--lm-line);
-  background: rgba(255, 176, 32, 0.06);
-  font-family: var(--lm-mono);
-  font-size: 10px;
-  line-height: 1.5;
-  color: var(--lm-ink-dim);
-}
-.lm-signal-note-dot {
-  flex-shrink: 0;
-  margin-top: 4px;
-  width: 6px;
-  height: 6px;
-  border-radius: 9999px;
-  background: var(--lm-amber);
-}
-.lm-signal-note b {
-  color: var(--lm-amber);
-  font-weight: 500;
 }
 
 .lm-profile {

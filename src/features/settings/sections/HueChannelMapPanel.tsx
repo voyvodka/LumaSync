@@ -29,7 +29,9 @@ import {
   snapshotAfterPush,
 } from "@/features/hue/model/hueSyncState";
 import { parseSkippedChannelIds } from "@/features/hue/model/hueWritebackResult";
-import { HueChannelMapConfirmDialog } from "./HueChannelMapConfirmDialog";
+import { Button } from "@/shared/ui/Button";
+import { Callout } from "@/shared/ui/Callout";
+import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 
 interface Props {
   channels: HueAreaChannelInfo[];
@@ -44,7 +46,7 @@ interface Props {
   placements?: HueChannelPlacement[];
   /** Called when any channel position changes. */
   onPositionChange?: (updated: HueChannelPlacement[]) => void;
-  /** When true, renders an inline amber error message under the rows. */
+  /** When true, renders an inline error under the rows. */
   persistError?: boolean;
   /** Bridge IP for write-back (CHAN-05). */
   bridgeIp?: string;
@@ -398,11 +400,7 @@ export function HueChannelMapPanel({
           </div>
         )}
 
-        {persistError && (
-          <div className="lm-chmap-feedback is-warn" role="alert">
-            <span>{t("hue:channelMap.saveError")}</span>
-          </div>
-        )}
+        {persistError && <Callout tone="error">{t("hue:channelMap.saveError")}</Callout>}
       </div>
 
       <div className="lm-chmap-rows">
@@ -460,21 +458,18 @@ export function HueChannelMapPanel({
           <div className="lm-chmap-footer-row">
             <span className="lm-chmap-beta">{t("hue:channelMap.beta")}</span>
             <div className="lm-chmap-footer-spacer" />
-            <button
-              type="button"
-              className="lm-device-btn"
+            <Button
               disabled={bridgeBusy || actionBusy || channels.length === 0}
-              aria-busy={isPulling}
+              busy={isPulling}
               title={bridgeBusy ? t("hue:channelMap.saveToBridgeTooltip") : undefined}
               onClick={() => setPendingConfirm("pull")}
             >
               {t("hue:channelMap.pullFromBridge")}
-            </button>
-            <button
-              type="button"
-              className="lm-device-btn is-primary"
+            </Button>
+            <Button
+              variant="primary"
               disabled={bridgeBusy || actionBusy}
-              aria-busy={isSaving}
+              busy={isSaving}
               title={
                 isStale
                   ? t(EMPTY_STATE_KEYS.unreachable.heading)
@@ -485,14 +480,14 @@ export function HueChannelMapPanel({
               onClick={() => setPendingConfirm("save")}
             >
               {isSaving ? t("hue:channelMap.saving") : t("hue:channelMap.saveToBridge")}
-            </button>
+            </Button>
           </div>
           {actionResult !== null && renderResult(actionResult)}
         </div>
       )}
 
       {pendingConfirm !== null && (
-        <HueChannelMapConfirmDialog
+        <ConfirmDialog
           title={
             pendingConfirm === "save"
               ? t("hue:channelMap.saveConfirmTitle")
@@ -508,8 +503,10 @@ export function HueChannelMapPanel({
               ? t("hue:channelMap.saveToBridge")
               : t("hue:channelMap.pullFromBridge")
           }
+          cancelLabel={t("hue:page.cancel")}
           onConfirm={confirmPending}
           onCancel={() => setPendingConfirm(null)}
+          testId="hue-channel-map-confirm"
         />
       )}
     </section>
@@ -518,68 +515,41 @@ export function HueChannelMapPanel({
   function renderResult(result: BridgeActionResult) {
     switch (result.kind) {
       case "saved":
-        return (
-          <div className="lm-chmap-feedback is-ok" role="status" aria-live="polite">
-            <span>{t("hue:channelMap.savedToBridge")}</span>
-          </div>
-        );
+        return <Callout tone="ok">{t("hue:channelMap.savedToBridge")}</Callout>;
       case "savedPartial":
         return (
-          <div className="lm-chmap-feedback is-warn" role="status" aria-live="polite">
-            <span>
-              {result.skippedIds.length > 0
-                ? t("hue:channelMap.savedPartial", { channels: channelList(result.skippedIds) })
-                : t("hue:channelMap.savedPartialUnnamed")}
-            </span>
-          </div>
+          <Callout tone="warning">
+            {result.skippedIds.length > 0
+              ? t("hue:channelMap.savedPartial", { channels: channelList(result.skippedIds) })
+              : t("hue:channelMap.savedPartialUnnamed")}
+          </Callout>
         );
       case "pulled":
-        return (
-          <div
-            className={`lm-chmap-feedback ${result.clampedIds.length > 0 ? "is-warn" : "is-ok"}`}
-            role="status"
-            aria-live="polite"
-          >
-            <span>
-              {result.clampedIds.length > 0
-                ? t("hue:channelMap.pulledClamped", { channels: channelList(result.clampedIds) })
-                : t("hue:channelMap.pulled")}
-            </span>
-          </div>
+        return result.clampedIds.length > 0 ? (
+          <Callout tone="warning">
+            {t("hue:channelMap.pulledClamped", { channels: channelList(result.clampedIds) })}
+          </Callout>
+        ) : (
+          <Callout tone="ok">{t("hue:channelMap.pulled")}</Callout>
         );
       case "pullFailed":
-        return (
-          <div className="lm-chmap-feedback is-err" role="alert">
-            <span>{t("hue:channelMap.pullFailed")}</span>
-          </div>
-        );
+        return <Callout tone="error">{t("hue:channelMap.pullFailed")}</Callout>;
       case "saveFailed": {
         const needsRepair = result.code === HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED;
+        const action =
+          needsRepair && onRepair
+            ? { label: t("hue:runtime.actions.repair"), onClick: onRepair }
+            : RETRYABLE_WRITEBACK_CODES.has(result.code)
+              ? { label: t("hue:channelMap.saveToBridgeErrorRetry"), onClick: () => { void runSave(); } }
+              : undefined;
         return (
-          <div className="lm-chmap-feedback is-err" role="alert">
-            <span>
-              {t("hue:channelMap.saveToBridgeError", {
-                reason: t(`hue:runtime.writeback.codes.${result.code}`, {
-                  defaultValue: result.code,
-                }),
-              })}
-            </span>
-            {needsRepair && onRepair ? (
-              <button type="button" className="lm-chmap-feedback-retry" onClick={onRepair}>
-                {t("hue:runtime.actions.repair")}
-              </button>
-            ) : RETRYABLE_WRITEBACK_CODES.has(result.code) ? (
-              <button
-                type="button"
-                className="lm-chmap-feedback-retry"
-                onClick={() => {
-                  void runSave();
-                }}
-              >
-                {t("hue:channelMap.saveToBridgeErrorRetry")}
-              </button>
-            ) : null}
-          </div>
+          <Callout tone="error" action={action}>
+            {t("hue:channelMap.saveToBridgeError", {
+              reason: t(`hue:runtime.writeback.codes.${result.code}`, {
+                defaultValue: result.code,
+              }),
+            })}
+          </Callout>
         );
       }
     }
