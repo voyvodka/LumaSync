@@ -1,27 +1,39 @@
-import { useId } from "react";
+import { useEffect, useId, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
 import { cx } from "@/shared/ui/cx";
 import { IconInfo } from "@/shared/ui/icons";
 
+import type { HueAreaChoice } from "./useHueAreaChoice";
+
 interface HueAreaPickerProps {
-  hue: UseHueOnboardingResult;
-  readinessDisabled: boolean;
+  areaGroups: UseHueOnboardingResult["areaGroups"];
+  choice: HueAreaChoice;
 }
 
 /**
- * The entertainment-area list of a freshly paired bridge. Toggle buttons, not
- * a radio group: choosing an area commits it and closes the list, so arrow
- * keys that select as they move would pick whatever they passed first.
+ * The entertainment-area list. Toggle buttons, not a radio group: the list
+ * only highlights, and the card footer's Confirm commits — so a Tab stop per
+ * area costs less than teaching a roving focus to a list this short.
  */
-export function HueAreaPicker({ hue, readinessDisabled }: HueAreaPickerProps) {
+export function HueAreaPicker({ areaGroups, choice }: HueAreaPickerProps) {
   const { t } = useTranslation();
   const baseId = useId();
   const labelId = `${baseId}-label`;
-  const { areaGroups, selectedAreaId, selectArea, revalidateArea, isCheckingReadiness } = hue;
+  const { draftId, pick, changing } = choice;
   const areas = areaGroups.flatMap((group) => group.areas);
-  const selectedIsHeld = areas.some((area) => area.activeStreamer && area.id === selectedAreaId);
+  const draftIsHeld = areas.some((area) => area.activeStreamer && area.id === draftId);
+
+  // "Change area" sat in the footer this list replaces, so its focus would
+  // otherwise fall to the document.
+  const listRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!changing) return;
+    const list = listRef.current;
+    const target = list?.querySelector<HTMLElement>('[aria-pressed="true"]') ?? list?.querySelector<HTMLElement>("button");
+    target?.focus();
+  }, [changing]);
 
   return (
     <div className="lm-hue-areas">
@@ -33,26 +45,23 @@ export function HueAreaPicker({ hue, readinessDisabled }: HueAreaPickerProps) {
           {t("hue:areas.empty")}
         </p>
       ) : (
-        <div className="lm-hue-area-list" role="group" aria-labelledby={labelId}>
+        <div className="lm-hue-area-list" role="group" aria-labelledby={labelId} ref={listRef}>
           {areas.map((area, index) => {
             const channelsId = `${baseId}-${index}-ch`;
             const heldId = `${baseId}-${index}-held`;
             const held = Boolean(area.activeStreamer);
+            const pressed = draftId === area.id;
             return (
               <button
                 key={area.id}
                 type="button"
-                className={cx(
-                  "lm-hue-area-item",
-                  selectedAreaId === area.id && "is-on",
-                  held && "is-blocked",
-                )}
-                aria-pressed={selectedAreaId === area.id}
+                className={cx("lm-hue-area-item", pressed && "is-on", held && "is-blocked")}
+                aria-pressed={pressed}
                 // Still focusable, so the reason it cannot be picked is read out.
                 aria-disabled={held || undefined}
                 aria-label={area.name}
                 aria-describedby={held ? `${channelsId} ${heldId}` : channelsId}
-                onClick={() => { if (!held) selectArea(area.id); }}
+                onClick={() => { if (!held) pick(area.id); }}
               >
                 <span className="lm-hue-area-ic" aria-hidden="true" />
                 <span className="lm-hue-area-name">{area.name}</span>
@@ -69,8 +78,8 @@ export function HueAreaPicker({ hue, readinessDisabled }: HueAreaPickerProps) {
           })}
         </div>
       )}
-      {/* State G: another app is streaming to the chosen area. */}
-      {selectedIsHeld ? (
+      {/* State G: another app is streaming to the highlighted area. */}
+      {draftIsHeld ? (
         <div className="lm-hue-repair is-error" style={{ marginTop: "6px" }}>
           <IconInfo />
           <div className="lm-hue-repair-tx">
@@ -78,17 +87,6 @@ export function HueAreaPicker({ hue, readinessDisabled }: HueAreaPickerProps) {
             <div className="lm-hue-repair-sub">{t("hue:areas.conflictHint")}</div>
           </div>
         </div>
-      ) : null}
-      {selectedAreaId ? (
-        <button
-          type="button"
-          className="lm-hue-area-confirm"
-          onClick={() => { void revalidateArea(); }}
-          disabled={readinessDisabled}
-          aria-busy={isCheckingReadiness}
-        >
-          {isCheckingReadiness ? t("hue:actions.checkingReadiness") : `${t("hue:page.confirmArea")} →`}
-        </button>
       ) : null}
     </div>
   );
