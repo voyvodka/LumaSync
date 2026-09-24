@@ -37,7 +37,8 @@ vi.mock("@/features/hue/hueOnboardingApi", () => ({
   verifyHueBridgeIp: vi.fn<typeof hueOnboardingApiModule.verifyHueBridgeIp>(),
 }));
 
-vi.mock("@/features/mode/modeApi", () => ({ stopHue: vi.fn() }));
+// Stubbed so nothing here can reach the Tauri transport.
+vi.mock("@/features/mode/modeApi", () => ({}));
 vi.mock("../../HueChannelMapPanel", () => ({ HueChannelMapPanel: () => null }));
 
 let hook: ReturnType<typeof useHueOnboardingCore>;

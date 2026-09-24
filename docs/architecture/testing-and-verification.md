@@ -106,9 +106,9 @@ can resolve a shape the backend never sends and the test still passes. On the co
 a command without a fixture rejects naming itself — or `invokeFromCommands({...})` as the
 implementation of a mocked `invoke`. For a mocked bridge function, `vi.fn<typeof api.fn>()`.
 
-Typing the first 279 boundary doubles found fixtures no backend could produce: a
-`HUE_CREDENTIAL_OK` that no producer has ever emitted, runtime results without the fields Rust
-always sends as `null`, a twin-overlay reply of `{ ok: true }`, a serial status of
+Typing the boundary doubles (665 bare `vi.fn()` down to 383) found fixtures no backend could
+produce: a `HUE_CREDENTIAL_OK` that no producer has ever emitted, runtime results without the fields
+Rust always sends as `null`, a twin-overlay reply of `{ ok: true }`, a serial status of
 `{ connected: true }`. `verify:untyped-mocks` (in `check:all`) counts the bare `vi.fn()` left under
 `src/`, `mock/` and `e2e/`, comments excluded, against `scripts/verify/untyped-mock-baseline.txt`.
 The count is static, so it is exact: above the baseline fails, and below it fails until the file is

@@ -6,7 +6,7 @@
  * double on the Tauri boundary can resolve a shape the backend never sends
  * and the test still passes. `vi.fn<typeof api.fn>()`, or `mockCommands({...})`
  * from `src/test/mockCommands.ts` (typed by the IPC command map), fails the
- * typecheck instead. Typing the first 279 surfaced a validate code no producer
+ * typecheck instead. Typing the boundary ones surfaced a validate code no producer
  * has ever emitted, runtime results missing fields Rust always sends, and a
  * twin-overlay reply of `{ ok: true }`.
  *
