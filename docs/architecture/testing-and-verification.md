@@ -14,12 +14,69 @@ like it proves more than it does.
 | `verify:shell-contracts` | every PR | every status code crossing IPC is *declared* — a drift guard, not a coverage score |
 | `verify:design-tokens` | every PR | every bare `var(--lm-*)` names a token that exists — see below |
 | `launch-smoke` / `overlay-smoke` | CI | the debug binary starts; on Windows, the overlay paints and passes clicks through |
-| WDIO e2e (`e2e/`) | **nobody — by hand only** | what a real layout engine and a real window decide |
+| WDIO e2e (`e2e/`) | CI, `e2e-macos` job, **not required** | what a real layout engine and a real window decide |
 
-The last row is the one to read twice. `ci.yml` never invokes `wdio` and `release.yml` runs
-`typecheck:e2e` alone, which compiles the specs without executing them. The suite runs on a
-maintainer machine or not at all — which is how it came to encode an assumption that had been false
-for several releases. **Treat anything it asserts as unverified until you have run it yourself.**
+The last row used to read "nobody — by hand only", because `ci.yml` never invoked `wdio` and
+`release.yml` only compiled the specs via `typecheck:e2e`. That is fixed by the `e2e-macos` job (see
+below), but the caveat only narrows, it does not disappear: the job is not a required status check,
+so a red run does not block a merge, and it proves only what a macOS runner shows — Linux and
+Windows are still unverified by this layer. **Treat anything this layer asserts on a platform it did
+not just run on as unverified until you have run it yourself.**
+
+## The CI e2e job (`e2e-macos`)
+
+`.github/workflows/ci.yml`'s `e2e-macos` job runs the WDIO suite and the UI audit probe on
+`macos-latest`, on every PR and every push to `main` — the one OS the `embedded` WebDriver provider
+works on at all (`tauri-driver` is Windows+Linux only, see below). It exists specifically so nobody
+has to run this layer on a machine they are also using: a GitHub-hosted runner can never be occluded
+by other work, and its `shell-state.json` is always a fresh file the job's own run created, never a
+maintainer's real one.
+
+It is **deliberately not a required check** — branch protection pins the four `Build and
+Check (<os>)` / `Analyze (javascript-typescript)` contexts by name, and this job must never take one
+of those names (renaming a workflow job renames its status context; see `ls-project-bugs`, "branch
+protection deadlock" post-mortem, for what that did the one time it happened by accident).
+
+Steps, mirroring the `verify` job's macOS toolchain setup (same pinned actions, same Xcode-26
+selection, same `rust-toolchain.toml`) but with its own `Swatinem/rust-cache` key
+(`macos-latest-e2e`, distinct from `verify`'s `macos-latest`): install the toolchain, `bun run
+e2e:build` (builds with `--features e2e`, never `cargo test`, which overwrites the same binary path
+with a dev-cfg build that loads the Vite dev URL and comes up blank), run `npx wdio run
+wdio.conf.ts`, then run the probe with `LUMASYNC_AUDIT_OUT` pointed at a workspace directory. Both
+WDIO runs are teed to a log file; the probe step and the artifact upload both run with `if: always`,
+so a failed suite still leaves behind the PNGs, `report.json`, and both WDIO logs. Artifacts land
+under the `e2e-macos-artifacts` name (`e2e-artifacts/wdio-logs/*.log`, `e2e-artifacts/audit/*.png`,
+`e2e-artifacts/audit/report.json`), retained 14 days.
+
+**No `shell-state.json` seed.** The job runs against whatever the runner starts with — nothing, on a
+fresh runner — and this was audited rather than assumed:
+
+- The `verify` job's own launch-smoke step already proves cold boot (zero prior state) works on
+  every push, on all three OSes.
+- Onboarding is a dismissible hint in the shell's notice slot, never a full-screen gate
+  (`useOnboardingStep.ts`: "onboarding is a hint, not a gate") — it cannot block `waitForAppReady`,
+  which only waits for the mode strip or a section tab, neither of which onboarding covers.
+- Every spec that could be state-sensitive already reads persisted state instead of assuming it:
+  `shell.e2e.ts` captures `persistedUiMode()` rather than hard-coding a starting mode (see the
+  round-trip bug fixed by that change, further down this file), and `shellLightingMode.e2e.ts`
+  drives Ambilight/Solid only when the button's own `disabled` attribute says the app's
+  `hasAnyOutput` gate allows it — which it never does on a runner with no serial device, no WLED
+  target, and no paired Hue bridge, so those two modes are always skipped there, not force-driven
+  against nothing.
+- Nothing the specs touch reaches the network in a way that can hang: the e2e build's `e2eBuild`
+  launch-context flag makes `useAutoUpdater` skip the startup update check outright; Hue bridge
+  discovery is invoked only from the pairing button the specs never click, never on boot or on
+  opening the Hue device-category rail; and macOS screen-capture consent has two calls behind two
+  different gates (`screen_capture_permission.rs`) — `get_screen_capture_permission` only ever calls
+  the non-prompting `CGPreflightScreenCaptureAccess`, and the prompting `CGRequestScreenCaptureAccess`
+  is reserved for the capture-start path, which is unreachable here because Ambilight is always
+  disabled (no output target) on a bare runner.
+
+If a future spec needs a *completed* onboarding state or a paired device to exercise a path this
+audit didn't need, seed a minimal `shell-state.json` in a step before the suite runs (the path is
+`~/Library/Application Support/com.lumasync.app/shell-state.json` on macOS, keyed by
+`SHELL_STORE_KEY` from `src/shared/contracts/shell.ts`) and say so in that spec's own comment, the
+way `shell.e2e.ts` documents why it reads rather than sets the starting UI mode.
 
 ## The act() warning ratchet
 

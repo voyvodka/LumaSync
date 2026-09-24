@@ -266,3 +266,121 @@ jobs:
         run: |
           cargo install --locked cargo-audit
           cargo audit
+
+  # WDIO e2e + the UI audit probe, on the one OS the `embedded` WebDriver
+  # provider works on at all (tauri-driver is Windows+Linux only, tauri-apps/
+  # tauri#7068 — see docs/architecture/testing-and-verification.md). Not a
+  # required status check: branch protection pins the four `verify`/`Analyze`
+  # contexts by name, and this job must never collide with one of those names
+  # (renaming a job renames its context and can deadlock every PR — see
+  # ls-project-bugs, "branch protection deadlock"). Runs on a GitHub-hosted
+  # runner precisely so it never drives a machine someone is using — unlike a
+  # maintainer's desktop, this window can never be occluded by other work, and
+  # `shell-state.json` here is always the runner's own fresh file, never a
+  # shared one (docs/architecture/testing-and-verification.md).
+  e2e-macos:
+    name: E2E (macos-latest)
+    runs-on: macos-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+
+      # Kept deliberately: vitest, wdio and the Tauri CLI still resolve through a
+      # Node shebang, so removing this breaks the run even though Bun installs.
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Cache Bun install cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          components: rustfmt, clippy
+
+      # rust-toolchain.toml pins the exact version cargo runs under; install it
+      # up front rather than on first cargo call.
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install
+
+      - name: Select Xcode 26 (macOS 26 SDK for screencapturekit 8 / apple-metal)
+        run: |
+          latest=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$latest" ]; then latest=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1); fi
+          echo "Selecting $latest"
+          sudo xcode-select -s "$latest/Contents/Developer"
+          xcodebuild -version
+          echo "macOS SDK: $(xcrun --sdk macosx --show-sdk-version)"
+
+      # Own shared-key, deliberately distinct from the `verify` job's
+      # `macos-latest` key: `e2e:build` compiles with `--features e2e` (the
+      # embedded WebDriver plugin), a different artifact set from `verify`'s
+      # plain debug build. Sharing a key would race two jobs writing the same
+      # cache entry in one workflow run and buys nothing — the two builds
+      # barely overlap in object files.
+      - name: Rust cache
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: src-tauri
+          prefix-key: v1.6-rust-cache
+          shared-key: macos-latest-e2e
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      # Not `cargo test`, which overwrites this same binary path with a dev-cfg
+      # build that loads the Vite dev URL and comes up blank
+      # (docs/architecture/testing-and-verification.md).
+      - name: Build the e2e binary
+        run: bun run e2e:build
+
+      - name: Prepare artifact directories
+        run: mkdir -p e2e-artifacts/wdio-logs e2e-artifacts/audit
+
+      # No `shell-state.json` seed: the app already boots correctly with none
+      # at all (this is exactly what the `verify` job's launch-smoke step
+      # proves on every push) and the specs are written to read persisted
+      # state rather than assume it — see the "CI e2e job" section of
+      # docs/architecture/testing-and-verification.md for the full audit of
+      # why a fresh-runner run is safe (onboarding is a dismissible hint, not
+      # a gate; Ambilight/Solid are gated behind the app's own disabled-button
+      # check; nothing here calls the macOS screen-recording *request* path,
+      # only the non-prompting preflight).
+      - name: Run WDIO e2e suite
+        run: |
+          set -o pipefail
+          npx wdio run wdio.conf.ts 2>&1 | tee e2e-artifacts/wdio-logs/e2e-suite.log
+
+      # Runs even if the suite above failed, so a red run still leaves behind
+      # a picture of what the window actually showed.
+      - name: Run UI audit probe
+        if: always()
+        env:
+          LUMASYNC_AUDIT_OUT: ${{ github.workspace }}/e2e-artifacts/audit
+        run: |
+          set -o pipefail
+          npx wdio run wdio.conf.ts --spec e2e/specs/ui-audit.probe.ts 2>&1 | tee e2e-artifacts/wdio-logs/ui-audit-probe.log
+
+      - name: Upload e2e artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-macos-artifacts
+          path: e2e-artifacts/**
+          retention-days: 14
+          if-no-files-found: warn
