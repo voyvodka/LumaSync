@@ -286,7 +286,7 @@ describe("Settings telemetry wiring", () => {
     renderWithShellStores(<SettingsLayout />, SYSTEM_SECTION);
 
     const toggle = await screen.findByTestId("nerd-stats-toggle");
-    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(toggle).toHaveAttribute("aria-checked", "false");
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
@@ -302,7 +302,7 @@ describe("Settings telemetry wiring", () => {
       toggle.click();
     });
 
-    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(toggle).toHaveAttribute("aria-checked", "true");
     expect(shellSaveMock).toHaveBeenCalledWith({ showNerdStats: true });
     await waitFor(() => expect(screen.getByText("60.00")).toBeInTheDocument());
     expect(getFullTelemetrySnapshotMock).toHaveBeenCalled();

@@ -233,13 +233,11 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
             <div className="lm-settings-row-desc">{t("settings:nerdStats.description")}</div>
           </div>
           <div className="lm-settings-row-r">
-            <button
-              type="button"
-              className="lm-settings-tg"
+            <Toggle
+              checked={showNerdStats}
+              onChange={(next) => { void setShowNerdStats(next); }}
+              label={t("settings:nerdStats.label")}
               data-testid="nerd-stats-toggle"
-              onClick={() => { void setShowNerdStats(!showNerdStats); }}
-              aria-pressed={showNerdStats}
-              aria-label={t("settings:nerdStats.label")}
             />
           </div>
         </div>

@@ -49,13 +49,13 @@ async function openGeneral(): Promise<void> {
 /** Clicks the toggle only when it is not already where `on` wants it. */
 async function setNerdStats(on: boolean): Promise<void> {
   await openGeneral();
-  if ((await attribute(TOGGLE, "aria-pressed")) !== String(on)) {
+  if ((await attribute(TOGGLE, "aria-checked")) !== String(on)) {
     await clickTestId(TOGGLE_ID);
   }
-  await browser.waitUntil(async () => (await attribute(TOGGLE, "aria-pressed")) === String(on), {
+  await browser.waitUntil(async () => (await attribute(TOGGLE, "aria-checked")) === String(on), {
     timeout: 5_000,
     interval: 100,
-    timeoutMsg: `the toggle never read aria-pressed=${on}`,
+    timeoutMsg: `the toggle never read aria-checked=${on}`,
   });
   await waitForBar(on, `setNerdStats(${on})`);
   // The save is what makes it survive; the optimistic flip alone would not.
@@ -174,6 +174,6 @@ describe("stats for nerds", () => {
     await expectChipsOnly("full, off");
     expect(persistedShowNerdStats()).toBe(false);
     await openGeneral();
-    expect(await attribute(TOGGLE, "aria-pressed")).toBe("false");
+    expect(await attribute(TOGGLE, "aria-checked")).toBe("false");
   });
 });
