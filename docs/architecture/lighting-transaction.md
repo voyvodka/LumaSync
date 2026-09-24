@@ -179,7 +179,9 @@ up to its total, holds more than `MAX_TOTAL_LEDS` (4096 — four `u16` edge coun
 and every frame allocates per LED), has a bottom gap wider than the bottom edge, or carries an
 enum string this build does not know; or a colour correction outside the panel's ranges. It is a
 gate like the device and Hue gates, so the transaction answers `OUTPUTS_REFUSED` and what ran keeps
-running. The saved colour correction is clamped as the frontend's normaliser clamps it, so a value
+running. A refused layout (`details` starting `ledCalibration`) is read by both windows as the
+calibration gate: the main window opens LED Setup and the popup says the strip needs calibrating
+(`needsCalibration` in `modeApplyOutcome.ts`). The saved colour correction is clamped as the frontend's normaliser clamps it, so a value
 an older build let through does not start refusing every mode after an update.
 
 **What stays in the frontend.** The notice copy and its timers, the screen-recording preflight

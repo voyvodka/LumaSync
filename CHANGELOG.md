@@ -95,6 +95,15 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- LED control popup: Off now turns your Hue lights off as well as the strip, Solid and Ambilight
+  now light your Hue lights when Hue is one of your outputs, and the mode you pick there is
+  remembered for the next launch like one picked in the main window. Picking a mode there with a
+  strip that still needs calibrating now says so instead of doing nothing.
+- Lighting: fewer needless restarts. Dragging a brightness or colour slider, changing a setting,
+  or a Hue stream coming back no longer restarts the running mode over and over; a setting change
+  is applied once, from whichever window made it, including the LED control popup.
+- Lighting: a saved LED layout whose numbers do not add up is no longer used to drive the strip;
+  picking a mode opens LED Setup to fix it instead.
 - Lighting: the window, and the LED control popup, could freeze for a few seconds when they asked
   which mode was running while a mode was switching. That answer no longer waits for the switch.
 - USB strips and WLED: with black border detection on, a letterboxed film no longer turns the

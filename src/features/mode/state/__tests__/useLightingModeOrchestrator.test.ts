@@ -309,6 +309,24 @@ describe("useLightingModeOrchestrator", () => {
       expect(onRequireCalibration).toHaveBeenCalledOnce();
     });
 
+    it("routes a saved layout Rust refused to the editor too", async () => {
+      applyOutputsMock.mockResolvedValue(
+        reply("OUTPUTS_REFUSED", snapshot(), {
+          applyStatus: {
+            code: "LIGHTING_MODE_INVALID_CONFIG",
+            message: "",
+            details: "ledCalibration: totalLeds is 60 but the edge counts add up to 59",
+          },
+        }),
+      );
+      const { view, onRequireCalibration } = mount();
+      await settle(view);
+
+      await act(() => view.result.current.handleLightingModeChange({ kind: "ambilight" }));
+
+      expect(onRequireCalibration).toHaveBeenCalledOnce();
+    });
+
     it("raises the backend's start failure, but keeps the probe's permission notice over an unclassified one", async () => {
       getScreenCapturePermissionMock.mockResolvedValue({ code: "SCREEN_CAPTURE_PERMISSION_DENIED" });
       applyOutputsMock.mockResolvedValue(

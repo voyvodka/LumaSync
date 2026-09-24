@@ -19,6 +19,7 @@ import { parseHex, rgbToHex } from "@/shared/lib/color";
 import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
 import { IconOff, IconAmbilight, IconSolidDot } from "@/shared/ui/icons";
 import { applyOutputs, retuneLighting } from "@/features/mode/modeApi";
+import { needsCalibration } from "@/features/mode/state/modeApplyOutcome";
 import { createRetuneCoalescer } from "@/features/mode/state/retuneCoalescer";
 import { useLightingRuntime } from "@/features/mode/state/useLightingRuntime";
 import {
@@ -323,7 +324,7 @@ export function ControlPopupApp() {
             origin: LIGHTING_ORIGIN.POPUP,
           });
           adopt(result.snapshot);
-          if (result.status.code === LIGHTING_OUTPUTS_STATUS.OUTPUTS_CALIBRATION_REQUIRED) {
+          if (needsCalibration(result)) {
             setRunError(t("preview:control.calibrationRequired"));
           } else if (
             result.status.code === LIGHTING_OUTPUTS_STATUS.OUTPUTS_REFUSED ||

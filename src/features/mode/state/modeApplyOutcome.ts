@@ -36,6 +36,20 @@ export function startFailureNotice(result: ApplyOutputsResult): CaptureFailureNo
   }
 }
 
+/**
+ * The strip needs LED Setup before this choice can run: no calibration at all,
+ * or a saved one whose counts Rust refused (`config_check.rs` prefixes its
+ * reason with the field). Either way the editor is where it gets fixed.
+ */
+export function needsCalibration(result: ApplyOutputsResult): boolean {
+  if (result.status.code === LIGHTING_OUTPUTS_STATUS.OUTPUTS_CALIBRATION_REQUIRED) return true;
+  const apply = result.outcome.applyStatus;
+  return (
+    apply?.code === LIGHTING_MODE_STATUS.LIGHTING_MODE_INVALID_CONFIG &&
+    (apply.details ?? "").startsWith("ledCalibration")
+  );
+}
+
 /** The mode asked for runs, on some of its outputs at least. */
 export function isOutputsApplied(result: ApplyOutputsResult): boolean {
   return (

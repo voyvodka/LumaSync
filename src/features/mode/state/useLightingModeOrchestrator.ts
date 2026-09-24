@@ -12,7 +12,6 @@ import { HUE_LEFT_OUT_REASON, LIGHTING_MODE_STATUS, type HueLeftOutReason } from
 import {
   BOOT_HUE_RETRY_STATE,
   LIGHTING_ORIGIN,
-  LIGHTING_OUTPUTS_STATUS,
   type ApplyOutputsRequest,
   type ApplyOutputsResult,
   type BootHueRetryState,
@@ -30,7 +29,7 @@ import {
 
 import { getScreenCapturePermission } from "../captureApi";
 import { applyOutputs, releaseHueOutput, retuneLighting } from "../modeApi";
-import { isOutputsApplied, pickStartFailureNotice, startFailureNotice } from "./modeApplyOutcome";
+import { isOutputsApplied, needsCalibration, pickStartFailureNotice, startFailureNotice } from "./modeApplyOutcome";
 import { createRetuneCoalescer } from "./retuneCoalescer";
 import { useLightingRuntime } from "./useLightingRuntime";
 
@@ -210,7 +209,7 @@ export function useLightingModeOrchestrator({
   const readReply = useCallback(
     (result: ApplyOutputsResult, options: { probeNotice?: CaptureFailureNotice | null; boot?: boolean } = {}) => {
       adopt(result.snapshot);
-      if (result.status.code === LIGHTING_OUTPUTS_STATUS.OUTPUTS_CALIBRATION_REQUIRED) {
+      if (needsCalibration(result)) {
         onRequireCalibration();
         return;
       }
