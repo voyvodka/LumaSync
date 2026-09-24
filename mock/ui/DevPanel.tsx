@@ -571,7 +571,8 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                   mutate((w) => {
                     w.shellState = { ...w.shellState, language: v };
                   });
-                  void import("i18next").then((m) => m.default.changeLanguage(v));
+                  // Through the app's own switch, which fetches the lazily loaded catalogue first.
+                  void import("../../src/features/i18n/i18n").then((m) => m.changeLanguage(v === "tr" ? "tr" : "en"));
                 }}
               />
               <div style={{ color: FAINT, fontSize: 9, lineHeight: 1.35, marginTop: 2 }}>

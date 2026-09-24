@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useMemo } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CAPTURE_FAILURE_BUCKET } from "@/shared/contracts/capture";
 import { HUE_LEFT_OUT_REASON } from "@/shared/contracts/lighting";
@@ -47,14 +47,28 @@ function Harness({ input, variant, suppressed = false, holdSpace = false }: Harn
   );
 }
 
-const cards = () => document.querySelectorAll(".lm-notice");
+const rows = () => document.querySelectorAll(".lm-notice");
+
+/** happy-dom has no layout: pretend every message line is cut. */
+function stubCutLines() {
+  const width = (cut: number) =>
+    function (this: HTMLElement) {
+      return this.classList.contains("lm-notice-message") ? cut : 0;
+    };
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(width(400));
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(width(180));
+}
 
 describe("ShellNoticeSlot", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("shows one notice and a count of the rest, expanding them in place", async () => {
     render(<Harness input={THREE} variant="compact" />);
 
-    expect(cards()).toHaveLength(1);
-    expect(screen.getByTestId("capture-start-failed-notice")).toHaveClass("is-headline");
+    expect(rows()).toHaveLength(1);
+    expect(screen.getByTestId("capture-start-failed-notice")).not.toHaveClass("is-wrapped");
     const toggle = screen.getByTestId("notice-toggle");
     expect(toggle).toHaveTextContent("shell:notices.moreBadge:2");
     expect(toggle).toHaveAttribute("aria-expanded", "false");
@@ -62,10 +76,10 @@ describe("ShellNoticeSlot", () => {
 
     await userEvent.click(toggle);
 
-    expect(cards()).toHaveLength(3);
+    expect(rows()).toHaveLength(3);
     expect(screen.getByTestId("notice-toggle")).toHaveAttribute("aria-expanded", "true");
-    // Expanded, the top card shows its body as well.
-    expect(screen.getByTestId("capture-start-failed-notice")).toHaveClass("is-detail");
+    // Expanded, every line wraps, so no sentence is cut.
+    for (const row of rows()) expect(row).toHaveClass("is-wrapped");
     expect(screen.getByTestId("hue-left-out-notice")).toBeInTheDocument();
     expect(screen.getByTestId("usb-disconnect-notice")).toBeInTheDocument();
   });
@@ -82,44 +96,81 @@ describe("ShellNoticeSlot", () => {
   // slot; real heights were 74–90 px, so they overlapped.
   // A floating bottom-right stack covered the page under a condition that
   // could last all session; full now sits in flow above the content too.
-  it("puts the full slot in flow above the content, one card with its body and a '+N'", async () => {
+  it("puts the full slot in flow above the content, one line and a '+N'", async () => {
     render(<Harness input={THREE} variant="full" />);
 
     const slot = screen.getByTestId("shell-notice-slot");
     expect(slot).toHaveClass("lm-notice-slot", "is-wide");
     expect(slot.getAttribute("style")).toBeNull();
-    expect(cards()).toHaveLength(1);
-    expect(screen.getByTestId("capture-start-failed-notice")).toHaveClass("is-detail");
-    expect(screen.getByText("common:captureFailed.permission")).not.toHaveClass("sr-only");
+    expect(rows()).toHaveLength(1);
+    const top = screen.getByTestId("capture-start-failed-notice");
+    expect(top).toHaveTextContent("shell:notices.messages.capturePermission");
 
-    await userEvent.click(screen.getByRole("button", { name: "shell:notices.moreCount:2" }));
+    await userEvent.click(screen.getByRole("button", { name: "shell:notices.showMore:2" }));
 
-    expect(cards()).toHaveLength(3);
-    for (const card of cards()) {
+    expect(rows()).toHaveLength(3);
+    for (const card of rows()) {
       expect(card.parentElement).toBe(slot);
       expect(card.getAttribute("style")).toBeNull();
     }
   });
 
   // The full-mode banner had "Open devices" beside "Check again"; the queue
-  // keeps both where there is room, and the compact headline keeps one.
-  it("shows the second action with the body, never in the compact headline", async () => {
+  // keeps both where there is room, and the compact line keeps one.
+  it("shows the second action on the full line and the expanded strip, never on the compact line", async () => {
+    stubCutLines();
     const gaveUp: Partial<ShellNoticeInput> = { availability: "none", hueProbeGaveUp: true };
     const { unmount } = render(<Harness input={gaveUp} variant="full" />);
-    const card = screen.getByTestId("output-none-notice");
-    expect(within(card).getByRole("button", { name: "common:output.offline.retry" })).toBeInTheDocument();
-    expect(within(card).getByRole("button", { name: "common:output.offline.action" })).toHaveClass("is-secondary");
+    const row = screen.getByTestId("output-none-notice");
+    expect(within(row).getByRole("button", { name: "shell:notices.actions.checkAgain" })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "shell:notices.actions.devices" })).toHaveClass("is-secondary");
     unmount();
 
     render(<Harness input={gaveUp} variant="compact" />);
-    const headline = screen.getByTestId("output-none-notice");
-    expect(within(headline).getByRole("button", { name: "common:output.offline.retry" })).toBeInTheDocument();
-    expect(within(headline).queryByRole("button", { name: "common:output.offline.action" })).toBeNull();
+    const line = screen.getByTestId("output-none-notice");
+    expect(within(line).getByRole("button", { name: "shell:notices.actions.checkAgain" })).toBeInTheDocument();
+    expect(within(line).queryByRole("button", { name: "shell:notices.actions.devices" })).toBeNull();
 
     await userEvent.click(screen.getByTestId("notice-toggle"));
     expect(
-      within(screen.getByTestId("output-none-notice")).getByRole("button", { name: "common:output.offline.action" }),
+      within(screen.getByTestId("output-none-notice")).getByRole("button", { name: "shell:notices.actions.devices" }),
     ).toBeInTheDocument();
+  });
+
+  // Compact cuts the sentence with an ellipsis; the rest must still be
+  // reachable — by hover, and without a pointer.
+  it("offers a cut sentence as a tooltip and behind its own toggle", async () => {
+    stubCutLines();
+    render(<Harness input={{ availability: "none" }} variant="compact" />);
+
+    const message = screen.getByText("shell:notices.messages.outputNone");
+    expect(message).toHaveAttribute("title", "shell:notices.messages.outputNone");
+    const toggle = screen.getByTestId("notice-toggle");
+    expect(toggle).toHaveAttribute("aria-label", "shell:notices.showDetails");
+
+    await userEvent.click(toggle);
+
+    expect(screen.getByTestId("output-none-notice")).toHaveClass("is-wrapped");
+    expect(message).not.toHaveAttribute("title");
+    // Wrapped, the line no longer overflows; the toggle stays to fold it back.
+    expect(screen.getByTestId("notice-toggle")).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("notice-toggle")).toHaveAttribute("aria-label", "shell:notices.showLess");
+  });
+
+  it("offers no toggle, and no tooltip, for a lone sentence that fits", () => {
+    render(<Harness input={{ availability: "none" }} variant="compact" />);
+
+    expect(screen.queryByTestId("notice-toggle")).toBeNull();
+    expect(screen.getByText("shell:notices.messages.outputNone")).not.toHaveAttribute("title");
+  });
+
+  // The arrow marks a link to another screen; a screen reader hears the label alone.
+  it("marks an action that opens another screen with an arrow the accessible name leaves out", () => {
+    render(<Harness input={{ availability: "none" }} variant="full" />);
+
+    const devices = screen.getByRole("button", { name: "shell:notices.actions.devices" });
+    const arrow = devices.querySelector(".lm-notice-arrow");
+    expect(arrow).toHaveAttribute("aria-hidden", "true");
   });
 
   it("speaks through one persistent live region, and no card is a live region", () => {
@@ -128,7 +179,7 @@ describe("ShellNoticeSlot", () => {
     const live = document.querySelectorAll("[aria-live]");
     expect(live).toHaveLength(1);
     expect(live[0]).toBe(screen.getByTestId("shell-notice-announcer"));
-    expect(live[0]).toHaveTextContent("shell:notices.severity.error: shell:notices.titles.capturePermission.");
+    expect(live[0]).toHaveTextContent("shell:notices.severity.error: shell:notices.messages.capturePermission");
     expect(within(screen.getByTestId("shell-notice-slot")).queryByRole("status")).toBeNull();
   });
 

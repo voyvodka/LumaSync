@@ -98,7 +98,7 @@ describe("tray Show LED Preview — a refused open is reported", () => {
     await clickTrayShowPreview();
 
     expect(await screen.findByTestId("preview-open-failed-notice")).toHaveTextContent(
-      "preview:status.CONTROL_POPUP_FAILED",
+      "shell:notices.messages.previewOpenFailed.popup",
     );
     expect(saveShellStateMock).not.toHaveBeenCalledWith({ ledPreviewPopupVisible: true });
   });
@@ -110,7 +110,7 @@ describe("tray Show LED Preview — a refused open is reported", () => {
     await clickTrayShowPreview();
 
     expect(await screen.findByTestId("preview-open-failed-notice")).toHaveTextContent(
-      "preview:status.TWIN_OVERLAY_DISPLAY_NOT_FOUND",
+      "shell:notices.messages.previewOpenFailed.display",
     );
     expect(openOverlayMock).toHaveBeenCalledWith({ scope: "test", displayId: "display-2" });
   });

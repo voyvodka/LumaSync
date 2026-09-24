@@ -805,7 +805,7 @@ describe("App", () => {
       await act(async () => {
         screen.getByTestId("notice-toggle").click();
       });
-      expect(screen.getByTestId("onboarding-notice")).toHaveTextContent("common:ui.onboarding.step1.title");
+      expect(screen.getByTestId("onboarding-notice")).toHaveTextContent("shell:notices.messages.onboarding.lights");
     });
   });
 

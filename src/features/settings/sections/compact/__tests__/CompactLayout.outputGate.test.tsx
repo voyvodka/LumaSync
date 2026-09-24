@@ -88,7 +88,7 @@ describe("CompactLayout output gate", () => {
   it("carries no notice of its own — the shell's slot says why the modes are dim", async () => {
     await renderCompact({ configured: false, reachable: false, verdict: null });
 
-    expect(screen.queryByText("common:output.offline.title")).not.toBeInTheDocument();
+    expect(screen.queryByText("shell:notices.messages.outputNone")).not.toBeInTheDocument();
     expect(screen.queryByTestId("output-checking")).not.toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });

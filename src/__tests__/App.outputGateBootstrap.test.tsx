@@ -91,7 +91,7 @@ vi.mock("../features/shell/StatusBar", () => ({
   STATUS_BAR_HEIGHT_COMPACT_PX: 22,
 }));
 
-const OFFLINE_TITLE = "common:output.offline.title";
+const OFFLINE_TITLE = "shell:notices.messages.outputNone";
 const BRIDGE = { id: "bridge-1", ip: "192.168.1.180", name: "Hue Bridge" };
 
 function ok<C extends string>(code: C) {

@@ -48,10 +48,6 @@ vi.mock("react-i18next", () => ({
         "lights:mode.ambilight.title": "Ambilight",
         "lights:mode.ambilight.subtitleFallback": "Live screen capture",
         "lights:mode.solid.title": "Solid",
-        "lights:calibrationBanner.title": "Calibration required",
-        "lights:calibrationBanner.action": "Open calibration",
-        "common:output.offline.title": "No reachable output",
-        "common:output.offline.action": "Open devices",
         "lights:signal.linkBudget.constrained":
           "USB link limit — at 115,200 baud this strip carries about {{fps}} fps.",
         "lights:signal.linkBudget.hint": "Shorten the strip or output over WLED.",
@@ -273,8 +269,8 @@ describe("LightsSection", () => {
     expect(screen.getByRole("button", { name: /Ambilight/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Solid/ })).toBeDisabled();
 
-    expect(screen.queryByText("Calibration required")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open calibration" })).not.toBeInTheDocument();
+    expect(screen.queryByText("shell:notices.messages.calibrationRequired")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "shell:notices.actions.ledSetup" })).not.toBeInTheDocument();
     expect(onModeChange).not.toHaveBeenCalled();
   });
 
@@ -424,8 +420,8 @@ describe("LightsSection — output availability gate", () => {
     // Off parks the outputs — always safe, never gated on having one.
     expect(screen.getByRole("button", { name: /Off/ })).toBeEnabled();
 
-    expect(screen.queryByText("No reachable output")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open devices" })).not.toBeInTheDocument();
+    expect(screen.queryByText("shell:notices.messages.outputNone")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "shell:notices.actions.devices" })).not.toBeInTheDocument();
     expect(onModeChange).not.toHaveBeenCalled();
   });
 

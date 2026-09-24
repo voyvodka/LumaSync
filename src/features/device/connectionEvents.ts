@@ -9,7 +9,7 @@
  * can drop "usb" from `selectedOutputTargets` and avoid the silent
  * `DEVICE_NOT_CONNECTED` mode-change gate. Limited to boot-time auto-
  * reconnect; runtime disconnects flow through the `wasConnected → false`
- * transition in `useUsbTargetReconciler` and the existing `common:hotplug.usbDisconnected` toast.
+ * transition in `useUsbTargetReconciler` and the `usb-disconnected` shell notice.
  *
  * `PORT_UNSUPPORTED` — Rust rejected the persisted port up-front (e.g.
  *   `/dev/cu.Bluetooth-Incoming-Port` after the WS2812B-only allowlist

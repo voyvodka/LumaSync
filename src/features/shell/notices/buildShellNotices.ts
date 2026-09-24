@@ -9,12 +9,17 @@ import {
   stepIndex,
   type OnboardingStep,
 } from "@/features/onboarding/state/onboardingState";
-import { PREVIEW_OPEN_FAILURE_COPY, type PreviewOpenFailure } from "@/features/preview/previewOpenFailure";
+import type { PreviewOpenFailure } from "@/features/preview/previewOpenFailure";
 import type { DeviceCategory } from "@/features/settings/sections/DeviceSection";
 import type { UpdateCheckFailure } from "@/features/updater/useUpdateCheckFailedNotice";
-import { CAPTURE_FAILURE_BUCKET, type CaptureFailureNotice } from "@/shared/contracts/capture";
+import {
+  CAPTURE_FAILURE_BUCKET,
+  type CaptureFailureBucket,
+  type CaptureFailureNotice,
+} from "@/shared/contracts/capture";
 import { HUE_SOLID_COLOR_STATUS, type HueRuntimeTarget, type HueSolidColorStatusCode } from "@/shared/contracts/hue";
 import { HUE_LEFT_OUT_REASON, type HueLeftOutReason } from "@/shared/contracts/lighting";
+import { CONTROL_POPUP_STATUS, TWIN_OVERLAY_STATUS } from "@/shared/contracts/preview";
 import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/shell";
 
 import {
@@ -65,54 +70,49 @@ export interface ShellNoticeHandlers {
   retryUpdateCheck: () => void;
 }
 
-const HUE_LEFT_OUT_TITLE: Record<HueLeftOutReason, TranslationKey> = {
-  [HUE_LEFT_OUT_REASON.UNREACHABLE]: "shell:notices.titles.hueUnreachable",
-  [HUE_LEFT_OUT_REASON.AUTH]: "shell:notices.titles.hueAuth",
-  [HUE_LEFT_OUT_REASON.CONFIG]: "shell:notices.titles.hueConfig",
-  [HUE_LEFT_OUT_REASON.BUSY]: "shell:notices.titles.hueWaiting",
-  [HUE_LEFT_OUT_REASON.BUSY_GAVE_UP]: "shell:notices.titles.hueBusy",
+const HUE_LEFT_OUT_MESSAGE: Record<HueLeftOutReason, TranslationKey> = {
+  [HUE_LEFT_OUT_REASON.UNREACHABLE]: "shell:notices.messages.hueLeftOut.unreachable",
+  [HUE_LEFT_OUT_REASON.AUTH]: "shell:notices.messages.hueLeftOut.auth",
+  [HUE_LEFT_OUT_REASON.CONFIG]: "shell:notices.messages.hueLeftOut.config",
+  [HUE_LEFT_OUT_REASON.BUSY]: "shell:notices.messages.hueLeftOut.busy",
+  [HUE_LEFT_OUT_REASON.BUSY_GAVE_UP]: "shell:notices.messages.hueLeftOut.busyGaveUp",
 };
 
-const HUE_LEFT_OUT_COPY: Record<HueLeftOutReason, TranslationKey> = {
-  [HUE_LEFT_OUT_REASON.UNREACHABLE]: "common:hueLeftOut.unreachable",
-  [HUE_LEFT_OUT_REASON.AUTH]: "common:hueLeftOut.auth",
-  [HUE_LEFT_OUT_REASON.CONFIG]: "common:hueLeftOut.config",
-  [HUE_LEFT_OUT_REASON.BUSY]: "common:hueLeftOut.busy",
-  [HUE_LEFT_OUT_REASON.BUSY_GAVE_UP]: "common:hueLeftOut.busyGaveUp",
+const HUE_BOOT_RETRY_MESSAGE: Record<BootHueRetryState, TranslationKey> = {
+  waiting: "shell:notices.messages.hueBootRetry.waiting",
+  gaveUp: "shell:notices.messages.hueBootRetry.gaveUp",
 };
 
-const HUE_BOOT_RETRY_TITLE: Record<BootHueRetryState, TranslationKey> = {
-  waiting: "shell:notices.titles.hueWaiting",
-  gaveUp: "shell:notices.titles.hueBusy",
+/** `permission` is a notice of its own, and `internal` reads its reason. */
+const START_FAILED_MESSAGE: Record<Exclude<CaptureFailureBucket, "permission" | "internal">, TranslationKey> = {
+  [CAPTURE_FAILURE_BUCKET.DISPLAY]: "shell:notices.messages.startFailed.display",
+  [CAPTURE_FAILURE_BUCKET.TRANSIENT]: "shell:notices.messages.startFailed.transient",
+  [CAPTURE_FAILURE_BUCKET.UNSUPPORTED]: "shell:notices.messages.startFailed.unsupported",
+  [CAPTURE_FAILURE_BUCKET.OUTPUT]: "shell:notices.messages.startFailed.output",
 };
 
-const HUE_BOOT_RETRY_COPY: Record<BootHueRetryState, TranslationKey> = {
-  waiting: "common:hueBootRetry.waiting",
-  gaveUp: "common:hueBootRetry.gaveUp",
+const PREVIEW_OPEN_FAILED_MESSAGE: Record<PreviewOpenFailure, TranslationKey> = {
+  [TWIN_OVERLAY_STATUS.OPEN_FAILED]: "shell:notices.messages.previewOpenFailed.overlay",
+  [TWIN_OVERLAY_STATUS.DISPLAY_NOT_FOUND]: "shell:notices.messages.previewOpenFailed.display",
+  [TWIN_OVERLAY_STATUS.UNSUPPORTED_PLATFORM_LIVE]: "shell:notices.messages.previewOpenFailed.unsupported",
+  [CONTROL_POPUP_STATUS.FAILED]: "shell:notices.messages.previewOpenFailed.popup",
 };
 
-const ONBOARDING_COPY: Record<Exclude<OnboardingStep, "complete">, { title: TranslationKey; body: TranslationKey; action: TranslationKey }> = {
-  [ONBOARDING_STEPS.LIGHTS]: {
-    title: "common:ui.onboarding.step1.title",
-    body: "common:ui.onboarding.step1.body",
-    action: "common:ui.onboarding.step1.action",
-  },
-  [ONBOARDING_STEPS.DEVICES]: {
-    title: "common:ui.onboarding.step2.title",
-    body: "common:ui.onboarding.step2.body",
-    action: "common:ui.onboarding.step2.action",
-  },
-  [ONBOARDING_STEPS.LED_SETUP]: {
-    title: "common:ui.onboarding.step3.title",
-    body: "common:ui.onboarding.step3.body",
-    action: "common:ui.onboarding.step3.action",
-  },
+const ONBOARDING_MESSAGE: Record<Exclude<OnboardingStep, "complete">, TranslationKey> = {
+  [ONBOARDING_STEPS.LIGHTS]: "shell:notices.messages.onboarding.lights",
+  [ONBOARDING_STEPS.DEVICES]: "shell:notices.messages.onboarding.devices",
+  [ONBOARDING_STEPS.LED_SETUP]: "shell:notices.messages.onboarding.ledSetup",
 };
 
-function startFailureBody(failure: CaptureFailureNotice, t: TFunction): string {
-  return failure.bucket === CAPTURE_FAILURE_BUCKET.INTERNAL && !failure.reason
-    ? t("common:captureFailed.internalNoReason")
-    : t(`common:captureFailed.${failure.bucket}` as const, { reason: failure.reason });
+function startFailureMessage(failure: CaptureFailureNotice, t: TFunction): string {
+  if (failure.bucket === CAPTURE_FAILURE_BUCKET.PERMISSION) return t("shell:notices.messages.capturePermission");
+  if (failure.bucket === CAPTURE_FAILURE_BUCKET.INTERNAL) {
+    // "Screen capture failed ()." shipped when the backend sent no details.
+    return failure.reason
+      ? t("shell:notices.messages.startFailed.internal", { reason: failure.reason })
+      : t("shell:notices.messages.startFailed.internalNoReason");
+  }
+  return t(START_FAILED_MESSAGE[failure.bucket]);
 }
 
 /**
@@ -130,10 +130,12 @@ export function buildShellNotices(
   const devicesAction = (category?: DeviceCategory) => ({
     label: t("shell:notices.actions.devices"),
     onClick: () => handlers.openDevices(category),
+    navigates: true,
   });
   const ledSetupAction = {
     label: t("shell:notices.actions.ledSetup"),
     onClick: handlers.openLedSetup,
+    navigates: true,
   };
 
   const permission =
@@ -157,11 +159,11 @@ export function buildShellNotices(
       tier: NOTICE_TIER.ERROR_CONDITION,
       severity: NOTICE_SEVERITY.ERROR,
       kind: "condition",
-      title: t("shell:notices.titles.capturePermission"),
-      body: t("common:captureFailed.permission"),
+      message: t("shell:notices.messages.capturePermission"),
       action: {
-        label: t("common:captureAction.openSettings"),
+        label: t("shell:notices.actions.systemSettings"),
         onClick: handlers.openCaptureSettings,
+        navigates: true,
         testId: "capture-permission-settings-button",
       },
       dismissible: false,
@@ -175,13 +177,12 @@ export function buildShellNotices(
       tier: NOTICE_TIER.ERROR_CONDITION,
       severity: NOTICE_SEVERITY.ERROR,
       kind: "condition",
-      title: t("shell:notices.titles.captureStalled"),
-      body:
+      message:
         stalled.bucket === CAPTURE_FAILURE_BUCKET.DISPLAY
-          ? t("common:captureStalled.display")
+          ? t("shell:notices.messages.captureStalled.display")
           : stalled.reason
-            ? t("common:captureStalled.generic", { reason: stalled.reason })
-            : t("common:captureStalled.genericNoReason"),
+            ? t("shell:notices.messages.captureStalled.generic", { reason: stalled.reason })
+            : t("shell:notices.messages.captureStalled.genericNoReason"),
       action: stalled.bucket === CAPTURE_FAILURE_BUCKET.DISPLAY ? ledSetupAction : undefined,
       dismissible: false,
       source: stalled.bucket,
@@ -194,8 +195,7 @@ export function buildShellNotices(
       tier: NOTICE_TIER.ERROR_EVENT,
       severity: NOTICE_SEVERITY.ERROR,
       kind: "event",
-      title: t("shell:notices.titles.startFailed"),
-      body: startFailureBody(startFailure, t),
+      message: startFailureMessage(startFailure, t),
       action:
         startFailure.bucket === CAPTURE_FAILURE_BUCKET.DISPLAY
           ? ledSetupAction
@@ -212,15 +212,15 @@ export function buildShellNotices(
     const targets = stopFailedTargets
       .map((target) => t(`common:hotplug.targetLabel.${target}` as const))
       .join(", ");
-    const body = t("common:hotplug.stopFailed", { targets });
     notices.push({
       id: SHELL_NOTICE_IDS.STOP_FAILED,
       tier: NOTICE_TIER.ERROR_EVENT,
       severity: NOTICE_SEVERITY.ERROR,
       kind: "event",
-      title: t("shell:notices.titles.stopFailed"),
       // The button only reaches Hue; the strip stops with the mode.
-      body: stopFailedTargets.includes("usb") ? `${body} ${t("common:hotplug.stopFailedUsbHint")}` : body,
+      message: stopFailedTargets.includes("usb")
+        ? t("shell:notices.messages.stopFailedUsb", { targets })
+        : t("shell:notices.messages.stopFailed", { targets }),
       action: stopFailedTargets.includes("hue")
         ? { label: t("shell:notices.actions.stopHue"), onClick: handlers.retryHueStop, testId: "stop-failed-retry" }
         : undefined,
@@ -235,8 +235,7 @@ export function buildShellNotices(
       tier: NOTICE_TIER.ERROR_EVENT,
       severity: NOTICE_SEVERITY.ERROR,
       kind: "event",
-      title: t("shell:notices.titles.previewOpenFailed"),
-      body: t(PREVIEW_OPEN_FAILURE_COPY[input.previewOpenFailure]),
+      message: t(PREVIEW_OPEN_FAILED_MESSAGE[input.previewOpenFailure]),
       dismissible: true,
       source: input.previewOpenFailure,
       testId: "preview-open-failed-notice",
@@ -256,8 +255,7 @@ export function buildShellNotices(
       tier: NOTICE_TIER.WARNING,
       severity: NOTICE_SEVERITY.WARNING,
       kind: waiting ? "condition" : "event",
-      title: t(HUE_LEFT_OUT_TITLE[input.hueLeftOut]),
-      body: t(HUE_LEFT_OUT_COPY[input.hueLeftOut]),
+      message: t(HUE_LEFT_OUT_MESSAGE[input.hueLeftOut]),
       action: opensDevices ? devicesAction("hue") : undefined,
       dismissible: !waiting,
       source: input.hueLeftOut,
@@ -273,8 +271,7 @@ export function buildShellNotices(
       tier: NOTICE_TIER.WARNING,
       severity: NOTICE_SEVERITY.WARNING,
       kind: waiting ? "condition" : "event",
-      title: t(HUE_BOOT_RETRY_TITLE[input.hueBootRetry]),
-      body: t(HUE_BOOT_RETRY_COPY[input.hueBootRetry]),
+      message: t(HUE_BOOT_RETRY_MESSAGE[input.hueBootRetry]),
       dismissible: !waiting,
       source: input.hueBootRetry,
       testId: "hue-boot-retry-notice",
@@ -287,10 +284,9 @@ export function buildShellNotices(
       tier: NOTICE_TIER.WARNING,
       severity: NOTICE_SEVERITY.WARNING,
       kind: "event",
-      title: t("shell:notices.titles.usbDisconnected"),
-      body: input.usbDisconnectedLightingOff
-        ? t("common:hotplug.usbDisconnectedLightingOff")
-        : t("common:hotplug.usbDisconnected"),
+      message: input.usbDisconnectedLightingOff
+        ? t("shell:notices.messages.usbDisconnectedLightingOff")
+        : t("shell:notices.messages.usbDisconnected"),
       dismissible: true,
       source: input.usbDisconnectedLightingOff ? "lightingOff" : "continuing",
       testId: "usb-disconnect-notice",
@@ -302,10 +298,9 @@ export function buildShellNotices(
       tier: NOTICE_TIER.WARNING,
       severity: NOTICE_SEVERITY.WARNING,
       kind: "event",
-      title: t("shell:notices.titles.usbUnsupported"),
-      body: input.usbUnsupportedHueFallback
-        ? t("common:hotplug.unsupportedFallback")
-        : t("common:hotplug.unsupportedNoFallback"),
+      message: input.usbUnsupportedHueFallback
+        ? t("shell:notices.messages.usbUnsupportedFallback")
+        : t("shell:notices.messages.usbUnsupportedNoFallback"),
       // Only the no-fallback copy sends the user to Devices.
       action: input.usbUnsupportedHueFallback ? undefined : devicesAction("usb"),
       dismissible: true,
@@ -320,8 +315,9 @@ export function buildShellNotices(
       tier: NOTICE_TIER.WARNING,
       severity: NOTICE_SEVERITY.WARNING,
       kind: "event",
-      title: t("shell:notices.titles.hueColor"),
-      body: noLights ? t("hue:colorNotApplied.noLights") : t("hue:colorNotApplied.streamOffline"),
+      message: noLights
+        ? t("shell:notices.messages.hueColorNoLights")
+        : t("shell:notices.messages.hueColorStreamOffline"),
       action: noLights ? devicesAction("hue") : undefined,
       dismissible: true,
       source: input.hueColorNotice,
@@ -332,18 +328,19 @@ export function buildShellNotices(
   // ── Outputs and calibration ──────────────────────────────────────────
   if (outputNoneShown) {
     const offerRetry = input.hueProbeGaveUp && handlers.retryHueProbe !== undefined;
-    const openDevices = { label: t("common:output.offline.action"), onClick: () => handlers.openDevices() };
+    const openDevices = devicesAction();
     notices.push({
       id: SHELL_NOTICE_IDS.OUTPUT_NONE,
       tier: NOTICE_TIER.ERROR_CONDITION,
       severity: NOTICE_SEVERITY.ERROR,
       kind: "condition",
-      title: t("common:output.offline.title"),
-      body: input.hueProbeGaveUp ? t("common:output.offline.stoppedBody") : t("common:output.offline.body"),
+      message: input.hueProbeGaveUp
+        ? t("shell:notices.messages.outputNoneStopped")
+        : t("shell:notices.messages.outputNone"),
       // The stopped copy says the probe gave up, so checking again is the next step.
       action: offerRetry
         ? {
-            label: input.hueProbeChecking ? t("common:output.offline.retrying") : t("common:output.offline.retry"),
+            label: input.hueProbeChecking ? t("shell:notices.actions.checking") : t("shell:notices.actions.checkAgain"),
             onClick: () => handlers.retryHueProbe?.(),
             pending: input.hueProbeChecking,
           }
@@ -360,9 +357,8 @@ export function buildShellNotices(
       tier: NOTICE_TIER.ERROR_CONDITION,
       severity: NOTICE_SEVERITY.ERROR,
       kind: "condition",
-      title: t("lights:calibrationBanner.title"),
-      body: t("lights:calibrationBanner.sub"),
-      action: { label: t("lights:calibrationBanner.action"), onClick: handlers.openLedSetup },
+      message: t("shell:notices.messages.calibrationRequired"),
+      action: ledSetupAction,
       dismissible: false,
       source: true,
       testId: "calibration-required-notice",
@@ -375,7 +371,7 @@ export function buildShellNotices(
       tier: NOTICE_TIER.INFO,
       severity: NOTICE_SEVERITY.INFO,
       kind: "condition",
-      title: t("common:output.checking"),
+      message: t("shell:notices.messages.outputChecking"),
       dismissible: false,
       source: true,
       testId: "output-checking",
@@ -393,23 +389,21 @@ export function buildShellNotices(
     // Calibration maps LEDs; a Hue-only setup has none to map.
     (step === ONBOARDING_STEPS.LED_SETUP && !input.localTargetConfigured);
   if (!onboardingHidden) {
-    const copy = ONBOARDING_COPY[step];
     const action =
       step === ONBOARDING_STEPS.LIGHTS
         ? // Compact is the Lights screen already, and so is full on Lights.
           onLights
           ? undefined
-          : { label: t(copy.action), onClick: handlers.openLights }
+          : { label: t("shell:notices.actions.lights"), onClick: handlers.openLights, navigates: true }
         : step === ONBOARDING_STEPS.DEVICES
-          ? { label: t(copy.action), onClick: () => handlers.openDevices() }
-          : { label: t(copy.action), onClick: handlers.openLedSetup };
+          ? devicesAction()
+          : ledSetupAction;
     notices.push({
       id: SHELL_NOTICE_IDS.ONBOARDING,
       tier: NOTICE_TIER.INFO,
       severity: NOTICE_SEVERITY.INFO,
       kind: "condition",
-      title: t(copy.title),
-      body: t(copy.body),
+      message: t(ONBOARDING_MESSAGE[step]),
       step: `${stepIndex(step)}/${ONBOARDING_TOTAL_STEPS}`,
       action,
       dismissible: true,
@@ -428,8 +422,7 @@ export function buildShellNotices(
       tier: NOTICE_TIER.INFO,
       severity: NOTICE_SEVERITY.INFO,
       kind: "event",
-      title: t("shell:notices.titles.updateCheckFailed"),
-      body: t("updater:error.backgroundCheckBody"),
+      message: t("shell:notices.messages.updateCheckFailed"),
       action: {
         label: input.updateChecking ? t("updater:checking") : t("updater:actions.retry"),
         onClick: handlers.retryUpdateCheck,

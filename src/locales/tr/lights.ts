@@ -68,11 +68,6 @@ const lights: Catalogue<typeof enLights> = {
       hueSubChecking: "Köprü · <b>kontrol ediliyor…</b>",
     },
   },
-  calibrationBanner: {
-    title: "Kalibrasyon gerekli",
-    sub: "Bu modu etkinleştirmeden önce LED düzenini tamamlayın.",
-    action: "Kurulumu aç",
-  },
   led: {
     colorCorrection: {
       title: "Renk Düzeltme",

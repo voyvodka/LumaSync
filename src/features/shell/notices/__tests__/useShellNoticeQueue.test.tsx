@@ -12,7 +12,7 @@ function notice(id: ShellNoticeId, overrides: Partial<ShellNotice> = {}): ShellN
     tier: NOTICE_TIER.WARNING,
     severity: NOTICE_SEVERITY.WARNING,
     kind: "event",
-    title: id,
+    message: id,
     dismissible: true,
     source: true,
     testId: id,
