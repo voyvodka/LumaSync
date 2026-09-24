@@ -84,6 +84,27 @@ one is stopped rather than left lit. A start that tore the old mode down and the
 bridge is configured but no stream is known here, as the frontend's Off did — that is what cancels
 a retry. A target change made while Off stops nothing.
 
+**Off turns the lights off.** Pressing Off — a `user`, `tray` or `popup` request carrying the Off
+mode (`reconcile_off`, `user_off`) — ends each output it finds driven with its lights dark, rather
+than letting go and leaving them as the last frame or the device's own state had them:
+
+- **The strip** gets one all-black frame once the mode has stopped (`blank_usb_after_off` in
+  `transition.rs`), encoded like any Solid frame for its profile, chip, order and length. Stopping
+  a mode only stops writing, and a strip holds the last frame it was sent — a Solid colour
+  indefinitely. `device-output.md` has the transport detail.
+- **A WLED device** gets the black frame and then `POST /json/state {"on":false}`, beside the Hue
+  stop rather than before it, so an unanswering device cannot hold the Hue switch-off back.
+- **Hue** gets `HueLightsAfterStop::TurnOff`, unless `ShellState.hueOffBehavior` is `restore`. The
+  setting is read from the saved state when the Off runs, never from the request or the mode's
+  payload, so a change made in any window after the mode started counts. Absent is `turnOff`.
+  What Hue does with it is in `hue.md` ("Off turns the lights off").
+
+Every other way output ends puts the lights back or leaves them: Hue taken out of a running mode,
+the Devices card's stop (`release_hue_output`), every output deselected, a strip unplugged, the
+test lease giving back what it opened, a boot restore that is refused, and the quit — none of them
+is pressing Off. A launch whose saved mode is Off has nothing running and writes nothing; so does
+an Off with nothing running (Hue still gets its stop, which finds no session and no snapshot).
+
 **The intent follows what ran.** A choice the backend did not run is not retried by the next
 transaction: the intent's kind settles back to what runs. A target left out of the running mode
 drops from the session's selection, never from what is saved.
@@ -107,7 +128,8 @@ it has its own first-come-first-served turn, stores the payload, and applies it 
 transaction left *accepting* — the running worker's atomics for Ambilight, a solid sink snapshot
 for Solid. A transaction closes accepting (under the same turn, so no retune is mid-send) before
 its first stop, and re-applies the stored payload when it commits if a retune arrived meanwhile:
-a drag during a start lands, and no solid packet reaches the strip once Off has begun. Answers:
+a drag during a start lands, and no colour packet reaches the strip once Off has begun — only
+Off's own black frame does. Answers:
 `RETUNE_APPLIED`, `RETUNE_DEFERRED` (a transaction bringing that kind up will apply it),
 `RETUNE_NOT_RUNNING` (stored for the next start). A settled drag is saved 300 ms after the last
 retune.
@@ -198,7 +220,8 @@ ordered log of what the hardware saw — strip packets, Hue starts and stops, mo
 what was published and what was saved. Most scenarios port a case of the orchestrator's vitest
 suite and name it. The boot retry runs on a paused Tokio clock. The production Hue driver is out of
 reach of a test binary: resolving it panics under `cfg(test)`, and `KeychainStore` refuses every
-call there.
+call there. So does the production WLED switch-off: the rig manages a `WledPowerOffHandle` that
+records `wled:off:<ip>` in the log instead.
 
 ## Gotchas
 

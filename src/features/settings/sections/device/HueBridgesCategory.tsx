@@ -1,7 +1,11 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { HueChannelPlacementOverride, HueRuntimeTriggerSource } from "@/shared/contracts/hue";
+import type {
+  HueChannelPlacementOverride,
+  HueOffBehavior,
+  HueRuntimeTriggerSource,
+} from "@/shared/contracts/hue";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import {
   deriveHueBridgeCardState,
@@ -14,6 +18,7 @@ import { cx } from "@/shared/ui/cx";
 import { IconBridge, IconHueBridgeGlyph, IconRefresh, IconWifi } from "@/shared/ui/icons";
 import { StatusPill } from "@/shared/ui/StatusPill";
 import { HueChannelMapPanel } from "../HueChannelMapPanel";
+import { HueOffBehaviorControl } from "./HueOffBehaviorControl";
 import {
   HUE_CARD_ACTIONS,
   HUE_CARD_CELL_TONE_CLASS,
@@ -45,6 +50,10 @@ export interface HueBridgesCategoryProps {
   /** Stop retrying and Stop Hue. Not `stopHue`: a running mode that names Hue
    *  has to let go of it first, which only the mode orchestrator can do. */
   onStopHue: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
+  /** What Off does to the Hue lights; `null` until the saved value is read. */
+  offBehavior?: HueOffBehavior | null;
+  /** Saves the choice. Absent ⇒ the choice is not shown. */
+  onOffBehaviorChange?: (next: HueOffBehavior) => void;
 }
 
 export function HueBridgesCategory({
@@ -58,6 +67,8 @@ export function HueBridgesCategory({
   persistError,
   zones,
   onStopHue,
+  offBehavior = null,
+  onOffBehaviorChange,
 }: HueBridgesCategoryProps) {
   const { t } = useTranslation();
   const manualIpFieldId = useId();
@@ -193,6 +204,9 @@ export function HueBridgesCategory({
         ) : selectedBridge && view ? (
           <>
             <HueBridgeCard name={selectedBridge.name} ip={selectedBridge.ip} view={view} ctx={cardContext} />
+            {onOffBehaviorChange ? (
+              <HueOffBehaviorControl value={offBehavior} onChange={onOffBehaviorChange} />
+            ) : null}
 
             {/* Channel map panel — shown when area is selected and credentials valid */}
             {selectedAreaId && credentialState === "valid" ? (

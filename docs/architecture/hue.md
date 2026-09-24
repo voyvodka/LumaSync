@@ -408,8 +408,9 @@ probes the area's readiness every 3 s for up to 25 s and, the moment the area is
   will join, is cleared when it does, and turns into "stayed busy, running on USB only" if the
   window closes first.
 
-**Lights return to their pre-stream state when Hue output ends.** Ending entertainment
-(`action: stop`) makes the bridge put its own post-stream state on each light and leave it **on** —
+**Lights return to their pre-stream state when Hue output ends — unless the user pressed Off.**
+Ending entertainment (`action: stop`) makes the bridge put its own post-stream state on each light
+and leave it **on** —
 a lamp that was off before Ambilight stayed on afterwards (seen on hardware, 2026-09-23), and a lamp
 that was on came back at another brightness and colour temperature than it had (2026-09-24). Hue
 Sync puts it back as it was, and so do we now (`commands/hue/light_restore.rs`).
@@ -425,9 +426,13 @@ Sync puts it back as it was, and so do we now (`commands/hue/light_restore.rs`).
   Reconnects never read it and never touch it (they use the metadata-only fetch), a restart or a
   later start of the same area keeps the first one — by then the lights show our stream or the
   bridge's "restored but on" state — and a `Failed` runtime keeps it for the next stop.
-- **Which stops restore.** `stop_hue_stream` always does: every frontend caller ends Hue output (Off,
-  Hue deselected, a mode without Hue, a start the mode apply left out, the test lease giving back a
-  stream it opened, the Devices stop button, quit). A mode change that keeps Hue never stops the
+- **Which stops restore.** Every stop but a user's Off: Hue deselected, a mode without Hue, a start
+  the mode apply left out, the test lease giving back a stream it opened, the Devices stop button,
+  every output deselected, an unplug, a refused boot restore, and the quit
+  (`stop_hue_stream_before_exit` passes `Restore` unconditionally). The `stop_hue_stream` command
+  always restores; a user's Off comes through the lighting transaction (`stop_hue_stream_on`) and
+  switches the lights off instead unless the user chose otherwise ("Off turns the lights off",
+  below). A mode change that keeps Hue never stops the
   stream (`start_hue_stream` answers NOOP), and `stop_led_test_pattern` does not touch the Hue
   runtime. A start or restart onto *another* area restores the held one first, before reading the
   new area, so a light in both is snapshotted in its real state. A start that a stop overtook while
@@ -576,6 +581,40 @@ Sync puts it back as it was, and so do we now (`commands/hue/light_restore.rs`).
 - **Unclean exit cannot restore.** A crash or kill never reaches the stop; the bridge times the
   session out and the lights stay on in their restored colour. Accepted — nothing on disk carries the
   snapshot to the next launch, and a snapshot taken then would read the lights already on.
+
+**Off turns the lights off.** Pressing Off in a window, the popup or the tray used to mean "let
+go": the stream stopped and the restore above put each lamp back — so a user whose lamps were on
+before Ambilight saw them stay on after Off. Off now switches the area's lights off, and the
+restore is kept for every other way Hue output ends (list above). A user who wants the old
+behaviour picks "Go back" on Devices → Hue Bridges (`ShellState.hueOffBehavior: "restore"`);
+absent is `turnOff`, for existing installs as well, so no migration step writes it. The lighting
+transaction reads the setting from the saved state when the Off runs (`lighting-transaction.md`)
+and hands the stop a `HueLightsAfterStop`.
+
+- **It is the restore, with every light's target set to off** (`HueLightRestore::switched_off`).
+  The measured bridge switches the lamps back on 300–600 ms after acknowledging `action: stop`, so
+  a single `{"on":{"on":false}}` per light would lose to it exactly as a single restore did. Off
+  therefore takes everything the restore has: the stop's deactivate and sender wait first, the
+  `active_streamer` check before any write, one PUT per light paced to the light budget, then the
+  watch — the bulk `GET` every 250 ms, a light that reads `on: true` written off again, at most
+  twice, until every light has been rewritten and read back off or 1.5 s after the first pass —
+  inside the same 4 s budget, with a 429 retried once and a refused key or a silent bridge ending
+  it. An off light is compared on `on` alone, and its PUT carries nothing else. The log says
+  `Off chosen, switching n light(s) off instead of restoring`, then the restore's usual lines.
+- **The same guards.** Another app streaming to the area keeps it, Off or not. `stop_in_flight`
+  holds a start issued after Off (Ambilight chosen straight after, say) until the watch ends, so the
+  switch-off never lands under the new stream, and the new session snapshots the lamps as Off left
+  them — off — which is what its own later restore puts back. A newer session of ours that begins
+  some other way stops the writes the same way it stops a restore's.
+- **The lights it knows are the snapshot's.** Off switches off the lights the session snapshotted
+  at its start: every channel member resolved to a light service and read successfully. A light
+  whose read failed, or that was already `streaming`, is left as the bridge leaves it, as the
+  restore leaves it. An Off with no session to end — nothing ran, or a second Off — has no snapshot
+  and writes nothing; so does a launch whose saved mode is Off, which never stops anything.
+- **Not covered: a start that a stop overtook.** Such a start restores what it captured when it
+  settles (`settle_abandoned_start`), since the stop that overtook it found nothing to act on. The
+  lighting transaction takes turns, so a user's Off cannot overtake a transaction's own start; only
+  a direct `start_hue_stream` could be overtaken, and none of the frontend's Off paths issue one.
 
 ## Gotchas
 

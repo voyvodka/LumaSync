@@ -68,7 +68,7 @@ vi.mock("react-i18next", () => ({
     t: (key: string, opts?: Record<string, unknown>) => {
       const dict: Record<string, string> = {
         "lights:mode.off.title": "Off",
-        "lights:mode.off.subtitle": "Outputs parked",
+        "lights:mode.off.subtitle": "Lights off",
         "lights:mode.ambilight.title": "Ambilight",
         "lights:mode.ambilight.subtitleFallback": "Live screen capture",
         "lights:mode.solid.title": "Solid",

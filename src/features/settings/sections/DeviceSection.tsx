@@ -2,7 +2,12 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, ty
 import { useTranslation } from "react-i18next";
 
 import type { DisplayInfo } from "@/shared/contracts/display";
-import type { HueChannelPlacementOverride, HueRuntimeTriggerSource } from "@/shared/contracts/hue";
+import {
+  resolveHueOffBehavior,
+  type HueChannelPlacementOverride,
+  type HueOffBehavior,
+  type HueRuntimeTriggerSource,
+} from "@/shared/contracts/hue";
 import { DEFAULT_ROOM_MAP, hueChannelsForArea, mergeHueChannels } from "@/shared/contracts/roomMap";
 import type {
   HueChannelPlacement,
@@ -165,6 +170,7 @@ export function DeviceSection({
   const [syncedPositions, setSyncedPositions] = useState<HueChannelPlacementOverride[] | undefined>();
   const [hueZones, setHueZones] = useState<HueZone[]>([]);
   const [pairedStrips, setPairedStrips] = useState<UsbStripPlacement[]>([]);
+  const [hueOffBehavior, setHueOffBehavior] = useState<HueOffBehavior | null>(null);
   // One flag per save path. A USB write failure must not light the banner
   // inside the Hue channel-map panel, nor re-arm its dismissal timer.
   const usbPersistError = useTransientFlag();
@@ -184,6 +190,7 @@ export function DeviceSection({
         );
         setHueZones(state.roomMap?.zones ?? []);
         setPairedStrips(state.roomMap?.usbStrips ?? []);
+        setHueOffBehavior(resolveHueOffBehavior(state.hueOffBehavior));
       })
       .catch((error: unknown) => {
         console.error("[LumaSync] DeviceSection: loading room-map placements failed:", error);
@@ -276,6 +283,14 @@ export function DeviceSection({
     }
   }, [hueChannelPersistError, selectedAreaId]);
 
+  /** Rust reads it from the saved state when an Off runs; saving is all it takes. */
+  const handleHueOffBehaviorChange = useCallback((next: HueOffBehavior) => {
+    setHueOffBehavior(next);
+    void shellStore.save({ hueOffBehavior: next }).catch((error: unknown) => {
+      console.error("[LumaSync] saving hueOffBehavior failed:", error);
+    });
+  }, []);
+
   /** Recorded per area: two areas' arrangements are pushed independently, and a
    *  single snapshot would report one of them wrong. */
   const handleSyncedPositionsChange = useCallback(
@@ -363,6 +378,8 @@ export function DeviceSection({
           persistError={hueChannelPersistError.active}
           zones={hueZones}
           onStopHue={onStopHueOutput}
+          offBehavior={hueOffBehavior}
+          onOffBehaviorChange={handleHueOffBehaviorChange}
         />
 
         <WledCategory isActive={activeCategory === "wled"} />

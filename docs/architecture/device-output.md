@@ -122,6 +122,26 @@ inside `spawn_blocking` — on the IPC dispatcher thread it froze the whole app 
 Health Check (observed on v1.5.0-rc). Cost is +2 s per connect and per health check, accepted: the
 alternative is a guaranteed handshake failure on every Arduino-class board.
 
+**Off paints the strip black, and switches a WLED device off.** Only a user's Off does
+(`lighting-transaction.md`, "Off turns the lights off"). Before, Off stopped the worker and
+nothing else: `SerialSink::stop` writes nothing, so the strip kept the last frame it was sent
+unless its firmware blanks on its own after a quiet spell, and a Solid colour stayed up
+indefinitely. A WLED device held the last frame until it left realtime mode (the DRGB packet asks
+for 2 s; DDP uses the device's own timeout), then went back to its own effect or preset — lit.
+Now, once the mode has stopped, `blank_usb_after_off` sends one all-black frame through the same
+Solid path (`SolidUsbOutput::blank`), so profile, chip type, colour order and length all apply and
+the cached serial session is reused rather than reopened. Black pixels at full brightness rather
+than a zero brightness byte: a firmware may read brightness 0 as "unchanged", never a black pixel as
+anything but off. For WLED the black frame covers the realtime window and
+`power_off_wled` (`wled_discovery.rs`) then sends `POST /json/state {"on":false}`, so the device
+stays dark when realtime ends: WLED restores its own brightness on leaving realtime, and that is now
+0. It still shows realtime frames while off (`realtimeLock` lights an off strip at its last
+brightness), so the next mode needs no switch-on. The write reuses the discovery client —
+redirects never followed, the same address guard (`parse_ipv4`) — with its own 1.5 s bound
+(`WLED_POWER_OFF_TIMEOUT`), and accepts only WLED's `{"success":true}`. A failure is logged with
+its `WledPowerOffError` variant and changes nothing else: the stream has stopped either way, and a
+device that missed the write only returns to its own effect.
+
 ## Gotchas
 
 - **Opening a serial port toggles DTR, which resets many boards.** Reconnecting on every mode change makes an Arduino-class controller reboot each time, so a cached session is deliberately preserved across mode changes — the log line `cached serial session preserved to avoid DTR-reset cycle` is that working as intended, not a leak. That preservation is scoped to the *same* port only: `set_active_port` (`lighting_mode/transition.rs`) releases the previous port's cached session via `output_bridge.disconnect_session` the moment the active port actually changes, so switching away from a port does not hold its OS handle open until the app quits. A future `LedSink`-from-registry unification (see `ActiveSinkRegistry` in `commands/device_connection.rs`) must carry this same release-on-switch rule, not just the DTR-preserving cache.

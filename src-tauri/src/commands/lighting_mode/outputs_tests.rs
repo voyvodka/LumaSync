@@ -32,7 +32,11 @@ use super::{
     SolidColorPayload, ACTIVE_AMBILIGHT_WORKERS,
 };
 use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionState};
+use crate::commands::hue::light_restore::HueLightsAfterStop;
 use crate::commands::hue::state_store::HueRuntimeTriggerSource;
+use crate::commands::led_output::{
+    encode_packet_for_output, ColorCorrectionConfig, EncoderPlan, FirmwareProfile, LedChipType,
+};
 use crate::commands::wled_sink::{WledProtocol, WledSinkConfig};
 use crate::shutdown::{app_cleanup_steps, run_cleanup, CleanupBudget};
 
@@ -328,6 +332,293 @@ fn off_still_stops_hue_when_the_strip_stop_fails() {
     assert_eq!(result.outcome.stop_failed, vec![Usb]);
     assert_eq!(result.snapshot.active_targets, vec![Usb]);
     assert_eq!(result.snapshot.phase, LightingPhase::Idle);
+}
+
+// ---------------------------------------------------------------------------
+// Off turns the lights off — a user's Off only
+// ---------------------------------------------------------------------------
+
+/// What a blank of the rig's 59-LED strip puts on the wire.
+fn black_frame() -> Vec<u8> {
+    encode_packet_for_output(
+        FirmwareProfile::default(),
+        LedChipType::default(),
+        1.0,
+        &[[0, 0, 0]; 59],
+        &EncoderPlan::new(&ColorCorrectionConfig::default()),
+    )
+}
+
+/// Strip packets sent after `event`.
+fn packets_after(rig: &Rig, event: &str) -> Vec<Vec<u8>> {
+    let at = rig.log.seq_of(event).expect("the event happened");
+    rig.log
+        .packets()
+        .into_iter()
+        .filter(|(seq, _)| *seq > at)
+        .map(|(_, packet)| packet)
+        .collect()
+}
+
+fn hue_stops(rig: &Rig) -> Vec<HueLightsAfterStop> {
+    rig.hue.stop_lights()
+}
+
+/// A strip holds the last frame it was sent, so stopping the worker alone
+/// left Ambilight's last colours up.
+#[test]
+fn off_paints_the_strip_black_once_the_worker_has_stopped() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(1.0), &[Usb]);
+    wait_until("the worker never drove the strip", || {
+        !rig.log.packets().is_empty()
+    });
+
+    apply(&rig, user(Some(off()), None));
+
+    assert_eq!(packets_after(&rig, "mode:off:"), vec![black_frame()]);
+    assert!(!rig.worker_running());
+}
+
+/// Solid writes once; nothing but Off's black frame ever replaced it.
+#[test]
+fn off_from_solid_paints_the_strip_black() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(200), &[Usb]);
+
+    apply(&rig, user(Some(off()), None));
+
+    assert_eq!(packets_after(&rig, "mode:off:"), vec![black_frame()]);
+}
+
+#[test]
+fn off_switches_the_hue_lights_off_by_default() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(1.0), &[Usb, Hue]);
+
+    apply(&rig, user(Some(off()), None));
+
+    assert_eq!(hue_stops(&rig), vec![HueLightsAfterStop::TurnOff]);
+    assert!(
+        order(&rig, "mode:off:", "hue:stop:mode_control"),
+        "{:?}",
+        events(&rig)
+    );
+}
+
+/// The choice is read when Off runs, so a change made after the mode started
+/// — in any window — counts.
+#[test]
+fn off_reads_the_hue_choice_when_it_runs() {
+    let rig = Rig::new(RigSetup {
+        state: json!({ "hueOffBehavior": "turnOff" }),
+        ..RigSetup::default()
+    });
+    running(&rig, solid(1), &[Usb, Hue]);
+    rig.seed(json!({ "hueOffBehavior": "restore" }));
+
+    apply(&rig, user(Some(off()), None));
+    assert_eq!(hue_stops(&rig), vec![HueLightsAfterStop::Restore]);
+    // The strip goes dark whatever Hue does.
+    assert_eq!(packets_after(&rig, "mode:off:"), vec![black_frame()]);
+
+    running(&rig, solid(1), &[Usb, Hue]);
+    rig.seed(json!({ "hueOffBehavior": "turnOff" }));
+    apply(&rig, user(Some(off()), None));
+    assert_eq!(
+        hue_stops(&rig),
+        vec![HueLightsAfterStop::Restore, HueLightsAfterStop::TurnOff]
+    );
+}
+
+#[test]
+fn the_tray_and_the_popup_off_switch_the_lights_off_too() {
+    for origin in [LightingOrigin::Tray, LightingOrigin::Popup] {
+        let rig = Rig::new(RigSetup::default());
+        running(&rig, solid(1), &[Usb, Hue]);
+
+        apply(&rig, request(origin, Some(off()), None));
+
+        assert_eq!(
+            hue_stops(&rig),
+            vec![HueLightsAfterStop::TurnOff],
+            "{origin:?}"
+        );
+        assert_eq!(
+            packets_after(&rig, "mode:off:"),
+            vec![black_frame()],
+            "{origin:?}"
+        );
+    }
+}
+
+/// Only pressing Off turns lights off. Taking Hue out of a running mode, the
+/// Devices card's stop, and a mode that ends because its outputs went all
+/// let the lights go back as they were — and leave the strip alone.
+#[test]
+fn every_other_way_hue_output_ends_puts_the_lights_back() {
+    // One rig at a time: each holds the worker-test guard.
+    let ended_by = |end: &dyn Fn(&Rig)| {
+        let rig = Rig::new(RigSetup::default());
+        running(&rig, solid(1), &[Usb, Hue]);
+        end(&rig);
+        let blanked = rig
+            .log
+            .seq_of("mode:off:")
+            .is_some_and(|_| !packets_after(&rig, "mode:off:").is_empty());
+        (hue_stops(&rig), blanked)
+    };
+    let restored = (vec![HueLightsAfterStop::Restore], false);
+
+    assert_eq!(
+        ended_by(&|rig| {
+            apply(rig, user(None, Some(&[Usb])));
+        }),
+        restored,
+        "Hue taken out of the running mode"
+    );
+    assert_eq!(
+        ended_by(&|rig| {
+            release(rig, HueRuntimeTriggerSource::DeviceSurface);
+        }),
+        restored,
+        "the Devices card's stop"
+    );
+    assert_eq!(
+        ended_by(&|rig| {
+            apply(rig, user(None, Some(&[])));
+        }),
+        restored,
+        "every output deselected is not pressing Off"
+    );
+    assert_eq!(
+        ended_by(&|rig| {
+            apply(rig, request(LightingOrigin::UsbUnplug, None, Some(&[])));
+        }),
+        restored,
+        "a strip unplugged"
+    );
+}
+
+/// A launch that finds Off saved has nothing running to switch off.
+#[test]
+fn a_launch_whose_saved_mode_is_off_touches_no_light() {
+    let rig = Rig::new(RigSetup {
+        state: json!({
+            "lightingMode": { "kind": "off" },
+            "lastOutputTargets": ["usb", "hue"]
+        }),
+        ..RigSetup::default()
+    });
+
+    let result = apply(&rig, request(LightingOrigin::Boot, None, None));
+
+    assert_eq!(result.status.code, "OUTPUTS_APPLIED");
+    assert!(hue_stops(&rig).is_empty(), "{:?}", events(&rig));
+    assert!(rig.log.packets().is_empty());
+}
+
+/// Off with nothing running sends the strip nothing. Hue still gets its stop,
+/// as it always did, which writes nothing without a session to end.
+#[test]
+fn off_while_nothing_runs_sends_the_strip_nothing() {
+    let rig = Rig::new(RigSetup::default());
+
+    let result = apply(&rig, user(Some(off()), None));
+
+    assert_eq!(result.status.code, "OUTPUTS_APPLIED");
+    assert!(rig.log.packets().is_empty());
+    assert!(!events(&rig).iter().any(|e| e.starts_with("wled:")));
+}
+
+/// Ambilight chosen straight after Off waits for Off's stop and starts
+/// afterwards: a switch-off can never land under the new stream.
+#[test]
+fn ambilight_right_after_off_starts_once_the_switch_off_is_done() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(1.0), &[Usb, Hue]);
+    let stop_gate = rig.hue.hold_stops();
+
+    let off = spawn_apply(&rig, user(Some(off()), None));
+    wait_until("Off reached Hue", || rig.hue.stops_entered() == 1);
+    let on = spawn_apply(&rig, user(Some(ambilight(1.0)), None));
+    std::thread::sleep(Duration::from_millis(50));
+    assert_eq!(rig.hue.starts_entered(), 1, "the start overtook the stop");
+    stop_gate.add_permits(1);
+    block_on(off).unwrap().unwrap();
+    let on = block_on(on).unwrap().unwrap();
+
+    assert_eq!(on.status.code, "OUTPUTS_APPLIED");
+    assert_eq!(hue_stops(&rig), vec![HueLightsAfterStop::TurnOff]);
+    assert!(
+        order(&rig, "hue:stop:mode_control", "hue:start"),
+        "{:?}",
+        events(&rig)
+    );
+    assert!(rig.hue.streaming());
+}
+
+/// A WLED device leaves realtime mode ~2 s after the last frame and goes back
+/// to its own effect, so black alone does not keep it dark.
+#[test]
+fn off_on_a_wled_strip_paints_it_black_and_switches_it_off() {
+    let rig = Rig::new(RigSetup {
+        serial_connected: false,
+        ..RigSetup::default()
+    });
+    let receiver = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    receiver
+        .set_read_timeout(Some(Duration::from_millis(500)))
+        .unwrap();
+    let config = WledSinkConfig {
+        ip: "127.0.0.1".parse().unwrap(),
+        port: receiver.local_addr().unwrap().port(),
+        led_count: 59,
+        protocol: WledProtocol::Drgb,
+    };
+    rig.app
+        .state::<ActiveSinkRegistry>()
+        .replace_wled(Box::new(config.build()), config);
+    running(&rig, solid(200), &[Usb]);
+    let mut datagram = [0u8; 2048];
+    let (len, _) = receiver.recv_from(&mut datagram).expect("the Solid frame");
+    assert!(datagram[2..len].iter().any(|byte| *byte != 0));
+
+    apply(&rig, user(Some(off()), None));
+
+    let (len, _) = receiver.recv_from(&mut datagram).expect("a black frame");
+    assert_eq!(datagram[0], 2, "DRGB");
+    assert_eq!(len, 2 + 59 * 3);
+    assert!(datagram[2..len].iter().all(|byte| *byte == 0));
+    assert!(
+        order(&rig, "mode:off:", "wled:off:127.0.0.1"),
+        "{:?}",
+        events(&rig)
+    );
+}
+
+#[test]
+fn a_wled_strip_is_not_switched_off_when_its_mode_ends_another_way() {
+    let rig = Rig::new(RigSetup {
+        serial_connected: false,
+        ..RigSetup::default()
+    });
+    let receiver = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    let config = WledSinkConfig {
+        ip: "127.0.0.1".parse().unwrap(),
+        port: receiver.local_addr().unwrap().port(),
+        led_count: 59,
+        protocol: WledProtocol::Drgb,
+    };
+    rig.app
+        .state::<ActiveSinkRegistry>()
+        .replace_wled(Box::new(config.build()), config);
+    running(&rig, solid(200), &[Usb]);
+
+    apply(&rig, user(None, Some(&[])));
+
+    assert!(has(&rig, "mode:off:"), "{:?}", events(&rig));
+    assert!(!events(&rig).iter().any(|e| e.starts_with("wled:")));
 }
 
 // ---------------------------------------------------------------------------
@@ -1232,15 +1523,14 @@ fn no_solid_packet_is_sent_after_off_begins() {
     stop.store(true, Ordering::SeqCst);
     hammer.join().unwrap();
 
-    let off_at = rig.log.seq_of("mode:off:").expect("Off ran");
-    let late: Vec<u64> = rig
-        .log
-        .packets()
-        .iter()
-        .map(|(seq, _)| *seq)
-        .filter(|seq| *seq > off_at)
-        .collect();
-    assert!(late.is_empty(), "{} solid packets after Off", late.len());
+    let late = packets_after(&rig, "mode:off:");
+    // The strip gets the one black frame Off sends, and no colour after it.
+    assert_eq!(
+        late,
+        vec![black_frame()],
+        "{} packets after Off",
+        late.len()
+    );
     let answers = late_answers.lock().unwrap();
     assert!(!answers.is_empty());
     assert!(

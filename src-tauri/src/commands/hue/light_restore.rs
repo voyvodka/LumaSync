@@ -13,6 +13,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
 
 use log::{info, warn};
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::super::hue_http::{classify_hue_response_blocking, HueHttpFault};
@@ -102,6 +103,33 @@ impl HueLightRestore {
     fn is_for(&self, bridge_ip: &str, area_id: &str) -> bool {
         self.bridge_ip == bridge_ip && self.area_id == area_id
     }
+
+    /// The same lights, each to be written and watched as off. Everything the
+    /// restore guards — the area check, the watch, the newer-session stop —
+    /// holds unchanged, since an off light is compared on `on` alone.
+    pub(crate) fn switched_off(mut self) -> Self {
+        for light in &mut self.lights {
+            light.state = HueLightState {
+                on: false,
+                brightness: None,
+                color: None,
+            };
+        }
+        self
+    }
+}
+
+/// What a stop does to the area's lights once the stream has ended.
+/// `ShellState.hueOffBehavior` in `src/shared/contracts/shell.ts` for the
+/// persisted choice; every stop but a user's Off restores.
+/// docs/architecture/hue.md ("Off turns the lights off").
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HueLightsAfterStop {
+    /// Put back what the lights were before the session first streamed.
+    Restore,
+    /// Switch every light of the area off.
+    TurnOff,
 }
 
 /// Parse the restorable state out of one `data[]` item of
@@ -880,6 +908,37 @@ mod tests {
             !reads_as(&xy, &ct(true, 40.0, 367)),
             "left in ct mode is not the xy colour"
         );
+    }
+
+    /// Off reuses the restore with every light's state replaced by "off": one
+    /// `on` write per light, and a light the bridge switched back on no longer
+    /// reads as holding, whatever colour it came back in.
+    #[test]
+    fn a_switched_off_restore_writes_off_alone_and_watches_on_alone() {
+        let mut held = restore("area", &[("light-1", true), ("light-2", false)]);
+        held.lights[0].state.brightness = Some(56.92);
+        held.lights[0].state.color = Some(HueLightColor::Mirek(446));
+
+        let off = held.switched_off();
+
+        assert_eq!(off.area_id, "area");
+        assert_eq!(off.lights.len(), 2);
+        let lit = HueLightState {
+            on: true,
+            brightness: Some(30.83),
+            color: Some(HueLightColor::Mirek(367)),
+        };
+        for light in &off.lights {
+            assert_eq!(restore_body(&light.state), json!({ "on": { "on": false } }));
+            assert!(!reads_as(&light.state, &lit));
+            assert!(reads_as(
+                &light.state,
+                &HueLightState {
+                    on: false,
+                    ..lit.clone()
+                }
+            ));
+        }
     }
 
     #[test]

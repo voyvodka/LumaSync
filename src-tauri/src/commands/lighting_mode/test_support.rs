@@ -13,6 +13,7 @@ use tauri::test::MockRuntime;
 use tauri::{App, AppHandle, Listener, Manager};
 
 use super::hue_driver::{HueAreaVerdict, HueDriver, HueDriverHandle, HueFuture};
+use super::outputs::WledPowerOffHandle;
 use super::runtime::LightingRuntimeOwner;
 use super::{
     stop_lighting_blocking, LightingRuntimeState, ACTIVE_AMBILIGHT_WORKERS,
@@ -23,6 +24,7 @@ use crate::commands::ambilight_capture::{
 };
 use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionState};
 use crate::commands::hue::frame::{HueAreaChannel, HueColorSender, HueFrameRx, HueScreenRegion};
+use crate::commands::hue::light_restore::HueLightsAfterStop;
 use crate::commands::hue::state_store::{
     status_with, HueActiveOutputContext, HueOutputLive, HueRuntimeCommandResult, HueRuntimeState,
     HueRuntimeStateStore, HueRuntimeTriggerSource, StartHueStreamRequest,
@@ -175,6 +177,8 @@ pub(crate) struct FakeHue {
     stops_entered: AtomicUsize,
     probed: AtomicUsize,
     receivers: Mutex<Vec<HueFrameRx>>,
+    /// What each stop was told to do to the lights, in order.
+    stop_lights: Mutex<Vec<HueLightsAfterStop>>,
 }
 
 impl FakeHue {
@@ -193,7 +197,13 @@ impl FakeHue {
             stops_entered: AtomicUsize::new(0),
             probed: AtomicUsize::new(0),
             receivers: Mutex::default(),
+            stop_lights: Mutex::default(),
         })
+    }
+
+    /// What each stop so far was told to do to the lights.
+    pub(crate) fn stop_lights(&self) -> Vec<HueLightsAfterStop> {
+        self.stop_lights.lock().unwrap().clone()
     }
 
     pub(crate) fn script_starts(&self, codes: &[&'static str]) {
@@ -322,11 +332,16 @@ impl HueDriver for FakeHue {
         })
     }
 
-    fn stop(&self, trigger: HueRuntimeTriggerSource) -> HueFuture<'_, HueRuntimeCommandResult> {
+    fn stop(
+        &self,
+        trigger: HueRuntimeTriggerSource,
+        lights: HueLightsAfterStop,
+    ) -> HueFuture<'_, HueRuntimeCommandResult> {
         Box::pin(async move {
             let trigger = serde_json::to_value(&trigger).unwrap();
             self.log
                 .record(format!("hue:stop:{}", trigger.as_str().unwrap_or_default()));
+            self.stop_lights.lock().unwrap().push(lights);
             self.stops_entered.fetch_add(1, Ordering::SeqCst);
             let gate = self.stop_gate.lock().unwrap().clone();
             if let Some(gate) = gate {
@@ -432,6 +447,11 @@ impl Rig {
         let app = tauri::test::mock_app();
         app.manage(LightingRuntimeState::for_tests(owner));
         app.manage(HueDriverHandle(hue.clone()));
+        let wled_log = Arc::clone(&log);
+        app.manage(WledPowerOffHandle(Arc::new(move |ip| {
+            wled_log.record(format!("wled:off:{ip}"));
+            Ok(())
+        })));
         app.manage(HueRuntimeStateStore::default());
         app.manage(SerialConnectionState::default());
         app.manage(ActiveSinkRegistry::default());

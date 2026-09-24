@@ -13,6 +13,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use super::LightingRuntimeState;
 use crate::commands::hue::area_cache::HueReadFreshness;
 use crate::commands::hue::commands::{start_hue_stream_on, stop_hue_stream_on};
+use crate::commands::hue::light_restore::HueLightsAfterStop;
 use crate::commands::hue::state_store::{
     acquire_hue_runtime, HueOutputLive, HueRuntimeCommandResult, HueRuntimeState,
     HueRuntimeStateStore, HueRuntimeTriggerSource, StartHueStreamRequest,
@@ -35,7 +36,12 @@ pub(crate) enum HueAreaVerdict {
 
 pub(crate) trait HueDriver: Send + Sync {
     fn start(&self, request: StartHueStreamRequest) -> HueFuture<'_, HueRuntimeCommandResult>;
-    fn stop(&self, trigger: HueRuntimeTriggerSource) -> HueFuture<'_, HueRuntimeCommandResult>;
+    /// `lights` is what the area's lights get once the stream is down.
+    fn stop(
+        &self,
+        trigger: HueRuntimeTriggerSource,
+        lights: HueLightsAfterStop,
+    ) -> HueFuture<'_, HueRuntimeCommandResult>;
     fn probe_area(&self, request: StartHueStreamRequest) -> HueFuture<'_, HueAreaVerdict>;
     /// Streaming, starting, retrying, or `Failed` with lights still to put back.
     fn runtime_active(&self) -> bool;
@@ -80,10 +86,14 @@ impl<R: Runtime> HueDriver for ProductionHueDriver<R> {
         })
     }
 
-    fn stop(&self, trigger: HueRuntimeTriggerSource) -> HueFuture<'_, HueRuntimeCommandResult> {
+    fn stop(
+        &self,
+        trigger: HueRuntimeTriggerSource,
+        lights: HueLightsAfterStop,
+    ) -> HueFuture<'_, HueRuntimeCommandResult> {
         Box::pin(async move {
             let store = self.app.state::<HueRuntimeStateStore>();
-            stop_hue_stream_on(store.inner(), trigger).await
+            stop_hue_stream_on(store.inner(), trigger, lights).await
         })
     }
 
