@@ -8,10 +8,17 @@
 //! Sink-agnostic on purpose: it sees light colours plus a topology, never a
 //! strip, a Hue channel or a WLED device.
 
+use std::time::Duration;
+
 use super::ambilight_capture::{BlackBorderInsets, CapturedFrame};
+use super::lighting_mode::smoothing::{
+    rate_for_interval, retention_for_interval, SMOOTHING_REFERENCE_INTERVAL,
+};
 
 // Tuning constants — tuned, not derived (no published number exists for this
 // viewing situation); expressed in u′v′ / Y so a value means the same at every hue.
+// The per-frame rates are per `SMOOTHING_REFERENCE_INTERVAL`, rescaled to the
+// real gap between frames.
 
 /// Frame-statistics stride, both axes. 640×360 → ~3 600 samples.
 const STATS_STRIDE: usize = 8;
@@ -190,6 +197,8 @@ pub struct SceneAnalyzer {
     ambience: Option<[f32; 3]>,
     /// α resolved for the current frame by `observe_frame`.
     alpha: f32,
+    /// Time since the previous observed frame; scales the per-frame rates.
+    frame_interval: Duration,
     // Scratch, reused so the hot path allocates nothing after warm-up.
     lin: Vec<[f32; 3]>,
     yuv: Vec<(f32, f32, f32)>,
@@ -215,6 +224,7 @@ impl SceneAnalyzer {
             frame_mean: [0.0; 3],
             ambience: None,
             alpha: 0.0,
+            frame_interval: SMOOTHING_REFERENCE_INTERVAL,
             lin: Vec::new(),
             yuv: Vec::new(),
             adjacent: Vec::new(),
@@ -223,15 +233,29 @@ impl SceneAnalyzer {
         }
     }
 
-    /// One pass over the frame (inside the border insets): frame mean, change
-    /// histogram, and from those the movement envelope, this frame's α, and
-    /// the ambience memory. Call once per frame, before `process`.
+    /// `observe_frame_after` one reference interval after the previous frame.
+    #[cfg(test)]
     pub fn observe_frame(
         &mut self,
         frame: &CapturedFrame,
         insets: &BlackBorderInsets,
         alpha_ceiling: f32,
     ) {
+        self.observe_frame_after(frame, insets, alpha_ceiling, SMOOTHING_REFERENCE_INTERVAL);
+    }
+
+    /// One pass over the frame (inside the border insets): frame mean, change
+    /// histogram, and from those the movement envelope, this frame's α, and
+    /// the ambience memory. Call once per new frame, before `process`;
+    /// `since_previous` is the time since the last call.
+    pub fn observe_frame_after(
+        &mut self,
+        frame: &CapturedFrame,
+        insets: &BlackBorderInsets,
+        alpha_ceiling: f32,
+        since_previous: Duration,
+    ) {
+        self.frame_interval = since_previous;
         let w = frame.width as usize;
         let h = frame.height as usize;
         let alpha_ceiling = alpha_ceiling.clamp(0.05, 1.0);
@@ -294,13 +318,13 @@ impl SceneAnalyzer {
         self.change_env = if change > self.change_env {
             change
         } else {
-            self.change_env * CHANGE_RELEASE
+            self.change_env * retention_for_interval(CHANGE_RELEASE, self.frame_interval)
         };
         self.alpha = alpha_floor
             + (alpha_ceiling - alpha_floor) * smoothstep(CHANGE_LO, CHANGE_HI, self.change_env);
 
         if count > 0 {
-            let rate = (self.alpha * AMBIENCE_RATE).clamp(0.0, 1.0);
+            let rate = rate_for_interval(self.alpha * AMBIENCE_RATE, self.frame_interval);
             self.ambience = Some(match self.ambience {
                 None => self.frame_mean,
                 Some(prev) => [
@@ -401,7 +425,10 @@ impl SceneAnalyzer {
         let target_sigma = (RANGE_GAIN * median).clamp(RANGE_SIGMA_MIN, RANGE_SIGMA_MAX);
         let sigma_r = match state.range_sigma {
             None => target_sigma,
-            Some(prev) => prev + RANGE_ENVELOPE_RATE * (target_sigma - prev),
+            Some(prev) => {
+                prev + rate_for_interval(RANGE_ENVELOPE_RATE, self.frame_interval)
+                    * (target_sigma - prev)
+            }
         };
         state.range_sigma = Some(sigma_r);
         state.last_median = median;
@@ -531,11 +558,7 @@ mod tests {
                 px.push(f(x, y));
             }
         }
-        CapturedFrame {
-            width: w as u32,
-            height: h as u32,
-            pixels_rgb: px,
-        }
+        CapturedFrame::new(w as u32, h as u32, px)
     }
 
     fn uniform(rgb: [u8; 3]) -> CapturedFrame {
@@ -821,11 +844,7 @@ mod tests {
     fn empty_frame_and_empty_set_are_harmless() {
         let mut a = SceneAnalyzer::new();
         a.observe_frame(
-            &CapturedFrame {
-                width: 0,
-                height: 0,
-                pixels_rgb: Vec::new(),
-            },
+            &CapturedFrame::new(0, 0, Vec::new()),
             &BlackBorderInsets::default(),
             0.35,
         );

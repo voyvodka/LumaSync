@@ -347,11 +347,7 @@ impl SyntheticFrameSource {
             }
         }
 
-        CapturedFrame {
-            width: self.width,
-            height: self.height,
-            pixels_rgb,
-        }
+        CapturedFrame::new(self.width, self.height, pixels_rgb)
     }
 }
 
@@ -812,11 +808,7 @@ mod tests {
             tail,
             [255, 255, 255],
         );
-        let frame = CapturedFrame {
-            width: w,
-            height: h,
-            pixels_rgb: pixels,
-        };
+        let frame = CapturedFrame::new(w, h, pixels);
         crate::commands::led_calibration::sample_frame_for_sequence(
             &frame,
             &sequence,

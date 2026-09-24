@@ -5,6 +5,7 @@
 //!
 //! - `frame` — HueStream binary frame builder, channel data model, RGB→XY
 //! - `dtls` — DTLS 1.2 PSK handshake (cipher pinned to PSK-AES128-GCM-SHA256)
+//! - `easing` — the DTLS sender's per-tick step towards the newest target
 //! - `sender` — DTLS / HTTP-fallback background sender threads,
 //!   entertainment_configuration activate/deactivate, channel resolution
 //! - `state_store` — runtime ownership types, DTOs, state machine enums,
@@ -37,6 +38,7 @@ pub mod bridge_identity;
 pub mod commands;
 pub mod credential_store;
 pub mod dtls;
+pub mod easing;
 pub mod frame;
 pub mod hue_config;
 pub mod light_restore;

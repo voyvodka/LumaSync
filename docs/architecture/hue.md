@@ -407,6 +407,25 @@ off, and so do we now (`commands/hue/light_restore.rs`).
   the 50 ms floor, and only then takes the newest frame on hand. It used to take the frame first
   and send it after the sleep, 50–67 ms stale. The floor and the 2 s keep-alive are unchanged; the
   HTTP fallback loop already took the newest frame when a request slot came up.
+- **The sender eases between targets.** A packet carries a step from what the lamps were last sent
+  towards the newest target, not the target itself (`HueEasing` in `commands/hue/easing.rs`). With
+  a newest-wins mailbox and no easing the lamps received a jump every 50 ms, and an irregular one:
+  the worker's frames and the sender's ticks run on different clocks, so a tick finds one new target,
+  none, or two, and the size of each jump followed that beat. That judder is what read as colours
+  "stepping" next to Hue Sync. The step is `1 − exp(−dt/τ)` of the remaining gap with `τ` one
+  tick (the 50 ms floor), `dt` the time since the previous packet capped at two ticks: about 63 % of
+  the gap per packet, so a cut still lands in two or three packets and the easing costs roughly one
+  tick of lag. While still gliding the loop wakes for the next tick with no new frame; once arrived
+  it goes back to waiting on the mailbox and the 2 s keep-alive. Newest-wins is kept: a target
+  replaced before a tick is never eased towards. The first target of a session, the Solid colour
+  path and test patterns (`HueMotion::Snap`) are shown as they are. Easing runs in wire space —
+  after the pipeline's gamma stage, before brightness — which is linear light, so a halfway packet
+  is the physical mix of the two colours rather than a gamma-encoded average that dips dark. The
+  gamut clip runs once per target on arrival, not per packet: a blend of two in-gamut colours stays
+  in gamut. Colours reach the sender as `f32` on the 16-bit wire scale; they used to be `u8` after
+  the gamma stage, which leaves a dark scene only a few levels to step through. The 50 ms floor is
+  untouched — easing changes what a packet carries, never how often one goes out. The HTTP fallback
+  does not ease: at its ~10 requests a second per light, a glide would only spend the budget.
 - **Colour mode.** CLIP v2 reports `color.xy` in both modes, so the mode is read from
   `color_temperature.mirek_valid` (`mirek` is null outside the ct spectrum). An on light gets one PUT
   with `on`, `dimming.brightness` and either `color_temperature.mirek` or `color.xy`, never both. An

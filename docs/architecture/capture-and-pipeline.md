@@ -81,11 +81,73 @@ only, and `select_display` on the capture start path is the *single* caller allo
 UI that gated the start on the preflight answer would short-circuit before the request ever ran,
 and a first-run user would never be asked at all. That ordering is load-bearing, not stylistic.
 
-**Smoothing is an EWMA per light; the preset is a ceiling on it.** `LightingSmoothingPreset` in
-`src/shared/contracts/lighting.ts` maps three names to three alpha values. They used to be applied
-as-is; since the scene-adaptive stage below they are the *most* movement a frame may use, and the
-stage picks the value each frame. `HueIntensityPreset` is a deprecated alias kept so pre-v1.4 call
-sites compile.
+**Each captured frame is analysed once; the outputs step on their own clock.** `CapturedFrame`
+carries a `seq` (unique per frame, kept by a clone) and a `captured_at`. The worker used to sleep a
+fixed `interval / 2` and re-run the whole step on whatever the source held — with a strip that was
+three to five passes over each 20 Hz frame, and each pass was smoothed again and counted as a
+captured frame. Now the frame and the output steps are separate:
+
+- **Push sources wake the worker.** ScreenCaptureKit and WGC publish into a `LatestFrame` (slot plus
+  condvar); the worker waits on it with a timeout no longer than its next output step (and never
+  over 50 ms, so a stop is seen). **Pull sources** — X11 via `xcap`, the synthetic test pattern —
+  are called at the capture rate; the synthetic pattern at the output rate, since it animates per
+  call. A frame whose `seq` was already seen is not sampled or analysed again.
+- **Analysis** (`AmbilightFramePipeline::analyze`) runs per new frame: strip sampling, the scene
+  stage, live saturation, the smoothing targets for the strip and Hue.
+- **Output steps** (`advance`) run at the strip's send interval, or every 25 ms with Hue alone, and
+  right after each new frame: the smoothers move by the time that passed, the strip is sent
+  through its send gate, and Hue gets the newest target (the sender eases on its own tick —
+  `hue.md`). A still screen therefore keeps the strip refreshed (WLED drops out of realtime mode
+  without packets) without re-analysing anything.
+- **A change to what the analysis reads re-analyses the frame on hand** — saturation, the smoothing
+  ceiling, border detection, a room-map move, a Hue stream swapped under the worker. A still screen
+  brings no new frame, so without this a slider dragged over a paused film would do nothing; the old
+  loop only hid that by re-processing the same frame forever.
+- **Telemetry counts unique frames.** `capture_fps` is analysed frames per second, `send_fps` strip
+  sends (or, with Hue alone, frames handed to Hue). A replaced frame that never reached an output is
+  what queue health counts as an overwrite.
+
+**Smoothing is time-based.** `lighting_mode/smoothing.rs`. A step closes `1 − exp(−dt/τ)` of the
+gap to the target, `dt` being the time since the previous step, so a preset gives the same answer
+at 20, 25 or 60 output steps a second and whatever sinks are on — the per-iteration EWMA it
+replaces moved a strip-on session several times faster than a Hue-only one. The pipeline advances
+the smoothers to the moment a new frame is analysed *before* switching targets, so what the lights
+show at any instant depends on when frames arrived and not on when output steps happened to run.
+`LightingSmoothingPreset` (`src/shared/contracts/lighting.ts`) still maps three names to three
+alpha values, and the scene-adaptive stage below still picks each frame's alpha under that ceiling.
+The alpha is read as the coefficient of the per-frame filter on the reference cadence, the ~25 Hz
+Hue-only loop the presets and the scene stage were tuned on (`SMOOTHING_REFERENCE_INTERVAL`,
+40 ms), and turned into `τ = 40 ms · (1 − a)/a`: that per-frame filter trails a steady ramp by
+exactly that, so each preset keeps its lag — Subtle 227 ms, Moderate 74 ms, Intense 27 ms, and the
+scene stage's floor on Moderate (a = 0.105) 341 ms. It is the mean delay that is kept, not the
+shape: the old filter jumped by `a` the moment a frame came in, the new one starts from that moment
+and glides. Smoothing state is `f32`; the `u8` state before it rounded every step and at the
+floor parked a strip a few levels short of the target for good. `HueIntensityPreset` is a
+deprecated alias kept so pre-v1.4 call sites compile.
+
+**Capture rate follows the output plan.** `capture_interval_for` in `lighting_mode.rs`: 20 Hz with
+Hue alone — the bridge takes 20 frames a second, so more would be read back and thrown away — and
+30 Hz when a strip (serial or WLED) is in the plan, never faster than a serial strip's link takes a
+frame. 30 rather than 60: with the strip smoothed between frames on every output step, the next
+frame is new information arriving ~8 ms sooner on average, at 1.5 times the capture cost on
+Windows, where every frame is a full-resolution GPU readback. ScreenCaptureKit and WGC are asked
+for the rate; X11 is polled at it. The scene stage's per-frame rates (the change envelope's
+release, the ambience memory, the σ envelope) are rescaled to the real gap between analysed
+frames, so they mean the same at 20 and 30 Hz. The histogram change signal is not: it compares
+consecutive frames, so a slow pan reads slightly smaller at 30 Hz. A cut reads the same.
+
+**One colour pipeline.** `EncoderPlan` in `led_output.rs` holds every per-pixel correction —
+device-calibration saturation, Kelvin multipliers (computed once, never per pixel), per-channel
+gamma LUTs, colour order — built once per sink or worker. The serial encoders, `CorrectedWledSink`,
+the Hue channels and the twin overlay all go through it; `apply_color_correction_rgb` is a one-off
+wrapper for Solid colours. Saturation has one implementation (`apply_saturation_to_pixel`) and
+host-side brightness one (`scale_brightness`, for Adalight, WLED and the twin). The order is the
+same for every sink: sample → scene stage → live saturation → time-based smoothing (gamma-encoded)
+→ `EncoderPlan` → wire. Hue used to smooth *after* the gamma stage while the strip smoothed
+before it, and never saw the live saturation slider. Hue takes `correct_precise`, the same stages
+without rounding, because its wire is 16-bit: after a 2.2 gamma an 8-bit value has only a handful
+of levels in a dark scene, and a slow fade walked up them in visible steps. For the strip every
+byte is what it was (`strip_bytes_match_the_pipeline_before_item_27` pins it).
 
 ### Scene-adaptive stage
 
@@ -126,8 +188,8 @@ things, in this order, per frame:
    and the lights follow decisively; a still or slowly drifting scene sits at the floor and steers
    gently. There is deliberately **no cut detector and no state reset** — nothing is declared, the
    filter simply moves as fast as the content did, so a pan or an explosion raises alpha for a
-   moment without ever producing a discontinuity. Both the USB `RuntimeQualityController` and the
-   Hue `HueChannelSmoother` read the same alpha.
+   moment without ever producing a discontinuity. The strip's and Hue's smoothers read the same
+   alpha.
 
 Cost, measured with the `#[ignore]`d `cost_on_a_full_frame` test on a 640×360 frame and 200 LEDs:
 about 22 µs per frame in release, ~160 µs in debug — three orders of magnitude under the frame
@@ -142,12 +204,12 @@ setting, and it is read once when the worker starts.
 
 ### Measuring the frame budget
 
-Everything the worker computes per frame after capture is one type, `AmbilightFramePipeline` in
-`src-tauri/src/commands/lighting_mode/frame_pipeline.rs`: the black-border cache, strip sampling,
-the scene stage, strip smoothing, and the Hue path (room-aware sample points, colour correction,
-smoothing). The worker keeps only the I/O around it — capture, the sends, telemetry, the twin
-feed. That split is what lets the real code be measured with no display and no hardware, from
-`lighting_mode/frame_pipeline_tests.rs`.
+Everything the worker computes after capture is one type, `AmbilightFramePipeline` in
+`src-tauri/src/commands/lighting_mode/frame_pipeline.rs`: per frame the black-border cache, strip
+sampling, the scene stage and the smoothing targets; per output step the smoothers and Hue's colour
+pipeline. Time is an argument, never read inside. The worker keeps only the I/O and the timing
+around it — capture, waking, the sends, telemetry, the twin feed. That split is what lets the real
+code be measured with no display and no hardware, from `lighting_mode/frame_pipeline_tests.rs`.
 
 **Timing, locally.** An `#[ignore]`d report runs the pipeline plus the serial encoder over synthetic
 640×360 and 640×400 frames — what ScreenCaptureKit hands the worker after its GPU downscale — for
@@ -160,7 +222,13 @@ cargo test --release --lib frame_budget_report -- --ignored --nocapture
 ```
 
 Quote release numbers: the whole step was ~40 µs (164 LEDs) and ~74 µs (300 LEDs) when this
-landed, under 0.5 % of a 60 Hz frame. Debug runs about 16× slower overall and up to 50× on the
+landed, under 0.5 % of a 60 Hz frame. When analysis and output steps were split (review items 17
+and 27) an interleaved A/B against the previous build on one machine put the new frame step at
+23.9–26.1 µs median (164 LEDs) and 42.2–49.6 µs (300) against 24.0–28.0 and 42.1–52.5 µs for the
+old whole step — the same within noise — with an output step between frames at 1.1 and 2.0 µs.
+What changed is how often the full step runs: once per captured frame (20 or 30 a second), where
+the old loop ran it on every pass, ~120 passes a second next to a WLED strip. Next to WLED that is
+roughly 0.8 ms of work a second where it was ~2.9. Debug runs about 16× slower overall and up to 50× on the
 encoders, so it only compares two builds of the same profile. A release build (test or
 `tauri build`) failing with `can't find crate for ctor_proc_macro` on macOS 27 is an old toolchain:
 rustc 1.94 strips proc-macro dylibs in a way macOS 27's dyld rejects ("mis-aligned LINKEDIT string
@@ -176,10 +244,12 @@ test binary installs a counting global allocator — it counts only on a thread 
 every steady-state frame through the pipeline and `SerialSink::send_frame`, over the production
 serial writer with a counting port behind it, asserts:
 
-- **at most three heap allocations** — the sampled strip, the smoothed strip queued for the sink,
-  the encoded packet — and no more bytes than those three need. A copy of the frame, a rebuilt Hue
-  sample table, a `collect()` on the Hue path or a cloned port name each fails it. Handing the
-  packet to the writer is a copy into a buffer it gives back, not an allocation.
+- **at most two heap allocations** per new frame — the sampled strip and the encoded packet — and
+  **one** (the packet) per output step between frames, and no more bytes than those need. The
+  smoothed strip is read in place; it used to be a third allocation, queued for the sink. A copy of
+  the frame, a rebuilt Hue sample table, a `collect()` on the Hue path or a cloned port name each
+  fails it. Handing the packet to the writer is a copy into a buffer it gives back, not an
+  allocation.
 - **none on the writer thread.** The port counts from inside `write`, on the writer thread, what
   that thread allocated since its previous write.
 - **no gamma or sRGB LUT tabulation.** Both tables live on the stack, so the allocator cannot see a
@@ -196,11 +266,16 @@ start, reconnect, restart or stop. Outside the guard: the Hue send's `to_vec()` 
 capture itself.
 
 **Equivalence.** `worker_output_matches_reference_*` drives the real threaded worker, and
-`extracted_step_matches_reference_*` the pipeline directly, against a reference copy of the loop
-body as it stood before the extraction — frame for frame, all four wire layouts, with settings,
-colour-order and room-map changes landing on fixed frames. Both sides call the same stage functions,
-so tuning the scene stage or an encoder leaves it green; changing the glue — what runs in which
-order, which setting is read where — means updating the reference in the same PR, on purpose.
+`extracted_step_matches_reference_*` the pipeline directly, against a reference copy of the glue
+written out inline — frame for frame, all four wire layouts, with settings, colour-order and
+room-map changes landing on fixed frames, one reference interval apart. The threaded run gets a
+scripted smoothing clock (`WorkerPacing::clock`) that moves one interval per frame served, so its
+smoothing is reproducible whenever its output steps land; the repeats those steps send between
+frames are collapsed before comparing. Both sides call the same stage functions, so tuning the
+scene stage or an encoder leaves it green; changing the glue — what runs in which order, which
+setting is read where — means updating the reference in the same PR, on purpose. The reference was
+last changed for review items 17 and 27. `outputs_are_the_same_whatever_the_output_rate` holds the
+pipeline to one answer at 20, 25 and 60 output steps a second.
 
 ## Gotchas
 
