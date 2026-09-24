@@ -106,6 +106,7 @@ const shell: Catalogue<typeof enShell> = {
       outputNoneStopped: "Hue köprüsü bu ağda yanıt vermedi — arama durduruldu",
       outputChecking: "Çıkışlar kontrol ediliyor…",
       calibrationRequired: "Kalibrasyon gerekli — bu mod için LED düzenini tamamla",
+      ledSetupNext: "Şerit bağlandı — sıradaki adım: her ekran kenarında kaç LED olduğunu bildir",
       onboarding: {
         lights: "Hoş geldin — başlamak için bir aydınlatma modu seç",
         devices: "Modların ışık gönderebilmesi için USB şerit, WLED ya da Hue bağla",

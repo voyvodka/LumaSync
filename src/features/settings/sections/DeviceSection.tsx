@@ -33,7 +33,7 @@ import type { TranslationKey } from "@/features/i18n/catalogue";
 
 export type DeviceCategory = "usb" | "hue" | "wled" | "displays" | "manual";
 
-type RailGroup = "connected" | "other";
+type RailGroup = "devices" | "other";
 
 export interface DeviceCategoryDescriptor {
   group: RailGroup;
@@ -43,10 +43,10 @@ export interface DeviceCategoryDescriptor {
 
 /** The Devices rail in order, one row per category: a new category fails to compile until it has one. */
 export const DEVICE_CATEGORIES = {
-  usb: { group: "connected", Icon: IconUsb, labelKey: "device:page.rail.usbStrips" },
-  hue: { group: "connected", Icon: IconHueBridgeGlyph, labelKey: "device:page.rail.hueBridges" },
-  wled: { group: "connected", Icon: IconWledGlyph, labelKey: "device:page.rail.wled" },
-  displays: { group: "connected", Icon: IconDisplayGlyph, labelKey: "device:page.rail.displays" },
+  usb: { group: "devices", Icon: IconUsb, labelKey: "device:page.rail.usbStrips" },
+  hue: { group: "devices", Icon: IconHueBridgeGlyph, labelKey: "device:page.rail.hueBridges" },
+  wled: { group: "devices", Icon: IconWledGlyph, labelKey: "device:page.rail.wled" },
+  displays: { group: "devices", Icon: IconDisplayGlyph, labelKey: "device:page.rail.displays" },
   manual: { group: "other", Icon: IconPencil, labelKey: "device:page.rail.manualEntry" },
 } satisfies Record<DeviceCategory, DeviceCategoryDescriptor>;
 
@@ -55,7 +55,7 @@ function deviceCategory(category: DeviceCategory): DeviceCategoryDescriptor {
 }
 
 const RAIL_GROUP_HEADINGS = {
-  connected: "device:page.rail.connected",
+  devices: "device:page.rail.devices",
   other: "device:page.rail.other",
 } satisfies Record<RailGroup, TranslationKey>;
 
@@ -85,6 +85,8 @@ export interface DeviceSectionProps {
   categoryRequest?: DeviceCategoryRequest | null;
   /** The category on view, and `null` on unmount; the shell's notices defer to it. */
   onVisibleCategoryChange?: (category: DeviceCategory | null) => void;
+  /** A bridge is paired and Hue is streaming: what the Hue badge counts. */
+  hueActive?: boolean;
 }
 
 interface RailButtonProps {
@@ -92,7 +94,7 @@ interface RailButtonProps {
   category: DeviceCategory;
   icon: React.ReactNode;
   label: string;
-  /** Rendered as a badge when non-zero. */
+  /** How many are active; rendered as a badge when non-zero. */
   count: number;
   /** What the badge means, for anyone who cannot see it sit next to the label. */
   countLabel?: string;
@@ -142,6 +144,7 @@ export function DeviceSection({
   onStopHueOutput,
   categoryRequest = null,
   onVisibleCategoryChange,
+  hueActive = false,
 }: DeviceSectionProps) {
   const { t } = useTranslation();
 
@@ -150,13 +153,8 @@ export function DeviceSection({
   const hue = useHueOnboarding();
   const device = useDeviceConnection();
 
-  const { selectedBridge, selectedAreaId } = hue;
-  const { ports, connectedPort } = device;
-  // The badge sits on a button labelled "USB Strips", so it counts strips —
-  // not every enumerated port. `/dev/cu.debug-console` and its kind enumerate,
-  // fail the VID/PID allowlist, and can never be one; counting them said "2"
-  // beside a header reading "1 connected" on the same screen.
-  const supportedPortCount = ports.filter((port) => port.isSupported).length;
+  const { selectedAreaId } = hue;
+  const { connectedPort } = device;
   const { activeWledIp } = useActiveWledSink();
 
   // -------------------------------------------------------------------------
@@ -300,11 +298,14 @@ export function DeviceSection({
     [selectedAreaId],
   );
 
+  // Every badge counts what is active, never what merely exists: an
+  // enumerated port or a paired-but-idle bridge put a number beside a header
+  // saying nothing was connected. Displays and manual entry have no such state.
   const railCounts: Record<DeviceCategory, number> = {
-    usb: supportedPortCount,
-    hue: selectedBridge ? 1 : 0,
+    usb: connectedPort ? 1 : 0,
+    hue: hueActive ? 1 : 0,
     wled: activeWledIp === null ? 0 : 1,
-    displays: displays.length,
+    displays: 0,
     manual: 0,
   };
 
@@ -325,7 +326,7 @@ export function DeviceSection({
                   icon={<Icon />}
                   label={t(labelKey)}
                   count={count}
-                  countLabel={t("device:page.rail.countLabel", { count })}
+                  countLabel={t("device:page.rail.activeLabel", { count })}
                   active={activeCategory === category}
                   onClick={() => setActiveCategory(category)}
                 />

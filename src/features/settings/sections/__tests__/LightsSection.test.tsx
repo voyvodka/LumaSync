@@ -13,6 +13,8 @@ import { __resetRuntimeHealthForTests } from "@/features/telemetry/runtimeHealth
 import { NO_RUNTIME_HEALTH_ISSUES, type RuntimeHealth } from "@/shared/contracts/telemetry";
 import { LightsSection, hueUnavailableSubKey } from "../LightsSection";
 import type * as roomMapApiModule from "@/features/room-map/roomMapApi";
+import type { HueRuntimeTarget } from "@/shared/contracts/hue";
+import { readStylesheet } from "@/test/stylesheetSource";
 
 const { shellStateRef, saveMock, createHueZoneMock, telemetryMock, healthListeners } = vi.hoisted(() => ({
   shellStateRef: { current: {} as Partial<ShellState> },
@@ -389,6 +391,43 @@ describe("LightsSection — the local output row names what is actually bound", 
 
     expect(text).toContain("No strip connected");
     expect(row).toHaveClass("is-unavailable");
+  });
+
+  // The toggles read ON beside "No strip connected" / "Not configured". The
+  // saved selection still holds both; only what is shown follows availability.
+  it("shows an unavailable output as off while it stays selected", async () => {
+    const onOutputTargetsChange = vi.fn<(targets: HueRuntimeTarget[]) => void>();
+    const view = render(
+      <LightsSection
+        mode={{ kind: "off" }}
+        outputTargets={["usb", "hue"]}
+        localOutputConnected={false}
+        localSink={null}
+        hueConfigured={false}
+        hueStreaming={false}
+        modeLockReason={null}
+        onModeChange={vi.fn<(next: LightingModeConfig) => void>()}
+        onOutputTargetsChange={onOutputTargetsChange}
+      />,
+    );
+    await act(async () => {});
+    const rows = view.container.querySelectorAll(".lm-out-row");
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row).toHaveClass("is-unavailable");
+      expect(row).toHaveAttribute("aria-pressed", "false");
+    }
+    expect(onOutputTargetsChange).not.toHaveBeenCalled();
+
+    const css = readStylesheet();
+    expect(css).toMatch(/\.lm-out-row\.is-unavailable \.tg::after\s*\{[^}]*left:\s*1px/);
+  });
+
+  it("no longer carries the firmware profile, which moved to Devices → USB", async () => {
+    const { view } = renderWithSink(null);
+    await act(async () => {});
+    expect(view.container.querySelector("[data-profile]")).toBeNull();
+    expect(screen.queryByText("lights:led.firmwareProfile.title")).toBeNull();
   });
 });
 

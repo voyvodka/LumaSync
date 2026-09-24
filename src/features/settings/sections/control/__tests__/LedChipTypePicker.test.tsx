@@ -13,6 +13,7 @@ import {
   type FirmwarePixelLayout,
 } from "@/shared/contracts/device";
 import { firmwareProfileEvents } from "@/features/device/firmwareProfileEvents";
+import { readStylesheet } from "@/test/stylesheetSource";
 import { LedChipTypePicker } from "../LedChipTypePicker";
 
 vi.mock("react-i18next", () => ({
@@ -49,6 +50,37 @@ beforeEach(() => {
 
 afterEach(() => {
   advertise(undefined);
+});
+
+// The tiles were styled inline with `all: unset`, which took the keyboard
+// focus ring with it. happy-dom applies no stylesheet, so the rules are read.
+describe("LedChipTypePicker — tile styling", () => {
+  it("styles the tiles through the shared class, not inline", () => {
+    render(<LedChipTypePicker initialChipType={LED_CHIP_TYPE.WS2812B_GRB} />);
+    for (const chipType of [LED_CHIP_TYPE.WS2812B_GRB, LED_CHIP_TYPE.SK6812_RGBW]) {
+      expect(tile(chipType)).toHaveClass("lm-strip-tile");
+      expect(tile(chipType).getAttribute("style")).toBeNull();
+    }
+  });
+
+  it("gives the tile a focus ring, a checked state and a forced-colors rule", () => {
+    const css = readStylesheet();
+    expect(css).toMatch(/\.lm-strip-tile:focus-visible\s*\{[^}]*var\(--lm-focus-ring\)/);
+    expect(css).toMatch(/\.lm-strip-tile\[aria-checked="true"\]\s*\{/);
+    expect(css).toMatch(/@media \(forced-colors: active\)\s*\{\s*\.lm-strip-tile\s*\{/);
+  });
+
+  it("warns about SK6812 only under the Adalight profile", () => {
+    const { rerender } = render(
+      <LedChipTypePicker initialChipType={LED_CHIP_TYPE.SK6812_RGBW} firmwareProfile={FIRMWARE_PROFILE.ADALIGHT} />,
+    );
+    expect(screen.getByText("lights:led.chipType.sk6812AdalightWarning")).toBeInTheDocument();
+
+    rerender(
+      <LedChipTypePicker initialChipType={LED_CHIP_TYPE.SK6812_RGBW} firmwareProfile={FIRMWARE_PROFILE.LUMASYNC_V1} />,
+    );
+    expect(screen.queryByText("lights:led.chipType.sk6812AdalightWarning")).toBeNull();
+  });
 });
 
 describe("LedChipTypePicker — firmware layout marker", () => {

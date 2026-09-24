@@ -4,8 +4,9 @@
    primitive inside its own surface (`.lm-color-order-answer`, say).
    ───────────────────────────────────────────────────────────────────── */
 
-/* Button — small (mono caps) and medium. A device card's footer action
-   (`size="card"`) draws with `.lm-dcard-act` in devices.css. */
+/* Button — small and medium, both mono caps like a device card's footer
+   action (`size="card"`, `.lm-dcard-act` in devices.css): one case for every
+   button on a page. */
 .lm-btn {
   all: unset;
   box-sizing: border-box;
@@ -72,8 +73,10 @@
   background: var(--lm-panel-2);
   color: var(--lm-ink);
   font-family: var(--lm-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease;
 }

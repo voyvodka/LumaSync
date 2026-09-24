@@ -50,7 +50,6 @@ import { Toggle } from "@/shared/ui/Toggle";
 
 import { SolidColorPanel } from "./control/SolidColorPanel";
 import { ColorCorrectionPanel } from "./control/ColorCorrectionPanel";
-import { FirmwareProfilePicker } from "./control/FirmwareProfilePicker";
 import { LightingSmoothingPresetControl } from "./control/LightingSmoothingPresetControl";
 
 const selectLinkBudget = (health: RuntimeHealth) => ({
@@ -167,6 +166,8 @@ export function LightsSection({
   // through App.tsx for every knob.
   const [initialColorCorrection, setInitialColorCorrection] =
     useState<ColorCorrectionConfig | undefined>(undefined);
+  // Chosen on Devices → USB; read here only for the Adalight brightness lock.
+  // Sections mount one at a time, so returning here re-reads it.
   const [firmwareProfile, setFirmwareProfile] = useState<FirmwareProfile | undefined>(undefined);
   const [initialHueIntensityPreset, setInitialHueIntensityPreset] =
     useState<HueIntensityPreset | undefined>(undefined);
@@ -577,16 +578,10 @@ export function LightsSection({
             initial values would cause the children to flash the DEFAULT
             config for one frame before the async read lands. */}
         {advancedHydrated && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <FirmwareProfilePicker
-              initialProfile={firmwareProfile}
-              onProfileChange={setFirmwareProfile}
-            />
-            <ColorCorrectionPanel
-              initialConfig={initialColorCorrection}
-              onConfigChange={setInitialColorCorrection}
-            />
-          </div>
+          <ColorCorrectionPanel
+            initialConfig={initialColorCorrection}
+            onConfigChange={setInitialColorCorrection}
+          />
         )}
       </div>
 
@@ -623,7 +618,9 @@ export function LightsSection({
                   }`}
                   disabled={modeSelectorDisabled || !row.available || (selected && outputTargets.length === 1)}
                   onClick={() => toggleTarget(target, selected)}
-                  aria-pressed={selected}
+                  // The saved selection is untouched; a missing output is just
+                  // not shown as on, since nothing is sent to it.
+                  aria-pressed={selected && row.available}
                 >
                   <span className="st" />
                   <div className="tx">

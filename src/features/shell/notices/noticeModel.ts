@@ -56,6 +56,7 @@ export const SHELL_NOTICE_IDS = {
   USB_UNSUPPORTED: "usb-unsupported",
   HUE_COLOR: "hue-color",
   OUTPUT_CHECKING: "output-checking",
+  LED_SETUP_NEXT: "led-setup-next",
   ONBOARDING: "onboarding",
   UPDATE_CHECK_FAILED: "update-check-failed",
 } as const;

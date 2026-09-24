@@ -34,6 +34,7 @@ export const QUIET_INPUT: ShellNoticeInput = {
   usbUnsupportedHueFallback: true,
   hueColorNotice: null,
   onboardingStep: null,
+  ledSetupNext: null,
   localTargetConfigured: true,
   updateCheckFailed: null,
   updateChecking: false,

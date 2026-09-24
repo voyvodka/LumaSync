@@ -44,6 +44,20 @@ describe("scenarios put the app in the state they claim", () => {
     expect(toHueStartConfig(SCENARIOS.empty.build().shellState)).toBeNull();
   });
 
+  it("usb-unsupported-only enumerates ports, none of which can be a strip", () => {
+    const { serial } = SCENARIOS["usb-unsupported-only"].build();
+    expect(serial.ports.length).toBeGreaterThan(0);
+    expect(serial.ports.some((port) => port.supported)).toBe(false);
+  });
+
+  it("usb-first-connect has a strip plugged in, not connected, and nothing saved", () => {
+    const world = SCENARIOS["usb-first-connect"].build();
+    expect(world.serial.ports.some((port) => port.supported)).toBe(true);
+    expect(world.serial.connectedPort).toBeNull();
+    expect(world.shellState.ledCalibration).toBeUndefined();
+    expect(world.shellState.lastSuccessfulPort).toBeUndefined();
+  });
+
   it("usb-only resolves no Hue config", () => {
     expect(toHueStartConfig(SCENARIOS["usb-only"].build().shellState)).toBeNull();
   });

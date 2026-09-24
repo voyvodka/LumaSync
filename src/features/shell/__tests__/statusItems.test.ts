@@ -86,10 +86,11 @@ describe("buildStatusItems", () => {
   // The health reconciler drops "hue" from the active targets on Failed, so
   // with a reachable bridge the chip used to fall through to a green OK.
   it("reads a failed Hue stream as failed and links to Devices, even with the bridge reachable", () => {
-    const onOpenDevices = vi.fn();
+    const onOpenDevices = vi.fn<StatusItemsInput["onOpenDevices"]>();
     const item = byLabel({ ...healthy, hueStreaming: false, hueFailed: true, onOpenDevices }, "HUE");
     expect(item).toMatchObject({ state: S.failed, kind: "error" });
-    expect(item.onReconnect).toBe(onOpenDevices);
+    item.onReconnect?.();
+    expect(onOpenDevices).toHaveBeenCalledWith("hue");
   });
 
   // A bridge unreachable for hours kept "hue" in the active targets, so the
@@ -107,11 +108,21 @@ describe("buildStatusItems", () => {
     // Reachable-but-not-streaming is still healthy enough to hide the affordance.
     expect(byLabel({ ...healthy, hueStreaming: false }, "HUE").onReconnect).toBeUndefined();
 
-    const onOpenDevices = vi.fn();
+    const onOpenDevices = vi.fn<StatusItemsInput["onOpenDevices"]>();
     const unhealthy = { ...healthy, localSink: null, hueStreaming: false, hueReachable: false, onOpenDevices };
     byLabel(unhealthy, "USB").onReconnect?.();
     byLabel(unhealthy, "HUE").onReconnect?.();
     expect(onOpenDevices).toHaveBeenCalledTimes(2);
+  });
+
+  // The link used to open Devices on whichever category was last open.
+  it("opens each chip's own Devices category", () => {
+    const onOpenDevices = vi.fn<StatusItemsInput["onOpenDevices"]>();
+    const unhealthy = { ...healthy, localSink: null, hueStreaming: false, hueReachable: false, onOpenDevices };
+    byLabel(unhealthy, "USB").onReconnect?.();
+    expect(onOpenDevices).toHaveBeenLastCalledWith("usb");
+    byLabel(unhealthy, "HUE").onReconnect?.();
+    expect(onOpenDevices).toHaveBeenLastCalledWith("hue");
   });
 
   it("always labels the reconnect buttons for screen readers", () => {
@@ -149,10 +160,11 @@ describe("buildStatusItems", () => {
   });
 
   it("reads a Hue left out of the running mode as left out and links to Devices, even with the bridge reachable", () => {
-    const onOpenDevices = vi.fn();
+    const onOpenDevices = vi.fn<StatusItemsInput["onOpenDevices"]>();
     const item = byLabel({ ...healthy, hueStreaming: false, hueHeldOut: "leftOut", onOpenDevices }, "HUE");
     expect(item).toMatchObject({ state: S.leftOut, kind: "error" });
-    expect(item.onReconnect).toBe(onOpenDevices);
+    item.onReconnect?.();
+    expect(onOpenDevices).toHaveBeenCalledWith("hue");
   });
 
   it("routes every chip value through the catalogue", () => {

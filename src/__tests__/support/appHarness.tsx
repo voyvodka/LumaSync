@@ -163,7 +163,7 @@ export const mockWledSink = {
 };
 
 export const mockEntryFlow = {
-  shouldAutoOpenCalibrationOnConnection: () => false,
+  shouldPromptLedSetupOnConnection: () => false,
   startCalibrationFromSettings: () => ({ open: true, step: "editor" }),
 };
 

@@ -416,6 +416,38 @@ describe("buildShellNotices", () => {
     });
   });
 
+  // The first connect used to switch to LED Setup; it now says so from where
+  // the user is.
+  describe("LED Setup after the first connect", () => {
+    const next = { ledSetupNext: "/dev/cu.usbserial-1420", uiMode: "full" as const };
+
+    it("points at LED Setup from Devices, as a dismissible hint", () => {
+      const handlers = makeHandlers();
+      const notice = byId({ ...next, activeSection: SECTION_IDS.DEVICES }, SHELL_NOTICE_IDS.LED_SETUP_NEXT, handlers);
+      expect(notice).toMatchObject({
+        severity: NOTICE_SEVERITY.INFO,
+        message: "shell:notices.messages.ledSetupNext",
+        dismissible: true,
+      });
+      expect(notice.action?.navigates).toBe(true);
+      notice.action?.onClick();
+      expect(handlers.openLedSetup).toHaveBeenCalledOnce();
+    });
+
+    it("is gone on LED Setup itself", () => {
+      expect(build({ ...next, activeSection: SECTION_IDS.LED_SETUP })).toEqual([]);
+    });
+
+    it("gives way to the onboarding step and the calibration notice, which say the same", () => {
+      expect(
+        build({ ...next, activeSection: SECTION_IDS.DEVICES, onboardingStep: ONBOARDING_STEPS.LED_SETUP }).map((n) => n.id),
+      ).toEqual([SHELL_NOTICE_IDS.ONBOARDING]);
+      expect(
+        build({ ...next, activeSection: SECTION_IDS.LIGHTS, calibrationRequired: true }).map((n) => n.id),
+      ).toEqual([SHELL_NOTICE_IDS.CALIBRATION_REQUIRED]);
+    });
+  });
+
   describe("update check", () => {
     const FAILURE = { message: "check_for_update not allowed" };
 

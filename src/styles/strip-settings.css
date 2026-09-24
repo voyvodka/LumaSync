@@ -1,0 +1,141 @@
+/* Devices → USB, "Strip settings": one group, one sub-block per setting —
+   firmware profile, chip type, colour order. A block's title says what it
+   is; the sentence that explains it sits under it, never in a header. */
+.lm-strip-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 16px;
+}
+.lm-strip-setting + .lm-strip-setting {
+  border-top: 1px solid var(--lm-line);
+}
+.lm-strip-setting-h {
+  margin: 0;
+  font-family: var(--lm-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--lm-ink);
+}
+.lm-strip-setting-desc {
+  margin: 0;
+  font-family: var(--lm-sans);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--lm-ink-dim);
+}
+.lm-strip-setting-check {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 32px;
+}
+.lm-strip-setting-check-tx {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--lm-sans);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--lm-ink-dim);
+}
+.lm-strip-setting-check b {
+  font-weight: 600;
+  color: var(--lm-ink);
+}
+
+/* A radio tile. A real class rather than inline `all: unset`, which had
+   stripped the keyboard focus ring along with everything else. */
+.lm-strip-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.lm-strip-tile {
+  all: unset;
+  box-sizing: border-box;
+  flex: 1 1 200px;
+  min-width: 0;
+  min-height: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--lm-line-2);
+  background: var(--lm-bg);
+  color: var(--lm-ink);
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.lm-strip-tile:hover:not([aria-disabled="true"]):not([aria-checked="true"]) {
+  border-color: rgba(255, 176, 32, 0.32);
+}
+.lm-strip-tile[aria-checked="true"] {
+  border-color: rgba(255, 176, 32, 0.4);
+  background: rgba(255, 176, 32, 0.08);
+  color: var(--lm-amber);
+}
+.lm-strip-tile[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+  color: var(--lm-ink-faint);
+}
+.lm-strip-tile:focus-visible {
+  box-shadow: var(--lm-focus-ring);
+}
+.lm-strip-tile-name {
+  font-family: var(--lm-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+.lm-strip-tile-desc {
+  font-family: var(--lm-sans);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--lm-ink-dim);
+}
+/* A spec line (channels, bytes per pixel) is data, so it stays mono. */
+.lm-strip-tile-desc.is-data {
+  font-family: var(--lm-mono);
+  font-size: 10px;
+}
+.lm-strip-tile-note {
+  font-family: var(--lm-sans);
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--lm-ink-faint);
+}
+.lm-strip-tile[aria-checked="true"] .lm-strip-tile-note.is-warn {
+  color: var(--lm-amber);
+}
+.lm-strip-tile-note.is-ok {
+  color: var(--lm-green);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-strip-tile {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .lm-strip-tile {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .lm-strip-tile[aria-checked="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  .lm-strip-tile[aria-disabled="true"] {
+    color: GrayText;
+  }
+  .lm-strip-tile:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+    box-shadow: none;
+  }
+}

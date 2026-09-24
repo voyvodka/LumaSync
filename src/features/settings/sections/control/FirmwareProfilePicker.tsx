@@ -32,8 +32,8 @@
  *   - Override dialog: the shared `ConfirmDialog` — focus trap, ESC =
  *     cancel, and Enter cancels unless Confirm itself has focus.
  *   - Tap targets ≥ 32 px (tile padding 12+12=24 + content height ≥ 8).
- *   - Forced-colors / reduced-motion respected via `lm-fw-tile` class
- *     rules in `src/styles.css`.
+ *   - Forced-colors / reduced-motion respected via the shared
+ *     `lm-strip-tile` rules in `src/styles/strip-settings.css`.
  */
 
 import {
@@ -54,6 +54,7 @@ import {
 import { useAdvertisedFirmwareProfile } from "@/features/device/useAdvertisedFirmwareProfile";
 import { shellStore } from "@/features/persistence/shellStore";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
+import { Toggle } from "@/shared/ui/Toggle";
 
 const DEFAULT_PROFILE: FirmwareProfile = FIRMWARE_PROFILE.LUMASYNC_V1;
 
@@ -116,88 +117,22 @@ function ProfileTile({
         onKeyDown={onKeyNavigate}
         data-profile={profile}
         data-mismatched={mismatched ? "true" : undefined}
-        className={`lm-fw-tile${disabled ? " is-disabled" : ""}`}
-        style={{
-          all: "unset",
-          cursor: disabled ? "not-allowed" : "pointer",
-          display: "flex",
-          flexDirection: "column",
-          gap: 6,
-          padding: "12px 14px",
-          minHeight: 32,
-          borderRadius: 8,
-          border: `1px solid ${
-            checked ? "rgba(255, 176, 32, 0.4)" : disabled ? "#1a1f27" : "var(--lm-line-2)"
-          }`,
-          background: checked
-            ? "rgba(255, 176, 32, 0.08)"
-            : disabled
-              ? "#070a0d"
-              : "#0a0c0f",
-          color: disabled
-            ? "var(--lm-ink-faint)"
-            : checked
-              ? "var(--lm-amber)"
-              : "var(--lm-ink)",
-          opacity: disabled ? 0.55 : 1,
-          flex: 1,
-          minWidth: 0,
-        }}
+        className="lm-strip-tile"
       >
-        <div
-          style={{
-            fontSize: 12.5,
-            fontWeight: 600,
-            letterSpacing: "-0.005em",
-            color: disabled
-              ? "var(--lm-ink-faint)"
-              : checked
-                ? "var(--lm-amber)"
-                : "var(--lm-ink)",
-          }}
-        >
-          {label}
-        </div>
-        <div
-          style={{
-            fontFamily:
-              "var(--lm-mono)",
-            fontSize: 10,
-            color: disabled ? "#3d4452" : "var(--lm-ink-dim)",
-            lineHeight: 1.45,
-          }}
-        >
-          {description}
-        </div>
-        {advertisedBadge && (
-          <div
-            style={{
-              fontFamily:
-                "var(--lm-mono)",
-              fontSize: 9.5,
-              color: "var(--lm-green)",
-              letterSpacing: "0.02em",
-              marginTop: 2,
-            }}
-          >
-            ● {advertisedBadge}
-          </div>
-        )}
-        {notice && (
-          <div
-            style={{
-              fontFamily:
-                "var(--lm-mono)",
-              fontSize: 9.5,
-              color: checked ? "var(--lm-amber)" : "var(--lm-ink-faint)",
-              letterSpacing: "0.02em",
-              marginTop: 2,
-            }}
-            title={notice}
-          >
-            ⚠ {notice}
-          </div>
-        )}
+        <span className="lm-strip-tile-name">{label}</span>
+        <span className="lm-strip-tile-desc">{description}</span>
+        {advertisedBadge ? (
+          <span className="lm-strip-tile-note is-ok">
+            <span aria-hidden="true">● </span>
+            {advertisedBadge}
+          </span>
+        ) : null}
+        {notice ? (
+          <span className="lm-strip-tile-note is-warn">
+            <span aria-hidden="true">⚠ </span>
+            {notice}
+          </span>
+        ) : null}
       </button>
       {showTooltip && (
         <span id={tooltipId} hidden>
@@ -459,25 +394,17 @@ export function FirmwareProfilePicker({
   }, []);
 
   const showOverrideAffordance = advertised !== undefined;
-  const overrideToggleId = useId();
+  const overrideHintId = useId();
+  const titleId = useId();
 
   return (
-    <section className="lm-settings-group">
-      <div className="lm-settings-group-h">
-        <span className="t">{t("lights:led.firmwareProfile.title")}</span>
-        <span className="sub">
-          {t("lights:led.firmwareProfile.description")}
-        </span>
-      </div>
+    <div className="lm-strip-setting" role="group" aria-labelledby={titleId}>
+      <h3 className="lm-strip-setting-h" id={titleId}>{t("lights:led.firmwareProfile.title")}</h3>
+      <p className="lm-strip-setting-desc">{t("lights:led.firmwareProfile.description")}</p>
       <div
         role="radiogroup"
         aria-label={t("lights:led.firmwareProfile.title")}
-        style={{
-          display: "flex",
-          gap: 10,
-          padding: 14,
-          flexWrap: "wrap",
-        }}
+        className="lm-strip-tiles"
       >
         {ORDERED_PROFILES.map((p) => {
           const checked = profile === p;
@@ -532,32 +459,18 @@ export function FirmwareProfilePicker({
       </div>
 
       {showOverrideAffordance && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "0 14px 12px",
-            fontSize: 11,
-            color: "var(--lm-ink-dim)",
-            minHeight: 32,
-          }}
-        >
-          <input
-            id={overrideToggleId}
-            type="checkbox"
+        <div className="lm-strip-setting-check">
+          <p className="lm-strip-setting-check-tx">
+            <b>{t("lights:led.firmwareProfile.useAnywayLabel")}</b>{" "}
+            <span id={overrideHintId}>{t("lights:led.firmwareProfile.useAnywayHint")}</span>
+          </p>
+          <Toggle
             checked={overrideEnabled}
-            onChange={(e) => handleOverrideToggle(e.target.checked)}
+            onChange={handleOverrideToggle}
+            label={t("lights:led.firmwareProfile.useAnywayLabel")}
+            aria-describedby={overrideHintId}
             data-testid="lm-fw-use-anyway"
           />
-          <label htmlFor={overrideToggleId} style={{ cursor: "pointer" }}>
-            <span style={{ fontWeight: 600 }}>
-              {t("lights:led.firmwareProfile.useAnywayLabel")}
-            </span>
-            <span style={{ marginLeft: 6, color: "#6c7585" }}>
-              {t("lights:led.firmwareProfile.useAnywayHint")}
-            </span>
-          </label>
         </div>
       )}
 
@@ -569,6 +482,6 @@ export function FirmwareProfilePicker({
           onCancel={handleDialogCancel}
         />
       )}
-    </section>
+    </div>
   );
 }

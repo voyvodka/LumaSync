@@ -285,6 +285,31 @@ and the close-to-tray hint. `scripts/verify/launch-smoke.mjs` reads the constant
 hardcoding it, so renaming the string is safe — but separating the constant from the call, or
 removing either, breaks CI rather than silently passing.
 
+**Devices → USB has one add path.** The page reads top to bottom as Controller (status, the
+supported ports, each with one Connect) → Strip settings (firmware profile, chip type, colour
+order) → Paired strips. There used to be two half-paths: "Pair as strip" only connected, and
+"+ Add LED strip" only wrote a room-map placement and never connected. Now a connect the user asks
+for also makes sure the strip is in the roster (`device/usbStripRoster.ts`): nothing is written if a
+placement already names the port, a placement drawn before strips carried a port is adopted rather
+than duplicated, and a new one takes its LED count from the saved LED layout (60 before there is
+one). The boot auto-reconnect never writes, so an existing setup gains no strip it did not ask for; when
+it reconnects a strip the roster lacks, Paired strips says so and offers "Add connected strip",
+which runs the same function.
+The placement changes no light: output and capture never read `roomMap.usbStrips` — it is the
+roster and the room map's drawing — so the room map stays off the first-run path. The cost is that
+a user's first visit to the room map finds that strip drawn along the top wall instead of the
+template picker. Ports that fail the VID/PID allowlist are listed only under a collapsed "Other
+serial ports", with no action.
+
+**The first connect points at LED Setup; it does not open it.** It used to switch the window to LED
+Setup, so the chip type and colour order on the page the user connected from went unseen. It now
+raises `LED_SETUP_NEXT` (`useLedSetupPrompt`), once a session and only once boot has read the
+saved layout. It gives way to the onboarding step and the calibration notice, which say the same.
+
+**A Devices rail badge counts what is active.** A connected strip, a streaming bridge, a bound WLED
+panel; displays and manual entry have no badge. An enumerated port or a paired-but-idle bridge
+used to put a number beside a header saying nothing was connected.
+
 ## Capabilities
 
 **Each window is granted the plugin, core and app calls its own frontend makes, and nothing

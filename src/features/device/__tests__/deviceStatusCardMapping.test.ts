@@ -209,3 +209,75 @@ describe("device status card mapping", () => {
     expect(backend.detailsKey).toBeUndefined();
   });
 });
+
+// A failed connect used to read "Connection attempt failed" whatever Rust
+// said, with Rust's English appended; the catalogue already had the words.
+describe("connect failures in the user's language", () => {
+  it.each([
+    "PORT_UNSUPPORTED",
+    "CONNECT_PERMISSION_DENIED",
+    "CONNECT_IO_ERROR",
+    "CONNECT_TIMEOUT",
+  ] as const)("names %s from the catalogue", (code) => {
+    const card = buildDeviceStatusCard({
+      status: "error",
+      statusCard: { variant: "error", code, message: "English from Rust", details: "os error 16" },
+      connectedPort: null,
+    });
+    expect(card.titleKey).toBe(`device:healthCheck.serialHealthCodes.${code}.label`);
+    expect(card.bodyKey).toBe(`device:healthCheck.serialHealthCodes.${code}.hint`);
+    // The OS error is data and stays; Rust's sentence never reaches the card.
+    expect(card.details).toBe("os error 16");
+  });
+
+  it("keeps the generic copy and Rust's text for a code it does not know", () => {
+    const card = buildDeviceStatusCard({
+      status: "error",
+      statusCard: { variant: "error", code: "CONNECT_SOMETHING_NEW", message: "m", details: "raw" },
+      connectedPort: null,
+    });
+    expect(card.titleKey).toBe("device:status.errorTitle");
+    expect(card.details).toBe("raw");
+  });
+});
+
+describe("advice the controller minted", () => {
+  // A Rescan too soon used to fall through to the idle card and say nothing.
+  it.each([
+    ["REFRESH_RATE_LIMITED", "device:status.hints.refreshRateLimited"],
+    ["RECOVERY_CANCELLED_BY_USER", "device:status.hints.recoveryCancelled"],
+  ] as const)("shows %s under the state it applies to", (code, detailsKey) => {
+    const idle = buildDeviceStatusCard({
+      status: "ready",
+      statusCard: { variant: "info", code, message: "m", detailsKey },
+      connectedPort: null,
+      ports: [{ isSupported: true }],
+    });
+    expect(idle).toMatchObject({ code: "IDLE", detailsKey });
+
+    const connected = buildDeviceStatusCard({
+      status: "connected",
+      statusCard: { variant: "info", code, message: "m", detailsKey },
+      connectedPort: "COM3",
+    });
+    expect(connected).toMatchObject({ variant: "success", titleKey: "device:status.connectedTitle", detailsKey });
+  });
+});
+
+describe("the idle card", () => {
+  it("names the port once, in the sentence", () => {
+    const card = buildDeviceStatusCard({ status: "connected", statusCard: null, connectedPort: "COM3" });
+    expect(card.bodyKey).toBe("device:status.connectedBody");
+    expect(card.details).toBeUndefined();
+  });
+
+  it("says why there is nothing to connect", () => {
+    const base = { status: "ready", statusCard: null, connectedPort: null };
+    expect(buildDeviceStatusCard({ ...base, ports: [] }).code).toBe("NO_PORTS");
+    expect(buildDeviceStatusCard({ ...base, ports: [{ isSupported: false }] })).toMatchObject({
+      code: "NO_SUPPORTED_PORTS",
+      titleKey: "device:status.noSupportedTitle",
+    });
+    expect(buildDeviceStatusCard({ ...base, ports: [{ isSupported: true }] }).code).toBe("IDLE");
+  });
+});

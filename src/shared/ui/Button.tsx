@@ -14,8 +14,9 @@ const VARIANT_CLASS = {
 
 interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type"> {
   variant?: ButtonVariant;
-  /** `sm` is the mono-caps chip of the device pages, `md` the 32 px row button,
-   *  `card` a device card's footer action (it grows to share the row). */
+  /** All three are mono caps. `sm` is the header chip of the device pages, `md`
+   *  the 32 px row button, `card` a device card's footer action (it grows to
+   *  share the row). */
   size?: ButtonSize;
   /** Disables the button and marks it `aria-busy` while its action runs. */
   busy?: boolean;
