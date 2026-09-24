@@ -1,20 +1,33 @@
-import React, { useRef, useState, useEffect, useCallback } from "react";
+import type React from "react";
+import { memo, useRef, useState, useEffect, useCallback } from "react";
 import type { RoomMapConfig, ImageLayer } from "@/shared/contracts/roomMap";
 import { imageLayerObjectId } from "../model/objectId";
 import { readRoomMapImage } from "../roomMapFilesApi";
 
 type ResizeCorner = "nw" | "ne" | "sw" | "se";
 
-/** Draggable + resizable image layer (lives inside object layer) */
-function ImageLayerView({
+/** `continuous` marks a write from a control that fires per input event — the
+ *  wheel — so the editor can fold a burst of them into one undo step. */
+export type ImageLayerTransformHandler = (
+  id: string,
+  offsetX: number,
+  offsetY: number,
+  scale: number,
+  scaleX?: number,
+  scaleY?: number,
+  continuous?: boolean,
+) => void;
+
+/** Draggable + resizable image layer (lives inside object layer). */
+const ImageLayerView = memo(function ImageLayerView({
   layer, zoom, selected, panMode, onSelect, onTransformChange,
 }: {
   layer: ImageLayer;
   zoom: number;
   selected?: boolean;
   panMode?: boolean;
-  onSelect?: () => void;
-  onTransformChange?: (id: string, ox: number, oy: number, s: number, sx?: number, sy?: number) => void;
+  onSelect?: (id: string) => void;
+  onTransformChange?: ImageLayerTransformHandler;
 }) {
   const canDrag = selected && !layer.locked;
   const aspectLocked = layer.aspectLocked !== false; // default true
@@ -73,11 +86,11 @@ function ImageLayerView({
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (panMode) return;
     e.stopPropagation();
-    onSelect?.();
+    onSelect?.(layer.id);
     if (!canDrag) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = { active: true, startX: e.clientX, startY: e.clientY, ox: localOx, oy: localOy };
-  }, [localOx, localOy, canDrag, panMode, onSelect]);
+  }, [localOx, localOy, canDrag, panMode, onSelect, layer.id]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragRef.current.active) return;
@@ -152,13 +165,13 @@ function ImageLayerView({
       const nsy = Math.max(0.05, localSy * factor);
       setLocalSx(nsx);
       setLocalSy(nsy);
-      onTransformChange?.(layer.id, localOx, localOy, layer.scale, nsx, nsy);
+      onTransformChange?.(layer.id, localOx, localOy, layer.scale, nsx, nsy, true);
     } else {
       const nsx = Math.max(0.05, localSx * factor);
       const nsy = Math.max(0.05, localSy * factor);
       setLocalSx(nsx);
       setLocalSy(nsy);
-      onTransformChange?.(layer.id, localOx, localOy, layer.scale, nsx, nsy);
+      onTransformChange?.(layer.id, localOx, localOy, layer.scale, nsx, nsy, true);
     }
   }, [layer.id, layer.scale, localOx, localOy, localSx, localSy, onTransformChange, canDrag, aspectLocked]);
 
@@ -229,26 +242,24 @@ function ImageLayerView({
       ))}
     </div>
   );
-}
-
-export interface RoomMapContextValue {
-  pxPerMeter: number;
-  canvasSize: { w: number; h: number };
-}
-
-export const RoomMapContext = React.createContext<RoomMapContextValue>({
-  pxPerMeter: 100,
-  canvasSize: { w: 0, h: 0 },
 });
+
+function layerTransform(x: number, y: number, zoom: number): string {
+  return `translate(${x}px, ${y}px) scale(${zoom})`;
+}
+
+const ORIGIN = { x: 0, y: 0 };
 
 interface RoomMapCanvasProps {
   config: RoomMapConfig;
   pxPerMeter: number;
+  /** Measured by the viewport hook, which owns the container. */
+  canvasSize: { w: number; h: number };
   showGrid: boolean;
   gridStrokeWidth: number;
   selectedId: string | null;
   onCanvasClick: () => void;
-  onImageLayerTransformChange?: (id: string, offsetX: number, offsetY: number, scale: number, scaleX?: number, scaleY?: number) => void;
+  onImageLayerTransformChange?: ImageLayerTransformHandler;
   onImageLayerSelect?: (id: string) => void;
   zoom?: number;
   panOffset?: { x: number; y: number };
@@ -261,6 +272,7 @@ interface RoomMapCanvasProps {
 export function RoomMapCanvas({
   config,
   pxPerMeter,
+  canvasSize,
   showGrid,
   gridStrokeWidth,
   selectedId,
@@ -268,43 +280,26 @@ export function RoomMapCanvas({
   onImageLayerTransformChange,
   onImageLayerSelect,
   zoom = 1,
-  panOffset = { x: 0, y: 0 },
+  panOffset = ORIGIN,
   onZoomChange,
   onPanChange,
   panMode = false,
   children,
 }: RoomMapCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
-
-  useEffect(() => {
-    const el = canvasRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        setCanvasSize({ w: width, h: height });
-      }
-    });
-    ro.observe(el);
-    // Initial measurement
-    const rect = el.getBoundingClientRect();
-    setCanvasSize({ w: rect.width, h: rect.height });
-    return () => ro.disconnect();
-  }, []);
+  const objectLayerRef = useRef<HTMLDivElement>(null);
 
   const { widthMeters, depthMeters } = config.dimensions;
 
   // Grid interval: 0.5m if room width < 4m, else 1.0m
   const gridInterval = widthMeters < 4 ? 0.5 : 1.0;
 
-  const panRef = useRef<{ active: boolean; startX: number; startY: number; ox: number; oy: number }>({
-    active: false, startX: 0, startY: 0, ox: 0, oy: 0,
+  // A pan moves the object layer's transform directly and commits the offset
+  // once, on release: committing per move re-rendered the editor and every
+  // object on the canvas at pointer rate for a change that is one CSS property.
+  const panRef = useRef<{ active: boolean; startX: number; startY: number; ox: number; oy: number; x: number; y: number }>({
+    active: false, startX: 0, startY: 0, ox: 0, oy: 0, x: 0, y: 0,
   });
-  // pointermove can fire several times per frame; coalesce pan updates to one per rAF.
-  const canvasTickRef = useRef(false);
-  const latestCanvasEventRef = useRef<{ dx: number; dy: number } | null>(null);
-  const canvasRafRef = useRef<number | null>(null);
 
   const handleCanvasWheel = useCallback(
     (e: React.WheelEvent<HTMLDivElement>) => {
@@ -333,7 +328,15 @@ export function RoomMapCanvas({
       if (panMode || e.button === 1) {
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);
-        panRef.current = { active: true, startX: e.clientX, startY: e.clientY, ox: panOffset.x, oy: panOffset.y };
+        panRef.current = {
+          active: true,
+          startX: e.clientX,
+          startY: e.clientY,
+          ox: panOffset.x,
+          oy: panOffset.y,
+          x: panOffset.x,
+          y: panOffset.y,
+        };
       }
     },
     [panOffset, panMode],
@@ -341,38 +344,22 @@ export function RoomMapCanvas({
 
   const handleCanvasPointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      if (!panRef.current.active) return;
-      const dx = e.clientX - panRef.current.startX;
-      const dy = e.clientY - panRef.current.startY;
-
-      latestCanvasEventRef.current = { dx, dy };
-      if (!canvasTickRef.current) {
-        canvasTickRef.current = true;
-        canvasRafRef.current = requestAnimationFrame(() => {
-          canvasTickRef.current = false;
-          if (latestCanvasEventRef.current) {
-            onPanChange?.({
-              x: panRef.current.ox + latestCanvasEventRef.current.dx,
-              y: panRef.current.oy + latestCanvasEventRef.current.dy
-            });
-          }
-        });
-      }
+      const pan = panRef.current;
+      if (!pan.active) return;
+      pan.x = pan.ox + e.clientX - pan.startX;
+      pan.y = pan.oy + e.clientY - pan.startY;
+      const layer = objectLayerRef.current;
+      if (layer) layer.style.transform = layerTransform(pan.x, pan.y, zoom);
     },
-    [onPanChange],
+    [zoom],
   );
 
-  useEffect(() => {
-    return () => {
-      if (canvasRafRef.current !== null) {
-        cancelAnimationFrame(canvasRafRef.current);
-      }
-    };
-  }, []);
-
   const handleCanvasPointerUp = useCallback(() => {
-    panRef.current.active = false;
-  }, []);
+    const pan = panRef.current;
+    if (!pan.active) return;
+    pan.active = false;
+    if (pan.x !== pan.ox || pan.y !== pan.oy) onPanChange?.({ x: pan.x, y: pan.y });
+  }, [onPanChange]);
 
   const handleBackgroundClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -392,8 +379,10 @@ export function RoomMapCanvas({
   const visMinYm = -panOffset.y / (pxPerMeter * zoom);
   const visMaxXm = visMinXm + canvasSize.w / (pxPerMeter * zoom);
   const visMaxYm = visMinYm + canvasSize.h / (pxPerMeter * zoom);
-  // Extend grid well beyond visible area, aligned to center
-  const gridPadM = gridInterval * 2;
+  // Extend grid well beyond visible area, aligned to center. The extra screen
+  // on each side is what a pan in flight reveals before it commits and the
+  // grid is rebuilt around the new offset.
+  const gridPadM = gridInterval * 2 + Math.max(canvasSize.w, canvasSize.h) / (pxPerMeter * zoom);
   const stepsLeft = Math.ceil((centerXm - visMinXm + gridPadM) / gridInterval);
   const stepsRight = Math.ceil((visMaxXm - centerXm + gridPadM) / gridInterval);
   const stepsUp = Math.ceil((centerYm - visMinYm + gridPadM) / gridInterval);
@@ -472,60 +461,61 @@ export function RoomMapCanvas({
   }
 
   return (
-    <RoomMapContext.Provider value={{ pxPerMeter, canvasSize }}>
+    <div
+      ref={canvasRef}
+      // `select-none` because a drag sweeps bubbled pointer-moves across the
+      // `<text>` and chip labels and highlights them. The dock's inputs mount
+      // outside this root, so they keep native selection.
+      className={`select-none relative w-full h-full overflow-hidden bg-bg ${panMode ? "cursor-grab" : ""}`}
+      onClick={handleBackgroundClick}
+      onWheel={handleCanvasWheel}
+      onPointerDown={handleCanvasPointerDown}
+      onPointerMove={handleCanvasPointerMove}
+      onPointerUp={handleCanvasPointerUp}
+      onPointerCancel={handleCanvasPointerUp}
+    >
+      {/* Object layer with zoom/pan transform (z-index 10+) */}
       <div
-        ref={canvasRef}
-        // `select-none` because a drag sweeps bubbled pointer-moves across the
-        // `<text>` and chip labels and highlights them. The dock's inputs mount
-        // outside this root, so they keep native selection.
-        className={`select-none relative w-full h-full overflow-hidden bg-bg ${panMode ? "cursor-grab" : ""}`}
-        onClick={handleBackgroundClick}
-        onWheel={handleCanvasWheel}
-        onPointerDown={handleCanvasPointerDown}
-        onPointerMove={handleCanvasPointerMove}
-        onPointerUp={handleCanvasPointerUp}
+        ref={objectLayerRef}
+        data-testid="room-map-object-layer"
+        className="relative z-10 w-full h-full"
+        style={{
+          transform: layerTransform(panOffset.x, panOffset.y, zoom),
+          transformOrigin: "0 0",
+        }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            onCanvasClick();
+          }
+        }}
       >
-        {/* Object layer with zoom/pan transform (z-index 10+) */}
-        <div
-          className="relative z-10 w-full h-full"
-          style={{
-            transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`,
-            transformOrigin: "0 0",
-          }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              onCanvasClick();
-            }
-          }}
-        >
-          {/* Grid SVG — inside object layer so it moves with zoom/pan */}
-          {showGrid && canvasSize.w > 0 && (
-            <svg
-              className="absolute text-zinc-700 pointer-events-none"
-              style={{ zIndex: 1, left: 0, top: 0, overflow: "visible" }}
-              width={1}
-              height={1}
-            >
-              {gridLines}
-            </svg>
-          )}
+        {/* Grid SVG — inside object layer so it moves with zoom/pan */}
+        {showGrid && canvasSize.w > 0 && (
+          <svg
+            className="absolute text-zinc-700 pointer-events-none"
+            style={{ zIndex: 1, left: 0, top: 0, overflow: "visible" }}
+            width={1}
+            height={1}
+          >
+            {gridLines}
+          </svg>
+        )}
 
-          {/* Image layers — inside object layer so they follow grid/zoom/pan */}
-          {config.imageLayers.map((layer) => (
-            <ImageLayerView
-              key={layer.id}
-              layer={layer}
-              zoom={zoom}
-              selected={selectedId === imageLayerObjectId(layer.id)}
-              panMode={panMode}
-              onSelect={() => onImageLayerSelect?.(layer.id)}
-              onTransformChange={onImageLayerTransformChange}
-            />
-          ))}
+        {/* Image layers — inside object layer so they follow grid/zoom/pan */}
+        {config.imageLayers.map((layer) => (
+          <ImageLayerView
+            key={layer.id}
+            layer={layer}
+            zoom={zoom}
+            selected={selectedId === imageLayerObjectId(layer.id)}
+            panMode={panMode}
+            onSelect={onImageLayerSelect}
+            onTransformChange={onImageLayerTransformChange}
+          />
+        ))}
 
-          {children}
-        </div>
+        {children}
       </div>
-    </RoomMapContext.Provider>
+    </div>
   );
 }

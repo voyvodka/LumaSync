@@ -6,19 +6,23 @@ import type {
   TvAnchorPlacement,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
-import { findHueChannel } from "@/shared/contracts/roomMap";
 import { moveHueChannelToWorld, nudgeHueChannel } from "../model/hueChannelPosition";
+import { findScopedHueChannel, updateScopedHueChannel } from "../model/hueChannelScope";
 import {
   furnitureObjectId,
   parseObjectId,
   usbStripObjectId,
 } from "../model/objectId";
+import type { ApplyOptions } from "./useRoomMapState";
+import type { RoomMapPatch } from "./roomMapReducer";
 
 export interface UseRoomMapObjectsArgs {
   config: RoomMapConfig;
-  updateConfig: (partial: Partial<RoomMapConfig>) => Promise<void>;
+  /** The entertainment area the editor shows; Hue channel ids resolve inside it. */
+  hueAreaId: string | null;
+  apply: (patch: RoomMapPatch, options?: ApplyOptions) => void;
   selectedId: string | null;
-  setSelectedId: React.Dispatch<React.SetStateAction<string | null>>;
+  select: (objectId: string | null) => void;
 }
 
 export interface UseRoomMapObjectsReturn {
@@ -40,9 +44,10 @@ export interface UseRoomMapObjectsReturn {
 /** Create, delete, duplicate and transform handlers for every non-image object kind. */
 export function useRoomMapObjects({
   config,
-  updateConfig,
+  hueAreaId,
+  apply,
   selectedId,
-  setSelectedId,
+  select,
 }: UseRoomMapObjectsArgs): UseRoomMapObjectsReturn {
   const { t } = useTranslation();
   const { widthMeters, depthMeters } = config.dimensions;
@@ -54,8 +59,8 @@ export function useRoomMapObjects({
       width: 1.0,
       height: 0.1,
     };
-    void updateConfig({ tvAnchor: newTv });
-  }, [widthMeters, updateConfig]);
+    apply({ tvAnchor: newTv });
+  }, [widthMeters, apply]);
 
   const handleAddFurniture = useCallback(
     (type: FurniturePlacement["type"]) => {
@@ -69,9 +74,9 @@ export function useRoomMapObjects({
         height: 0.6,
         label: t(`roomMap:furniture.type.${type}`),
       };
-      void updateConfig({ furniture: [...config.furniture, newItem] });
+      apply({ furniture: [...config.furniture, newItem] });
     },
-    [widthMeters, depthMeters, config.furniture, updateConfig, t],
+    [widthMeters, depthMeters, config.furniture, apply, t],
   );
 
   const handleAddUsb = useCallback(() => {
@@ -84,8 +89,8 @@ export function useRoomMapObjects({
       endY: 1,
       ledCount: 60,
     };
-    void updateConfig({ usbStrips: [...config.usbStrips, newStrip] });
-  }, [widthMeters, config.usbStrips, updateConfig]);
+    apply({ usbStrips: [...config.usbStrips, newStrip] });
+  }, [widthMeters, config.usbStrips, apply]);
 
   const isLocked = useCallback(
     (id: string): boolean => {
@@ -93,11 +98,13 @@ export function useRoomMapObjects({
       if (parsed?.kind === "tv") return !!config.tvAnchor?.locked;
       if (parsed?.kind === "furniture") return !!config.furniture.find((f) => f.id === parsed.furnitureId)?.locked;
       if (parsed?.kind === "usb") return !!config.usbStrips.find((s) => s.stripId === parsed.stripId)?.locked;
-      if (parsed?.kind === "hue") return !!findHueChannel(config.hueChannels, parsed.channelIndex)?.locked;
+      if (parsed?.kind === "hue") {
+        return !!findScopedHueChannel(config.hueChannels, hueAreaId, parsed.channelIndex)?.locked;
+      }
       if (parsed?.kind === "image") return !!config.imageLayers.find((l) => l.id === parsed.layerId)?.locked;
       return false;
     },
-    [config],
+    [config, hueAreaId],
   );
 
   const deleteById = useCallback(
@@ -105,20 +112,20 @@ export function useRoomMapObjects({
       if (isLocked(id)) return;
       const parsed = parseObjectId(id);
       if (parsed?.kind === "image") {
-        void updateConfig({ imageLayers: config.imageLayers.filter((l) => l.id !== parsed.layerId) });
+        apply({ imageLayers: config.imageLayers.filter((l) => l.id !== parsed.layerId) });
       } else if (parsed?.kind === "tv") {
-        void updateConfig({ tvAnchor: undefined });
+        apply({ tvAnchor: undefined });
       } else if (parsed?.kind === "furniture") {
-        void updateConfig({ furniture: config.furniture.filter((f) => f.id !== parsed.furnitureId) });
+        apply({ furniture: config.furniture.filter((f) => f.id !== parsed.furnitureId) });
       } else if (parsed?.kind === "usb") {
-        void updateConfig({ usbStrips: config.usbStrips.filter((s) => s.stripId !== parsed.stripId) });
+        apply({ usbStrips: config.usbStrips.filter((s) => s.stripId !== parsed.stripId) });
       }
       // No Hue-channel branch here on purpose — channels are bridge-managed and
       // detaching goes through "Move to → Unassigned". See
       // docs/architecture/room-map.md for the bug that removing one caused.
-      setSelectedId(null);
+      select(null);
     },
-    [config, updateConfig, isLocked, setSelectedId],
+    [config, apply, isLocked, select],
   );
 
   const handleDelete = useCallback(() => {
@@ -135,8 +142,8 @@ export function useRoomMapObjects({
       const current = f.rotation ?? 0;
       return { ...f, rotation: (current + 15) % 360 };
     });
-    void updateConfig({ furniture: updated });
-  }, [selectedId, config.furniture, updateConfig, isLocked]);
+    apply({ furniture: updated });
+  }, [selectedId, config.furniture, apply, isLocked]);
 
   const handleDuplicate = useCallback(
     (id: string) => {
@@ -146,17 +153,17 @@ export function useRoomMapObjects({
         const src = config.furniture.find((f) => f.id === parsed.furnitureId);
         if (!src) return;
         const dup = { ...src, id: crypto.randomUUID(), x: src.x + offset, y: src.y + offset };
-        void updateConfig({ furniture: [...config.furniture, dup] });
-        setSelectedId(furnitureObjectId(dup.id));
+        apply({ furniture: [...config.furniture, dup] });
+        select(furnitureObjectId(dup.id));
       } else if (parsed?.kind === "usb") {
         const src = config.usbStrips.find((s) => s.stripId === parsed.stripId);
         if (!src) return;
         const dup = { ...src, stripId: crypto.randomUUID(), startX: src.startX + offset, startY: src.startY + offset, endX: src.endX + offset, endY: src.endY + offset };
-        void updateConfig({ usbStrips: [...config.usbStrips, dup] });
-        setSelectedId(usbStripObjectId(dup.stripId));
+        apply({ usbStrips: [...config.usbStrips, dup] });
+        select(usbStripObjectId(dup.stripId));
       }
     },
-    [config.furniture, config.usbStrips, updateConfig, setSelectedId],
+    [config.furniture, config.usbStrips, apply, select],
   );
 
   const handleArrowNudge = useCallback(
@@ -175,25 +182,38 @@ export function useRoomMapObjects({
       if (e.key === "ArrowUp") dy = -nudgeM;
       if (e.key === "ArrowDown") dy = nudgeM;
 
+      // Keyed per object, so a held arrow is one undo step and one save while
+      // moving a second object starts a step of its own.
+      const nudge = { gesture: `nudge:${selectedId}`, continued: e.repeat };
       const parsed = parseObjectId(selectedId);
-      if (parsed?.kind === "tv" && config.tvAnchor) {
-        void updateConfig({
-          tvAnchor: { ...config.tvAnchor, x: config.tvAnchor.x + dx, y: config.tvAnchor.y + dy },
-        });
+      if (parsed?.kind === "tv") {
+        apply(
+          (cfg) =>
+            cfg.tvAnchor
+              ? { tvAnchor: { ...cfg.tvAnchor, x: cfg.tvAnchor.x + dx, y: cfg.tvAnchor.y + dy } }
+              : {},
+          nudge,
+        );
       } else if (parsed?.kind === "furniture") {
-        void updateConfig({
-          furniture: config.furniture.map((f) =>
-            f.id === parsed.furnitureId ? { ...f, x: f.x + dx, y: f.y + dy } : f,
-          ),
-        });
+        apply(
+          (cfg) => ({
+            furniture: cfg.furniture.map((f) =>
+              f.id === parsed.furnitureId ? { ...f, x: f.x + dx, y: f.y + dy } : f,
+            ),
+          }),
+          nudge,
+        );
       } else if (parsed?.kind === "usb") {
-        void updateConfig({
-          usbStrips: config.usbStrips.map((s) =>
-            s.stripId === parsed.stripId
-              ? { ...s, startX: s.startX + dx, startY: s.startY + dy, endX: s.endX + dx, endY: s.endY + dy }
-              : s,
-          ),
-        });
+        apply(
+          (cfg) => ({
+            usbStrips: cfg.usbStrips.map((s) =>
+              s.stripId === parsed.stripId
+                ? { ...s, startX: s.startX + dx, startY: s.startY + dy, endX: s.endX + dx, endY: s.endY + dy }
+                : s,
+            ),
+          }),
+          nudge,
+        );
       } else if (parsed?.kind === "hue") {
         // Hue channels: nudge in [-1,1] space; step = 0.05
         const hueStep = 0.05;
@@ -204,27 +224,28 @@ export function useRoomMapObjects({
         // Hue Y: up = positive (towards front), CSS up = negative
         if (e.key === "ArrowUp") hdy = hueStep;
         if (e.key === "ArrowDown") hdy = -hueStep;
-        void updateConfig({
-          hueChannels: config.hueChannels.map((ch) =>
-            ch.channelIndex === parsed.channelIndex
-              ? nudgeHueChannel(ch, config.zones, hdx, hdy)
-              : ch,
-          ),
-        });
+        apply(
+          (cfg) => ({
+            hueChannels: updateScopedHueChannel(cfg.hueChannels, hueAreaId, parsed.channelIndex, (ch) =>
+              nudgeHueChannel(ch, cfg.zones, hdx, hdy),
+            ),
+          }),
+          nudge,
+        );
       }
     },
-    [selectedId, config, updateConfig, isLocked],
+    [selectedId, hueAreaId, apply, isLocked],
   );
 
   const handleUpdatePosition = useCallback(
     (id: string, x: number, y: number) => {
       const parsed = parseObjectId(id);
       if (parsed?.kind === "tv" && config.tvAnchor) {
-        void updateConfig({ tvAnchor: { ...config.tvAnchor, x, y } });
+        apply({ tvAnchor: { ...config.tvAnchor, x, y } });
       } else if (parsed?.kind === "furniture") {
-        void updateConfig({ furniture: config.furniture.map((f) => (f.id === parsed.furnitureId ? { ...f, x, y } : f)) });
+        apply({ furniture: config.furniture.map((f) => (f.id === parsed.furnitureId ? { ...f, x, y } : f)) });
       } else if (parsed?.kind === "usb") {
-        void updateConfig({
+        apply({
           usbStrips: config.usbStrips.map((s) => {
             if (s.stripId !== parsed.stripId) return s;
             const dx = x - s.startX;
@@ -233,49 +254,47 @@ export function useRoomMapObjects({
           }),
         });
       } else if (parsed?.kind === "hue") {
-        void updateConfig({
-          hueChannels: config.hueChannels.map((ch) =>
-            ch.channelIndex === parsed.channelIndex
-              ? moveHueChannelToWorld(ch, config.zones, x, y)
-              : ch,
+        apply({
+          hueChannels: updateScopedHueChannel(config.hueChannels, hueAreaId, parsed.channelIndex, (ch) =>
+            moveHueChannelToWorld(ch, config.zones, x, y),
           ),
         });
       } else if (parsed?.kind === "image") {
-        void updateConfig({ imageLayers: config.imageLayers.map((l) => (l.id === parsed.layerId ? { ...l, offsetX: x, offsetY: y } : l)) });
+        apply({ imageLayers: config.imageLayers.map((l) => (l.id === parsed.layerId ? { ...l, offsetX: x, offsetY: y } : l)) });
       }
     },
-    [config, updateConfig],
+    [config, hueAreaId, apply],
   );
 
   const handleUpdateSize = useCallback(
     (id: string, w: number, h: number) => {
       const parsed = parseObjectId(id);
       if (parsed?.kind === "tv" && config.tvAnchor) {
-        void updateConfig({ tvAnchor: { ...config.tvAnchor, width: w, height: h } });
+        apply({ tvAnchor: { ...config.tvAnchor, width: w, height: h } });
       } else if (parsed?.kind === "furniture") {
-        void updateConfig({ furniture: config.furniture.map((f) => (f.id === parsed.furnitureId ? { ...f, width: w, height: h } : f)) });
+        apply({ furniture: config.furniture.map((f) => (f.id === parsed.furnitureId ? { ...f, width: w, height: h } : f)) });
       }
     },
-    [config, updateConfig],
+    [config, apply],
   );
 
   const handleUpdateRotation = useCallback(
     (id: string, rotation: number) => {
       const parsed = parseObjectId(id);
       if (parsed?.kind === "furniture") {
-        void updateConfig({ furniture: config.furniture.map((f) => (f.id === parsed.furnitureId ? { ...f, rotation } : f)) });
+        apply({ furniture: config.furniture.map((f) => (f.id === parsed.furnitureId ? { ...f, rotation } : f)) });
       }
     },
-    [config.furniture, updateConfig],
+    [config.furniture, apply],
   );
 
   const handleRenameFurniture = useCallback(
     (id: string, label: string) => {
-      void updateConfig({
+      apply({
         furniture: config.furniture.map((f) => (f.id === id ? { ...f, label } : f)),
       });
     },
-    [config.furniture, updateConfig],
+    [config.furniture, apply],
   );
 
   return {

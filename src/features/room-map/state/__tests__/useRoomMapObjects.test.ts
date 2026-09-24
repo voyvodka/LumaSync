@@ -6,7 +6,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap";
 import { furnitureObjectId, hueChannelObjectId } from "../../model/objectId";
+import type { RoomMapPatch } from "../roomMapReducer";
 import { useRoomMapObjects } from "../useRoomMapObjects";
+import type { ApplyOptions } from "../useRoomMapState";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -23,21 +25,32 @@ function gappedConfig(): RoomMapConfig {
   };
 }
 
-function renderObjects(config: RoomMapConfig, selectedId: string | null = null) {
-  const updateConfig = vi.fn().mockResolvedValue(undefined);
+function renderObjects(
+  config: RoomMapConfig,
+  selectedId: string | null = null,
+  hueAreaId: string | null = null,
+) {
+  const apply = vi.fn<(patch: RoomMapPatch, options?: ApplyOptions) => void>();
   const hook = renderHook(() =>
     useRoomMapObjects({
       config,
-      updateConfig,
+      hueAreaId,
+      apply,
       selectedId,
-      setSelectedId: vi.fn(),
+      select: vi.fn(),
     }),
   );
-  return { ...hook, updateConfig };
+  /** The config the `index`th apply produces, updater or plain partial alike. */
+  const written = (index: number): RoomMapConfig => {
+    const patch = apply.mock.calls[index]?.[0];
+    if (patch === undefined) throw new Error(`no apply #${index}`);
+    return { ...config, ...(typeof patch === "function" ? patch(config) : patch) };
+  };
+  return { ...hook, apply, written };
 }
 
-function arrowEvent(key: string) {
-  return { key, shiftKey: false, preventDefault: vi.fn() } as unknown as React.KeyboardEvent<HTMLDivElement>;
+function arrowEvent(key: string, repeat = false) {
+  return { key, shiftKey: false, repeat, preventDefault: vi.fn() } as unknown as React.KeyboardEvent<HTMLDivElement>;
 }
 
 describe("useRoomMapObjects — isLocked resolves Hue channels by identity", () => {
@@ -69,38 +82,38 @@ describe("useRoomMapObjects — the lock covers every mutator, not just delete",
 
   it("refuses to rotate a locked object", () => {
     const cfg = lockedFurniture(true);
-    const { result, updateConfig } = renderObjects(cfg, furnitureObjectId("f1"));
+    const { result, apply } = renderObjects(cfg, furnitureObjectId("f1"));
     act(() => result.current.handleRotate());
-    expect(updateConfig).not.toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
   });
 
   it("still rotates an unlocked one", () => {
     const cfg = lockedFurniture(false);
-    const { result, updateConfig } = renderObjects(cfg, furnitureObjectId("f1"));
+    const { result, apply, written } = renderObjects(cfg, furnitureObjectId("f1"));
     act(() => result.current.handleRotate());
-    expect(updateConfig).toHaveBeenCalledTimes(1);
-    expect(updateConfig.mock.calls[0][0].furniture[0].rotation).toBe(15);
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(written(0).furniture[0].rotation).toBe(15);
   });
 
   it("refuses to nudge a locked object", () => {
     const cfg = lockedFurniture(true);
-    const { result, updateConfig } = renderObjects(cfg, furnitureObjectId("f1"));
+    const { result, apply } = renderObjects(cfg, furnitureObjectId("f1"));
     act(() => result.current.handleArrowNudge(arrowEvent("ArrowRight")));
-    expect(updateConfig).not.toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
   });
 
   it("still nudges an unlocked one", () => {
     const cfg = lockedFurniture(false);
-    const { result, updateConfig } = renderObjects(cfg, furnitureObjectId("f1"));
+    const { result, apply, written } = renderObjects(cfg, furnitureObjectId("f1"));
     act(() => result.current.handleArrowNudge(arrowEvent("ArrowRight")));
-    expect(updateConfig).toHaveBeenCalledTimes(1);
-    expect(updateConfig.mock.calls[0][0].furniture[0].x).toBeCloseTo(1.1, 10);
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(written(0).furniture[0].x).toBeCloseTo(1.1, 10);
   });
 
   it("refuses to nudge a locked Hue channel", () => {
-    const { result, updateConfig } = renderObjects(gappedConfig(), hueChannelObjectId(2));
+    const { result, apply } = renderObjects(gappedConfig(), hueChannelObjectId(2));
     act(() => result.current.handleArrowNudge(arrowEvent("ArrowRight")));
-    expect(updateConfig).not.toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
   });
 });
 
@@ -130,18 +143,67 @@ describe("useRoomMapObjects — nudging a zone-bound Hue channel", () => {
   };
 
   it("moves the zone-relative coordinate the canvas reads", () => {
-    const { result, updateConfig } = renderObjects(config, hueChannelObjectId(0));
+    const { result, written } = renderObjects(config, hueChannelObjectId(0));
     act(() => result.current.handleArrowNudge(arrowEvent("ArrowRight")));
-    const ch = updateConfig.mock.calls[0][0].hueChannels[0];
+    const ch = written(0).hueChannels[0];
     // 0.05 world / 0.5 zone scale = 0.1 relative
-    expect(ch.zoneRelativePosition.x).toBeCloseTo(0.1, 10);
+    expect(ch?.zoneRelativePosition?.x).toBeCloseTo(0.1, 10);
     expect(ch.x).toBeCloseTo(0.05, 10);
   });
 
   it("routes handleUpdatePosition through the zone too", () => {
-    const { result, updateConfig } = renderObjects(config);
+    const { result, written } = renderObjects(config);
     act(() => result.current.handleUpdatePosition(hueChannelObjectId(0), 0.25, 0));
-    const ch = updateConfig.mock.calls[0][0].hueChannels[0];
-    expect(ch.zoneRelativePosition.x).toBeCloseTo(0.5, 10);
+    const ch = written(0).hueChannels[0];
+    expect(ch?.zoneRelativePosition?.x).toBeCloseTo(0.5, 10);
+  });
+});
+
+// `hue-<index>` names no area. Two areas' channel 0 were both hit by a nudge
+// and a typed position, and the lock check read whichever came first. See
+// docs/architecture/room-map.md.
+describe("useRoomMapObjects — Hue channels resolve inside the viewed area", () => {
+  const twoAreas: RoomMapConfig = {
+    ...DEFAULT_ROOM_MAP,
+    hueChannels: [
+      { channelIndex: 0, x: -0.5, y: 0, z: 0, entertainmentAreaId: "area-a", locked: true },
+      { channelIndex: 0, x: 0.5, y: 0, z: 0, entertainmentAreaId: "area-b", locked: false },
+    ],
+  };
+
+  it("nudges only the viewed area's channel", () => {
+    const { result, written } = renderObjects(twoAreas, hueChannelObjectId(0), "area-b");
+    act(() => result.current.handleArrowNudge(arrowEvent("ArrowRight")));
+    const [a, b] = written(0).hueChannels;
+    expect(a).toEqual(twoAreas.hueChannels[0]);
+    expect(b?.x).toBeCloseTo(0.55, 10);
+  });
+
+  it("types a position into the viewed area's channel only", () => {
+    const { result, written } = renderObjects(twoAreas, null, "area-b");
+    act(() => result.current.handleUpdatePosition(hueChannelObjectId(0), 0.1, 0.2));
+    const [a, b] = written(0).hueChannels;
+    expect(a).toEqual(twoAreas.hueChannels[0]);
+    expect(b).toMatchObject({ x: 0.1, y: 0.2 });
+  });
+
+  it("reads the lock of the viewed area's channel, not the first match", () => {
+    const { result } = renderObjects(twoAreas, null, "area-b");
+    expect(result.current.isLocked(hueChannelObjectId(0))).toBe(false);
+  });
+});
+
+describe("useRoomMapObjects — a held arrow is one gesture per object", () => {
+  const cfg: RoomMapConfig = {
+    ...DEFAULT_ROOM_MAP,
+    furniture: [{ id: "f1", type: "sofa", x: 1, y: 1, width: 2, height: 1 }],
+  };
+
+  it("keys the nudge on the selected object and marks auto-repeats as continued", () => {
+    const { result, apply } = renderObjects(cfg, furnitureObjectId("f1"));
+    act(() => result.current.handleArrowNudge(arrowEvent("ArrowRight")));
+    act(() => result.current.handleArrowNudge(arrowEvent("ArrowRight", true)));
+    expect(apply.mock.calls[0]?.[1]).toEqual({ gesture: "nudge:furniture-f1", continued: false });
+    expect(apply.mock.calls[1]?.[1]).toEqual({ gesture: "nudge:furniture-f1", continued: true });
   });
 });
