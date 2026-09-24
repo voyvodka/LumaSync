@@ -160,8 +160,9 @@ export const HUE_CARD_ACTIONS = {
     busy: ctx.hue.isRuntimeMutating,
     danger: true,
   }),
-  retryStop: (ctx) => ({
-    label: ctx.t("hue:page.retryStop"),
+  // The shell's stop-failed notice runs the same stop under the same label.
+  stopHue: (ctx) => ({
+    label: ctx.t("hue:actions.stop"),
     onClick: () => { stopFromCard(ctx); },
     busy: ctx.hue.isRuntimeMutating,
   }),
@@ -431,7 +432,7 @@ export const HUE_CARD_VIEW = {
         code={hue.runtimeStatus?.code ?? null}
       />
     ),
-    actions: ["retryStop", "forceForget"],
+    actions: ["stopHue", "forceForget"],
   },
   gateBlocked: {
     subtitle: "hue:runtime.checklist.title",

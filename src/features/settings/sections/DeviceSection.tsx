@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState, type ComponentType } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type ComponentType } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { DisplayInfo } from "@/shared/contracts/display";
@@ -83,6 +83,8 @@ export interface DeviceSectionProps {
   onStopHueOutput: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
   /** Opens a category from outside, e.g. a notice's "Devices" action for Hue. */
   categoryRequest?: DeviceCategoryRequest | null;
+  /** The category on view, and `null` on unmount; the shell's notices defer to it. */
+  onVisibleCategoryChange?: (category: DeviceCategory | null) => void;
 }
 
 interface RailButtonProps {
@@ -139,6 +141,7 @@ export function DeviceSection({
   onNavigateToRoomMap,
   onStopHueOutput,
   categoryRequest = null,
+  onVisibleCategoryChange,
 }: DeviceSectionProps) {
   const { t } = useTranslation();
 
@@ -199,6 +202,12 @@ export function DeviceSection({
     setHandledRequest(categoryRequest);
     if (categoryRequest !== null) setActiveCategory(categoryRequest.category);
   }
+
+  // Layout effects, so a notice this page already shows is gone before paint.
+  useLayoutEffect(() => {
+    onVisibleCategoryChange?.(activeCategory);
+  }, [activeCategory, onVisibleCategoryChange]);
+  useLayoutEffect(() => () => onVisibleCategoryChange?.(null), [onVisibleCategoryChange]);
 
   // One scroller serves every category — they only toggle `hidden` — so the
   // offset carries over and a taller category opens past its own heading.

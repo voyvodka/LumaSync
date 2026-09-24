@@ -10,7 +10,18 @@ describe("createNavigationStore", () => {
       uiMode: "compact",
       activeSection: SECTION_IDS.LIGHTS,
       deviceCategoryRequest: null,
+      visibleDeviceCategory: null,
     });
+  });
+
+  it("keeps the Devices page's reported category apart from a notice's request", () => {
+    const store = createNavigationStore();
+    store.setVisibleDeviceCategory("hue");
+    expect(store.get().visibleDeviceCategory).toBe("hue");
+    expect(store.get().deviceCategoryRequest).toBeNull();
+
+    store.setVisibleDeviceCategory(null);
+    expect(store.get().visibleDeviceCategory).toBeNull();
   });
 
   it("writes a notice's section and category together, and a repeat of it counts again", () => {

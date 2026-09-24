@@ -743,6 +743,22 @@ describe("the category rail is addressable by test id", () => {
     await user.click(button);
     expect(button).toHaveAttribute("aria-current", "page");
   });
+
+  // The shell hides the Hue notices only while this page says they are up.
+  it("reports the category on view, and none once it unmounts", async () => {
+    const user = userEvent.setup();
+    const onVisibleCategoryChange = vi.fn();
+    const { unmount } = render(
+      <DeviceSection onStopHueOutput={stopHueOutputMock} onVisibleCategoryChange={onVisibleCategoryChange} />,
+    );
+    expect(onVisibleCategoryChange).toHaveBeenLastCalledWith("usb");
+
+    await user.click(screen.getByTestId("device-category-hue"));
+    expect(onVisibleCategoryChange).toHaveBeenLastCalledWith("hue");
+
+    unmount();
+    expect(onVisibleCategoryChange).toHaveBeenLastCalledWith(null);
+  });
 });
 
 // Both mount-time reads were fire-and-forget; a rejection bypassed the

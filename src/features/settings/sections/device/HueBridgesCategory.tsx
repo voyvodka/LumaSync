@@ -40,7 +40,7 @@ export interface HueBridgesCategoryProps {
   /** Room-map zones, so the channel map can project through a bound channel's
    *  zone instead of writing the absolute pair the runtime ignores. */
   zones: readonly HueZone[];
-  /** Stop retrying and Retry stop. Not `stopHue`: a running mode that names Hue
+  /** Stop retrying and Stop Hue. Not `stopHue`: a running mode that names Hue
    *  has to let go of it first, which only the mode orchestrator can do. */
   onStopHue: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
 }

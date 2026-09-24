@@ -1,4 +1,4 @@
-// Stop retrying and Retry stop used to call `stopHue` straight from the card,
+// Stop retrying and Stop Hue used to call `stopHue` straight from the card,
 // so a running mode that named Hue kept its worker holding the stream's sender
 // through the stop. Both now go through `onStopHue`, which App wires to the mode
 // orchestrator; `stopHue` itself must never be reached from the card.
@@ -75,7 +75,7 @@ function hueState(runtimeStatus: HueRuntimeStatusView): UseHueOnboardingResult {
 describe("HueBridgesCategory — the card's Hue stops go through onStopHue", () => {
   it.each([
     { name: "Stop retrying", label: "hue:page.stopRetrying", status: runtime("Reconnecting", "TRANSIENT_RETRY_SCHEDULED") },
-    { name: "Retry stop", label: "hue:page.retryStop", status: runtime("Idle", "HUE_STOP_TIMEOUT_PARTIAL") },
+    { name: "Stop Hue", label: "hue:actions.stop", status: runtime("Idle", "HUE_STOP_TIMEOUT_PARTIAL") },
   ])("$name", ({ label, status }) => {
     stopHueMock.mockClear();
     const onStopHue = vi.fn(async () => {});
