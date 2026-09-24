@@ -1234,6 +1234,13 @@ console.log("\n[ Lighting transaction — Rust → lightingRuntime.ts parity ]")
   const rustSnapshot = stripComments(
     readOrEmpty(resolve(ROOT, "src-tauri/src/commands/lighting_mode/snapshot.rs"), "rust snapshot")
   );
+  const rustHueHealth = stripComments(
+    readOrEmpty(resolve(ROOT, "src-tauri/src/commands/hue/health.rs"), "rust hue health")
+  );
+  const hueHealthSource = readOrEmpty(
+    resolve(ROOT, "src/shared/contracts/hueHealth.ts"),
+    "hueHealth"
+  );
   const literalCodes = (source, fn) =>
     [...source.matchAll(new RegExp(`${fn}\\(\\s*"([A-Z][A-Z0-9_]*)"`, "g"))].map((m) => m[1]);
   checkWireUnion(
@@ -1267,6 +1274,7 @@ console.log("\n[ Lighting transaction — Rust → lightingRuntime.ts parity ]")
     [rustSnapshot, "LightingPhase", lightingRuntimeSource, "LIGHTING_RUNTIME_PHASE"],
     [rustSnapshot, "BootHueRetryState", lightingRuntimeSource, "BOOT_HUE_RETRY_STATE"],
     [rustOutputs, "LightingOrigin", lightingRuntimeSource, "LIGHTING_ORIGIN"],
+    [rustHueHealth, "HueBridgeVerdict", hueHealthSource, "HUE_BRIDGE_VERDICT"],
   ]) {
     const rust = rustEnumValues(rustSource, rustName);
     const ts = tsValues(tsSource, tsName);
@@ -2477,7 +2485,9 @@ const checkedPairs = nullabilityPairs.filter(
 // 50 → 53: `ShellStateSnapshot`, `ShellStateWriteResult`, `ShellStateChanged`.
 // 53 → 57: the lighting transaction's `ApplyOutputsResult`, `ApplyOutputsOutcome`,
 // `LightingRuntimeSnapshot` and `RetuneLightingResult`.
-const EXPECTED_NULLABILITY_PAIR_COUNT = 57;
+// 57 → 61: the Hue health monitor's `HueHealthSnapshot`, `HueBridgeHealth`,
+// `HueAreaHealth` and `HueStreamHealth`.
+const EXPECTED_NULLABILITY_PAIR_COUNT = 61;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

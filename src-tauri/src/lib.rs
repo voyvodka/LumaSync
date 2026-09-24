@@ -74,6 +74,7 @@ use commands::hue::commands::{
     get_hue_area_channels, get_hue_stream_status, restart_hue_stream, set_hue_solid_color,
     simulate_hue_fault, start_hue_stream, stop_hue_stream,
 };
+use commands::hue::health::{get_hue_health, retry_hue_health, watch_hue_health};
 use commands::hue::state_store::HueRuntimeStateStore;
 use commands::hue_onboarding::{
     check_hue_stream_readiness, discover_hue_bridges, list_hue_entertainment_areas,
@@ -549,6 +550,8 @@ pub fn run() {
             app.manage(HueRuntimeStateStore::default());
             app.manage(RuntimeTelemetryState::default());
             app.manage(PendingUpdate::default());
+            // After the shell state and the Hue runtime: its first pass reads both.
+            commands::hue::health::install(app.handle());
 
             // After the `manage` calls, not next to `LUMASYNC_NO_DEVTOOLS`: the
             // hook resolves `OverlayState` when it fires.
@@ -775,6 +778,9 @@ pub fn run() {
             retune_lighting,
             release_hue_output,
             get_lighting_runtime,
+            get_hue_health,
+            watch_hue_health,
+            retry_hue_health,
         ])
         .build(app_context())
         .expect("error while building tauri application");

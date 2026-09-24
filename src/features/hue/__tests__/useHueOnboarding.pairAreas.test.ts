@@ -2,7 +2,8 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HUE_CREDENTIAL_STATUS } from "@/shared/contracts/hue";
-import { __resetHueReadCacheForTests } from "../hueReadCache";
+import { __resetHueHealthStoreForTests } from "../state/hueHealthStore";
+import { resetHealth } from "./fakeHueHealth";
 import { useHueOnboarding } from "../useHueOnboarding";
 
 const shellLoadMock = vi.fn();
@@ -14,8 +15,9 @@ const validateCredentialsMock = vi.fn();
 const migrateCredentialsMock = vi.fn();
 const checkReadinessMock = vi.fn();
 
+vi.mock("../hueHealthApi", async () => (await import("./fakeHueHealth")).fakeHueHealthApi);
+
 vi.mock("@/features/mode/modeApi", () => ({
-  getHueStreamStatus: vi.fn().mockResolvedValue(null),
   restartHue: vi.fn(),
   startHue: vi.fn(),
 }));
@@ -48,7 +50,8 @@ const OLD_APP_KEY = "app-key-superseded";
 describe("useHueOnboarding — pairing lists areas with the key it just received", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    __resetHueReadCacheForTests();
+    __resetHueHealthStoreForTests();
+    resetHealth();
 
     shellLoadMock.mockResolvedValue({});
     shellSaveMock.mockResolvedValue(undefined);

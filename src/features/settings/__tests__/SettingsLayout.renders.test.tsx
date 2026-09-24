@@ -1,5 +1,5 @@
 // Which sections a shell change re-renders. Every section is a counting stub;
-// the layout, its panels and the three stores are real, so a count that moves
+// the layout, its panels and the four stores are real, so a count that moves
 // is a render the stores or the memo boundaries let through.
 
 import { act, screen } from "@testing-library/react";
@@ -24,9 +24,14 @@ vi.mock("@/features/persistence/shellStore", () => ({
 }));
 
 vi.mock("../sections/LightsSection", () => ({
-  LightsSection: ({ mode }: { mode: LightingModeConfig }) => {
+  LightsSection: ({ mode, hueStreaming }: { mode: LightingModeConfig; hueStreaming: boolean }) => {
     count("lights");
-    return <p data-testid="lights-mode">{mode.kind}</p>;
+    return (
+      <>
+        <p data-testid="lights-mode">{mode.kind}</p>
+        <p data-testid="lights-hue-streaming">{String(hueStreaming)}</p>
+      </>
+    );
   },
 }));
 
@@ -72,8 +77,6 @@ vi.mock("../sections/control/LightingSmoothingPresetControl", () => ({
 
 import { SettingsLayout } from "../SettingsLayout";
 
-const HUE = { hueConfigured: true, hueReachable: true, hueProbeVerdict: "reachable", hueStreaming: false } as const;
-
 const TESTID: Record<Exclude<SectionId, "lights">, string> = {
   [SECTION_IDS.SYSTEM]: "system-checking",
   [SECTION_IDS.DEVICES]: "devices-category",
@@ -89,7 +92,7 @@ const NAME: Record<Exclude<SectionId, "lights">, string> = {
 };
 
 async function renderFull(activeSection: SectionId) {
-  const shell = renderWithShellStores(<SettingsLayout {...HUE} />, {
+  const shell = renderWithShellStores(<SettingsLayout />, {
     navigation: { uiMode: "full", activeSection },
     lighting: { localSink: { transport: "serial", id: "/dev/cu.test" } },
   });
@@ -162,17 +165,36 @@ describe("SettingsLayout render boundaries", () => {
     expect(screen.getByTestId("system-checking")).toHaveTextContent("true");
   });
 
-  it.each([SECTION_IDS.SYSTEM, SECTION_IDS.DEVICES] as const)(
-    "does not re-render %s for a Hue status change",
+  it.each([SECTION_IDS.SYSTEM, SECTION_IDS.DEVICES, SECTION_IDS.ROOM_MAP] as const)(
+    "does not re-render %s for a Hue status change it does not show",
     async (section) => {
       const shell = await renderFull(section);
       const before = renders[NAME[section]];
 
-      shell.rerenderUi(<SettingsLayout {...HUE} hueStreaming hueReconnecting />);
+      shell.setHue({ streaming: true, reconnecting: true });
 
       expect(renders[NAME[section]]).toBe(before);
     },
   );
+
+  it("re-renders the Lights page for a Hue status change, which it does show", async () => {
+    const shell = await renderFull(SECTION_IDS.LIGHTS);
+    const before = renders.lights;
+
+    shell.setHue({ streaming: true });
+
+    expect(screen.getByTestId("lights-hue-streaming")).toHaveTextContent("true");
+    expect(renders.lights).toBe(before + 1);
+  });
+
+  it("re-renders the room map only for the Hue status it shows", async () => {
+    const shell = await renderFull(SECTION_IDS.ROOM_MAP);
+    const before = renders.roomMap;
+
+    shell.setHue({ probeVerdict: "unreachable", reachable: false });
+
+    expect(renders.roomMap).toBe(before + 1);
+  });
 
   it("hands the Devices page a notice's category request, and re-renders only for it", async () => {
     const shell = await renderFull(SECTION_IDS.DEVICES);
@@ -186,7 +208,7 @@ describe("SettingsLayout render boundaries", () => {
   });
 
   it("re-renders compact for the mode it shows, not for a calibration it does not", async () => {
-    const shell = renderWithShellStores(<SettingsLayout {...HUE} />, {
+    const shell = renderWithShellStores(<SettingsLayout />, {
       navigation: { uiMode: "compact", activeSection: SECTION_IDS.LIGHTS },
       lighting: { localSink: { transport: "serial", id: "/dev/cu.test" } },
     });

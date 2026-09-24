@@ -1,26 +1,24 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
-
 import type { HueBridgeSummary, HuePairingCredentials } from "../../hueOnboardingApi";
 import { HUE_ONBOARDING_TRANSPORT_CODES, type HueOnboardingStatus } from "../../model/onboardingStatusCodes";
-import {
-  RUNTIME_POLL_INTERVAL_MS,
-  RUNTIME_POLL_MIN_INTERVAL_MS,
-  runtimeStatusRetryDelayMs,
-} from "../../model/pollingCadence";
+import { runtimeStatusRetryDelayMs } from "../../model/pollingCadence";
+import { __resetHueHealthStoreForTests } from "../hueHealthStore";
 import { useHueRuntimeStatus } from "../useHueRuntimeStatus";
+import {
+  fakeHueHealthApi,
+  publishHealth,
+  resetHealth,
+  runtimeStatus,
+  setHealth,
+} from "../../__tests__/fakeHueHealth";
 
-const readHueStreamStatusMock = vi.fn();
 const startHueMock = vi.fn();
 const restartHueMock = vi.fn();
 const shellLoadMock = vi.fn();
 
-vi.mock("../../hueReadCache", () => ({
-  readHueStreamStatus: (...args: unknown[]) => readHueStreamStatusMock(...args),
-  subscribeHueStreamStatusInvalidation: () => () => {},
-}));
+vi.mock("../../hueHealthApi", async () => (await import("../../__tests__/fakeHueHealth")).fakeHueHealthApi);
 
 vi.mock("@/features/mode/modeApi", () => ({
   startHue: (...args: unknown[]) => startHueMock(...args),
@@ -34,9 +32,7 @@ vi.mock("@/features/persistence/shellStore", () => ({
 const bridge: HueBridgeSummary = { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" } as HueBridgeSummary;
 const credentials: HuePairingCredentials = { username: "app-user", clientKey: "AABBCCDD" };
 
-const statusOf = (state: string) => ({
-  status: { state, code: "X", message: "ok", details: null, triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM },
-});
+const running = { stream: { active: true, status: runtimeStatus("Running") } };
 
 const flush = async (ms = 0) => {
   await act(async () => {
@@ -44,60 +40,71 @@ const flush = async (ms = 0) => {
   });
 };
 
+const mount = (onError: (status: HueOnboardingStatus) => void = () => {}) =>
+  renderHook(() => useHueRuntimeStatus({ bridge, credentials, areaId: "area-1", onError }));
+
 describe("useHueRuntimeStatus", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    __resetHueHealthStoreForTests();
+    resetHealth();
     vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
     shellLoadMock.mockResolvedValue({});
-    readHueStreamStatusMock.mockResolvedValue(statusOf("Idle"));
   });
 
   afterEach(() => {
+    __resetHueHealthStoreForTests();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
-  it("does not double-poll when a startRuntime-triggered transition lands inside the min-interval floor", async () => {
-    readHueStreamStatusMock.mockResolvedValueOnce(statusOf("Idle"));
-    startHueMock.mockResolvedValue(undefined);
+  // Regression: the Devices-tab loop went silent in Idle, so a stream started
+  // from Lights, the tray or a keybind left the bridge card on "Ready" while
+  // the status bar said STREAMING. Rust now publishes every runtime change,
+  // whichever surface made it.
+  it("follows a stream another surface started, without polling for it", async () => {
+    const { result } = mount();
+    await flush();
+    expect(result.current.runtimeStatus?.state).toBe("Idle");
 
-    const { result } = renderHook(() =>
-      useHueRuntimeStatus({ bridge, credentials, areaId: "area-1", onError: () => {} }),
-    );
+    act(() => {
+      publishHealth(running);
+    });
+    await flush(60_000);
 
-    // Mount tick.
-    await flush(0);
-    expect(readHueStreamStatusMock).toHaveBeenCalledOnce();
+    expect(result.current.runtimeStatus?.state).toBe("Running");
+    expect(result.current.runtimeTargets[0]).toMatchObject({ target: "hue", state: "Running" });
+    expect(fakeHueHealthApi.getHueHealth).not.toHaveBeenCalled();
+  });
 
-    // startRuntime does its own forced poll, landing the state on "Starting"
-    // — a state change that reruns the polling effect within the same tick.
-    readHueStreamStatusMock.mockResolvedValueOnce(statusOf("Starting"));
+  it("reads afresh after its own start, so the card never paints the state it left", async () => {
+    startHueMock.mockImplementation(async () => {
+      setHealth(running);
+    });
+    const { result } = mount();
+    await flush();
+
     await act(async () => {
       await result.current.startRuntime();
     });
 
-    // Without the `RUNTIME_POLL_MIN_INTERVAL_MS` floor, the effect rerun
-    // triggered by the "Idle" → "Starting" jump would immediately re-fetch a
-    // third time — the exact "three round-trips per burst" the guard exists
-    // to prevent (see pollingCadence.ts).
-    expect(readHueStreamStatusMock).toHaveBeenCalledTimes(2);
-
-    // The throttled tick still eventually fires once the streaming cadence elapses.
-    readHueStreamStatusMock.mockResolvedValueOnce(statusOf("Running"));
-    await flush(RUNTIME_POLL_INTERVAL_MS);
-    expect(readHueStreamStatusMock).toHaveBeenCalledTimes(3);
+    expect(fakeHueHealthApi.getHueHealth).toHaveBeenCalledOnce();
+    expect(result.current.runtimeStatus?.state).toBe("Running");
+    expect(result.current.isRuntimeMutating).toBe(false);
   });
 
   it("holds a rejected read beside the last reported status instead of minting a Failed state", async () => {
-    readHueStreamStatusMock.mockResolvedValueOnce(statusOf("Running"));
-    const { result } = renderHook(() =>
-      useHueRuntimeStatus({ bridge, credentials, areaId: "area-1", onError: () => {} }),
-    );
-    await flush(0);
+    setHealth(running);
+    const { result } = mount();
+    await flush();
 
-    readHueStreamStatusMock.mockRejectedValueOnce(new Error("IPC channel closed"));
-    await flush(RUNTIME_POLL_INTERVAL_MS);
+    fakeHueHealthApi.getHueHealth.mockRejectedValueOnce(new Error("IPC channel closed"));
+    startHueMock.mockResolvedValue(undefined);
+    await act(async () => {
+      await result.current.startRuntime();
+    });
 
     expect(result.current.runtimeStatus?.state).toBe("Running");
     expect(result.current.runtimeTargets[0]?.state).toBe("Running");
@@ -107,37 +114,8 @@ describe("useHueRuntimeStatus", () => {
       details: "IPC channel closed",
     });
 
-    readHueStreamStatusMock.mockResolvedValueOnce(statusOf("Running"));
+    // Retried on the backoff until a read lands.
     await flush(runtimeStatusRetryDelayMs(1));
-    expect(result.current.runtimeStatusReadFailure).toBeNull();
-  });
-
-  it("retries on the backoff when the forced read after a start rejects while idle", async () => {
-    startHueMock.mockResolvedValue(undefined);
-    const { result } = renderHook(() =>
-      useHueRuntimeStatus({ bridge, credentials, areaId: "area-1", onError: () => {} }),
-    );
-    await flush(0);
-    expect(readHueStreamStatusMock).toHaveBeenCalledOnce();
-    // Idle is silent; let the mount read fall well behind the floor.
-    await flush(RUNTIME_POLL_MIN_INTERVAL_MS * 2);
-    expect(readHueStreamStatusMock).toHaveBeenCalledOnce();
-
-    readHueStreamStatusMock.mockRejectedValueOnce(new Error("IPC channel closed"));
-    await act(async () => {
-      await result.current.startRuntime();
-    });
-    expect(readHueStreamStatusMock).toHaveBeenCalledTimes(2);
-    expect(result.current.runtimeStatusReadFailure).not.toBeNull();
-
-    // The forced read counts toward the floor: no immediate second read.
-    await flush(runtimeStatusRetryDelayMs(1) - 1);
-    expect(readHueStreamStatusMock).toHaveBeenCalledTimes(2);
-
-    readHueStreamStatusMock.mockResolvedValueOnce(statusOf("Running"));
-    await flush(1);
-    expect(readHueStreamStatusMock).toHaveBeenCalledTimes(3);
-    expect(result.current.runtimeStatus?.state).toBe("Running");
     expect(result.current.runtimeStatusReadFailure).toBeNull();
   });
 
@@ -146,7 +124,7 @@ describe("useHueRuntimeStatus", () => {
     const { result } = renderHook(() =>
       useHueRuntimeStatus({ bridge: null, credentials, areaId: "area-1", onError }),
     );
-    await flush(0);
+    await flush();
 
     await act(async () => {
       await result.current.startRuntime();
@@ -162,11 +140,8 @@ describe("useHueRuntimeStatus", () => {
   it("surfaces a coded HUE_STREAM_START_FAILED error when startHue rejects", async () => {
     startHueMock.mockRejectedValue(new Error("bridge unreachable"));
     const onError = vi.fn<(status: HueOnboardingStatus) => void>();
-
-    const { result } = renderHook(() =>
-      useHueRuntimeStatus({ bridge, credentials, areaId: "area-1", onError }),
-    );
-    await flush(0);
+    const { result } = mount(onError);
+    await flush();
 
     await act(async () => {
       await result.current.startRuntime();
@@ -180,6 +155,22 @@ describe("useHueRuntimeStatus", () => {
     );
   });
 
+  it("surfaces HUE_STREAM_RECOVERY_FAILED when the card's restart rejects", async () => {
+    restartHueMock.mockRejectedValue(new Error("bridge unreachable"));
+    const onError = vi.fn<(status: HueOnboardingStatus) => void>();
+    const { result } = mount(onError);
+    await flush();
+
+    await act(async () => {
+      await result.current.retryRuntimeTarget("hue");
+    });
+
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ code: HUE_ONBOARDING_TRANSPORT_CODES.STREAM_RECOVERY_FAILED }),
+    );
+    expect(fakeHueHealthApi.getHueHealth).toHaveBeenCalledOnce();
+  });
+
   it("ignores a second startRuntime call while the first is still mutating", async () => {
     let resolveStart!: () => void;
     startHueMock.mockReturnValueOnce(
@@ -187,11 +178,8 @@ describe("useHueRuntimeStatus", () => {
         resolveStart = resolve;
       }),
     );
-
-    const { result } = renderHook(() =>
-      useHueRuntimeStatus({ bridge, credentials, areaId: "area-1", onError: () => {} }),
-    );
-    await flush(0);
+    const { result } = mount();
+    await flush();
 
     // A real second click is a separate React event, so it always sees a
     // render that already reflects the first click's `isRuntimeMutating`

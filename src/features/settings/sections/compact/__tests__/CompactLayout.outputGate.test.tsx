@@ -35,18 +35,11 @@ async function renderCompact(
   bootstrapDone = true,
 ) {
   await act(async () => {
-    renderWithShellStores(
-      <SettingsLayout
-        hueConfigured={hue.configured}
-        hueReachable={hue.reachable}
-        hueProbeVerdict={hue.verdict}
-        hueStreaming={false}
-      />,
-      {
-        navigation: { uiMode: "compact", activeSection: SECTION_IDS.LIGHTS },
-        lighting: { lightingMode: { kind: "off" }, outputTargets: ["hue"], localSink: null, bootstrapDone },
-      },
-    );
+    renderWithShellStores(<SettingsLayout />, {
+      hue: { configured: hue.configured, reachable: hue.reachable, probeVerdict: hue.verdict },
+      navigation: { uiMode: "compact", activeSection: SECTION_IDS.LIGHTS },
+      lighting: { lightingMode: { kind: "off" }, outputTargets: ["hue"], localSink: null, bootstrapDone },
+    });
   });
 }
 

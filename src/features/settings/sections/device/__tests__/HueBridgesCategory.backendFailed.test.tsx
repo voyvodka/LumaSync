@@ -1,8 +1,8 @@
 // A `Failed` runtime state the backend reported had no branch in the card
 // derivation: a stream that had given up read as a Ready bridge, and a spent
 // retry budget (TRANSIENT_RETRY_EXHAUSTED) as a reconnect still in progress.
-// Real runtime hook, real read cache, real modeApi and the real card; only
-// `invoke` is fake.
+// Real runtime hook, real health store, real modeApi and the real card; only
+// `invoke` and the health API are fake.
 
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,10 +12,18 @@ import {
   HUE_RUNTIME_TRIGGER_SOURCE,
   type HueRuntimeActionHint,
   type HueRuntimeState,
+  type HueRuntimeStatus,
 } from "@/shared/contracts/hue";
-import { __resetHueReadCacheForTests } from "@/features/hue/hueReadCache";
 import type { HueBridgeSummary, HuePairingCredentials } from "@/features/hue/hueOnboardingApi";
-import { RUNTIME_POLL_INTERVAL_MS, runtimeStatusRetryDelayMs } from "@/features/hue/model/pollingCadence";
+import { runtimeStatusRetryDelayMs } from "@/features/hue/model/pollingCadence";
+import { __resetHueHealthStoreForTests } from "@/features/hue/state/hueHealthStore";
+import {
+  fakeHueHealthApi,
+  publishHealth,
+  resetHealth,
+  setHealth,
+  type HealthChange,
+} from "@/features/hue/__tests__/fakeHueHealth";
 import { useHueRuntimeStatus } from "@/features/hue/state/useHueRuntimeStatus";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
 import { HueBridgesCategory } from "../HueBridgesCategory";
@@ -33,6 +41,8 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (command: string, payload?: Record<string, unknown>) => invokeMock(command, payload),
 }));
 
+vi.mock("@/features/hue/hueHealthApi", async () => (await import("@/features/hue/__tests__/fakeHueHealth")).fakeHueHealthApi);
+
 vi.mock("../../HueChannelMapPanel", () => ({ HueChannelMapPanel: () => null }));
 
 const bridge: HueBridgeSummary = { id: "bridge-1", ip: "192.168.1.10", name: "Test Bridge" };
@@ -46,12 +56,14 @@ interface BackendStatus {
 }
 
 const RUNNING: BackendStatus = { state: "Running", code: "HUE_STREAM_RUNNING_DTLS" };
-let backend: BackendStatus | "reject" = RUNNING;
 let restartRecovers = true;
 let pairMock = vi.fn();
 
-function reads(command: string): number {
-  return invokeMock.mock.calls.filter(([name]) => name === command).length;
+/** What the health monitor reports the runtime as. A code outside the wire
+ * union is the point of one case, hence the cast. */
+function backendIs(status: BackendStatus): HealthChange {
+  const result = commandResult(status);
+  return { stream: { active: result.active, status: result.status as unknown as HueRuntimeStatus } };
 }
 
 /** A paired bridge with a validated area; only the runtime half is live. */
@@ -145,24 +157,25 @@ describe("HueBridgesCategory — a Failed stream the backend reported", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     invokeMock.mockReset();
-    __resetHueReadCacheForTests();
-    backend = RUNNING;
+    __resetHueHealthStoreForTests();
+    resetHealth(backendIs(RUNNING));
     restartRecovers = true;
     pairMock = vi.fn(async () => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
     invokeMock.mockImplementation(async (command: string) => {
       if (command === HUE_COMMANDS.RESTART_STREAM) {
         if (!restartRecovers) return commandResult({ state: "Failed", code: "HUE_STREAM_START_ABORTED" });
-        backend = RUNNING;
+        setHealth(backendIs(RUNNING));
         return commandResult(RUNNING);
       }
-      if (command !== HUE_COMMANDS.GET_STREAM_STATUS) return undefined;
-      if (backend === "reject") throw new Error("IPC channel closed");
-      return commandResult(backend);
+      return undefined;
     });
   });
 
   afterEach(() => {
+    __resetHueHealthStoreForTests();
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it("says the stream stopped once retries run out, and Start Again brings it back", async () => {
@@ -170,8 +183,10 @@ describe("HueBridgesCategory — a Failed stream the backend reported", () => {
     await flush(0);
     expect(screen.getByText("hue:page.pill.streaming")).toBeInTheDocument();
 
-    backend = { state: "Failed", code: "TRANSIENT_RETRY_EXHAUSTED", actionHint: "retry" };
-    await flush(RUNTIME_POLL_INTERVAL_MS);
+    act(() => {
+      publishHealth(backendIs({ state: "Failed", code: "TRANSIENT_RETRY_EXHAUSTED", actionHint: "retry" }));
+    });
+    await flush(0);
     expectStreamFailed("hue:runtime.codes.TRANSIENT_RETRY_EXHAUSTED");
     expect(screen.getByText("TRANSIENT_RETRY_EXHAUSTED")).toBeInTheDocument();
     // Not a key problem, so no re-pair on offer.
@@ -194,7 +209,7 @@ describe("HueBridgesCategory — a Failed stream the backend reported", () => {
   });
 
   it("names an aborted start on the first read", async () => {
-    backend = { state: "Failed", code: "HUE_STREAM_START_ABORTED", actionHint: "retry" };
+    setHealth(backendIs({ state: "Failed", code: "HUE_STREAM_START_ABORTED", actionHint: "retry" }));
     render(<Harness />);
     await flush(0);
     expectStreamFailed("hue:runtime.codes.HUE_STREAM_START_ABORTED");
@@ -202,7 +217,7 @@ describe("HueBridgesCategory — a Failed stream the backend reported", () => {
   });
 
   it("offers a re-pair as well when the runtime says the key was refused", async () => {
-    backend = { state: "Failed", code: "AUTH_INVALID_CREDENTIALS", actionHint: "repair" };
+    setHealth(backendIs({ state: "Failed", code: "AUTH_INVALID_CREDENTIALS", actionHint: "repair" }));
     render(<Harness />);
     await flush(0);
     expectStreamFailed("hue:runtime.codes.AUTH_INVALID_CREDENTIALS");
@@ -213,7 +228,7 @@ describe("HueBridgesCategory — a Failed stream the backend reported", () => {
   });
 
   it("falls back to the generic line for a Failed code without its own text", async () => {
-    backend = { state: "Failed", code: "HUE_SOMETHING_NEW" };
+    setHealth(backendIs({ state: "Failed", code: "HUE_SOMETHING_NEW" }));
     render(<Harness />);
     await flush(0);
     expectStreamFailed("hue:runtime.failed.body");
@@ -222,23 +237,20 @@ describe("HueBridgesCategory — a Failed stream the backend reported", () => {
   // #434: a rejected read is not a runtime state. Holding a Failed status when
   // the next read rejects must say "checking", not repeat the stale failure.
   it("shows a rejected read over a held Failed as unknown, then the Failed again once a read lands", async () => {
-    backend = { state: "Failed", code: "TRANSIENT_RETRY_EXHAUSTED", actionHint: "retry" };
+    setHealth(backendIs({ state: "Failed", code: "TRANSIENT_RETRY_EXHAUSTED", actionHint: "retry" }));
     render(<Harness />);
     await flush(0);
     expectStreamFailed("hue:runtime.codes.TRANSIENT_RETRY_EXHAUSTED");
-    const readsBefore = reads(HUE_COMMANDS.GET_STREAM_STATUS);
 
-    // Failed is terminal and not polled; the forced read after a restart is
-    // what reaches the backend again here.
+    // The fresh read after the card's own restart is what rejects here.
     restartRecovers = false;
-    backend = "reject";
+    fakeHueHealthApi.getHueHealth.mockRejectedValueOnce(new Error("IPC channel closed"));
     fireEvent.click(screen.getByText("hue:page.startAgain"));
     await flush(0);
-    expect(reads(HUE_COMMANDS.GET_STREAM_STATUS)).toBeGreaterThan(readsBefore);
+    expect(fakeHueHealthApi.getHueHealth).toHaveBeenCalledOnce();
     expect(screen.getByTestId("hue-status-unavailable")).toBeInTheDocument();
     expect(screen.queryByTestId("hue-stream-failed")).toBeNull();
 
-    backend = { state: "Failed", code: "TRANSIENT_RETRY_EXHAUSTED", actionHint: "retry" };
     await flush(runtimeStatusRetryDelayMs(1));
     expectStreamFailed("hue:runtime.codes.TRANSIENT_RETRY_EXHAUSTED");
   });

@@ -5,8 +5,8 @@ import { HUE_RUNTIME_STATES } from "@/shared/contracts/hue";
 import type { UseHueOnboardingResult } from "./model/onboardingTypes";
 import { deriveRuntimeTargets } from "./model/runtimeTargets";
 import { useHueAreaChannels } from "./state/useHueAreaChannels";
+import { useHueAreaReadiness } from "./state/useHueAreaReadiness";
 import { useHueOnboardingCore } from "./state/useHueOnboardingCore";
-import { useHueReadinessPolling } from "./state/useHueReadinessPolling";
 import { useHueRuntimeStatus } from "./state/useHueRuntimeStatus";
 
 export { deriveRuntimeTargets };
@@ -56,11 +56,10 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     await revalidateReadiness();
   }, [refreshChannels, revalidateReadiness]);
 
-  useHueReadinessPolling({
+  useHueAreaReadiness({
     bridge: core.selectedBridge,
     credentials: state.credentials,
     areaId: state.selectedAreaId,
-    blocked: core.selectedAreaIsBlocked,
     isValidatingCredential: state.isValidatingCredential,
     isLoadingAreas: state.isLoadingAreas,
     onResult: core.applyBackgroundReadiness,

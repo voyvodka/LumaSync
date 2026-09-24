@@ -7,7 +7,7 @@ import {
   HUE_PAIRING_POLL_INTERVAL_MS,
   HUE_PAIRING_POLL_WINDOW_MS,
 } from "../../model/pollingCadence";
-import { __resetHueReadCacheForTests } from "../../hueReadCache";
+import { __resetHueHealthStoreForTests } from "../hueHealthStore";
 import { useHueOnboardingCore } from "../useHueOnboardingCore";
 
 const shellLoadMock = vi.fn();
@@ -87,7 +87,7 @@ describe("useHueOnboardingCore — link-button polling (#337)", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
-    __resetHueReadCacheForTests();
+    __resetHueHealthStoreForTests();
     shellLoadMock.mockResolvedValue({});
     shellSaveMock.mockResolvedValue(undefined);
     discoverBridgesMock.mockResolvedValue({

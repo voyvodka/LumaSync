@@ -25,9 +25,6 @@ import {
   type RetuneLightingResult,
 } from "@/shared/contracts/lightingRuntime";
 import { parseCommandError, type CommandStatusOf } from "@/shared/contracts/status";
-// Cyclic with hueReadCache (it wraps `getHueStreamStatus` below); safe because
-// neither side calls across the cycle at module-eval time.
-import { invalidateHueStreamStatus } from "../hue/hueReadCache";
 import {
   normalizeAmbilightPayload,
   normalizeSolidColorPayload,
@@ -118,10 +115,6 @@ export async function startHue(
     });
   } catch (error) {
     throw mapModeApiError(HUE_COMMANDS.START_STREAM, error);
-  } finally {
-    // Attached to the command, not to a call site: a stale status lets the App
-    // health reconciler act on a pre-mutation answer and undo what just happened.
-    invalidateHueStreamStatus();
   }
 }
 
@@ -143,17 +136,6 @@ export async function restartHue(
     });
   } catch (error) {
     throw mapModeApiError(HUE_COMMANDS.RESTART_STREAM, error);
-  } finally {
-    invalidateHueStreamStatus();
-  }
-}
-
-/** Poll the Hue stream's current runtime state; self-heals if the background sender thread has died. */
-export async function getHueStreamStatus(invoker: ModeInvoker = defaultInvoke): Promise<HueRuntimeCommandResult> {
-  try {
-    return await invoker<HueRuntimeCommandResult>(HUE_COMMANDS.GET_STREAM_STATUS);
-  } catch (error) {
-    throw mapModeApiError(HUE_COMMANDS.GET_STREAM_STATUS, error);
   }
 }
 
@@ -182,9 +164,6 @@ export async function applyOutputs(
     });
   } catch (error) {
     throw mapModeApiError(LIGHTING_RUNTIME_COMMANDS.APPLY_OUTPUTS, error);
-  } finally {
-    // The transaction may have started or stopped the Hue stream.
-    invalidateHueStreamStatus();
   }
 }
 
@@ -213,8 +192,6 @@ export async function releaseHueOutput(
     });
   } catch (error) {
     throw mapModeApiError(LIGHTING_RUNTIME_COMMANDS.RELEASE_HUE_OUTPUT, error);
-  } finally {
-    invalidateHueStreamStatus();
   }
 }
 

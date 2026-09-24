@@ -12,7 +12,7 @@ import {
 } from "../mode/state/lightingControl";
 import { useNavigationActions, useNavigationState, type NavigationState } from "../shell/navigationStore";
 import { useUpdaterActions, useUpdaterState, type UpdaterSnapshot } from "../updater/UpdaterProvider";
-import type { HueProbeVerdict } from "../hue/state/useHueBridgeReachability";
+import { useHueShellStatus, type HueShellStatus } from "../hue/state/hueShellStatus";
 import { resetToManual } from "../calibration/model/templates";
 import { CompactLayout } from "./sections/compact/CompactLayout";
 import type { RoomMapEditorProps } from "@/features/room-map/ui/RoomMapEditor";
@@ -52,20 +52,6 @@ function SectionPlaceholder() {
   return <div className="h-full" aria-busy="true" data-testid="section-loading" />;
 }
 
-/**
- * The Hue status the shell derives from its polls. Still props: the Hue
- * health store that replaces those polls will replace these too.
- */
-export interface SettingsLayoutProps {
-  hueConfigured: boolean;
-  hueReachable?: boolean;
-  hueProbeVerdict?: HueProbeVerdict | null;
-  hueStreaming: boolean;
-  /** Hue session owned but the backend is retrying the bridge; overrides `hueStreaming`. */
-  hueReconnecting?: boolean;
-  hueStreamFailed?: boolean;
-}
-
 // Every panel below is memoised and reads its own slices, so a change only one
 // of them shows re-renders that one alone. See docs/architecture/ui-and-shell.md,
 // "Shell state reaches sections through stores".
@@ -76,16 +62,11 @@ const selectLayoutNavigation = (state: NavigationState) => ({
 });
 
 const selectLighting = (state: LightingControlState) => state;
+const selectHue = (status: HueShellStatus) => status;
 
-const LightsPanel = memo(function LightsPanel({
-  hueConfigured,
-  hueReachable,
-  hueProbeVerdict,
-  hueStreaming,
-  hueReconnecting,
-  hueStreamFailed,
-}: Required<SettingsLayoutProps>) {
+const LightsPanel = memo(function LightsPanel() {
   const lighting = useLightingControlState(selectLighting);
+  const hue = useHueShellStatus(selectHue);
   const { changeMode, changeOutputTargets } = useLightingActions();
   return (
     <div className="h-full overflow-hidden">
@@ -94,13 +75,13 @@ const LightsPanel = memo(function LightsPanel({
         outputTargets={lighting.outputTargets}
         localOutputConnected={lighting.localSink !== null}
         localSink={lighting.localSink}
-        hueConfigured={hueConfigured}
+        hueConfigured={hue.configured}
         bootstrapDone={lighting.bootstrapDone}
-        hueReachable={hueReachable}
-        hueProbeVerdict={hueProbeVerdict}
-        hueStreaming={hueStreaming}
-        hueReconnecting={hueReconnecting}
-        hueStreamFailed={hueStreamFailed}
+        hueReachable={hue.reachable}
+        hueProbeVerdict={hue.probeVerdict}
+        hueStreaming={hue.streaming}
+        hueReconnecting={hue.reconnecting}
+        hueStreamFailed={hue.streamFailed}
         calibration={lighting.calibration}
         modeLockReason={lighting.modeLockReason}
         isModeTransitioning={lighting.isModeTransitioning}
@@ -180,19 +161,19 @@ const SystemPanel = memo(function SystemPanel() {
 });
 
 const selectOutputTargets = (state: LightingControlState) => state.outputTargets;
+const selectRoomMapHue = (status: HueShellStatus) => ({
+  reachable: status.reachable,
+  configured: status.configured,
+  probeVerdict: status.probeVerdict,
+});
 
 const RoomMapPanel = memo(function RoomMapPanel({
-  hueReachable,
-  hueConfigured,
-  hueProbeVerdict,
   onZoneCountsConfirmed,
 }: {
-  hueReachable: boolean;
-  hueConfigured: boolean;
-  hueProbeVerdict: HueProbeVerdict | null;
   onZoneCountsConfirmed: (counts: LedSegmentCounts) => void;
 }) {
   const outputTargets = useLightingControlState(selectOutputTargets);
+  const hue = useHueShellStatus(selectRoomMapHue, shallowEqual);
   const { goToSection } = useNavigationActions();
   const openDevices = useCallback(() => void goToSection(SECTION_IDS.DEVICES), [goToSection]);
   return (
@@ -200,36 +181,23 @@ const RoomMapPanel = memo(function RoomMapPanel({
       <RoomMapEditor.Component
         onZoneCountsConfirmed={onZoneCountsConfirmed}
         onNavigateToDevices={openDevices}
-        hueReachable={hueReachable}
+        hueReachable={hue.reachable}
         outputTargets={outputTargets}
-        hueConfigured={hueConfigured}
-        hueProbeVerdict={hueProbeVerdict}
+        hueConfigured={hue.configured}
+        hueProbeVerdict={hue.probeVerdict}
       />
     </div>
   );
 });
 
-export const SettingsLayout = memo(function SettingsLayout({
-  hueConfigured,
-  hueReachable = true,
-  hueProbeVerdict = null,
-  hueStreaming,
-  hueReconnecting = false,
-  hueStreamFailed = false,
-}: SettingsLayoutProps) {
+export const SettingsLayout = memo(function SettingsLayout() {
   const { uiMode, activeSection } = useNavigationState(selectLayoutNavigation, shallowEqual);
   const [pendingZoneCounts, setPendingZoneCounts] = useState<LedSegmentCounts | null>(null);
   useFullOnlySectionPreload(uiMode);
 
   // ── Compact mode ──────────────────────────────────────────────────────
   if (uiMode === "compact") {
-    return (
-      <CompactLayout
-        hueConfigured={hueConfigured}
-        hueReachable={hueReachable}
-        hueProbeVerdict={hueProbeVerdict}
-      />
-    );
+    return <CompactLayout />;
   }
 
   // ── Full mode ─────────────────────────────────────────────────────────
@@ -239,14 +207,7 @@ export const SettingsLayout = memo(function SettingsLayout({
       <main className="min-h-0 min-w-0 flex-1 overflow-hidden" role="main" data-testid={`section-panel-${activeSection}`}>
         <Suspense fallback={<SectionPlaceholder />}>
           {activeSection === SECTION_IDS.LIGHTS && (
-            <LightsPanel
-              hueConfigured={hueConfigured}
-              hueReachable={hueReachable}
-              hueProbeVerdict={hueProbeVerdict}
-              hueStreaming={hueStreaming}
-              hueReconnecting={hueReconnecting}
-              hueStreamFailed={hueStreamFailed}
-            />
+            <LightsPanel />
           )}
 
           {activeSection === SECTION_IDS.LED_SETUP && (
@@ -262,12 +223,7 @@ export const SettingsLayout = memo(function SettingsLayout({
           {activeSection === SECTION_IDS.SYSTEM && <SystemPanel />}
 
           {activeSection === SECTION_IDS.ROOM_MAP && (
-            <RoomMapPanel
-              hueReachable={hueReachable}
-              hueConfigured={hueConfigured}
-              hueProbeVerdict={hueProbeVerdict}
-              onZoneCountsConfirmed={setPendingZoneCounts}
-            />
+            <RoomMapPanel onZoneCountsConfirmed={setPendingZoneCounts} />
           )}
         </Suspense>
       </main>

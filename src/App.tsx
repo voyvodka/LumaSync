@@ -2,8 +2,9 @@
  * App.tsx — the shell. Composes the feature hooks in dependency order, owns
  * routing plus the slices with no single feature home (calibration, Hue
  * pairing config, onboarding flags), and renders the tree. Sections read what
- * they show from the lighting, navigation and updater stores, not from props;
- * see docs/architecture/ui-and-shell.md, "Shell state reaches sections through stores".
+ * they show from the lighting, navigation, updater and Hue status stores, not
+ * from props; see docs/architecture/ui-and-shell.md, "Shell state reaches
+ * sections through stores".
  */
 
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from "react";
@@ -19,6 +20,7 @@ import { useHueSolidColorNotice } from "./features/mode/state/useHueSolidColorNo
 import { usePreviewOpenNotice } from "./features/preview/state/usePreviewOpenNotice";
 import { useLightingModeOrchestrator } from "./features/mode/state/useLightingModeOrchestrator";
 import { useHueBridgeReachability } from "./features/hue/state/useHueBridgeReachability";
+import { HueShellStatusProvider, type HueShellStatus } from "./features/hue/state/hueShellStatus";
 import {
   isHueSessionReconnecting,
   isHueStreamDead,
@@ -193,6 +195,15 @@ function Shell() {
   const hueStreamFailed = isHueStreamFailed(hueRuntimeState);
   const hueProbe = useHueBridgeReachability(hueStartConfig, hueSessionActive);
   const hueReachable = hueProbe.reachable;
+  // What the sections show about Hue, through the Hue status store.
+  const hueShellStatus: HueShellStatus = {
+    configured: hueStartConfig !== null,
+    reachable: hueReachable || hueSessionActive,
+    probeVerdict: hueProbe.verdict,
+    streaming: hueStreaming,
+    reconnecting: hueReconnecting,
+    streamFailed: hueStreamFailed,
+  };
 
   // The USB reconciler needs `bootstrapDone`, so it cannot be declared above
   // the boot sequence; arming reaches it through a ref rather than moving the
@@ -487,6 +498,7 @@ function Shell() {
   return (
     <NavigationProvider store={navigation} actions={navigationActions}>
       <LightingControlProvider state={lightingControlState} actions={lightingControlActions}>
+        <HueShellStatusProvider status={hueShellStatus}>
         {/* Custom cross-platform title bar. Sits above everything. Handles
             native drag + double-click zoom, hosts the compact-mode toggle, and
             (on Windows/Linux) draws custom min/max/close buttons since native
@@ -548,16 +560,9 @@ function Shell() {
               holdSpace={onboarding.pending || !bootstrapDone}
             />
             <div className="min-h-0 flex-1">
-              {/* Hue status only: everything else reaches the sections through
-                  the stores, so a render of this shell stops at the memo. */}
-              <SettingsLayout
-                hueConfigured={hueStartConfig !== null}
-                hueReachable={hueReachable || hueSessionActive}
-                hueProbeVerdict={hueProbe.verdict}
-                hueStreaming={hueStreaming}
-                hueReconnecting={hueReconnecting}
-                hueStreamFailed={hueStreamFailed}
-              />
+              {/* No props: everything reaches the sections through the stores,
+                  so a render of this shell stops at the memo. */}
+              <SettingsLayout />
             </div>
           </div>
         </div>
@@ -570,6 +575,7 @@ function Shell() {
         {/* After the notices, and above them: the modal owns the screen, and the
             queue waits under it, inert and outside its focus trap. */}
         <UpdateModalHost />
+        </HueShellStatusProvider>
       </LightingControlProvider>
     </NavigationProvider>
   );

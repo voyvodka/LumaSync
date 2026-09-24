@@ -64,6 +64,9 @@ const APP_COMMANDS: &[&str] = &[
     "retune_lighting",
     "release_hue_output",
     "get_lighting_runtime",
+    "get_hue_health",
+    "watch_hue_health",
+    "retry_hue_health",
 ];
 
 fn main() {

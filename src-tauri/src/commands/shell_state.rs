@@ -623,14 +623,15 @@ pub async fn get_shell_state(
 /// re-applies the running mode when a setting it reads changed.
 fn window_wrote<R: Runtime>(app: &AppHandle<R>, changed: &ShellStateChanged) {
     emit_changed(app, changed);
-    super::lighting_mode::outputs::note_settings_saved(
-        app,
+    let keys = || {
         changed
             .set
             .keys()
             .map(String::as_str)
-            .chain(changed.remove.iter().map(String::as_str)),
-    );
+            .chain(changed.remove.iter().map(String::as_str))
+    };
+    super::lighting_mode::outputs::note_settings_saved(app, keys());
+    super::hue::health::note_settings_saved(app, keys());
 }
 
 #[tauri::command]

@@ -31,6 +31,7 @@ import type {
   HueOnboardingWireStatusCode,
   HueStatusCode,
 } from "../../src/shared/contracts/hue";
+import type { HueHealthSnapshot } from "../../src/shared/contracts/hueHealth";
 import type { CommandStatusOf } from "../../src/shared/contracts/status";
 import type {
   ControlPopupResult,
@@ -240,6 +241,9 @@ export interface CommandResponse {
   update_hue_channel_positions: HueChannelWritebackStatus;
   get_hue_area_channels: HueAreaChannelListResponse;
   migrate_hue_credentials: HueCredentialMigrationResponse;
+  get_hue_health: HueHealthSnapshot;
+  watch_hue_health: HueHealthSnapshot;
+  retry_hue_health: HueHealthSnapshot;
 
   // --- shell ----------------------------------------------------------------
   list_displays: DisplayInfo[];

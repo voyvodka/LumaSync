@@ -16,9 +16,9 @@ import {
   type LightingControlActions,
 } from "@/features/mode/state/lightingControl";
 import { useNavigationState } from "@/features/shell/navigationStore";
-import type { SettingsLayoutProps } from "@/features/settings/SettingsLayout";
+import { useHueShellStatus } from "@/features/hue/state/hueShellStatus";
+import { runtimeStatus } from "@/features/hue/__tests__/fakeHueHealth";
 import { DEVICE_COMMANDS } from "@/shared/contracts/device";
-import { HUE_COMMANDS, HUE_STATUS } from "@/shared/contracts/hue";
 import type {
   ApplyOutputsOutcome,
   ApplyOutputsRequest,
@@ -60,7 +60,6 @@ export const checkForUpdatesMock = vi.fn().mockResolvedValue(undefined);
 export const checkForUpdatesInBackgroundMock = vi.fn().mockResolvedValue(undefined);
 // Mock invoke for Tauri commands (used in bootstrap for USB status check)
 export const invokeMock = vi.fn();
-export const getHueStreamStatusMock = vi.fn();
 export const applyOutputsMock = vi.fn();
 export const retuneLightingMock = vi.fn();
 export const releaseHueOutputMock = vi.fn();
@@ -179,7 +178,6 @@ export const mockModeApi = {
   retuneLighting: (tuning: unknown) => retuneLightingMock(tuning),
   releaseHueOutput: (trigger: string) => releaseHueOutputMock(trigger),
   getLightingRuntime: () => getLightingRuntimeMock(),
-  getHueStreamStatus: () => getHueStreamStatusMock(),
   startHue: vi.fn(),
   restartHue: vi.fn(),
   acquireHueForTest: vi.fn(),
@@ -218,9 +216,11 @@ export const mockStatusBar = {
 const selectEverything = <T,>(state: T) => state;
 
 /** Reads the stores as the real sections do, and exposes the actions as buttons. */
-function LayoutProbe({ hueStreaming, hueReconnecting }: { hueStreaming: boolean; hueReconnecting?: boolean }) {
+function LayoutProbe() {
   env.layoutProbeRenders += 1;
   const lighting = useLightingControlState(selectEverything);
+  const hueStreaming = useHueShellStatus((status) => status.streaming);
+  const hueReconnecting = useHueShellStatus((status) => status.reconnecting);
   const actions = useLightingActions();
   const activeSection = useNavigationState((state) => state.activeSection);
   const uiMode = useNavigationState((state) => state.uiMode);
@@ -292,12 +292,13 @@ function LayoutProbe({ hueStreaming, hueReconnecting }: { hueStreaming: boolean;
   );
 }
 
-// Memoised like the real one, so a render of it means App handed it new props.
+// Memoised like the real one, so a render of it after mount means App handed
+// it props, which it no longer takes.
 export const mockSettingsLayout = {
-  SettingsLayout: memo(function SettingsLayout(props: SettingsLayoutProps) {
+  SettingsLayout: memo(function SettingsLayout(props: Record<string, unknown>) {
     env.layoutRenders += 1;
-    env.lastLayoutProps = props as unknown as Record<string, unknown>;
-    return <LayoutProbe hueStreaming={props.hueStreaming} hueReconnecting={props.hueReconnecting} />;
+    env.lastLayoutProps = props;
+    return <LayoutProbe />;
   }),
 };
 
@@ -312,11 +313,6 @@ export const mockSettingsLayout = {
 export function installInvokeDispatch(serialConnected: boolean): void {
   invokeMock.mockImplementation((command: string) => {
     switch (command) {
-      case HUE_COMMANDS.VALIDATE_CREDENTIALS:
-        return Promise.resolve({
-          status: { code: HUE_STATUS.CREDENTIAL_VALID, message: "ok", details: null },
-          valid: true,
-        });
       case DEVICE_COMMANDS.GET_RUNTIME_TELEMETRY:
         return Promise.resolve({
           usb: {
@@ -429,10 +425,9 @@ export const PAIRED = {
   lastHueAreaId: "area-1",
 };
 
-export const hueStatus = (state: "Running" | "Reconnecting" | "Failed" | "Idle") => ({
-  active: state === "Running",
-  lastSolidColor: null,
-  status: { state, code: `HUE_${state.toUpperCase()}`, message: state, details: null },
+/** The stream as the Hue health monitor reports it. */
+export const hueStream = (state: "Running" | "Reconnecting" | "Failed" | "Idle") => ({
+  stream: { active: state === "Running" || state === "Reconnecting", status: runtimeStatus(state) },
 });
 
 /** The shared beforeEach, after `vi.clearAllMocks()`. */
@@ -452,7 +447,6 @@ export function resetAppHarness(): void {
   env.revision = 0;
   env.runtime = snapshot();
   installInvokeDispatch(true);
-  getHueStreamStatusMock.mockResolvedValue(hueStatus("Idle"));
   getLightingRuntimeMock.mockImplementation(() => Promise.resolve(env.runtime));
   applyOutputsMock.mockImplementation(() => Promise.resolve(reply("OUTPUTS_APPLIED", env.runtime)));
   retuneLightingMock.mockResolvedValue({ status: { code: "RETUNE_APPLIED", message: "", details: null } });

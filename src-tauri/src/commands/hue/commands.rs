@@ -247,6 +247,7 @@ pub(crate) async fn start_hue_stream_on(
     mut request: StartHueStreamRequest,
     closing: &(dyn Fn() -> bool + Sync),
 ) -> HueRuntimeCommandResult {
+    let _wake = super::health::WakeOnDrop;
     // MUST precede the readiness call and the `credentials_valid` evidence —
     // every downstream reader, including the stored `ActiveHueStream`, takes
     // the key from this one field. See docs/architecture/hue.md.
@@ -556,6 +557,7 @@ pub(crate) async fn stop_hue_stream_on(
     runtime_state: &HueRuntimeStateStore,
     trigger: HueRuntimeTriggerSource,
 ) -> HueRuntimeCommandResult {
+    let _wake = super::health::WakeOnDrop;
     let runtime = runtime_state.runtime_arc();
     let in_flight = Arc::clone(&runtime_state.stop_in_flight).lock_owned().await;
     let stopped = tokio::task::spawn_blocking(move || {
@@ -700,6 +702,7 @@ pub async fn restart_hue_stream(
     mut request: StartHueStreamRequest,
     runtime_state: State<'_, HueRuntimeStateStore>,
 ) -> Result<HueRuntimeCommandResult, String> {
+    let _wake = super::health::WakeOnDrop;
     // Same ordering rule as `start_hue_stream` — resolve before any reader.
     request.username = effective_hue_app_key(&request.username);
     runtime_state.wait_for_stop_to_settle().await;
@@ -878,10 +881,35 @@ pub fn set_hue_solid_color(
 pub async fn get_hue_stream_status(
     runtime_state: State<'_, HueRuntimeStateStore>,
 ) -> Result<HueRuntimeCommandResult, String> {
+    Ok(refresh_hue_stream_status(runtime_state.inner(), true)
+        .await
+        .result)
+}
+
+/// What one runtime refresh saw, for the health monitor (`health.rs`): the
+/// status, the live stream's bridge and area, and the readiness answer when
+/// the refresh asked the bridge.
+pub(crate) struct HueStreamRefresh {
+    pub(crate) result: HueRuntimeCommandResult,
+    pub(crate) stream_area: Option<(String, String)>,
+    pub(crate) readiness: Option<HueStreamReadinessResponse>,
+}
+
+/// Body of `get_hue_stream_status`, shared with the health monitor. With
+/// `bridge_check` false it stays local: the dead-sender probe and the
+/// pending-colour flush, no readiness round-trip.
+pub(crate) async fn refresh_hue_stream_status(
+    runtime_state: &HueRuntimeStateStore,
+    bridge_check: bool,
+) -> HueStreamRefresh {
     // 1. Check if stream is active and read params -- brief lock, no I/O.
-    let active_stream_params = {
+    let (active_stream_params, stream_area) = {
         let owner = acquire_hue_runtime(&runtime_state.runtime);
-        if matches!(
+        let stream_area = owner
+            .active_stream
+            .as_ref()
+            .map(|stream| (stream.bridge_ip.clone(), stream.area_id.clone()));
+        let params = if matches!(
             owner.state,
             HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
         ) {
@@ -895,8 +923,17 @@ pub async fn get_hue_stream_status(
             })
         } else {
             None
-        }
+        };
+        (params, stream_area)
     }; // lock released before async I/O
+    let refreshed = |result: HueRuntimeCommandResult,
+                     readiness: Option<HueStreamReadinessResponse>| {
+        HueStreamRefresh {
+            result,
+            stream_area: stream_area.clone(),
+            readiness,
+        }
+    };
 
     // Non-blocking probe — if the background sender thread has already exited,
     // register a transient fault immediately without doing a network round-trip.
@@ -912,18 +949,21 @@ pub async fn get_hue_stream_status(
                 // Clear dead stream/sender contexts so the next start can spawn fresh.
                 owner.set_active_stream(None);
                 owner.persistent_sender = None;
-                return Ok(register_transient_fault(
-                    &mut owner,
-                    "DTLS sender thread exited unexpectedly.",
-                    HueRuntimeTriggerSource::System,
-                ));
+                return refreshed(
+                    register_transient_fault(
+                        &mut owner,
+                        "DTLS sender thread exited unexpectedly.",
+                        HueRuntimeTriggerSource::System,
+                    ),
+                    None,
+                );
             }
-            return Ok(make_result(&owner));
+            return refreshed(make_result(&owner), None);
         }
     }
 
     // 2. If stream is active, check readiness async -- no lock held.
-    if let Some((bridge_ip, username, area_id, _)) = active_stream_params {
+    if let Some((bridge_ip, username, area_id, _)) = active_stream_params.filter(|_| bridge_check) {
         // During a health poll the area's active_streamer is us. The readiness
         // check treats a streamer as "not ready" to prevent hijacking a foreign
         // stream; `Ours` tells it this one is our own session, so it neither
@@ -962,14 +1002,14 @@ pub async fn get_hue_stream_status(
         let _ = status_refresh_with_evidence(&mut owner, &gate, details);
         // Flush any solid color that was queued during the stream-starting window.
         flush_pending_solid_color(&mut owner);
-        return Ok(make_result(&owner));
+        return refreshed(make_result(&owner), Some(readiness));
     }
 
     // Fallback: active_stream was None at step 1, but step 4c of start_hue_stream
     // may have stored the context by now. Re-acquire the lock and attempt a flush.
     let mut owner = acquire_hue_runtime(&runtime_state.runtime);
     flush_pending_solid_color(&mut owner);
-    Ok(make_result(&owner))
+    refreshed(make_result(&owner), None)
 }
 
 // ---------------------------------------------------------------------------

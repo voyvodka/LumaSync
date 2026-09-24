@@ -9,14 +9,15 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HUE_CREDENTIAL_STATUS, HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
-import { __resetHueReadCacheForTests } from "../hueReadCache";
+import { HUE_CREDENTIAL_STATUS } from "@/shared/contracts/hue";
+import { __resetHueHealthStoreForTests } from "../state/hueHealthStore";
+import { resetHealth, runtimeStatus, setHealth } from "./fakeHueHealth";
 
-const getHueStreamStatusMock = vi.fn();
 const getAreaChannelsMock = vi.fn();
 
+vi.mock("../hueHealthApi", async () => (await import("./fakeHueHealth")).fakeHueHealthApi);
+
 vi.mock("@/features/mode/modeApi", () => ({
-  getHueStreamStatus: (...args: unknown[]) => getHueStreamStatusMock(...args),
   restartHue: vi.fn(),
   startHue: vi.fn().mockResolvedValue(undefined),
 }));
@@ -57,20 +58,8 @@ vi.mock("../hueOnboardingApi", () => ({
   verifyHueBridgeIp: vi.fn(),
 }));
 
-let runtimeState = "Idle";
-
-function statusResult() {
-  return {
-    active: runtimeState !== "Idle",
-    status: {
-      state: runtimeState,
-      code: "HUE_STREAM_IDLE",
-      message: "",
-      details: null,
-      triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM,
-    },
-    lastSolidColor: null,
-  };
+function streamIs(state: "Idle" | "Running") {
+  setHealth({ stream: { active: state !== "Idle", status: runtimeStatus(state) } });
 }
 
 import { useHueOnboarding } from "../useHueOnboarding";
@@ -86,9 +75,8 @@ async function mountWithArea() {
 describe("useHueOnboarding channel re-read", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    __resetHueReadCacheForTests();
-    runtimeState = "Idle";
-    getHueStreamStatusMock.mockImplementation(() => Promise.resolve(statusResult()));
+    __resetHueHealthStoreForTests();
+    resetHealth();
     getAreaChannelsMock.mockResolvedValue({
       status: { code: "HUE_AREA_CHANNELS_EMPTY", message: "", details: null },
       channels: [],
@@ -107,14 +95,14 @@ describe("useHueOnboarding channel re-read", () => {
   });
 
   it("re-reads the channels once lighting stops, replacing the list that echoed ours", async () => {
-    runtimeState = "Running";
+    streamIs("Running");
     const { result } = await mountWithArea();
     await waitFor(() => expect(result.current.runtimeStatus?.state).toBe("Running"));
     const before = getAreaChannelsMock.mock.calls.length;
 
-    // `startRuntime` ends in a forced status read, which is the transition a
+    // `startRuntime` ends in a fresh status read, which is the transition a
     // stop is observed through.
-    runtimeState = "Idle";
+    streamIs("Idle");
     await act(async () => {
       await result.current.startRuntime();
     });
