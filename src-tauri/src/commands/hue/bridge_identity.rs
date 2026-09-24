@@ -170,8 +170,10 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 /// Read what a certificate chain claims. `at_unix` is the handshake time;
-/// `None` checks validity against the system clock.
-pub(crate) fn inspect_certificate(
+/// `None` checks validity against the system clock. Everything returned is
+/// public — the bridge hands this chain to anyone who connects — so the bridge
+/// id and fingerprint are safe to log.
+pub(crate) fn inspect_presented_chain(
     leaf_der: &[u8],
     intermediates_der: &[&[u8]],
     at_unix: Option<u64>,
@@ -199,7 +201,7 @@ pub(crate) fn inspect_certificate(
 
 /// The bridge id a certificate names, for a response whose handshake already
 /// passed the verifier.
-pub(crate) fn bridge_id_of_certificate(leaf_der: &[u8]) -> Option<String> {
+pub(crate) fn bridge_id_named_by_leaf(leaf_der: &[u8]) -> Option<String> {
     let leaf = X509::from_der(leaf_der).ok()?;
     normalize_bridge_id(&common_name(&leaf)?)
 }
@@ -397,10 +399,11 @@ impl ServerCertVerifier for BridgeCertVerifier {
     ) -> Result<ServerCertVerified, rustls::Error> {
         let intermediates = intermediates
             .iter()
-            .map(|cert| cert.as_ref())
+            .map(|der| der.as_ref())
             .collect::<Vec<_>>();
-        let result = inspect_certificate(end_entity.as_ref(), &intermediates, Some(now.as_secs()))
-            .and_then(|presented| admit(&presented, &self.trust, self.store.as_ref()));
+        let result =
+            inspect_presented_chain(end_entity.as_ref(), &intermediates, Some(now.as_secs()))
+                .and_then(|presented| admit(&presented, &self.trust, self.store.as_ref()));
         match result {
             Ok(()) => Ok(ServerCertVerified::assertion()),
             Err(rejection) => {
@@ -610,7 +613,7 @@ AP31tUs6kG4a9CifLyi7MaFYZBcxMZY0u+yNFK2eCqXzAiEAnD9leje6HlDcgWft
     #[test]
     fn a_real_bridge_pro_certificate_chains_to_the_pinned_root() {
         let leaf = X509::from_pem(BRIDGE_PRO_LEAF_PEM.as_bytes()).unwrap();
-        let presented = inspect_certificate(&leaf.to_der().unwrap(), &[], None).unwrap();
+        let presented = inspect_presented_chain(&leaf.to_der().unwrap(), &[], None).unwrap();
         assert_eq!(presented.bridge_id, "c42996fffec4e2d8");
         assert!(presented.signify_signed);
     }
@@ -628,7 +631,7 @@ AP31tUs6kG4a9CifLyi7MaFYZBcxMZY0u+yNFK2eCqXzAiEAnD9leje6HlDcgWft
     fn a_certificate_from_another_ca_is_not_signify_signed() {
         let (ca, leaf) = ca_signed(BRIDGE_A);
         let presented =
-            inspect_certificate(&leaf.der(), &[&ca.der()], None).expect("readable bridge cert");
+            inspect_presented_chain(&leaf.der(), &[&ca.der()], None).expect("readable bridge cert");
         assert_eq!(presented.bridge_id, BRIDGE_A);
         assert!(!presented.signify_signed);
     }
@@ -637,7 +640,7 @@ AP31tUs6kG4a9CifLyi7MaFYZBcxMZY0u+yNFK2eCqXzAiEAnD9leje6HlDcgWft
     fn a_certificate_that_names_no_bridge_is_refused() {
         let cert = self_signed("test-bridge");
         assert_eq!(
-            inspect_certificate(&cert.der(), &[], None),
+            inspect_presented_chain(&cert.der(), &[], None),
             Err(IdentityRejection::NotABridge)
         );
         assert_eq!(

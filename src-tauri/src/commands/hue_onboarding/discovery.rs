@@ -268,16 +268,16 @@ pub(crate) async fn verify_bridge_at(
                 .bridge
                 .as_ref()
                 .and_then(|bridge| normalize_bridge_id(&bridge.id));
-            if let (Some(certificate), Some(configured)) = (answering, configured) {
-                if certificate != configured {
+            if let (Some(answering_id), Some(configured)) = (answering, configured) {
+                if answering_id != configured {
                     warn!(
-                        "Hue bridge at {bridge_ip}: certificate names {certificate}, \
+                        "Hue bridge at {bridge_ip}: certificate names {answering_id}, \
                          config reports {configured}"
                     );
                     return HueVerifyBridgeIpResponse {
                         status: identity_mismatch_status(format!(
                             "{IDENTITY_MISMATCH_CODE}: the certificate names bridge \
-                             {certificate} but the bridge reports {configured}"
+                             {answering_id} but the bridge reports {configured}"
                         )),
                         bridge: None,
                     };

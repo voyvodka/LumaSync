@@ -16,7 +16,7 @@ use reqwest::blocking::Client as BlockingClient;
 use reqwest::redirect::Policy;
 
 use super::bridge_identity::{
-    bridge_id_of_certificate, identity_rejection_in, rustls_error_in, BridgeCertVerifier,
+    bridge_id_named_by_leaf, identity_rejection_in, rustls_error_in, BridgeCertVerifier,
     BridgeTrust, IdentityRejection,
 };
 use super::credential_store::{default_store, pair_owner, PairOwner, SecretStore, KEY_HUE_APP_KEY};
@@ -244,7 +244,7 @@ pub(crate) fn answering_bridge_id(response: &reqwest::Response) -> Option<String
         .extensions()
         .get::<reqwest::tls::TlsInfo>()
         .and_then(|info| info.peer_certificate())
-        .and_then(bridge_id_of_certificate)
+        .and_then(bridge_id_named_by_leaf)
 }
 
 /// The certificate refusal behind a failed request, if that is what it was.

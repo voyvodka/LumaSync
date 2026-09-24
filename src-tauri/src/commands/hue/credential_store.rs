@@ -128,14 +128,17 @@ impl CredentialBackend {
 
 /// Abstract credential store. Tested against `KeychainStore`, `NoopStore`,
 /// and the in-memory test double under `tests::InMemoryStore`.
+///
+/// `slot` is the keychain account name — one of the fixed `KEY_HUE_*` labels —
+/// and is safe to log. `value` is the secret and never is.
 pub trait SecretStore: Send + Sync {
-    /// Persist `value` under `account`. Idempotent: existing entry is overwritten.
-    fn set(&self, account: &str, value: &str) -> Result<(), String>;
-    /// Read the value at `account`. `Ok(None)` means "no entry" (NotFound),
+    /// Persist `value` under `slot`. Idempotent: existing entry is overwritten.
+    fn set(&self, slot: &str, value: &str) -> Result<(), String>;
+    /// Read the value at `slot`. `Ok(None)` means "no entry" (NotFound),
     /// distinct from `Err(_)` which means the backend itself is unavailable.
-    fn get(&self, account: &str) -> Result<Option<String>, String>;
-    /// Delete the entry at `account`. Idempotent: deleting a missing entry is `Ok(())`.
-    fn delete(&self, account: &str) -> Result<(), String>;
+    fn get(&self, slot: &str) -> Result<Option<String>, String>;
+    /// Delete the entry at `slot`. Idempotent: deleting a missing entry is `Ok(())`.
+    fn delete(&self, slot: &str) -> Result<(), String>;
     /// Backend label for the `credentialStorageBackend` surface.
     fn backend(&self) -> CredentialBackend;
 }
@@ -158,59 +161,59 @@ impl KeychainStore {
     }
 
     #[cfg(not(test))]
-    fn entry(account: &str) -> Result<keyring::Entry, String> {
-        keyring::Entry::new(KEYCHAIN_SERVICE, account)
+    fn entry(slot: &str) -> Result<keyring::Entry, String> {
+        keyring::Entry::new(KEYCHAIN_SERVICE, slot)
             .map_err(|e| format!("KEYCHAIN_ENTRY_FAILED: {e}"))
     }
 
     /// A test binary never reaches the developer's keychain, even through a
     /// `KeychainStore` built by hand: every call fails as an unavailable backend.
     #[cfg(test)]
-    fn entry(account: &str) -> Result<keyring::Entry, String> {
+    fn entry(slot: &str) -> Result<keyring::Entry, String> {
         Err(format!(
-            "KEYCHAIN_ENTRY_FAILED: the OS keychain is off limits to tests ({account})"
+            "KEYCHAIN_ENTRY_FAILED: the OS keychain is off limits to tests ({slot})"
         ))
     }
 }
 
 impl SecretStore for KeychainStore {
-    fn set(&self, account: &str, value: &str) -> Result<(), String> {
-        let entry = Self::entry(account)?;
+    fn set(&self, slot: &str, value: &str) -> Result<(), String> {
+        let entry = Self::entry(slot)?;
         entry
             .set_password(value)
             .map_err(|e| format!("KEYCHAIN_SET_FAILED: {e}"))?;
-        debug!("[hue-cred] keychain SET ok ({account})");
+        debug!("[hue-cred] keychain SET ok ({slot})");
         Ok(())
     }
 
-    fn get(&self, account: &str) -> Result<Option<String>, String> {
-        let entry = Self::entry(account)?;
+    fn get(&self, slot: &str) -> Result<Option<String>, String> {
+        let entry = Self::entry(slot)?;
         match entry.get_password() {
             Ok(value) => {
-                debug!("[hue-cred] keychain GET ok ({account})");
+                debug!("[hue-cred] keychain GET ok ({slot})");
                 Ok(Some(value))
             }
             // `keyring::Error::NoEntry` is the only "soft" miss — caller falls back to plaintext.
             Err(keyring::Error::NoEntry) => {
-                debug!("[hue-cred] keychain GET miss ({account})");
+                debug!("[hue-cred] keychain GET miss ({slot})");
                 Ok(None)
             }
             Err(err) => {
-                warn!("[hue-cred] keychain GET failed ({account}): {err}");
+                warn!("[hue-cred] keychain GET failed ({slot}): {err}");
                 Err(format!("KEYCHAIN_GET_FAILED: {err}"))
             }
         }
     }
 
-    fn delete(&self, account: &str) -> Result<(), String> {
-        let entry = Self::entry(account)?;
+    fn delete(&self, slot: &str) -> Result<(), String> {
+        let entry = Self::entry(slot)?;
         match entry.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => {
-                debug!("[hue-cred] keychain DELETE ok/idempotent ({account})");
+                debug!("[hue-cred] keychain DELETE ok/idempotent ({slot})");
                 Ok(())
             }
             Err(err) => {
-                warn!("[hue-cred] keychain DELETE failed ({account}): {err}");
+                warn!("[hue-cred] keychain DELETE failed ({slot}): {err}");
                 Err(format!("KEYCHAIN_DELETE_FAILED: {err}"))
             }
         }
@@ -240,13 +243,13 @@ impl NoopStore {
 }
 
 impl SecretStore for NoopStore {
-    fn set(&self, _account: &str, _value: &str) -> Result<(), String> {
+    fn set(&self, _slot: &str, _value: &str) -> Result<(), String> {
         Err(format!("{}: noop backend", status::STORE_UNAVAILABLE))
     }
-    fn get(&self, _account: &str) -> Result<Option<String>, String> {
+    fn get(&self, _slot: &str) -> Result<Option<String>, String> {
         Ok(None)
     }
-    fn delete(&self, _account: &str) -> Result<(), String> {
+    fn delete(&self, _slot: &str) -> Result<(), String> {
         Ok(())
     }
     fn backend(&self) -> CredentialBackend {
@@ -364,28 +367,28 @@ impl DevFileStore {
 
 #[cfg(any(debug_assertions, test))]
 impl SecretStore for DevFileStore {
-    fn set(&self, account: &str, value: &str) -> Result<(), String> {
+    fn set(&self, slot: &str, value: &str) -> Result<(), String> {
         let _guard = self.lock();
         let mut entries = self.read_all()?;
-        entries.insert(account.to_string(), value.to_string());
+        entries.insert(slot.to_string(), value.to_string());
         self.write_all(&entries)?;
-        debug!("[hue-cred] dev-file SET ok ({account})");
+        debug!("[hue-cred] dev-file SET ok ({slot})");
         Ok(())
     }
 
-    fn get(&self, account: &str) -> Result<Option<String>, String> {
+    fn get(&self, slot: &str) -> Result<Option<String>, String> {
         let entries = self.read_all()?;
-        Ok(entries.get(account).cloned())
+        Ok(entries.get(slot).cloned())
     }
 
-    fn delete(&self, account: &str) -> Result<(), String> {
+    fn delete(&self, slot: &str) -> Result<(), String> {
         let _guard = self.lock();
         let mut entries = self.read_all()?;
-        if entries.remove(account).is_none() {
+        if entries.remove(slot).is_none() {
             return Ok(());
         }
         self.write_all(&entries)?;
-        debug!("[hue-cred] dev-file DELETE ok ({account})");
+        debug!("[hue-cred] dev-file DELETE ok ({slot})");
         Ok(())
     }
 
@@ -459,33 +462,33 @@ impl CachedStore {
 }
 
 impl SecretStore for CachedStore {
-    fn set(&self, account: &str, value: &str) -> Result<(), String> {
+    fn set(&self, slot: &str, value: &str) -> Result<(), String> {
         // Evict on failure too: a rejected write may still have landed.
-        let result = self.inner.set(account, value);
+        let result = self.inner.set(slot, value);
         self.invalidate();
         result
     }
 
-    fn get(&self, account: &str) -> Result<Option<String>, String> {
+    fn get(&self, slot: &str) -> Result<Option<String>, String> {
         let generation = {
             let state = self.lock();
-            if let Some(cached) = state.entries.get(account) {
+            if let Some(cached) = state.entries.get(slot) {
                 return Ok(cached.clone());
             }
             state.generation
         };
 
-        let value = self.inner.get(account)?;
+        let value = self.inner.get(slot)?;
 
         let mut state = self.lock();
         if state.generation == generation {
-            state.entries.insert(account.to_string(), value.clone());
+            state.entries.insert(slot.to_string(), value.clone());
         }
         Ok(value)
     }
 
-    fn delete(&self, account: &str) -> Result<(), String> {
-        let result = self.inner.delete(account);
+    fn delete(&self, slot: &str) -> Result<(), String> {
+        let result = self.inner.delete(slot);
         self.invalidate();
         result
     }
@@ -954,7 +957,7 @@ pub(crate) mod tests {
     }
 
     impl SecretStore for InMemoryStore {
-        fn set(&self, account: &str, value: &str) -> Result<(), String> {
+        fn set(&self, slot: &str, value: &str) -> Result<(), String> {
             if self
                 .force_set_failure
                 .swap(false, std::sync::atomic::Ordering::SeqCst)
@@ -964,10 +967,10 @@ pub(crate) mod tests {
             self.inner
                 .lock()
                 .map_err(|_| "poisoned".to_string())?
-                .insert(account.to_string(), value.to_string());
+                .insert(slot.to_string(), value.to_string());
             Ok(())
         }
-        fn get(&self, account: &str) -> Result<Option<String>, String> {
+        fn get(&self, slot: &str) -> Result<Option<String>, String> {
             self.get_calls
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             if self
@@ -980,14 +983,14 @@ pub(crate) mod tests {
                 .inner
                 .lock()
                 .map_err(|_| "poisoned".to_string())?
-                .get(account)
+                .get(slot)
                 .cloned())
         }
-        fn delete(&self, account: &str) -> Result<(), String> {
+        fn delete(&self, slot: &str) -> Result<(), String> {
             self.inner
                 .lock()
                 .map_err(|_| "poisoned".to_string())?
-                .remove(account);
+                .remove(slot);
             Ok(())
         }
         fn backend(&self) -> CredentialBackend {
@@ -1336,18 +1339,18 @@ pub(crate) mod tests {
             calls: std::sync::atomic::AtomicUsize,
         }
         impl SecretStore for FailingSecond {
-            fn set(&self, account: &str, value: &str) -> Result<(), String> {
+            fn set(&self, slot: &str, value: &str) -> Result<(), String> {
                 let n = self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 if n == 1 {
                     return Err("KEYCHAIN_SET_FAILED: simulated".into());
                 }
-                self.inner.set(account, value)
+                self.inner.set(slot, value)
             }
-            fn get(&self, account: &str) -> Result<Option<String>, String> {
-                self.inner.get(account)
+            fn get(&self, slot: &str) -> Result<Option<String>, String> {
+                self.inner.get(slot)
             }
-            fn delete(&self, account: &str) -> Result<(), String> {
-                self.inner.delete(account)
+            fn delete(&self, slot: &str) -> Result<(), String> {
+                self.inner.delete(slot)
             }
             fn backend(&self) -> CredentialBackend {
                 CredentialBackend::Keychain
@@ -1376,14 +1379,14 @@ pub(crate) mod tests {
             inner: InMemoryStore,
         }
         impl SecretStore for LyingStore {
-            fn set(&self, account: &str, value: &str) -> Result<(), String> {
-                self.inner.set(account, value)
+            fn set(&self, slot: &str, value: &str) -> Result<(), String> {
+                self.inner.set(slot, value)
             }
-            fn get(&self, account: &str) -> Result<Option<String>, String> {
-                Ok(self.inner.get(account)?.map(|_| "tampered".to_string()))
+            fn get(&self, slot: &str) -> Result<Option<String>, String> {
+                Ok(self.inner.get(slot)?.map(|_| "tampered".to_string()))
             }
-            fn delete(&self, account: &str) -> Result<(), String> {
-                self.inner.delete(account)
+            fn delete(&self, slot: &str) -> Result<(), String> {
+                self.inner.delete(slot)
             }
             fn backend(&self) -> CredentialBackend {
                 CredentialBackend::Keychain
@@ -1699,14 +1702,14 @@ pub(crate) mod tests {
     struct SharedBacking(Arc<InMemoryStore>);
 
     impl SecretStore for SharedBacking {
-        fn set(&self, account: &str, value: &str) -> Result<(), String> {
-            self.0.set(account, value)
+        fn set(&self, slot: &str, value: &str) -> Result<(), String> {
+            self.0.set(slot, value)
         }
-        fn get(&self, account: &str) -> Result<Option<String>, String> {
-            self.0.get(account)
+        fn get(&self, slot: &str) -> Result<Option<String>, String> {
+            self.0.get(slot)
         }
-        fn delete(&self, account: &str) -> Result<(), String> {
-            self.0.delete(account)
+        fn delete(&self, slot: &str) -> Result<(), String> {
+            self.0.delete(slot)
         }
         fn backend(&self) -> CredentialBackend {
             self.0.backend()
@@ -1827,13 +1830,13 @@ pub(crate) mod tests {
         // itself, and a lying backend would report a successful migration.
         struct LyingBacking;
         impl SecretStore for LyingBacking {
-            fn set(&self, _account: &str, _value: &str) -> Result<(), String> {
+            fn set(&self, _slot: &str, _value: &str) -> Result<(), String> {
                 Ok(())
             }
-            fn get(&self, _account: &str) -> Result<Option<String>, String> {
+            fn get(&self, _slot: &str) -> Result<Option<String>, String> {
                 Ok(Some("tampered".to_string()))
             }
-            fn delete(&self, _account: &str) -> Result<(), String> {
+            fn delete(&self, _slot: &str) -> Result<(), String> {
                 Ok(())
             }
             fn backend(&self) -> CredentialBackend {
