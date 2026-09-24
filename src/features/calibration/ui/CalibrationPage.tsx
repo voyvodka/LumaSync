@@ -17,6 +17,7 @@ import { clamp } from "@/shared/lib/math";
 import { Callout } from "@/shared/ui/Callout";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { Segmented } from "@/shared/ui/Segmented";
+import { useRadioGroup } from "@/shared/ui/useRadioGroup";
 import type { TranslationKey } from "@/features/i18n/catalogue";
 
 interface CalibrationPageProps {
@@ -46,6 +47,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
     confirmDiscard,
     isSaving,
     testPattern,
+    isTogglingTestPattern,
     displayTarget,
     validationErrors,
     testPatternError,
@@ -76,7 +78,18 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
   const powerWatts = (totalLeds * 0.06).toFixed(1); // ~0.06W per LED at medium brightness
   // `aria-disabled`, not `disabled`: a button disabled under the keyboard drops
   // focus to the document, and a switch lasts only as long as the overlay takes.
-  const isSwitching = displayTarget.isSwitching;
+  // A test pattern start or stop holds both too; the session ignores a press then.
+  const isSwitching = displayTarget.isSwitching || isTogglingTestPattern;
+  // Not `isDisabled` while switching: that would take every monitor out of the
+  // tab order for the length of a switch. The session ignores the pick instead.
+  const { itemProps: displayItemProps } = useRadioGroup({
+    values: displayTarget.displays.map((display) => display.id),
+    value: displayTarget.selectedDisplayId ?? null,
+    onChange: (id) => {
+      const display = displayTarget.displays.find((candidate) => candidate.id === id);
+      if (display) void handleSelectDisplay(display);
+    },
+  });
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -215,34 +228,40 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
                   {t("calibration:overlay.noDisplays")}
                 </div>
               ) : (
-                displayTarget.displays.map((display) => {
-                  const isSelected = display.id === displayTarget.selectedDisplayId;
-                  return (
-                    <button
-                      key={display.id}
-                      type="button"
-                      aria-disabled={isSwitching || undefined}
-                      onClick={() => void handleSelectDisplay(display)}
-                      className={`flex items-center gap-2 rounded-md border px-2.5 py-2 text-left transition-colors aria-disabled:cursor-not-allowed aria-disabled:opacity-40 ${
-                        isSelected
-                          ? "border-amber/40 bg-amber/10 text-amber"
-                          : "border-line-2 bg-panel hover:border-line-2"
-                      }`}
-                    >
-                      <div className={`h-4 w-6 shrink-0 rounded-sm border ${isSelected ? "border-amber" : "border-line-2"}`}>
-                        {isSelected && <div className="h-full w-full rounded-sm bg-amber/20" />}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-mono text-[10px] uppercase tracking-[0.1em] font-medium">
-                          {display.label}
+                <div
+                  role="radiogroup"
+                  aria-label={t("calibration:page.dockCaptureSource")}
+                  className="flex flex-col gap-1.5"
+                >
+                  {displayTarget.displays.map((display) => {
+                    const isSelected = display.id === displayTarget.selectedDisplayId;
+                    return (
+                      <button
+                        key={display.id}
+                        type="button"
+                        {...displayItemProps(display.id)}
+                        aria-disabled={isSwitching || undefined}
+                        className={`flex items-center gap-2 rounded-md border px-2.5 py-2 text-left transition-colors aria-disabled:cursor-not-allowed aria-disabled:opacity-40 ${
+                          isSelected
+                            ? "border-amber/40 bg-amber/10 text-amber"
+                            : "border-line-2 bg-panel hover:border-line-2"
+                        }`}
+                      >
+                        <div className={`h-4 w-6 shrink-0 rounded-sm border ${isSelected ? "border-amber" : "border-line-2"}`}>
+                          {isSelected && <div className="h-full w-full rounded-sm bg-amber/20" />}
                         </div>
-                        <div className="truncate font-mono text-[9px] text-ink-dim">
-                          {display.width} × {display.height}
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-mono text-[10px] uppercase tracking-[0.1em] font-medium">
+                            {display.label}
+                          </div>
+                          <div className="truncate font-mono text-[9px] text-ink-dim">
+                            {display.width} × {display.height}
+                          </div>
                         </div>
-                      </div>
-                    </button>
-                  );
-                })
+                      </button>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </DockSection>

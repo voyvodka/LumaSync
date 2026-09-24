@@ -133,6 +133,10 @@ https://keepachangelog.com/en/1.1.0/
   monitor in that moment saved it as the capture source while the overlay landed on the other
   screen, and a second press of the button started a second test. The buttons stay focusable, so a
   keyboard user is not sent back to the top of the page.
+- LED Setup: pressing "Run test pattern" again while the test is still starting no longer starts a
+  second one. The start can take a few seconds with Hue lights; the button and the monitor list now
+  wait for it the same way they wait for the overlay. Screen readers announce the monitor list as a
+  single choice with the selected monitor checked, and the arrow keys move through it.
 - USB strips: the hint under a missing port or a timed-out reconnect was always in English. It now
   follows the app language.
 - Ambilight: the saturation slider now reaches Hue lamps too; it only affected the strip before.
