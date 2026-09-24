@@ -1,10 +1,12 @@
 /**
  * App.tsx — the shell. Composes the feature hooks in dependency order, owns
- * routing plus the four slices with no single feature home (section,
- * calibration, Hue pairing config, onboarding flags), and renders the tree.
+ * routing plus the slices with no single feature home (calibration, Hue
+ * pairing config, onboarding flags), and renders the tree. Sections read what
+ * they show from the lighting, navigation and updater stores, not from props;
+ * see docs/architecture/ui-and-shell.md, "Shell state reaches sections through stores".
  */
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
 import { TitleBar, TITLE_BAR_HEIGHT_PX } from "./features/shell/TitleBar";
@@ -28,14 +30,19 @@ import { buildShellNotices, type ShellNoticeHandlers } from "./features/shell/no
 import { useShellNoticeQueue } from "./features/shell/notices/useShellNoticeQueue";
 import { ShellNoticeAnnouncer, ShellNoticeSlot } from "./features/shell/notices/ShellNoticeSlot";
 import { useOnboardingStep } from "./features/onboarding/state/useOnboardingStep";
-import { useAutoUpdater } from "./features/updater/useAutoUpdater";
+import {
+  UpdateModalHost,
+  UpdaterProvider,
+  useUpdaterActions,
+  useUpdaterState,
+  type UpdaterSnapshot,
+} from "./features/updater/UpdaterProvider";
 import { isUpdateModalStatus } from "./features/updater/updateModalStatus";
 import { outputAvailability } from "./features/mode/model/outputAvailability";
 import { useCapturePermissionRecheck } from "./features/mode/state/useCapturePermissionRecheck";
-import type { DeviceCategory, DeviceCategoryRequest } from "./features/settings/sections/DeviceSection";
+import type { DeviceCategory } from "./features/settings/sections/DeviceSection";
 import { CAPTURE_FAILURE_BUCKET } from "./shared/contracts/capture";
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "./shared/contracts/hue";
-import { UpdateModal } from "./features/updater/UpdateModal";
 import {
   shouldAutoOpenCalibrationOnConnection,
   startCalibrationFromSettings,
@@ -48,6 +55,7 @@ import {
   canEnableLedMode,
   MODE_GUARD_REASONS,
 } from "./features/mode/state/modeGuard";
+import { LightingControlProvider } from "./features/mode/state/lightingControl";
 import {
   LIGHTING_MODE_KIND,
   type LightingModeConfig,
@@ -64,6 +72,12 @@ import {
 } from "./features/shell/useUIMode";
 import { useGlobalKeybinds } from "./features/shell/useGlobalKeybinds";
 import {
+  createNavigationStore,
+  NavigationProvider,
+  type NavigationState,
+} from "./features/shell/navigationStore";
+import { useStoreSelector } from "./shared/lib/store";
+import {
   KEYBIND_ACTIONS,
   SECTION_IDS,
   type SectionId,
@@ -75,18 +89,19 @@ import {
  */
 const CALIBRATION_AUTO_OPENED_KEY = "lumasync_calibration_opened";
 
-function App() {
+const selectActiveSection = (state: NavigationState) => state.activeSection;
+const selectUpdaterStatus = (snapshot: UpdaterSnapshot) => snapshot.state.status;
+const selectUpdateCheckFailedNotice = (snapshot: UpdaterSnapshot) => snapshot.checkFailedNotice;
+const selectUpdateModalShown = (snapshot: UpdaterSnapshot) =>
+  snapshot.isModalOpen && isUpdateModalStatus(snapshot.state);
+
+function Shell() {
   const { t } = useTranslation();
-  const {
-    state: updaterState,
-    isModalOpen: isUpdateModalOpen,
-    checkForUpdates,
-    checkForUpdatesInBackground,
-    checkFailedNotice: updateCheckFailedNotice,
-    downloadAndInstall,
-    dismiss,
-    devSetState: devSetUpdaterState,
-  } = useAutoUpdater();
+  // Slices only: a download's progress re-renders the modal, not the shell.
+  const updaterStatus = useUpdaterState(selectUpdaterStatus);
+  const updateCheckFailedNotice = useUpdaterState(selectUpdateCheckFailedNotice);
+  const updateModalShown = useUpdaterState(selectUpdateModalShown);
+  const { checkForUpdates, checkForUpdatesInBackground } = useUpdaterActions();
   const {
     currentMode,
     isContentVisible,
@@ -94,8 +109,12 @@ function App() {
     switchUIMode,
     setCurrentMode,
   } = useUIMode();
-  const [activeSection, setActiveSection] = useState<SectionId>(SECTION_IDS.LIGHTS);
-  const [deviceCategoryRequest, setDeviceCategoryRequest] = useState<DeviceCategoryRequest | null>(null);
+  const [navigation] = useState(createNavigationStore);
+  const activeSection = useStoreSelector(navigation, selectActiveSection);
+  const { setActiveSection } = navigation;
+  useLayoutEffect(() => {
+    navigation.setUIMode(currentMode);
+  }, [navigation, currentMode]);
   const [savedCalibration, setSavedCalibration] = useState<LedCalibrationConfig | undefined>(undefined);
   const [hueStartConfig, setHueStartConfig] = useStableHueStartConfig();
   // Mirror of `hueStartConfig` so the connection-event subscriber (in a
@@ -112,7 +131,12 @@ function App() {
   // perfectly able to drive the panel.
   const { activeWledIp } = useActiveWledSink();
   const connectedProduct = ports.find((port) => port.portName === connectedPort)?.product;
-  const localSink = deriveLocalSink(isConnected, connectedPort ?? null, activeWledIp, connectedProduct);
+  // Memoised because the lighting store compares by identity: a fresh object
+  // per render would re-render every section that reads it.
+  const localSink = useMemo(
+    () => deriveLocalSink(isConnected, connectedPort ?? null, activeWledIp, connectedProduct),
+    [isConnected, connectedPort, activeWledIp, connectedProduct],
+  );
   const wasConnectedRef = useRef(false);
   // Defaults to `true` so a hydrating store never flashes the banner at a user
   // who has already dismissed it; bootstrap flips it false for a fresh install.
@@ -130,7 +154,7 @@ function App() {
     if (entry.open) {
       setActiveSection(SECTION_IDS.LED_SETUP);
     }
-  }, [savedCalibration]);
+  }, [savedCalibration, setActiveSection]);
 
   const mode = useLightingModeOrchestrator({
     onRequireCalibration: handleOpenCalibration,
@@ -211,12 +235,9 @@ function App() {
 
   const handleSectionChange = useCallback(async (sectionId: SectionId, deviceCategory?: DeviceCategory) => {
     // Only a notice names a category; every other way in keeps the one open.
-    setDeviceCategoryRequest(
-      deviceCategory === undefined ? null : { category: deviceCategory, nonce: Date.now() },
-    );
     // Set before the switch so the full layout mounts on the target section;
     // CompactLayout ignores it meanwhile.
-    setActiveSection(sectionId);
+    navigation.openSection(sectionId, deviceCategory);
     // CompactLayout ignores `activeSection`, so a deep-link from the banner, a
     // CTA or the tray would set it silently and leave the user staring at the
     // LIGHTS panel. Switch to full first, or the click appears to do nothing.
@@ -228,7 +249,7 @@ function App() {
     } catch (err) {
       console.error("[LumaSync] saveShellState(lastSection) failed:", err);
     }
-  }, [switchUIMode]);
+  }, [navigation, switchUIMode]);
 
   // Auto-open calibration when device connects for the first time
   useEffect(() => {
@@ -248,7 +269,7 @@ function App() {
     }
 
     wasConnectedRef.current = isConnected;
-  }, [isConnected, savedCalibration]);
+  }, [isConnected, savedCalibration, setActiveSection]);
 
 
   // Global keyboard shortcuts — the behaviour behind every `<kbd>` badge in
@@ -283,43 +304,38 @@ function App() {
     lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT,
   );
 
-  // Shared SettingsLayout props — only `uiMode` differs between the
-  // outgoing and incoming cross-fade slots.
-  const sharedSettingsLayoutProps = {
-    activeSection,
-    onSectionChange: handleSectionChange,
-    calibration: savedCalibration,
+  // What the mode controls read, published to the sections through the
+  // lighting store. Each section selects its own slice of it.
+  const lightingControlState = {
     lightingMode,
     outputTargets: selectedOutputTargets,
-    localSink,
-    hueConfigured: hueStartConfig !== null,
-    bootstrapDone,
-    hueReachable: hueReachable || hueSessionActive,
-    hueProbeVerdict: hueProbe.verdict,
-    hueStreaming,
-    hueReconnecting,
-    hueStreamFailed,
+    isModeTransitioning,
     modeLockReason:
       modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED
         ? modeGuard.reason
         : null,
-    isModeTransitioning,
-    onLightingModeChange: (next: LightingModeConfig) => {
+    calibration: savedCalibration,
+    localSink,
+    bootstrapDone,
+  };
+  // Fresh closures are fine: the provider hands the sections stable wrappers.
+  const lightingControlActions = {
+    changeMode: (next: LightingModeConfig) => {
       // First deliberate mode click satisfies the LIGHTS
       // step guard. Subsequent clicks are no-ops on the flag.
       if (!hasInteractedWithMode) setHasInteractedWithMode(true);
       void handleLightingModeChange(next);
     },
-    onOutputTargetsChange: handleOutputTargetsChange,
-    onStopHueOutput: mode.stopHueOutput,
-    onCalibrationSaved: (config: LedCalibrationConfig) => {
+    changeOutputTargets: handleOutputTargetsChange,
+    stopHueOutput: mode.stopHueOutput,
+    saveCalibration: (config: LedCalibrationConfig) => {
       setSavedCalibration(config);
     },
-    onCheckForUpdates: checkForUpdates,
-    isCheckingForUpdates: updaterState.status === "checking",
-    devSetUpdaterState,
-    deviceCategoryRequest,
-  } as const;
+  };
+  const navigationActions = {
+    goToSection: handleSectionChange,
+    switchUIMode,
+  };
 
   // Onboarding completion handler. Persists the flag and
   // unmounts the flow on the next render. Called on either a successful
@@ -354,7 +370,6 @@ function App() {
     hueProbeVerdict: hueProbe.verdict,
     bootstrapDone,
   });
-  const updateModalShown = isUpdateModalOpen && isUpdateModalStatus(updaterState);
 
   useCapturePermissionRecheck(
     mode.startFailedNotice?.bucket === CAPTURE_FAILURE_BUCKET.PERMISSION,
@@ -414,7 +429,7 @@ function App() {
           onboardingStep: onboarding.step,
           localTargetConfigured,
           updateCheckFailed: updateCheckFailedNotice,
-          updateChecking: updaterState.status === "checking",
+          updateChecking: updaterStatus === "checking",
         },
         noticeHandlers,
         t,
@@ -441,7 +456,7 @@ function App() {
       onboarding.step,
       localTargetConfigured,
       updateCheckFailedNotice,
-      updaterState.status,
+      updaterStatus,
       noticeHandlers,
       t,
     ],
@@ -470,89 +485,105 @@ function App() {
   const statusBarHeight = statusBarHeightPx(currentMode);
 
   return (
-    <>
-      {/* Custom cross-platform title bar. Sits above everything. Handles
-          native drag + double-click zoom, hosts the compact-mode toggle, and
-          (on Windows/Linux) draws custom min/max/close buttons since native
-          decorations are disabled there. See TitleBar.tsx for details. */}
-      <TitleBar
-        uiMode={currentMode}
-        onSwitchUIMode={switchUIMode}
-        activeSection={activeSection}
-        onSectionChange={(id) => void handleSectionChange(id)}
-      />
+    <NavigationProvider store={navigation} actions={navigationActions}>
+      <LightingControlProvider state={lightingControlState} actions={lightingControlActions}>
+        {/* Custom cross-platform title bar. Sits above everything. Handles
+            native drag + double-click zoom, hosts the compact-mode toggle, and
+            (on Windows/Linux) draws custom min/max/close buttons since native
+            decorations are disabled there. See TitleBar.tsx for details. */}
+        <TitleBar
+          uiMode={currentMode}
+          onSwitchUIMode={switchUIMode}
+          activeSection={activeSection}
+          onSectionChange={(id) => void handleSectionChange(id)}
+        />
 
-      {/* Persistent dark backdrop so the space between the fade-out and
-          fade-in phases blends with the layout background instead of
-          revealing the desktop. Offset by the title bar at the top and the
-          status bar at the bottom so neither overlaps the content slot. */}
-      <div
-        className="fixed right-0 left-0 overflow-hidden"
-        style={{
-          top: `${TITLE_BAR_HEIGHT_PX}px`,
-          bottom: `${statusBarHeight}px`,
-          background: "var(--lm-bg)",
-        }}
-      >
-        {/*
-         * Single content slot — sequential fade-out → window resize →
-         * fade-in, orchestrated by `useUIMode`. Running the resize while
-         * the content is at opacity 0 removes the progressive-clipping
-         * artifact that a parallel cross-fade produced when slot pinning
-         * forced the incoming layout to overflow the still-animating
-         * window. Easing matches `easeOutCubic` in `animateWindowRect`
-         * so the three phases read as one continuous motion.
-         */}
-        {/* A flex column, not a block: the layout sizes itself to 100% of this
-            box, so an in-flow banner above it pushed exactly its own height off
-            the bottom, past the layout's own scroll container. See
-            docs/architecture/ui-and-shell.md. */}
+        {/* Persistent dark backdrop so the space between the fade-out and
+            fade-in phases blends with the layout background instead of
+            revealing the desktop. Offset by the title bar at the top and the
+            status bar at the bottom so neither overlaps the content slot. */}
         <div
-          ref={contentRef}
-          className={`absolute inset-0 flex flex-col ${
-            isContentVisible ? "" : "pointer-events-none"
-          }`}
+          className="fixed right-0 left-0 overflow-hidden"
           style={{
-            opacity: isContentVisible ? 1 : 0,
-            // The recede-and-settle is deliberate: with a matched backdrop it
-            // reads as a breathe rather than as content vanishing.
-            transform: isContentVisible ? "scale(1)" : "scale(0.985)",
-            filter: isContentVisible ? "blur(0px)" : "blur(6px)",
-            transformOrigin: "center center",
-            willChange: "opacity, transform, filter",
-            transitionProperty: "opacity, transform, filter",
-            transitionDuration: `${UI_MODE_FADE_DURATION_MS}ms`,
-            transitionTimingFunction: UI_MODE_FADE_TIMING,
+            top: `${TITLE_BAR_HEIGHT_PX}px`,
+            bottom: `${statusBarHeight}px`,
+            background: "var(--lm-bg)",
           }}
         >
-          <ShellNoticeSlot
-            variant={currentMode}
-            queue={noticeQueue}
-            suppressed={updateModalShown}
-            holdSpace={onboarding.pending || !bootstrapDone}
-          />
-          <div className="min-h-0 flex-1">
-            <SettingsLayout uiMode={currentMode} {...sharedSettingsLayoutProps} />
+          {/*
+           * Single content slot — sequential fade-out → window resize →
+           * fade-in, orchestrated by `useUIMode`. Running the resize while
+           * the content is at opacity 0 removes the progressive-clipping
+           * artifact that a parallel cross-fade produced when slot pinning
+           * forced the incoming layout to overflow the still-animating
+           * window. Easing matches `easeOutCubic` in `animateWindowRect`
+           * so the three phases read as one continuous motion.
+           */}
+          {/* A flex column, not a block: the layout sizes itself to 100% of this
+              box, so an in-flow banner above it pushed exactly its own height off
+              the bottom, past the layout's own scroll container. See
+              docs/architecture/ui-and-shell.md. */}
+          <div
+            ref={contentRef}
+            className={`absolute inset-0 flex flex-col ${
+              isContentVisible ? "" : "pointer-events-none"
+            }`}
+            style={{
+              opacity: isContentVisible ? 1 : 0,
+              // The recede-and-settle is deliberate: with a matched backdrop it
+              // reads as a breathe rather than as content vanishing.
+              transform: isContentVisible ? "scale(1)" : "scale(0.985)",
+              filter: isContentVisible ? "blur(0px)" : "blur(6px)",
+              transformOrigin: "center center",
+              willChange: "opacity, transform, filter",
+              transitionProperty: "opacity, transform, filter",
+              transitionDuration: `${UI_MODE_FADE_DURATION_MS}ms`,
+              transitionTimingFunction: UI_MODE_FADE_TIMING,
+            }}
+          >
+            <ShellNoticeSlot
+              variant={currentMode}
+              queue={noticeQueue}
+              suppressed={updateModalShown}
+              holdSpace={onboarding.pending || !bootstrapDone}
+            />
+            <div className="min-h-0 flex-1">
+              {/* Hue status only: everything else reaches the sections through
+                  the stores, so a render of this shell stops at the memo. */}
+              <SettingsLayout
+                hueConfigured={hueStartConfig !== null}
+                hueReachable={hueReachable || hueSessionActive}
+                hueProbeVerdict={hueProbe.verdict}
+                hueStreaming={hueStreaming}
+                hueReconnecting={hueReconnecting}
+                hueStreamFailed={hueStreamFailed}
+              />
+            </div>
           </div>
         </div>
-      </div>
-      <StatusBar
-        items={statusItems}
-        uiMode={currentMode}
-        lightingActive={lightingMode.kind !== LIGHTING_MODE_KIND.OFF}
-      />
-      <ShellNoticeAnnouncer queue={noticeQueue} />
-      {/* After the notices, and above them: the modal owns the screen, and the
-          queue waits under it, inert and outside its focus trap. */}
-      {isUpdateModalOpen && (
-        <UpdateModal
-          state={updaterState}
-          onInstall={downloadAndInstall}
-          onDismiss={dismiss}
-          onRetry={() => void checkForUpdates()}
+        <StatusBar
+          items={statusItems}
+          uiMode={currentMode}
+          lightingActive={lightingMode.kind !== LIGHTING_MODE_KIND.OFF}
         />
-      )}
-    </>
+        <ShellNoticeAnnouncer queue={noticeQueue} />
+        {/* After the notices, and above them: the modal owns the screen, and the
+            queue waits under it, inert and outside its focus trap. */}
+        <UpdateModalHost />
+      </LightingControlProvider>
+    </NavigationProvider>
+  );
+}
+
+/**
+ * The updater sits above the shell, so a download's progress events re-render
+ * the provider and the modal and stop there.
+ */
+function App() {
+  return (
+    <UpdaterProvider>
+      <Shell />
+    </UpdaterProvider>
   );
 }
 

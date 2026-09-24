@@ -40,6 +40,32 @@ the EN fallback — key parity is a CI gate, so the fallback is never reached. T
 in `main.tsx` alone, and `scripts/verify/window-grants.mjs` follows `import()` as well as static
 imports, or a lazy section would drop out of the main window's required grants.
 
+**Shell state reaches sections through stores.** `App.tsx` used to hand `SettingsLayout` every
+lighting value, the navigation state and the updater's, two of them as fresh closures, so the
+layout's `memo` never held: every render of the shell — a Hue poll, a runtime revision, each
+download-progress event — re-rendered the whole page. Now three stores carry it, each a
+`createStore` (`src/shared/lib/store.ts`) read through `useSyncExternalStore` with a selector, so a
+consumer re-renders only when its own slice changes:
+
+- *Lighting control* (`mode/state/lightingControl.tsx`): the orchestrator's view of the runtime
+  snapshot plus the non-Hue inputs of the output gate, and the actions — change mode (an apply, or
+  a coalesced retune), change outputs, release Hue, save calibration.
+- *Navigation* (`shell/navigationStore.tsx`): owns the active section and a notice's Devices
+  category; mirrors `uiMode`, which `useUIMode` keeps owning because it owns the fade.
+- *Updater* (`updater/UpdaterProvider.tsx`): `useAutoUpdater` sits in a provider *above* the shell,
+  so a progress event re-renders the provider and `UpdateModalHost` and stops there; the shell
+  reads only the status, the failed-check notice and whether the modal is up.
+
+Each provider wraps its actions with `useStableHandlers`, so the actions object never changes
+identity and the caller may pass fresh closures. A hook-owned value is mirrored with
+`useMirroredStore`, which writes in a layout effect: subscribers re-render in the same frame,
+before paint. Every section in `SettingsLayout` is a memoised panel that selects its own slices;
+the layout itself takes only the Hue status, as props, until the Hue health store replaces the
+shell's Hue polls. `SettingsLayout.renders.test.tsx` and the render-boundary tests in
+`src/__tests__/` count renders and fail if a boundary leaks. A value put into a store must keep its
+identity between renders when unchanged — `localSink` is memoised for exactly this — or every
+reader of it re-renders.
+
 **Stylesheet layers.** `src/styles.css` is an ordered import list over `src/styles/`: tokens and
 the element rules go into Tailwind's `base` layer, every `lm-*` feature file into `components`.
 `theme.css` maps the colour tokens and `--lm-mono` into `@theme inline`, so a utility names the

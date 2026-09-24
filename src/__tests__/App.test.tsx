@@ -1,8 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LightingModeConfig } from "@/shared/contracts/mode";
-import type { LocalSink } from "../features/device/localSink";
 import { DEVICE_COMMANDS } from "@/shared/contracts/device";
 import { HUE_COMMANDS, HUE_STATUS } from "@/shared/contracts/hue";
 import type {
@@ -175,85 +173,82 @@ vi.mock("../features/shell/StatusBar", () => ({
 
 let lastLayoutProps: Record<string, unknown> = {};
 
-vi.mock("../features/settings/SettingsLayout", () => ({
-  SettingsLayout: (props: {
-    activeSection: string;
-    lightingMode: LightingModeConfig;
-    outputTargets: Array<"usb" | "hue">;
-    localSink: LocalSink | null;
-    calibration?: { totalLeds: number };
-    hueStreaming: boolean;
-    hueReconnecting?: boolean;
-    isModeTransitioning?: boolean;
-    onLightingModeChange: (mode: LightingModeConfig) => void;
-    onOutputTargetsChange: (targets: Array<"usb" | "hue">) => void;
-    onStopHueOutput: (triggerSource: string) => Promise<void>;
-  }) => {
-    lastLayoutProps = props as unknown as Record<string, unknown>;
-    return (
-      <div>
-        <p data-testid="active-mode">{props.lightingMode.kind}</p>
-        <p data-testid="active-section">{props.activeSection}</p>
-        <p data-testid="hue-shown-state">
-          {props.hueReconnecting ? "reconnecting" : props.hueStreaming ? "streaming" : "none"}
-        </p>
-        <p data-testid="output-targets">{props.outputTargets.join(",")}</p>
-        <p data-testid="transitioning">{String(props.isModeTransitioning ?? false)}</p>
-        <p data-testid="local-sink">
-          {props.localSink ? `${props.localSink.transport}:${props.localSink.id}` : "none"}
-        </p>
-        <p data-testid="calibration-leds">{props.calibration?.totalLeds ?? ""}</p>
-        <button type="button" onClick={() => props.onOutputTargetsChange(["hue"])}>
-          set-hue-target
-        </button>
-        <button type="button" onClick={() => props.onOutputTargetsChange(["usb", "hue"])}>
-          set-both-targets
-        </button>
-        {/* The Devices Hue card's Stop retrying / Retry stop. */}
-        <button type="button" onClick={() => void props.onStopHueOutput("device_surface")}>
-          device-stop-hue
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            props.onLightingModeChange({
-              kind: "solid",
-              solid: { r: 10, g: 20, b: 30, brightness: 0.8 },
-            })
-          }
-        >
-          set-solid
-        </button>
-        <button type="button" onClick={() => props.onLightingModeChange({ kind: "off" })}>
-          set-off
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            props.onLightingModeChange({
-              kind: "ambilight",
-              ambilight: { brightness: 0.8, saturation: 1, blackBorderDetection: false },
-            })
-          }
-        >
-          set-ambilight
-        </button>
-        {/* The same payload with its keys in another order, as a re-render rebuilds it. */}
-        <button
-          type="button"
-          onClick={() =>
-            props.onLightingModeChange({
-              kind: "ambilight",
-              ambilight: { saturation: 1, blackBorderDetection: false, brightness: 0.8 },
-            })
-          }
-        >
-          set-ambilight-reordered
-        </button>
-      </div>
-    );
-  },
-}));
+// The layout reads lighting and navigation from the shell stores, as the real
+// sections do; only the Hue status still arrives as props.
+vi.mock("../features/settings/SettingsLayout", async () => {
+  const { useLightingActions, useLightingControlState } = await import("../features/mode/state/lightingControl");
+  const { useNavigationState } = await import("../features/shell/navigationStore");
+  return {
+    SettingsLayout: (props: { hueStreaming: boolean; hueReconnecting?: boolean }) => {
+      lastLayoutProps = props as unknown as Record<string, unknown>;
+      const lighting = useLightingControlState((state) => state);
+      const actions = useLightingActions();
+      const activeSection = useNavigationState((state) => state.activeSection);
+      return (
+        <div>
+          <p data-testid="active-mode">{lighting.lightingMode.kind}</p>
+          <p data-testid="active-section">{activeSection}</p>
+          <p data-testid="hue-shown-state">
+            {props.hueReconnecting ? "reconnecting" : props.hueStreaming ? "streaming" : "none"}
+          </p>
+          <p data-testid="output-targets">{lighting.outputTargets.join(",")}</p>
+          <p data-testid="transitioning">{String(lighting.isModeTransitioning)}</p>
+          <p data-testid="local-sink">
+            {lighting.localSink ? `${lighting.localSink.transport}:${lighting.localSink.id}` : "none"}
+          </p>
+          <p data-testid="calibration-leds">{lighting.calibration?.totalLeds ?? ""}</p>
+          <button type="button" onClick={() => actions.changeOutputTargets(["hue"])}>
+            set-hue-target
+          </button>
+          <button type="button" onClick={() => actions.changeOutputTargets(["usb", "hue"])}>
+            set-both-targets
+          </button>
+          {/* The Devices Hue card's Stop retrying / Retry stop. */}
+          <button type="button" onClick={() => void actions.stopHueOutput("device_surface")}>
+            device-stop-hue
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              actions.changeMode({
+                kind: "solid",
+                solid: { r: 10, g: 20, b: 30, brightness: 0.8 },
+              })
+            }
+          >
+            set-solid
+          </button>
+          <button type="button" onClick={() => actions.changeMode({ kind: "off" })}>
+            set-off
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              actions.changeMode({
+                kind: "ambilight",
+                ambilight: { brightness: 0.8, saturation: 1, blackBorderDetection: false },
+              })
+            }
+          >
+            set-ambilight
+          </button>
+          {/* The same payload with its keys in another order, as a re-render rebuilds it. */}
+          <button
+            type="button"
+            onClick={() =>
+              actions.changeMode({
+                kind: "ambilight",
+                ambilight: { saturation: 1, blackBorderDetection: false, brightness: 0.8 },
+              })
+            }
+          >
+            set-ambilight-reordered
+          </button>
+        </div>
+      );
+    },
+  };
+});
 
 import App from "../App";
 import { __resetHueReadCacheForTests } from "../features/hue/hueReadCache";
