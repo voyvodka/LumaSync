@@ -517,7 +517,7 @@ export function ControlPopupApp() {
           <div>
             <div className="lm-control-section-title flex items-center justify-between">
               <span>{showColorPicker ? t("common:mode.solidColor") : t("common:mode.brightness")}</span>
-              <span className="[font-family:var(--lm-mono)] text-[10px] text-[var(--lm-ink-dim)]">
+              <span className="font-mono text-[10px] text-ink-dim">
                 {showColorPicker ? `${hexColor.toUpperCase()} · ` : ""}
                 <span className="lm-control-readout-num">{brightnessPct}%</span>
               </span>
@@ -565,7 +565,7 @@ export function ControlPopupApp() {
             onSpeedChange={handleSpeedChange}
           />
           {runError && (
-            <p className="mt-2 [font-family:var(--lm-mono)] text-[10px] leading-snug text-[var(--lm-red)]" role="alert">
+            <p className="mt-2 font-mono text-[10px] leading-snug text-red" role="alert">
               {runError}
             </p>
           )}
@@ -634,7 +634,7 @@ function ModeButton({ kind, active, label, icon, onClick }: ModeButtonProps) {
       type="button"
       role="radio"
       aria-checked={active}
-      className={`lm-control-mbtn ${active ? "is-on" : ""}`}
+      className="lm-control-mbtn"
       onClick={() => onClick(kind)}
     >
       <span aria-hidden="true">{icon}</span>

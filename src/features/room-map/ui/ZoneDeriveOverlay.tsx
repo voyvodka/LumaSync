@@ -190,7 +190,7 @@ export function ZoneDeriveOverlay({
         style={{ zIndex: 30 }}
       >
         <button
-          className="bg-[var(--lm-amber)] text-[var(--lm-bg)] hover:brightness-110 px-3 py-1 rounded-md text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lm-bg)]"
+          className="bg-amber text-bg hover:brightness-110 px-3 py-1 rounded-md text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/60 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
           onClick={onConfirm}
           // Deliberate: the overlay is a modal confirm step, so focus belongs on
           // its primary action the moment it opens.
@@ -199,7 +199,7 @@ export function ZoneDeriveOverlay({
           {t("roomMap:zones.confirmDeriveButton")}
         </button>
         <button
-          className="text-[var(--lm-ink-dim)] hover:text-[var(--lm-ink)] px-3 py-1 rounded-md text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60"
+          className="text-ink-dim hover:text-ink px-3 py-1 rounded-md text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/60"
           onClick={onDiscard}
         >
           {t("roomMap:zones.cancelDeriveButton")}

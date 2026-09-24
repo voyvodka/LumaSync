@@ -182,12 +182,12 @@ export function PropertyBar({
 
         {/* Aspect lock toggle */}
         <button
-          className={`flex items-center justify-center w-8 h-8 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60 ${
+          className={`flex items-center justify-center w-8 h-8 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/60 ${
             locked
-              ? "opacity-40 cursor-not-allowed text-[var(--lm-ink-faint)]"
+              ? "opacity-40 cursor-not-allowed text-ink-faint"
               : fields.aspectLocked
-                ? "text-[var(--lm-amber)]"
-                : "text-[var(--lm-ink-dim)] hover:text-[var(--lm-ink)]"
+                ? "text-amber"
+                : "text-ink-dim hover:text-ink"
           }`}
           onClick={locked ? undefined : () => onUpdateImageAspectLock?.(imgId, !fields.aspectLocked)}
           disabled={locked}
@@ -234,10 +234,10 @@ export function PropertyBar({
 
         {/* Reset to original size */}
         <button
-          className={`flex items-center justify-center w-8 h-8 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60 ${
+          className={`flex items-center justify-center w-8 h-8 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/60 ${
             locked
-              ? "opacity-40 cursor-not-allowed text-[var(--lm-ink-faint)]"
-              : "text-[var(--lm-ink-dim)] hover:text-[var(--lm-ink)]"
+              ? "opacity-40 cursor-not-allowed text-ink-faint"
+              : "text-ink-dim hover:text-ink"
           }`}
           onClick={locked ? undefined : () => onResetImageScale?.(imgId)}
           disabled={locked}
@@ -266,9 +266,9 @@ export function PropertyBar({
             value={parseInt(fields.opacity!, 10)}
             onChange={(e) => onUpdateImageOpacity?.(imgId, parseInt(e.target.value, 10))}
             aria-label={t("roomMap:inspector.imageOpacityLabel")}
-            className="w-12 h-[3px] appearance-none rounded-full bg-[var(--lm-line-2)] accent-[var(--lm-amber)] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--lm-amber)] [&::-webkit-slider-thumb]:cursor-pointer disabled:cursor-not-allowed"
+            className="w-12 h-[3px] appearance-none rounded-full bg-line-2 accent-amber [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber [&::-webkit-slider-thumb]:cursor-pointer disabled:cursor-not-allowed"
           />
-          <span className="w-5 text-right tabular-nums text-[9px] font-medium text-[var(--lm-ink-dim)]">{fields.opacity}</span>
+          <span className="w-5 text-right tabular-nums text-[9px] font-medium text-ink-dim">{fields.opacity}</span>
         </div>
       </div>
     );

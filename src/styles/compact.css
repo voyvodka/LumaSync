@@ -1,0 +1,138 @@
+/* ─────────────────────────────────────────────────────────────────────
+   Compact layout (UI Mockup Rev 07 — `10-compact.html`)
+   Visual-only restyle of the existing compact mode. Backend wiring,
+   throttling, and lighting mode contracts stay untouched — these classes
+   purely re-skin Off/Ambilight/Solid cards + scene tile presets in the
+   amber dark language.
+   ───────────────────────────────────────────────────────────────────── */
+.lm-compact {
+  position: relative;
+  display: flex;
+  height: 100%;
+  width: 100%;
+  flex-direction: column;
+  background-color: var(--lm-bg);
+  color: var(--lm-ink);
+  font-family: var(--lm-sans);
+  overflow: hidden;
+}
+.lm-compact::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 80% 40% at 50% 0%, rgba(255, 176, 32, 0.07), transparent 65%);
+}
+
+.lm-compact-body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  /* flex-basis: 0 forces the body to size from its overflow rather than its
+     intrinsic content height — without it, flex children with `min-height:
+     auto` push the body past its share of the column and the `overflow-y`
+     never engages because the body itself stretches the parent. */
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 12px 12px 10px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+/* Keep flex children from claiming `min-content` width, which would
+   otherwise let intrinsic widths leak past the 320 px frame. They must not
+   shrink vertically, though: the body is the scroll container, and a child
+   that gives up height instead — the `overflow: hidden` mode card — clips its
+   own last row where the body would have scrolled to it. */
+.lm-compact-body > * {
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+/* Section title — uppercase mono small + flexed gradient line */
+.lm-compact-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-family: var(--lm-mono);
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint);
+}
+.lm-compact-section-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, var(--lm-line-2), transparent);
+}
+
+/* Mode strip — 3-col grid with amber-glow on active */
+.lm-compact-mode-strip {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+.lm-compact-mbtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px 9px;
+  background: var(--lm-panel);
+  border: 1px solid var(--lm-line);
+  border-radius: 9px;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+  color: var(--lm-ink-dim);
+}
+.lm-compact-mbtn:hover:not(:disabled) {
+  border-color: var(--lm-line-2);
+}
+.lm-compact-mbtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.lm-compact-mbtn:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring);
+}
+.lm-compact-mbtn .ico {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  color: var(--lm-ink-dim);
+}
+.lm-compact-mbtn .ico svg {
+  width: 16px;
+  height: 16px;
+}
+.lm-compact-mbtn .tn {
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim);
+}
+.lm-compact-mbtn[aria-pressed="true"] {
+  background: linear-gradient(180deg, rgba(255, 176, 32, 0.14), rgba(255, 176, 32, 0.03));
+  border-color: rgba(255, 176, 32, 0.45);
+  box-shadow:
+    0 0 0 1px rgba(255, 176, 32, 0.18),
+    0 0 18px -4px rgba(255, 176, 32, 0.35);
+}
+.lm-compact-mbtn[aria-pressed="true"] .ico,
+.lm-compact-mbtn[aria-pressed="true"] .tn {
+  color: var(--lm-amber);
+}

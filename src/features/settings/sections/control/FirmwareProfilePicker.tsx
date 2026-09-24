@@ -116,7 +116,7 @@ function ProfileTile({
         onKeyDown={onKeyNavigate}
         data-profile={profile}
         data-mismatched={mismatched ? "true" : undefined}
-        className={`lm-fw-tile${checked ? " is-on" : ""}${disabled ? " is-disabled" : ""}`}
+        className={`lm-fw-tile${disabled ? " is-disabled" : ""}`}
         style={{
           all: "unset",
           cursor: disabled ? "not-allowed" : "pointer",
@@ -127,7 +127,7 @@ function ProfileTile({
           minHeight: 32,
           borderRadius: 8,
           border: `1px solid ${
-            checked ? "rgba(255, 176, 32, 0.4)" : disabled ? "#1a1f27" : "#252b34"
+            checked ? "rgba(255, 176, 32, 0.4)" : disabled ? "#1a1f27" : "var(--lm-line-2)"
           }`,
           background: checked
             ? "rgba(255, 176, 32, 0.08)"
@@ -135,10 +135,10 @@ function ProfileTile({
               ? "#070a0d"
               : "#0a0c0f",
           color: disabled
-            ? "#4d5564"
+            ? "var(--lm-ink-faint)"
             : checked
-              ? "var(--lm-amber, #ffb020)"
-              : "#eaeef4",
+              ? "var(--lm-amber)"
+              : "var(--lm-ink)",
           opacity: disabled ? 0.55 : 1,
           flex: 1,
           minWidth: 0,
@@ -150,10 +150,10 @@ function ProfileTile({
             fontWeight: 600,
             letterSpacing: "-0.005em",
             color: disabled
-              ? "#4d5564"
+              ? "var(--lm-ink-faint)"
               : checked
-                ? "var(--lm-amber, #ffb020)"
-                : "#eaeef4",
+                ? "var(--lm-amber)"
+                : "var(--lm-ink)",
           }}
         >
           {label}
@@ -161,9 +161,9 @@ function ProfileTile({
         <div
           style={{
             fontFamily:
-              "var(--lm-mono, \"IBM Plex Mono\", ui-monospace, monospace)",
+              "var(--lm-mono)",
             fontSize: 10,
-            color: disabled ? "#3d4452" : "#8a94a3",
+            color: disabled ? "#3d4452" : "var(--lm-ink-dim)",
             lineHeight: 1.45,
           }}
         >
@@ -173,9 +173,9 @@ function ProfileTile({
           <div
             style={{
               fontFamily:
-                "var(--lm-mono, \"IBM Plex Mono\", ui-monospace, monospace)",
+                "var(--lm-mono)",
               fontSize: 9.5,
-              color: "var(--lm-green, #65d49a)",
+              color: "var(--lm-green)",
               letterSpacing: "0.02em",
               marginTop: 2,
             }}
@@ -187,9 +187,9 @@ function ProfileTile({
           <div
             style={{
               fontFamily:
-                "var(--lm-mono, \"IBM Plex Mono\", ui-monospace, monospace)",
+                "var(--lm-mono)",
               fontSize: 9.5,
-              color: checked ? "var(--lm-amber, #ffb020)" : "#4d5564",
+              color: checked ? "var(--lm-amber)" : "var(--lm-ink-faint)",
               letterSpacing: "0.02em",
               marginTop: 2,
             }}
@@ -279,13 +279,13 @@ function OverrideWarningDialog({
         style={{
           maxWidth: 460,
           width: "100%",
-          background: "var(--lm-panel, #0e1115)",
+          background: "var(--lm-panel)",
           borderRadius: 12,
           padding: 18,
           display: "flex",
           flexDirection: "column",
           gap: 12,
-          border: "1px solid #252b34",
+          border: "1px solid var(--lm-line-2)",
         }}
       >
         <div
@@ -293,7 +293,7 @@ function OverrideWarningDialog({
           style={{
             fontSize: 14,
             fontWeight: 600,
-            color: "var(--lm-amber, #ffb020)",
+            color: "var(--lm-amber)",
           }}
         >
           {t("lights:led.firmwareProfile.overrideWarningTitle")}
@@ -302,7 +302,7 @@ function OverrideWarningDialog({
           id={bodyId}
           style={{
             fontSize: 12,
-            color: "var(--lm-ink-dim, #aab1bc)",
+            color: "var(--lm-ink-dim)",
             lineHeight: 1.55,
           }}
         >
@@ -317,7 +317,7 @@ function OverrideWarningDialog({
             alignItems: "center",
             gap: 8,
             fontSize: 12,
-            color: "var(--lm-ink, #eaeef4)",
+            color: "var(--lm-ink)",
             cursor: "pointer",
             minHeight: 32,
           }}
@@ -347,9 +347,9 @@ function OverrideWarningDialog({
               padding: "8px 14px",
               minHeight: 32,
               borderRadius: 6,
-              border: "1px solid #252b34",
+              border: "1px solid var(--lm-line-2)",
               background: "transparent",
-              color: "var(--lm-ink, #eaeef4)",
+              color: "var(--lm-ink)",
               cursor: "pointer",
               fontSize: 12,
             }}
@@ -368,7 +368,7 @@ function OverrideWarningDialog({
               borderRadius: 6,
               border: "1px solid rgba(255, 176, 32, 0.45)",
               background: "rgba(255, 176, 32, 0.12)",
-              color: "var(--lm-amber, #ffb020)",
+              color: "var(--lm-amber)",
               cursor: "pointer",
               fontSize: 12,
               fontWeight: 600,
@@ -670,7 +670,7 @@ export function FirmwareProfilePicker({
             gap: 8,
             padding: "0 14px 12px",
             fontSize: 11,
-            color: "var(--lm-ink-dim, #aab1bc)",
+            color: "var(--lm-ink-dim)",
             minHeight: 32,
           }}
         >

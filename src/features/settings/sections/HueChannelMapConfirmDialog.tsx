@@ -41,13 +41,13 @@ export function HueChannelMapConfirmDialog({
       onClick={onCancel}
     >
       <div
-        className="w-full max-w-sm rounded-xl border border-[var(--lm-line-2)] bg-[var(--lm-panel)] p-5 shadow-xl"
+        className="w-full max-w-sm rounded-xl border border-line-2 bg-panel p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 id={titleId} className="text-sm font-semibold text-[var(--lm-ink)]">
+        <h3 id={titleId} className="text-sm font-semibold text-ink">
           {title}
         </h3>
-        <p id={bodyId} className="mt-2 text-xs text-[var(--lm-ink-dim)]">
+        <p id={bodyId} className="mt-2 text-xs text-ink-dim">
           {body}
         </p>
         <div className="mt-4 flex justify-end gap-2">

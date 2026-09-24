@@ -134,13 +134,13 @@ export function RoomMapSettingsPopover({
   };
 
   const inputClass =
-    "w-full rounded-md border border-[var(--lm-line-2)] bg-[var(--lm-panel-2)] px-2 py-1 text-sm text-[var(--lm-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60";
-  const labelClass = "block text-[11px] font-semibold text-[var(--lm-ink-dim)] mb-1";
+    "w-full rounded-md border border-line-2 bg-panel-2 px-2 py-1 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/60";
+  const labelClass = "block text-[11px] font-semibold text-ink-dim mb-1";
 
   return (
     <div
       ref={popoverRef}
-      className="absolute top-10 left-0 z-50 w-[280px] rounded-lg border border-[var(--lm-line)] bg-[var(--lm-panel)]/95 shadow-lg p-4"
+      className="absolute top-10 left-0 z-50 w-[280px] rounded-lg border border-line bg-panel/95 shadow-lg p-4"
       role="dialog"
       aria-label={t("roomMap:toolbar.settingsAriaLabel")}
     >
@@ -179,12 +179,12 @@ export function RoomMapSettingsPopover({
 
         {/* Grid toggle */}
         <div>
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-[var(--lm-ink)]">
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-ink">
             <input
               type="checkbox"
               checked={showGrid}
               onChange={() => onGridToggle(!showGrid)}
-              className="rounded accent-[var(--lm-ink)]"
+              className="rounded accent-ink"
             />
             {t("roomMap:settings.showGrid")}
           </label>
@@ -206,7 +206,7 @@ export function RoomMapSettingsPopover({
                   const raw = parseFloat((e.target as HTMLInputElement).value);
                   onGridStrokeWidthChange(Math.round(raw * 10) / 10);
                 }}
-                className="w-full accent-[var(--lm-ink)]"
+                className="w-full accent-ink"
               />
             </div>
           )}
@@ -216,22 +216,22 @@ export function RoomMapSettingsPopover({
             shellStore as `roomMapShowHueZones` so the user's choice
             survives editor reopen. */}
         <div>
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-[var(--lm-ink)]">
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-ink">
             <input
               type="checkbox"
               checked={showHueZones}
               onChange={() => onHueZonesToggle(!showHueZones)}
-              className="rounded accent-[var(--lm-ink)]"
+              className="rounded accent-ink"
             />
             {t("roomMap:settings.showHueZones")}
           </label>
-          <p className="mt-1 text-[10.5px] leading-snug text-[var(--lm-ink-faint)]">
+          <p className="mt-1 text-[10.5px] leading-snug text-ink-faint">
             {t("roomMap:settings.showHueZonesHint")}
           </p>
         </div>
 
         {/* Divider */}
-        <div className="border-t border-[var(--lm-line)]" />
+        <div className="border-t border-line" />
 
         {/* Reset map — destructive intent token (kept on red-* utilities) */}
         <div>

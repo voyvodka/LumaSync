@@ -9,6 +9,7 @@ import { getZoneColor } from "../model/zoneColor";
 import { deriveHueAreaState } from "../model/hueAreaState";
 import { hueChannelName } from "../model/hueChannelLabel";
 import { HUE_AREA_CHANNELS_STATUS } from "@/shared/contracts/hue";
+import { cx } from "@/shared/ui/cx";
 
 interface HueZonesTabProps {
   hueZones: HueZone[];
@@ -258,13 +259,10 @@ export function HueZonesTab(props: HueZonesTabProps) {
             return (
               <li key={zone.id}>
                 <div
-                  className={[
+                  className={cx(
                     "lm-room-dock-row",
-                    isActive ? "is-on" : "",
                     isDropTarget ? "is-drop-target" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
+                  )}
                   role="button"
                   tabIndex={0}
                   aria-pressed={isActive}
@@ -343,13 +341,11 @@ export function HueZonesTab(props: HueZonesTabProps) {
                     {bucket.map((ch) => (
                       <li
                         key={ch.channelIndex}
-                        className={[
+                        className={cx(
                           "lm-room-dock-row",
                           "is-nested",
                           dragChannelIndex === ch.channelIndex ? "is-drag-source" : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" ")}
+                        )}
                         role="button"
                         tabIndex={0}
                         onClick={(e) => {
@@ -407,12 +403,10 @@ export function HueZonesTab(props: HueZonesTabProps) {
           {(unassigned.length > 0 || dragSupported) && (
             <li>
               <div
-                className={[
+                className={cx(
                   "lm-room-dock-h",
                   dropTargetZoneId === null && dragChannelIndex !== null ? "is-drop-target" : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
+                )}
                 role="heading"
                 aria-level={3}
                 data-drop-zone-id="__unassigned__"
@@ -433,13 +427,11 @@ export function HueZonesTab(props: HueZonesTabProps) {
                   {unassigned.map((ch) => (
                     <li
                       key={ch.channelIndex}
-                      className={[
+                      className={cx(
                         "lm-room-dock-row",
                         "is-nested",
                         dragChannelIndex === ch.channelIndex ? "is-drag-source" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
+                      )}
                       role="button"
                       tabIndex={0}
                       onClick={() => onSelectChannel(ch.channelIndex)}

@@ -1,0 +1,406 @@
+/* ─────────────────────────────────────────────────────────────────────
+   TitleBar (LumaSync amber dark chrome, UI Mockup Rev 07)
+   Always dark regardless of system theme: chrome lives outside the
+   light/dark body and remains visually consistent.
+   ───────────────────────────────────────────────────────────────────── */
+.lm-titlebar {
+  background-color: rgba(8, 9, 12, 0.85);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--lm-line);
+  color: var(--lm-ink);
+}
+
+.lm-titlebar-brand {
+  font-family: var(--lm-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #f1f4f9;
+  white-space: nowrap;
+}
+.lm-titlebar-brand .accent {
+  color: var(--lm-amber);
+}
+
+.lm-titlebar-toggle {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 176, 32, 0.22);
+  background: rgba(255, 176, 32, 0.06);
+  color: #d4a254;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease;
+  padding: 0;
+}
+.lm-titlebar-toggle:hover {
+  border-color: rgba(255, 176, 32, 0.5);
+  background: rgba(255, 176, 32, 0.12);
+  color: var(--lm-amber);
+}
+.lm-titlebar-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring);
+}
+.lm-titlebar-toggle svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Titlebar tabs — full mode navigation (Phase 10) */
+.lm-titlebar-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  height: 100%;
+  margin-left: 4px;
+}
+.lm-titlebar-tab {
+  height: 100%;
+  padding: 0 13px;
+  border: 0;
+  background: transparent;
+  color: var(--lm-ink-faint);
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  position: relative;
+  transition: color 0.15s ease;
+  white-space: nowrap;
+}
+.lm-titlebar-tab:hover {
+  color: var(--lm-ink-dim);
+}
+.lm-titlebar-tab:focus-visible {
+  outline: none;
+  color: var(--lm-amber);
+}
+.lm-titlebar-tab[aria-selected="true"] {
+  color: var(--lm-ink);
+}
+.lm-titlebar-tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1.5px;
+  background: var(--lm-amber);
+  box-shadow: 0 0 8px rgba(255, 176, 32, 0.5);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   StatusBar (LumaSync amber dark chrome, UI Mockup Rev 07)
+   Mirrors the title bar at the bottom: full width, always dark, hosts
+   subsystem pills + (full mode only) keyboard hints + version pill.
+   ───────────────────────────────────────────────────────────────────── */
+.lm-statusbar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 14px;
+  background-color: rgba(8, 9, 12, 0.9);
+  border-top: 1px solid var(--lm-line);
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint);
+  user-select: none;
+}
+.lm-statusbar.is-compact {
+  gap: 9px;
+  padding: 0 10px;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+}
+
+.lm-statusbar-pair {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lm-statusbar.is-compact .lm-statusbar-pair {
+  gap: 4px;
+}
+.lm-statusbar-label {
+  color: var(--lm-ink-faint);
+}
+.lm-statusbar-value {
+  font-weight: 500;
+  color: var(--lm-ink-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.lm-statusbar-value.is-ok {
+  color: var(--lm-green);
+}
+.lm-statusbar-value.is-active {
+  color: var(--lm-amber);
+}
+.lm-statusbar-value.is-idle {
+  color: var(--lm-ink-dim);
+}
+.lm-statusbar-value.is-off {
+  color: var(--lm-ink-faint);
+}
+.lm-statusbar-value.is-error {
+  color: var(--lm-red);
+}
+
+/* FPS/latency HUD pill — 4th StatusBar chip. `is-low` lights up when
+   the rolling FPS drops below the hard red threshold; the component also
+   renders a "Low FPS" text span so the state is never expressed by color
+   alone (WCAG SC 1.4.1). `is-idle` reuses the existing dim ink for the
+   Ambilight-off placeholder. */
+.lm-statusbar-value.is-low {
+  color: var(--lm-red);
+}
+.lm-statusbar-lowfps {
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--lm-red);
+}
+
+/* Reserved boxes for the two 1 Hz readings. Without them the latency suffix
+   slides left every time FPS drops a digit. StatusBar is mono, so 1ch is one
+   glyph: 3ch fits "144"/"—", 7ch fits "· 144ms". */
+.lm-statusbar-fps {
+  display: inline-block;
+  min-width: 3ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.lm-statusbar-latency {
+  display: inline-block;
+  min-width: 7ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Inline Reconnect button rendered next to an offline chip's
+   value. Uses the chip's currentColor so it inherits the offline tone
+   (idle = ink-faint, off = ink-faint), upgrades to amber on hover/focus,
+   and collapses to system colors under forced-colors. */
+.lm-statusbar-reconnect {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.85;
+  padding: 0;
+  flex-shrink: 0;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.lm-statusbar-reconnect:hover {
+  opacity: 1;
+  background: rgba(255, 176, 32, 0.14);
+  color: var(--lm-amber);
+}
+.lm-statusbar-reconnect:focus-visible {
+  opacity: 1;
+  outline: none;
+  background: rgba(255, 176, 32, 0.18);
+  color: var(--lm-amber);
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.55);
+}
+.lm-statusbar.is-compact .lm-statusbar-reconnect {
+  width: 14px;
+  height: 14px;
+  margin-left: 3px;
+}
+/* The glyph stays small to fit a 22 px bar; the hit area meets the 32 px
+   floor. It reaches 5 px above the bar, over the body's bottom padding. */
+.lm-statusbar-reconnect::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 32px;
+  height: 32px;
+  transform: translate(-50%, -50%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-statusbar-reconnect {
+    transition: none;
+  }
+}
+
+/* Forced-colors (Windows high contrast / accessibility skins) — the amber
+   palette collapses to system colors. Mirror the semantic kinds to the
+   closest CSS system color so chrome surfaces stay legible without
+   relying on brand tokens. Covers TitleBar, StatusBar, status chips,
+   compact mode strip, and scene tiles (UI Gap 7). */
+@media (forced-colors: active) {
+  /* StatusBar — pills, labels, version, chrome */
+  .lm-statusbar-value.is-ok,
+  .lm-statusbar-value.is-active,
+  .lm-statusbar-value.is-idle,
+  .lm-statusbar-value.is-off,
+  .lm-statusbar-value.is-error,
+  .lm-statusbar-value.is-low,
+  .lm-statusbar-lowfps,
+  .lm-statusbar-label,
+  .lm-statusbar-version {
+    color: CanvasText;
+    forced-color-adjust: none;
+  }
+  .lm-statusbar {
+    border-top-color: CanvasText;
+  }
+  .lm-statusbar-kbd kbd {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+  }
+  .lm-statusbar-reconnect {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+    forced-color-adjust: none;
+  }
+
+  /* TitleBar — brand, tabs, toggle, native control replacements */
+  .lm-titlebar {
+    border-bottom-color: CanvasText;
+    color: CanvasText;
+  }
+  .lm-titlebar-brand,
+  .lm-titlebar-brand .accent {
+    color: CanvasText;
+    forced-color-adjust: none;
+  }
+  .lm-titlebar-toggle,
+  .lm-titlebar-ctrl {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+    forced-color-adjust: none;
+  }
+  .lm-titlebar-toggle:focus-visible,
+  .lm-titlebar-ctrl:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+    box-shadow: none;
+  }
+  .lm-titlebar-tab {
+    color: CanvasText;
+  }
+  .lm-titlebar-tab[aria-selected="true"] {
+    color: Highlight;
+  }
+  .lm-titlebar-tab[aria-selected="true"]::after {
+    background: Highlight;
+    box-shadow: none;
+  }
+  .lm-titlebar-mark {
+    color: Highlight;
+  }
+
+  /* Compact mode strip + scene tiles — selection state must not rely
+     on color alone. Use Highlight for the active surface, CanvasText
+     borders for everything else. */
+  .lm-compact-mbtn,
+  .lm-compact-scene-tile {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+    forced-color-adjust: none;
+  }
+  .lm-compact-mbtn[aria-pressed="true"] {
+    color: Highlight;
+    border-color: Highlight;
+  }
+  .lm-compact-mbtn:focus-visible,
+  .lm-compact-scene-tile:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+    box-shadow: none;
+  }
+}
+
+.lm-statusbar-spacer {
+  flex: 1;
+}
+
+.lm-statusbar-kbd {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--lm-ink-faint);
+}
+.lm-statusbar-kbd kbd {
+  font: inherit;
+  font-size: 8.5px;
+  padding: 1px 5px;
+  border: 1px solid var(--lm-line-2);
+  border-radius: 3px;
+  background: #0f1217;
+  color: var(--lm-ink-dim);
+}
+
+.lm-statusbar-version {
+  color: var(--lm-ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Win/Linux native control replacements — same amber dark language */
+.lm-titlebar-ctrl {
+  width: 44px;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--lm-ink-faint);
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+.lm-titlebar-ctrl:hover {
+  color: var(--lm-ink);
+  background: rgba(255, 255, 255, 0.06);
+}
+.lm-titlebar-ctrl.is-danger:hover {
+  background: var(--lm-red);
+  color: #fff;
+}
+.lm-titlebar-ctrl:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-inset);
+}
+
+/* Small leading brand mark on Win/Linux (where mac traffic-lights live
+   on the left). Shares the amber tint with the rest of the chrome. */
+.lm-titlebar-mark {
+  color: var(--lm-amber);
+  width: 14px;
+  height: 14px;
+}

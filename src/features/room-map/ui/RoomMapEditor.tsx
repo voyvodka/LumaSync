@@ -529,7 +529,7 @@ export function RoomMapEditor({
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <span className="text-sm text-[var(--lm-ink-faint)]">{t("roomMap:loading")}</span>
+        <span className="text-sm text-ink-faint">{t("roomMap:loading")}</span>
       </div>
     );
   }
@@ -905,13 +905,13 @@ export function RoomMapEditor({
       )}
 
       {error && (
-        <div className="px-3 py-1.5 text-[11px] text-[color:var(--lm-red)]">
+        <div className="px-3 py-1.5 text-[11px] text-red">
           {t("roomMap:persistError")}
         </div>
       )}
 
       {imageError && (
-        <div role="alert" className="px-3 py-1.5 text-[11px] text-[color:var(--lm-red)]">
+        <div role="alert" className="px-3 py-1.5 text-[11px] text-red">
           {imageErrorCode === ROOM_MAP_BACKGROUND_ERROR.TOO_LARGE
             ? t("roomMap:imageTooLarge", { maxMb: ROOM_MAP_BACKGROUND_MAX_MB })
             : t("roomMap:imageImportError")}
@@ -919,13 +919,13 @@ export function RoomMapEditor({
       )}
 
       {hueZoneRejection && (
-        <div role="alert" className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-[color:var(--lm-red)]">
+        <div role="alert" className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-red">
           <span>{t(HUE_ZONE_REJECTION_KEYS[hueZoneRejection])}</span>
           <button
             type="button"
             onClick={dismissHueZoneRejection}
             aria-label={t("roomMap:hueZones.rejected.dismiss")}
-            className="min-h-[32px] px-2 underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color:var(--lm-amber)]"
+            className="min-h-[32px] px-2 underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber"
           >
             {t("roomMap:hueZones.rejected.dismiss")}
           </button>

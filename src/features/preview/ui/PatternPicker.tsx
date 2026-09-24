@@ -8,7 +8,7 @@
  * intentionally inert rather than broken.
  *
  * The "running" indicator pulse is guarded by `prefers-reduced-motion` through
- * the `.lm-test-pulse` rule in `styles.css`.
+ * the `.lm-test-pulse` rule in `src/styles/preview.css`.
  */
 
 import { useTranslation } from "react-i18next";
@@ -70,9 +70,9 @@ export function PatternPicker({
       <div className="lm-control-section-title flex items-center justify-between">
         <span>{t("preview:test.title")}</span>
         {running && (
-          <span className="inline-flex items-center gap-1.5 text-[var(--lm-amber)]">
+          <span className="inline-flex items-center gap-1.5 text-amber">
             <span className="lm-test-pulse" aria-hidden="true" />
-            <span className="[font-family:var(--lm-mono)] text-[9px] tracking-wide">
+            <span className="font-mono text-[9px] tracking-wide">
               {t("preview:test.running")}
             </span>
           </span>
@@ -89,7 +89,7 @@ export function PatternPicker({
               role="radio"
               aria-checked={on}
               disabled={disabled}
-              className={`lm-pattern-tile ${on ? "is-on" : ""}`}
+              className="lm-pattern-tile"
               onClick={() => onSelectKind(kind)}
             >
               <span className="swatch" style={{ background: SWATCH[kind] }} aria-hidden="true" />
@@ -112,7 +112,6 @@ export function PatternPicker({
             role="radio"
             aria-checked={s === speed}
             disabled={speedDisabled}
-            className={s === speed ? "is-on" : ""}
             onClick={() => onSpeedChange(s)}
           >
             {t(`preview:test.speed.${s}`)}

@@ -3,7 +3,7 @@ import type { ComponentPropsWithoutRef, ElementType, ReactNode } from "react";
 type SectionLabelTone = "dim";
 
 const TONE_CLASSNAME: Record<SectionLabelTone, string> = {
-  dim: "text-[10px] uppercase tracking-wide text-[color:var(--lm-ink-dim)]",
+  dim: "text-[10px] uppercase tracking-wide text-ink-dim",
 };
 
 type SectionLabelOwnProps<T extends ElementType> = {

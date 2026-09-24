@@ -1,8 +1,12 @@
 // Shared inline SVG icon set — consolidated from ~9 files where these were duplicated inline.
+//
+// An icon that sits in an `lm-*` container sizing its svg gets its default size
+// from `width`/`height` attributes, not a size utility: utilities outrank the
+// components layer, so a class here would override the container's rule.
 
 export function IconCheck() {
   return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M2 6l3 3 5-5" />
     </svg>
   );
@@ -10,7 +14,7 @@ export function IconCheck() {
 
 export function IconInfo() {
   return (
-    <svg viewBox="0 0 16 16" className="mt-0.5 h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 16 16" width="14" height="14" className="shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="8" cy="8" r="6" />
       <path d="M8 5v3.5M8 11v.5" />
     </svg>
@@ -19,7 +23,7 @@ export function IconInfo() {
 
 export function IconInfoAlt() {
   return (
-    <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="8" cy="8" r="6.5" />
       <path d="M8 7v4" />
       <circle cx="8" cy="5" r="0.5" fill="currentColor" stroke="none" />
@@ -29,7 +33,7 @@ export function IconInfoAlt() {
 
 export function IconWifi() {
   return (
-    <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M2 7.5a12.5 12.5 0 0116 0" />
       <path d="M5 11a8 8 0 0110 0" />
       <path d="M8 14.5a4 4 0 014 0" />
@@ -40,7 +44,7 @@ export function IconWifi() {
 
 export function IconBridge() {
   return (
-    <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="5" width="14" height="10" rx="3" />
       <circle cx="10" cy="10" r="2" />
       <path d="M10 5v-2M10 17v-2" />

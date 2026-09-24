@@ -23,6 +23,31 @@ woff2 is bundled and served over the local asset protocol, well inside the block
 paints once already in the right face. `optional` was rejected — it permanently drops a window to
 the fallback face on a cold-launch miss, which is worse than the bounded wait `block` accepts.
 
+**Stylesheet layers.** `src/styles.css` is an ordered import list over `src/styles/`: tokens and
+the element rules go into Tailwind's `base` layer, every `lm-*` feature file into `components`.
+`theme.css` maps the colour tokens and `--lm-mono` into `@theme inline`, so a utility names the
+token — `text-ink`, `bg-panel-2`, `ring-amber/60`, `font-mono` — and still compiles to
+`var(--lm-*)`; `verify:design-tokens` rejects the old arbitrary `[var(--lm-*)]` form where a named
+utility exists.
+Layer order is theme < base < components < utilities and it is decided before specificity, so a
+utility on an element beats any `lm-*` rule that sets the same property — `.lm-x .lm-y:hover`
+included. That is the point: a utility is the local override, with no `.lm-x.hidden`-style
+counter-rule needed. The cost is the reverse case. A container rule that sizes its children
+(`.lm-hue-repair svg { width: 13px }`) cannot beat a size utility on the child, so shared icons that
+sit in such containers declare their default size as `width`/`height` attributes, which any
+stylesheet rule overrides. Within a layer, source order still decides equal-specificity ties,
+which is why the import list is kept in cascade order. `stylesheetSanity.test.ts` fails on a
+feature file imported without a layer. `GlobalErrorBoundary.css` stays unlayered: it is loaded by its
+component rather than through this list, and unlayered it cannot lose to a components-layer rule
+on the `lm-settings-group` card it sits on, whatever order the bundler emits.
+
+**Selection state is styled from ARIA where the element carries it.** A tab's selected look is
+`[aria-selected="true"]`, a toggle's `[aria-pressed="true"]`, a radio's `[aria-checked="true"]`, the
+device rail's `[aria-current="page"]` — the attribute a screen reader announces is the same one the
+stylesheet reads, so the two cannot disagree. Where the element has no such attribute, the class is
+`is-on`; `is-sel` and `is-selected` are gone. `is-active` survives only for things that are not
+selection: a step tracker's current step and the status bar's tone scale.
+
 **The compact/full mode transition is sequential, never a cross-fade.** `useUIMode.ts`: fade the
 current content out, resize the window to the target mode, then mount the incoming layout and fade
 it in. Pinning the incoming slot at its target size while the window is still animating toward that

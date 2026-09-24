@@ -235,7 +235,7 @@ const ImageLayerView = memo(function ImageLayerView({
           onPointerUp={handleResizePointerUp}
         >
           <span
-            className="pointer-events-none absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-[var(--lm-ink)] bg-[var(--lm-bg)]"
+            className="pointer-events-none absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-ink bg-bg"
             aria-hidden
           />
         </div>
@@ -466,7 +466,7 @@ export function RoomMapCanvas({
       // `select-none` because a drag sweeps bubbled pointer-moves across the
       // `<text>` and chip labels and highlights them. The dock's inputs mount
       // outside this root, so they keep native selection.
-      className={`select-none relative w-full h-full overflow-hidden bg-[var(--lm-bg)] ${panMode ? "cursor-grab" : ""}`}
+      className={`select-none relative w-full h-full overflow-hidden bg-bg ${panMode ? "cursor-grab" : ""}`}
       onClick={handleBackgroundClick}
       onWheel={handleCanvasWheel}
       onPointerDown={handleCanvasPointerDown}
