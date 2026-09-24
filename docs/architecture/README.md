@@ -19,6 +19,7 @@ in an area needs both.
 | Working on USB serial, WLED, or any output sink | [`device-output.md`](device-output.md) |
 | Changing the serial wire format, the handshake, or writing firmware | [`serial-protocol.md`](serial-protocol.md) |
 | Touching screen capture, the worker, or anything per frame | [`capture-and-pipeline.md`](capture-and-pipeline.md) |
+| Changing how a mode choice reaches the outputs — order, Hue start/stop, retunes, the runtime snapshot | [`lighting-transaction.md`](lighting-transaction.md) |
 | Adding or changing a Tauri command, a status code, persisted state, or an i18n key | [`contracts-and-state.md`](contracts-and-state.md) |
 | Building for the first time, changing CI, or cutting a release | [`build-and-release.md`](build-and-release.md) |
 | Writing a test, or trusting one — especially anything that drives the real window | [`testing-and-verification.md`](testing-and-verification.md) |

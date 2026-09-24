@@ -30,7 +30,10 @@ export interface HueStartConfig {
  * zone-bound channel's authoritative position is zone-relative) and keyed by
  * the bridge's id. A record with no `channelId` is omitted, the same refusal
  * the write-back makes — never address the bridge by our ordinal. A height of
- * unknown origin is left off so the stream keeps the bridge's own. */
+ * unknown origin is left off so the stream keeps the bridge's own.
+ *
+ * Rust has a copy (`commands/hue/hue_config.rs`) for starts it makes itself;
+ * `__tests__/fixtures/channelPlacements.parity.json` holds the two together. */
 export function toChannelPlacements(
   roomMap: Pick<RoomMapConfig, "hueChannels" | "zones"> | undefined,
   areaId: string,

@@ -173,6 +173,12 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     ("download_and_install_update", MAIN_ONLY),
     // Registered, but nothing in the frontend calls it.
     ("request_notification_permission", NO_WINDOW),
+    // The lighting transaction, registered ahead of its callers: a window is
+    // granted each one in the change that makes that window call it.
+    ("apply_outputs", NO_WINDOW),
+    ("retune_lighting", NO_WINDOW),
+    ("release_hue_output", NO_WINDOW),
+    ("get_lighting_runtime", NO_WINDOW),
 ];
 
 /// The commands a compromised overlay or popup page must never reach, named so

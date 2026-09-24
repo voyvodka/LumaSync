@@ -1,0 +1,285 @@
+{
+  "placements": [
+    {
+      "name": "no room map",
+      "roomMap": null,
+      "areaId": "area-1",
+      "expected": null
+    },
+    {
+      "name": "an empty channel list",
+      "roomMap": { "hueChannels": [], "zones": [] },
+      "areaId": "area-1",
+      "expected": null
+    },
+    {
+      "name": "an absolute position passes through unclamped",
+      "roomMap": {
+        "hueChannels": [
+          { "channelIndex": 0, "channelId": 3, "entertainmentAreaId": "area-1", "x": 1.5, "y": -0.25, "z": 0.4 }
+        ],
+        "zones": []
+      },
+      "areaId": "area-1",
+      "expected": [{ "channelId": 3, "positionX": 1.5, "positionY": -0.25 }]
+    },
+    {
+      "name": "the area filter keeps channels scoped to no area",
+      "roomMap": {
+        "hueChannels": [
+          { "channelIndex": 0, "channelId": 1, "entertainmentAreaId": "area-1", "x": 0.1, "y": 0.1, "z": 0 },
+          { "channelIndex": 0, "channelId": 2, "entertainmentAreaId": "area-2", "x": 0.2, "y": 0.2, "z": 0 },
+          { "channelIndex": 1, "channelId": 3, "entertainmentAreaId": null, "x": 0.3, "y": 0.3, "z": 0 },
+          { "channelIndex": 2, "channelId": 4, "entertainmentAreaId": "", "x": 0.4, "y": 0.4, "z": 0 },
+          { "channelIndex": 3, "channelId": 5, "x": 0.5, "y": 0.5, "z": 0 }
+        ],
+        "zones": []
+      },
+      "areaId": "area-1",
+      "expected": [
+        { "channelId": 1, "positionX": 0.1, "positionY": 0.1 },
+        { "channelId": 3, "positionX": 0.3, "positionY": 0.3 },
+        { "channelId": 4, "positionX": 0.4, "positionY": 0.4 },
+        { "channelId": 5, "positionX": 0.5, "positionY": 0.5 }
+      ]
+    },
+    {
+      "name": "a channel with no channelId is dropped, channel 0 is not",
+      "roomMap": {
+        "hueChannels": [
+          { "channelIndex": 0, "channelId": null, "x": 0.1, "y": 0.1, "z": 0 },
+          { "channelIndex": 1, "x": 0.2, "y": 0.2, "z": 0 },
+          { "channelIndex": 2, "channelId": 0, "x": -0.5, "y": 0.5, "z": 0 }
+        ],
+        "zones": []
+      },
+      "areaId": "area-1",
+      "expected": [{ "channelId": 0, "positionX": -0.5, "positionY": 0.5 }]
+    },
+    {
+      "name": "no channel with a channelId leaves nothing",
+      "roomMap": {
+        "hueChannels": [{ "channelIndex": 0, "x": 0.1, "y": 0.1, "z": 0 }],
+        "zones": []
+      },
+      "areaId": "area-1",
+      "expected": null
+    },
+    {
+      "name": "a zone-bound channel resolves through its zone",
+      "roomMap": {
+        "hueChannels": [
+          {
+            "channelIndex": 0,
+            "channelId": 7,
+            "x": 0.9,
+            "y": 0.9,
+            "z": 0.9,
+            "zOrigin": "user",
+            "zoneId": "z1",
+            "zoneRelativePosition": { "x": 0.5, "y": 1, "z": -0.5 }
+          }
+        ],
+        "zones": [
+          {
+            "id": "z1",
+            "name": "Couch",
+            "entertainmentAreaId": "area-1",
+            "centerX": 0.5,
+            "centerY": -0.5,
+            "centerZ": 0.2,
+            "scaleX": 0.5,
+            "scaleY": 0.25,
+            "scaleZ": 0.5,
+            "channelIndices": [0]
+          }
+        ]
+      },
+      "areaId": "area-1",
+      "expected": [{ "channelId": 7, "positionX": 0.75, "positionY": -0.25, "positionZ": -0.05 }]
+    },
+    {
+      "name": "a zone-relative position is clamped to [-1, 1]",
+      "roomMap": {
+        "hueChannels": [
+          {
+            "channelIndex": 0,
+            "channelId": 2,
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "zOrigin": "bridge",
+            "zoneId": "z1",
+            "zoneRelativePosition": { "x": 1, "y": -1, "z": 1 }
+          }
+        ],
+        "zones": [
+          {
+            "id": "z1",
+            "name": "Edge",
+            "entertainmentAreaId": "area-1",
+            "centerX": 0.8,
+            "centerY": -0.9,
+            "centerZ": 0.9,
+            "scaleX": 0.5,
+            "scaleY": 0.5,
+            "scaleZ": 0.5,
+            "channelIndices": [0]
+          }
+        ]
+      },
+      "areaId": "area-1",
+      "expected": [{ "channelId": 2, "positionX": 1, "positionY": -1, "positionZ": 1 }]
+    },
+    {
+      "name": "a non-finite zone position is 0",
+      "roomMap": {
+        "hueChannels": [
+          {
+            "channelIndex": 0,
+            "channelId": 2,
+            "x": 0.4,
+            "y": 0.4,
+            "z": 0,
+            "zoneId": "z1",
+            "zoneRelativePosition": { "x": 1, "y": 0.5, "z": 0 }
+          }
+        ],
+        "zones": [
+          {
+            "id": "z1",
+            "name": "Huge",
+            "entertainmentAreaId": "area-1",
+            "centerX": 1e308,
+            "centerY": 0,
+            "centerZ": 0,
+            "scaleX": 1e308,
+            "scaleY": 0.5,
+            "scaleZ": 1,
+            "channelIndices": [0]
+          }
+        ]
+      },
+      "areaId": "area-1",
+      "expected": [{ "channelId": 2, "positionX": 0, "positionY": 0.25 }]
+    },
+    {
+      "name": "a height rides only when its origin is known",
+      "roomMap": {
+        "hueChannels": [
+          { "channelIndex": 0, "channelId": 1, "x": 0, "y": 0, "z": 0.6, "zOrigin": "bridge" },
+          { "channelIndex": 1, "channelId": 2, "x": 0, "y": 0, "z": 0.6 },
+          { "channelIndex": 2, "channelId": 3, "x": 0, "y": 0, "z": 0.6, "zOrigin": null }
+        ],
+        "zones": []
+      },
+      "areaId": "area-1",
+      "expected": [
+        { "channelId": 1, "positionX": 0, "positionY": 0, "positionZ": 0.6 },
+        { "channelId": 2, "positionX": 0, "positionY": 0 },
+        { "channelId": 3, "positionX": 0, "positionY": 0 }
+      ]
+    },
+    {
+      "name": "a zone id that matches no zone, or is empty, falls back to absolute",
+      "roomMap": {
+        "hueChannels": [
+          {
+            "channelIndex": 0,
+            "channelId": 1,
+            "x": 0.3,
+            "y": -0.3,
+            "z": 0,
+            "zoneId": "gone",
+            "zoneRelativePosition": { "x": 1, "y": 1, "z": 1 }
+          },
+          {
+            "channelIndex": 1,
+            "channelId": 2,
+            "x": -0.6,
+            "y": 0.6,
+            "z": 0,
+            "zoneId": "",
+            "zoneRelativePosition": { "x": 1, "y": 1, "z": 1 }
+          },
+          { "channelIndex": 2, "channelId": 3, "x": 0.1, "y": 0.2, "z": 0, "zoneId": "z1", "zoneRelativePosition": null }
+        ],
+        "zones": [
+          {
+            "id": "z1",
+            "name": "Zone",
+            "entertainmentAreaId": "area-1",
+            "centerX": 0,
+            "centerY": 0,
+            "centerZ": 0,
+            "scaleX": 1,
+            "scaleY": 1,
+            "scaleZ": 1,
+            "channelIndices": [2]
+          }
+        ]
+      },
+      "areaId": "area-1",
+      "expected": [
+        { "channelId": 1, "positionX": 0.3, "positionY": -0.3 },
+        { "channelId": 2, "positionX": -0.6, "positionY": 0.6 },
+        { "channelId": 3, "positionX": 0.1, "positionY": 0.2 }
+      ]
+    }
+  ],
+  "roomGeometry": [
+    {
+      "name": "no TV anchor means no geometry",
+      "state": {
+        "roomMap": {
+          "dimensions": { "widthMeters": 4, "depthMeters": 5, "heightMeters": 2.5 },
+          "hueChannels": [],
+          "zones": []
+        },
+        "lastHueAreaId": "area-1"
+      },
+      "expected": null
+    },
+    {
+      "name": "no room map means no geometry",
+      "state": { "lastHueAreaId": "area-1" },
+      "expected": null
+    },
+    {
+      "name": "a TV anchor carries the area's placements and drops the lock",
+      "state": {
+        "roomMap": {
+          "dimensions": { "widthMeters": 4, "depthMeters": 5, "heightMeters": 2.5 },
+          "tvAnchor": { "x": 1, "y": 0, "width": 1.2, "height": 0.1, "locked": true, "mountHeightMeters": 1.1 },
+          "hueChannels": [
+            { "channelIndex": 0, "channelId": 4, "entertainmentAreaId": "area-1", "x": 0.5, "y": 1, "z": 0.3, "zOrigin": "user" },
+            { "channelIndex": 0, "channelId": 9, "entertainmentAreaId": "area-2", "x": -0.5, "y": -1, "z": 0 }
+          ],
+          "zones": []
+        },
+        "lastHueAreaId": " area-1 "
+      },
+      "expected": {
+        "dimensions": { "widthMeters": 4, "depthMeters": 5, "heightMeters": 2.5 },
+        "tv": { "x": 1, "y": 0, "width": 1.2, "height": 0.1, "mountHeightMeters": 1.1 },
+        "huePlacements": [{ "channelId": 4, "positionX": 0.5, "positionY": 1, "positionZ": 0.3 }]
+      }
+    },
+    {
+      "name": "no area means no placements, and an unset mount height stays unset",
+      "state": {
+        "roomMap": {
+          "dimensions": { "widthMeters": 3, "depthMeters": 3, "heightMeters": 2.4 },
+          "tvAnchor": { "x": 0.5, "y": 0, "width": 1, "height": 0.08 },
+          "hueChannels": [{ "channelIndex": 0, "channelId": 4, "x": 0.5, "y": 1, "z": 0 }],
+          "zones": []
+        }
+      },
+      "expected": {
+        "dimensions": { "widthMeters": 3, "depthMeters": 3, "heightMeters": 2.4 },
+        "tv": { "x": 0.5, "y": 0, "width": 1, "height": 0.08 },
+        "huePlacements": []
+      }
+    }
+  ]
+}

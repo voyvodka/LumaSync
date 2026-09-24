@@ -238,11 +238,11 @@ inside another branch's binary that way.
 
 | Window | App commands |
 |---|---|
-| `main` | 52 of the 56: the 51 its `*Api.ts` bridges reach, and `simulate_hue_fault` for the dev mock's panel, which passes it through to Rust from this window. Not the popup's three below, and not `request_notification_permission` |
+| `main` | 52 of the 60: the 51 its `*Api.ts` bridges reach, and `simulate_hue_fault` for the dev mock's panel, which passes it through to Rust from this window. Not the popup's three below, and not the five in the last row |
 | `led-control-popup` | `get_shell_state`, `patch_shell_state` (its position, last pattern, hint flag); `set_lighting_mode`, `stop_lighting`, `get_lighting_mode_status` (its mode strip and `useLightingModeSync`); `start_led_test_pattern`, `stop_led_test_pattern` (`useTestPatternRunner`); `start_hue_stream`, `stop_hue_stream` (the Hue test lease in `hueTestLease.ts`); `get_led_preview_status` (`useLightingModeSync`); `close_led_twin_overlay`, `hide_led_control_popup` (its close button); `show_notification` (the one-time hint); `open_log_dir` (`GlobalErrorBoundary`'s "Show logs") |
 | `led-twin-overlay-*` | `get_shell_state` only — it reads the calibration it draws |
 | `calibration-overlay-*` | none |
-| no window | `request_notification_permission` — registered, but nothing in the frontend calls it |
+| no window | `request_notification_permission` — registered, but nothing in the frontend calls it. `apply_outputs`, `retune_lighting`, `release_hue_output`, `get_lighting_runtime` — the lighting transaction, registered ahead of its callers ([`lighting-transaction.md`](lighting-transaction.md)); each window is granted them in the change that makes its code call them, since a grant no code reaches fails `verify:window-grants` |
 
 `get_led_preview_status`, `close_led_twin_overlay` and `hide_led_control_popup` are the popup's
 alone; the main window never calls them. Two withholdings are deliberate even though the walk

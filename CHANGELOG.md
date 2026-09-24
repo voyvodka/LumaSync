@@ -88,6 +88,8 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Lighting: the window, and the LED control popup, could freeze for a few seconds when they asked
+  which mode was running while a mode was switching. That answer no longer waits for the switch.
 - USB strips and WLED: with black border detection on, a letterboxed film no longer turns the
   top and bottom LEDs dark. The strip had been sampling the black bars since 1.4.0, when LEDs
   started taking their colour one by one; Hue lights were already skipping them. The strip now

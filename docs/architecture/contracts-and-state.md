@@ -113,7 +113,9 @@ grant for `replace_shell_state`, and it must still boot.
 
 **`shell://state-changed` carries `{ set, remove, revision, writerId }` to every window.** The
 facade feeds it to `onShellStateSaved` listeners, so a save in the popup reaches the main
-window's listeners too. A window's own write is delivered in-window as soon as the patch resolves,
+window's listeners too. Rust writes through the same store and the same event
+(`shell_state::patch_from_rust`, writer id `rust`, which no window holds as its own) — the
+lighting transaction saves `lastOutputTargets` and `lightingMode` that way. A window's own write is delivered in-window as soon as the patch resolves,
 as before, and its echo is dropped by `writerId`. Reads need no event: every `loadShellState`
 asks Rust, so no window holds a stale copy of the file.
 
