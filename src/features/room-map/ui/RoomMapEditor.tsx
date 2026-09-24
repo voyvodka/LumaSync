@@ -61,7 +61,7 @@ import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
 import { roomAwareStatus } from "../model/roomAware";
 
-interface RoomMapEditorProps {
+export interface RoomMapEditorProps {
   onZoneCountsConfirmed?: (counts: LedSegmentCounts) => void;
   /**
    * Invoked when the dock state strip's CTA prompts the
