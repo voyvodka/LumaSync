@@ -1953,6 +1953,7 @@ mod tests {
     #[derive(Default)]
     struct PortLog {
         writes: Mutex<Vec<(Instant, Vec<u8>)>>,
+        writes_started: AtomicUsize,
         flushes: AtomicUsize,
         dropped: AtomicBool,
     }
@@ -1984,6 +1985,7 @@ mod tests {
     impl Write for ScriptedPort {
         fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
             let started = Instant::now();
+            self.log.writes_started.fetch_add(1, Ordering::SeqCst);
             std::thread::sleep(self.script.write_takes);
             if self.script.fail_writes {
                 return Err(std::io::ErrorKind::BrokenPipe.into());
@@ -2045,6 +2047,10 @@ mod tests {
         Duration::from_millis(100)
     }
 
+    fn pacing_1s(_: usize) -> Duration {
+        Duration::from_secs(1)
+    }
+
     fn pacing_10s(_: usize) -> Duration {
         Duration::from_secs(10)
     }
@@ -2081,11 +2087,17 @@ mod tests {
 
     #[test]
     fn packets_queued_while_the_link_is_busy_collapse_to_the_newest() {
-        let (sender, logs) = scripted_sender(PortScript::default(), pacing_100ms);
+        // A second of wire time, so a stalled CI runner cannot let packet 2 out
+        // on its own between the sends below.
+        let (sender, logs) = scripted_sender(PortScript::default(), pacing_1s);
 
         sender.send("COM1", &[1]).expect("send");
-        // Let the writer take packet 1, so 2..=5 all land inside its wire time.
-        std::thread::sleep(Duration::from_millis(20));
+        // Wait for the writer to take packet 1, so 2..=5 all land inside its wire time.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while first_log(&logs).packets().is_empty() {
+            assert!(Instant::now() < deadline, "packet 1 never reached the port");
+            std::thread::sleep(Duration::from_millis(1));
+        }
         for byte in 2..=5_u8 {
             sender.send("COM1", &[byte]).expect("send");
         }
@@ -2222,9 +2234,16 @@ mod tests {
             write_takes: Duration::from_secs(3),
             ..PortScript::default()
         };
-        let (sender, _) = scripted_sender(script, no_pacing);
+        let (sender, logs) = scripted_sender(script, no_pacing);
         sender.send("COM1", &[1]).expect("send");
-        std::thread::sleep(Duration::from_millis(20));
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while first_log(&logs).writes_started.load(Ordering::SeqCst) == 0 {
+            assert!(
+                Instant::now() < deadline,
+                "the writer never started packet 1"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
 
         let started = Instant::now();
         sender.disconnect_session("COM1");
