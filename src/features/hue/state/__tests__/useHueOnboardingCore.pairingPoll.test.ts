@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HUE_CREDENTIAL_STATUS } from "@/shared/contracts/hue";
+import { HUE_CREDENTIAL_STATUS, type HuePairBridgeResponse } from "@/shared/contracts/hue";
 import { deriveHueBridgeCardState } from "../../model/hueBridgeCardState";
 import {
   HUE_PAIRING_POLL_INTERVAL_MS,
@@ -9,38 +9,39 @@ import {
 } from "../../model/pollingCadence";
 import { __resetHueHealthStoreForTests } from "../hueHealthStore";
 import { useHueOnboardingCore } from "../useHueOnboardingCore";
+import type * as hueOnboardingApiModule from "../../hueOnboardingApi";
 
 const shellLoadMock = vi.fn();
 const shellSaveMock = vi.fn();
-const discoverBridgesMock = vi.fn();
-const pairBridgeMock = vi.fn();
-const listAreasMock = vi.fn();
+const discoverBridgesMock = vi.fn<typeof hueOnboardingApiModule.discoverHueBridges>();
+const pairBridgeMock = vi.fn<typeof hueOnboardingApiModule.pairHueBridge>();
+const listAreasMock = vi.fn<typeof hueOnboardingApiModule.listHueEntertainmentAreas>();
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => shellLoadMock(),
-    save: (...args: unknown[]) => shellSaveMock(...args),
+    save: (...args: Parameters<typeof shellSaveMock>) => shellSaveMock(...args),
   },
 }));
 
 vi.mock("../../hueOnboardingApi", () => ({
-  checkHueStreamReadiness: vi.fn(),
-  discoverHueBridges: (...args: unknown[]) => discoverBridgesMock(...args),
-  listHueEntertainmentAreas: (...args: unknown[]) => listAreasMock(...args),
-  migrateHueCredentials: vi.fn(),
-  pairHueBridge: (...args: unknown[]) => pairBridgeMock(...args),
-  validateHueCredentials: vi.fn(),
-  verifyHueBridgeIp: vi.fn(),
+  checkHueStreamReadiness: vi.fn<typeof hueOnboardingApiModule.checkHueStreamReadiness>(),
+  discoverHueBridges: (...args: Parameters<typeof discoverBridgesMock>) => discoverBridgesMock(...args),
+  listHueEntertainmentAreas: (...args: Parameters<typeof listAreasMock>) => listAreasMock(...args),
+  migrateHueCredentials: vi.fn<typeof hueOnboardingApiModule.migrateHueCredentials>(),
+  pairHueBridge: (...args: Parameters<typeof pairBridgeMock>) => pairBridgeMock(...args),
+  validateHueCredentials: vi.fn<typeof hueOnboardingApiModule.validateHueCredentials>(),
+  verifyHueBridgeIp: vi.fn<typeof hueOnboardingApiModule.verifyHueBridgeIp>(),
 }));
 
 const BRIDGE = { id: "bridge-1", ip: "192.168.1.20", name: "Test Bridge" };
 const OTHER_BRIDGE = { id: "bridge-2", ip: "192.168.1.21", name: "Other Bridge" };
 
-const NOT_PRESSED = {
+const NOT_PRESSED: HuePairBridgeResponse = {
   status: { code: "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED", message: "press it", details: null },
   credentials: null,
 };
-const PAIRED = {
+const PAIRED: HuePairBridgeResponse = {
   status: { code: "HUE_PAIRING_OK", message: "ok", details: null },
   credentials: { username: "app-user", clientKey: "AABBCCDD" },
   credentialStorageBackend: "keychain",

@@ -9,6 +9,8 @@ import { useHueOnboardingCore } from "@/features/hue/state/useHueOnboardingCore"
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
 import { __resetHueHealthStoreForTests } from "@/features/hue/state/hueHealthStore";
 import { HueBridgesCategory } from "../HueBridgesCategory";
+import type * as hueOnboardingApiModule from "@/features/hue/hueOnboardingApi";
+import type { HuePairBridgeStatusCode } from "@/shared/contracts/hue";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -21,18 +23,18 @@ vi.mock("@/features/persistence/shellStore", () => ({
   },
 }));
 
-const pairBridgeMock = vi.fn();
+const pairBridgeMock = vi.fn<typeof hueOnboardingApiModule.pairHueBridge>();
 vi.mock("@/features/hue/hueOnboardingApi", () => ({
-  checkHueStreamReadiness: vi.fn(),
-  discoverHueBridges: vi.fn().mockResolvedValue({
+  checkHueStreamReadiness: vi.fn<typeof hueOnboardingApiModule.checkHueStreamReadiness>(),
+  discoverHueBridges: vi.fn<typeof hueOnboardingApiModule.discoverHueBridges>().mockResolvedValue({
     status: { code: "HUE_DISCOVERY_OK", message: "ok", details: null },
     bridges: [{ id: "bridge-1", ip: "192.168.1.20", name: "Test Bridge" }],
   }),
-  listHueEntertainmentAreas: vi.fn(),
-  migrateHueCredentials: vi.fn(),
-  pairHueBridge: (...args: unknown[]) => pairBridgeMock(...args),
-  validateHueCredentials: vi.fn(),
-  verifyHueBridgeIp: vi.fn(),
+  listHueEntertainmentAreas: vi.fn<typeof hueOnboardingApiModule.listHueEntertainmentAreas>(),
+  migrateHueCredentials: vi.fn<typeof hueOnboardingApiModule.migrateHueCredentials>(),
+  pairHueBridge: (...args: Parameters<typeof pairBridgeMock>) => pairBridgeMock(...args),
+  validateHueCredentials: vi.fn<typeof hueOnboardingApiModule.validateHueCredentials>(),
+  verifyHueBridgeIp: vi.fn<typeof hueOnboardingApiModule.verifyHueBridgeIp>(),
 }));
 
 vi.mock("@/features/mode/modeApi", () => ({ stopHue: vi.fn() }));
@@ -83,7 +85,7 @@ function Harness() {
   );
 }
 
-async function pairAndGetRefused(code: string) {
+async function pairAndGetRefused(code: HuePairBridgeStatusCode) {
   pairBridgeMock.mockResolvedValue({
     status: { code, message: "English message from Rust", details: null },
     credentials: null,
@@ -139,7 +141,9 @@ describe("HueBridgesCategory — named pairing refusals", () => {
   });
 
   it("keeps a real credential rejection on the re-pair prompt", async () => {
-    await pairAndGetRefused("HUE_CREDENTIAL_INVALID");
+    // `pair_hue_bridge` never emits this (there is no key yet to reject); the
+    // cast keeps the card-state branch covered without typing it as wire.
+    await pairAndGetRefused("HUE_CREDENTIAL_INVALID" as HuePairBridgeStatusCode);
 
     expect(screen.getAllByText("hue:credential.needsRepair").length).toBeGreaterThan(0);
     expect(screen.queryByTestId("hue-pairing-deferred")).toBeNull();

@@ -3,10 +3,14 @@
 // and used to vanish — the click did nothing and said nothing.
 
 import { render, screen, waitFor } from "@testing-library/react";
+import type { ControlPopupResult, TwinOverlayResult } from "@/shared/contracts/preview";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CalibrationPage } from "../CalibrationPage";
+import type * as calibrationApiModule from "@/features/calibration/calibrationApi";
+import type * as modeApiModule from "@/features/mode/modeApi";
+import type * as previewApiModule from "@/features/preview/previewApi";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -26,30 +30,30 @@ vi.mock("@/features/persistence/shellStore", () => ({
 
 vi.mock("@/features/calibration/calibrationApi", () => ({
   listDisplays: () => Promise.resolve([]),
-  openDisplayOverlay: vi.fn(),
+  openDisplayOverlay: vi.fn<typeof calibrationApiModule.openDisplayOverlay>(),
   closeDisplayOverlay: () => Promise.resolve({ ok: true }),
   updateDisplayOverlayPreview: () => Promise.resolve({ ok: true }),
 }));
 
 vi.mock("@/features/mode/modeApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/features/mode/modeApi")>()),
-  acquireHueForTest: vi.fn(),
-  releaseHueAfterTest: vi.fn(),
+  acquireHueForTest: vi.fn<typeof modeApiModule.acquireHueForTest>(),
+  releaseHueAfterTest: vi.fn<typeof modeApiModule.releaseHueAfterTest>(),
 }));
 
-const openOverlayMock = vi.fn();
-const openPopupMock = vi.fn();
-const showPopupMock = vi.fn();
+const openOverlayMock = vi.fn<typeof previewApiModule.openLedTwinOverlay>();
+const openPopupMock = vi.fn<typeof previewApiModule.openLedControlPopup>();
+const showPopupMock = vi.fn<typeof previewApiModule.showLedControlPopup>();
 vi.mock("@/features/preview/previewApi", () => ({
-  openLedTwinOverlay: (...args: unknown[]) => openOverlayMock(...args),
+  openLedTwinOverlay: (...args: Parameters<typeof openOverlayMock>) => openOverlayMock(...args),
   openLedControlPopup: () => openPopupMock(),
   showLedControlPopup: () => showPopupMock(),
-  startLedTestPattern: vi.fn(),
+  startLedTestPattern: vi.fn<typeof previewApiModule.startLedTestPattern>(),
   stopLedTestPattern: () => Promise.resolve({ status: { code: "LED_TEST_PATTERN_STOPPED" } }),
 }));
 
-const OVERLAY_OK = { ok: true, code: "TWIN_OVERLAY_OPENED", message: "" };
-const POPUP_OK = { ok: true, code: "CONTROL_POPUP_SHOWN", message: "", visible: true };
+const OVERLAY_OK: TwinOverlayResult = { ok: true, code: "TWIN_OVERLAY_OPENED", message: "" };
+const POPUP_OK: ControlPopupResult = { ok: true, code: "CONTROL_POPUP_SHOWN", message: "", visible: true };
 
 async function clickPreview() {
   const user = userEvent.setup();

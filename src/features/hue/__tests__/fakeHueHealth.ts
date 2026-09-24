@@ -10,6 +10,7 @@ import { vi } from "vitest";
 import {
   HUE_RUNTIME_STATES,
   HUE_RUNTIME_TRIGGER_SOURCE,
+  type HueRuntimeCommandResult,
   type HueRuntimeState,
   type HueRuntimeStatus,
 } from "@/shared/contracts/hue";
@@ -44,6 +45,17 @@ export function runtimeStatus(
     details: null,
     triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM,
     ...extra,
+  };
+}
+
+/** What a `start_hue_stream` / `restart_hue_stream` resolves to. */
+export function runtimeResult(
+  state: HueRuntimeState = HUE_RUNTIME_STATES.RUNNING,
+): HueRuntimeCommandResult {
+  return {
+    active: state !== HUE_RUNTIME_STATES.IDLE,
+    status: runtimeStatus(state),
+    lastSolidColor: null,
   };
 }
 

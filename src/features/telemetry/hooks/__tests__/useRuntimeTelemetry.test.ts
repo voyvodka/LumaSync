@@ -5,7 +5,7 @@ import type { FullTelemetrySnapshot } from "@/shared/contracts/telemetry";
 
 // Mock the telemetryApi module — the hook only calls `getFullTelemetrySnapshot`
 // so that is the single dependency the tests drive.
-const getFullTelemetrySnapshotMock = vi.fn();
+const getFullTelemetrySnapshotMock = vi.fn<typeof telemetryApiModule.getFullTelemetrySnapshot>();
 
 vi.mock("@/features/telemetry/telemetryApi", () => ({
   getFullTelemetrySnapshot: () => getFullTelemetrySnapshotMock(),
@@ -13,6 +13,7 @@ vi.mock("@/features/telemetry/telemetryApi", () => ({
 
 // Import after the mock is registered so the hook picks up the mocked module.
 import { useRuntimeTelemetry } from "../useRuntimeTelemetry";
+import type * as telemetryApiModule from "@/features/telemetry/telemetryApi";
 
 /** Small helper: build a FullTelemetrySnapshot with sane defaults. */
 function makeSnapshot(partial?: Partial<FullTelemetrySnapshot["usb"]>): FullTelemetrySnapshot {

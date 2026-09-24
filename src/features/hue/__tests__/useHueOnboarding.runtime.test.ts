@@ -8,47 +8,49 @@ import {
 } from "@/shared/contracts/hue";
 import { __resetHueHealthStoreForTests } from "../state/hueHealthStore";
 import { fakeHueHealthApi, resetHealth } from "./fakeHueHealth";
+import type * as modeApiModule from "@/features/mode/modeApi";
+import type * as hueOnboardingApiModule from "../hueOnboardingApi";
 
-const restartHueMock = vi.fn();
+const restartHueMock = vi.fn<typeof modeApiModule.restartHue>();
 const shellLoadMock = vi.fn();
 const shellSaveMock = vi.fn();
-const listAreasMock = vi.fn();
-const validateCredentialsMock = vi.fn();
+const listAreasMock = vi.fn<typeof hueOnboardingApiModule.listHueEntertainmentAreas>();
+const validateCredentialsMock = vi.fn<typeof hueOnboardingApiModule.validateHueCredentials>();
 
 vi.mock("../hueHealthApi", async () => (await import("./fakeHueHealth")).fakeHueHealthApi);
 
 vi.mock("@/features/mode/modeApi", () => ({
-  restartHue: (...args: unknown[]) => restartHueMock(...args),
-  startHue: vi.fn(),
+  restartHue: (...args: Parameters<typeof restartHueMock>) => restartHueMock(...args),
+  startHue: vi.fn<typeof modeApiModule.startHue>(),
 }));
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => shellLoadMock(),
-    save: (...args: unknown[]) => shellSaveMock(...args),
+    save: (...args: Parameters<typeof shellSaveMock>) => shellSaveMock(...args),
   },
 }));
 
 vi.mock("../hueOnboardingApi", () => ({
   // The readiness poller chains .then() onto this; a bare vi.fn() resolves to
   // undefined and the chain throws into the poller's own catch instead.
-  checkHueStreamReadiness: vi.fn().mockResolvedValue({
+  checkHueStreamReadiness: vi.fn<typeof hueOnboardingApiModule.checkHueStreamReadiness>().mockResolvedValue({
     status: { code: "HUE_STREAM_READY", message: "ok", details: null },
     readiness: { ready: true, reasons: [] },
   }),
-  discoverHueBridges: vi.fn(),
-  getHueAreaChannels: vi.fn().mockResolvedValue({
+  discoverHueBridges: vi.fn<typeof hueOnboardingApiModule.discoverHueBridges>(),
+  getHueAreaChannels: vi.fn<typeof hueOnboardingApiModule.getHueAreaChannels>().mockResolvedValue({
     status: { code: "HUE_AREA_CHANNELS_EMPTY", message: "", details: null },
     channels: [],
   }),
-  listHueEntertainmentAreas: (...args: unknown[]) => listAreasMock(...args),
-  migrateHueCredentials: vi.fn().mockResolvedValue({
-    status: { code: "HUE_CREDENTIAL_MIGRATION_FAILED", message: "no keychain" },
+  listHueEntertainmentAreas: (...args: Parameters<typeof listAreasMock>) => listAreasMock(...args),
+  migrateHueCredentials: vi.fn<typeof hueOnboardingApiModule.migrateHueCredentials>().mockResolvedValue({
+    status: { code: "HUE_CREDENTIAL_MIGRATION_FAILED", message: "no keychain", details: null },
     backend: "plaintext-legacy",
   }),
-  pairHueBridge: vi.fn(),
-  validateHueCredentials: (...args: unknown[]) => validateCredentialsMock(...args),
-  verifyHueBridgeIp: vi.fn(),
+  pairHueBridge: vi.fn<typeof hueOnboardingApiModule.pairHueBridge>(),
+  validateHueCredentials: (...args: Parameters<typeof validateCredentialsMock>) => validateCredentialsMock(...args),
+  verifyHueBridgeIp: vi.fn<typeof hueOnboardingApiModule.verifyHueBridgeIp>(),
 }));
 
 function runtimeStatusFixture() {
@@ -86,6 +88,7 @@ describe("useHueOnboarding runtime wiring", () => {
           name: "Living Room",
           roomName: "Salon",
           channelCount: 3,
+          activeStreamer: false,
         },
       ],
     });

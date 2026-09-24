@@ -59,10 +59,10 @@ function controllerWith(
   const emit = vi.fn();
   const firmwareProfileEvents: FirmwareProfileEventBus = { emit, subscribe: vi.fn() };
   const controller = createDeviceConnectionController({
-    listSerialPorts: vi.fn().mockResolvedValue(LISTING),
+    listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(LISTING),
     connectSerialPort,
-    getSerialConnectionStatus: vi.fn().mockResolvedValue(DISCONNECTED),
-    persistLastSuccessfulPort: vi.fn().mockResolvedValue(undefined),
+    getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue(DISCONNECTED),
+    persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>().mockResolvedValue(undefined),
     firmwareProfileEvents,
     ...extra,
   });

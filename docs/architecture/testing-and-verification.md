@@ -98,6 +98,22 @@ it, and a test that stubs `console.error` swallows the warning before any report
 Under an AI coding agent, vitest detects the agent and switches to its `minimal` reporter, which
 prints no console output at all — the warnings are still counted, just not shown.
 
+## Typed test doubles, and the untyped-mock ratchet
+
+A bare `vi.fn()` is `Mock<Procedure>`, assignable to any function: a double on the Tauri boundary
+can resolve a shape the backend never sends and the test still passes. On the command boundary use
+`mockCommands({...})` from `src/test/mockCommands.ts` — its fixtures are typed by `CommandMap`, and
+a command without a fixture rejects naming itself — or `invokeFromCommands({...})` as the
+implementation of a mocked `invoke`. For a mocked bridge function, `vi.fn<typeof api.fn>()`.
+
+Typing the first 279 boundary doubles found fixtures no backend could produce: a
+`HUE_CREDENTIAL_OK` that no producer has ever emitted, runtime results without the fields Rust
+always sends as `null`, a twin-overlay reply of `{ ok: true }`, a serial status of
+`{ connected: true }`. `verify:untyped-mocks` (in `check:all`) counts the bare `vi.fn()` left under
+`src/`, `mock/` and `e2e/`, comments excluded, against `scripts/verify/untyped-mock-baseline.txt`.
+The count is static, so it is exact: above the baseline fails, and below it fails until the file is
+lowered. Callback props (`onChange: vi.fn()`) make up most of what remains.
+
 ## The quietest failure CSS has
 
 A reference to an undefined custom property does not warn, does not fall back to

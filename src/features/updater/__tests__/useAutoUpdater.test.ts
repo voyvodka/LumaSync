@@ -11,8 +11,8 @@ import { UPDATER_STATUS, type UpdateDownloadProgress, type UpdateMetadata } from
 // ---------------------------------------------------------------------------
 
 vi.mock("../updaterApi", () => ({
-  checkForUpdate: vi.fn(),
-  downloadAndInstallUpdate: vi.fn(),
+  checkForUpdate: vi.fn<typeof updaterApiModule.checkForUpdate>(),
+  downloadAndInstallUpdate: vi.fn<typeof updaterApiModule.downloadAndInstallUpdate>(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -26,7 +26,7 @@ vi.mock("@/features/persistence/shellStore", () => ({
 }));
 
 vi.mock("@/features/shell/launchApi", () => ({
-  readE2eBuild: vi.fn().mockResolvedValue(false),
+  readE2eBuild: vi.fn<typeof launchApiModule.readE2eBuild>().mockResolvedValue(false),
 }));
 
 // ---------------------------------------------------------------------------
@@ -39,6 +39,8 @@ import { checkForUpdate, downloadAndInstallUpdate } from "../updaterApi";
 import { useAutoUpdater } from "../useAutoUpdater";
 import { isUpdateModalStatus } from "../updateModalStatus";
 import { UPDATE_CHECK_FAILED_NOTICE_MS } from "../useUpdateCheckFailedNotice";
+import type * as updaterApiModule from "../updaterApi";
+import type * as launchApiModule from "@/features/shell/launchApi";
 
 // ---------------------------------------------------------------------------
 // Helpers

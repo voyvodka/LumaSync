@@ -5,32 +5,33 @@ import { HUE_CREDENTIAL_STATUS, type HueStreamReadinessStatusCode } from "@/shar
 import { hueCredentialEvents } from "../../hueCredentialEvents";
 import { __resetHueHealthStoreForTests } from "../hueHealthStore";
 import { useHueOnboardingCore } from "../useHueOnboardingCore";
+import type * as hueOnboardingApiModule from "../../hueOnboardingApi";
 
 const shellLoadMock = vi.fn();
 const shellSaveMock = vi.fn();
-const discoverBridgesMock = vi.fn();
-const pairBridgeMock = vi.fn();
-const listAreasMock = vi.fn();
-const validateCredentialsMock = vi.fn();
+const discoverBridgesMock = vi.fn<typeof hueOnboardingApiModule.discoverHueBridges>();
+const pairBridgeMock = vi.fn<typeof hueOnboardingApiModule.pairHueBridge>();
+const listAreasMock = vi.fn<typeof hueOnboardingApiModule.listHueEntertainmentAreas>();
+const validateCredentialsMock = vi.fn<typeof hueOnboardingApiModule.validateHueCredentials>();
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => shellLoadMock(),
-    save: (...args: unknown[]) => shellSaveMock(...args),
+    save: (...args: Parameters<typeof shellSaveMock>) => shellSaveMock(...args),
   },
 }));
 
 vi.mock("../../hueOnboardingApi", () => ({
-  checkHueStreamReadiness: vi.fn(),
-  discoverHueBridges: (...args: unknown[]) => discoverBridgesMock(...args),
-  listHueEntertainmentAreas: (...args: unknown[]) => listAreasMock(...args),
-  migrateHueCredentials: vi.fn().mockResolvedValue({
-    status: { code: "HUE_CREDENTIAL_MIGRATION_FAILED", message: "no keychain" },
+  checkHueStreamReadiness: vi.fn<typeof hueOnboardingApiModule.checkHueStreamReadiness>(),
+  discoverHueBridges: (...args: Parameters<typeof discoverBridgesMock>) => discoverBridgesMock(...args),
+  listHueEntertainmentAreas: (...args: Parameters<typeof listAreasMock>) => listAreasMock(...args),
+  migrateHueCredentials: vi.fn<typeof hueOnboardingApiModule.migrateHueCredentials>().mockResolvedValue({
+    status: { code: "HUE_CREDENTIAL_MIGRATION_FAILED", message: "no keychain", details: null },
     backend: "plaintext-legacy",
   }),
-  pairHueBridge: (...args: unknown[]) => pairBridgeMock(...args),
-  validateHueCredentials: (...args: unknown[]) => validateCredentialsMock(...args),
-  verifyHueBridgeIp: vi.fn(),
+  pairHueBridge: (...args: Parameters<typeof pairBridgeMock>) => pairBridgeMock(...args),
+  validateHueCredentials: (...args: Parameters<typeof validateCredentialsMock>) => validateCredentialsMock(...args),
+  verifyHueBridgeIp: vi.fn<typeof hueOnboardingApiModule.verifyHueBridgeIp>(),
 }));
 
 const BRIDGE = { id: "bridge-1", ip: "192.168.1.20", name: "Test Bridge" };

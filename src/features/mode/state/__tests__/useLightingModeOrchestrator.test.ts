@@ -9,17 +9,17 @@ import type {
 } from "@/shared/contracts/lightingRuntime";
 import type { LightingModeConfig } from "@/shared/contracts/mode";
 
-const applyOutputsMock = vi.fn();
-const retuneLightingMock = vi.fn();
-const releaseHueOutputMock = vi.fn();
-const getLightingRuntimeMock = vi.fn();
-const getScreenCapturePermissionMock = vi.fn();
+const applyOutputsMock = vi.fn<typeof modeApiModule.applyOutputs>();
+const retuneLightingMock = vi.fn<typeof modeApiModule.retuneLighting>();
+const releaseHueOutputMock = vi.fn<typeof modeApiModule.releaseHueOutput>();
+const getLightingRuntimeMock = vi.fn<typeof modeApiModule.getLightingRuntime>();
+const getScreenCapturePermissionMock = vi.fn<typeof captureApiModule.getScreenCapturePermission>();
 let pushSnapshot: ((snapshot: LightingRuntimeSnapshot) => void) | null = null;
 
 vi.mock("../../modeApi", () => ({
-  applyOutputs: (...args: unknown[]) => applyOutputsMock(...args),
-  retuneLighting: (...args: unknown[]) => retuneLightingMock(...args),
-  releaseHueOutput: (...args: unknown[]) => releaseHueOutputMock(...args),
+  applyOutputs: (...args: Parameters<typeof applyOutputsMock>) => applyOutputsMock(...args),
+  retuneLighting: (...args: Parameters<typeof retuneLightingMock>) => retuneLightingMock(...args),
+  releaseHueOutput: (...args: Parameters<typeof releaseHueOutputMock>) => releaseHueOutputMock(...args),
   getLightingRuntime: () => getLightingRuntimeMock(),
 }));
 
@@ -35,6 +35,8 @@ vi.mock("../../captureApi", () => ({
 }));
 
 import { BOOT_HUE_RETRY_GAVE_UP_NOTICE_MS, useLightingModeOrchestrator } from "../useLightingModeOrchestrator";
+import type * as modeApiModule from "../../modeApi";
+import type * as captureApiModule from "../../captureApi";
 
 let revision = 0;
 
@@ -239,7 +241,7 @@ describe("useLightingModeOrchestrator", () => {
     it("turn a drag into coalesced retunes and no apply at all", async () => {
       let answer!: () => void;
       retuneLightingMock.mockImplementationOnce(
-        () => new Promise((resolve) => (answer = () => resolve({ status: { code: "RETUNE_APPLIED" } }))),
+        () => new Promise((resolve) => (answer = () => resolve({ status: { code: "RETUNE_APPLIED", message: "", details: null } }))),
       );
       const { view } = mount();
       await settle(view);
@@ -257,7 +259,7 @@ describe("useLightingModeOrchestrator", () => {
       });
 
       await waitFor(() => expect(retuneLightingMock).toHaveBeenCalledTimes(2));
-      expect(retuneLightingMock.mock.calls[1][0].ambilight.brightness).toBe(1);
+      expect(retuneLightingMock.mock.calls[1][0].ambilight?.brightness).toBe(1);
       expect(applyOutputsMock).not.toHaveBeenCalled();
     });
 
