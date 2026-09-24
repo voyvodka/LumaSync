@@ -1173,7 +1173,7 @@ for (const fn of REQUIRED_PREVIEW_COMMANDS) {
 // args count; the preview call sites pass a constant and belong to preview.ts.
 // ---------------------------------------------------------------------------
 const LIGHTING_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/lighting.ts");
-const RUST_LIGHTING_MODE_FILE = resolve(ROOT, "src-tauri/src/commands/lighting_mode.rs");
+const RUST_LIGHTING_MODE_FILE = resolve(ROOT, "src-tauri/src/commands/lighting_mode/transition.rs");
 const lightingSource = readOrEmpty(LIGHTING_CONTRACT_FILE, "lighting");
 const rustLightingSource = readOrEmpty(RUST_LIGHTING_MODE_FILE, "rust lighting_mode");
 
@@ -1192,7 +1192,7 @@ const emittedLightingCodes = [
 const EXPECTED_LIGHTING_CODE_COUNT = 12;
 check(
   emittedLightingCodes.length === EXPECTED_LIGHTING_CODE_COUNT,
-  `harvested exactly ${EXPECTED_LIGHTING_CODE_COUNT} command_status codes from lighting_mode.rs`,
+  `harvested exactly ${EXPECTED_LIGHTING_CODE_COUNT} command_status codes from lighting_mode/transition.rs`,
   `HARVEST COUNT DRIFT: expected ${EXPECTED_LIGHTING_CODE_COUNT} lighting codes, got `
     + `${emittedLightingCodes.length} [${emittedLightingCodes.join(", ")}] — a code was added, `
     + `removed, or refactored from a string literal into a constant (which this harvest cannot see)`
@@ -1439,7 +1439,10 @@ check(
   "MISSING LINK_MAX_FPS_ABSENT in telemetry.ts — nothing stops a consumer "
     + "rendering a Hue-only session as \"0 fps\""
 );
-const rustLinkThreshold = rustLightingSource.match(
+const rustLinkThreshold = readOrEmpty(
+  resolve(ROOT, "src-tauri/src/commands/lighting_mode/pacing.rs"),
+  "rust pacing"
+).match(
   /const\s+LINK_CONSTRAINED_FPS\s*:\s*f32\s*=\s*([0-9.]+)/
 );
 const tsLinkThreshold = telemetrySource.match(

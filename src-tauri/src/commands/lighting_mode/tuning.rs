@@ -13,11 +13,10 @@ use log::warn;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime};
 
+use super::live::{retune_ambilight_live, AmbilightLiveSettings};
 use super::snapshot::SnapshotSink;
-use super::{
-    retune_ambilight_live, AmbilightLiveSettings, AmbilightPayload, LightingModeKind,
-    LightingRuntimeState, SolidColorPayload, SolidUsbOutput, UsbOutputPlan,
-};
+use super::usb_output::{SolidUsbOutput, UsbOutputPlan};
+use super::{AmbilightPayload, LightingModeKind, LightingRuntimeState, SolidColorPayload};
 use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionState};
 use crate::commands::hue::state_store::{apply_hue_color_with_context, HueOutputLive};
 use crate::commands::led_output::{apply_color_correction_rgb, ColorCorrectionConfig};

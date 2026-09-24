@@ -20,9 +20,9 @@ use super::{assert_camel_case_keys, invoke, main_webview, mock_app, status_code}
 
 fn app() -> App<MockRuntime> {
     mock_app(tauri::generate_handler![
-        crate::commands::lighting_mode::start_led_test_pattern,
-        crate::commands::lighting_mode::stop_led_test_pattern,
-        crate::commands::lighting_mode::get_led_preview_status
+        crate::commands::lighting_mode::led_test_pattern::start_led_test_pattern,
+        crate::commands::lighting_mode::led_test_pattern::stop_led_test_pattern,
+        crate::commands::lighting_mode::preview::get_led_preview_status
     ])
 }
 

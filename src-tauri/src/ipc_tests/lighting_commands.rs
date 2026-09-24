@@ -10,9 +10,9 @@ use super::{grant_main_for_tests, invoke, main_webview, mock_app, status_code, O
 
 fn app() -> App<MockRuntime> {
     let app = mock_app(tauri::generate_handler![
-        crate::commands::lighting_mode::set_lighting_mode,
-        crate::commands::lighting_mode::get_lighting_mode_status,
-        crate::commands::lighting_mode::stop_lighting
+        crate::commands::lighting_mode::transition::set_lighting_mode,
+        crate::commands::lighting_mode::transition::get_lighting_mode_status,
+        crate::commands::lighting_mode::transition::stop_lighting
     ]);
     grant_main_for_tests(&app, &OLD_MODE_COMMANDS);
     app
@@ -34,7 +34,7 @@ fn lighting_mode_starts_off() {
 ///
 /// The invariant under test is that a gated request reports the mode that is
 /// *actually* running, not the one that was asked for — `apply_mode_change`
-/// returns `owner.active_mode.clone()` on the USB gate (`lighting_mode.rs`).
+/// returns `owner.active_mode.clone()` on the USB gate (`lighting_mode/transition.rs`).
 /// Reporting `solid` here would light the mode strip with no LEDs behind it.
 /// An empty `targets` list means USB-required by the legacy rule, so this
 /// pins that default too.
@@ -126,9 +126,9 @@ mod transitions {
     /// machine. The socket is returned to keep the port bound.
     fn app() -> (App<MockRuntime>, UdpSocket) {
         let app = mock_app(tauri::generate_handler![
-            crate::commands::lighting_mode::set_lighting_mode,
-            crate::commands::lighting_mode::stop_lighting,
-            crate::commands::lighting_mode::get_lighting_mode_status
+            crate::commands::lighting_mode::transition::set_lighting_mode,
+            crate::commands::lighting_mode::transition::stop_lighting,
+            crate::commands::lighting_mode::transition::get_lighting_mode_status
         ]);
         grant_main_for_tests(&app, &OLD_MODE_COMMANDS);
         let receiver = UdpSocket::bind("127.0.0.1:0").expect("bind receiver");

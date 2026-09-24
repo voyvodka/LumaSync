@@ -11,11 +11,11 @@ use std::time::{Duration, Instant};
 
 use log::info;
 
-use super::smoothing::{TimeSmoother, SMOOTHING_REFERENCE_INTERVAL};
-use super::{
+use super::live::RoomGeometryLive;
+use super::sampling::{
     hue_sample_table, sample_screen_position_avg, BlackBorderCache, HueSampleTable,
-    RoomGeometryLive,
 };
+use super::smoothing::{TimeSmoother, SMOOTHING_REFERENCE_INTERVAL};
 use crate::commands::ambilight_capture::CapturedFrame;
 use crate::commands::ambilight_scene::{LightSetState, LightTopology, SceneAnalyzer};
 use crate::commands::hue::frame::{HueAreaChannel, HueRgb};

@@ -2,7 +2,7 @@
 //! step. See docs/architecture/capture-and-pipeline.md, "Measuring the frame
 //! budget".
 
-use std::sync::atomic::AtomicU32;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -10,22 +10,37 @@ use std::time::{Duration, Instant};
 use super::frame_pipeline::{
     strip_topology_for, AmbilightFramePipeline, FramePipelineConfig, FrameSettings,
 };
+use super::live::{AmbilightLiveSettings, RoomGeometryLive};
+use super::sampling::{
+    hue_sample_table, sample_screen_position_avg, BlackBorderCache, HueSampleTable,
+    LIVE_SAMPLE_WINDOW,
+};
 use super::smoothing::{alpha_for_interval, TimeSmoother, SMOOTHING_REFERENCE_INTERVAL};
-use super::worker::WorkerPacing;
+use super::usb_output::UsbOutputPlan;
+use super::worker::{start_ambilight_worker, WorkerPacing};
 use super::*;
-use crate::commands::ambilight_capture::AmbilightCaptureError;
-use crate::commands::ambilight_scene::{LightSetState, SceneAnalyzer};
+use crate::commands::ambilight_capture::{
+    detect_black_borders, AmbilightCaptureError, AmbilightFrameSource, BlackBorderInsets,
+    CapturedFrame, BLACK_BORDER_THRESHOLD,
+};
+use crate::commands::ambilight_scene::{LightSetState, LightTopology, SceneAnalyzer};
 use crate::commands::hue::frame::{HueAreaChannel, HueColorSender, HueRgb, HueScreenRegion};
 use crate::commands::hue::state_store::{
     HueActiveOutputContext, HueChannelPlacementOverride, HueOutputLive,
 };
+use crate::commands::hue_intensity::LightingSmoothingPreset;
 use crate::commands::led_calibration::{
-    build_led_sequence, sample_frame_for_sequence, sample_frame_within_insets, LedSegment,
-    LedSegmentCounts, LedSequenceItem,
+    build_led_sequence, sample_frame_for_sequence, sample_frame_within_insets,
+    LedCalibrationConfig, LedSegment, LedSegmentCounts, LedSequenceItem,
 };
-use crate::commands::led_output::{apply_saturation_to_pixel, LedOutputError, LedPacketSender};
+use crate::commands::led_output::{
+    apply_saturation_to_pixel, encode_packet_for_output, ColorCorrectionConfig, EncoderPlan,
+    FirmwareProfile, LedChipType, LedColorOrder, LedOutputBridge, LedOutputError, LedPacketSender,
+    SerialSink, WirePixelLayout,
+};
+use crate::commands::led_sink::LedSink;
 use crate::commands::runtime_telemetry::RuntimeTelemetrySnapshot;
-use crate::models::room_map::{RoomDimensions, TvAnchorPlacement};
+use crate::models::room_map::{RoomDimensions, RoomGeometry, TvAnchorPlacement};
 
 // ---------------------------------------------------------------------------
 // Fixtures

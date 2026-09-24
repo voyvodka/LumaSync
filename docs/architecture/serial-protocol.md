@@ -227,7 +227,7 @@ frames afterwards.
 
 The host paces frames to what the link can carry, twice. `frame_wire_bytes`, `frame_wire_time_ms`
 and `link_max_fps` (`led_calibration.rs`) compute it from `SERIAL_LINK_BYTES_PER_SEC`;
-`SerialSendBudget` (`commands/lighting_mode.rs`) clamps the worker's send interval to it and flags a
+`SerialSendBudget` (`commands/lighting_mode/pacing.rs`) clamps the worker's send interval to it and flags a
 strip as link-constrained below 30 fps (`LINK_CONSTRAINED_FPS`). Only a serial sink gets this
 budget; WLED does not (`resolve_quality_config`).
 
