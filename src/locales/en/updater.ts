@@ -26,7 +26,6 @@ export default {
     checkTitle: "Could not reach the update server",
     checkBody: "Nothing has changed — you are still on the version you were running. This usually means no connection, or something on the network blocking the request.",
     detailTitle: "Technical detail",
-    backgroundCheckBody: "Nothing has changed. LumaSync will check again the next time it starts.",
   },
   actions: {
     later: "Later",

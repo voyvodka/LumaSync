@@ -65,11 +65,6 @@ export default {
       hueSubChecking: "Bridge · <b>checking…</b>",
     },
   },
-  calibrationBanner: {
-    title: "Calibration required",
-    sub: "Finish LED layout before enabling this mode.",
-    action: "Open setup",
-  },
   led: {
     colorCorrection: {
       title: "Color Correction",

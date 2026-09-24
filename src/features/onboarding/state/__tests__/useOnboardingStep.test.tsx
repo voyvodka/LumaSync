@@ -17,9 +17,9 @@ interface FlowState {
 }
 
 const STEP_TITLE: Record<Exclude<OnboardingStep, "complete">, string> = {
-  [ONBOARDING_STEPS.LIGHTS]: "common:ui.onboarding.step1.title",
-  [ONBOARDING_STEPS.DEVICES]: "common:ui.onboarding.step2.title",
-  [ONBOARDING_STEPS.LED_SETUP]: "common:ui.onboarding.step3.title",
+  [ONBOARDING_STEPS.LIGHTS]: "shell:notices.messages.onboarding.lights",
+  [ONBOARDING_STEPS.DEVICES]: "shell:notices.messages.onboarding.devices",
+  [ONBOARDING_STEPS.LED_SETUP]: "shell:notices.messages.onboarding.ledSetup",
 };
 
 /** Renders the shown step the way the notice slot names it. */
@@ -83,11 +83,11 @@ describe("useOnboardingStep", () => {
   it("walks past every step whose guard already holds, in one change", async () => {
     const { onComplete, rerender } = flow(AWAITING_OUTPUT);
     await advance(ONBOARDING_REVEAL_SETTLE_MS);
-    expect(screen.getByText("common:ui.onboarding.step2.title")).toBeInTheDocument();
+    expect(screen.getByText("shell:notices.messages.onboarding.devices")).toBeInTheDocument();
 
     rerender(ALL);
 
-    expect(screen.queryByText("common:ui.onboarding.step3.title")).not.toBeInTheDocument();
+    expect(screen.queryByText("shell:notices.messages.onboarding.ledSetup")).not.toBeInTheDocument();
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
@@ -99,18 +99,18 @@ describe("useOnboardingStep", () => {
 
   it("stops at the first unmet step", () => {
     const { onComplete } = flow({ ...ALL, hasSavedCalibration: false });
-    expect(screen.getByText("common:ui.onboarding.step3.title")).toBeInTheDocument();
+    expect(screen.getByText("shell:notices.messages.onboarding.ledSetup")).toBeInTheDocument();
     expect(onComplete).not.toHaveBeenCalled();
   });
 
   describe("revealing only a settled step", () => {
     it("shows nothing until the persisted guards load, then step 1 at once", () => {
       const { rerender } = flow({ guards: NONE, guardsLoaded: false });
-      expect(screen.queryByText("common:ui.onboarding.step1.title")).not.toBeInTheDocument();
+      expect(screen.queryByText("shell:notices.messages.onboarding.lights")).not.toBeInTheDocument();
 
       rerender({ guards: NONE, guardsLoaded: true });
 
-      expect(screen.getByText("common:ui.onboarding.step1.title")).toBeInTheDocument();
+      expect(screen.getByText("shell:notices.messages.onboarding.lights")).toBeInTheDocument();
     });
 
     // An upgrader whose persisted guards arrive in a later tick than the flag.
@@ -119,13 +119,13 @@ describe("useOnboardingStep", () => {
       rerender({ guards: { ...NONE, hasSavedCalibration: true }, guardsLoaded: false });
       rerender({ guards: ALL, guardsLoaded: true });
 
-      expect(screen.queryByText("common:ui.onboarding.step1.title")).not.toBeInTheDocument();
+      expect(screen.queryByText("shell:notices.messages.onboarding.lights")).not.toBeInTheDocument();
       expect(onComplete).toHaveBeenCalledTimes(1);
     });
 
     it("holds the devices step back while the output guards can still settle", async () => {
       const { onComplete, rerender } = flow({ guards: AWAITING_OUTPUT, guardsLoaded: true });
-      expect(screen.queryByText("common:ui.onboarding.step2.title")).not.toBeInTheDocument();
+      expect(screen.queryByText("shell:notices.messages.onboarding.devices")).not.toBeInTheDocument();
 
       // A remembered strip reconnecting inside the window: no flash, straight to done.
       await advance(ONBOARDING_REVEAL_SETTLE_MS - 1);
@@ -140,31 +140,31 @@ describe("useOnboardingStep", () => {
 
       await advance(ONBOARDING_REVEAL_SETTLE_MS);
 
-      expect(screen.getByText("common:ui.onboarding.step2.title")).toBeInTheDocument();
+      expect(screen.getByText("shell:notices.messages.onboarding.devices")).toBeInTheDocument();
     });
 
     it("waits for a bridge probe still out, up to the cap", async () => {
       const { rerender } = flow({ guards: AWAITING_OUTPUT, guardsLoaded: true, reachabilityPending: true });
 
       await advance(ONBOARDING_REVEAL_SETTLE_MS);
-      expect(screen.queryByText("common:ui.onboarding.step2.title")).not.toBeInTheDocument();
+      expect(screen.queryByText("shell:notices.messages.onboarding.devices")).not.toBeInTheDocument();
 
       await advance(ONBOARDING_REVEAL_CAP_MS - ONBOARDING_REVEAL_SETTLE_MS);
-      expect(screen.getByText("common:ui.onboarding.step2.title")).toBeInTheDocument();
+      expect(screen.getByText("shell:notices.messages.onboarding.devices")).toBeInTheDocument();
 
       // Latched: the probe answering later does not take it away again.
       rerender({ guards: AWAITING_OUTPUT, guardsLoaded: true, reachabilityPending: false });
-      expect(screen.getByText("common:ui.onboarding.step2.title")).toBeInTheDocument();
+      expect(screen.getByText("shell:notices.messages.onboarding.devices")).toBeInTheDocument();
     });
 
     it("shows the devices step as soon as a pending probe answers after the settle window", async () => {
       const { rerender } = flow({ guards: AWAITING_OUTPUT, guardsLoaded: true, reachabilityPending: true });
       await advance(ONBOARDING_REVEAL_SETTLE_MS + 500);
-      expect(screen.queryByText("common:ui.onboarding.step2.title")).not.toBeInTheDocument();
+      expect(screen.queryByText("shell:notices.messages.onboarding.devices")).not.toBeInTheDocument();
 
       rerender({ guards: AWAITING_OUTPUT, guardsLoaded: true, reachabilityPending: false });
 
-      expect(screen.getByText("common:ui.onboarding.step2.title")).toBeInTheDocument();
+      expect(screen.getByText("shell:notices.messages.onboarding.devices")).toBeInTheDocument();
     });
   });
 });

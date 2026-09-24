@@ -27,6 +27,9 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Notices at the top of the window are now a thin one-line strip: a coloured dot, one short
+  sentence and a link such as "Devices →". In the compact window a sentence that does not fit ends
+  in "…", and the full text is in its tooltip or one click away.
 - Room map: undo steps back a whole drag, including slider drags. Holding an arrow key, or dragging
   a Hue zone's size slider, its colour picker, a light's height slider or an image's opacity slider,
   is one undo step and one save instead of one per key repeat or slider tick. Dragging is smoother:

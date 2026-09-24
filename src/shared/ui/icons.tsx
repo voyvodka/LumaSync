@@ -331,15 +331,6 @@ export function IconError() {
   );
 }
 
-export function IconWarning() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3.5 2.8 19.5h18.4z" />
-      <path d="M12 10v4M12 17h.01" />
-    </svg>
-  );
-}
-
 export function IconClose() {
   return (
     <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">

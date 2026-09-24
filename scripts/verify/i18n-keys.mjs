@@ -26,7 +26,6 @@ const KNOWN_DYNAMIC_PREFIXES = [
   "hue:runtime.states",
   "hue:runtime.triggerSource",
   "hue:runtime.writeback.codes",
-  "common:captureFailed",
   "common:hotplug.targetLabel",
   "preview:pattern",
   "preview:status",
@@ -67,7 +66,6 @@ const DYNAMIC_PREFIX_DOMAINS = {
       "hue.ts HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED",
     ],
   },
-  "common:captureFailed": { sources: ["capture.ts CAPTURE_FAILURE_BUCKET"] },
   "common:hotplug.targetLabel": { sources: ["hue.ts HueRuntimeTarget"] },
   "preview:pattern": { sources: ["preview.ts LED_TEST_PATTERN_KIND"] },
   // The popup's error line: exactly useTestPatternRunner's ERROR_CODES.

@@ -243,8 +243,4 @@ export default {
       discovered: "DISCOVERED",
     },
   },
-  colorNotApplied: {
-    streamOffline: "Hue stream is offline — the colour is queued and will be sent when it reconnects.",
-    noLights: "No addressable Hue lights resolved — revalidate the entertainment area.",
-  },
 };
