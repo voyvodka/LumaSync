@@ -19,6 +19,7 @@ export default {
   manualIp: {
     title: "Manual IP entry",
     description: "If auto-discovery did not find your bridge, enter its IP address.",
+    inputLabel: "Bridge IP address",
     placeholder: "e.g. 192.168.1.50",
     invalid: "Enter a valid IPv4 address before submitting.",
   },

@@ -273,34 +273,6 @@
 .lm-pattern-speed button:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
 .lm-pattern-speed button[aria-checked="true"] { color: var(--lm-amber); border-color: rgba(255, 176, 32, 0.5); background: rgba(255, 176, 32, 0.08); }
 
-/* ── Preview-only info note (FE-3) ───────────────────────────────────────
-   A PATTERN_PREVIEW_ONLY run is a success (the test ran into the twin /
-   edge-signal stream) — NOT an error. Distinct from the red runError
-   alert: a neutral amber-tinted note with a leading dot so colour is not
-   the sole status signal. role="status" (polite), never role="alert". */
-.lm-control-info {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin-top: 8px;
-  padding: 7px 9px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 176, 32, 0.4);
-  background: rgba(255, 176, 32, 0.08);
-  color: var(--lm-ink-dim);
-  font-family: var(--lm-mono);
-  font-size: 10px;
-  line-height: 1.4;
-}
-.lm-control-info-dot {
-  flex-shrink: 0;
-  margin-top: 3px;
-  width: 6px;
-  height: 6px;
-  border-radius: 9999px;
-  background: var(--lm-amber);
-}
-
 /* ── Running-test footer ─────────────────────────────────────────────────── */
 .lm-test-footer {
   display: flex;
@@ -359,16 +331,11 @@
   .lm-pattern-tile,
   .lm-pattern-speed button,
   .lm-control-close,
-  .lm-control-chip,
-  .lm-control-info,
-  .lm-signal-note {
+  .lm-control-chip {
     border-color: CanvasText;
     forced-color-adjust: none;
   }
-  /* The dot is the link note's non-colour indicator — without this the amber
-     fill disappears and the row loses its leading marker entirely. */
-  .lm-test-dot,
-  .lm-signal-note-dot {
+  .lm-test-dot {
     background: CanvasText;
   }
   .lm-control-mbtn[aria-checked="true"],

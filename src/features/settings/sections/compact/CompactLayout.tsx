@@ -246,6 +246,7 @@ export const CompactLayout = memo(function CompactLayout() {
                   disabled={nonOffDisabled}
                   onClick={() => handleScenePresetClick(preset)}
                   className={`lm-compact-scene-tile ${isSelected ? "is-on" : ""}`}
+                  aria-pressed={isSelected}
                   style={{ background: preset.gradient }}
                   title={t(preset.labelKey)}
                 >

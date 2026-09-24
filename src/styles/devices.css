@@ -634,12 +634,17 @@
   display: flex;
   align-items: center;
   gap: 9px;
+  min-height: 32px;
   padding: 7px 10px;
   border: 1px solid var(--lm-line-2);
   border-radius: 6px;
   background: #0a0c0f;
   cursor: pointer;
   transition: all 0.15s;
+}
+.lm-hue-area-item:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring);
 }
 .lm-hue-area-item:hover:not(.is-blocked) {
   border-color: rgba(255, 176, 32, 0.35);
@@ -773,6 +778,32 @@
 }
 .lm-hue-retry-tx { flex: 1; font-family: var(--lm-mono); font-size: 9.5px; color: var(--lm-amber); letter-spacing: 0.04em; }
 .lm-hue-retry-tx b { color: var(--lm-ink-dim); font-weight: 400; }
+
+/* After both spinners on purpose: a guard earlier in the cascade loses to
+   their `animation` shorthand, which is how the one in updater.css never
+   applied. Functional spinners slow down rather than stop. */
+@media (prefers-reduced-motion: reduce) {
+  .lm-hue-wait-sp,
+  .lm-hue-retry-sp {
+    animation-duration: 2.2s;
+  }
+  .lm-hue-area-item {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .lm-hue-area-item {
+    border-color: CanvasText;
+  }
+  .lm-hue-area-item[aria-pressed="true"] {
+    outline: 2px solid Highlight;
+  }
+  .lm-hue-area-item:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+    box-shadow: none;
+  }
+}
 
 /* ── Stale readiness banner (State N) ───────────────────────────────── */
 .lm-hue-stale {
