@@ -384,8 +384,36 @@ impl FakeHue {
         }
     }
 
-    /// Every restore PUT, as `(light id, body)` in arrival order.
+    /// Every restore PUT, as `(light id, body)` in arrival order. A start's
+    /// switch-on of an off light (`{"on":{"on":true}}` alone) is not one: see
+    /// [`Self::switch_ons`]. A restore of an on light always carries its
+    /// brightness here, since every light this bridge serves has `dimming`.
     pub(crate) fn light_puts(&self) -> Vec<(String, Value)> {
+        self.all_light_puts()
+            .into_iter()
+            .filter(|(_, body)| *body != switch_on_body())
+            .collect()
+    }
+
+    /// The lights a start switched on before its stream, in arrival order.
+    pub(crate) fn switch_ons(&self) -> Vec<String> {
+        self.all_light_puts()
+            .into_iter()
+            .filter(|(_, body)| *body == switch_on_body())
+            .map(|(id, _)| id)
+            .collect()
+    }
+
+    /// [`Self::light_puts`] as recorded, with their arrival times.
+    pub(crate) fn restore_requests(&self) -> Vec<Recorded> {
+        self.bridge
+            .puts_to("/clip/v2/resource/light/")
+            .into_iter()
+            .filter(|r| r.json() != switch_on_body())
+            .collect()
+    }
+
+    fn all_light_puts(&self) -> Vec<(String, Value)> {
         self.bridge
             .puts_to("/clip/v2/resource/light/")
             .into_iter()
@@ -395,6 +423,10 @@ impl FakeHue {
             })
             .collect()
     }
+}
+
+fn switch_on_body() -> Value {
+    json!({ "on": { "on": true } })
 }
 
 fn route(

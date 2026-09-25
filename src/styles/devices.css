@@ -855,8 +855,9 @@
   grid-column: 1 / -1;
 }
 
-/* ── Manual IP inline form ──────────────────────────────────────────── */
-.lm-hue-ip-form {
+/* ── Manual IP inline form, and the Off choice in the same frame ─────── */
+.lm-hue-ip-form,
+.lm-hue-off-form {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -873,6 +874,7 @@
   letter-spacing: -0.01em;
 }
 .lm-hue-ip-form-sub { font-family: var(--lm-mono); font-size: 10px; color: var(--lm-ink-faint); letter-spacing: 0.02em; }
+.lm-hue-off-form .lm-settings-seg { align-self: flex-start; }
 .lm-hue-ip-row { display: flex; gap: 8px; }
 .lm-hue-ip-input {
   all: unset;

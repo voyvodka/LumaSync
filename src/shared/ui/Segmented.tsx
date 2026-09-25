@@ -21,6 +21,8 @@ interface SegmentedProps<T extends string> {
   value: T | null;
   onChange: (value: T) => void;
   ariaLabel: string;
+  /** Id of the line that explains the choice, read after the group's name. */
+  ariaDescribedBy?: string;
   /** The group's look is the caller's: every strip in the app keeps its own class. */
   className?: string;
   itemClassName?: string;
@@ -33,6 +35,7 @@ export function Segmented<T extends string>({
   value,
   onChange,
   ariaLabel,
+  ariaDescribedBy,
   className,
   itemClassName,
   disabled = false,
@@ -51,6 +54,7 @@ export function Segmented<T extends string>({
       className={className}
       role="radiogroup"
       aria-label={ariaLabel}
+      aria-describedby={ariaDescribedBy}
       aria-disabled={disabled || undefined}
     >
       {options.map((option) => (

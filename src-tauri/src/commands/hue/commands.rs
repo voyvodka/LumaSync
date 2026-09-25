@@ -15,11 +15,7 @@ use std::sync::atomic::AtomicU32;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use log::{error, warn};
-// Reachable only from the `#[cfg(debug_assertions)]` arm of `simulate_hue_fault`,
-// so an ungated import is an unused-import error under `clippy --release`.
-#[cfg(debug_assertions)]
-use log::info;
+use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -32,8 +28,9 @@ use super::area_cache::HueReadFreshness;
 use super::credential_store::effective_hue_app_key;
 use super::frame::{HueAreaChannel, HueAreaChannelInfo};
 use super::light_restore::{
-    adopt_light_snapshot, restore_lights, take_light_restore_for_abandoned_start,
-    take_light_restore_for_other_area, HueLightRestore, HUE_LIGHT_RESTORE_BUDGET,
+    adopt_light_snapshot, restore_lights, switch_on_lights, take_light_restore_for_abandoned_start,
+    take_light_restore_for_other_area, HueLightRestore, HueLightsAfterStop,
+    HUE_LIGHT_RESTORE_BUDGET, HUE_LIGHT_SWITCH_ON_BUDGET,
 };
 use super::reconnect::{
     spawn_hue_sender_with, spawn_reconnect_monitor, store_active_stream_context, StartAbortGuard,
@@ -412,6 +409,25 @@ where
         lights: lights.states,
     };
 
+    // 4a-ter. Switch on the lights that read off (after Off, every one of them)
+    //         while the area is not yet ours: the bridge is not documented to
+    //         do it for a stream. `captured` keeps them "off", so the session's
+    //         restore puts them back off. See docs/architecture/hue.md.
+    if result.active {
+        let switch_on = captured.off_lights_switched_on();
+        if !switch_on.lights.is_empty() {
+            let probe = Arc::clone(runtime);
+            let _ = tokio::task::spawn_blocking(move || {
+                switch_on_lights(
+                    &switch_on,
+                    Instant::now() + HUE_LIGHT_SWITCH_ON_BUDGET,
+                    &|| a_stop_overtook_the_start(&probe),
+                )
+            })
+            .await;
+        }
+    }
+
     // 4b. Spawn the sender, wired to the owner's packet counter.
     let spawned = if result.active {
         let sender_channels = channels.clone();
@@ -536,6 +552,14 @@ async fn settle_abandoned_start(
     .await;
 }
 
+/// A start switching lights on stops once a stop has taken the runtime back.
+fn a_stop_overtook_the_start(runtime: &Arc<Mutex<HueRuntimeOwner>>) -> bool {
+    matches!(
+        acquire_hue_runtime(runtime).state,
+        HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed
+    )
+}
+
 /// A stop leaves the runtime `Idle`; any of these means a start has begun
 /// since, and a restore still running must not write under it. The stop
 /// command's own gate (`stop_in_flight`) already holds starts back; an
@@ -553,10 +577,11 @@ fn a_newer_session_began(runtime: &Arc<Mutex<HueRuntimeOwner>>) -> bool {
 /// `HUE_STOP_TIMEOUT_SECS`, the command reports `HUE_STOP_TIMEOUT_PARTIAL`
 /// with an action hint to retry.
 ///
-/// Every caller of this command ends Hue output (Off, Hue deselected, a mode
-/// without Hue, a refused start, a test lease giving back what it opened), so
-/// it always restores. Transient stops — reconnect, restart of the same area —
-/// never come through here. See docs/architecture/hue.md.
+/// Every caller of this command ends Hue output, so it always restores. A
+/// user's Off, which may switch the lights off instead, comes through the
+/// lighting transaction (`stop_hue_stream_on`), never through here. Transient
+/// stops — reconnect, restart of the same area — never come through here
+/// either. See docs/architecture/hue.md.
 ///
 /// `async` so the blocking work runs on the blocking pool: a sync command runs
 /// on the main thread, and the deactivate, sender wait and restore would
@@ -567,21 +592,22 @@ pub async fn stop_hue_stream(
     runtime_state: State<'_, HueRuntimeStateStore>,
 ) -> Result<HueRuntimeCommandResult, String> {
     let trigger = trigger_source.unwrap_or(HueRuntimeTriggerSource::System);
-    Ok(stop_hue_stream_on(runtime_state.inner(), trigger).await)
+    Ok(stop_hue_stream_on(runtime_state.inner(), trigger, HueLightsAfterStop::Restore).await)
 }
 
 /// Body of `stop_hue_stream`, shared with the lighting transaction's Hue driver
-/// so both hold `stop_in_flight` across the restore.
+/// so both hold `stop_in_flight` across the restore — or the switch-off.
 pub(crate) async fn stop_hue_stream_on(
     runtime_state: &HueRuntimeStateStore,
     trigger: HueRuntimeTriggerSource,
+    lights: HueLightsAfterStop,
 ) -> HueRuntimeCommandResult {
     let _wake = super::health::WakeOnDrop;
     let runtime = runtime_state.runtime_arc();
     let in_flight = Arc::clone(&runtime_state.stop_in_flight).lock_owned().await;
     let stopped = tokio::task::spawn_blocking(move || {
         let _in_flight = in_flight;
-        stop_hue_runtime(&runtime, trigger, None)
+        stop_hue_runtime(&runtime, trigger, None, lights)
     })
     .await;
     stopped.unwrap_or_else(|_join_err| {
@@ -593,6 +619,7 @@ pub(crate) async fn stop_hue_stream_on(
 /// The quit path's stop (`lib.rs` `[shutdown]` step 2). Same stop and restore
 /// as the command, but the deactivate PUT, the sender wait and the restore all
 /// end by `deadline`, so a slow bridge cannot run into the shutdown watchdog.
+/// Quitting is not choosing Off: the lights always go back as they were.
 pub fn stop_hue_stream_before_exit(
     runtime_state: &HueRuntimeStateStore,
     deadline: Instant,
@@ -601,15 +628,18 @@ pub fn stop_hue_stream_before_exit(
         &runtime_state.runtime,
         HueRuntimeTriggerSource::System,
         Some(deadline),
+        HueLightsAfterStop::Restore,
     )
 }
 
 /// Blocking body of every stop. `deadline` bounds the whole call when given;
-/// without one each step keeps its own ceiling.
+/// without one each step keeps its own ceiling. `lights` says what the area's
+/// lights get once the stream is down.
 pub(crate) fn stop_hue_runtime(
     runtime: &Arc<Mutex<HueRuntimeOwner>>,
     trigger: HueRuntimeTriggerSource,
     deadline: Option<Instant>,
+    lights: HueLightsAfterStop,
 ) -> HueRuntimeCommandResult {
     let remaining = |ceiling: Duration| match deadline {
         Some(deadline) => ceiling.min(deadline.saturating_duration_since(Instant::now())),
@@ -710,9 +740,23 @@ pub(crate) fn stop_hue_runtime(
         make_result(&owner)
     };
 
-    // 4. Put the lights back. Logged, never fatal: a refusal or an unreachable
-    //    bridge leaves them as the bridge restored them (colour back, on).
+    // 4. Put the lights back — or, for a user's Off, switch them off through
+    //    the same writes and watch, so the bridge's own post-stream state
+    //    cannot turn them back on. Logged, never fatal: a refusal or an
+    //    unreachable bridge leaves them as the bridge restored them (colour
+    //    back, on).
     if let Some(restore) = light_restore {
+        let restore = match lights {
+            HueLightsAfterStop::Restore => restore,
+            HueLightsAfterStop::TurnOff => {
+                info!(
+                    "[hue-restore] area {}: Off chosen, switching {} light(s) off instead of restoring",
+                    restore.area_id,
+                    restore.lights.len()
+                );
+                restore.switched_off()
+            }
+        };
         let restore_deadline =
             deadline.unwrap_or_else(|| Instant::now() + HUE_LIGHT_RESTORE_BUDGET);
         restore_lights(&restore, restore_deadline, &|| {
@@ -1208,12 +1252,11 @@ mod light_restore_flow {
     use super::super::retry::start_with_evidence;
     use super::super::sender::{new_shutdown_signal, signal_shutdown_complete, DeactivateToken};
     use super::super::state_store::test_helpers::strict_gate_ready;
-    use super::super::test_bridge::{light_json, FakeHue, Reply};
+    use super::super::test_bridge::{light_json, FakeHue, Reply, TestBridge};
     use super::*;
 
     const AREA: &str = "area-1";
     const STOP_PUT: &str = "/clip/v2/resource/entertainment_configuration/";
-    const LIGHT_PUT: &str = "/clip/v2/resource/light/";
 
     fn request(hue: &FakeHue, area_id: &str) -> StartHueStreamRequest {
         StartHueStreamRequest {
@@ -1326,7 +1369,7 @@ mod light_restore_flow {
             vec![("light-1".to_string(), switch_off())]
         );
         let stop_put = hue.bridge.puts_to(STOP_PUT);
-        let light_put = hue.bridge.puts_to(LIGHT_PUT);
+        let light_put = hue.restore_requests();
         assert_eq!(stop_put[0].json(), json!({ "action": "stop" }));
         assert!(
             stop_put[0].at <= light_put[0].at,
@@ -1558,7 +1601,7 @@ mod light_restore_flow {
 
         assert_eq!(result.status.code, "HUE_STREAM_STOPPED");
         assert!(Instant::now() <= deadline, "{:?}", started.elapsed());
-        let puts = hue.bridge.puts_to(LIGHT_PUT);
+        let puts = hue.restore_requests();
         assert_eq!(puts.len(), 3);
         // ~10 requests/s: three restores span two ~100 ms slots. Measured on
         // the server side, so a TLS handshake's jitter is allowed for.
@@ -1869,7 +1912,7 @@ mod light_restore_flow {
 
         assert_eq!(stopped.status.code, "HUE_STREAM_STOPPED");
         let stop_puts = hue.bridge.puts_to(STOP_PUT);
-        let light_puts = hue.bridge.puts_to(LIGHT_PUT);
+        let light_puts = hue.restore_requests();
         assert_eq!(
             stop_puts.len(),
             1,
@@ -1977,6 +2020,189 @@ mod light_restore_flow {
         assert!(acquire_hue_runtime(&runtime).light_restore.is_none());
     }
 
+    fn restore_of(bridge: &TestBridge, lights: &[&str]) -> HueLightRestore {
+        HueLightRestore {
+            bridge_ip: bridge.authority.clone(),
+            username: "app-key".to_string(),
+            area_id: AREA.to_string(),
+            lights: lights
+                .iter()
+                .map(|light| HueLightSnapshot {
+                    light_id: light.to_string(),
+                    state: parse_light_state(&before_stream()).unwrap(),
+                })
+                .collect(),
+        }
+    }
+
+    /// A bridge whose area read answers `first` once and `then` after that.
+    fn area_answering(first: Reply, then: fn() -> Reply) -> TestBridge {
+        let first = Mutex::new(Some(first));
+        TestBridge::start(move |method, path, _| {
+            if method == "GET" && path.contains("entertainment_configuration") {
+                return first.lock().unwrap().take().unwrap_or_else(then);
+            }
+            Reply::ok()
+        })
+    }
+
+    fn streamed_by_another_app() -> Reply {
+        Reply::json(
+            200,
+            json!({ "errors": [], "data": [{
+                "id": AREA,
+                "status": "active",
+                "active_streamer": { "rid": "another-app", "rtype": "auth_v1" }
+            }] }),
+        )
+    }
+
+    fn unreadable() -> Reply {
+        Reply::text(200, "<html>not the bridge's JSON</html>".to_string())
+    }
+
+    /// The flake behind #486's "another app" test: a read of the area that
+    /// could not be understood — a garbled body, or a first read cut off by
+    /// the window on a loaded machine — was taken for "free", and the restore
+    /// wrote under the other app's stream. Only a read that says free may.
+    #[tokio::test]
+    async fn a_restore_never_takes_an_unreadable_area_read_for_free() {
+        let bridge = area_answering(unreadable(), streamed_by_another_app);
+        let restore = restore_of(&bridge, &["left", "right"]);
+
+        let report = tokio::task::spawn_blocking(move || {
+            restore_lights(&restore, Instant::now() + HUE_LIGHT_RESTORE_BUDGET, &|| {
+                false
+            })
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(report.stopped, Some(HueLightRestoreStop::AreaTaken));
+        assert!(bridge.puts_to("/clip/v2/resource/light/").is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_restore_that_never_gets_a_readable_area_answer_writes_nothing() {
+        let bridge = area_answering(unreadable(), unreadable);
+        let restore = restore_of(&bridge, &["left"]);
+
+        let report = tokio::task::spawn_blocking(move || {
+            restore_lights(&restore, Instant::now() + HUE_LIGHT_RESTORE_BUDGET, &|| {
+                false
+            })
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(report.stopped, Some(HueLightRestoreStop::AreaUnknown));
+        assert!(bridge.puts_to("/clip/v2/resource/light/").is_empty());
+    }
+
+    /// An area the bridge no longer has is streamed by nobody: its lights are
+    /// still the user's to put back.
+    #[tokio::test]
+    async fn a_restore_writes_when_the_area_is_gone() {
+        let bridge = area_answering(
+            Reply::json(404, json!({ "errors": [{ "description": "not found" }] })),
+            unreadable,
+        );
+        let restore = restore_of(&bridge, &["left"]);
+
+        let report = tokio::task::spawn_blocking(move || {
+            restore_lights(&restore, Instant::now() + HUE_LIGHT_RESTORE_BUDGET, &|| {
+                false
+            })
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(report.restored, 1);
+    }
+
+    // ── a start switching off lights on ──────────────────────────────────
+
+    /// After Off every lamp of the area is off, and the bridge is not
+    /// documented to switch a lamp on for a stream. The start does, before it
+    /// activates the area, for the lamps that read off only — and the session
+    /// still remembers them off, so its restore puts them back off.
+    #[tokio::test]
+    async fn a_start_switches_on_the_off_lights_and_the_restore_puts_them_back_off() {
+        let hue = FakeHue::start(
+            &[(AREA, &["off-lamp", "on-lamp"])],
+            &[
+                ("off-lamp", light_json(false, 30.0, Some(367), (0.45, 0.41))),
+                ("on-lamp", light_json(true, 60.0, Some(300), (0.44, 0.40))),
+            ],
+            |_| Reply::ok(),
+        );
+        let app = app();
+        let runtime = runtime_of(&app);
+        let result = start_with_evidence(
+            &mut acquire_hue_runtime(&runtime),
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        let activated_at = Arc::new(Mutex::new(None));
+        let at = Arc::clone(&activated_at);
+        let build = move |channels, metadata, counter| {
+            *at.lock().unwrap() = Some(Instant::now());
+            fake_sender(true)(channels, metadata, counter)
+        };
+        let started = bring_up_stream(
+            &runtime,
+            &request(&hue, AREA),
+            result,
+            BringUpKind::Start,
+            build,
+        )
+        .await;
+
+        assert_eq!(started.status.code, "HUE_STREAM_RUNNING_DTLS");
+        assert_eq!(hue.switch_ons(), vec!["off-lamp".to_string()]);
+        assert_eq!(hue.light("off-lamp")["on"]["on"], json!(true));
+        let switched_at = hue
+            .bridge
+            .puts_to("/clip/v2/resource/light/off-lamp")
+            .first()
+            .map(|r| r.at)
+            .unwrap();
+        assert!(switched_at <= activated_at.lock().unwrap().unwrap());
+        assert_eq!(held_light_on(&runtime, "off-lamp"), Some(false));
+
+        stop_hue_stream(None, app.state()).await.unwrap();
+
+        assert_eq!(hue.light("off-lamp")["on"]["on"], json!(false));
+        assert_eq!(hue.light("on-lamp")["on"]["on"], json!(true));
+    }
+
+    #[tokio::test]
+    async fn a_start_switches_nothing_on_when_every_light_is_on() {
+        let hue = one_area(&[("light-1", before_stream())]);
+        let app = app();
+        let runtime = runtime_of(&app);
+
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+
+        assert!(hue.switch_ons().is_empty());
+        stop_hue_stream(None, app.state()).await.unwrap();
+    }
+
+    /// Another app holding the area owns its lamps, off ones included.
+    #[tokio::test]
+    async fn a_start_leaves_off_lights_alone_when_another_app_holds_the_area() {
+        let hue = one_area(&[("light-1", light_json(false, 30.0, Some(367), (0.45, 0.41)))]);
+        hue.another_app_streams(AREA, &[]);
+        let app = app();
+        let runtime = runtime_of(&app);
+
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+
+        assert!(hue.switch_ons().is_empty());
+        assert_eq!(hue.light("light-1")["on"]["on"], json!(false));
+        stop_hue_stream(None, app.state()).await.unwrap();
+    }
+
     /// Whatever a restore is doing, once a newer session has begun it writes
     /// nothing more — the watch included, though the bridge undid the lights.
     #[tokio::test]
@@ -2024,6 +2250,164 @@ mod light_restore_flow {
         assert_eq!(report.stopped, Some(HueLightRestoreStop::Superseded));
         assert_eq!(report.reapplied, 0);
         assert_eq!(hue.light_puts().len(), 2);
+    }
+
+    // ── a user's Off: the lights switched off, not restored ───────────────
+
+    async fn user_off(app: &tauri::App<tauri::test::MockRuntime>) -> HueRuntimeCommandResult {
+        stop_hue_stream_on(
+            app.state::<HueRuntimeStateStore>().inner(),
+            HueRuntimeTriggerSource::ModeControl,
+            HueLightsAfterStop::TurnOff,
+        )
+        .await
+    }
+
+    fn reads_off(hue: &FakeHue, light: &str) -> bool {
+        hue.light(light)["on"]["on"] == json!(false)
+    }
+
+    /// The measured bridge switches both lamps back on a few hundred ms after
+    /// the stop. Off has to outlast that the way the restore does, and every
+    /// write it makes is a switch-off.
+    #[tokio::test]
+    async fn off_switches_every_light_off_and_outlasts_the_bridges_post_stream_state() {
+        let hue = measured_bridge();
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+
+        let started = Instant::now();
+        let stopped = user_off(&app).await;
+        let took = started.elapsed();
+        once_the_bridge_is_done().await;
+
+        assert_eq!(stopped.status.code, "HUE_STREAM_STOPPED");
+        for light in ["left", "right"] {
+            assert!(
+                reads_off(&hue, light),
+                "{light} was left as the bridge put it: {}",
+                hue.light(light)
+            );
+        }
+        let puts = hue.light_puts();
+        // Once per light, and once more after the bridge switched it back on.
+        assert_eq!(puts.len(), 4, "{puts:?}");
+        assert!(
+            puts.iter().all(|(_, body)| *body == switch_off()),
+            "{puts:?}"
+        );
+        assert!(took < HUE_LIGHT_RESTORE_WATCH, "{took:?}");
+        assert!(acquire_hue_runtime(&runtime).light_restore.is_none());
+    }
+
+    /// Off from a lamp that was already off before the stream: the snapshot
+    /// said "off", and so does Off.
+    #[tokio::test]
+    async fn off_and_restore_agree_on_a_light_that_was_off() {
+        let hue = one_area(&[("light-1", light_json(false, 30.0, Some(367), (0.45, 0.41)))]);
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+
+        user_off(&app).await;
+
+        assert_eq!(
+            hue.light_puts(),
+            vec![("light-1".to_string(), switch_off())]
+        );
+    }
+
+    /// Off with no session to end has no lights to write: the stop a user's
+    /// Off always sends a configured bridge must not reach it.
+    #[tokio::test]
+    async fn off_with_nothing_streaming_writes_nothing() {
+        let hue = one_area(&[("light-1", before_stream())]);
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+        stop_hue_stream(None, app.state()).await.unwrap();
+        let requests = hue.bridge.requests().len();
+
+        let stopped = user_off(&app).await;
+
+        assert_eq!(stopped.status.code, "HUE_STREAM_STOPPED");
+        assert_eq!(hue.bridge.requests().len(), requests);
+    }
+
+    /// Another app holding the area owns its lights, Off or not.
+    #[tokio::test]
+    async fn off_leaves_an_area_another_app_streams_to() {
+        let hue = measured_bridge();
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+        {
+            let mut owner = acquire_hue_runtime(&runtime);
+            owner.set_active_stream(None);
+            owner.persistent_sender = None;
+            owner.state = HueRuntimeState::Failed;
+        }
+        hue.another_app_streams(AREA, &["left", "right"]);
+
+        user_off(&app).await;
+
+        assert!(hue.light_puts().is_empty(), "{:?}", hue.light_puts());
+    }
+
+    /// Ambilight straight after Off: the start waits out Off's watch, so no
+    /// switch-off lands under the new stream, and the new session reads the
+    /// lamps as Off left them.
+    #[tokio::test]
+    async fn a_start_right_after_off_is_never_switched_off_under() {
+        let hue = measured_bridge();
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+
+        let store = app.state::<HueRuntimeStateStore>();
+        let (_, puts_when_the_start_began) = tokio::join!(user_off(&app), async {
+            once_the_restore_has_begun(&hue).await;
+            store.wait_for_stop_to_settle().await;
+            let puts = hue.light_puts().len();
+            start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+            puts
+        });
+        once_the_bridge_is_done().await;
+        let puts_while_streaming = hue.light_puts().len();
+        let held: Vec<Option<bool>> = ["left", "right"]
+            .into_iter()
+            .map(|light| held_light_on(&runtime, light))
+            .collect();
+        stop_hue_stream(None, app.state()).await.unwrap();
+
+        assert_eq!(
+            puts_while_streaming, puts_when_the_start_began,
+            "Off wrote under the new session"
+        );
+        assert_eq!(held, vec![Some(false), Some(false)]);
+    }
+
+    /// Quitting is not choosing Off, whatever the setting says: the quit path
+    /// puts the lights back.
+    #[tokio::test]
+    async fn quitting_while_streaming_still_restores() {
+        let hue = measured_bridge();
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+
+        let deadline = Instant::now() + Duration::from_millis(3_200);
+        tokio::task::spawn_blocking(move || {
+            stop_hue_stream_before_exit(&app.state::<HueRuntimeStateStore>(), deadline)
+        })
+        .await
+        .unwrap();
+        once_the_bridge_is_done().await;
+
+        for light in ["left", "right"] {
+            assert!(reads_as_before_stream(&hue, light), "{}", hue.light(light));
+        }
     }
 
     #[tokio::test]

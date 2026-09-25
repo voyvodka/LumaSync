@@ -623,6 +623,60 @@ describe("DeviceSection — colour order", () => {
   });
 });
 
+describe("DeviceSection — what Off does to the Hue lights", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const { shellStore } = await import("@/features/persistence/shellStore");
+    vi.mocked(shellStore.save).mockReset().mockResolvedValue(undefined);
+    activeWledIpMock = null;
+    useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
+  });
+
+  // Existing installs never saved a choice; they get "turn off".
+  it("shows turning the lights off when nothing is saved", async () => {
+    await renderHueTab(createHueHookState());
+
+    await waitFor(() => {
+      expect(screen.getByRole("radio", { name: "hue:offBehavior.turnOff" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      );
+    });
+  });
+
+  it("shows a saved choice to put them back", async () => {
+    const { shellStore } = await import("@/features/persistence/shellStore");
+    vi.mocked(shellStore.load).mockResolvedValue({ roomMap: null, hueOffBehavior: "restore" } as never);
+    try {
+      await renderHueTab(createHueHookState());
+
+      await waitFor(() => {
+        expect(screen.getByRole("radio", { name: "hue:offBehavior.restore" })).toHaveAttribute(
+          "aria-checked",
+          "true",
+        );
+      });
+    } finally {
+      vi.mocked(shellStore.load).mockResolvedValue({ roomMap: null } as never);
+    }
+  });
+
+  // Rust reads the saved value when an Off runs: the save is all it takes.
+  it("saves the pick", async () => {
+    const { shellStore } = await import("@/features/persistence/shellStore");
+    const user = userEvent.setup();
+    await renderHueTab(createHueHookState());
+
+    await user.click(await screen.findByRole("radio", { name: "hue:offBehavior.restore" }));
+
+    expect(shellStore.save).toHaveBeenCalledWith({ hueOffBehavior: "restore" });
+    expect(screen.getByRole("radio", { name: "hue:offBehavior.restore" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+  });
+});
+
 describe("DeviceSection — category scroll position", () => {
   beforeEach(() => {
     vi.clearAllMocks();

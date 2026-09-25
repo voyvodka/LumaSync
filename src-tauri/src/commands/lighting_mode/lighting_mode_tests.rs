@@ -14,6 +14,7 @@ use crate::commands::ambilight_capture::{
 };
 use crate::commands::hue::commands::stop_hue_runtime;
 use crate::commands::hue::frame::{HueAreaChannel, HueColorSender, HueScreenRegion};
+use crate::commands::hue::light_restore::HueLightsAfterStop;
 use crate::commands::hue::reconnect::store_active_stream_context;
 use crate::commands::hue::retry::start_with_evidence;
 use crate::commands::hue::sender::{
@@ -769,6 +770,7 @@ fn a_mode_re_applied_without_hue_lets_the_hue_sender_exit() {
         &store.runtime_arc(),
         HueRuntimeTriggerSource::ModeControl,
         None,
+        HueLightsAfterStop::Restore,
     );
 
     assert_eq!(stopped.status.code, "HUE_STREAM_STOPPED");
@@ -825,6 +827,7 @@ fn assert_a_hue_stop_under_a_live_worker_lets_the_sender_exit(targets: &[&str]) 
         &store.runtime_arc(),
         HueRuntimeTriggerSource::ModeControl,
         None,
+        HueLightsAfterStop::Restore,
     );
 
     assert_eq!(stopped.status.code, "HUE_STREAM_STOPPED");
@@ -1097,7 +1100,12 @@ fn a_reconnect_hands_the_running_worker_the_new_sender() {
 
     let mut cleanup_trace = None;
     super::transition::stop_previous(&mut owner, &mut cleanup_trace);
-    let stopped = stop_hue_runtime(&runtime, HueRuntimeTriggerSource::ModeControl, None);
+    let stopped = stop_hue_runtime(
+        &runtime,
+        HueRuntimeTriggerSource::ModeControl,
+        None,
+        HueLightsAfterStop::Restore,
+    );
     assert_eq!(stopped.status.code, "HUE_STREAM_STOPPED");
     wait_for_workers_drained();
     drop(rt);

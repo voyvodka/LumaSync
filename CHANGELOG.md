@@ -31,6 +31,13 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Lighting: Off now turns your lights off. The LED strip goes dark instead of holding its last
+  colours, a WLED device is switched off instead of going back to its own effect, and Hue lights
+  are switched off. **This changes what Off does for existing Hue users:** until now Off put your
+  Hue lights back the way they were before lighting started, so lamps that were on stayed on. If
+  you prefer that, choose "Go back" under "When you press Off, Hue lights" on Devices → Hue
+  Bridges. Quitting LumaSync, another app taking over your Hue lights, or taking Hue out of a
+  running mode still puts them back as they were, and launching with lighting off touches nothing.
 - Keyboard: the mode buttons — on the Lights page, in the compact window and in the LED test
   popup — are one group you Tab into once and move through with the arrow keys, Home and End. The
   same goes for the test pattern tiles and speeds, and for LED Setup's start edge, start point and

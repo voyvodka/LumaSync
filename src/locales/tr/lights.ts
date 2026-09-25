@@ -13,7 +13,7 @@ const lights: Catalogue<typeof enLights> = {
   mode: {
     off: {
       title: "Kapalı",
-      subtitle: "Çıkışlar beklemede",
+      subtitle: "Işıklar kapalı",
     },
     ambilight: {
       title: "Ambilight",

@@ -15,6 +15,7 @@ use serde_json::{Map, Value};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
 use super::hue::hue_config::{HueStartView, PlacementRecord, RoomPlacementView, ZoneFrame};
+use super::hue::light_restore::HueLightsAfterStop;
 use super::hue_intensity::LightingSmoothingPreset;
 use super::led_calibration::LedCalibrationConfig;
 use super::led_output::{ColorCorrectionConfig, FirmwareProfile, LedChipType, LedColorOrder};
@@ -144,6 +145,13 @@ impl PersistedShellState {
 
     pub fn lighting_intensity_preset(&self) -> Option<LightingSmoothingPreset> {
         self.read("lightingIntensityPreset")
+    }
+
+    /// What a user's Off does to the Hue lights. Absent — every install that
+    /// never chose — switches them off.
+    pub fn hue_off_behavior(&self) -> HueLightsAfterStop {
+        self.read("hueOffBehavior")
+            .unwrap_or(HueLightsAfterStop::TurnOff)
     }
 
     /// Bridge, area and pairing evidence for a Hue start. The legacy keys are
@@ -1034,6 +1042,36 @@ mod tests {
 
     fn persisted(raw: &str) -> Option<PersistedShellState> {
         PersistedShellState::from_file_json(raw)
+    }
+
+    /// Off switching the Hue lights off is the default for every install,
+    /// existing ones included: absent reads as it, and so does a value this
+    /// build does not know.
+    #[test]
+    fn hue_off_behavior_defaults_to_switching_the_lights_off() {
+        use super::super::hue::light_restore::HueLightsAfterStop;
+        let read = |value: &str| {
+            persisted(&format!(r#"{{"shell-state": {{ {value} }} }}"#))
+                .unwrap()
+                .hue_off_behavior()
+        };
+        assert_eq!(read(r#""schemaVersion": 6"#), HueLightsAfterStop::TurnOff);
+        assert_eq!(
+            read(r#""hueOffBehavior": "turnOff""#),
+            HueLightsAfterStop::TurnOff
+        );
+        assert_eq!(
+            read(r#""hueOffBehavior": "restore""#),
+            HueLightsAfterStop::Restore
+        );
+        assert_eq!(
+            read(r#""hueOffBehavior": "dim""#),
+            HueLightsAfterStop::TurnOff
+        );
+        assert_eq!(
+            read(r#""hueOffBehavior": null"#),
+            HueLightsAfterStop::TurnOff
+        );
     }
 
     #[test]

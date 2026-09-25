@@ -24,6 +24,12 @@ export default {
     placeholder: "e.g. 192.168.1.50",
     invalid: "Enter a valid IPv4 address before submitting.",
   },
+  offBehavior: {
+    title: "When you press Off, Hue lights",
+    turnOff: "Turn off",
+    restore: "Go back",
+    description: "“Go back” leaves them as they were before lighting started. Quitting LumaSync always does that.",
+  },
   pair: {
     linkButtonHint: "Press the button on top of your Hue bridge. LumaSync keeps checking for it, so there is nothing else to click.",
     timedOutTitle: "Button press not detected",
