@@ -314,6 +314,35 @@ layout, and only for a connect the user made: the manual connect's `connectionEv
 `userInitiated`, the boot auto-reconnect's and recovery's do not. Keyed on `connected` flipping, it
 had nudged a user with no layout on every launch. It gives way to the onboarding step and the calibration notice, which say the same.
 
+**LED Setup asks for the strip's total before the per-edge counts.** With no saved layout the dock
+opens on "How many LEDs does your strip have?" in place of the four steppers. The first fill used
+to come from the display's pixel width (60/22/60/22 for anything 3440 px and up), so a 3600-px
+laptop panel got 164 LEDs whatever strip was on it: pixels say nothing about how long a strip is.
+The count is a fact about the hardware, so the user supplies it — or a bound WLED panel does, since
+it reports its own (`lastWledSink.ledCount`), and that pre-fills the question and the draft. Without
+one nothing is guessed. `splitTotalAcrossEdges` (`calibration/model/splitTotal.ts`) then shares the
+total out:
+
+- Each chosen edge gets a share proportional to its length on the display — top and bottom its
+  width, the sides its height — so only the aspect ratio counts, and a portrait display gives the
+  sides the long share. Unchosen edges get zero.
+- Pitch is uniform along the strip, so the stand gap is `bottomMissing` pitches of perimeter that
+  carry no LED: the total plus the gap is shared out, and the gap comes off the bottom edge. A gap
+  the bottom cannot hold (fewer LEDs beside it than it is wide, which validation refuses) shrinks to
+  half the bottom edge.
+- The shares are floored and the LEDs left over go one each to the largest fractions, ties in
+  top → right → bottom → left order (Hamilton's method), so the counts add up to the total exactly.
+  Rounding each share instead can come out one over or under, and a total that does not match the
+  strip leaves its tail dark or holding a stale colour (`WLED_LENGTH_MISMATCH`).
+
+The start anchor and direction are left alone; normalisation moves an anchor off an edge that went
+to zero, as it does for a hand edit. The steppers are the refinement step for corners that fall
+differently, and "Change total LED count" re-opens the question over the edges the layout lights.
+Reset keeps the total and re-splits it over all four edges. A saved layout opens straight on the
+steppers, and counts from the room map skip the question. The WLED fill, like the old one, moves the
+baseline while nothing has been touched, so a first visit is not unsaved work; a total the user
+types and splits is.
+
 **A Devices rail badge counts what is active.** A connected strip, a streaming bridge, a bound WLED
 panel; displays have no badge. An enumerated port or a paired-but-idle bridge
 used to put a number beside a header saying nothing was connected.

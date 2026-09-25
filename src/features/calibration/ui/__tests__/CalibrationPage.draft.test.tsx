@@ -125,22 +125,8 @@ async function renderPage(props: Partial<Parameters<typeof CalibrationPage>[0]> 
 const increaseTop = () => screen.getAllByRole("button", { name: "calibration:page.aria.countIncrease" });
 const dialog = () => screen.queryByTestId("calibration-discard-dialog");
 
-describe("CalibrationPage — first visit", () => {
-  // The display-derived counts filled a zero baseline as an *edit*, so Cancel
-  // on a page nobody had touched asked "discard changes?".
-  it("does not count the automatic fill as unsaved work", async () => {
-    const user = userEvent.setup();
-    const page = await renderPage();
-    await waitFor(() =>
-      expect(screen.getAllByRole("textbox", { name: "calibration:page.aria.countInput" })[0]).not.toHaveValue("0"),
-    );
-
-    await user.click(screen.getByRole("button", { name: "calibration:overlay.cancel" }));
-
-    expect(dialog()).toBeNull();
-    expect(page.onNavigateBack).toHaveBeenCalledTimes(1);
-  });
-});
+// The first visit — the total asked for first, and an automatic fill that is
+// not unsaved work — is in CalibrationPage.totalStep.test.tsx.
 
 describe("CalibrationPage — leaving with an unsaved draft", () => {
   it("lets a clean page go without asking", async () => {
