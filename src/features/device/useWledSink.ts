@@ -3,14 +3,18 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   WLED_DEFAULT_DDP_PORT,
+  WLED_STATUS,
+  type WledCommandStatus,
   type WledDeviceInfo,
   type WledUdpSinkConfig,
 } from "@/shared/contracts/device";
+import { parseCommandError } from "@/shared/contracts/status";
 import type { ShellState } from "@/shared/contracts/shell";
 import { shellStore } from "../persistence/shellStore";
 import {
   connectWledSink,
   discoverWledDevices,
+  forgetWledDevice,
   getWledSinkStatus,
 } from "./wledApi";
 import {
@@ -69,11 +73,15 @@ export interface ActiveWledSink {
   ready: boolean;
   /** Record a successful manual connect and re-read the Rust snapshot. */
   markConnected: (device: WledDeviceInfo) => Promise<void>;
+  /** Stop sending to the device, unbind it and drop it from the saved state.
+   *  Never throws; check `code`. */
+  forget: (ip: string) => Promise<WledCommandStatus>;
 }
 
 export interface UseActiveWledSinkDeps {
   wledSinkEvents?: WledSinkEventBus;
   getStatus?: typeof getWledSinkStatus;
+  forgetDevice?: typeof forgetWledDevice;
   loadShellState?: () => Promise<ShellState>;
   saveShellState?: (partial: Partial<ShellState>) => Promise<void>;
 }
@@ -83,6 +91,7 @@ export function useActiveWledSink(
 ): ActiveWledSink {
   const bus = deps.wledSinkEvents ?? defaultWledSinkEvents;
   const getStatus = deps.getStatus ?? getWledSinkStatus;
+  const forgetDevice = deps.forgetDevice ?? forgetWledDevice;
   const loadShellState = deps.loadShellState ?? (() => shellStore.load());
   const saveShellState = deps.saveShellState ?? ((partial) => shellStore.save(partial));
 
@@ -140,5 +149,26 @@ export function useActiveWledSink(
     [loadShellState, saveShellState, refresh],
   );
 
-  return { activeWledIp, savedSink, restoreOutcome, ready, markConnected };
+  const forget = useCallback(
+    async (ip: string): Promise<WledCommandStatus> => {
+      let status: WledCommandStatus;
+      try {
+        status = (await forgetDevice(ip)).status;
+      } catch (err) {
+        console.error("[LumaSync] forgetting the WLED device failed:", err);
+        status = {
+          code: WLED_STATUS.FORGET_FAILED,
+          message: "The WLED device was not forgotten.",
+          details: parseCommandError(err).message,
+        };
+      }
+      // The launch's restore note is about the device that just went.
+      if (status.code === WLED_STATUS.FORGET_OK) bus.publish({ kind: "no-saved-device" });
+      await refresh();
+      return status;
+    },
+    [bus, forgetDevice, refresh],
+  );
+
+  return { activeWledIp, savedSink, restoreOutcome, ready, markConnected, forget };
 }

@@ -166,6 +166,9 @@ function createHueHookState(overrides: Record<string, unknown> = {}) {
     startRuntime: vi.fn(),
     areaChannels: [],
     retryRuntimeTarget: vi.fn(),
+    forgetBridge: async () => null,
+    lightNames: {},
+    identifyLights: async () => ({ code: "HUE_IDENTIFY_OK" as const, message: "", details: null }),
     ...overrides,
   };
 }
@@ -791,10 +794,11 @@ describe("the category rail counts what its labels say", () => {
     expect(badgeFor("device:page.rail.displays")).toBeNull();
   });
 
-  it("heads the rail groups Devices and Other", async () => {
+  it("heads the rail Devices, with no Other group left", async () => {
     await renderSettled();
     expect(screen.getByText("device:page.rail.devices")).toBeInTheDocument();
-    expect(screen.getByText("device:page.rail.other")).toBeInTheDocument();
+    expect(document.querySelectorAll(".lm-device-rail-h")).toHaveLength(1);
+    expect(screen.queryByTestId("device-category-manual")).toBeNull();
   });
 
   it("counts a bound WLED panel, which was hardcoded to zero", async () => {
@@ -826,7 +830,6 @@ describe("the category rail is addressable by test id", () => {
     ["hue", "device:page.rail.hueBridges"],
     ["wled", "device:page.rail.wled"],
     ["displays", "device:page.rail.displays"],
-    ["manual", "device:page.rail.manualEntry"],
   ])("gives the %s rail button its test id", async (category, labelKey) => {
     const user = userEvent.setup();
     render(<DeviceSection onStopHueOutput={stopHueOutputMock} />);

@@ -45,7 +45,7 @@ export default {
   checkAction: "Check for updates",
   betaChannel: "Beta channel",
   betaChannelDescription:
-    "Receive prereleases as well as stable versions. Prereleases are built and tested by CI, but the packaged installer itself is never launch-tested — expect rough edges.",
+    "Receive prereleases as well as stable versions. CI builds and tests each one and launches the macOS, Linux AppImage and Windows app before publishing, but never runs the .msi or .deb installers — expect rough edges. On by default while you run a prerelease.",
   checking: "Checking…",
   upToDate: "You're on the latest version · checked {{time}}",
 };

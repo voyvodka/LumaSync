@@ -96,7 +96,7 @@ const REQUIRED_V14_STATE_FIELDS = [
  * v1.5 ShellState additions. All optional / additive — the absence of
  * each field naturally degrades to a v1.4-compatible default
  * (`hasCompletedOnboarding=false` shows onboarding once, `updateChannel`
- * absent ⇒ stable channel, `selectedChipType` absent ⇒ WS2812B GRB).
+ * absent ⇒ stable channel on a stable build, `selectedChipType` absent ⇒ WS2812B GRB).
  * Strict optional-`?:` presence check, no default-value check.
  */
 const REQUIRED_V15_STATE_FIELDS = [
@@ -113,7 +113,8 @@ const REQUIRED_V15_STATE_FIELDS = [
 /** v1.5 contract surface that must be exported alongside the new fields. */
 const REQUIRED_V15_EXPORTS = [
   "UpdateChannel",
-  "DEFAULT_UPDATE_CHANNEL",
+  "defaultUpdateChannel",
+  "resolveUpdateChannel",
 ];
 
 // ---------------------------------------------------------------------------
@@ -1663,7 +1664,8 @@ checkWireUnion(
   ),
   // 14 → 16: the two `spawn_blocking` worker-death codes, added when discovery
   // and test moved off the main thread. 16 → 17: connect followed them.
-  17
+  // 17 → 19: `forget_wled_device`'s OK and FAILED.
+  19
 );
 
 const rustHueRuntimeSource = walkRustSourceFiles(resolve(ROOT, "src-tauri/src/commands/hue"))
@@ -1690,6 +1692,24 @@ checkWireUnion(
   "HueAreaChannelsWireStatusCode",
   [...rustHueRuntimeSource.matchAll(/area_channels_status\(\s*"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]),
   [...constMembers(hueSource, "HUE_AREA_CHANNELS_STATUS"), "AUTH_INVALID_RE_PAIR_REQUIRED"],
+  5
+);
+
+// The forget, light-name and identify commands each build their status through
+// one constructor, so each family is harvested from it.
+const hueLiteralCodes = (fn) =>
+  [...rustHueRuntimeSource.matchAll(new RegExp(`${fn}\\(\\s*"([A-Z][A-Z0-9_]*)"`, "g"))].map((m) => m[1]);
+checkWireUnion("HueForgetStatusCode", hueLiteralCodes("forget_status"), constMembers(hueSource, "HUE_FORGET_STATUS"), 3);
+checkWireUnion(
+  "HueLightNamesWireStatusCode",
+  hueLiteralCodes("light_names_status"),
+  [...constMembers(hueSource, "HUE_LIGHT_NAMES_STATUS"), "AUTH_INVALID_RE_PAIR_REQUIRED"],
+  3
+);
+checkWireUnion(
+  "HueIdentifyWireStatusCode",
+  hueLiteralCodes("identify_status"),
+  [...constMembers(hueSource, "HUE_IDENTIFY_STATUS"), "AUTH_INVALID_RE_PAIR_REQUIRED"],
   5
 );
 
@@ -2541,7 +2561,9 @@ const checkedPairs = nullabilityPairs.filter(
 // and `shell://main-window-visibility` payload.
 // 84 → 83: `LightingModeChangedPayload`, with the `lighting://mode-changed`
 // event nothing listened to.
-const EXPECTED_NULLABILITY_PAIR_COUNT = 83;
+// 83 → 86: `HueLightName`, `HueLightNamesResponse` (`get_hue_light_names`) and
+// `WledForgetResponse` (`forget_wled_device`).
+const EXPECTED_NULLABILITY_PAIR_COUNT = 86;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

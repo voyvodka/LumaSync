@@ -13,7 +13,13 @@ import {
   twinOverlayOpenFailure,
   type PreviewOpenFailure,
 } from "@/features/preview/previewOpenFailure";
-import type { LedCalibrationConfig, LedDirection, LedSegmentCounts } from "../model/contracts";
+import type {
+  LedCalibrationConfig,
+  LedDirection,
+  LedSegmentCounts,
+  LedSegmentKey,
+} from "../model/contracts";
+import { sumSegmentCounts } from "../model/contracts";
 import {
   CALIBRATION_NOTICE_KEYS,
   noticeDetail,
@@ -29,7 +35,8 @@ import {
   type AnchorEdge,
   type AnchorEndpoint,
 } from "../model/startAnchor";
-import { deriveDefaultCounts, resetToManual } from "../model/templates";
+import { ALL_EDGES, litEdges, MAX_STRIP_LEDS, splitTotalAcrossEdges } from "../model/splitTotal";
+import { resetToManual } from "../model/templates";
 import {
   validateCalibrationConfig,
   type CalibrationValidationError,
@@ -90,6 +97,27 @@ function buildOverlayPreviewPayload(
   };
 }
 
+/** The counts and gap a strip total splits into on `display` (16:9 when unknown). */
+function splitPatch(
+  total: number,
+  display: Pick<DisplayInfo, "width" | "height"> | undefined,
+  edges: readonly LedSegmentKey[],
+  bottomGap: number,
+) {
+  return splitTotalAcrossEdges({
+    total,
+    display: display ?? { width: 16, height: 9 },
+    edges,
+    bottomGap,
+  });
+}
+
+/** The LED count a bound WLED panel reported, which is the strip's total. */
+function reportedStripTotal(ledCount: number | undefined): number | null {
+  if (typeof ledCount !== "number" || !Number.isFinite(ledCount) || ledCount <= 0) return null;
+  return Math.min(Math.floor(ledCount), MAX_STRIP_LEDS);
+}
+
 /** A layout the backend would accept for a test: valid, and more than one LED. */
 function isTestableLayout(config: LedCalibrationConfig): boolean {
   return validateCalibrationConfig(config).ok && config.totalLeds > 1;
@@ -121,6 +149,11 @@ export function useCalibrationSession({
     createCalibrationEditorState(initialConfig ?? resetToManual(), draftCounts),
   );
   const [countsFromRoomMap, setCountsFromRoomMap] = useState(() => Boolean(draftCounts));
+  const hasSavedLayout = initialConfig !== undefined && sumSegmentCounts(initialConfig.counts) > 0;
+  // With no saved layout the page asks for the strip's total first; the
+  // per-edge steppers refine the split it makes.
+  const [totalStepOpen, setTotalStepOpen] = useState(() => !hasSavedLayout && !draftCounts);
+  const [knownTotal, setKnownTotal] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<CalibrationNotice | null>(null);
   const [chipType, setChipType] = useState<LedChipType>(LED_CHIP_TYPE.WS2812B_GRB);
@@ -154,22 +187,24 @@ export function useCalibrationSession({
         }
         setDisplayTarget(newState);
 
-        // Auto-derive default LED counts from the resolved capture display
-        // if the editor still holds the all-zero \`MANUAL_COUNTS\` baseline.
-        // Mirrors the same heuristic that runs on a manual display click in
-        // \`handleSelectDisplay\` so cold-start without saved calibration
-        // does not leave the dock at 0/0/0/0 until the user changes monitors.
-        // An autofill, not an edit: a first visit that touched nothing must
-        // not ask "discard changes?" on Cancel.
+        // A bound WLED panel knows its own length, so an empty layout starts
+        // from that total split over the selected display. An autofill, not an
+        // edit: a first visit that touched nothing must not ask "discard
+        // changes?" on Cancel. Without a reported total nothing is guessed —
+        // pixels say nothing about how long the strip is.
+        const reported = reportedStripTotal(shell.lastWledSink?.ledCount);
+        setKnownTotal(reported);
         const selectedId = newState.selectedDisplayId;
         const selectedDisplay = selectedId
           ? displays.find((candidate) => candidate.id === selectedId)
           : undefined;
-        if (selectedDisplay) {
+        if (reported !== null) {
           setEditorState((prev) => {
             if (prev.current.totalLeds !== 0) return prev;
-            const defaults = deriveDefaultCounts(selectedDisplay);
-            return autofillEditorConfig(prev, { counts: defaults });
+            return autofillEditorConfig(
+              prev,
+              splitPatch(reported, selectedDisplay, ALL_EDGES, prev.current.bottomMissing),
+            );
           });
         }
       })
@@ -392,11 +427,14 @@ export function useCalibrationSession({
       console.error("[LumaSync] LED Setup could not save the capture display:", error);
     });
 
-    // Auto-derive default counts only when the user hasn't customized yet
-    // (fresh manual default → totalLeds === 0).
-    if (editorState.current.totalLeds === 0) {
-      const defaults = deriveDefaultCounts(display);
-      setEditorState((prev) => autofillEditorConfig(prev, { counts: defaults }));
+    // An untouched automatic split follows the display it was made for.
+    if (!hasSavedLayout && !editorState.isDirty && editorState.current.totalLeds > 0) {
+      setEditorState((prev) =>
+        autofillEditorConfig(
+          prev,
+          splitPatch(prev.current.totalLeds, display, litEdges(prev.current.counts), prev.current.bottomMissing),
+        ),
+      );
     }
 
     if (!testPattern.isEnabled) return;
@@ -418,7 +456,7 @@ export function useCalibrationSession({
         detail: noticeDetail(null, parseCommandError(error).message),
       });
     }
-  }, [editorState, overlayPreviewPayload, testPattern.isEnabled, beginDisplaySwitch]);
+  }, [editorState, hasSavedLayout, overlayPreviewPayload, testPattern.isEnabled, beginDisplaySwitch]);
 
   // Accept the absolute next value, not a delta. Stepper buttons
   // pass `value + 1` / `value - 1` so the +/- affordance is preserved
@@ -434,17 +472,40 @@ export function useCalibrationSession({
     setValidationErrors(null);
   }, []);
 
+  const selectedDisplay = useCallback(() => {
+    const snapshot = displayTargetRef.current.getSnapshot();
+    return snapshot.displays.find((candidate) => candidate.id === snapshot.selectedDisplayId);
+  }, []);
+
+  const handleApplyTotal = useCallback((total: number, edges: readonly LedSegmentKey[]) => {
+    const display = selectedDisplay();
+    setEditorState((prev) =>
+      updateEditorConfig(prev, splitPatch(total, display, edges, prev.current.bottomMissing)),
+    );
+    setTotalStepOpen(false);
+    setCountsFromRoomMap(false);
+    setValidationErrors(null);
+  }, [selectedDisplay]);
+
+  const handleOpenTotalStep = useCallback(() => setTotalStepOpen(true), []);
+  const handleCloseTotalStep = useCallback(() => setTotalStepOpen(false), []);
+
+  // Reset keeps the strip's total — a fact about the hardware — and re-splits
+  // it over all four edges. With no total yet it goes back to asking for one.
   const handleReset = useCallback(() => {
-    const display = displayTarget.displays.find((candidate) => candidate.id === displayTarget.selectedDisplayId);
-    if (display) {
-      const defaults = deriveDefaultCounts(display);
-      setEditorState((prev) => updateEditorConfig(prev, { counts: defaults }));
+    const display = selectedDisplay();
+    const total = editorState.current.totalLeds || knownTotal || 0;
+    if (total > 0) {
+      setEditorState((prev) =>
+        updateEditorConfig(prev, splitPatch(total, display, ALL_EDGES, prev.current.bottomMissing)),
+      );
     } else {
       setEditorState((prev) => loadEditorConfig(prev, resetToManual()));
+      setTotalStepOpen(true);
     }
     setCountsFromRoomMap(false);
     setValidationErrors(null);
-  }, [displayTarget]);
+  }, [editorState, knownTotal, selectedDisplay]);
 
   // Accept the absolute next value, not a delta. Same shape as
   // handleCountChange so StandGapStepper can use the unified API.
@@ -580,6 +641,8 @@ export function useCalibrationSession({
     isDirty: editorState.isDirty,
     confirmDiscard: editorState.confirmDiscard,
     countsFromRoomMap: countsFromRoomMap && editorState.isDirty,
+    totalStepOpen,
+    knownTotal,
     chipType,
     isSaving,
     saveError,
@@ -596,6 +659,9 @@ export function useCalibrationSession({
     handleSelectDisplay,
     handleCountChange,
     handleReset,
+    handleApplyTotal,
+    handleOpenTotalStep,
+    handleCloseTotalStep,
     handleBottomMissingChange,
     handleDirectionChange,
     handleEdgeChange,

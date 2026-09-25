@@ -134,12 +134,10 @@ export default {
   page: {
     rail: {
       devices: "Devices",
-      other: "Other",
       usbStrips: "USB Strips",
       hueBridges: "Hue Bridges",
       wled: "WLED",
       displays: "Displays",
-      manualEntry: "Manual Entry",
       activeLabel: "{{count}} active",
     },
     header: {
@@ -150,8 +148,6 @@ export default {
       hueSub: "Philips Hue entertainment areas",
       displaysTitle: "Displays",
       displaysSub: "Screens available for Ambilight capture",
-      manualTitle: "Manual Entry",
-      manualSub: "Enter device details by hand",
     },
     actions: {
       rescan: "Rescan",
@@ -212,9 +208,6 @@ export default {
       captureSource: "Capture source",
       chooseInLedSetup: "Choose the capture display in LED Setup",
     },
-    manual: {
-      body: "Manual device entry isn't available yet. To add a strip, rescan on USB Strips; a WLED device can be added by its IP address.",
-    },
     wled: {
       title: "WLED Devices",
       subtitle: "Network LED panels reachable on the local network",
@@ -240,6 +233,16 @@ export default {
       pill: {
         discovered: "DISCOVERED",
         connected: "ACTIVE",
+        saved: "SAVED",
+      },
+      savedDevice: "Saved WLED device",
+      forgetAction: "Forget device",
+      forgetting: "Forgetting...",
+      forgetConfirm: {
+        title: "Forget this WLED device?",
+        body: "LumaSync stops sending to {{ip}} and no longer connects to it at launch. Lighting keeps running on your other outputs, or stops if this was the only one.",
+        confirm: "Forget device",
+        cancel: "Cancel",
       },
       restore: {
         restoring: "Reconnecting to the saved WLED device at {{ip}}...",
@@ -263,6 +266,8 @@ export default {
         testSendFailed: "Could not send the test frame to the device.",
         sinkNotStarted: "Connect the device before testing it.",
         workerFailed: "LumaSync could not finish the request. Try again.",
+        forgetOk: "Device forgotten. Discover it again to use it.",
+        forgetFailed: "The device was not forgotten. Nothing was changed.",
       },
     },
   },

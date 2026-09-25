@@ -314,14 +314,22 @@ What it reads, and when:
 |---|---|---|---|
 | Stream, local | Hue is live (Starting, Running, Reconnecting) | 1 s with a window visible, 5 s without | none — the runtime lock, the dead-sender probe, the pending-colour flush |
 | Stream, readiness | Hue is live and a window is visible | 5 s | `GET …/entertainment_configuration` (area cache, `Ours`) |
-| Bridge probe | configured, not live, a window visible, not given up | 30 s | `GET /clip/v2/resource/bridge` |
+| Bridge probe | configured, not live, a window visible (or the launch's first pass), not given up | 30 s; once at launch | `GET /clip/v2/resource/bridge` |
 | Area readiness | configured, the Devices view mounted, a window visible, not fed by a live stream | 15 s; 3 s while another session holds the area; 15 → 30 → 60 → 120 s while the bridge does not answer | `GET …/entertainment_configuration` (area cache, `Ours` or `Foreign`) |
 
 - **It idles when nothing needs it.** With no bridge, area and pairing saved (the `toHueStartConfig`
   rule, read in Rust through `hue_start_request`) nothing is scheduled. With no window visible and
-  no live stream the task parks on a `Notify` and makes no call at all, however long the app sits in
-  the tray; a live stream in the tray gets the 5 s local read only, which is what flushes a colour
-  the tray queued while the stream was starting. The window says what it needs with
+  no live stream the task parks on a `Notify` and makes no call after the launch probe (next
+  entry), however long the app sits in the tray; a live stream in the tray gets the 5 s local read
+  only, which is what flushes a colour the tray queued while the stream was starting.
+- **One probe at launch, whatever is visible.** The task's first pass may run the bridge probe
+  with no window visible (`Inner::launch_probe`), so an app started into the tray has a bridge
+  verdict — the status chip, the tray's status line and the notices read it — before anything is
+  shown. It used to have none until the window first appeared. The first pass spends it whether or
+  not it probed: nothing configured, or a stream already live, and there is no hidden probe later
+  either, not even after a pairing saved while hidden. After it the visible-only cadence holds as
+  before: while hidden, no bridge call at all. `the_task_sleeps_in_the_tray_and_wakes_when_a_window_shows`
+  pins "one at launch, then none" rather than the old "none". The window says what it needs with
   `watch_hue_health({ visible, areaReadiness })` whenever its visibility changes — the old convention,
   moved from each loop into the one store. `visible` is `isWindowVisible` (the document and Rust's
   read of the native window, `ui-and-shell.md`), since WebView2 can report a window hidden in the
@@ -339,7 +347,8 @@ What it reads, and when:
   the cadence changes how fast a flaky bridge exhausts that budget; 5 s is the App chip cadence it
   replaced.
 - **Hidden means nothing new.** The old loops paused while hidden too, so the idle tray costs what
-  it cost before — nothing — and now also with the Devices view open behind it.
+  it cost before — one probe at launch and nothing after — and now also with the Devices view open
+  behind it.
 - **`get_hue_health` never calls the bridge.** It runs the local part of the runtime refresh first,
   so a caller that has just started or stopped the stream itself (the Devices card's Start and
   Start Again) reads the result rather than the state it changed away from. `get_hue_stream_status`
@@ -634,6 +643,60 @@ and hands the stop a `HueLightsAfterStop`.
   settles (`settle_abandoned_start`), since the stop that overtook it found nothing to act on. The
   lighting transaction takes turns, so a user's Off cannot overtake a transaction's own start; only
   a direct `start_hue_stream` could be overtaken, and none of the frontend's Off paths issue one.
+
+**Forgetting a bridge removes everything the app keeps about it.** The card's Forget used to drop
+the selection in the window and nothing else: `lastHueBridge`, the area and the keychain pair
+stayed, a running stream kept streaming, and the next launch brought the bridge straight back.
+`forget_hue_bridge` (`commands/hue/forget.rs`) now does it in Rust, after a confirmation:
+
+- **Hue leaves the lighting through the transaction.** `release_hue_with` stops the stream the way
+  the Devices card's Stop does (the mode lets go first, the lights go back); the mode keeps running
+  on the other outputs, or ends if Hue was its only one. Then, if the saved selection names `hue`,
+  an `apply_outputs` user choice without it saves the rest (`lastOutputTargets`, possibly `[]`),
+  which keeps the transaction's own record of the saved selection in step. No second stop path.
+- **The saved pairing goes** — `HUE_BRIDGE_STATE_KEYS`: `lastHueBridge`, `lastHueAreaId`,
+  `hueBridgeSyncedPositions`, the legacy `hueAppKey` / `hueClientKey`, `hueCredentialStatus`,
+  `hueOnboardingStep`, `credentialStorageBackend` — and the health monitor is told, so it stops
+  probing at once. `hueOffBehavior` stays: it is a preference about Off, not about this bridge.
+- **Room-map placements stay.** `roomMap.hueChannels` and the Hue zones are the user's layout,
+  scoped by entertainment-area id, and the room map already treats them as never-deleted by anything
+  but the user (`room-map.md`: Reset keeps them, the editor never deletes a channel). Pairing the same
+  bridge again finds them; another bridge's areas have other ids and never see them.
+- **The keychain pair is deleted only if it is this bridge's** (`forget_pair_for_bridge`): a pair
+  recorded for another bridge id stays; an unscoped or address-owned one is deleted, since it serves
+  any bridge and the app keeps one pairing. A store that refuses the delete makes the answer
+  `HUE_FORGET_PARTIAL` rather than a failure — the saved state is already clear. The certificate pin
+  is kept: it is not a secret, and it is what refuses an impostor if the same bridge is paired again.
+- **The saved bridge must be the one being forgotten.** If `lastHueBridge` names another bridge id
+  the command changes nothing and answers `HUE_FORGET_FAILED`. A card whose bridge has no key (a
+  first pairing that failed) has nothing saved, so its Forget only lets go of the selection, with no
+  confirmation.
+- **The bridge keeps its whitelist entry, and we cannot remove it.** Signify removed the local API
+  call that deleted a whitelist entry ("Hue whitelist security update",
+  https://developers.meethue.com/hue-whitelist-security-update/): an application key can only be
+  revoked from the user's Hue account at https://account.meethue.com/apps, and CLIP v2 has no
+  resource for it. The confirmation and the result say so and name the address.
+
+**Light names and Identify.** The channel map's rows read `#0 · 1 light` and nothing said which
+lamp that was. `get_hue_light_names` (`commands/hue/lights.rs`) reads every light in one
+`GET /clip/v2/resource/light` — no light budget, the restore's watch uses the same read — and
+answers the names of the ids asked for; a light listed without a name is left out and the row falls
+back to its count, never to an id. The frontend asks once per bridge and set of light ids and keeps
+the answer for the session (`useHueLightNames`); nothing polls, and Revalidate reads it again. The
+stream-start metadata fetch is per light and carries no name, so the same bulk read serves a running
+stream too.
+
+- **Identify is the owning device's action.** The OpenHue spec puts `identify: {action: "identify"}`
+  on `device` ("Lights perform one breathe cycle"), not on `light`, so `identify_hue_lights` reads
+  the light list for each light's `owner` and PUTs `{"identify":{"action":"identify"}}` to
+  `/clip/v2/resource/device/{id}`, once per device, never writing a light's state.
+- **Paced to the light budget** by one process-wide `RequestPacer` at
+  `HUE_HTTP_FALLBACK_MAX_REQUESTS_PER_SEC`, held across a whole press so two presses queue rather
+  than burst; a 429 widens it and is retried once.
+- **Refused while a stream owns the lights** (`HUE_IDENTIFY_BLOCKED_STREAMING`): a runtime
+  `Starting`, `Running` or `Reconnecting`, or an active stream context — checked before the read
+  and again before every write. The button is disabled while the card reads Running, described by
+  the channel map's streaming note, which says so.
 
 ## Hue state vocabulary
 

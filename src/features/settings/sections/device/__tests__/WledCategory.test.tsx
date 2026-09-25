@@ -6,6 +6,7 @@ import { WledCategory } from "../WledCategory";
 import type * as wledApiModule from "@/features/device/wledApi";
 
 const getWledSinkStatusMock = vi.fn<typeof wledApiModule.getWledSinkStatus>();
+const forgetWledDeviceMock = vi.fn<typeof wledApiModule.forgetWledDevice>();
 const loadMock = vi.fn();
 const saveMock = vi.fn();
 
@@ -18,6 +19,7 @@ vi.mock("@/features/device/wledApi", () => ({
   connectWledSink: vi.fn<typeof wledApiModule.connectWledSink>(),
   testWledBridge: vi.fn<typeof wledApiModule.testWledBridge>(),
   getWledSinkStatus: () => getWledSinkStatusMock(),
+  forgetWledDevice: (ip: string) => forgetWledDeviceMock(ip),
 }));
 
 vi.mock("@/features/persistence/shellStore", () => ({
@@ -36,6 +38,7 @@ const SAVED = {
 
 beforeEach(() => {
   getWledSinkStatusMock.mockReset();
+  forgetWledDeviceMock.mockReset();
   loadMock.mockReset();
   saveMock.mockReset();
   getWledSinkStatusMock.mockResolvedValue({ connected: true, sink: SAVED });
@@ -96,5 +99,54 @@ describe("WledCategory → WledDevicePicker wiring", () => {
         lastSuccessfulPort: undefined,
       });
     });
+  });
+
+  it("keeps the saved device on the page after navigating away, with a way to forget it", async () => {
+    render(<WledCategory isActive />);
+
+    const card = await screen.findByTestId("wled-saved-device");
+    expect(card).toHaveTextContent(SAVED.ip);
+    expect(card).toHaveTextContent("device:page.wled.pill.connected");
+    expect(card).toHaveTextContent(String(SAVED.ledCount));
+  });
+
+  it("forgets the device only after the confirmation, then says so", async () => {
+    forgetWledDeviceMock.mockImplementation(async () => {
+      getWledSinkStatusMock.mockResolvedValue({ connected: false, sink: null });
+      loadMock.mockResolvedValue({});
+      return { status: { code: "WLED_FORGET_OK", message: "ok", details: null } };
+    });
+    const user = userEvent.setup();
+    render(<WledCategory isActive />);
+
+    await user.click(await screen.findByTestId("wled-forget"));
+    expect(forgetWledDeviceMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("wled-forget-confirm")).toHaveTextContent(
+      "device:page.wled.forgetConfirm.body",
+    );
+
+    await user.click(screen.getByTestId("wled-forget-confirm-yes"));
+
+    await waitFor(() => {
+      expect(forgetWledDeviceMock).toHaveBeenCalledWith(SAVED.ip);
+    });
+    expect(await screen.findByTestId("wled-forget-result")).toHaveTextContent(
+      "device:page.wled.status.forgetOk",
+    );
+    await waitFor(() => {
+      expect(screen.queryByTestId("wled-saved-device")).toBeNull();
+    });
+  });
+
+  it("forgets nothing when the confirmation is cancelled", async () => {
+    const user = userEvent.setup();
+    render(<WledCategory isActive />);
+
+    await user.click(await screen.findByTestId("wled-forget"));
+    await user.click(screen.getByRole("button", { name: "device:page.wled.forgetConfirm.cancel" }));
+
+    expect(screen.queryByTestId("wled-forget-confirm")).toBeNull();
+    expect(forgetWledDeviceMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("wled-saved-device")).toBeInTheDocument();
   });
 });

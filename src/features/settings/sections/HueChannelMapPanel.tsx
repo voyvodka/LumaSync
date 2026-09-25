@@ -11,8 +11,10 @@ import {
 } from "@/shared/contracts/roomMap";
 import {
   HUE_AREA_CHANNELS_STATUS,
+  HUE_IDENTIFY_STATUS,
   HUE_RUNTIME_STATUS,
   type HueChannelPlacementOverride,
+  type HueIdentifyStatus,
 } from "@/shared/contracts/hue";
 import { updateHueChannelPositions } from "@/features/room-map/roomMapApi";
 import {
@@ -73,9 +75,14 @@ interface Props {
    *  the zone, so editing here has to project through it rather than write the
    *  absolute pair the runtime ignores. */
   zones?: readonly HueZone[];
+  /** Light id → the Hue app's name. A light missing here is shown by count. */
+  lightNames?: Readonly<Record<string, string>>;
+  /** Blinks a channel's lights once. Absent ⇒ no Identify buttons. */
+  onIdentify?: (lightIds: string[]) => Promise<HueIdentifyStatus>;
 }
 
 type BridgeActionResult =
+  | { kind: "identifyFailed"; code: string }
   | { kind: "saved" }
   | { kind: "savedPartial"; skippedIds: number[] }
   | { kind: "saveFailed"; code: string }
@@ -83,6 +90,9 @@ type BridgeActionResult =
   | { kind: "pullFailed" };
 
 const NO_ZONES: readonly HueZone[] = [];
+const NO_NAMES: Readonly<Record<string, string>> = {};
+/** Names shown before the rest collapse into "+n". */
+const NAMES_SHOWN = 2;
 
 const SAVED_DISMISS_MS = 3000;
 /** Long enough to read which channels the bridge kept. */
@@ -113,6 +123,12 @@ function channelList(ids: readonly number[]): string {
   return ids.map((id) => `#${id}`).join(", ");
 }
 
+/** The channel's lights by name, or `null` while none of them has one. */
+function namedLights(lightIds: readonly string[], names: Readonly<Record<string, string>>): string[] | null {
+  const named = lightIds.flatMap((id) => (names[id] ? [names[id]] : []));
+  return named.length > 0 ? named : null;
+}
+
 export function HueChannelMapPanel({
   channels,
   isLoading,
@@ -131,6 +147,8 @@ export function HueChannelMapPanel({
   onRepair,
   onNavigateToRoomMap,
   zones = NO_ZONES,
+  lightNames = NO_NAMES,
+  onIdentify,
 }: Props) {
   const { t } = useTranslation();
   const busyNoteId = useId();
@@ -150,6 +168,7 @@ export function HueChannelMapPanel({
   const [isSaving, setIsSaving] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<"save" | "pull" | null>(null);
+  const [identifyingIndex, setIdentifyingIndex] = useState<number | null>(null);
   const [actionResult, setActionResult] = useState<BridgeActionResult | null>(null);
   const resultTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -313,6 +332,24 @@ export function HueChannelMapPanel({
     showResult,
   ]);
 
+  const runIdentify = useCallback(
+    async (channelIndex: number, lightIds: string[]) => {
+      if (!onIdentify) return;
+      setIdentifyingIndex(channelIndex);
+      showResult(null);
+      try {
+        const status = await onIdentify(lightIds);
+        if (status.code !== HUE_IDENTIFY_STATUS.OK) {
+          console.warn(`[LumaSync] Hue identify: ${status.code}${status.details ? ` — ${status.details}` : ""}`);
+          showResult({ kind: "identifyFailed", code: status.code }, DETAIL_DISMISS_MS);
+        }
+      } finally {
+        setIdentifyingIndex(null);
+      }
+    },
+    [onIdentify, showResult],
+  );
+
   const confirmPending = useCallback(() => {
     const action = pendingConfirm;
     setPendingConfirm(null);
@@ -373,6 +410,9 @@ export function HueChannelMapPanel({
   // holds a channel list with our placements applied.
   const bridgeBusy = isStreaming || isStale;
   const hasSaveAction = Boolean(bridgeIp && areaId) && username !== undefined;
+  // Same pairing prerequisites as the save, and its streaming note says why
+  // the button is off.
+  const identifyEnabled = hasSaveAction && onIdentify !== undefined;
   const actionBusy = isSaving || isPulling;
   // Said on the page, not in a tooltip: a disabled button shows no title.
   const busyNote = isStreaming && !isStale ? t("hue:channelMap.streamingNote") : null;
@@ -414,6 +454,19 @@ export function HueChannelMapPanel({
           const zone = zones.find((z) => z.id === placement.zoneId);
           // The bridge's own id, rendered raw: `#0` is a legitimate channel.
           const idLabel = `#${ch.channelId}`;
+          const named = namedLights(ch.lightIds, lightNames);
+          const countLabel =
+            ch.lightCount === 1
+              ? t("hue:channelMap.oneLight")
+              : t("hue:channelMap.lights", { count: ch.lightCount });
+          const shownNames = named?.slice(0, NAMES_SHOWN) ?? [];
+          const unshown = ch.lightIds.length - shownNames.length;
+          const lightsLabel =
+            named === null
+              ? countLabel
+              : unshown > 0
+                ? t("hue:channelMap.moreLights", { names: shownNames.join(", "), count: unshown })
+                : shownNames.join(", ");
 
           return (
             <div
@@ -425,14 +478,27 @@ export function HueChannelMapPanel({
               <div className="lm-chmap-row-id">
                 <span className="lm-chmap-row-dot" aria-hidden />
                 <span className="lm-chmap-row-num">{idLabel}</span>
-                <span className="lm-chmap-row-lights">
-                  {ch.lightCount === 1
-                    ? t("hue:channelMap.oneLight")
-                    : t("hue:channelMap.lights", { count: ch.lightCount })}
+                <span className="lm-chmap-row-lights" title={named?.join(", ")}>
+                  {lightsLabel}
                 </span>
               </div>
 
               <div className="lm-chmap-row-trail">
+                {identifyEnabled && ch.lightIds.length > 0 ? (
+                  <Button
+                    size="md"
+                    disabled={isStreaming || identifyingIndex !== null}
+                    busy={identifyingIndex === ch.index}
+                    aria-label={t("hue:channelMap.identifyAriaLabel", { index: idLabel })}
+                    aria-describedby={busyNote ? busyNoteId : undefined}
+                    onClick={() => { void runIdentify(ch.index, ch.lightIds); }}
+                    data-testid={`hue-chmap-identify-${ch.channelId}`}
+                  >
+                    {identifyingIndex === ch.index
+                      ? t("hue:channelMap.identifying")
+                      : t("hue:channelMap.identify")}
+                  </Button>
+                ) : null}
                 {zone ? (
                   <span className="lm-chmap-row-zone">{zone.name}</span>
                 ) : (
@@ -517,6 +583,25 @@ export function HueChannelMapPanel({
 
   function renderResult(result: BridgeActionResult) {
     switch (result.kind) {
+      case "identifyFailed": {
+        if (result.code === HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED) {
+          return (
+            <Callout
+              tone="error"
+              action={onRepair ? { label: t("hue:runtime.actions.repair"), onClick: onRepair } : undefined}
+            >
+              {t("hue:credential.repairHint")}
+            </Callout>
+          );
+        }
+        const key =
+          result.code === HUE_IDENTIFY_STATUS.BLOCKED_STREAMING
+            ? "hue:channelMap.identifyBlocked"
+            : result.code === HUE_IDENTIFY_STATUS.PARTIAL
+              ? "hue:channelMap.identifyPartial"
+              : "hue:channelMap.identifyFailed";
+        return <Callout tone={result.code === HUE_IDENTIFY_STATUS.PARTIAL ? "warning" : "error"}>{t(key)}</Callout>;
+      }
       case "saved":
         return <Callout tone="ok">{t("hue:channelMap.savedToBridge")}</Callout>;
       case "savedPartial":

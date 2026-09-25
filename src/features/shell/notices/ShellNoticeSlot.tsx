@@ -121,6 +121,7 @@ export function ShellNoticeSlot({
           entry={top}
           wrapped={shownExpanded}
           showSecondary={!compact || shownExpanded}
+          labelDismiss={!compact}
           onDismiss={handleDismiss}
           toggle={canExpand ? toggle : undefined}
           messageRef={messageRef}
@@ -129,7 +130,14 @@ export function ShellNoticeSlot({
       )}
       {shownExpanded &&
         rest.map((entry) => (
-          <NoticeRow key={entry.key} entry={entry} wrapped showSecondary onDismiss={handleDismiss} />
+          <NoticeRow
+            key={entry.key}
+            entry={entry}
+            wrapped
+            showSecondary
+            labelDismiss={!compact}
+            onDismiss={handleDismiss}
+          />
         ))}
     </section>
   );

@@ -19,6 +19,12 @@ interface NoticeRowProps {
   /** Expanded, the sentence wraps; otherwise it stays on one line and ends in an ellipsis. */
   wrapped: boolean;
   showSecondary: boolean;
+  /**
+   * A named dismiss (`dismissLabel`) may be spelled out as text. Full mode
+   * only: at 320 px even the expanded strip squeezed the sentence into a
+   * column one word wide, so compact keeps the × with the name as its label.
+   */
+  labelDismiss?: boolean;
   onDismiss: (entry: QueuedNotice) => void;
   toggle?: NoticeRowToggle;
   messageRef?: Ref<HTMLParagraphElement>;
@@ -51,6 +57,7 @@ export function NoticeRow({
   entry,
   wrapped,
   showSecondary,
+  labelDismiss = false,
   onDismiss,
   toggle,
   messageRef,
@@ -82,18 +89,28 @@ export function NoticeRow({
       </p>
       {notice.action && <ActionLink action={notice.action} />}
       {showSecondary && notice.secondaryAction && <ActionLink action={notice.secondaryAction} secondary />}
-      {notice.dismissible && (
-        <button
-          type="button"
-          className="lm-notice-icon-btn"
-          onClick={() => onDismiss(entry)}
-          aria-label={t("shell:notices.dismiss")}
-          title={t("shell:notices.dismiss")}
-          data-testid="notice-dismiss"
-        >
-          <IconClose />
-        </button>
-      )}
+      {notice.dismissible &&
+        (notice.dismissLabel && labelDismiss ? (
+          <button
+            type="button"
+            className="lm-notice-action is-secondary"
+            onClick={() => onDismiss(entry)}
+            data-testid="notice-dismiss"
+          >
+            {notice.dismissLabel}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="lm-notice-icon-btn"
+            onClick={() => onDismiss(entry)}
+            aria-label={notice.dismissLabel ?? t("shell:notices.dismiss")}
+            title={notice.dismissLabel ?? t("shell:notices.dismiss")}
+            data-testid="notice-dismiss"
+          >
+            <IconClose />
+          </button>
+        ))}
       {toggle && (
         <button
           type="button"

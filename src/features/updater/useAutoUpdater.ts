@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef } from "react";
 
 import { shellStore } from "../persistence/shellStore";
-import { DEFAULT_UPDATE_CHANNEL, type UpdateChannel } from "@/shared/contracts/shell";
+import { APP_VERSION } from "@/shared/constants/app";
+import { defaultUpdateChannel, resolveUpdateChannel, type UpdateChannel } from "@/shared/contracts/shell";
 import {
   UPDATER_STATUS,
   type UpdaterStatusCode,
@@ -35,8 +36,14 @@ export type UpdaterState =
 
 export type UpdaterErrorPhase = "check" | "install";
 
-/** `background` is the startup check nobody asked for; it never opens the modal on failure. */
+/** `background` is a check nobody asked for; it never opens the modal on failure. */
 type UpdateCheckTrigger = "user" | "background";
+
+/**
+ * What a background check came to, for the schedule that runs it: `failed`
+ * retries sooner, `done` waits a full interval, and `off` stops the schedule.
+ */
+export type BackgroundCheckOutcome = "done" | "failed" | "off";
 
 /** Rendered as a badge, so it is refreshed from the store before every check.
  * Rust reads the same field to pick the endpoint and echoes it back — a
@@ -44,19 +51,23 @@ type UpdateCheckTrigger = "user" | "background";
 async function readUpdateChannel(): Promise<UpdateChannel> {
   try {
     const state = await shellStore.load();
-    return state.updateChannel ?? DEFAULT_UPDATE_CHANNEL;
+    return resolveUpdateChannel(state.updateChannel, APP_VERSION);
   } catch (err) {
     console.error("[LumaSync] update channel read failed; using default:", err);
-    return DEFAULT_UPDATE_CHANNEL;
+    return defaultUpdateChannel(APP_VERSION);
   }
 }
 
 export function useAutoUpdater() {
   const [state, setState] = useState<UpdaterState>({ status: "idle" });
-  const [channel, setChannel] = useState<UpdateChannel>(DEFAULT_UPDATE_CHANNEL);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const [channel, setChannel] = useState<UpdateChannel>(() => defaultUpdateChannel(APP_VERSION));
   // Hides the status that was dismissed, not the updater. Setting `idle`
   // instead hid nothing — the progress listener kept writing `downloading`.
   const [dismissedStatus, setDismissedStatus] = useState<UpdaterState["status"] | null>(null);
+  const dismissedStatusRef = useRef(dismissedStatus);
+  dismissedStatusRef.current = dismissedStatus;
   // An up-to-date answer leaves the state at `idle`, which is also "never
   // checked"; without this a check the user asked for said nothing at all.
   const [upToDateAt, setUpToDateAt] = useState<number | null>(null);
@@ -70,8 +81,9 @@ export function useAutoUpdater() {
     clear: clearCheckFailed,
   } = useUpdateCheckFailedNotice();
 
+  // A check that lost to a later one reports `done`: the later one answers for both.
   const runCheck = useCallback(
-    async (trigger: UpdateCheckTrigger) => {
+    async (trigger: UpdateCheckTrigger): Promise<"done" | "failed"> => {
       // A newer version is new information even though the status is `available`
       // again, so it must not stay hidden behind the previous "Later".
       setDismissedStatus(null);
@@ -84,13 +96,13 @@ export function useAutoUpdater() {
       }
 
       const storedChannel = await readUpdateChannel();
-      if (!isLatest()) return;
+      if (!isLatest()) return "done";
       setChannel(storedChannel);
       setState({ status: "checking" });
 
       // A background failure is logged and offered as a notice; only a check the
       // user asked for may put the modal over the window.
-      const fail = (failure: UpdateCheckFailure) => {
+      const fail = (failure: UpdateCheckFailure): "failed" => {
         if (trigger === "background") {
           setState({ status: "idle" });
           reportCheckFailed(failure);
@@ -98,11 +110,12 @@ export function useAutoUpdater() {
           clearCheckFailed();
           setState({ status: "error", phase: "check", ...failure });
         }
+        return "failed";
       };
 
       try {
         const response = await checkForUpdate();
-        if (!isLatest()) return;
+        if (!isLatest()) return "done";
         // Rust's answer wins over the store read above: it is what actually
         // chose the endpoint the result came from.
         setChannel(response.channel);
@@ -119,30 +132,42 @@ export function useAutoUpdater() {
             code: response.status.code,
             message: response.status.message,
           });
-          fail({ code: response.status.code, message: response.status.message });
+          return fail({ code: response.status.code, message: response.status.message });
         }
+        return "done";
       } catch (err) {
-        if (!isLatest()) return;
+        if (!isLatest()) return "done";
         // The command never rejects; this is the invoke layer itself failing —
         // an unregistered command, or a window torn down mid-check.
         console.error(`[LumaSync] update check rejected (${trigger}):`, err);
-        fail({ message: parseCommandError(err).message });
+        return fail({ message: parseCommandError(err).message });
       }
     },
     [holdCheckFailed, reportCheckFailed, clearCheckFailed],
   );
 
   /** A check the user asked for: Retry, the Software update button, the notice. */
-  const checkForUpdates = useCallback(() => runCheck("user"), [runCheck]);
+  const checkForUpdates = useCallback(async () => {
+    await runCheck("user");
+  }, [runCheck]);
 
-  const checkForUpdatesInBackground = useCallback(async () => {
+  const checkForUpdatesInBackground = useCallback(async (): Promise<BackgroundCheckOutcome> => {
     // The e2e binary drives the real window; whatever the live feed answers
     // would land over the screens a spec is asserting on.
     if (await readE2eBuild()) {
-      console.info("[LumaSync] e2e build: startup update check skipped");
-      return;
+      console.info("[LumaSync] e2e build: background update checks skipped");
+      return "off";
     }
-    await runCheck("background");
+    // Never on top of a check in flight, an update already found, or one being
+    // installed: a re-check would reopen a prompt the user put off with "Later",
+    // or reset a download under way. The next scheduled check tries again.
+    const busy = stateRef.current.status;
+    if (busy === "checking" || busy === "available" || busy === "downloading" || busy === "installing") {
+      return "done";
+    }
+    // An error the prompt still shows is the user's to answer.
+    if (busy === "error" && dismissedStatusRef.current !== "error") return "done";
+    return runCheck("background");
   }, [runCheck]);
 
   const downloadAndInstall = useCallback(async (update: UpdateMetadata) => {

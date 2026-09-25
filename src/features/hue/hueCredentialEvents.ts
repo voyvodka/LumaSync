@@ -6,7 +6,8 @@
 export type HueCredentialChangeReason =
   | "paired"
   | "area-selected"
-  | "credentials-migrated";
+  | "credentials-migrated"
+  | "forgotten";
 
 export interface HueCredentialEvent {
   readonly reason: HueCredentialChangeReason;

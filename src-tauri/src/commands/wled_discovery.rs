@@ -21,6 +21,8 @@
 //!   WLED_INVALID_IP            -- IP failed SSRF guard (not IPv4, loopback,
 //!                                 unspecified, multicast, or broadcast).
 //!   WLED_INVALID_LED_COUNT     -- led_count == 0 supplied to connect_wled_sink.
+//!   WLED_FORGET_OK             -- Device forgotten: not driven, not bound, not saved.
+//!   WLED_FORGET_FAILED         -- The lighting could not let go of it; nothing changed.
 use std::io::Read;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
@@ -156,6 +158,19 @@ pub struct WledSinkSnapshot {
 pub struct WledSinkStatusResponse {
     pub connected: bool,
     pub sink: Option<WledSinkSnapshot>,
+}
+
+/// Request payload for `forget_wled_device`.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WledForgetRequest {
+    pub ip: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WledForgetResponse {
+    pub status: CommandStatus,
 }
 
 #[derive(Debug, Deserialize)]
@@ -609,6 +624,99 @@ pub fn get_wled_sink_status(
             sink: None,
         },
     }
+}
+
+/// The body of `forget_wled_device`. Contacts nothing on the network.
+pub(crate) async fn forget_wled_with<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    ip: &str,
+) -> WledForgetResponse {
+    use tauri::Manager;
+
+    use super::lighting_mode::outputs::{apply_outputs_with, ApplyOutputsRequest, LightingOrigin};
+    use super::lighting_mode::snapshot::OutputTarget;
+    use super::lighting_mode::LightingRuntimeState;
+
+    let Ok(addr) = Ipv4Addr::from_str(ip.trim()) else {
+        return WledForgetResponse {
+            status: CommandStatus::new(
+                "WLED_INVALID_IP",
+                "Not a WLED device address.",
+                Some(format!("'{ip}' is not a valid IPv4 address")),
+            ),
+        };
+    };
+    let bound_here = |app: &tauri::AppHandle<R>| {
+        app.state::<ActiveSinkRegistry>()
+            .active_wled_config()
+            .is_some_and(|config| config.ip == addr)
+    };
+
+    if bound_here(app) {
+        // The "usb" channel is whichever local sink is bound; with this one
+        // gone it has nothing, as after an unplug. Session only, like one.
+        let selected = app
+            .state::<LightingRuntimeState>()
+            .snapshot
+            .read()
+            .selected_targets;
+        if selected.contains(&OutputTarget::Usb) {
+            let rest = selected
+                .into_iter()
+                .filter(|target| *target != OutputTarget::Usb)
+                .map(|target| target.as_str().to_string())
+                .collect();
+            let request = ApplyOutputsRequest {
+                mode: None,
+                targets: Some(rest),
+                origin: LightingOrigin::UsbUnplug,
+            };
+            if let Err(error) = apply_outputs_with(app, request).await {
+                log::warn!("[wled-forget] the lighting did not let go of {addr}: {error}");
+                return WledForgetResponse {
+                    status: CommandStatus::new(
+                        "WLED_FORGET_FAILED",
+                        "The WLED device was not forgotten.",
+                        Some(error),
+                    ),
+                };
+            }
+        }
+        // A strip connected meanwhile replaced it already, and is not ours to drop.
+        if bound_here(app) {
+            app.state::<ActiveSinkRegistry>().clear();
+        }
+    }
+
+    let saved_here = super::shell_state::persisted(app)
+        .and_then(|state| state.saved_wled_ip())
+        .is_some_and(|saved| saved.trim() == ip.trim());
+    if saved_here {
+        if let Err(error) = super::shell_state::remove_from_rust(app, &["lastWledSink"]) {
+            return WledForgetResponse {
+                status: CommandStatus::new(
+                    "WLED_FORGET_FAILED",
+                    "The WLED device was not forgotten.",
+                    Some(error),
+                ),
+            };
+        }
+    }
+    log::info!("[wled-forget] {addr} forgotten");
+    WledForgetResponse {
+        status: CommandStatus::ok("WLED_FORGET_OK", "The WLED device was forgotten."),
+    }
+}
+
+/// Forget a WLED device: the running mode stops sending to it (and ends when
+/// it was the only output), the sink registration goes, and so does the saved
+/// device a launch would bind again.
+#[tauri::command]
+pub async fn forget_wled_device<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    request: WledForgetRequest,
+) -> WledForgetResponse {
+    forget_wled_with(&app, &request.ip).await
 }
 
 /// Send a one-off red-ramp test frame to a WLED device without registering
@@ -1086,5 +1194,124 @@ mod tests {
                 "{ip}: {error:?}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod forget_tests {
+    use serde_json::json;
+    use tauri::async_runtime::block_on;
+    use tauri::Manager;
+
+    use super::super::device_connection::ActiveSinkRegistry;
+    use super::super::lighting_mode::outputs::{
+        apply_outputs_with, ApplyOutputsRequest, LightingOrigin,
+    };
+    use super::super::lighting_mode::{
+        LightingModeConfig, LightingModeKind, Rig, RigSetup, SolidColorPayload,
+    };
+    use super::super::wled_sink::{WledProtocol, WledSinkConfig};
+    use super::forget_wled_with;
+
+    // Loopback, with a receiver bound below: a test never sends to the LAN.
+    const IP: &str = "127.0.0.1";
+
+    fn rig_with_wled(bind: bool) -> (Rig, std::net::UdpSocket) {
+        let receiver = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        let port = receiver.local_addr().unwrap().port();
+        let rig = Rig::new(RigSetup {
+            serial_connected: false,
+            hue_paired: false,
+            state: json!({
+                "lastWledSink": { "ip": IP, "port": port, "ledCount": 59, "protocol": "drgb" },
+                "lastOutputTargets": ["usb"],
+            }),
+            ..RigSetup::default()
+        });
+        if bind {
+            let config = WledSinkConfig {
+                ip: IP.parse().unwrap(),
+                port,
+                led_count: 59,
+                protocol: WledProtocol::Drgb,
+            };
+            rig.app
+                .state::<ActiveSinkRegistry>()
+                .replace_wled(Box::new(config.build()), config);
+        }
+        (rig, receiver)
+    }
+
+    fn solid_on_usb(rig: &Rig) {
+        let started = block_on(apply_outputs_with(
+            &rig.handle(),
+            ApplyOutputsRequest {
+                mode: Some(LightingModeConfig {
+                    kind: LightingModeKind::Solid,
+                    solid: Some(SolidColorPayload {
+                        r: 200,
+                        g: 20,
+                        b: 30,
+                        brightness: 1.0,
+                    }),
+                    ..LightingModeConfig::default()
+                }),
+                targets: Some(vec!["usb".to_string()]),
+                origin: LightingOrigin::User,
+            },
+        ))
+        .expect("apply resolves");
+        assert_eq!(started.status.code, "OUTPUTS_APPLIED", "setup: {started:?}");
+    }
+
+    #[test]
+    fn forgetting_the_driven_device_ends_its_mode_and_unbinds_it() {
+        let (rig, _receiver) = rig_with_wled(true);
+        solid_on_usb(&rig);
+
+        let response = block_on(forget_wled_with(&rig.handle(), IP));
+
+        assert_eq!(response.status.code, "WLED_FORGET_OK");
+        let snapshot = rig.state().snapshot.read();
+        assert_eq!(snapshot.mode.kind, LightingModeKind::Off);
+        assert!(snapshot.active_targets.is_empty());
+        assert!(!rig.worker_running(), "nothing drives the device any more");
+        assert!(rig
+            .app
+            .state::<ActiveSinkRegistry>()
+            .active_wled_config()
+            .is_none());
+        assert_eq!(rig.saved("lastWledSink"), None);
+        assert_eq!(
+            rig.saved("lastOutputTargets"),
+            Some(json!(["usb"])),
+            "the local channel stays chosen for the next strip or device"
+        );
+    }
+
+    #[test]
+    fn a_device_that_is_only_saved_is_dropped_without_touching_the_lighting() {
+        let (rig, _receiver) = rig_with_wled(false);
+
+        let response = block_on(forget_wled_with(&rig.handle(), IP));
+
+        assert_eq!(response.status.code, "WLED_FORGET_OK");
+        assert!(rig.log.events().is_empty(), "{:?}", rig.log.events());
+        assert_eq!(rig.saved("lastWledSink"), None);
+    }
+
+    #[test]
+    fn another_bound_device_is_left_bound() {
+        let (rig, _receiver) = rig_with_wled(true);
+
+        let response = block_on(forget_wled_with(&rig.handle(), "127.0.0.2"));
+
+        assert_eq!(response.status.code, "WLED_FORGET_OK");
+        assert!(rig
+            .app
+            .state::<ActiveSinkRegistry>()
+            .active_wled_config()
+            .is_some());
+        assert!(rig.saved("lastWledSink").is_some());
     }
 }

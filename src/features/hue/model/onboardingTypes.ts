@@ -3,6 +3,8 @@ import type { TranslationKey } from "@/features/i18n/catalogue";
 import {
   HUE_CREDENTIAL_STATUS,
   type HueCredentialStatus,
+  type HueForgetStatus,
+  type HueIdentifyStatus,
   type HueRuntimeTarget,
 } from "@/shared/contracts/hue";
 import type {
@@ -88,6 +90,10 @@ export interface UseHueOnboardingResult {
   refreshChannels: () => Promise<HueAreaChannelsRead | null>;
   discover: () => Promise<void>;
   selectBridge: (bridgeId: string | null) => void;
+  /** Forgets the selected bridge: Hue leaves the lighting and the saved
+   *  outputs, the saved pairing and its key pair are removed. `null` when no
+   *  bridge is selected. */
+  forgetBridge: () => Promise<HueForgetStatus | null>;
   setManualIp: (value: string) => void;
   submitManualIp: () => Promise<void>;
   /** Asks the selected bridge again whether the saved key works — the way
@@ -101,6 +107,10 @@ export interface UseHueOnboardingResult {
   revalidateArea: () => Promise<void>;
   startRuntime: () => Promise<void>;
   retryRuntimeTarget: (target: HueRuntimeTarget) => Promise<void>;
+  /** Light id → the Hue app's name, read once per area; see `useHueLightNames`. */
+  lightNames: Readonly<Record<string, string>>;
+  /** Blink these lights once. Refused by the bridge side while streaming. */
+  identifyLights: (lightIds: string[]) => Promise<HueIdentifyStatus>;
 }
 
 /** `clientKey` is DTLS pre-shared key material: never put it in a status

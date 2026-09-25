@@ -23,6 +23,8 @@ snapshot (`useLightingRuntime.ts`: seeded by `get_lighting_runtime`, kept by
 | Tray: Lights off, Resume last mode, Solid colour | built in Rust (`tray_request`), never through a window |
 | Test patterns (LED Setup, popup tiles) | `apply_outputs` `{ targets, origin: "leaseHue" }` around each run |
 | Devices card Stop retrying / Retry stop | `release_hue_output` |
+| Devices → Hue Forget | built in Rust (`forget_hue_bridge`): `release_hue_with`, then a `user` choice of the saved targets without `hue` (`hue.md`, "Forgetting a bridge") |
+| Devices → WLED Forget device | built in Rust (`forget_wled_device`): a `usbUnplug` request without `usb` when that device is the bound local sink |
 | A drag within the running kind (both windows) | `retune_lighting`, through `retuneCoalescer.ts` |
 | A saved setting the mode reads | nothing — Rust re-applies on the save (below) |
 

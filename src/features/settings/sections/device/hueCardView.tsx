@@ -35,6 +35,9 @@ export interface HueCardContext {
   /** Not `stopHue`: a running mode that names Hue has to let go of it first. */
   onStopHue: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
   areaChoice: HueAreaChoice;
+  /** Opens the forget confirmation; nothing is forgotten until it is answered. */
+  requestForget: () => void;
+  isForgetting: boolean;
 }
 
 type HueCardText = TranslationKey | ((ctx: HueCardContext) => string);
@@ -104,8 +107,18 @@ const stopFromCard = ({ onStopHue }: HueCardContext) => {
   void onStopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
 };
 
-const forgetAction = (label: TranslationKey) => ({ t, hue }: HueCardContext): HueCardActionSpec => ({
-  label: t(label),
+// Forget asks first and then clears everything the app keeps about the bridge.
+const forgetAction = (label: TranslationKey) => ({ t, requestForget, isForgetting }: HueCardContext): HueCardActionSpec => ({
+  label: isForgetting ? t("hue:page.forgetting") : t(label),
+  onClick: requestForget,
+  busy: isForgetting,
+  danger: true,
+});
+
+// Walking away from a pairing run or an unpaired selection: nothing is saved
+// for it yet, so letting go of the selection is all there is to undo.
+const cancelAction = ({ t, hue }: HueCardContext): HueCardActionSpec => ({
+  label: t("hue:page.cancel"),
   onClick: () => { hue.selectBridge(null); },
   danger: true,
 });
@@ -206,7 +219,7 @@ export const HUE_CARD_ACTIONS = {
     busy: hue.isDiscovering,
   }),
   forget: forgetAction("hue:page.forgotBridge"),
-  cancel: forgetAction("hue:page.cancel"),
+  cancel: cancelAction,
   forceForget: forgetAction("hue:page.forceForget"),
 } satisfies Record<string, (ctx: HueCardContext) => HueCardActionSpec | null>;
 

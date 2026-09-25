@@ -309,6 +309,8 @@ struct FakeHueState {
     post_stream: Option<PostStream>,
     /// Lights a PUT was answered 2xx for since the last `action: stop`.
     written_since_stop: HashSet<String>,
+    /// Devices that answer a PUT with 404, as one removed from the bridge does.
+    removed_devices: HashSet<String>,
     /// Held before answering a read of every light at once.
     bulk_read_delay: Duration,
 }
@@ -414,6 +416,15 @@ impl FakeHue {
         }
     }
 
+    /// PUTs to this device answer 404 from now on.
+    pub(crate) fn remove_device(&self, device_id: &str) {
+        self.state
+            .lock()
+            .unwrap()
+            .removed_devices
+            .insert(device_id.to_string());
+    }
+
     /// Every restore PUT, as `(light id, body)` in arrival order. A start's
     /// switch-on of an off light (`{"on":{"on":true}}` alone) is not one: see
     /// [`Self::switch_ons`]. A restore of an on light always carries its
@@ -516,6 +527,8 @@ fn route(
             let all: Vec<Value> = all
                 .into_iter()
                 .map(|(id, mut light)| {
+                    // Owned the way `GET device` links it back.
+                    light["owner"] = json!({ "rid": format!("dev-{id}"), "rtype": "device" });
                     light["id"] = json!(id);
                     light
                 })
@@ -563,6 +576,13 @@ fn route(
                 _ => {}
             }
             Reply::ok()
+        }
+        ("PUT", "device") => {
+            if state.lock().unwrap().removed_devices.contains(id) {
+                not_found()
+            } else {
+                Reply::ok()
+            }
         }
         ("PUT", "light") => {
             let reply = put_light(id);
