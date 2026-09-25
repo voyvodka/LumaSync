@@ -34,6 +34,9 @@ every attempted open, and script what the device answers.
 
 **Read the constant. Never hardcode the list elsewhere.** A second copy is a second thing to keep
 in sync, and the failure is silent: a device works in one code path and is rejected in another.
+The one mirror that exists, `SUPPORTED_CONTROLLER_IDS` in `device.ts`, is held to it entry by
+entry and in order by `verify:shell-contracts`, and `allowlist_has_nine_entries` pins the count —
+so adding a chip touches all three, and a half-done edit fails CI instead of a user.
 
 **Serial link is 115200 baud, 8N1 — and on a long strip that, not the software, is the frame-rate
 ceiling.** 11 520 bytes/s against a `6 + N × bpp` frame
@@ -49,7 +52,9 @@ Raising the ceiling means raising the baud, and that is a contract with firmware
 flashed rather than a constant to edit. Every chip on the allowlist supports far more than
 115 200 — but the host and the device have to agree, and the Adalight profile is pinned at 115 200
 by Adalight's own convention, so it could never move. `a_164_led_strip_is_capped_by_the_link_at_23_fps`
-pins the arithmetic so the next person meets the explanation instead of the number alone.
+pins the arithmetic so the next person meets the explanation instead of the number alone. Until a
+firmware release negotiates a faster rate ([`serial-protocol.md`](serial-protocol.md) §2.2), the
+answer for a strip the link cannot feed fast enough is WLED.
 
 **The serial write never blocks the worker.** Each open port gets a writer thread
 (`WriterSession`, `led_output/serial.rs`). `send` copies the packet into a latest-wins slot and
@@ -72,12 +77,22 @@ once its two ping-pong buffers have grown; the allocation guard runs the product
 it (`capture-and-pipeline.md`).
 
 **Every sink goes through the `LedSink` trait.** Serial and WLED differ in transport, not in what
-they are asked to do. New output types implement the trait rather than branching at the call site.
+they are asked to do. New output types implement the trait rather than branching at the call site,
+and add a variant to `UsbOutputPlan` / `ActiveUsbSink` (`lighting_mode/usb_output.rs`) with their
+own config interface in `device.ts` beside `WledUdpSinkConfig`. One sink per output channel; Hue
+and the local sink are separate channels fed by the same capture worker, and run together. There is
+deliberately no generic TypeScript sink union: `SinkRef` claimed to be one, no command ever accepted
+it, and it was deleted (#354) before someone designed against it.
 
 **WLED is driven over UDP with DDP, or DRGB/DNRGB on the realtime port.** These are WLED's own
 realtime protocols; there is no HTTP request per frame. WLED is also the documented route for any
 strip the serial path cannot drive yet — APA102 and SK9822
 ([`serial-protocol.md`](serial-protocol.md) §4).
+
+**A WLED device is found by the IP the user types, never by browsing.** `discover_wled_devices`
+probes that one address over HTTP `/json/info`; there is no WLED mDNS browse yet. When one is
+added it attaches to the shared registry in `network/mdns.rs` — a second mDNS daemon in the process
+makes one responder silently miss replies on macOS.
 
 **Serial colour order is a host-side correction, relative to the firmware.** `LedColorOrder`
 (`led_output/wire.rs`, persisted as `ledColorOrder`) permutes the three colour bytes after the
@@ -166,6 +181,7 @@ address.
   **One exception: `channelProbe` pins the identity colour order.** It lights a single wire slot pure red, green or blue so the user can report which colour that slot shows, and the answer is only meaningful when nothing reorders the slots — under a saved order the probe would confirm the saved order instead of measuring the firmware. Only the order is overridden (set on the test config, and hydration is caller-wins); chip type, profile and correction still apply. A slot above 2 is refused with `LED_TEST_PATTERN_INVALID_PARAMS`.
 - **Every serial encoder corrects pixels through one `EncoderPlan`** (`led_output/correction.rs`), built from the colour correction when a `SerialSink` is constructed and once per Solid write — never per frame, because a gamma other than 2.2 costs 768 `powf`s to tabulate. A colour correction change restarts the worker, so a running sink never needs to rebuild it. The colour order is the one field patched in place (`SerialSink::set_color_order`), which touches nothing else in the plan. Before the plan existed each encoder derived its own corrections, and the default one (LumaSync v1 + WS2812B) quietly hardcoded gamma 2.2, so the gamma sliders did nothing on the most common setup. A new per-pixel stage belongs in the plan, not in one encoder.
 - **Adalight carries no brightness, so the host scales the pixels.** Third-party Adalight firmware has no brightness input, so the Adalight encoder multiplies the corrected pixels by brightness, the same way `CorrectedWledSink` does. Only LumaSync v1 frames carry a brightness byte. The slider used to do nothing under Adalight.
+- **An absent `firmwareProfile` is LumaSync v1, and nothing detects otherwise.** The `FIRMWARE_PROFILE` JSDoc in `device.ts` describes an auto-detect (v1 when the handshake answers, else Adalight) that is not implemented: the picker is the only writer, and Rust resolves an absent value with `unwrap_or_default()`. A stock Adalight sketch stays dark until the user switches profile, which is why LumaSync is never described as plainly "Adalight-compatible".
 - **The frame budget sizes pixels by what the encoder actually writes, not by the chip type.** `WirePixelLayout::for_output` decides both the encoder dispatch and the 115 200-baud budget. SK6812 under Adalight is sent as 3-byte pixels, because Adalight has no RGBW frame, and sizing it at 4 bytes held it a quarter below the frame rate the link can carry.
 - **`lastSuccessfulPort` and `lastWledSink` are mutually exclusive, and the code that writes one clears the other.** `ActiveSinkRegistry` holds one sink per output channel, so a serial connect evicts WLED in Rust and vice versa. If both were persisted, both boot paths would fire: the WLED restore lands first, then the serial auto-reconnect evicts it — the 2 s `BOOTLOADER_SETTLE_DELAY_MS` guarantees serial finishes last. The user would see a "connected" WLED device receiving nothing. Mirroring the eviction in persisted state is what keeps the restore honest; there is no separate "which family is active" flag to drift.
 - **A WLED restore probes before it connects, because `connect_wled_sink` cannot fail for an absent device.** `WledUdpSink::start()` binds a local `0.0.0.0:0` socket and never contacts the bridge, so a blind restore reports `WLED_CONNECT_OK` for a device that is powered off. `restoreWledSink` runs `discover_wled_devices` (an HTTP `/json/info` probe) first and only registers the sink once the device has answered. `test_wled_bridge` would prove reachability too, but it sends a red-ramp frame — not something to do to someone's lights at every launch.

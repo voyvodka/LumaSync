@@ -1,88 +1,141 @@
-# CLAUDE.md
+# LumaSync
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-Project context — architecture, commands, code style, verification, release rules, constraints — lives
-in `AGENTS.md`, shared with other coding agents. This file adds only Claude Code–specific routing.
+> Main context source for this repository — read this first. `AGENTS.md` only points here, so
+> project rules belong in this file.
 
-@AGENTS.md
+**LumaSync** is a native desktop application (Tauri 2 + React 19) that mirrors the screen to WS2812B
+LED strips, WLED devices, and Philips Hue entertainment areas in real time, with per-edge room-map
+calibration and fully local processing — no cloud. Package name: `lumasync`, identifier:
+`com.lumasync.app`.
 
-## Agent Routing
+## Where the reasoning lives
 
-This project uses specialist agents in `.claude/agents/`. They are the primary authority for their domains. The main assistant is an **orchestrator**, not an inline worker.
+Two sets, and the split is what is shareable. Each keeps its own index; this file holds neither map.
 
-**`.claude/` is not committed.** The agents and skills named below exist on the maintainer's machine only, so a fresh clone has none of them and this section describes nothing it can reach. If you are working without them, the routing below is still a useful map of which domains need care — just do the work directly, and treat the constraints in `docs/architecture/` as the authority the agents would have cited.
+- **`docs/architecture/README.md` — public, committed.** Technical decisions, gotchas, and the reasoning behind them, split by area so reading about one does not load all of them: `hue`, `device-output`, `serial-protocol`, `capture-and-pipeline`, `lighting-transaction`, `contracts-and-state`, `room-map`, `ui-and-shell`, `design-language`, `build-and-release`, `testing-and-verification`, `references`. **Before changing an area, read its note** — the thing you find odd may be deliberate. A long explanation goes there, not into a twenty-line comment: write the reason there and keep the comment short.
+- **`devdocs/README.md` — private, excluded from git.** Product direction, decisions, roadmap, research. **Never committed, unignored, or distributed**; assume collaborators, CI, and sandboxed agents cannot see it. **Never reference a `devdocs/` path from committed source (including comments), commit messages, PRs, or release notes.** Put the reasoning in `docs/architecture/` instead.
 
-### Routing rules
+Read `devdocs/product/00-state.md` for where the project stands before proposing a plan. Where
+`devdocs/` is not available, read `CHANGELOG.md` and the open issues/PRs instead. When code and a
+document disagree, the code wins — say so and fix the document in the same change.
 
-For any non-trivial task, **spawn the relevant specialist agent(s) instead of working inline.** "Non-trivial" means anything that:
+## Deliberately not built
 
-- plans or designs work (roadmap, phase, feature, refactor)
-- edits code beyond a one-line fix or rename
-- touches `src-tauri/`, `src/features/`, `src/shared/contracts/`, `.github/workflows/`, `CHANGELOG.md`, `SECURITY.md`, version files
-- spans more than one domain (Hue + UI, contract + Rust, etc.)
-- proposes adding a new dependency, partnership, or integration
-- prepares a release or a PR
+Decisions, not gaps. Reopening one is fine; doing it without knowing it was decided is not.
 
-For multi-domain work, **spawn relevant agents in parallel**, then synthesize their outputs. Never serialize what can run concurrently.
+- **Daemon or headless mode** — answered instead by autostart plus a planned loopback HTTP/WS API
+- **Any outbound telemetry, analytics SDK, or third-party crash reporting** — including the "privacy-first" ones. Any feedback path must be user-initiated, user-inspectable, and abortable.
+- **Cloud scene gallery, AI scene generation, proprietary peripheral bridges** (Razer, Corsair), **subscription gating**, **full-screen welcome wizard**, **container and Pi-headless distribution**
+- **The room map on the first-run path** — it is an advanced surface. First run must reach working ambient lighting without it.
 
-### Inline work is allowed only for
+## Commands
 
-- One-line clarifications or factual questions answered from a single file read
-- Typo fixes, identifier renames, pure string edits
-- Conversational back-and-forth during the **design discussion phase**, before any code is written. The maintainer prefers to settle a UI direction in conversation first; jumping straight to an implementation means discarding it.
+`bun run tauri dev` is the primary development command; `bun run dev` runs the Vite server alone with
+no Tauri runtime. Everything else is in `package.json`. Three traps live in the build and test setup —
+including `cargo build` and `bun run tauri build --debug` writing the same path with different
+binaries — read `docs/architecture/build-and-release.md` before losing an afternoon to one.
 
-If in doubt, spawn the agent. The token cost of a redundant spawn is trivial compared to the cost of missing an expert-flagged blind spot.
+## Architecture
 
-### Agent map
+```
+Frontend (React/TS)  →  Tauri Commands (Rust)  →  Device Layer (Serial / WLED UDP / Hue CLIP v2)
+```
 
-| Trigger | Agent |
+- **Contracts first.** Everything crossing the IPC boundary is defined in `src/shared/contracts/` **before** implementation; that directory is the source of truth — list it rather than trusting a summary. `bun run verify:shell-contracts` checks Rust against it. A green verifier means every status code is *declared*, not that it is *correct*.
+- **Feature modules** (`src/features/`) use some of `ui/`, `state/`, `model/`, and an `*Api.ts` `invoke()` bridge; `ls src/features/` is the authoritative list. `hue` holds no UI — placement is authored only in the room map (`docs/architecture/hue.md`). `onboarding` does not include the room map.
+- **Rust commands** live in `src-tauri/src/commands/`; the `generate_handler![]` block in `src-tauri/src/lib.rs` is the authoritative registration list.
+- **State** persists in `shell-state.json` in the app data directory, and Rust owns it (`commands/shell_state.rs`, atomic writes plus `.bak`). The frontend goes through the `shellStore.ts` facade; shape changes go through `migrations.ts`. Hue credentials live in the OS keychain, never in that file. See `contracts-and-state.md`.
+- **Auto-update** uses GitHub Releases with minisign verification (`build-and-release.md`).
+
+## Code style
+
+The surrounding code is the style guide. Only what a reader would not infer from it:
+
+- **Rust command payloads** are typed `struct`s with `#[derive(Serialize)]` and `#[serde(rename_all = "camelCase")]`.
+- **Comments** state a non-obvious *why* — a gotcha, workaround, invariant, subtle edge case — and nothing else. Never restate what the code does.
+- **Coded errors, never swallowing a failure, contracts as source of truth, EN + TR moving together** are decisions, not style — `contracts-and-state.md`.
+- **Tests may be run without asking** — the global "do not run tests unless asked" rule does NOT apply here. Tests live in a `__tests__/` subfolder beside the code (`foo.ts` → `__tests__/foo.test.ts`), never co-located. Mock the Tauri boundary at `@tauri-apps/api/core`. Only add or adjust tests for changed behaviour.
+
+## Verification
+
+Run after any change, lightest first:
+
+1. `bun run typecheck`
+2. `bun run test <changed-test-or-folder>`
+3. `bun run verify:shell-contracts` — if contracts or commands were touched
+4. `bun run check:i18n` — if a file that reads translation keys was added, moved, or **deleted** (deleting one orphans every key it alone referenced, and the orphan ratchet fails CI)
+5. `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test -- --test-threads=1` — if Rust was touched; CI enforces all three
+6. `bun run build` — integration confidence
+
+Before opening a PR, run `bun run check:all` — it is what CI runs, and it is a superset of the
+individual checks; running them one by one is how a green local tree still fails the build.
+
+Two local gates enforce this on the maintainer's machine: a Claude Code **Stop hook** runs the fast
+checks for whatever the working tree changed before a turn may end, and a git **pre-push** hook runs
+`check:all`, the tests, fmt and clippy (skipped for docs-only pushes). If the Stop hook blocks, fix
+the failure or say plainly that the work is unfinished — never report it done.
+
+## Refactor discipline
+
+Learned across the v1.5 frontend decomposition, where each of these cost a cycle before it was written down.
+
+- **A plan document is stale until proven otherwise.** Audit it against current `main` and re-derive every line number and file list before editing.
+- **"Behaviour unchanged" is a claim to prove, not assert.** Diff the exported surface against `main`. Where a guard is the point of the change, break the guard and confirm the test fails.
+- **Invariant comments travel verbatim with the code they guard.** The comment-guard hook will object when you move one; overriding it is correct in exactly that case.
+- **An empty import graph does not prove a file is dead.** Ask what it references that nothing else does — a zero-importer module was the sole consumer of twenty catalogue keys.
+- **One writer per checkout.** Check `git status` before switching branches. Never run `git add -A`, `git commit -a`, `git checkout -- .`, `git restore .`, `git reset --hard`, `git clean` or `git stash` — they discard work you did not put there. Stage paths by name.
+- **Do not stack a PR on an unmerged branch.** `main` squash-merges, so a stacked branch goes `DIRTY` when its base lands. Wait, or cherry-pick onto fresh `main`.
+- **A locally measured flake rate is not evidence.** `vitest` sets no worker cap; reproduce the mechanism instead, and use `--maxWorkers=<n|%>` to leave the machine usable.
+
+## Seeing and debugging the running app
+
+- **Look at a screen instead of reasoning about JSX.** `e2e/specs/ui-audit.probe.ts` writes a PNG and a structural report per section; the `ui-audit` skill drives it. Read `testing-and-verification.md` before trusting a result — `:hover` never fires, IPC hooks from a spec record zero, only `main` is reachable, and a run shares the real `shell-state.json`.
+- **Runtime symptoms are read from the log, not guessed.** Frontend and Rust share one file: `~/Library/Logs/com.lumasync.app/lumasync-dev.log` in dev. The clean restart, level config and log patterns are in `docs/debugging.md`; the `debug-runtime` skill wraps them. Skip it only when a stack trace or failing test already proves the bug.
+
+## Release rules
+
+The procedure is the `release` skill (triggered by "X.Y.Z atıyorum", "release hazırla", "yeni
+versiyon"); the reasoning is `build-and-release.md`. Rules that hold regardless of who does it:
+
+- **Patch bumps only**, whatever the change contains, until the maintainer says otherwise. A genuinely breaking change still ships under a patch number and is called out in the release notes.
+- **Four version locations move in lockstep** — `src-tauri/Cargo.toml`, `package.json`, `SECURITY.md` (full version) and `bundle.windows.wix.version` in `tauri.conf.json` (bare `X.Y.Z`; MSI rejects prerelease identifiers) — then `cargo check` to refresh `Cargo.lock`. `verify:version-parity` checks it on every PR.
+- **No duplicate `## [X.Y.Z]` headings in `CHANGELOG.md`** — `release.yml` extracts notes with `awk` and stops at the first match.
+- **Work lands on `main` through pull requests.** Renaming a CI job renames its required status context and blocks every PR.
+- **Green CI proves less than it looks.** The `.msi` and `.deb` are never installed in CI; do not describe either as verified.
+- **Do NOT commit, tag, or push unless the user explicitly asks.**
+
+## Key constraints
+
+The ones that bite most often; each is explained in its area note.
+
+- **Hue streaming floor is 50 ms** — a protocol limit, not a tuning knob (`hue.md`).
+- **USB serial is gated by a 9-entry VID/PID allowlist** — `SUPPORTED_USB_DEVICE_ALLOWLIST` in `device_connection.rs`; never hardcode the list elsewhere (`device-output.md`).
+- **`MACOSX_DEPLOYMENT_TARGET` is pinned to 12.3** — lowering it reintroduces the v1.5.2 launch crash (`build-and-release.md`).
+- **The capture-to-output path has a per-frame budget** — a regression is a defect, not a tuning matter (`capture-and-pipeline.md`).
+
+## Working in Claude Code
+
+**The main session is the only writer.** It plans, edits, and verifies. Subagents under
+`.claude/agents/` are **read-only consultants**: they investigate or review and return findings
+with file:line evidence; they never edit. Parallel writers in one checkout conflict and cost far
+more than they return, while a clean-context reviewer catches what the author cannot.
+
+| Consult | When |
 |---|---|
-| Planning a phase / milestone / multi-domain feature | Spawn the relevant domain agents in parallel, then synthesize |
-| Tauri command / status-code / contract change (FIRST, before any implementation) | `contract-architect` |
-| Persisted-state shape change / `migrations.ts` / new `ShellState` field | `contract-architect` |
-| Hue CLIP v2 / DTLS / entertainment streaming / bridge / 403 re-pair | `hue-expert` |
-| USB serial / WS2812B / Adalight / WLED / OpenRGB / firmware / `LedSink` | `device-serial-expert` |
-| Rust backend / Tauri config / capture pipeline / tray / platform / CI | `tauri-expert` |
-| React components / Tailwind / amber Rev 07 design language / compact mode / a11y / i18n | `ui-ux-expert` |
-| New tests / test strategy / coverage gaps / Vitest / cargo test | `test-expert` |
-| Dev IPC mock (`mock/`) / WDIO e2e (`e2e/`) | `test-expert` |
-| PR review / release readiness / CHANGELOG / Conventional Commits / license / secrets audit | `opensource-guardian` |
-| New or bumped dependency / Dependabot / CI workflow or branch-protection change | `opensource-guardian` (with `tauri-expert` for workflow edits) |
-| "X.Y.Z atıyorum" / "release hazırla" / "new version" | `release-manager` |
+| `contract-architect` | **Required** for any Tauri command, status code, contract type, `ShellState` field or `migrations.ts` change — once on the proposed design, once on the diff |
+| `hardware-expert` | Before designing or changing Hue, serial/LED, WLED, `LedSink`, capture or per-frame code; when a device symptom needs a protocol-level read |
+| `ui-ux-expert` | While settling a UI direction, and to review a UI, styles or locales diff |
+| `reviewer` | On a finished change set before the PR — correctness, test adequacy, open-source hygiene |
 
-### Standing maintenance duties
+Consult when a domain's risk is real, not by reflex; one targeted question beats a broad fan-out.
+A consultant's answer is a draft — if it reads thin or contradicts the code, say so and check it.
+The maintainer prefers to settle a UI direction in conversation before any code is written.
+Agent and skill definitions, toolchains and available models drift silently — when you notice one
+out of date, say so in a sentence rather than opening a project.
 
-These hold in **every** session, not only planning ones. Nobody invokes a command to trigger them.
+Skills: `debug-runtime` and `ui-audit` (above), `release`, and `sweep` — a find-and-fix pass where
+read-only auditors report, the maintainer picks, and the main session fixes one finding at a time
+through the verification gate.
 
-- **Judge the specialist output you receive.** A subagent's answer is a draft, not a verdict. If it reads thin, contradicts the code, or is shallower than the task deserved, say so plainly instead of passing it on — then offer to send a focused agent to verify or redo that specific part. Ask before spawning; do not fan out.
-- **Keep the tooling current.** The agent and skill definitions under `.claude/`, dependency and toolchain updates, and newly available models all drift out of date silently. Raise it when noticed, in a sentence, rather than opening a project.
-- **Watch runtime cost.** The capture-to-output path has a per-frame budget. Treat a regression in it as a defect, not a tuning matter.
-
-Spend tokens in proportion to what is at stake. One targeted agent against a specific doubt beats a
-broad re-review, and noticing out loud costs nothing at all.
-
-### Runtime debugging — invoke `debug-runtime` BEFORE spawning agents
-
-When the user reports a runtime symptom that cannot be diagnosed from code
-alone — UI hangs, crashes, mode transitions misbehaving, capture failures,
-Hue/USB anomalies, shutdown deadlocks — invoke the `debug-runtime` skill
-first via the Skill tool (or run `/debug-runtime "<problem>"` if the user
-typed it). The skill restarts a clean dev session, captures both frontend
-(via the console bridge in `src/main.tsx`, which forwards into `tauri-plugin-log`) and backend logs into a
-single file, runs the validation suite, and either applies a small inline
-fix or hands the captured `/tmp/lumasync-debug-window.log` excerpt to the
-right specialist with file:line citations. Skipping this step and
-spawning a specialist on hypothesis means the agent re-discovers what the
-runtime would have proven in 30 seconds.
-
-Skip the skill only when the bug is already proven by a stack trace or a
-failing test in this conversation — re-running the app for evidence we
-already have wastes a warm-up cycle.
-
-## Release trigger
-
-Triggered by "X.Y.Z atacağım" / "yeni versiyon" / "release hazırla" → spawn
-`release-manager`, which owns the full procedure. The `ls-ci-release-standards`
-skill is the single source for CI steps, the readiness checklist, CHANGELOG style, and how
-publication works. Do not re-derive any of it here; the rules that must hold regardless of who does
-the work are under **Release Workflow** in `AGENTS.md`.
+`.claude/` is not committed, so a fresh clone has none of these. Without them, do the work
+directly and treat `docs/architecture/` as the authority the consultants would have cited.

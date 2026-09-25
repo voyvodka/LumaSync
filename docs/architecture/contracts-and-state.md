@@ -41,7 +41,10 @@ frontend-invented code can never pose as something the backend can send. `Serial
 which is harder to spot than a bare `string`.
 
 **Failures are never swallowed.** An empty `catch {}` is a defect here, not a shortcut. Log with
-the `[LumaSync]` prefix.
+the `[LumaSync]` prefix. A `catch` whose body is only a comment or a fallback `return` is the same
+defect, and a grep for `catch {}` misses it: a logged error reaches the log file through the
+`main.tsx` console bridge, a swallowed one is gone. The few deliberate exceptions state their
+reason inline.
 
 **A rejection is read once, by `parseCommandError` in `shared/contracts/status.ts`.** Every
 `Result<_, String>` command rejects with a bare string, by convention `"CODE: context"`. The
@@ -83,7 +86,9 @@ which is why the lighting-mode contract is `shared/contracts/mode.ts`. Tests are
 enforces it, so a key added to one and not the other fails the suite. `check:i18n`
 (`scripts/verify/i18n-keys.mjs`) ratchets orphans, and a `` t(`prefix.${x}`) `` site references
 only the children its contract value set can produce — so a key whose value left the contract turns
-orphan instead of hiding under the prefix, and a contract value with no message fails.
+orphan instead of hiding under the prefix, and a contract value with no message fails. Neither
+check can see a hardcoded string: an English literal in JSX has no key in either locale, so parity
+and `check:i18n` both pass. Catching it is review's job.
 
 ## Shell-state ownership
 
@@ -174,6 +179,7 @@ disk, as before.
 
 - **A wire union is checked for *equality* with the emitted set, not containment.** `verify:shell-contracts` harvests the codes Rust puts on each status shape and fails in both directions — an emitted code missing from the union, and a union member no producer emits. Containment alone is what let a declared-but-unemitted member sit in a union indefinitely.
 - **A green verifier means every status code crossing the boundary is *declared*, not that it is *correct*.** It is a drift guard, not a coverage score. A code can be declared, returned, and still be the wrong code.
+- **Adding or splitting a status code is a soft breaking change.** The new code falls into every consumer's `default` branch and quietly renders the wrong UI; nothing fails. Grep every `switch` on that union before merging.
 - **Hue credentials are not in `shell-state.json`.** They live in the OS keychain — see [`hue.md`](hue.md).
 - **The `2 → 3` window-geometry migration derives a centre that sits ~14 px high on macOS, and that is accepted, not a bug.** The legacy `windowX/Y/Width/Height` fields stored the *inner* content size, but macOS adds ~28 px of title bar to the *outer* rect, and the derived centre can only use what was persisted. The bias self-corrects on the very next move or resize, because the rewritten `persistWindowState` path measures the outer size from then on. Do not "fix" the one-shot migration by reaching for a chrome height — it is platform-dependent and not knowable from persisted state alone.
 - **A migration that drops records needs a reason it is safe.** The `1 → 2` step drops legacy `ZoneDefinition` records with a `console.warn` so the loss is auditable. That is only safe because the shape that produced them never shipped; no released build ever persisted one. A future migration cannot assume the same.

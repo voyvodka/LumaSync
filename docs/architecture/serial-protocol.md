@@ -15,6 +15,10 @@ the symbol name is the anchor — fix the line, do not delete the citation.
 
 ## 1. Shipped — protocol v1
 
+**Neither framing changes under a flashed device.** Firmware in the field is the other half of this
+contract and does not update with the app, so a wire change arrives as a profile the user selects
+or a version the handshake gates (1.5), never in place.
+
 ### 1.1 Serial link
 
 | Parameter | Value | Source |
@@ -177,7 +181,9 @@ know, or RGBW under Adalight framing (Adalight has no four-byte pixel), is rejec
 
 The format byte states what the device expects; the host compares it with the user's settings and
 shows a mismatch — the framing on the firmware-profile picker, the layout on the chip-type picker —
-rather than switching on its own.
+rather than switching on its own. That comparison runs in the frontend only:
+`SERIAL_HEALTH_FIRMWARE_MISMATCH` is declared in `device.ts`, but no Rust path emits it
+(`scripts/verify/contract-phantom-baseline.txt`).
 
 **Versions.** The host speaks to `MIN_FW_VERSION` (1.0) through `MAX_FW_MAJOR`.x (1.x)
 (`device_handshake.rs`). Two rules keep that window safe to widen:
@@ -198,7 +204,8 @@ connect status's `details` — and keeps sending v1 frames.
   device that was never asked — Adalight and older sketches cost the 250 ms and nothing else.
   Connect then closes the handle as before; the output path opens its own (§1.1, DTR).
 - **In the serial health check**, on a freshly opened handle, after the settle delay, with a 2 s
-  window. A device that does not answer fails the `HANDSHAKE` step non-fatally with
+  window — it replaced an open-and-close check that passed a board with nothing flashed. The PING
+  goes out whatever profile is selected. A device that does not answer fails the `HANDSHAKE` step non-fatally with
   `SERIAL_HEALTH_HANDSHAKE_TIMEOUT`, and the user is told to try the Adalight profile; a malformed
   reply is `SERIAL_HEALTH_PROTOCOL_ERROR`.
 
