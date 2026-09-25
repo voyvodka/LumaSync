@@ -493,7 +493,10 @@ Sync puts it back as it was, and so do we now (`commands/hue/light_restore.rs`).
   bridge no longer has). A read that could not be understood — a garbled body, or a first read the
   window cut off because the client took long to come up on a loaded machine — is asked again, never
   taken for free: it once was, and a CI run on macOS restored both lamps under another app's stream.
-  A window that ends without one clear answer leaves the lights alone (`AreaUnknown`). During the
+  A window that ends without one clear answer leaves the lights alone (`AreaUnknown`). A read gets
+  only what is left of its window, so one that times out on a timeout clipped below the full
+  request ceiling was cut short by us, and counts as unanswered too — not as `Unreachable`, which
+  is kept for a full-length timeout or a connection error. The watch's reads follow the same rule. During the
   watch a light reading `mode: streaming` is never written, and if the area is active the watch
   ends. A restore also asks the runtime before every write and read: once a newer session of ours
   has begun (`Starting`, `Running`, `Reconnecting`) it writes nothing more. `stop_hue_stream_on`

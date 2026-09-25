@@ -2171,6 +2171,40 @@ mod light_restore_flow {
         assert!(bridge.puts_to("/clip/v2/resource/light/").is_empty());
     }
 
+    /// The last read of the window gets only what is left of it. One our own
+    /// window cut short is a read that went unanswered, not a bridge that is
+    /// gone — it read `Unreachable`, and under load flaked the two tests
+    /// above. The deadline sits under one request's ceiling, so the only read
+    /// is clipped wherever the client comes up in it.
+    #[tokio::test]
+    async fn an_area_read_our_window_cut_short_is_unanswered_not_unreachable() {
+        let bridge = area_answering(
+            streamed_by_another_app().after(Duration::from_secs(3)),
+            || streamed_by_another_app().after(Duration::from_secs(3)),
+        );
+        let restore = restore_of(&bridge, &["left"]);
+
+        let report = tokio::task::spawn_blocking(move || {
+            restore_lights(
+                &restore,
+                Instant::now() + Duration::from_millis(1_000),
+                &|| false,
+            )
+        })
+        .await
+        .unwrap();
+
+        assert!(
+            bridge
+                .requests()
+                .iter()
+                .any(|r| r.method == "GET" && r.path.contains("entertainment_configuration")),
+            "the area was never read"
+        );
+        assert_eq!(report.stopped, Some(HueLightRestoreStop::AreaUnknown));
+        assert!(bridge.puts_to("/clip/v2/resource/light/").is_empty());
+    }
+
     /// An area the bridge no longer has is streamed by nobody: its lights are
     /// still the user's to put back.
     #[tokio::test]
