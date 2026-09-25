@@ -680,6 +680,22 @@ fn a_gate_refusal_keeps_the_mode_that_runs() {
     assert_eq!(rig.saved("lightingMode"), saved_before);
 }
 
+/// An older build copied the selection into `lightingMode`, where nothing read
+/// it; the next save leaves it out.
+#[test]
+fn a_saved_mode_drops_the_targets_an_older_build_wrote() {
+    let rig = Rig::new(RigSetup {
+        state: json!({ "lightingMode": { "kind": "solid", "targets": ["hue"] } }),
+        ..RigSetup::default()
+    });
+
+    apply(&rig, user(Some(ambilight(0.8)), Some(&[Usb])));
+
+    let saved = rig.saved("lightingMode").expect("the mode was saved");
+    assert_eq!(saved["kind"], json!("ambilight"));
+    assert_eq!(saved.get("targets"), None);
+}
+
 /// "commits the mode when the backend accepts it" and "stays silent when the
 /// start succeeds"
 #[test]
@@ -697,7 +713,8 @@ fn an_accepted_start_is_shown_and_saved() {
     );
     let saved = rig.saved("lightingMode").expect("the mode was saved");
     assert_eq!(saved["kind"], json!("ambilight"));
-    assert_eq!(saved["targets"], json!(["usb"]));
+    assert_eq!(saved.get("targets"), None);
+    assert_eq!(rig.saved("lastOutputTargets"), Some(json!(["usb"])));
     wait_until("the strip never received a frame", || {
         !rig.log.packets().is_empty()
     });
@@ -748,7 +765,8 @@ fn a_mode_choice_keeps_the_last_payloads_and_saves_the_selection() {
             .map(|b| (b * 10.0).round()),
         Some(7.0)
     );
-    assert_eq!(saved["targets"], json!(["usb", "hue"]));
+    assert_eq!(saved.get("targets"), None);
+    assert_eq!(rig.saved("lastOutputTargets"), Some(json!(["usb", "hue"])));
 }
 
 // ---------------------------------------------------------------------------
@@ -906,7 +924,8 @@ fn a_left_out_hue_is_never_saved_away() {
         .contains(&"lastOutputTargets".to_string()));
     let saved = rig.saved("lightingMode").unwrap();
     assert_eq!(saved["kind"], json!("ambilight"));
-    assert_eq!(saved["targets"], json!(["usb", "hue"]));
+    assert_eq!(saved.get("targets"), None);
+    assert_eq!(rig.saved("lastOutputTargets"), Some(json!(["usb", "hue"])));
 }
 
 /// "cancels a start that left Hue retrying before running on USB"
@@ -1387,7 +1406,8 @@ fn an_unplug_behind_a_queued_start_still_drops_usb() {
     // targets the user chose, not the ones the cable left.
     let saved = rig.saved("lightingMode").unwrap();
     assert_eq!(saved["kind"], json!("solid"));
-    assert_eq!(saved["targets"], json!(["usb", "hue"]));
+    assert_eq!(saved.get("targets"), None);
+    assert_eq!(rig.saved("lastOutputTargets"), Some(json!(["usb", "hue"])));
 }
 
 // ---------------------------------------------------------------------------
@@ -1557,10 +1577,8 @@ fn a_settled_retune_is_published_and_saved() {
         rig.saved("lightingMode")
             .is_some_and(|mode| mode["solid"]["r"] == json!(77))
     });
-    assert_eq!(
-        rig.saved("lightingMode").unwrap()["targets"],
-        json!(["usb"])
-    );
+    assert_eq!(rig.saved("lightingMode").unwrap().get("targets"), None);
+    assert_eq!(rig.saved("lastOutputTargets"), Some(json!(["usb"])));
 }
 
 #[test]
@@ -2211,9 +2229,10 @@ fn a_choice_with_the_strip_missing_runs_on_hue_and_drops_the_strip() {
     assert_eq!(result.outcome.dropped_targets, vec![Usb]);
     assert_eq!(result.snapshot.selected_targets, vec![Hue]);
     let saved = rig.saved("lightingMode").expect("the mode was saved");
+    assert_eq!(saved.get("targets"), None);
     assert_eq!(
-        saved["targets"],
-        json!(["usb", "hue"]),
+        rig.saved("lastOutputTargets"),
+        Some(json!(["usb", "hue"])),
         "only the session drops it"
     );
 }

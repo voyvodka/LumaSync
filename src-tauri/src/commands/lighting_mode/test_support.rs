@@ -16,8 +16,7 @@ use super::hue_driver::{HueAreaVerdict, HueDriver, HueDriverHandle, HueFuture};
 use super::outputs::WledPowerOffHandle;
 use super::runtime::LightingRuntimeOwner;
 use super::{
-    stop_lighting_blocking, LightingRuntimeState, ACTIVE_AMBILIGHT_WORKERS,
-    LIGHTING_MODE_CHANGED_EVENT,
+    stop_lighting_blocking, AppliedModeProbe, LightingRuntimeState, ACTIVE_AMBILIGHT_WORKERS,
 };
 use crate::commands::ambilight_capture::{
     AmbilightCaptureError, AmbilightFrameSource, CapturedFrame,
@@ -534,9 +533,9 @@ impl Rig {
         rig.seed(state);
 
         let log = Arc::clone(&rig.log);
-        rig.app.listen(LIGHTING_MODE_CHANGED_EVENT, move |event| {
-            let payload: Value = serde_json::from_str(event.payload()).unwrap();
-            let targets = payload["config"]["targets"]
+        rig.app.manage(AppliedModeProbe(Box::new(move |mode| {
+            let config = serde_json::to_value(mode).unwrap();
+            let targets = config["targets"]
                 .as_array()
                 .map(|t| {
                     t.iter()
@@ -547,9 +546,9 @@ impl Rig {
                 .unwrap_or_default();
             log.record(format!(
                 "mode:{}:{targets}",
-                payload["config"]["kind"].as_str().unwrap_or_default()
+                config["kind"].as_str().unwrap_or_default()
             ));
-        });
+        })));
         let snapshots = Arc::clone(&rig.snapshots);
         rig.app
             .listen(LIGHTING_RUNTIME_CHANGED_EVENT, move |event| {

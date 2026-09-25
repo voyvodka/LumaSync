@@ -12,9 +12,7 @@ use serde::Serialize;
 
 use crate::commands::device_connection::{SerialConnectionStatus, SerialPortListResponse};
 use crate::commands::hue_onboarding::{HueStreamReadiness, HueStreamReadinessResponse};
-use crate::commands::lighting_mode::{
-    LedTestPatternResult, LightingModeCommandResult, LightingModeConfig,
-};
+use crate::commands::lighting_mode::LedTestPatternResult;
 use crate::commands::room_map::hue_zone::HueZoneCommandResult;
 use crate::commands::status::CommandStatus;
 use crate::commands::updater::{UpdateCheckResponse, UpdateInstallResponse};
@@ -68,7 +66,7 @@ fn serial_responses_are_unchanged() {
 }
 
 #[test]
-fn lighting_and_test_pattern_responses_are_unchanged() {
+fn test_pattern_responses_are_unchanged() {
     assert_wire(
         "start_led_test_pattern",
         &LedTestPatternResult {
@@ -77,16 +75,6 @@ fn lighting_and_test_pattern_responses_are_unchanged() {
             status: CommandStatus::ok("LED_TEST_PATTERN_PREVIEW_ONLY", "Preview only"),
         },
         r#"{"active":true,"previewOnly":true,"status":{"code":"LED_TEST_PATTERN_PREVIEW_ONLY","message":"Preview only","details":null}}"#,
-    );
-    assert_wire(
-        "set_lighting_mode",
-        &LightingModeCommandResult {
-            active: false,
-            mode: LightingModeConfig::default(),
-            status: CommandStatus::new("LIGHTING_MODE_OFF", "Off", details()),
-            wled_advisory: None,
-        },
-        r#"{"active":false,"mode":{"kind":"off","solid":null,"ambilight":null,"targets":null,"displayId":null,"ledCalibration":null,"colorCorrection":null,"firmwareProfile":null,"chipType":null},"status":{"code":"LIGHTING_MODE_OFF","message":"Off","details":"port \"COM3\" — busy\n"},"wledAdvisory":null}"#,
     );
 }
 

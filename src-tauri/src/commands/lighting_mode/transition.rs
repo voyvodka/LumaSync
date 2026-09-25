@@ -1,13 +1,12 @@
 //! The Off/Solid/Ambilight transition and the mode commands that drive it:
 //! `apply_mode_change` under the runtime lock, the turn queue the async
-//! commands wait in, and the `lighting://mode-changed` broadcast.
+//! commands wait in.
 
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 use log::{info, warn};
-use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, Runtime, State};
+use tauri::{AppHandle, Manager, Runtime};
 
 use super::config::{
     frame_led_count_for, normalize_mode_config, wled_frame_advisory, LightingModeCommandResult,
@@ -24,9 +23,7 @@ use super::usb_output::{SolidUsbOutput, UsbOutputPlan};
 use super::worker::{start_ambilight_worker, WorkerPacing};
 use super::SOLID_OUTPUT_ATTEMPTS;
 use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionState};
-use crate::commands::hue::state_store::{
-    apply_hue_color_with_context, HueOutputLive, HueRuntimeStateStore,
-};
+use crate::commands::hue::state_store::{apply_hue_color_with_context, HueOutputLive};
 use crate::commands::led_output::apply_color_correction_rgb;
 use crate::commands::led_preview::{emit_preview_state_changed, LedTwinState};
 use crate::commands::runtime_telemetry::{
@@ -646,25 +643,26 @@ fn apply_mode_change_inner(
     }
 }
 
-/// Apply a full `LightingModeConfig` from the frontend: hydrates missing
-/// calibration, ambilight settings and output stamps (colour correction,
-/// firmware profile, chip type) from persisted shell-state, then starts,
-/// reconfigures, or stops the worker to match the requested mode. Broadcasts
-/// `LIGHTING_MODE_CHANGED_EVENT` and the preview snapshot on every call.
-#[tauri::command]
-pub async fn set_lighting_mode<R: Runtime>(
+/// A bare mode apply in the transition queue, with no output reconciling or
+/// saving. Tests only: every production caller goes through the lighting
+/// transaction (docs/architecture/lighting-transaction.md).
+#[cfg(test)]
+pub(crate) async fn set_lighting_mode<R: Runtime>(
     app: AppHandle<R>,
     payload: LightingModeConfig,
 ) -> Result<LightingModeCommandResult, String> {
     run_mode_transition(app, move |app| set_lighting_mode_blocking(app, payload)).await
 }
 
+#[cfg(test)]
 pub(super) fn set_lighting_mode_blocking<R: Runtime>(
     app: &AppHandle<R>,
     payload: LightingModeConfig,
 ) -> Result<LightingModeCommandResult, String> {
     app.state::<LightingRuntimeState>().tuning.close_blocking();
-    let hue_output = app.state::<HueRuntimeStateStore>().output_live();
+    let hue_output = app
+        .state::<crate::commands::hue::state_store::HueRuntimeStateStore>()
+        .output_live();
     let result = apply_config_blocking(app, payload, hue_output, false)?;
     snapshot::publish_running(app, &result.mode);
     Ok(result)
@@ -770,15 +768,9 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
     );
     owner.hue_gate_waived = false;
     // Release the runtime lock before broadcasting so a re-entrant
-    // mode-change listener cannot deadlock on it.
+    // listener cannot deadlock on it.
     drop(owner);
-    let _ = app.emit(
-        LIGHTING_MODE_CHANGED_EVENT,
-        LightingModeChangedPayload {
-            config: result.mode.clone(),
-            active: result.active,
-        },
-    );
+    note_applied_mode(app, &result.mode);
     // v1.6 LED Preview — a live mode change supersedes any active synthetic
     // test (apply_mode_change just cleared it). Drop the captured prior mode
     // so a late/racing Stop cannot revive the pre-test mode over the user's
@@ -797,15 +789,17 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
     Ok(result)
 }
 
-/// Force the lighting mode to `Off`, stopping any running worker.
-#[tauri::command]
-pub async fn stop_lighting<R: Runtime>(
+/// `stop_lighting_blocking` in the transition queue. Tests only, like
+/// `set_lighting_mode`.
+#[cfg(test)]
+pub(crate) async fn stop_lighting<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<LightingModeCommandResult, String> {
     run_mode_transition(app, |app| stop_lighting_blocking(app)).await
 }
 
-/// Body of `stop_lighting`. Also used on the app shutdown path, so it resolves
+/// Force the lighting mode to `Off`, stopping any running worker. Used by the
+/// lighting transaction and on the app shutdown path, so it resolves
 /// `LedTwinState` best-effort via the `AppHandle` rather than requiring it as a
 /// managed-state argument. The shutdown path calls it directly, outside the
 /// transition queue: quit must never wait behind a queued mode change, and
@@ -836,13 +830,7 @@ pub fn stop_lighting_blocking<R: Runtime>(
         );
         (result, superseded_test)
     };
-    let _ = app.emit(
-        LIGHTING_MODE_CHANGED_EVENT,
-        LightingModeChangedPayload {
-            config: result.mode.clone(),
-            active: result.active,
-        },
-    );
+    note_applied_mode(app, &result.mode);
     snapshot::publish_running(app, &result.mode);
     // v1.6 LED Preview — stopping all lighting supersedes any active test;
     // drop the captured prior mode so a late Stop cannot revive it. This
@@ -922,38 +910,18 @@ pub(crate) fn blank_usb_after_off<R: Runtime>(
     })
 }
 
-/// Read-only snapshot of the current lighting mode, for the frontend to
-/// reconcile against on load without triggering a mode change.
-///
-/// Sync, so it runs on the main thread: it reads the published snapshot and
-/// never the runtime lock, which a transition holds for seconds.
-#[tauri::command]
-pub fn get_lighting_mode_status(
-    runtime_state: State<'_, LightingRuntimeState>,
-) -> Result<LightingModeCommandResult, String> {
-    Ok(make_result(
-        runtime_state.snapshot.read().mode,
-        command_status(
-            "LIGHTING_MODE_STATUS_OK",
-            "Lighting mode status read successfully.",
-            None,
-        ),
-    ))
-}
+/// Test hook called wherever a mode is applied, after the runtime lock is
+/// released, so tests can see which modes ran and in what order.
+#[cfg(test)]
+pub(crate) struct AppliedModeProbe(pub(crate) Box<dyn Fn(&LightingModeConfig) + Send + Sync>);
 
-/// `LIGHTING_EVENTS.MODE_CHANGED` in `src/shared/contracts/mode.ts`. Broadcast
-/// app-wide whenever the active lighting mode changes, so preview surfaces
-/// (and any window other than the issuer) reconcile. Defined in
-/// `crate::events`; re-exported here since this is the emit site.
-pub use crate::events::LIGHTING_MODE_CHANGED_EVENT;
-
-/// Payload for `LIGHTING_MODE_CHANGED_EVENT` — the new mode and whether it
-/// is active, broadcast to every window (not just the command's caller).
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LightingModeChangedPayload {
-    pub config: LightingModeConfig,
-    pub active: bool,
+pub(super) fn note_applied_mode<R: Runtime>(app: &AppHandle<R>, mode: &LightingModeConfig) {
+    #[cfg(test)]
+    if let Some(probe) = app.try_state::<AppliedModeProbe>() {
+        (probe.0)(mode);
+    }
+    #[cfg(not(test))]
+    let _ = (app, mode);
 }
 
 /// `Err` prefix when the blocking half of a mode command dies before answering.

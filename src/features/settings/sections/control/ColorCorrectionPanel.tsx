@@ -3,8 +3,8 @@
  *
  * Renders the per-channel gamma (R/G/B), white-point Kelvin, and saturation
  * sliders that feed the Rust LED encoder. State is persisted to
- * `shellStore.colorCorrection`; on every commit the hot `set_lighting_mode`
- * path rides the updated config into the active worker (see App.tsx).
+ * `shellStore.colorCorrection`; Rust re-applies the running mode on the save,
+ * so the updated config reaches the active worker (lighting-transaction.md).
  *
  * The panel is rendered inside `LightsSection` as a collapsible
  * `lm-settings-group` so compact mode (320 px) can hide the dense slider

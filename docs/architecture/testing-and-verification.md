@@ -275,9 +275,10 @@ Four things about it are not obvious and each cost a cycle:
   component that remounts, hundreds a second into the console you are trying to read.
   `mock/eventBridge.ts` replaces it, browser-only, so passthrough still reaches Rust under
   `tauri:mock`.
-- **A fixture that reports the world instead of the command lies about state.** `stop_hue_stream`
-  answered with whatever fault the world held, so against an unreachable bridge the stop returned
-  the retry code, the app read that as a failed stop, kept Hue listed active and showed HUE
+- **A fixture that reports the world instead of the command lies about state.** The Hue stop
+  fixture (then `stop_hue_stream`, now `stopHueStream` under the mock's `apply_outputs`) answered
+  with whatever fault the world held, so against an unreachable bridge the stop returned the retry
+  code, the app read that as a failed stop, kept Hue listed active and showed HUE
   STREAMING beside a "can't reach the bridge" notice. Rust's stop is local: it answers
   `HUE_STREAM_STOPPED` (or `HUE_STOP_TIMEOUT_PARTIAL` when its sender will not exit), never a
   bridge fault, and the runtime then sits Idle until the next start; the world's `hue.stopped` flag

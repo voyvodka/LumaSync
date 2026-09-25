@@ -5,7 +5,7 @@ use std::sync::atomic::Ordering;
 
 use log::warn;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
 use super::config::{
     AmbilightPayload, LightingModeCommandResult, LightingModeConfig, LightingModeKind,
@@ -17,8 +17,7 @@ use super::preview::build_edge_emitter;
 use super::runtime::LightingRuntimeState;
 use super::snapshot;
 use super::transition::{
-    apply_mode_change, command_status, run_mode_transition, LightingModeChangedPayload,
-    LIGHTING_MODE_CHANGED_EVENT,
+    apply_mode_change, command_status, note_applied_mode, run_mode_transition,
 };
 use crate::commands::calibration::list_displays;
 use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionState};
@@ -61,8 +60,8 @@ fn resolve_display_aspect<R: Runtime>(app: &AppHandle<R>) -> f32 {
     }
 }
 
-/// Apply a mode transition and broadcast `lighting://mode-changed`. Shared by
-/// the synthetic-test start/stop commands; `set_lighting_mode` inlines the
+/// Apply a mode transition and publish the runtime snapshot. Shared by the
+/// synthetic-test start/stop commands; `apply_config_blocking` inlines the
 /// equivalent flow with its own hydration logging.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn apply_and_broadcast<R: Runtime>(
@@ -111,13 +110,7 @@ pub(super) fn apply_and_broadcast<R: Runtime>(
         )
     };
 
-    let _ = app.emit(
-        LIGHTING_MODE_CHANGED_EVENT,
-        LightingModeChangedPayload {
-            config: result.mode.clone(),
-            active: result.active,
-        },
-    );
+    note_applied_mode(app, &result.mode);
     // A test pattern is a preview, not the user's mode: every window's mirror
     // keeps showing the mode it interrupted, which the test's stop restores
     // and publishes.

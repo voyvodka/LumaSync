@@ -14,10 +14,6 @@
 /// Re-exported from `commands::lighting_mode::snapshot`.
 pub const LIGHTING_RUNTIME_CHANGED_EVENT: &str = "lighting://runtime-changed";
 
-/// `LIGHTING_EVENTS.MODE_CHANGED` in `src/shared/contracts/mode.ts`.
-/// Re-exported from `commands::lighting_mode::transition`.
-pub const LIGHTING_MODE_CHANGED_EVENT: &str = "lighting://mode-changed";
-
 /// `SHELL_EVENTS.STATE_CHANGED` in `src/shared/contracts/shell.ts`.
 /// Re-exported from `commands::shell_state`.
 pub const SHELL_STATE_CHANGED_EVENT: &str = "shell://state-changed";

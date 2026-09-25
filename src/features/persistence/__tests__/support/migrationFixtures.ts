@@ -73,7 +73,6 @@ export function makeBaseState(
     windowCenterY: null,
     lastSection: "lights",
     trayHintShown: false,
-    startupEnabled: false,
     ...canonicalOverrides,
   };
 

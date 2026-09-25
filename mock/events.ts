@@ -26,8 +26,6 @@
 
 import { emit } from "@tauri-apps/api/event";
 
-import { LIGHTING_EVENTS } from "../src/shared/contracts/lightingRuntime";
-import type { LightingModeChangedPayload } from "../src/shared/contracts/mode";
 import {
   PREVIEW_EVENTS,
   type EdgeSignalPayload,
@@ -291,12 +289,6 @@ export async function emitRuntimeHealth(): Promise<void> {
     linkMaxFps: w.serial.connectedPort !== null ? w.telemetry.linkMaxFps : LINK_MAX_FPS_ABSENT,
   };
   await emitMockEvent(TELEMETRY_EVENTS.HEALTH_CHANGED, runtimeHealthFromSnapshot(usb));
-}
-
-export async function emitLightingModeChanged(): Promise<void> {
-  const mode = getWorld().lighting.mode;
-  const payload: LightingModeChangedPayload = { config: mode, active: mode.kind !== "off" };
-  await emitMockEvent(LIGHTING_EVENTS.MODE_CHANGED, payload);
 }
 
 /**
