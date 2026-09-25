@@ -1618,10 +1618,11 @@ mod light_restore_flow {
         assert!(Instant::now() <= deadline, "{:?}", started.elapsed());
         let puts = hue.restore_requests();
         assert_eq!(puts.len(), 3);
-        // ~10 requests/s: three restores span two ~100 ms slots. Measured on
-        // the server side, so a TLS handshake's jitter is allowed for.
-        let span = puts[2].at.duration_since(puts[0].at);
-        assert!(span >= Duration::from_millis(150), "{span:?}");
+        // ~10 requests/s: three restores span two ~100 ms slots. Measured
+        // where each connection arrived, with room for the accept loop's own
+        // wake-up; a request's arrival after its handshake is not paced.
+        let span = puts[2].connected_at.duration_since(puts[0].connected_at);
+        assert!(span >= Duration::from_millis(170), "{span:?}");
     }
 
     /// A bridge that stops answering mid-quit cannot hold the exit: the stop

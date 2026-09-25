@@ -30,6 +30,10 @@ pub(crate) struct Recorded {
     pub(crate) path: String,
     pub(crate) body: String,
     pub(crate) at: Instant,
+    /// When its connection was accepted — before the TLS handshake, whose
+    /// length varies request to request. The closest the bridge sees to when
+    /// the client sent it, so pacing is measured on this, not on `at`.
+    pub(crate) connected_at: Instant,
 }
 
 impl Recorded {
@@ -142,13 +146,16 @@ impl TestBridge {
                     std::thread::sleep(Duration::from_millis(2));
                     continue;
                 };
+                let connected_at = Instant::now();
                 thread_connections.fetch_add(1, Ordering::SeqCst);
                 let (seen, route, acceptor) = (
                     Arc::clone(&thread_seen),
                     Arc::clone(&route),
                     Arc::clone(&acceptor),
                 );
-                std::thread::spawn(move || serve(stream, &acceptor, &seen, route.as_ref()));
+                std::thread::spawn(move || {
+                    serve(stream, connected_at, &acceptor, &seen, route.as_ref())
+                });
             }
         });
         Self {
@@ -205,7 +212,13 @@ fn default_acceptor() -> &'static Arc<SslAcceptor> {
     ACCEPTOR.get_or_init(|| Arc::new(acceptor_for(&self_signed(TEST_BRIDGE_ID), &[], None)))
 }
 
-fn serve(stream: TcpStream, acceptor: &SslAcceptor, seen: &Mutex<Vec<Recorded>>, route: &Router) {
+fn serve(
+    stream: TcpStream,
+    connected_at: Instant,
+    acceptor: &SslAcceptor,
+    seen: &Mutex<Vec<Recorded>>,
+    route: &Router,
+) {
     let _ = stream.set_nonblocking(false);
     let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
     let Ok(tls) = acceptor.accept(stream) else {
@@ -244,6 +257,7 @@ fn serve(stream: TcpStream, acceptor: &SslAcceptor, seen: &Mutex<Vec<Recorded>>,
         path: path.clone(),
         body: body.clone(),
         at: Instant::now(),
+        connected_at,
     });
 
     let reply = route(&method, &path, &body);
