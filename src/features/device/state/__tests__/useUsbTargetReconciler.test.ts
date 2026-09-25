@@ -29,6 +29,7 @@ function harness(overrides: Partial<UsbTargetReconcilerInput> = {}) {
     isConnected: true,
     bootstrapDone: true,
     selectedOutputTargets: ["usb"],
+    lightingRunning: true,
     selectedOutputTargetsRef,
     hueStartConfigRef,
     onSelectTargets,
@@ -129,6 +130,22 @@ describe("useUsbTargetReconciler", () => {
 
       expect(onDropUsbTarget).toHaveBeenCalledWith(["hue"]);
       expect(view.result.current.usbDisconnectNotice).toBe(true);
+    });
+
+    // "Continuing on the other outputs" with the mode Off named nothing that continued.
+    it("drops usb on unplug without the toast while nothing runs", () => {
+      const { view, input, onDropUsbTarget } = harness({
+        isConnected: true,
+        selectedOutputTargets: ["usb", "hue"],
+        lightingRunning: false,
+      });
+      act(() => {
+        view.result.current.armUsbConnected(true);
+      });
+      view.rerender({ ...input, isConnected: false, selectedOutputTargets: ["usb", "hue"] });
+
+      expect(onDropUsbTarget).toHaveBeenCalledWith(["hue"]);
+      expect(view.result.current.usbDisconnectNotice).toBe(false);
     });
 
     it("ends the mode instead of emptying the set when USB was the only target, and says so", async () => {

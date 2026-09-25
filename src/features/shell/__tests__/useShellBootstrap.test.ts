@@ -15,6 +15,7 @@ vi.mock("@/features/device/deviceConnectionApi", () => ({
   getSerialConnectionStatus: () => getSerialConnectionStatusMock(),
 }));
 
+import { pushTrayLabels } from "../useTrayIntegration";
 import { useShellBootstrap, type ShellBootstrapSink } from "../useShellBootstrap";
 import type * as deviceConnectionApiModule from "@/features/device/deviceConnectionApi";
 import type { SerialConnectionStatus } from "@/shared/contracts/device";
@@ -64,7 +65,20 @@ describe("useShellBootstrap", () => {
     getSerialConnectionStatusMock.mockResolvedValue(connectionStatus(true));
   });
 
-  it("asks for the restore once, with the saved mode, before it reports done", async () => {
+  it("asks for the restore once, with the saved mode", async () => {
+    const bag = sink();
+
+    renderHook(() => useShellBootstrap(bag));
+
+    await waitFor(() => expect(bag.restoreLighting).toHaveBeenCalledTimes(1));
+    expect(bag.restoreLighting).toHaveBeenCalledWith({
+      lightingMode: { kind: "ambilight", ambilight: { brightness: 0.6 } },
+    });
+  });
+
+  // The restore can wait seconds on a Hue start; the tray kept its English
+  // labels and the shell its boot state for all of it.
+  it("finishes the boot without waiting for the restore, which reports on its own", async () => {
     let finishRestore!: () => void;
     const restoreLighting = vi.fn(
       () =>
@@ -76,13 +90,11 @@ describe("useShellBootstrap", () => {
 
     const { result } = renderHook(() => useShellBootstrap(bag));
 
-    await waitFor(() => expect(restoreLighting).toHaveBeenCalledTimes(1));
-    expect(restoreLighting).toHaveBeenCalledWith({
-      lightingMode: { kind: "ambilight", ambilight: { brightness: 0.6 } },
-    });
-    expect(result.current.bootstrapDone).toBe(false);
-    finishRestore();
     await waitFor(() => expect(result.current.bootstrapDone).toBe(true));
+    expect(pushTrayLabels).toHaveBeenCalledTimes(1);
+    expect(result.current.lightingRestored).toBe(false);
+    finishRestore();
+    await waitFor(() => expect(result.current.lightingRestored).toBe(true));
   });
 
   // Off is asked too: the boot request is what tells Rust the saved choice,
@@ -116,7 +128,8 @@ describe("useShellBootstrap", () => {
 
     const { result } = renderHook(() => useShellBootstrap(bag));
 
-    await waitFor(() => expect(result.current.bootstrapDone).toBe(true));
+    await waitFor(() => expect(result.current.lightingRestored).toBe(true));
+    expect(result.current.bootstrapDone).toBe(true);
   });
 
   it("runs once under StrictMode's double mount", async () => {

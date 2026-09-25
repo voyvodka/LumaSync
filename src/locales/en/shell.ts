@@ -95,7 +95,17 @@ export default {
         config: "Hue isn't set up — running on {{output}} only",
         busy: "The Hue bridge is held by an earlier session — Hue joins once it lets go",
         busyGaveUp: "The Hue bridge stayed busy — running on {{output}} only until you turn Hue back on",
+        inUse: "Another app is using the Hue entertainment area — running on {{output}} only",
+        noLights: "The Hue entertainment area has no lights to stream to — running on {{output}} only",
       },
+      hueNotStarted: {
+        unreachable: "Hue didn't start — the bridge can't be reached",
+        auth: "Hue didn't start — the bridge needs pairing again",
+        config: "Hue didn't start — no bridge or entertainment area is set up",
+        inUse: "Hue didn't start — another app is using the entertainment area",
+        noLights: "Hue didn't start — the entertainment area has no lights",
+      },
+      usbLeftOut: "The USB strip isn't connected — running on Hue only",
       hueBootRetry: {
         waiting: "The Hue bridge is held by an earlier session — lighting resumes once it lets go",
         gaveUp: "The Hue bridge stayed busy, so lighting is off — turn it on again once it's free",

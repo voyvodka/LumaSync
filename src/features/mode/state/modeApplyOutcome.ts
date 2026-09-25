@@ -12,8 +12,9 @@ import {
 
 /**
  * The notice a transaction's reply calls for, or `null`. A capture start that
- * failed names its reason in the apply status's `details`; a strip the device
- * gate kept out of a running mode borrows the output bucket's copy; a failed
+ * failed names its reason in the apply status's `details`; a choice the device
+ * gate refused outright borrows the output bucket's copy, while a strip it
+ * kept out beside Hue is `usbLeftOut`'s to name, since the mode runs; a failed
  * Solid start is named only for an output reason, because every other
  * bucket's copy is about screen capture.
  */
@@ -28,12 +29,17 @@ export function startFailureNotice(result: ApplyOutputsResult): CaptureFailureNo
       return notice.bucket === CAPTURE_FAILURE_BUCKET.OUTPUT ? notice : null;
     }
     case LIGHTING_MODE_GATE_STATUS.DEVICE_NOT_CONNECTED:
-      return result.outcome.droppedTargets.includes("usb")
-        ? describeCaptureFailure(AMBILIGHT_CAPTURE_REASON.LED_OUTPUT_DEVICE_NOT_CONNECTED)
-        : null;
+      return usbLeftOut(result)
+        ? null
+        : describeCaptureFailure(AMBILIGHT_CAPTURE_REASON.LED_OUTPUT_DEVICE_NOT_CONNECTED);
     default:
       return null;
   }
+}
+
+/** The device gate kept the strip out of a choice that runs on Hue instead. */
+export function usbLeftOut(result: ApplyOutputsResult): boolean {
+  return result.outcome.droppedTargets.includes("usb");
 }
 
 /**

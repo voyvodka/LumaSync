@@ -212,7 +212,7 @@ function Shell() {
   // the boot sequence; arming reaches it through a ref rather than moving the
   // boot effect below every other effect.
   const armUsbConnectedRef = useRef<((connected: boolean) => void) | null>(null);
-  const { bootstrapDone } = useShellBootstrap({
+  const { bootstrapDone, lightingRestored } = useShellBootstrap({
     t,
     setUIMode: setCurrentMode,
     setActiveSection,
@@ -233,8 +233,10 @@ function Shell() {
   } =
     useUsbTargetReconciler({
       isConnected,
-      bootstrapDone,
+      // It writes a selection from the one it reads, which the restore sets.
+      bootstrapDone: bootstrapDone && lightingRestored,
       selectedOutputTargets,
+      lightingRunning: lightingMode.kind !== LIGHTING_MODE_KIND.OFF,
       selectedOutputTargetsRef: mode.selectedOutputTargetsRef,
       hueStartConfigRef,
       onSelectTargets: handleOutputTargetsChange,
@@ -447,6 +449,8 @@ function Shell() {
           stopFailedTargets: mode.stopFailedNotice,
           previewOpenFailure: previewOpenNotice,
           hueLeftOut: mode.hueLeftOutNotice,
+          hueNotStarted: mode.hueNotStartedNotice,
+          usbLeftOut: mode.usbLeftOutNotice,
           hueBootRetry: mode.bootHueRetryNotice,
           usbDisconnected: usbDisconnectNotice,
           usbDisconnectedLightingOff: usbDisconnectLightingOffNotice,
@@ -477,6 +481,8 @@ function Shell() {
       mode.stopFailedNotice,
       previewOpenNotice,
       mode.hueLeftOutNotice,
+      mode.hueNotStartedNotice,
+      mode.usbLeftOutNotice,
       mode.bootHueRetryNotice,
       usbDisconnectNotice,
       usbDisconnectLightingOffNotice,

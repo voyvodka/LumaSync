@@ -29,7 +29,13 @@ import {
 
 import { getScreenCapturePermission } from "../captureApi";
 import { applyOutputs, releaseHueOutput, retuneLighting } from "../modeApi";
-import { isOutputsApplied, needsCalibration, pickStartFailureNotice, startFailureNotice } from "./modeApplyOutcome";
+import {
+  isOutputsApplied,
+  needsCalibration,
+  pickStartFailureNotice,
+  startFailureNotice,
+  usbLeftOut,
+} from "./modeApplyOutcome";
 import { createRetuneCoalescer } from "./retuneCoalescer";
 import { useLightingRuntime } from "./useLightingRuntime";
 
@@ -78,6 +84,10 @@ export interface LightingModeOrchestrator {
   clearCapturePermissionNotice: () => void;
   /** A `[usb, hue]` start ran on USB alone this session; the reason picks the copy. */
   hueLeftOutNotice: HueLeftOutReason | null;
+  /** A Hue-only choice did not start; the reason picks the copy. */
+  hueNotStartedNotice: HueLeftOutReason | null;
+  /** A choice ran on Hue without the strip it also named, which is not connected. */
+  usbLeftOutNotice: boolean;
   /**
    * Why Hue is out of the running mode, for the status chip. Raised with the
    * notice but not dismissed with it: it holds until Hue joins, or the user
@@ -131,6 +141,8 @@ export function useLightingModeOrchestrator({
   // display bucket out, so a launch against an unplugged display must not toast.
   const [startFailedNotice, setStartFailedNotice] = useState<CaptureFailureNotice | null>(null);
   const [hueLeftOutNotice, setHueLeftOutNotice] = useState<HueLeftOutReason | null>(null);
+  const [hueNotStartedNotice, setHueNotStartedNotice] = useState<HueLeftOutReason | null>(null);
+  const [usbLeftOutNotice, setUsbLeftOutNotice] = useState(false);
   const [bootHueRetryNotice, setBootHueRetryNotice] = useState<BootHueRetryState | null>(null);
   const [pendingChoices, setPendingChoices] = useState(0);
   // The kind the newest choice asked for, while it is in flight: a nudge of
@@ -200,6 +212,18 @@ export function useLightingModeOrchestrator({
   }, [hueLeftOutNotice]);
 
   useEffect(() => {
+    if (!hueNotStartedNotice) return;
+    const timerId = window.setTimeout(() => setHueNotStartedNotice(null), HUE_LEFT_OUT_NOTICE_MS);
+    return () => window.clearTimeout(timerId);
+  }, [hueNotStartedNotice]);
+
+  useEffect(() => {
+    if (!usbLeftOutNotice) return;
+    const timerId = window.setTimeout(() => setUsbLeftOutNotice(false), HUE_LEFT_OUT_NOTICE_MS);
+    return () => window.clearTimeout(timerId);
+  }, [usbLeftOutNotice]);
+
+  useEffect(() => {
     if (bootHueRetryNotice !== BOOT_HUE_RETRY_STATE.GAVE_UP) return;
     const timerId = window.setTimeout(() => setBootHueRetryNotice(null), BOOT_HUE_RETRY_GAVE_UP_NOTICE_MS);
     return () => window.clearTimeout(timerId);
@@ -214,6 +238,11 @@ export function useLightingModeOrchestrator({
         return;
       }
       if (result.outcome.stopFailed.length > 0) setStopFailedNotice(result.outcome.stopFailed);
+      // Each reply answers both afresh: a later choice that ran says nothing is missing.
+      if (result.outcome.hueNotStarted !== null || isOutputsApplied(result)) {
+        setHueNotStartedNotice(result.outcome.hueNotStarted);
+      }
+      if (usbLeftOut(result) || isOutputsApplied(result)) setUsbLeftOutNotice(usbLeftOut(result));
 
       const apply = result.outcome.applyStatus;
       if (apply?.code === LIGHTING_MODE_STATUS.SOLID_MODE_HUE_OUTPUT_SKIPPED) {
@@ -368,6 +397,8 @@ export function useLightingModeOrchestrator({
     startFailedNotice,
     clearCapturePermissionNotice,
     hueLeftOutNotice,
+    hueNotStartedNotice,
+    usbLeftOutNotice,
     hueHeldOutReason,
     bootHueRetryNotice,
     handleLightingModeChange,

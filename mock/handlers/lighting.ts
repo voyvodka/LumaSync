@@ -71,6 +71,7 @@ function emptyOutcome(): ApplyOutputsOutcome {
   return {
     hueStartCode: null,
     hueLeftOut: null,
+    hueNotStarted: null,
     applyStatus: null,
     stopFailed: [],
     droppedTargets: [],
@@ -147,6 +148,9 @@ export const lightingRuntimeHandlers = {
         applied = deviceHandlers[DEVICE_COMMANDS.SET_LIGHTING_MODE]({ payload: payload(run) });
       }
       outcome.applyStatus = applied.status;
+      if (applied.status.code === "HUE_NOT_READY" && choice && run.length === 1 && run[0] === "hue") {
+        outcome.hueNotStarted = HUE_LEFT_OUT_REASON.UNREACHABLE;
+      }
       if (applied.mode.kind !== kind) {
         if (!run.includes("hue") || applied.mode.kind === "off") stopHueIfStreaming();
         return reply(

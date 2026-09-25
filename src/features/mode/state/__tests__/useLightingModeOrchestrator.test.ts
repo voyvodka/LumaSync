@@ -68,6 +68,7 @@ function reply(
     outcome: {
       hueStartCode: null,
       hueLeftOut: null,
+      hueNotStarted: null,
       applyStatus: null,
       stopFailed: [],
       droppedTargets: [],
@@ -374,19 +375,52 @@ describe("useLightingModeOrchestrator", () => {
       expect(view.result.current.startFailedNotice).toBeNull();
     });
 
-    it("names the strip when a USB add was kept out by the device gate", async () => {
+    // "Lighting didn't start" was wrong: the mode runs, on Hue.
+    it("names the strip the device gate kept out, without calling it a failed start", async () => {
       applyOutputsMock.mockResolvedValue(
-        reply("OUTPUTS_APPLIED_PARTIAL", running({ kind: "solid" }), {
-          applyStatus: { code: "DEVICE_NOT_CONNECTED", message: "", details: null },
+        reply("OUTPUTS_APPLIED_PARTIAL", running({ kind: "solid" }, { activeTargets: ["hue"] }), {
+          applyStatus: { code: "SOLID_MODE_APPLIED", message: "", details: null },
           droppedTargets: ["usb"],
         }),
       );
       const { view } = mount();
       await settle(view);
 
-      await act(() => view.result.current.handleOutputTargetsChange(["usb", "hue"]));
+      await act(() => view.result.current.handleLightingModeChange({ kind: "solid" }));
+
+      expect(view.result.current.usbLeftOutNotice).toBe(true);
+      expect(view.result.current.startFailedNotice).toBeNull();
+    });
+
+    // A strip-only choice with no strip used to be refused without a word.
+    it("says lighting did not start when the device gate refused the whole choice", async () => {
+      applyOutputsMock.mockResolvedValue(
+        reply("OUTPUTS_REFUSED", snapshot(), {
+          applyStatus: { code: "DEVICE_NOT_CONNECTED", message: "", details: null },
+        }),
+      );
+      const { view } = mount();
+      await settle(view);
+
+      await act(() => view.result.current.handleLightingModeChange({ kind: "solid" }));
 
       expect(view.result.current.startFailedNotice?.bucket).toBe(CAPTURE_FAILURE_BUCKET.OUTPUT);
+      expect(view.result.current.usbLeftOutNotice).toBe(false);
+    });
+
+    it("says why a Hue-only choice did not start, until a choice runs", async () => {
+      applyOutputsMock.mockResolvedValueOnce(
+        reply("OUTPUTS_REFUSED", snapshot(), { hueNotStarted: "inUse", hueStartCode: "CONFIG_NOT_READY_GATE_BLOCKED" }),
+      );
+      const { view } = mount();
+      await settle(view);
+
+      await act(() => view.result.current.handleLightingModeChange({ kind: "ambilight" }));
+      expect(view.result.current.hueNotStartedNotice).toBe("inUse");
+
+      applyOutputsMock.mockResolvedValueOnce(reply("OUTPUTS_APPLIED", running({ kind: "solid" })));
+      await act(() => view.result.current.handleLightingModeChange({ kind: "solid" }));
+      expect(view.result.current.hueNotStartedNotice).toBeNull();
     });
 
     it("keeps a stop that did not confirm on screen for a while", async () => {

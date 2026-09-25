@@ -141,6 +141,8 @@ export interface ApplyOutputsOutcome {
   hueStartCode: string | null;
   /** Hue was left out of a mode that runs on USB. */
   hueLeftOut: HueLeftOutReason | null;
+  /** A user choice named Hue alone and Hue did not start, so nothing new runs. */
+  hueNotStarted: HueLeftOutReason | null;
   /** The last mode apply's status, when one ran — the start-failure reason is in its `details`. */
   applyStatus: CommandStatusOf<LightingModeStatusCode> | null;
   /** Targets whose stop did not confirm; they stay in `activeTargets`. */

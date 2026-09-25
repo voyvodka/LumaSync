@@ -162,6 +162,7 @@ const hue: Catalogue<typeof enHue> = {
       HUE_STREAM_STOPPED: "Hue yayını durdu.",
       TRANSIENT_RETRY_SCHEDULED: "Geçici sorun algılandı. Otomatik deneme planlandı.",
       TRANSIENT_RETRY_EXHAUSTED: "Deneme bütçesi tükendi. Manuel yeniden bağlan gerekli.",
+      HUE_AREA_TAKEN_OVER: "Bu eğlence alanına başka bir uygulama yayın yapmaya başladı, yayın durdu. Diğer uygulamayı kapat, sonra yeniden başlat.",
       AUTH_INVALID_CREDENTIALS: "Kimlik bilgileri geçersiz. Yeniden eşleştirme gerekli.",
       AUTH_INVALID_RE_PAIR_REQUIRED: "Köprü isteği reddetti. Yeniden eşleştirme gerekli.",
       CONFIG_NOT_READY_GATE_BLOCKED: "Başlatma kapı kontrolden geçmedi; hazırlık stale veya eksik.",

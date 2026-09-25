@@ -169,6 +169,7 @@ describe("buildShellNotices", () => {
       [HUE_LEFT_OUT_REASON.UNREACHABLE, "shell:notices.messages.hueLeftOut.unreachable"],
       [HUE_LEFT_OUT_REASON.AUTH, "shell:notices.messages.hueLeftOut.auth"],
       [HUE_LEFT_OUT_REASON.CONFIG, "shell:notices.messages.hueLeftOut.config"],
+      [HUE_LEFT_OUT_REASON.NO_LIGHTS, "shell:notices.messages.hueLeftOut.noLights"],
     ])("says why Hue was left out for the %s reason and opens the Hue devices", (reason, key) => {
       const handlers = makeHandlers();
       const notice = byId({ hueLeftOut: reason }, SHELL_NOTICE_IDS.HUE_LEFT_OUT, handlers);
@@ -193,6 +194,24 @@ describe("buildShellNotices", () => {
       expect(notice.message).toBe(
         "shell:notices.messages.stopFailedUsb[targets=common:hotplug.wledLabel, common:hotplug.targetLabel.hue]",
       );
+    });
+
+    // A Hue-only choice the bridge refused used to change nothing on screen.
+    it.each([
+      [HUE_LEFT_OUT_REASON.UNREACHABLE, "shell:notices.messages.hueNotStarted.unreachable"],
+      [HUE_LEFT_OUT_REASON.AUTH, "shell:notices.messages.hueNotStarted.auth"],
+      [HUE_LEFT_OUT_REASON.CONFIG, "shell:notices.messages.hueNotStarted.config"],
+      [HUE_LEFT_OUT_REASON.IN_USE, "shell:notices.messages.hueNotStarted.inUse"],
+      [HUE_LEFT_OUT_REASON.NO_LIGHTS, "shell:notices.messages.hueNotStarted.noLights"],
+    ])("says why Hue did not start for the %s reason and opens the Hue devices", (reason, key) => {
+      const handlers = makeHandlers();
+      const notice = byId({ hueNotStarted: reason }, SHELL_NOTICE_IDS.HUE_NOT_STARTED, handlers);
+
+      expect(notice.message).toBe(key);
+      expect(notice.kind).toBe("event");
+      expect(notice.shownBy).toBe(NOTICE_VIEW.DEVICES_HUE);
+      notice.action?.onClick();
+      expect(handlers.openDevices).toHaveBeenCalledWith("hue");
     });
 
     it("keeps the busy wait up as a condition, with nothing to click", () => {
@@ -259,6 +278,14 @@ describe("buildShellNotices", () => {
       const notice = byId({ usbDisconnectedLightingOff: true }, SHELL_NOTICE_IDS.USB_DISCONNECTED);
       expect(notice.message).toBe("shell:notices.messages.usbDisconnectedLightingOff");
       expect(notice.testId).toBe("usb-disconnect-notice");
+    });
+
+    it("says the strip was left out of a choice that runs on Hue, and opens the USB devices", () => {
+      const handlers = makeHandlers();
+      const notice = byId({ usbLeftOut: true }, SHELL_NOTICE_IDS.USB_LEFT_OUT, handlers);
+      expect(notice.message).toBe("shell:notices.messages.usbLeftOut");
+      notice.action?.onClick();
+      expect(handlers.openDevices).toHaveBeenCalledWith("usb");
     });
 
     it("never claims a switch to Hue when nothing took over from the unrecognised port", () => {
