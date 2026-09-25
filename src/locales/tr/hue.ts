@@ -27,6 +27,12 @@ const hue: Catalogue<typeof enHue> = {
     placeholder: "örn. 192.168.1.50",
     invalid: "Göndermeden önce geçerli bir IPv4 adresi gir.",
   },
+  offBehavior: {
+    title: "Kapalı'ya bastığında Hue ışıkları",
+    turnOff: "Kapansın",
+    restore: "Eski hâline dönsün",
+    description: "“Eski hâline dönsün” seçilirse ışıklar aydınlatma başlamadan önceki gibi kalır. LumaSync'ten çıktığında her zaman böyle olur.",
+  },
   pair: {
     linkButtonHint: "Hue köprünüzün üstündeki butona basın. LumaSync bunu kendisi kontrol ediyor, başka bir yere tıklamanız gerekmiyor.",
     timedOutTitle: "Buton basışı algılanmadı",

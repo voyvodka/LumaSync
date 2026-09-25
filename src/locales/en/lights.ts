@@ -10,7 +10,7 @@ export default {
   mode: {
     off: {
       title: "Off",
-      subtitle: "Outputs parked",
+      subtitle: "Lights off",
     },
     ambilight: {
       title: "Ambilight",

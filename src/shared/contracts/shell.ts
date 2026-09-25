@@ -15,6 +15,7 @@ import type {
   HueCredentialBackend,
   HueCredentialStatus,
   HueIntensityPreset,
+  HueOffBehavior,
   HueOnboardingStep,
   HueRuntimeTarget,
 } from "./hue";
@@ -285,6 +286,15 @@ export interface ShellState {
    * Cached credential health line shown in Hue settings.
    */
   hueCredentialStatus?: HueCredentialStatus;
+  /**
+   * What pressing Off does to the Hue lights (Devices → Hue Bridges). Read by
+   * Rust when the Off runs, never from a request. Absent ⇒ `turnOff` for
+   * everyone, existing installs included — a deliberate change from when Off
+   * put the lights back. Additive, no schema bump and no migration step:
+   * absence already reads as the default, and a step writing that default
+   * back would change nothing but the version.
+   */
+  hueOffBehavior?: HueOffBehavior;
   /**
    * Where the Hue credentials currently live.
    *

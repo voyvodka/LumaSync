@@ -534,6 +534,39 @@ export type HueCredentialBackend =
   (typeof HUE_CREDENTIAL_BACKENDS)[keyof typeof HUE_CREDENTIAL_BACKENDS];
 
 // ---------------------------------------------------------------------------
+// What Off does to the Hue lights
+// ---------------------------------------------------------------------------
+
+/**
+ * `ShellState.hueOffBehavior`: what pressing Off — in a window, the popup or
+ * the tray — does to the entertainment area's lights once the stream ends.
+ * Mirrors Rust's `HueLightsAfterStop`, which reads it from the saved state
+ * when the Off runs.
+ *
+ * - `turnOff` — every light of the area is switched off. The default, for
+ *   every install that never chose, existing ones included.
+ * - `restore` — every light goes back to how it was before the stream.
+ *
+ * Only Off reads it. Quitting, another app taking the area, Hue taken out of
+ * a running mode and a test giving the stream back always restore.
+ * See docs/architecture/hue.md ("Off turns the lights off").
+ */
+export const HUE_OFF_BEHAVIOR = {
+  TURN_OFF: "turnOff",
+  RESTORE: "restore",
+} as const;
+
+export type HueOffBehavior = (typeof HUE_OFF_BEHAVIOR)[keyof typeof HUE_OFF_BEHAVIOR];
+
+/** Absent ⇒ this. Rust applies the same default. */
+export const DEFAULT_HUE_OFF_BEHAVIOR: HueOffBehavior = HUE_OFF_BEHAVIOR.TURN_OFF;
+
+/** The saved choice, read as Rust reads it: anything unknown is the default. */
+export function resolveHueOffBehavior(saved: unknown): HueOffBehavior {
+  return saved === HUE_OFF_BEHAVIOR.RESTORE ? HUE_OFF_BEHAVIOR.RESTORE : DEFAULT_HUE_OFF_BEHAVIOR;
+}
+
+// ---------------------------------------------------------------------------
 // Hue intensity presets (v1.4 — deprecated aliases, unified in v1.4)
 // ---------------------------------------------------------------------------
 

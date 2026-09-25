@@ -106,6 +106,18 @@ impl SolidUsbOutput {
         }
     }
 
+    /// Every LED black, encoded the way this strip reads a frame. Black at full
+    /// brightness rather than a zero brightness byte: a firmware may treat
+    /// brightness 0 as "unchanged", never a black pixel as anything but off.
+    pub(super) fn blank(&self) -> Result<(), String> {
+        self.send(&SolidColorPayload {
+            r: 0,
+            g: 0,
+            b: 0,
+            brightness: 1.0,
+        })
+    }
+
     pub(super) fn send(&self, payload: &SolidColorPayload) -> Result<(), String> {
         let triplets: Vec<[u8; 3]> = vec![[payload.r, payload.g, payload.b]; self.led_count];
         // WLED has no on-wire brightness field, so `CorrectedWledSink`

@@ -332,6 +332,79 @@ fn fetch_info_from(url: &str) -> Result<WledInfoResponse, CommandStatus> {
     Ok(info)
 }
 
+// ---------------------------------------------------------------------------
+// Switching a device off — the lighting transaction's Off
+// ---------------------------------------------------------------------------
+
+/// Longest a switch-off may take. It runs beside the Hue stop on a user's Off,
+/// so a device that does not answer costs this, never the 2 s probe timeout.
+pub(crate) const WLED_POWER_OFF_TIMEOUT: Duration = Duration::from_millis(1_500);
+
+/// Why a switch-off did not land. Logged, never raised and never on the wire,
+/// so the variant is the code: the stream has already stopped, and a device
+/// that missed the write only falls back to its own effect once it leaves
+/// realtime mode.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum WledPowerOffError {
+    /// The address failed the same guard discovery applies (`parse_ipv4`).
+    InvalidIp(String),
+    Timeout,
+    Unreachable(String),
+    /// Answered, but not with WLED's `{"success":true}` — a redirect, an error
+    /// status, or something that is not WLED.
+    Refused(String),
+}
+
+/// `POST /json/state {"on":false}`: the device goes dark and stays dark when
+/// it leaves realtime mode, instead of returning to its own effect. WLED still
+/// shows realtime frames while off, so the next mode lights it again.
+/// docs/architecture/device-output.md ("Off switches a WLED device off").
+pub(crate) fn power_off_wled(ip: Ipv4Addr) -> Result<(), WledPowerOffError> {
+    parse_ipv4(&ip.to_string()).map_err(WledPowerOffError::InvalidIp)?;
+    post_power_off(&format!("http://{ip}/json/state"), WLED_POWER_OFF_TIMEOUT)
+}
+
+/// The switch-off against an already-vetted URL.
+fn post_power_off(url: &str, timeout: Duration) -> Result<(), WledPowerOffError> {
+    let client =
+        wled_http_client().map_err(|status| WledPowerOffError::Unreachable(status.message))?;
+    let response = client
+        .post(url)
+        .timeout(timeout)
+        .json(&serde_json::json!({ "on": false }))
+        .send()
+        .map_err(|error| {
+            if error.is_timeout() {
+                WledPowerOffError::Timeout
+            } else {
+                WledPowerOffError::Unreachable(error.to_string())
+            }
+        })?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(WledPowerOffError::Refused(format!(
+            "HTTP {}",
+            status.as_u16()
+        )));
+    }
+    let mut body = Vec::new();
+    response
+        .take(WLED_MAX_RESPONSE_BYTES as u64)
+        .read_to_end(&mut body)
+        .map_err(|error| WledPowerOffError::Unreachable(error.to_string()))?;
+    let accepted = serde_json::from_slice::<serde_json::Value>(&body)
+        .ok()
+        .and_then(|value| value.get("success")?.as_bool())
+        == Some(true);
+    if accepted {
+        Ok(())
+    } else {
+        Err(WledPowerOffError::Refused(
+            "the answer was not WLED's {\"success\":true}".to_string(),
+        ))
+    }
+}
+
 /// Parses `/json/info`, refusing a body past [`WLED_MAX_RESPONSE_BYTES`].
 fn read_info_body(
     response: reqwest::blocking::Response,
@@ -900,5 +973,113 @@ mod tests {
             status.details.as_deref(),
             Some(format!("body exceeds {WLED_MAX_RESPONSE_BYTES} bytes").as_str())
         );
+    }
+
+    // ── switching a device off ─────────────────────────────────────────
+
+    /// A WLED stand-in on 127.0.0.1 that answers one request with `reply`
+    /// after `delay` and hands back the request it read.
+    fn device_once(
+        reply: &'static str,
+        delay: std::time::Duration,
+    ) -> (String, std::sync::mpsc::Receiver<String>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/json/state", listener.local_addr().unwrap());
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(500)));
+            let mut request = Vec::new();
+            let mut buf = [0u8; 1024];
+            while let Ok(n) = stream.read(&mut buf) {
+                if n == 0 {
+                    break;
+                }
+                request.extend_from_slice(&buf[..n]);
+                let text = String::from_utf8_lossy(&request);
+                if text.contains("\r\n\r\n") && text.trim_end().ends_with('}') {
+                    break;
+                }
+            }
+            let _ = tx.send(String::from_utf8_lossy(&request).into_owned());
+            std::thread::sleep(delay);
+            let _ = stream.write_all(reply.as_bytes());
+        });
+        (url, rx)
+    }
+
+    fn json_reply(status: &str, body: &str) -> String {
+        format!(
+            "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    }
+
+    fn leak(reply: String) -> &'static str {
+        Box::leak(reply.into_boxed_str())
+    }
+
+    #[test]
+    fn a_switch_off_posts_on_false_to_the_state_endpoint() {
+        let (url, request) = device_once(
+            leak(json_reply("200 OK", r#"{"success":true}"#)),
+            std::time::Duration::ZERO,
+        );
+
+        assert_eq!(
+            super::post_power_off(&url, super::WLED_POWER_OFF_TIMEOUT),
+            Ok(())
+        );
+        let request = request.recv().unwrap();
+        assert!(request.starts_with("POST /json/state "), "{request}");
+        let body = request.split("\r\n\r\n").nth(1).unwrap_or_default();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(body).unwrap(),
+            serde_json::json!({ "on": false })
+        );
+    }
+
+    #[test]
+    fn a_switch_off_is_refused_by_anything_but_wleds_success() {
+        for reply in [
+            json_reply("200 OK", r#"{"error":9}"#),
+            json_reply("500 Internal Server Error", r#"{"success":true}"#),
+            "HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:1/json/state\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string(),
+        ] {
+            let (url, _request) = device_once(leak(reply.clone()), std::time::Duration::ZERO);
+            let error = super::post_power_off(&url, super::WLED_POWER_OFF_TIMEOUT).unwrap_err();
+            assert!(
+                matches!(error, super::WledPowerOffError::Refused(_)),
+                "{reply}: {error:?}"
+            );
+        }
+    }
+
+    /// A device that does not answer costs the switch-off's own bound, not
+    /// the Off it runs beside.
+    #[test]
+    fn a_silent_device_ends_the_switch_off_at_its_timeout() {
+        let (url, _request) = device_once(
+            leak(json_reply("200 OK", r#"{"success":true}"#)),
+            std::time::Duration::from_secs(3),
+        );
+        let started = std::time::Instant::now();
+
+        let error = super::post_power_off(&url, std::time::Duration::from_millis(300)).unwrap_err();
+
+        assert_eq!(error, super::WledPowerOffError::Timeout);
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+    }
+
+    #[test]
+    fn a_switch_off_is_never_sent_to_an_address_the_guard_refuses() {
+        for ip in ["127.0.0.1", "0.0.0.0", "239.1.1.1", "255.255.255.255"] {
+            let error = super::power_off_wled(ip.parse().unwrap()).unwrap_err();
+            assert!(
+                matches!(error, super::WledPowerOffError::InvalidIp(_)),
+                "{ip}: {error:?}"
+            );
+        }
     }
 }

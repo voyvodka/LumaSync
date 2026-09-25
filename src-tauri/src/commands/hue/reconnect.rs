@@ -956,7 +956,7 @@ mod tests {
     async fn after_a_reconnect_the_stop_still_outlasts_the_bridges_post_stream_state() {
         use super::super::commands::stop_hue_runtime;
         use super::super::light_restore::{
-            parse_light_state, reads_as, HueLightRestore, HueLightSnapshot,
+            parse_light_state, reads_as, HueLightRestore, HueLightSnapshot, HueLightsAfterStop,
         };
         use super::super::sender::signal_shutdown_complete;
         use super::super::state_store::test_helpers::dummy_active_stream_context;
@@ -1040,7 +1040,12 @@ mod tests {
 
         let stop_runtime = Arc::clone(&runtime);
         let stopped = tokio::task::spawn_blocking(move || {
-            stop_hue_runtime(&stop_runtime, HueRuntimeTriggerSource::ModeControl, None)
+            stop_hue_runtime(
+                &stop_runtime,
+                HueRuntimeTriggerSource::ModeControl,
+                None,
+                HueLightsAfterStop::Restore,
+            )
         })
         .await
         .unwrap();

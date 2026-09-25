@@ -24,7 +24,7 @@ use super::snapshot::{
     parse_targets, publish_running, BootHueRetryState, HueLeftOutReason, LightingPhase,
     LightingRuntimeSnapshot, OutputTarget, OutputTargets,
 };
-use super::transition::apply_config_blocking;
+use super::transition::{apply_config_blocking, blank_usb_after_off};
 use super::tuning::{accepting_for_running, StoredTuning};
 use super::{
     stop_lighting_blocking, AmbilightPayload, LightingModeCommandResult, LightingModeConfig,
@@ -32,9 +32,11 @@ use super::{
 };
 use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionState};
 use crate::commands::hue::hue_config::{hue_start_request, room_geometry_from_state};
+use crate::commands::hue::light_restore::HueLightsAfterStop;
 use crate::commands::hue::state_store::{HueRuntimeTriggerSource, StartHueStreamRequest};
 use crate::commands::shell_state::{self, PersistedShellState};
 use crate::commands::status::CommandStatus;
+use crate::commands::wled_discovery::{power_off_wled, WledPowerOffError};
 
 /// The readiness loop's cadence while a streamer holds the area.
 pub(crate) const BOOT_HUE_RETRY_POLL: Duration = Duration::from_secs(3);
@@ -754,9 +756,23 @@ impl<'a, R: Runtime> Transaction<'a, R> {
     }
 
     /// `true` when the stop confirmed. One that did not stays listed active.
+    /// Every stop restores the lights but a user's Off, which reads
+    /// `hueOffBehavior` itself (`reconcile_off`).
     async fn stop_hue(&mut self, trigger: HueRuntimeTriggerSource) -> bool {
-        info!("[outputs] #{} stop Hue ({trigger:?})", self.ticket);
-        let result = self.driver.stop(trigger).await;
+        self.stop_hue_then(trigger, HueLightsAfterStop::Restore)
+            .await
+    }
+
+    async fn stop_hue_then(
+        &mut self,
+        trigger: HueRuntimeTriggerSource,
+        lights: HueLightsAfterStop,
+    ) -> bool {
+        info!(
+            "[outputs] #{} stop Hue ({trigger:?}, lights: {lights:?})",
+            self.ticket
+        );
+        let result = self.driver.stop(trigger, lights).await;
         self.state.outputs.set_owner(HueOwner::Nobody);
         let confirmed = result.status.code == "HUE_STREAM_STOPPED";
         self.state
@@ -807,6 +823,10 @@ impl<'a, R: Runtime> Transaction<'a, R> {
         running: &LightingModeConfig,
     ) -> Result<Ending, String> {
         let hue_up = self.hue_live() || self.driver.runtime_active();
+        // Pressing Off — in a window, the popup or the tray — turns the lights
+        // off. Every other way lighting ends lets them go back as they were.
+        // docs/architecture/lighting-transaction.md ("Off turns the lights off").
+        let user_off = matches!(self.kind, TxKind::Choice(_)) && intent.persist_mode;
         let stop_hue = match self.kind {
             // The user chose Off. As the frontend's Off did, a configured bridge
             // gets its stop even when no stream is known here, which also
@@ -818,18 +838,52 @@ impl<'a, R: Runtime> Transaction<'a, R> {
         // The worker holds a handle on the Hue sender, which exits only once
         // every handle is gone, so the worker stops first — whatever its
         // targets. See docs/architecture/hue.md.
+        let mut usb_off = None;
         if running.kind != LightingModeKind::Off {
-            if let Err(error) = self.stop_lighting().await {
-                warn!("[outputs] stop_lighting before the Hue stop failed: {error}");
-                self.outcome.stop_failed.push(OutputTarget::Usb);
+            match self.stop_lighting().await {
+                Ok(_) if user_off => {
+                    let ended = running.clone();
+                    usb_off = blocking(self.app, move |app| Ok(blank_usb_after_off(app, &ended)))
+                        .await
+                        .unwrap_or_default();
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    warn!("[outputs] stop_lighting before the Hue stop failed: {error}");
+                    self.outcome.stop_failed.push(OutputTarget::Usb);
+                }
             }
         }
+        // Read now, not from the request: the setting may have changed since
+        // the mode started, and in another window.
+        let hue_lights = if user_off {
+            self.persisted()
+                .map(|persisted| persisted.hue_off_behavior())
+                .unwrap_or(HueLightsAfterStop::TurnOff)
+        } else {
+            HueLightsAfterStop::Restore
+        };
+        let wled = usb_off.and_then(|off| off.wled);
+        let app = self.app;
+        let wled_off = async move {
+            if let Some(cfg) = wled {
+                let power_off = wled_power_off_for(app);
+                let result = blocking(app, move |_| Ok(power_off(cfg.ip))).await;
+                log_wled_power_off(cfg.ip, result);
+            }
+        };
         if stop_hue {
             if self.superseded() {
+                wled_off.await;
                 return Ok(Ending::Superseded);
             }
             self.publish_phase(LightingPhase::Stopping);
-            self.stop_hue(HueRuntimeTriggerSource::ModeControl).await;
+            let _ = tokio::join!(
+                self.stop_hue_then(HueRuntimeTriggerSource::ModeControl, hue_lights),
+                wled_off
+            );
+        } else {
+            wled_off.await;
         }
         if let Some(previous) = self.kind.selection_to_keep() {
             if intent.targets.is_empty() {
@@ -1622,6 +1676,38 @@ pub(crate) async fn release_hue_with<R: Runtime>(
 }
 
 // ---------------------------------------------------------------------------
+// WLED switch-off — a user's Off on a WLED "usb" channel
+// ---------------------------------------------------------------------------
+
+pub(crate) type WledPowerOff =
+    dyn Fn(std::net::Ipv4Addr) -> Result<(), WledPowerOffError> + Send + Sync;
+
+/// Managed only by tests; production switches the device off over HTTP.
+pub(crate) struct WledPowerOffHandle(pub(crate) Arc<WledPowerOff>);
+
+fn wled_power_off_for<R: Runtime>(app: &AppHandle<R>) -> Arc<WledPowerOff> {
+    if let Some(handle) = app.try_state::<WledPowerOffHandle>() {
+        return Arc::clone(&handle.0);
+    }
+    // The production switch-off talks to a device on the network.
+    if cfg!(test) {
+        panic!("a test reached the production WLED switch-off — manage a WledPowerOffHandle");
+    }
+    Arc::new(power_off_wled)
+}
+
+fn log_wled_power_off(
+    ip: std::net::Ipv4Addr,
+    result: Result<Result<(), WledPowerOffError>, String>,
+) {
+    match result {
+        Ok(Ok(())) => info!("[lighting-off] WLED {ip} switched off"),
+        Ok(Err(error)) => warn!("[lighting-off] WLED {ip} not switched off: {error:?}"),
+        Err(error) => warn!("[lighting-off] WLED {ip} switch-off did not run: {error}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // The Hue test lease — a test pattern borrowing the stream
 // ---------------------------------------------------------------------------
 
@@ -1729,7 +1815,12 @@ async fn lease_release<R: Runtime>(
     if state.outputs.owner() != HueOwner::Lease {
         return Ok(());
     }
-    let result = driver.stop(HueRuntimeTriggerSource::ModeControl).await;
+    let result = driver
+        .stop(
+            HueRuntimeTriggerSource::ModeControl,
+            HueLightsAfterStop::Restore,
+        )
+        .await;
     state.outputs.set_owner(HueOwner::Nobody);
     if result.status.code != "HUE_STREAM_STOPPED" {
         outcome.stop_failed.push(OutputTarget::Hue);

@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_HUE_OFF_BEHAVIOR,
   HUE_COMMANDS,
   HUE_CREDENTIAL_BACKENDS,
+  HUE_OFF_BEHAVIOR,
+  resolveHueOffBehavior,
   type HueCredentialBackend,
   type HuePairBridgeResponse,
 } from "../hue";
@@ -46,5 +49,24 @@ describe("Hue credential backend wire contract", () => {
       };
       expect(response.credentialStorageBackend).toBe(backend);
     }
+  });
+});
+
+describe("What Off does to the Hue lights", () => {
+  // Rust deserialises `hueOffBehavior` with these exact spellings
+  // (`HueLightsAfterStop`, camelCase); a drift reads as "turn off".
+  it("pins the literal values Rust reads", () => {
+    expect(HUE_OFF_BEHAVIOR.TURN_OFF).toBe("turnOff");
+    expect(HUE_OFF_BEHAVIOR.RESTORE).toBe("restore");
+  });
+
+  // Existing installs have no saved value and get the new behaviour.
+  it("reads anything but an explicit restore as turning the lights off", () => {
+    expect(DEFAULT_HUE_OFF_BEHAVIOR).toBe("turnOff");
+    expect(resolveHueOffBehavior(undefined)).toBe("turnOff");
+    expect(resolveHueOffBehavior(null)).toBe("turnOff");
+    expect(resolveHueOffBehavior("dim")).toBe("turnOff");
+    expect(resolveHueOffBehavior("turnOff")).toBe("turnOff");
+    expect(resolveHueOffBehavior("restore")).toBe("restore");
   });
 });

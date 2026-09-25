@@ -852,6 +852,69 @@ pub fn stop_lighting_blocking<R: Runtime>(
     Ok(result)
 }
 
+/// What a user's Off did to the "usb" channel it found driven.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct UsbOff {
+    /// `Err` leaves the strip holding the last frame it was sent.
+    pub(crate) black_frame: Result<(), String>,
+    /// A WLED device, to be switched off as well: black alone lasts only until
+    /// it leaves realtime mode and goes back to its own effect.
+    pub(crate) wled: Option<WledSinkConfig>,
+}
+
+/// Paint the strip the ended mode drove black. Stopping a mode only stops
+/// writing, and a strip holds the last frame it was sent — a Solid colour
+/// indefinitely. Must run after the mode has stopped, so no worker frame can
+/// follow the black one. `None` when the mode did not drive the channel or no
+/// sink is there to reach. docs/architecture/device-output.md ("Off").
+pub(crate) fn blank_usb_after_off<R: Runtime>(
+    app: &AppHandle<R>,
+    ended: &LightingModeConfig,
+) -> Option<UsbOff> {
+    let targets = ended.targets.clone().unwrap_or_default();
+    let drove_usb = ended.kind != LightingModeKind::Off
+        && (targets.is_empty() || targets.iter().any(|target| target == "usb"));
+    if !drove_usb {
+        return None;
+    }
+    let wled = app
+        .try_state::<ActiveSinkRegistry>()
+        .and_then(|registry| registry.active_wled_config());
+    let serial_port = app.try_state::<SerialConnectionState>().and_then(|state| {
+        let status = state.last_status.lock().ok()?;
+        status.port_name.clone().filter(|_| status.connected)
+    });
+    // The precedence `apply_mode_change` plans the channel with.
+    let plan = match (wled, serial_port) {
+        (Some(cfg), _) => UsbOutputPlan::Wled(cfg),
+        (None, Some(port)) => UsbOutputPlan::Serial(port),
+        (None, None) => return None,
+    };
+    let bridge = app
+        .state::<LightingRuntimeState>()
+        .runtime
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .output_bridge
+        .clone();
+    let output = SolidUsbOutput::for_mode(&bridge, plan.clone(), ended);
+    let black_frame = output.blank();
+    match &black_frame {
+        Ok(()) => info!(
+            "[lighting-off] strip blanked — sink={plan:?} led_count={}",
+            output.led_count
+        ),
+        Err(reason) => warn!("[lighting-off] black frame FAILED — sink={plan:?} reason={reason}"),
+    }
+    Some(UsbOff {
+        black_frame,
+        wled: match plan {
+            UsbOutputPlan::Wled(cfg) => Some(cfg),
+            UsbOutputPlan::Serial(_) => None,
+        },
+    })
+}
+
 /// Read-only snapshot of the current lighting mode, for the frontend to
 /// reconcile against on load without triggering a mode change.
 ///
