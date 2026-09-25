@@ -77,10 +77,12 @@ function cardState(state: ReturnType<typeof useHueOnboardingCore>["state"]) {
     runtimeStatusUnavailable: false,
     hueStatus: state.status,
     credentialState: state.credentialState,
+    hasCredentials: state.credentials !== null,
     bridgeUnreachable: state.bridgeUnreachable,
     isPairing: state.isPairing,
     selectedAreaId: state.selectedAreaId,
     isReadinessStale: false,
+    areaHeldByAnotherApp: false,
   });
 }
 

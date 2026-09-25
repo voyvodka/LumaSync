@@ -205,7 +205,7 @@ describe("HueReadySummaryCard", () => {
     await renderHueTab(createHueHookState({
       canStartHue: false,
       isReadinessStale: true,
-      selectedArea: { id: "test-area", name: "Living Room", readiness: { ready: false } },
+      selectedArea: { id: "test-area", name: "Living Room", readiness: { ready: false, reasons: [] } },
       selectedBridge: { id: "test-bridge", name: "Test Bridge", ip: "192.168.1.100" },
       runtimeStatus: null,
     }));

@@ -148,6 +148,13 @@ describe("HueBridgesCategory — revoked app key", () => {
     // The credential cell stays: it is a translated status, not a raw code.
     expect(screen.getByText("hue:card.cellCredentialInvalid")).toBeInTheDocument();
   });
+
+  it("never captions the fault with the success code the last onboarding call returned (H-12)", () => {
+    renderCard(hueState({ credentialState: "needs_repair", status: onboarding("HUE_DISCOVERY_OK") }));
+    expect(screen.getByTestId("hue-auth-error")).toBeInTheDocument();
+    expect(screen.queryByTestId("hue-fault-code")).toBeNull();
+    expect(screen.queryByText("HUE_DISCOVERY_OK")).toBeNull();
+  });
 });
 
 describe("HueBridgesCategory — raw codes are a detail in every state that shows one", () => {
@@ -172,7 +179,8 @@ describe("HueBridgesCategory — raw codes are a detail in every state that show
         status: onboarding("HUE_STREAM_RECOVERY_FAILED"),
         runtimeStatus: runtime("Reconnecting", "TRANSIENT_RETRY_SCHEDULED", { remainingAttempts: 3, nextAttemptMs: 2000 }),
       }),
-      code: "HUE_STREAM_RECOVERY_FAILED",
+      // The runtime is what is reconnecting; the last onboarding answer is not its reason (H-12).
+      code: "TRANSIENT_RETRY_SCHEDULED",
     },
     {
       name: "stopPartial",
