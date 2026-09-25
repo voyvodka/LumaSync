@@ -580,9 +580,14 @@ Sync puts it back as it was, and so do we now (`commands/hue/light_restore.rs`).
 - **Quit.** `[shutdown]` step 2 calls `stop_hue_stream_before_exit` with a deadline 3.3 s after
   cleanup starts; the deactivate PUT, the sender wait and every restore request honour it, so a
   slow bridge ends the step at that deadline rather than at the 4 s watchdog, and the thread is
-  abandoned 100 ms after it regardless. A slow step 1 leaves step 2 about 1.8 s. The watch honours
-  the same deadline: on the measured bridge it adds about a second to step 2, at most the 1.5 s
-  window, and a slow step 1 cuts it short rather than moving the exit.
+  abandoned 100 ms after it regardless. Each of those waits aims at `HUE_STOP_DEADLINE_RESERVE`
+  (100 ms) *before* the deadline, not at the deadline: a request timed out on the deadline itself
+  still has to unwind, so the call used to return a few ms past it every time a request was still
+  in flight at the end — a watch read the bridge was slow to answer, say. A deactivate with under
+  50 ms left is not sent at all rather than given a floor that outlasts the deadline. A slow
+  step 1 leaves step 2 about 1.8 s. The watch honours the same deadline: on the measured bridge
+  it adds about a second to step 2, at most the 1.5 s window, and a slow step 1 cuts it short
+  rather than moving the exit.
 - **Unclean exit cannot restore.** A crash or kill never reaches the stop; the bridge times the
   session out and the lights stay on in their restored colour. Accepted — nothing on disk carries the
   snapshot to the next launch, and a snapshot taken then would read the lights already on.
