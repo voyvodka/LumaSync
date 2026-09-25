@@ -31,10 +31,10 @@ use super::{
     LightingModeKind, LightingRuntimeState,
 };
 use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionState};
-use crate::commands::hue_onboarding::ACTIVE_STREAMER_REASON;
 use crate::commands::hue::hue_config::{hue_start_request, room_geometry_from_state};
 use crate::commands::hue::light_restore::HueLightsAfterStop;
 use crate::commands::hue::state_store::{HueRuntimeTriggerSource, StartHueStreamRequest};
+use crate::commands::hue_onboarding::ACTIVE_STREAMER_REASON;
 use crate::commands::shell_state::{self, PersistedShellState};
 use crate::commands::status::CommandStatus;
 use crate::commands::wled_discovery::{power_off_wled, WledPowerOffError};
@@ -1707,8 +1707,11 @@ pub(crate) async fn apply_outputs_with<R: Runtime>(
     // Any request that says what should run answers the launch's wait for a
     // strip: a choice speaks for itself, and an unplug or a newer launch
     // restore changes what the wait was for.
-    if request.mode.is_some() || request.targets.is_some() || request.origin == LightingOrigin::Boot {
-        state.outputs.cancel_boot_sink_wait("a newer lighting request");
+    if request.mode.is_some() || request.targets.is_some() || request.origin == LightingOrigin::Boot
+    {
+        state
+            .outputs
+            .cancel_boot_sink_wait("a newer lighting request");
     }
 
     let ticket = state.outputs.issue_ticket();
@@ -1811,7 +1814,7 @@ pub fn note_settings_saved<'k, R: Runtime>(
             .outputs
             .settings_beyond_calibration
             .swap(false, Ordering::SeqCst);
-        if !beyond && calibration_unchanged(&app) {
+        if !beyond && calibration_is_current(&app) {
             return;
         }
         match refresh_running_with(&app).await {
@@ -1823,16 +1826,12 @@ pub fn note_settings_saved<'k, R: Runtime>(
 }
 
 /// LED Setup saves the layout on every step, most of them leaving it as the
-/// running mode already carries it.
-fn calibration_unchanged<R: Runtime>(app: &AppHandle<R>) -> bool {
-    let running = app
-        .state::<LightingRuntimeState>()
-        .snapshot
-        .read()
-        .mode
-        .led_calibration;
-    running.is_some()
-        && running == shell_state::persisted(app).and_then(|state| state.led_calibration())
+/// running mode already carries it; a mode off the strip does not read it.
+fn calibration_is_current<R: Runtime>(app: &AppHandle<R>) -> bool {
+    let running = app.state::<LightingRuntimeState>().snapshot.read().mode;
+    !running_targets(&running).contains(&OutputTarget::Usb)
+        || running.led_calibration
+            == shell_state::persisted(app).and_then(|state| state.led_calibration())
 }
 
 /// The tray's three lighting items. They run the transaction from Rust, so
@@ -2287,7 +2286,9 @@ pub fn note_local_sink_connected<R: Runtime>(app: &AppHandle<R>) {
         }
         let snapshot = state.snapshot.read();
         if snapshot.mode.kind == LightingModeKind::Off {
-            state.outputs.update_intent(|intent| intent.kind = wait.kind);
+            state
+                .outputs
+                .update_intent(|intent| intent.kind = wait.kind);
         } else if snapshot.active_targets.contains(&OutputTarget::Usb) {
             return;
         }

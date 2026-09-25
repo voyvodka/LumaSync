@@ -503,9 +503,10 @@ pub async fn connect_wled_sink<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     request: WledConnectRequest,
 ) -> WledConnectResponse {
-    tokio::task::spawn_blocking(move || {
+    let worker_app = app.clone();
+    let response = tokio::task::spawn_blocking(move || {
         use tauri::Manager;
-        connect_wled_sink_blocking(request, &app.state::<ActiveSinkRegistry>())
+        connect_wled_sink_blocking(request, &worker_app.state::<ActiveSinkRegistry>())
     })
     .await
     .unwrap_or_else(|join_error| WledConnectResponse {
@@ -514,7 +515,11 @@ pub async fn connect_wled_sink<R: tauri::Runtime>(
             "WLED connect worker terminated unexpectedly.",
             Some(join_error.to_string()),
         ),
-    })
+    });
+    if response.status.code == "WLED_CONNECT_OK" {
+        super::lighting_mode::outputs::note_local_sink_connected(&app);
+    }
+    response
 }
 
 fn connect_wled_sink_blocking(
