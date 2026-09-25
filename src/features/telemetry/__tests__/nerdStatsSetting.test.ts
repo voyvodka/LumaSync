@@ -83,7 +83,8 @@ describe("showNerdStats setting", () => {
     expect(saveMock).toHaveBeenCalledWith({ showNerdStats: true });
   });
 
-  it("puts the switch back when the save fails", async () => {
+  // The shell's persist-failure notice says a change lasts until quit.
+  it("keeps the choice for the session, and logs, when the save fails", async () => {
     saveMock.mockRejectedValue(new Error("SHELL_STATE_WRITE_FAILED: disk full"));
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     const { result } = await mount();
@@ -92,7 +93,7 @@ describe("showNerdStats setting", () => {
       await setShowNerdStats(true);
     });
 
-    expect(result.current).toBe(false);
+    expect(result.current).toBe(true);
     expect(consoleError).toHaveBeenCalled();
     consoleError.mockRestore();
   });

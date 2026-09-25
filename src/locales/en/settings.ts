@@ -1,10 +1,10 @@
 export default {
-  title: "General",
-  subtitle: "Launch behavior and language",
+  title: "Settings",
+  subtitle: "Startup, language, updates and about",
   groups: {
     startup: {
       title: "Startup",
-      sub: "Launch · tray",
+      sub: "Launch at login",
     },
     language: {
       title: "Language",
@@ -24,7 +24,7 @@ export default {
   },
   language: {
     label: "Interface language",
-    description: "Restart required to apply",
+    description: "Applies to every LumaSync window right away",
   },
   about: {
     tagline: "Screen-synced ambient lighting",
@@ -44,6 +44,8 @@ export default {
   startupTray: {
     launchAtLogin: "Launch at login",
     launchAtLoginDescription: "Start LumaSync automatically when you log in.",
+    readError: "Couldn't read whether LumaSync launches at login",
+    writeError: "Couldn't change launch at login — try again",
   },
   nerdStats: {
     label: "Show stats for nerds",

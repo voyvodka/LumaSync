@@ -160,12 +160,19 @@ function clampFloat(value: unknown, min: number, max: number, fallback: number):
   return Math.max(min, Math.min(max, toFiniteNumber(value, fallback)));
 }
 
+/**
+ * The colour Solid shows before the user has picked one — every surface, and
+ * what Rust applies when a Solid config carries no colour. The compact window
+ * once defaulted to a warm white the other surfaces did not.
+ */
+export const DEFAULT_SOLID_COLOR: Readonly<SolidColorPayload> = { r: 255, g: 255, b: 255, brightness: 1 };
+
 export function normalizeSolidColorPayload(input?: Partial<SolidColorPayload>): SolidColorPayload {
   return {
-    r: clampInt(input?.r, 0, 255, 255),
-    g: clampInt(input?.g, 0, 255, 255),
-    b: clampInt(input?.b, 0, 255, 255),
-    brightness: clampFloat(input?.brightness, 0, 1, 1),
+    r: clampInt(input?.r, 0, 255, DEFAULT_SOLID_COLOR.r),
+    g: clampInt(input?.g, 0, 255, DEFAULT_SOLID_COLOR.g),
+    b: clampInt(input?.b, 0, 255, DEFAULT_SOLID_COLOR.b),
+    brightness: clampFloat(input?.brightness, 0, 1, DEFAULT_SOLID_COLOR.brightness),
   };
 }
 

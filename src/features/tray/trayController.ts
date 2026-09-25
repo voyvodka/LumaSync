@@ -5,7 +5,7 @@
  * - Show LED Preview: opens the control popup (the lighting items — off,
  *   resume, solid — run the lighting transaction in Rust, never in a window)
  * - Label i18n: push translated strings to Rust via update_tray_labels
- * - Startup toggle: managed via plugin-autostart (no tray checkbox)
+ * - Launch at login: set via plugin-autostart (no tray checkbox)
  *
  * Tray menu ID and event-name constants are imported from shell contracts —
  * never hardcode strings here.
@@ -20,31 +20,21 @@ import { TRAY_EVENTS, TRAY_MENU_IDS } from "@/shared/contracts/shell";
 // ---------------------------------------------------------------------------
 
 /**
- * Toggle run-at-login and return the new state.
- * The tray menu no longer has a checkbox for this; autostart state is
- * controlled exclusively from the System settings section.
+ * Set run-at-login to what the user asked for and return what the OS now
+ * reports. Explicit, never a flip of the current state: a switch showing a
+ * stale value used to turn autostart off when the user asked for on. Only
+ * the Settings section changes it; the tray has no item for it.
  */
-export async function toggleStartup(): Promise<boolean> {
-  const enabled = await isEnabled();
-  if (enabled) {
-    await disable();
-    return false;
-  } else {
-    await enable();
-    return true;
-  }
+export async function setStartup(enabled: boolean): Promise<boolean> {
+  if (enabled) await enable();
+  else await disable();
+  return isEnabled();
 }
 
 /** Read current autostart state */
 export async function getStartupEnabled(): Promise<boolean> {
   return isEnabled();
 }
-
-/**
- * No-op — kept for API compatibility. The tray startup checkbox was removed;
- * nothing needs to be synced in the Rust menu.
- */
-export async function setStartupTrayChecked(_checked: boolean): Promise<void> {}
 
 // ---------------------------------------------------------------------------
 // Tray quick action event listeners

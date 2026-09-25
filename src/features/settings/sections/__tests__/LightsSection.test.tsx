@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MODE_GUARD_REASONS } from "@/features/mode/state/modeGuard";
 import type { LightingModeConfig } from "@/shared/contracts/mode";
-import { DEFAULT_ROOM_MAP, type HueZone, type RoomMapConfig } from "@/shared/contracts/roomMap";
+import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 import type { ShellState } from "@/shared/contracts/shell";
 import type { LocalSink } from "@/features/device/localSink";
 import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
@@ -562,34 +562,19 @@ describe("LightsSection — output availability gate", () => {
   });
 });
 
-// The room map renders exclusively from `RoomMapConfig.zones`; the legacy
-// `hueZones` fold is a one-shot migration. See docs/architecture/hue.md.
-describe("LightsSection — Add Hue zone", () => {
-  const existingZone: HueZone = {
-    id: "hue-zone-existing",
-    name: "Zone 1",
-    entertainmentAreaId: "area-1",
-    centerX: 0,
-    centerY: 0,
-    centerZ: 0,
-    scaleX: 0.5,
-    scaleY: 0.5,
-    scaleZ: 0.5,
-    channelIndices: [],
-  };
-
+// The "+" wrote an empty Hue zone at the room's origin behind a load → save.
+// Outputs are added on Devices, so that is all it does now.
+describe("LightsSection — add output", () => {
   beforeEach(() => {
     saveMock.mockClear();
     createHueZoneMock.mockClear();
-    shellStateRef.current = {
-      lastHueAreaId: "area-1",
-      roomMapVersion: 7,
-      roomMap: { ...DEFAULT_ROOM_MAP, zones: [existingZone] },
-    };
+    shellStateRef.current = { lastHueAreaId: "area-1", roomMapVersion: 7, roomMap: { ...DEFAULT_ROOM_MAP } };
   });
 
-  function renderWithHue() {
-    return render(
+  it("opens Devices and writes nothing to the room map", async () => {
+    const user = userEvent.setup();
+    const onAddOutput = vi.fn<() => void>();
+    render(
       <LightsSection
         mode={{ kind: "off" }}
         outputTargets={["hue"]}
@@ -601,63 +586,15 @@ describe("LightsSection — Add Hue zone", () => {
         modeLockReason={null}
         onModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
+        onAddOutput={onAddOutput}
       />,
     );
-  }
 
-  it("appends the new zone to roomMap.zones and never writes the legacy hueZones field", async () => {
-    const user = userEvent.setup();
-    renderWithHue();
+    await user.click(await screen.findByRole("button", { name: "Add Hue zone" }));
 
-    const addButton = await screen.findByRole("button", { name: "Add Hue zone" });
-    await waitFor(() => expect(addButton).toHaveAttribute("aria-disabled", "false"));
-    await user.click(addButton);
-
-    await waitFor(() => expect(saveMock).toHaveBeenCalled());
-
-    const saved = saveMock.mock.calls[0][0] as { roomMap: RoomMapConfig; roomMapVersion: number };
-    expect(saved.roomMap).not.toHaveProperty("hueZones");
-    expect(saved.roomMap.zones).toHaveLength(2);
-    expect(saved.roomMap.zones[0]).toEqual(existingZone);
-    expect(saved.roomMap.zones[1]).toMatchObject({
-      entertainmentAreaId: "area-1",
-      channelIndices: [],
-    });
-    expect(saved.roomMapVersion).toBe(8);
-  });
-
-  it("numbers the new zone from the rendered zone list and omits the deprecated centerColor", async () => {
-    const user = userEvent.setup();
-    renderWithHue();
-
-    const addButton = await screen.findByRole("button", { name: "Add Hue zone" });
-    await waitFor(() => expect(addButton).toHaveAttribute("aria-disabled", "false"));
-    await user.click(addButton);
-
-    await waitFor(() => expect(saveMock).toHaveBeenCalled());
-
-    const saved = saveMock.mock.calls[0][0] as { roomMap: RoomMapConfig };
-    const created = saved.roomMap.zones[1];
-    expect(created.name).toBe("Zone 2");
-    expect(created).not.toHaveProperty("centerColor");
-  });
-
-  it("mirrors the canonical zone list to the backend under the request envelope", async () => {
-    const user = userEvent.setup();
-    renderWithHue();
-
-    const addButton = await screen.findByRole("button", { name: "Add Hue zone" });
-    await waitFor(() => expect(addButton).toHaveAttribute("aria-disabled", "false"));
-    await user.click(addButton);
-
-    await waitFor(() => expect(createHueZoneMock).toHaveBeenCalled());
-
-    const payload = createHueZoneMock.mock.calls[0][0] as {
-      zone: HueZone;
-      existingZones: HueZone[];
-    };
-    expect(payload.existingZones).toEqual([existingZone]);
-    expect(payload.zone.entertainmentAreaId).toBe("area-1");
+    expect(onAddOutput).toHaveBeenCalledOnce();
+    expect(saveMock).not.toHaveBeenCalled();
+    expect(createHueZoneMock).not.toHaveBeenCalled();
   });
 });
 

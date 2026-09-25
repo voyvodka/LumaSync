@@ -208,6 +208,9 @@ export default {
       empty: "No displays enumerated.",
       cellId: "ID",
       cellScale: "Scale",
+      capturing: "Capturing",
+      captureSource: "Capture source",
+      chooseInLedSetup: "Choose the capture display in LED Setup",
     },
     manual: {
       body: "Manual device entry isn't available yet. To add a strip, rescan on USB Strips; a WLED device can be added by its IP address.",

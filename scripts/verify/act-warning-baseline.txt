@@ -6,4 +6,6 @@
 # telemetry, and the poll's ticks were what landed outside act.
 # 2026-09-24: DeviceSection.test.tsx 24 → 0 — its rail tests settle the page's
 # store reads inside act.
-74
+# 2026-09-25: 74 → 66 after the Settings and notices audit fixes, the same count
+# on two full runs.
+66

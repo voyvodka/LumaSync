@@ -92,6 +92,10 @@ export interface DeviceSectionProps {
   onVisibleCategoryChange?: (category: DeviceCategory | null) => void;
   /** A bridge is paired and Hue is streaming: what the Hue badge counts. */
   hueActive?: boolean;
+  /** Ambilight runs, so Displays marks its source as being captured. */
+  ambilightActive?: boolean;
+  /** Displays links to the display picker, which lives in LED Setup. */
+  onOpenLedSetup?: () => void;
 }
 
 interface RailButtonProps {
@@ -150,6 +154,8 @@ export function DeviceSection({
   categoryRequest = null,
   onVisibleCategoryChange,
   hueActive = false,
+  ambilightActive = false,
+  onOpenLedSetup,
 }: DeviceSectionProps) {
   const { t } = useTranslation();
 
@@ -384,7 +390,12 @@ export function DeviceSection({
 
         <WledCategory isActive={activeCategory === "wled"} />
 
-        <DisplaysCategory isActive={activeCategory === "displays"} displays={displays} />
+        <DisplaysCategory
+          isActive={activeCategory === "displays"}
+          displays={displays}
+          capturing={ambilightActive}
+          onOpenLedSetup={onOpenLedSetup}
+        />
 
         <ManualEntryCategory isActive={activeCategory === "manual"} />
       </div>

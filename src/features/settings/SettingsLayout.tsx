@@ -72,6 +72,8 @@ const LightsPanel = memo(function LightsPanel() {
   const lighting = useLightingControlState(selectLighting);
   const hue = useHueShellStatus(selectHue);
   const { changeMode, changeOutputTargets } = useLightingActions();
+  const { goToSection } = useNavigationActions();
+  const openDevices = useCallback(() => void goToSection(SECTION_IDS.DEVICES), [goToSection]);
   return (
     <div className="h-full overflow-hidden">
       <LightsSection
@@ -91,6 +93,7 @@ const LightsPanel = memo(function LightsPanel() {
         isModeTransitioning={lighting.isModeTransitioning}
         onModeChange={changeMode}
         onOutputTargetsChange={changeOutputTargets}
+        onAddOutput={openDevices}
       />
     </div>
   );
@@ -129,14 +132,17 @@ const CalibrationPanel = memo(function CalibrationPanel({
 
 const selectDeviceCategoryRequest = (state: NavigationState) => state.deviceCategoryRequest;
 const selectHueActive = (status: HueShellStatus) => status.configured && status.streaming;
+const selectAmbilightActive = (state: LightingControlState) => state.lightingMode.kind === "ambilight";
 
 const DevicesPanel = memo(function DevicesPanel() {
   const categoryRequest = useNavigationState(selectDeviceCategoryRequest);
   const hueActive = useHueShellStatus(selectHueActive);
+  const ambilightActive = useLightingControlState(selectAmbilightActive);
   const reportVisibleCategory = useVisibleDeviceCategoryReporter();
   const { goToSection } = useNavigationActions();
   const { stopHueOutput } = useLightingActions();
   const openRoomMap = useCallback(() => void goToSection(SECTION_IDS.ROOM_MAP), [goToSection]);
+  const openLedSetup = useCallback(() => void goToSection(SECTION_IDS.LED_SETUP), [goToSection]);
   return (
     <div className="h-full overflow-hidden">
       <DeviceSection.Component
@@ -145,25 +151,33 @@ const DevicesPanel = memo(function DevicesPanel() {
         categoryRequest={categoryRequest}
         onVisibleCategoryChange={reportVisibleCategory}
         hueActive={hueActive}
+        ambilightActive={ambilightActive}
+        onOpenLedSetup={openLedSetup}
       />
     </div>
   );
 });
 
 const selectLocalOutputConnected = (state: LightingControlState) => state.localSink !== null;
+const selectHueSessionActive = (status: HueShellStatus) => status.streaming || status.reconnecting;
 const selectCheckingForUpdates = (snapshot: UpdaterSnapshot) => snapshot.state.status === "checking";
+const selectUpToDateAt = (snapshot: UpdaterSnapshot) => snapshot.upToDateAt;
 
 const SystemPanel = memo(function SystemPanel() {
   const localOutputConnected = useLightingControlState(selectLocalOutputConnected);
+  const hueActive = useHueShellStatus(selectHueSessionActive);
   const isCheckingForUpdates = useUpdaterState(selectCheckingForUpdates);
+  const upToDateAt = useUpdaterState(selectUpToDateAt);
   const { checkForUpdates, devSetState } = useUpdaterActions();
   return (
     <div className="h-full overflow-hidden">
       <SystemSection
         onCheckForUpdates={checkForUpdates}
         isCheckingForUpdates={isCheckingForUpdates}
+        upToDateAt={upToDateAt}
         devSetUpdaterState={devSetState}
         localOutputConnected={localOutputConnected}
+        hueActive={hueActive}
       />
     </div>
   );

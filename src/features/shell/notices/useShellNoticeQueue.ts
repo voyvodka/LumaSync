@@ -260,6 +260,10 @@ export function useShellNoticeQueue(
     setAnnounced(top);
   }, [top, suppressed]);
 
+  // A live region keeps its last text, so a notice that has left would still be
+  // what a screen reader finds there — "Checking outputs…" long after the check.
+  const announcedStillShown = announced !== null && entries.some((entry) => entry.key === announced.key);
+
   return {
     entries,
     expanded: expanded && !isEmpty,
@@ -267,6 +271,6 @@ export function useShellNoticeQueue(
     dismiss,
     holdProps,
     releaseHold,
-    announced,
+    announced: announcedStillShown ? announced : null,
   };
 }

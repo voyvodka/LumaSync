@@ -57,6 +57,9 @@ export function useAutoUpdater() {
   // Hides the status that was dismissed, not the updater. Setting `idle`
   // instead hid nothing — the progress listener kept writing `downloading`.
   const [dismissedStatus, setDismissedStatus] = useState<UpdaterState["status"] | null>(null);
+  // An up-to-date answer leaves the state at `idle`, which is also "never
+  // checked"; without this a check the user asked for said nothing at all.
+  const [upToDateAt, setUpToDateAt] = useState<number | null>(null);
   const lastStartRef = useRef<number>(0);
   const checkGuardRef = useRef(createLatestOperationGuard());
 
@@ -75,7 +78,10 @@ export function useAutoUpdater() {
       // The startup check and a Retry press can be in flight together and resolve
       // in either order; without this the older answer lands last and wins.
       const isLatest = checkGuardRef.current.begin();
-      if (trigger === "user") holdCheckFailed();
+      if (trigger === "user") {
+        holdCheckFailed();
+        setUpToDateAt(null);
+      }
 
       const storedChannel = await readUpdateChannel();
       if (!isLatest()) return;
@@ -107,6 +113,7 @@ export function useAutoUpdater() {
         } else if (response.status.code === UPDATER_STATUS.UP_TO_DATE) {
           clearCheckFailed();
           setState({ status: "idle" });
+          if (trigger === "user") setUpToDateAt(Date.now());
         } else {
           console.warn(`[LumaSync] update check failed (${trigger}):`, {
             code: response.status.code,
@@ -224,6 +231,7 @@ export function useAutoUpdater() {
     checkForUpdates,
     checkForUpdatesInBackground,
     checkFailedNotice,
+    upToDateAt,
     downloadAndInstall,
     dismiss,
     devSetState,
