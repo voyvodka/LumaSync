@@ -241,6 +241,16 @@ const device: Catalogue<typeof enDevice> = {
       pill: {
         discovered: "BULUNDU",
         connected: "AKTİF",
+        saved: "KAYITLI",
+      },
+      savedDevice: "Kayıtlı WLED cihazı",
+      forgetAction: "Cihazı unut",
+      forgetting: "Unutuluyor...",
+      forgetConfirm: {
+        title: "Bu WLED cihazı unutulsun mu?",
+        body: "LumaSync {{ip}} adresine göndermeyi bırakır ve açılışta artık ona bağlanmaz. Aydınlatma diğer çıkışlarında sürer; tek çıkış buysa durur.",
+        confirm: "Cihazı unut",
+        cancel: "İptal",
       },
       restore: {
         restoring: "{{ip}} adresindeki kayıtlı WLED cihazına yeniden bağlanılıyor...",
@@ -264,6 +274,8 @@ const device: Catalogue<typeof enDevice> = {
         testSendFailed: "Test karesi cihaza gönderilemedi.",
         sinkNotStarted: "Test etmeden önce cihaza bağlan.",
         workerFailed: "LumaSync isteği tamamlayamadı. Tekrar dene.",
+        forgetOk: "Cihaz unutuldu. Kullanmak için yeniden tara.",
+        forgetFailed: "Cihaz unutulamadı. Hiçbir şey değişmedi.",
       },
     },
   },

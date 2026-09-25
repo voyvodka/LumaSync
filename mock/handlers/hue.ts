@@ -17,6 +17,8 @@
 import {
   HUE_AREA_CHANNELS_STATUS,
   HUE_COMMANDS,
+  HUE_IDENTIFY_STATUS,
+  HUE_LIGHT_NAMES_STATUS,
   HUE_READINESS_REASON,
   HUE_RUNTIME_STATES,
   HUE_RUNTIME_STATUS,
@@ -444,6 +446,32 @@ export const hueHandlers = {
     status: status(HUE_STATUS.PAIRING_OK, "Nothing to migrate"),
     backend: "keychain" as const,
   }),
+
+  /** Each light is named after its channel, as `get_hue_area_channels` ids them. */
+  [HUE_COMMANDS.GET_LIGHT_NAMES]: ({ lightIds }) => {
+    const { hue } = getWorld();
+    if (!hue.reachable) {
+      return { status: status(HUE_LIGHT_NAMES_STATUS.FAILED, "Bridge unreachable"), lights: [] };
+    }
+    if (!hue.credentialValid) {
+      return { status: status(HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED, "Key rejected"), lights: [] };
+    }
+    const lights = lightIds.flatMap((id) => {
+      const channel = hue.channels.find((c) => `light-${c.index}` === id);
+      return channel ? [{ id, name: channel.name }] : [];
+    });
+    return { status: status(HUE_LIGHT_NAMES_STATUS.OK, "Hue light names loaded."), lights };
+  },
+
+  [HUE_COMMANDS.IDENTIFY_LIGHTS]: () => {
+    const { hue } = getWorld();
+    if (hue.streaming) {
+      return status(HUE_IDENTIFY_STATUS.BLOCKED_STREAMING, "Hue is streaming to these lights.");
+    }
+    if (!hue.reachable) return status(HUE_IDENTIFY_STATUS.FAILED, "No Hue light was identified.", "Bridge unreachable");
+    if (!hue.credentialValid) return status(HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED, "Key rejected");
+    return status(HUE_IDENTIFY_STATUS.OK, "The light blinks once.");
+  },
 
   [HUE_COMMANDS.SET_SOLID_COLOR]: () => {
     const { hue } = getWorld();

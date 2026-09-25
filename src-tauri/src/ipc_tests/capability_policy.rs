@@ -153,6 +153,10 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     ("watch_hue_health", MAIN_ONLY),
     ("retry_hue_health", MAIN_ONLY),
     ("get_hue_area_channels", MAIN_ONLY),
+    // The Devices page: the channel map's names and Identify, and Forget.
+    ("get_hue_light_names", MAIN_ONLY),
+    ("identify_hue_lights", MAIN_ONLY),
+    ("forget_hue_bridge", MAIN_ONLY),
     ("get_runtime_telemetry", MAIN_ONLY),
     ("get_screen_capture_permission", MAIN_ONLY),
     ("open_screen_capture_settings", MAIN_ONLY),
@@ -172,6 +176,7 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     ("connect_wled_sink", MAIN_ONLY),
     ("test_wled_bridge", MAIN_ONLY),
     ("get_wled_sink_status", MAIN_ONLY),
+    ("forget_wled_device", MAIN_ONLY),
     ("open_led_twin_overlay", MAIN_ONLY),
     ("open_led_control_popup", MAIN_ONLY),
     ("show_led_control_popup", MAIN_ONLY),

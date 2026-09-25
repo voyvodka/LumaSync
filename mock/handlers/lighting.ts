@@ -9,7 +9,12 @@
  */
 
 import { DEVICE_COMMANDS } from "../../src/shared/contracts/device";
-import { HUE_COMMANDS, HUE_RUNTIME_STATUS, type HueRuntimeTarget } from "../../src/shared/contracts/hue";
+import {
+  HUE_COMMANDS,
+  HUE_FORGET_STATUS,
+  HUE_RUNTIME_STATUS,
+  type HueRuntimeTarget,
+} from "../../src/shared/contracts/hue";
 import { HUE_LEFT_OUT_REASON, type HueLeftOutReason } from "../../src/shared/contracts/lighting";
 import { LIGHTING_EVENTS } from "../../src/shared/contracts/lightingRuntime";
 import {
@@ -26,7 +31,7 @@ import { emitMockEvent } from "../events";
 import { getWorld, mutate } from "../state";
 import { deviceHandlers } from "./device";
 import { hueHandlers } from "./hue";
-import { writeShellStateKey } from "./shell";
+import { removeShellStateKeys, writeShellStateKey } from "./shell";
 import { status } from "./status";
 import type { TypedHandlers } from "./types";
 
@@ -96,6 +101,33 @@ function reply(
 function stopHueIfStreaming(): void {
   if (getWorld().hue.streaming) hueHandlers[HUE_COMMANDS.STOP_STREAM]();
 }
+
+function releaseHue(): ApplyOutputsResult {
+  const outcome = emptyOutcome();
+  mutate((w) => {
+    w.hue.streaming = false;
+    w.hue.stopped = true;
+    const remaining = (w.lighting.mode.targets ?? []).filter((t) => t !== "hue");
+    if (w.lighting.mode.kind !== "off" && remaining.length === 0) outcome.modeEnded = true;
+    w.lighting.mode =
+      remaining.length > 0
+        ? { ...w.lighting.mode, targets: remaining }
+        : { ...w.lighting.mode, kind: "off" };
+  });
+  return reply("OUTPUTS_APPLIED", outcome);
+}
+
+/** `HUE_BRIDGE_STATE_KEYS` in `commands/hue/forget.rs`. */
+const HUE_BRIDGE_STATE_KEYS = [
+  "lastHueBridge",
+  "lastHueAreaId",
+  "hueBridgeSyncedPositions",
+  "hueAppKey",
+  "hueClientKey",
+  "hueCredentialStatus",
+  "hueOnboardingStep",
+  "credentialStorageBackend",
+] as const;
 
 export const lightingRuntimeHandlers = {
   [LIGHTING_RUNTIME_COMMANDS.APPLY_OUTPUTS]: (args) => {
@@ -187,19 +219,53 @@ export const lightingRuntimeHandlers = {
     return { status: status("RETUNE_APPLIED", "Retuned") };
   },
 
-  [LIGHTING_RUNTIME_COMMANDS.RELEASE_HUE_OUTPUT]: () => {
-    const outcome = emptyOutcome();
+  [LIGHTING_RUNTIME_COMMANDS.RELEASE_HUE_OUTPUT]: () => releaseHue(),
+
+  // Hue out of the lighting, the saved outputs and the saved pairing, as
+  // `forget_hue_bridge` does it.
+  [HUE_COMMANDS.FORGET_BRIDGE]: () => {
+    releaseHue();
+    const saved = savedTargets();
+    if (saved.includes("hue")) {
+      selection = saved.filter((t) => t !== "hue");
+      writeShellStateKey("lastOutputTargets", selection);
+    }
+    removeShellStateKeys(HUE_BRIDGE_STATE_KEYS);
     mutate((w) => {
-      w.hue.streaming = false;
-      w.hue.stopped = true;
-      const remaining = (w.lighting.mode.targets ?? []).filter((t) => t !== "hue");
-      if (w.lighting.mode.kind !== "off" && remaining.length === 0) outcome.modeEnded = true;
-      w.lighting.mode =
-        remaining.length > 0
-          ? { ...w.lighting.mode, targets: remaining }
-          : { ...w.lighting.mode, kind: "off" };
+      w.hue.appKey = null;
+      w.hue.selectedBridgeId = null;
+      w.hue.selectedAreaId = null;
     });
-    return reply("OUTPUTS_APPLIED", outcome);
+    publish();
+    return status(HUE_FORGET_STATUS.OK, "The Hue bridge was forgotten.");
+  },
+
+  // The local channel loses its device as on an unplug: session only.
+  [DEVICE_COMMANDS.FORGET_WLED_DEVICE]: ({ request }) => {
+    const world = getWorld();
+    if (world.wled.connectedHost === request.ip) {
+      const run = selection ?? savedTargets();
+      if (run.includes("usb") && world.serial.connectedPort === null) {
+        selection = run.filter((t) => t !== "usb");
+        if (world.lighting.mode.kind !== "off") {
+          if (selection.length === 0) {
+            deviceHandlers[DEVICE_COMMANDS.STOP_LIGHTING]();
+          } else {
+            const rest = selection;
+            mutate((w) => {
+              w.lighting.mode = { ...w.lighting.mode, targets: rest };
+            });
+          }
+        }
+      }
+      mutate((w) => {
+        w.wled.connectedHost = null;
+      });
+    }
+    const savedSink = getWorld().shellState?.lastWledSink;
+    if (savedSink?.ip === request.ip) removeShellStateKeys(["lastWledSink"]);
+    publish();
+    return { status: status("WLED_FORGET_OK", "The WLED device was forgotten.") };
   },
 
   [LIGHTING_RUNTIME_COMMANDS.GET_LIGHTING_RUNTIME]: () => snapshot(),

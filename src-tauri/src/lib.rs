@@ -77,7 +77,9 @@ use commands::hue::commands::{
     get_hue_area_channels, get_hue_stream_status, restart_hue_stream, set_hue_solid_color,
     simulate_hue_fault, start_hue_stream, stop_hue_stream,
 };
+use commands::hue::forget::forget_hue_bridge;
 use commands::hue::health::{get_hue_health, retry_hue_health, watch_hue_health};
+use commands::hue::lights::{get_hue_light_names, identify_hue_lights};
 use commands::hue::state_store::HueRuntimeStateStore;
 use commands::hue_onboarding::{
     check_hue_stream_readiness, discover_hue_bridges, list_hue_entertainment_areas,
@@ -115,7 +117,8 @@ use commands::shell_state::{
 use commands::updater::{check_for_update, download_and_install_update, PendingUpdate};
 use commands::window_visibility::{get_main_window_visibility, MainWindowVisibilityState};
 use commands::wled_discovery::{
-    connect_wled_sink, discover_wled_devices, get_wled_sink_status, test_wled_bridge,
+    connect_wled_sink, discover_wled_devices, forget_wled_device, get_wled_sink_status,
+    test_wled_bridge,
 };
 use events::{SHELL_CLOSE_TO_TRAY_EVENT, TRAY_SHOW_LED_PREVIEW_EVENT};
 
@@ -834,6 +837,10 @@ pub fn run() {
             watch_hue_health,
             retry_hue_health,
             get_main_window_visibility,
+            forget_hue_bridge,
+            get_hue_light_names,
+            identify_hue_lights,
+            forget_wled_device,
         ])
         .build(app_context())
         .expect("error while building tauri application");

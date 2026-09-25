@@ -23,6 +23,9 @@
 //!   `HueHealthSnapshot` on `hue://health`
 //! - `light_restore` — the area's pre-stream light state, captured before the
 //!   first start and written back once Hue output ends
+//! - `lights` — the channel map's light names and its Identify blink
+//! - `forget` — forgetting the paired bridge: out of the lighting, the saved
+//!   state and the keychain
 //! - `transport` — the one HTTP layer for bridge calls: address guard,
 //!   shared clients bound to the key's bridge, response size cap
 //! - `bridge_identity` — bridge certificate check: Signify roots, CN =
@@ -44,12 +47,14 @@ pub mod commands;
 pub mod credential_store;
 pub mod dtls;
 pub mod easing;
+pub mod forget;
 pub mod frame;
 pub mod health;
 #[cfg(test)]
 mod health_tests;
 pub mod hue_config;
 pub mod light_restore;
+pub mod lights;
 pub mod pin_store;
 pub mod reconnect;
 pub mod retry;

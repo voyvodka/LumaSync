@@ -4,6 +4,9 @@ import {
   type HueCredentialMigrationResponse,
   type HueDiscoveryResponse,
   type HueEntertainmentAreaListResponse,
+  type HueForgetStatus,
+  type HueIdentifyStatus,
+  type HueLightNamesResponse,
   type HuePairBridgeResponse,
   type HueStreamReadinessResponse,
   type HueValidateCredentialsResponse,
@@ -107,4 +110,29 @@ export async function getHueAreaChannels(
     username,
     areaId,
   });
+}
+
+/** Forget the paired bridge: Hue leaves the lighting, the saved outputs and
+ * the saved pairing, and its key pair leaves the keychain. Never throws;
+ * check `code`. */
+export async function forgetHueBridge(bridgeId: string): Promise<HueForgetStatus> {
+  return invokeCommand(HUE_COMMANDS.FORGET_BRIDGE, { bridgeId });
+}
+
+/** The Hue app's names for `lightIds`, from one read of the bridge's lights. */
+export async function getHueLightNames(
+  bridgeIp: string,
+  username: string,
+  lightIds: string[],
+): Promise<HueLightNamesResponse> {
+  return invokeCommand(HUE_COMMANDS.GET_LIGHT_NAMES, { bridgeIp, username, lightIds });
+}
+
+/** Blink each light once; refused while a stream owns them. */
+export async function identifyHueLights(
+  bridgeIp: string,
+  username: string,
+  lightIds: string[],
+): Promise<HueIdentifyStatus> {
+  return invokeCommand(HUE_COMMANDS.IDENTIFY_LIGHTS, { bridgeIp, username, lightIds });
 }

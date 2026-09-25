@@ -28,8 +28,23 @@ https://keepachangelog.com/en/1.1.0/
   status bar and the telemetry readout. It is off by default, and while it is off the app no longer
   asks for those numbers at all; the status bar shows just the connection chips. A capture that
   stops mid-stream is still reported either way.
+- Hue: the channel list on Devices → Hue Bridges names each channel's lights the way the Hue app
+  does, and an Identify button makes a channel's lights blink once so you can tell which lamp is
+  which. Identify is off while Hue is streaming to them.
+- WLED: the WLED page keeps showing your saved device after you leave it, with a "Forget device"
+  action. Forgetting stops sending to it (lighting carries on with your other outputs, or stops if
+  it was the only one) and stops LumaSync reconnecting to it at launch.
 
 ### Changed
+
+- Hue: Forget now forgets the bridge. It asks first, then stops Hue, takes it out of your outputs,
+  and removes the pairing and its key from this computer; your room map keeps its Hue lights. The
+  bridge still lists LumaSync as an authorised app, which only your Hue account can remove
+  (account.meethue.com/apps), and the app says so. Until now Forget only closed the card, and the
+  bridge came back, still streaming, on the next launch.
+- Hue: an app started into the tray checks the bridge once at launch, so the status chip and the
+  tray know whether it is reachable before the window is first opened. While the window stays
+  hidden there is still no other bridge traffic.
 
 - Lighting: Off now turns your lights off. The LED strip goes dark instead of holding its last
   colours, a WLED device is switched off instead of going back to its own effect, and Hue lights

@@ -33,6 +33,7 @@ import type {
   SerialPortListResponse,
   WledConnectResponse,
   WledDeviceInfo,
+  WledForgetResponse,
   WledDiscoveryResponse,
   WledProtocol,
   WledSinkStatus,
@@ -54,6 +55,9 @@ import type {
   HueDebugCommandCode,
   HueDiscoveryResponse,
   HueEntertainmentAreaListResponse,
+  HueForgetStatus,
+  HueIdentifyStatus,
+  HueLightNamesResponse,
   HuePairBridgeResponse,
   HueRuntimeCommandResult,
   HueRuntimeTriggerSource,
@@ -150,6 +154,7 @@ export interface CommandMap {
   >;
   test_wled_bridge: Command<{ request: { device: WledDeviceInfo } }, WledTestResponse>;
   get_wled_sink_status: NoArgs<WledSinkStatus>;
+  forget_wled_device: Command<{ request: { ip: string } }, WledForgetResponse>;
 
   // --- display overlay ----------------------------------------------------
   list_displays: NoArgs<DisplayInfo[]>;
@@ -175,6 +180,15 @@ export interface CommandMap {
   check_hue_stream_readiness: Command<HueAreaArgs, HueStreamReadinessResponse>;
   get_hue_area_channels: Command<HueAreaArgs, HueAreaChannelListResponse>;
   migrate_hue_credentials: Command<{ username: string; clientKey: string }, HueCredentialMigrationResponse>;
+  forget_hue_bridge: Command<{ bridgeId: string }, HueForgetStatus>;
+  get_hue_light_names: Command<
+    { bridgeIp: string; username: string; lightIds: string[] },
+    HueLightNamesResponse
+  >;
+  identify_hue_lights: Command<
+    { bridgeIp: string; username: string; lightIds: string[] },
+    HueIdentifyStatus
+  >;
 
   // --- hue: runtime -------------------------------------------------------
   start_hue_stream: Command<{ request: StartHueStreamRequest }, HueRuntimeCommandResult>;

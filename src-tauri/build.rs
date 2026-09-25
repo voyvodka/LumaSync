@@ -68,6 +68,10 @@ const APP_COMMANDS: &[&str] = &[
     "watch_hue_health",
     "retry_hue_health",
     "get_main_window_visibility",
+    "forget_hue_bridge",
+    "get_hue_light_names",
+    "identify_hue_lights",
+    "forget_wled_device",
 ];
 
 fn main() {

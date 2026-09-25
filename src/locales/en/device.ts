@@ -240,6 +240,16 @@ export default {
       pill: {
         discovered: "DISCOVERED",
         connected: "ACTIVE",
+        saved: "SAVED",
+      },
+      savedDevice: "Saved WLED device",
+      forgetAction: "Forget device",
+      forgetting: "Forgetting...",
+      forgetConfirm: {
+        title: "Forget this WLED device?",
+        body: "LumaSync stops sending to {{ip}} and no longer connects to it at launch. Lighting keeps running on your other outputs, or stops if this was the only one.",
+        confirm: "Forget device",
+        cancel: "Cancel",
       },
       restore: {
         restoring: "Reconnecting to the saved WLED device at {{ip}}...",
@@ -263,6 +273,8 @@ export default {
         testSendFailed: "Could not send the test frame to the device.",
         sinkNotStarted: "Connect the device before testing it.",
         workerFailed: "LumaSync could not finish the request. Try again.",
+        forgetOk: "Device forgotten. Discover it again to use it.",
+        forgetFailed: "The device was not forgotten. Nothing was changed.",
       },
     },
   },

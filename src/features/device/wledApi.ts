@@ -11,6 +11,7 @@ import {
   type WledConnectResponse,
   type WledDeviceInfo,
   type WledDiscoveryResponse,
+  type WledForgetResponse,
   type WledSinkStatus,
   type WledTestResponse,
   type WledUdpSinkConfig,
@@ -82,4 +83,10 @@ export async function testWledBridge(
   return invokeCommand(DEVICE_COMMANDS.TEST_WLED_BRIDGE, {
     request: { device },
   });
+}
+
+/** Stop sending to the device at `ip`, unbind it and drop it from the saved
+ * state. Contacts nothing on the network. Never throws; check `status.code`. */
+export async function forgetWledDevice(ip: string): Promise<WledForgetResponse> {
+  return invokeCommand(DEVICE_COMMANDS.FORGET_WLED_DEVICE, { request: { ip } });
 }

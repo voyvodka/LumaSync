@@ -1657,7 +1657,8 @@ checkWireUnion(
   ),
   // 14 → 16: the two `spawn_blocking` worker-death codes, added when discovery
   // and test moved off the main thread. 16 → 17: connect followed them.
-  17
+  // 17 → 19: `forget_wled_device`'s OK and FAILED.
+  19
 );
 
 const rustHueRuntimeSource = walkRustSourceFiles(resolve(ROOT, "src-tauri/src/commands/hue"))
@@ -1684,6 +1685,24 @@ checkWireUnion(
   "HueAreaChannelsWireStatusCode",
   [...rustHueRuntimeSource.matchAll(/area_channels_status\(\s*"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]),
   [...constMembers(hueSource, "HUE_AREA_CHANNELS_STATUS"), "AUTH_INVALID_RE_PAIR_REQUIRED"],
+  5
+);
+
+// The forget, light-name and identify commands each build their status through
+// one constructor, so each family is harvested from it.
+const hueLiteralCodes = (fn) =>
+  [...rustHueRuntimeSource.matchAll(new RegExp(`${fn}\\(\\s*"([A-Z][A-Z0-9_]*)"`, "g"))].map((m) => m[1]);
+checkWireUnion("HueForgetStatusCode", hueLiteralCodes("forget_status"), constMembers(hueSource, "HUE_FORGET_STATUS"), 3);
+checkWireUnion(
+  "HueLightNamesWireStatusCode",
+  hueLiteralCodes("light_names_status"),
+  [...constMembers(hueSource, "HUE_LIGHT_NAMES_STATUS"), "AUTH_INVALID_RE_PAIR_REQUIRED"],
+  3
+);
+checkWireUnion(
+  "HueIdentifyWireStatusCode",
+  hueLiteralCodes("identify_status"),
+  [...constMembers(hueSource, "HUE_IDENTIFY_STATUS"), "AUTH_INVALID_RE_PAIR_REQUIRED"],
   5
 );
 
@@ -2533,7 +2552,9 @@ const checkedPairs = nullabilityPairs.filter(
 // and lost the `Serialize` derive instead.
 // 83 → 84: `MainWindowVisibility`, the `get_main_window_visibility` response
 // and `shell://main-window-visibility` payload.
-const EXPECTED_NULLABILITY_PAIR_COUNT = 84;
+// 84 → 87: `HueLightName`, `HueLightNamesResponse` (`get_hue_light_names`) and
+// `WledForgetResponse` (`forget_wled_device`).
+const EXPECTED_NULLABILITY_PAIR_COUNT = 87;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

@@ -3,9 +3,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   HUE_CREDENTIAL_BACKENDS,
   HUE_CREDENTIAL_STATUS,
+  HUE_FORGET_STATUS,
   HUE_ONBOARDING_STEP,
   HUE_RUNTIME_STATUS,
   HUE_STATUS,
+  type HueForgetStatus,
 } from "@/shared/contracts/hue";
 import type { ShellState } from "@/shared/contracts/shell";
 import { parseCommandError } from "@/shared/contracts/status";
@@ -45,6 +47,7 @@ import {
 import {
   checkHueStreamReadiness,
   discoverHueBridges,
+  forgetHueBridge,
   listHueEntertainmentAreas,
   migrateHueCredentials,
   pairHueBridge,
@@ -68,6 +71,7 @@ export interface UseHueOnboardingCoreResult {
   ) => void;
   discover: () => Promise<void>;
   selectBridge: (bridgeId: string | null) => void;
+  forgetBridge: () => Promise<HueForgetStatus | null>;
   setManualIp: (value: string) => void;
   submitManualIp: () => Promise<void>;
   recheckBridge: () => Promise<void>;
@@ -500,6 +504,45 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
     [patchState, stopPairingPoll],
   );
 
+  // Rust clears the saved pairing and the keychain pair; this clears what the
+  // hook holds, unless nothing was forgotten.
+  const forgetBridge = useCallback(async (): Promise<HueForgetStatus | null> => {
+    const bridgeId = stateRef.current.selectedBridgeId;
+    if (bridgeId === null) return null;
+    stopPairingPoll();
+    let response: HueForgetStatus;
+    try {
+      response = await forgetHueBridge(bridgeId);
+    } catch (error) {
+      console.error("[LumaSync] Forgetting the Hue bridge failed:", error);
+      return {
+        code: HUE_FORGET_STATUS.FAILED,
+        message: "The Hue bridge was not forgotten.",
+        details: parseCommandError(error).message,
+      };
+    }
+    if (response.code === HUE_FORGET_STATUS.FAILED) {
+      console.warn(`[LumaSync] Hue bridge not forgotten: ${response.details ?? response.message}`);
+      return response;
+    }
+    setReadinessById(new Map());
+    setReadinessCheckedAtById(new Map());
+    patchState((prev) => ({
+      ...prev,
+      bridges: prev.bridges.filter((bridge) => !sameBridgeId(bridge.id, bridgeId)),
+      selectedBridgeId: null,
+      credentials: null,
+      credentialState: HUE_CREDENTIAL_STATUS.UNKNOWN,
+      bridgeUnreachable: false,
+      areaGroups: [],
+      selectedAreaId: null,
+      isPairing: false,
+      status: null,
+    }));
+    hueCredentialEvents.emit({ reason: "forgotten" });
+    return response;
+  }, [patchState, stopPairingPoll]);
+
   const submitManualIp = useCallback(async () => {
     const manualIp = normalizeIpValue(state.manualIp);
     const ipError = resolveManualIpError(manualIp);
@@ -815,6 +858,7 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
     applyBackgroundReadiness,
     discover,
     selectBridge,
+    forgetBridge,
     setManualIp,
     submitManualIp,
     recheckBridge,

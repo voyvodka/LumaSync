@@ -34,6 +34,13 @@ export const HUE_COMMANDS = {
   GET_AREA_CHANNELS: "get_hue_area_channels",
   UPDATE_CHANNEL_POSITIONS: "update_hue_channel_positions",
   MIGRATE_CREDENTIALS: "migrate_hue_credentials",
+  /** Stop Hue through the lighting transaction, drop it from the saved
+   * outputs, clear the saved pairing and delete the key pair. */
+  FORGET_BRIDGE: "forget_hue_bridge",
+  /** One read of the bridge's lights; the caller caches it, nothing polls. */
+  GET_LIGHT_NAMES: "get_hue_light_names",
+  /** One blink per light, through its owning device; refused while streaming. */
+  IDENTIFY_LIGHTS: "identify_hue_lights",
 } as const;
 
 export type HueCommandId = (typeof HUE_COMMANDS)[keyof typeof HUE_COMMANDS];
@@ -411,6 +418,59 @@ export function isHueSolidColorUnapplied(code: string): boolean {
     code === HUE_SOLID_COLOR_STATUS.APPLY_SKIPPED_NO_LIGHTS
   );
 }
+
+/** `forget_hue_bridge` codes. */
+export const HUE_FORGET_STATUS = {
+  OK: "HUE_FORGET_OK",
+  /** Forgotten, but the stream's stop did not confirm, the output selection
+   * was not saved, or the keychain refused the delete — `details` says which. */
+  PARTIAL: "HUE_FORGET_PARTIAL",
+  /** Nothing was cleared: the saved bridge is another one, the lighting could
+   * not let go of Hue, or the saved state could not be written. */
+  FAILED: "HUE_FORGET_FAILED",
+} as const;
+
+export type HueForgetStatusCode = (typeof HUE_FORGET_STATUS)[keyof typeof HUE_FORGET_STATUS];
+
+export type HueForgetStatus = CommandStatusOf<HueForgetStatusCode>;
+
+/** `get_hue_light_names` codes; a refused key borrows the runtime's re-pair code. */
+export const HUE_LIGHT_NAMES_STATUS = {
+  OK: "HUE_LIGHT_NAMES_OK",
+  FAILED: "HUE_LIGHT_NAMES_FAILED",
+} as const;
+
+export type HueLightNamesWireStatusCode =
+  | (typeof HUE_LIGHT_NAMES_STATUS)[keyof typeof HUE_LIGHT_NAMES_STATUS]
+  | typeof HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED;
+
+/** A light as the Hue app names it. A light the bridge lists without a name
+ * is left out of the answer, never named by its id. */
+export interface HueLightName {
+  id: string;
+  name: string;
+}
+
+/** Result of `get_hue_light_names`. `lights` is empty on every failure arm. */
+export interface HueLightNamesResponse {
+  status: CommandStatusOf<HueLightNamesWireStatusCode>;
+  lights: HueLightName[];
+}
+
+/** `identify_hue_lights` codes; a refused key borrows the runtime's re-pair code. */
+export const HUE_IDENTIFY_STATUS = {
+  OK: "HUE_IDENTIFY_OK",
+  PARTIAL: "HUE_IDENTIFY_PARTIAL",
+  /** A stream owns the lights; nothing was sent. */
+  BLOCKED_STREAMING: "HUE_IDENTIFY_BLOCKED_STREAMING",
+  FAILED: "HUE_IDENTIFY_FAILED",
+} as const;
+
+export type HueIdentifyWireStatusCode =
+  | (typeof HUE_IDENTIFY_STATUS)[keyof typeof HUE_IDENTIFY_STATUS]
+  | typeof HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED;
+
+export type HueIdentifyStatus = CommandStatusOf<HueIdentifyWireStatusCode>;
 
 /** Prefix families the runtime status codes fall into, for coarse-grained UI branching. */
 export const HUE_RUNTIME_STATUS_FAMILY = {
