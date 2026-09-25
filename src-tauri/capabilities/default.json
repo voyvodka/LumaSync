@@ -45,6 +45,12 @@
       "allow": [
         {
           "url": "https://lumasync.app/*"
+        },
+        {
+          "url": "https://github.com/voyvodka/LumaSync/issues/new*"
+        },
+        {
+          "url": "https://github.com/voyvodka/LumaSync/discussions*"
         }
       ]
     },

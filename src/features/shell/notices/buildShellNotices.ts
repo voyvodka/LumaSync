@@ -58,6 +58,11 @@ export interface ShellNoticeInput {
   hueColorNotice: HueSolidColorStatusCode | null;
   /** The step the onboarding flow would show now, or `null`. */
   onboardingStep: OnboardingStep | null;
+  /** A guide step exists but is held back until the guards settle. */
+  onboardingPending: boolean;
+  /** The Ambilight button is enabled, so the last guide step can turn it on in place. */
+  ambilightReady: boolean;
+  modeTransitioning: boolean;
   /** The port a strip just connected on with no LED layout saved, or `null`. */
   ledSetupNext: string | null;
   /** A USB strip or WLED panel is bound — the only outputs calibration applies to. */
@@ -82,6 +87,7 @@ export interface ShellNoticeHandlers {
   retryHueProbe?: () => void;
   retryHueStop: () => void;
   completeOnboarding: () => void;
+  turnOnAmbilight: () => void;
   retryUpdateCheck: () => void;
 }
 
@@ -127,9 +133,9 @@ const PREVIEW_OPEN_FAILED_MESSAGE: Record<PreviewOpenFailure, TranslationKey> = 
 };
 
 const ONBOARDING_MESSAGE: Record<Exclude<OnboardingStep, "complete">, TranslationKey> = {
-  [ONBOARDING_STEPS.LIGHTS]: "shell:notices.messages.onboarding.lights",
   [ONBOARDING_STEPS.DEVICES]: "shell:notices.messages.onboarding.devices",
   [ONBOARDING_STEPS.LED_SETUP]: "shell:notices.messages.onboarding.ledSetup",
+  [ONBOARDING_STEPS.TURN_ON]: "shell:notices.messages.onboarding.turnOn",
 };
 
 function startFailureMessage(failure: CaptureFailureNotice, t: TFunction): string {
@@ -178,7 +184,14 @@ export function buildShellNotices(
   // are dim, so they show where those buttons are: always in compact, and on
   // the Lights section in full.
   const onLights = compact || input.activeSection === SECTION_IDS.LIGHTS;
-  const outputNoneShown = onLights && input.availability === "none";
+  // The guide's first step says what "no reachable output" says, as a welcome
+  // rather than a red error on a fresh install — so it wins, and the error
+  // waits while a step is still being decided. Only the copy for a bridge probe
+  // that gave up adds something the step does not: a retry.
+  const guideExplainsNoOutput =
+    !input.hueProbeGaveUp &&
+    (input.onboardingPending || input.onboardingStep === ONBOARDING_STEPS.DEVICES);
+  const outputNoneShown = onLights && input.availability === "none" && !guideExplainsNoOutput;
   // With nothing to send frames to, calibrating is not the next step.
   const calibrationShown = onLights && input.calibrationRequired && input.availability !== "none";
 
@@ -450,7 +463,7 @@ export function buildShellNotices(
   const onboardingHidden =
     step === null ||
     step === ONBOARDING_STEPS.COMPLETE ||
-    // "Connect your lights" says what the no-output notice already says.
+    // Only after the bridge probe gave up, when the no-output notice carries the retry.
     (step === ONBOARDING_STEPS.DEVICES && outputNoneShown) ||
     // "Calibrate your LEDs" says what the calibration notice already says.
     (step === ONBOARDING_STEPS.LED_SETUP && calibrationShown) ||
@@ -482,11 +495,19 @@ export function buildShellNotices(
 
   if (!onboardingHidden) {
     const action =
-      step === ONBOARDING_STEPS.LIGHTS
-        ? // Compact is the Lights screen already, and so is full on Lights.
-          onLights
-          ? undefined
-          : { label: t("shell:notices.actions.lights"), onClick: handlers.openLights, navigates: true }
+      step === ONBOARDING_STEPS.TURN_ON
+        ? input.ambilightReady
+          ? {
+              label: t("shell:notices.actions.turnOnAmbilight"),
+              onClick: handlers.turnOnAmbilight,
+              pending: input.modeTransitioning,
+              testId: "onboarding-turn-on",
+            }
+          : // Whatever locks the button says so on the Lights screen, which
+            // compact and full-on-Lights already are.
+            onLights
+            ? undefined
+            : { label: t("shell:notices.actions.lights"), onClick: handlers.openLights, navigates: true }
         : step === ONBOARDING_STEPS.DEVICES
           ? devicesAction()
           : ledSetupAction;
@@ -499,6 +520,9 @@ export function buildShellNotices(
       step: `${stepIndex(step)}/${ONBOARDING_TOTAL_STEPS}`,
       action,
       dismissible: true,
+      // Skipping ends the guide for good (Settings → Help brings it back), so
+      // it is named for what it does rather than as a generic ×.
+      dismissLabel: t("shell:notices.skipSetupGuide"),
       onDismiss: handlers.completeOnboarding,
       source: step,
       testId: "onboarding-notice",

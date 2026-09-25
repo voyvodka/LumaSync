@@ -40,7 +40,7 @@ describe("buildShellNotices", () => {
       usbDisconnected: true,
       usbUnsupported: true,
       hueColorNotice: HUE_SOLID_COLOR_STATUS.APPLY_SKIPPED,
-      onboardingStep: ONBOARDING_STEPS.LIGHTS,
+      onboardingStep: ONBOARDING_STEPS.TURN_ON,
     };
     // The builder lists notices by source (outputs after Hue and USB); only
     // the tier sort puts "calibration required" above them.
@@ -403,57 +403,92 @@ describe("buildShellNotices", () => {
   });
 
   describe("onboarding", () => {
-    // Step 2 and "no reachable output" said the same thing with the same button.
-    it("hides 'connect your lights' while the no-output notice says it", () => {
-      const step2 = { onboardingStep: ONBOARDING_STEPS.DEVICES, availability: "none" as const };
-      expect(build({ ...step2, uiMode: "compact" }).map((n) => n.id)).toEqual([SHELL_NOTICE_IDS.OUTPUT_NONE]);
-      // Full shows the no-output notice on Lights only; elsewhere step 2 is the only one saying it.
-      expect(build({ ...step2, uiMode: "full", activeSection: SECTION_IDS.LIGHTS }).map((n) => n.id)).toEqual([
-        SHELL_NOTICE_IDS.OUTPUT_NONE,
-      ]);
-      expect(build({ ...step2, uiMode: "full", activeSection: SECTION_IDS.SYSTEM }).map((n) => n.id)).toEqual([
-        SHELL_NOTICE_IDS.ONBOARDING,
-      ]);
+    // A fresh install opened on a red "No reachable output" with the welcome
+    // hidden behind "+1"; the guide's first step explains the same thing.
+    it("shows step 1 instead of the no-output error it explains", () => {
+      const step1 = { onboardingStep: ONBOARDING_STEPS.DEVICES, availability: "none" as const };
+      for (const view of [
+        { uiMode: "compact" as const },
+        { uiMode: "full" as const, activeSection: SECTION_IDS.LIGHTS },
+        { uiMode: "full" as const, activeSection: SECTION_IDS.SYSTEM },
+      ]) {
+        expect(build({ ...step1, ...view }).map((n) => n.id)).toEqual([SHELL_NOTICE_IDS.ONBOARDING]);
+      }
     });
 
-    // Step 3 and "calibration required" said the same thing with the same button.
-    it("hides 'calibrate your strip' while the calibration notice says it", () => {
-      const step3 = { onboardingStep: ONBOARDING_STEPS.LED_SETUP, calibrationRequired: true };
-      expect(build({ ...step3, uiMode: "compact" }).map((n) => n.id)).toEqual([SHELL_NOTICE_IDS.CALIBRATION_REQUIRED]);
-      expect(build({ ...step3, uiMode: "full", activeSection: SECTION_IDS.LIGHTS }).map((n) => n.id)).toEqual([
+    it("keeps the error out while a guide step is still being decided", () => {
+      expect(build({ onboardingPending: true, availability: "none" })).toEqual([]);
+    });
+
+    // Only the gave-up copy carries something the step does not: a retry.
+    it("gives step 1 way to the no-output notice once the bridge probe gave up", () => {
+      const gaveUp = { onboardingStep: ONBOARDING_STEPS.DEVICES, availability: "none" as const, hueProbeGaveUp: true };
+      expect(build({ ...gaveUp, uiMode: "compact" }).map((n) => n.id)).toEqual([SHELL_NOTICE_IDS.OUTPUT_NONE]);
+    });
+
+    it("leaves the no-output error alone for a user past step 1", () => {
+      const ids = build({ onboardingStep: ONBOARDING_STEPS.TURN_ON, availability: "none", ambilightReady: false }).map(
+        (n) => n.id,
+      );
+      expect(ids).toEqual([SHELL_NOTICE_IDS.OUTPUT_NONE, SHELL_NOTICE_IDS.ONBOARDING]);
+    });
+
+    // Step 2 and "calibration required" said the same thing with the same button.
+    it("hides the LED step while the calibration notice says it", () => {
+      const step2 = { onboardingStep: ONBOARDING_STEPS.LED_SETUP, calibrationRequired: true };
+      expect(build({ ...step2, uiMode: "compact" }).map((n) => n.id)).toEqual([SHELL_NOTICE_IDS.CALIBRATION_REQUIRED]);
+      expect(build({ ...step2, uiMode: "full", activeSection: SECTION_IDS.LIGHTS }).map((n) => n.id)).toEqual([
         SHELL_NOTICE_IDS.CALIBRATION_REQUIRED,
       ]);
-      expect(build({ ...step3, uiMode: "full", activeSection: SECTION_IDS.DEVICES }).map((n) => n.id)).toEqual([
+      expect(build({ ...step2, uiMode: "full", activeSection: SECTION_IDS.DEVICES }).map((n) => n.id)).toEqual([
         SHELL_NOTICE_IDS.ONBOARDING,
       ]);
     });
 
-    it("asks to calibrate only when a strip or WLED panel is configured", () => {
+    it("asks for the LED layout only when a strip or WLED panel is configured", () => {
       expect(build({ onboardingStep: ONBOARDING_STEPS.LED_SETUP, localTargetConfigured: false })).toEqual([]);
       expect(
         build({ onboardingStep: ONBOARDING_STEPS.LED_SETUP, localTargetConfigured: true }).map((n) => n.id),
       ).toEqual([SHELL_NOTICE_IDS.ONBOARDING]);
     });
 
-    // In compact "Open lights" led where the user already was.
-    it("drops the step-1 action where it would lead nowhere", () => {
-      const step1 = { onboardingStep: ONBOARDING_STEPS.LIGHTS };
-      expect(byId({ ...step1, uiMode: "compact" }, SHELL_NOTICE_IDS.ONBOARDING).action).toBeUndefined();
+    it("turns Ambilight on from the last step itself when the mode is available", () => {
+      const handlers = makeHandlers();
+      const notice = byId({ onboardingStep: ONBOARDING_STEPS.TURN_ON }, SHELL_NOTICE_IDS.ONBOARDING, handlers);
+      expect(notice.message).toBe("shell:notices.messages.onboarding.turnOn");
+      expect(notice.step).toBe("3/3");
+      expect(notice.action?.label).toBe("shell:notices.actions.turnOnAmbilight");
+      expect(notice.action?.navigates).toBeUndefined();
+      notice.action?.onClick();
+      expect(handlers.turnOnAmbilight).toHaveBeenCalledOnce();
+
       expect(
-        byId({ ...step1, uiMode: "full", activeSection: SECTION_IDS.LIGHTS }, SHELL_NOTICE_IDS.ONBOARDING).action,
+        byId({ onboardingStep: ONBOARDING_STEPS.TURN_ON, modeTransitioning: true }, SHELL_NOTICE_IDS.ONBOARDING).action
+          ?.pending,
+      ).toBe(true);
+    });
+
+    // A locked Ambilight button has its own notice on the Lights screen.
+    it("points at Lights instead while Ambilight is locked, except where the user already is", () => {
+      const locked = { onboardingStep: ONBOARDING_STEPS.TURN_ON, ambilightReady: false };
+      expect(byId({ ...locked, uiMode: "compact" }, SHELL_NOTICE_IDS.ONBOARDING).action).toBeUndefined();
+      expect(
+        byId({ ...locked, uiMode: "full", activeSection: SECTION_IDS.LIGHTS }, SHELL_NOTICE_IDS.ONBOARDING).action,
       ).toBeUndefined();
 
       const handlers = makeHandlers();
-      byId({ ...step1, uiMode: "full", activeSection: SECTION_IDS.DEVICES }, SHELL_NOTICE_IDS.ONBOARDING, handlers)
+      byId({ ...locked, uiMode: "full", activeSection: SECTION_IDS.DEVICES }, SHELL_NOTICE_IDS.ONBOARDING, handlers)
         .action?.onClick();
       expect(handlers.openLights).toHaveBeenCalledOnce();
+      expect(handlers.turnOnAmbilight).not.toHaveBeenCalled();
     });
 
-    it("numbers the step and completes the flow on dismiss", () => {
+    it("numbers the step and names its dismiss as skipping the guide", () => {
       const handlers = makeHandlers();
       const notice = byId({ onboardingStep: ONBOARDING_STEPS.DEVICES }, SHELL_NOTICE_IDS.ONBOARDING, handlers);
-      expect(notice.step).toBe("2/3");
+      expect(notice.step).toBe("1/3");
       expect(notice.dismissible).toBe(true);
+      expect(notice.dismissLabel).toBe("shell:notices.skipSetupGuide");
       notice.onDismiss?.();
       expect(handlers.completeOnboarding).toHaveBeenCalledOnce();
     });
@@ -538,7 +573,7 @@ describe("buildShellNotices", () => {
     it("sits below everything that concerns the lights, onboarding included", () => {
       const ids = build({
         updateCheckFailed: FAILURE,
-        onboardingStep: ONBOARDING_STEPS.LIGHTS,
+        onboardingStep: ONBOARDING_STEPS.TURN_ON,
         availability: "checking",
         usbDisconnected: true,
       }).map((n) => n.id);

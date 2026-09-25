@@ -9,6 +9,14 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Added
 
+- Settings → Help: "Show again" brings back the setup guide, "Open folder" opens LumaSync's log
+  folder, "Report" opens a new GitHub issue in your browser with the app version and system filled
+  in, and "Discussions" links to questions and ideas. Nothing is sent by the app; you review and
+  submit the issue yourself, or close the tab.
+- Updates: besides the check at launch, LumaSync now checks once a day while it runs, and retries
+  a failed check after 1, 5 and 15 minutes instead of waiting for the next launch. An update found
+  in the background is offered the next time you open the window.
+
 - USB strips: connecting now asks the controller what it is. A LumaSync controller that answers
   reports its firmware version, the frame format it expects and whether it wants RGB or RGBW
   pixels, and Settings marks a firmware profile or LED chip type that disagrees, without changing
@@ -37,6 +45,14 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- First-run guide: the steps now follow the order the app unlocks in — connect a USB strip, WLED
+  or Hue; set up the LEDs (skipped when Hue is your only output); then turn on Ambilight, which
+  the last step can do for you. On a fresh install the guide replaces the red "No reachable output"
+  it explains, and its close button now says "Skip setup guide".
+- Updates: an install that never picked a channel follows the build it runs — beta while you run a
+  prerelease, stable otherwise. A channel you chose in Settings always wins. The beta description
+  now says what CI launch-tests: the macOS, Linux AppImage and Windows app, but not the .msi or
+  .deb installers.
 - Hue: Forget now forgets the bridge. It asks first, then stops Hue, takes it out of your outputs,
   and removes the pairing and its key from this computer; your room map keeps its Hue lights. The
   bridge still lists LumaSync as an authorised app, which only your Hue account can remove

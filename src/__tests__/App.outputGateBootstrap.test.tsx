@@ -187,8 +187,8 @@ describe("output gate during shell boot", () => {
     },
   );
 
-  it("still tells a fresh install there is no output once boot has settled", async () => {
-    shellState = { trayHintShown: true };
+  it("still tells an install with no output that there is none once boot has settled", async () => {
+    shellState = { trayHintShown: true, hasCompletedOnboarding: true };
     await bootHeldAtSerialStatus("compact");
 
     expect(screen.queryByText(OFFLINE_TITLE)).not.toBeInTheDocument();
@@ -198,5 +198,18 @@ describe("output gate during shell boot", () => {
     });
     expect(await screen.findByText(OFFLINE_TITLE)).toBeInTheDocument();
     expect(screen.queryByTestId("output-checking")).not.toBeInTheDocument();
+  });
+
+  // A fresh install opened on the red error with the welcome behind "+1".
+  it("greets a fresh install with the guide's first step instead of the error", async () => {
+    shellState = { trayHintShown: true };
+    await bootHeldAtSerialStatus("compact");
+
+    await act(async () => {
+      releaseSerialStatus();
+    });
+    expect(await screen.findByText("shell:notices.messages.onboarding.devices")).toBeInTheDocument();
+    expect(screen.getByTestId("shell-notice-slot").getAttribute("data-queue")).toBe("onboarding");
+    expect(offlineBannerSeen).toBe(false);
   });
 });

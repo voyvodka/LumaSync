@@ -19,6 +19,7 @@ import {
 } from "../shell/navigationStore";
 import { useUpdaterActions, useUpdaterState, type UpdaterSnapshot } from "../updater/UpdaterProvider";
 import { useHueShellStatus, type HueShellStatus } from "../hue/state/hueShellStatus";
+import { useSetupGuideActions } from "../onboarding/state/setupGuideControl";
 import { syncStripLedCount } from "./sections/device/usbStripRoster";
 import { CompactLayout } from "./sections/compact/CompactLayout";
 import type { RoomMapEditorProps } from "@/features/room-map/ui/RoomMapEditor";
@@ -179,9 +180,11 @@ const SystemPanel = memo(function SystemPanel() {
   const isCheckingForUpdates = useUpdaterState(selectCheckingForUpdates);
   const upToDateAt = useUpdaterState(selectUpToDateAt);
   const { checkForUpdates, devSetState } = useUpdaterActions();
+  const setupGuide = useSetupGuideActions();
   return (
     <div className="h-full overflow-hidden">
       <SystemSection
+        onRestartSetupGuide={setupGuide?.restart}
         onCheckForUpdates={checkForUpdates}
         isCheckingForUpdates={isCheckingForUpdates}
         upToDateAt={upToDateAt}

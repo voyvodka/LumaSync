@@ -5,8 +5,7 @@ import type { KeybindHandlers } from "./useGlobalKeybinds";
 
 /**
  * ⌥1–⌥3, as the mode buttons they stand for: the same `changeMode` a click
- * runs, so a shortcut also counts as the first deliberate mode choice, and
- * nothing while that button is disabled. Read at press time, so a handler map
+ * runs, and nothing while that button is disabled. Read at press time, so a handler map
  * built once never acts on a stale answer.
  */
 export function modeKeybindHandlers(

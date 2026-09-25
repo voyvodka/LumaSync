@@ -11,11 +11,15 @@ import {
   type I18nLanguage,
 } from "@/features/i18n/i18n";
 import { shellStore } from "@/features/persistence/shellStore";
+import type { SetupGuideRestartResult } from "@/features/onboarding/state/setupGuideControl";
+import { openLogDir } from "@/features/platform/platformApi";
 import { getStartupEnabled, setStartup } from "@/features/tray/trayController";
 import { APP_NAME, APP_VERSION } from "@/shared/constants/app";
-import { DEFAULT_UPDATE_CHANNEL, type UpdateChannel } from "@/shared/contracts/shell";
+import { defaultUpdateChannel, resolveUpdateChannel, type UpdateChannel } from "@/shared/contracts/shell";
 import type { UpdaterState } from "@/features/updater/useAutoUpdater";
 import { DevUpdaterMenu } from "@/features/updater/DevUpdaterMenu";
+
+import { buildIssueReportUrl, detectOsName, DISCUSSIONS_URL } from "./helpLinks";
 
 /** How long "you're on the latest version" stays after a check the user asked for. */
 export const UP_TO_DATE_RESULT_MS = 12_000;
@@ -31,6 +35,34 @@ interface SystemSectionProps {
   localOutputConnected: boolean;
   /** The app owns a Hue session, which has telemetry of its own. */
   hueActive?: boolean;
+  /** Absent outside the shell, where there is no guide to bring back. */
+  onRestartSetupGuide?: () => SetupGuideRestartResult;
+}
+
+/** Opens in the system browser through the opener plugin's link handler. */
+interface ExternalLinkProps {
+  href: string;
+  label: string;
+  describedBy: string;
+  testId: string;
+}
+
+function ExternalLink({ href, label, describedBy, testId }: ExternalLinkProps) {
+  const { t } = useTranslation();
+  return (
+    <a
+      className="lm-settings-btn"
+      href={href}
+      target="_blank"
+      rel="noreferrer noopener"
+      aria-describedby={describedBy}
+      data-testid={testId}
+    >
+      {label}
+      <span aria-hidden="true">↗</span>
+      <span className="sr-only"> ({t("settings:help.opensInBrowser")})</span>
+    </a>
+  );
 }
 
 interface SettingsGroupProps {
@@ -60,18 +92,26 @@ export function SystemSection({
   devSetUpdaterState,
   localOutputConnected,
   hueActive = false,
+  onRestartSetupGuide,
 }: SystemSectionProps) {
   const { t, i18n } = useTranslation();
   const currentLanguage: I18nLanguage = i18n.language.toLowerCase().startsWith("tr") ? "tr" : "en";
   const [startupEnabled, setStartupEnabled] = useState(false);
   const [startupError, setStartupError] = useState<StartupError | null>(null);
-  const [updateChannel, setUpdateChannel] = useState<UpdateChannel>(DEFAULT_UPDATE_CHANNEL);
+  const [updateChannel, setUpdateChannel] = useState<UpdateChannel>(() => defaultUpdateChannel(APP_VERSION));
   const [startupLoading, setStartupLoading] = useState(true);
+  const [guideResult, setGuideResult] = useState<SetupGuideRestartResult | null>(null);
+  const [logDirFailed, setLogDirFailed] = useState(false);
   const showNerdStats = useShowNerdStats();
   const startupDescId = useId();
   const languageDescId = useId();
   const channelDescId = useId();
   const nerdStatsDescId = useId();
+  const guideDescId = useId();
+  const logsDescId = useId();
+  const issueDescId = useId();
+  const discussionsDescId = useId();
+  const [issueUrl] = useState(() => buildIssueReportUrl(APP_VERSION, detectOsName()));
 
   useEffect(() => {
     async function init() {
@@ -86,10 +126,10 @@ export function SystemSection({
 
       try {
         const persisted = await shellStore.load();
-        setUpdateChannel(persisted.updateChannel ?? DEFAULT_UPDATE_CHANNEL);
+        setUpdateChannel(resolveUpdateChannel(persisted.updateChannel, APP_VERSION));
       } catch (err) {
         console.error("[LumaSync] loading the update channel failed:", err);
-        setUpdateChannel(DEFAULT_UPDATE_CHANNEL);
+        setUpdateChannel(defaultUpdateChannel(APP_VERSION));
       }
     }
 
@@ -156,6 +196,21 @@ export function SystemSection({
       }
     } finally {
       setStartupLoading(false);
+    }
+  }
+
+  function handleRestartGuide() {
+    if (!onRestartSetupGuide) return;
+    setGuideResult(onRestartSetupGuide());
+  }
+
+  async function handleOpenLogDir() {
+    setLogDirFailed(false);
+    try {
+      await openLogDir();
+    } catch (err) {
+      console.error("[LumaSync] opening the log folder failed:", err);
+      setLogDirFailed(true);
     }
   }
 
@@ -278,6 +333,86 @@ export function SystemSection({
           </div>
         </div>
         {showNerdStats && <TelemetrySection localOutputConnected={localOutputConnected} hueActive={hueActive} />}
+      </SettingsGroup>
+
+      <SettingsGroup title={t("settings:groups.help.title")} sub={t("settings:groups.help.sub")}>
+        {onRestartSetupGuide && (
+          <div className="lm-settings-row">
+            <div className="lm-settings-row-l">
+              <div className="lm-settings-row-name">{t("settings:help.guide.label")}</div>
+              <div className="lm-settings-row-desc" id={guideDescId}>{t("settings:help.guide.description")}</div>
+              {/* Mounted empty, so the result is announced when it lands. */}
+              <p className="lm-settings-row-result" role="status" aria-live="polite" data-testid="setup-guide-result">
+                {guideResult === "shown"
+                  ? t("settings:help.guide.shown")
+                  : guideResult === "alreadyDone"
+                    ? t("settings:help.guide.alreadyDone")
+                    : ""}
+              </p>
+            </div>
+            <div className="lm-settings-row-r">
+              <button
+                type="button"
+                className="lm-settings-btn"
+                onClick={handleRestartGuide}
+                aria-describedby={guideDescId}
+                data-testid="setup-guide-restart"
+              >
+                {t("settings:help.guide.action")}
+              </button>
+            </div>
+          </div>
+        )}
+        <div className="lm-settings-row">
+          <div className="lm-settings-row-l">
+            <div className="lm-settings-row-name">{t("settings:help.logs.label")}</div>
+            <div className="lm-settings-row-desc" id={logsDescId}>{t("settings:help.logs.description")}</div>
+            {logDirFailed && (
+              <p className="lm-settings-row-error" role="alert" data-testid="log-folder-error">
+                {t("settings:help.logs.error")}
+              </p>
+            )}
+          </div>
+          <div className="lm-settings-row-r">
+            <button
+              type="button"
+              className="lm-settings-btn"
+              onClick={() => { void handleOpenLogDir(); }}
+              aria-describedby={logsDescId}
+              data-testid="open-log-folder"
+            >
+              {t("settings:help.logs.action")}
+            </button>
+          </div>
+        </div>
+        <div className="lm-settings-row">
+          <div className="lm-settings-row-l">
+            <div className="lm-settings-row-name">{t("settings:help.issue.label")}</div>
+            <div className="lm-settings-row-desc" id={issueDescId}>{t("settings:help.issue.description")}</div>
+          </div>
+          <div className="lm-settings-row-r">
+            <ExternalLink
+              href={issueUrl}
+              label={t("settings:help.issue.action")}
+              describedBy={issueDescId}
+              testId="report-issue-link"
+            />
+          </div>
+        </div>
+        <div className="lm-settings-row">
+          <div className="lm-settings-row-l">
+            <div className="lm-settings-row-name">{t("settings:help.discussions.label")}</div>
+            <div className="lm-settings-row-desc" id={discussionsDescId}>{t("settings:help.discussions.description")}</div>
+          </div>
+          <div className="lm-settings-row-r">
+            <ExternalLink
+              href={DISCUSSIONS_URL}
+              label={t("settings:help.discussions.action")}
+              describedBy={discussionsDescId}
+              testId="discussions-link"
+            />
+          </div>
+        </div>
       </SettingsGroup>
 
       <SettingsGroup title={t("settings:groups.about.title")} sub={t("settings:groups.about.sub")}>

@@ -4,7 +4,7 @@
  * beside everything else (`buildShellNotices`).
  *
  * DNA-fit: a hint in the notice slot, never a full-screen welcome wizard, and
- * dismissible with one click — onboarding is a hint, not a gate.
+ * skippable with one click — onboarding is a hint, not a gate.
  */
 import { useEffect, useRef, useState } from "react";
 
@@ -29,7 +29,14 @@ export interface OnboardingStepInput {
   guardsLoaded?: boolean;
   /** A reachability probe that could still satisfy the devices step is out. */
   reachabilityPending?: boolean;
-  /** Fires once the machine reaches COMPLETE. The dismiss path is the caller's. */
+  /** Something saved could still satisfy a guard on its own; see `OnboardingBootFacts`. */
+  outputRemembered?: boolean;
+  /**
+   * Bumped when the user asks for the guide again: it starts over from step 1
+   * and shows at once, since the user is looking at the window.
+   */
+  restartKey?: number;
+  /** Fires once the machine reaches COMPLETE. The skip path is the caller's. */
   onComplete: () => void;
 }
 
@@ -45,39 +52,57 @@ export function useOnboardingStep({
   guards,
   guardsLoaded = true,
   reachabilityPending = false,
+  outputRemembered = true,
+  restartKey = 0,
   onComplete,
 }: OnboardingStepInput): OnboardingStepState {
   const [step, setStep] = useState<OnboardingStep>(INITIAL_ONBOARDING_STEP);
+  // Latched: once shown, the step leaves only by completing or being skipped.
+  const [revealed, setRevealed] = useState(false);
+
+  const { hasReachableOutput, hasLocalOutput, hasSavedCalibration, hasLightingRun } = guards;
+
+  // Adjusted during render, so the restarted guide never renders one frame
+  // from the COMPLETE it is leaving. Stored settled, like the effect below
+  // stores it, or a later guard flip could walk the shown step back.
+  const [seenRestartKey, setSeenRestartKey] = useState(restartKey);
+  let current = step;
+  if (restartKey !== seenRestartKey) {
+    current = settleStep(INITIAL_ONBOARDING_STEP, guards);
+    setSeenRestartKey(restartKey);
+    setStep(current);
+    setRevealed(true);
+  }
 
   // Only ever advances forwards, so a flip-flop in (e.g.) `hasReachableOutput`
-  // does not bounce the user back to step 2 once past it. Keyed on the three
+  // does not bounce the user back to step 1 once past it. Keyed on the four
   // booleans, not the object: App passes a fresh literal every render, and
   // settling to a fixpoint is what makes one run enough.
-  const { hasInteractedWithMode, hasReachableOutput, hasSavedCalibration } = guards;
   useEffect(() => {
-    setStep((current) =>
-      settleStep(current, { hasInteractedWithMode, hasReachableOutput, hasSavedCalibration }),
+    setStep((prev) =>
+      settleStep(prev, { hasReachableOutput, hasLocalOutput, hasSavedCalibration, hasLightingRun }),
     );
-  }, [hasInteractedWithMode, hasReachableOutput, hasSavedCalibration]);
+  }, [hasReachableOutput, hasLocalOutput, hasSavedCalibration, hasLightingRun]);
   // Settled during render too, so the reveal below never judges the step the
   // effect above is about to replace.
-  const shownStep = settleStep(step, { hasInteractedWithMode, hasReachableOutput, hasSavedCalibration });
+  const shownStep = settleStep(current, { hasReachableOutput, hasLocalOutput, hasSavedCalibration, hasLightingRun });
 
-  // Latched: once shown, the step leaves only by completing or dismissing.
-  const [revealed, setRevealed] = useState(false);
   const loadedAtRef = useRef<number | null>(null);
+  const revealDelay = onboardingRevealDelayMs(shownStep, { reachabilityPending, outputRemembered });
+  // With nothing that could settle on its own, the step shows on the very
+  // render the guards load — a frame later is a frame of the error it replaces.
+  const shownNow = revealed || (guardsLoaded && revealDelay <= 0);
   useEffect(() => {
     if (revealed || !guardsLoaded || shownStep === ONBOARDING_STEPS.COMPLETE) return;
     if (loadedAtRef.current === null) loadedAtRef.current = Date.now();
-    const remaining =
-      onboardingRevealDelayMs(shownStep, reachabilityPending) - (Date.now() - loadedAtRef.current);
+    const remaining = revealDelay - (Date.now() - loadedAtRef.current);
     if (remaining <= 0) {
       setRevealed(true);
       return;
     }
     const timerId = window.setTimeout(() => setRevealed(true), remaining);
     return () => window.clearTimeout(timerId);
-  }, [revealed, guardsLoaded, shownStep, reachabilityPending]);
+  }, [revealed, guardsLoaded, shownStep, revealDelay]);
 
   useEffect(() => {
     if (step === ONBOARDING_STEPS.COMPLETE) {
@@ -86,6 +111,6 @@ export function useOnboardingStep({
   }, [step, onComplete]);
 
   if (hasCompleted || shownStep === ONBOARDING_STEPS.COMPLETE) return { step: null, pending: false };
-  if (!revealed) return { step: null, pending: true };
+  if (!shownNow) return { step: null, pending: true };
   return { step: shownStep, pending: false };
 }

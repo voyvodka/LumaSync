@@ -125,6 +125,12 @@ export interface ShellNotice {
   secondaryAction?: NoticeAction;
   /** Shows a ×. Events always have one; of the conditions, only onboarding and the failed settings save. */
   dismissible: boolean;
+  /**
+   * Names a dismiss that does more than hide this occurrence. In full mode it
+   * replaces the × with a text button; in compact the × carries it as its
+   * accessible name and tooltip.
+   */
+  dismissLabel?: string;
   /** Runs after the queue hides the notice — onboarding persists its completion here. */
   onDismiss?: () => void;
   /**

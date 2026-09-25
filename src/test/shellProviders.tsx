@@ -101,7 +101,7 @@ export function renderWithShellStores(
   };
   const updaterActions: UpdaterActions = {
     checkForUpdates: vi.fn(async () => {}),
-    checkForUpdatesInBackground: vi.fn(async () => {}),
+    checkForUpdatesInBackground: vi.fn(async () => "done" as const),
     downloadAndInstall: vi.fn(async () => {}),
     dismiss: vi.fn(),
     devSetState: vi.fn(),

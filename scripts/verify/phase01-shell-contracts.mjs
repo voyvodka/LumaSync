@@ -96,7 +96,7 @@ const REQUIRED_V14_STATE_FIELDS = [
  * v1.5 ShellState additions. All optional / additive — the absence of
  * each field naturally degrades to a v1.4-compatible default
  * (`hasCompletedOnboarding=false` shows onboarding once, `updateChannel`
- * absent ⇒ stable channel, `selectedChipType` absent ⇒ WS2812B GRB).
+ * absent ⇒ stable channel on a stable build, `selectedChipType` absent ⇒ WS2812B GRB).
  * Strict optional-`?:` presence check, no default-value check.
  */
 const REQUIRED_V15_STATE_FIELDS = [
@@ -113,7 +113,8 @@ const REQUIRED_V15_STATE_FIELDS = [
 /** v1.5 contract surface that must be exported alongside the new fields. */
 const REQUIRED_V15_EXPORTS = [
   "UpdateChannel",
-  "DEFAULT_UPDATE_CHANNEL",
+  "defaultUpdateChannel",
+  "resolveUpdateChannel",
 ];
 
 // ---------------------------------------------------------------------------
