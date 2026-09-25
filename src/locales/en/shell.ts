@@ -111,7 +111,7 @@ export default {
       choiceStartFailed: "That lighting mode couldn't start, so the lights are off",
       hueBootRetry: {
         waiting: "The Hue bridge is held by an earlier session — lighting resumes once it lets go",
-        gaveUp: "The Hue bridge stayed busy, so lighting is off — turn it on again once it's free",
+        gaveUp: "Hue wasn't available at launch, so lighting is off — turn it on again once the bridge is back",
       },
       usbDisconnected: "USB strip disconnected — continuing on the other outputs",
       usbDisconnectedLightingOff: "USB strip disconnected, so lighting is off — reconnect it and pick a mode",

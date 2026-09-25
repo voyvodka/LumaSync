@@ -31,6 +31,7 @@ use super::{
     LightingModeKind, LightingRuntimeState,
 };
 use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionState};
+use crate::commands::hue::health::{self, BOOT_RESUME_PROBE_WINDOW};
 use crate::commands::hue::hue_config::{hue_start_request, room_geometry_from_state};
 use crate::commands::hue::light_restore::HueLightsAfterStop;
 use crate::commands::hue::state_store::{HueRuntimeTriggerSource, StartHueStreamRequest};
@@ -209,6 +210,16 @@ enum BootRetryPlan {
     Rejoin { left_out: HueLeftOutReason },
 }
 
+/// What parking a launch restore's Hue plan came to.
+enum Parked {
+    /// This launch already resumed once.
+    Spent,
+    /// The monitor already has the bridge answering.
+    FireNow(BootRetryPlan),
+    /// Waiting, under this generation, for the bridge to answer.
+    Waiting(u64),
+}
+
 #[derive(Default)]
 pub(crate) struct CancelToken {
     cancelled: AtomicBool,
@@ -255,8 +266,12 @@ pub(crate) struct OutputsState {
     /// Set once a parked resume fired: at most one per launch.
     boot_hue_park_spent: AtomicBool,
     /// Whether the last Hue health publish said the bridge answers; the park
-    /// fires on the edge into it.
+    /// fires on the edge into it, or at once when it already does.
     hue_reachable: AtomicBool,
+    /// Tells a park's timeout from a later park's.
+    boot_hue_park_generation: AtomicU64,
+    /// `None` is `BOOT_RESUME_PROBE_WINDOW`; tests shorten it.
+    boot_hue_park_window: Mutex<Option<Duration>>,
     /// Bumped by every save of a setting the mode reads; a refresh runs only
     /// if no later save arrived during its debounce.
     settings_generation: AtomicU64,
@@ -412,18 +427,45 @@ impl OutputsState {
         locked(&self.boot_hue_parked).is_some()
     }
 
-    fn park_boot_hue(&self, plan: BootRetryPlan) {
+    fn park_boot_hue(&self, plan: BootRetryPlan) -> Parked {
         if self.boot_hue_park_spent.load(Ordering::SeqCst) {
-            return;
+            return Parked::Spent;
+        }
+        // The monitor already has the bridge answering: an edge will not come.
+        if self.hue_reachable.load(Ordering::SeqCst) {
+            self.boot_hue_park_spent.store(true, Ordering::SeqCst);
+            return Parked::FireNow(plan);
         }
         info!("[outputs] boot Hue resume parked until the bridge answers: {plan:?}");
+        let generation = self.boot_hue_park_generation.fetch_add(1, Ordering::SeqCst) + 1;
         locked(&self.boot_hue_parked).replace(plan);
+        Parked::Waiting(generation)
     }
 
-    fn cancel_boot_hue_park(&self, reason: &str) {
-        if locked(&self.boot_hue_parked).take().is_some() {
+    fn cancel_boot_hue_park(&self, reason: &str) -> bool {
+        let cancelled = locked(&self.boot_hue_parked).take().is_some();
+        if cancelled {
             info!("[outputs] parked boot Hue resume cancelled: {reason}");
         }
+        cancelled
+    }
+
+    /// The park `generation` made, if it is still waiting once its window ends.
+    fn lapse_boot_hue_park(&self, generation: u64) -> Option<BootRetryPlan> {
+        if self.boot_hue_park_generation.load(Ordering::SeqCst) != generation {
+            return None;
+        }
+        locked(&self.boot_hue_parked).take()
+    }
+
+    fn boot_hue_park_window(&self) -> Duration {
+        locked(&self.boot_hue_park_window).unwrap_or(BOOT_RESUME_PROBE_WINDOW)
+    }
+
+    /// A park window short enough for a test to see it end.
+    #[cfg(test)]
+    pub(crate) fn set_boot_hue_park_window(&self, window: Duration) {
+        locked(&self.boot_hue_park_window).replace(window);
     }
 
     /// The parked plan, on the edge into reachable. Takes it: it fires once.
@@ -451,7 +493,9 @@ pub(crate) fn cancel_boot_hue_waits<R: Runtime>(app: &AppHandle<R>, reason: &str
 /// goes with it. A resume parked until the bridge answers goes too.
 fn cancel_boot_retry<R: Runtime>(app: &AppHandle<R>, reason: &str) {
     let state = app.state::<LightingRuntimeState>();
-    state.outputs.cancel_boot_hue_park(reason);
+    if state.outputs.cancel_boot_hue_park(reason) {
+        health::note_boot_resume_pending(app, false);
+    }
     let Some(retry) = state.outputs.take_boot_retry() else {
         // A wait that already gave up still says so; the choice answers it as
         // it would a pending one. Without this the notice outlived the choice
@@ -1587,7 +1631,7 @@ impl<'a, R: Runtime> Transaction<'a, R> {
             .as_deref()
             .is_some_and(|code| !is_hue_start_ok(code));
         if refused && self.hue_refusal(had_config) == HueLeftOutReason::Unreachable {
-            self.state.outputs.park_boot_hue(plan);
+            park_boot_hue(self.app, plan);
         }
     }
 
@@ -1842,10 +1886,13 @@ pub fn note_settings_saved<'k, R: Runtime>(
         // Read after the save, not in it: this runs under the shell-state lock.
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
-            if !hue_paired(&app) {
-                app.state::<LightingRuntimeState>()
+            if !hue_paired(&app)
+                && app
+                    .state::<LightingRuntimeState>()
                     .outputs
-                    .cancel_boot_hue_park("the bridge was forgotten");
+                    .cancel_boot_hue_park("the bridge was forgotten")
+            {
+                health::note_boot_resume_pending(&app, false);
             }
         });
     }
@@ -2304,7 +2351,7 @@ async fn run_boot_retry<R: Runtime>(
             };
             if outcome == ReleaseWait::Unreachable {
                 info!("[outputs] boot Hue retry: the bridge did not answer");
-                state.outputs.park_boot_hue(plan);
+                park_boot_hue(&app, plan);
             } else {
                 warn!("[outputs] boot Hue retry: the refusal was not a busy area; not retrying");
             }
@@ -2407,9 +2454,54 @@ pub(crate) fn note_hue_reachable<R: Runtime>(app: &AppHandle<R>, reachable: bool
     let Some(plan) = state.outputs.take_boot_hue_park(reachable) else {
         return;
     };
-    // Off the emitting thread: this runs inside the monitor's publish.
+    fire_parked(app, plan);
+}
+
+/// Parks a launch restore's Hue plan until the bridge answers. While it
+/// waits the health monitor probes the bridge even with no window shown, on
+/// a bounded schedule; the wait ends when the plan fires, is cancelled, or
+/// its window runs out. See docs/architecture/lighting-transaction.md.
+fn park_boot_hue<R: Runtime>(app: &AppHandle<R>, plan: BootRetryPlan) {
+    let state = app.state::<LightingRuntimeState>();
+    match state.outputs.park_boot_hue(plan) {
+        Parked::Spent => {}
+        Parked::FireNow(plan) => {
+            info!("[outputs] the bridge already answers; resuming the launch restore now");
+            fire_parked(app, plan);
+        }
+        Parked::Waiting(generation) => {
+            health::note_boot_resume_pending(app, true);
+            let window = state.outputs.boot_hue_park_window();
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(window).await;
+                lapse_boot_hue_park(&app, generation);
+            });
+        }
+    }
+}
+
+/// The bridge never answered within the park's window: stop probing and say
+/// so the way the area wait's end does.
+fn lapse_boot_hue_park<R: Runtime>(app: &AppHandle<R>, generation: u64) {
+    let state = app.state::<LightingRuntimeState>();
+    let Some(plan) = state.outputs.lapse_boot_hue_park(generation) else {
+        return;
+    };
+    warn!("[outputs] the bridge never answered while the launch restore waited; giving up");
+    health::note_boot_resume_pending(app, false);
+    state.snapshot.publish(app, |snapshot| match plan {
+        BootRetryPlan::Resume { .. } => snapshot.boot_hue_retry = Some(BootHueRetryState::GaveUp),
+        BootRetryPlan::Rejoin { left_out } => snapshot.hue_held_out_reason = Some(left_out),
+    });
+}
+
+/// Runs a taken plan off the caller's thread — `note_hue_reachable` runs
+/// inside the monitor's publish.
+fn fire_parked<R: Runtime>(app: &AppHandle<R>, plan: BootRetryPlan) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
+        health::note_boot_resume_pending(&app, false);
         if app.state::<LightingRuntimeState>().is_closing() {
             return;
         }

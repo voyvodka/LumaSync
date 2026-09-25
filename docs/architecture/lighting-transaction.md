@@ -233,17 +233,29 @@ above probes once, and that probe answers that the bridge is silent. The wait re
 and gave up for good, so a Hue-only setup stayed Off and `[usb, hue]` ran on the strip alone until
 the user chose again. A silent bridge is now its own verdict (`HueAreaVerdict::Unreachable`), and
 it — or a start that failed outright for a bridge that did not answer — *parks* the same resume or
-rejoin plan instead (`park_boot_hue`). Nothing polls for it. The Hue health monitor already probes
-the bridge, and its `hue://health` event is heard in Rust (`listen_hue_health`); the first publish
-that says the bridge answers — a probe's answer, not a publish while one is in flight, or a live
-stream — runs the parked plan once (`note_hue_reachable`), through the same `resume_boot_hue` the
-area wait uses. It fires at most once per launch. Anything that cancels the area wait cancels the
+rejoin plan instead (`park_boot_hue`). The lighting module polls nothing itself: the Hue health
+monitor is the one thing that asks the bridge, and its `hue://health` event is heard in Rust
+(`listen_hue_health`). The first publish that says the bridge answers — a probe's answer, not a
+publish while one is in flight, or a live stream — runs the parked plan once
+(`note_hue_reachable`), through the same `resume_boot_hue` the area wait uses. When the monitor
+*already* says the bridge answers as the plan parks (its launch probe won the race), no edge is
+coming, so the plan runs at once.
+
+The monitor probes hidden only once, at launch, and autostart before Wi-Fi is up is exactly the
+case where that probe finds the bridge silent, so a park also tells the monitor a resume is
+pending (`health::note_boot_resume_pending`). While it is, the bridge probe runs with no window
+shown: at once, every 5 s for the first minute, then every 15 s, for three minutes at most — about
+twenty calls, one at a time since 5 s is the HTTP timeout; the cadence and the reasoning are in
+`hue.md` ("One probe at launch"). The pending flag drops the moment the plan runs, is cancelled or
+its window ends, and hidden traffic is zero again. A window that ends with the bridge still silent
+gives up the way the area wait does: `bootHueRetry: gaveUp` for a resume, the held-out reason
+kept for a rejoin.
+
+It fires at most once per launch. Anything that cancels the area wait cancels the
 park (a choice, a newer launch, the Devices card's stop). Forgetting the bridge cancels both waits
 first thing (`cancel_boot_hue_waits` in `forget_hue_bridge`), before any step that could fail; a
 window save that leaves no Hue pairing behind does too, and a quit is checked before the resume
-runs. With the window hidden the monitor probes once at launch and then only when asked: a
-tray-started app whose bridge answers that launch probe resumes without a window being shown, and
-one whose bridge is still silent then waits until the window next opens. The strip's own resume
+runs. The strip's own resume
 (`BootSinkRetry`) leaves Hue to a parked plan as it does to the area wait, so with both outputs late
 either one can land first and the other joins it.
 

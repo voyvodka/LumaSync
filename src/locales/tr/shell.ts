@@ -111,7 +111,7 @@ const shell: Catalogue<typeof enShell> = {
       choiceStartFailed: "Bu ışık modu başlatılamadı, ışıklar kapalı",
       hueBootRetry: {
         waiting: "Hue köprüsü önceki bir oturumu tutuyor — bıraktığında aydınlatma kendiliğinden sürer",
-        gaveUp: "Hue köprüsü meşgul kaldı, aydınlatma kapalı — köprü boşalınca yeniden aç",
+        gaveUp: "Hue açılışta hazır değildi, aydınlatma kapalı — köprü geri gelince yeniden aç",
       },
       usbDisconnected: "USB şerit çıkarıldı — diğer çıkışlarla devam ediliyor",
       usbDisconnectedLightingOff: "USB şerit çıkarıldı, aydınlatma kapalı — şeridi takıp bir mod seç",

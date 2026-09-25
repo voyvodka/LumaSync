@@ -194,9 +194,11 @@ https://keepachangelog.com/en/1.1.0/
 
 - Hue: when LumaSync starts at login before Wi-Fi is up, your saved lighting now comes back on Hue
   once the bridge answers, instead of staying off (Hue only) or running on the strip without Hue
-  until you picked a mode again. It happens at most once per launch, and choosing a mode yourself,
-  forgetting the bridge or quitting first cancels it. While the window is closed this can wait
-  until you next open it.
+  until you picked a mode again. It works with the window closed: while it waits, LumaSync checks
+  the bridge every few seconds for up to three minutes, and otherwise still makes no Hue calls from
+  the tray beyond one check at launch. It happens at most once per launch, and choosing a mode
+  yourself, forgetting the bridge or quitting first cancels it. If the bridge never answers, the
+  notice now says Hue wasn't available at launch rather than that it stayed busy.
 - Tray and LED control popup: a lighting choice that did not go through now says why. The main
   window shows the same notice its own buttons would, the popup shows it in place, and when a tray
   choice fails with the window closed you get one system notification for it. Before, a tray
