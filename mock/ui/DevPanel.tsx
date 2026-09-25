@@ -611,23 +611,27 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                   mutate((w) => {
                     // The step is not persisted: the machine mounts at step 1
                     // and only moves forward, so a step is a recipe over the
-                    // fields its guards read, not a field of its own.
+                    // fields its guards read, not a field of its own. Steps:
+                    // 1 connect an output, 2 LED layout (local outputs only),
+                    // 3 turn on a mode — a saved non-Off mode counts as done.
                     const base: Record<string, unknown> = {
                       ...w.shellState,
                       hasCompletedOnboarding: false,
                     };
+                    const port = w.serial.ports[0]?.name ?? null;
                     if (v === "step 1") {
                       delete base.lightingMode;
                       delete base.ledCalibration;
+                      delete base.lastSuccessfulPort;
                       w.serial.connectedPort = null;
                     } else if (v === "step 2") {
-                      base.lightingMode = { kind: "ambilight" };
+                      delete base.lightingMode;
                       delete base.ledCalibration;
-                      w.serial.connectedPort = null;
+                      w.serial.connectedPort = port;
                     } else if (v === "step 3") {
-                      base.lightingMode = { kind: "ambilight" };
-                      delete base.ledCalibration;
-                      w.serial.connectedPort = w.serial.ports[0]?.name ?? null;
+                      base.lightingMode = { kind: "off" };
+                      base.ledCalibration ??= SCENARIOS.furnished.build().shellState.ledCalibration;
+                      w.serial.connectedPort = port;
                     } else if (v === "complete") {
                       base.hasCompletedOnboarding = true;
                     }

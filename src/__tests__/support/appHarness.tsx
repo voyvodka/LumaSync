@@ -17,6 +17,7 @@ import {
 } from "@/features/mode/state/lightingControl";
 import { useLeaveGuardRegistrar, useNavigationState } from "@/features/shell/navigationStore";
 import { useHueShellStatus } from "@/features/hue/state/hueShellStatus";
+import { useSetupGuideActions, type SetupGuideActions } from "@/features/onboarding/state/setupGuideControl";
 import { runtimeStatus } from "@/features/hue/__tests__/fakeHueHealth";
 import { DEVICE_COMMANDS } from "@/shared/contracts/device";
 import type {
@@ -44,6 +45,8 @@ export const env = {
   pushHealth: null as ((health: RuntimeHealth) => void) | null,
   lastLayoutProps: {} as Record<string, unknown>,
   lastLightingActions: null as LightingControlActions | null,
+  /** What Settings → Help reaches to bring the first-run guide back. */
+  setupGuide: null as SetupGuideActions | null,
   /** Renders of the memoised layout itself: App handing it new props. */
   layoutRenders: 0,
   /** Renders of the store subscriber inside it. */
@@ -61,7 +64,7 @@ export const saveShellStateMock = vi.fn();
 export const initWindowLifecycleMock = vi.fn();
 export const resizeToModeMock = vi.fn();
 export const checkForUpdatesMock = vi.fn().mockResolvedValue(undefined);
-export const checkForUpdatesInBackgroundMock = vi.fn().mockResolvedValue(undefined);
+export const checkForUpdatesInBackgroundMock = vi.fn().mockResolvedValue("done");
 // Mock invoke for Tauri commands (used in bootstrap for USB status check)
 export const invokeMock = vi.fn();
 export const applyOutputsMock = vi.fn();
@@ -238,6 +241,7 @@ function LayoutProbe() {
   const deviceCategory = useNavigationState((state) => state.deviceCategoryRequest?.category ?? "");
   const registerLeaveGuard = useLeaveGuardRegistrar();
   env.lastLightingActions = actions;
+  env.setupGuide = useSetupGuideActions();
   return (
     <div>
       <p data-testid="active-mode">{lighting.lightingMode.kind}</p>
@@ -466,6 +470,7 @@ export function resetAppHarness(): void {
   env.pushHealth = null;
   env.lastLayoutProps = {};
   env.lastLightingActions = null;
+  env.setupGuide = null;
   env.layoutRenders = 0;
   env.layoutProbeRenders = 0;
   env.statusBarRenders = 0;

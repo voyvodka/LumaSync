@@ -61,6 +61,7 @@ const shell: Catalogue<typeof enShell> = {
       info: "Bilgi",
     },
     dismiss: "Bildirimi kapat",
+    skipSetupGuide: "Kurulum rehberini atla",
     showDetails: "Bildirimin tamamını göster",
     showLess: "Daha az göster",
     showMore_one: "{{count}} bildirim daha göster",
@@ -122,11 +123,11 @@ const shell: Catalogue<typeof enShell> = {
       calibrationRequired: "Kalibrasyon gerekli — bu mod için LED düzenini tamamla",
       ledSetupNext: "Şerit bağlandı — sıradaki adım: her ekran kenarında kaç LED olduğunu bildir",
       onboarding: {
-        lights: "Hoş geldin — başlamak için bir aydınlatma modu seç",
-        devices: "Modların ışık gönderebilmesi için USB şerit, WLED ya da Hue bağla",
+        devices: "Hoş geldin — başlamak için USB şerit, WLED ya da Hue bağla",
         ledSetup: "Her ekran kenarında kaç LED olduğunu LumaSync'e bildir",
+        turnOn: "Son adım — ekranını yansıtmak için Ambilight'ı aç",
       },
-      updateCheckFailed: "Güncellemeler kontrol edilemedi — LumaSync sonraki açılışta yeniden dener",
+      updateCheckFailed: "Güncellemeler kontrol edilemedi — LumaSync arka planda yeniden dener",
       settingsNotSaved: "Ayarlar kaydedilemiyor — değişiklikler çıkana dek geçerli",
     },
     actions: {
@@ -136,6 +137,7 @@ const shell: Catalogue<typeof enShell> = {
       systemSettings: "Sistem Ayarları",
       checkAgain: "Yeniden dene",
       checking: "Kontrol ediliyor…",
+      turnOnAmbilight: "Ambilight'ı aç",
     },
   },
 };

@@ -1,9 +1,11 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getStartupEnabledMock, setStartupMock } = vi.hoisted(() => ({
+const { getStartupEnabledMock, setStartupMock, loadShellStoreMock, openLogDirMock } = vi.hoisted(() => ({
   getStartupEnabledMock: vi.fn<() => Promise<boolean>>(),
   setStartupMock: vi.fn<(enabled: boolean) => Promise<boolean>>(),
+  loadShellStoreMock: vi.fn<() => Promise<Record<string, unknown>>>(),
+  openLogDirMock: vi.fn<() => Promise<void>>(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -28,12 +30,18 @@ vi.mock("@/features/i18n/i18n", () => ({
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     save: vi.fn<(partial: unknown) => Promise<void>>().mockResolvedValue(undefined),
-    load: () => Promise.resolve({}),
+    load: () => loadShellStoreMock(),
     onSaved: () => () => {},
   },
 }));
 
+vi.mock("@/features/platform/platformApi", () => ({
+  openLogDir: () => openLogDirMock(),
+}));
+
 import { __resetShowNerdStatsForTests } from "@/features/telemetry/nerdStatsSetting";
+import { APP_VERSION } from "@/shared/constants/app";
+import { defaultUpdateChannel } from "@/shared/contracts/shell";
 
 import { SystemSection, UP_TO_DATE_RESULT_MS } from "../SystemSection";
 
@@ -58,6 +66,8 @@ describe("SystemSection", () => {
   beforeEach(() => {
     getStartupEnabledMock.mockReset().mockResolvedValue(false);
     setStartupMock.mockReset().mockImplementation((enabled) => Promise.resolve(enabled));
+    loadShellStoreMock.mockReset().mockResolvedValue({});
+    openLogDirMock.mockReset().mockResolvedValue(undefined);
     __resetShowNerdStatsForTests();
   });
   afterEach(() => {
@@ -172,6 +182,7 @@ describe("SystemSection", () => {
         "settings:groups.language.title",
         "settings:groups.updates.title",
         "telemetry:title",
+        "settings:groups.help.title",
         "settings:groups.about.title",
       ]);
       expect(screen.getByRole("region", { name: "settings:groups.about.title" })).toBeInTheDocument();
@@ -195,6 +206,97 @@ describe("SystemSection", () => {
       await waitFor(() =>
         expect(screen.getByRole("combobox")).toHaveAccessibleDescription("settings:language.description"),
       );
+    });
+  });
+
+  describe("update channel", () => {
+    const betaSwitch = () => screen.getByRole("switch", { name: "updater:betaChannel" });
+
+    it("defaults to the channel of the running build when nothing was chosen", async () => {
+      renderSection();
+      await settle();
+      expect(betaSwitch()).toHaveAttribute("aria-checked", String(defaultUpdateChannel(APP_VERSION) === "beta"));
+    });
+
+    it("shows an explicit choice whatever the build", async () => {
+      for (const stored of ["stable", "beta"] as const) {
+        loadShellStoreMock.mockResolvedValue({ updateChannel: stored });
+        renderSection();
+        await settle();
+        expect(betaSwitch()).toHaveAttribute("aria-checked", String(stored === "beta"));
+        cleanup();
+      }
+    });
+  });
+
+  describe("help", () => {
+    it("brings the setup guide back and says where it went", async () => {
+      const restart = vi.fn(() => "shown" as const);
+      renderSection({ onRestartSetupGuide: restart });
+      await settle();
+
+      await act(async () => {
+        screen.getByTestId("setup-guide-restart").click();
+      });
+
+      expect(restart).toHaveBeenCalledOnce();
+      expect(screen.getByTestId("setup-guide-result")).toHaveTextContent("settings:help.guide.shown");
+    });
+
+    // A set-up user's restart completes again at once; a silent button reads as dead.
+    it("says so when every step of the guide is already done", async () => {
+      renderSection({ onRestartSetupGuide: () => "alreadyDone" });
+      await settle();
+
+      await act(async () => {
+        screen.getByTestId("setup-guide-restart").click();
+      });
+
+      expect(screen.getByTestId("setup-guide-result")).toHaveTextContent("settings:help.guide.alreadyDone");
+    });
+
+    it("has no guide row where there is no guide to bring back", async () => {
+      renderSection();
+      await settle();
+      expect(screen.queryByTestId("setup-guide-restart")).not.toBeInTheDocument();
+    });
+
+    it("opens the log folder, and reports a failure instead of swallowing it", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      renderSection();
+      await settle();
+
+      await act(async () => {
+        screen.getByTestId("open-log-folder").click();
+      });
+      expect(openLogDirMock).toHaveBeenCalledOnce();
+      expect(screen.queryByTestId("log-folder-error")).not.toBeInTheDocument();
+
+      openLogDirMock.mockRejectedValueOnce(new Error("no file manager"));
+      await act(async () => {
+        screen.getByTestId("open-log-folder").click();
+      });
+      expect(screen.getByRole("alert")).toHaveTextContent("settings:help.logs.error");
+      expect(error).toHaveBeenCalledWith("[LumaSync] opening the log folder failed:", expect.any(Error));
+    });
+
+    // Nothing is sent by the app: both are links the browser opens, and the
+    // issue form only arrives pre-filled.
+    it("links to a pre-filled issue form and to Discussions, in the browser", async () => {
+      renderSection();
+      await settle();
+
+      const issue = screen.getByTestId("report-issue-link");
+      const url = new URL(issue.getAttribute("href") ?? "");
+      expect(`${url.origin}${url.pathname}`).toBe("https://github.com/voyvodka/LumaSync/issues/new");
+      expect(url.searchParams.get("template")).toBe("bug_report.md");
+      expect(url.searchParams.get("body")).toContain(`- App version: ${APP_VERSION}`);
+      expect(issue).toHaveAttribute("target", "_blank");
+      expect(issue).toHaveAccessibleDescription("settings:help.issue.description");
+
+      const discussions = screen.getByTestId("discussions-link");
+      expect(discussions).toHaveAttribute("href", "https://github.com/voyvodka/LumaSync/discussions");
+      expect(discussions).toHaveAttribute("target", "_blank");
     });
   });
 });

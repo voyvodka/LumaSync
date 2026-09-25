@@ -64,7 +64,7 @@ fresh runner — and this was audited rather than assumed:
   target, and no paired Hue bridge, so those two modes are always skipped there, not force-driven
   against nothing.
 - Nothing the specs touch reaches the network in a way that can hang: the e2e build's `e2eBuild`
-  launch-context flag makes `useAutoUpdater` skip the startup update check outright; Hue bridge
+  launch-context flag makes `useAutoUpdater` skip every automatic update check outright; Hue bridge
   discovery is invoked only from the pairing button the specs never click, never on boot or on
   opening the Hue device-category rail; and macOS screen-capture consent has two calls behind two
   different gates (`screen_capture_permission.rs`) — `get_screen_capture_permission` only ever calls
@@ -182,8 +182,8 @@ call `assertNoOpenDialog`, which fails on any rendered `[role="dialog"]`, `[role
 `[aria-modal="true"]` and quotes its role, name and visible text. The probe records `openDialogs` in
 every section's structure and fails once it has captured the PNG. A spec that opens a dialog on
 purpose must close it before the next helper call. Separately, `get_launch_context` reports
-`e2eBuild` (`cfg!(feature = "e2e")`), and `useAutoUpdater` skips the automatic startup check when it
-is set, so a run's first screen does not depend on what the live feed answers that day. A check the
+`e2eBuild` (`cfg!(feature = "e2e")`), and `useAutoUpdater` skips the automatic checks when it
+is set — the daily schedule stops at its first — so a run's first screen does not depend on what the live feed answers that day. A check the
 user starts still reaches the feed; the unit tests cover both paths.
 
 ## Seeing the screen

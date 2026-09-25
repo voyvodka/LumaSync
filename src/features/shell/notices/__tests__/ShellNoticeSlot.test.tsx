@@ -194,6 +194,22 @@ describe("ShellNoticeSlot", () => {
     expect(screen.queryByTestId("notice-dismiss")).toBeNull();
   });
 
+  // The guide's × read "Dismiss notice" and ended the guide for good.
+  it("names the guide's dismiss as skipping it: a text button in full, the ×'s name in compact", async () => {
+    const guide: Partial<ShellNoticeInput> = { onboardingStep: "devices" };
+    const { unmount } = render(<Harness input={guide} variant="full" />);
+    const skip = screen.getByRole("button", { name: "shell:notices.skipSetupGuide" });
+    expect(skip).toHaveTextContent("shell:notices.skipSetupGuide");
+    unmount();
+
+    render(<Harness input={guide} variant="compact" />);
+    const close = screen.getByTestId("notice-dismiss");
+    expect(close).toHaveAttribute("aria-label", "shell:notices.skipSetupGuide");
+    expect(close).toHaveAttribute("title", "shell:notices.skipSetupGuide");
+    await userEvent.click(close);
+    expect(screen.queryByTestId("onboarding-notice")).toBeNull();
+  });
+
   // The toasts rendered above UpdateModal and outside its focus trap.
   it("sits inert under a modal and says nothing while it is open", () => {
     render(<Harness input={THREE} variant="compact" suppressed />);

@@ -81,10 +81,19 @@ capture crates. CodeQL analyses `javascript-typescript`, `rust` and `actions`, a
 keeps that exact name.
 
 **Updates ship through GitHub Releases with minisign verification.** The updater checks on startup
-and surfaces `UpdateModal.tsx` when a version is available. A failed startup check is only logged
-and raised as a low-priority shell notice with "Try again"; the modal reports a failure only for a
-check the user started (see `ui-and-shell.md`). The e2e build skips the startup check. Artefacts
-must include a `latest.json` endpoint.
+and then daily while the app runs, retrying a failed check after 1, 5 and 15 minutes, and surfaces
+`UpdateModal.tsx` when a version is available. A failed automatic check is only logged and raised as
+a low-priority shell notice with "Try again"; the modal reports a failure only for a check the user
+started (see `ui-and-shell.md`). The e2e build skips automatic checks. Artefacts must include a
+`latest.json` endpoint.
+
+**The update channel defaults to the running build.** An install that never chose a channel checks
+beta while it runs a prerelease (a version with a `-` suffix) and stable otherwise;
+`resolve_update_channel` in `commands/updater.rs` and `defaultUpdateChannel` in
+`contracts/shell.ts` must agree. An explicit choice always wins, and any stored value but an exact
+`"beta"` stays stable, so a corrupt store still never moves anyone onto prereleases. The prerelease
+default is the one sanctioned exception, for someone already running one: on stable they would
+never be offered the next.
 
 **Tests live in a `__tests__/` subfolder beside the code under test** (`foo.ts` →
 `__tests__/foo.test.ts`), never co-located. Mock the Tauri boundary for deterministic frontend

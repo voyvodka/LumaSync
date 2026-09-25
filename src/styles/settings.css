@@ -173,8 +173,16 @@
   box-shadow: inset 0 0 0 1px rgba(255, 176, 32, 0.5), 0 0 0 2px rgba(255, 176, 32, 0.2);
 }
 
-/* Updates row button (amber ghost primary) */
+/* Row button (amber ghost primary). Also drawn on the Help links, hence the
+   inline-flex and no underline; the min-height is the 32 px tap floor. */
 .lm-settings-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  white-space: nowrap;
+  text-decoration: none;
   padding: 6px 12px;
   font-family: var(--lm-mono);
   font-size: 10px;
@@ -262,6 +270,17 @@
   .lm-settings-row-error,
   .lm-settings-row-result {
     color: CanvasText;
+  }
+  /* The link form would otherwise read as body text in a button's box. */
+  .lm-settings-btn {
+    border-color: ButtonText;
+    color: ButtonText;
+  }
+  a.lm-settings-btn {
+    color: LinkText;
+  }
+  .lm-settings-btn:focus-visible {
+    outline: 2px solid Highlight;
   }
 }
 .lm-settings-about-v {

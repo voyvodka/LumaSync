@@ -36,6 +36,9 @@ export const QUIET_INPUT: ShellNoticeInput = {
   usbUnsupportedHueFallback: true,
   hueColorNotice: null,
   onboardingStep: null,
+  onboardingPending: false,
+  ambilightReady: true,
+  modeTransitioning: false,
   ledSetupNext: null,
   localTargetConfigured: true,
   localTransport: "serial",
@@ -53,6 +56,7 @@ export function makeHandlers(): { [K in keyof Required<ShellNoticeHandlers>]: Mo
     retryHueProbe: vi.fn(),
     retryHueStop: vi.fn(),
     completeOnboarding: vi.fn(),
+    turnOnAmbilight: vi.fn<ShellNoticeHandlers["turnOnAmbilight"]>(),
     retryUpdateCheck: vi.fn(),
   };
 }

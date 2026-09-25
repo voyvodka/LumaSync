@@ -35,6 +35,16 @@ import { useShellNoticeQueue } from "./features/shell/notices/useShellNoticeQueu
 import { ShellNoticeAnnouncer, ShellNoticeSlot } from "./features/shell/notices/ShellNoticeSlot";
 import { useOnboardingStep } from "./features/onboarding/state/useOnboardingStep";
 import {
+  INITIAL_ONBOARDING_STEP,
+  NO_ONBOARDING_BOOT_FACTS,
+  ONBOARDING_STEPS,
+  settleStep,
+  type OnboardingBootFacts,
+  type OnboardingGuardSnapshot,
+} from "./features/onboarding/state/onboardingState";
+import { SetupGuideProvider, type SetupGuideRestartResult } from "./features/onboarding/state/setupGuideControl";
+import { useBackgroundUpdateChecks } from "./features/updater/useBackgroundUpdateChecks";
+import {
   UpdateModalHost,
   UpdaterProvider,
   useUpdaterActions,
@@ -75,6 +85,7 @@ import {
 } from "./features/shell/useUIMode";
 import { useGlobalKeybinds, type KeybindHandlers } from "./features/shell/useGlobalKeybinds";
 import { modeKeybindHandlers } from "./features/shell/modeKeybinds";
+import { modeKind } from "./features/mode/model/modeKinds";
 import { useWindowVisible } from "./features/shell/windowVisibility";
 import { useShellStateWriteFailing } from "./features/persistence/writeHealth";
 import {
@@ -146,8 +157,8 @@ function Shell() {
   // Defaults to `true` so a hydrating store never flashes the banner at a user
   // who has already dismissed it; bootstrap flips it false for a fresh install.
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(true);
-  const [hasInteractedWithMode, setHasInteractedWithMode] = useState(false);
-  const updateCheckRanRef = useRef(false);
+  const [onboardingBoot, setOnboardingBootFacts] = useState<OnboardingBootFacts>(NO_ONBOARDING_BOOT_FACTS);
+  const [onboardingRestartKey, setOnboardingRestartKey] = useState(0);
 
   const { notice: hueColorNotice, report: reportHueSolidColorStatus } =
     useHueSolidColorNotice();
@@ -176,14 +187,10 @@ function Shell() {
   } = mode;
 
   // Deliberately outside `bootstrap()` — behind shellStore, Hue, USB and DTLS the
-  // release probe landed well past the user's first frame. The ref keeps
-  // StrictMode's double-mount from firing `check()` twice. A failure here is a
-  // notice, never the modal: nobody asked for this check.
-  useEffect(() => {
-    if (updateCheckRanRef.current) return;
-    updateCheckRanRef.current = true;
-    void checkForUpdatesInBackground();
-  }, [checkForUpdatesInBackground]);
+  // release probe landed well past the user's first frame. A failure here is a
+  // notice, never the modal: nobody asked for this check. It repeats daily, and
+  // a failed one retries sooner; see `updateCheckSchedule.ts`.
+  useBackgroundUpdateChecks(checkForUpdatesInBackground);
 
   const { runtimeState: hueRuntimeState } = useHueStreamHealth({
     hueTargetSelected: selectedOutputTargets.includes("hue"),
@@ -219,7 +226,7 @@ function Shell() {
     setActiveSection,
     setSavedCalibration,
     setHasCompletedOnboarding,
-    setHasInteractedWithMode,
+    setOnboardingBootFacts,
     setHueStartConfig,
     armUsbConnected: (connected) => armUsbConnectedRef.current?.(connected),
     restoreLighting: mode.restoreAtBoot,
@@ -335,9 +342,6 @@ function Shell() {
   // Fresh closures are fine: the provider hands the sections stable wrappers.
   const lightingControlActions = {
     changeMode: (next: LightingModeConfig) => {
-      // First deliberate mode click satisfies the LIGHTS
-      // step guard. Subsequent clicks are no-ops on the flag.
-      if (!hasInteractedWithMode) setHasInteractedWithMode(true);
       void handleLightingModeChange(next);
     },
     changeOutputTargets: handleOutputTargetsChange,
@@ -351,9 +355,8 @@ function Shell() {
     switchUIMode: guardedSwitchUIMode,
   };
 
-  // Onboarding completion handler. Persists the flag and
-  // unmounts the flow on the next render. Called on either a successful
-  // step 3 (calibration saved) or a deliberate dismiss.
+  // Persists the flag and unmounts the guide on the next render. Called when
+  // the last step's guard holds, and by the notice's "Skip setup guide".
   const handleOnboardingComplete = useCallback(() => {
     setHasCompletedOnboarding(true);
     void saveShellState({ hasCompletedOnboarding: true }).catch((err) => {
@@ -361,17 +364,35 @@ function Shell() {
     });
   }, []);
 
+  const lightingRunning = lightingMode.kind !== LIGHTING_MODE_KIND.OFF && activeOutputTargets.length > 0;
+  const onboardingGuards: OnboardingGuardSnapshot = {
+    hasReachableOutput: localSink !== null || hueReachable || hueSessionActive,
+    hasLocalOutput: localSinkSeen,
+    hasSavedCalibration: savedCalibration !== undefined,
+    hasLightingRun: onboardingBoot.hasRunLighting || lightingRunning,
+  };
   const onboarding = useOnboardingStep({
     hasCompleted: hasCompletedOnboarding,
-    guards: {
-      hasInteractedWithMode,
-      hasReachableOutput: isConnected || hueReachable || hueSessionActive,
-      hasSavedCalibration: savedCalibration !== undefined,
-    },
-    guardsLoaded: bootstrapDone,
+    guards: onboardingGuards,
+    // The launch restore runs the saved mode, which is the last step's guard.
+    guardsLoaded: bootstrapDone && lightingRestored,
     reachabilityPending: hueStartConfig !== null && hueProbe.verdict === null && !hueSessionActive,
+    outputRemembered: onboardingBoot.outputRemembered,
+    restartKey: onboardingRestartKey,
     onComplete: handleOnboardingComplete,
   });
+
+  // Nothing to bring back when every guard already holds: the guide would
+  // complete again on its first render, and the button would seem dead.
+  const restartSetupGuide = (): SetupGuideRestartResult => {
+    if (settleStep(INITIAL_ONBOARDING_STEP, onboardingGuards) === ONBOARDING_STEPS.COMPLETE) return "alreadyDone";
+    setHasCompletedOnboarding(false);
+    setOnboardingRestartKey((key) => key + 1);
+    void saveShellState({ hasCompletedOnboarding: false }).catch((err) => {
+      console.error("[LumaSync] saveShellState(hasCompletedOnboarding=false) failed:", err);
+    });
+    return "shown";
+  };
 
   const openDevicesSection = (category: DeviceCategory) =>
     void handleSectionChange(SECTION_IDS.DEVICES, category);
@@ -396,6 +417,7 @@ function Shell() {
       : isModeTransitioning ||
         availability !== "ready" ||
         modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED;
+  const ambilightDisabled = isModeKindDisabled(LIGHTING_MODE_KIND.AMBILIGHT);
   // Read at press time through the hook's ref, so fresh closures cost nothing.
   const keybindHandlers: KeybindHandlers = {
     // ⌘, / Ctrl+, is the canonical open-settings shortcut on all three
@@ -421,6 +443,8 @@ function Shell() {
     retryHueProbe: hueProbe.retry,
     retryHueStop: () => void mode.stopHueOutput(HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL),
     completeOnboarding: handleOnboardingComplete,
+    // The kind alone, as ⌥2 does: Rust keeps the last Ambilight settings.
+    turnOnAmbilight: () => lightingControlActions.changeMode(modeKind(LIGHTING_MODE_KIND.AMBILIGHT).config({})),
     retryUpdateCheck: () => void checkForUpdates(),
   };
   const noticeHandlers = useMemo<ShellNoticeHandlers>(
@@ -432,6 +456,7 @@ function Shell() {
       retryHueProbe: () => noticeHandlersRef.current?.retryHueProbe?.(),
       retryHueStop: () => noticeHandlersRef.current?.retryHueStop(),
       completeOnboarding: () => noticeHandlersRef.current?.completeOnboarding(),
+      turnOnAmbilight: () => noticeHandlersRef.current?.turnOnAmbilight(),
       retryUpdateCheck: () => noticeHandlersRef.current?.retryUpdateCheck(),
     }),
     [],
@@ -465,6 +490,9 @@ function Shell() {
           usbUnsupportedHueFallback,
           hueColorNotice,
           onboardingStep: onboarding.step,
+          onboardingPending: onboarding.pending,
+          ambilightReady: !ambilightDisabled,
+          modeTransitioning: isModeTransitioning,
           ledSetupNext: ledSetupNextPort,
           localTargetConfigured,
           localTransport,
@@ -497,6 +525,9 @@ function Shell() {
       usbUnsupportedHueFallback,
       hueColorNotice,
       onboarding.step,
+      onboarding.pending,
+      ambilightDisabled,
+      isModeTransitioning,
       ledSetupNextPort,
       localTargetConfigured,
       localTransport,
@@ -543,6 +574,7 @@ function Shell() {
     <NavigationProvider store={navigation} actions={navigationActions}>
       <LightingControlProvider state={lightingControlState} actions={lightingControlActions}>
         <HueShellStatusProvider status={hueShellStatus}>
+        <SetupGuideProvider actions={{ restart: restartSetupGuide }}>
         {/* Custom cross-platform title bar. Sits above everything. Handles
             native drag + double-click zoom, hosts the compact-mode toggle, and
             (on Windows/Linux) draws custom min/max/close buttons since native
@@ -619,6 +651,7 @@ function Shell() {
         {/* After the notices, and above them: the modal owns the screen, and the
             queue waits under it, inert and outside its focus trap. */}
         <UpdateModalHost />
+        </SetupGuideProvider>
         </HueShellStatusProvider>
       </LightingControlProvider>
     </NavigationProvider>

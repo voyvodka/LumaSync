@@ -309,20 +309,20 @@ describe("useAutoUpdater", () => {
     vi.mocked(shellStore.load).mockResolvedValue(
       { updateChannel: "beta" } as Awaited<ReturnType<typeof shellStore.load>>,
     );
+    // Disagreeing with the store on purpose, to tell the two reads apart.
     vi.mocked(checkForUpdate).mockResolvedValue({
       status: status(UPDATER_STATUS.UP_TO_DATE),
-      channel: "beta",
+      channel: "stable",
       update: null,
     });
 
     const { result } = renderHook(() => useAutoUpdater());
-    expect(result.current.channel).toBe("stable");
 
     await act(async () => {
       await result.current.checkForUpdates();
     });
 
-    expect(result.current.channel).toBe("beta");
+    expect(result.current.channel).toBe("stable");
   });
 
   it("dismiss() closes the modal without discarding what the updater is doing", async () => {
@@ -492,14 +492,94 @@ describe("useAutoUpdater", () => {
       expect(result.current.checkFailedNotice).toBeNull();
     });
 
-    it("never reaches the feed in the e2e build", async () => {
+    it("never reaches the feed in the e2e build, and turns the schedule off", async () => {
       vi.mocked(readE2eBuild).mockResolvedValue(true);
+      const { result } = renderHook(() => useAutoUpdater());
 
-      const { result } = await runBackground();
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await result.current.checkForUpdatesInBackground();
+      });
 
+      expect(outcome).toBe("off");
       expect(checkForUpdate).not.toHaveBeenCalled();
       expect(result.current.state.status).toBe("idle");
       expect(result.current.checkFailedNotice).toBeNull();
+    });
+
+    it("tells the schedule whether the check failed", async () => {
+      const { result } = renderHook(() => useAutoUpdater());
+      const outcomes: unknown[] = [];
+
+      vi.mocked(checkForUpdate).mockRejectedValueOnce(new Error("offline"));
+      vi.mocked(checkForUpdate).mockResolvedValueOnce({
+        status: status(UPDATER_STATUS.UP_TO_DATE),
+        channel: "stable",
+        update: null,
+      });
+      for (let i = 0; i < 2; i += 1) {
+        await act(async () => {
+          outcomes.push(await result.current.checkForUpdatesInBackground());
+        });
+      }
+
+      expect(outcomes).toEqual(["failed", "done"]);
+    });
+
+    // The daily check must not reopen a prompt the user put off with "Later",
+    // nor restart a download that is running.
+    it.each(["available", "downloading"] as const)("leaves an update already %s alone", async (busy) => {
+      vi.mocked(checkForUpdate).mockResolvedValue({
+        status: status(UPDATER_STATUS.UPDATE_AVAILABLE),
+        channel: "stable",
+        update: UPDATE,
+      });
+      const { result } = renderHook(() => useAutoUpdater());
+      await act(async () => {
+        await result.current.checkForUpdatesInBackground();
+      });
+      if (busy === "downloading") {
+        act(() => {
+          result.current.devSetState({
+            status: "downloading",
+            update: UPDATE,
+            progress: 10,
+            downloadedBytes: 1,
+            totalBytes: 10,
+            bytesPerSecond: 1,
+            etaSeconds: 9,
+          });
+        });
+      }
+      act(() => {
+        result.current.dismiss();
+      });
+      vi.mocked(checkForUpdate).mockClear();
+
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await result.current.checkForUpdatesInBackground();
+      });
+
+      expect(outcome).toBe("done");
+      expect(checkForUpdate).not.toHaveBeenCalled();
+      expect(result.current.isModalOpen).toBe(false);
+    });
+
+    it("does not replace an error the prompt still shows", async () => {
+      vi.mocked(checkForUpdate).mockRejectedValue(new Error("offline"));
+      const { result } = renderHook(() => useAutoUpdater());
+      await act(async () => {
+        await result.current.checkForUpdates();
+      });
+      vi.mocked(checkForUpdate).mockClear();
+
+      await act(async () => {
+        await result.current.checkForUpdatesInBackground();
+      });
+
+      expect(checkForUpdate).not.toHaveBeenCalled();
+      expect(result.current.state).toMatchObject({ status: "error", phase: "check" });
     });
 
     it("a user check still opens the modal on the same failure", async () => {
