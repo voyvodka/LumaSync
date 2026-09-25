@@ -54,6 +54,10 @@ const HUE_LIGHT_RESTORE_MIN_REQUEST_WINDOW: Duration = Duration::from_millis(50)
 /// A throttled light is tried again at most this many times in one restore.
 const HUE_LIGHT_RESTORE_MAX_ATTEMPTS: u8 = 2;
 
+/// Ceiling on switching an area's off lights on before its stream starts: the
+/// start waits for it, so it is kept short — ~15 lights at the light budget.
+pub(crate) const HUE_LIGHT_SWITCH_ON_BUDGET: Duration = Duration::from_millis(1_500);
+
 /// The light's active colour mode. CLIP v2 reports `color.xy` in both modes,
 /// so the mode is read from `color_temperature.mirek_valid`, not from which
 /// field is present.
@@ -102,6 +106,28 @@ impl std::fmt::Debug for HueLightRestore {
 impl HueLightRestore {
     fn is_for(&self, bridge_ip: &str, area_id: &str) -> bool {
         self.bridge_ip == bridge_ip && self.area_id == area_id
+    }
+
+    /// The lights of this capture that read off, each to be switched on and
+    /// nothing else. The capture itself is left as it is, so a later restore
+    /// still puts them back off.
+    pub(crate) fn off_lights_switched_on(&self) -> Self {
+        Self {
+            lights: self
+                .lights
+                .iter()
+                .filter(|light| !light.state.on)
+                .map(|light| HueLightSnapshot {
+                    light_id: light.light_id.clone(),
+                    state: HueLightState {
+                        on: true,
+                        brightness: None,
+                        color: None,
+                    },
+                })
+                .collect(),
+            ..self.clone()
+        }
     }
 
     /// The same lights, each to be written and watched as off. Everything the
@@ -267,6 +293,9 @@ pub(crate) enum HueLightRestoreStop {
     NoClient(String),
     /// Another streamer holds the area; its lights are not ours to write.
     AreaTaken,
+    /// The bridge never said whether anyone streams to the area, so its lights
+    /// are left alone rather than risk writing under another stream.
+    AreaUnknown,
     /// A newer session of ours began; writing now would paint under it.
     Superseded,
 }
@@ -300,6 +329,8 @@ enum ReadFailure {
     Stop(HueLightRestoreStop),
     /// This read is lost; the next one may land.
     Skip,
+    /// 404: the resource is gone.
+    Gone,
 }
 
 /// Write each snapshot back, paced to the bridge's light budget
@@ -386,6 +417,65 @@ pub(crate) fn restore_lights(
     report
 }
 
+/// Switch on the lights `lights` names (`off_lights_switched_on`), before the
+/// area is activated. The bridge is not documented to switch an off light on
+/// for a stream, and after Off every light of the area is off. One read of
+/// the area first: written only if it says nobody streams to it. No watch —
+/// nothing is known to undo it, and the start waits for this. Blocking, never
+/// fatal; `superseded` says a stop overtook the start.
+pub(crate) fn switch_on_lights(
+    lights: &HueLightRestore,
+    deadline: Instant,
+    superseded: &dyn Fn() -> bool,
+) -> HueLightRestoreReport {
+    let total = lights.lights.len();
+    let mut report = HueLightRestoreReport {
+        restored: 0,
+        reapplied: 0,
+        total,
+        stopped: None,
+    };
+    if total == 0 {
+        return report;
+    }
+    let client = match blocking_client_for_key(&lights.username) {
+        Ok(client) => client,
+        Err(err) => {
+            report.stopped = Some(HueLightRestoreStop::NoClient(err));
+            return report;
+        }
+    };
+    let mut run = RestoreRun {
+        client: &client,
+        restore: lights,
+        deadline,
+        superseded,
+        pacer: RequestPacer::new(HUE_HTTP_FALLBACK_MAX_REQUESTS_PER_SEC),
+    };
+    let area = match run.area_is_active(deadline) {
+        Ok(false) => None,
+        Ok(true) => Some(HueLightRestoreStop::AreaTaken),
+        Err(ReadFailure::Stop(stop)) => Some(stop),
+        Err(ReadFailure::Skip | ReadFailure::Gone) => Some(HueLightRestoreStop::AreaUnknown),
+    };
+    if let Some(stop) = area {
+        warn!(
+            "[hue-restore] area {}: {total} off light(s) not switched on before the stream: {stop:?}",
+            lights.area_id
+        );
+        report.stopped = Some(stop);
+        return report;
+    }
+    let (written, stopped) = run.write(lights.lights.iter().collect());
+    report.restored = written.len();
+    report.stopped = stopped;
+    info!(
+        "[hue-restore] area {}: switched {}/{} off light(s) on before the stream ({:?})",
+        lights.area_id, report.restored, total, report.stopped
+    );
+    report
+}
+
 struct RestoreRun<'a> {
     client: &'a reqwest::blocking::Client,
     restore: &'a HueLightRestore,
@@ -428,19 +518,23 @@ impl RestoreRun<'_> {
 
     /// Our own stream has ended by now, so a busy area is another streamer —
     /// or a reconnect of ours the stop overtook, which gives it back within
-    /// moments. Waits until `end` for it to come free.
+    /// moments. Waits until `end` for it to come free. Only a read that says
+    /// "free" lets the writes go: a lost read is asked again, never taken for
+    /// free, or one garbled answer would paint under another app's stream.
     fn wait_for_area_free(&mut self, end: Instant) -> Result<(), HueLightRestoreStop> {
+        let mut unanswered = HueLightRestoreStop::AreaUnknown;
         loop {
             if (self.superseded)() {
                 return Err(HueLightRestoreStop::Superseded);
             }
             match self.area_is_active(end) {
-                Ok(false) | Err(ReadFailure::Skip) => return Ok(()),
+                Ok(false) => return Ok(()),
+                Ok(true) => unanswered = HueLightRestoreStop::AreaTaken,
                 Err(ReadFailure::Stop(stop)) => return Err(stop),
-                Ok(true) => {}
+                Err(ReadFailure::Skip | ReadFailure::Gone) => {}
             }
             if !Self::wait_for_next_poll(end) {
-                return Err(HueLightRestoreStop::AreaTaken);
+                return Err(unanswered);
             }
         }
     }
@@ -538,7 +632,7 @@ impl RestoreRun<'_> {
             }
             let readings = match self.read_lights(end) {
                 Ok(readings) => readings,
-                Err(ReadFailure::Skip) => continue,
+                Err(ReadFailure::Skip | ReadFailure::Gone) => continue,
                 Err(ReadFailure::Stop(stop)) => {
                     report.stopped = Some(stop);
                     return;
@@ -636,7 +730,8 @@ impl RestoreRun<'_> {
         Ok(readings)
     }
 
-    /// Does anyone stream to the area? Read the way readiness reads it.
+    /// Does anyone stream to the area? Read the way readiness reads it. An
+    /// area the bridge no longer has is streamed by nobody.
     fn area_is_active(&self, end: Instant) -> Result<bool, ReadFailure> {
         if !is_safe_resource_id(&self.restore.area_id) {
             return Err(ReadFailure::Skip);
@@ -646,7 +741,10 @@ impl RestoreRun<'_> {
             "https://{}/clip/v2/resource/entertainment_configuration/{}",
             self.restore.bridge_ip, self.restore.area_id
         );
-        let body = self.get(&endpoint, timeout)?;
+        let body = match self.get(&endpoint, timeout) {
+            Err(ReadFailure::Gone) => return Ok(false),
+            other => other?,
+        };
         let Some(area) = body
             .get("data")
             .and_then(Value::as_array)
@@ -678,6 +776,7 @@ impl RestoreRun<'_> {
             Err(HueHttpFault::AuthInvalid) => {
                 Err(ReadFailure::Stop(HueLightRestoreStop::AuthInvalid))
             }
+            Err(HueHttpFault::NotFound) => Err(ReadFailure::Gone),
             Err(_) => Err(ReadFailure::Skip),
         }
     }
