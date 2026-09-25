@@ -155,8 +155,6 @@ pub(crate) struct LightingIntent {
     pub(crate) kind: LightingModeKind,
     /// The selection for this session; a left-out target drops from it.
     pub(crate) targets: OutputTargets,
-    /// What `lastOutputTargets` holds — the persisted mode carries these.
-    pub(crate) saved_targets: OutputTargets,
     /// A choice asked for `kind` and it has not been saved yet. Level, not
     /// edge: a choice superseded by an unplug is saved by whichever
     /// transaction runs it.
@@ -330,23 +328,19 @@ impl OutputsState {
                 .or_else(|| persisted.and_then(PersistedShellState::lighting_mode))
                 .unwrap_or_default();
             self.note_ran(mode.kind);
-            let targets = request.targets.clone().unwrap_or_else(saved);
             intent.clone_from(&LightingIntent {
                 known: true,
                 kind: mode.kind,
-                targets: targets.clone(),
-                saved_targets: targets,
+                targets: request.targets.clone().unwrap_or_else(saved),
                 persist_mode: false,
             });
             return None;
         }
         if !intent.known {
-            let targets = saved();
             intent.clone_from(&LightingIntent {
                 known: true,
                 kind: running_kind,
-                targets: targets.clone(),
-                saved_targets: targets,
+                targets: saved(),
                 persist_mode: false,
             });
         }
@@ -357,7 +351,6 @@ impl OutputsState {
         let targets = request.targets.clone()?;
         intent.targets = targets.clone();
         if request.origin.is_choice() {
-            intent.saved_targets = targets.clone();
             return Some(targets);
         }
         None
@@ -563,14 +556,9 @@ fn payload_for(
     mode
 }
 
-/// Writes `lightingMode` as the frontend did: the kind, both payloads, and the
-/// saved targets — never a set a left-out target was dropped from.
-fn persist_mode<R: Runtime>(
-    app: &AppHandle<R>,
-    kind: &LightingModeKind,
-    stored: &StoredTuning,
-    saved_targets: &OutputTargets,
-) {
+/// Writes `lightingMode`: the kind and both payloads. The selection is
+/// `lastOutputTargets`, saved on arrival, so no copy of it goes here.
+fn persist_mode<R: Runtime>(app: &AppHandle<R>, kind: &LightingModeKind, stored: &StoredTuning) {
     let mut mode = shell_state::persisted(app)
         .and_then(|state| state.lighting_mode_object())
         .unwrap_or_default();
@@ -594,12 +582,9 @@ fn persist_mode<R: Runtime>(
             .as_ref()
             .and_then(|a| serde_json::to_value(a).ok()),
     );
-    put(
-        "targets",
-        serde_json::to_value(target_strings(saved_targets)).ok(),
-    );
-    // Stamped per dispatch and never part of the saved mode.
-    for derived in ["ledCalibration", "roomGeometry"] {
+    // Stamped per dispatch and never part of the saved mode; `targets` is a
+    // copy an older build wrote, which nothing read.
+    for derived in ["ledCalibration", "roomGeometry", "targets"] {
         mode.remove(derived);
     }
     let mut set = Map::new();
@@ -627,12 +612,7 @@ pub(crate) fn persist_running_choice<R: Runtime>(app: &AppHandle<R>) {
     if intent.kind == LightingModeKind::Off || state.snapshot.read().mode.kind != intent.kind {
         return;
     }
-    persist_mode(
-        app,
-        &intent.kind,
-        &state.tuning.stored(),
-        &intent.saved_targets,
-    );
+    persist_mode(app, &intent.kind, &state.tuning.stored());
 }
 
 async fn blocking<R, T, F>(app: &AppHandle<R>, work: F) -> Result<T, String>
@@ -1032,12 +1012,7 @@ impl<'a, R: Runtime> Transaction<'a, R> {
         }
         self.held_out = Some(None);
         if intent.persist_mode {
-            persist_mode(
-                self.app,
-                &intent.kind,
-                &self.state.tuning.stored(),
-                &intent.saved_targets,
-            );
+            persist_mode(self.app, &intent.kind, &self.state.tuning.stored());
             self.state
                 .outputs
                 .update_intent(|intent| intent.persist_mode = false);
@@ -1299,12 +1274,7 @@ impl<'a, R: Runtime> Transaction<'a, R> {
         self.carried = true;
         self.commit().await;
         if intent.persist_mode {
-            persist_mode(
-                self.app,
-                &intent.kind,
-                &self.state.tuning.stored(),
-                &intent.saved_targets,
-            );
+            persist_mode(self.app, &intent.kind, &self.state.tuning.stored());
             self.state
                 .outputs
                 .update_intent(|intent| intent.persist_mode = false);

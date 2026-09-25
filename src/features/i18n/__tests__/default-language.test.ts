@@ -37,7 +37,6 @@ describe("resolveInitialLanguage()", () => {
       windowCenterY: null,
       lastSection: "lights",
       trayHintShown: false,
-      startupEnabled: false,
       // language is absent (first launch state) — cast to satisfy TS in tests
       language: undefined as unknown as string,
     });
@@ -57,7 +56,6 @@ describe("resolveInitialLanguage()", () => {
       windowCenterY: null,
       lastSection: "lights",
       trayHintShown: false,
-      startupEnabled: false,
       language: "tr",
     });
 
@@ -76,7 +74,6 @@ describe("resolveInitialLanguage()", () => {
       windowCenterY: null,
       lastSection: "lights",
       trayHintShown: false,
-      startupEnabled: false,
       language: "xx-UNKNOWN",
     });
 

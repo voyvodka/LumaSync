@@ -76,7 +76,6 @@ const REQUIRED_STATE_FIELDS = [
   "windowCenterY",
   "lastSection",
   "trayHintShown",
-  "startupEnabled",
   "roomMap",
   "roomMapVersion",
 ];
@@ -91,7 +90,6 @@ const REQUIRED_V14_STATE_FIELDS = [
   "colorCorrection",
   "firmwareProfile",
   "selectedDisplayId",
-  "notificationsEnabled",
 ];
 
 /**
@@ -279,12 +277,19 @@ if (orderMatch) {
 // ---------------------------------------------------------------------------
 // Schema version bump — gates the newest migration step; earlier steps chain.
 // ---------------------------------------------------------------------------
-console.log("\n[ Shell state schema version (region overrides retired) ]");
+console.log("\n[ Shell state schema version (unread keys retired) ]");
 check(
-  /SHELL_STATE_SCHEMA_VERSION\s*=\s*6\b/.test(source),
-  "SHELL_STATE_SCHEMA_VERSION === 6 (region-override fold gate)",
-  "SHELL_STATE_SCHEMA_VERSION not bumped to 6 — the 5 → 6 fold shim has no trigger"
+  /SHELL_STATE_SCHEMA_VERSION\s*=\s*7\b/.test(source),
+  "SHELL_STATE_SCHEMA_VERSION === 7 (unread-key drop gate)",
+  "SHELL_STATE_SCHEMA_VERSION not bumped to 7 — the 6 → 7 drop step has no trigger"
 );
+for (const retired of ["startupEnabled", "notificationsEnabled", "roomMapBackgroundOpacity"]) {
+  check(
+    !new RegExp(`\\b${retired}\\??:`).test(source),
+    `${retired} gone from ShellState`,
+    `${retired} is back on ShellState — nothing reads it, and the 6 → 7 step deletes it on load`
+  );
+}
 check(
   !/hueChannelRegionOverrides/.test(source),
   "hueChannelRegionOverrides gone from ShellState",
@@ -1186,7 +1191,8 @@ const emittedLightingCodes = [
 // to a `const` (the shape led_preview.rs already uses) would silently drop it while
 // the other nine still matched. Bump this deliberately when a code is added.
 // 10 → 11: LIGHTING_MODE_SHUTTING_DOWN, a start refused once the quit began.
-const EXPECTED_LIGHTING_CODE_COUNT = 12;
+// 12 → 11: LIGHTING_MODE_STATUS_OK went with `get_lighting_mode_status`.
+const EXPECTED_LIGHTING_CODE_COUNT = 11;
 check(
   emittedLightingCodes.length === EXPECTED_LIGHTING_CODE_COUNT,
   `harvested exactly ${EXPECTED_LIGHTING_CODE_COUNT} command_status codes from lighting_mode/transition.rs`,
@@ -2534,7 +2540,9 @@ const checkedPairs = nullabilityPairs.filter(
 // and lost the `Serialize` derive instead.
 // 83 → 84: `MainWindowVisibility`, the `get_main_window_visibility` response
 // and `shell://main-window-visibility` payload.
-const EXPECTED_NULLABILITY_PAIR_COUNT = 84;
+// 84 → 83: `LightingModeChangedPayload`, with the `lighting://mode-changed`
+// event nothing listened to.
+const EXPECTED_NULLABILITY_PAIR_COUNT = 83;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

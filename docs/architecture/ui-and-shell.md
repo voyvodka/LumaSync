@@ -391,11 +391,11 @@ inside another branch's binary that way.
 
 | Window | App commands |
 |---|---|
-| `main` | 51 of the 60: the 50 its `*Api.ts` bridges reach, and `simulate_hue_fault` for the dev mock's panel, which passes it through to Rust from this window. Not the popup's three below, and not the six in the last row |
+| `main` | 54 of the 60: the 53 its `*Api.ts` bridges reach, and `simulate_hue_fault` for the dev mock's panel, which passes it through to Rust from this window. Not the popup's three below, and not the three in the last row |
 | `led-control-popup` | `get_shell_state`, `patch_shell_state` (its position, last pattern, hint flag); `apply_outputs`, `retune_lighting`, `get_lighting_runtime` (its mode strip, its Solid drag, the Hue test lease, and `useLightingRuntime`); `start_led_test_pattern`, `stop_led_test_pattern` (`useTestPatternRunner`); `get_led_preview_status` (`usePreviewStatusSync`); `close_led_twin_overlay`, `hide_led_control_popup` (its close button); `show_notification` (the one-time hint); `open_log_dir` (`GlobalErrorBoundary`'s "Show logs") |
 | `led-twin-overlay-*` | `get_shell_state` only — it reads the calibration it draws |
 | `calibration-overlay-*` | none |
-| no window | `request_notification_permission` — registered, but nothing in the frontend calls it. `set_lighting_mode`, `stop_lighting`, `get_lighting_mode_status`, `stop_hue_stream`, `set_hue_solid_color` — the mode commands the lighting transaction replaced ([`lighting-transaction.md`](lighting-transaction.md)). They stay registered and their tests grant them to the test window; a window calling one would skip the transaction's ordering and saving |
+| no window | `request_notification_permission` — registered, but nothing in the frontend calls it. `set_hue_solid_color` — the last bare Hue command the lighting transaction replaced ([`lighting-transaction.md`](lighting-transaction.md)); `set_lighting_mode`, `stop_lighting`, `get_lighting_mode_status` and `stop_hue_stream` are no longer registered at all. It stays registered and its tests grant it to the test window; a window calling it would skip the transaction's ordering and saving. `get_hue_stream_status` — read by the health monitor in Rust; its test grants it |
 
 `get_led_preview_status`, `close_led_twin_overlay` and `hide_led_control_popup` are the popup's
 alone; the main window never calls them. Two withholdings are deliberate even though the walk

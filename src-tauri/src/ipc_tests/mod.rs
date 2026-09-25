@@ -27,7 +27,7 @@ use serde_json::Value;
 use tauri::ipc::{CallbackFn, InvokeBody};
 use tauri::test::{get_ipc_response, mock_builder, MockRuntime};
 use tauri::webview::InvokeRequest;
-use tauri::{App, Manager, WebviewWindow, WebviewWindowBuilder};
+use tauri::{App, AppHandle, Manager, WebviewWindow, WebviewWindowBuilder};
 
 use crate::commands::calibration::OverlayState;
 use crate::commands::device_connection::{
@@ -79,9 +79,8 @@ where
     app
 }
 
-/// Grants the main window commands no window's capability grants any more.
-/// The old mode commands stay registered, and their own tests still reach
-/// them over IPC; nothing in the frontend does.
+/// Grants the main window commands that are registered but that no window's
+/// capability grants, so their own tests can still reach them over IPC.
 pub fn grant_main_for_tests(app: &App<MockRuntime>, permissions: &[&str]) {
     let mut capability =
         tauri::ipc::CapabilityBuilder::new("ungranted-under-test").window(crate::MAIN_WINDOW_LABEL);
@@ -92,12 +91,33 @@ pub fn grant_main_for_tests(app: &App<MockRuntime>, permissions: &[&str]) {
         .expect("the test capability resolves");
 }
 
-/// The permissions of the mode commands the transaction replaced.
-pub const OLD_MODE_COMMANDS: [&str; 3] = [
-    "allow-set-lighting-mode",
-    "allow-stop-lighting",
-    "allow-get-lighting-mode-status",
-];
+/// A bare mode apply through the transition queue, answered as the JSON the
+/// old `set_lighting_mode` command sent. That command is no longer registered
+/// — every window goes through the lighting transaction — so the tests of the
+/// state machine under it call it directly.
+pub fn apply_mode(app: &AppHandle<MockRuntime>, payload: Value) -> Value {
+    let payload = serde_json::from_value(payload).expect("a valid mode payload");
+    let result = tauri::async_runtime::block_on(crate::commands::lighting_mode::set_lighting_mode(
+        app.clone(),
+        payload,
+    ))
+    .expect("a mode apply must resolve, never reject");
+    serde_json::to_value(result).expect("the result serialises")
+}
+
+/// `apply_mode` for Off.
+pub fn stop_mode(app: &AppHandle<MockRuntime>) -> Value {
+    let result =
+        tauri::async_runtime::block_on(crate::commands::lighting_mode::stop_lighting(app.clone()))
+            .expect("a stop must resolve, never reject");
+    serde_json::to_value(result).expect("the result serialises")
+}
+
+/// The mode the published snapshot says runs.
+pub fn running_mode(app: &AppHandle<MockRuntime>) -> Value {
+    let mode = app.state::<LightingRuntimeState>().snapshot.read().mode;
+    serde_json::to_value(mode).expect("the mode serialises")
+}
 
 /// The webview every invoke is routed through. Labelled `main` to match
 /// `MAIN_WINDOW_LABEL`, since commands that call `emit_to` target it by name.

@@ -12,9 +12,7 @@ use serialport::{SerialPortInfo, SerialPortType, UsbPortInfo};
 use tauri::test::MockRuntime;
 use tauri::{App, Manager};
 
-use super::{
-    grant_main_for_tests, invoke, main_webview, mock_app, mock_app_with_serial_ports, status_code,
-};
+use super::{apply_mode, invoke, main_webview, mock_app, mock_app_with_serial_ports, status_code};
 use crate::commands::device_connection::{
     ActiveSinkRegistry, SerialConnectionState, SerialPortAccess, SerialPortIo, SettledPort,
 };
@@ -238,10 +236,7 @@ impl LedPacketSender for RecordingSender {
 fn output_app(port_name: &str) -> (App<MockRuntime>, Arc<RecordingSender>) {
     // `start_led_test_pattern` is covered in `lighting_mode/transition_tests.rs` instead: it
     // reads the monitor list, which `MockRuntime` leaves unimplemented.
-    let app = mock_app(tauri::generate_handler![
-        crate::commands::lighting_mode::transition::set_lighting_mode
-    ]);
-    grant_main_for_tests(&app, &["allow-set-lighting-mode"]);
+    let app = mock_app(tauri::generate_handler![]);
     {
         let state = app.state::<SerialConnectionState>();
         let mut status = state.last_status.lock().expect("status lock poisoned");
@@ -256,21 +251,17 @@ fn output_app(port_name: &str) -> (App<MockRuntime>, Arc<RecordingSender>) {
 
 fn solid_on_usb() -> Value {
     json!({
-        "payload": {
-            "kind": "solid",
-            "solid": { "r": 255, "g": 0, "b": 0, "brightness": 1.0 },
-            "targets": ["usb"]
-        }
+        "kind": "solid",
+        "solid": { "r": 255, "g": 0, "b": 0, "brightness": 1.0 },
+        "targets": ["usb"]
     })
 }
 
 #[test]
 fn a_port_name_without_a_connection_is_not_written_to() {
     let (app, recorder) = output_app(BLUETOOTH);
-    let webview = main_webview(&app);
 
-    let response = invoke(&webview, "set_lighting_mode", solid_on_usb())
-        .expect("set_lighting_mode must resolve, never reject");
+    let response = apply_mode(app.handle(), solid_on_usb());
 
     assert_eq!(
         status_code(&response),
@@ -286,7 +277,6 @@ fn a_port_name_without_a_connection_is_not_written_to() {
 #[test]
 fn wled_output_runs_with_a_port_name_but_no_connection() {
     let (app, recorder) = output_app(BLUETOOTH);
-    let webview = main_webview(&app);
 
     let receiver = UdpSocket::bind("127.0.0.1:0").expect("bind receiver");
     receiver
@@ -301,8 +291,7 @@ fn wled_output_runs_with_a_port_name_but_no_connection() {
     app.state::<ActiveSinkRegistry>()
         .replace_wled(Box::new(config.build()), config);
 
-    let response = invoke(&webview, "set_lighting_mode", solid_on_usb())
-        .expect("set_lighting_mode must resolve, never reject");
+    let response = apply_mode(app.handle(), solid_on_usb());
 
     assert_eq!(
         status_code(&response),
