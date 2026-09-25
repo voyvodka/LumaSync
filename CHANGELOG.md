@@ -36,6 +36,12 @@ https://keepachangelog.com/en/1.1.0/
   status bar and the telemetry readout. It is off by default, and while it is off the app no longer
   asks for those numbers at all; the status bar shows just the connection chips. A capture that
   stops mid-stream is still reported either way.
+- Hue: the channel list on Devices → Hue Bridges names each channel's lights the way the Hue app
+  does, and an Identify button makes a channel's lights blink once so you can tell which lamp is
+  which. Identify is off while Hue is streaming to them.
+- WLED: the WLED page keeps showing your saved device after you leave it, with a "Forget device"
+  action. Forgetting stops sending to it (lighting carries on with your other outputs, or stops if
+  it was the only one) and stops LumaSync reconnecting to it at launch.
 
 ### Changed
 
@@ -47,6 +53,15 @@ https://keepachangelog.com/en/1.1.0/
   prerelease, stable otherwise. A channel you chose in Settings always wins. The beta description
   now says what CI launch-tests: the macOS, Linux AppImage and Windows app, but not the .msi or
   .deb installers.
+- Hue: Forget now forgets the bridge. It asks first, then stops Hue, takes it out of your outputs,
+  and removes the pairing and its key from this computer; your room map keeps its Hue lights. The
+  bridge still lists LumaSync as an authorised app, which only your Hue account can remove
+  (account.meethue.com/apps), and the app says so. Until now Forget only closed the card, and the
+  bridge came back, still streaming, on the next launch.
+- Hue: an app started into the tray checks the bridge once at launch, so the status chip and the
+  tray know whether it is reachable before the window is first opened. While the window stays
+  hidden there is still no other bridge traffic.
+
 - Lighting: Off now turns your lights off. The LED strip goes dark instead of holding its last
   colours, a WLED device is switched off instead of going back to its own effect, and Hue lights
   are switched off. **This changes what Off does for existing Hue users:** until now Off put your
@@ -54,6 +69,13 @@ https://keepachangelog.com/en/1.1.0/
   you prefer that, choose "Go back" under "When you press Off, Hue lights" on Devices → Hue
   Bridges. Quitting LumaSync, another app taking over your Hue lights, or taking Hue out of a
   running mode still puts them back as they were, and launching with lighting off touches nothing.
+- LED Setup asks how many LEDs your strip has before anything else, then shares them out over the
+  edges by your screen's shape, leaving room for the stand gap, so the edges always add up to your
+  strip. Adjust any edge afterwards, or choose which edges the strip runs along. With a WLED device
+  its own LED count is filled in for you. Until now the first layout was guessed from the screen's
+  resolution, so a high-resolution laptop screen got 164 LEDs whatever strip was on it. Reset keeps
+  your total and shares it out again; "Change total LED count" asks again. A saved layout opens
+  as before.
 - Keyboard: the mode buttons — on the Lights page, in the compact window and in the LED test
   popup — are one group you Tab into once and move through with the arrow keys, Home and End. The
   same goes for the test pattern tiles and speeds, and for LED Setup's start edge, start point and
@@ -155,9 +177,13 @@ https://keepachangelog.com/en/1.1.0/
   you pick one. The firmware profile moved here from the Lights page. After a connect you make, the
   app stays on Devices and a notice points to LED Setup, instead of jumping there before you have
   seen the strip settings; reconnecting on its own at launch does not bring the notice back. While
-  the app is reconnecting to a strip on its own, you can press Connect to take over. The rail
-  groups read Devices and Other, and each badge counts what is active: a connected strip, a
-  streaming bridge, a bound WLED device.
+  the app is reconnecting to a strip on its own, you can press Connect to take over. Each rail
+  badge counts what is active: a connected strip, a streaming bridge, a bound WLED device.
+
+### Removed
+
+- Devices: the Manual Entry page, which only said manual entry was not available yet. A Hue bridge
+  is added by IP address on Hue Bridges and a WLED device on WLED, as before.
 
 ### Fixed
 

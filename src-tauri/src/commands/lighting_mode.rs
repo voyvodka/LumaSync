@@ -103,4 +103,6 @@ mod led_test_pattern_tests;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
-pub(crate) use test_support::{calibration as calibration_for_tests, EventLog, FakeHue, Watchdog};
+pub(crate) use test_support::{
+    calibration as calibration_for_tests, EventLog, FakeHue, Rig, RigSetup, Watchdog,
+};

@@ -214,20 +214,41 @@ async fn with_no_bridge_configured_nothing_is_scheduled() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn with_no_window_visible_and_no_stream_it_parks() {
+async fn with_no_window_visible_and_no_stream_it_probes_once_at_launch_then_parks() {
     let backend = FakeBackend::configured();
     let (monitor, _) = monitor(&backend);
 
     assert_eq!(monitor.run_once().await, None);
+    assert_eq!(backend.calls().validate, 1, "the launch probe");
+    assert_eq!(
+        monitor.snapshot().bridge.verdict,
+        Some(HueBridgeVerdict::Reachable),
+        "a tray start has a verdict before any window shows"
+    );
     monitor.watch("main", HIDDEN);
-    assert_eq!(monitor.run_once().await, None);
+    assert_eq!(pass_after(&monitor, BRIDGE_PROBE_INTERVAL).await, None);
 
-    assert_eq!(backend.calls().validate, 0);
+    assert_eq!(backend.calls().validate, 1);
     assert!(monitor.snapshot().configured);
 }
 
-/// The whole task, idle in the tray for ten minutes: not one bridge call, then
-/// a probe as soon as the window shows.
+/// A launch with nothing paired spends its probe on nothing: pairing later
+/// while hidden does not turn it into a hidden probe.
+#[tokio::test(start_paused = true)]
+async fn the_launch_probe_is_spent_by_the_first_pass() {
+    let backend = FakeBackend::unconfigured();
+    let (monitor, _) = monitor(&backend);
+    assert_eq!(monitor.run_once().await, None);
+
+    *backend.target.lock().unwrap() = Some(target());
+    monitor.note_config_changed();
+    assert_eq!(monitor.run_once().await, None);
+
+    assert_eq!(backend.calls().validate, 0);
+}
+
+/// The whole task, idle in the tray for ten minutes: the one launch probe and
+/// no other bridge call, then a probe as soon as the window shows.
 #[tokio::test(start_paused = true)]
 async fn the_task_sleeps_in_the_tray_and_wakes_when_a_window_shows() {
     let backend = FakeBackend::configured();
@@ -238,21 +259,25 @@ async fn the_task_sleeps_in_the_tray_and_wakes_when_a_window_shows() {
         advance(Duration::from_secs(60)).await;
         tokio::task::yield_now().await;
     }
-    assert_eq!(backend.calls().validate, 0);
+    assert_eq!(
+        backend.calls().validate,
+        1,
+        "one probe at launch, none after"
+    );
     assert_eq!(backend.calls().readiness, 0);
 
     monitor.watch("main", VISIBLE);
     for _ in 0..5 {
         tokio::task::yield_now().await;
     }
-    assert_eq!(backend.calls().validate, 1);
+    assert_eq!(backend.calls().validate, 2);
 
     monitor.watch("main", HIDDEN);
     for _ in 0..10 {
         advance(Duration::from_secs(60)).await;
         tokio::task::yield_now().await;
     }
-    assert_eq!(backend.calls().validate, 1, "hidden again: no more probes");
+    assert_eq!(backend.calls().validate, 2, "hidden again: no more probes");
 
     monitor.close();
     task.await.unwrap();

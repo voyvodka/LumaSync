@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-identify-hue-lights"
+description = "Enables the identify_hue_lights command without any pre-configured scope."
+commands.allow = ["identify_hue_lights"]
+
+[[permission]]
+identifier = "deny-identify-hue-lights"
+description = "Denies the identify_hue_lights command without any pre-configured scope."
+commands.deny = ["identify_hue_lights"]

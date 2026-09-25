@@ -33,14 +33,14 @@ describe("DEVICE_CATEGORIES", () => {
   it("has exactly one rail row per device category", () => {
     const covered: Equals<keyof typeof DEVICE_CATEGORIES, DeviceCategory> = true;
     expect(covered).toBe(true);
-    expect(Object.keys(DEVICE_CATEGORIES)).toEqual(["usb", "hue", "wled", "displays", "manual"]);
+    expect(Object.keys(DEVICE_CATEGORIES)).toEqual(["usb", "hue", "wled", "displays"]);
   });
 
   it("does not compile with a category missing", () => {
-    const { manual: _manual, ...withoutManual } = DEVICE_CATEGORIES;
-    // @ts-expect-error — manual entry would have no rail button.
-    const incomplete = withoutManual satisfies Record<DeviceCategory, DeviceCategoryDescriptor>;
-    expect(Object.keys(incomplete)).not.toContain("manual");
+    const { displays: _displays, ...withoutDisplays } = DEVICE_CATEGORIES;
+    // @ts-expect-error — displays would have no rail button.
+    const incomplete = withoutDisplays satisfies Record<DeviceCategory, DeviceCategoryDescriptor>;
+    expect(Object.keys(incomplete)).not.toContain("displays");
   });
 });
 

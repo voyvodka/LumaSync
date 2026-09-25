@@ -803,6 +803,44 @@ pub(crate) fn adopt_bridge_owner(store: &dyn SecretStore, app_key: &str, bridge_
     }
 }
 
+/// What forgetting a bridge did to the stored pair.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum PairForget {
+    /// Both keys and the owner record are gone.
+    Deleted,
+    /// The pair belongs to another bridge and was left alone.
+    OtherBridge,
+    /// The store refused a delete; what is left may still resolve.
+    Failed(String),
+}
+
+/// Delete the stored pair when it is `bridge_id`'s. An unscoped or
+/// address-owned pair is deleted too: it serves any bridge, and the app keeps
+/// one pairing, so it is the one being forgotten.
+pub(crate) fn forget_pair_for_bridge(store: &dyn SecretStore, bridge_id: &str) -> PairForget {
+    if let PairOwner::Bridge(owner) = pair_owner(store) {
+        let asked = super::bridge_identity::normalize_bridge_id(bridge_id);
+        if asked.as_deref() != Some(owner.as_str()) {
+            info!("[hue-cred] forget: the stored pair belongs to another bridge; kept");
+            return PairForget::OtherBridge;
+        }
+    }
+    let failures: Vec<String> = [KEY_HUE_APP_KEY, KEY_HUE_CLIENT_KEY, KEY_HUE_BRIDGE_ID]
+        .into_iter()
+        .filter_map(|slot| store.delete(slot).err().map(|err| format!("{slot}: {err}")))
+        .collect();
+    if failures.is_empty() {
+        info!("[hue-cred] forget: pair deleted");
+        PairForget::Deleted
+    } else {
+        warn!(
+            "[hue-cred] forget: pair not fully deleted ({})",
+            failures.join("; ")
+        );
+        PairForget::Failed(failures.join("; "))
+    }
+}
+
 /// Resolve Hue credentials with keychain-first preference, falling back to
 /// the request-supplied values for legacy v1.4 users.
 ///
@@ -1681,6 +1719,55 @@ pub(crate) mod tests {
 
         assert_eq!(outcome, MigrationOutcome::Migrated);
         assert_eq!(pair_owner(&store), PairOwner::Unscoped);
+    }
+
+    #[test]
+    fn forgetting_a_bridge_deletes_only_its_own_pair() {
+        let other = scoped_pair(OTHER_BRIDGE);
+        assert_eq!(
+            forget_pair_for_bridge(&other, &OWNER.to_uppercase()),
+            PairForget::OtherBridge
+        );
+        assert_eq!(
+            other.get(KEY_HUE_APP_KEY).unwrap().as_deref(),
+            Some("kc-user")
+        );
+
+        let own = scoped_pair(OWNER);
+        assert_eq!(
+            forget_pair_for_bridge(&own, &OWNER.to_uppercase()),
+            PairForget::Deleted,
+            "the id is compared the way the certificate spells it"
+        );
+        for slot in [KEY_HUE_APP_KEY, KEY_HUE_CLIENT_KEY, KEY_HUE_BRIDGE_ID] {
+            assert_eq!(own.get(slot).unwrap(), None, "{slot} left behind");
+        }
+        assert!(resolve_hue_credentials(&own, OWNER, "", "").is_none());
+    }
+
+    #[test]
+    fn forgetting_deletes_an_unscoped_or_address_owned_pair() {
+        let unscoped = InMemoryStore::default();
+        unscoped.set(KEY_HUE_APP_KEY, "kc-user").unwrap();
+        unscoped.set(KEY_HUE_CLIENT_KEY, "kc-key").unwrap();
+        assert_eq!(
+            forget_pair_for_bridge(&unscoped, OWNER),
+            PairForget::Deleted
+        );
+        assert_eq!(unscoped.get(KEY_HUE_APP_KEY).unwrap(), None);
+
+        let legacy = scoped_pair("192.168.1.180");
+        assert_eq!(forget_pair_for_bridge(&legacy, OWNER), PairForget::Deleted);
+        assert_eq!(legacy.get(KEY_HUE_CLIENT_KEY).unwrap(), None);
+    }
+
+    #[test]
+    fn a_store_that_refuses_the_delete_says_so() {
+        let refusing = KeychainStore::new();
+        assert!(matches!(
+            forget_pair_for_bridge(&refusing, OWNER),
+            PairForget::Failed(_)
+        ));
     }
 
     #[test]

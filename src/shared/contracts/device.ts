@@ -27,6 +27,9 @@ export const DEVICE_COMMANDS = {
   TEST_WLED_BRIDGE: "test_wled_bridge",
   /** Registry snapshot of the bound WLED sink. `lastWledSink` is intent; this is what Rust holds — they diverge when a boot restore fails or serial evicts WLED. */
   GET_WLED_SINK_STATUS: "get_wled_sink_status",
+  /** Stop sending to the device, unbind it and drop the saved device.
+   * Contacts nothing on the network. */
+  FORGET_WLED_DEVICE: "forget_wled_device",
 } as const;
 
 export const DEVICE_STATUS = {
@@ -640,6 +643,11 @@ export const WLED_STATUS = {
   TEST_WORKER_FAILED: "WLED_TEST_WORKER_FAILED",
   /** Same, for `connect_wled_sink`'s worker: no sink was registered. */
   CONNECT_WORKER_FAILED: "WLED_CONNECT_WORKER_FAILED",
+  /** `forget_wled_device`: not driven, not bound, not saved any more. */
+  FORGET_OK: "WLED_FORGET_OK",
+  /** The lighting could not let go of the device, or the saved device could
+   * not be cleared. */
+  FORGET_FAILED: "WLED_FORGET_FAILED",
 } as const;
 
 export type WledStatusCode = (typeof WLED_STATUS)[keyof typeof WLED_STATUS];
@@ -663,5 +671,10 @@ export interface WledDiscoveryResponse {
 
 /** `connect_wled_sink`. */
 export interface WledConnectResponse {
+  status: WledCommandStatus;
+}
+
+/** `forget_wled_device`. */
+export interface WledForgetResponse {
   status: WledCommandStatus;
 }
