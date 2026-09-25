@@ -221,6 +221,21 @@ describe("CHAN-05: save to bridge write-back", () => {
     expect(saveBtn).toHaveProperty("disabled", true);
   });
 
+  // A disabled button never shows its title, so the reason used to be invisible.
+  it("says why save and pull are off while streaming, as text on the page (H-9)", () => {
+    render(<HueChannelMapPanel {...writebackProps} isStreaming={true} />);
+    const note = screen.getByTestId("hue-chmap-streaming-note");
+    expect(note).toHaveTextContent("hue:channelMap.streamingNote");
+    expect(screen.getByRole("button", { name: /saveToBridge$/ })).toHaveAccessibleDescription(
+      "hue:channelMap.streamingNote",
+    );
+  });
+
+  it("shows no streaming note while idle", () => {
+    render(<HueChannelMapPanel {...writebackProps} isStreaming={false} />);
+    expect(screen.queryByTestId("hue-chmap-streaming-note")).toBeNull();
+  });
+
   it("save button is enabled when isStreaming is false and credentials present", () => {
     render(<HueChannelMapPanel {...writebackProps} isStreaming={false} />);
     const saveBtn = screen.getByRole("button", { name: /saveToBridge$/ });
