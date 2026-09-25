@@ -31,11 +31,11 @@ const shell: Catalogue<typeof enShell> = {
       ok: "TAMAM",
       off: "KAPALI",
       idle: "BOŞTA",
-      streaming: "YAYIN",
+      streaming: "YAYINDA",
       retrying: "DENİYOR",
       failed: "BAŞARISIZ",
       waiting: "BEKLİYOR",
-      leftOut: "DIŞARIDA",
+      leftOut: "HARİÇ",
     },
     reconnect: {
       usbAriaLabel: "Cihazlar → USB'yi aç",

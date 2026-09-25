@@ -11,6 +11,7 @@ import {
   deriveHueBridgeCardState,
   huePairingErrorDescriptionKey,
 } from "@/features/hue/model/hueBridgeCardState";
+import { isAreaHeldByAnotherApp } from "@/features/hue/model/areaGrouping";
 import { buildHueRuntimeStatusCard } from "@/features/hue/model/hueRuntimeStatusCard";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
 import { Button } from "@/shared/ui/Button";
@@ -18,6 +19,7 @@ import { cx } from "@/shared/ui/cx";
 import { IconBridge, IconHueBridgeGlyph, IconRefresh, IconWifi } from "@/shared/ui/icons";
 import { StatusPill } from "@/shared/ui/StatusPill";
 import { HueChannelMapPanel } from "../HueChannelMapPanel";
+import { HueManualIpForm } from "./HueManualIpForm";
 import { HueOffBehaviorControl } from "./HueOffBehaviorControl";
 import {
   HUE_CARD_ACTIONS,
@@ -71,13 +73,10 @@ export function HueBridgesCategory({
   onOffBehaviorChange,
 }: HueBridgesCategoryProps) {
   const { t } = useTranslation();
-  const manualIpFieldId = useId();
   const {
     bridges,
     selectedBridgeId,
     selectedBridge,
-    manualIp,
-    manualIpError,
     credentialState,
     bridgeUnreachable,
     selectedAreaId,
@@ -100,14 +99,8 @@ export function HueBridgesCategory({
     channelsFromBridge,
     refreshChannels,
     discover,
-    setManualIp,
-    submitManualIp,
     pair,
   } = hue;
-
-  const hueManualIpDisabled = isHueDiscovering || !manualIp || Boolean(manualIpError);
-  const manualIpDescriptionId = `${manualIpFieldId}-description`;
-  const manualIpErrorId = `${manualIpFieldId}-error`;
 
   const hueBridgeState = deriveHueBridgeCardState({
     selectedBridgeId,
@@ -115,10 +108,12 @@ export function HueBridgesCategory({
     runtimeStatusUnavailable: runtimeStatusReadFailure !== null,
     hueStatus,
     credentialState,
+    hasCredentials: credentials !== null,
     bridgeUnreachable,
     isPairing: isHuePairing,
     selectedAreaId,
     isReadinessStale,
+    areaHeldByAnotherApp: isAreaHeldByAnotherApp(selectedArea),
   });
 
   const stateView: HueCardView | null = hueBridgeState ? HUE_CARD_VIEW[hueBridgeState] : null;
@@ -235,40 +230,7 @@ export function HueBridgesCategory({
 
         {/* Manual IP form — visible when no bridge selected */}
         {!selectedBridgeId ? (
-          <div className="lm-hue-ip-form">
-            <div>
-              <div className="lm-hue-ip-form-title">{t("hue:manualIp.title")}</div>
-              <div className="lm-hue-ip-form-sub" id={manualIpDescriptionId}>{t("hue:manualIp.description")}</div>
-            </div>
-            <div className="lm-hue-ip-row">
-              <input
-                className="lm-hue-ip-input"
-                value={manualIp}
-                onChange={(e) => { setManualIp(e.target.value); }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !hueManualIpDisabled) {
-                    e.preventDefault();
-                    void submitManualIp();
-                  }
-                }}
-                placeholder={t("hue:manualIp.placeholder")}
-                aria-label={t("hue:manualIp.inputLabel")}
-                aria-describedby={manualIpError ? `${manualIpDescriptionId} ${manualIpErrorId}` : manualIpDescriptionId}
-                aria-invalid={manualIpError ? true : undefined}
-                spellCheck={false}
-                autoComplete="off"
-              />
-              <button
-                type="button"
-                className="lm-hue-ip-submit"
-                onClick={() => { void submitManualIp(); }}
-                disabled={hueManualIpDisabled}
-              >
-                {t("hue:page.enterIp")}
-              </button>
-            </div>
-            {manualIpError ? <div className="lm-hue-ip-error" id={manualIpErrorId}>{t(manualIpError)}</div> : null}
-          </div>
+          <HueManualIpForm hue={hue} title="hue:manualIp.title" description="hue:manualIp.description" />
         ) : null}
       </div>
     </div>

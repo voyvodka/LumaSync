@@ -104,6 +104,7 @@ function Harness() {
     selectBridge: () => {},
     setManualIp: () => {},
     submitManualIp: noop,
+    recheckBridge: noop,
     pair: pairMock,
     refreshAreas: noop,
     selectArea: () => {},

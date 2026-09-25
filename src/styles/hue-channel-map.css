@@ -251,6 +251,13 @@
 .lm-chmap-footer-spacer {
   flex: 1;
 }
+.lm-chmap-busy-note {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--lm-ink-dim);
+  text-align: right;
+}
 /* Shared status-banner tone. Carries colour only — each site keeps its own
    padding and type scale. New one-sentence notices use <Callout> instead. */
 .lm-status-banner {

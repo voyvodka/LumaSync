@@ -54,7 +54,10 @@ export type HueBridgeCardState =
   | "pairingFailed"
   | "authError"
   | "pairing"
+  | "unpaired"
+  | "checkingCredentials"
   | "areaSelect"
+  | "areaBusy"
   | "statusUnknown"
   | "stale"
   | "idle";
@@ -66,10 +69,20 @@ export interface HueBridgeCardStateInput {
   runtimeStatusUnavailable: boolean;
   hueStatus: HueOnboardingStatus | null;
   credentialState: HueCredentialStatus;
+  /** A key is saved or was just issued. Without one nothing can have expired. */
+  hasCredentials: boolean;
   bridgeUnreachable: boolean;
   isPairing: boolean;
   selectedAreaId: string | null;
   isReadinessStale: boolean;
+  /** The last readiness check found another session streaming to the area. */
+  areaHeldByAnotherApp: boolean;
+}
+
+/** Codes a pairing request answers with, which describe the pairing — not a key. */
+function isPairingAnswer(code: string | undefined): boolean {
+  return code !== undefined
+    && (code.startsWith("HUE_PAIRING_") || code === HUE_STATUS.BRIDGE_IDENTITY_MISMATCH || code === HUE_STATUS.IP_INVALID);
 }
 
 export function deriveHueBridgeCardState({
@@ -78,10 +91,12 @@ export function deriveHueBridgeCardState({
   runtimeStatusUnavailable,
   hueStatus,
   credentialState,
+  hasCredentials,
   bridgeUnreachable,
   isPairing,
   selectedAreaId,
   isReadinessStale,
+  areaHeldByAnotherApp,
 }: HueBridgeCardStateInput): HueBridgeCardState | null {
   if (!selectedBridgeId) return null;
 
@@ -89,7 +104,12 @@ export function deriveHueBridgeCardState({
   // status nor "Ready" may speak for it until a read lands again.
   const runtimeStatus = runtimeStatusUnavailable ? null : lastRuntimeStatus;
   if (runtimeStatus?.code === "HUE_STOP_TIMEOUT_PARTIAL") return "stopPartial";
-  if (runtimeStatus?.code === "CONFIG_NOT_READY_GATE_BLOCKED") return "gateBlocked";
+  // A start the gate refused because the bridge never answered is the bridge
+  // being offline; the checklist offered nothing to do about that.
+  if (runtimeStatus?.code === "CONFIG_NOT_READY_GATE_BLOCKED") {
+    if (bridgeUnreachable) return "offline";
+    return areaHeldByAnotherApp ? "areaBusy" : "gateBlocked";
+  }
   if (runtimeStatus?.state === "Running") return "streaming";
   const failed = runtimeStatus?.state === HUE_RUNTIME_STATES.FAILED;
   // TRANSIENT_RETRY_EXHAUSTED is a Failed code: the retries are over, so it
@@ -110,11 +130,15 @@ export function deriveHueBridgeCardState({
     }
     // A refused bridge certificate is not an expired key: say what happened,
     // with pairing again as the way back.
-    return hueStatus?.code === "HUE_PAIRING_FAILED"
+    if (
+      hueStatus?.code === "HUE_PAIRING_FAILED"
       || hueStatus?.code === "HUE_PAIRING_DEVICETYPE_INVALID"
       || hueStatus?.code === HUE_STATUS.BRIDGE_IDENTITY_MISMATCH
-      ? "pairingFailed"
-      : "authError";
+    ) {
+      return "pairingFailed";
+    }
+    if (hasCredentials) return "authError";
+    return isPairingAnswer(hueStatus?.code) ? "pairingFailed" : "unpaired";
   }
   if (isPairing) {
     // Minted by useHueOnboardingCore between polls; Rust never sends it.
@@ -126,8 +150,10 @@ export function deriveHueBridgeCardState({
     // Terminal until the next start or stop; falling through here is what
     // showed a stream that had just died as a Ready bridge.
     if (failed) return "streamFailed";
+    if (areaHeldByAnotherApp) return "areaBusy";
     if (isReadinessStale) return "stale";
     return "idle";
   }
-  return "pairing";
+  // A saved key the bridge has not answered about yet.
+  return hasCredentials ? "checkingCredentials" : "unpaired";
 }
