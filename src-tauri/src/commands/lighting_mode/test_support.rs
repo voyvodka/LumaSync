@@ -222,10 +222,7 @@ impl FakeHue {
     /// A start that answers `code` with the status `details` the real start
     /// gate writes — its blocker tokens.
     pub(crate) fn script_start_with_details(&self, code: &'static str, details: &'static str) {
-        self.starts
-            .lock()
-            .unwrap()
-            .push_back((code, Some(details)));
+        self.starts.lock().unwrap().push_back((code, Some(details)));
     }
 
     /// The area each start asked for, in order.
