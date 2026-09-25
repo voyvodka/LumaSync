@@ -408,17 +408,19 @@ export interface ShellState {
    */
   ledColorOrder?: LedColorOrder;
   /**
-   * Update channel preference. Defaults to `"stable"` when
-   * absent — `"beta"` opts the user into the prerelease feed served from
-   * `latest-beta.json` alongside the canonical `latest.json`.
+   * Update channel preference, written only by an explicit choice in
+   * Settings. Absent ⇒ `defaultUpdateChannel(APP_VERSION)`: `"beta"` on a
+   * prerelease build, `"stable"` otherwise. `"beta"` opts the user into the
+   * prerelease feed served from `latest-beta.json` alongside the canonical
+   * `latest.json`.
    *
-   * The channel is read at startup by `useAutoUpdater` so it can render the
-   * active channel badge inside `<UpdateModal />`. The Rust updater
+   * The channel is read before every check by `useAutoUpdater` so it can
+   * render the active channel badge inside `<UpdateModal />`. The Rust updater
    * (`commands/updater.rs`) reads the same persisted field to pick the
-   * stable or beta feed.
+   * stable or beta feed, and its answer is the one that counts.
    *
-   * Additive — `schemaVersion` is not bumped because absence naturally
-   * degrades to `"stable"` which matches v1.4 behaviour exactly.
+   * Additive — `schemaVersion` is not bumped; on a stable build absence
+   * degrades to `"stable"`, which matches v1.4 behaviour exactly.
    */
   updateChannel?: UpdateChannel;
   /**
@@ -572,13 +574,30 @@ export interface ShellStateChanged {
 /** Window layout mode — compact for tray-first quick controls, full for settings */
 export type UIMode = "compact" | "full";
 
-/** Auto-update channel; absent or unreadable ⇒ `"stable"`. Beta is a
- * **superset** — stable releases refresh the beta feed too. Routing lives in
- * `commands/updater.rs`, not `tauri.conf.json`. */
+/** Auto-update channel. Beta is a **superset** — stable releases refresh the
+ * beta feed too. Routing lives in `commands/updater.rs`, not `tauri.conf.json`. */
 export type UpdateChannel = "stable" | "beta";
 
-/** Default update channel for fresh installs / unset state. */
-export const DEFAULT_UPDATE_CHANNEL: UpdateChannel = "stable";
+/**
+ * The channel for someone who never chose one: `"beta"` while running a
+ * prerelease (the version carries a `-` suffix), else `"stable"`. Someone who
+ * installed a prerelease is already on prereleases; on stable they would never
+ * be offered the next one. Mirrors `default_channel` in `commands/updater.rs`.
+ */
+export function defaultUpdateChannel(appVersion: string): UpdateChannel {
+  const release = appVersion.split("+", 1)[0] ?? "";
+  return release.includes("-") ? "beta" : "stable";
+}
+
+/**
+ * The channel Rust will check. An explicit choice always wins, and any string
+ * but `"beta"` is stable, so a corrupt value never moves an install onto
+ * prereleases; only a missing (or non-string) value falls back to the default.
+ */
+export function resolveUpdateChannel(stored: unknown, appVersion: string): UpdateChannel {
+  if (typeof stored === "string") return stored === "beta" ? "beta" : "stable";
+  return defaultUpdateChannel(appVersion);
+}
 
 /** Logical pixel dimensions for each UI mode */
 export const UI_MODE_SIZES: Readonly<Record<UIMode, { width: number; height: number }>> = {

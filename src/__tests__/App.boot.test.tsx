@@ -9,6 +9,7 @@ import { DEVICE_COMMANDS } from "@/shared/contracts/device";
 
 import {
   bootDone,
+  CALIBRATION,
   choices,
   env,
   installInvokeDispatch,
@@ -159,7 +160,8 @@ describe("App boot", () => {
           direction: "cw",
           totalLeds: 40,
         },
-        lightingMode: { kind: "off" },
+        // Set up means a mode has run: the guide's last step asks for exactly that.
+        lightingMode: { kind: "ambilight" },
         lastOutputTargets: ["hue"],
         lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
         hueAppKey: "app-user",
@@ -189,17 +191,81 @@ describe("App boot", () => {
 
       render(<App />);
 
-      // Behind "no reachable output", which outranks it in the queue.
+      // In place of "no reachable output", which it explains; that used to
+      // outrank it and hide the welcome behind "+1".
       await waitFor(() => {
         expect(screen.getByTestId("shell-notice-slot").getAttribute("data-queue")?.split(" ")).toEqual([
-          "output-none",
           "onboarding",
         ]);
       });
+      expect(screen.getByTestId("onboarding-notice")).toHaveTextContent("shell:notices.messages.onboarding.devices");
+      expect(screen.getByTestId("onboarding-notice")).toHaveTextContent("1/3");
+    });
+
+    it("skips the guide for good from its own named action", async () => {
+      env.isConnected = false;
+      installInvokeDispatch(false);
+      loadShellStateMock.mockResolvedValue({ lastSection: "general" });
+
+      render(<App />);
+
+      const skip = await screen.findByRole("button", { name: "shell:notices.skipSetupGuide" });
       await act(async () => {
-        screen.getByTestId("notice-toggle").click();
+        skip.click();
       });
-      expect(screen.getByTestId("onboarding-notice")).toHaveTextContent("shell:notices.messages.onboarding.lights");
+
+      await waitFor(completed);
+      expect(screen.queryByTestId("onboarding-notice")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("showing the setup guide again", () => {
+    it("brings a skipped guide back at its first unmet step and clears the flag", async () => {
+      env.isConnected = false;
+      installInvokeDispatch(false);
+      loadShellStateMock.mockResolvedValue({ lastSection: "general", hasCompletedOnboarding: true });
+
+      render(<App />);
+      await bootDone();
+      expect(screen.queryByTestId("onboarding-notice")).not.toBeInTheDocument();
+
+      let result: unknown;
+      act(() => {
+        result = env.setupGuide?.restart();
+      });
+
+      expect(result).toBe("shown");
+      expect(saveShellStateMock).toHaveBeenCalledWith({ hasCompletedOnboarding: false });
+      expect(await screen.findByTestId("onboarding-notice")).toHaveTextContent(
+        "shell:notices.messages.onboarding.devices",
+      );
+    });
+
+    // Every guard holds, so a restarted guide would complete on its first render.
+    it("says there is nothing to show to a user who is set up, and leaves the flag alone", async () => {
+      nextApplyRuns({
+        mode: { kind: "solid", solid: { r: 1, g: 2, b: 3, brightness: 0.5 } },
+        active: true,
+        activeTargets: ["usb"],
+      });
+      loadShellStateMock.mockResolvedValue({
+        lastSection: "general",
+        hasCompletedOnboarding: true,
+        ledCalibration: CALIBRATION,
+        lightingMode: { kind: "solid" },
+      });
+
+      render(<App />);
+      await waitFor(() => expect(screen.getByTestId("active-mode")).toHaveTextContent("solid"));
+
+      let result: unknown;
+      act(() => {
+        result = env.setupGuide?.restart();
+      });
+
+      expect(result).toBe("alreadyDone");
+      expect(saveShellStateMock).not.toHaveBeenCalledWith({ hasCompletedOnboarding: false });
+      expect(screen.queryByTestId("onboarding-notice")).not.toBeInTheDocument();
     });
   });
 });

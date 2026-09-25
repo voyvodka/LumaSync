@@ -60,6 +60,7 @@ export default {
       info: "Note",
     },
     dismiss: "Dismiss notice",
+    skipSetupGuide: "Skip setup guide",
     showDetails: "Show the full notice",
     showLess: "Show less",
     showMore_one: "Show {{count}} more notice",
@@ -124,11 +125,11 @@ export default {
       calibrationRequired: "Calibration required — finish the LED layout to use this mode",
       ledSetupNext: "Strip connected — next, tell LumaSync how many LEDs sit on each screen edge",
       onboarding: {
-        lights: "Welcome — pick a lighting mode to get started",
-        devices: "Connect a USB strip, WLED or Hue so the modes can send light",
+        devices: "Welcome — connect a USB strip, WLED or Hue to get started",
         ledSetup: "Tell LumaSync how many LEDs sit on each screen edge",
+        turnOn: "Last step — turn on Ambilight to mirror your screen",
       },
-      updateCheckFailed: "Couldn't check for updates — LumaSync tries again next launch",
+      updateCheckFailed: "Couldn't check for updates — LumaSync tries again in the background",
       settingsNotSaved: "Settings can't be saved — changes last until you quit",
     },
     actions: {
@@ -138,6 +139,7 @@ export default {
       systemSettings: "System Settings",
       checkAgain: "Check again",
       checking: "Checking…",
+      turnOnAmbilight: "Turn on Ambilight",
     },
   },
 };

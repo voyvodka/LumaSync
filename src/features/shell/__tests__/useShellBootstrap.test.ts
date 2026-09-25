@@ -38,7 +38,7 @@ function sink(overrides: Partial<ShellBootstrapSink> = {}): ShellBootstrapSink {
     setActiveSection: vi.fn(),
     setSavedCalibration: vi.fn(),
     setHasCompletedOnboarding: vi.fn(),
-    setHasInteractedWithMode: vi.fn(),
+    setOnboardingBootFacts: vi.fn<ShellBootstrapSink["setOnboardingBootFacts"]>(),
     setHueStartConfig: vi.fn(),
     armUsbConnected: vi.fn(),
     restoreLighting: vi.fn().mockResolvedValue(undefined),
@@ -107,7 +107,21 @@ describe("useShellBootstrap", () => {
 
     await waitFor(() => expect(result.current.bootstrapDone).toBe(true));
     expect(bag.restoreLighting).toHaveBeenCalledWith({ lightingMode: { kind: "off" } });
-    expect(bag.setHasInteractedWithMode).toHaveBeenCalledWith(true);
+    // An Off choice is not lighting that ran, so the guide's last step still stands.
+    expect(bag.setOnboardingBootFacts).toHaveBeenCalledWith({ outputRemembered: false, hasRunLighting: false });
+  });
+
+  it("tells the guide what is remembered and that a saved mode ran", async () => {
+    loadShellStateMock.mockResolvedValue({
+      lastSuccessfulPort: "COM3",
+      lightingMode: { kind: "solid" },
+    });
+    const bag = sink();
+
+    const { result } = renderHook(() => useShellBootstrap(bag));
+
+    await waitFor(() => expect(result.current.bootstrapDone).toBe(true));
+    expect(bag.setOnboardingBootFacts).toHaveBeenCalledWith({ outputRemembered: true, hasRunLighting: true });
   });
 
   it("arms the USB edge detector from the live status before the restore", async () => {

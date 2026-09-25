@@ -48,7 +48,7 @@ const updater: Catalogue<typeof enUpdater> = {
   checkAction: "Güncellemeleri kontrol et",
   betaChannel: "Beta kanalı",
   betaChannelDescription:
-    "Kararlı sürümlerin yanı sıra ön sürümleri de al. Ön sürümler CI tarafından derlenip test edilir, ancak paketlenmiş kurulum dosyasının kendisi hiçbir zaman çalıştırılarak sınanmaz — pürüz bekle.",
+    "Kararlı sürümlerin yanı sıra ön sürümleri de al. CI her birini derleyip test eder ve yayınlamadan önce macOS, Linux AppImage ve Windows uygulamasını çalıştırır, ancak .msi ve .deb kurulum dosyalarını hiç çalıştırmaz — pürüz bekle. Ön sürüm kullanırken varsayılan olarak açıktır.",
   checking: "Kontrol ediliyor…",
   upToDate: "En son sürümü kullanıyorsun · {{time}} itibarıyla",
 };

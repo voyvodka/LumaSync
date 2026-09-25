@@ -102,13 +102,26 @@ fn emit_progress<R: Runtime>(app: &AppHandle<R>, progress: UpdateDownloadProgres
     );
 }
 
-/// Anything unrecognised is "stable" — an unreadable store must never
-/// silently move someone onto prereleases.
+/// The channel the running build checks. See [`resolve_update_channel`].
 pub fn read_update_channel<R: Runtime>(app: &AppHandle<R>) -> String {
-    let resolved = shell_state::persisted(app).and_then(|state| state.update_channel());
-    match resolved.as_deref() {
-        Some("beta") => "beta".to_string(),
-        _ => "stable".to_string(),
+    let stored = shell_state::persisted(app).and_then(|state| state.update_channel());
+    let running_prerelease = !app.package_info().version.pre.is_empty();
+    resolve_update_channel(stored.as_deref(), running_prerelease).to_string()
+}
+
+/// An explicit choice always wins, and any stored value but an exact "beta"
+/// is stable — a corrupt store must never silently move someone onto
+/// prereleases. The one exception is the default for someone who never chose:
+/// a prerelease build defaults to beta, because its user already runs
+/// prereleases and on stable would never be offered the next one. A stable
+/// build defaults to stable. `defaultUpdateChannel` in `contracts/shell.ts`
+/// mirrors this.
+fn resolve_update_channel(stored: Option<&str>, running_prerelease: bool) -> &'static str {
+    match stored {
+        Some("beta") => "beta",
+        Some(_) => "stable",
+        None if running_prerelease => "beta",
+        None => "stable",
     }
 }
 
@@ -315,7 +328,9 @@ pub async fn download_and_install_update<R: Runtime>(
 mod tests {
     use std::time::{Duration, Instant};
 
-    use super::{endpoint_for, ProgressThrottle, BETA_ENDPOINT, STABLE_ENDPOINT};
+    use super::{
+        endpoint_for, resolve_update_channel, ProgressThrottle, BETA_ENDPOINT, STABLE_ENDPOINT,
+    };
 
     const MS: Duration = Duration::from_millis(1);
 
@@ -361,6 +376,38 @@ mod tests {
         assert!(throttle.should_emit(start, 10, None));
         assert!(!throttle.should_emit(start + 99 * MS, 20, None));
         assert!(throttle.should_emit(start + 100 * MS, 30, None));
+    }
+
+    #[test]
+    fn an_explicit_choice_wins_on_either_build() {
+        for prerelease in [false, true] {
+            assert_eq!(resolve_update_channel(Some("beta"), prerelease), "beta");
+            assert_eq!(resolve_update_channel(Some("stable"), prerelease), "stable");
+        }
+    }
+
+    #[test]
+    fn no_choice_follows_the_running_build() {
+        assert_eq!(resolve_update_channel(None, false), "stable");
+        assert_eq!(resolve_update_channel(None, true), "beta");
+    }
+
+    /// Only an absent value takes the prerelease default: a corrupt one on a
+    /// prerelease build still reads as stable, never as a vote for beta.
+    #[test]
+    fn an_unrecognised_stored_value_is_stable_even_on_a_prerelease() {
+        for value in ["", "Beta", "BETA", "nightly", "beta "] {
+            assert_eq!(
+                resolve_update_channel(Some(value), true),
+                "stable",
+                "{value:?}"
+            );
+            assert_eq!(
+                resolve_update_channel(Some(value), false),
+                "stable",
+                "{value:?}"
+            );
+        }
     }
 
     #[test]

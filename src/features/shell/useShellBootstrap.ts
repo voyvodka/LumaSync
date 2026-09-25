@@ -8,6 +8,10 @@ import {
 import { getSerialConnectionStatus } from "@/features/device/deviceConnectionApi";
 import { toHueStartConfig, type HueStartConfig } from "@/features/hue/model/hueStartConfig";
 import type { BootLightingInput } from "@/features/mode/state/useLightingModeOrchestrator";
+import {
+  onboardingBootFacts,
+  type OnboardingBootFacts,
+} from "@/features/onboarding/state/onboardingState";
 import { showNotification } from "@/features/platform/platformApi";
 import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/shell";
 
@@ -24,7 +28,7 @@ export interface ShellBootstrapSink {
   setActiveSection: (sectionId: SectionId) => void;
   setSavedCalibration: (calibration: LedCalibrationConfig | undefined) => void;
   setHasCompletedOnboarding: (completed: boolean) => void;
-  setHasInteractedWithMode: (interacted: boolean) => void;
+  setOnboardingBootFacts: (facts: OnboardingBootFacts) => void;
   setHueStartConfig: (config: HueStartConfig | null) => void;
   armUsbConnected: (connected: boolean) => void;
   /**
@@ -144,12 +148,9 @@ export function useShellBootstrap(sink: ShellBootstrapSink): ShellBootstrapState
         // This prevents false "USB detected" events on startup
         sink.armUsbConnected(bootstrapUsbAvailable);
 
-        // Any persisted lightingMode — even `off` — means the user already picked
-        // one, so the onboarding flow must not gate them at step 1.
-        if (state.lightingMode !== undefined) {
-          sink.setHasInteractedWithMode(true);
-        }
-        sink.setHueStartConfig(toHueStartConfig(state));
+        const hueStartConfig = toHueStartConfig(state);
+        sink.setOnboardingBootFacts(onboardingBootFacts(state, hueStartConfig !== null));
+        sink.setHueStartConfig(hueStartConfig);
 
         // Deliberately no `validateHueCredentials` here — setting `hueStartConfig`
         // re-arms the reachability poll, and doing both probed the bridge twice.
