@@ -67,6 +67,14 @@ use super::transport::{
 /// before reporting a partial-stop timeout.
 const HUE_STOP_TIMEOUT_SECS: u64 = 3;
 
+/// A stop with a deadline aims every wait at this much before it: a request
+/// timed out on the deadline itself still has to unwind, and the call
+/// returned past it. docs/architecture/hue.md ("Quit").
+const HUE_STOP_DEADLINE_RESERVE: Duration = Duration::from_millis(100);
+
+/// Below this much time left the deactivate is not sent: it could not land.
+const HUE_STOP_MIN_REQUEST_WINDOW: Duration = Duration::from_millis(50);
+
 // Every `Result` below is structural, never a throwing surface — coded failures
 // ride the status object. Tauri *requires* it of an `async` command taking a
 // reference: dropping it fails the `AsyncCommandMustReturnResult` bound.
@@ -614,9 +622,10 @@ pub(crate) async fn stop_hue_stream_on(
     })
 }
 
-/// The quit path's stop (`lib.rs` `[shutdown]` step 2). Same stop and restore
-/// as `stop_hue_stream_on`, but the deactivate PUT, the sender wait and the restore all
-/// end by `deadline`, so a slow bridge cannot run into the shutdown watchdog.
+/// The quit path's stop (`shutdown.rs` `[shutdown]` step 2). Same stop and
+/// restore as `stop_hue_stream_on`, but the deactivate PUT, the sender wait and
+/// the restore all end `HUE_STOP_DEADLINE_RESERVE` before `deadline`, so the
+/// call returns by it and a slow bridge cannot run into the shutdown watchdog.
 /// Quitting is not choosing Off: the lights always go back as they were.
 pub fn stop_hue_stream_before_exit(
     runtime_state: &HueRuntimeStateStore,
@@ -630,15 +639,21 @@ pub fn stop_hue_stream_before_exit(
     )
 }
 
-/// Blocking body of every stop. `deadline` bounds the whole call when given;
-/// without one each step keeps its own ceiling. `lights` says what the area's
-/// lights get once the stream is down.
+/// Blocking body of every stop. `deadline` bounds the whole call when given —
+/// every step aims at `HUE_STOP_DEADLINE_RESERVE` before it; without one each
+/// step keeps its own ceiling. `lights` says what the area's lights get once
+/// the stream is down.
 pub(crate) fn stop_hue_runtime(
     runtime: &Arc<Mutex<HueRuntimeOwner>>,
     trigger: HueRuntimeTriggerSource,
     deadline: Option<Instant>,
     lights: HueLightsAfterStop,
 ) -> HueRuntimeCommandResult {
+    let deadline = deadline.map(|deadline| {
+        deadline
+            .checked_sub(HUE_STOP_DEADLINE_RESERVE)
+            .unwrap_or(deadline)
+    });
     let remaining = |ceiling: Duration| match deadline {
         Some(deadline) => ceiling.min(deadline.saturating_duration_since(Instant::now())),
         None => ceiling,
@@ -690,8 +705,10 @@ pub(crate) fn stop_hue_runtime(
     // blocking the mutex. If the sender thread's close_notify cleanup path
     // already drained the token, this call is a fast in-process no-op.
     let deactivate = |(ip, username, area_id, token): &(String, String, String, Arc<_>)| {
-        let request_timeout =
-            remaining(Duration::from_millis(HUE_HTTP_TIMEOUT_MS)).max(Duration::from_millis(100));
+        let request_timeout = remaining(Duration::from_millis(HUE_HTTP_TIMEOUT_MS));
+        if request_timeout < HUE_STOP_MIN_REQUEST_WINDOW {
+            return Err("no time left before the deadline".to_string());
+        }
         blocking_client_with_timeout(&trust_for_app_key(username), request_timeout)
             .and_then(|client| deactivate_with_token(token, &client, ip, username, area_id))
     };
@@ -1625,16 +1642,47 @@ mod light_restore_flow {
         .unwrap();
 
         assert_eq!(result.status.code, "HUE_STREAM_STOPPED");
-        // Ignoring the deadline costs a full 1.5 s request timeout on top.
-        assert!(
-            started.elapsed() < Duration::from_millis(1_300),
-            "{:?}",
-            started.elapsed()
-        );
+        assert!(Instant::now() <= deadline, "{:?}", started.elapsed());
         assert_eq!(
             hue.light_puts().len(),
             1,
             "an unanswered request means the bridge is gone; the rest are not tried"
+        );
+    }
+
+    /// A watch read the bridge is slow to answer straddles the deadline. Its
+    /// timeout used to end on the deadline itself, so the call returned past
+    /// it every time — by however long a timed-out request takes to unwind.
+    #[tokio::test]
+    async fn the_quit_path_ends_inside_its_deadline_when_a_watch_read_straddles_it() {
+        let hue = three_light_area(|_| Reply::ok());
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+        hue.answer_bulk_light_reads_after(Duration::from_secs(3));
+
+        let deadline = Instant::now() + Duration::from_millis(1_000);
+        let (result, returned_at) = tokio::task::spawn_blocking(move || {
+            let result =
+                stop_hue_stream_before_exit(&app.state::<HueRuntimeStateStore>(), deadline);
+            (result, Instant::now())
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(result.status.code, "HUE_STREAM_STOPPED");
+        assert_eq!(hue.light_puts().len(), 3);
+        assert!(
+            hue.bridge
+                .requests()
+                .iter()
+                .any(|r| r.method == "GET" && r.path == "/clip/v2/resource/light"),
+            "the watch never read the lights"
+        );
+        assert!(
+            returned_at <= deadline,
+            "returned {:?} past the deadline",
+            returned_at - deadline
         );
     }
 
