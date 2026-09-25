@@ -95,16 +95,16 @@ describe("Scenario 10 — the write queue under load and failure", () => {
     await Promise.all([
       saveShellState({ language: "en" }),
       saveShellState({ trayHintShown: true }),
-      saveShellState({ startupEnabled: true }),
-      saveShellState({ notificationsEnabled: false }),
+      saveShellState({ showNerdStats: true }),
+      saveShellState({ hasCompletedOnboarding: false }),
       saveShellState({ lastSuccessfulPort: "/dev/ttyUSB0" }),
     ]);
 
     expect(read()).toMatchObject({
       language: "en",
       trayHintShown: true,
-      startupEnabled: true,
-      notificationsEnabled: false,
+      showNerdStats: true,
+      hasCompletedOnboarding: false,
       lastSuccessfulPort: "/dev/ttyUSB0",
     });
   });

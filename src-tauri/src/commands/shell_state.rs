@@ -128,7 +128,8 @@ impl PersistedShellState {
         ))
     }
 
-    /// The mode last chosen, with the targets saved beside it.
+    /// The mode last chosen. Its `targets` is not the saved selection —
+    /// `last_output_targets` is.
     pub fn lighting_mode(&self) -> Option<LightingModeConfig> {
         self.read("lightingMode")
     }

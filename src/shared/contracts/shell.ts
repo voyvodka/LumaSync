@@ -188,8 +188,10 @@ export const SECTION_ORDER: SectionId[] = [
  */
 /** `3 → 4` re-folds Hue zones stranded in `roomMap.hueZones` — see docs/architecture/hue.md.
  *  `4 → 5` stamps each `hueChannels` record with its entertainment area.
- *  `5 → 6` folds the retired region overrides into channel positions. */
-export const SHELL_STATE_SCHEMA_VERSION = 6 as const;
+ *  `5 → 6` folds the retired region overrides into channel positions.
+ *  `6 → 7` drops keys nothing read: `startupEnabled`, `notificationsEnabled`,
+ *  `roomMapBackgroundOpacity` and `lightingMode.targets`. */
+export const SHELL_STATE_SCHEMA_VERSION = 7 as const;
 
 /** Shape of shell state persisted to `shell-state.json` */
 export interface ShellState {
@@ -224,8 +226,6 @@ export interface ShellState {
   lastSection: SectionId;
   /** Whether the user has already seen the "minimized to tray" one-time hint */
   trayHintShown: boolean;
-  /** Whether to launch at OS login */
-  startupEnabled: boolean;
   /**
    * User-selected language code (e.g. "en", "tr").
    * Absent on first launch → languagePolicy defaults to "en" per I18N-02.
@@ -244,7 +244,8 @@ export interface ShellState {
    */
   ledCalibration?: LedCalibrationConfig;
   /**
-   * Last selected LED lighting mode state.
+   * Last selected LED lighting mode state: the kind and both payloads. Its
+   * `targets` is never stored — `lastOutputTargets` is the saved selection.
    * Absent until user explicitly changes mode settings.
    */
   lightingMode?: LightingModeConfig;
@@ -330,8 +331,6 @@ export interface ShellState {
    * preference survives editor reopen.
    */
   roomMapShowHueZones?: boolean;
-  /** Room map editor background image opacity (0-100) */
-  roomMapBackgroundOpacity?: number;
   /** Active UI layout mode (compact tray panel vs full settings window) */
   uiMode?: UIMode;
   /**
@@ -374,11 +373,6 @@ export interface ShellState {
    * pipeline uses the OS primary display as it does today.
    */
   selectedDisplayId?: DisplayId;
-  /**
-   * Whether the OS-level notification surface is enabled (v1.4 Platform
-   * GAP). Absent ⇒ notifications disabled until the user opts in.
-   */
-  notificationsEnabled?: boolean;
   /**
    * First-run onboarding completion flag. When `true`,
    * `useOnboardingStep` shows nothing; when `undefined` / `false`,
@@ -471,7 +465,6 @@ export const DEFAULT_SHELL_STATE: ShellState = {
   windowCenterY: null,
   lastSection: SECTION_IDS.LIGHTS,
   trayHintShown: false,
-  startupEnabled: false,
 };
 
 // ---------------------------------------------------------------------------

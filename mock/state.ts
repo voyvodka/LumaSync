@@ -116,7 +116,7 @@ export interface MockWorld {
      *  streaming and idle, meaning Hue was never active this session. */
     everActive: boolean;
     /**
-     * `stop_hue_stream` ran and nothing has started since. Rust's runtime then
+     * A Hue stop ran and nothing has started since. Rust's runtime then
      * sits Idle / `HUE_STREAM_STOPPED` whatever the bridge does — the stop
      * cancelled the retry — so no fault is reported until the next start.
      * Absent from a world saved before the field existed, which reads as false.

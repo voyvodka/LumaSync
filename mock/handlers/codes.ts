@@ -87,14 +87,6 @@ export const OFFERED_CODES = {
     "AUTH_INVALID_CREDENTIALS",
     "CONFIG_NOT_READY_GATE_BLOCKED",
   ],
-  set_lighting_mode: [
-    "AMBILIGHT_MODE_STARTED",
-    "AMBILIGHT_MODE_START_FAILED",
-    "SOLID_MODE_APPLIED",
-    "SOLID_MODE_HUE_OUTPUT_SKIPPED",
-    "DEVICE_NOT_CONNECTED",
-    "HUE_NOT_READY",
-  ],
 } satisfies { [K in CommandName]?: InjectableCode<K>[] };
 
 export type InjectableCommand = keyof typeof OFFERED_CODES;

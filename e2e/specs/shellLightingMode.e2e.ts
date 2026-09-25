@@ -31,7 +31,7 @@ async function expectExactlyOnePressed(): Promise<void> {
 
 /**
  * Off/Ambilight/Solid driven through the mode strip and read back through
- * `aria-checked` — the UI's own reflection of `get_lighting_mode_status`,
+ * `aria-checked` — the UI's own reflection of the lighting runtime snapshot,
  * and the only avenue available here: the IPC boundary cannot be hooked from
  * a spec (`testing-and-verification.md`). The mode strip only carries
  * `data-testid`s in compact mode (`ModeStrip.tsx`); the equivalent full-mode

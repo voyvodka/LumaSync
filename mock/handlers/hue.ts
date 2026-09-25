@@ -25,6 +25,7 @@ import {
 } from "../../src/shared/contracts/hue";
 import { CHANNEL_WRITEBACK_STATUS } from "../../src/shared/contracts/roomMap";
 import type {
+  HueRuntimeCommandResult,
   HueRuntimeState,
   HueRuntimeStatus,
   HueRuntimeWireStatusCode,
@@ -344,16 +345,6 @@ export const hueHandlers = {
     return { active: true, status: currentRuntime(), lastSolidColor: null };
   },
 
-  // Local in Rust: the stop answers `HUE_STREAM_STOPPED` whatever the bridge
-  // is doing, so it never reads as a failed stop that leaves Hue listed active.
-  [HUE_COMMANDS.STOP_STREAM]: () => {
-    mutate((w) => {
-      w.hue.streaming = false;
-      w.hue.stopped = true;
-    });
-    return { active: false, status: currentRuntime(), lastSolidColor: null };
-  },
-
   [HUE_COMMANDS.RESTART_STREAM]: () => {
     mutate((w) => {
       w.hue.stopped = false;
@@ -461,3 +452,17 @@ export const hueHandlers = {
     return { active: hue.streaming, status: currentRuntime(), lastSolidColor: null };
   },
 } satisfies TypedHandlers;
+
+/**
+ * The lighting transaction's Hue stop (`stop_hue_stream_on` in Rust; no
+ * command reaches it on its own). Local in Rust: the stop answers
+ * `HUE_STREAM_STOPPED` whatever the bridge is doing, so it never reads as a
+ * failed stop that leaves Hue listed active.
+ */
+export function stopHueStream(): HueRuntimeCommandResult {
+  mutate((w) => {
+    w.hue.streaming = false;
+    w.hue.stopped = true;
+  });
+  return { active: false, status: currentRuntime(), lastSolidColor: null };
+}

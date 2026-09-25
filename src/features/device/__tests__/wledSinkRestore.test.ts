@@ -26,7 +26,6 @@ function shellState(partial: Partial<ShellState> = {}): ShellState {
     windowCenterY: null,
     lastSection: "lights",
     trayHintShown: false,
-    startupEnabled: false,
     ...partial,
   } as ShellState;
 }
