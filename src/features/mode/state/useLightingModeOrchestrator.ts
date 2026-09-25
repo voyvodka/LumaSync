@@ -16,6 +16,7 @@ import {
   type ApplyOutputsResult,
   type BootHueRetryState,
   type LightingOrigin,
+  type LightingOutcome,
 } from "@/shared/contracts/lightingRuntime";
 import {
   LIGHTING_MODE_KIND,
@@ -35,6 +36,7 @@ import {
   pickStartFailureNotice,
   startFailureNotice,
   usbLeftOut,
+  type ChoiceAnswer,
 } from "./modeApplyOutcome";
 import { createRetuneCoalescer } from "./retuneCoalescer";
 import { useLightingRuntime } from "./useLightingRuntime";
@@ -96,6 +98,8 @@ export interface LightingModeOrchestrator {
   hueHeldOutReason: HueLeftOutReason | null;
   /** A boot restore is waiting for the bridge to free its area, or gave up waiting. */
   bootHueRetryNotice: BootHueRetryState | null;
+  /** The newest choice's answer, whichever surface made it; `undefined` until the first snapshot. */
+  lastOutcome: LightingOutcome | null | undefined;
   handleLightingModeChange: (mode: LightingModeConfig) => Promise<void>;
   /** A choice of outputs — the Lights toggles, pairing a strip, the unsupported-port fallback. */
   handleOutputTargetsChange: (targets: HueRuntimeTarget[]) => Promise<void>;
@@ -229,12 +233,20 @@ export function useLightingModeOrchestrator({
     return () => window.clearTimeout(timerId);
   }, [bootHueRetryNotice]);
 
-  /** Everything a reply can ask of this window. */
-  const readReply = useCallback(
-    (result: ApplyOutputsResult, options: { probeNotice?: CaptureFailureNotice | null; boot?: boolean } = {}) => {
-      adopt(result.snapshot);
+  /**
+   * Everything a choice's answer can ask of this window. `remote` is a choice
+   * the popup or the tray made: it raises the same notices, but never moves
+   * this window to LED Setup — the calibration notice already stands on Lights
+   * for as long as the layout is missing.
+   */
+  const readAnswer = useCallback(
+    (
+      result: ChoiceAnswer,
+      runningKind: LightingModeConfig["kind"],
+      options: { probeNotice?: CaptureFailureNotice | null; boot?: boolean; remote?: boolean } = {},
+    ) => {
       if (needsCalibration(result)) {
-        onRequireCalibration();
+        if (!options.remote) onRequireCalibration();
         return;
       }
       if (result.outcome.stopFailed.length > 0) setStopFailedNotice(result.outcome.stopFailed);
@@ -260,12 +272,39 @@ export function useLightingModeOrchestrator({
       }
       // A start went through, so a permission notice — including the one the
       // advisory probe raised for this very start — no longer holds.
-      if (isOutputsApplied(result) && result.snapshot.mode.kind !== LIGHTING_MODE_KIND.OFF) {
+      if (isOutputsApplied(result) && runningKind !== LIGHTING_MODE_KIND.OFF) {
         setStartFailedNotice(withoutPermissionNotice);
       }
     },
-    [adopt, onRequireCalibration, reportHueSolidColorStatus],
+    [onRequireCalibration, reportHueSolidColorStatus],
   );
+
+  const readReply = useCallback(
+    (result: ApplyOutputsResult, options: { probeNotice?: CaptureFailureNotice | null; boot?: boolean } = {}) => {
+      adopt(result.snapshot);
+      readAnswer(result, result.snapshot.mode.kind, options);
+    },
+    [adopt, readAnswer],
+  );
+
+  // A choice made elsewhere — the popup, the tray — reaches this window only
+  // as the snapshot's `lastOutcome`. Its own choices it reads from the reply.
+  // The first snapshot is the baseline: an answer this window was not open
+  // for is not news, and `requestId` only grows, so none is raised twice.
+  const handledOutcomeRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (snapshot === null) return;
+    const outcome = snapshot.lastOutcome;
+    const handled = handledOutcomeRef.current;
+    if (handled === null) {
+      handledOutcomeRef.current = outcome?.requestId ?? 0;
+      return;
+    }
+    if (outcome === null || outcome.requestId <= handled) return;
+    handledOutcomeRef.current = outcome.requestId;
+    if (outcome.origin === LIGHTING_ORIGIN.USER) return;
+    readAnswer(outcome, snapshot.mode.kind, { remote: true });
+  }, [snapshot, readAnswer]);
 
   const send = useCallback(
     async (
@@ -401,6 +440,7 @@ export function useLightingModeOrchestrator({
     usbLeftOutNotice,
     hueHeldOutReason,
     bootHueRetryNotice,
+    lastOutcome: snapshot === null ? undefined : snapshot.lastOutcome,
     handleLightingModeChange,
     handleOutputTargetsChange,
     dropUnpluggedUsbTarget,

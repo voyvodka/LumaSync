@@ -30,6 +30,15 @@ pub struct SolidColorPayload {
     pub brightness: f32,
 }
 
+/// `DEFAULT_SOLID_COLOR` in `src/shared/contracts/mode.ts`: what Solid shows
+/// before any colour was chosen.
+pub(crate) const DEFAULT_SOLID: SolidColorPayload = SolidColorPayload {
+    r: 255,
+    g: 255,
+    b: 255,
+    brightness: 1.0,
+};
+
 /// Tunables for `LightingModeKind::Ambilight` — brightness plus the
 /// sampling/smoothing knobs applied on top of raw screen capture.
 #[derive(Clone, Deserialize, Serialize, PartialEq, Debug, Default)]
@@ -244,12 +253,7 @@ pub(super) fn normalize_mode_config(config: LightingModeConfig) -> LightingModeC
             }
         }
         LightingModeKind::Solid => {
-            let solid = config.solid.unwrap_or(SolidColorPayload {
-                r: 255,
-                g: 255,
-                b: 255,
-                brightness: 1.0,
-            });
+            let solid = config.solid.unwrap_or(DEFAULT_SOLID);
             LightingModeConfig {
                 kind: LightingModeKind::Solid,
                 solid: Some(SolidColorPayload {

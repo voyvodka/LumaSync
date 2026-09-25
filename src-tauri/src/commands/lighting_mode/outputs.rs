@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use tauri::{AppHandle, Manager, Runtime, State};
+use tauri::{AppHandle, Listener, Manager, Runtime, State};
 
 use super::hue_driver::{hue_driver_for, HueAreaVerdict, HueDriver};
 use super::snapshot::{
@@ -31,6 +31,7 @@ use super::{
     LightingModeKind, LightingRuntimeState,
 };
 use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionState};
+use crate::commands::hue::health::{self, BOOT_RESUME_PROBE_WINDOW};
 use crate::commands::hue::hue_config::{hue_start_request, room_geometry_from_state};
 use crate::commands::hue::light_restore::HueLightsAfterStop;
 use crate::commands::hue::state_store::{HueRuntimeTriggerSource, StartHueStreamRequest};
@@ -71,11 +72,20 @@ const SETTINGS_THE_MODE_READS: &[&str] = &[
     "ledCalibration",
 ];
 
+/// Saved keys a Hue pairing lives in. A save that leaves no pairing behind
+/// takes back a launch restore parked for the bridge.
+const HUE_PAIRING_KEYS: &[&str] = &[
+    "lastHueBridge",
+    "hueAppKey",
+    "hueClientKey",
+    "credentialStorageBackend",
+];
+
 // ---------------------------------------------------------------------------
 // Wire shapes — `src/shared/contracts/lightingRuntime.ts`
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum LightingOrigin {
     User,
@@ -123,6 +133,18 @@ pub struct ApplyOutputsOutcome {
     pub stop_failed: Vec<OutputTarget>,
     pub dropped_targets: Vec<OutputTarget>,
     pub mode_ended: bool,
+}
+
+/// A choice's answer as the snapshot carries it, so a surface that did not
+/// make the choice — the main window for the tray and the popup — can say
+/// what happened. Only choices publish one; a superseded one publishes none.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LightingOutcome {
+    pub request_id: u64,
+    pub origin: LightingOrigin,
+    pub status: CommandStatus,
+    pub outcome: ApplyOutputsOutcome,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -188,6 +210,16 @@ enum BootRetryPlan {
     Rejoin { left_out: HueLeftOutReason },
 }
 
+/// What parking a launch restore's Hue plan came to.
+enum Parked {
+    /// This launch already resumed once.
+    Spent,
+    /// The monitor already has the bridge answering.
+    FireNow(BootRetryPlan),
+    /// Waiting, under this generation, for the bridge to answer.
+    Waiting(u64),
+}
+
 #[derive(Default)]
 pub(crate) struct CancelToken {
     cancelled: AtomicBool,
@@ -228,8 +260,18 @@ pub(crate) struct OutputsState {
     hue_stop_unconfirmed: AtomicBool,
     boot_retry: Mutex<Option<BootRetry>>,
     boot_sink_wait: Mutex<Option<BootSinkWait>>,
-    /// What the tray's "resume last mode" brings back.
-    last_non_off: Mutex<Option<LightingModeKind>>,
+    /// A launch restore Hue was left out of because the bridge did not
+    /// answer, waiting for the health monitor to see it reachable.
+    boot_hue_parked: Mutex<Option<BootRetryPlan>>,
+    /// Set once a parked resume fired: at most one per launch.
+    boot_hue_park_spent: AtomicBool,
+    /// Whether the last Hue health publish said the bridge answers; the park
+    /// fires on the edge into it, or at once when it already does.
+    hue_reachable: AtomicBool,
+    /// Tells a park's timeout from a later park's.
+    boot_hue_park_generation: AtomicU64,
+    /// `None` is `BOOT_RESUME_PROBE_WINDOW`; tests shorten it.
+    boot_hue_park_window: Mutex<Option<Duration>>,
     /// Bumped by every save of a setting the mode reads; a refresh runs only
     /// if no later save arrived during its debounce.
     settings_generation: AtomicU64,
@@ -267,16 +309,6 @@ impl OutputsState {
 
     pub(crate) fn hue_stop_unconfirmed(&self) -> bool {
         self.hue_stop_unconfirmed.load(Ordering::SeqCst)
-    }
-
-    pub(crate) fn last_non_off(&self) -> Option<LightingModeKind> {
-        locked(&self.last_non_off).to_owned()
-    }
-
-    fn note_ran(&self, kind: LightingModeKind) {
-        if kind != LightingModeKind::Off {
-            locked(&self.last_non_off).replace(kind);
-        }
     }
 
     fn owner(&self) -> HueOwner {
@@ -327,7 +359,6 @@ impl OutputsState {
                 .clone()
                 .or_else(|| persisted.and_then(PersistedShellState::lighting_mode))
                 .unwrap_or_default();
-            self.note_ran(mode.kind);
             intent.clone_from(&LightingIntent {
                 known: true,
                 kind: mode.kind,
@@ -386,14 +417,85 @@ impl OutputsState {
         matches!(
             locked(&self.boot_retry).as_ref().map(|retry| retry.plan),
             Some(BootRetryPlan::Rejoin { .. })
+        ) || matches!(
+            *locked(&self.boot_hue_parked),
+            Some(BootRetryPlan::Rejoin { .. })
         )
+    }
+
+    fn boot_hue_parked(&self) -> bool {
+        locked(&self.boot_hue_parked).is_some()
+    }
+
+    fn park_boot_hue(&self, plan: BootRetryPlan) -> Parked {
+        if self.boot_hue_park_spent.load(Ordering::SeqCst) {
+            return Parked::Spent;
+        }
+        // The monitor already has the bridge answering: an edge will not come.
+        if self.hue_reachable.load(Ordering::SeqCst) {
+            self.boot_hue_park_spent.store(true, Ordering::SeqCst);
+            return Parked::FireNow(plan);
+        }
+        info!("[outputs] boot Hue resume parked until the bridge answers: {plan:?}");
+        let generation = self.boot_hue_park_generation.fetch_add(1, Ordering::SeqCst) + 1;
+        locked(&self.boot_hue_parked).replace(plan);
+        Parked::Waiting(generation)
+    }
+
+    fn cancel_boot_hue_park(&self, reason: &str) -> bool {
+        let cancelled = locked(&self.boot_hue_parked).take().is_some();
+        if cancelled {
+            info!("[outputs] parked boot Hue resume cancelled: {reason}");
+        }
+        cancelled
+    }
+
+    /// The park `generation` made, if it is still waiting once its window ends.
+    fn lapse_boot_hue_park(&self, generation: u64) -> Option<BootRetryPlan> {
+        if self.boot_hue_park_generation.load(Ordering::SeqCst) != generation {
+            return None;
+        }
+        locked(&self.boot_hue_parked).take()
+    }
+
+    fn boot_hue_park_window(&self) -> Duration {
+        locked(&self.boot_hue_park_window).unwrap_or(BOOT_RESUME_PROBE_WINDOW)
+    }
+
+    /// A park window short enough for a test to see it end.
+    #[cfg(test)]
+    pub(crate) fn set_boot_hue_park_window(&self, window: Duration) {
+        locked(&self.boot_hue_park_window).replace(window);
+    }
+
+    /// The parked plan, on the edge into reachable. Takes it: it fires once.
+    fn take_boot_hue_park(&self, reachable: bool) -> Option<BootRetryPlan> {
+        let was = self.hue_reachable.swap(reachable, Ordering::SeqCst);
+        if !reachable || was {
+            return None;
+        }
+        let plan = locked(&self.boot_hue_parked).take()?;
+        self.boot_hue_park_spent.store(true, Ordering::SeqCst);
+        Some(plan)
+    }
+}
+
+/// Forgetting the bridge ends every launch wait on it: the area wait and a
+/// resume parked for the bridge to answer. Called first thing, so no step of
+/// the forget that fails can leave one behind to fire on a later answer.
+pub(crate) fn cancel_boot_hue_waits<R: Runtime>(app: &AppHandle<R>, reason: &str) {
+    if app.try_state::<LightingRuntimeState>().is_some() {
+        cancel_boot_retry(app, reason);
     }
 }
 
 /// A boot retry the user overtook: every choice supersedes it, and its notice
-/// goes with it.
+/// goes with it. A resume parked until the bridge answers goes too.
 fn cancel_boot_retry<R: Runtime>(app: &AppHandle<R>, reason: &str) {
     let state = app.state::<LightingRuntimeState>();
+    if state.outputs.cancel_boot_hue_park(reason) {
+        health::note_boot_resume_pending(app, false);
+    }
     let Some(retry) = state.outputs.take_boot_retry() else {
         // A wait that already gave up still says so; the choice answers it as
         // it would a pending one. Without this the notice outlived the choice
@@ -1051,10 +1153,12 @@ impl<'a, R: Runtime> Transaction<'a, R> {
         // runs; the first local sink to connect resumes it (`wait_for_local_sink`).
         self.boot_sink_missing = self.kind == TxKind::Boot && usb_selected && !usb_present;
         // A strip that came up first resumes the mode on itself; Hue is the
-        // held area's wait to bring back, not this one's.
+        // held area's wait to bring back, or the unanswered bridge's, not this one's.
         let want_hue = intent.targets.contains(&OutputTarget::Hue)
             && self.kind.release_trigger().is_none()
-            && !(self.kind == TxKind::BootSinkRetry && self.state.outputs.boot_retry_pending());
+            && !(self.kind == TxKind::BootSinkRetry
+                && (self.state.outputs.boot_retry_pending()
+                    || self.state.outputs.boot_hue_parked()));
         let running_before = running_targets(running);
         let hue_ran_before = running_before.contains(&OutputTarget::Hue);
 
@@ -1489,15 +1593,13 @@ impl<'a, R: Runtime> Transaction<'a, R> {
         if self.kind != TxKind::Boot || !had_config || running.kind != LightingModeKind::Off {
             return;
         }
+        let plan = BootRetryPlan::Resume { kind: intent.kind };
         if self.outcome.hue_start_code.as_deref() != Some("CONFIG_NOT_READY_GATE_BLOCKED") {
+            self.maybe_park(plan, had_config);
             return;
         }
         if let Some(request) = self.hue_request() {
-            schedule_boot_retry(
-                self.app,
-                BootRetryPlan::Resume { kind: intent.kind },
-                request,
-            );
+            schedule_boot_retry(self.app, plan, request);
         }
     }
 
@@ -1507,14 +1609,30 @@ impl<'a, R: Runtime> Transaction<'a, R> {
         if self.kind != TxKind::Boot || !had_config {
             return false;
         }
+        let plan = BootRetryPlan::Rejoin { left_out };
         if self.outcome.hue_start_code.as_deref() != Some("CONFIG_NOT_READY_GATE_BLOCKED") {
+            self.maybe_park(plan, had_config);
             return false;
         }
         let Some(request) = self.hue_request() else {
             return false;
         };
-        schedule_boot_retry(self.app, BootRetryPlan::Rejoin { left_out }, request);
+        schedule_boot_retry(self.app, plan, request);
         true
+    }
+
+    /// A launch whose Hue start failed for a bridge that did not answer —
+    /// Wi-Fi not up yet at login — waits for the health monitor to see it
+    /// answer. The gate's refusal gets there through the area wait instead.
+    fn maybe_park(&self, plan: BootRetryPlan, had_config: bool) {
+        let refused = self
+            .outcome
+            .hue_start_code
+            .as_deref()
+            .is_some_and(|code| !is_hue_start_ok(code));
+        if refused && self.hue_refusal(had_config) == HueLeftOutReason::Unreachable {
+            park_boot_hue(self.app, plan);
+        }
     }
 
     fn finish(self, ending: Ending) -> ApplyOutputsResult {
@@ -1569,7 +1687,18 @@ impl<'a, R: Runtime> Transaction<'a, R> {
             let ticket = self.ticket;
             let hue_live = self.hue_live();
             let hue_unconfirmed = self.state.outputs.hue_stop_unconfirmed();
-            let published = self.state.snapshot.publish(self.app, |snapshot| {
+            // Every choice's answer rides the snapshot, whoever made it: the
+            // tray has no reply to read and the main window did not ask.
+            let last_outcome = match self.kind {
+                TxKind::Choice(origin) => Some(LightingOutcome {
+                    request_id: ticket,
+                    origin,
+                    status: status.clone(),
+                    outcome: self.outcome.clone(),
+                }),
+                _ => None,
+            };
+            self.state.snapshot.publish(self.app, |snapshot| {
                 // A Hue stop after the last apply changed what is driven.
                 let mode = snapshot.mode.clone();
                 snapshot.set_running(&mode, hue_live, hue_unconfirmed);
@@ -1579,9 +1708,10 @@ impl<'a, R: Runtime> Transaction<'a, R> {
                 if let Some(held_out) = held_out {
                     snapshot.hue_held_out_reason = held_out;
                 }
-            });
-            self.state.outputs.note_ran(published.mode.kind);
-            published
+                if last_outcome.is_some() {
+                    snapshot.last_outcome = last_outcome;
+                }
+            })
         };
         info!(
             "[outputs] #{} {} — running {:?} on {:?}",
@@ -1748,6 +1878,24 @@ pub fn note_settings_saved<'k, R: Runtime>(
     app: &AppHandle<R>,
     keys: impl IntoIterator<Item = &'k str>,
 ) {
+    let keys: Vec<&str> = keys.into_iter().collect();
+    let Some(state) = app.try_state::<LightingRuntimeState>() else {
+        return;
+    };
+    if state.outputs.boot_hue_parked() && keys.iter().any(|key| HUE_PAIRING_KEYS.contains(key)) {
+        // Read after the save, not in it: this runs under the shell-state lock.
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            if !hue_paired(&app)
+                && app
+                    .state::<LightingRuntimeState>()
+                    .outputs
+                    .cancel_boot_hue_park("the bridge was forgotten")
+            {
+                health::note_boot_resume_pending(&app, false);
+            }
+        });
+    }
     let read: Vec<&str> = keys
         .into_iter()
         .filter(|key| SETTINGS_THE_MODE_READS.contains(key))
@@ -1755,9 +1903,6 @@ pub fn note_settings_saved<'k, R: Runtime>(
     if read.is_empty() {
         return;
     }
-    let Some(state) = app.try_state::<LightingRuntimeState>() else {
-        return;
-    };
     if read.iter().any(|key| *key != "ledCalibration") {
         state
             .outputs
@@ -1804,54 +1949,83 @@ fn calibration_is_current<R: Runtime>(app: &AppHandle<R>) -> bool {
             == shell_state::persisted(app).and_then(|state| state.led_calibration())
 }
 
-/// The tray's three lighting items. They run the transaction from Rust, so
-/// they work whether or not a window is loaded.
+/// The tray's mode check group. It runs the transaction from Rust, so it works
+/// whether or not a window is loaded.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TrayLighting {
     Off,
-    ResumeLastMode,
-    SolidColor,
+    Ambilight,
+    Solid,
 }
 
-/// The request a tray item sends, or `None` when there is nothing to resume.
-pub(crate) fn tray_request<R: Runtime>(
-    app: &AppHandle<R>,
-    item: TrayLighting,
-) -> Option<ApplyOutputsRequest> {
-    let kind = match item {
-        TrayLighting::Off => LightingModeKind::Off,
-        TrayLighting::SolidColor => LightingModeKind::Solid,
-        TrayLighting::ResumeLastMode => app
-            .state::<LightingRuntimeState>()
-            .outputs
-            .last_non_off()
-            .or_else(|| {
-                shell_state::persisted(app)
-                    .and_then(|state| state.lighting_mode())
-                    .map(|mode| mode.kind)
-                    .filter(|kind| *kind != LightingModeKind::Off)
-            })?,
-    };
-    // The payloads are left out on purpose: the transaction keeps the last
-    // colour and the last Ambilight settings.
-    Some(ApplyOutputsRequest {
+impl TrayLighting {
+    pub const ALL: [Self; 3] = [Self::Off, Self::Ambilight, Self::Solid];
+
+    pub fn kind(self) -> LightingModeKind {
+        match self {
+            Self::Off => LightingModeKind::Off,
+            Self::Ambilight => LightingModeKind::Ambilight,
+            Self::Solid => LightingModeKind::Solid,
+        }
+    }
+
+    /// `TRAY_MENU_IDS.MODE_*` in `src/shared/contracts/shell.ts`.
+    pub fn menu_id(self) -> &'static str {
+        match self {
+            Self::Off => "tray-mode-off",
+            Self::Ambilight => "tray-mode-ambilight",
+            Self::Solid => "tray-mode-solid",
+        }
+    }
+
+    pub fn from_menu_id(id: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|item| item.menu_id() == id)
+    }
+}
+
+/// One item of the tray's mode group as it should read now.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TrayModeItem {
+    pub item: TrayLighting,
+    pub checked: bool,
+    pub enabled: bool,
+}
+
+/// The mode group for what runs. `locked` is what the main window's own mode
+/// buttons have disabled (`TrayLabels.lockedModes`); a transaction in flight
+/// greys all three, as a choice in flight does there.
+pub fn tray_mode_items(
+    running: LightingModeKind,
+    transitioning: bool,
+    locked: &[LightingModeKind],
+) -> [TrayModeItem; 3] {
+    TrayLighting::ALL.map(|item| TrayModeItem {
+        item,
+        checked: item.kind() == running,
+        enabled: !transitioning && !locked.contains(&item.kind()),
+    })
+}
+
+/// The request a tray item sends. The payloads are left out on purpose: the
+/// transaction keeps the last colour — `DEFAULT_SOLID` before any — and the
+/// last Ambilight settings.
+pub(crate) fn tray_request(item: TrayLighting) -> ApplyOutputsRequest {
+    ApplyOutputsRequest {
         mode: Some(LightingModeConfig {
-            kind,
+            kind: item.kind(),
             ..LightingModeConfig::default()
         }),
         targets: None,
         origin: LightingOrigin::Tray,
-    })
+    }
 }
 
+/// The answer is published as the snapshot's `lastOutcome`: the tray has no
+/// window to read a reply, so the main window raises it.
 pub fn run_tray_lighting<R: Runtime>(app: &AppHandle<R>, item: TrayLighting) {
-    let Some(request) = tray_request(app, item) else {
-        info!("[outputs] tray {item:?}: no earlier mode to resume");
-        return;
-    };
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        match apply_outputs_with(&app, request).await {
+        match apply_outputs_with(&app, tray_request(item)).await {
             Ok(result) => info!("[outputs] tray {item:?}: {}", result.status.code),
             Err(error) => warn!("[outputs] tray {item:?} failed: {error}"),
         }
@@ -2035,6 +2209,8 @@ pub(crate) enum ReleaseWait {
     Free,
     Timeout,
     NotBusy,
+    /// The bridge did not answer: the wait parks until it does.
+    Unreachable,
     Cancelled,
 }
 
@@ -2077,7 +2253,9 @@ where
         }
         match verdict {
             HueAreaVerdict::Free => return ReleaseWait::Free,
-            // Unreachable, re-pair, an unusable area: none clear by waiting.
+            // None clears by polling: a re-pair or an unusable area never
+            // does, a bridge that does not answer does once it answers.
+            HueAreaVerdict::Unreachable => return ReleaseWait::Unreachable,
             HueAreaVerdict::Other => return ReleaseWait::NotBusy,
             HueAreaVerdict::Busy => {}
         }
@@ -2166,12 +2344,17 @@ async fn run_boot_retry<R: Runtime>(
                 )
             });
         }
-        ReleaseWait::NotBusy => {
-            warn!("[outputs] boot Hue retry: the refusal was not a busy area; not retrying");
+        ReleaseWait::NotBusy | ReleaseWait::Unreachable => {
             let left_out = match plan {
                 BootRetryPlan::Rejoin { left_out } => Some(left_out),
                 BootRetryPlan::Resume { .. } => None,
             };
+            if outcome == ReleaseWait::Unreachable {
+                info!("[outputs] boot Hue retry: the bridge did not answer");
+                park_boot_hue(&app, plan);
+            } else {
+                warn!("[outputs] boot Hue retry: the refusal was not a busy area; not retrying");
+            }
             state
                 .snapshot
                 .publish(&app, |snapshot| notice(snapshot, None, left_out));
@@ -2181,35 +2364,160 @@ async fn run_boot_retry<R: Runtime>(
             state
                 .snapshot
                 .publish(&app, |snapshot| notice(snapshot, None, None));
-            match plan {
-                BootRetryPlan::Resume { kind } => {
-                    let snapshot = state.snapshot.read();
-                    if snapshot.mode.kind == LightingModeKind::Off {
-                        state.outputs.update_intent(|intent| intent.kind = kind);
-                    } else {
-                        // Only the strip's own resume runs a mode without the
-                        // user (every choice cancels this wait); it left Hue to
-                        // this one. Anything else has had its say.
-                        let hue_to_add = snapshot.mode.kind == kind
-                            && !snapshot.active_targets.contains(&OutputTarget::Hue)
-                            && state.outputs.intent().targets.contains(&OutputTarget::Hue);
-                        if !hue_to_add {
-                            return;
-                        }
-                    }
-                }
-                BootRetryPlan::Rejoin { .. } => {
-                    state.outputs.update_intent(|intent| {
-                        intent.targets.insert(OutputTarget::Hue);
-                    });
-                }
-            }
-            let ticket = state.outputs.issue_ticket();
-            if let Err(error) = run_ticketed(&app, ticket, TxKind::BootRetry).await {
-                warn!("[outputs] boot Hue retry failed: {error}");
-            }
+            resume_boot_hue(&app, plan).await;
         }
     }
+}
+
+/// Resumes a launch restore Hue was kept out of: the mode it could not run,
+/// or Hue beside the strip it runs on. Once.
+async fn resume_boot_hue<R: Runtime>(app: &AppHandle<R>, plan: BootRetryPlan) {
+    let state = app.state::<LightingRuntimeState>();
+    match plan {
+        BootRetryPlan::Resume { kind } => {
+            let snapshot = state.snapshot.read();
+            if snapshot.mode.kind == LightingModeKind::Off {
+                state.outputs.update_intent(|intent| intent.kind = kind);
+            } else {
+                // Only the strip's own resume runs a mode without the user
+                // (every choice cancels this wait); it left Hue to this one.
+                // Anything else has had its say.
+                let hue_to_add = snapshot.mode.kind == kind
+                    && !snapshot.active_targets.contains(&OutputTarget::Hue)
+                    && state.outputs.intent().targets.contains(&OutputTarget::Hue);
+                if !hue_to_add {
+                    return;
+                }
+            }
+        }
+        BootRetryPlan::Rejoin { .. } => {
+            state.outputs.update_intent(|intent| {
+                intent.targets.insert(OutputTarget::Hue);
+            });
+        }
+    }
+    let ticket = state.outputs.issue_ticket();
+    if let Err(error) = run_ticketed(app, ticket, TxKind::BootRetry).await {
+        warn!("[outputs] boot Hue retry failed: {error}");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The parked boot Hue resume — answered by the health monitor
+// ---------------------------------------------------------------------------
+
+/// The slice of `hue://health` the parked resume reads.
+#[derive(Deserialize)]
+struct HueHealthView {
+    bridge: HueBridgeView,
+    stream: HueStreamView,
+}
+
+#[derive(Deserialize)]
+struct HueBridgeView {
+    verdict: Option<String>,
+    probing: bool,
+}
+
+#[derive(Deserialize)]
+struct HueStreamView {
+    active: bool,
+}
+
+/// Follows the health monitor's own event rather than polling: a launch
+/// restore parked for a bridge that did not answer resumes on the first
+/// publish that says it does. See docs/architecture/lighting-transaction.md
+/// ("The launch's wait for the bridge").
+pub fn listen_hue_health<R: Runtime>(app: &AppHandle<R>) {
+    let handle = app.clone();
+    app.listen(crate::events::HUE_HEALTH_CHANGED_EVENT, move |event| {
+        match serde_json::from_str::<HueHealthView>(event.payload()) {
+            // A probe in flight still carries the previous verdict; only its
+            // answer counts.
+            Ok(view) => note_hue_reachable(
+                &handle,
+                view.stream.active
+                    || (!view.bridge.probing
+                        && view.bridge.verdict.as_deref() == Some("reachable")),
+            ),
+            Err(error) => warn!("[outputs] unreadable Hue health event: {error}"),
+        }
+    });
+}
+
+/// One health publish. On the edge into reachable a parked resume runs, once;
+/// by then a quit or a forgotten bridge has taken it back.
+pub(crate) fn note_hue_reachable<R: Runtime>(app: &AppHandle<R>, reachable: bool) {
+    let Some(state) = app.try_state::<LightingRuntimeState>() else {
+        return;
+    };
+    let Some(plan) = state.outputs.take_boot_hue_park(reachable) else {
+        return;
+    };
+    fire_parked(app, plan);
+}
+
+/// Parks a launch restore's Hue plan until the bridge answers. While it
+/// waits the health monitor probes the bridge even with no window shown, on
+/// a bounded schedule; the wait ends when the plan fires, is cancelled, or
+/// its window runs out. See docs/architecture/lighting-transaction.md.
+fn park_boot_hue<R: Runtime>(app: &AppHandle<R>, plan: BootRetryPlan) {
+    let state = app.state::<LightingRuntimeState>();
+    match state.outputs.park_boot_hue(plan) {
+        Parked::Spent => {}
+        Parked::FireNow(plan) => {
+            info!("[outputs] the bridge already answers; resuming the launch restore now");
+            fire_parked(app, plan);
+        }
+        Parked::Waiting(generation) => {
+            health::note_boot_resume_pending(app, true);
+            let window = state.outputs.boot_hue_park_window();
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(window).await;
+                lapse_boot_hue_park(&app, generation);
+            });
+        }
+    }
+}
+
+/// The bridge never answered within the park's window: stop probing and say
+/// so the way the area wait's end does.
+fn lapse_boot_hue_park<R: Runtime>(app: &AppHandle<R>, generation: u64) {
+    let state = app.state::<LightingRuntimeState>();
+    let Some(plan) = state.outputs.lapse_boot_hue_park(generation) else {
+        return;
+    };
+    warn!("[outputs] the bridge never answered while the launch restore waited; giving up");
+    health::note_boot_resume_pending(app, false);
+    state.snapshot.publish(app, |snapshot| match plan {
+        BootRetryPlan::Resume { .. } => snapshot.boot_hue_retry = Some(BootHueRetryState::GaveUp),
+        BootRetryPlan::Rejoin { left_out } => snapshot.hue_held_out_reason = Some(left_out),
+    });
+}
+
+/// Runs a taken plan off the caller's thread — `note_hue_reachable` runs
+/// inside the monitor's publish.
+fn fire_parked<R: Runtime>(app: &AppHandle<R>, plan: BootRetryPlan) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        health::note_boot_resume_pending(&app, false);
+        if app.state::<LightingRuntimeState>().is_closing() {
+            return;
+        }
+        if !hue_paired(&app) {
+            info!("[outputs] the bridge answers, but it is no longer paired; not resuming");
+            return;
+        }
+        info!("[outputs] the bridge answers; resuming the launch restore on Hue ({plan:?})");
+        resume_boot_hue(&app, plan).await;
+    });
+}
+
+fn hue_paired<R: Runtime>(app: &AppHandle<R>) -> bool {
+    shell_state::persisted(app)
+        .and_then(|persisted| hue_start_request(&persisted, HueRuntimeTriggerSource::ModeControl))
+        .is_some()
 }
 
 // ---------------------------------------------------------------------------

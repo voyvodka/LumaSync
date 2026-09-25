@@ -130,6 +130,8 @@ export interface LightingRuntimeSnapshot {
   /** Why Hue is out of the running mode. Held until Hue joins or a new choice is made. */
   hueHeldOutReason: HueLeftOutReason | null;
   bootHueRetry: BootHueRetryState | null;
+  /** The answer to the newest choice that ran to an end, from any window or the tray. */
+  lastOutcome: LightingOutcome | null;
 }
 
 export interface ApplyOutputsOutcome {
@@ -147,6 +149,21 @@ export interface ApplyOutputsOutcome {
   droppedTargets: HueRuntimeTarget[];
   /** The running mode ended rather than a target: nothing was left to run on. */
   modeEnded: boolean;
+}
+
+/**
+ * A choice's answer, published with the snapshot so a surface that did not
+ * make the choice can still say what happened: the main window raises the
+ * notice for a popup or tray choice, and an OS notification when a tray choice
+ * fails while it is hidden. Only `user`, `popup` and `tray` requests publish
+ * one; a superseded request publishes none, since the newer one answers.
+ * `requestId` only grows, so a surface that handled one never raises it again.
+ */
+export interface LightingOutcome {
+  requestId: number;
+  origin: LightingOrigin;
+  status: CommandStatusOf<LightingOutputsStatusCode>;
+  outcome: ApplyOutputsOutcome;
 }
 
 export interface ApplyOutputsResult {

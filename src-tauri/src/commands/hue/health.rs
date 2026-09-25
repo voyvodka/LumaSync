@@ -57,6 +57,14 @@ pub(crate) const AREA_BACKOFF_CAP: Duration = Duration::from_secs(120);
 // Wi-Fi hiccup into a missing bridge. See docs/architecture/hue.md.
 pub(crate) const GIVE_UP_AFTER_FAILURES: u32 = 4;
 pub(crate) const GIVE_UP_AFTER: Duration = Duration::from_secs(90);
+// The only hidden probing after the launch probe: while a launch restore waits
+// for the bridge to answer (Wi-Fi not up yet at login). 5 s is the HTTP
+// timeout, so one probe at a time; the window bounds it to ~20 calls. See
+// docs/architecture/hue.md ("One probe at launch").
+pub(crate) const BOOT_RESUME_PROBE_FAST: Duration = Duration::from_secs(5);
+pub(crate) const BOOT_RESUME_FAST_FOR: Duration = Duration::from_secs(60);
+pub(crate) const BOOT_RESUME_PROBE_SLOW: Duration = Duration::from_secs(15);
+pub(crate) const BOOT_RESUME_PROBE_WINDOW: Duration = Duration::from_secs(180);
 
 /// Shell-state keys that change what the monitor watches. Credential status
 /// and the onboarding step are written beside them but describe, not choose.
@@ -265,9 +273,30 @@ struct Inner {
     /// tray-started app has a verdict before anything is shown. Spent by
     /// that pass whether or not it probed.
     launch_probe: bool,
+    /// Since when a launch restore has waited for the bridge to answer. The
+    /// bridge probe runs hidden while it waits, within its window.
+    boot_resume_since: Option<Instant>,
 }
 
 impl Inner {
+    fn boot_resume_waiting(&self, now: Instant) -> bool {
+        self.boot_resume_since
+            .is_some_and(|since| now.duration_since(since) < BOOT_RESUME_PROBE_WINDOW)
+    }
+
+    fn bridge_interval(&self, now: Instant) -> Duration {
+        match self.boot_resume_since {
+            Some(since) if self.boot_resume_waiting(now) => {
+                if now.duration_since(since) < BOOT_RESUME_FAST_FOR {
+                    BOOT_RESUME_PROBE_FAST
+                } else {
+                    BOOT_RESUME_PROBE_SLOW
+                }
+            }
+            _ => BRIDGE_PROBE_INTERVAL,
+        }
+    }
+
     fn visible(&self) -> bool {
         self.watches.values().any(|watch| watch.visible)
     }
@@ -297,7 +326,7 @@ impl Inner {
             stream_bridge: self.live && visible,
             // An active stream is proof enough on its own.
             bridge: configured
-                && (visible || self.launch_probe)
+                && (visible || self.launch_probe || self.boot_resume_since.is_some())
                 && !self.live
                 && !self.bridge.stopped,
             area: configured && self.area_wanted() && !self.area.stopped && !stream_feeds_area,
@@ -438,6 +467,7 @@ impl HueHealthMonitor {
                 bridge: Signal::default(),
                 area: Signal::default(),
                 launch_probe: true,
+                boot_resume_since: None,
             }),
             wake: Arc::new(Notify::new()),
             closing: AtomicBool::new(false),
@@ -529,6 +559,26 @@ impl HueHealthMonitor {
 
     pub(crate) fn close(&self) {
         self.0.closing.store(true, Ordering::SeqCst);
+        self.0.wake.notify_one();
+    }
+
+    /// A launch restore started or stopped waiting for the bridge to answer.
+    /// While it waits the bridge probe runs hidden too, at once and then on
+    /// the boot cadence, for `BOOT_RESUME_PROBE_WINDOW` at most.
+    pub(crate) fn set_boot_resume_pending(&self, pending: bool) {
+        {
+            let mut inner = self.lock();
+            if pending == inner.boot_resume_since.is_some() {
+                return;
+            }
+            let now = Instant::now();
+            if pending {
+                inner.boot_resume_since = Some(now);
+                inner.bridge.rearm(now);
+            } else {
+                inner.boot_resume_since = None;
+            }
+        }
         self.0.wake.notify_one();
     }
 
@@ -638,7 +688,7 @@ impl HueHealthMonitor {
             }
             let code = response.status.code.as_str();
             inner.working.bridge.verdict = Some(verdict_for(code));
-            inner.bridge.due = Some(now + BRIDGE_PROBE_INTERVAL);
+            inner.bridge.due = Some(now + inner.bridge_interval(now));
             // Only a bridge that never answered counts against the budget. A
             // bridge that answers CREDENTIAL_INVALID — or with a certificate
             // that is not the paired bridge's — is on the network and needs a
@@ -655,7 +705,8 @@ impl HueHealthMonitor {
             if streak == 1 {
                 warn!("[hue-health] bridge probe failed: {code}");
             }
-            if exhausted {
+            // A launch restore waiting for the bridge keeps it probing for its whole window.
+            if exhausted && !inner.boot_resume_waiting(now) {
                 warn!("[hue-health] bridge probe gave up after {streak} consecutive failures — manual retry required");
                 inner.bridge.stopped = true;
                 inner.bridge.due = None;
@@ -692,6 +743,12 @@ impl HueHealthMonitor {
     /// next pass is needed — `None` parks the task until something wakes it.
     pub(crate) async fn run_once(&self) -> Option<Instant> {
         let now = Instant::now();
+        {
+            let mut inner = self.lock();
+            if inner.boot_resume_since.is_some() && !inner.boot_resume_waiting(now) {
+                inner.boot_resume_since = None;
+            }
+        }
         self.observe_target(now);
 
         let bridge_check = {
@@ -854,6 +911,14 @@ pub fn note_settings_saved<'k, R: Runtime>(
     }
     if let Some(monitor) = app.try_state::<HueHealthMonitor>() {
         monitor.note_config_changed();
+    }
+}
+
+/// The lighting transaction's launch restore parked, or stopped waiting, for
+/// the bridge to answer. A no-op until `install` has run.
+pub(crate) fn note_boot_resume_pending<R: Runtime>(app: &AppHandle<R>, pending: bool) {
+    if let Some(monitor) = app.try_state::<HueHealthMonitor>() {
+        monitor.set_boot_resume_pending(pending);
     }
 }
 

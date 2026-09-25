@@ -10,6 +10,7 @@ use log::warn;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
+use super::outputs::LightingOutcome;
 use super::{LightingModeConfig, LightingModeKind, LightingRuntimeState};
 
 /// `LIGHTING_EVENTS.RUNTIME_CHANGED` in `src/shared/contracts/lightingRuntime.ts`.
@@ -119,6 +120,7 @@ pub struct LightingRuntimeSnapshot {
     pub request_id: Option<u64>,
     pub hue_held_out_reason: Option<HueLeftOutReason>,
     pub boot_hue_retry: Option<BootHueRetryState>,
+    pub last_outcome: Option<LightingOutcome>,
 }
 
 impl LightingRuntimeSnapshot {
@@ -165,6 +167,7 @@ impl<R: Runtime> SnapshotSink for AppHandle<R> {
                 snapshot.revision
             );
         }
+        crate::sync_tray_modes(self, snapshot);
     }
 }
 

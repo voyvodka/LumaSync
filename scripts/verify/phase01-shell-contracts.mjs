@@ -46,9 +46,9 @@ const REQUIRED_EXPORTS = [
 const REQUIRED_TRAY_IDS = [
   "open-settings",
   "status-indicator",
-  "tray-lights-off",
-  "tray-resume-last-mode",
-  "tray-solid-color",
+  "tray-mode-off",
+  "tray-mode-ambilight",
+  "tray-mode-solid",
   "quit",
 ];
 
@@ -2563,7 +2563,8 @@ const checkedPairs = nullabilityPairs.filter(
 // event nothing listened to.
 // 83 → 86: `HueLightName`, `HueLightNamesResponse` (`get_hue_light_names`) and
 // `WledForgetResponse` (`forget_wled_device`).
-const EXPECTED_NULLABILITY_PAIR_COUNT = 86;
+// 86 → 87: `LightingOutcome`, the snapshot's `lastOutcome`.
+const EXPECTED_NULLABILITY_PAIR_COUNT = 87;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,
