@@ -28,7 +28,9 @@ Both halves of that rule are load-bearing (`classify_status` in `commands/hue_ht
 documents 401 alongside 403 for a rejected application key, so keying on 403 alone misses a real
 re-pair. And the body check is not belt-and-braces: a reverse proxy or a captive portal in front
 of the bridge answers with its own 403, and treating that as a dead credential throws away a
-pairing that was fine.
+pairing that was fine. A new bridge call goes through `classify_hue_response` (or its `_blocking`
+twin) like every existing one; `error_for_status` folds a revoked key into a generic HTTP error that
+never reaches re-pair.
 
 **"Hue-shaped" includes the bridge's HTML page, because real bridges do not send JSON here.** On a
 BSB002 (fw 1978293000, API 1.78.0, checked 2026-09-23) CLIP v2 with a bogus or missing
@@ -151,7 +153,9 @@ no bridge id in hand (the boot migration) clears the previous owner instead of i
 Linux Secret Service, via `commands/hue/credential_store.rs`. `shell-state.json` holds neither the
 DTLS pre-shared key nor the application key — on a platform where the keychain works. Where it does
 not (a Linux box with no D-Bus), `default_store()` degrades to `NoopStore` and both keys stay on
-disk, because the alternative is an app that cannot pair.
+disk, because the alternative is an app that cannot pair. A new secret goes the same way, never
+into `shell-state.json`. Describe this as "Hue keys are in the OS keychain", not "encrypted at
+rest": the rest of the state file is plaintext, and the NoopStore case keeps the keys there too.
 
 **`default_store()` is one process-wide handle with a read cache, and writes evict it.** Every
 resolver call used to allocate a fresh probe entry and re-read the backend, which on a single stream
@@ -771,6 +775,7 @@ success code (`HUE_DISCOVERY_OK`, `…_VALID`, `…_READY`) never captions a fai
 - **Bug H2 — gamut clipping used to discard luminance, not just chroma.** The fix converts RGB to CIE xy plus the input's own luminance (`big_y`), clips the xy point to the bulb's gamut triangle, then converts back using that *same* luminance rather than a hard-coded 1.0. Before the fix, the inverse transform renormalised so the largest channel saturated — preserving hue but discarding brightness, which the frame builder then tried to claw back through the brightness scalar, producing visibly dim saturated content and, on gamut-edge projections, momentary all-zero RGB that drove the ambilight-frame stutter.
 - **A bridge keeps its id when DHCP moves it, so the id — not the address — decides which entry is current.** `dedupeBridges` keeps the *first* entry per id (case-insensitive: cloud discovery reports it in lower case, `/api/config` in upper case), and every caller lists the fresh answer first. It used to keep the last, which kept the old address. When a rediscovery or a typed address places the selected bridge somewhere new, `lastHueBridge` is saved with the new address (which also re-arms the health monitor) and the saved key is checked there. A typed address that turns out to be a *different* bridge starts unpaired; the pair stays with the bridge that issued it (#352).
 - **A scan selects a bridge for the user only when it found exactly one.** Selecting hides the list of found bridges, so auto-selecting the first of several hid the others behind a card for a bridge the user never chose. With nothing stored, the credential state is `unknown`, never `needs_repair` — the latter showed a first-time user "credentials expired" before they had paired anything.
+- **`roomName` on an entertainment area is always null.** The room enrichment and its extra `GET /clip/v2/resource/room` were removed in #229 as a surface nothing used; the field stayed on the contract, so the area picker's room grouping (`normalizeAreas`) puts every area in one group. Filling it again means paying that request on every area list.
 - **Discovery touches the cloud; the manual-IP path does not.** `discover_hue_bridges` queries `discovery.meethue.com` beside LAN-only mDNS; that endpoint is one of the app's three outbound calls (see the README), and the manual-IP path exists precisely so a user can avoid it.
 - **A failed read-back rolls back BOTH keychain halves, never just the bad one.** `migrate_hue_credentials_to_keychain` writes, reads back, compares, and only then reports success; on any mismatch it deletes both entries. Deleting only the mismatched half looks tidier and is wrong — `resolve_hue_credentials` prefers a complete keychain pair over the request fallback, so a stale pair left behind shadows the working plaintext credentials and yields a broken bridge that reports a keychain success. Rolling both back degrades to the plaintext path, which works. The order is fixed: write, read back, *then* clear plaintext. Never clear on a write acknowledgement alone.
 - **Only the literal `"keychain"` licenses deleting the plaintext copy.** An absent `credentialStorageBackend` — every pairing failure path, and any Rust build predating the migration — means there is no evidence the keychain holds anything, and the only safe response to no evidence is to keep the copy. `CredentialBackend::as_str` can also emit `"noop"`, which is outside the TS union. Test for the one permitting value; never switch exhaustively over the union.

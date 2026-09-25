@@ -4,8 +4,15 @@ The traps here cost the most time per incident, and one of them shipped a broken
 
 ## Decisions
 
-**`MACOSX_DEPLOYMENT_TARGET` is pinned to 12.3** at workflow level in both CI and release.
-Lowering it reintroduces the v1.5.2 launch crash — see *Resolved* below.
+**`MACOSX_DEPLOYMENT_TARGET` is pinned to 12.3, in three places on purpose**: workflow-level `env`
+in `ci.yml` and `release.yml`, `force = true` in `src-tauri/.cargo/config.toml`, and
+`bundle.macOS.minimumSystemVersion`. `tauri build` exports the minimum system version (10.13 when
+unset) as a real env var, and a non-forced Cargo `[env]` entry loses to any pre-set value — each
+layer covers a build path another misses. Lowering it reintroduces the v1.5.2 launch crash — see
+*Resolved* below. The macOS jobs also select the newest installed Xcode: `screencapturekit` pulls
+`apple-metal`, whose Swift bridge needs the macOS 26 SDK at compile time; its `#available` guard
+keeps the binary runnable on 12.3. (The step names still say "screencapturekit 8"; the lockfile is
+on 10.x.)
 
 **The Rust toolchain is pinned to an exact version** in `rust-toolchain.toml`, not `stable`. A new
 stable release brings new clippy lints, and CI runs clippy at deny level, so a floating channel turns
@@ -39,8 +46,25 @@ carries the bare `X.Y.Z` (why is under the prerelease entry below). The app vers
 itself is inherited from `Cargo.toml` — `tauri.conf.json` has no top-level version field.
 
 **Publication is two-stage.** The build matrix uploads into a *draft* (`releaseDraft: true`) so the
-updater feed never sees a platform-incomplete `latest.json`; a `publish` job then asserts all four
-platform keys before undrafting. A `-` in the tag marks it prerelease.
+updater feed never sees a platform-incomplete `latest.json` — anything under `/releases/latest/` is
+live the instant it is published, and each matrix job used to upload into a published release, so
+the first to finish exposed a one-OS feed. `publish` then asserts all four platform keys, checks the
+signatures, refreshes the beta feed, and only then undrafts. Any failure leaves a draft, and a
+re-run is safe: `tauri-action` gets-or-creates the release by tag and replaces same-named assets. A
+`-` in the tag marks it prerelease. A complete release carries a universal `.dmg` and
+`.app.tar.gz`, an `.msi` and NSIS `-setup.exe`, an `.AppImage`, `.deb` and `.rpm`, a `.sig` beside
+every updater artefact (the `.dmg` has none; it is not an update payload), and `latest.json`.
+
+**Only the updates are signed.** minisign signs the updater artefacts; the builds themselves are
+ad-hoc code-signed on macOS (no Developer ID, not notarized) and unsigned on Windows, where
+SmartScreen shows an unknown publisher. Never describe a release as notarized or
+Authenticode-signed. What ad-hoc signing costs users is under *Keychain prompts in dev*.
+
+**GitHub Releases is the only distribution channel**, because that is where the updater feed
+lives. Package-manager channels are blocked on prerequisites rather than effort: Homebrew disables
+casks that fail Gatekeeper, which an ad-hoc-signed build does, and a Flatpak needs
+Wayland capture (a Wayland user would get none today) plus `--device=all` for serial. Container and
+headless packaging are not built at all — LumaSync is a tray app, not a daemon.
 
 **Every updater artefact is signature-checked before the release is undrafted.** After the
 four-platform assertion, `publish` runs `scripts/verify/updater-signatures.mjs`: it downloads each
@@ -71,14 +95,32 @@ and has to be bumped by hand. Every `actions/checkout` sets `persist-credentials
 pushes (releases go through `gh` and the REST API), so leaving the token in the checkout's config
 only exposes it to every later step.
 
-**The supply-chain gates, and which job owns each.** `cargo audit` (in `ci.yml`) owns Rust
-advisories. The weekly `license-scan` runs `cargo deny check licenses sources bans`: crates.io is the
-only allowed source, a dependency from a repository URL has to be listed in `deny.toml` with a
-reason, wildcard version requirements are denied, and duplicate versions only warn — the ~60 there
-today are almost all the `windows-sys` family pulled at different majors by tauri, tao, wry and the
-capture crates. CodeQL analyses `javascript-typescript`, `rust` and `actions`, all with
-`build-mode: none`; only `Analyze (javascript-typescript)` is a required context, so the matrix entry
-keeps that exact name.
+**The supply-chain gates, and which job owns each.**
+
+- **`cargo audit`** (in `ci.yml` and `release.yml`) owns Rust advisories, and
+  `src-tauri/.cargo/audit.toml` ignores nothing. An ignore added there carries its justification
+  in that file, is re-checked every release, and goes the moment the parent bumps. The allowed
+  *warnings* it prints — unmaintained `unic-*` via `urlpattern`, `proc-macro-error`, unsound `glib`
+  0.18 — arrive through Tauri's own tree, mostly its Linux GTK3 stack. They are not actionable
+  here and are not to be pinned around.
+- **`dependency-review`** gates each PR's *changed* dependencies: it fails on a high-severity
+  advisory, and its licence allow-list is the union of `deny.toml`'s and the npm scan's, so it
+  refuses nothing the full-tree scan accepts. Copyleft (GPL, LGPL, AGPL, EUPL, SSPL) is refused by
+  absence. A dependency whose licence string GitHub cannot map fails with its name in the log — add
+  its purl to `allow-dependencies-licenses` with a reason rather than widening the list.
+- **`license-scan`** is the full-tree backstop, weekly and on any PR touching either lockfile or
+  `deny.toml`, because `dependency-review` sees only what changed and once passed a crate whose
+  licence it could not parse. `cargo deny check licenses sources bans`: crates.io is the only
+  allowed source, a git dependency has to be listed in `deny.toml` with a reason, wildcard version
+  requirements are denied, and duplicate versions only warn — the ~60 there today are almost all
+  the `windows-sys` family pulled at different majors by tauri, tao, wry and the capture crates.
+- **CodeQL** analyses `javascript-typescript`, `rust` and `actions`, all with `build-mode: none`;
+  only `Analyze (javascript-typescript)` is a required context, so the matrix entry keeps that
+  exact name.
+- **Dependabot** runs weekly for cargo, npm (it reads `bun.lock`) and Actions, minor and patch
+  grouped per ecosystem, majors alone for individual review. It offers no prerelease unless a
+  package is already on a prerelease track, which is what keeps the tree on latest stable without
+  an ignore rule.
 
 **Updates ship through GitHub Releases with minisign verification.** The updater checks on startup
 and then daily while the app runs, retrying a failed check after 1, 5 and 15 minutes, and surfaces
@@ -103,7 +145,15 @@ tests. Only add or adjust tests for changed behaviour.
 `Build and Check (ubuntu-24.04)`, `Build and Check (macos-latest)`,
 `Build and Check (windows-latest)`, `Analyze (javascript-typescript)`. Renaming a workflow job
 renames its status context, and a required context that no job produces blocks every PR until an
-admin overrides it.
+admin overrides it — which happened once, with a stale `typecheck` context. `E2E (macos-latest)` is
+deliberately not required (see [`testing-and-verification.md`](testing-and-verification.md)) and
+must never take one of those four names.
+
+**CI splits by what actually varies per platform.** `check:all`, `bun run test` and `cargo audit`
+run on Linux only; three OSes would add minutes and no signal. `cargo fmt`, `clippy -D warnings`
+and `cargo test` run on all three and are *not* part of `check:all`, so a green `check:all` on a
+Rust branch can still fail CI on formatting. CI cancels superseded runs; `release.yml` never does,
+because a half-published release is worse than a wasted run.
 
 **The beta update channel is fed from an anchor release, because GitHub has no "latest prerelease"
 URL.** The stable endpoint in `tauri.conf.json` resolves through
@@ -158,7 +208,10 @@ introduced by a *merged* pull request. Provenance is checked rather than re-runn
 contexts against the merge commit: `ci.yml` sets `cancel-in-progress`, so a superseded commit's run
 shows `cancelled` even when its PR was fully green — requiring `success` there would block
 legitimate releases. A merged PR cannot exist without the four required checks having passed, which
-is the same guarantee arrived at from the other side.
+is the same guarantee arrived at from the other side. So the tag goes on the squash-merge commit on
+`main`, never on a branch commit. A third gate refuses a tag that sorts below an existing one under
+semver (`v1.5.4-rc.1` after `v1.5.4`): the version gate compares core versions only and cannot see
+a backwards tag, which would ship a feed older than what users run.
 
 **The version gate also runs on every PR, not only on a tag.** `scripts/verify/version-parity.mjs`
 is in `check:all` and applies the same rules as the tag gate — plus two the workflow cannot check
@@ -168,10 +221,23 @@ copied rather than reimplemented; a check that reads the files differently can p
 fails, which is worse than no check. Learning at tag time that a version drifted is the most
 expensive moment to learn it: the work is already merged.
 
-`release.yml` also runs `typecheck:e2e` and `check:i18n` from `check:all`. `check:i18n` is the
+`release.yml` re-runs only part of `check:all`: the Rust checks on all three platforms, and on Linux
+`verify:shell-contracts`, `typecheck:e2e` and `check:i18n`. `check:i18n` is the
 orphaned-translation-key ratchet, and a tag push runs no CI, so this is the only place it can catch
-one before publication. `typecheck:mock`, `verify:mock-not-shipped` and `verify:design-tokens` are
-not re-run at tag time.
+one before publication. Biome lint, `typecheck:mock`, `verify:event-names`,
+`verify:mock-not-shipped`, `verify:design-tokens` and `verify:untyped-mocks` are not re-run at tag
+time. **Nor, in practice, is `verify:window-grants`**: its release step is conditioned on
+`ubuntu-24.04`, which left the release matrix when Linux moved to 22.04, so it is skipped on every
+tag. It still gates every PR through `check:all`.
+
+**`CHANGELOG.md` is a reader-facing release note, not an audit log** — the commit history is the
+audit log. Keep a Changelog 1.1.0 headings, plus a house `### Internal` for changes only a
+contributor would notice. Each bullet is written from the user's side and summarises a theme; one
+that reads like a commit message belongs folded into its nearest theme. Dependency bumps get one
+line per ecosystem (Rust, frontend, GitHub Actions), naming a package only for a major version or a
+user-visible effect. Purely internal changes — a removed constant, a moved test — are left out. An
+rc cut folds `[Unreleased]` into the core `## [X.Y.Z]` heading, undated; the stable release adds
+`— YYYY-MM-DD`. Anything still under `[Unreleased]` at tag time is missing from that build's notes.
 
 ## The package manager and its dependency overrides
 
@@ -182,6 +248,12 @@ setup gave us: an import of a package we never declared would resolve at runtime
 break for anyone installing with a different resolver. Isolated keeps the symlinked layout, so only
 the declared dependencies sit at the top level — `ls node_modules | wc -l` should report 17, not
 several hundred. Do not drop the file to "simplify" the install.
+
+**`bun test` is not `bun run test`.** The first is Bun's own runner, which ignores
+`vitest.config.ts` and turns the suite into hundreds of failures that read like a regression.
+`bunfig.toml`'s `[test] root` confines it to `scripts/bun-test-guard`, whose one failing test names
+the right command. Node stays installed (22 in CI) — vitest, wdio, the Tauri CLI and every
+`scripts/verify/*.mjs` run under it — but it is never the package manager.
 
 **Three dependency overrides in `package.json` are security fixes, not preferences.** `package.json`
 is strict JSON and cannot carry the reasoning inline, so it lives here — they were annotated in
@@ -212,8 +284,8 @@ those downloads. `esbuild` genuinely needs its postinstall to fetch a platform b
 - **A green CI run proves the debug binary starts, not the installer.** `scripts/verify/launch-smoke.mjs` launches debug binaries on all three platforms; Windows uses `tauri.windows-smoke.conf.json` because WebView2 can lose the embedded top-level request when a debug webview starts hidden. `release.yml` launches the mounted `.dmg`, the AppImage, and the Windows release binary before the draft is published. The `.msi` and `.deb` installers themselves are not installed in CI.
 - **Log lines twice: `tauri_plugin_log::Builder::new()` already carries `[Stdout, LogDir { file_name: None }]`, and `.target()` appends.** Two `.target()` calls therefore made four sinks: stdout twice (every line doubled in `bun run tauri dev` and in CI's captured stdout), our named file, and a second file named after the package — `LumaSync.log`. In release that second name and our `lumasync.log` are the same file on macOS and Windows, so the release log carried every line twice; in dev it left a stray `LumaSync.log` next to `lumasync-dev.log`, which is the file the smoke `--log-file` deletion below once destroyed. `.targets([...])` replaces the default set instead of adding to it. A line seen once on stdout and once in the file is the two sinks doing their job; the same line twice in one place is a regression of this.
 - **`launch-smoke.mjs --log-file` scans the file from its size at launch and never deletes it.** A stale log would match the startup marker without the app ever starting, so only bytes appended after the script starts count; a file that is *shorter* than it was at launch was rotated or truncated and is read from the top. It used to delete the file instead, which on a developer machine is the live log — and on macOS's case-insensitive filesystem `lumasync.log` and `LumaSync.log` are the same file, so it once destroyed months of history. `overlay-smoke.mjs` follows the same rule.
-- **No duplicate `## [X.Y.Z]` headings in `CHANGELOG.md`.** `release.yml` extracts notes with `awk` and stops at the first match.
-- **`CHANGELOG.md` merges with `merge=union`** (`.gitattributes`). Nearly every PR adds a line under `[Unreleased]`, so with several branches open each merge of `main` into the others used to stop on a conflict that was only two additions side by side. Union keeps both sides. It cannot tell an edit from an addition: two branches rewording the same line keep both versions, and two branches adding the same heading keep it twice, so read the section after a merge, and check the rule above before tagging. GitHub's own merge button ignores the attribute; it applies when `main` is merged into a branch locally.
+- **No duplicate `## [X.Y.Z]` headings in `CHANGELOG.md`.** `release.yml` extracts notes with `awk` and stops at the first match. It also stops at a bare `---` line, so a horizontal rule inside a section silently truncates the published notes.
+- **`CHANGELOG.md` merges with `merge=union`** (`.gitattributes`). Nearly every PR adds a line under `[Unreleased]`, so with several branches open each merge of `main` into the others used to stop on a conflict that was only two additions side by side. Union keeps both sides. It cannot tell an edit from an addition: two branches rewording the same line keep both versions, and two branches adding the same heading keep it twice — `[Unreleased]` routinely ends up with two `### Added` — so read the section after a merge and merge repeated subsections when folding it, and check the rule above before tagging. GitHub's own merge button ignores the attribute; it applies when `main` is merged into a branch locally.
 - **`chunkSizeWarningLimit` is a ratchet rather than a mute.** Vite's 500 kB default measures download cost over a network; a Tauri bundle is read off local disk and never pays it — what matters here is parse time and memory per webview. Since the per-window split (`ui-and-shell.md`, "Per-window bundles") the largest chunk is the shared entry, React plus i18next at about 265 kB, and the limit sits just above it at 300 kB so real growth still trips it. A warning now most likely means something heavy was imported statically from `main.tsx`, which every window, including each twin overlay, would parse.
 - **The test environment installs its own `localStorage`** in `src/test/setup.ts`. Node ≥ 24 defines an experimental `localStorage` global that reads back as `undefined` without `--localstorage-file`, and it shadows the one happy-dom provides. CI runs Node 22 and never saw it; on a newer local Node every `HsvColorPicker` recent-colors read and write threw into its own `catch`, so the feature was inert in tests and nothing failed. Anything reached through `window` deserves the same suspicion when local and CI Node versions differ.
 
@@ -472,7 +544,7 @@ convenience.
 
 ## Resolved
 
-- **v1.5.2 shipped a macOS build that could not launch** ([#115](https://github.com/voyvodka/LumaSync/issues/115)). Linking with a deployment target below 12.0 made dyld abort at launch on users' machines. An app that cannot start cannot run its own updater, so the fault was unrecoverable by the mechanism that exists to recover from faults, and affected users had to reinstall by hand. The deployment-target pin, `scripts/verify/macos-swift-runtime.sh`, and the entire launch smoke test all exist because of this one incident.
+- **v1.5.2 shipped a macOS build that could not launch** ([#115](https://github.com/voyvodka/LumaSync/issues/115)). Linking with a deployment target below 12.0 made dyld abort at launch on users' machines. An app that cannot start cannot run its own updater, so the fault was unrecoverable by the mechanism that exists to recover from faults, and affected users had to reinstall by hand. The deployment-target pin, `scripts/verify/macos-swift-runtime.sh`, and the entire launch smoke test all exist because of this one incident. [#179](https://github.com/voyvodka/LumaSync/issues/179) stays open and pinned on purpose: it is the notice for users stranded on 1.5.2, not a defect to close.
 
 ## The e2e suite
 

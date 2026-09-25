@@ -25,6 +25,8 @@ in an area needs both.
 | Writing a test, or trusting one — especially anything that drives the real window | [`testing-and-verification.md`](testing-and-verification.md) |
 | Reproducing a state without the hardware for it, or checking hover in a real browser | [`testing-and-verification.md`](testing-and-verification.md) — the dev mock |
 | Working on the window, the tray, or compact mode | [`ui-and-shell.md`](ui-and-shell.md) |
+| Styling a component — tokens, colour, focus, motion, dialogs, a11y | [`design-language.md`](design-language.md) |
+| Looking up a protocol spec or a reference project | [`references.md`](references.md) |
 | Calling a Tauri plugin or core API from the frontend, or adding a window | [`ui-and-shell.md`](ui-and-shell.md#capabilities) |
 | Working on the room-map editor, zone geometry, or channel placement | [`room-map.md`](room-map.md) |
 | Chasing a runtime bug with no obvious cause | [`../debugging.md`](../debugging.md), then the area file above |
