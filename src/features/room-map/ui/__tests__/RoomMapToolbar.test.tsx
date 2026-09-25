@@ -46,7 +46,7 @@ describe("RoomMapToolbar", () => {
 
   it("derive zones button is disabled when neither TV nor USB is present", () => {
     render(<RoomMapToolbar {...BASE_PROPS} hasTv={false} hasUsb={false} />);
-    const deriveBtn = screen.getByRole("button", { name: "roomMap:zones.deriveButton" });
+    const deriveBtn = screen.getByRole("button", { name: "roomMap:deriveCounts.button" });
     expect(deriveBtn).toHaveAttribute("aria-disabled", "true");
   });
 
@@ -60,7 +60,7 @@ describe("RoomMapToolbar", () => {
         onDeriveZones={onDeriveZones}
       />,
     );
-    const deriveBtn = screen.getByRole("button", { name: "roomMap:zones.deriveButton" });
+    const deriveBtn = screen.getByRole("button", { name: "roomMap:deriveCounts.button" });
     expect(deriveBtn).not.toBeDisabled();
     fireEvent.click(deriveBtn);
     expect(onDeriveZones).toHaveBeenCalledTimes(1);

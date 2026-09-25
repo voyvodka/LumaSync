@@ -5,7 +5,9 @@ import { HUE_CHANNEL_HEIGHT_ORIGIN } from "@/shared/contracts/roomMap";
 import {
   moveHueChannelToWorld,
   nudgeHueChannel,
+  hueChannelZRange,
   resolveHueChannelWorld,
+  resolveHueChannelWorldZ,
   setHueChannelWorldZ,
 } from "../hueChannelPosition";
 
@@ -119,5 +121,30 @@ describe("setHueChannelWorldZ", () => {
     expect(bound.zOrigin).toBe(HUE_CHANNEL_HEIGHT_ORIGIN.USER);
     // centreZ 0 + scaleZ 0.5 * relative 0.5 ⇒ 0.25
     expect(bound.zoneRelativePosition?.z).toBeCloseTo(0.5, 6);
+  });
+});
+
+describe("hueChannelZRange", () => {
+  it("is the whole floor-to-ceiling range for an unbound channel", () => {
+    expect(hueChannelZRange(FREE, [ZONE])).toEqual({ min: -1, max: 1, zone: null });
+  });
+
+  // The slider used to run floor to ceiling while the value it wrote was
+  // clamped to the zone: most of its travel moved nothing.
+  it("narrows to the zone's vertical extent for a bound channel", () => {
+    const range = hueChannelZRange(BOUND, [ZONE]);
+    expect(range.zone).toBe(ZONE);
+    expect(range.min).toBeCloseTo(-0.5, 6);
+    expect(range.max).toBeCloseTo(0.5, 6);
+    // Every height inside the range is one the channel can hold.
+    const top = setHueChannelWorldZ(BOUND, [ZONE], range.max);
+    expect(resolveHueChannelWorldZ(top, [ZONE])).toBeCloseTo(range.max, 6);
+  });
+
+  it("stays inside the bridge's cube for a zone that reaches past it", () => {
+    const high = { ...ZONE, centerZ: 0.8, scaleZ: 0.5 };
+    const range = hueChannelZRange(BOUND, [high]);
+    expect(range.max).toBe(1);
+    expect(range.min).toBeCloseTo(0.3, 6);
   });
 });

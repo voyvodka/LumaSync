@@ -7,6 +7,7 @@ import {
   TV_ANCHOR_OBJECT_ID,
   usbStripObjectId,
 } from "./objectId";
+import { hueChannelName } from "./hueChannelLabel";
 
 export type RoomObjectType = "tv" | "furniture" | "usb" | "hue" | "image";
 
@@ -59,7 +60,7 @@ export function buildObjectList(
     rows.push({
       id: hueChannelObjectId(ch.channelIndex),
       type: "hue",
-      label: ch.label ?? t("roomMap:objectPanel.hueLabel", { index: String(ch.channelIndex + 1) }),
+      label: hueChannelName(ch, t),
       locked: ch.locked ?? undefined,
       zoneId: ch.zoneId,
     });

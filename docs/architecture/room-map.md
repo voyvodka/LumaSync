@@ -146,6 +146,16 @@ middle of an import.
   centre. Channels and zones live in the bridge's `[-1, 1]` cube, which spans the room, so they
   already follow the new size; adding the metre shift to them once pushed a channel at `x = 0.5`
   in a 5 → 7 m resize out to `1.5`, off the cube.
+- **"Reset map" is an empty template, not the empty map.** It goes through `applyRoomTemplate`
+  with `DEFAULT_ROOM_MAP`, so the Hue channels and zones (the bridge sync's) and every port-linked
+  strip (Devices') survive, the first one keeping its placement. Writing `DEFAULT_ROOM_MAP` over the
+  config once wiped all three, and the map then disagreed with both owners until they re-synced.
+- **"LED counts from the map" hands LED Setup a draft, never a baseline.** The counts share out the
+  saved LED Setup total (`model/calibrationStrip.ts`), not the strip's `ledCount`, which is stamped
+  at connect and kept in step only by LED Setup's save (`syncStripLedCount`). Confirm navigates to
+  LED Setup, which opens them as unsaved edits over the saved layout: the shell once parked them in
+  memory with no navigation and merged them into the *baseline* of the next visit, so Cancel lost
+  them silently and Save applied them unseen.
 - **Editor shortcuts stand aside for form fields.** The editor root owns Delete/Backspace, Cmd+Z,
   arrows and the rest, and the dock's fields sit inside it: Backspace in the on-canvas LED count
   deleted the strip, and Cmd+Z in a field ran the editor's undo instead of the field's own.

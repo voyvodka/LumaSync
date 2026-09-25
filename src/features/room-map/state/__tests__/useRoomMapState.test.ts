@@ -203,3 +203,49 @@ describe("useRoomMapState — a gesture is one undo step and one save", () => {
     expect(roomMapSaves()[0]?.[0].roomMap.furniture[0].x).toBe(1);
   });
 });
+
+describe("useRoomMapState — reset", () => {
+  // Reset used to write DEFAULT_ROOM_MAP over everything, taking the bridge's
+  // channels and zones and the strips Devices had linked to a port with it.
+  it("clears what the user placed and keeps what the bridge and Devices own", async () => {
+    const persisted: RoomMapConfig = {
+      ...makePersistedConfig(),
+      hueChannels: [{ channelIndex: 0, channelId: 3, x: 0.2, y: -0.1, z: 0.4 }],
+      zones: [
+        {
+          id: "zone-a",
+          name: "Sofa",
+          entertainmentAreaId: "area-1",
+          centerX: 0,
+          centerY: 0,
+          centerZ: 0,
+          scaleX: 0.5,
+          scaleY: 0.5,
+          scaleZ: 0.5,
+          channelIndices: [0],
+          borderColor: "#3b82f6",
+        },
+      ],
+      usbStrips: [
+        { stripId: "usb-linked", startX: 1, startY: 1, endX: 4, endY: 1, ledCount: 164, portName: "/dev/cu.test" },
+        { stripId: "usb-drawn", startX: 0, startY: 3, endX: 2, endY: 3, ledCount: 30 },
+      ],
+    };
+    mockLoad.mockResolvedValue({ roomMap: persisted } as ShellState);
+    const { result } = renderHook(() => useRoomMapState());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => result.current.reset());
+
+    const config = result.current.config;
+    expect(config.tvAnchor).toBeUndefined();
+    expect(config.furniture).toEqual([]);
+    expect(config.dimensions).toEqual(DEFAULT_ROOM_MAP.dimensions);
+    expect(config.hueChannels).toEqual(persisted.hueChannels);
+    expect(config.zones).toEqual(persisted.zones);
+    expect(config.usbStrips.map((s) => s.stripId)).toEqual(["usb-linked"]);
+    expect(config.usbStrips[0].ledCount).toBe(164);
+    // Still one undoable step.
+    expect(result.current.canUndo).toBe(true);
+  });
+});

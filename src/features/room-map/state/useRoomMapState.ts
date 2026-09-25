@@ -3,6 +3,7 @@ import { shellStore } from "@/features/persistence/shellStore";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 import { parseCommandError } from "@/shared/contracts/status";
+import { applyRoomTemplate } from "../model/roomTemplate";
 import {
   GESTURE_COALESCE_MS,
   initialRoomMapState,
@@ -147,8 +148,16 @@ export function useRoomMapState(): UseRoomMapStateReturn {
     (full: RoomMapConfig) => dispatch({ type: "apply", patch: full, replace: true }),
     [],
   );
+  // An empty template, not the empty map: the Hue channels and zones belong to
+  // the bridge sync and the port-linked strips to Devices, and a reset that
+  // wiped them left the map disagreeing with both.
   const reset = useCallback(
-    () => dispatch({ type: "apply", patch: DEFAULT_ROOM_MAP, replace: true }),
+    () =>
+      dispatch({
+        type: "apply",
+        patch: (config) => applyRoomTemplate(config, DEFAULT_ROOM_MAP),
+        replace: true,
+      }),
     [],
   );
   const undo = useCallback(() => dispatch({ type: "undo" }), []);
