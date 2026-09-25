@@ -67,11 +67,16 @@ opened; an unplug behind a queued start runs that start on what the cable left. 
 
 1. Hue up — only if the intent names Hue and no stream is live. A start that answers
    `TRANSIENT_RETRY_SCHEDULED` is cancelled at once: nothing will use it, and left alone it keeps
-   retrying unseen.
+   retrying unseen. A live stream on another area than the saved `lastHueAreaId` is *moved*: a
+   start on a running stream is a no-op whatever its area, so the old session stops first (its
+   lights go back) and the saved area starts after it (`hue_area_moved`, `move_hue`). A stream
+   opened elsewhere names no area here and is left where it is.
 2. The mode, through the real `apply_mode_change`, on the targets that can run it. A Hue gate
    refusal beside USB runs the mode on USB alone (Hue *left out*, with its reason on the wire as
-   `HueLeftOutReason`); a device-gate refusal when USB was being *added* keeps the mode running on
-   the rest. A payload and target set the running mode already carries is not re-applied.
+   `HueLeftOutReason`); a device-gate refusal beside Hue runs on Hue alone — the running mode when
+   USB was being added, the new choice when it was a mode — and drops `usb` from the session's
+   selection (`droppedTargets`) until a strip connects. A payload and target set the running mode
+   already carries is not re-applied.
 3. Hue down — after the worker has let go. A stream the running mode does not use is stopped if
    this module opened it, or if the mode that used it has gone. A stream the test lease opened is
    the lease's to stop.
@@ -79,6 +84,30 @@ opened; an unplug behind a queued start runs that start on what the cable left. 
 A refused start leaves what was running, unless it drives a target the user just deselected: that
 one is stopped rather than left lit. A start that tore the old mode down and then failed is
 `OUTPUTS_START_FAILED`; the Hue stream it leaves unfed is given back.
+
+**A refused choice says why.** Every refusal used to reach the main window as a status code it did
+not read, so a press that changed nothing changed nothing on screen either:
+
+- A choice that named Hue alone, where Hue did not start, carries `hueNotStarted` with the reason;
+  the left-out reason has nothing to ride on, since nothing new runs. The reason is read from the
+  start's code and the blocker tokens the start gate appends to its `details`
+  (`"; readiness: <code>[, <sentinel>]"`, the wire contract on `CONFIG_NOT_READY_GATE_BLOCKED` in
+  `hue.ts`), never from the prose around them (`hue_refusal_reason`): a re-pair (`auth`), no bridge
+  or area on record (`config`), the active-streamer sentinel (`inUse` — another app holds the area),
+  a readiness that found no usable area (`noLights`), anything else `unreachable`.
+- The same reasons name a Hue left out beside USB. `inUse` is not `busy`: `busy` belongs to the
+  launch's wait, which adds Hue back once the area frees; after a choice nothing waits, so saying
+  "Hue joins once it lets go" would be false.
+- A strip-only choice with no strip is refused as before, and the main window now says so (the
+  output bucket of the start-failure notice). One that also named Hue runs there and raises
+  `usbLeftOut` instead, since "lighting didn't start" would be false.
+
+**A reconnect that finds another app on the area stops under its own code.** The reconnect monitor
+re-reads readiness before each attempt and must not take over a foreign session; when the active
+streamer is the only blocker it used to spend the whole retry budget on it and end
+`TRANSIENT_RETRY_EXHAUSTED`, which reads as a network fault. It now ends `Failed` at once with
+`HUE_AREA_TAKEN_OVER` (`restart_refused` in `reconnect.rs`, `register_area_taken_over` in
+`retry.rs`), which the Hue card names.
 
 **Off stops the worker first, whatever its targets, then Hue.** A user's Off also stops Hue when a
 bridge is configured but no stream is known here, as the frontend's Off did — that is what cancels
@@ -161,6 +190,24 @@ target change that keeps Hue. The wait shows as `bootHueRetry` (resume) or the h
 takes `gaveUp` down too: it used to outlive the choice whenever the wait ended first, which a paused
 test clock reproduced by running the whole window out while a transaction awaited blocking work.
 
+**The launch's wait for a strip.** The boot restore runs while auto-reconnect is still scanning
+and settling the strip (~2 s after the port opens), so it sees no local output about a quarter of
+the time. It keeps `usb` selected and runs without it — a `[usb]` restore ends Off, a `[usb, hue]`
+one runs on Hue — and used to stay that way, since the hot-plug reconciler sees `usb` already
+selected and does nothing when the strip connects. A restore that left `usb` out for that reason now
+waits for one (`wait_for_local_sink`): the first serial connect or WLED bind within 30 s
+(`BOOT_SINK_WAIT_WINDOW`, `note_local_sink_connected` from `connect_serial_port` and
+`connect_wled_sink`) runs one `BootSinkRetry` transaction that resumes the mode on the strip, or adds
+the strip beside the Hue it runs on. Like the boot restore it saves nothing. Any request that says
+what should run — a choice, an unplug, a newer launch — ends the wait, and a connect after the
+window starts nothing. A strip that connected while the restore was still running is caught when
+the wait is set up. When the Hue wait is also pending, the strip resume leaves Hue to it.
+
+The main window no longer awaits the restore: it can wait seconds on a Hue start, and the tray
+labels, onboarding and prompts waited with it. Only the USB reconciler and the Hue auto-add
+(below) still wait (`lightingRestored`), because they write a selection from the one they read and
+the restore is what sets it.
+
 **The Hue test lease**, ported from the frontend's: `origin: "leaseHue"` with targets naming Hue brings
 the stream up for a test run and remembers whether it opened it; any other targets hand it back —
 only if it opened it, and not if a mode started meanwhile adopted the stream.
@@ -175,15 +222,27 @@ vitest suite and `cargo test`: change one side without the other and a suite fai
 
 **Settings refresh.** A window's write to the shell state that names a key the running mode reads
 (`selectedDisplayId`, `lightingIntensityPreset`, `colorCorrection`, `firmwareProfile`,
-`selectedChipType`, `ledColorOrder`, `roomMap`, `lastHueAreaId`) schedules a re-apply of what runs,
-300 ms after the last such save (`note_settings_saved`, hooked into `patch_shell_state` and
-`replace_shell_state`). It replaces a re-dispatch every settings panel made from the main window,
-which the popup and every other writer of those keys never did. The refresh takes the newest
-ticket as it stands rather than a new one, so it never supersedes a choice in flight; the save
-also marks the running payload stale, so a choice that arrives after it re-applies even when its
-request names nothing new. It leaves a test pattern alone — the test's own stop restores the mode
-from the saved settings — and does nothing while Off. `ledCalibration` is not on the list: LED
-Setup saves it while a test owns the strip.
+`selectedChipType`, `ledColorOrder`, `roomMap`, `lastHueAreaId`, `ledCalibration`) schedules a
+re-apply of what runs, 300 ms after the last such save (`note_settings_saved`, hooked into
+`patch_shell_state` and `replace_shell_state`). It replaces a re-dispatch every settings panel made
+from the main window, which the popup and every other writer of those keys never did. The refresh
+takes the newest ticket as it stands rather than a new one, so it never supersedes a choice in
+flight; the save also marks the running payload stale, so a choice that arrives after it re-applies
+even when its request names nothing new. It leaves a test pattern alone — the test's own stop
+restores the mode from the saved settings — and does nothing while Off.
+
+- `ledCalibration` joined the list because a layout saved while a mode ran never reached it: the
+  mode kept the old layout until something else re-applied. LED Setup saves it while a test owns
+  the strip, which the refresh already leaves alone, and on steps that change nothing, so a save
+  naming only `ledCalibration` is skipped when the running mode already carries that layout or does
+  not drive the strip (`calibration_is_current`).
+- A saved `lastHueAreaId` that differs from the live stream's area moves the stream (phase 1 above).
+  A move the new area refuses leaves Hue out with its reason and keeps the rest running; a Hue-only
+  mode with nowhere left to run ends.
+- A refresh keeps Hue in a mode that already runs on it while the stream reconnects
+  (`hue_gate_waived` on the runtime owner, set for that one apply). The Hue gate used to refuse the
+  whole re-apply, so the strip beside a reconnecting stream ignored colour correction, colour order
+  and display changes; the worker follows the live slot, so Hue picks the change up when it is back.
 
 **A test pattern is not the mode.** A test runs as an Ambilight worker over a synthetic source, but
 starting one publishes nothing: every window keeps showing the mode it interrupted, and the test's
