@@ -579,12 +579,16 @@ mod tests {
             hue.bridge.puts_to("/clip/v2/resource/light/").is_empty(),
             "identify never writes a light's state"
         );
-        let gap = puts[1].at.duration_since(puts[0].at);
+        // The pacer spaces request starts, so the gap is read where each
+        // connection arrived: a request's arrival after its TLS handshake
+        // once put two paced identifies 92 ms apart. The allowance is the
+        // accept loop's own wake-up.
+        let gap = puts[1].connected_at.duration_since(puts[0].connected_at);
         let floor = std::time::Duration::from_millis(
             1_000 / u64::from(HUE_HTTP_FALLBACK_MAX_REQUESTS_PER_SEC),
         );
         assert!(
-            gap + std::time::Duration::from_millis(5) >= floor,
+            gap + std::time::Duration::from_millis(20) >= floor,
             "two identifies {gap:?} apart; the light budget allows one per {floor:?}"
         );
     }

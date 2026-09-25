@@ -1618,10 +1618,11 @@ mod light_restore_flow {
         assert!(Instant::now() <= deadline, "{:?}", started.elapsed());
         let puts = hue.restore_requests();
         assert_eq!(puts.len(), 3);
-        // ~10 requests/s: three restores span two ~100 ms slots. Measured on
-        // the server side, so a TLS handshake's jitter is allowed for.
-        let span = puts[2].at.duration_since(puts[0].at);
-        assert!(span >= Duration::from_millis(150), "{span:?}");
+        // ~10 requests/s: three restores span two ~100 ms slots. Measured
+        // where each connection arrived, with room for the accept loop's own
+        // wake-up; a request's arrival after its handshake is not paced.
+        let span = puts[2].connected_at.duration_since(puts[0].connected_at);
+        assert!(span >= Duration::from_millis(170), "{span:?}");
     }
 
     /// A bridge that stops answering mid-quit cannot hold the exit: the stop
@@ -1634,7 +1635,10 @@ mod light_restore_flow {
         start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
 
         let started = Instant::now();
-        let deadline = started + Duration::from_millis(800);
+        // The restore's own per-request ceiling: whenever the first PUT goes
+        // out, the deadline ends it, not that ceiling — and a slow runner
+        // still has most of it left to send that PUT at all.
+        let deadline = started + Duration::from_millis(1_500);
         let result = tokio::task::spawn_blocking(move || {
             stop_hue_stream_before_exit(&app.state::<HueRuntimeStateStore>(), deadline)
         })
@@ -1661,7 +1665,11 @@ mod light_restore_flow {
         start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
         hue.answer_bulk_light_reads_after(Duration::from_secs(3));
 
-        let deadline = Instant::now() + Duration::from_millis(1_000);
+        // One watch window from now: however long the stop takes to reach
+        // the watch, the deadline ends it rather than its own window, and
+        // the stop has ~1.1 s to get there. A 1 s deadline left a slow
+        // runner's three paced PUTs no room to start the watch at all.
+        let deadline = Instant::now() + HUE_LIGHT_RESTORE_WATCH;
         let (result, returned_at) = tokio::task::spawn_blocking(move || {
             let result =
                 stop_hue_stream_before_exit(&app.state::<HueRuntimeStateStore>(), deadline);
@@ -1672,12 +1680,14 @@ mod light_restore_flow {
 
         assert_eq!(result.status.code, "HUE_STREAM_STOPPED");
         assert_eq!(hue.light_puts().len(), 3);
+        let last_put = hue.restore_requests().last().map(|put| put.at);
         assert!(
             hue.bridge
                 .requests()
                 .iter()
                 .any(|r| r.method == "GET" && r.path == "/clip/v2/resource/light"),
-            "the watch never read the lights"
+            "the watch never read the lights; last restore PUT {:?} before the deadline",
+            last_put.map(|at| deadline.saturating_duration_since(at))
         );
         assert!(
             returned_at <= deadline,
@@ -1858,7 +1868,7 @@ mod light_restore_flow {
             &[("left", before_stream()), ("right", before_stream())],
             |_| Reply::ok(),
         );
-        hue.after_stop_bridge_sets(
+        hue.after_our_restore_bridge_sets(
             Duration::from_millis(400),
             &[
                 ("left", bridge_post_stream()),
@@ -1878,6 +1888,25 @@ mod light_restore_flow {
         tokio::time::sleep(Duration::from_millis(800)).await;
     }
 
+    /// Reads of every light the watch made after the last light PUT. One
+    /// means it ended on the read that found every re-written light holding,
+    /// rather than polling on to the end of its window — counted, not timed,
+    /// so a slow runner's requests cannot make an early end look late.
+    fn watch_reads_after_the_last_write(hue: &FakeHue) -> usize {
+        let last_write = hue
+            .bridge
+            .puts_to("/clip/v2/resource/light/")
+            .last()
+            .expect("the stop wrote the lights")
+            .at;
+        hue.bridge
+            .requests()
+            .iter()
+            .filter(|r| r.method == "GET" && r.path == "/clip/v2/resource/light")
+            .filter(|r| r.at > last_write)
+            .count()
+    }
+
     /// The bridge acknowledges `action: stop`, takes our restore, and then
     /// puts its own state on the lights anyway. The restore has to be the
     /// last write.
@@ -1888,9 +1917,7 @@ mod light_restore_flow {
         let runtime = runtime_of(&app);
         start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
 
-        let started = Instant::now();
         let stopped = stop_hue_stream(None, app.state()).await.unwrap();
-        let took = started.elapsed();
         once_the_bridge_is_done().await;
 
         assert_eq!(stopped.status.code, "HUE_STREAM_STOPPED");
@@ -1905,7 +1932,7 @@ mod light_restore_flow {
         assert_eq!(hue.light_puts().len(), 4, "{:?}", hue.light_puts());
         // Every light written again and read back holding ends the watch
         // before its window does.
-        assert!(took < HUE_LIGHT_RESTORE_WATCH, "{took:?}");
+        assert_eq!(watch_reads_after_the_last_write(&hue), 1);
     }
 
     /// The stop skips its own `action: stop` while the sender holds the token.
@@ -2145,6 +2172,40 @@ mod light_restore_flow {
         assert!(bridge.puts_to("/clip/v2/resource/light/").is_empty());
     }
 
+    /// The last read of the window gets only what is left of it. One our own
+    /// window cut short is a read that went unanswered, not a bridge that is
+    /// gone — it read `Unreachable`, and under load flaked the two tests
+    /// above. The deadline sits under one request's ceiling, so the only read
+    /// is clipped wherever the client comes up in it.
+    #[tokio::test]
+    async fn an_area_read_our_window_cut_short_is_unanswered_not_unreachable() {
+        let bridge = area_answering(
+            streamed_by_another_app().after(Duration::from_secs(3)),
+            || streamed_by_another_app().after(Duration::from_secs(3)),
+        );
+        let restore = restore_of(&bridge, &["left"]);
+
+        let report = tokio::task::spawn_blocking(move || {
+            restore_lights(
+                &restore,
+                Instant::now() + Duration::from_millis(1_000),
+                &|| false,
+            )
+        })
+        .await
+        .unwrap();
+
+        assert!(
+            bridge
+                .requests()
+                .iter()
+                .any(|r| r.method == "GET" && r.path.contains("entertainment_configuration")),
+            "the area was never read"
+        );
+        assert_eq!(report.stopped, Some(HueLightRestoreStop::AreaUnknown));
+        assert!(bridge.puts_to("/clip/v2/resource/light/").is_empty());
+    }
+
     /// An area the bridge no longer has is streamed by nobody: its lights are
     /// still the user's to put back.
     #[tokio::test]
@@ -2323,9 +2384,7 @@ mod light_restore_flow {
         let runtime = runtime_of(&app);
         start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
 
-        let started = Instant::now();
         let stopped = user_off(&app).await;
-        let took = started.elapsed();
         once_the_bridge_is_done().await;
 
         assert_eq!(stopped.status.code, "HUE_STREAM_STOPPED");
@@ -2343,7 +2402,7 @@ mod light_restore_flow {
             puts.iter().all(|(_, body)| *body == switch_off()),
             "{puts:?}"
         );
-        assert!(took < HUE_LIGHT_RESTORE_WATCH, "{took:?}");
+        assert_eq!(watch_reads_after_the_last_write(&hue), 1);
         assert!(acquire_hue_runtime(&runtime).light_restore.is_none());
     }
 

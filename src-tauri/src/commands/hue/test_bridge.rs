@@ -30,6 +30,10 @@ pub(crate) struct Recorded {
     pub(crate) path: String,
     pub(crate) body: String,
     pub(crate) at: Instant,
+    /// When its connection was accepted — before the TLS handshake, whose
+    /// length varies request to request. The closest the bridge sees to when
+    /// the client sent it, so pacing is measured on this, not on `at`.
+    pub(crate) connected_at: Instant,
 }
 
 impl Recorded {
@@ -142,13 +146,16 @@ impl TestBridge {
                     std::thread::sleep(Duration::from_millis(2));
                     continue;
                 };
+                let connected_at = Instant::now();
                 thread_connections.fetch_add(1, Ordering::SeqCst);
                 let (seen, route, acceptor) = (
                     Arc::clone(&thread_seen),
                     Arc::clone(&route),
                     Arc::clone(&acceptor),
                 );
-                std::thread::spawn(move || serve(stream, &acceptor, &seen, route.as_ref()));
+                std::thread::spawn(move || {
+                    serve(stream, connected_at, &acceptor, &seen, route.as_ref())
+                });
             }
         });
         Self {
@@ -205,7 +212,13 @@ fn default_acceptor() -> &'static Arc<SslAcceptor> {
     ACCEPTOR.get_or_init(|| Arc::new(acceptor_for(&self_signed(TEST_BRIDGE_ID), &[], None)))
 }
 
-fn serve(stream: TcpStream, acceptor: &SslAcceptor, seen: &Mutex<Vec<Recorded>>, route: &Router) {
+fn serve(
+    stream: TcpStream,
+    connected_at: Instant,
+    acceptor: &SslAcceptor,
+    seen: &Mutex<Vec<Recorded>>,
+    route: &Router,
+) {
     let _ = stream.set_nonblocking(false);
     let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
     let Ok(tls) = acceptor.accept(stream) else {
@@ -244,6 +257,7 @@ fn serve(stream: TcpStream, acceptor: &SslAcceptor, seen: &Mutex<Vec<Recorded>>,
         path: path.clone(),
         body: body.clone(),
         at: Instant::now(),
+        connected_at,
     });
 
     let reply = route(&method, &path, &body);
@@ -293,7 +307,13 @@ pub(crate) fn light_json(on: bool, brightness: f64, mirek: Option<u16>, xy: (f64
 struct PostStream {
     delay: Duration,
     lights: Vec<(String, Value)>,
+    /// Held, too, until each of `lights` has taken a write since the stop.
+    over_our_writes: bool,
 }
+
+/// How long a post-stream write held for our writes waits for them before
+/// landing anyway.
+const POST_STREAM_WAIT_FOR_OUR_WRITES: Duration = Duration::from_secs(5);
 
 #[derive(Default)]
 struct FakeHueState {
@@ -301,6 +321,8 @@ struct FakeHueState {
     /// Areas someone streams to: `action: start` adds one, `stop` removes it.
     active: HashSet<String>,
     post_stream: Option<PostStream>,
+    /// Lights a PUT was answered 2xx for since the last `action: stop`.
+    written_since_stop: HashSet<String>,
     /// Devices that answer a PUT with 404, as one removed from the bridge does.
     removed_devices: HashSet<String>,
     /// Held before answering a read of every light at once.
@@ -367,12 +389,26 @@ impl FakeHue {
     /// From now on, every `action: stop` makes the bridge put `lights` on
     /// after `delay`, the way a BSB002 was measured doing.
     pub(crate) fn after_stop_bridge_sets(&self, delay: Duration, lights: &[(&str, Value)]) {
+        self.post_stream(delay, lights, false);
+    }
+
+    /// As [`Self::after_stop_bridge_sets`], but never before each of `lights`
+    /// has taken a write since that stop: the order the BSB002 showed, its
+    /// write landing on top of a restore it had acknowledged. Pinned, because
+    /// on a slow runner our restore could otherwise land after it — and the
+    /// test would no longer be about undoing it.
+    pub(crate) fn after_our_restore_bridge_sets(&self, delay: Duration, lights: &[(&str, Value)]) {
+        self.post_stream(delay, lights, true);
+    }
+
+    fn post_stream(&self, delay: Duration, lights: &[(&str, Value)], over_our_writes: bool) {
         self.state.lock().unwrap().post_stream = Some(PostStream {
             delay,
             lights: lights
                 .iter()
                 .map(|(id, value)| (id.to_string(), value.clone()))
                 .collect(),
+            over_our_writes,
         });
     }
 
@@ -528,10 +564,22 @@ fn route(
                 }
                 Some("stop") => {
                     held.active.remove(id);
+                    held.written_since_stop.clear();
                     if let Some(post) = held.post_stream.clone() {
                         let later = Arc::clone(state);
                         std::thread::spawn(move || {
                             std::thread::sleep(post.delay);
+                            let give_up = Instant::now() + POST_STREAM_WAIT_FOR_OUR_WRITES;
+                            let ours_landed = || {
+                                let held = later.lock().unwrap();
+                                post.lights
+                                    .iter()
+                                    .all(|(light, _)| held.written_since_stop.contains(light))
+                            };
+                            while post.over_our_writes && !ours_landed() && Instant::now() < give_up
+                            {
+                                std::thread::sleep(Duration::from_millis(2));
+                            }
                             let mut held = later.lock().unwrap();
                             for (light, value) in post.lights {
                                 held.lights.insert(light, value);
@@ -554,7 +602,9 @@ fn route(
             let reply = put_light(id);
             if (200..300).contains(&reply.status) {
                 let written: Value = serde_json::from_str(body).unwrap_or(Value::Null);
-                if let Some(light) = state.lock().unwrap().lights.get_mut(id) {
+                let mut held = state.lock().unwrap();
+                held.written_since_stop.insert(id.to_string());
+                if let Some(light) = held.lights.get_mut(id) {
                     apply_light_put(light, &written);
                 }
             }

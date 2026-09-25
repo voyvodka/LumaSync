@@ -767,7 +767,14 @@ impl RestoreRun<'_> {
             .header("hue-application-key", &self.restore.username)
             .send()
             .map_err(|err| {
-                ReadFailure::Stop(HueLightRestoreStop::Unreachable(send_error_text(&err)))
+                // Clipped to what was left of our own window: the bridge was
+                // not given a full request's time, so this says nothing
+                // about whether it answers. docs/architecture/hue.md
+                if err.is_timeout() && timeout < HUE_LIGHT_RESTORE_REQUEST_TIMEOUT {
+                    ReadFailure::Skip
+                } else {
+                    ReadFailure::Stop(HueLightRestoreStop::Unreachable(send_error_text(&err)))
+                }
             })?;
         match classify_hue_response_blocking(response) {
             Ok(response) => read_body_blocking(response)
