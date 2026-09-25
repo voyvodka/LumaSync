@@ -45,7 +45,7 @@ export function RoomMapToolbar({
 
   return (
     <div className="lm-room-toolbar shrink-0">
-      {/* Derive Zones */}
+      {/* LED counts from the map — not a Hue zone, whatever the old name said. */}
       <button
         type="button"
         className={`${TOOLBAR_BTN} ${
@@ -53,10 +53,11 @@ export function RoomMapToolbar({
         }`}
         onClick={deriveDisabled ? undefined : onDeriveZones}
         aria-disabled={deriveDisabled}
-        title={deriveDisabled ? t("roomMap:zones.deriveDisabledTooltip") : undefined}
+        aria-pressed={deriveDisabled ? undefined : derivePreviewActive}
+        title={t(deriveDisabled ? "roomMap:deriveCounts.disabledTooltip" : "roomMap:deriveCounts.tooltip")}
       >
         <IconGrid />
-        <span>{t("roomMap:zones.deriveButton")}</span>
+        <span>{t("roomMap:deriveCounts.button")}</span>
       </button>
 
       {/* + Zone */}

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { computeFit, ROOM_MAP_PX_PER_METER } from "../useRoomMapViewport";
+import {
+  computeFit,
+  resetViewportScroll,
+  ROOM_MAP_PX_PER_METER,
+  ROOM_MAP_VIEWPORT_ATTR,
+} from "../useRoomMapViewport";
 
 /** Replaces the ROOM-01 `it.todo`: measuring the canvas needs a layout engine,
  *  deciding the fit from a measurement does not. */
@@ -60,5 +65,29 @@ describe("computeFit", () => {
     const tall = computeFit(400, 1600, 4, 4, 0);
 
     expect(wide.zoom).toBeCloseTo(tall.zoom, 5);
+  });
+});
+
+// Focusing the derive preview's Confirm scrolled the clipped canvas by 191 px,
+// and nothing ever scrolled it back: the map stayed shifted under the pan.
+describe("resetViewportScroll", () => {
+  it("scrolls the container and the marked canvas back to the origin", () => {
+    const container = document.createElement("div");
+    const canvas = document.createElement("div");
+    canvas.setAttribute(ROOM_MAP_VIEWPORT_ATTR, "");
+    container.appendChild(canvas);
+    canvas.scrollTop = 191;
+    canvas.scrollLeft = 12;
+    container.scrollTop = 5;
+
+    resetViewportScroll(container);
+
+    expect(canvas.scrollTop).toBe(0);
+    expect(canvas.scrollLeft).toBe(0);
+    expect(container.scrollTop).toBe(0);
+  });
+
+  it("does nothing before the canvas exists", () => {
+    expect(() => resetViewportScroll(null)).not.toThrow();
   });
 });

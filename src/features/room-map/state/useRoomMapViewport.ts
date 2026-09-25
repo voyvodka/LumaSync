@@ -63,6 +63,7 @@ export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewpo
       const fit = computeFit(canvasSize.w, canvasSize.h, widthMeters, depthMeters, pad);
       setZoom(fit.zoom);
       setPanOffset(fit.panOffset);
+      resetViewportScroll(canvasContainerRef.current);
     },
     [canvasSize, widthMeters, depthMeters],
   );
@@ -129,6 +130,24 @@ export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewpo
     fitToView,
     handleArrowPan,
   };
+}
+
+/** Marks the canvas's clipping root, which `fitToView` scrolls back to zero. */
+export const ROOM_MAP_VIEWPORT_ATTR = "data-room-map-viewport";
+
+/**
+ * The canvas clips with `overflow: hidden`, which still scrolls when the
+ * browser brings a focused element into view, and nothing scrolls it back —
+ * pan and zoom are a transform, so the map stays shifted by that offset. Fit
+ * is the one "put the view back" gesture, so it clears any such scroll too.
+ */
+export function resetViewportScroll(container: HTMLElement | null): void {
+  if (!container) return;
+  const targets = [container, ...container.querySelectorAll<HTMLElement>(`[${ROOM_MAP_VIEWPORT_ATTR}]`)];
+  for (const el of targets) {
+    el.scrollTop = 0;
+    el.scrollLeft = 0;
+  }
 }
 
 /** Exported for tests: measuring the canvas needs a layout engine, computing the

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { useTranslation } from "react-i18next";
 
 import { shellStore } from "@/features/persistence/shellStore";
 import { focusCurrentWindow } from "@/features/shell/windowApi";
+import type { LeaveGuard } from "@/features/shell/navigationStore";
 import {
   openLedTwinOverlay,
   openLedControlPopup,
@@ -13,7 +13,14 @@ import {
   twinOverlayOpenFailure,
   type PreviewOpenFailure,
 } from "@/features/preview/previewOpenFailure";
-import type { LedCalibrationConfig, LedDirection } from "../model/contracts";
+import type { LedCalibrationConfig, LedDirection, LedSegmentCounts } from "../model/contracts";
+import {
+  CALIBRATION_NOTICE_KEYS,
+  noticeDetail,
+  overlayBlockedNotice,
+  testPatternRefusalNotice,
+  type CalibrationNotice,
+} from "../model/calibrationNotices";
 import { buildLedSequence } from "../model/indexMapping";
 import {
   anchorFromEdgeEndpoint,
@@ -28,7 +35,10 @@ import {
   type CalibrationValidationError,
 } from "../model/validation";
 import {
+  autofillEditorConfig,
+  calibrationLayoutKey,
   createCalibrationEditorState,
+  isSameCalibrationLayout,
   keepEditing,
   loadEditorConfig,
   requestEditorClose,
@@ -49,23 +59,18 @@ import {
   type TestPatternSnapshot,
 } from "./testPatternFlow";
 import { createDisplayTargetState, type DisplayTargetSnapshot } from "./displayTargetState";
-import {
-  DISPLAY_OVERLAY_STATUS,
-  type DisplayId,
-  type DisplayInfo,
-  type OverlayPreviewPayload,
-} from "@/shared/contracts/display";
-import { LED_TEST_STATUS } from "@/shared/contracts/preview";
+import type { DisplayId, DisplayInfo, OverlayPreviewPayload } from "@/shared/contracts/display";
+import { LED_CHIP_TYPE, type LedChipType } from "@/shared/contracts/device";
 import { clamp } from "@/shared/lib/math";
 import { parseCommandError } from "@/shared/contracts/status";
+
+/** Quiet time after the last edit before a running test picks the layout up.
+ * Each restart rebuilds the output worker, so a run of clicks is one restart. */
+export const TEST_PATTERN_RETUNE_DELAY_MS = 400;
 
 function reclaimFocus() {
   void focusCurrentWindow();
   setTimeout(() => void focusCurrentWindow(), 150);
-}
-
-function buildInitialEditorState(initialConfig?: LedCalibrationConfig): CalibrationEditorState {
-  return createCalibrationEditorState(initialConfig ?? resetToManual());
 }
 
 function buildOverlayPreviewPayload(
@@ -85,21 +90,40 @@ function buildOverlayPreviewPayload(
   };
 }
 
+/** A layout the backend would accept for a test: valid, and more than one LED. */
+function isTestableLayout(config: LedCalibrationConfig): boolean {
+  return validateCalibrationConfig(config).ok && config.totalLeds > 1;
+}
+
 export interface CalibrationSessionOptions {
   initialConfig?: LedCalibrationConfig;
+  /**
+   * Counts proposed from elsewhere (the room map), applied as an unsaved draft
+   * over `initialConfig`. Read once, on mount.
+   */
+  draftCounts?: LedSegmentCounts | null;
   onNavigateBack: () => void;
   onSaved: (config: LedCalibrationConfig) => void;
+  /** Registers the guard that asks before the page is navigated away from. */
+  registerLeaveGuard?: (guard: LeaveGuard | null) => void;
 }
 
 /** LED Setup's editing session: the editor draft, the display target and its
  * overlay, the test pattern, and the save/close flow. `CalibrationPage` renders it. */
-export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }: CalibrationSessionOptions) {
-  const { t } = useTranslation();
-
+export function useCalibrationSession({
+  initialConfig,
+  draftCounts,
+  onNavigateBack,
+  onSaved,
+  registerLeaveGuard,
+}: CalibrationSessionOptions) {
   const [editorState, setEditorState] = useState<CalibrationEditorState>(() =>
-    buildInitialEditorState(initialConfig),
+    createCalibrationEditorState(initialConfig ?? resetToManual(), draftCounts),
   );
+  const [countsFromRoomMap, setCountsFromRoomMap] = useState(() => Boolean(draftCounts));
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<CalibrationNotice | null>(null);
+  const [chipType, setChipType] = useState<LedChipType>(LED_CHIP_TYPE.WS2812B_GRB);
 
   const flowRef = useRef(createDefaultTestPatternFlow(initialConfig));
   const [testPattern, setTestPattern] = useState<TestPatternSnapshot>(flowRef.current.getSnapshot());
@@ -110,7 +134,7 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
     displayTargetRef.current.getSnapshot(),
   );
   const [validationErrors, setValidationErrors] = useState<CalibrationValidationError[] | null>(null);
-  const [testPatternError, setTestPatternError] = useState<string | null>(null);
+  const [testPatternError, setTestPatternError] = useState<CalibrationNotice | null>(null);
   const [previewOpenFailure, setPreviewOpenFailure] = useState<PreviewOpenFailure | null>(null);
 
   // Load displays on mount. Honour any persisted selection so the
@@ -120,6 +144,7 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
     Promise.all([listDisplays(), shellStore.load()])
       .then(([displays, shell]) => {
         if (cancelled) return;
+        if (shell.selectedChipType === LED_CHIP_TYPE.SK6812_RGBW) setChipType(LED_CHIP_TYPE.SK6812_RGBW);
         let newState = displayTargetRef.current.setDisplays(displays);
         const persisted = shell.selectedDisplayId;
         if (persisted && displays.some((candidate) => candidate.id === persisted)) {
@@ -134,6 +159,8 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
         // Mirrors the same heuristic that runs on a manual display click in
         // \`handleSelectDisplay\` so cold-start without saved calibration
         // does not leave the dock at 0/0/0/0 until the user changes monitors.
+        // An autofill, not an edit: a first visit that touched nothing must
+        // not ask "discard changes?" on Cancel.
         const selectedId = newState.selectedDisplayId;
         const selectedDisplay = selectedId
           ? displays.find((candidate) => candidate.id === selectedId)
@@ -142,7 +169,7 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
           setEditorState((prev) => {
             if (prev.current.totalLeds !== 0) return prev;
             const defaults = deriveDefaultCounts(selectedDisplay);
-            return updateEditorConfig(prev, { counts: defaults });
+            return autofillEditorConfig(prev, { counts: defaults });
           });
         }
       })
@@ -168,6 +195,25 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
       });
     };
   }, []);
+
+  // Read by the leave guard, which runs outside render. Cleared by hand on the
+  // page's own exits (save, discard) so the navigation they trigger is not held.
+  const dirtyRef = useRef(editorState.isDirty);
+  useEffect(() => {
+    dirtyRef.current = editorState.isDirty;
+  }, [editorState.isDirty]);
+  const pendingLeaveRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (!registerLeaveGuard) return;
+    registerLeaveGuard((proceed) => {
+      if (!dirtyRef.current) return false;
+      pendingLeaveRef.current = proceed;
+      setEditorState((prev) => ({ ...prev, confirmDiscard: true, shouldClose: false }));
+      return true;
+    });
+    return () => registerLeaveGuard(null);
+  }, [registerLeaveGuard]);
 
   const sequence = useMemo(() => buildLedSequence(editorState.current), [editorState.current]);
   const overlayPreviewPayload = useMemo(
@@ -203,18 +249,20 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
     try {
       if (shouldEnable) {
         if (displayTarget.blocked) {
-          const reason = displayTarget.blockedReason ?? t("calibration:overlay.blockedReasonUnknown");
-          const code = displayTarget.blockedCode ?? DISPLAY_OVERLAY_STATUS.OPEN_FAILED;
-          setTestPatternError(t("calibration:overlay.errors.testPatternBlocked", { code, reason }));
+          setTestPatternError({
+            key: CALIBRATION_NOTICE_KEYS.testPatternBlocked,
+            detail: noticeDetail(displayTarget.blockedCode, displayTarget.blockedReason),
+          });
           return;
         }
         const switched = await beginDisplaySwitch(undefined, overlayPreviewPayload);
         setDisplayTarget(switched);
         reclaimFocus();
         if (switched.blocked) {
-          const reason = switched.blockedReason ?? t("calibration:overlay.blockedReasonUnknown");
-          const code = switched.blockedCode ?? DISPLAY_OVERLAY_STATUS.OPEN_FAILED;
-          setTestPatternError(t("calibration:overlay.errors.testPatternBlocked", { code, reason }));
+          setTestPatternError({
+            key: CALIBRATION_NOTICE_KEYS.testPatternBlocked,
+            detail: noticeDetail(switched.blockedCode, switched.blockedReason),
+          });
           return;
         }
       }
@@ -225,11 +273,7 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
       // down with it — otherwise the editor shows a stage dressed for a test
       // that never began.
       if (shouldEnable && isTestPatternFailure(next.lastStatus)) {
-        setTestPatternError(
-          next.lastStatus === LED_TEST_STATUS.PATTERN_NO_CALIBRATION
-            ? t("calibration:overlay.errors.testPatternNoCalibration")
-            : t("calibration:overlay.errors.testPatternRefused", { code: next.lastStatus }),
-        );
+        setTestPatternError(testPatternRefusalNotice(next.lastStatus));
         const closed = await displayTargetRef.current.closeActiveDisplay();
         setDisplayTarget(closed);
         return;
@@ -244,7 +288,10 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
       }
     } catch (error) {
       const reason = parseCommandError(error).message;
-      setTestPatternError(t("calibration:overlay.errors.testPatternToggleFailed", { reason }));
+      setTestPatternError({
+        key: CALIBRATION_NOTICE_KEYS.testPatternToggleFailed,
+        detail: noticeDetail(null, reason),
+      });
       // Best-effort rollback: testPatternError above already tells the user what
       // failed, so a failing rollback must not overwrite it with a second message.
       // Logged at debug level so the swallow is still visible in the log sink.
@@ -261,18 +308,25 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
         console.debug(`[LumaSync] Overlay close after failure did not complete: ${parseCommandError(rollbackError).message}`);
       }
     }
-  }, [displayTarget, overlayPreviewPayload, beginDisplaySwitch, t]);
+  }, [displayTarget, overlayPreviewPayload, beginDisplaySwitch]);
 
   // Raised for the whole run of a press — the switch, the start or stop (seconds
   // on Hue), and the overlay close after it. The ref is the guard; the state
   // only lets the page show the buttons as waiting.
   const previewToggleRunningRef = useRef(false);
   const [isTogglingTestPattern, setIsTogglingTestPattern] = useState(false);
+  // A layout restart in flight. Kept apart from the toggle so a restart does
+  // not flash the monitor picker busy; a press waits for neither, it is ignored.
+  const retuneRunningRef = useRef(false);
 
   const handlePreviewToggle = useCallback(async () => {
     // Read from the store, not the render: a second press can land before React
     // has re-rendered with the in-flight snapshot.
-    if (previewToggleRunningRef.current || displayTargetRef.current.getSnapshot().isSwitching) return;
+    if (
+      previewToggleRunningRef.current
+      || retuneRunningRef.current
+      || displayTargetRef.current.getSnapshot().isSwitching
+    ) return;
     previewToggleRunningRef.current = true;
     setIsTogglingTestPattern(true);
     try {
@@ -283,6 +337,48 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
     }
   }, [runPreviewToggle]);
 
+  // The chase gets its layout once, at start. Without this an edit made while
+  // it runs changes the canvas and the overlay but never the strip, which is
+  // the one thing the test is for.
+  const testLayoutStale =
+    testPattern.isEnabled
+    && testPattern.layout !== null
+    && !isSameCalibrationLayout(testPattern.layout, editorState.current);
+  const draftTestable = isTestableLayout(editorState.current);
+  // Changes with every edit and every restart, so each one re-arms the
+  // debounce — including an edit that lands while a restart is in flight.
+  const retuneKey =
+    testLayoutStale && draftTestable && testPattern.layout
+      ? `${calibrationLayoutKey(testPattern.layout)}→${calibrationLayoutKey(editorState.current)}`
+      : null;
+
+  useEffect(() => {
+    if (retuneKey === null || isTogglingTestPattern) return;
+    const timer = setTimeout(() => {
+      if (previewToggleRunningRef.current || retuneRunningRef.current) return;
+      retuneRunningRef.current = true;
+      void (async () => {
+        try {
+          const next = await flowRef.current.retune();
+          setTestPattern(next);
+          if (!next.isEnabled) {
+            setTestPatternError(testPatternRefusalNotice(next.lastStatus));
+            setDisplayTarget(await displayTargetRef.current.closeActiveDisplay());
+          }
+        } catch (error) {
+          console.error("[LumaSync] LED Setup test restart with the edited layout failed:", error);
+          setTestPatternError({
+            key: CALIBRATION_NOTICE_KEYS.testPatternToggleFailed,
+            detail: noticeDetail(null, parseCommandError(error).message),
+          });
+        } finally {
+          retuneRunningRef.current = false;
+        }
+      })();
+    }, TEST_PATTERN_RETUNE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [retuneKey, isTogglingTestPattern]);
+
   const handleSelectDisplay = useCallback(async (display: DisplayInfo) => {
     // A pick mid-switch would be saved as the capture source while the overlay
     // lands on the display the switch was already heading for. Mid-toggle the
@@ -292,13 +388,15 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
     setDisplayTarget(selected);
     // The save is what moves a running capture: Rust re-applies the mode
     // once a setting it reads is saved (lighting-transaction.md).
-    void shellStore.save({ selectedDisplayId: display.id });
+    void shellStore.save({ selectedDisplayId: display.id }).catch((error) => {
+      console.error("[LumaSync] LED Setup could not save the capture display:", error);
+    });
 
     // Auto-derive default counts only when the user hasn't customized yet
     // (fresh manual default → totalLeds === 0).
     if (editorState.current.totalLeds === 0) {
       const defaults = deriveDefaultCounts(display);
-      setEditorState((prev) => updateEditorConfig(prev, { counts: defaults }));
+      setEditorState((prev) => autofillEditorConfig(prev, { counts: defaults }));
     }
 
     if (!testPattern.isEnabled) return;
@@ -307,17 +405,20 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
       setDisplayTarget(switched);
       reclaimFocus();
       if (switched.blocked) {
-        const reason = switched.blockedReason ?? t("calibration:overlay.blockedReasonUnknown");
-        const code = switched.blockedCode ?? DISPLAY_OVERLAY_STATUS.OPEN_FAILED;
-        setTestPatternError(t("calibration:overlay.errors.displaySwitchBlocked", { code, reason }));
+        setTestPatternError({
+          key: CALIBRATION_NOTICE_KEYS.displaySwitchBlocked,
+          detail: noticeDetail(switched.blockedCode, switched.blockedReason),
+        });
       } else {
         setTestPatternError(null);
       }
     } catch (error) {
-      const reason = parseCommandError(error).message;
-      setTestPatternError(t("calibration:overlay.errors.displaySwitchFailed", { reason }));
+      setTestPatternError({
+        key: CALIBRATION_NOTICE_KEYS.displaySwitchFailed,
+        detail: noticeDetail(null, parseCommandError(error).message),
+      });
     }
-  }, [editorState, overlayPreviewPayload, testPattern.isEnabled, beginDisplaySwitch, t]);
+  }, [editorState, overlayPreviewPayload, testPattern.isEnabled, beginDisplaySwitch]);
 
   // Accept the absolute next value, not a delta. Stepper buttons
   // pass `value + 1` / `value - 1` so the +/- affordance is preserved
@@ -341,6 +442,7 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
     } else {
       setEditorState((prev) => loadEditorConfig(prev, resetToManual()));
     }
+    setCountsFromRoomMap(false);
     setValidationErrors(null);
   }, [displayTarget]);
 
@@ -380,6 +482,7 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
 
   const handleSave = useCallback(async () => {
     setIsSaving(true);
+    setSaveError(null);
     const result = validateCalibrationConfig(editorState.current);
     if (!result.ok) {
       setValidationErrors(result.errors);
@@ -387,11 +490,24 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
       return;
     }
     setValidationErrors(null);
+    const savedState = saveEditorCalibration(editorState);
     try {
-      const savedState = saveEditorCalibration(editorState);
       await shellStore.save({ ledCalibration: savedState.current });
+    } catch (error) {
+      // The draft stays as it was, so Retry saves exactly what failed.
+      console.error("[LumaSync] LED Setup could not save the layout:", error);
+      setSaveError({
+        key: CALIBRATION_NOTICE_KEYS.saveFailed,
+        detail: noticeDetail(null, parseCommandError(error).message),
+      });
+      setIsSaving(false);
+      return;
+    }
+    try {
       onSaved(savedState.current);
       setEditorState(savedState);
+      setCountsFromRoomMap(false);
+      dirtyRef.current = false;
       await flowRef.current.dispose();
       setTestPattern(flowRef.current.getSnapshot());
       onNavigateBack();
@@ -411,14 +527,21 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
   }, [editorState, onNavigateBack]);
 
   const handleKeepEditing = useCallback(() => {
+    pendingLeaveRef.current = null;
     setEditorState((prev) => keepEditing(prev));
   }, []);
 
   const handleDiscard = useCallback(() => {
+    const proceed = pendingLeaveRef.current;
+    pendingLeaveRef.current = null;
+    dirtyRef.current = false;
     setEditorState((prev) => discardEditorChanges(prev));
+    setCountsFromRoomMap(false);
     void flowRef.current.dispose();
     setTestPattern(flowRef.current.getSnapshot());
-    onNavigateBack();
+    // A leave the guard held goes where the user was heading, not to Lights.
+    if (proceed) proceed();
+    else onNavigateBack();
   }, [onNavigateBack]);
 
   // v1.6 — launch the LED preview surface (click-through digital-twin
@@ -448,13 +571,24 @@ export function useCalibrationSession({ initialConfig, onNavigateBack, onSaved }
     }
   }, []);
 
+  const overlayBlocked = displayTarget.blocked
+    ? overlayBlockedNotice(displayTarget.blockedCode, displayTarget.blockedReason)
+    : null;
+
   return {
     config: editorState.current,
+    isDirty: editorState.isDirty,
     confirmDiscard: editorState.confirmDiscard,
+    countsFromRoomMap: countsFromRoomMap && editorState.isDirty,
+    chipType,
     isSaving,
+    saveError,
     testPattern,
+    testLayoutStale,
+    draftTestable,
     isTogglingTestPattern,
     displayTarget,
+    overlayBlocked,
     validationErrors,
     testPatternError,
     previewOpenFailure,

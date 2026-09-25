@@ -463,6 +463,7 @@ export function RoomMapCanvas({
   return (
     <div
       ref={canvasRef}
+      data-room-map-viewport=""
       // `select-none` because a drag sweeps bubbled pointer-moves across the
       // `<text>` and chip labels and highlights them. The dock's inputs mount
       // outside this root, so they keep native selection.

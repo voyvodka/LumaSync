@@ -11,7 +11,9 @@ import {
   ensureStripForPort,
   FALLBACK_STRIP_LED_COUNT,
   stripLedCount,
+  syncStripLedCount,
   withStripForPort,
+  withStripLedCount,
 } from "../usbStripRoster";
 
 const { stateRef, saveMock } = vi.hoisted(() => ({
@@ -137,5 +139,49 @@ describe("ensureStripForPort", () => {
 
     await expect(ensureStripForPort(PORT)).resolves.toEqual([drawn]);
     expect(saveMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("syncStripLedCount", () => {
+  beforeEach(() => {
+    saveMock.mockClear();
+  });
+
+  it("sets the connected port's strip to the saved LED Setup total", async () => {
+    stateRef.current = {
+      roomMap: roomMap([strip({ stripId: "a", portName: "/dev/other" }), strip({ stripId: "b", portName: PORT })]),
+      roomMapVersion: 4,
+    };
+
+    await syncStripLedCount(164, PORT);
+
+    const strips = stateRef.current.roomMap!.usbStrips;
+    expect(strips.find((s) => s.stripId === "b")!.ledCount).toBe(164);
+    expect(strips.find((s) => s.stripId === "a")!.ledCount).toBe(42);
+    expect(stateRef.current.roomMapVersion).toBe(5);
+  });
+
+  it("updates the only strip when no port says which one it is", async () => {
+    stateRef.current = { roomMap: roomMap([strip()]) };
+    await syncStripLedCount(90, null);
+    expect(stateRef.current.roomMap!.usbStrips[0].ledCount).toBe(90);
+  });
+
+  it("writes nothing when the count already matches, or the strip is ambiguous", async () => {
+    stateRef.current = { roomMap: roomMap([strip({ ledCount: 42 })]) };
+    await syncStripLedCount(42, null);
+    stateRef.current = { roomMap: roomMap([strip({ stripId: "a" }), strip({ stripId: "b" })]) };
+    await syncStripLedCount(90, null);
+    expect(saveMock).not.toHaveBeenCalled();
+  });
+
+  it("leaves the rest of the map, Hue channels included, as it was", () => {
+    const map = {
+      ...roomMap([strip({ portName: PORT })]),
+      hueChannels: [{ channelIndex: 0, x: 0.2, y: 0.1, z: 0 }],
+    };
+    const next = withStripLedCount(map, 120, PORT);
+    expect(next.changed).toBe(true);
+    expect(next.roomMap.hueChannels).toBe(map.hueChannels);
   });
 });

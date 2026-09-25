@@ -14,6 +14,7 @@ const FIXTURE_LOCALES: Record<string, string> = {
   "roomMap:inspector.hueHeightCeiling": "ceiling level",
   "roomMap:inspector.hueHeightValueText": "{{metres}} m — {{label}}",
   "roomMap:inspector.hueHeightReadout": "{{metres}} m",
+  "roomMap:inspector.hueHeightZoneLimit": "{{name}}: {{min}}–{{max}} m",
 };
 
 vi.mock("react-i18next", () => ({
@@ -140,5 +141,60 @@ describe("channel identity", () => {
   it("says nothing about ghosts for a channel the bridge still reports", () => {
     renderChannel(gapped);
     expect(screen.queryByText("roomMap:inspector.hueChannelGhostNote")).toBeNull();
+  });
+});
+
+describe("HueChannelInspector height inside a zone", () => {
+  beforeEach(cleanup);
+
+  const zone = {
+    id: "zone-a",
+    name: "Sofa",
+    entertainmentAreaId: "area-1",
+    centerX: 0,
+    centerY: 0,
+    centerZ: 0,
+    scaleX: 0.5,
+    scaleY: 0.5,
+    scaleZ: 0.5,
+    channelIndices: [0],
+    borderColor: "#3b82f6",
+  };
+
+  it("limits the slider to the heights the zone lets the channel reach, and says why", () => {
+    render(
+      <HueChannelInspector
+        channel={{ ...channel, zoneId: "zone-a", zoneRelativePosition: { x: 0, y: 0, z: 0 } }}
+        zoneName="Sofa"
+        worldZ={0}
+        heightRange={{ min: -0.5, max: 0.5, zone }}
+        roomHeightMeters={2.5}
+        onHeightChange={vi.fn<(worldZ: number) => void>()}
+        onRename={vi.fn<(label: string) => void>()}
+        onToggleLock={vi.fn<() => void>()}
+      />,
+    );
+    const slider = screen.getByRole("slider");
+    expect(slider.getAttribute("aria-valuemin")).toBe("-0.5");
+    expect(slider.getAttribute("aria-valuemax")).toBe("0.5");
+    expect(screen.getByTestId("hue-height-zone-limit").textContent).toBe(
+      "Sofa: 0.63–1.88 m",
+    );
+  });
+
+  it("shows no limit for a zone as tall as the room", () => {
+    render(
+      <HueChannelInspector
+        channel={channel}
+        zoneName={null}
+        worldZ={0}
+        heightRange={{ min: -1, max: 1, zone }}
+        roomHeightMeters={2.5}
+        onHeightChange={vi.fn<(worldZ: number) => void>()}
+        onRename={vi.fn<(label: string) => void>()}
+        onToggleLock={vi.fn<() => void>()}
+      />,
+    );
+    expect(screen.queryByTestId("hue-height-zone-limit")).toBeNull();
   });
 });

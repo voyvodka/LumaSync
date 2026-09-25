@@ -76,17 +76,22 @@ describe("buildObjectList", () => {
     expect(rows.map((r) => r.label)).toEqual(["Reading chair", "Left wall"]);
   });
 
-  it("falls back to the furniture-type key and a 1-based Hue channel number", () => {
+  it("falls back to the furniture-type key, and names a Hue channel as the canvas and inspector do", () => {
     const rows = buildObjectList(
       configWith({
         furniture: [{ id: "f1", type: "table", x: 0, y: 0, width: 1, height: 1 }],
-        hueChannels: [{ channelIndex: 0, x: 0, y: 0, z: 0 }],
+        // Ordinal 0, bridge id 3: the list once said "Hue 1" while the canvas said #3.
+        hueChannels: [
+          { channelIndex: 0, channelId: 3, x: 0, y: 0, z: 0 },
+          { channelIndex: 1, x: 0, y: 0, z: 0 },
+        ],
       }),
       t,
     );
 
     expect(rows[0].label).toBe("roomMap:furniture.type.table");
-    expect(rows[1].label).toBe("roomMap:objectPanel.hueLabel(1)");
+    expect(rows[1].label).toBe("roomMap:hueChannel.defaultLabel(#3)");
+    expect(rows[2].label).toBe("roomMap:hueChannel.unresolvedLabel");
   });
 
   it("carries lock state and the Hue zone assignment through onto the row", () => {

@@ -14,6 +14,9 @@ export interface TestPatternSnapshot {
   /** Coded outcome of the last start/stop, so the page can explain a refusal
    * instead of showing an enabled test that never reached a strip. */
   lastStatus: LedTestStatusCode | null;
+  /** The layout the running test was started with — the strip shows this one,
+   * whatever the editor holds now. `null` while nothing runs. */
+  layout: LedCalibrationConfig | null;
 }
 
 interface CreateTestPatternFlowDeps {
@@ -26,10 +29,16 @@ export interface TestPatternFlow {
   getSnapshot: () => TestPatternSnapshot;
   setConfig: (config: LedCalibrationConfig) => void;
   toggle: (enabled: boolean) => Promise<TestPatternSnapshot>;
+  /**
+   * Restarts a running test with the current config, in place: Rust keeps the
+   * prior mode and the chase phase for a start over a running test. A refused
+   * restart stops the test, so nothing is left running a layout nobody sees.
+   */
+  retune: () => Promise<TestPatternSnapshot>;
   dispose: () => Promise<void>;
 }
 
-const IDLE: TestPatternSnapshot = { isEnabled: false, mode: "preview-only", lastStatus: null };
+const IDLE: TestPatternSnapshot = { isEnabled: false, mode: "preview-only", lastStatus: null, layout: null };
 
 /** Brightness the LED Setup chase runs at. Bright enough to read the ordering
  * across a room, short of the eye-watering full scale. */
@@ -37,11 +46,27 @@ const TEST_BRIGHTNESS = 0.5;
 
 export function createTestPatternFlow(deps: CreateTestPatternFlowDeps): TestPatternFlow {
   let snapshot: TestPatternSnapshot = IDLE;
+  let config: LedCalibrationConfig | null = null;
+
+  const start = async (): Promise<TestPatternSnapshot> => {
+    const layout = config;
+    const result = await deps.startPattern();
+    snapshot = {
+      // The backend owns this verdict. Reporting "sending" from a cached
+      // connection flag is exactly how the previous no-op stayed hidden.
+      isEnabled: result.active,
+      mode: result.previewOnly ? "preview-only" : "sending",
+      lastStatus: result.status.code,
+      layout: result.active ? layout : null,
+    };
+    return snapshot;
+  };
 
   return {
     getSnapshot: () => snapshot,
-    setConfig: (config) => {
-      deps.onConfigChange?.(config);
+    setConfig: (next) => {
+      config = next;
+      deps.onConfigChange?.(next);
     },
     toggle: async (enabled) => {
       if (!enabled) {
@@ -50,14 +75,15 @@ export function createTestPatternFlow(deps: CreateTestPatternFlowDeps): TestPatt
         return snapshot;
       }
 
-      const result = await deps.startPattern();
-      snapshot = {
-        // The backend owns this verdict. Reporting "sending" from a cached
-        // connection flag is exactly how the previous no-op stayed hidden.
-        isEnabled: result.active,
-        mode: result.previewOnly ? "preview-only" : "sending",
-        lastStatus: result.status.code,
-      };
+      return start();
+    },
+    retune: async () => {
+      if (!snapshot.isEnabled) return snapshot;
+      const next = await start();
+      if (next.isEnabled) return next;
+      // An early refusal leaves the old test running in Rust; stop it.
+      await deps.stopPattern();
+      snapshot = { ...IDLE, lastStatus: next.lastStatus };
       return snapshot;
     },
     dispose: async () => {
@@ -94,9 +120,9 @@ async function resolveTestTargets(): Promise<HueRuntimeTarget[]> {
 }
 
 export function createDefaultTestPatternFlow(initialConfig?: LedCalibrationConfig): TestPatternFlow {
-  let currentConfig: LedCalibrationConfig | undefined = initialConfig;
+  let currentConfig: LedCalibrationConfig | undefined;
 
-  return createTestPatternFlow({
+  const flow = createTestPatternFlow({
     onConfigChange: (config) => {
       currentConfig = config;
     },
@@ -126,4 +152,6 @@ export function createDefaultTestPatternFlow(initialConfig?: LedCalibrationConfi
       }
     },
   });
+  if (initialConfig) flow.setConfig(initialConfig);
+  return flow;
 }
