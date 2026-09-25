@@ -167,7 +167,11 @@ pub(crate) struct FakeHue {
     log: Arc<EventLog>,
     live: Arc<HueOutputLive>,
     active: AtomicBool,
-    starts: Mutex<VecDeque<&'static str>>,
+    starts: Mutex<VecDeque<(&'static str, Option<&'static str>)>>,
+    /// The area each start asked for, in order.
+    start_areas: Mutex<Vec<String>>,
+    /// The area the live stream holds; `None` for one opened elsewhere.
+    live_area: Mutex<Option<String>>,
     stops: Mutex<VecDeque<&'static str>>,
     probes: Mutex<VecDeque<HueAreaVerdict>>,
     gate: Mutex<Option<Arc<tokio::sync::Semaphore>>>,
@@ -188,6 +192,8 @@ impl FakeHue {
             live: HueOutputLive::new(),
             active: AtomicBool::new(false),
             starts: Mutex::default(),
+            start_areas: Mutex::default(),
+            live_area: Mutex::default(),
             stops: Mutex::default(),
             probes: Mutex::default(),
             gate: Mutex::default(),
@@ -207,7 +213,29 @@ impl FakeHue {
     }
 
     pub(crate) fn script_starts(&self, codes: &[&'static str]) {
-        self.starts.lock().unwrap().extend(codes);
+        self.starts
+            .lock()
+            .unwrap()
+            .extend(codes.iter().map(|code| (*code, None)));
+    }
+
+    /// A start that answers `code` with the status `details` the real start
+    /// gate writes — its blocker tokens.
+    pub(crate) fn script_start_with_details(&self, code: &'static str, details: &'static str) {
+        self.starts
+            .lock()
+            .unwrap()
+            .push_back((code, Some(details)));
+    }
+
+    /// The area each start asked for, in order.
+    pub(crate) fn start_areas(&self) -> Vec<String> {
+        self.start_areas.lock().unwrap().clone()
+    }
+
+    /// The area the live stream holds.
+    pub(crate) fn live_area(&self) -> Option<String> {
+        self.live_area.lock().unwrap().clone()
     }
 
     pub(crate) fn script_stops(&self, codes: &[&'static str]) {
@@ -292,33 +320,49 @@ impl FakeHue {
         }));
     }
 
-    fn result(state: HueRuntimeState, code: &str, active: bool) -> HueRuntimeCommandResult {
+    fn result(
+        state: HueRuntimeState,
+        code: &str,
+        details: Option<&str>,
+        active: bool,
+    ) -> HueRuntimeCommandResult {
         HueRuntimeCommandResult {
             active,
-            status: status_with(state, code, "fake", None, HueRuntimeTriggerSource::System),
+            status: status_with(
+                state,
+                code,
+                "fake",
+                details.map(str::to_string),
+                HueRuntimeTriggerSource::System,
+            ),
             last_solid_color: None,
         }
     }
 }
 
 impl HueDriver for FakeHue {
-    fn start(&self, _request: StartHueStreamRequest) -> HueFuture<'_, HueRuntimeCommandResult> {
+    fn start(&self, request: StartHueStreamRequest) -> HueFuture<'_, HueRuntimeCommandResult> {
         Box::pin(async move {
             self.log.record("hue:start");
+            self.start_areas
+                .lock()
+                .unwrap()
+                .push(request.area_id.clone());
             self.entered.fetch_add(1, Ordering::SeqCst);
             let gate = self.gate.lock().unwrap().clone();
             if let Some(gate) = gate {
                 gate.acquire().await.expect("gate open").forget();
             }
-            let code = self
+            let (code, details) = self
                 .starts
                 .lock()
                 .unwrap()
                 .pop_front()
-                .unwrap_or("HUE_STREAM_RUNNING_DTLS");
+                .unwrap_or(("HUE_STREAM_RUNNING_DTLS", None));
             let (state, active) = match code {
                 "HUE_STREAM_RUNNING" | "HUE_STREAM_RUNNING_DTLS" => {
                     self.publish_stream();
+                    self.live_area.lock().unwrap().replace(request.area_id);
                     (HueRuntimeState::Running, true)
                 }
                 "HUE_START_NOOP_ALREADY_ACTIVE" => (HueRuntimeState::Running, true),
@@ -328,7 +372,7 @@ impl HueDriver for FakeHue {
                 _ => (HueRuntimeState::Idle, false),
             };
             self.active.store(active, Ordering::SeqCst);
-            Self::result(state, code, active)
+            Self::result(state, code, details, active)
         })
     }
 
@@ -354,8 +398,9 @@ impl HueDriver for FakeHue {
                 .pop_front()
                 .unwrap_or("HUE_STREAM_STOPPED");
             self.live.publish(None);
+            self.live_area.lock().unwrap().take();
             self.active.store(false, Ordering::SeqCst);
-            Self::result(HueRuntimeState::Idle, code, false)
+            Self::result(HueRuntimeState::Idle, code, None, false)
         })
     }
 
@@ -381,6 +426,12 @@ impl HueDriver for FakeHue {
 
     fn output_live(&self) -> Arc<HueOutputLive> {
         Arc::clone(&self.live)
+    }
+
+    fn live_area_id(&self) -> Option<String> {
+        self.live
+            .current()
+            .and_then(|_| self.live_area.lock().unwrap().clone())
     }
 }
 

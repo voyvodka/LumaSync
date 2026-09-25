@@ -251,6 +251,7 @@ fn apply_mode_change_inner(
         && needs_hue
         && hue_context.is_none()
         && !is_test
+        && !owner.hue_gate_waived
     {
         return make_result(
             owner.active_mode.clone(),
@@ -448,8 +449,9 @@ fn apply_mode_change_inner(
                         }
                     }
                     None => {
-                        // Only reachable on the preview/test path; the Hue gate
-                        // above rejects a missing context for real modes.
+                        // Only reachable on the preview/test path and a settings
+                        // refresh during a reconnect; the Hue gate above
+                        // rejects a missing context for every other real mode.
                         warn!("[apply_mode_change] solid Hue send SKIPPED — no output context");
                         hue_skip_reason = Some("HUE_OUTPUT_CONTEXT_MISSING".to_string());
                     }
@@ -663,18 +665,21 @@ pub(super) fn set_lighting_mode_blocking<R: Runtime>(
 ) -> Result<LightingModeCommandResult, String> {
     app.state::<LightingRuntimeState>().tuning.close_blocking();
     let hue_output = app.state::<HueRuntimeStateStore>().output_live();
-    let result = apply_config_blocking(app, payload, hue_output)?;
+    let result = apply_config_blocking(app, payload, hue_output, false)?;
     snapshot::publish_running(app, &result.mode);
     Ok(result)
 }
 
 /// The body of a mode apply: hydrate, apply under the runtime lock, broadcast.
 /// `hue_output` is the slot a worker naming Hue follows. Shared by
-/// `set_lighting_mode` and the lighting transaction.
+/// `set_lighting_mode` and the lighting transaction. `waive_hue_gate` is the
+/// settings refresh's, for a mode already running on Hue while its stream
+/// reconnects.
 pub(crate) fn apply_config_blocking<R: Runtime>(
     app: &AppHandle<R>,
     mut payload: LightingModeConfig,
     hue_output: Arc<HueOutputLive>,
+    waive_hue_gate: bool,
 ) -> Result<LightingModeCommandResult, String> {
     let runtime_state = app.state::<LightingRuntimeState>();
     let connection_state = app.state::<SerialConnectionState>();
@@ -751,6 +756,7 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
     let edge_emitter = Some(build_edge_emitter(app));
     let wled_sink = sink_registry.active_wled_config();
 
+    owner.hue_gate_waived = waive_hue_gate;
     let result = apply_mode_change(
         &mut owner,
         payload,
@@ -762,6 +768,7 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
         edge_emitter,
         None,
     );
+    owner.hue_gate_waived = false;
     // Release the runtime lock before broadcasting so a re-entrant
     // mode-change listener cannot deadlock on it.
     drop(owner);

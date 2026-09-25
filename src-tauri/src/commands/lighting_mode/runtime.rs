@@ -93,6 +93,9 @@ pub(crate) struct LightingRuntimeOwner {
     pub(super) preview: PreviewRuntime,
     /// `LightingRuntimeState::closing`, read under the runtime lock.
     pub(super) closing: Arc<AtomicBool>,
+    /// Set for one apply by the settings refresh of a mode already on Hue, so
+    /// a reconnecting stream does not refuse the strip its new settings.
+    pub(super) hue_gate_waived: bool,
 }
 
 impl Default for LightingRuntimeOwner {
@@ -118,6 +121,7 @@ impl Default for LightingRuntimeOwner {
                 }
             }),
             closing: Arc::default(),
+            hue_gate_waived: false,
         }
     }
 }
