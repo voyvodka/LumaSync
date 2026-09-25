@@ -2553,3 +2553,118 @@ fn the_health_event_answers_the_parked_resume() {
         rig.state().snapshot.read().active_targets == vec![Hue]
     });
 }
+
+#[test]
+fn forgetting_the_bridge_takes_the_parked_resume_back() {
+    use crate::commands::hue::credential_store::NoopStore;
+    use crate::commands::hue::forget::forget_hue_bridge_with;
+
+    let rig = restoring_on(json!(["hue"]), true);
+    rig.hue.script_starts(&["TRANSIENT_RETRY_SCHEDULED"]);
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+
+    let status = block_on(forget_hue_bridge_with(
+        &rig.handle(),
+        "abc",
+        &NoopStore::new(),
+    ));
+    assert!(status.code.starts_with("HUE_FORGET_"), "{status:?}");
+    rig.log.clear();
+
+    note_hue_reachable(&rig.handle(), true);
+
+    std::thread::sleep(Duration::from_millis(150));
+    assert!(events(&rig).is_empty(), "{:?}", events(&rig));
+    assert_eq!(rig.running().kind, LightingModeKind::Off);
+}
+
+/// A tray-started app: no window ever shows, so the monitor's one launch
+/// probe is the only answer there is. It reaches the parked resume through
+/// the monitor's own `hue://health` publish.
+#[test]
+fn the_launch_probe_resumes_a_tray_started_restore_with_no_window_shown() {
+    use crate::commands::hue::health::{
+        HealthBackend, HealthFuture, HueHealthMonitor, HueHealthTarget, HueStreamHealth, StreamRead,
+    };
+    use crate::commands::hue::state_store::HueRuntimeOwner;
+    use crate::commands::hue_onboarding::{
+        HueStreamReadiness, HueStreamReadinessResponse, HueValidateCredentialsResponse,
+    };
+    use crate::commands::status::CommandStatus;
+
+    struct Bridge(AtomicUsize);
+
+    impl HealthBackend for Bridge {
+        fn target(&self) -> Option<HueHealthTarget> {
+            Some(HueHealthTarget {
+                bridge_ip: "192.168.1.50".to_string(),
+                username: String::new(),
+                area_id: "area-1".to_string(),
+            })
+        }
+        fn stream(&self, _bridge_check: bool) -> HealthFuture<'_, StreamRead> {
+            Box::pin(async {
+                StreamRead {
+                    health: HueStreamHealth {
+                        active: false,
+                        status: HueRuntimeOwner::default().last_status,
+                    },
+                    stream_area: None,
+                    readiness: None,
+                }
+            })
+        }
+        fn validate(
+            &self,
+            _target: HueHealthTarget,
+        ) -> HealthFuture<'_, HueValidateCredentialsResponse> {
+            Box::pin(async {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                HueValidateCredentialsResponse {
+                    status: CommandStatus::new("HUE_CREDENTIAL_VALID", "valid", None),
+                    valid: true,
+                }
+            })
+        }
+        fn readiness(
+            &self,
+            _target: HueHealthTarget,
+        ) -> HealthFuture<'_, HueStreamReadinessResponse> {
+            Box::pin(async {
+                HueStreamReadinessResponse {
+                    status: CommandStatus::new("HUE_STREAM_READY", "ready", None),
+                    readiness: HueStreamReadiness {
+                        ready: true,
+                        reasons: Vec::new(),
+                    },
+                }
+            })
+        }
+        fn wall_clock_ms(&self) -> u64 {
+            0
+        }
+    }
+
+    let rig = restoring_on(json!(["hue"]), true);
+    rig.hue.script_starts(&["TRANSIENT_RETRY_SCHEDULED"]);
+    listen_hue_health(&rig.handle());
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+
+    let bridge = Arc::new(Bridge(AtomicUsize::new(0)));
+    let monitor = HueHealthMonitor::new(bridge.clone(), Arc::new(rig.handle()));
+    // No window has asked to watch: this pass probes only because it is the first.
+    block_on(monitor.run_once());
+
+    assert_eq!(bridge.0.load(Ordering::SeqCst), 1, "the launch probe ran");
+    wait_until("the launch probe never resumed the restore", || {
+        let snapshot = rig.state().snapshot.read();
+        snapshot.active_targets == vec![Hue] && snapshot.phase == LightingPhase::Idle
+    });
+
+    // Once: a later probe answering the same finds nothing parked.
+    block_on(monitor.run_once());
+    note_hue_reachable(&rig.handle(), false);
+    note_hue_reachable(&rig.handle(), true);
+    std::thread::sleep(Duration::from_millis(100));
+    assert_eq!(hue_starts(&rig), 2, "{:?}", events(&rig));
+}

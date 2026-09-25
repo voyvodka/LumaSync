@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-forget-wled-device"
+description = "Enables the forget_wled_device command without any pre-configured scope."
+commands.allow = ["forget_wled_device"]
+
+[[permission]]
+identifier = "deny-forget-wled-device"
+description = "Denies the forget_wled_device command without any pre-configured scope."
+commands.deny = ["forget_wled_device"]

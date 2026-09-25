@@ -142,6 +142,19 @@ redirects never followed, the same address guard (`parse_ipv4`) — with its own
 its `WledPowerOffError` variant and changes nothing else: the stream has stopped either way, and a
 device that missed the write only returns to its own effect.
 
+**Forgetting a WLED device is an unplug that also forgets.** There was no way to let go of a WLED
+device at all, and once the discovery list was gone the page showed only the launch's restore note.
+The WLED page now keeps a card for the saved or bound device, with Forget device behind a
+confirmation (`forget_wled_device`, `wled_discovery.rs`). When that device is the bound "usb" sink,
+the transaction takes `usb` out of the session's selection with a `usbUnplug` request — the mode
+keeps running on Hue, or ends if the device was its only output — and only then is the registry
+cleared, unless a strip replaced it meanwhile. The saved `lastWledSink` goes too, so the next
+launch binds nothing. `lastOutputTargets` keeps `usb` on purpose: that entry means "the local
+channel", which a strip or another WLED device serves just as well, and dropping it would leave the
+next device undriven until the user re-selects it. The command contacts nothing on the network — no
+power-off, the device leaves realtime mode on its own — which is also why its tests can use any
+address.
+
 ## Gotchas
 
 - **Opening a serial port toggles DTR, which resets many boards.** Reconnecting on every mode change makes an Arduino-class controller reboot each time, so a cached session is deliberately preserved across mode changes — the log line `cached serial session preserved to avoid DTR-reset cycle` is that working as intended, not a leak. That preservation is scoped to the *same* port only: `set_active_port` (`lighting_mode/transition.rs`) releases the previous port's cached session via `output_bridge.disconnect_session` the moment the active port actually changes, so switching away from a port does not hold its OS handle open until the app quits. A future `LedSink`-from-registry unification (see `ActiveSinkRegistry` in `commands/device_connection.rs`) must carry this same release-on-switch rule, not just the DTR-preserving cache.

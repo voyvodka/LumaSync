@@ -438,6 +438,15 @@ impl OutputsState {
     }
 }
 
+/// Forgetting the bridge ends every launch wait on it: the area wait and a
+/// resume parked for the bridge to answer. Called first thing, so no step of
+/// the forget that fails can leave one behind to fire on a later answer.
+pub(crate) fn cancel_boot_hue_waits<R: Runtime>(app: &AppHandle<R>, reason: &str) {
+    if app.try_state::<LightingRuntimeState>().is_some() {
+        cancel_boot_retry(app, reason);
+    }
+}
+
 /// A boot retry the user overtook: every choice supersedes it, and its notice
 /// goes with it. A resume parked until the bridge answers goes too.
 fn cancel_boot_retry<R: Runtime>(app: &AppHandle<R>, reason: &str) {

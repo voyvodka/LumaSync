@@ -135,12 +135,10 @@ const device: Catalogue<typeof enDevice> = {
   page: {
     rail: {
       devices: "Cihazlar",
-      other: "Diğer",
       usbStrips: "USB Şeritleri",
       hueBridges: "Hue Köprüleri",
       wled: "WLED",
       displays: "Ekranlar",
-      manualEntry: "Manuel Giriş",
       activeLabel: "{{count}} etkin",
     },
     header: {
@@ -151,8 +149,6 @@ const device: Catalogue<typeof enDevice> = {
       hueSub: "Philips Hue eğlence alanları",
       displaysTitle: "Ekranlar",
       displaysSub: "Ambilight yakalama için kullanılabilir ekranlar",
-      manualTitle: "Manuel Giriş",
-      manualSub: "Cihaz bilgilerini elle gir",
     },
     actions: {
       rescan: "Yeniden Tara",
@@ -213,9 +209,6 @@ const device: Catalogue<typeof enDevice> = {
       captureSource: "Yakalama kaynağı",
       chooseInLedSetup: "Yakalanan ekranı LED Kurulumu'nda seç",
     },
-    manual: {
-      body: "Manuel cihaz girişi henüz yok. Şerit eklemek için USB Şeritleri'nde yeniden tara; bir WLED cihazını IP adresiyle ekleyebilirsin.",
-    },
     wled: {
       title: "WLED Cihazları",
       subtitle: "Yerel ağda erişilebilen ağ LED panelleri",
@@ -241,6 +234,16 @@ const device: Catalogue<typeof enDevice> = {
       pill: {
         discovered: "BULUNDU",
         connected: "AKTİF",
+        saved: "KAYITLI",
+      },
+      savedDevice: "Kayıtlı WLED cihazı",
+      forgetAction: "Cihazı unut",
+      forgetting: "Unutuluyor...",
+      forgetConfirm: {
+        title: "Bu WLED cihazı unutulsun mu?",
+        body: "LumaSync {{ip}} adresine göndermeyi bırakır ve açılışta artık ona bağlanmaz. Aydınlatma diğer çıkışlarında sürer; tek çıkış buysa durur.",
+        confirm: "Cihazı unut",
+        cancel: "İptal",
       },
       restore: {
         restoring: "{{ip}} adresindeki kayıtlı WLED cihazına yeniden bağlanılıyor...",
@@ -264,6 +267,8 @@ const device: Catalogue<typeof enDevice> = {
         testSendFailed: "Test karesi cihaza gönderilemedi.",
         sinkNotStarted: "Test etmeden önce cihaza bağlan.",
         workerFailed: "LumaSync isteği tamamlayamadı. Tekrar dene.",
+        forgetOk: "Cihaz unutuldu. Kullanmak için yeniden tara.",
+        forgetFailed: "Cihaz unutulamadı. Hiçbir şey değişmedi.",
       },
     },
   },

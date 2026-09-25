@@ -23,6 +23,8 @@ snapshot (`useLightingRuntime.ts`: seeded by `get_lighting_runtime`, kept by
 | Tray: the Off / Ambilight / Solid check group | built in Rust (`tray_request`), never through a window; the kind alone, `origin: "tray"` |
 | Test patterns (LED Setup, popup tiles) | `apply_outputs` `{ targets, origin: "leaseHue" }` around each run |
 | Devices card Stop retrying / Retry stop | `release_hue_output` |
+| Devices → Hue Forget | built in Rust (`forget_hue_bridge`): `release_hue_with`, then a `user` choice of the saved targets without `hue` (`hue.md`, "Forgetting a bridge") |
+| Devices → WLED Forget device | built in Rust (`forget_wled_device`): a `usbUnplug` request without `usb` when that device is the bound local sink |
 | A drag within the running kind (both windows) | `retune_lighting`, through `retuneCoalescer.ts` |
 | A saved setting the mode reads | nothing — Rust re-applies on the save (below) |
 
@@ -236,9 +238,12 @@ the bridge, and its `hue://health` event is heard in Rust (`listen_hue_health`);
 that says the bridge answers — a probe's answer, not a publish while one is in flight, or a live
 stream — runs the parked plan once (`note_hue_reachable`), through the same `resume_boot_hue` the
 area wait uses. It fires at most once per launch. Anything that cancels the area wait cancels the
-park (a choice, a newer launch, the Devices card's stop); so does a save that leaves no Hue pairing
-behind, and a quit, which the resume checks before it runs. While the window is hidden the monitor
-probes only when asked, so a park may wait until the window next opens. The strip's own resume
+park (a choice, a newer launch, the Devices card's stop). Forgetting the bridge cancels both waits
+first thing (`cancel_boot_hue_waits` in `forget_hue_bridge`), before any step that could fail; a
+window save that leaves no Hue pairing behind does too, and a quit is checked before the resume
+runs. With the window hidden the monitor probes once at launch and then only when asked: a
+tray-started app whose bridge answers that launch probe resumes without a window being shown, and
+one whose bridge is still silent then waits until the window next opens. The strip's own resume
 (`BootSinkRetry`) leaves Hue to a parked plan as it does to the area wait, so with both outputs late
 either one can land first and the other joins it.
 

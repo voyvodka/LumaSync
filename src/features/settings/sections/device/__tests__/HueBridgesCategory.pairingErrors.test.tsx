@@ -73,6 +73,9 @@ function Harness() {
     revalidateArea: hook.revalidateArea,
     startRuntime: async () => {},
     retryRuntimeTarget: async () => {},
+    forgetBridge: async () => null,
+    lightNames: {},
+    identifyLights: async () => ({ code: "HUE_IDENTIFY_OK" as const, message: "", details: null }),
   };
   return (
     <HueBridgesCategory

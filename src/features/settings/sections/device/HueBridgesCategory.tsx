@@ -1,10 +1,12 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import type {
-  HueChannelPlacementOverride,
-  HueOffBehavior,
-  HueRuntimeTriggerSource,
+import {
+  HUE_FORGET_STATUS,
+  type HueChannelPlacementOverride,
+  type HueForgetStatus,
+  type HueOffBehavior,
+  type HueRuntimeTriggerSource,
 } from "@/shared/contracts/hue";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import {
@@ -15,6 +17,8 @@ import { isAreaHeldByAnotherApp } from "@/features/hue/model/areaGrouping";
 import { buildHueRuntimeStatusCard } from "@/features/hue/model/hueRuntimeStatusCard";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
 import { Button } from "@/shared/ui/Button";
+import { Callout } from "@/shared/ui/Callout";
+import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { cx } from "@/shared/ui/cx";
 import { IconBridge, IconHueBridgeGlyph, IconRefresh, IconWifi } from "@/shared/ui/icons";
 import { StatusPill } from "@/shared/ui/StatusPill";
@@ -27,6 +31,7 @@ import {
   HUE_CARD_TONE_CLASS,
   HUE_CARD_VIEW,
   resolveHueCardText,
+  StatusCodeDetail,
   withAreaChange,
   type HueCardActionSpec,
   type HueCardContext,
@@ -119,6 +124,36 @@ export function HueBridgesCategory({
   const stateView: HueCardView | null = hueBridgeState ? HUE_CARD_VIEW[hueBridgeState] : null;
   const areaChoice = useHueAreaChoice(hue, stateView?.actions.includes("changeArea") ?? false);
 
+  const [forgetOpen, setForgetOpen] = useState(false);
+  const [isForgetting, setIsForgetting] = useState(false);
+  const [forgetResult, setForgetResult] = useState<HueForgetStatus | null>(null);
+  const { forgetBridge, selectBridge } = hue;
+  // A bridge with no key has nothing saved to forget: letting go of the
+  // selection is the whole of it, and asking first would overstate it.
+  const requestForget = useCallback(() => {
+    setForgetResult(null);
+    if (credentials === null) {
+      selectBridge(null);
+      return;
+    }
+    setForgetOpen(true);
+  }, [credentials, selectBridge]);
+  // The note is about the bridge that was forgotten; a bridge selected since
+  // (a new pairing, a scan with one result) is another story.
+  const selectedAfterForget = forgetResult?.code !== HUE_FORGET_STATUS.FAILED && selectedBridgeId !== null;
+  useEffect(() => {
+    if (selectedAfterForget) setForgetResult(null);
+  }, [selectedAfterForget]);
+  const confirmForget = useCallback(async () => {
+    setForgetOpen(false);
+    setIsForgetting(true);
+    try {
+      setForgetResult(await forgetBridge());
+    } finally {
+      setIsForgetting(false);
+    }
+  }, [forgetBridge]);
+
   const cardContext: HueCardContext = {
     t,
     hue,
@@ -136,6 +171,8 @@ export function HueBridgesCategory({
     },
     onStopHue,
     areaChoice,
+    requestForget,
+    isForgetting,
   };
   const view = stateView && areaChoice.changing ? withAreaChange(stateView) : stateView;
 
@@ -158,6 +195,8 @@ export function HueBridgesCategory({
           </Button>
         </div>
       </div>
+
+      {forgetResult ? <HueForgetResultNote result={forgetResult} /> : null}
 
       {/* ── Hue content area ── */}
       <div className="lm-device-grid">
@@ -223,6 +262,8 @@ export function HueBridgesCategory({
                 areaId={selectedArea?.id}
                 isStreaming={runtimeStatus?.state === "Running"}
                 zones={zones}
+                lightNames={hue.lightNames}
+                onIdentify={hue.identifyLights}
               />
             ) : null}
           </>
@@ -233,6 +274,41 @@ export function HueBridgesCategory({
           <HueManualIpForm hue={hue} title="hue:manualIp.title" description="hue:manualIp.description" />
         ) : null}
       </div>
+
+      {forgetOpen ? (
+        <ConfirmDialog
+          title={t("hue:page.forgetConfirm.title")}
+          body={t("hue:page.forgetConfirm.body")}
+          confirmLabel={t("hue:page.forgetConfirm.confirm")}
+          cancelLabel={t("hue:page.cancel")}
+          tone="danger"
+          enterCancels
+          onConfirm={() => { void confirmForget(); }}
+          onCancel={() => setForgetOpen(false)}
+          testId="hue-forget-confirm"
+          confirmTestId="hue-forget-confirm-yes"
+        />
+      ) : null}
+    </div>
+  );
+}
+
+const FORGET_RESULT_COPY = {
+  [HUE_FORGET_STATUS.OK]: { tone: "ok", key: "hue:page.forgetResult.ok" },
+  [HUE_FORGET_STATUS.PARTIAL]: { tone: "warning", key: "hue:page.forgetResult.partial" },
+  [HUE_FORGET_STATUS.FAILED]: { tone: "error", key: "hue:page.forgetResult.failed" },
+} as const;
+
+/** What forgetting did. The card it came from is gone by now, so the page says it. */
+function HueForgetResultNote({ result }: { result: HueForgetStatus }) {
+  const { t } = useTranslation();
+  const copy = FORGET_RESULT_COPY[result.code];
+  return (
+    <div role="status" aria-live="polite" data-testid="hue-forget-result">
+      <Callout tone={copy.tone}>
+        {t(copy.key)}
+        {result.code !== HUE_FORGET_STATUS.OK ? <StatusCodeDetail code={result.code} /> : null}
+      </Callout>
     </div>
   );
 }

@@ -261,6 +261,10 @@ struct Inner {
     stream_bridge_due: Option<Instant>,
     bridge: Signal,
     area: Signal,
+    /// The first pass may probe the bridge with no window visible, so a
+    /// tray-started app has a verdict before anything is shown. Spent by
+    /// that pass whether or not it probed.
+    launch_probe: bool,
 }
 
 impl Inner {
@@ -292,7 +296,10 @@ impl Inner {
             }),
             stream_bridge: self.live && visible,
             // An active stream is proof enough on its own.
-            bridge: configured && visible && !self.live && !self.bridge.stopped,
+            bridge: configured
+                && (visible || self.launch_probe)
+                && !self.live
+                && !self.bridge.stopped,
             area: configured && self.area_wanted() && !self.area.stopped && !stream_feeds_area,
         }
     }
@@ -430,6 +437,7 @@ impl HueHealthMonitor {
                 stream_bridge_due: None,
                 bridge: Signal::default(),
                 area: Signal::default(),
+                launch_probe: true,
             }),
             wake: Arc::new(Notify::new()),
             closing: AtomicBool::new(false),
@@ -696,7 +704,9 @@ impl HueHealthMonitor {
             return None;
         }
 
-        if let Some(target) = self.take_bridge(Instant::now()) {
+        let probe = self.take_bridge(Instant::now());
+        self.lock().launch_probe = false;
+        if let Some(target) = probe {
             let response = self.0.backend.validate(target.clone()).await;
             self.apply_bridge(&target, &response, Instant::now());
             if self.closing() {
