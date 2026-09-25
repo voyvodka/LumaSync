@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { useState, type ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MODE_GUARD_REASONS } from "@/features/mode/state/modeGuard";
@@ -302,8 +302,8 @@ describe("LightsSection", () => {
   // raised the lock, and Off and the output rows went with it while the lights ran.
   it("never locks Off or the output rows behind the calibration", async () => {
     const user = userEvent.setup();
-    const onModeChange = vi.fn();
-    const onOutputTargetsChange = vi.fn();
+    const onModeChange = vi.fn<ComponentProps<typeof LightsSection>["onModeChange"]>();
+    const onOutputTargetsChange = vi.fn<ComponentProps<typeof LightsSection>["onOutputTargetsChange"]>();
 
     render(
       <LightsSection

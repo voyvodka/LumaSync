@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { useHueTargetAutoAdd, type HueTargetAutoAddInput } from "../useHueTargetAutoAdd";
 
 function mount(initial: Partial<HueTargetAutoAddInput> = {}) {
-  const onSelectTargets = vi.fn().mockResolvedValue(undefined);
+  const onSelectTargets = vi.fn<HueTargetAutoAddInput["onSelectTargets"]>().mockResolvedValue(undefined);
   const input: HueTargetAutoAddInput = {
     ready: true,
     hueConfigured: false,
