@@ -7,6 +7,7 @@
  *   - Manual IP input + Discover → `discover_wled_devices`
  *   - Per-device "Connect" → `connect_wled_sink` (binds the active sink)
  *   - Per-device "Test" → `test_wled_bridge` (single red-ramp frame)
+ *   - "Forget device" on the saved or bound one → `forget_wled_device`
  *
  * Status codes from `WLED_STATUS` map to localized strings under
  * `devicesPage.wled.status.*` so the UI never leaks raw constants.
@@ -24,6 +25,7 @@ import { useTranslation } from "react-i18next";
 
 import {
   WLED_STATUS,
+  type WledCommandStatus,
   type WledDeviceInfo,
   type WledStatusCode,
   type WledUdpSinkConfig,
@@ -32,13 +34,13 @@ import {
   connectWledSink,
   discoverWledDevices,
   testWledBridge,
-  type WledCommandStatus,
 } from "@/features/device/wledApi";
 import type { WledRestoreOutcome } from "@/features/device/wledSinkRestore";
 import type { TranslationKey } from "@/features/i18n/catalogue";
 import { parseCommandError } from "@/shared/contracts/status";
 import { Button } from "@/shared/ui/Button";
 import { Callout, type CalloutTone } from "@/shared/ui/Callout";
+import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { EmptyState } from "@/shared/ui/EmptyState";
 import { StatusPill } from "@/shared/ui/StatusPill";
 
@@ -51,6 +53,8 @@ interface WledDevicePickerProps {
   restoreOutcome?: WledRestoreOutcome;
   /** Fired after a successful connect so the parent can persist the sink ref. */
   onConnected?: (device: WledDeviceInfo) => void;
+  /** Forgets the device at `ip`. Absent ⇒ no Forget action. */
+  onForget?: (ip: string) => Promise<WledCommandStatus>;
 }
 
 type RowState =
@@ -63,6 +67,7 @@ export function WledDevicePicker({
   savedSink = null,
   restoreOutcome = { kind: "idle" },
   onConnected,
+  onForget,
 }: WledDevicePickerProps) {
   const { t } = useTranslation();
   const [manualIp, setManualIp] = useState("");
@@ -73,6 +78,49 @@ export function WledDevicePicker({
   const [devices, setDevices] = useState<WledDeviceInfo[]>([]);
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({});
   const [ipPrefilled, setIpPrefilled] = useState(false);
+  const [forgetIp, setForgetIp] = useState<string | null>(null);
+  const [isForgetting, setIsForgetting] = useState(false);
+  const [forgetStatus, setForgetStatus] = useState<WledCommandStatus | null>(null);
+
+  // The device LumaSync would drive, bound now or bound again at launch.
+  const knownIp = savedSink?.ip ?? activeWledIp;
+  const knownInList = knownIp !== null && devices.some((device) => device.ip === knownIp);
+
+  const confirmForget = useCallback(async () => {
+    const ip = forgetIp;
+    setForgetIp(null);
+    if (ip === null || !onForget) return;
+    setIsForgetting(true);
+    try {
+      const status = await onForget(ip);
+      setForgetStatus(status);
+      if (status.code === WLED_STATUS.FORGET_OK) {
+        setRowStates((prev) => {
+          const next = { ...prev };
+          delete next[ip];
+          return next;
+        });
+      }
+    } finally {
+      setIsForgetting(false);
+    }
+  }, [forgetIp, onForget]);
+
+  const forgetButton = (ip: string) =>
+    onForget ? (
+      <Button
+        size="card"
+        variant="danger"
+        busy={isForgetting}
+        onClick={() => {
+          setForgetStatus(null);
+          setForgetIp(ip);
+        }}
+        data-testid="wled-forget"
+      >
+        {isForgetting ? t("device:page.wled.forgetting") : t("device:page.wled.forgetAction")}
+      </Button>
+    ) : null;
 
   // A failed restore should cost one click to retry, not a re-typed IP.
   // Fires once and never overwrites what the user has already entered.
@@ -189,6 +237,66 @@ export function WledDevicePicker({
       </div>
 
       <WledRestoreBanner outcome={restoreOutcome} t={t} />
+
+      {forgetStatus && (
+        <div role="status" aria-live="polite" data-testid="wled-forget-result">
+          <Callout tone={wledStatusTone(forgetStatus.code)}>
+            {translateWledStatusCode(forgetStatus.code, t) ?? forgetStatus.message}
+          </Callout>
+        </div>
+      )}
+
+      {knownIp !== null && !knownInList && (
+        <div className="lm-device-grid">
+          <div
+            role="group"
+            aria-label={t("device:page.wled.savedDevice")}
+            className={activeWledIp === knownIp ? "lm-dcard is-on" : "lm-dcard is-ghost"}
+            data-testid="wled-saved-device"
+          >
+            <div className="lm-dcard-head">
+              <div className="lm-dcard-ic">
+                <WledIcon />
+              </div>
+              <div className="lm-dcard-tx">
+                <div className="lm-dcard-name">
+                  <span>{t("device:page.wled.savedDevice")}</span>
+                  {activeWledIp === knownIp ? (
+                    <StatusPill tone="streaming">{t("device:page.wled.pill.connected")}</StatusPill>
+                  ) : (
+                    <StatusPill tone="warn">{t("device:page.wled.pill.saved")}</StatusPill>
+                  )}
+                </div>
+                <div className="lm-dcard-sub">{knownIp}</div>
+              </div>
+            </div>
+            {savedSink?.ip === knownIp && (
+              <div className="lm-dcard-body">
+                <div className="lm-dcard-cell">
+                  <div className="lm-dcard-cell-k">{t("device:page.wled.cellLedCount")}</div>
+                  <div className="lm-dcard-cell-v">{savedSink.ledCount}</div>
+                </div>
+              </div>
+            )}
+            {onForget && (
+              <div className="lm-dcard-actions">
+                <Button
+                  size="card"
+                  variant="danger"
+                  busy={isForgetting}
+                  onClick={() => {
+                    setForgetStatus(null);
+                    setForgetIp(knownIp);
+                  }}
+                  data-testid="wled-forget"
+                >
+                  {isForgetting ? t("device:page.wled.forgetting") : t("device:page.wled.forgetAction")}
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Manual IP + discover row */}
       <div className="lm-hue-ip-form">
@@ -334,11 +442,27 @@ export function WledDevicePicker({
                     ? t("device:page.wled.testing")
                     : t("device:page.wled.testAction")}
                 </Button>
+                {device.ip === knownIp ? forgetButton(device.ip) : null}
               </div>
             </div>
           );
         })}
       </div>
+
+      {forgetIp !== null && (
+        <ConfirmDialog
+          title={t("device:page.wled.forgetConfirm.title")}
+          body={t("device:page.wled.forgetConfirm.body", { ip: forgetIp })}
+          confirmLabel={t("device:page.wled.forgetConfirm.confirm")}
+          cancelLabel={t("device:page.wled.forgetConfirm.cancel")}
+          tone="danger"
+          enterCancels
+          onConfirm={() => { void confirmForget(); }}
+          onCancel={() => setForgetIp(null)}
+          testId="wled-forget-confirm"
+          confirmTestId="wled-forget-confirm-yes"
+        />
+      )}
     </div>
   );
 }
@@ -400,6 +524,8 @@ export const WLED_STATUS_COPY = {
   [WLED_STATUS.DISCOVERY_WORKER_FAILED]: "device:page.wled.status.workerFailed",
   [WLED_STATUS.TEST_WORKER_FAILED]: "device:page.wled.status.workerFailed",
   [WLED_STATUS.CONNECT_WORKER_FAILED]: "device:page.wled.status.workerFailed",
+  [WLED_STATUS.FORGET_OK]: "device:page.wled.status.forgetOk",
+  [WLED_STATUS.FORGET_FAILED]: "device:page.wled.status.forgetFailed",
 } as const satisfies Record<WledStatusCode, TranslationKey>;
 
 /** A success reads as one, a caveat as a warning, anything that stopped the
@@ -409,6 +535,7 @@ export function wledStatusTone(code: string): CalloutTone {
     case WLED_STATUS.DISCOVERY_OK:
     case WLED_STATUS.CONNECT_OK:
     case WLED_STATUS.TEST_LIVE_CONFIRMED:
+    case WLED_STATUS.FORGET_OK:
       return "ok";
     case WLED_STATUS.TEST_SENT_UNCONFIRMED:
     case WLED_STATUS.LED_COUNT_MISMATCH:

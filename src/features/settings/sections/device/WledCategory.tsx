@@ -6,7 +6,7 @@ export interface WledCategoryProps {
 }
 
 export function WledCategory({ isActive }: WledCategoryProps) {
-  const { activeWledIp, savedSink, restoreOutcome, markConnected } = useActiveWledSink();
+  const { activeWledIp, savedSink, restoreOutcome, markConnected, forget } = useActiveWledSink();
 
   return (
     <div className="lm-device-cat-body" hidden={!isActive}>
@@ -15,6 +15,7 @@ export function WledCategory({ isActive }: WledCategoryProps) {
         savedSink={savedSink}
         restoreOutcome={restoreOutcome}
         onConnected={(device) => { void markConnected(device); }}
+        onForget={forget}
       />
     </div>
   );

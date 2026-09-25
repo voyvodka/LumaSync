@@ -166,6 +166,9 @@ function createHueHookState(overrides: Record<string, unknown> = {}) {
     startRuntime: vi.fn(),
     areaChannels: [],
     retryRuntimeTarget: vi.fn(),
+    forgetBridge: async () => null,
+    lightNames: {},
+    identifyLights: async () => ({ code: "HUE_IDENTIFY_OK" as const, message: "", details: null }),
     ...overrides,
   };
 }

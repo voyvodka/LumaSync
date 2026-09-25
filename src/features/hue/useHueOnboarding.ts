@@ -6,6 +6,7 @@ import type { UseHueOnboardingResult } from "./model/onboardingTypes";
 import { deriveRuntimeTargets } from "./model/runtimeTargets";
 import { useHueAreaChannels } from "./state/useHueAreaChannels";
 import { useHueAreaReadiness } from "./state/useHueAreaReadiness";
+import { useHueLightNames } from "./state/useHueLightNames";
 import { useHueOnboardingCore } from "./state/useHueOnboardingCore";
 import { useHueRuntimeStatus } from "./state/useHueRuntimeStatus";
 
@@ -27,6 +28,8 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     state.selectedAreaId,
     core.publishStatus,
   );
+
+  const names = useHueLightNames(core.selectedBridge, state.credentials, channels.areaChannels);
 
   const runtime = useHueRuntimeStatus({
     bridge: core.selectedBridge,
@@ -51,10 +54,12 @@ export function useHueOnboarding(): UseHueOnboardingResult {
   // "Validate again" is where a user goes after changing the area in the Hue
   // app, so it re-reads the channel positions along with the readiness.
   const { revalidateArea: revalidateReadiness } = core;
+  const { reloadLightNames } = names;
   const revalidateArea = useCallback(async () => {
     void refreshChannels();
+    reloadLightNames();
     await revalidateReadiness();
-  }, [refreshChannels, revalidateReadiness]);
+  }, [refreshChannels, reloadLightNames, revalidateReadiness]);
 
   useHueAreaReadiness({
     bridge: core.selectedBridge,
@@ -97,6 +102,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     refreshChannels: channels.refreshChannels,
     discover: core.discover,
     selectBridge: core.selectBridge,
+    forgetBridge: core.forgetBridge,
     setManualIp: core.setManualIp,
     submitManualIp: core.submitManualIp,
     recheckBridge: core.recheckBridge,
@@ -106,5 +112,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     revalidateArea,
     startRuntime: runtime.startRuntime,
     retryRuntimeTarget: runtime.retryRuntimeTarget,
+    lightNames: names.lightNames,
+    identifyLights: names.identifyLights,
   };
 }

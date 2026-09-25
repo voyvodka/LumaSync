@@ -49,6 +49,20 @@ export function writeShellStateKey(key: string, value: unknown): void {
   });
 }
 
+/** Removes shell-state keys the way Rust's own writes do: a revision and a
+ * change event every window hears. */
+export function removeShellStateKeys(keys: readonly string[]): void {
+  ensureSeeded();
+  const next: Record<string, unknown> = { ...shellStateBacking };
+  for (const key of keys) delete next[key];
+  shellStateBacking = next;
+  shellStateRevision += 1;
+  mutate((w) => {
+    w.shellState = next as Partial<ShellState>;
+  });
+  announceShellStateChange({ set: {}, remove: [...keys], revision: shellStateRevision, writerId: "rust" });
+}
+
 function ensureSeeded(): void {
   const w = getWorld();
   if (seededGeneration === w.generation) return;

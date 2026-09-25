@@ -102,12 +102,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
   /* A floor, not a fixed width: the id grew from one digit to `#<channelId>`
      and the count is translated, so a hard 96 px pushed the text out of the
-     column instead of letting it shrink. */
+     column instead of letting it shrink. The lights' names take whatever the
+     trail leaves and ellipsize there. */
+  flex: 1 1 auto;
   min-width: 96px;
-  max-width: 140px;
 }
 .lm-chmap-row-zone {
   font-family: var(--lm-mono);

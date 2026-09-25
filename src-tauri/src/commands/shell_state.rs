@@ -144,6 +144,22 @@ impl PersistedShellState {
         self.read("lastOutputTargets")
     }
 
+    /// `lastHueBridge.id` — the bridge the saved pairing belongs to.
+    pub fn saved_hue_bridge_id(&self) -> Option<String> {
+        self.0
+            .get("lastHueBridge")
+            .and_then(|bridge| bridge.get("id"))
+            .and_then(|id| read_value(id, "lastHueBridge.id"))
+    }
+
+    /// `lastWledSink.ip` — the WLED device a launch binds again.
+    pub fn saved_wled_ip(&self) -> Option<String> {
+        self.0
+            .get("lastWledSink")
+            .and_then(|sink| sink.get("ip"))
+            .and_then(|ip| read_value(ip, "lastWledSink.ip"))
+    }
+
     pub fn lighting_intensity_preset(&self) -> Option<LightingSmoothingPreset> {
         self.read("lightingIntensityPreset")
     }
@@ -608,6 +624,19 @@ pub fn patch_from_rust<R: Runtime>(app: &AppHandle<R>, set: StateMap) -> Result<
     store.patch(
         set,
         Vec::new(),
+        Some(RUST_WRITER_ID.to_string()),
+        |changed| emit_changed(app, changed),
+    )
+}
+
+/// Removes `keys` on Rust's own behalf, announced the way [`patch_from_rust`] is.
+pub fn remove_from_rust<R: Runtime>(app: &AppHandle<R>, keys: &[&str]) -> Result<u64, String> {
+    let Some(store) = app.try_state::<ShellStateStore>() else {
+        return Err(format!("{SHELL_STATE_WRITE_FAILED}: no shell-state store"));
+    };
+    store.patch(
+        StateMap::new(),
+        keys.iter().map(|key| key.to_string()).collect(),
         Some(RUST_WRITER_ID.to_string()),
         |changed| emit_changed(app, changed),
     )

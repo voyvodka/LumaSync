@@ -70,6 +70,9 @@ function hueState(runtimeStatus: HueRuntimeStatusView): UseHueOnboardingResult {
     revalidateArea: noop,
     startRuntime: noop,
     retryRuntimeTarget: noop,
+    forgetBridge: async () => null,
+    lightNames: {},
+    identifyLights: async () => ({ code: "HUE_IDENTIFY_OK" as const, message: "", details: null }),
   };
 }
 
