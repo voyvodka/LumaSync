@@ -335,9 +335,10 @@ enum ReadFailure {
 
 /// Write each snapshot back, paced to the bridge's light budget
 /// (`HUE_HTTP_FALLBACK_MAX_REQUESTS_PER_SEC`), then watch the lights and
-/// write again any the bridge changes back. Returns by `deadline` whatever the
-/// bridge does. Blocking; never fatal — every outcome is logged and reported,
-/// none is raised.
+/// write again any the bridge changes back. Every request and sleep ends by
+/// `deadline` whatever the bridge does, so the call returns just after it — a
+/// caller that must return *by* a deadline passes an earlier one. Blocking;
+/// never fatal — every outcome is logged and reported, none is raised.
 ///
 /// Must run after the area's `action: stop` has landed: during entertainment
 /// the bridge overrides these writes. `superseded` is asked before every write

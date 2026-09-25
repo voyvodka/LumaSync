@@ -75,7 +75,7 @@ use commands::device_connection::{
 };
 use commands::hue::commands::{
     get_hue_area_channels, get_hue_stream_status, restart_hue_stream, set_hue_solid_color,
-    simulate_hue_fault, start_hue_stream, stop_hue_stream,
+    simulate_hue_fault, start_hue_stream,
 };
 use commands::hue::forget::forget_hue_bridge;
 use commands::hue::health::{get_hue_health, retry_hue_health, watch_hue_health};
@@ -95,8 +95,7 @@ use commands::lighting_mode::outputs::{
 };
 use commands::lighting_mode::tuning::retune_lighting;
 use commands::lighting_mode::{
-    get_led_preview_status, get_lighting_mode_status, set_lighting_mode, start_led_test_pattern,
-    stop_led_test_pattern, stop_lighting, LightingRuntimeState,
+    get_led_preview_status, start_led_test_pattern, stop_led_test_pattern, LightingRuntimeState,
 };
 use commands::notifications::{request_notification_permission, show_notification};
 use commands::platform::open_log_dir;
@@ -786,14 +785,10 @@ pub fn run() {
             list_hue_entertainment_areas,
             check_hue_stream_readiness,
             start_hue_stream,
-            stop_hue_stream,
             restart_hue_stream,
             set_hue_solid_color,
             get_hue_stream_status,
             get_hue_area_channels,
-            set_lighting_mode,
-            stop_lighting,
-            get_lighting_mode_status,
             get_runtime_telemetry,
             show_notification,
             request_notification_permission,

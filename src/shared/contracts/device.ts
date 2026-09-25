@@ -9,9 +9,6 @@ export const DEVICE_COMMANDS = {
   CONNECT_PORT: "connect_serial_port",
   GET_CONNECTION_STATUS: "get_serial_connection_status",
   RUN_HEALTH_CHECK: "run_serial_health_check",
-  SET_LIGHTING_MODE: "set_lighting_mode",
-  STOP_LIGHTING: "stop_lighting",
-  GET_LIGHTING_MODE_STATUS: "get_lighting_mode_status",
   GET_RUNTIME_TELEMETRY: "get_runtime_telemetry",
   /**
    * Probe a single user-supplied IP's `/json/info` endpoint.
@@ -567,7 +564,7 @@ export interface WledTestResponse {
   deviceRealtimePort?: number | null;
 }
 
-/** Non-fatal notice from `set_lighting_mode`: the stream started, but the frame
+/** Non-fatal notice from a mode apply: the stream started, but the frame
  * length does not match the sink, so part of the strip will not track. Rides
  * the result instead of replacing its success code — half a strip beats none. */
 export interface WledLiveFrameAdvisory {

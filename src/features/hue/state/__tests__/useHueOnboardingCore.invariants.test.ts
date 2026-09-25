@@ -264,3 +264,39 @@ describe("useHueOnboardingCore — pairing announces itself", () => {
     unsubscribe();
   });
 });
+
+describe("useHueOnboardingCore — an area choice whose save fails", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    __resetHueHealthStoreForTests();
+    shellLoadMock.mockResolvedValue({});
+    shellSaveMock.mockImplementation((partial: { lastHueAreaId?: string }) =>
+      partial.lastHueAreaId === "area-1"
+        ? Promise.reject(new Error("SHELL_STATE_WRITE_FAILED: disk full"))
+        : Promise.resolve(undefined),
+    );
+  });
+
+  it("logs the failed write, keeps the choice on screen, and announces nothing", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const seen: string[] = [];
+    const unsubscribe = hueCredentialEvents.subscribe((event) => seen.push(event.reason));
+    const { result } = renderHook(() => useHueOnboardingCore());
+    await waitFor(() => expect(shellLoadMock).toHaveBeenCalled());
+
+    act(() => {
+      result.current.selectArea("area-1");
+    });
+
+    await waitFor(() =>
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("saving the selected area failed"),
+        expect.objectContaining({ message: expect.stringContaining("SHELL_STATE_WRITE_FAILED") }),
+      ),
+    );
+    expect(result.current.state.selectedAreaId).toBe("area-1");
+    expect(seen).not.toContain("area-selected");
+    unsubscribe();
+    errorSpy.mockRestore();
+  });
+});

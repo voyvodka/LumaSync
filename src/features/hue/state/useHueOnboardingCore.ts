@@ -85,6 +85,14 @@ function isPairingStatus(status: HueOnboardingStatus | null): boolean {
   return status?.code.startsWith("HUE_PAIRING_") ?? false;
 }
 
+/** For a save nobody awaits. The store already raised its write notice; this
+ * keeps the rejection, and which save it was, out of the unhandled pile. */
+function logSaveFailure(what: string): (error: unknown) => void {
+  return (error) => {
+    console.error(`[LumaSync] Hue onboarding: saving ${what} failed:`, error);
+  };
+}
+
 async function persistResumeState(step: HueStep): Promise<void> {
   await shellStore.save({ hueOnboardingStep: toPersistedStep(step) });
 }
@@ -234,9 +242,11 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
       });
 
       if (response.readiness.ready && options?.persistReadyStep !== false) {
-        void shellStore.save({
-          hueOnboardingStep: HUE_ONBOARDING_STEP.READY,
-        });
+        void shellStore
+          .save({
+            hueOnboardingStep: HUE_ONBOARDING_STEP.READY,
+          })
+          .catch(logSaveFailure("the ready step"));
       }
     },
     [patchState],
@@ -276,7 +286,8 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
             lastHueAreaId: nextSelectedAreaId ?? undefined,
             hueOnboardingStep: HUE_ONBOARDING_STEP.AREA_SELECT,
           })
-          .then(() => hueCredentialEvents.emit({ reason: "area-selected" }));
+          .then(() => hueCredentialEvents.emit({ reason: "area-selected" }))
+          .catch(logSaveFailure("the listed area"));
 
         return {
           ...prev,
@@ -730,7 +741,8 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
           lastHueAreaId: areaId ?? undefined,
           hueOnboardingStep: areaId ? HUE_ONBOARDING_STEP.AREA_SELECT : HUE_ONBOARDING_STEP.PAIR,
         })
-        .then(() => hueCredentialEvents.emit({ reason: "area-selected" }));
+        .then(() => hueCredentialEvents.emit({ reason: "area-selected" }))
+        .catch(logSaveFailure("the selected area"));
     },
     [patchState],
   );

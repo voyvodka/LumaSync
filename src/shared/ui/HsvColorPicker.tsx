@@ -44,7 +44,7 @@
  * Drag-throttled `onChange`:
  * Pointer-move events fire at 60–240 Hz on modern displays, so an
  * unthrottled drag was firing the parent `onChange` (and therefore the
- * `set_lighting_mode` Tauri invoke when wired to compact Solid mode)
+ * lighting IPC call when wired to compact Solid mode)
  * 50–200 times per second. The local HSV state still updates
  * synchronously so the handles track the cursor smoothly, but the
  * `onChange` callback is rate-limited to one fire per

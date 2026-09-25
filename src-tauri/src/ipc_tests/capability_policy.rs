@@ -184,13 +184,9 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     ("download_and_install_update", MAIN_ONLY),
     // Registered, but nothing in the frontend calls it.
     ("request_notification_permission", NO_WINDOW),
-    // The mode commands the lighting transaction replaced. Still registered,
-    // and their tests grant them; a window calling one would skip the
+    // The last bare Hue command the lighting transaction replaced. Still
+    // registered, and its tests grant it; a window calling it would skip the
     // transaction's ordering and saving.
-    ("set_lighting_mode", NO_WINDOW),
-    ("stop_lighting", NO_WINDOW),
-    ("get_lighting_mode_status", NO_WINDOW),
-    ("stop_hue_stream", NO_WINDOW),
     ("set_hue_solid_color", NO_WINDOW),
     // Read by the health monitor in Rust; its test grants it.
     ("get_hue_stream_status", NO_WINDOW),

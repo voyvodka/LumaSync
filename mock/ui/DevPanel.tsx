@@ -31,7 +31,6 @@ import {
   EDGE_SIGNAL_INTERVAL_MS,
   SHELL_EVENTS,
   TRAY_EVENTS,
-  emitLightingModeChanged,
   emitMockEvent,
   emitRuntimeHealth,
   emitUpdateDownload,
@@ -1053,7 +1052,7 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                 }
               />
             </Ctl>
-            <Ctl label="Autostart" keywords="autostart startupEnabled login" reach="remount" query={q}>
+            <Ctl label="Autostart" keywords="autostart login" reach="remount" query={q}>
               <Toggle
                 on={world.shell.autostartEnabled}
                 label="Enabled"
@@ -1236,18 +1235,11 @@ export function DevPanel({ onReloadApp }: PanelProps) {
 
             <Ctl
               label="Broadcasts"
-              keywords="lighting mode-changed updater download progress event popup sync"
+              keywords="updater download progress event popup sync"
               reach="live"
               query={q}
             >
               <div style={{ display: "grid", gap: 4 }}>
-                <button
-                  type="button"
-                  style={{ ...btn, width: "100%", textAlign: "left" }}
-                  onClick={() => void emitLightingModeChanged()}
-                >
-                  Lighting mode changed ({world.lighting.mode.kind})
-                </button>
                 <button
                   type="button"
                   style={{ ...btn, width: "100%", textAlign: "left" }}

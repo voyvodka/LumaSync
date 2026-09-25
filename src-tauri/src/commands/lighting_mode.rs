@@ -42,16 +42,14 @@ pub use config::{
 pub use led_test_pattern::{start_led_test_pattern, stop_led_test_pattern};
 pub use preview::get_led_preview_status;
 pub use runtime::LightingRuntimeState;
-pub use transition::{
-    get_lighting_mode_status, set_lighting_mode, stop_lighting, stop_lighting_blocking,
-};
+pub use transition::stop_lighting_blocking;
 
 #[cfg(test)]
 pub(crate) use led_test_pattern::LedTestPatternResult;
 #[cfg(test)]
 pub(crate) use sampling::SYNTHETIC_SAMPLE_WINDOW;
 #[cfg(test)]
-pub(crate) use transition::LIGHTING_MODE_CHANGED_EVENT;
+pub(crate) use transition::{set_lighting_mode, stop_lighting, AppliedModeProbe};
 
 static ACTIVE_AMBILIGHT_WORKERS: AtomicUsize = AtomicUsize::new(0);
 static SOLID_OUTPUT_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);

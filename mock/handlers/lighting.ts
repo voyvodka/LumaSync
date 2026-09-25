@@ -1,10 +1,9 @@
 /**
  * The lighting transaction's fixtures: a small version of `outputs.rs` over
- * the same `set_lighting_mode` / `stop_lighting` / Hue fixtures the rest of
- * the mock uses, so both paths stay in step with one another. It keeps the
- * rules a caller can see — Hue up before the mode, Off stops Hue too, a
- * `[usb, hue]` start the Hue gate refuses runs on USB, a choice is saved — and
- * announces every change on `lighting://runtime-changed`, which is what every
+ * the mode apply and stop in `./device.ts` and the Hue fixtures in `./hue.ts`.
+ * It keeps the rules a caller can see — Hue up before the mode, Off stops Hue
+ * too, a `[usb, hue]` start the Hue gate refuses runs on USB, a choice is
+ * saved — and announces every change on `lighting://runtime-changed`, which is what every
  * window renders from.
  */
 
@@ -29,8 +28,8 @@ import {
 import type { LightingModeConfig } from "../../src/shared/contracts/mode";
 import { emitMockEvent } from "../events";
 import { getWorld, mutate } from "../state";
-import { deviceHandlers } from "./device";
-import { hueHandlers } from "./hue";
+import { applyLightingMode, stopLightingMode } from "./device";
+import { hueHandlers, stopHueStream } from "./hue";
 import { removeShellStateKeys, writeShellStateKey } from "./shell";
 import { status } from "./status";
 import type { TypedHandlers } from "./types";
@@ -99,7 +98,7 @@ function reply(
 }
 
 function stopHueIfStreaming(): void {
-  if (getWorld().hue.streaming) hueHandlers[HUE_COMMANDS.STOP_STREAM]();
+  if (getWorld().hue.streaming) stopHueStream();
 }
 
 function releaseHue(): ApplyOutputsResult {
@@ -154,13 +153,13 @@ export const lightingRuntimeHandlers = {
     const ambilight = request.mode?.ambilight ?? current.ambilight;
 
     if (kind === "off") {
-      if (current.kind !== "off") deviceHandlers[DEVICE_COMMANDS.STOP_LIGHTING]();
+      if (current.kind !== "off") stopLightingMode();
       if (choice && request.mode) stopHueIfStreaming();
     } else {
       let run = selection ?? savedTargets();
       if (run.length === 0) {
         const ended = current.kind !== "off";
-        if (ended) deviceHandlers[DEVICE_COMMANDS.STOP_LIGHTING]();
+        if (ended) stopLightingMode();
         stopHueIfStreaming();
         outcome.modeEnded = ended;
         return reply("OUTPUTS_APPLIED", outcome);
@@ -169,7 +168,7 @@ export const lightingRuntimeHandlers = {
         outcome.hueStartCode = hueHandlers[HUE_COMMANDS.START_STREAM]().status.code;
       }
       const payload = (targets: HueRuntimeTarget[]): LightingModeConfig => ({ kind, solid, ambilight, targets });
-      let applied = deviceHandlers[DEVICE_COMMANDS.SET_LIGHTING_MODE]({ payload: payload(run) });
+      let applied = applyLightingMode(payload(run));
       if (applied.status.code === "HUE_NOT_READY" && run.includes("usb") && run.length > 1) {
         if (outcome.hueStartCode === HUE_RUNTIME_STATUS.TRANSIENT_RETRY_SCHEDULED) stopHueIfStreaming();
         run = ["usb"];
@@ -177,7 +176,7 @@ export const lightingRuntimeHandlers = {
         outcome.hueLeftOut = heldOut;
         outcome.droppedTargets = ["hue"];
         selection = run;
-        applied = deviceHandlers[DEVICE_COMMANDS.SET_LIGHTING_MODE]({ payload: payload(run) });
+        applied = applyLightingMode(payload(run));
       }
       outcome.applyStatus = applied.status;
       if (applied.status.code === "HUE_NOT_READY" && choice && run.length === 1 && run[0] === "hue") {
@@ -249,7 +248,7 @@ export const lightingRuntimeHandlers = {
         selection = run.filter((t) => t !== "usb");
         if (world.lighting.mode.kind !== "off") {
           if (selection.length === 0) {
-            deviceHandlers[DEVICE_COMMANDS.STOP_LIGHTING]();
+            stopLightingMode();
           } else {
             const rest = selection;
             mutate((w) => {

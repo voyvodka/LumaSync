@@ -60,7 +60,6 @@ import type {
   HueLightNamesResponse,
   HuePairBridgeResponse,
   HueRuntimeCommandResult,
-  HueRuntimeTriggerSource,
   HueStreamReadinessResponse,
   HueValidateCredentialsResponse,
   HueVerifyBridgeIpResponse,
@@ -77,7 +76,6 @@ import type {
   ReleaseHueTrigger,
   RetuneLightingResult,
 } from "./lightingRuntime";
-import type { LightingModeCommandResult, LightingModeConfig } from "./mode";
 import type { NotificationPayload, NotificationResult, PLATFORM_COMMANDS } from "./platform";
 import type {
   CloseLedTwinOverlayPayload,
@@ -139,10 +137,6 @@ export interface CommandMap {
   get_serial_connection_status: NoArgs<SerialConnectionStatus>;
   run_serial_health_check: Command<{ portName: string }, HealthCheckResult>;
 
-  // --- device: lighting mode (the lighting transaction supersedes these) ---
-  set_lighting_mode: Command<{ payload: LightingModeConfig }, LightingModeCommandResult>;
-  stop_lighting: NoArgs<LightingModeCommandResult>;
-  get_lighting_mode_status: NoArgs<LightingModeCommandResult>;
   /** The wire DTO; `telemetryApi` normalises it on the way through. */
   get_runtime_telemetry: NoArgs<FullTelemetrySnapshot>;
 
@@ -193,7 +187,6 @@ export interface CommandMap {
   // --- hue: runtime -------------------------------------------------------
   start_hue_stream: Command<{ request: StartHueStreamRequest }, HueRuntimeCommandResult>;
   restart_hue_stream: Command<{ request: StartHueStreamRequest }, HueRuntimeCommandResult>;
-  stop_hue_stream: Command<{ triggerSource?: HueRuntimeTriggerSource }, HueRuntimeCommandResult>;
   set_hue_solid_color: Command<{ request: SetHueSolidColorRequest }, HueRuntimeCommandResult>;
   get_hue_stream_status: NoArgs<HueRuntimeCommandResult>;
   /** Flat args — `save_load.rs` takes four positional params, not an envelope. */

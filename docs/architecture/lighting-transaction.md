@@ -29,10 +29,12 @@ snapshot (`useLightingRuntime.ts`: seeded by `get_lighting_runtime`, kept by
 | A saved setting the mode reads | nothing — Rust re-applies on the save (below) |
 
 The main window's orchestrator (`useLightingModeOrchestrator.ts`) is what is left of the frontend
-one: the notices and their timers, and the screen-recording preflight. `set_lighting_mode`,
-`stop_lighting`, `get_lighting_mode_status`, `stop_hue_stream` and `set_hue_solid_color` stay
-registered, and their tests grant them to the test window, but no window is granted them: a window
-calling one would skip the ordering and the saving below.
+one: the notices and their timers, and the screen-recording preflight. The bare mode commands it
+replaced — `set_lighting_mode`, `stop_lighting`, `get_lighting_mode_status`, `stop_hue_stream` — are
+no longer registered; their Rust bodies are what the transaction calls, and the tests of the state
+machine under it call them directly. `set_hue_solid_color` is still registered, and its tests grant
+it to the test window, but no window is granted it: a window calling it would skip the ordering and
+the saving below.
 
 ## Why it moved to Rust
 
@@ -169,11 +171,11 @@ retune.
 running mode, the driven targets, the session's selection, the phase, the held-out reason and the
 boot wait. Its revision is bumped under a small mutex and the event is emitted after that mutex is
 released, so two publishers can deliver out of order; `listenLightingRuntime` keeps the higher
-revision. A transaction publishes when it starts, at each phase, and when it ends; the old mode
-commands publish too. Retunes are coalesced to 10 Hz with a trailing publish so the last value
-always goes out. `get_lighting_runtime` and `get_lighting_mode_status` read this cell. Both are
-sync commands, so they run on the main thread, and the status read used to wait on the runtime
-lock a transition holds for seconds; that froze the window.
+revision. A transaction publishes when it starts, at each phase, and when it ends; so do the test
+pattern's start and stop. Retunes are coalesced to 10 Hz with a trailing publish so the last value
+always goes out. `get_lighting_runtime` reads this cell. It is a sync command, so it runs on the
+main thread, and the retired mode-status read used to wait on the runtime lock a transition holds
+for seconds; that froze the window.
 
 **Quitting.** Step 1 of the quit sets `LightingRuntimeState::closing` before it stops anything.
 `apply_mode_change` reads it under the runtime lock and refuses any start
@@ -286,9 +288,9 @@ records `wled:off:<ip>` in the log instead.
 
 ## Gotchas
 
-- **`get_lighting_mode_status` answers from the last publish.** During a transition it reports the
-  mode from before it, where it used to block until the transition finished. A caller that must
-  see the outcome reads the transaction's own reply.
+- **`get_lighting_runtime` answers from the last publish.** During a transition it reports the
+  mode from before it; it never blocks until the transition finishes. A caller that must see the
+  outcome reads the transaction's own reply.
 - **The driven targets are the truth, not the UI's hopes.** A Hue stream whose stop did not confirm
   stays in `activeTargets`, because the bridge may still count it as its streamer; a stream the
   Devices card opened beside a USB-only mode is not in them, because no mode drives it.

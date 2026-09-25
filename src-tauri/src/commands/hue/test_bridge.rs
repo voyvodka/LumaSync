@@ -303,6 +303,8 @@ struct FakeHueState {
     post_stream: Option<PostStream>,
     /// Devices that answer a PUT with 404, as one removed from the bridge does.
     removed_devices: HashSet<String>,
+    /// Held before answering a read of every light at once.
+    bulk_read_delay: Duration,
 }
 
 pub(crate) struct FakeHue {
@@ -372,6 +374,12 @@ impl FakeHue {
                 .map(|(id, value)| (id.to_string(), value.clone()))
                 .collect(),
         });
+    }
+
+    /// From now on, a read of every light at once (the restore's watch) is
+    /// answered only after `delay`.
+    pub(crate) fn answer_bulk_light_reads_after(&self, delay: Duration) {
+        self.state.lock().unwrap().bulk_read_delay = delay;
     }
 
     /// Another app streams to `area`: the area reads active and these lights
@@ -485,13 +493,14 @@ fn route(
             "services": [{ "rid": id.trim_start_matches("dev-"), "rtype": "light" }]
         })),
         ("GET", "light") if id.is_empty() => {
-            let mut all: Vec<(String, Value)> = state
-                .lock()
-                .unwrap()
+            let held = state.lock().unwrap();
+            let delay = held.bulk_read_delay;
+            let mut all: Vec<(String, Value)> = held
                 .lights
                 .iter()
                 .map(|(id, light)| (id.clone(), light.clone()))
                 .collect();
+            drop(held);
             all.sort_by(|a, b| a.0.cmp(&b.0));
             let all: Vec<Value> = all
                 .into_iter()
@@ -502,7 +511,7 @@ fn route(
                     light
                 })
                 .collect();
-            Reply::json(200, json!({ "errors": [], "data": all }))
+            Reply::json(200, json!({ "errors": [], "data": all })).after(delay)
         }
         ("GET", "light") => match state.lock().unwrap().lights.get(id) {
             Some(light) => data(light.clone()),

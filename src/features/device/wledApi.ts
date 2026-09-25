@@ -47,7 +47,7 @@ export async function discoverWledDevices(
 /**
  * Bind the persisted active sink to the given WLED device. Idempotent —
  * calling twice with the same args is safe; the bridge does not start
- * streaming until a `set_lighting_mode` arrives.
+ * streaming until a mode is applied.
  */
 export async function connectWledSink(
   device: WledDeviceInfo,
