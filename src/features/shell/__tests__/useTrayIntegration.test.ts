@@ -16,7 +16,7 @@ const listenTrayShowLedPreview = vi.fn((cb: Listener) => {
   return Promise.resolve(unlisten);
 });
 
-// Only the preview item is a window event. The lighting items (off, resume,
+// Only the preview item is a window event. The mode items (off, Ambilight,
 // solid) run the transaction in Rust, so no window listens for them.
 vi.mock("@/features/tray/trayController", () => ({
   listenTrayShowLedPreview: (cb: Listener) => listenTrayShowLedPreview(cb),
@@ -67,6 +67,25 @@ describe("useTrayIntegration", () => {
     view.rerender({ status: { mode: "ambilight", outputs: ["usb", "hue"] } });
     await waitFor(() => expect(updateTrayLabelsMock).toHaveBeenCalledTimes(2));
     expect(Object.keys(updateTrayLabelsMock.mock.calls[1][0])).toContain("status");
+  });
+
+  // The tray greys what the window's mode buttons grey, so a tray press can
+  // never reach a mode the window would not have offered.
+  it("pushes the window's mode locks with the labels, and again when they change", async () => {
+    const view = renderHook((props: Parameters<typeof useTrayIntegration>[0]) => useTrayIntegration(props), {
+      initialProps: {
+        status: { mode: "off", outputs: [] },
+        lockedModes: ["ambilight", "solid"],
+      } as Parameters<typeof useTrayIntegration>[0],
+    });
+    await waitFor(() => expect(updateTrayLabelsMock).toHaveBeenCalledTimes(1));
+    const first = updateTrayLabelsMock.mock.calls[0][0];
+    expect(first.lockedModes).toEqual(["ambilight", "solid"]);
+    expect(Object.keys(first)).toEqual(expect.arrayContaining(["lightsOff", "ambilight", "solidColor"]));
+
+    view.rerender({ status: { mode: "off", outputs: [] }, lockedModes: [] });
+    await waitFor(() => expect(updateTrayLabelsMock).toHaveBeenCalledTimes(2));
+    expect(updateTrayLabelsMock.mock.calls[1][0].lockedModes).toEqual([]);
   });
 
   it("logs a push the tray refused instead of leaving it unhandled", async () => {

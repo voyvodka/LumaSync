@@ -15,8 +15,9 @@ fn labels() -> serde_json::Value {
         "openSettings": "Open LumaSync",
         "status": "● Ambilight · USB + Hue",
         "lightsOff": "Lights Off",
-        "resumeLastMode": "Resume Last Mode",
+        "ambilight": "Ambilight",
         "solidColor": "Solid Color",
+        "lockedModes": ["ambilight", "solid"],
         "showLedPreview": "LED Preview",
         "closeOverlays": "Close Overlays",
         "quit": "Quit LumaSync",
@@ -28,6 +29,18 @@ fn the_status_line_arrives_with_the_labels() {
     let pushed: TrayLabels = serde_json::from_value(labels()).expect("labels deserialize");
     assert_eq!(pushed.status, "● Ambilight · USB + Hue");
     assert_eq!(pushed.open_settings, "Open LumaSync");
+}
+
+#[test]
+fn the_mode_locks_arrive_with_the_labels() {
+    use crate::commands::lighting_mode::LightingModeKind;
+
+    let pushed: TrayLabels = serde_json::from_value(labels()).expect("labels deserialize");
+    assert_eq!(
+        pushed.locked_modes,
+        vec![LightingModeKind::Ambilight, LightingModeKind::Solid]
+    );
+    assert_eq!(pushed.ambilight, "Ambilight");
 }
 
 #[test]

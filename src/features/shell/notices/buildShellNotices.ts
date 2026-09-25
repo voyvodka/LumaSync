@@ -91,7 +91,7 @@ export interface ShellNoticeHandlers {
   retryUpdateCheck: () => void;
 }
 
-const HUE_LEFT_OUT_MESSAGE: Record<HueLeftOutReason, TranslationKey> = {
+export const HUE_LEFT_OUT_MESSAGE: Record<HueLeftOutReason, TranslationKey> = {
   [HUE_LEFT_OUT_REASON.UNREACHABLE]: "shell:notices.messages.hueLeftOut.unreachable",
   [HUE_LEFT_OUT_REASON.AUTH]: "shell:notices.messages.hueLeftOut.auth",
   [HUE_LEFT_OUT_REASON.CONFIG]: "shell:notices.messages.hueLeftOut.config",
@@ -102,7 +102,7 @@ const HUE_LEFT_OUT_MESSAGE: Record<HueLeftOutReason, TranslationKey> = {
 };
 
 /** The two busy reasons belong to the launch's wait and never answer a choice. */
-const HUE_NOT_STARTED_MESSAGE: Record<HueLeftOutReason, TranslationKey> = {
+export const HUE_NOT_STARTED_MESSAGE: Record<HueLeftOutReason, TranslationKey> = {
   [HUE_LEFT_OUT_REASON.UNREACHABLE]: "shell:notices.messages.hueNotStarted.unreachable",
   [HUE_LEFT_OUT_REASON.AUTH]: "shell:notices.messages.hueNotStarted.auth",
   [HUE_LEFT_OUT_REASON.CONFIG]: "shell:notices.messages.hueNotStarted.config",
@@ -138,7 +138,7 @@ const ONBOARDING_MESSAGE: Record<Exclude<OnboardingStep, "complete">, Translatio
   [ONBOARDING_STEPS.TURN_ON]: "shell:notices.messages.onboarding.turnOn",
 };
 
-function startFailureMessage(failure: CaptureFailureNotice, t: TFunction): string {
+export function startFailureMessage(failure: CaptureFailureNotice, t: TFunction): string {
   if (failure.bucket === CAPTURE_FAILURE_BUCKET.PERMISSION) return t("shell:notices.messages.capturePermission");
   if (failure.bucket === CAPTURE_FAILURE_BUCKET.INTERNAL) {
     // "Screen capture failed ()." shipped when the backend sent no details.

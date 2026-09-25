@@ -13,6 +13,7 @@ import { SettingsLayout } from "./features/settings/SettingsLayout";
 import { TitleBar, TITLE_BAR_HEIGHT_PX } from "./features/shell/TitleBar";
 import { StatusBar, statusBarHeightPx } from "./features/shell/StatusBar";
 import { useTrayIntegration, type TrayOutput } from "./features/shell/useTrayIntegration";
+import { useTrayFailureNotification } from "./features/shell/useTrayFailureNotification";
 import { useShellBootstrap } from "./features/shell/useShellBootstrap";
 import { openScreenCaptureSettings } from "./features/mode/captureApi";
 import { useCaptureStallNotice } from "./features/telemetry/hooks/useCaptureStallNotice";
@@ -85,7 +86,7 @@ import {
 } from "./features/shell/useUIMode";
 import { useGlobalKeybinds, type KeybindHandlers } from "./features/shell/useGlobalKeybinds";
 import { modeKeybindHandlers } from "./features/shell/modeKeybinds";
-import { modeKind } from "./features/mode/model/modeKinds";
+import { MODE_KIND_ORDER, modeKind } from "./features/mode/model/modeKinds";
 import { useWindowVisible } from "./features/shell/windowVisibility";
 import { useShellStateWriteFailing } from "./features/persistence/writeHealth";
 import {
@@ -266,10 +267,6 @@ function Shell() {
     trayOutputs.push(localSink.transport === "wled" ? "wled" : "usb");
   }
   if (hueSessionActive) trayOutputs.push("hue");
-  useTrayIntegration({
-    onPreviewOpenFailed: reportPreviewOpenFailure,
-    status: { mode: lightingMode.kind, outputs: trayOutputs },
-  });
 
   const runSectionChange = useCallback(async (sectionId: SectionId, deviceCategory?: DeviceCategory) => {
     // Only a notice names a category; every other way in keeps the one open.
@@ -417,6 +414,13 @@ function Shell() {
       : isModeTransitioning ||
         availability !== "ready" ||
         modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED;
+  // The tray's mode group greys what these buttons grey.
+  useTrayIntegration({
+    onPreviewOpenFailed: reportPreviewOpenFailure,
+    status: { mode: lightingMode.kind, outputs: trayOutputs },
+    lockedModes: MODE_KIND_ORDER.filter(isModeKindDisabled),
+  });
+  useTrayFailureNotification(mode.lastOutcome);
   const ambilightDisabled = isModeKindDisabled(LIGHTING_MODE_KIND.AMBILIGHT);
   // Read at press time through the hook's ref, so fresh closures cost nothing.
   const keybindHandlers: KeybindHandlers = {

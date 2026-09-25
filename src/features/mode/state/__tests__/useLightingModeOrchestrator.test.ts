@@ -5,6 +5,8 @@ import { AMBILIGHT_CAPTURE_REASON, CAPTURE_FAILURE_BUCKET } from "@/shared/contr
 import type {
   ApplyOutputsOutcome,
   ApplyOutputsResult,
+  LightingOrigin,
+  LightingOutcome,
   LightingRuntimeSnapshot,
 } from "@/shared/contracts/lightingRuntime";
 import type { LightingModeConfig } from "@/shared/contracts/mode";
@@ -52,6 +54,7 @@ function snapshot(overrides: Partial<LightingRuntimeSnapshot> = {}): LightingRun
     requestId: null,
     hueHeldOutReason: null,
     bootHueRetry: null,
+    lastOutcome: null,
     ...overrides,
   };
 }
@@ -486,6 +489,92 @@ describe("useLightingModeOrchestrator", () => {
       await act(() => view.result.current.handleLightingModeChange({ kind: "solid" }));
 
       expect(reportHueSolidColorStatus).toHaveBeenCalledWith("HUE_COLOR_APPLY_SKIPPED_NO_LIGHTS");
+    });
+  });
+
+  /**
+   * The tray and the popup have no notice strip of their own; their answers
+   * reach this window only as the snapshot's `lastOutcome`, and used to reach
+   * no window at all.
+   */
+  describe("a choice made elsewhere", () => {
+    function outcomeOf(
+      requestId: number,
+      origin: LightingOrigin,
+      code: string,
+      outcome: Partial<ApplyOutputsOutcome> = {},
+    ): LightingOutcome {
+      const answer = reply(code, snapshot(), outcome);
+      return { requestId, origin, status: answer.status, outcome: answer.outcome };
+    }
+
+    const permissionDenied: Partial<ApplyOutputsOutcome> = {
+      applyStatus: {
+        code: "AMBILIGHT_MODE_START_FAILED",
+        message: "",
+        details: AMBILIGHT_CAPTURE_REASON.PERMISSION_DENIED,
+      },
+    };
+
+    it("raises the notice this window raises for its own choice", async () => {
+      const { view } = mount();
+      await settle(view);
+      await waitFor(() => expect(getLightingRuntimeMock).toHaveBeenCalled());
+
+      publish(snapshot({ lastOutcome: outcomeOf(7, "tray", "OUTPUTS_START_FAILED", permissionDenied) }));
+
+      expect(view.result.current.startFailedNotice?.bucket).toBe(CAPTURE_FAILURE_BUCKET.PERMISSION);
+
+      publish(snapshot({ lastOutcome: outcomeOf(8, "popup", "OUTPUTS_REFUSED", { hueNotStarted: "unreachable" }) }));
+      expect(view.result.current.hueNotStartedNotice).toBe("unreachable");
+    });
+
+    it("raises each answer once, however often the snapshot repeats it", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const { view } = mount();
+      await settle(view);
+      const answer = outcomeOf(3, "popup", "OUTPUTS_REFUSED", { hueNotStarted: "inUse" });
+
+      publish(snapshot({ lastOutcome: answer }));
+      expect(view.result.current.hueNotStartedNotice).toBe("inUse");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(view.result.current.hueNotStartedNotice).toBeNull();
+
+      // A retune, a refresh, a window shown again: the answer rides along.
+      publish(snapshot({ lastOutcome: answer }));
+      publish(snapshot({ lastOutcome: answer, phase: "applying" }));
+      expect(view.result.current.hueNotStartedNotice).toBeNull();
+    });
+
+    it("leaves this window's own choices to their replies", async () => {
+      const { view } = mount();
+      await settle(view);
+
+      publish(snapshot({ lastOutcome: outcomeOf(4, "user", "OUTPUTS_REFUSED", { hueNotStarted: "auth" }) }));
+
+      expect(view.result.current.hueNotStartedNotice).toBeNull();
+    });
+
+    it("does not raise an answer from before this window was open", async () => {
+      getLightingRuntimeMock.mockResolvedValue(
+        snapshot({ lastOutcome: outcomeOf(2, "tray", "OUTPUTS_START_FAILED", permissionDenied) }),
+      );
+      const { view } = mount();
+      await settle(view);
+      await waitFor(() => expect(view.result.current.lastOutcome?.requestId).toBe(2));
+
+      expect(view.result.current.startFailedNotice).toBeNull();
+    });
+
+    it("never moves this window to LED Setup for a tray choice that needs a layout", async () => {
+      const { view, onRequireCalibration } = mount();
+      await settle(view);
+
+      publish(snapshot({ lastOutcome: outcomeOf(5, "tray", "OUTPUTS_CALIBRATION_REQUIRED") }));
+
+      expect(onRequireCalibration).not.toHaveBeenCalled();
     });
   });
 });

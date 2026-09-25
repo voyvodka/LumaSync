@@ -45,6 +45,11 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Tray: the lighting items are now Lights Off, Ambilight and Solid Color, with a check beside the
+  one that is running. "Resume Last Mode" is gone: after a Solid color it did the same as Solid
+  Color, and there was no way back to Ambilight from the tray. Solid Color shows your last color,
+  or white before you have picked one. An item is greyed out whenever the same mode is greyed out
+  in the main window, and while a change is under way.
 - First-run guide: the steps now follow the order the app unlocks in — connect a USB strip, WLED
   or Hue; set up the LEDs (skipped when Hue is your only output); then turn on Ambilight, which
   the last step can do for you. On a fresh install the guide replaces the red "No reachable output"
@@ -187,6 +192,18 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Hue: when LumaSync starts at login before Wi-Fi is up, your saved lighting now comes back on Hue
+  once the bridge answers, instead of staying off (Hue only) or running on the strip without Hue
+  until you picked a mode again. It works with the window closed: while it waits, LumaSync checks
+  the bridge every few seconds for up to three minutes, and otherwise still makes no Hue calls from
+  the tray beyond one check at launch. It happens at most once per launch, and choosing a mode
+  yourself, forgetting the bridge or quitting first cancels it. If the bridge never answers, the
+  notice now says Hue wasn't available at launch rather than that it stayed busy.
+- Tray and LED control popup: a lighting choice that did not go through now says why. The main
+  window shows the same notice its own buttons would, the popup shows it in place, and when a tray
+  choice fails with the window closed you get one system notification for it. Before, a tray
+  Ambilight without screen recording permission, or a tray Solid with no LED layout, changed
+  nothing and said nothing.
 - Lighting: a mode restored at launch now reaches a USB strip or WLED device that finishes
   connecting a moment after the app starts; about one launch in four used to leave the strip dark
   until you picked a mode again. Choosing a mode with the strip unplugged runs it on Hue if Hue is

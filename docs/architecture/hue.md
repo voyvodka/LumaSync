@@ -314,7 +314,7 @@ What it reads, and when:
 |---|---|---|---|
 | Stream, local | Hue is live (Starting, Running, Reconnecting) | 1 s with a window visible, 5 s without | none — the runtime lock, the dead-sender probe, the pending-colour flush |
 | Stream, readiness | Hue is live and a window is visible | 5 s | `GET …/entertainment_configuration` (area cache, `Ours`) |
-| Bridge probe | configured, not live, a window visible (or the launch's first pass), not given up | 30 s; once at launch | `GET /clip/v2/resource/bridge` |
+| Bridge probe | configured, not live, a window visible (or the launch's first pass, or a boot Hue resume pending), not given up | 30 s; once at launch; 5 s then 15 s for at most 3 min while a boot resume is pending | `GET /clip/v2/resource/bridge` |
 | Area readiness | configured, the Devices view mounted, a window visible, not fed by a live stream | 15 s; 3 s while another session holds the area; 15 → 30 → 60 → 120 s while the bridge does not answer | `GET …/entertainment_configuration` (area cache, `Ours` or `Foreign`) |
 
 - **It idles when nothing needs it.** With no bridge, area and pairing saved (the `toHueStartConfig`
@@ -329,7 +329,22 @@ What it reads, and when:
   not it probed: nothing configured, or a stream already live, and there is no hidden probe later
   either, not even after a pairing saved while hidden. After it the visible-only cadence holds as
   before: while hidden, no bridge call at all. `the_task_sleeps_in_the_tray_and_wakes_when_a_window_shows`
-  pins "one at launch, then none" rather than the old "none". The window says what it needs with
+  pins "one at launch, then none" rather than the old "none".
+- **The hidden-traffic rule: one probe at launch; bounded probing only while a boot Hue resume is
+  pending; otherwise zero.** Autostart at login often runs before Wi-Fi is up, so the launch probe
+  finds the bridge silent and the launch restore parks its Hue resume until the bridge answers
+  (`lighting-transaction.md`, "The launch's wait for the bridge"). With nothing else probing hidden
+  that answer would never come until the window opened, so the park sets a flag the monitor reads
+  (`set_boot_resume_pending`, `Inner::boot_resume_since`): the bridge probe runs hidden, at once,
+  every 5 s for the first minute and every 15 s after, for 3 minutes at most
+  (`BOOT_RESUME_PROBE_*`). 5 s is `HUE_HTTP_TIMEOUT_MS`, so a silent bridge never has two probes in
+  flight; a minute at 5 s covers the usual time to join Wi-Fi after login, and the whole window is
+  about twenty `GET /clip/v2/resource/bridge` calls — nothing against the bridge's rate budget, and
+  bounded however long the machine stays offline. The failure budget does not stop it inside that
+  window (four failures and 90 s would end it halfway); after it the budget applies as always. The
+  flag drops the moment the resume runs, is cancelled or times out, and the monitor also ends it by
+  itself once the window has passed. `a_pending_boot_resume_probes_hidden_on_a_bounded_schedule`
+  pins the schedule. The window says what it needs with
   `watch_hue_health({ visible, areaReadiness })` whenever its visibility changes — the old convention,
   moved from each loop into the one store. `visible` is `isWindowVisible` (the document and Rust's
   read of the native window, `ui-and-shell.md`), since WebView2 can report a window hidden in the
@@ -347,8 +362,8 @@ What it reads, and when:
   the cadence changes how fast a flaky bridge exhausts that budget; 5 s is the App chip cadence it
   replaced.
 - **Hidden means nothing new.** The old loops paused while hidden too, so the idle tray costs what
-  it cost before — one probe at launch and nothing after — and now also with the Devices view open
-  behind it.
+  it cost before — one probe at launch and nothing after, bar the bounded window above while a boot
+  resume waits — and now also with the Devices view open behind it.
 - **`get_hue_health` never calls the bridge.** It runs the local part of the runtime refresh first,
   so a caller that has just started or stopped the stream itself (the Devices card's Start and
   Start Again) reads the result rather than the state it changed away from. `get_hue_stream_status`

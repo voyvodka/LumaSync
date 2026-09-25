@@ -48,11 +48,14 @@ export interface TrayIntegrationInput {
   onPreviewOpenFailed?: (failure: PreviewOpenFailure) => void;
   /** What the tray's status line reports; pushed whenever it changes. */
   status?: TrayStatus;
+  /** The modes the main window's own mode buttons have disabled; the tray greys the same. */
+  lockedModes?: readonly LightingModeKind[];
 }
 
 // Module state because the boot path pushes the labels too, before any mode
 // is known; that push must not reset a status a render already set.
 let trayStatus: TrayStatus = { mode: LIGHTING_MODE_KIND.OFF, outputs: [] };
+let trayLockedModes: LightingModeKind[] = [];
 
 function pushTrayLabels() {
   const t = i18next.t.bind(i18next) as TFunction;
@@ -60,8 +63,9 @@ function pushTrayLabels() {
     openSettings: t("tray:openSettings"),
     status: trayStatusLabel(trayStatus, t),
     lightsOff: t("tray:lightsOff"),
-    resumeLastMode: t("tray:resumeLastMode"),
+    ambilight: t("tray:ambilight"),
     solidColor: t("tray:solidColor"),
+    lockedModes: trayLockedModes,
     showLedPreview: t("preview:tray.show"),
     closeOverlays: t("tray:closeOverlays"),
     quit: t("tray:quit"),
@@ -71,24 +75,31 @@ function pushTrayLabels() {
 }
 
 /**
- * The tray's labels and its "Show LED Preview" item. The three lighting items
- * (off, resume, solid) run the lighting transaction in Rust and never reach a
- * window, so they work with the window unloaded.
+ * The tray's labels and its "Show LED Preview" item. The mode check group
+ * (off, Ambilight, solid) runs the lighting transaction in Rust and never
+ * reaches a window, so it works with the window unloaded; Rust checks the
+ * running mode itself, and greys what this window says it has locked.
  */
-export function useTrayIntegration({ onPreviewOpenFailed, status }: TrayIntegrationInput): void {
+export function useTrayIntegration({ onPreviewOpenFailed, status, lockedModes }: TrayIntegrationInput): void {
   const previewOpenFailedRef = useRef(onPreviewOpenFailed);
   previewOpenFailedRef.current = onPreviewOpenFailed;
 
   const statusMode = status?.mode ?? null;
   const statusOutputs = status?.outputs.join(",") ?? "";
+  const locked = lockedModes?.join(",") ?? null;
   useEffect(() => {
-    if (statusMode === null) return;
-    trayStatus = {
-      mode: statusMode,
-      outputs: statusOutputs === "" ? [] : (statusOutputs.split(",") as TrayOutput[]),
-    };
+    if (statusMode === null && locked === null) return;
+    if (statusMode !== null) {
+      trayStatus = {
+        mode: statusMode,
+        outputs: statusOutputs === "" ? [] : (statusOutputs.split(",") as TrayOutput[]),
+      };
+    }
+    if (locked !== null) {
+      trayLockedModes = locked === "" ? [] : (locked.split(",") as LightingModeKind[]);
+    }
     pushTrayLabels();
-  }, [statusMode, statusOutputs]);
+  }, [statusMode, statusOutputs, locked]);
 
   // Register i18n languageChanged hook to re-push tray labels
   useEffect(() => {

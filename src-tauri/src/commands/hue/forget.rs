@@ -7,7 +7,8 @@ use log::{info, warn};
 use tauri::{AppHandle, Runtime};
 
 use super::super::lighting_mode::outputs::{
-    apply_outputs_with, release_hue_with, ApplyOutputsRequest, LightingOrigin,
+    apply_outputs_with, cancel_boot_hue_waits, release_hue_with, ApplyOutputsRequest,
+    LightingOrigin,
 };
 use super::super::lighting_mode::snapshot::OutputTarget;
 use super::super::shell_state::{self, PersistedShellState};
@@ -68,6 +69,7 @@ pub(crate) async fn forget_hue_bridge_with<R: Runtime>(
         }
     }
 
+    cancel_boot_hue_waits(app, "the bridge was forgotten");
     let mut notes: Vec<String> = Vec::new();
     match release_hue_with(app, HueRuntimeTriggerSource::DeviceSurface).await {
         Ok(result) if result.outcome.stop_failed.contains(&OutputTarget::Hue) => {

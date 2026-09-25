@@ -30,7 +30,10 @@ pub(crate) enum HueAreaVerdict {
     Free,
     /// Held by another session, and held is the only thing wrong with it.
     Busy,
-    /// Anything that waiting does not clear: unreachable, re-pair, no channels.
+    /// The bridge did not answer. Polling does not clear it either, but the
+    /// health monitor seeing the bridge answer does.
+    Unreachable,
+    /// Anything else waiting does not clear: re-pair, no channels.
     Other,
 }
 
@@ -150,6 +153,10 @@ pub(crate) fn area_verdict(code: &str, ready: bool, reasons: &[String]) -> HueAr
     {
         return HueAreaVerdict::Busy;
     }
+    // `HUE_STATUS.STREAM_READINESS_FAILED`: the bridge did not answer.
+    if code == "HUE_STREAM_READINESS_FAILED" {
+        return HueAreaVerdict::Unreachable;
+    }
     HueAreaVerdict::Other
 }
 
@@ -178,6 +185,10 @@ mod tests {
         );
         assert_eq!(
             area_verdict("HUE_STREAM_READINESS_FAILED", false, &streamer),
+            HueAreaVerdict::Unreachable
+        );
+        assert_eq!(
+            area_verdict("AUTH_INVALID_RE_PAIR_REQUIRED", false, &[]),
             HueAreaVerdict::Other
         );
     }

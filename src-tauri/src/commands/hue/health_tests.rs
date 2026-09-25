@@ -247,6 +247,78 @@ async fn the_launch_probe_is_spent_by_the_first_pass() {
     assert_eq!(backend.calls().validate, 0);
 }
 
+/// Drives passes back to back on the paused clock until the task would park,
+/// or `until` passes. Returns the moments the bridge probe ran.
+async fn probes_until(
+    monitor: &HueHealthMonitor,
+    backend: &FakeBackend,
+    started: Instant,
+    until: Duration,
+) -> Vec<Duration> {
+    let mut at = Vec::new();
+    loop {
+        let before = backend.calls().validate;
+        let next = monitor.run_once().await;
+        if backend.calls().validate > before {
+            at.push(Instant::now() - started);
+        }
+        match next {
+            Some(wake) if wake - started <= until => advance(wake - Instant::now()).await,
+            _ => return at,
+        }
+    }
+}
+
+/// A launch restore waiting for a bridge that does not answer yet: hidden
+/// probing at 5 s for a minute, then 15 s, and none after three minutes, even
+/// though nobody said to stop — never the whole session. Failures past the
+/// give-up budget do not stop it inside the window.
+#[tokio::test(start_paused = true)]
+async fn a_pending_boot_resume_probes_hidden_on_a_bounded_schedule() {
+    let backend = FakeBackend::configured();
+    backend.answer_validate("HUE_CREDENTIAL_CHECK_FAILED");
+    let (monitor, _) = monitor(&backend);
+    assert_eq!(
+        monitor.run_once().await,
+        None,
+        "the launch probe, then parked"
+    );
+    assert_eq!(backend.calls().validate, 1);
+
+    let started = Instant::now();
+    monitor.set_boot_resume_pending(true);
+    let at = probes_until(&monitor, &backend, started, Duration::from_secs(600)).await;
+
+    let secs: Vec<u64> = at.iter().map(Duration::as_secs).collect();
+    let fast: Vec<u64> = (0..60).step_by(5).collect();
+    let slow: Vec<u64> = (60..180).step_by(15).collect();
+    assert_eq!(secs, [fast, slow].concat());
+    assert!(
+        !monitor.snapshot().bridge.gave_up,
+        "the window is not the give-up budget"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn hidden_probing_stops_the_moment_the_boot_resume_stops_waiting() {
+    let backend = FakeBackend::configured();
+    backend.answer_validate("HUE_CREDENTIAL_CHECK_FAILED");
+    let (monitor, _) = monitor(&backend);
+    monitor.run_once().await;
+
+    let started = Instant::now();
+    monitor.set_boot_resume_pending(true);
+    let at = probes_until(&monitor, &backend, started, Duration::from_secs(12)).await;
+    assert_eq!(at.len(), 3, "{at:?}");
+
+    monitor.set_boot_resume_pending(false);
+    let after = probes_until(&monitor, &backend, Instant::now(), Duration::from_secs(600)).await;
+    assert!(
+        after.is_empty(),
+        "hidden traffic after the wait ended: {after:?}"
+    );
+}
+
 /// The whole task, idle in the tray for ten minutes: the one launch probe and
 /// no other bridge call, then a probe as soon as the window shows.
 #[tokio::test(start_paused = true)]
