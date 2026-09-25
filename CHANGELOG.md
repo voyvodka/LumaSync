@@ -145,6 +145,20 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Hue: setting up a bridge for the first time no longer says your credentials have expired before
+  you have paired anything. The card asks you to pair, with a line on the link button, and a scan
+  that finds several bridges lets you pick one instead of choosing the first. Choosing an area has
+  a way out. A bridge that is offline at launch shows Retry, Rediscover and an address field
+  instead of an empty start checklist, and a bridge that moved to a new address is followed there,
+  whether a rediscovery finds it or you type the address. An area another app is streaming to
+  says so instead of showing Ready, and your own area is no longer listed as in use by another app
+  while you stream to it. The channel map says on the page why saving is off while Hue runs, and
+  a fault card no longer shows an unrelated success code as its reason.
+- WLED: a successful connect or a confirmed test reads as a success instead of a warning, every
+  answer the device can give is explained in your language, and an address that is not a WLED
+  device no longer tells you to try a protocol setting that does not exist.
+- Turkish: the whole app now speaks to you informally and names each Hue state one way; the tray
+  message no longer mentions a menu bar on Windows and Linux.
 - LED Setup: unsaved changes are no longer lost when you switch tabs, go to compact or follow a
   notice — you are asked to keep editing or discard first, and a page you have not touched no
   longer asks at all. A running test pattern now follows your edits on the strip, a failed save

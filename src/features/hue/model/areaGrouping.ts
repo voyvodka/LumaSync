@@ -45,6 +45,20 @@ export function normalizeAreas(
   return Array.from(groups.values());
 }
 
+/** The readiness each row carries, keyed by area id, for a re-list to keep. */
+export function readinessOf(areaGroups: HueAreaGroup[]): Map<string, HueAreaReadiness> {
+  const byId = new Map<string, HueAreaReadiness>();
+  for (const area of flattenAreaGroups(areaGroups)) {
+    if (area.readiness) byId.set(area.id, area.readiness);
+  }
+  return byId;
+}
+
+/** Another session holds the area — the bridge said so on the last check. */
+export function isAreaHeldByAnotherApp(area: HueAreaRow | null): boolean {
+  return area?.readiness?.ready === false && area.readiness.reasons.includes(ACTIVE_STREAMER_REASON);
+}
+
 export function flattenAreaGroups(areaGroups: HueAreaGroup[]): HueAreaRow[] {
   return areaGroups.flatMap((group) => group.areas);
 }

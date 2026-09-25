@@ -41,7 +41,7 @@ pub use readiness::{
 };
 #[allow(unused_imports)]
 pub(crate) use readiness::{
-    check_hue_stream_readiness_with_freshness, ActiveStreamerView, AreaListError,
+    check_hue_stream_readiness_with_freshness, clear_own_stream, ActiveStreamerView, AreaListError,
     ACTIVE_STREAMER_REASON,
 };
 

@@ -66,6 +66,7 @@ function Harness() {
     selectBridge: hook.selectBridge,
     setManualIp: hook.setManualIp,
     submitManualIp: hook.submitManualIp,
+    recheckBridge: hook.recheckBridge,
     pair: hook.pair,
     refreshAreas: hook.refreshAreas,
     selectArea: hook.selectArea,
@@ -141,12 +142,14 @@ describe("HueBridgesCategory — named pairing refusals", () => {
     expectNoCredentialFault();
   });
 
-  it("keeps a real credential rejection on the re-pair prompt", async () => {
+  it("asks to pair, never calls a key expired, when there is no key yet (H-5)", async () => {
     // `pair_hue_bridge` never emits this (there is no key yet to reject); the
     // cast keeps the card-state branch covered without typing it as wire.
     await pairAndGetRefused("HUE_CREDENTIAL_INVALID" as HuePairBridgeStatusCode);
 
-    expect(screen.getAllByText("hue:credential.needsRepair").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("hue-pair-prompt")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "hue:page.pair" })).toBeInTheDocument();
     expect(screen.queryByTestId("hue-pairing-deferred")).toBeNull();
+    expectNoCredentialFault();
   });
 });

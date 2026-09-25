@@ -63,6 +63,7 @@ function hueState(runtimeStatus: HueRuntimeStatusView): UseHueOnboardingResult {
     selectBridge: () => {},
     setManualIp: () => {},
     submitManualIp: noop,
+    recheckBridge: noop,
     pair: noop,
     refreshAreas: noop,
     selectArea: () => {},

@@ -19,7 +19,7 @@ const settings: Catalogue<typeof enSettings> = {
     },
     about: {
       title: "Hakkında",
-      sub: "Build · lisans",
+      sub: "Sürüm · lisans",
     },
     telemetry: {
       sub: "Canlı akış",
@@ -46,7 +46,7 @@ const settings: Catalogue<typeof enSettings> = {
   },
   startupTray: {
     launchAtLogin: "Girişte başlat",
-    launchAtLoginDescription: "LumaSync'i oturum açtığınızda otomatik başlatın.",
+    launchAtLoginDescription: "Oturum açtığında LumaSync'i kendiliğinden başlat.",
     readError: "LumaSync'in girişte başlayıp başlamadığı okunamadı",
     writeError: "Girişte başlatma değiştirilemedi — tekrar dene",
   },

@@ -23,11 +23,11 @@ const updater: Catalogue<typeof enUpdater> = {
   error: {
     eyebrow: "Güncelleme başarısız",
     title: "Kurulum tamamlanamadı",
-    body: "Mevcut sürümü kullanmaya devam edebilirsiniz. Aşağıdaki hatayı inceleyin veya tekrar deneyin.",
+    body: "Mevcut sürümü kullanmaya devam edebilirsin. Aşağıdaki hataya bak ya da tekrar dene.",
     boxTitle: "Güncelleme hatası",
     checkEyebrow: "Güncelleme kontrolü başarısız",
     checkTitle: "Güncelleme sunucusuna ulaşılamadı",
-    checkBody: "Hiçbir şey değişmedi — çalıştırdığınız sürümdesiniz. Bu genelde bağlantı olmadığı ya da ağda bir şeyin isteği engellediği anlamına gelir.",
+    checkBody: "Hiçbir şey değişmedi — hâlâ çalıştırdığın sürümdesin. Bu genelde bağlantı olmadığı ya da ağda bir şeyin isteği engellediği anlamına gelir.",
     detailTitle: "Teknik ayrıntı",
   },
   actions: {
@@ -48,7 +48,7 @@ const updater: Catalogue<typeof enUpdater> = {
   checkAction: "Güncellemeleri kontrol et",
   betaChannel: "Beta kanalı",
   betaChannelDescription:
-    "Kararlı sürümlerin yanı sıra ön sürümleri de al. Ön sürümler CI tarafından derlenip test edilir, ancak paketlenmiş kurulum dosyasının kendisi hiçbir zaman çalıştırılarak sınanmaz — pürüz bekleyin.",
+    "Kararlı sürümlerin yanı sıra ön sürümleri de al. Ön sürümler CI tarafından derlenip test edilir, ancak paketlenmiş kurulum dosyasının kendisi hiçbir zaman çalıştırılarak sınanmaz — pürüz bekle.",
   checking: "Kontrol ediliyor…",
   upToDate: "En son sürümü kullanıyorsun · {{time}} itibarıyla",
 };

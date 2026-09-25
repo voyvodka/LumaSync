@@ -52,12 +52,36 @@ pub struct HueStreamReadinessResponse {
 
 /// List the bridge's Entertainment Areas for the area picker. Always a
 /// forced round-trip so a newly created area shows up immediately.
+///
+/// The `Result` is structural (a `State` argument requires it); every path is `Ok`.
 #[tauri::command]
 pub async fn list_hue_entertainment_areas(
     bridge_ip: String,
     username: String,
-) -> HueEntertainmentAreaListResponse {
-    if !is_valid_bridge_addr(&bridge_ip) {
+    runtime_state: tauri::State<'_, HueRuntimeStateStore>,
+) -> Result<HueEntertainmentAreaListResponse, String> {
+    let mut response = list_areas(&bridge_ip, username).await;
+    clear_own_stream(&mut response.areas, &bridge_ip, &runtime_state);
+    Ok(response)
+}
+
+/// The bridge names our own running session as the `active_streamer` of the
+/// area we stream to, so the picker flagged that area "in use by another app"
+/// while we held it. Same ownership rule as [`ActiveStreamerView::Ours`].
+pub(crate) fn clear_own_stream(
+    areas: &mut [HueEntertainmentArea],
+    bridge_ip: &str,
+    runtime_state: &HueRuntimeStateStore,
+) {
+    for area in areas.iter_mut().filter(|area| area.active_streamer) {
+        if streams_area(runtime_state, bridge_ip, &area.id) {
+            area.active_streamer = false;
+        }
+    }
+}
+
+async fn list_areas(bridge_ip: &str, username: String) -> HueEntertainmentAreaListResponse {
+    if !is_valid_bridge_addr(bridge_ip) {
         return HueEntertainmentAreaListResponse {
             status: command_status(
                 "HUE_IP_INVALID",
@@ -82,7 +106,7 @@ pub async fn list_hue_entertainment_areas(
 
     // User-initiated listing (area picker / refresh) — always a real trip so a
     // freshly created Entertainment Area shows up immediately.
-    match load_hue_entertainment_areas(&bridge_ip, &username, HueReadFreshness::Force).await {
+    match load_hue_entertainment_areas(bridge_ip, &username, HueReadFreshness::Force).await {
         Ok(areas) if areas.is_empty() => HueEntertainmentAreaListResponse {
             status: command_status(
                 "HUE_AREA_LIST_EMPTY",

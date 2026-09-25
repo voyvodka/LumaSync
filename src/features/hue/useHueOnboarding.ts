@@ -99,6 +99,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     selectBridge: core.selectBridge,
     setManualIp: core.setManualIp,
     submitManualIp: core.submitManualIp,
+    recheckBridge: core.recheckBridge,
     pair: core.pair,
     refreshAreas: core.refreshAreas,
     selectArea: core.selectArea,

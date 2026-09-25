@@ -67,6 +67,7 @@ function hueState(overrides: Partial<UseHueOnboardingResult> = {}): UseHueOnboar
     selectBridge: () => {},
     setManualIp: () => {},
     submitManualIp: noop,
+    recheckBridge: noop,
     pair: noop,
     refreshAreas: noop,
     selectArea: () => {},

@@ -48,7 +48,7 @@ const lights: Catalogue<typeof enLights> = {
     outputs: "Çıkışlar",
     addAria: "Çıkış ekle",
     addHueZoneTooltip: "Yeni bir Hue bölgesi ekle",
-    addDisabledTooltip: "Bölge eklemek için bir Hue köprüsü eşleyin",
+    addDisabledTooltip: "Bölge eklemek için bir Hue köprüsü eşle",
     rows: {
       usbName: "USB",
       usbType: "CH340",

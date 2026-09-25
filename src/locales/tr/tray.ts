@@ -14,8 +14,8 @@ const tray: Catalogue<typeof enTray> = {
     runningNoOutputs: "● {{mode}}",
   },
   hint: {
-    title: "LumaSync menü çubuğunda çalışıyor",
-    body: "Pencereyi geri açmak için menü çubuğundaki simgeye tıkla. Bu mesaj sadece ilk kapatmada görünür.",
+    title: "LumaSync sistem tepsisinde çalışıyor",
+    body: "Pencereyi geri açmak için sistem tepsisindeki simgeye tıkla. Bu mesaj sadece ilk kapatmada görünür.",
   },
 };
 
