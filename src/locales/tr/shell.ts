@@ -35,7 +35,7 @@ const shell: Catalogue<typeof enShell> = {
       retrying: "DENİYOR",
       failed: "BAŞARISIZ",
       waiting: "BEKLİYOR",
-      leftOut: "DIŞARIDA",
+      leftOut: "HARİÇ",
     },
     reconnect: {
       usbAriaLabel: "Cihazlar → USB'yi aç",
