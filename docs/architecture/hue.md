@@ -465,7 +465,12 @@ Sync puts it back as it was, and so do we now (`commands/hue/light_restore.rs`).
 - **Never under another stream.** Before writing, the restore reads the area (`status` /
   `active_streamer`, as readiness does). Our stream is over by then, so an active area is another
   app — or a reconnect of ours the stop overtook, which gives it back within moments — and the
-  restore waits up to the watch window for it to come free, then leaves the lights alone. During the
+  restore waits up to the watch window for it to come free, then leaves the lights alone. Only a
+  read that says the area is free lets the writes go (a 404 counts: nobody streams to an area the
+  bridge no longer has). A read that could not be understood — a garbled body, or a first read the
+  window cut off because the client took long to come up on a loaded machine — is asked again, never
+  taken for free: it once was, and a CI run on macOS restored both lamps under another app's stream.
+  A window that ends without one clear answer leaves the lights alone (`AreaUnknown`). During the
   watch a light reading `mode: streaming` is never written, and if the area is active the watch
   ends. A restore also asks the runtime before every write and read: once a newer session of ours
   has begun (`Starting`, `Running`, `Reconnecting`) it writes nothing more. `stop_hue_stream`
@@ -611,6 +616,16 @@ and hands the stop a `HueLightsAfterStop`.
   whose read failed, or that was already `streaming`, is left as the bridge leaves it, as the
   restore leaves it. An Off with no session to end — nothing ran, or a second Off — has no snapshot
   and writes nothing; so does a launch whose saved mode is Off, which never stops anything.
+- **A start switches the off lights on first.** After Off every lamp of the area reads `on: false`,
+  and the bridge is not documented to switch a lamp on for a stream — during entertainment the light
+  resource keeps reading off. So the start, right after capturing the snapshot and before the sender
+  activates the area, PUTs `{"on":{"on":true}}` to each light the capture read off
+  (`off_lights_switched_on`, `switch_on_lights`): one read of the area first, written only if it
+  says nobody streams there, then paced to the light budget within `HUE_LIGHT_SWITCH_ON_BUDGET`
+  (1.5 s), no watch, errors logged and never fatal, abandoned if a stop overtakes the start. The
+  snapshot keeps them off, so the session's restore — or a later Off — leaves them off again. A
+  reconnect does not do it: its lamps were on the stream a moment ago. The cost is a brief glimpse
+  of each lamp's own colour before the first frame.
 - **Not covered: a start that a stop overtook.** Such a start restores what it captured when it
   settles (`settle_abandoned_start`), since the stop that overtook it found nothing to act on. The
   lighting transaction takes turns, so a user's Off cannot overtake a transaction's own start; only
