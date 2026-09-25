@@ -135,12 +135,10 @@ const device: Catalogue<typeof enDevice> = {
   page: {
     rail: {
       devices: "Cihazlar",
-      other: "Diğer",
       usbStrips: "USB Şeritleri",
       hueBridges: "Hue Köprüleri",
       wled: "WLED",
       displays: "Ekranlar",
-      manualEntry: "Manuel Giriş",
       activeLabel: "{{count}} etkin",
     },
     header: {
@@ -151,8 +149,6 @@ const device: Catalogue<typeof enDevice> = {
       hueSub: "Philips Hue eğlence alanları",
       displaysTitle: "Ekranlar",
       displaysSub: "Ambilight yakalama için kullanılabilir ekranlar",
-      manualTitle: "Manuel Giriş",
-      manualSub: "Cihaz bilgilerini elle gir",
     },
     actions: {
       rescan: "Yeniden Tara",
@@ -212,9 +208,6 @@ const device: Catalogue<typeof enDevice> = {
       capturing: "Yakalanıyor",
       captureSource: "Yakalama kaynağı",
       chooseInLedSetup: "Yakalanan ekranı LED Kurulumu'nda seç",
-    },
-    manual: {
-      body: "Manuel cihaz girişi henüz yok. Şerit eklemek için USB Şeritleri'nde yeniden tara; bir WLED cihazını IP adresiyle ekleyebilirsin.",
     },
     wled: {
       title: "WLED Cihazları",

@@ -21,7 +21,6 @@ import { useDeviceConnection } from "@/features/device/useDeviceConnection";
 import { useHueOnboarding } from "@/features/hue/useHueOnboarding";
 import { DisplaysCategory } from "./device/DisplaysCategory";
 import { HueBridgesCategory } from "./device/HueBridgesCategory";
-import { ManualEntryCategory } from "./device/ManualEntryCategory";
 import { UsbStripsCategory } from "./device/UsbStripsCategory";
 import { useActiveWledSink } from "@/features/device/useWledSink";
 import { WledCategory } from "./device/WledCategory";
@@ -31,14 +30,13 @@ import {
   IconHueBridgeGlyph,
   IconDisplayGlyph,
   IconWledGlyph,
-  IconPencil,
 } from "@/shared/ui/icons";
 import { parseCommandError } from "@/shared/contracts/status";
 import type { TranslationKey } from "@/features/i18n/catalogue";
 
-export type DeviceCategory = "usb" | "hue" | "wled" | "displays" | "manual";
+export type DeviceCategory = "usb" | "hue" | "wled" | "displays";
 
-type RailGroup = "devices" | "other";
+type RailGroup = "devices";
 
 export interface DeviceCategoryDescriptor {
   group: RailGroup;
@@ -52,7 +50,6 @@ export const DEVICE_CATEGORIES = {
   hue: { group: "devices", Icon: IconHueBridgeGlyph, labelKey: "device:page.rail.hueBridges" },
   wled: { group: "devices", Icon: IconWledGlyph, labelKey: "device:page.rail.wled" },
   displays: { group: "devices", Icon: IconDisplayGlyph, labelKey: "device:page.rail.displays" },
-  manual: { group: "other", Icon: IconPencil, labelKey: "device:page.rail.manualEntry" },
 } satisfies Record<DeviceCategory, DeviceCategoryDescriptor>;
 
 function deviceCategory(category: DeviceCategory): DeviceCategoryDescriptor {
@@ -61,7 +58,6 @@ function deviceCategory(category: DeviceCategory): DeviceCategoryDescriptor {
 
 const RAIL_GROUP_HEADINGS = {
   devices: "device:page.rail.devices",
-  other: "device:page.rail.other",
 } satisfies Record<RailGroup, TranslationKey>;
 
 const DEVICE_RAIL_GROUPS = (Object.keys(RAIL_GROUP_HEADINGS) as RailGroup[]).map((group) => ({
@@ -321,13 +317,12 @@ export function DeviceSection({
 
   // Every badge counts what is active, never what merely exists: an
   // enumerated port or a paired-but-idle bridge put a number beside a header
-  // saying nothing was connected. Displays and manual entry have no such state.
+  // saying nothing was connected. Displays have no such state.
   const railCounts: Record<DeviceCategory, number> = {
     usb: connectedPort ? 1 : 0,
     hue: hueActive ? 1 : 0,
     wled: activeWledIp === null ? 0 : 1,
     displays: 0,
-    manual: 0,
   };
 
   return (
@@ -396,8 +391,6 @@ export function DeviceSection({
           capturing={ambilightActive}
           onOpenLedSetup={onOpenLedSetup}
         />
-
-        <ManualEntryCategory isActive={activeCategory === "manual"} />
       </div>
     </div>
   );

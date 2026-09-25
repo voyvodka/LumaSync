@@ -315,7 +315,7 @@ layout, and only for a connect the user made: the manual connect's `connectionEv
 had nudged a user with no layout on every launch. It gives way to the onboarding step and the calibration notice, which say the same.
 
 **A Devices rail badge counts what is active.** A connected strip, a streaming bridge, a bound WLED
-panel; displays and manual entry have no badge. An enumerated port or a paired-but-idle bridge
+panel; displays have no badge. An enumerated port or a paired-but-idle bridge
 used to put a number beside a header saying nothing was connected.
 
 ## Capabilities
