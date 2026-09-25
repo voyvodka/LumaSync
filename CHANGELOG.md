@@ -53,6 +53,13 @@ https://keepachangelog.com/en/1.1.0/
   you prefer that, choose "Go back" under "When you press Off, Hue lights" on Devices → Hue
   Bridges. Quitting LumaSync, another app taking over your Hue lights, or taking Hue out of a
   running mode still puts them back as they were, and launching with lighting off touches nothing.
+- LED Setup asks how many LEDs your strip has before anything else, then shares them out over the
+  edges by your screen's shape, leaving room for the stand gap, so the edges always add up to your
+  strip. Adjust any edge afterwards, or choose which edges the strip runs along. With a WLED device
+  its own LED count is filled in for you. Until now the first layout was guessed from the screen's
+  resolution, so a high-resolution laptop screen got 164 LEDs whatever strip was on it. Reset keeps
+  your total and shares it out again; "Change total LED count" asks again. A saved layout opens
+  as before.
 - Keyboard: the mode buttons — on the Lights page, in the compact window and in the LED test
   popup — are one group you Tab into once and move through with the arrow keys, Home and End. The
   same goes for the test pattern tiles and speeds, and for LED Setup's start edge, start point and
@@ -154,9 +161,13 @@ https://keepachangelog.com/en/1.1.0/
   you pick one. The firmware profile moved here from the Lights page. After a connect you make, the
   app stays on Devices and a notice points to LED Setup, instead of jumping there before you have
   seen the strip settings; reconnecting on its own at launch does not bring the notice back. While
-  the app is reconnecting to a strip on its own, you can press Connect to take over. The rail
-  groups read Devices and Other, and each badge counts what is active: a connected strip, a
-  streaming bridge, a bound WLED device.
+  the app is reconnecting to a strip on its own, you can press Connect to take over. Each rail
+  badge counts what is active: a connected strip, a streaming bridge, a bound WLED device.
+
+### Removed
+
+- Devices: the Manual Entry page, which only said manual entry was not available yet. A Hue bridge
+  is added by IP address on Hue Bridges and a WLED device on WLED, as before.
 
 ### Fixed
 

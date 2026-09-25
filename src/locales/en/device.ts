@@ -134,12 +134,10 @@ export default {
   page: {
     rail: {
       devices: "Devices",
-      other: "Other",
       usbStrips: "USB Strips",
       hueBridges: "Hue Bridges",
       wled: "WLED",
       displays: "Displays",
-      manualEntry: "Manual Entry",
       activeLabel: "{{count}} active",
     },
     header: {
@@ -150,8 +148,6 @@ export default {
       hueSub: "Philips Hue entertainment areas",
       displaysTitle: "Displays",
       displaysSub: "Screens available for Ambilight capture",
-      manualTitle: "Manual Entry",
-      manualSub: "Enter device details by hand",
     },
     actions: {
       rescan: "Rescan",
@@ -211,9 +207,6 @@ export default {
       capturing: "Capturing",
       captureSource: "Capture source",
       chooseInLedSetup: "Choose the capture display in LED Setup",
-    },
-    manual: {
-      body: "Manual device entry isn't available yet. To add a strip, rescan on USB Strips; a WLED device can be added by its IP address.",
     },
     wled: {
       title: "WLED Devices",

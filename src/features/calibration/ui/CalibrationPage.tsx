@@ -13,8 +13,11 @@ import {
   type AnchorEndpoint,
 } from "../model/startAnchor";
 import type { CalibrationValidationCode } from "../model/validation";
+import { litEdges } from "../model/splitTotal";
 import { useCalibrationSession } from "../state/useCalibrationSession";
+import { dockChoiceClass, FOCUS_RING } from "./dockStyles";
 import { LedRoomCanvas } from "./LedRoomCanvas";
+import { TotalCountStep } from "./TotalCountStep";
 import { clamp } from "@/shared/lib/math";
 import { Callout } from "@/shared/ui/Callout";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
@@ -46,9 +49,6 @@ const VALIDATION_MESSAGE_KEYS = {
   // still fails to compile if a code is added to the union without a string.
 } as const satisfies Record<CalibrationValidationCode, string>;
 
-const FOCUS_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/60";
-
 export function CalibrationPage({
   initialConfig,
   draftCounts,
@@ -61,6 +61,8 @@ export function CalibrationPage({
     config,
     confirmDiscard,
     countsFromRoomMap,
+    totalStepOpen,
+    knownTotal,
     chipType,
     isSaving,
     saveError,
@@ -77,6 +79,9 @@ export function CalibrationPage({
     handleSelectDisplay,
     handleCountChange,
     handleReset,
+    handleApplyTotal,
+    handleOpenTotalStep,
+    handleCloseTotalStep,
     handleBottomMissingChange,
     handleDirectionChange,
     handleEdgeChange,
@@ -111,6 +116,18 @@ export function CalibrationPage({
       if (display) void handleSelectDisplay(display);
     },
   });
+
+  // The step unmounts under the button that closed it; focus lands on the
+  // control that brings it back rather than on the document. Opening it by
+  // hand moves focus into the step's field.
+  const changeTotalRef = useRef<HTMLButtonElement | null>(null);
+  const [focusAfterStep, setFocusAfterStep] = useState<"step" | "change" | null>(null);
+  useEffect(() => {
+    if (focusAfterStep === "change" && !totalStepOpen) {
+      changeTotalRef.current?.focus();
+      setFocusAfterStep(null);
+    }
+  }, [focusAfterStep, totalStepOpen]);
 
   const hasErrors = Boolean(
     testPatternError
@@ -325,14 +342,45 @@ export function CalibrationPage({
             </div>
           </DockSection>
 
-          <DockSection title={t("calibration:page.dockLedCountPerEdge")}>
-            <div className="flex flex-col gap-1.5">
-              <CountStepper label={t("calibration:page.edgeTop")} value={counts.top} onChange={(v) => handleCountChange("top", v)} />
-              <CountStepper label={t("calibration:page.edgeRight")} value={counts.right} onChange={(v) => handleCountChange("right", v)} />
-              <CountStepper label={t("calibration:page.edgeBottom")} value={counts.bottom} onChange={(v) => handleCountChange("bottom", v)} />
-              <CountStepper label={t("calibration:page.edgeLeft")} value={counts.left} onChange={(v) => handleCountChange("left", v)} />
-            </div>
-          </DockSection>
+          {totalStepOpen ? (
+            <DockSection title={t("calibration:page.totalStep.title")}>
+              <TotalCountStep
+                initialTotal={knownTotal ?? (totalLeds > 0 ? totalLeds : null)}
+                initialEdges={litEdges(counts)}
+                knownTotal={knownTotal}
+                chipType={chipType}
+                autoFocus={focusAfterStep === "step"}
+                onApply={(total, edges) => {
+                  setFocusAfterStep("change");
+                  handleApplyTotal(total, edges);
+                }}
+                onSkip={() => {
+                  setFocusAfterStep("change");
+                  handleCloseTotalStep();
+                }}
+              />
+            </DockSection>
+          ) : (
+            <DockSection title={t("calibration:page.dockLedCountPerEdge")}>
+              <div className="flex flex-col gap-1.5">
+                <CountStepper label={t("calibration:page.edgeTop")} value={counts.top} onChange={(v) => handleCountChange("top", v)} />
+                <CountStepper label={t("calibration:page.edgeRight")} value={counts.right} onChange={(v) => handleCountChange("right", v)} />
+                <CountStepper label={t("calibration:page.edgeBottom")} value={counts.bottom} onChange={(v) => handleCountChange("bottom", v)} />
+                <CountStepper label={t("calibration:page.edgeLeft")} value={counts.left} onChange={(v) => handleCountChange("left", v)} />
+                <button
+                  ref={changeTotalRef}
+                  type="button"
+                  onClick={() => {
+                    setFocusAfterStep("step");
+                    handleOpenTotalStep();
+                  }}
+                  className={`min-h-8 self-start rounded-md px-1 text-xs text-amber underline-offset-2 hover:underline ${FOCUS_RING}`}
+                >
+                  {t("calibration:page.totalStep.change")}
+                </button>
+              </div>
+            </DockSection>
+          )}
 
           {counts.bottom > 0 && (
             <DockSection title={t("calibration:page.dockStandGap")}>
@@ -586,15 +634,6 @@ const ENDPOINT_LABEL_KEYS = {
   "gap-left": "calibration:page.anchorGapLeft",
   end: "calibration:page.anchorEnd",
 } as const satisfies Record<AnchorEndpoint, TranslationKey>;
-
-/** One option of a dock choice group; `layout` carries what differs between the groups. */
-function dockChoiceClass(active: boolean, layout: string): string {
-  return `min-h-8 rounded-md border py-1.5 tracking-[0.1em] transition-colors ${FOCUS_RING} ${layout} ${
-    active
-      ? "border-amber/40 bg-amber/10 text-amber"
-      : "border-line-2 bg-panel text-ink-dim hover:border-line-2"
-  }`;
-}
 
 // Same keyboard-input pattern as CountStepper, with the
 // `max` cap (counts.bottom) preserved on commit so an out-of-range
