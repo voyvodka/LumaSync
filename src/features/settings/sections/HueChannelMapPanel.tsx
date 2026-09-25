@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { HueAreaChannelInfo } from "@/features/hue/hueOnboardingApi";
@@ -133,6 +133,7 @@ export function HueChannelMapPanel({
   zones = NO_ZONES,
 }: Props) {
   const { t } = useTranslation();
+  const busyNoteId = useId();
 
   // Stable refs so the effects below do not cycle on new array identities.
   const placementsRef = useRef<HueChannelPlacement[]>(placements ?? []);
@@ -373,6 +374,8 @@ export function HueChannelMapPanel({
   const bridgeBusy = isStreaming || isStale;
   const hasSaveAction = Boolean(bridgeIp && areaId) && username !== undefined;
   const actionBusy = isSaving || isPulling;
+  // Said on the page, not in a tooltip: a disabled button shows no title.
+  const busyNote = isStreaming && !isStale ? t("hue:channelMap.streamingNote") : null;
 
   return (
     <section
@@ -461,7 +464,7 @@ export function HueChannelMapPanel({
             <Button
               disabled={bridgeBusy || actionBusy || channels.length === 0}
               busy={isPulling}
-              title={bridgeBusy ? t("hue:channelMap.saveToBridgeTooltip") : undefined}
+              aria-describedby={busyNote ? busyNoteId : undefined}
               onClick={() => setPendingConfirm("pull")}
             >
               {t("hue:channelMap.pullFromBridge")}
@@ -470,18 +473,18 @@ export function HueChannelMapPanel({
               variant="primary"
               disabled={bridgeBusy || actionBusy}
               busy={isSaving}
-              title={
-                isStale
-                  ? t(EMPTY_STATE_KEYS.unreachable.heading)
-                  : isStreaming
-                    ? t("hue:channelMap.saveToBridgeTooltip")
-                    : undefined
-              }
+              title={isStale ? t(EMPTY_STATE_KEYS.unreachable.heading) : undefined}
+              aria-describedby={busyNote ? busyNoteId : undefined}
               onClick={() => setPendingConfirm("save")}
             >
               {isSaving ? t("hue:channelMap.saving") : t("hue:channelMap.saveToBridge")}
             </Button>
           </div>
+          {busyNote ? (
+            <p className="lm-chmap-busy-note" id={busyNoteId} data-testid="hue-chmap-streaming-note">
+              {busyNote}
+            </p>
+          ) : null}
           {actionResult !== null && renderResult(actionResult)}
         </div>
       )}

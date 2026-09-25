@@ -574,7 +574,8 @@ enum ConnectOutcome {
 /// Open the given serial port, run the bootloader settle delay, and
 /// register a fresh `SerialSink` in `ActiveSinkRegistry` on success.
 #[tauri::command]
-pub async fn connect_serial_port(
+pub async fn connect_serial_port<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     port_name: String,
     chip_type: Option<LedChipType>,
     connection_state: tauri::State<'_, SerialConnectionState>,
@@ -611,6 +612,9 @@ pub async fn connect_serial_port(
     };
 
     set_last_status(&connection_state, status.clone());
+    if status.connected {
+        super::lighting_mode::outputs::note_local_sink_connected(&app);
+    }
     // Always Ok — every failure path returns a populated `SerialConnectionStatus`
     // with `connected: false` and a coded `status.code`. The Result wrapper is
     // mandated by Tauri's async command + tauri::State lifetime constraint.

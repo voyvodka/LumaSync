@@ -25,16 +25,21 @@ export interface LedModeEnableAttempt {
   shouldOpenCalibration: boolean;
 }
 
+/**
+ * `localOutputBound`: a strip or WLED panel is connected. Every fresh install
+ * has `usb` selected, so selection alone would lock a Hue-only user out of
+ * every mode behind a layout for a strip they do not own; Rust asks for a
+ * layout only when one is there too.
+ */
 export function canEnableLedMode(
   calibration?: LedCalibrationConfig,
   selectedTargets?: HueRuntimeTarget[],
+  localOutputBound = true,
 ): LedModeGuardResult {
-  // If targets are exclusively Hue (no USB), skip calibration requirement.
   // USB target (or no targets = default to USB) requires calibration.
   const usesUsb =
-    !selectedTargets ||
-    selectedTargets.length === 0 ||
-    selectedTargets.includes("usb");
+    localOutputBound &&
+    (!selectedTargets || selectedTargets.length === 0 || selectedTargets.includes("usb"));
 
   // Rust refuses a layout past the cap, so offering the mode would only fail.
   const usable = calibration !== undefined && calibration.totalLeds <= LED_CALIBRATION_MAX_TOTAL_LEDS;

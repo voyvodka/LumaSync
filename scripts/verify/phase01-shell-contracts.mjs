@@ -1677,7 +1677,7 @@ checkWireUnion(
     ),
     ...constMembers(hueSource, "HUE_SOLID_COLOR_STATUS"),
   ],
-  19
+  20
 );
 
 checkWireUnion(

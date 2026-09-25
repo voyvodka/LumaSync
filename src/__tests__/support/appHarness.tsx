@@ -394,6 +394,7 @@ export function reply(
     outcome: {
       hueStartCode: null,
       hueLeftOut: null,
+      hueNotStarted: null,
       applyStatus: null,
       stopFailed: [],
       droppedTargets: [],

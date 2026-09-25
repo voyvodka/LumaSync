@@ -14,6 +14,8 @@ export interface UsbTargetReconcilerInput {
   isConnected: boolean;
   bootstrapDone: boolean;
   selectedOutputTargets: HueRuntimeTarget[];
+  /** A mode runs, so an unplug has something to continue. */
+  lightingRunning: boolean;
   /** Read by the `[]`-dep connection-event subscriber, which must not re-subscribe. */
   selectedOutputTargetsRef: RefObject<HueRuntimeTarget[]>;
   hueStartConfigRef: RefObject<unknown>;
@@ -46,6 +48,7 @@ export function useUsbTargetReconciler({
   isConnected,
   bootstrapDone,
   selectedOutputTargets,
+  lightingRunning,
   selectedOutputTargetsRef,
   hueStartConfigRef,
   onSelectTargets,
@@ -86,7 +89,8 @@ export function useUsbTargetReconciler({
         const nextTargets = selectedOutputTargets.filter((t) => t !== "usb");
         if (nextTargets.length > 0) {
           void onDropUsbTarget(nextTargets);
-          setUsbDisconnectNotice("continuing");
+          // With the mode Off nothing continues; the selection still changes.
+          if (lightingRunning) setUsbDisconnectNotice("continuing");
         } else {
           // Nothing else to run on, so a running mode ends and the selection
           // stays, as Off leaves it. Told only once it has: with the mode
@@ -103,7 +107,15 @@ export function useUsbTargetReconciler({
     }
 
     prevUsbConnectedRef.current = isConnected;
-  }, [isConnected, selectedOutputTargets, onSelectTargets, onDropUsbTarget, onLastTargetUnplugged, bootstrapDone]);
+  }, [
+    isConnected,
+    selectedOutputTargets,
+    lightingRunning,
+    onSelectTargets,
+    onDropUsbTarget,
+    onLastTargetUnplugged,
+    bootstrapDone,
+  ]);
 
   // Own effect keyed on the flag it clears — the hot-plug effect above re-runs
   // whenever `selectedOutputTargets` changes, which its own unplug branch causes.

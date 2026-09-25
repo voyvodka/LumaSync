@@ -90,6 +90,9 @@ export interface UseHueOnboardingResult {
   selectBridge: (bridgeId: string | null) => void;
   setManualIp: (value: string) => void;
   submitManualIp: () => Promise<void>;
+  /** Asks the selected bridge again whether the saved key works — the way
+   *  back from the offline card once the bridge is reachable. */
+  recheckBridge: () => Promise<void>;
   /** Pairs the selected bridge, or selects `bridgeId` first. Keeps re-asking
    *  while the bridge waits for its link button, for a bounded window. */
   pair: (bridgeId?: string) => Promise<void>;

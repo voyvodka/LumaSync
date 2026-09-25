@@ -65,6 +65,15 @@ describe("canEnableLedMode", () => {
     });
   });
 
+  // A fresh install selects `usb`; a Hue-only user was locked out of every mode.
+  it("returns canEnable when USB is selected but no strip or WLED panel is connected", () => {
+    expect(canEnableLedMode(undefined, ["usb", "hue"], false)).toEqual({
+      canEnable: true,
+      reason: null,
+    });
+    expect(canEnableLedMode(undefined, ["usb"], false).canEnable).toBe(true);
+  });
+
   it("returns CALIBRATION_REQUIRED for undefined targets (backward compatible)", () => {
     expect(canEnableLedMode(undefined, undefined)).toEqual({
       canEnable: false,

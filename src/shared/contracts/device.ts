@@ -589,9 +589,9 @@ export const WLED_STATUS = {
   /** `connect_wled_sink` / `test_wled_bridge` could not reach the configured IP. */
   BRIDGE_UNREACHABLE: "WLED_BRIDGE_UNREACHABLE",
   /**
-   * The bridge replied but rejected our wire protocol (e.g. user picked
-   * DDP against a 0.8.x WLED build that only speaks WARLS). User must
-   * pick the alternate protocol on the same port.
+   * The address answered `/json/info`, but not as WLED: a non-2xx status, a
+   * redirect (never followed), a body that is not WLED JSON or is oversized,
+   * or no `leds.count`. There is no protocol to switch to — the fix is the IP.
    */
   PROTOCOL_MISMATCH: "WLED_PROTOCOL_MISMATCH",
   /**

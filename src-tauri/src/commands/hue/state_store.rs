@@ -998,6 +998,42 @@ mod tests {
         assert!(!streams_area(&store, "192.168.1.2", "area"));
     }
 
+    /// The area picker read the bridge's `active_streamer` raw, so while we
+    /// streamed, our own area was listed as held by another app.
+    #[test]
+    fn the_area_list_does_not_flag_the_area_our_own_stream_holds() {
+        use crate::commands::hue_onboarding::{clear_own_stream, HueEntertainmentArea};
+
+        let held = |id: &str| HueEntertainmentArea {
+            id: id.to_string(),
+            name: id.to_string(),
+            room_name: None,
+            channel_count: 2,
+            active_streamer: true,
+        };
+        let store = store_with(HueRuntimeOwner {
+            state: HueRuntimeState::Running,
+            active_stream: Some(dummy_active_stream_context()),
+            ..Default::default()
+        });
+
+        let mut areas = vec![held("area"), held("another-area")];
+        clear_own_stream(&mut areas, "192.168.1.2", &store);
+        assert!(!areas[0].active_streamer, "our own stream");
+        assert!(areas[1].active_streamer, "another app's stream");
+
+        let mut elsewhere = vec![held("area")];
+        clear_own_stream(&mut elsewhere, "192.168.1.3", &store);
+        assert!(
+            elsewhere[0].active_streamer,
+            "same area id on another bridge"
+        );
+
+        let mut idle = vec![held("area")];
+        clear_own_stream(&mut idle, "192.168.1.2", &HueRuntimeStateStore::default());
+        assert!(idle[0].active_streamer, "no stream of ours");
+    }
+
     #[test]
     fn active_stream_answers_only_for_its_own_area() {
         let store = store_with(HueRuntimeOwner {

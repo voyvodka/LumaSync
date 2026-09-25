@@ -25,6 +25,7 @@ import { useTranslation } from "react-i18next";
 import {
   WLED_STATUS,
   type WledDeviceInfo,
+  type WledStatusCode,
   type WledUdpSinkConfig,
 } from "@/shared/contracts/device";
 import {
@@ -34,6 +35,7 @@ import {
   type WledCommandStatus,
 } from "@/features/device/wledApi";
 import type { WledRestoreOutcome } from "@/features/device/wledSinkRestore";
+import type { TranslationKey } from "@/features/i18n/catalogue";
 import { parseCommandError } from "@/shared/contracts/status";
 import { Button } from "@/shared/ui/Button";
 import { Callout, type CalloutTone } from "@/shared/ui/Callout";
@@ -232,7 +234,7 @@ export function WledDevicePicker({
 
       {/* Discovery result status */}
       {discoveryStatus && (
-        <Callout tone={discoveryStatus.code === WLED_STATUS.DISCOVERY_OK ? "ok" : "error"}>
+        <Callout tone={wledStatusTone(discoveryStatus.code)}>
           {translateWledStatusCode(discoveryStatus.code, t) ?? discoveryStatus.message}
         </Callout>
       )}
@@ -305,7 +307,7 @@ export function WledDevicePicker({
               </div>
               {/* Status note from the latest action */}
               {resultStatus && (
-                <Callout tone={resultStatus.code === "WLED_DISCOVERY_OK" ? "ok" : "warning"} className="mt-1">
+                <Callout tone={wledStatusTone(resultStatus.code)} className="mt-1">
                   {translateWledStatusCode(resultStatus.code, t) ?? resultStatus.message}
                 </Callout>
               )}
@@ -376,33 +378,54 @@ function WledRestoreBanner({
   );
 }
 
-/** Map a `WLED_STATUS` code to its localized string, or null when unknown. */
+/** Every code a WLED command can answer with, in the user's words. A
+ *  `Record` over the whole union so a new code cannot ship untranslated. */
+export const WLED_STATUS_COPY = {
+  [WLED_STATUS.DISCOVERY_OK]: "device:page.wled.status.discoveryOk",
+  [WLED_STATUS.DISCOVERY_TIMEOUT]: "device:page.wled.status.discoveryTimeout",
+  [WLED_STATUS.DISCOVERY_UNREACHABLE]: "device:page.wled.status.discoveryUnreachable",
+  [WLED_STATUS.BRIDGE_UNREACHABLE]: "device:page.wled.status.bridgeUnreachable",
+  [WLED_STATUS.PROTOCOL_MISMATCH]: "device:page.wled.status.protocolMismatch",
+  [WLED_STATUS.LED_COUNT_MISMATCH]: "device:page.wled.status.ledCountMismatch",
+  [WLED_STATUS.INVALID_IP]: "device:page.wled.status.invalidIp",
+  [WLED_STATUS.INVALID_LED_COUNT]: "device:page.wled.status.invalidLedCount",
+  [WLED_STATUS.CONNECT_OK]: "device:page.wled.status.connectOk",
+  [WLED_STATUS.TEST_LIVE_CONFIRMED]: "device:page.wled.status.testLiveConfirmed",
+  [WLED_STATUS.TEST_SENT_UNCONFIRMED]: "device:page.wled.status.testSentUnconfirmed",
+  [WLED_STATUS.REALTIME_PORT_MISMATCH]: "device:page.wled.status.realtimePortMismatch",
+  [WLED_STATUS.LIVE_LED_COUNT_MISMATCH]: "device:page.wled.status.ledCountMismatch",
+  [WLED_STATUS.TEST_SEND_FAILED]: "device:page.wled.status.testSendFailed",
+  [WLED_STATUS.CLIENT_BUILD_FAILED]: "device:page.wled.status.clientBuildFailed",
+  [WLED_STATUS.SINK_NOT_STARTED]: "device:page.wled.status.sinkNotStarted",
+  [WLED_STATUS.DISCOVERY_WORKER_FAILED]: "device:page.wled.status.workerFailed",
+  [WLED_STATUS.TEST_WORKER_FAILED]: "device:page.wled.status.workerFailed",
+  [WLED_STATUS.CONNECT_WORKER_FAILED]: "device:page.wled.status.workerFailed",
+} as const satisfies Record<WledStatusCode, TranslationKey>;
+
+/** A success reads as one, a caveat as a warning, anything that stopped the
+ *  action as an error — every non-discovery answer used to be a warning. */
+export function wledStatusTone(code: string): CalloutTone {
+  switch (code) {
+    case WLED_STATUS.DISCOVERY_OK:
+    case WLED_STATUS.CONNECT_OK:
+    case WLED_STATUS.TEST_LIVE_CONFIRMED:
+      return "ok";
+    case WLED_STATUS.TEST_SENT_UNCONFIRMED:
+    case WLED_STATUS.LED_COUNT_MISMATCH:
+    case WLED_STATUS.LIVE_LED_COUNT_MISMATCH:
+      return "warning";
+    default:
+      return "error";
+  }
+}
+
 function translateWledStatusCode(
   code: string,
   t: TFunction,
 ): string | null {
-  switch (code) {
-    case WLED_STATUS.DISCOVERY_OK:
-      return t("device:page.wled.status.discoveryOk");
-    case WLED_STATUS.DISCOVERY_TIMEOUT:
-      return t("device:page.wled.status.discoveryTimeout");
-    case WLED_STATUS.DISCOVERY_UNREACHABLE:
-      return t("device:page.wled.status.discoveryUnreachable");
-    case WLED_STATUS.BRIDGE_UNREACHABLE:
-      return t("device:page.wled.status.bridgeUnreachable");
-    case WLED_STATUS.PROTOCOL_MISMATCH:
-      return t("device:page.wled.status.protocolMismatch");
-    case WLED_STATUS.LED_COUNT_MISMATCH:
-      return t("device:page.wled.status.ledCountMismatch");
-    case WLED_STATUS.INVALID_IP:
-      return t("device:page.wled.status.invalidIp");
-    case WLED_STATUS.INVALID_LED_COUNT:
-      return t("device:page.wled.status.invalidLedCount");
-    case WLED_STATUS.CLIENT_BUILD_FAILED:
-      return t("device:page.wled.status.clientBuildFailed");
-    default:
-      return null;
-  }
+  return Object.prototype.hasOwnProperty.call(WLED_STATUS_COPY, code)
+    ? t(WLED_STATUS_COPY[code as WledStatusCode])
+    : null;
 }
 
 function WledIcon() {

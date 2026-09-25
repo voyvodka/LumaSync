@@ -17,6 +17,7 @@ import { IconCheck, IconInfo } from "@/shared/ui/icons";
 import type { StatusPillTone } from "@/shared/ui/StatusPill";
 
 import { HueAreaPicker } from "./HueAreaPicker";
+import { HueManualIpForm } from "./HueManualIpForm";
 import type { HueAreaChoice } from "./useHueAreaChoice";
 
 /** Everything a card state reads to draw itself. Built once per render. */
@@ -180,6 +181,17 @@ export const HUE_CARD_ACTIONS = {
     onClick: () => { stopFromCard(ctx); },
     busy: ctx.hue.isRuntimeMutating,
   }),
+  pairBridge: ({ t, hue }) => ({
+    label: t("hue:page.pair"),
+    onClick: () => { void hue.pair(); },
+    primary: true,
+  }),
+  retryBridge: ({ t, hue }) => ({
+    label: hue.isValidatingCredential ? t("hue:actions.checkingBridge") : t("hue:page.retry"),
+    onClick: () => { void hue.recheckBridge(); },
+    busy: hue.isValidatingCredential,
+    primary: true,
+  }),
   tryPairAgain: ({ t, hue }) => ({
     label: t("hue:pair.tryAgain"),
     onClick: () => { void hue.pair(); },
@@ -192,10 +204,6 @@ export const HUE_CARD_ACTIONS = {
     label: hue.isDiscovering ? t("hue:actions.discovering") : t("hue:wizard.offlineRediscover"),
     onClick: () => { void hue.discover(); },
     busy: hue.isDiscovering,
-  }),
-  differentIp: ({ t, hue }) => ({
-    label: t("hue:page.tryDifferentIp"),
-    onClick: () => { hue.setManualIp(""); },
   }),
   forget: forgetAction("hue:page.forgotBridge"),
   cancel: forgetAction("hue:page.cancel"),
@@ -232,6 +240,28 @@ const statusCell = (ctx: HueCardContext, label: TranslationKey, tone: HueCardCel
 });
 
 const NO_CELLS = (): HueCardCell[] => [];
+
+// ── Captions ────────────────────────────────────────────────────────────
+
+const SUCCESS_CODE = /_(OK|VALID|READY|IDLE|APPLIED|UPDATED)$|^HUE_STREAM_(RUNNING|STARTING|STOPPING|STOPPED)|NOOP/;
+
+/** A code fit to caption a failure: the last onboarding answer is often a
+ *  success (`HUE_DISCOVERY_OK`) that has nothing to do with the card. */
+export function failureCaptionCode(code: string | null | undefined): string | null {
+  return code && !SUCCESS_CODE.test(code) ? code : null;
+}
+
+const isAuthFailureCode = (code: string | null | undefined): code is string =>
+  Boolean(code && (code.startsWith("AUTH_INVALID") || code === "HUE_CREDENTIAL_INVALID"));
+
+/** Why the key reads as refused: the runtime's code when it was the one to
+ *  hear it, else the onboarding answer that said so. */
+export function authErrorCaptionCode(hue: UseHueOnboardingResult): string | null {
+  const runtimeCode = hue.runtimeStatus?.code;
+  if (isAuthFailureCode(runtimeCode)) return runtimeCode;
+  const onboardingCode = hue.status?.code;
+  return isAuthFailureCode(onboardingCode) ? onboardingCode : null;
+}
 
 // ── Body pieces ─────────────────────────────────────────────────────────
 
@@ -409,7 +439,7 @@ export const HUE_CARD_VIEW = {
                 nextMs: runtimeModel.retry.nextAttemptMs ?? "—",
               })
             : t("hue:runtime.reconnectingTitle")}
-          <StatusCodeDetail code={hue.status?.code} />
+          <StatusCodeDetail code={failureCaptionCode(hue.runtimeStatus?.code)} />
         </span>
       </div>
     ),
@@ -455,9 +485,19 @@ export const HUE_CARD_VIEW = {
     lead: null,
     cells: (ctx) => [...selectedAreaCells(ctx), PROTOCOL_CELL],
     // Validate lives in the footer.
+    // Always one line of why: the list used to render empty unless the
+    // readiness had also gone stale.
     detail: ({ t, hue }) => (
       <div className="lm-hue-checklist" data-testid="hue-gate-blocked">
         <div className="lm-hue-checklist-title">{t("hue:runtime.checklist.title")}</div>
+        <div className="lm-hue-checklist-item">
+          <IconInfo />
+          <span>
+            {hue.runtimeStatus?.details?.includes("HUE_STREAM_READINESS_FAILED")
+              ? t("hue:runtime.checklist.bridgeSilent")
+              : t("hue:runtime.checklist.notConfirmed")}
+          </span>
+        </div>
         {hue.isReadinessStale ? (
           <div className="lm-hue-checklist-item">
             <IconInfo />
@@ -479,7 +519,7 @@ export const HUE_CARD_VIEW = {
         error
         title={t("hue:credential.needsRepair")}
         sub={t("hue:credential.repairHint")}
-        code={hue.status?.code ?? null}
+        code={authErrorCaptionCode(hue)}
         testId="hue-auth-error"
       />
     ),
@@ -517,15 +557,23 @@ export const HUE_CARD_VIEW = {
     pill: { tone: "error", label: "hue:bridge.unreachable" },
     lead: null,
     cells: NO_CELLS,
-    detail: ({ t }) => (
-      <div className="lm-hue-offline">
-        <div className="lm-hue-offline-title">{t("hue:wizard.offlineReasonsTitle")}</div>
-        <div className="lm-hue-offline-item">{t("hue:wizard.offlineReason1")}</div>
-        <div className="lm-hue-offline-item">{t("hue:wizard.offlineReason2")}</div>
-        <div className="lm-hue-offline-item">{t("hue:wizard.offlineReason3")}</div>
-      </div>
+    detail: ({ t, hue }) => (
+      <>
+        <div className="lm-hue-offline">
+          <div className="lm-hue-offline-title">{t("hue:wizard.offlineReasonsTitle")}</div>
+          <div className="lm-hue-offline-item">{t("hue:wizard.offlineReason1")}</div>
+          <div className="lm-hue-offline-item">{t("hue:wizard.offlineReason2")}</div>
+          <div className="lm-hue-offline-item">{t("hue:wizard.offlineReason3")}</div>
+        </div>
+        <HueManualIpForm
+          hue={hue}
+          inset
+          title="hue:page.tryDifferentIp"
+          description="hue:manualIp.movedDescription"
+        />
+      </>
     ),
-    actions: ["rediscover", "differentIp", "forget"],
+    actions: ["retryBridge", "rediscover", "forget"],
   },
   pairing: {
     subtitle: "hue:wizard.pairingStep",
@@ -578,7 +626,47 @@ export const HUE_CARD_VIEW = {
     lead: null,
     cells: NO_CELLS,
     detail: ({ hue, areaChoice }) => <HueAreaPicker areaGroups={hue.areaGroups} choice={areaChoice} />,
-    actions: ["confirmArea", "refreshAreas"],
+    actions: ["confirmArea", "refreshAreas", "forget"],
+  },
+  areaBusy: {
+    subtitle: (ctx) => ctx.t("hue:card.areaBusy.title", { area: areaName(ctx) }),
+    tone: "warn",
+    pill: { tone: "warn", label: "hue:page.pill.inUse" },
+    lead: null,
+    cells: (ctx) => [areaCell(ctx, "dim"), statusCell(ctx, "hue:page.pill.inUse", "warn")],
+    detail: (ctx) => (
+      <HueRepairNote
+        title={ctx.t("hue:card.areaBusy.title", { area: areaName(ctx) })}
+        sub={ctx.t("hue:card.areaBusy.body")}
+        testId="hue-area-busy"
+      />
+    ),
+    actions: ["changeArea", "forget"],
+  },
+  unpaired: {
+    subtitle: "hue:pair.promptTitle",
+    tone: "ghost",
+    pill: { tone: "warn", label: "hue:page.pill.notPaired" },
+    lead: null,
+    cells: NO_CELLS,
+    detail: ({ t }) => (
+      <HueRepairNote title={t("hue:pair.promptTitle")} sub={t("hue:pair.promptHint")} testId="hue-pair-prompt" />
+    ),
+    actions: ["pairBridge", "cancel"],
+  },
+  checkingCredentials: {
+    subtitle: "hue:credential.checking",
+    tone: null,
+    pill: { tone: "warn", label: "hue:page.pill.checking" },
+    lead: null,
+    cells: selectedAreaCells,
+    detail: ({ t }) => (
+      <div className="lm-hue-retry" role="status" aria-live="polite" data-testid="hue-checking-credentials">
+        <span className="lm-hue-retry-sp" aria-hidden="true" />
+        <span className="lm-hue-retry-tx">{t("hue:credential.checking")}</span>
+      </div>
+    ),
+    actions: ["forget"],
   },
 } satisfies Record<HueBridgeCardState, HueCardView>;
 

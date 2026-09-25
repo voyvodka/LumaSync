@@ -14,10 +14,12 @@ const BASE: HueBridgeCardStateInput = {
   runtimeStatusUnavailable: false,
   hueStatus: null,
   credentialState: "valid",
+  hasCredentials: true,
   bridgeUnreachable: false,
   isPairing: false,
   selectedAreaId: "area-1",
   isReadinessStale: false,
+  areaHeldByAnotherApp: false,
 };
 
 const runtime = (partial: Partial<HueRuntimeStatusView>): HueRuntimeStatusView =>
@@ -263,7 +265,59 @@ describe("deriveHueBridgeCardState", () => {
     });
   });
 
-  it("falls back to pairing for an unknown credential state", () => {
-    expect(deriveHueBridgeCardState({ ...BASE, credentialState: "unknown" })).toBe("pairing");
+  describe("a bridge with no key yet (H-5)", () => {
+    const unpaired = { ...BASE, hasCredentials: false, selectedAreaId: null };
+
+    it("asks to pair, never says a key expired", () => {
+      expect(deriveHueBridgeCardState({ ...unpaired, credentialState: "unknown" })).toBe("unpaired");
+      expect(deriveHueBridgeCardState({ ...unpaired, credentialState: "needs_repair" })).toBe("unpaired");
+      expect(
+        deriveHueBridgeCardState({ ...unpaired, credentialState: "needs_repair", hueStatus: status("HUE_DISCOVERY_OK") }),
+      ).toBe("unpaired");
+    });
+
+    it("reports a failed pairing answer as a failed pairing", () => {
+      expect(
+        deriveHueBridgeCardState({ ...unpaired, credentialState: "needs_repair", hueStatus: status("HUE_IP_INVALID") }),
+      ).toBe("pairingFailed");
+    });
+
+    it("waits on a saved key the bridge has not answered about", () => {
+      expect(deriveHueBridgeCardState({ ...BASE, credentialState: "unknown" })).toBe("checkingCredentials");
+    });
+  });
+
+  describe("an unreachable bridge outranks the start checklist (H-3)", () => {
+    const gate = runtime({ code: "CONFIG_NOT_READY_GATE_BLOCKED" });
+
+    it("shows the offline card, which can retry", () => {
+      expect(deriveHueBridgeCardState({ ...BASE, runtimeStatus: gate, bridgeUnreachable: true })).toBe("offline");
+    });
+
+    it("keeps the checklist for a reachable bridge", () => {
+      expect(deriveHueBridgeCardState({ ...BASE, runtimeStatus: gate })).toBe("gateBlocked");
+    });
+  });
+
+  describe("an area another app streams to (H-2a)", () => {
+    it("is never Ready", () => {
+      expect(deriveHueBridgeCardState({ ...BASE, areaHeldByAnotherApp: true })).toBe("areaBusy");
+    });
+
+    it("explains a refused start by the other app", () => {
+      expect(
+        deriveHueBridgeCardState({
+          ...BASE,
+          areaHeldByAnotherApp: true,
+          runtimeStatus: runtime({ code: "CONFIG_NOT_READY_GATE_BLOCKED" }),
+        }),
+      ).toBe("areaBusy");
+    });
+
+    it("leaves our own running stream alone", () => {
+      expect(
+        deriveHueBridgeCardState({ ...BASE, areaHeldByAnotherApp: true, runtimeStatus: runtime({ state: "Running" }) }),
+      ).toBe("streaming");
+    });
   });
 });

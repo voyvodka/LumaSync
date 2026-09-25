@@ -71,6 +71,7 @@ fn owner_with_fake_sender() -> LightingRuntimeOwner {
         output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
         preview: Default::default(),
         closing: Default::default(),
+        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(
@@ -116,6 +117,7 @@ fn owner_that_fails_after_first_frame() -> LightingRuntimeOwner {
         output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
         preview: Default::default(),
         closing: Default::default(),
+        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FailsAfterFirstFrameSource {
                 frame: CapturedFrame::new(
@@ -1743,6 +1745,7 @@ fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
         output_bridge: LedOutputBridge::from_sender(recorder.clone()),
         preview: Default::default(),
         closing: Default::default(),
+        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(

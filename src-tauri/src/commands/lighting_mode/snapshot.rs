@@ -83,6 +83,10 @@ pub enum HueLeftOutReason {
     Config,
     Busy,
     BusyGaveUp,
+    /// Another app streams the area. Unlike `Busy`, nothing waits for it.
+    InUse,
+    /// The area is gone from the bridge, or has no lights to stream to.
+    NoLights,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]

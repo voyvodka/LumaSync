@@ -323,6 +323,78 @@ fn a_save_the_mode_does_not_read_refreshes_nothing() {
     assert_eq!(mode_applies(&rig), 0, "{:?}", rig.log.events());
 }
 
+/// LED Setup's save used to reach only a test pattern: the running mode kept
+/// the old layout until something else re-applied it.
+#[test]
+fn a_saved_led_layout_reaches_the_running_mode() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(), &["usb"]);
+    let mut layout = super::calibration_for_tests();
+    layout["counts"]["top"] = json!(31);
+    layout["totalLeds"] = json!(60);
+    rig.seed(json!({ "ledCalibration": layout }));
+
+    note_settings_saved(&rig.handle(), ["ledCalibration"]);
+
+    wait_until("the layout never reached the mode", || {
+        mode_applies(&rig) >= 1
+    });
+    assert_eq!(
+        rig.running().led_calibration.map(|c| c.total_leds),
+        Some(60)
+    );
+    std::thread::sleep(SETTINGS_REFRESH_DEBOUNCE * 2);
+    assert_eq!(mode_applies(&rig), 1, "{:?}", rig.log.events());
+}
+
+#[test]
+fn a_led_layout_save_that_changes_nothing_re_applies_nothing() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(), &["usb"]);
+
+    note_settings_saved(&rig.handle(), ["ledCalibration"]);
+
+    std::thread::sleep(SETTINGS_REFRESH_DEBOUNCE * 2);
+    assert_eq!(mode_applies(&rig), 0, "{:?}", rig.log.events());
+}
+
+#[test]
+fn a_led_layout_save_leaves_a_mode_off_the_strip_alone() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(), &["hue"]);
+    let mut layout = super::calibration_for_tests();
+    layout["counts"]["top"] = json!(31);
+    layout["totalLeds"] = json!(60);
+    rig.seed(json!({ "ledCalibration": layout }));
+
+    note_settings_saved(&rig.handle(), ["ledCalibration"]);
+
+    std::thread::sleep(SETTINGS_REFRESH_DEBOUNCE * 2);
+    assert_eq!(mode_applies(&rig), 0, "{:?}", rig.log.events());
+}
+
+/// A reconnecting stream used to refuse the whole re-apply at the Hue gate,
+/// so the strip beside it never saw the new setting.
+#[test]
+fn a_setting_reaches_the_strip_while_hue_reconnects() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(), &["usb", "hue"]);
+    rig.hue.stream_drops();
+    rig.seed(json!({ "selectedDisplayId": "DISPLAY2:1920:0" }));
+
+    let result = block_on(refresh_running_with(&rig.handle()))
+        .unwrap()
+        .expect("a mode is running");
+
+    assert_eq!(result.status.code, "OUTPUTS_APPLIED", "{result:?}");
+    assert_eq!(rig.running().display_id.as_deref(), Some("DISPLAY2:1920:0"));
+    assert_eq!(
+        rig.running().targets,
+        Some(vec!["usb".to_string(), "hue".to_string()]),
+        "Hue stays in the mode for the stream to rejoin"
+    );
+}
+
 /// Starts a gamut test the way `start_led_test_pattern` does, minus the display
 /// lookup a mock runtime cannot answer.
 fn start_test(rig: &Rig) {

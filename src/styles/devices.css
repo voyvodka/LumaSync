@@ -914,6 +914,14 @@
 .lm-hue-ip-submit:hover:not(:disabled) { background: rgba(255, 176, 32, 0.12); }
 .lm-hue-ip-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 .lm-hue-ip-error { font-family: var(--lm-mono); font-size: 10px; color: var(--lm-red); letter-spacing: 0.04em; }
+/* The same form inside the offline card: the card is already the frame. */
+.lm-hue-ip-form.is-inset {
+  padding: 0;
+  margin-top: 10px;
+  background: none;
+  border: none;
+  border-radius: 0;
+}
 
 /* ── Devices → USB ──────────────────────────────────────────────────── */
 /* A group body on the Devices page: the same inset as the group header. */

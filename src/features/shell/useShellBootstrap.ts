@@ -34,9 +34,20 @@ export interface ShellBootstrapSink {
   restoreLighting: (saved: BootLightingInput) => Promise<void>;
 }
 
+export interface ShellBootstrapState {
+  /** The saved state is read and the shell is ready; the launch restore may still run. */
+  bootstrapDone: boolean;
+  /**
+   * The launch restore has answered, so the snapshot holds the saved output
+   * selection. Whatever writes a selection from what it reads must wait for it.
+   */
+  lightingRestored: boolean;
+}
+
 /** Runs the shell boot sequence exactly once and reports when it has settled. */
-export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: boolean } {
+export function useShellBootstrap(sink: ShellBootstrapSink): ShellBootstrapState {
   const [bootstrapDone, setBootstrapDone] = useState(false);
+  const [lightingRestored, setLightingRestored] = useState(false);
   const bootstrapRanRef = useRef(false);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: one-shot boot sequence; it must not re-run when the sink's identity changes
@@ -144,9 +155,15 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
         // re-arms the reachability poll, and doing both probed the bridge twice.
 
         // Always asked, Off included: it is what tells Rust the saved choice.
-        await sink.restoreLighting({ lightingMode: state.lightingMode });
+        // Not awaited: it can wait seconds on a Hue start, and neither the
+        // tray labels nor the rest of the shell depend on it.
+        void sink
+          .restoreLighting({ lightingMode: state.lightingMode })
+          .catch((err) => {
+            console.error("[LumaSync] launch lighting restore failed:", err);
+          })
+          .finally(() => setLightingRestored(true));
 
-        // Push localized tray labels to Rust
         pushTrayLabels();
 
         // The LED preview surfaces are never auto-opened on boot — persisted
@@ -158,11 +175,12 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
         console.warn("[LumaSync] Shell lifecycle bootstrap error:", err);
         // Still mark bootstrap complete so UI is not permanently blocked
         setBootstrapDone(true);
+        setLightingRestored(true);
       }
     }
 
     void bootstrap();
   }, []);
 
-  return { bootstrapDone };
+  return { bootstrapDone, lightingRestored };
 }
