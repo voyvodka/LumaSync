@@ -8,7 +8,7 @@ use serde_json::json;
 use tauri::async_runtime::block_on;
 
 use super::outputs::{
-    apply_outputs_with, note_settings_saved, refresh_running_with, tray_request,
+    apply_outputs_with, note_settings_saved, refresh_running_with, tray_mode_items, tray_request,
     ApplyOutputsRequest, ApplyOutputsResult, LightingOrigin, TrayLighting,
     SETTINGS_REFRESH_DEBOUNCE,
 };
@@ -215,56 +215,183 @@ fn a_kind_only_choice_keeps_the_last_colour() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn the_tray_resumes_the_last_mode_that_ran() {
-    let rig = Rig::new(RigSetup::default());
-    assert!(
-        tray_request(&rig.handle(), TrayLighting::ResumeLastMode).is_none(),
-        "nothing has run and nothing non-Off is saved"
-    );
-    running(&rig, ambilight(), &["usb"]);
-    apply(
-        &rig,
-        request(
-            LightingOrigin::Tray,
-            Some(kind_only(LightingModeKind::Off)),
-            None,
-        ),
-    );
-
-    let resume = tray_request(&rig.handle(), TrayLighting::ResumeLastMode).unwrap();
-    assert_eq!(resume.origin, LightingOrigin::Tray);
-    assert_eq!(
-        resume.mode.as_ref().map(|m| m.kind),
-        Some(LightingModeKind::Ambilight)
-    );
-    let result = apply(&rig, resume);
-    assert_eq!(result.status.code, "OUTPUTS_APPLIED");
-    assert_eq!(result.snapshot.mode.kind, LightingModeKind::Ambilight);
-}
-
-#[test]
-fn the_tray_resumes_a_saved_mode_after_a_launch_that_did_not_run_it() {
-    let rig = Rig::new(RigSetup {
-        state: json!({ "lightingMode": { "kind": "solid" } }),
-        ..RigSetup::default()
-    });
-    let resume = tray_request(&rig.handle(), TrayLighting::ResumeLastMode).unwrap();
-    assert_eq!(resume.mode.map(|m| m.kind), Some(LightingModeKind::Solid));
-}
-
-#[test]
-fn the_tray_off_and_solid_items_are_choices_without_a_payload() {
-    let rig = Rig::new(RigSetup::default());
+fn the_tray_mode_items_are_choices_without_a_payload() {
     for (item, kind) in [
         (TrayLighting::Off, LightingModeKind::Off),
-        (TrayLighting::SolidColor, LightingModeKind::Solid),
+        (TrayLighting::Ambilight, LightingModeKind::Ambilight),
+        (TrayLighting::Solid, LightingModeKind::Solid),
     ] {
-        let request = tray_request(&rig.handle(), item).unwrap();
+        let request = tray_request(item);
+        assert_eq!(request.origin, LightingOrigin::Tray);
         let mode = request.mode.unwrap();
         assert_eq!(mode.kind, kind);
         assert!(mode.solid.is_none() && mode.ambilight.is_none());
         assert!(request.targets.is_none());
     }
+}
+
+/// The tray had no way back to Ambilight: "Resume last mode" after a Solid
+/// was Solid again.
+#[test]
+fn the_tray_brings_ambilight_back_after_solid() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(7), &["usb"]);
+
+    let result = apply(&rig, tray_request(TrayLighting::Ambilight));
+
+    assert_eq!(result.status.code, "OUTPUTS_APPLIED");
+    assert_eq!(result.snapshot.mode.kind, LightingModeKind::Ambilight);
+    assert_eq!(
+        rig.saved("lightingMode").map(|m| m["kind"].clone()),
+        Some(json!("ambilight")),
+        "a tray choice is saved like any other"
+    );
+}
+
+#[test]
+fn a_tray_solid_shows_the_last_colour_or_the_default() {
+    {
+        // One rig at a time: each holds the process-wide worker guard.
+        let fresh = Rig::new(RigSetup::default());
+        let result = apply(&fresh, tray_request(TrayLighting::Solid));
+        assert_eq!(
+            result.snapshot.mode.solid,
+            Some(super::config::DEFAULT_SOLID)
+        );
+    }
+
+    let used = Rig::new(RigSetup::default());
+    running(&used, solid(42), &["usb"]);
+    apply(&used, tray_request(TrayLighting::Off));
+    let result = apply(&used, tray_request(TrayLighting::Solid));
+    assert_eq!(result.snapshot.mode.solid.map(|s| s.r), Some(42));
+}
+
+#[test]
+fn the_tray_mode_group_checks_what_runs_and_greys_what_the_window_greys() {
+    let items = tray_mode_items(LightingModeKind::Ambilight, false, &[]);
+    assert_eq!(
+        items.map(|i| (i.item, i.checked, i.enabled)),
+        [
+            (TrayLighting::Off, false, true),
+            (TrayLighting::Ambilight, true, true),
+            (TrayLighting::Solid, false, true),
+        ]
+    );
+
+    // No layout for a bound strip: the window greys both lit modes, never Off.
+    let locked = [LightingModeKind::Ambilight, LightingModeKind::Solid];
+    let items = tray_mode_items(LightingModeKind::Off, false, &locked);
+    assert_eq!(
+        items.map(|i| (i.checked, i.enabled)),
+        [(true, true), (false, false), (false, false)]
+    );
+
+    let items = tray_mode_items(LightingModeKind::Solid, true, &[]);
+    assert!(
+        items.iter().all(|i| !i.enabled),
+        "a transaction greys all three"
+    );
+    assert!(items[2].checked);
+}
+
+#[test]
+fn the_tray_menu_ids_are_the_contracts() {
+    let contract = include_str!("../../../../src/shared/contracts/shell.ts");
+    for item in TrayLighting::ALL {
+        assert!(
+            contract.contains(&format!("\"{}\"", item.menu_id())),
+            "{} is not in TRAY_MENU_IDS",
+            item.menu_id()
+        );
+        assert_eq!(TrayLighting::from_menu_id(item.menu_id()), Some(item));
+    }
+    assert_eq!(TrayLighting::from_menu_id("tray-resume-last-mode"), None);
+}
+
+// ---------------------------------------------------------------------------
+// Every choice's answer rides the snapshot
+// ---------------------------------------------------------------------------
+
+fn last_outcome(rig: &Rig) -> serde_json::Value {
+    rig.published()
+        .last()
+        .map(|snapshot| snapshot["lastOutcome"].clone())
+        .expect("something was published")
+}
+
+/// Tray Ambilight without screen recording used to change nothing anywhere
+/// the user could see: the reply went to a log line.
+#[test]
+fn a_tray_choice_that_fails_publishes_its_outcome() {
+    let rig = Rig::new(RigSetup::default());
+    rig.fail_capture(Some("AMBILIGHT_CAPTURE_PERMISSION_DENIED"));
+
+    let result = apply(&rig, tray_request(TrayLighting::Ambilight));
+
+    assert_eq!(result.status.code, "OUTPUTS_START_FAILED");
+    let outcome = last_outcome(&rig);
+    assert_eq!(outcome["requestId"], json!(result.request_id));
+    assert_eq!(outcome["origin"], json!("tray"));
+    assert_eq!(outcome["status"]["code"], json!("OUTPUTS_START_FAILED"));
+    assert_eq!(
+        outcome["outcome"]["applyStatus"]["details"],
+        json!("AMBILIGHT_CAPTURE_PERMISSION_DENIED")
+    );
+    let held = rig
+        .state()
+        .snapshot
+        .read()
+        .last_outcome
+        .expect("kept in the cell");
+    assert_eq!(held.request_id, result.request_id);
+}
+
+#[test]
+fn a_tray_solid_without_a_layout_publishes_the_calibration_refusal() {
+    let rig = Rig::new(RigSetup {
+        calibrated: false,
+        ..RigSetup::default()
+    });
+
+    let result = apply(&rig, tray_request(TrayLighting::Solid));
+
+    assert_eq!(result.status.code, "OUTPUTS_CALIBRATION_REQUIRED");
+    let outcome = last_outcome(&rig);
+    assert_eq!(outcome["origin"], json!("tray"));
+    assert_eq!(
+        outcome["status"]["code"],
+        json!("OUTPUTS_CALIBRATION_REQUIRED")
+    );
+}
+
+#[test]
+fn every_choice_publishes_its_outcome_and_nothing_else_does() {
+    let rig = Rig::new(RigSetup::default());
+    let boot = apply(&rig, request(LightingOrigin::Boot, None, None));
+    assert!(
+        boot.snapshot.last_outcome.is_none(),
+        "a launch restore is no choice"
+    );
+
+    for origin in [
+        LightingOrigin::User,
+        LightingOrigin::Popup,
+        LightingOrigin::Tray,
+    ] {
+        let result = apply(&rig, request(origin, Some(solid(3)), None));
+        let outcome = last_outcome(&rig);
+        assert_eq!(outcome["origin"], serde_json::to_value(origin).unwrap());
+        assert_eq!(outcome["requestId"], json!(result.request_id));
+        assert_eq!(outcome["status"]["code"], json!(result.status.code));
+    }
+
+    let before = last_outcome(&rig);
+    apply(
+        &rig,
+        request(LightingOrigin::UsbUnplug, None, Some(&["usb"])),
+    );
+    assert_eq!(last_outcome(&rig), before, "an unplug is no choice");
 }
 
 // ---------------------------------------------------------------------------

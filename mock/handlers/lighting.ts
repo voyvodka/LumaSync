@@ -16,6 +16,7 @@ import {
   type ApplyOutputsOutcome,
   type ApplyOutputsResult,
   type LightingOrigin,
+  type LightingOutcome,
   type LightingOutputsStatusCode,
   type LightingRuntimeSnapshot,
 } from "../../src/shared/contracts/lightingRuntime";
@@ -33,6 +34,8 @@ let requestId = 0;
 /** The session selection; `null` until a request or the saved targets set it. */
 let selection: HueRuntimeTarget[] | null = null;
 let heldOut: HueLeftOutReason | null = null;
+/** The newest choice's answer, which every later snapshot carries. */
+let lastOutcome: LightingOutcome | null = null;
 
 const CHOICES: readonly LightingOrigin[] = [LIGHTING_ORIGIN.USER, LIGHTING_ORIGIN.TRAY, LIGHTING_ORIGIN.POPUP];
 
@@ -56,6 +59,7 @@ function snapshot(): LightingRuntimeSnapshot {
     requestId: requestId || null,
     hueHeldOutReason: heldOut,
     bootHueRetry: null,
+    lastOutcome,
   };
 }
 
@@ -81,10 +85,15 @@ function reply(
   code: LightingOutputsStatusCode,
   outcome: ApplyOutputsOutcome,
   details: string | null = null,
+  choiceOrigin: LightingOrigin | null = null,
 ): ApplyOutputsResult {
   requestId += 1;
+  const answer = status(code, "Mock lighting transaction", details);
+  if (choiceOrigin !== null) {
+    lastOutcome = { requestId, origin: choiceOrigin, status: answer, outcome };
+  }
   return {
-    status: status(code, "Mock lighting transaction", details),
+    status: answer,
     requestId,
     snapshot: publish(),
     outcome,
@@ -108,6 +117,7 @@ export const lightingRuntimeHandlers = {
     }
 
     const choice = CHOICES.includes(request.origin);
+    const choiceOrigin = choice ? request.origin : null;
     if (request.targets) {
       selection = [...request.targets];
       if (choice) writeShellStateKey("lastOutputTargets", selection);
@@ -129,7 +139,7 @@ export const lightingRuntimeHandlers = {
         if (ended) stopLightingMode();
         stopHueIfStreaming();
         outcome.modeEnded = ended;
-        return reply("OUTPUTS_APPLIED", outcome);
+        return reply("OUTPUTS_APPLIED", outcome, null, choiceOrigin);
       }
       if (run.includes("hue") && !getWorld().hue.streaming) {
         outcome.hueStartCode = hueHandlers[HUE_COMMANDS.START_STREAM]().status.code;
@@ -155,6 +165,7 @@ export const lightingRuntimeHandlers = {
           applied.mode.kind === "off" && current.kind !== "off" ? "OUTPUTS_START_FAILED" : "OUTPUTS_REFUSED",
           outcome,
           applied.status.details ?? applied.status.code,
+          choiceOrigin,
         );
       }
       mutate((w) => {
@@ -165,7 +176,12 @@ export const lightingRuntimeHandlers = {
     if (choice && request.mode) {
       writeShellStateKey("lightingMode", { kind, solid, ambilight, targets: savedTargets() });
     }
-    return reply(outcome.hueLeftOut ? "OUTPUTS_APPLIED_PARTIAL" : "OUTPUTS_APPLIED", outcome);
+    return reply(
+      outcome.hueLeftOut ? "OUTPUTS_APPLIED_PARTIAL" : "OUTPUTS_APPLIED",
+      outcome,
+      null,
+      choiceOrigin,
+    );
   },
 
   [LIGHTING_RUNTIME_COMMANDS.RETUNE_LIGHTING]: (args) => {
@@ -207,4 +223,5 @@ export const lightingRuntimeHandlers = {
 export function __resetMockLightingRuntime(): void {
   selection = null;
   heldOut = null;
+  lastOutcome = null;
 }

@@ -29,6 +29,7 @@ function snapshot(revision: number): LightingRuntimeSnapshot {
     requestId: null,
     hueHeldOutReason: null,
     bootHueRetry: null,
+    lastOutcome: null,
   };
 }
 

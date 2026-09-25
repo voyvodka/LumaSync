@@ -410,6 +410,48 @@ describe("ControlPopupApp mode strip", () => {
       expect(screen.getByRole("alert")).toHaveTextContent("preview:control.calibrationRequired"),
     );
   });
+
+  // A refused or failed choice used to reach a console line and nothing else.
+  it("says why a choice did not start, in the main window's words", async () => {
+    applyOutputs.mockResolvedValue(
+      outputsResult("OUTPUTS_START_FAILED", runtimeSnapshot(), {
+        applyStatus: {
+          code: "AMBILIGHT_MODE_START_FAILED",
+          message: "",
+          details: "AMBILIGHT_CAPTURE_PERMISSION_DENIED",
+        },
+      }),
+    );
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await clickMode(/common:mode\.options\.ambilight/);
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent("shell:notices.messages.capturePermission"),
+    );
+  });
+
+  it("says a refused choice changed nothing when no reason is named", async () => {
+    applyOutputs.mockResolvedValue(outputsReply("OUTPUTS_REFUSED"));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await clickMode(/common:mode\.options\.solid/);
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent("shell:notices.messages.choiceRefused"),
+    );
+  });
+
+  it("raises nothing for a choice that runs", async () => {
+    applyOutputs.mockResolvedValue(
+      outputsResult("OUTPUTS_APPLIED_PARTIAL", runtimeSnapshot(), { hueLeftOut: "unreachable" }),
+    );
+
+    await clickMode(/common:mode\.options\.ambilight/);
+
+    await waitFor(() => expect(adopt).toHaveBeenCalled());
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
 });
 
 /**

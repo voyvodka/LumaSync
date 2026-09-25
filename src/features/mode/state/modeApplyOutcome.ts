@@ -11,6 +11,12 @@ import {
 } from "@/shared/contracts/lightingRuntime";
 
 /**
+ * What a choice's answer says, from its own reply or from the snapshot's
+ * `lastOutcome` — the same two fields, so one reading serves both.
+ */
+export type ChoiceAnswer = Pick<ApplyOutputsResult, "status" | "outcome">;
+
+/**
  * The notice a transaction's reply calls for, or `null`. A capture start that
  * failed names its reason in the apply status's `details`; a choice the device
  * gate refused outright borrows the output bucket's copy, while a strip it
@@ -18,7 +24,7 @@ import {
  * Solid start is named only for an output reason, because every other
  * bucket's copy is about screen capture.
  */
-export function startFailureNotice(result: ApplyOutputsResult): CaptureFailureNotice | null {
+export function startFailureNotice(result: ChoiceAnswer): CaptureFailureNotice | null {
   const apply = result.outcome.applyStatus;
   if (apply === null) return null;
   switch (apply.code) {
@@ -38,7 +44,7 @@ export function startFailureNotice(result: ApplyOutputsResult): CaptureFailureNo
 }
 
 /** The device gate kept the strip out of a choice that runs on Hue instead. */
-export function usbLeftOut(result: ApplyOutputsResult): boolean {
+export function usbLeftOut(result: ChoiceAnswer): boolean {
   return result.outcome.droppedTargets.includes("usb");
 }
 
@@ -47,7 +53,7 @@ export function usbLeftOut(result: ApplyOutputsResult): boolean {
  * or a saved one whose counts Rust refused (`config_check.rs` prefixes its
  * reason with the field). Either way the editor is where it gets fixed.
  */
-export function needsCalibration(result: ApplyOutputsResult): boolean {
+export function needsCalibration(result: ChoiceAnswer): boolean {
   if (result.status.code === LIGHTING_OUTPUTS_STATUS.OUTPUTS_CALIBRATION_REQUIRED) return true;
   const apply = result.outcome.applyStatus;
   return (
@@ -57,7 +63,7 @@ export function needsCalibration(result: ApplyOutputsResult): boolean {
 }
 
 /** The mode asked for runs, on some of its outputs at least. */
-export function isOutputsApplied(result: ApplyOutputsResult): boolean {
+export function isOutputsApplied(result: ChoiceAnswer): boolean {
   return (
     result.status.code === LIGHTING_OUTPUTS_STATUS.OUTPUTS_APPLIED ||
     result.status.code === LIGHTING_OUTPUTS_STATUS.OUTPUTS_APPLIED_PARTIAL

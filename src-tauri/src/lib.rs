@@ -3,7 +3,7 @@
 // `shutdown::begin` — see docs/architecture/ui-and-shell.md.
 
 use tauri::{
-    menu::{Menu, MenuItem, PredefinedMenuItem},
+    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, EventTarget, Manager, RunEvent, Runtime, State,
 };
@@ -89,9 +89,12 @@ use commands::led_preview::{
     show_led_control_popup, LedTwinState,
 };
 use commands::lighting_mode::outputs::{
-    apply_outputs, get_lighting_runtime, release_hue_output, run_tray_lighting, TrayLighting,
+    apply_outputs, get_lighting_runtime, release_hue_output, run_tray_lighting, tray_mode_items,
+    TrayLighting, TrayModeItem,
 };
+use commands::lighting_mode::snapshot::{LightingPhase, LightingRuntimeSnapshot};
 use commands::lighting_mode::tuning::retune_lighting;
+use commands::lighting_mode::LightingModeKind;
 use commands::lighting_mode::{
     get_led_preview_status, start_led_test_pattern, stop_led_test_pattern, LightingRuntimeState,
 };
@@ -129,12 +132,98 @@ const TRAY_ICON_ID: &str = "main-tray";
 struct TrayState<R: Runtime> {
     open_settings: MenuItem<R>,
     status: MenuItem<R>,
-    lights_off: MenuItem<R>,
-    resume_last_mode: MenuItem<R>,
-    solid_color: MenuItem<R>,
+    /// In `TrayLighting::ALL` order.
+    modes: [CheckMenuItem<R>; 3],
     show_led_preview: MenuItem<R>,
     close_overlays: MenuItem<R>,
     quit: MenuItem<R>,
+    mode_view: std::sync::Mutex<TrayModeView>,
+}
+
+/// What the mode group was last drawn from. The checks follow the lighting
+/// snapshot, published from any thread; the locks come with the labels.
+#[derive(Default)]
+struct TrayModeView {
+    revision: u64,
+    running: LightingModeKind,
+    transitioning: bool,
+    locked: Vec<LightingModeKind>,
+    shown: Option<[TrayModeItem; 3]>,
+}
+
+impl<R: Runtime> TrayState<R> {
+    /// Redraws the mode group when `change` moved it. Posted to the main thread
+    /// rather than waited on: a menu call from another thread blocks until the
+    /// main thread runs it, and a quit can hold the main thread while a
+    /// transaction still publishes. Posted under the view lock, so the draws
+    /// land in the order the views were taken.
+    fn update_modes(
+        &self,
+        app: &AppHandle<R>,
+        force: bool,
+        change: impl FnOnce(&mut TrayModeView) -> bool,
+    ) {
+        let mut view = self
+            .mode_view
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if !change(&mut view) {
+            return;
+        }
+        let items = tray_mode_items(view.running, view.transitioning, &view.locked);
+        if !force && view.shown == Some(items) {
+            return;
+        }
+        view.shown = Some(items);
+        let modes = self.modes.clone();
+        if let Err(error) = app.run_on_main_thread(move || {
+            for (menu_item, item) in modes.iter().zip(items) {
+                if let Err(error) = menu_item
+                    .set_checked(item.checked)
+                    .and_then(|()| menu_item.set_enabled(item.enabled))
+                {
+                    log::warn!("[tray] the {:?} item was not redrawn: {error}", item.item);
+                }
+            }
+        }) {
+            log::warn!("[tray] the mode group was not redrawn: {error}");
+        }
+    }
+}
+
+/// A click toggles a check item natively, before the choice has run, so the
+/// group is redrawn from what runs at once; the transaction's own publishes
+/// move the check. The mode already running is no choice, as its button in
+/// the main window is none.
+fn choose_tray_mode<R: Runtime>(app: &AppHandle<R>, item: TrayLighting) {
+    let mut running = None;
+    if let Some(tray) = app.try_state::<TrayState<R>>() {
+        tray.update_modes(app, true, |view| {
+            running = Some(view.running);
+            true
+        });
+    }
+    if running == Some(item.kind()) {
+        return;
+    }
+    run_tray_lighting(app, item);
+}
+
+/// Every snapshot publish lands here. A test app manages no tray.
+pub(crate) fn sync_tray_modes<R: Runtime>(app: &AppHandle<R>, snapshot: &LightingRuntimeSnapshot) {
+    let Some(tray) = app.try_state::<TrayState<R>>() else {
+        return;
+    };
+    tray.update_modes(app, false, |view| {
+        // Publishers emit outside the snapshot lock, so an older one can arrive last.
+        if snapshot.revision < view.revision {
+            return false;
+        }
+        view.revision = snapshot.revision;
+        view.running = snapshot.mode.kind;
+        view.transitioning = snapshot.phase != LightingPhase::Idle;
+        true
+    });
 }
 
 #[derive(serde::Deserialize)]
@@ -145,8 +234,10 @@ struct TrayLabels {
     /// localized by the frontend, which is where the mode is known.
     status: String,
     lights_off: String,
-    resume_last_mode: String,
+    ambilight: String,
     solid_color: String,
+    /// The modes the main window's own buttons have disabled right now.
+    locked_modes: Vec<LightingModeKind>,
     show_led_preview: String,
     close_overlays: String,
     quit: String,
@@ -236,10 +327,16 @@ fn hide_to_tray<R: Runtime>(window: &tauri::Window<R>) {
 
 #[tauri::command]
 fn update_tray_labels(
+    app: AppHandle<tauri::Wry>,
     tray_state: State<'_, TrayState<tauri::Wry>>,
     labels: TrayLabels,
 ) -> Result<(), String> {
-    apply_tray_labels(&tray_state, &labels)
+    apply_tray_labels(&tray_state, &labels)?;
+    tray_state.update_modes(&app, false, |view| {
+        view.locked.clone_from(&labels.locked_modes);
+        true
+    });
+    Ok(())
 }
 
 fn apply_tray_labels<R: Runtime>(
@@ -254,18 +351,10 @@ fn apply_tray_labels<R: Runtime>(
         .status
         .set_text(&labels.status)
         .map_err(|e| e.to_string())?;
-    tray_state
-        .lights_off
-        .set_text(&labels.lights_off)
-        .map_err(|e| e.to_string())?;
-    tray_state
-        .resume_last_mode
-        .set_text(&labels.resume_last_mode)
-        .map_err(|e| e.to_string())?;
-    tray_state
-        .solid_color
-        .set_text(&labels.solid_color)
-        .map_err(|e| e.to_string())?;
+    let mode_labels = [&labels.lights_off, &labels.ambilight, &labels.solid_color];
+    for (item, label) in tray_state.modes.iter().zip(mode_labels) {
+        item.set_text(label).map_err(|e| e.to_string())?;
+    }
     tray_state
         .show_led_preview
         .set_text(&labels.show_led_preview)
@@ -290,16 +379,24 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
     // Neutral until the frontend pushes the real, localized line.
     let status = MenuItem::with_id(app, "status-indicator", "LumaSync", false, None::<&str>)?;
     let separator2 = PredefinedMenuItem::separator(app)?;
-    let lights_off = MenuItem::with_id(app, "tray-lights-off", "Lights Off", true, None::<&str>)?;
-    let resume_last = MenuItem::with_id(
-        app,
-        "tray-resume-last-mode",
-        "Resume Last Mode",
-        true,
-        None::<&str>,
-    )?;
-    let solid_color =
-        MenuItem::with_id(app, "tray-solid-color", "Solid Color", true, None::<&str>)?;
+    // Nothing runs before the launch restore; the first snapshot redraws it.
+    let initial = tray_mode_items(LightingModeKind::Off, false, &[]);
+    let check = |item: TrayModeItem, label: &str| {
+        CheckMenuItem::with_id(
+            app,
+            item.item.menu_id(),
+            label,
+            item.enabled,
+            item.checked,
+            None::<&str>,
+        )
+    };
+    let modes = [
+        check(initial[0], "Lights Off")?,
+        check(initial[1], "Ambilight")?,
+        check(initial[2], "Solid Color")?,
+    ];
+    let separator_modes = PredefinedMenuItem::separator(app)?;
     let show_led_preview = MenuItem::with_id(
         app,
         "tray-show-led-preview",
@@ -324,9 +421,10 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
             &separator1,
             &status,
             &separator2,
-            &lights_off,
-            &resume_last,
-            &solid_color,
+            &modes[0],
+            &modes[1],
+            &modes[2],
+            &separator_modes,
             &show_led_preview,
             &close_overlays,
             &separator3,
@@ -337,12 +435,14 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
     let tray_state = TrayState {
         open_settings: open,
         status,
-        lights_off,
-        resume_last_mode: resume_last,
-        solid_color,
+        modes,
         show_led_preview,
         close_overlays,
         quit,
+        mode_view: std::sync::Mutex::new(TrayModeView {
+            shown: Some(initial),
+            ..TrayModeView::default()
+        }),
     };
 
     Ok((menu, tray_state))
@@ -593,6 +693,8 @@ pub fn run() {
             app.manage(MainWindowVisibilityState::default());
             register_runtime_health_emitter(app.handle());
             // After the shell state and the Hue runtime: its first pass reads both.
+            // Before the monitor starts, so its first publish is heard.
+            commands::lighting_mode::outputs::listen_hue_health(app.handle());
             commands::hue::health::install(app.handle());
 
             // After the `manage` calls, not next to `LUMASYNC_NO_DEVTOOLS`: the
@@ -667,11 +769,11 @@ pub fn run() {
                 // Menu item actions
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "open-settings" => show_and_focus_settings(app),
-                    "tray-lights-off" => run_tray_lighting(app, TrayLighting::Off),
-                    "tray-resume-last-mode" => {
-                        run_tray_lighting(app, TrayLighting::ResumeLastMode)
+                    id if TrayLighting::from_menu_id(id).is_some() => {
+                        if let Some(item) = TrayLighting::from_menu_id(id) {
+                            choose_tray_mode(app, item);
+                        }
                     }
-                    "tray-solid-color" => run_tray_lighting(app, TrayLighting::SolidColor),
                     "tray-show-led-preview" => {
                         let _ = app.emit_to(
                             EventTarget::webview_window(MAIN_WINDOW_LABEL),

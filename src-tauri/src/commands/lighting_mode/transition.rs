@@ -10,7 +10,7 @@ use tauri::{AppHandle, Manager, Runtime};
 
 use super::config::{
     frame_led_count_for, normalize_mode_config, wled_frame_advisory, LightingModeCommandResult,
-    LightingModeConfig, LightingModeKind, SolidColorPayload,
+    LightingModeConfig, LightingModeKind, DEFAULT_SOLID,
 };
 use super::config_check;
 use super::hydrate::{hydrate_mode_payload, read_persisted_shell_state};
@@ -353,12 +353,7 @@ fn apply_mode_change_inner(
         }
         LightingModeKind::Solid => {
             push_trace(&mut trace, "start_solid");
-            let payload = normalized_next.solid.clone().unwrap_or(SolidColorPayload {
-                r: 255,
-                g: 255,
-                b: 255,
-                brightness: 1.0,
-            });
+            let payload = normalized_next.solid.clone().unwrap_or(DEFAULT_SOLID);
 
             // USB solid output (only if USB target requested and a sink -- serial
             // or WLED -- is available)

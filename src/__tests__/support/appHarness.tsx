@@ -368,6 +368,7 @@ export function snapshot(overrides: Partial<LightingRuntimeSnapshot> = {}): Ligh
     requestId: null,
     hueHeldOutReason: null,
     bootHueRetry: null,
+    lastOutcome: null,
     ...overrides,
     revision: env.revision,
   };

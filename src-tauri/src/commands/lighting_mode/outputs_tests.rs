@@ -19,9 +19,10 @@ use tauri::Manager;
 
 use super::hue_driver::HueAreaVerdict;
 use super::outputs::{
-    apply_outputs_with, note_local_sink_connected, refresh_running_with, release_hue_with,
-    wait_for_area_release, ApplyOutputsRequest, ApplyOutputsResult, CancelToken, LightingOrigin,
-    ReleaseWait, BOOT_HUE_RETRY_POLL, BOOT_HUE_RETRY_WINDOW,
+    apply_outputs_with, listen_hue_health, note_hue_reachable, note_local_sink_connected,
+    note_settings_saved, refresh_running_with, release_hue_with, wait_for_area_release,
+    ApplyOutputsRequest, ApplyOutputsResult, CancelToken, LightingOrigin, ReleaseWait,
+    BOOT_HUE_RETRY_POLL, BOOT_HUE_RETRY_WINDOW,
 };
 use super::snapshot::{BootHueRetryState, HueLeftOutReason, LightingPhase, OutputTarget};
 use super::test_support::{Rig, RigSetup};
@@ -2043,6 +2044,20 @@ async fn the_area_wait_stops_at_an_answer_waiting_cannot_clear() {
 
     assert_eq!(outcome, ReleaseWait::NotBusy);
     assert_eq!(busy.load(Ordering::SeqCst), 0);
+
+    let silent = wait_for_area_release(
+        || async { HueAreaVerdict::Unreachable },
+        &token,
+        || {},
+        BOOT_HUE_RETRY_POLL,
+        BOOT_HUE_RETRY_WINDOW,
+    )
+    .await;
+    assert_eq!(
+        silent,
+        ReleaseWait::Unreachable,
+        "a silent bridge is not polled"
+    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -2303,4 +2318,238 @@ fn an_area_another_app_holds_is_named_when_hue_is_left_out() {
     assert_eq!(result.snapshot.active_targets, vec![Usb]);
     assert_eq!(result.outcome.hue_left_out, Some(HueLeftOutReason::InUse));
     assert_eq!(result.outcome.hue_not_started, None);
+}
+
+// ---------------------------------------------------------------------------
+// The launch's wait for the bridge — autostart before Wi-Fi is up
+// ---------------------------------------------------------------------------
+
+/// What the start gate answers when readiness could not reach the bridge.
+const BRIDGE_SILENT: &str =
+    "Missing prerequisites: readiness; readiness: HUE_STREAM_READINESS_FAILED";
+
+fn restoring_on(targets: serde_json::Value, serial_connected: bool) -> Rig {
+    Rig::new(RigSetup {
+        serial_connected,
+        state: json!({
+            "lightingMode": { "kind": "ambilight", "ambilight": { "brightness": 1 } },
+            "lastOutputTargets": targets
+        }),
+        ..RigSetup::default()
+    })
+}
+
+fn hue_starts(rig: &Rig) -> usize {
+    events(rig).iter().filter(|e| *e == "hue:start").count()
+}
+
+/// The start gate refused and the area wait's first probe found the bridge
+/// silent. The wait used to read that as "not busy" and give up for good, so
+/// a Hue-only setup stayed Off until the user chose again.
+#[test]
+fn a_hue_only_restore_resumes_once_the_bridge_answers() {
+    let rig = restoring_on(json!(["hue"]), true);
+    rig.hue
+        .script_start_with_details("CONFIG_NOT_READY_GATE_BLOCKED", BRIDGE_SILENT);
+    rig.hue.script_probes(&[HueAreaVerdict::Unreachable]);
+    let handle = rig.handle();
+
+    paused_runtime().block_on(async {
+        let restore = apply_outputs_with(&handle, request(LightingOrigin::Boot, None, None))
+            .await
+            .unwrap();
+        assert_eq!(restore.snapshot.mode.kind, LightingModeKind::Off);
+        while rig.hue.probes_made() == 0 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        // The park polls nothing: the wait ended at the silent probe.
+        tokio::time::sleep(BOOT_HUE_RETRY_WINDOW * 2).await;
+    });
+    assert_eq!(rig.hue.probes_made(), 1);
+    assert_eq!(rig.running().kind, LightingModeKind::Off);
+
+    note_hue_reachable(&handle, false);
+    note_hue_reachable(&handle, true);
+
+    wait_until("the restore never resumed on Hue", || {
+        let snapshot = rig.state().snapshot.read();
+        snapshot.mode.kind == LightingModeKind::Ambilight && snapshot.phase == LightingPhase::Idle
+    });
+    assert_eq!(rig.state().snapshot.read().active_targets, vec![Hue]);
+    assert!(rig.written_keys().is_empty(), "a resume saves nothing");
+
+    // Once per launch: the next reachable edge finds nothing parked.
+    apply(&rig, user(Some(off()), None));
+    note_hue_reachable(&handle, false);
+    note_hue_reachable(&handle, true);
+    std::thread::sleep(Duration::from_millis(100));
+    assert_eq!(hue_starts(&rig), 2, "{:?}", events(&rig));
+}
+
+/// A start that failed outright for a silent bridge parks without the area
+/// wait; `[usb, hue]` has run on USB alone since, and Hue joins it.
+#[test]
+fn a_restore_left_on_usb_rejoins_hue_once_the_bridge_answers() {
+    let rig = restoring_on(json!(["usb", "hue"]), true);
+    rig.hue.script_starts(&["TRANSIENT_RETRY_SCHEDULED"]);
+
+    let restore = apply(&rig, request(LightingOrigin::Boot, None, None));
+    assert_eq!(restore.snapshot.active_targets, vec![Usb]);
+    assert_eq!(
+        restore.snapshot.hue_held_out_reason,
+        Some(HueLeftOutReason::Unreachable)
+    );
+
+    // A probe still in flight carries the old verdict; nothing fires on it.
+    note_hue_reachable(&rig.handle(), false);
+    std::thread::sleep(Duration::from_millis(50));
+    assert_eq!(hue_starts(&rig), 1);
+
+    note_hue_reachable(&rig.handle(), true);
+
+    wait_until("Hue never joined", || {
+        let snapshot = rig.state().snapshot.read();
+        snapshot.active_targets == vec![Usb, Hue] && snapshot.phase == LightingPhase::Idle
+    });
+    let snapshot = rig.state().snapshot.read();
+    assert_eq!(snapshot.hue_held_out_reason, None);
+    assert_eq!(snapshot.selected_targets, vec![Usb, Hue]);
+    assert!(rig.written_keys().is_empty());
+}
+
+#[test]
+fn a_user_choice_takes_the_parked_resume_back() {
+    let rig = restoring_on(json!(["hue"]), true);
+    rig.hue.script_starts(&["TRANSIENT_RETRY_SCHEDULED"]);
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+
+    // The user chose Off while the bridge was away; its answer must not light
+    // the room back up.
+    apply(&rig, user(Some(off()), None));
+    rig.log.clear();
+    note_hue_reachable(&rig.handle(), true);
+
+    std::thread::sleep(Duration::from_millis(150));
+    assert!(events(&rig).is_empty(), "{:?}", events(&rig));
+    assert_eq!(rig.running().kind, LightingModeKind::Off);
+}
+
+#[test]
+fn a_forgotten_bridge_or_a_quit_takes_the_parked_resume_back() {
+    use crate::commands::shell_state::ShellStateStore;
+
+    let forgotten = restoring_on(json!(["hue"]), true);
+    forgotten.hue.script_starts(&["TRANSIENT_RETRY_SCHEDULED"]);
+    apply(&forgotten, request(LightingOrigin::Boot, None, None));
+    forgotten
+        .app
+        .state::<ShellStateStore>()
+        .patch(
+            serde_json::Map::new(),
+            vec!["lastHueBridge".to_string()],
+            None,
+            |_| {},
+        )
+        .unwrap();
+    note_settings_saved(&forgotten.handle(), ["lastHueBridge"]);
+    std::thread::sleep(Duration::from_millis(100));
+    note_hue_reachable(&forgotten.handle(), true);
+    std::thread::sleep(Duration::from_millis(150));
+    assert_eq!(hue_starts(&forgotten), 1, "{:?}", events(&forgotten));
+    // One rig at a time: each holds the process-wide worker guard.
+    drop(forgotten);
+
+    let quitting = restoring_on(json!(["hue"]), true);
+    quitting.hue.script_starts(&["TRANSIENT_RETRY_SCHEDULED"]);
+    apply(&quitting, request(LightingOrigin::Boot, None, None));
+    quitting.state().mark_closing();
+    note_hue_reachable(&quitting.handle(), true);
+    std::thread::sleep(Duration::from_millis(150));
+    assert_eq!(hue_starts(&quitting), 1, "{:?}", events(&quitting));
+}
+
+/// Both late at login: the strip still settling and the bridge not on the
+/// network yet. The strip's resume leaves Hue to the bridge's, which adds it
+/// beside the strip; neither wait knows about the other's order.
+#[test]
+fn a_restore_with_both_outputs_late_gets_both_back_in_either_order() {
+    // The strip first.
+    let rig = restoring_on(json!(["usb", "hue"]), false);
+    rig.hue.script_starts(&["TRANSIENT_RETRY_SCHEDULED"]);
+    let restore = apply(&rig, request(LightingOrigin::Boot, None, None));
+    assert_eq!(restore.snapshot.mode.kind, LightingModeKind::Off);
+
+    rig.set_serial_connected(true);
+    note_local_sink_connected(&rig.handle());
+    wait_until("the strip never resumed", || {
+        let snapshot = rig.state().snapshot.read();
+        snapshot.active_targets == vec![Usb] && snapshot.phase == LightingPhase::Idle
+    });
+    assert_eq!(hue_starts(&rig), 1, "the strip's resume left Hue alone");
+
+    note_hue_reachable(&rig.handle(), true);
+    wait_until("Hue never joined the strip", || {
+        let snapshot = rig.state().snapshot.read();
+        snapshot.active_targets == vec![Usb, Hue] && snapshot.phase == LightingPhase::Idle
+    });
+    assert_eq!(rig.running().kind, LightingModeKind::Ambilight);
+    // One rig at a time: each holds the process-wide worker guard.
+    drop(rig);
+
+    // The bridge first.
+    let rig = restoring_on(json!(["usb", "hue"]), false);
+    rig.hue.script_starts(&["TRANSIENT_RETRY_SCHEDULED"]);
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+
+    note_hue_reachable(&rig.handle(), true);
+    wait_until("the restore never resumed on Hue", || {
+        let snapshot = rig.state().snapshot.read();
+        snapshot.active_targets == vec![Hue] && snapshot.phase == LightingPhase::Idle
+    });
+
+    rig.set_serial_connected(true);
+    note_local_sink_connected(&rig.handle());
+    wait_until("the strip never joined Hue", || {
+        let snapshot = rig.state().snapshot.read();
+        snapshot.active_targets == vec![Usb, Hue] && snapshot.phase == LightingPhase::Idle
+    });
+    assert_eq!(hue_starts(&rig), 2, "{:?}", events(&rig));
+}
+
+/// The monitor's own event is what answers the park: a probe in flight is
+/// not an answer, the probe's answer is.
+#[test]
+fn the_health_event_answers_the_parked_resume() {
+    use crate::events::HUE_HEALTH_CHANGED_EVENT;
+    use tauri::Emitter;
+
+    let rig = restoring_on(json!(["hue"]), true);
+    rig.hue.script_starts(&["TRANSIENT_RETRY_SCHEDULED"]);
+    listen_hue_health(&rig.handle());
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    let health = |verdict: &str, probing: bool| {
+        json!({
+            "revision": 1,
+            "configured": true,
+            "bridge": { "verdict": verdict, "probing": probing, "gaveUp": false },
+            "area": null,
+            "stream": { "active": false, "status": {} }
+        })
+    };
+
+    rig.app
+        .emit(HUE_HEALTH_CHANGED_EVENT, health("unreachable", false))
+        .unwrap();
+    rig.app
+        .emit(HUE_HEALTH_CHANGED_EVENT, health("reachable", true))
+        .unwrap();
+    std::thread::sleep(Duration::from_millis(100));
+    assert_eq!(hue_starts(&rig), 1);
+
+    rig.app
+        .emit(HUE_HEALTH_CHANGED_EVENT, health("reachable", false))
+        .unwrap();
+    wait_until("the event never resumed the restore", || {
+        rig.state().snapshot.read().active_targets == vec![Hue]
+    });
 }

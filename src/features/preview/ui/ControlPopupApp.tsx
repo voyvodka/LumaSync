@@ -21,7 +21,8 @@ import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
 import { modeKind } from "@/features/mode/model/modeKinds";
 import { ModeStrip } from "@/features/mode/ui/ModeStrip";
 import { applyOutputs, retuneLighting } from "@/features/mode/modeApi";
-import { needsCalibration } from "@/features/mode/state/modeApplyOutcome";
+import { isOutputsApplied, needsCalibration } from "@/features/mode/state/modeApplyOutcome";
+import { choiceFailureMessage } from "@/features/shell/notices/choiceFailureMessage";
 import { createRetuneCoalescer } from "@/features/mode/state/retuneCoalescer";
 import { useLightingRuntime } from "@/features/mode/state/useLightingRuntime";
 import {
@@ -30,7 +31,7 @@ import {
   normalizeSolidColorPayload,
   type LightingModeKind,
 } from "@/shared/contracts/mode";
-import { LIGHTING_ORIGIN, LIGHTING_OUTPUTS_STATUS } from "@/shared/contracts/lightingRuntime";
+import { LIGHTING_ORIGIN } from "@/shared/contracts/lightingRuntime";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 import {
   LED_TEST_STATUS,
@@ -327,14 +328,17 @@ export function ControlPopupApp() {
           adopt(result.snapshot);
           if (needsCalibration(result)) {
             setRunError(t("preview:control.calibrationRequired"));
-          } else if (
-            result.status.code === LIGHTING_OUTPUTS_STATUS.OUTPUTS_REFUSED ||
-            result.status.code === LIGHTING_OUTPUTS_STATUS.OUTPUTS_START_FAILED
-          ) {
-            console.warn(
-              `[LumaSync] ControlPopupApp mode ${next}: ${result.status.code}`,
-              result.status.details ?? "",
-            );
+          } else if (!isOutputsApplied(result)) {
+            // Said here, in the main window's words: a choice that changed
+            // nothing used to change nothing on screen either.
+            const failure = choiceFailureMessage(result, t);
+            if (failure !== null) {
+              setRunError(failure);
+              console.warn(
+                `[LumaSync] ControlPopupApp mode ${next}: ${result.status.code}`,
+                result.status.details ?? "",
+              );
+            }
           }
         } catch (error) {
           console.error("[LumaSync] ControlPopupApp mode change failed:", error);

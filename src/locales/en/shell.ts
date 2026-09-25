@@ -106,6 +106,8 @@ export default {
         noLights: "Hue didn't start — the entertainment area has no lights",
       },
       usbLeftOut: "The USB strip isn't connected — running on Hue only",
+      choiceRefused: "That lighting change didn't go through — what was running still runs",
+      choiceStartFailed: "That lighting mode couldn't start, so the lights are off",
       hueBootRetry: {
         waiting: "The Hue bridge is held by an earlier session — lighting resumes once it lets go",
         gaveUp: "The Hue bridge stayed busy, so lighting is off — turn it on again once it's free",

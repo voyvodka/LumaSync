@@ -46,9 +46,9 @@ const REQUIRED_EXPORTS = [
 const REQUIRED_TRAY_IDS = [
   "open-settings",
   "status-indicator",
-  "tray-lights-off",
-  "tray-resume-last-mode",
-  "tray-solid-color",
+  "tray-mode-off",
+  "tray-mode-ambilight",
+  "tray-mode-solid",
   "quit",
 ];
 
@@ -2541,7 +2541,8 @@ const checkedPairs = nullabilityPairs.filter(
 // and `shell://main-window-visibility` payload.
 // 84 → 83: `LightingModeChangedPayload`, with the `lighting://mode-changed`
 // event nothing listened to.
-const EXPECTED_NULLABILITY_PAIR_COUNT = 83;
+// 83 → 84: `LightingOutcome`, the snapshot's `lastOutcome`.
+const EXPECTED_NULLABILITY_PAIR_COUNT = 84;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

@@ -20,7 +20,7 @@ snapshot (`useLightingRuntime.ts`: seeded by `get_lighting_runtime`, kept by
 | A strip unplugged | `apply_outputs` `{ targets, origin: "usbUnplug" }` — the rest, or `[]` when it was the only one |
 | Launch | `apply_outputs` `{ origin: "boot" }` — Rust reads the saved mode and outputs itself |
 | LED control popup mode strip | `apply_outputs` `{ mode, origin: "popup" }` |
-| Tray: Lights off, Resume last mode, Solid colour | built in Rust (`tray_request`), never through a window |
+| Tray: the Off / Ambilight / Solid check group | built in Rust (`tray_request`), never through a window; the kind alone, `origin: "tray"` |
 | Test patterns (LED Setup, popup tiles) | `apply_outputs` `{ targets, origin: "leaseHue" }` around each run |
 | Devices card Stop retrying / Retry stop | `release_hue_output` |
 | A drag within the running kind (both windows) | `retune_lighting`, through `retuneCoalescer.ts` |
@@ -104,6 +104,39 @@ not read, so a press that changed nothing changed nothing on screen either:
   output bucket of the start-failure notice). One that also named Hue runs there and raises
   `usbLeftOut` instead, since "lighting didn't start" would be false.
 
+**Every choice's answer rides the snapshot** (`lastOutcome`: request id, origin, status, outcome).
+The tray has no window to read a reply, and the main window never saw the popup's; a tray Ambilight
+without screen recording, or a tray Solid with no LED layout, used to end as a log line and nothing
+anyone could see. Each `user`, `popup` and `tray` transaction that runs to an end publishes its
+answer with its final snapshot; a superseded one publishes none, since the newer one answers, and
+no other origin publishes one. Every later publish carries it along unchanged.
+
+- The main window reads its own choices from their replies and every other origin's from
+  `lastOutcome`, through the same reader (`readAnswer` in `useLightingModeOrchestrator.ts`), so the
+  notice is the one its own button would have raised. Two differences: a remote answer that needs a
+  layout never moves the window to LED Setup (the calibration notice already stands on Lights), and
+  the first snapshot the window sees is a baseline, not news. Request ids only grow, so an answer is
+  raised once however often later snapshots repeat it.
+- A tray answer that fell short while the main window is hidden also raises an OS notification
+  (`useTrayFailureNotification.ts`), in the notices' own copy (`choiceFailureMessage.ts`). The same
+  sentence within a minute is not repeated, and a tray choice that ran clears that memory. A
+  visible window's notice is enough; a choice that ran says nothing.
+- The popup shows its own refused or failed choice inline, in the same copy.
+
+**The tray's mode group is a check group** (`TrayLighting`, `tray_mode_items`). Off, Ambilight and
+Solid are check items; the check follows the snapshot's running mode, redrawn on every publish
+(`sync_tray_modes` in `lib.rs`, newest revision wins). A click toggles a check item natively before
+the choice has run, so the group is redrawn at once from what runs; clicking the running mode sends
+nothing, as its button in the window does nothing. The items are greyed while a transaction runs,
+and each one the main window's own mode button has disabled — no layout for a bound strip, no
+output, a choice in flight — which the window pushes as `TrayLabels.lockedModes` with the labels.
+With no window loaded nothing is locked and the transaction's gates answer instead. The draws are
+posted to the main thread rather than waited on: a menu call from another thread blocks until the
+main thread runs it, and the quit can hold the main thread while a transaction still publishes.
+Solid sends no payload, so it shows the last colour, or `DEFAULT_SOLID` before any was chosen. The
+old "Resume last mode" item is gone: it did the same as Solid whenever Solid ran last, and there was
+no way back to Ambilight.
+
 **A reconnect that finds another app on the area stops under its own code.** The reconnect monitor
 re-reads readiness before each attempt and must not take over a foreign session; when the active
 streamer is the only blocker it used to spend the whole retry budget on it and end
@@ -166,8 +199,8 @@ Off's own black frame does. Answers:
 retune.
 
 **What runs is one snapshot, never the runtime lock.** `LightingRuntimeSnapshot` carries the
-running mode, the driven targets, the session's selection, the phase, the held-out reason and the
-boot wait. Its revision is bumped under a small mutex and the event is emitted after that mutex is
+running mode, the driven targets, the session's selection, the phase, the held-out reason, the
+boot wait and the last choice's answer. Its revision is bumped under a small mutex and the event is emitted after that mutex is
 released, so two publishers can deliver out of order; `listenLightingRuntime` keeps the higher
 revision. A transaction publishes when it starts, at each phase, and when it ends; so do the test
 pattern's start and stop. Retunes are coalesced to 10 Hz with a trailing publish so the last value
@@ -191,6 +224,23 @@ target change that keeps Hue. The wait shows as `bootHueRetry` (resume) or the h
 `busy` (rejoin), and gives up as `gaveUp` / `busyGaveUp`. A choice made after the wait gave up
 takes `gaveUp` down too: it used to outlive the choice whenever the wait ended first, which a paused
 test clock reproduced by running the whole window out while a transaction awaited blocking work.
+
+**The launch's wait for the bridge.** Autostart runs the restore before Wi-Fi is up. The start gate
+refuses (`CONFIG_NOT_READY_GATE_BLOCKED`, readiness `HUE_STREAM_READINESS_FAILED`), the area wait
+above probes once, and that probe answers that the bridge is silent. The wait read it as "not busy"
+and gave up for good, so a Hue-only setup stayed Off and `[usb, hue]` ran on the strip alone until
+the user chose again. A silent bridge is now its own verdict (`HueAreaVerdict::Unreachable`), and
+it — or a start that failed outright for a bridge that did not answer — *parks* the same resume or
+rejoin plan instead (`park_boot_hue`). Nothing polls for it. The Hue health monitor already probes
+the bridge, and its `hue://health` event is heard in Rust (`listen_hue_health`); the first publish
+that says the bridge answers — a probe's answer, not a publish while one is in flight, or a live
+stream — runs the parked plan once (`note_hue_reachable`), through the same `resume_boot_hue` the
+area wait uses. It fires at most once per launch. Anything that cancels the area wait cancels the
+park (a choice, a newer launch, the Devices card's stop); so does a save that leaves no Hue pairing
+behind, and a quit, which the resume checks before it runs. While the window is hidden the monitor
+probes only when asked, so a park may wait until the window next opens. The strip's own resume
+(`BootSinkRetry`) leaves Hue to a parked plan as it does to the area wait, so with both outputs late
+either one can land first and the other joins it.
 
 **The launch's wait for a strip.** The boot restore runs while auto-reconnect is still scanning
 and settling the strip (~2 s after the port opens), so it sees no local output about a quarter of

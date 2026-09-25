@@ -17,6 +17,7 @@ export function runtimeSnapshot(overrides: Partial<LightingRuntimeSnapshot> = {}
     requestId: null,
     hueHeldOutReason: null,
     bootHueRetry: null,
+    lastOutcome: null,
     ...overrides,
   };
 }

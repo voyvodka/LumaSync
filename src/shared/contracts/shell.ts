@@ -8,7 +8,7 @@ import type {
 } from "./device";
 import type { DisplayId } from "./display";
 import type { LedTestPattern } from "./preview";
-import type { LightingModeConfig } from "./mode";
+import type { LightingModeConfig, LightingModeKind } from "./mode";
 import type {
   HueBridgeSummary,
   HueChannelPlacementOverride,
@@ -60,9 +60,16 @@ export interface TrayLabels {
   openSettings: string;
   /** The disabled status line under it — the running mode and its outputs. */
   status: string;
+  /** The three mode items, a check group: Rust checks the one that runs. */
   lightsOff: string;
-  resumeLastMode: string;
+  ambilight: string;
   solidColor: string;
+  /**
+   * The modes the main window's own mode buttons have disabled right now — no
+   * layout for a bound strip, no output, a choice in flight. The tray greys
+   * the same ones, and all three while a transaction runs.
+   */
+  lockedModes: LightingModeKind[];
   showLedPreview: string;
   closeOverlays: string;
   quit: string;
@@ -92,9 +99,10 @@ export interface LaunchContext {
 export const TRAY_MENU_IDS = {
   OPEN_SETTINGS: "open-settings",
   STATUS_INDICATOR: "status-indicator",
-  LIGHTS_OFF: "tray-lights-off",
-  RESUME_LAST_MODE: "tray-resume-last-mode",
-  SOLID_COLOR: "tray-solid-color",
+  /** The mode check group. Each runs the lighting transaction with origin `tray`. */
+  MODE_OFF: "tray-mode-off",
+  MODE_AMBILIGHT: "tray-mode-ambilight",
+  MODE_SOLID: "tray-mode-solid",
   /**
    * v1.6 — opens (or focuses) the LED preview surface: the interactive
    * control popup plus, when enabled, the digital-twin overlay. Lets the
