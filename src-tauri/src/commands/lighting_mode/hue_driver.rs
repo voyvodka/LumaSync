@@ -47,6 +47,8 @@ pub(crate) trait HueDriver: Send + Sync {
     fn runtime_active(&self) -> bool;
     /// The slot a running ambilight worker follows.
     fn output_live(&self) -> Arc<HueOutputLive>;
+    /// The area the live stream holds, when one is live.
+    fn live_area_id(&self) -> Option<String>;
 }
 
 /// Managed only by tests; production resolves to `ProductionHueDriver`.
@@ -125,6 +127,15 @@ impl<R: Runtime> HueDriver for ProductionHueDriver<R> {
 
     fn output_live(&self) -> Arc<HueOutputLive> {
         self.app.state::<HueRuntimeStateStore>().output_live()
+    }
+
+    fn live_area_id(&self) -> Option<String> {
+        let store = self.app.state::<HueRuntimeStateStore>();
+        let owner = acquire_hue_runtime(&store.runtime);
+        owner
+            .active_stream
+            .as_ref()
+            .map(|stream| stream.area_id.clone())
     }
 }
 

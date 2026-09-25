@@ -95,7 +95,17 @@ const shell: Catalogue<typeof enShell> = {
         config: "Hue kurulmamış — yalnızca {{output}} ile çalışıyor",
         busy: "Hue köprüsü önceki bir oturumu tutuyor — bıraktığında Hue kendiliğinden katılır",
         busyGaveUp: "Hue köprüsü meşgul kaldı — Hue'yu yeniden açana dek yalnızca {{output}} ile çalışıyor",
+        inUse: "Hue eğlence alanını başka bir uygulama kullanıyor — yalnızca {{output}} ile çalışıyor",
+        noLights: "Hue eğlence alanında yayın yapılacak ışık yok — yalnızca {{output}} ile çalışıyor",
       },
+      hueNotStarted: {
+        unreachable: "Hue başlamadı — köprüye ulaşılamıyor",
+        auth: "Hue başlamadı — köprü yeniden eşleştirilmeli",
+        config: "Hue başlamadı — köprü ya da eğlence alanı kurulmamış",
+        inUse: "Hue başlamadı — eğlence alanını başka bir uygulama kullanıyor",
+        noLights: "Hue başlamadı — eğlence alanında ışık yok",
+      },
+      usbLeftOut: "USB şerit bağlı değil — yalnızca Hue ile çalışıyor",
       hueBootRetry: {
         waiting: "Hue köprüsü önceki bir oturumu tutuyor — bıraktığında aydınlatma kendiliğinden sürer",
         gaveUp: "Hue köprüsü meşgul kaldı, aydınlatma kapalı — köprü boşalınca yeniden aç",

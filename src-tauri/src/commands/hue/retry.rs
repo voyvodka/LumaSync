@@ -94,6 +94,32 @@ pub(crate) fn register_transient_fault(
     make_result(owner)
 }
 
+/// A reconnect found another app streaming the area. Terminal, like an
+/// exhausted budget, but named for what happened; a user stop still wins.
+pub(crate) fn register_area_taken_over(
+    owner: &mut HueRuntimeOwner,
+    details: &str,
+) -> HueRuntimeCommandResult {
+    if owner.user_override_pending {
+        return make_result(owner);
+    }
+    owner.state = HueRuntimeState::Failed;
+    owner.reconnect_attempt = owner.retry_policy.max_attempts;
+    owner.last_status = status_with(
+        HueRuntimeState::Failed,
+        "HUE_AREA_TAKEN_OVER",
+        "Another app started streaming to the entertainment area.",
+        Some(details.to_string()),
+        HueRuntimeTriggerSource::System,
+    );
+    owner.last_status.action_hint = Some(HueRuntimeActionHint::Retry);
+    owner.last_status.remaining_attempts = Some(0);
+    owner.last_status.next_attempt_ms = None;
+    owner.last_error_code = Some(owner.last_status.code.clone());
+    owner.last_error_at = Some(Instant::now());
+    make_result(owner)
+}
+
 pub(crate) fn register_auth_invalid(
     owner: &mut HueRuntimeOwner,
     details: &str,
@@ -356,6 +382,35 @@ mod tests {
         assert_eq!(result.status.code, "CONFIG_NOT_READY_GATE_BLOCKED");
         assert_eq!(result.status.state, HueRuntimeState::Idle);
         assert!(!result.active);
+    }
+
+    #[test]
+    fn an_area_taken_over_mid_stream_fails_under_its_own_code() {
+        let mut owner = HueRuntimeOwner {
+            state: HueRuntimeState::Reconnecting,
+            ..HueRuntimeOwner::default()
+        };
+
+        let result = register_area_taken_over(&mut owner, "held by another app");
+
+        assert_eq!(result.status.code, "HUE_AREA_TAKEN_OVER");
+        assert_eq!(result.status.state, HueRuntimeState::Failed);
+        assert_eq!(result.status.remaining_attempts, Some(0));
+        assert_eq!(owner.state, HueRuntimeState::Failed);
+    }
+
+    #[test]
+    fn a_user_stop_outranks_a_take_over() {
+        let mut owner = HueRuntimeOwner {
+            state: HueRuntimeState::Idle,
+            user_override_pending: true,
+            ..HueRuntimeOwner::default()
+        };
+
+        let result = register_area_taken_over(&mut owner, "held by another app");
+
+        assert_ne!(result.status.code, "HUE_AREA_TAKEN_OVER");
+        assert_eq!(owner.state, HueRuntimeState::Idle);
     }
 
     /// The gate details are what the frontend reads to tell a busy area from

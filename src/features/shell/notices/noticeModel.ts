@@ -51,6 +51,8 @@ export const SHELL_NOTICE_IDS = {
   STOP_FAILED: "stop-failed",
   PREVIEW_OPEN_FAILED: "preview-open-failed",
   HUE_LEFT_OUT: "hue-left-out",
+  HUE_NOT_STARTED: "hue-not-started",
+  USB_LEFT_OUT: "usb-left-out",
   HUE_BOOT_RETRY: "hue-boot-retry",
   USB_DISCONNECTED: "usb-disconnected",
   USB_UNSUPPORTED: "usb-unsupported",

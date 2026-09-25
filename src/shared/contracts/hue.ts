@@ -232,6 +232,8 @@ export const HUE_RUNTIME_STATUS = {
   STREAM_STOPPED: "HUE_STREAM_STOPPED",
   TRANSIENT_RETRY_SCHEDULED: "TRANSIENT_RETRY_SCHEDULED",
   TRANSIENT_RETRY_EXHAUSTED: "TRANSIENT_RETRY_EXHAUSTED",
+  /** Failed: a reconnect found another app streaming the area; retrying would not win it back. */
+  AREA_TAKEN_OVER: "HUE_AREA_TAKEN_OVER",
   AUTH_INVALID_CREDENTIALS: "AUTH_INVALID_CREDENTIALS",
   /**
    * Uniform 403 re-pair signal.

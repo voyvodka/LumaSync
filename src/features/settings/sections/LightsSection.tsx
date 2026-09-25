@@ -363,7 +363,9 @@ export function LightsSection({
             variant="full"
             value={activeKind}
             isDisabled={(kind) =>
-              kind === LIGHTING_MODE_KIND.OFF ? modeSelectorDisabled : nonOffModeDisabled
+              // Off is never locked by the calibration: lights left running
+              // behind a lock could not be switched off (compact never did).
+              kind === LIGHTING_MODE_KIND.OFF ? isModeTransitioning : nonOffModeDisabled
             }
             subtitles={{
               [LIGHTING_MODE_KIND.OFF]: t("lights:mode.off.subtitle"),
@@ -570,7 +572,9 @@ export function LightsSection({
                   className={`lm-out-row ${
                     !row.available ? "is-unavailable" : !selected ? "is-off" : (row.liveState ?? "")
                   }`}
-                  disabled={modeSelectorDisabled || !row.available || lastLiveOutput}
+                  // Not locked by the calibration: dropping the strip is a
+                  // way out of that lock.
+                  disabled={isModeTransitioning || !row.available || lastLiveOutput}
                   onClick={() => toggleTarget(target, selected)}
                   // The saved selection is untouched; a missing output is just
                   // not shown as on, since nothing is sent to it.

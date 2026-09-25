@@ -19,9 +19,9 @@ use tauri::Manager;
 
 use super::hue_driver::HueAreaVerdict;
 use super::outputs::{
-    apply_outputs_with, release_hue_with, wait_for_area_release, ApplyOutputsRequest,
-    ApplyOutputsResult, CancelToken, LightingOrigin, ReleaseWait, BOOT_HUE_RETRY_POLL,
-    BOOT_HUE_RETRY_WINDOW,
+    apply_outputs_with, note_local_sink_connected, refresh_running_with, release_hue_with,
+    wait_for_area_release, ApplyOutputsRequest, ApplyOutputsResult, CancelToken, LightingOrigin,
+    ReleaseWait, BOOT_HUE_RETRY_POLL, BOOT_HUE_RETRY_WINDOW,
 };
 use super::snapshot::{BootHueRetryState, HueLeftOutReason, LightingPhase, OutputTarget};
 use super::test_support::{Rig, RigSetup};
@@ -773,23 +773,26 @@ fn a_stream_this_start_opened_is_released_when_the_mode_never_ran() {
     assert_eq!(result.snapshot.mode.kind, LightingModeKind::Off);
 }
 
-/// "keeps the stream a still-running mode is using when a gate refuses"
+/// "keeps the stream a still-running mode is using when a gate refuses" — the
+/// device gate no longer refuses the whole choice: it runs on the Hue that is
+/// there, on the stream it already had.
 #[test]
-fn a_gate_refusal_keeps_the_stream_the_running_mode_uses() {
+fn a_choice_the_strip_cannot_take_keeps_the_stream_the_running_mode_uses() {
     let rig = Rig::new(RigSetup::default());
     running(&rig, solid(1), &[Hue]);
     rig.set_serial_connected(false);
 
     let result = apply(&rig, user(Some(ambilight(1.0)), Some(&[Usb, Hue])));
 
-    assert_eq!(result.status.code, "OUTPUTS_REFUSED");
+    assert_eq!(result.status.code, "OUTPUTS_APPLIED_PARTIAL");
     assert!(
         !events(&rig).iter().any(|e| e.starts_with("hue:stop")),
         "{:?}",
         events(&rig)
     );
-    assert_eq!(result.snapshot.mode.kind, LightingModeKind::Solid);
+    assert_eq!(result.snapshot.mode.kind, LightingModeKind::Ambilight);
     assert_eq!(result.snapshot.active_targets, vec![Hue]);
+    assert_eq!(result.outcome.dropped_targets, vec![Usb]);
 }
 
 /// "releases the previous mode's stream once the backend has torn that mode down"
@@ -2045,4 +2048,240 @@ async fn a_cancelled_area_wait_stops_mid_sleep() {
 
     assert_eq!(outcome, ReleaseWait::Cancelled);
     assert_eq!(started.elapsed(), Duration::from_secs(4));
+}
+
+// ---------------------------------------------------------------------------
+// The launch's wait for a strip
+// ---------------------------------------------------------------------------
+
+fn restoring(targets: serde_json::Value) -> Rig {
+    Rig::new(RigSetup {
+        serial_connected: false,
+        state: json!({
+            "lightingMode": { "kind": "solid", "solid": { "r": 5, "g": 6, "b": 7, "brightness": 1 } },
+            "lastOutputTargets": targets
+        }),
+        ..RigSetup::default()
+    })
+}
+
+fn strip_connects(rig: &Rig) {
+    rig.set_serial_connected(true);
+    note_local_sink_connected(&rig.handle());
+}
+
+/// Auto-reconnect is still settling the strip when the restore runs; the
+/// restore used to end Off and stay there.
+#[test]
+fn a_restore_that_found_no_strip_resumes_on_it_once_it_connects() {
+    let rig = restoring(json!(["usb"]));
+
+    let restore = apply(&rig, request(LightingOrigin::Boot, None, None));
+    assert_eq!(restore.snapshot.mode.kind, LightingModeKind::Off);
+
+    strip_connects(&rig);
+
+    wait_until("the restore never resumed on the strip", || {
+        rig.state().snapshot.read().mode.kind == LightingModeKind::Solid
+    });
+    assert_eq!(rig.state().snapshot.read().active_targets, vec![Usb]);
+    assert!(rig.written_keys().is_empty(), "a resume saves nothing");
+}
+
+#[test]
+fn a_restore_running_on_hue_adds_the_strip_once_it_connects() {
+    let rig = restoring(json!(["usb", "hue"]));
+
+    let restore = apply(&rig, request(LightingOrigin::Boot, None, None));
+    assert_eq!(restore.snapshot.active_targets, vec![Hue]);
+
+    strip_connects(&rig);
+
+    wait_until("the strip never joined", || {
+        let snapshot = rig.state().snapshot.read();
+        snapshot.active_targets == vec![Usb, Hue] && snapshot.phase == LightingPhase::Idle
+    });
+    assert_eq!(
+        events(&rig).iter().filter(|e| *e == "hue:start").count(),
+        1,
+        "the stream is kept, not restarted: {:?}",
+        events(&rig)
+    );
+}
+
+#[test]
+fn a_choice_made_before_the_strip_connects_ends_the_wait() {
+    let rig = restoring(json!(["usb"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    apply(&rig, user(None, Some(&[Usb])));
+
+    strip_connects(&rig);
+
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(mode_events(&rig).is_empty(), "{:?}", events(&rig));
+    assert_eq!(rig.running().kind, LightingModeKind::Off);
+}
+
+#[test]
+fn a_strip_that_connects_after_the_wait_starts_nothing() {
+    let rig = restoring(json!(["usb"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+
+    strip_connects(&rig);
+
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(mode_events(&rig).is_empty(), "{:?}", events(&rig));
+}
+
+// ---------------------------------------------------------------------------
+// The saved Hue area moves the stream
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_new_saved_area_moves_the_running_stream_to_it() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(1.0), &[Hue]);
+    rig.seed(json!({ "lastHueAreaId": "area-2" }));
+
+    let result = block_on(refresh_running_with(&rig.handle()))
+        .unwrap()
+        .expect("a mode runs");
+
+    assert_eq!(result.status.code, "OUTPUTS_APPLIED");
+    assert!(
+        order(&rig, "hue:stop:system", "hue:start"),
+        "{:?}",
+        events(&rig)
+    );
+    assert_eq!(rig.hue.start_areas(), vec!["area-1", "area-2"]);
+    assert_eq!(rig.hue.live_area().as_deref(), Some("area-2"));
+    assert_eq!(result.snapshot.active_targets, vec![Hue]);
+    assert_eq!(rig.running().kind, LightingModeKind::Ambilight);
+}
+
+#[test]
+fn a_mode_choice_runs_on_the_saved_area_not_the_live_one() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(1), &[Hue]);
+    rig.seed(json!({ "lastHueAreaId": "area-2" }));
+
+    let result = apply(&rig, user(Some(ambilight(1.0)), None));
+
+    assert_eq!(result.status.code, "OUTPUTS_APPLIED");
+    assert_eq!(rig.hue.live_area().as_deref(), Some("area-2"));
+    assert_eq!(result.snapshot.active_targets, vec![Hue]);
+}
+
+#[test]
+fn a_move_the_new_area_refuses_leaves_the_mode_on_the_strip() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(1.0), &[Usb, Hue]);
+    rig.seed(json!({ "lastHueAreaId": "area-2" }));
+    rig.hue.script_start_with_details(
+        "CONFIG_NOT_READY_GATE_BLOCKED",
+        "Missing prerequisites: ready; readiness: HUE_STREAM_NOT_READY, HUE_STREAM_NOT_READY_ACTIVE_STREAMER",
+    );
+
+    let result = block_on(refresh_running_with(&rig.handle()))
+        .unwrap()
+        .expect("a mode runs");
+
+    assert_eq!(result.status.code, "OUTPUTS_APPLIED_PARTIAL");
+    assert_eq!(result.outcome.hue_left_out, Some(HueLeftOutReason::InUse));
+    assert_eq!(result.snapshot.active_targets, vec![Usb]);
+    assert!(!rig.hue.streaming());
+}
+
+// ---------------------------------------------------------------------------
+// A refused choice says why
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_choice_with_the_strip_missing_runs_on_hue_and_drops_the_strip() {
+    let rig = Rig::new(RigSetup {
+        serial_connected: false,
+        ..RigSetup::default()
+    });
+
+    let result = apply(&rig, user(Some(ambilight(1.0)), Some(&[Usb, Hue])));
+
+    assert_eq!(result.status.code, "OUTPUTS_APPLIED_PARTIAL");
+    assert_eq!(result.snapshot.active_targets, vec![Hue]);
+    assert_eq!(result.outcome.dropped_targets, vec![Usb]);
+    assert_eq!(result.snapshot.selected_targets, vec![Hue]);
+    let saved = rig.saved("lightingMode").expect("the mode was saved");
+    assert_eq!(
+        saved["targets"],
+        json!(["usb", "hue"]),
+        "only the session drops it"
+    );
+}
+
+fn hue_only_refusal(code: &'static str, details: &'static str) -> ApplyOutputsResult {
+    let rig = Rig::new(RigSetup::default());
+    rig.hue.script_start_with_details(code, details);
+    apply(&rig, user(Some(ambilight(1.0)), Some(&[Hue])))
+}
+
+#[test]
+fn a_hue_only_choice_hue_refused_names_the_reason() {
+    let cases = [
+        (
+            "CONFIG_NOT_READY_GATE_BLOCKED",
+            "Missing prerequisites: ready; readiness: HUE_STREAM_NOT_READY, HUE_STREAM_NOT_READY_ACTIVE_STREAMER",
+            HueLeftOutReason::InUse,
+        ),
+        (
+            "CONFIG_NOT_READY_GATE_BLOCKED",
+            "Missing prerequisites: readiness; readiness: HUE_STREAM_READINESS_FAILED",
+            HueLeftOutReason::Unreachable,
+        ),
+        (
+            "CONFIG_NOT_READY_GATE_BLOCKED",
+            "Missing prerequisites: ready; readiness: HUE_STREAM_NOT_READY",
+            HueLeftOutReason::NoLights,
+        ),
+        (
+            "AUTH_INVALID_CREDENTIALS",
+            "Bridge returned explicit auth-invalid evidence.",
+            HueLeftOutReason::Auth,
+        ),
+    ];
+    for (code, details, reason) in cases {
+        let result = hue_only_refusal(code, details);
+        assert_eq!(result.status.code, "OUTPUTS_REFUSED", "{code} {details}");
+        assert_eq!(result.outcome.hue_not_started, Some(reason), "{details}");
+        assert_eq!(result.outcome.hue_left_out, None);
+    }
+}
+
+#[test]
+fn a_hue_only_choice_without_a_bridge_says_not_set_up() {
+    let rig = Rig::new(RigSetup {
+        hue_paired: false,
+        ..RigSetup::default()
+    });
+
+    let result = apply(&rig, user(Some(ambilight(1.0)), Some(&[Hue])));
+
+    assert_eq!(
+        result.outcome.hue_not_started,
+        Some(HueLeftOutReason::Config)
+    );
+}
+
+#[test]
+fn an_area_another_app_holds_is_named_when_hue_is_left_out() {
+    let rig = Rig::new(RigSetup::default());
+    rig.hue.script_start_with_details(
+        "CONFIG_NOT_READY_GATE_BLOCKED",
+        "Missing prerequisites: ready; readiness: HUE_STREAM_NOT_READY, HUE_STREAM_NOT_READY_ACTIVE_STREAMER",
+    );
+
+    let result = apply(&rig, user(Some(ambilight(1.0)), Some(&[Usb, Hue])));
+
+    assert_eq!(result.snapshot.active_targets, vec![Usb]);
+    assert_eq!(result.outcome.hue_left_out, Some(HueLeftOutReason::InUse));
+    assert_eq!(result.outcome.hue_not_started, None);
 }

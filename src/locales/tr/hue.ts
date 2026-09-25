@@ -165,6 +165,7 @@ const hue: Catalogue<typeof enHue> = {
     },
     codes: {
       HUE_STREAM_STARTING: "Hue yayın başlatma isteği alındı.",
+      HUE_AREA_TAKEN_OVER: "Bu eğlence alanına başka bir uygulama yayın yapmaya başladı, yayın durdu. Diğer uygulamayı kapat, sonra yeniden başlat.",
       HUE_STREAM_RUNNING: "Hue yayını aktif.",
       HUE_STREAM_RUNNING_DTLS: "Hue yayını aktif.",
       HUE_STREAM_STOPPING: "Hue durduruluyor.",

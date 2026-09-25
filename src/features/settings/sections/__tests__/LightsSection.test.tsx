@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { useState, type ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MODE_GUARD_REASONS } from "@/features/mode/state/modeGuard";
@@ -296,6 +296,39 @@ describe("LightsSection", () => {
     expect(screen.queryByText("shell:notices.messages.calibrationRequired")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "shell:notices.actions.ledSetup" })).not.toBeInTheDocument();
     expect(onModeChange).not.toHaveBeenCalled();
+  });
+
+  // Hue-only Ambilight running, a strip plugged in: the auto-added USB target
+  // raised the lock, and Off and the output rows went with it while the lights ran.
+  it("never locks Off or the output rows behind the calibration", async () => {
+    const user = userEvent.setup();
+    const onModeChange = vi.fn<ComponentProps<typeof LightsSection>["onModeChange"]>();
+    const onOutputTargetsChange = vi.fn<ComponentProps<typeof LightsSection>["onOutputTargetsChange"]>();
+
+    render(
+      <LightsSection
+        mode={{ kind: "ambilight" }}
+        outputTargets={["usb", "hue"]}
+        localOutputConnected={true}
+        localSink={{ transport: "serial", id: "/dev/cu.usbserial-1420" }}
+        hueConfigured={true}
+        hueReachable={true}
+        hueStreaming={true}
+        modeLockReason={MODE_GUARD_REASONS.CALIBRATION_REQUIRED}
+        onModeChange={onModeChange}
+        onOutputTargetsChange={onOutputTargetsChange}
+      />,
+    );
+
+    const off = screen.getByRole("radio", { name: /Off/ });
+    expect(off).toBeEnabled();
+    await user.click(off);
+    expect(onModeChange).toHaveBeenCalledWith(expect.objectContaining({ kind: "off" }));
+
+    const usbRow = screen.getByRole("button", { name: /USB/ });
+    expect(usbRow).toBeEnabled();
+    await user.click(usbRow);
+    expect(onOutputTargetsChange).toHaveBeenCalledWith(["hue"]);
   });
 
   it("toggles hue target when hue is configured and the row is clicked", async () => {

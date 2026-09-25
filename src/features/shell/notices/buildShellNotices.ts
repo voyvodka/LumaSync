@@ -46,6 +46,10 @@ export interface ShellNoticeInput {
   stopFailedTargets: HueRuntimeTarget[] | null;
   previewOpenFailure: PreviewOpenFailure | null;
   hueLeftOut: HueLeftOutReason | null;
+  /** A Hue-only choice did not start, so what ran before still runs. */
+  hueNotStarted: HueLeftOutReason | null;
+  /** A choice runs on Hue without the strip it named, which is not connected. */
+  usbLeftOut: boolean;
   hueBootRetry: BootHueRetryState | null;
   usbDisconnected: boolean;
   usbDisconnectedLightingOff: boolean;
@@ -87,6 +91,19 @@ const HUE_LEFT_OUT_MESSAGE: Record<HueLeftOutReason, TranslationKey> = {
   [HUE_LEFT_OUT_REASON.CONFIG]: "shell:notices.messages.hueLeftOut.config",
   [HUE_LEFT_OUT_REASON.BUSY]: "shell:notices.messages.hueLeftOut.busy",
   [HUE_LEFT_OUT_REASON.BUSY_GAVE_UP]: "shell:notices.messages.hueLeftOut.busyGaveUp",
+  [HUE_LEFT_OUT_REASON.IN_USE]: "shell:notices.messages.hueLeftOut.inUse",
+  [HUE_LEFT_OUT_REASON.NO_LIGHTS]: "shell:notices.messages.hueLeftOut.noLights",
+};
+
+/** The two busy reasons belong to the launch's wait and never answer a choice. */
+const HUE_NOT_STARTED_MESSAGE: Record<HueLeftOutReason, TranslationKey> = {
+  [HUE_LEFT_OUT_REASON.UNREACHABLE]: "shell:notices.messages.hueNotStarted.unreachable",
+  [HUE_LEFT_OUT_REASON.AUTH]: "shell:notices.messages.hueNotStarted.auth",
+  [HUE_LEFT_OUT_REASON.CONFIG]: "shell:notices.messages.hueNotStarted.config",
+  [HUE_LEFT_OUT_REASON.BUSY]: "shell:notices.messages.hueNotStarted.inUse",
+  [HUE_LEFT_OUT_REASON.BUSY_GAVE_UP]: "shell:notices.messages.hueNotStarted.inUse",
+  [HUE_LEFT_OUT_REASON.IN_USE]: "shell:notices.messages.hueNotStarted.inUse",
+  [HUE_LEFT_OUT_REASON.NO_LIGHTS]: "shell:notices.messages.hueNotStarted.noLights",
 };
 
 const HUE_BOOT_RETRY_MESSAGE: Record<BootHueRetryState, TranslationKey> = {
@@ -268,7 +285,8 @@ export function buildShellNotices(
     const opensDevices =
       input.hueLeftOut === HUE_LEFT_OUT_REASON.AUTH ||
       input.hueLeftOut === HUE_LEFT_OUT_REASON.UNREACHABLE ||
-      input.hueLeftOut === HUE_LEFT_OUT_REASON.CONFIG;
+      input.hueLeftOut === HUE_LEFT_OUT_REASON.CONFIG ||
+      input.hueLeftOut === HUE_LEFT_OUT_REASON.NO_LIGHTS;
     notices.push({
       id: SHELL_NOTICE_IDS.HUE_LEFT_OUT,
       tier: NOTICE_TIER.WARNING,
@@ -281,6 +299,34 @@ export function buildShellNotices(
       testId: "hue-left-out-notice",
       shownBy: NOTICE_VIEW.DEVICES_HUE,
       data: { "data-reason": input.hueLeftOut },
+    });
+  }
+  if (input.hueNotStarted) {
+    notices.push({
+      id: SHELL_NOTICE_IDS.HUE_NOT_STARTED,
+      tier: NOTICE_TIER.WARNING,
+      severity: NOTICE_SEVERITY.WARNING,
+      kind: "event",
+      message: t(HUE_NOT_STARTED_MESSAGE[input.hueNotStarted]),
+      action: devicesAction("hue"),
+      dismissible: true,
+      source: input.hueNotStarted,
+      testId: "hue-not-started-notice",
+      shownBy: NOTICE_VIEW.DEVICES_HUE,
+      data: { "data-reason": input.hueNotStarted },
+    });
+  }
+  if (input.usbLeftOut) {
+    notices.push({
+      id: SHELL_NOTICE_IDS.USB_LEFT_OUT,
+      tier: NOTICE_TIER.WARNING,
+      severity: NOTICE_SEVERITY.WARNING,
+      kind: "event",
+      message: t("shell:notices.messages.usbLeftOut"),
+      action: devicesAction("usb"),
+      dismissible: true,
+      source: true,
+      testId: "usb-left-out-notice",
     });
   }
   // Never co-fires with the left-out notice: that one means a mode is running.

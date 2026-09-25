@@ -32,10 +32,13 @@ use std::time::{Duration, Instant};
 
 use log::info;
 
-use super::super::hue_onboarding::{check_hue_stream_readiness_with_freshness, ActiveStreamerView};
+use super::super::hue_onboarding::{
+    check_hue_stream_readiness_with_freshness, ActiveStreamerView, HueStreamReadinessResponse,
+    ACTIVE_STREAMER_REASON,
+};
 use super::area_cache::HueReadFreshness;
 use super::frame::HueAreaChannel;
-use super::retry::register_transient_fault;
+use super::retry::{register_area_taken_over, register_transient_fault};
 use super::sender::{
     apply_channel_placements, build_hue_sender, deactivate_with_token, fetch_area_channels,
     fetch_light_metadata_for_channels, wait_for_shutdown, HueLightMetadata, ShutdownSignal,
@@ -307,6 +310,9 @@ enum RestartOutcome {
     Retryable(String),
     /// User stop or terminal runtime state — exit without re-arming.
     Abandoned,
+    /// Another app streams the area now. Waiting out the budget cannot win it
+    /// back, and "retries exhausted" would name the wrong cause.
+    TakenOver(String),
 }
 
 // ---------------------------------------------------------------------------
@@ -431,9 +437,31 @@ pub(crate) fn spawn_reconnect_monitor_with(
                     info!("Reconnect monitor: restart attempt failed ({detail}); re-arming.");
                     fault_detail = detail;
                 }
+                RestartOutcome::TakenOver(detail) => {
+                    info!("Reconnect monitor: another app streams the area now; giving up.");
+                    let mut owner = acquire_hue_runtime(&runtime);
+                    register_area_taken_over(&mut owner, &detail);
+                    return;
+                }
             }
         }
     });
+}
+
+/// Why readiness refused a reconnect. Only the streamer sentinel alone reads
+/// as a take-over: an area that also lost its channels would not come back
+/// once the other app let go either.
+fn restart_refused(readiness: &HueStreamReadinessResponse) -> RestartOutcome {
+    let detail = format!(
+        "Readiness check failed during reconnect: {}",
+        readiness.status.message
+    );
+    let reasons = &readiness.readiness.reasons;
+    if reasons.len() == 1 && reasons[0] == ACTIVE_STREAMER_REASON {
+        RestartOutcome::TakenOver(detail)
+    } else {
+        RestartOutcome::Retryable(detail)
+    }
 }
 
 /// Internal stream restart logic for the reconnect monitor.
@@ -501,10 +529,7 @@ async fn internal_restart_stream(
             // Deliberately NOT relaxed for `ACTIVE_STREAMER` the way the health
             // poll is: our own stream is already deactivated by this point, so a
             // busy area means a foreign client owns it and we must not hijack.
-            return RestartOutcome::Retryable(format!(
-                "Readiness check failed during reconnect: {}",
-                readiness.status.message
-            ));
+            return restart_refused(&readiness);
         }
     }
 
@@ -616,6 +641,37 @@ mod tests {
             trigger_source: Some(HueRuntimeTriggerSource::ModeControl),
             channel_placements: None,
         }
+    }
+
+    fn readiness(code: &str, reasons: &[&str]) -> HueStreamReadinessResponse {
+        HueStreamReadinessResponse {
+            status: crate::commands::status::CommandStatus::new(code, "not ready", None),
+            readiness: super::super::super::hue_onboarding::HueStreamReadiness {
+                ready: false,
+                reasons: reasons.iter().map(|r| r.to_string()).collect(),
+            },
+        }
+    }
+
+    #[test]
+    fn a_reconnect_refused_only_by_another_streamer_is_a_take_over() {
+        let taken = restart_refused(&readiness(
+            "HUE_STREAM_NOT_READY",
+            &[ACTIVE_STREAMER_REASON],
+        ));
+        assert!(matches!(taken, RestartOutcome::TakenOver(_)), "{taken:?}");
+
+        let emptied = restart_refused(&readiness(
+            "HUE_STREAM_NOT_READY",
+            &[ACTIVE_STREAMER_REASON, "no channels"],
+        ));
+        assert!(
+            matches!(emptied, RestartOutcome::Retryable(_)),
+            "{emptied:?}"
+        );
+
+        let silent = restart_refused(&readiness("HUE_STREAM_READINESS_FAILED", &["no answer"]));
+        assert!(matches!(silent, RestartOutcome::Retryable(_)), "{silent:?}");
     }
 
     fn test_channels() -> Vec<HueAreaChannel> {

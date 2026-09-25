@@ -168,6 +168,7 @@ export default {
       HUE_STREAM_STOPPED: "Hue stream is stopped.",
       TRANSIENT_RETRY_SCHEDULED: "Transient issue detected. Auto-retry scheduled.",
       TRANSIENT_RETRY_EXHAUSTED: "Retry budget exhausted. Manual reconnect required.",
+      HUE_AREA_TAKEN_OVER: "Another app started streaming to this entertainment area, so the stream stopped. Close the other app, then start again.",
       AUTH_INVALID_CREDENTIALS: "Credentials are invalid. Re-pair is required.",
       AUTH_INVALID_RE_PAIR_REQUIRED: "The bridge rejected the request. Re-pair is required.",
       CONFIG_NOT_READY_GATE_BLOCKED: "Hue did not start: the area was not confirmed ready.",

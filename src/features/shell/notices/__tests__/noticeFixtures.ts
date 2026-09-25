@@ -27,6 +27,8 @@ export const QUIET_INPUT: ShellNoticeInput = {
   stopFailedTargets: null,
   previewOpenFailure: null,
   hueLeftOut: null,
+  hueNotStarted: null,
+  usbLeftOut: false,
   hueBootRetry: null,
   usbDisconnected: false,
   usbDisconnectedLightingOff: false,

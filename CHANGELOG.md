@@ -145,6 +145,19 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Lighting: a mode restored at launch now reaches a USB strip or WLED device that finishes
+  connecting a moment after the app starts; about one launch in four used to leave the strip dark
+  until you picked a mode again. Choosing a mode with the strip unplugged runs it on Hue if Hue is
+  selected, and says the strip is not connected, instead of doing nothing; a Hue-only choice that
+  Hue refuses now says why (bridge unreachable, pairing needed, another app using the area, no
+  lights in the area). A Hue stream that another app takes over is reported as that instead of
+  "retry budget exhausted". Picking another entertainment area while streaming moves the stream to
+  it. A saved LED layout reaches the running mode, and colour correction, colour order and display
+  changes reach the strip while Hue reconnects. Off and the output switches are never locked
+  behind the LED layout, a Hue-only setup is no longer asked for a layout for a strip it does not
+  have, finishing Hue setup turns the Hue output on, the "continuing on the other outputs" notice
+  no longer appears while lighting is off, and the tray's labels and the rest of the window no
+  longer wait for the launch's lighting restore.
 - Hue: setting up a bridge for the first time no longer says your credentials have expired before
   you have paired anything. The card asks you to pair, with a line on the link button, and a scan
   that finds several bridges lets you pick one instead of choosing the first. Choosing an area has

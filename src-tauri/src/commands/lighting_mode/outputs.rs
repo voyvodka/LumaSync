@@ -12,7 +12,7 @@
 use std::future::Future;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
@@ -34,6 +34,7 @@ use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionSta
 use crate::commands::hue::hue_config::{hue_start_request, room_geometry_from_state};
 use crate::commands::hue::light_restore::HueLightsAfterStop;
 use crate::commands::hue::state_store::{HueRuntimeTriggerSource, StartHueStreamRequest};
+use crate::commands::hue_onboarding::ACTIVE_STREAMER_REASON;
 use crate::commands::shell_state::{self, PersistedShellState};
 use crate::commands::status::CommandStatus;
 use crate::commands::wled_discovery::{power_off_wled, WledPowerOffError};
@@ -45,14 +46,19 @@ pub(crate) const BOOT_HUE_RETRY_POLL: Duration = Duration::from_secs(3);
 /// took 10–20 s.
 pub(crate) const BOOT_HUE_RETRY_WINDOW: Duration = Duration::from_secs(25);
 
+/// How long a launch restore that found no strip or WLED panel waits for one.
+/// Auto-reconnect settles a serial controller for ~2 s after its scan; this
+/// covers a slow USB enumeration too.
+pub(crate) const BOOT_SINK_WAIT_WINDOW: Duration = Duration::from_secs(30);
+
 /// A settings save waits this long for the edit to settle before the running
 /// mode is re-applied: the room map saves on every drag move.
 pub(crate) const SETTINGS_REFRESH_DEBOUNCE: Duration = Duration::from_millis(300);
 
 /// Saved keys the running mode reads when it is applied. A save of any of them,
-/// from any window, re-applies what runs once the edit settles. The LED
-/// calibration is not here: it is saved while a test pattern owns the strip,
-/// and the test's own stop re-reads it.
+/// from any window, re-applies what runs once the edit settles. LED Setup saves
+/// `ledCalibration` while a test pattern owns the strip; the refresh leaves a
+/// test alone, and the test's own stop re-reads it.
 const SETTINGS_THE_MODE_READS: &[&str] = &[
     "selectedDisplayId",
     "lightingIntensityPreset",
@@ -62,6 +68,7 @@ const SETTINGS_THE_MODE_READS: &[&str] = &[
     "ledColorOrder",
     "roomMap",
     "lastHueAreaId",
+    "ledCalibration",
 ];
 
 // ---------------------------------------------------------------------------
@@ -110,6 +117,8 @@ struct Request {
 pub struct ApplyOutputsOutcome {
     pub hue_start_code: Option<String>,
     pub hue_left_out: Option<HueLeftOutReason>,
+    /// A choice that named Hue did not run on it, and ran on nothing else.
+    pub hue_not_started: Option<HueLeftOutReason>,
     pub apply_status: Option<CommandStatus>,
     pub stop_failed: Vec<OutputTarget>,
     pub dropped_targets: Vec<OutputTarget>,
@@ -203,6 +212,14 @@ struct BootRetry {
     plan: BootRetryPlan,
 }
 
+/// A launch restore that left the local output out because no strip or WLED
+/// panel was there yet. Answered by the first one to connect before `deadline`.
+#[derive(Clone, Copy, Debug)]
+struct BootSinkWait {
+    kind: LightingModeKind,
+    deadline: Instant,
+}
+
 #[derive(Default)]
 pub(crate) struct OutputsState {
     next_ticket: AtomicU64,
@@ -212,11 +229,15 @@ pub(crate) struct OutputsState {
     lease: Mutex<LeaseState>,
     hue_stop_unconfirmed: AtomicBool,
     boot_retry: Mutex<Option<BootRetry>>,
+    boot_sink_wait: Mutex<Option<BootSinkWait>>,
     /// What the tray's "resume last mode" brings back.
     last_non_off: Mutex<Option<LightingModeKind>>,
     /// Bumped by every save of a setting the mode reads; a refresh runs only
     /// if no later save arrived during its debounce.
     settings_generation: AtomicU64,
+    /// A save since the last refresh named a setting other than the LED
+    /// calibration, so the refresh runs whatever the calibration says.
+    settings_beyond_calibration: AtomicBool,
 }
 
 fn locked<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -350,6 +371,24 @@ impl OutputsState {
         locked(&self.boot_retry).take()
     }
 
+    fn boot_retry_pending(&self) -> bool {
+        locked(&self.boot_retry).is_some()
+    }
+
+    fn cancel_boot_sink_wait(&self, reason: &str) {
+        if locked(&self.boot_sink_wait).take().is_some() {
+            info!("[outputs] boot wait for a strip cancelled: {reason}");
+        }
+    }
+
+    /// A wait past its window lapses unanswered.
+    #[cfg(test)]
+    pub(crate) fn lapse_boot_sink_wait(&self) {
+        if let Some(wait) = locked(&self.boot_sink_wait).as_mut() {
+            wait.deadline = Instant::now();
+        }
+    }
+
     fn pending_retry_is_rejoin(&self) -> bool {
         matches!(
             locked(&self.boot_retry).as_ref().map(|retry| retry.plan),
@@ -425,16 +464,29 @@ fn is_hue_start_ok(code: &str) -> bool {
     )
 }
 
-/// `hueLeftOutReason`: with a config in hand, a gate refusal means the
-/// readiness probe failed, which reads as unreachable.
-fn hue_left_out_reason(had_config: bool, start_code: Option<&str>) -> HueLeftOutReason {
+/// Why a start that named Hue could not use it. The start gate's `details`
+/// end in `"; readiness: <code>[, <sentinel>]"` — a wire contract documented
+/// on `CONFIG_NOT_READY_GATE_BLOCKED` in `hue.ts` — and only those tokens are
+/// read, never the prose around them.
+fn hue_refusal_reason(
+    had_config: bool,
+    start_code: Option<&str>,
+    start_details: Option<&str>,
+) -> HueLeftOutReason {
     if !had_config {
         return HueLeftOutReason::Config;
     }
+    let blockers: Vec<&str> = start_details
+        .and_then(|details| details.split_once("; readiness: "))
+        .map(|(_, tokens)| tokens.split(", ").map(str::trim).collect())
+        .unwrap_or_default();
     match start_code {
         Some(code) if code.starts_with("AUTH_INVALID_") || code.starts_with("HUE-AUTH-") => {
             HueLeftOutReason::Auth
         }
+        _ if blockers.contains(&ACTIVE_STREAMER_REASON) => HueLeftOutReason::InUse,
+        Some("HUE_STREAM_RUNNING_NO_LIGHTS") => HueLeftOutReason::NoLights,
+        _ if blockers.contains(&"HUE_STREAM_NOT_READY") => HueLeftOutReason::NoLights,
         _ => HueLeftOutReason::Unreachable,
     }
 }
@@ -626,6 +678,9 @@ enum TxKind {
     Boot,
     /// The boot restore's one retry once a held area frees.
     BootRetry,
+    /// The boot restore's resume once the strip or WLED panel it found
+    /// missing connects.
+    BootSinkRetry,
     /// `previous` is the selection before the strip went away.
     UsbUnplug {
         previous: OutputTargets,
@@ -641,7 +696,7 @@ enum TxKind {
 
 impl TxKind {
     fn is_boot(&self) -> bool {
-        matches!(self, Self::Boot | Self::BootRetry)
+        matches!(self, Self::Boot | Self::BootRetry | Self::BootSinkRetry)
     }
 
     fn release_trigger(&self) -> Option<HueRuntimeTriggerSource> {
@@ -683,6 +738,10 @@ struct Transaction<'a, R: Runtime> {
     carried: bool,
     /// `Some(x)` sets the snapshot's held-out reason to `x` when it finishes.
     held_out: Option<Option<HueLeftOutReason>>,
+    /// What the last Hue start answered in its status `details`.
+    hue_start_details: Option<String>,
+    /// The launch restore left the strip out because none was there yet.
+    boot_sink_missing: bool,
 }
 
 impl<'a, R: Runtime> Transaction<'a, R> {
@@ -697,6 +756,8 @@ impl<'a, R: Runtime> Transaction<'a, R> {
             applied_generation: 0,
             carried: false,
             held_out: None,
+            hue_start_details: None,
+            boot_sink_missing: false,
         }
     }
 
@@ -730,6 +791,17 @@ impl<'a, R: Runtime> Transaction<'a, R> {
         kind: &LightingModeKind,
         targets: &[OutputTarget],
     ) -> Result<LightingModeCommandResult, String> {
+        self.apply_waiving(kind, targets, false).await
+    }
+
+    /// `waive_hue_gate` keeps a mode that already runs on Hue on it while the
+    /// stream is between sessions (reconnecting): the worker follows the slot.
+    async fn apply_waiving(
+        &mut self,
+        kind: &LightingModeKind,
+        targets: &[OutputTarget],
+        waive_hue_gate: bool,
+    ) -> Result<LightingModeCommandResult, String> {
         let stored = self.state.tuning.stored();
         self.applied_generation = stored.generation;
         let payload = payload_for(*kind, targets, &stored, self.persisted().as_ref());
@@ -739,7 +811,7 @@ impl<'a, R: Runtime> Transaction<'a, R> {
             self.ticket, payload.kind, payload.targets
         );
         let result = blocking(self.app, move |app| {
-            let result = apply_config_blocking(app, payload, hue_output)?;
+            let result = apply_config_blocking(app, payload, hue_output, waive_hue_gate)?;
             publish_running(app, &result.mode);
             Ok(result)
         })
@@ -785,6 +857,68 @@ impl<'a, R: Runtime> Transaction<'a, R> {
         confirmed
     }
 
+    /// Starts Hue and says whether it is up, or on its way up. A start left
+    /// retrying keeps going unseen; nothing here will use it, so it is
+    /// cancelled at once.
+    async fn start_hue(&mut self, request: StartHueStreamRequest) -> bool {
+        self.publish_phase(LightingPhase::StartingHue);
+        info!(
+            "[outputs] #{} start Hue on area {}",
+            self.ticket, request.area_id
+        );
+        let started = self.driver.start(request).await;
+        let code = started.status.code;
+        self.outcome.hue_start_code = Some(code.clone());
+        self.hue_start_details = started.status.details;
+        let ok = is_hue_start_ok(&code);
+        if ok && code != "HUE_START_NOOP_ALREADY_ACTIVE" {
+            self.state.outputs.set_owner(HueOwner::Transaction);
+        }
+        if code == "TRANSIENT_RETRY_SCHEDULED" {
+            self.stop_hue(HueRuntimeTriggerSource::System).await;
+        }
+        ok
+    }
+
+    /// The saved area, when the live stream holds another one. A stream
+    /// opened elsewhere names no area here and is left where it is.
+    fn hue_area_moved(&self) -> Option<StartHueStreamRequest> {
+        let live = self.driver.live_area_id()?;
+        let request = self.hue_request()?;
+        (request.area_id != live).then_some(request)
+    }
+
+    /// Takes the stream to the saved area. A start on a running stream is a
+    /// no-op whatever its area, so the old session stops first — its lights go
+    /// back — and the new area is read after that.
+    async fn move_hue(&mut self, request: StartHueStreamRequest) -> bool {
+        info!(
+            "[outputs] #{} the saved Hue area is now {}; moving the stream",
+            self.ticket, request.area_id
+        );
+        self.publish_phase(LightingPhase::StartingHue);
+        if !self.stop_hue(HueRuntimeTriggerSource::System).await {
+            return false;
+        }
+        self.start_hue(request).await
+    }
+
+    /// A choice that named Hue alone, and Hue did not start: the reply says
+    /// why, since nothing runs to carry a held-out reason.
+    fn note_hue_not_started(&mut self, had_config: bool) {
+        if matches!(self.kind, TxKind::Choice(_)) {
+            self.outcome.hue_not_started = Some(self.hue_refusal(had_config));
+        }
+    }
+
+    fn hue_refusal(&self, had_config: bool) -> HueLeftOutReason {
+        hue_refusal_reason(
+            had_config,
+            self.outcome.hue_start_code.as_deref(),
+            self.hue_start_details.as_deref(),
+        )
+    }
+
     async fn reconcile(&mut self) -> Result<Ending, String> {
         let intent = self.state.outputs.intent();
         if self.kind == TxKind::Refresh {
@@ -814,7 +948,11 @@ impl<'a, R: Runtime> Transaction<'a, R> {
         if intent.kind == LightingModeKind::Off {
             return self.reconcile_off(&intent, &running).await;
         }
-        self.reconcile_on(&intent, &running).await
+        let ending = self.reconcile_on(&intent, &running).await?;
+        if self.boot_sink_missing && !matches!(ending, Ending::Superseded | Ending::ShuttingDown) {
+            wait_for_local_sink(self.app, intent.kind);
+        }
+        Ok(ending)
     }
 
     async fn reconcile_off(
@@ -914,24 +1052,34 @@ impl<'a, R: Runtime> Transaction<'a, R> {
         intent: &LightingIntent,
         running: &LightingModeConfig,
     ) -> Result<Ending, String> {
+        let usb_present = usb_available(self.app);
         let has_calibration = self
             .persisted()
             .as_ref()
             .and_then(PersistedShellState::led_calibration)
             .is_some();
+        // With no strip or WLED panel there is nothing to lay out yet: the
+        // device gate answers that choice instead, and a Hue beside it runs.
         if matches!(self.kind, TxKind::Choice(_))
             && intent.kind != running.kind
             && intent.targets.contains(&OutputTarget::Usb)
             && !has_calibration
+            && usb_present
         {
             self.settle_kind(running.kind);
             return Ok(Ending::CalibrationRequired);
         }
 
-        let want_usb = intent.targets.contains(&OutputTarget::Usb)
-            && (!self.kind.is_boot() || usb_available(self.app));
-        let want_hue =
-            intent.targets.contains(&OutputTarget::Hue) && self.kind.release_trigger().is_none();
+        let usb_selected = intent.targets.contains(&OutputTarget::Usb);
+        let want_usb = usb_selected && (!self.kind.is_boot() || usb_present);
+        // Auto-reconnect is still settling the strip when the launch restore
+        // runs; the first local sink to connect resumes it (`wait_for_local_sink`).
+        self.boot_sink_missing = self.kind == TxKind::Boot && usb_selected && !usb_present;
+        // A strip that came up first resumes the mode on itself; Hue is the
+        // held area's wait to bring back, not this one's.
+        let want_hue = intent.targets.contains(&OutputTarget::Hue)
+            && self.kind.release_trigger().is_none()
+            && !(self.kind == TxKind::BootSinkRetry && self.state.outputs.boot_retry_pending());
         let running_before = running_targets(running);
         let hue_ran_before = running_before.contains(&OutputTarget::Hue);
 
@@ -941,26 +1089,26 @@ impl<'a, R: Runtime> Transaction<'a, R> {
         // so a stream that is not up yet leaves the worker without Hue.
         let mut hue_ok = self.hue_live();
         let mut had_config = true;
-        if want_hue && !hue_ok {
+        let mut hue_moved = false;
+        if want_hue && hue_ok {
+            if let Some(request) = self.hue_area_moved() {
+                hue_moved = true;
+                hue_ok = self.move_hue(request).await;
+                if self.state.is_closing() {
+                    return Ok(Ending::ShuttingDown);
+                }
+                if self.superseded() {
+                    return Ok(Ending::Superseded);
+                }
+            }
+        }
+        if want_hue && !hue_ok && !hue_moved {
             match self.hue_request() {
                 None => had_config = false,
                 Some(request) => {
-                    self.publish_phase(LightingPhase::StartingHue);
-                    info!("[outputs] #{} start Hue", self.ticket);
-                    let started = self.driver.start(request).await;
-                    let code = started.status.code;
-                    self.outcome.hue_start_code = Some(code.clone());
+                    hue_ok = self.start_hue(request).await;
                     if self.state.is_closing() {
                         return Ok(Ending::ShuttingDown);
-                    }
-                    hue_ok = is_hue_start_ok(&code);
-                    if hue_ok && code != "HUE_START_NOOP_ALREADY_ACTIVE" {
-                        self.state.outputs.set_owner(HueOwner::Transaction);
-                    }
-                    // A start left retrying keeps going unseen; nothing here
-                    // will use it, so it is cancelled before the mode runs.
-                    if code == "TRANSIENT_RETRY_SCHEDULED" {
-                        self.stop_hue(HueRuntimeTriggerSource::System).await;
                     }
                 }
             }
@@ -982,11 +1130,25 @@ impl<'a, R: Runtime> Transaction<'a, R> {
         if run_on.is_empty() {
             if want_hue {
                 // Hue alone, and Hue did not come up: nothing to run it on.
+                self.note_hue_not_started(had_config);
+                let mut running_after = running.clone();
+                // The stream it ran on has moved away and did not come back:
+                // what ran has nothing left to drive.
+                if hue_moved && running.kind != LightingModeKind::Off {
+                    self.publish_phase(LightingPhase::Stopping);
+                    match self.stop_lighting().await {
+                        Ok(result) => running_after = result.mode,
+                        Err(error) => {
+                            warn!("[outputs] stop_lighting after a failed Hue move: {error}");
+                            self.outcome.stop_failed.push(OutputTarget::Usb);
+                        }
+                    }
+                }
                 return self
                     .refuse(
                         intent,
                         running,
-                        running.clone(),
+                        running_after,
                         "HUE_NOT_READY".to_string(),
                         hue_ran_before,
                         had_config,
@@ -998,6 +1160,7 @@ impl<'a, R: Runtime> Transaction<'a, R> {
 
         let unchanged = intent.kind == running.kind
             && run_on == running_before
+            && !hue_moved
             && self.state.tuning.is_current();
         let mut running_after = running.clone();
         let mut gate_absorbed = false;
@@ -1052,18 +1215,17 @@ impl<'a, R: Runtime> Transaction<'a, R> {
                 };
             }
 
-            // Adding USB to a running mode the device gate refused: the gate
-            // returned before teardown, so the mode keeps running on the rest.
-            if result.status.code == "DEVICE_NOT_CONNECTED"
-                && running.kind == intent.kind
-                && run_on.len() > 1
-            {
+            // The device gate refused USB beside another output. It returned
+            // before teardown, so the mode runs on the rest — the running mode
+            // when USB was being added, the new choice when it was a mode — and
+            // USB drops from this session's selection until a strip connects.
+            if result.status.code == "DEVICE_NOT_CONNECTED" && run_on.len() > 1 {
                 run_on.retain(|t| *t != OutputTarget::Usb);
                 self.outcome.dropped_targets.push(OutputTarget::Usb);
                 self.state
                     .outputs
                     .update_intent(|intent| intent.targets.retain(|t| *t != OutputTarget::Usb));
-                if run_on == running_before {
+                if run_on == running_before && running.kind == intent.kind {
                     gate_absorbed = true;
                 } else {
                     if self.superseded() {
@@ -1096,6 +1258,9 @@ impl<'a, R: Runtime> Transaction<'a, R> {
         let gated = apply_code.as_deref().is_some_and(is_gate_code) && !gate_absorbed;
         if gated || running_after.kind != intent.kind {
             let reason = apply_code.unwrap_or_default();
+            if reason == "HUE_NOT_READY" && run_on == [OutputTarget::Hue] {
+                self.note_hue_not_started(had_config);
+            }
             return self
                 .refuse(
                     intent,
@@ -1118,7 +1283,7 @@ impl<'a, R: Runtime> Transaction<'a, R> {
             }
         }
         if hue_left_out && ran.contains(&OutputTarget::Usb) {
-            let reason = hue_left_out_reason(had_config, self.outcome.hue_start_code.as_deref());
+            let reason = self.hue_refusal(had_config);
             self.outcome.hue_left_out = Some(reason);
             self.outcome.dropped_targets.push(OutputTarget::Hue);
             self.state
@@ -1158,11 +1323,41 @@ impl<'a, R: Runtime> Transaction<'a, R> {
         if running.kind == LightingModeKind::Off || blocking(self.app, test_pattern_active).await? {
             return Ok(Ending::Applied);
         }
-        let targets = running_targets(running);
+        let mut targets = running_targets(running);
         let hue_ran_before = targets.contains(&OutputTarget::Hue);
         self.state.tuning.close(Some(running.kind)).await;
+        if hue_ran_before {
+            if let Some(request) = self.hue_area_moved() {
+                let moved = self.move_hue(request).await;
+                if self.state.is_closing() {
+                    return Ok(Ending::ShuttingDown);
+                }
+                if self.superseded() {
+                    return Ok(Ending::Superseded);
+                }
+                if !moved {
+                    let reason = self.hue_refusal(true);
+                    targets.retain(|t| *t != OutputTarget::Hue);
+                    if targets.is_empty() {
+                        return self.end_mode(running, hue_ran_before).await;
+                    }
+                    self.outcome.hue_left_out = Some(reason);
+                    self.outcome.dropped_targets.push(OutputTarget::Hue);
+                    self.held_out = Some(Some(reason));
+                    self.state
+                        .outputs
+                        .update_intent(|intent| intent.targets.retain(|t| *t != OutputTarget::Hue));
+                }
+            }
+        }
         self.publish_phase(LightingPhase::Applying);
-        let result = match self.apply(&running.kind, &targets).await {
+        // What runs on Hue keeps it through a reconnect: the Hue gate would
+        // refuse the whole re-apply, and the strip would never see the change.
+        let waive_hue_gate = targets.contains(&OutputTarget::Hue);
+        let result = match self
+            .apply_waiving(&running.kind, &targets, waive_hue_gate)
+            .await
+        {
             Ok(result) => result,
             Err(error) => {
                 warn!("[outputs] settings refresh failed: {error}");
@@ -1509,6 +1704,15 @@ pub(crate) async fn apply_outputs_with<R: Runtime>(
     if cancels_retry {
         cancel_boot_retry(app, "a newer lighting request");
     }
+    // Any request that says what should run answers the launch's wait for a
+    // strip: a choice speaks for itself, and an unplug or a newer launch
+    // restore changes what the wait was for.
+    if request.mode.is_some() || request.targets.is_some() || request.origin == LightingOrigin::Boot
+    {
+        state
+            .outputs
+            .cancel_boot_sink_wait("a newer lighting request");
+    }
 
     let ticket = state.outputs.issue_ticket();
     let persisted = shell_state::persisted(app);
@@ -1574,15 +1778,22 @@ pub fn note_settings_saved<'k, R: Runtime>(
     app: &AppHandle<R>,
     keys: impl IntoIterator<Item = &'k str>,
 ) {
-    if !keys
+    let read: Vec<&str> = keys
         .into_iter()
-        .any(|key| SETTINGS_THE_MODE_READS.contains(&key))
-    {
+        .filter(|key| SETTINGS_THE_MODE_READS.contains(key))
+        .collect();
+    if read.is_empty() {
         return;
     }
     let Some(state) = app.try_state::<LightingRuntimeState>() else {
         return;
     };
+    if read.iter().any(|key| *key != "ledCalibration") {
+        state
+            .outputs
+            .settings_beyond_calibration
+            .store(true, Ordering::SeqCst);
+    }
     let generation = state
         .outputs
         .settings_generation
@@ -1598,12 +1809,29 @@ pub fn note_settings_saved<'k, R: Runtime>(
         if state.outputs.settings_generation.load(Ordering::SeqCst) != generation {
             return;
         }
+        // Read here, not in the save: that runs under the shell-state lock.
+        let beyond = state
+            .outputs
+            .settings_beyond_calibration
+            .swap(false, Ordering::SeqCst);
+        if !beyond && calibration_is_current(&app) {
+            return;
+        }
         match refresh_running_with(&app).await {
             Ok(Some(result)) => info!("[outputs] settings refresh: {}", result.status.code),
             Ok(None) => {}
             Err(error) => warn!("[outputs] settings refresh failed: {error}"),
         }
     });
+}
+
+/// LED Setup saves the layout on every step, most of them leaving it as the
+/// running mode already carries it; a mode off the strip does not read it.
+fn calibration_is_current<R: Runtime>(app: &AppHandle<R>) -> bool {
+    let running = app.state::<LightingRuntimeState>().snapshot.read().mode;
+    !running_targets(&running).contains(&OutputTarget::Usb)
+        || running.led_calibration
+            == shell_state::persisted(app).and_then(|state| state.led_calibration())
 }
 
 /// The tray's three lighting items. They run the transaction from Rust, so
@@ -1985,11 +2213,20 @@ async fn run_boot_retry<R: Runtime>(
                 .publish(&app, |snapshot| notice(snapshot, None, None));
             match plan {
                 BootRetryPlan::Resume { kind } => {
-                    // Anything that started a mode meanwhile has had its say.
-                    if state.snapshot.read().mode.kind != LightingModeKind::Off {
-                        return;
+                    let snapshot = state.snapshot.read();
+                    if snapshot.mode.kind == LightingModeKind::Off {
+                        state.outputs.update_intent(|intent| intent.kind = kind);
+                    } else {
+                        // Only the strip's own resume runs a mode without the
+                        // user (every choice cancels this wait); it left Hue to
+                        // this one. Anything else has had its say.
+                        let hue_to_add = snapshot.mode.kind == kind
+                            && !snapshot.active_targets.contains(&OutputTarget::Hue)
+                            && state.outputs.intent().targets.contains(&OutputTarget::Hue);
+                        if !hue_to_add {
+                            return;
+                        }
                     }
-                    state.outputs.update_intent(|intent| intent.kind = kind);
                 }
                 BootRetryPlan::Rejoin { .. } => {
                     state.outputs.update_intent(|intent| {
@@ -2003,6 +2240,65 @@ async fn run_boot_retry<R: Runtime>(
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// The boot wait for a strip — the launch restore's resume once one connects
+// ---------------------------------------------------------------------------
+
+/// Called by a launch restore that left the local output out because no strip
+/// or WLED panel was bound yet. See docs/architecture/lighting-transaction.md
+/// ("The launch's wait for a strip").
+fn wait_for_local_sink<R: Runtime>(app: &AppHandle<R>, kind: LightingModeKind) {
+    let state = app.state::<LightingRuntimeState>();
+    locked(&state.outputs.boot_sink_wait).replace(BootSinkWait {
+        kind,
+        deadline: Instant::now() + BOOT_SINK_WAIT_WINDOW,
+    });
+    info!("[outputs] boot restore: no strip or WLED panel yet; waiting for one to connect");
+    // One that connected while the restore ran found no wait to answer.
+    if usb_available(app) {
+        note_local_sink_connected(app);
+    }
+}
+
+/// A serial strip or a WLED panel was bound. Resumes a launch restore that
+/// was waiting for one: the mode it could not run, or the strip beside the
+/// Hue it ran on.
+pub fn note_local_sink_connected<R: Runtime>(app: &AppHandle<R>) {
+    let Some(state) = app.try_state::<LightingRuntimeState>() else {
+        return;
+    };
+    let Some(wait) = locked(&state.outputs.boot_sink_wait).take() else {
+        return;
+    };
+    if Instant::now() >= wait.deadline {
+        info!("[outputs] a strip connected after the boot wait ended; the user picks the mode");
+        return;
+    }
+    let seen = state.outputs.latest_ticket.load(Ordering::SeqCst);
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<LightingRuntimeState>();
+        // A request since the connect has had its say.
+        if state.outputs.latest_ticket.load(Ordering::SeqCst) != seen {
+            return;
+        }
+        let snapshot = state.snapshot.read();
+        if snapshot.mode.kind == LightingModeKind::Off {
+            state
+                .outputs
+                .update_intent(|intent| intent.kind = wait.kind);
+        } else if snapshot.active_targets.contains(&OutputTarget::Usb) {
+            return;
+        }
+        info!("[outputs] a strip connected; resuming the launch restore on it");
+        let ticket = state.outputs.issue_ticket();
+        match run_ticketed(&app, ticket, TxKind::BootSinkRetry).await {
+            Ok(result) => info!("[outputs] boot strip resume: {}", result.status.code),
+            Err(error) => warn!("[outputs] boot strip resume failed: {error}"),
+        }
+    });
 }
 
 // ---------------------------------------------------------------------------

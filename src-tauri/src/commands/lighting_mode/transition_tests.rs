@@ -84,6 +84,7 @@ fn owner_with_fake_sender() -> LightingRuntimeOwner {
         output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
         preview: Default::default(),
         closing: Default::default(),
+        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(
@@ -107,6 +108,7 @@ fn owner_with_unavailable_capture() -> LightingRuntimeOwner {
         output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
         preview: Default::default(),
         closing: Default::default(),
+        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(1, 1, vec![[0, 0, 0]]),
@@ -193,6 +195,7 @@ fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
         output_bridge: LedOutputBridge::from_sender(recorder.clone()),
         preview: Default::default(),
         closing: Default::default(),
+        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(
@@ -519,6 +522,7 @@ fn set_ambilight_stops_previous_then_starts_new_runtime() {
         frame_source_factory: owner.frame_source_factory,
         preview: Default::default(),
         closing: Default::default(),
+        hue_gate_waived: false,
     };
     let mut trace = Vec::new();
 
@@ -884,6 +888,7 @@ fn owner_with_recording_sender_for_ambilight() -> (LightingRuntimeOwner, Arc<Fak
         output_bridge: LedOutputBridge::from_sender(recorder.clone()),
         preview: Default::default(),
         closing: Default::default(),
+        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(
@@ -982,6 +987,7 @@ fn owner_with_red_frame() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
         output_bridge: LedOutputBridge::from_sender(recorder.clone()),
         preview: Default::default(),
         closing: Default::default(),
+        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(4, 4, vec![[255, 0, 0]; 16]),

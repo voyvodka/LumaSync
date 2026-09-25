@@ -27,6 +27,7 @@ export function huePairingErrorDescriptionKey(code: string | null | undefined): 
 /** The Failed codes the runtime produces (`commands/hue/retry.rs`, `reconnect.rs`). */
 const STREAM_FAILURE_REASONS: Partial<Record<string, TranslationKey>> = {
   [HUE_RUNTIME_STATUS.TRANSIENT_RETRY_EXHAUSTED]: "hue:runtime.codes.TRANSIENT_RETRY_EXHAUSTED",
+  [HUE_RUNTIME_STATUS.AREA_TAKEN_OVER]: "hue:runtime.codes.HUE_AREA_TAKEN_OVER",
   [HUE_RUNTIME_STATUS.STREAM_START_ABORTED]: "hue:runtime.codes.HUE_STREAM_START_ABORTED",
   [HUE_RUNTIME_STATUS.AUTH_INVALID_CREDENTIALS]: "hue:runtime.codes.AUTH_INVALID_CREDENTIALS",
 };

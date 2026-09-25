@@ -125,10 +125,12 @@ export function isLightingModeGateCode(code: string): code is LightingModeGateSt
 }
 
 /**
- * Why a `[usb, hue]` start ran on USB alone after the Hue gate refused it. On
- * the wire as `ApplyOutputsOutcome.hueLeftOut` and the snapshot's
- * `hueHeldOutReason` (`HueLeftOutReason` in `lighting_mode/outputs.rs`). A
- * reason, not a status code, so it stays outside `LIGHTING_MODE_STATUS`.
+ * Why a start that named Hue could not use it: a `[usb, hue]` start that ran
+ * on USB alone (`ApplyOutputsOutcome.hueLeftOut`, the snapshot's
+ * `hueHeldOutReason`), or a Hue-only choice that ran nowhere
+ * (`ApplyOutputsOutcome.hueNotStarted`). `HueLeftOutReason` in
+ * `lighting_mode/snapshot.rs`. A reason, not a status code, so it stays
+ * outside `LIGHTING_MODE_STATUS`.
  */
 export const HUE_LEFT_OUT_REASON = {
   UNREACHABLE: "unreachable",
@@ -138,6 +140,10 @@ export const HUE_LEFT_OUT_REASON = {
   BUSY: "busy",
   /** Boot only: the area stayed held for the whole wait. */
   BUSY_GAVE_UP: "busyGaveUp",
+  /** Another app streams the area. Unlike `busy`, nothing waits for it to let go. */
+  IN_USE: "inUse",
+  /** The area is gone from the bridge, or has no lights to stream to. */
+  NO_LIGHTS: "noLights",
 } as const;
 
 export type HueLeftOutReason = (typeof HUE_LEFT_OUT_REASON)[keyof typeof HUE_LEFT_OUT_REASON];
