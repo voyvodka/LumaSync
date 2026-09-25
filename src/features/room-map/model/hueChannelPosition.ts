@@ -76,6 +76,19 @@ export function resolveHueChannelWorldZ(
   return clampUnit(zone.centerZ + zone.scaleZ * channel.zoneRelativePosition.z);
 }
 
+/** The heights a channel can actually reach. Unbound, all of [-1, 1]; bound,
+ *  only the zone's own vertical extent, since the relative z is clamped to
+ *  [-1, 1] — a slider past it would move and change nothing. */
+export function hueChannelZRange(
+  channel: HueChannelPlacement,
+  zones: readonly HueZone[],
+): { min: number; max: number; zone: HueZone | null } {
+  const zone = findBoundZone(channel, zones);
+  if (!zone || !channel.zoneRelativePosition) return { min: -1, max: 1, zone: null };
+  const reach = Math.abs(zone.scaleZ);
+  return { min: clampUnit(zone.centerZ - reach), max: clampUnit(zone.centerZ + reach), zone };
+}
+
 /** Set the height, writing whichever field is live. Stamped as known — the
  *  user's by default, the bridge's when adopted from there — so from here on
  *  it is real and rides the stream and the bridge push. */

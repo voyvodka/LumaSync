@@ -1,5 +1,6 @@
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import { shellStore } from "@/features/persistence/shellStore";
+import { stripForCalibration } from "@/features/room-map/model/calibrationStrip";
 import { DEFAULT_ROOM_MAP, type RoomMapConfig, type UsbStripPlacement } from "@/shared/contracts/roomMap";
 
 /** LED count for a strip added before LED Setup has run. */
@@ -8,7 +9,10 @@ const MAX_STRIP_LED_COUNT = 1000;
 
 /** The saved layout's total when there is one: it is the strip the user described. */
 export function stripLedCount(calibration: LedCalibrationConfig | undefined): number {
-  const total = calibration?.totalLeds;
+  return ledCountFromTotal(calibration?.totalLeds);
+}
+
+function ledCountFromTotal(total: number | undefined): number {
   if (typeof total !== "number" || !Number.isFinite(total) || total < 1) return FALLBACK_STRIP_LED_COUNT;
   return Math.min(MAX_STRIP_LED_COUNT, Math.round(total));
 }
@@ -88,4 +92,36 @@ export async function ensureStripForPort(
     return { roomMap: next.roomMap, roomMapVersion: (current.roomMapVersion ?? 0) + 1 };
   });
   return roster;
+}
+
+/** The room map with that strip's LED count set to `totalLeds`, or the same map. */
+export function withStripLedCount(
+  roomMap: RoomMapConfig,
+  totalLeds: number,
+  connectedPort: string | null,
+): { roomMap: RoomMapConfig; changed: boolean } {
+  const target = stripForCalibration(roomMap.usbStrips, connectedPort);
+  const ledCount = ledCountFromTotal(totalLeds);
+  if (!target || target.ledCount === ledCount) return { roomMap, changed: false };
+  return {
+    roomMap: {
+      ...roomMap,
+      usbStrips: roomMap.usbStrips.map((strip) => (strip === target ? { ...strip, ledCount } : strip)),
+    },
+    changed: true,
+  };
+}
+
+/**
+ * Keeps the roster strip's LED count in step with a newly saved LED Setup
+ * total. The count is stamped once at connect; without this the room map's
+ * strip — and anything derived from it — kept the count from that day on.
+ */
+export async function syncStripLedCount(totalLeds: number, connectedPort: string | null): Promise<void> {
+  await shellStore.update((current) => {
+    if (!current.roomMap) return null;
+    const next = withStripLedCount(current.roomMap, totalLeds, connectedPort);
+    if (!next.changed) return null;
+    return { roomMap: next.roomMap, roomMapVersion: (current.roomMapVersion ?? 0) + 1 };
+  });
 }

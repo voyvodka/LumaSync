@@ -181,6 +181,8 @@ function distributeLeds(
 export function deriveZones(
   strip: UsbStripPlacement,
   tv: TvAnchorPlacement,
+  /** LEDs to share out; the saved LED Setup total, see `deriveSource`. */
+  totalLeds: number = strip.ledCount,
 ): ZoneDeriveResult {
   const empty: ZoneDeriveResult = {
     counts: { top: 0, right: 0, bottom: 0, left: 0 },
@@ -204,7 +206,7 @@ export function deriveZones(
   }
 
   // --- 2. Sample points ---
-  const N = Math.max(strip.ledCount, 20);
+  const N = Math.max(totalLeds, 20);
   const edges = buildTvEdges(tv);
 
   // Per-sample edge assignments
@@ -250,7 +252,7 @@ export function deriveZones(
   });
 
   // --- 5. Distribute LEDs ---
-  const ledCounts = distributeLeds(segmentsWithLength, strip.ledCount);
+  const ledCounts = distributeLeds(segmentsWithLength, totalLeds);
 
   const derivedSegments: DerivedSegment[] = segmentsWithLength.map((seg, i) => ({
     edge: seg.edge,

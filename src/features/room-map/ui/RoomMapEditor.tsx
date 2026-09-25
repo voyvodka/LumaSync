@@ -40,7 +40,8 @@ import { PropertyBar } from "./PropertyBar";
 import { RenameDialog } from "./RenameDialog";
 import { TemplateSelector } from "./TemplateSelector";
 import { applyRoomTemplate, isRoomMapEmpty } from "../model/roomTemplate";
-import { ZoneDeriveOverlay } from "./ZoneDeriveOverlay";
+import { ZoneDeriveActionBar, ZoneDeriveOverlay } from "./ZoneDeriveOverlay";
+import { deriveSource } from "../model/calibrationStrip";
 import type {
   FurniturePlacement,
   HueChannelPlacement,
@@ -63,7 +64,10 @@ import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachabil
 import { roomAwareStatus } from "../model/roomAware";
 
 export interface RoomMapEditorProps {
+  /** "LED counts from the map" was confirmed; the shell opens LED Setup with them. */
   onZoneCountsConfirmed?: (counts: LedSegmentCounts) => void;
+  /** Saved LED Setup total — what the counts are shared out of. */
+  savedLedTotal?: number | null;
   /**
    * Invoked when the dock state strip's CTA prompts the
    * user to finish Hue onboarding (pair bridge or pick an entertainment
@@ -103,6 +107,7 @@ const HUE_ZONE_REJECTION_KEYS = {
 
 export function RoomMapEditor({
   onZoneCountsConfirmed,
+  savedLedTotal = null,
   onNavigateToDevices,
   hueReachable,
   outputTargets = [],
@@ -347,15 +352,15 @@ export function RoomMapEditor({
       setDerivePreview(null);
       return;
     }
-    const strip = config.usbStrips[0];
+    const source = deriveSource(config.usbStrips, usb.connectedPort, savedLedTotal);
     const tv = config.tvAnchor;
-    if (!strip || !tv) return;
-    const result = deriveZones(strip, tv);
+    if (!source || !tv) return;
+    const result = deriveZones(source.strip, tv, source.totalLeds);
     if (result.counts.top + result.counts.right + result.counts.bottom + result.counts.left === 0) {
       return;
     }
     setDerivePreview(result);
-  }, [config.usbStrips, config.tvAnchor, derivePreview]);
+  }, [config.usbStrips, config.tvAnchor, derivePreview, usb.connectedPort, savedLedTotal]);
 
   const handleDeriveConfirm = useCallback(() => {
     if (!derivePreview) return;
@@ -706,8 +711,6 @@ export function RoomMapEditor({
                 result={derivePreview}
                 tv={config.tvAnchor}
                 pxPerMeter={pxPerMeter}
-                onConfirm={handleDeriveConfirm}
-                onDiscard={handleDeriveDiscard}
               />
             )}
 
@@ -730,6 +733,10 @@ export function RoomMapEditor({
             onFitToView={() => fitToView(16)}
             isMac={IS_MAC}
           />
+
+          {derivePreview && config.tvAnchor && (
+            <ZoneDeriveActionBar onConfirm={handleDeriveConfirm} onDiscard={handleDeriveDiscard} />
+          )}
 
           {/* Mouse coordinate display — fixed to bottom-right of canvas container */}
           <MouseCoordinateDisplay

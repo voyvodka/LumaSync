@@ -75,6 +75,15 @@ function modelFingerprint(config: LedCalibrationConfig): string {
   });
 }
 
+/** A layout's identity, ignoring anything normalisation would heal. */
+export function calibrationLayoutKey(config: LedCalibrationConfig): string {
+  return modelFingerprint(config);
+}
+
+export function isSameCalibrationLayout(a: LedCalibrationConfig, b: LedCalibrationConfig): boolean {
+  return modelFingerprint(a) === modelFingerprint(b);
+}
+
 function buildState(
   baseline: LedCalibrationConfig,
   current: LedCalibrationConfig,
@@ -92,8 +101,14 @@ function buildState(
   };
 }
 
-export function createCalibrationEditorState(initial: LedCalibrationConfig): CalibrationEditorState {
-  return buildState(initial, initial);
+export function createCalibrationEditorState(
+  initial: LedCalibrationConfig,
+  draftCounts?: LedSegmentCounts | null,
+): CalibrationEditorState {
+  const clean = buildState(initial, initial);
+  // Counts handed over from elsewhere (the room map) are a proposal, not the
+  // saved layout: they start as the draft so Cancel and leaving both ask.
+  return draftCounts ? updateEditorConfig(clean, { counts: draftCounts }) : clean;
 }
 
 export function updateEditorConfig(
@@ -116,6 +131,21 @@ export function updateEditorConfig(
   };
 
   return buildState(state.baseline, next);
+}
+
+/**
+ * An automatic fill (display-derived defaults) rather than a user edit: while
+ * nothing has been touched it moves the baseline too, so the first visit is not
+ * "unsaved" before the user has done anything. Once the draft is dirty it lands
+ * on the draft alone, like any edit.
+ */
+export function autofillEditorConfig(
+  state: CalibrationEditorState,
+  patch: EditorConfigPatch,
+): CalibrationEditorState {
+  const next = updateEditorConfig(state, patch);
+  if (state.isDirty) return next;
+  return buildState(next.current, next.current);
 }
 
 export function loadEditorConfig(

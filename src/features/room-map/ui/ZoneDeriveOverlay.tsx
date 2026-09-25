@@ -1,12 +1,10 @@
 /**
- * ZoneDeriveOverlay — SVG overlay showing derived zone edge lines and LED count badges.
- *
- * Renders colored edge lines along each TV side with LED count badges.
- * Floating action bar with Confirm / Discard Preview buttons.
- *
- * ZONE-02 / ZONE-03 — Phase 19 Plan 02
+ * ZoneDeriveOverlay — the "LED counts from the map" preview: coloured edge
+ * lines along each TV side with LED count badges, drawn in map space.
+ * `ZoneDeriveActionBar` is its Confirm / Discard pair, drawn in screen space.
  */
 
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { TvAnchorPlacement } from "@/shared/contracts/roomMap";
 import { tvFootprintBounds, type ZoneDeriveResult } from "../model/deriveZones";
@@ -30,8 +28,6 @@ interface ZoneDeriveOverlayProps {
   result: ZoneDeriveResult;
   tv: TvAnchorPlacement;
   pxPerMeter: number;
-  onConfirm: () => void;
-  onDiscard: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -42,8 +38,6 @@ export function ZoneDeriveOverlay({
   result,
   tv,
   pxPerMeter,
-  onConfirm,
-  onDiscard,
 }: ZoneDeriveOverlayProps) {
   const { t } = useTranslation();
 
@@ -125,7 +119,6 @@ export function ZoneDeriveOverlay({
     <div
       className="absolute inset-0 pointer-events-none"
       style={{ zIndex: 20 }}
-      aria-label={t("roomMap:zones.deriveSuccess")}
     >
       {/* SVG overlay for edge lines and fill bands */}
       <svg
@@ -184,27 +177,53 @@ export function ZoneDeriveOverlay({
         );
       })}
 
-      {/* Floating action bar */}
-      <div
-        className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2 pointer-events-auto"
-        style={{ zIndex: 30 }}
+    </div>
+  );
+}
+
+interface ZoneDeriveActionBarProps {
+  onConfirm: () => void;
+  onDiscard: () => void;
+}
+
+/**
+ * Rendered outside the canvas's pan/zoom layer, so it stays on screen at any
+ * zoom — inside it the bar could sit below the clip, and focusing it scrolled
+ * the `overflow: hidden` canvas with no way back.
+ */
+export function ZoneDeriveActionBar({ onConfirm, onDiscard }: ZoneDeriveActionBarProps) {
+  const { t } = useTranslation();
+  const confirmRef = useRef<HTMLButtonElement>(null);
+
+  // Deliberate: the preview is a confirm step, so focus belongs on its primary
+  // action the moment it opens. Not `autoFocus`, which scrolls to the target.
+  useEffect(() => {
+    confirmRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  return (
+    <div
+      role="group"
+      aria-label={t("roomMap:deriveCounts.previewLabel")}
+      className="absolute bottom-16 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-line-2 bg-panel/95 p-1.5 shadow-lg"
+      style={{ zIndex: 30 }}
+    >
+      <span className="whitespace-nowrap px-1.5 text-[11px] text-ink-dim">{t("roomMap:deriveCounts.previewLabel")}</span>
+      <button
+        ref={confirmRef}
+        type="button"
+        className="min-h-8 whitespace-nowrap rounded-md bg-amber px-3 py-1 text-[11px] font-semibold text-bg hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/60 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+        onClick={onConfirm}
       >
-        <button
-          className="bg-amber text-bg hover:brightness-110 px-3 py-1 rounded-md text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/60 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
-          onClick={onConfirm}
-          // Deliberate: the overlay is a modal confirm step, so focus belongs on
-          // its primary action the moment it opens.
-          autoFocus
-        >
-          {t("roomMap:zones.confirmDeriveButton")}
-        </button>
-        <button
-          className="text-ink-dim hover:text-ink px-3 py-1 rounded-md text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/60"
-          onClick={onDiscard}
-        >
-          {t("roomMap:zones.cancelDeriveButton")}
-        </button>
-      </div>
+        {t("roomMap:deriveCounts.confirm")}
+      </button>
+      <button
+        type="button"
+        className="min-h-8 whitespace-nowrap rounded-md px-3 py-1 text-[11px] font-semibold text-ink-dim hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/60"
+        onClick={onDiscard}
+      >
+        {t("roomMap:deriveCounts.cancel")}
+      </button>
     </div>
   );
 }

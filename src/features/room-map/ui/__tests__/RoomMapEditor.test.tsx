@@ -15,6 +15,8 @@ import { render, act, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import { RoomMapEditor } from "../RoomMapEditor";
+import { deriveZones } from "../../model/deriveZones";
+import type { LedSegmentCounts } from "@/features/calibration/model/contracts";
 
 // ---------------------------------------------------------------------------
 // Module-level mocks
@@ -120,9 +122,16 @@ vi.mock("../RoomMapCanvas", () => ({
 }));
 
 vi.mock("../RoomMapToolbar", () => ({
-  RoomMapToolbar: ({ onToggleSettings }: { onToggleSettings: () => void }) => (
+  RoomMapToolbar: ({
+    onToggleSettings,
+    onDeriveZones,
+  }: {
+    onToggleSettings: () => void;
+    onDeriveZones?: () => void;
+  }) => (
     <div data-testid="room-map-toolbar">
       <button type="button" data-testid="toggle-settings" onClick={onToggleSettings} />
+      <button type="button" data-testid="derive-counts" onClick={onDeriveZones} />
     </div>
   ),
 }));
@@ -175,7 +184,10 @@ vi.mock("../RoomDockPanel", () => ({
 }));
 
 vi.mock("../../model/deriveZones", () => ({
-  deriveZones: vi.fn().mockReturnValue({ zones: [], warnings: [] }),
+  deriveZones: vi.fn<typeof import("../../model/deriveZones").deriveZones>().mockReturnValue({
+    counts: { top: 50, right: 32, bottom: 50, left: 32 },
+    segments: [],
+  }),
 }));
 
 vi.mock("../../state/useSnapGuides", () => ({
@@ -208,6 +220,9 @@ vi.mock("../TemplateSelector", () => ({
 
 vi.mock("../ZoneDeriveOverlay", () => ({
   ZoneDeriveOverlay: () => null,
+  ZoneDeriveActionBar: ({ onConfirm }: { onConfirm: () => void }) => (
+    <button type="button" data-testid="derive-confirm" onClick={onConfirm} />
+  ),
 }));
 
 // ---------------------------------------------------------------------------
@@ -559,5 +574,32 @@ describe("RoomMapEditor — resizing the room", () => {
     // Channels are fractions of the room and follow it with no write; adding
     // the metre shift once pushed x from 0.5 to 1.5, outside [-1, 1].
     expect(patch).not.toHaveProperty("hueChannels");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// LED counts from the map
+// ---------------------------------------------------------------------------
+
+describe("RoomMapEditor — LED counts from the map", () => {
+  afterEach(() => {
+    persistState.configOverride = {};
+  });
+
+  it("shares out the saved LED Setup total, not the strip's stamped count, and hands the counts on", async () => {
+    const strip = { stripId: "usb-a", startX: 0, startY: 0, endX: 3, endY: 0, ledCount: 60 };
+    persistState.configOverride = { usbStrips: [strip] };
+    const onConfirmed = vi.fn<(counts: LedSegmentCounts) => void>();
+    let view!: ReturnType<typeof render>;
+    await act(async () => {
+      view = render(<RoomMapEditor savedLedTotal={164} onZoneCountsConfirmed={onConfirmed} />);
+    });
+    const { getByTestId } = view;
+
+    fireEvent.click(getByTestId("derive-counts"));
+    expect(vi.mocked(deriveZones)).toHaveBeenLastCalledWith(strip, expect.anything(), 164);
+
+    fireEvent.click(getByTestId("derive-confirm"));
+    expect(onConfirmed).toHaveBeenCalledWith({ top: 50, right: 32, bottom: 50, left: 32 });
   });
 });

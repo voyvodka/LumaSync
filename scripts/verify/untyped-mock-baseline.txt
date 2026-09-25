@@ -2,4 +2,4 @@
 #
 # The number of bare `vi.fn()` test doubles (comments excluded) under src/,
 # mock/ and e2e/. Was 665 before the typed IPC layer typed the boundary ones.
-377
+376

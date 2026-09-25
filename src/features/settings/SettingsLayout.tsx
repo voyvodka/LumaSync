@@ -11,6 +11,7 @@ import {
   type LightingControlState,
 } from "../mode/state/lightingControl";
 import {
+  useLeaveGuardRegistrar,
   useNavigationActions,
   useNavigationState,
   useVisibleDeviceCategoryReporter,
@@ -18,7 +19,7 @@ import {
 } from "../shell/navigationStore";
 import { useUpdaterActions, useUpdaterState, type UpdaterSnapshot } from "../updater/UpdaterProvider";
 import { useHueShellStatus, type HueShellStatus } from "../hue/state/hueShellStatus";
-import { resetToManual } from "../calibration/model/templates";
+import { syncStripLedCount } from "./sections/device/usbStripRoster";
 import { CompactLayout } from "./sections/compact/CompactLayout";
 import type { RoomMapEditorProps } from "@/features/room-map/ui/RoomMapEditor";
 
@@ -100,6 +101,8 @@ const LightsPanel = memo(function LightsPanel() {
 });
 
 const selectCalibration = (state: LightingControlState) => state.calibration;
+const selectSerialPort = (state: LightingControlState) =>
+  state.localSink?.transport === "serial" ? state.localSink.id || null : null;
 
 const CalibrationPanel = memo(function CalibrationPanel({
   pendingZoneCounts,
@@ -109,22 +112,29 @@ const CalibrationPanel = memo(function CalibrationPanel({
   onPendingZoneCountsChange: (counts: LedSegmentCounts | null) => void;
 }) {
   const calibration = useLightingControlState(selectCalibration);
+  const serialPort = useLightingControlState(selectSerialPort);
   const { saveCalibration } = useLightingActions();
   const { goToSection } = useNavigationActions();
+  const registerLeaveGuard = useLeaveGuardRegistrar();
+  // Read once: the page takes them as its opening draft, and they must not come
+  // back on the next visit after the user has saved or discarded them.
+  const [draftCounts] = useState(pendingZoneCounts);
+  useEffect(() => {
+    if (draftCounts) onPendingZoneCountsChange(null);
+  }, [draftCounts, onPendingZoneCountsChange]);
   return (
     <CalibrationPage.Component
-      initialConfig={
-        pendingZoneCounts
-          ? { ...(calibration ?? resetToManual()), counts: pendingZoneCounts }
-          : calibration
-      }
+      initialConfig={calibration}
+      draftCounts={draftCounts}
+      registerLeaveGuard={registerLeaveGuard}
       onNavigateBack={() => {
-        onPendingZoneCountsChange(null);
         void goToSection(SECTION_IDS.LIGHTS);
       }}
       onSaved={(cfg) => {
-        onPendingZoneCountsChange(null);
         saveCalibration(cfg);
+        void syncStripLedCount(cfg.totalLeds, serialPort).catch((error) => {
+          console.error("[LumaSync] Room map strip LED count could not follow the saved layout:", error);
+        });
       }}
     />
   );
@@ -190,19 +200,32 @@ const selectRoomMapHue = (status: HueShellStatus) => ({
   probeVerdict: status.probeVerdict,
 });
 
+const selectSavedLedTotal = (state: LightingControlState) => state.calibration?.totalLeds ?? null;
+
 const RoomMapPanel = memo(function RoomMapPanel({
   onZoneCountsConfirmed,
 }: {
   onZoneCountsConfirmed: (counts: LedSegmentCounts) => void;
 }) {
   const outputTargets = useLightingControlState(selectOutputTargets);
+  const savedLedTotal = useLightingControlState(selectSavedLedTotal);
   const hue = useHueShellStatus(selectRoomMapHue, shallowEqual);
   const { goToSection } = useNavigationActions();
   const openDevices = useCallback(() => void goToSection(SECTION_IDS.DEVICES), [goToSection]);
+  // The counts open LED Setup as its draft; left in memory they would silently
+  // become the baseline of whatever visit came next.
+  const openCountsInLedSetup = useCallback(
+    (counts: LedSegmentCounts) => {
+      onZoneCountsConfirmed(counts);
+      void goToSection(SECTION_IDS.LED_SETUP);
+    },
+    [onZoneCountsConfirmed, goToSection],
+  );
   return (
     <div className="h-full overflow-hidden">
       <RoomMapEditor.Component
-        onZoneCountsConfirmed={onZoneCountsConfirmed}
+        onZoneCountsConfirmed={openCountsInLedSetup}
+        savedLedTotal={savedLedTotal}
         onNavigateToDevices={openDevices}
         hueReachable={hue.reachable}
         outputTargets={outputTargets}
