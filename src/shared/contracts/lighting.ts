@@ -72,7 +72,7 @@ export type LightingModeGateStatusCode =
   (typeof LIGHTING_MODE_GATE_STATUS)[keyof typeof LIGHTING_MODE_GATE_STATUS];
 
 /**
- * Exhaustive `LightingModeCommandResult.status.code` set — `verify:shell-contracts` derives
+ * Exhaustive mode-apply status code set (`ApplyOutputsOutcome.applyStatus`) — `verify:shell-contracts` derives
  * the Rust `command_status(...)` literals and fails on an undeclared one. Preview
  * codes stay in `preview.ts` even though `lighting_mode.rs` emits them.
  */
@@ -85,7 +85,6 @@ export const LIGHTING_MODE_STATUS = {
   AMBILIGHT_MODE_UPDATED: "AMBILIGHT_MODE_UPDATED",
   AMBILIGHT_MODE_START_FAILED: "AMBILIGHT_MODE_START_FAILED",
   LIGHTING_MODE_STOPPED: "LIGHTING_MODE_STOPPED",
-  LIGHTING_MODE_STATUS_OK: "LIGHTING_MODE_STATUS_OK",
   /** The app is quitting: a start is refused and the running mode is left to the quit path. */
   LIGHTING_MODE_SHUTTING_DOWN: "LIGHTING_MODE_SHUTTING_DOWN",
   /**
@@ -100,9 +99,8 @@ export const LIGHTING_MODE_STATUS = {
 export type LightingModeStatusCode =
   (typeof LIGHTING_MODE_STATUS)[keyof typeof LIGHTING_MODE_STATUS];
 
-/** Failures thrown by `set_lighting_mode` / `stop_lighting` /
- * `get_lighting_mode_status` / `start_led_test_pattern` / `stop_led_test_pattern`
- * as `Err("CODE: detail")`. A thrown error, never a `status.code` — the command
+/** Failures thrown by `start_led_test_pattern` / `stop_led_test_pattern` as
+ * `Err("CODE: detail")`. A thrown error, never a `status.code` — the command
  * never got far enough. */
 export const LIGHTING_COMMAND_ERRORS = {
   CONNECTION_STATE_LOCK_FAILED: "LIGHTING_CONNECTION_STATE_LOCK_FAILED",

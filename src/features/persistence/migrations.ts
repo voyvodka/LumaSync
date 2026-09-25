@@ -51,6 +51,14 @@ import { moveHueChannelToWorld } from "@/features/room-map/model/hueChannelPosit
  * Declared inline here (not exported) so `ShellState` itself stays clean —
  * no consumer outside the migration module should ever read these fields.
  */
+/** Retired at schemaVersion 7: stored, but read by nothing. Launch at login is
+ *  the OS autostart entry's own state, never this flag. */
+type RetiredUnreadKeys = {
+  startupEnabled?: boolean;
+  notificationsEnabled?: boolean;
+  roomMapBackgroundOpacity?: number;
+};
+
 /** Retired at schemaVersion 6. Declared here so the fold can read it without
  *  putting it back on `ShellState`. */
 type LegacyChannelRegions = {
@@ -115,6 +123,30 @@ export function migrateShellState(state: ShellState): ShellState {
     next = migrateV5ToV6(next);
   }
 
+  // 6 → 7: drop the keys nothing read
+  if ((next.schemaVersion ?? 1) < 7) {
+    next = migrateV6ToV7(next);
+  }
+
+  return next;
+}
+
+// ---------------------------------------------------------------------------
+// 6 → 7 — drop stored keys nothing reads
+// ---------------------------------------------------------------------------
+
+/** Safe to drop: no reader in either language, so nothing the user sees
+ *  changes. `lightingMode.targets` was a copy of the selection; boot and the
+ *  tray read `lastOutputTargets`, which every choice writes on arrival. */
+function migrateV6ToV7(state: ShellState): ShellState {
+  const next = { ...state, schemaVersion: 7 } as ShellState & RetiredUnreadKeys;
+  delete next.startupEnabled;
+  delete next.notificationsEnabled;
+  delete next.roomMapBackgroundOpacity;
+  if (next.lightingMode && "targets" in next.lightingMode) {
+    const { targets: _targets, ...mode } = next.lightingMode;
+    next.lightingMode = mode;
+  }
   return next;
 }
 

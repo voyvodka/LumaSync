@@ -27,7 +27,6 @@ export const HUE_COMMANDS = {
   LIST_ENTERTAINMENT_AREAS: "list_hue_entertainment_areas",
   CHECK_STREAM_READINESS: "check_hue_stream_readiness",
   START_STREAM: "start_hue_stream",
-  STOP_STREAM: "stop_hue_stream",
   RESTART_STREAM: "restart_hue_stream",
   SET_SOLID_COLOR: "set_hue_solid_color",
   GET_STREAM_STATUS: "get_hue_stream_status",
@@ -758,8 +757,8 @@ export interface HueSolidColorSnapshot {
   brightness: number;
 }
 
-/** `start_hue_stream`, `stop_hue_stream`, `restart_hue_stream`,
- * `set_hue_solid_color` and `get_hue_stream_status`. */
+/** `start_hue_stream`, `restart_hue_stream`, `set_hue_solid_color` and
+ * `get_hue_stream_status`. */
 export interface HueRuntimeCommandResult {
   active: boolean;
   status: HueRuntimeStatus;

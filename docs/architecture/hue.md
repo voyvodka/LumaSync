@@ -201,7 +201,7 @@ render the wrong card, so the "we never called the bridge" distinction is carrie
 `request.username` sits above the readiness call and above the `credentials_valid` gate evidence,
 which is computed from that same field. Resolving after either one makes an empty request username
 refuse the start with no error the user can act on. Everything downstream is then free: the stored
-`ActiveHueStream.username` carries the resolved key, so `stop_hue_stream`, `get_hue_stream_status`,
+`ActiveHueStream.username` carries the resolved key, so `stop_hue_stream_on`, `get_hue_stream_status`,
 the deactivate PUTs and the whole reconnect monitor need no credential handling of their own.
 
 **The app-key lookup is a sibling of `resolve_hue_credentials`, not a relaxation of it.**
@@ -429,9 +429,8 @@ Sync puts it back as it was, and so do we now (`commands/hue/light_restore.rs`).
 - **Which stops restore.** Every stop but a user's Off: Hue deselected, a mode without Hue, a start
   the mode apply left out, the test lease giving back a stream it opened, the Devices stop button,
   every output deselected, an unplug, a refused boot restore, and the quit
-  (`stop_hue_stream_before_exit` passes `Restore` unconditionally). The `stop_hue_stream` command
-  always restores; a user's Off comes through the lighting transaction (`stop_hue_stream_on`) and
-  switches the lights off instead unless the user chose otherwise ("Off turns the lights off",
+  (`stop_hue_stream_before_exit` passes `Restore` unconditionally). Every stop goes through the
+  lighting transaction's `stop_hue_stream_on`; a user's Off asks it to switch the lights off instead unless the user chose otherwise ("Off turns the lights off",
   below). A mode change that keeps Hue never stops the
   stream (`start_hue_stream` answers NOOP), and `stop_led_test_pattern` does not touch the Hue
   runtime. A start or restart onto *another* area restores the held one first, before reading the
@@ -473,14 +472,14 @@ Sync puts it back as it was, and so do we now (`commands/hue/light_restore.rs`).
   A window that ends without one clear answer leaves the lights alone (`AreaUnknown`). During the
   watch a light reading `mode: streaming` is never written, and if the area is active the watch
   ends. A restore also asks the runtime before every write and read: once a newer session of ours
-  has begun (`Starting`, `Running`, `Reconnecting`) it writes nothing more. `stop_hue_stream`
+  has begun (`Starting`, `Running`, `Reconnecting`) it writes nothing more. `stop_hue_stream_on`
   already holds starts back (next entry); the guard covers an abandoned start's restore, which has
   no such gate.
 - **A start waits for a stop's restore.** `stop_with_timeout` leaves the runtime `Idle` at once,
   and the deactivate, the sender wait and the restore all run after it, so a start issued in that
   window (another webview, the test lease, a tray action) used to read the lights while the restore
   was still walking through them: the ones it had not reached yet were snapshotted "on", and that
-  session's own stop switched them back on. `stop_hue_stream` now holds
+  session's own stop switched them back on. `stop_hue_stream_on` now holds
   `HueRuntimeStateStore::stop_in_flight` from its first lock until the restore returns, and
   `start_hue_stream` / `restart_hue_stream` wait for it before they read the bridge. They only
   wait — nothing is held across a start, so a stop can still overtake a start as described above.
@@ -572,8 +571,8 @@ Sync puts it back as it was, and so do we now (`commands/hue/light_restore.rs`).
 - **Pacing and bounds.** One PUT per light through the fallback's `RequestPacer` at the ~10 req/s
   light budget, so ten lights take about a second. An interactive stop gives the restore
   `HUE_LIGHT_RESTORE_BUDGET` (4 s: a first pass over ~25 lights, then the watch in what is left);
-  `stop_hue_stream` is `async` for this, because a sync command
-  runs on the main thread and froze the window. A refused key (the classifier's `AuthInvalid`,
+  `stop_hue_stream_on` is `async` for this, and runs the work on the blocking pool: the stop was
+  once a sync command, which runs on the main thread, and froze the window. A refused key (the classifier's `AuthInvalid`,
   #418's HTML page included) or an unanswered request ends the restore; a throttle is retried once;
   a light rejected on its merits is skipped. None of it changes the stop's status: logged, never
   fatal, and a snapshot that could not be written is dropped, not retried.
@@ -686,7 +685,7 @@ success code (`HUE_DISCOVERY_OK`, `…_VALID`, `…_READY`) never captions a fai
 - **A bridge allows one active entertainment streamer at a time.** `HUE_STREAM_NOT_READY_ACTIVE_STREAMER` in the log means something else holds the session — often a previous instance of this app that did not shut down cleanly, or the official Hue Sync app. It is not a pairing failure and must not be reported as one.
 - **Our own running stream is not a foreign streamer, and only our own running stream is exempt.** The bridge names the holder only by an `auth_v1` id, and learning ours costs a `GET /auth/v1`, so ownership is read from this process's runtime instead (`streams_area`): state `Running`, an active stream for the same bridge and area, and a sender that has not exited. Only then does readiness (`ActiveStreamerView::Ours`) drop the sentinel — for `get_hue_stream_status`'s health poll and for `check_hue_stream_readiness` from the frontend, which used to report our own area as held by another app and log it every ~5 s. `list_hue_entertainment_areas` applies the same rule to each area's `activeStreamer` (`clear_own_stream`), so the area picker opened mid-stream does not mark our own area as in use. Every gate about to start a session — start, restart, reconnect — passes `Foreign`. A session a previous run left on the bridge holds the area under the *same* key and must keep reading as busy: nobody has shown the bridge accepts a fresh start over it, and the boot retry waits on exactly that sentinel.
 - **A gate-blocked start says why in `details`, as tokens.** `start_with_evidence` appends `"; readiness: <readiness code>[, HUE_STREAM_NOT_READY_ACTIVE_STREAMER]"` to `CONFIG_NOT_READY_GATE_BLOCKED`'s details, so the frontend can tell a busy area (the sentinel) from an unreachable bridge (`HUE_STREAM_READINESS_FAILED`) without a new code. A refused key never reaches that branch — it is `AUTH_INVALID_CREDENTIALS` with the `repair` hint.
-- **`entertainment_configuration` deactivation can race between three call sites:** the sender thread's own cleanup, the foreground `stop_hue_stream` command, and the reconnect monitor's pre-restart cleanup. Uncoordinated, all three PUT `{"action":"stop"}` to the same area, which the bridge logs as duplicate stale-state mutations and which historically produced the "phantom active streamer" symptom (bug audit A1.3). `DeactivateToken` is the coordination primitive — whichever caller wins `try_acquire()` performs the PUT, every later caller sees the in-flight bit and no-ops. It gates one PUT *in flight*, not one PUT per lifetime: a PUT that fails hands the token back, because what it dedupes is concurrency, and a token burned on a failure means no later caller ever retries and the bridge keeps `active_streamer` until it is restarted. A PUT that succeeds keeps it burned — releasing there would reopen the race. That rule lives in `settle_deactivate`, separately from the HTTP call, so it is testable without a bridge; the log has to live there too, because four of the six call sites discard the `Result`.
+- **`entertainment_configuration` deactivation can race between three call sites:** the sender thread's own cleanup, the foreground stop (`stop_hue_stream_on`), and the reconnect monitor's pre-restart cleanup. Uncoordinated, all three PUT `{"action":"stop"}` to the same area, which the bridge logs as duplicate stale-state mutations and which historically produced the "phantom active streamer" symptom (bug audit A1.3). `DeactivateToken` is the coordination primitive — whichever caller wins `try_acquire()` performs the PUT, every later caller sees the in-flight bit and no-ops. It gates one PUT *in flight*, not one PUT per lifetime: a PUT that fails hands the token back, because what it dedupes is concurrency, and a token burned on a failure means no later caller ever retries and the bridge keeps `active_streamer` until it is restarted. A PUT that succeeds keeps it burned — releasing there would reopen the race. That rule lives in `settle_deactivate`, separately from the HTTP call, so it is testable without a bridge; the log has to live there too, because four of the six call sites discard the `Result`.
 - **`DTLS entertainment stream established` is the line that proves streaming actually started.** Pairing succeeding says nothing about the stream.
 - **Bug H2 — gamut clipping used to discard luminance, not just chroma.** The fix converts RGB to CIE xy plus the input's own luminance (`big_y`), clips the xy point to the bulb's gamut triangle, then converts back using that *same* luminance rather than a hard-coded 1.0. Before the fix, the inverse transform renormalised so the largest channel saturated — preserving hue but discarding brightness, which the frame builder then tried to claw back through the brightness scalar, producing visibly dim saturated content and, on gamut-edge projections, momentary all-zero RGB that drove the ambilight-frame stutter.
 - **A bridge keeps its id when DHCP moves it, so the id — not the address — decides which entry is current.** `dedupeBridges` keeps the *first* entry per id (case-insensitive: cloud discovery reports it in lower case, `/api/config` in upper case), and every caller lists the fresh answer first. It used to keep the last, which kept the old address. When a rediscovery or a typed address places the selected bridge somewhere new, `lastHueBridge` is saved with the new address (which also re-arms the health monitor) and the saved key is checked there. A typed address that turns out to be a *different* bridge starts unpaired; the pair stays with the bridge that issued it (#352).

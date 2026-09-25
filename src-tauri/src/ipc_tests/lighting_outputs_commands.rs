@@ -1,6 +1,5 @@
 //! The lighting transaction's commands over IPC, through the main window's
-//! real grants. `get_lighting_mode_status` is no longer granted to any window;
-//! its lock-free read is still pinned here, so the test grants it.
+//! real grants.
 
 use std::sync::{mpsc, Arc};
 use std::time::Duration;
@@ -9,9 +8,7 @@ use serde_json::{json, Value};
 use tauri::test::MockRuntime;
 use tauri::{App, Manager, WebviewWindow};
 
-use super::{
-    assert_camel_case_keys, grant_main_for_tests, invoke, main_webview, mock_app, status_code,
-};
+use super::{assert_camel_case_keys, invoke, main_webview, mock_app, status_code};
 use crate::commands::device_connection::SerialConnectionState;
 use crate::commands::led_output::{LedOutputBridge, LedOutputError, LedPacketSender};
 use crate::commands::lighting_mode::hue_driver::HueDriverHandle;
@@ -35,11 +32,9 @@ fn app() -> App<MockRuntime> {
         crate::commands::lighting_mode::outputs::apply_outputs,
         crate::commands::lighting_mode::tuning::retune_lighting,
         crate::commands::lighting_mode::outputs::release_hue_output,
-        crate::commands::lighting_mode::outputs::get_lighting_runtime,
-        crate::commands::lighting_mode::transition::get_lighting_mode_status
+        crate::commands::lighting_mode::outputs::get_lighting_runtime
     ]);
     app.manage(HueDriverHandle(FakeHue::new(Arc::new(EventLog::default()))));
-    grant_main_for_tests(&app, &["allow-get-lighting-mode-status"]);
     app.state::<LightingRuntimeState>()
         .replace_output_bridge_for_tests(LedOutputBridge::from_sender(Arc::new(SilentStrip)));
     {
@@ -96,8 +91,6 @@ fn apply_outputs_runs_a_mode_and_says_what_runs() {
     assert_eq!(result["snapshot"]["mode"]["kind"], json!("solid"));
     assert_eq!(result["snapshot"]["activeTargets"], json!(["usb"]));
 
-    let status = invoke(&webview, "get_lighting_mode_status", json!({})).unwrap();
-    assert_eq!(status["mode"]["kind"], json!("solid"));
     let runtime = invoke(&webview, "get_lighting_runtime", json!({})).unwrap();
     assert_eq!(runtime["revision"], result["snapshot"]["revision"]);
 }
@@ -173,11 +166,6 @@ fn answers_while_the_runtime_is_locked(command: &'static str) {
     let value = answered.expect("the read resolves");
     let mode = value.get("mode").cloned().unwrap_or(Value::Null);
     assert_eq!(mode["kind"], json!("solid"), "{value}");
-}
-
-#[test]
-fn the_mode_status_never_waits_for_the_runtime_lock() {
-    answers_while_the_runtime_is_locked("get_lighting_mode_status");
 }
 
 #[test]

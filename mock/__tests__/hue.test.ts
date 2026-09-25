@@ -15,6 +15,7 @@ import {
   HUE_RUNTIME_STATES,
   HUE_RUNTIME_STATUS,
   HUE_STATUS,
+  type HueRuntimeTarget,
 } from "../../src/shared/contracts/hue";
 import type {
   HueEntertainmentAreaListResponse,
@@ -23,11 +24,12 @@ import type {
   HueValidateCredentialsResponse,
 } from "../../src/features/hue/hueOnboardingApi";
 import { isHueStopCodeOk } from "../../src/features/hue/model/hueStartConfig";
-import type { HueRuntimeCommandResult, LightingModeCommandResult } from "../../src/features/mode/modeApi";
-import { DEVICE_COMMANDS } from "../../src/shared/contracts/device";
+import type { HueRuntimeCommandResult } from "../../src/features/mode/modeApi";
 import { HUE_HEALTH_COMMANDS, type HueHealthSnapshot } from "../../src/shared/contracts/hueHealth";
 import { dispatch } from "../dispatch";
 import { handlerFor } from "../handlers";
+import { applyLightingMode } from "../handlers/device";
+import { stopHueStream } from "../handlers/hue";
 import { SCENARIOS } from "../scenarios";
 import { mutate, setWorld } from "../state";
 
@@ -149,20 +151,20 @@ describe("hueRuntimeFault distinguishes a start-time gate block from a live-stre
 });
 
 /**
- * `stop_hue_stream` is local in Rust: `stop_with_timeout` (`hue/retry.rs`)
+ * The Hue stop is local in Rust: `stop_with_timeout` (`hue/retry.rs`)
  * leaves Idle / `HUE_STREAM_STOPPED` whatever the bridge is doing. The mock
  * answered the stop with the unreachable bridge's retry code instead, which
  * `isHueStopCodeOk` reads as a stop that failed — so a Hue left out of a
  * `[usb, hue]` start stayed listed active and the HUE chip read STREAMING
  * beside the left-out notice, a state the real backend cannot produce.
  */
-describe("stop_hue_stream answers as Rust's local stop does", () => {
+describe("the Hue stop answers as Rust's local stop does", () => {
   it("reports HUE_STREAM_STOPPED against an unreachable bridge, and Idle until the next start", async () => {
     setWorld(SCENARIOS["hue-unreachable"].build());
     const start = (await dispatch(HUE_COMMANDS.START_STREAM)) as HueRuntimeCommandResult;
     expect(start.active).toBe(false);
 
-    const stop = (await dispatch(HUE_COMMANDS.STOP_STREAM)) as HueRuntimeCommandResult;
+    const stop = stopHueStream();
     expect(stop.status.code).toBe(HUE_RUNTIME_STATUS.STREAM_STOPPED);
     expect(isHueStopCodeOk(stop.status.code)).toBe(true);
 
@@ -179,7 +181,7 @@ describe("stop_hue_stream answers as Rust's local stop does", () => {
     const world = SCENARIOS["hue-key-expired"].build();
     setWorld(world);
 
-    const stop = (await dispatch(HUE_COMMANDS.STOP_STREAM)) as HueRuntimeCommandResult;
+    const stop = stopHueStream();
     expect(stop.status.code).toBe(HUE_RUNTIME_STATUS.STREAM_STOPPED);
 
     const start = (await dispatch(HUE_COMMANDS.START_STREAM)) as HueRuntimeCommandResult;
@@ -318,8 +320,7 @@ describe("a held entertainment area", () => {
   // The walk `usb-hue-busy-at-boot` exists for: USB alone at once, Hue added later.
   it("with a strip plugged in, gates [usb, hue] on Hue but runs [usb], then takes Hue once freed", () => {
     setWorld(SCENARIOS["usb-hue-busy-at-boot"].build());
-    const apply = (targets: string[]) =>
-      call(DEVICE_COMMANDS.SET_LIGHTING_MODE, { payload: { kind: "ambilight", targets } }) as LightingModeCommandResult;
+    const apply = (targets: HueRuntimeTarget[]) => applyLightingMode({ kind: "ambilight", targets });
 
     expect((call(HUE_COMMANDS.START_STREAM) as HueRuntimeCommandResult).status.code).toBe(
       HUE_RUNTIME_STATUS.CONFIG_NOT_READY_GATE_BLOCKED,

@@ -4,9 +4,7 @@ use serde_json::{json, Value};
 use tauri::test::MockRuntime;
 use tauri::App;
 
-use super::{
-    assert_camel_case_keys, grant_main_for_tests, invoke, main_webview, mock_app, status_code,
-};
+use super::{apply_mode, assert_camel_case_keys, invoke, main_webview, mock_app, status_code};
 
 fn app() -> App<MockRuntime> {
     mock_app(tauri::generate_handler![
@@ -168,10 +166,8 @@ fn path_shaped_port_names_are_refused_without_becoming_the_status_port() {
 #[test]
 fn refused_connect_does_not_arm_usb_output() {
     let app = mock_app(tauri::generate_handler![
-        crate::commands::device_connection::connect_serial_port,
-        crate::commands::lighting_mode::transition::set_lighting_mode
+        crate::commands::device_connection::connect_serial_port
     ]);
-    grant_main_for_tests(&app, &["allow-set-lighting-mode"]);
     let webview = main_webview(&app);
 
     invoke(
@@ -181,18 +177,14 @@ fn refused_connect_does_not_arm_usb_output() {
     )
     .expect("connect must resolve");
 
-    let response = invoke(
-        &webview,
-        "set_lighting_mode",
+    let response = apply_mode(
+        app.handle(),
         json!({
-            "payload": {
-                "kind": "solid",
-                "solid": { "r": 255, "g": 0, "b": 0, "brightness": 1.0 },
-                "targets": ["usb"]
-            }
+            "kind": "solid",
+            "solid": { "r": 255, "g": 0, "b": 0, "brightness": 1.0 },
+            "targets": ["usb"]
         }),
-    )
-    .expect("set_lighting_mode must resolve, never reject");
+    );
 
     assert_eq!(
         status_code(&response),

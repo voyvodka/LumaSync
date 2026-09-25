@@ -1,17 +1,16 @@
 /**
  * Contract tests for arg/response-shape bugs found by visual inspection.
  *
- * 1. `set_lighting_mode` read `args.mode`, but `setLightingMode` in
- *    `src/features/mode/modeApi.ts` has only ever sent `{ payload }`. Every
- *    call landed on the `undefined` fallback, so every mode applied as "off":
- *    the capture-permission gate below was unreachable and Solid mode could
- *    never be entered. These tests call the handler with the *real* envelope
- *    the bridge sends, not the one the old fixture happened to read.
+ * 1. The mode apply under `apply_outputs` (`applyLightingMode`) was once the
+ *    `set_lighting_mode` fixture, which read `args.mode` while the bridge sent
+ *    `{ payload }`: every mode applied as "off", so the capture-permission gate
+ *    was unreachable and Solid could never start. The tests below pin the
+ *    modes that fixture could not reach.
  * 2. `get_runtime_telemetry`'s Hue block never produced `lastErrorCode` and
  *    reported "Idle" for both an unreachable bridge and an expired key —
  *    collapsing exactly the distinction `get_hue_stream_status` already
  *    got right. See `hueRuntimeFault` in `mock/handlers/hue.ts`.
- * 3. The capture-permission refusal of `set_lighting_mode` sent `details:
+ * 3. The mode apply's capture-permission refusal sent `details:
  *    null` on `AMBILIGHT_MODE_START_FAILED`. Rust always puts the capture
  *    reason there (`lighting_mode.rs`), and `describeCaptureFailure` in
  *    `src/shared/contracts/capture.ts` reads it to pick the failure bucket
@@ -24,13 +23,13 @@ import { describeCaptureFailure } from "../../src/shared/contracts/capture";
 import { DEVICE_COMMANDS } from "../../src/shared/contracts/device";
 import { HUE_RUNTIME_STATES, HUE_RUNTIME_STATUS } from "../../src/shared/contracts/hue";
 import type { FullTelemetrySnapshot } from "../../src/shared/contracts/telemetry";
-import type { LightingModeCommandResult } from "../../src/features/mode/modeApi";
 import {
   LIGHTING_RUNTIME_COMMANDS,
   type ApplyOutputsResult,
 } from "../../src/shared/contracts/lightingRuntime";
 import { dispatch } from "../dispatch";
 import { handlerFor } from "../handlers";
+import { applyLightingMode } from "../handlers/device";
 import { __resetMockLightingRuntime } from "../handlers/lighting";
 import { SCENARIOS } from "../scenarios";
 import { getWorld, setWorld } from "../state";
@@ -41,15 +40,13 @@ const call = (command: string, args?: Record<string, unknown>) => {
   return handler?.(args);
 };
 
-describe("set_lighting_mode reads the real invoke payload shape", () => {
+describe("the mode apply reaches every mode", () => {
   beforeEach(() => {
     setWorld(SCENARIOS.furnished.build());
   });
 
-  it("applies ambilight when called with the real { payload } envelope", () => {
-    const result = call(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
-      payload: { kind: "ambilight" },
-    }) as LightingModeCommandResult;
+  it("applies ambilight", () => {
+    const result = applyLightingMode({ kind: "ambilight" });
 
     expect(result.mode.kind).toBe("ambilight");
     expect(result.active).toBe(true);
@@ -58,9 +55,7 @@ describe("set_lighting_mode reads the real invoke payload shape", () => {
 
   it("refuses ambilight when capture permission is denied — the gate `args.mode` made unreachable", () => {
     setWorld(SCENARIOS["capture-denied"].build());
-    const result = call(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
-      payload: { kind: "ambilight" },
-    }) as LightingModeCommandResult;
+    const result = applyLightingMode({ kind: "ambilight" });
 
     expect(result.active).toBe(false);
     expect(result.status.code).toBe("AMBILIGHT_MODE_START_FAILED");
@@ -68,9 +63,7 @@ describe("set_lighting_mode reads the real invoke payload shape", () => {
 
   it("carries the real capture reason in `details`, not null, on a permission refusal", () => {
     setWorld(SCENARIOS["capture-denied"].build());
-    const result = call(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
-      payload: { kind: "ambilight" },
-    }) as LightingModeCommandResult;
+    const result = applyLightingMode({ kind: "ambilight" });
 
     expect(result.status.details).toBe("AMBILIGHT_CAPTURE_PERMISSION_DENIED");
     // The read the UI actually performs — `describeCaptureFailure` — must
@@ -80,9 +73,7 @@ describe("set_lighting_mode reads the real invoke payload shape", () => {
   });
 
   it("applies solid mode — unreachable under the old `args.mode` read, which always fell back to 'off'", () => {
-    const result = call(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
-      payload: { kind: "solid" },
-    }) as LightingModeCommandResult;
+    const result = applyLightingMode({ kind: "solid" });
 
     expect(result.mode.kind).toBe("solid");
     expect(result.active).toBe(true);
@@ -91,7 +82,7 @@ describe("set_lighting_mode reads the real invoke payload shape", () => {
 });
 
 /**
- * `set_lighting_mode` used to ignore `targets` entirely — every mode applied
+ * The mode apply used to ignore `targets` entirely — every mode applied
  * regardless of whether USB or Hue was actually available, so the two gates
  * `apply_mode_change_inner` runs before ever touching the worker
  * (`src-tauri/src/commands/lighting_mode.rs:2023-2036` USB,
@@ -104,11 +95,8 @@ describe("set_lighting_mode reads the real invoke payload shape", () => {
  * stop/gate-block/abort/reconnect path. `hue.streaming` is the mock's proxy
  * for that fact, not `hue.everActive` or `hue.reachable` — a bridge that is
  * reachable and paired but never started still leaves `hue_output` `None`.
- *
- * These drive the mock through `dispatch()`, not `handlerFor`, matching the
- * hueRuntimeFault regression guard in `mock/__tests__/hue.test.ts`.
  */
-describe("set_lighting_mode's USB and Hue gates fire in the same order apply_mode_change_inner does", () => {
+describe("the mode apply's USB and Hue gates fire in the same order apply_mode_change_inner does", () => {
   it("refuses a hue-target mode with DEVICE_NOT_CONNECTED before ever checking hue_output — USB gate runs first", async () => {
     // Both targets requested, neither available: real Rust's USB gate
     // (2023-2036) precedes its Hue gate (2039-2052), so DEVICE_NOT_CONNECTED
@@ -119,9 +107,7 @@ describe("set_lighting_mode's USB and Hue gates fire in the same order apply_mod
     expect(world.wled.connectedHost).toBeNull();
     expect(world.hue.streaming).toBe(false);
 
-    const result = (await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
-      payload: { kind: "ambilight", targets: ["usb", "hue"] },
-    })) as LightingModeCommandResult;
+    const result = applyLightingMode({ kind: "ambilight", targets: ["usb", "hue"] });
 
     expect(result.status.code).toBe("DEVICE_NOT_CONNECTED");
     expect(result.active).toBe(false);
@@ -132,9 +118,7 @@ describe("set_lighting_mode's USB and Hue gates fire in the same order apply_mod
     setWorld(world);
     expect(world.hue.streaming).toBe(false);
 
-    const result = (await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
-      payload: { kind: "ambilight", targets: ["hue"] },
-    })) as LightingModeCommandResult;
+    const result = applyLightingMode({ kind: "ambilight", targets: ["hue"] });
 
     expect(result.status.code).toBe("HUE_NOT_READY");
     expect(result.status.details).toBe("HUE_RUNTIME_GATE_FAILED");
@@ -155,9 +139,7 @@ describe("set_lighting_mode's USB and Hue gates fire in the same order apply_mod
     expect(world.hue.reachable).toBe(true);
     expect(world.hue.credentialValid).toBe(true);
 
-    const result = (await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
-      payload: { kind: "solid", targets: ["hue"] },
-    })) as LightingModeCommandResult;
+    const result = applyLightingMode({ kind: "solid", targets: ["hue"] });
 
     expect(result.status.code).toBe("HUE_NOT_READY");
   });
@@ -169,9 +151,7 @@ describe("set_lighting_mode's USB and Hue gates fire in the same order apply_mod
     world.lighting.mode = { ...world.lighting.mode, kind: "solid" };
     setWorld(world);
 
-    const result = (await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
-      payload: { kind: "ambilight", targets: ["usb", "hue"] },
-    })) as LightingModeCommandResult;
+    const result = applyLightingMode({ kind: "ambilight", targets: ["usb", "hue"] });
 
     expect(result.status.code).toBe("HUE_NOT_READY");
     expect(result.mode.kind).toBe("solid");
@@ -182,9 +162,7 @@ describe("set_lighting_mode's USB and Hue gates fire in the same order apply_mod
     setWorld(SCENARIOS.furnished.build());
     expect(getWorld().hue.streaming).toBe(true);
 
-    const result = (await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
-      payload: { kind: "solid", targets: ["hue"] },
-    })) as LightingModeCommandResult;
+    const result = applyLightingMode({ kind: "solid", targets: ["hue"] });
 
     expect(result.status.code).toBe("SOLID_MODE_APPLIED");
     expect(result.active).toBe(true);
@@ -196,9 +174,7 @@ describe("set_lighting_mode's USB and Hue gates fire in the same order apply_mod
     world.hue.reachable = false;
     setWorld(world);
 
-    const result = (await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
-      payload: { kind: "ambilight", targets: ["usb"] },
-    })) as LightingModeCommandResult;
+    const result = applyLightingMode({ kind: "ambilight", targets: ["usb"] });
 
     expect(result.status.code).toBe("AMBILIGHT_MODE_STARTED");
   });
@@ -210,9 +186,7 @@ describe("set_lighting_mode's USB and Hue gates fire in the same order apply_mod
     setWorld(world);
     expect(world.serial.connectedPort).toBeNull();
 
-    const result = (await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
-      payload: { kind: "ambilight", targets: ["usb"] },
-    })) as LightingModeCommandResult;
+    const result = applyLightingMode({ kind: "ambilight", targets: ["usb"] });
 
     expect(result.status.code).not.toBe("DEVICE_NOT_CONNECTED");
   });
@@ -221,9 +195,7 @@ describe("set_lighting_mode's USB and Hue gates fire in the same order apply_mod
     const world = SCENARIOS.empty.build();
     setWorld(world);
 
-    const result = (await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
-      payload: { kind: "off", targets: ["usb", "hue"] },
-    })) as LightingModeCommandResult;
+    const result = applyLightingMode({ kind: "off", targets: ["usb", "hue"] });
 
     expect(result.status.code).not.toBe("DEVICE_NOT_CONNECTED");
     expect(result.status.code).not.toBe("HUE_NOT_READY");

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
-import { DEVICE_COMMANDS } from "@/shared/contracts/device";
 import {
   HUE_RUNTIME_ACTION_HINT,
   HUE_RUNTIME_STATES,
@@ -123,7 +122,6 @@ describe("lighting mode contracts", () => {
       windowCenterY: null,
       lastSection: "lights",
       trayHintShown: true,
-      startupEnabled: false,
       ledCalibration: CALIBRATION,
       lightingMode: {
         kind: "solid",
@@ -137,12 +135,6 @@ describe("lighting mode contracts", () => {
     };
 
     expect(shellState.ledCalibration).toEqual(CALIBRATION);
-  });
-
-  it("maps mode command IDs in DEVICE_COMMANDS contract", () => {
-    expect(DEVICE_COMMANDS.SET_LIGHTING_MODE).toBe("set_lighting_mode");
-    expect(DEVICE_COMMANDS.STOP_LIGHTING).toBe("stop_lighting");
-    expect(DEVICE_COMMANDS.GET_LIGHTING_MODE_STATUS).toBe("get_lighting_mode_status");
   });
 
   it("exports Hue runtime lifecycle states as Idle/Starting/Running/Reconnecting/Stopping/Failed", () => {

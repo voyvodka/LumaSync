@@ -117,22 +117,11 @@ export interface LightingModeConfig {
 }
 
 /**
- * Tauri event channel emitted whenever the active lighting mode changes
- * (mode flip, solid color update, ambilight start/stop). Lets preview
- * surfaces — and any window other than the one that issued the change —
- * reconcile their mode view without polling `get_lighting_mode_status`.
+ * What one mode apply under the lighting transaction answers
+ * (`apply_config_blocking` in Rust). No command returns it whole — the
+ * transaction hands on its `status` as `ApplyOutputsOutcome.applyStatus` — but
+ * the dev mock's transaction is built on it.
  */
-export const LIGHTING_MODE_CHANGED_EVENT = "lighting://mode-changed";
-
-/** Payload broadcast on {@link LIGHTING_MODE_CHANGED_EVENT}. */
-export interface LightingModeChangedPayload {
-  /** The lighting mode configuration now in effect. */
-  config: LightingModeConfig;
-  /** Whether lighting is actively driving sinks (false when `kind === "off"` / stopped). */
-  active: boolean;
-}
-
-/** `set_lighting_mode`, `stop_lighting` and `get_lighting_mode_status`. */
 export interface LightingModeCommandResult {
   active: boolean;
   mode: LightingModeConfig;
