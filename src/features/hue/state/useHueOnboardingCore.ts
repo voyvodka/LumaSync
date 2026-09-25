@@ -15,8 +15,15 @@ import {
   applyAreaReadinessSnapshot,
   flattenAreaGroups,
   normalizeAreas,
+  readinessOf,
 } from "../model/areaGrouping";
-import { dedupeBridges, normalizeIpValue, resolveManualIpError } from "../model/bridgeIdentity";
+import {
+  dedupeBridges,
+  normalizeIpValue,
+  relocatedBridge,
+  resolveManualIpError,
+  sameBridgeId,
+} from "../model/bridgeIdentity";
 import { deriveStep, toPersistedStep, toStepFromPersisted } from "../model/onboardingStep";
 import {
   HUE_ONBOARDING_TRANSPORT_CODES as CODE,
@@ -63,6 +70,7 @@ export interface UseHueOnboardingCoreResult {
   selectBridge: (bridgeId: string | null) => void;
   setManualIp: (value: string) => void;
   submitManualIp: () => Promise<void>;
+  recheckBridge: () => Promise<void>;
   pair: (bridgeId?: string) => Promise<void>;
   refreshAreas: () => Promise<void>;
   selectArea: (areaId: string | null) => void;
@@ -111,6 +119,11 @@ async function migrateStoredCredentialsToKeychain(storedState: ShellState): Prom
  * state object and one patchState, so they are not split further. */
 export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
   const [state, setState] = useState<HueOnboardingState>(DEFAULT_STATE);
+  // Read by the async flows after an await, where the render's `state` is stale.
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
   const [readinessById, setReadinessById] = useState<Map<string, HueAreaReadiness>>(new Map());
   const [readinessCheckedAtById, setReadinessCheckedAtById] = useState<Map<string, number>>(new Map());
 
@@ -286,6 +299,105 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
     await refreshAreasWith(state.credentials);
   }, [refreshAreasWith, state.credentials]);
 
+  // Asks the bridge whether the saved key still works, then lists its areas.
+  // Boot runs it, and so does anything that has just learned where the
+  // bridge is now: Retry, a rediscovery, a new address typed in.
+  const validateBridge = useCallback(async (
+    bridge: HueBridgeSummary,
+    credentials: HuePairingCredentials,
+    isCancelled: () => boolean = () => false,
+  ) => {
+    patchState((prev) => ({
+      ...prev,
+      credentialState: HUE_CREDENTIAL_STATUS.UNKNOWN,
+      isValidatingCredential: true,
+    }));
+
+    try {
+      const validation = await validateHueCredentials(bridge.ip, credentials.username, credentials.clientKey);
+      if (isCancelled()) {
+        return;
+      }
+
+      patchState((prev) => ({
+        ...prev,
+        credentialState: validation.valid
+          ? HUE_CREDENTIAL_STATUS.VALID
+          : HUE_CREDENTIAL_STATUS.NEEDS_REPAIR,
+        // HUE_CREDENTIAL_CHECK_FAILED = network error (bridge offline).
+        // HUE_CREDENTIAL_INVALID = bridge responded but auth is wrong.
+        // Any other case (success or unexpected) = bridge was reachable.
+        bridgeUnreachable: !validation.valid && validation.status.code === "HUE_CREDENTIAL_CHECK_FAILED",
+        isValidatingCredential: false,
+        status: validation.status,
+      }));
+
+      await shellStore.save({
+        hueCredentialStatus: validation.valid
+          ? HUE_CREDENTIAL_STATUS.VALID
+          : HUE_CREDENTIAL_STATUS.NEEDS_REPAIR,
+      });
+
+      if (!validation.valid) {
+        return;
+      }
+
+      const areas = await listHueEntertainmentAreas(bridge.ip, credentials.username);
+      if (isCancelled()) {
+        return;
+      }
+
+      patchState((prev) => ({
+        ...prev,
+        // A re-check must not wipe the readiness the rows already carry:
+        // Start stays disabled until an area reads ready again.
+        areaGroups: normalizeAreas(areas.areas, readinessOf(prev.areaGroups)),
+        status: areas.status,
+      }));
+    } catch (error) {
+      if (isCancelled()) {
+        return;
+      }
+
+      patchState((prev) => ({
+        ...prev,
+        credentialState: HUE_CREDENTIAL_STATUS.NEEDS_REPAIR,
+        bridgeUnreachable: true,
+        isValidatingCredential: false,
+        status: {
+          code: CODE.CREDENTIAL_CHECK_FAILED,
+          message: "Could not validate saved Hue credentials.",
+          details: parseCommandError(error).message,
+        },
+      }));
+    }
+  }, [patchState]);
+
+  // A bridge DHCP moved keeps its id, so a rediscovery or a typed address is
+  // the moment to learn where it went: remember the new address — saving
+  // `lastHueBridge` also re-arms the health monitor — and ask it again.
+  const adoptBridgeAddress = useCallback(async (
+    bridge: HueBridgeSummary,
+    moved: boolean,
+    current: HueOnboardingState,
+  ) => {
+    if (moved) {
+      await shellStore.save({ lastHueBridge: bridge });
+    }
+    if (current.credentials && (moved || current.bridgeUnreachable)) {
+      await validateBridge(bridge, current.credentials);
+    }
+  }, [validateBridge]);
+
+  const recheckBridge = useCallback(async () => {
+    const current = stateRef.current;
+    const bridge = current.bridges.find((candidate) => candidate.id === current.selectedBridgeId);
+    if (!bridge || !current.credentials) {
+      return;
+    }
+    await validateBridge(bridge, current.credentials);
+  }, [validateBridge]);
+
   const discover = useCallback(async () => {
     patchState((prev) => ({
       ...prev,
@@ -294,10 +406,24 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
 
     try {
       const response = await discoverHueBridges();
+      const current = stateRef.current;
+      const selected = current.bridges.find((bridge) => bridge.id === current.selectedBridgeId) ?? null;
+      const moved = selected ? relocatedBridge(selected, response.bridges) : null;
+      const found = moved ?? (selected && response.bridges.some((bridge) => sameBridgeId(bridge.id, selected.id))
+        ? selected
+        : null);
+      const fresh = dedupeBridges(response.bridges);
+
       patchState((prev) => {
-        const merged = dedupeBridges([...response.bridges, ...prev.bridges]);
+        const merged = dedupeBridges([...(moved ? [moved] : []), ...fresh, ...prev.bridges]);
         const selectedExists = prev.selectedBridgeId && merged.some((bridge) => bridge.id === prev.selectedBridgeId);
-        const selectedBridgeId = selectedExists ? prev.selectedBridgeId : merged[0]?.id ?? null;
+        // Selecting a bridge hides the list of found ones, so a scan only
+        // picks one for the user when there is nothing to choose between.
+        const selectedBridgeId = selectedExists
+          ? prev.selectedBridgeId
+          : fresh.length === 1
+            ? fresh[0]?.id ?? null
+            : null;
         return {
           ...prev,
           bridges: merged,
@@ -306,6 +432,10 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
           status: response.status,
         };
       });
+
+      if (found) {
+        await adoptBridgeAddress(found, moved !== null, current);
+      }
     } catch (error) {
       patchState((prev) => ({
         ...prev,
@@ -391,24 +521,36 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
 
     try {
       const response = await verifyHueBridgeIp(manualIp);
-      patchState((prev) => {
-        const bridge = response.bridge;
-        const bridges = bridge ? dedupeBridges([bridge, ...prev.bridges]) : prev.bridges;
-        const selectedBridgeId = bridge?.id ?? prev.selectedBridgeId;
-        if (bridge) {
-          void shellStore.save({
-            lastHueBridge: bridge,
-          });
-        }
+      const current = stateRef.current;
+      const bridge = response.bridge;
+      const selected = current.bridges.find((candidate) => candidate.id === current.selectedBridgeId) ?? null;
+      const sameAsSelected = bridge !== null && selected !== null && sameBridgeId(bridge.id, selected.id);
+      const moved = sameAsSelected && selected ? relocatedBridge(selected, [bridge]) : null;
+      // Typed from the offline card while another bridge is paired: the key
+      // belongs to that one, so this bridge starts unpaired and the saved
+      // bridge stays until the new one is paired.
+      const otherBridge = bridge !== null && selected !== null && !sameAsSelected;
 
+      patchState((prev) => {
+        const kept = moved ?? (sameAsSelected ? selected : bridge);
+        const bridges = kept ? dedupeBridges([kept, ...prev.bridges]) : prev.bridges;
         return {
           ...prev,
           bridges,
-          selectedBridgeId,
+          selectedBridgeId: kept?.id ?? prev.selectedBridgeId,
+          credentials: otherBridge ? null : prev.credentials,
+          credentialState: otherBridge ? HUE_CREDENTIAL_STATUS.UNKNOWN : prev.credentialState,
+          bridgeUnreachable: otherBridge ? false : prev.bridgeUnreachable,
           isDiscovering: false,
           status: response.status,
         };
       });
+
+      if (bridge && selected === null) {
+        await shellStore.save({ lastHueBridge: bridge });
+      } else if (sameAsSelected && selected) {
+        await adoptBridgeAddress(moved ?? selected, moved !== null, current);
+      }
     } catch (error) {
       patchState((prev) => ({
         ...prev,
@@ -420,7 +562,7 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
         },
       }));
     }
-  }, [patchState, state.manualIp]);
+  }, [adoptBridgeAddress, patchState, state.manualIp]);
 
   const pair = useCallback(async (bridgeId?: string) => {
     const bridge = bridgeId === undefined
@@ -633,15 +775,17 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
           }
         : null;
 
-      const initialReadiness = new Map<string, HueAreaReadiness>();
-
       patchState((prev) => ({
         ...prev,
         step: toStepFromPersisted(storedState.hueOnboardingStep),
         bridges: savedBridge ? dedupeBridges([savedBridge, ...prev.bridges]) : prev.bridges,
         selectedBridgeId: savedBridge?.id ?? prev.selectedBridgeId,
         selectedAreaId: storedState.lastHueAreaId ?? prev.selectedAreaId,
-        credentialState: storedState.hueCredentialStatus ?? HUE_CREDENTIAL_STATUS.NEEDS_REPAIR,
+        // Nothing stored is "not paired yet", never "needs re-pair": the
+        // latter showed a first-time user expired credentials before pairing.
+        credentialState: savedCredentials
+          ? storedState.hueCredentialStatus ?? HUE_CREDENTIAL_STATUS.UNKNOWN
+          : HUE_CREDENTIAL_STATUS.UNKNOWN,
         credentials: savedCredentials,
       }));
 
@@ -651,69 +795,7 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
         return;
       }
 
-      patchState((prev) => ({
-        ...prev,
-        credentialState: HUE_CREDENTIAL_STATUS.UNKNOWN,
-        isValidatingCredential: true,
-      }));
-
-      try {
-        const validation = await validateHueCredentials(savedBridge.ip, savedCredentials.username, savedCredentials.clientKey);
-        if (cancelled) {
-          return;
-        }
-
-        patchState((prev) => ({
-          ...prev,
-          credentialState: validation.valid
-            ? HUE_CREDENTIAL_STATUS.VALID
-            : HUE_CREDENTIAL_STATUS.NEEDS_REPAIR,
-          // HUE_CREDENTIAL_CHECK_FAILED = network error (bridge offline).
-          // HUE_CREDENTIAL_INVALID = bridge responded but auth is wrong.
-          // Any other case (success or unexpected) = bridge was reachable.
-          bridgeUnreachable: !validation.valid && validation.status.code === "HUE_CREDENTIAL_CHECK_FAILED",
-          isValidatingCredential: false,
-          status: validation.status,
-        }));
-
-        await shellStore.save({
-          hueCredentialStatus: validation.valid
-            ? HUE_CREDENTIAL_STATUS.VALID
-            : HUE_CREDENTIAL_STATUS.NEEDS_REPAIR,
-        });
-
-        if (!validation.valid) {
-          return;
-        }
-
-        const areas = await listHueEntertainmentAreas(savedBridge.ip, savedCredentials.username);
-        if (cancelled) {
-          return;
-        }
-
-        const areaGroups = normalizeAreas(areas.areas, initialReadiness);
-        patchState((prev) => ({
-          ...prev,
-          areaGroups,
-          status: areas.status,
-        }));
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-
-        patchState((prev) => ({
-          ...prev,
-          credentialState: HUE_CREDENTIAL_STATUS.NEEDS_REPAIR,
-          bridgeUnreachable: true,
-          isValidatingCredential: false,
-          status: {
-            code: CODE.CREDENTIAL_CHECK_FAILED,
-            message: "Could not validate saved Hue credentials.",
-            details: parseCommandError(error).message,
-          },
-        }));
-      }
+      await validateBridge(savedBridge, savedCredentials, () => cancelled);
     };
 
     void initialize();
@@ -721,7 +803,7 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
     return () => {
       cancelled = true;
     };
-  }, [patchState]);
+  }, [patchState, validateBridge]);
 
   return {
     state,
@@ -735,6 +817,7 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
     selectBridge,
     setManualIp,
     submitManualIp,
+    recheckBridge,
     pair,
     refreshAreas,
     selectArea,

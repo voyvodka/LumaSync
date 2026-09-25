@@ -66,6 +66,7 @@ function Harness() {
     selectBridge: hook.selectBridge,
     setManualIp: hook.setManualIp,
     submitManualIp: hook.submitManualIp,
+    recheckBridge: hook.recheckBridge,
     pair: hook.pair,
     refreshAreas: hook.refreshAreas,
     selectArea: hook.selectArea,
