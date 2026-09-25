@@ -17,6 +17,7 @@ import { useShellBootstrap } from "./features/shell/useShellBootstrap";
 import { openScreenCaptureSettings } from "./features/mode/captureApi";
 import { useCaptureStallNotice } from "./features/telemetry/hooks/useCaptureStallNotice";
 import { useHueSolidColorNotice } from "./features/mode/state/useHueSolidColorNotice";
+import { useHueTargetAutoAdd } from "./features/mode/state/useHueTargetAutoAdd";
 import { usePreviewOpenNotice } from "./features/preview/state/usePreviewOpenNotice";
 import { useLightingModeOrchestrator } from "./features/mode/state/useLightingModeOrchestrator";
 import { useHueBridgeReachability } from "./features/hue/state/useHueBridgeReachability";
@@ -244,6 +245,12 @@ function Shell() {
       onLastTargetUnplugged: mode.endLightingOnUsbUnplug,
     });
   armUsbConnectedRef.current = armUsbConnected;
+  useHueTargetAutoAdd({
+    ready: bootstrapDone && lightingRestored,
+    hueConfigured: hueStartConfig !== null,
+    selectedOutputTargets,
+    onSelectTargets: handleOutputTargetsChange,
+  });
 
   useHueStartConfigSync(setHueStartConfig);
   useEffect(() => { hueStartConfigRef.current = hueStartConfig; }, [hueStartConfig]);
@@ -305,7 +312,7 @@ function Shell() {
     onLedSetup: activeSection === SECTION_IDS.LED_SETUP,
   });
 
-  const modeGuard = canEnableLedMode(savedCalibration, selectedOutputTargets);
+  const modeGuard = canEnableLedMode(savedCalibration, selectedOutputTargets, localSink !== null);
 
   const captureStalledNotice = useCaptureStallNotice(
     lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT,
