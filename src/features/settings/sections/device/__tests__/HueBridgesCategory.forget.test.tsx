@@ -98,7 +98,7 @@ const forgotten = (code: HueForgetStatus["code"]): HueForgetStatus => ({ code, m
 describe("HueBridgesCategory — Forget", () => {
   it("asks first, and forgets nothing when the answer is Cancel", async () => {
     const forgetBridge = vi.fn(async () => forgotten("HUE_FORGET_OK"));
-    const selectBridge = vi.fn();
+    const selectBridge = vi.fn<UseHueOnboardingResult["selectBridge"]>();
     const user = userEvent.setup();
     renderCategory(hueState({ forgetBridge, selectBridge }));
 
@@ -144,7 +144,7 @@ describe("HueBridgesCategory — Forget", () => {
 
   it("a bridge with no key is only let go of: nothing to confirm, nothing to forget", async () => {
     const forgetBridge = vi.fn(async () => forgotten("HUE_FORGET_OK"));
-    const selectBridge = vi.fn();
+    const selectBridge = vi.fn<UseHueOnboardingResult["selectBridge"]>();
     const user = userEvent.setup();
     renderCategory(
       hueState({
@@ -165,7 +165,7 @@ describe("HueBridgesCategory — Forget", () => {
 
   it("Cancel on a pairing run stays a plain deselect", async () => {
     const forgetBridge = vi.fn(async () => forgotten("HUE_FORGET_OK"));
-    const selectBridge = vi.fn();
+    const selectBridge = vi.fn<UseHueOnboardingResult["selectBridge"]>();
     const user = userEvent.setup();
     renderCategory(hueState({ forgetBridge, selectBridge, credentials: null, isPairing: true }));
 

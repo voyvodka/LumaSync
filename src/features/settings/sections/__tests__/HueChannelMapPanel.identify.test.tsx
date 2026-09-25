@@ -16,7 +16,7 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn<typeof import("@tauri-apps/api/core").invoke>() }));
 
 function channel(index: number, channelId: number, lightIds: string[]): HueAreaChannelInfo {
   return {
@@ -107,7 +107,7 @@ describe("HueChannelMapPanel — light names and Identify", () => {
   });
 
   it("offers the re-pair when the bridge refuses the key", async () => {
-    const onRepair = vi.fn();
+    const onRepair = vi.fn<() => void>();
     const user = userEvent.setup();
     renderPanel({ onIdentify: vi.fn(async () => status("AUTH_INVALID_RE_PAIR_REQUIRED")), onRepair });
 

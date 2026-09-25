@@ -14,8 +14,8 @@ import { useHueOnboarding } from "../useHueOnboarding";
 import type * as modeApiModule from "@/features/mode/modeApi";
 import type * as hueOnboardingApiModule from "../hueOnboardingApi";
 
-const shellLoadMock = vi.fn();
-const shellSaveMock = vi.fn();
+const shellLoadMock = vi.fn<() => Promise<Record<string, unknown>>>();
+const shellSaveMock = vi.fn<(partial: unknown) => Promise<void>>();
 const forgetMock = vi.fn<typeof hueOnboardingApiModule.forgetHueBridge>();
 
 vi.mock("../hueHealthApi", async () => (await import("./fakeHueHealth")).fakeHueHealthApi);
