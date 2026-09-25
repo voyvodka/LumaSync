@@ -6,12 +6,13 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HUE_CREDENTIAL_STATUS } from "@/shared/contracts/hue";
+import type { ShellState } from "@/shared/contracts/shell";
 import { __resetHueHealthStoreForTests } from "../hueHealthStore";
 import { useHueOnboardingCore } from "../useHueOnboardingCore";
 import type * as hueOnboardingApiModule from "../../hueOnboardingApi";
 
-const shellLoadMock = vi.fn();
-const shellSaveMock = vi.fn();
+const shellLoadMock = vi.fn<() => Promise<Partial<ShellState>>>();
+const shellSaveMock = vi.fn<(partial: Partial<ShellState>) => Promise<void>>();
 const discoverBridgesMock = vi.fn<typeof hueOnboardingApiModule.discoverHueBridges>();
 const listAreasMock = vi.fn<typeof hueOnboardingApiModule.listHueEntertainmentAreas>();
 const validateCredentialsMock = vi.fn<typeof hueOnboardingApiModule.validateHueCredentials>();

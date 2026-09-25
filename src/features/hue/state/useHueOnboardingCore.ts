@@ -447,7 +447,7 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
         },
       }));
     }
-  }, [patchState]);
+  }, [adoptBridgeAddress, patchState]);
 
   const setManualIp = useCallback(
     (value: string) => {

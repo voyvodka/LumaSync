@@ -158,7 +158,7 @@ function createHueHookState(overrides: Record<string, unknown> = {}) {
     selectBridge: vi.fn(),
     setManualIp: vi.fn(),
     submitManualIp: vi.fn(),
-    recheckBridge: vi.fn(),
+    recheckBridge: vi.fn<() => Promise<void>>(),
     pair: vi.fn(),
     refreshAreas: vi.fn(),
     selectArea: vi.fn(),
