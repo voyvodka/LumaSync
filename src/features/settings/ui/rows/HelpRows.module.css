@@ -1,4 +1,6 @@
 @layer components {
+  .ok { display: inline-grid; color: var(--lm-green); }
+
   .shortcuts {
     display: grid;
     gap: 2px;
@@ -32,5 +34,6 @@
 
   @media (forced-colors: active) {
     .shortcut kbd { border-color: CanvasText; }
+    .ok { color: CanvasText; }
   }
 }

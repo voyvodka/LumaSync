@@ -45,6 +45,13 @@ export function HueShellStatusProvider({
   return <HueShellStatusContext.Provider value={store}>{children}</HueShellStatusContext.Provider>;
 }
 
+/** The status as it is now, for a one-off read (a copy at a press); subscribes to nothing. */
+export function useHueShellStatusReader(): () => HueShellStatus {
+  const store = useContext(HueShellStatusContext);
+  if (store === null) throw new Error("useHueShellStatusReader used outside HueShellStatusProvider");
+  return store.get;
+}
+
 /** The slice `selector` picks; the caller re-renders only when that slice changes. */
 export function useHueShellStatus<S>(
   selector: (status: HueShellStatus) => S,

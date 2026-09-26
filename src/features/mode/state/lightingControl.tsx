@@ -77,6 +77,11 @@ export function useLightingControlState<S>(
   return useStoreSelector(useLightingControl().store, selector, isEqual);
 }
 
+/** The whole state as it is now, for a one-off read (a copy at a press); subscribes to nothing. */
+export function useLightingControlReader(): () => LightingControlState {
+  return useLightingControl().store.get;
+}
+
 /** Identity-stable for the provider's lifetime. */
 export function useLightingActions(): LightingControlActions {
   return useLightingControl().actions;

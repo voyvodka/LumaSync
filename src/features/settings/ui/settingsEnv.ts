@@ -13,4 +13,6 @@ export interface SettingsEnv {
   hueActive?: boolean;
   /** Absent outside the shell, where there is no guide to bring back. */
   onRestartSetupGuide?: () => SetupGuideRestartResult;
+  /** The install's state as text for a bug report, read when called. Absent outside the shell. */
+  readDiagnostics?: () => string;
 }

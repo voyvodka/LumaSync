@@ -1,11 +1,17 @@
 import { memo, useEffect, useCallback, Suspense, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { SECTION_IDS, SECTION_ORDER, type SectionId, type UIMode } from "@/shared/contracts/shell";
 import { preloadableComponent } from "@/shared/lib/preloadableComponent";
 import { shallowEqual } from "@/shared/lib/store";
 import { LightsSection } from "./sections/LightsSection";
 import { SettingsPage } from "./ui/SettingsPage";
+import { buildDiagnostics } from "./ui/diagnostics";
+import { detectOsName } from "./ui/helpLinks";
+import { getPreference } from "../persistence/preferences";
+import { APP_NAME, APP_VERSION } from "@/shared/constants/app";
 import {
   useLightingActions,
+  useLightingControlReader,
   useLightingControlState,
   type LightingControlState,
 } from "../mode/state/lightingControl";
@@ -16,7 +22,7 @@ import {
   type NavigationState,
 } from "../shell/navigationStore";
 import { useUpdaterActions, useUpdaterState, type UpdaterSnapshot } from "../updater/UpdaterProvider";
-import { useHueShellStatus, type HueShellStatus } from "../hue/state/hueShellStatus";
+import { useHueShellStatus, useHueShellStatusReader, type HueShellStatus } from "../hue/state/hueShellStatus";
 import { useSetupGuideActions } from "../onboarding/state/setupGuideControl";
 import { CompactLayout } from "./sections/compact/CompactLayout";
 import { CalibrationPanel, preloadCalibrationPanel } from "../calibration/ui/CalibrationPanel";
@@ -130,8 +136,29 @@ const selectCheckingForUpdates = (snapshot: UpdaterSnapshot) => snapshot.state.s
 const selectUpToDateAt = (snapshot: UpdaterSnapshot) => snapshot.upToDateAt;
 
 const SystemPanel = memo(function SystemPanel() {
+  const { i18n } = useTranslation();
   const localOutputConnected = useLightingControlState(selectLocalOutputConnected);
   const hueActive = useHueShellStatus(selectHueSessionActive);
+  // Read at the press, not subscribed to: the panel must not re-render for state it never draws.
+  const readLighting = useLightingControlReader();
+  const readHue = useHueShellStatusReader();
+  const readDiagnostics = useCallback(() => {
+    const lighting = readLighting();
+    return buildDiagnostics({
+      appName: APP_NAME,
+      appVersion: APP_VERSION,
+      os: detectOsName(),
+      channel: getPreference("updateChannel"),
+      mode: lighting.lightingMode.kind,
+      outputs: lighting.outputTargets,
+      localSink: lighting.localSink,
+      calibration: lighting.calibration,
+      hue: readHue(),
+      uiZoom: getPreference("uiZoom"),
+      motion: getPreference("motion"),
+      language: i18n?.language ?? "en",
+    });
+  }, [readLighting, readHue, i18n]);
   const isCheckingForUpdates = useUpdaterState(selectCheckingForUpdates);
   const upToDateAt = useUpdaterState(selectUpToDateAt);
   const { checkForUpdates, devSetState } = useUpdaterActions();
@@ -146,6 +173,7 @@ const SystemPanel = memo(function SystemPanel() {
         devSetUpdaterState={devSetState}
         localOutputConnected={localOutputConnected}
         hueActive={hueActive}
+        readDiagnostics={readDiagnostics}
       />
     </div>
   );
