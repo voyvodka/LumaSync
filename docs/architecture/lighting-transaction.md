@@ -279,7 +279,9 @@ the restore is what sets it.
 
 **The Hue test lease**, ported from the frontend's: `origin: "leaseHue"` with targets naming Hue brings
 the stream up for a test run and remembers whether it opened it; any other targets hand it back —
-only if it opened it, and not if a mode started meanwhile adopted the stream.
+only if it opened it, and not if a mode started meanwhile adopted the stream. A bridge the health
+monitor has already settled as unreachable is not tried: the start would sit out its HTTP timeouts
+(~7 s), and the pattern and its Stop would wait on them. The test runs without Hue at once.
 
 **Hue start requests are built in Rust.** `hue_config.rs` reads the bridge, area and pairing
 evidence through typed `shell_state.rs` accessors — paired is a legacy key on disk or the keychain

@@ -192,6 +192,14 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- LED Setup: with a Hue bridge that is not answering, "Run test pattern" starts and can be stopped
+  at once. It used to wait about seven seconds for the bridge before the pattern ran, and Stop
+  waited with it.
+- macOS: "Open folder" in Settings → Help and "Show logs" on the error screen now reveal the latest
+  log file in Finder. They failed before, because macOS took the log folder, whose name ends in
+  ".app", for an application.
+- WLED: the main window no longer re-reads the saved WLED device and the device's status every
+  time it redraws; it made two background calls on each update.
 - Hue: when LumaSync starts at login before Wi-Fi is up, your saved lighting now comes back on Hue
   once the bridge answers, instead of staying off (Hue only) or running on the strip without Hue
   until you picked a mode again. It works with the window closed: while it waits, LumaSync checks

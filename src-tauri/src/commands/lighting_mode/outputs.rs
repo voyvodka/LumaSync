@@ -2151,6 +2151,14 @@ async fn lease_acquire<R: Runtime>(
         outcome.hue_left_out = Some(HueLeftOutReason::Config);
         return true;
     };
+    // The start would sit out its HTTP timeouts (~7 s) against a bridge the
+    // monitor already found silent, and the pattern — and its Stop — wait on it.
+    if hue_known_unreachable(app) {
+        state.outputs.set_lease(LeaseState::NotOurs);
+        outcome.hue_left_out = Some(HueLeftOutReason::Unreachable);
+        warn!("[outputs] the bridge is known unreachable; the test runs without Hue");
+        return true;
+    }
     let code = driver.start(request).await.status.code;
     outcome.hue_start_code = Some(code.clone());
     let opened = is_hue_start_ok(&code) && code != "HUE_START_NOOP_ALREADY_ACTIVE";
@@ -2165,6 +2173,16 @@ async fn lease_acquire<R: Runtime>(
         return true;
     }
     false
+}
+
+/// Only a settled verdict counts: a probe in flight still carries the last one.
+fn hue_known_unreachable<R: Runtime>(app: &AppHandle<R>) -> bool {
+    let Some(monitor) = app.try_state::<health::HueHealthMonitor>() else {
+        return false;
+    };
+    let bridge = monitor.snapshot().bridge;
+    bridge.gave_up
+        || (!bridge.probing && bridge.verdict == Some(health::HueBridgeVerdict::Unreachable))
 }
 
 async fn lease_release<R: Runtime>(

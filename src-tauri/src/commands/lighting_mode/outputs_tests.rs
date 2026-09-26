@@ -2809,4 +2809,35 @@ mod bridge_wait {
         });
         assert_eq!(hue_starts(&rig), 1);
     }
+
+    /// A test pattern borrows Hue. Against a bridge the monitor already found
+    /// silent the start is skipped rather than sat out, so the pattern and its
+    /// Stop do not wait on the bridge's timeouts; a bridge that answers still
+    /// gets its start.
+    #[test]
+    fn a_test_lease_skips_a_bridge_the_monitor_found_silent() {
+        for (script, starts, left_out) in [
+            (SILENT, 0, Some(super::HueLeftOutReason::Unreachable)),
+            (ANSWERS, 1, None),
+        ] {
+            let rig = Rig::new(super::RigSetup::default());
+            let bridge = Bridge::new(&[script]);
+            let monitor = HueHealthMonitor::new(bridge.clone(), Arc::new(rig.handle()));
+            rig.app.manage(monitor.clone());
+            let handle = rig.handle();
+
+            let result = paused_runtime().block_on(async {
+                monitor.run_once().await;
+                apply_outputs_with(
+                    &handle,
+                    request(LightingOrigin::LeaseHue, None, Some(&[Hue])),
+                )
+                .await
+                .unwrap()
+            });
+
+            assert_eq!(hue_starts(&rig), starts, "{script}");
+            assert_eq!(result.outcome.hue_left_out, left_out, "{script}");
+        }
+    }
 }
