@@ -120,9 +120,9 @@ fn maybe_hydrate_ambilight_settings(
 }
 
 /// Fill any output stamp the caller left unset from the persisted shell state
-/// (caller-wins: a stamp already on the payload is never overwritten). The main
-/// window stamps them (`withColorCorrectionAndFirmwareProfile`); the LED control
-/// popup does not, and server-built configs have no payload to inherit from.
+/// (caller-wins: a stamp already on the payload is never overwritten). The LED
+/// control popup sends none, and server-built configs have no payload to
+/// inherit from.
 ///
 /// Without this a synthetic test drives an SK6812 RGBW strip through the
 /// WS2812B encoder and an Adalight controller through the LumaSync v1 header,

@@ -84,7 +84,7 @@
               "level": "error",
               "options": {
                 "paths": {
-                  "@tauri-apps/plugin-store": "plugin-store is opened only by src/features/shell/windowLifecycle.ts; go through shellStore.",
+                  "@tauri-apps/plugin-store": "plugin-store is gone: Rust owns shell-state.json; go through shellStore.",
                   "@tauri-apps/plugin-fs": "plugin-fs is imported only by src/features/room-map/roomMapFilesApi.ts.",
                   "@tauri-apps/plugin-dialog": "plugin-dialog is imported only by src/features/room-map/roomMapFilesApi.ts."
                 }
@@ -103,7 +103,7 @@
               "level": "error",
               "options": {
                 "paths": {
-                  "@tauri-apps/plugin-store": "plugin-store is opened only by src/features/shell/windowLifecycle.ts; go through shellStore.",
+                  "@tauri-apps/plugin-store": "plugin-store is gone: Rust owns shell-state.json; go through shellStore.",
                   "@tauri-apps/plugin-fs": "plugin-fs is imported only by src/features/room-map/roomMapFilesApi.ts.",
                   "@tauri-apps/plugin-dialog": "plugin-dialog is imported only by src/features/room-map/roomMapFilesApi.ts."
                 },
@@ -146,7 +146,7 @@
               "level": "error",
               "options": {
                 "paths": {
-                  "@tauri-apps/plugin-store": "plugin-store is opened only by src/features/shell/windowLifecycle.ts; go through shellStore."
+                  "@tauri-apps/plugin-store": "plugin-store is gone: Rust owns shell-state.json; go through shellStore."
                 }
               }
             }

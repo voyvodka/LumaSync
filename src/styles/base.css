@@ -21,6 +21,31 @@ body {
   color: var(--lm-ink);
 }
 
+/* Tailwind 4's preflight leaves buttons on the default cursor. Every control
+   shows the pointer and a disabled one shows not-allowed; `:where` keeps the
+   specificity at zero, so a component's own cursor (grab, progress) wins. */
+:where(
+    button,
+    a[href],
+    summary,
+    select,
+    label[for],
+    input:is([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]),
+    [role="button"],
+    [role="tab"],
+    [role="radio"],
+    [role="checkbox"],
+    [role="switch"],
+    [role="option"],
+    [role^="menuitem"]
+  ) {
+  cursor: pointer;
+}
+
+:where(:disabled, [aria-disabled="true"]) {
+  cursor: not-allowed;
+}
+
 /* ─────────────────────────────────────────────────────────────────────
    Scrollbars
    ─────────────────────────────────────────────────────────────────────

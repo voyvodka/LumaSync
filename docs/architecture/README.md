@@ -59,6 +59,7 @@ A new decision or a newly found trap goes in as it is made or found, not in a la
 pass — by then the reason has been forgotten and only the outcome remains.
 
 - **One entry, kept short.** A ledger nobody finishes reading is a ledger nobody uses.
+- **Cite a symbol, never a line number** — here and in code comments. A line number rots with the next edit to the file; a symbol can be searched for as long as it exists.
 - **Put it in the area file it belongs to.** A new area gets a new file and a row in the table above; do not let one file become the place everything lands.
 - **When a decision changes, the document moves before the code does.** A set that drifts stops being trusted, and a set nobody trusts stops being read — at which point it is only cost.
 - **Rewrite, do not append.** A changed decision is edited in place. Leaving the old wording beside the new is how a reader follows the stale half — and the stale one is usually the more specific, which makes it the one they follow.

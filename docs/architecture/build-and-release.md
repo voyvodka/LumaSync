@@ -155,6 +155,16 @@ and `cargo test` run on all three and are *not* part of `check:all`, so a green 
 Rust branch can still fail CI on formatting. CI cancels superseded runs; `release.yml` never does,
 because a half-published release is worse than a wasted run.
 
+There is no docs-only path filter, on purpose. A job-level `if:` on the matrix job skips it, and a
+skipped matrix never produces the required `Build and Check (*)` contexts, so every docs PR would
+wait on checks that never arrive. Only per-step conditions would be safe, and the minutes saved did
+not justify them.
+
+**A change that needs real hardware may merge before its device check, but never ship before it.**
+When a Hue bridge or a strip is not at hand, a PR that is green locally and in CI merges so the work
+built on it is not blocked; its device checklist goes on the pre-release list, and the release waits
+for it. CI and fakes prove the code does what its tests say, not what a bridge or a controller does.
+
 **The beta update channel is fed from an anchor release, because GitHub has no "latest prerelease"
 URL.** The stable endpoint in `tauri.conf.json` resolves through
 `/releases/latest/download/latest.json`, and `/releases/latest` returns the newest release that is
@@ -288,6 +298,10 @@ those downloads. `esbuild` genuinely needs its postinstall to fetch a platform b
 - **`CHANGELOG.md` merges with `merge=union`** (`.gitattributes`). Nearly every PR adds a line under `[Unreleased]`, so with several branches open each merge of `main` into the others used to stop on a conflict that was only two additions side by side. Union keeps both sides. It cannot tell an edit from an addition: two branches rewording the same line keep both versions, and two branches adding the same heading keep it twice — `[Unreleased]` routinely ends up with two `### Added` — so read the section after a merge and merge repeated subsections when folding it, and check the rule above before tagging. GitHub's own merge button ignores the attribute; it applies when `main` is merged into a branch locally.
 - **`chunkSizeWarningLimit` is a ratchet rather than a mute.** Vite's 500 kB default measures download cost over a network; a Tauri bundle is read off local disk and never pays it — what matters here is parse time and memory per webview. Since the per-window split (`ui-and-shell.md`, "Per-window bundles") the largest chunk is the shared entry, React plus i18next at about 265 kB, and the limit sits just above it at 300 kB so real growth still trips it. A warning now most likely means something heavy was imported statically from `main.tsx`, which every window, including each twin overlay, would parse.
 - **The test environment installs its own `localStorage`** in `src/test/setup.ts`. Node ≥ 24 defines an experimental `localStorage` global that reads back as `undefined` without `--localstorage-file`, and it shadows the one happy-dom provides. CI runs Node 22 and never saw it; on a newer local Node every `HsvColorPicker` recent-colors read and write threw into its own `catch`, so the feature was inert in tests and nothing failed. Anything reached through `window` deserves the same suspicion when local and CI Node versions differ.
+
+- **Never share `CARGO_TARGET_DIR` across worktrees.** The `lumasync` package hashes collide across checkouts, so tauri-build's generated capability ACL from one branch ended up in another branch's binary, which then refused a command at runtime while its probe still passed. Every worktree builds in its own `src-tauri/target`.
+- **A worktree without its own `node_modules` resolves an ancestor's.** Module resolution walks up the directory tree, so a worktree placed inside the checkout picks up the main copy; a stale one there once dropped the bundled fonts from a build. Run `bun install --frozen-lockfile` in every worktree before building.
+- **sccache was measured and reverted.** A cold `cargo test --no-run` took 79 s without it and 131 s with a warm cache, and the incremental main crate is never cacheable, so it cost time rather than saving it.
 
 ## The Windows overlay probe
 
@@ -540,6 +554,7 @@ convenience.
 ## Accepted risks
 
 - **Windows embedded-debug launch needs a visible smoke window.** Reproducing [#181](https://github.com/voyvodka/LumaSync/issues/181) on bare-metal Windows isolated a WebView2 race: `tauri dev`, release `--no-bundle`, and the release MSI load, but a debug embedded webview starting hidden falls through to `chrome-error://chromewebdata/`. Disabling the automatic DevTools window does not change it; starting the same binary visible makes the custom-protocol document and frontend IPC load. Production remains hidden to avoid a startup flash. CI merges `tauri.windows-smoke.conf.json`, which changes only the smoke window to visible and disables DevTools. The apparently separate missing frontend logs were a logger-filter bug: plugin-log's `webview:<location>` target does not inherit fern's `level_for("webview", Info)`, because fern only walks `::` module separators. Debug logging now uses a global `Info` floor, allowing the startup marker to reach the file sink. (plugin-log 2.9.2 changed the target to `webview::<location>`, so a `level_for("webview", ..)` would now match; the global floor stays.)
+- **The updater signing key is visible to the whole build.** `TAURI_SIGNING_PRIVATE_KEY` is set on the `tauri-action` step, and that step also runs the frontend build and `cargo build`, so every npm script and every crate's build script in the dependency tree runs with the key in its environment. Pinned actions and the pre-publish signature check narrow the exposure but do not remove it. The fix is to build unsigned and sign in a separate job behind a protected environment with a required reviewer; that needs repository settings, and until it lands this is the release pipeline's largest exposure.
 - **The `.deb` is not launched in CI.** The release Ubuntu job has every webkit/gtk dev package installed, so installing it there resolves trivially and proves nothing about declared runtime dependencies on a clean machine. Testing it honestly needs a clean container.
 
 ## Resolved

@@ -24,6 +24,8 @@ let session = 0;
 /** Bumped by every pushed value, so a read that resolves after one is dropped. */
 let pushes = 0;
 let unlisten: UnlistenFn | null = null;
+/** Set by `pagehide`, which fires before the unload's `visibilitychange`. */
+let unloading = false;
 
 function documentVisible(): boolean {
   return typeof document === "undefined" || document.visibilityState !== "hidden";
@@ -67,12 +69,23 @@ function ask(): void {
 // A `show()` the frontend makes itself (the boot show) reaches Rust as no
 // event, but the document becoming visible or focused asks Rust again.
 function onDocumentVisibility(): void {
+  // A reload hides the document on its way out; announcing that sends IPC the
+  // page is gone before it answers (a cancelled fetch and an orphaned callback).
+  if (unloading) return;
   recompute(true);
   if (documentVisible()) ask();
 }
 
 function onFocus(): void {
   ask();
+}
+
+function onPageHide(): void {
+  unloading = true;
+}
+
+function onPageShow(): void {
+  unloading = false;
 }
 
 function start(): void {
@@ -96,6 +109,8 @@ function start(): void {
     });
   document.addEventListener("visibilitychange", onDocumentVisibility);
   window.addEventListener("focus", onFocus);
+  window.addEventListener("pagehide", onPageHide);
+  window.addEventListener("pageshow", onPageShow);
   recompute();
   ask();
 }
@@ -106,6 +121,9 @@ function stop(): void {
   unlisten = null;
   document.removeEventListener("visibilitychange", onDocumentVisibility);
   window.removeEventListener("focus", onFocus);
+  window.removeEventListener("pagehide", onPageHide);
+  window.removeEventListener("pageshow", onPageShow);
+  unloading = false;
   nativeVisible = true;
   lastPublished = isWindowVisible();
 }

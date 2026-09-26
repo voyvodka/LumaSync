@@ -37,6 +37,27 @@ two private KVC keys (`drawsBackground`, `fullScreenEnabled`), not linked privat
 **One capture worker drives every configured output at once.** Hue, serial, and WLED are fed from
 the same frame rather than each running its own capture.
 
+That is also the shape for more outputs, if they are ever built: one worker feeding N sources, not
+N workers, because the limits sit on the sink side. Hue's 50 ms floor is per bridge, so two workers
+at 20 Hz to one bridge is 40 Hz and the bridge drops the stream; one serial port needs one writer or
+frames interleave; and one send cadence needs one quality controller, since two backing off
+independently against a shared link oscillate. Arbitrary N sinks and a Hyperion-style instance
+system were rejected, and `targets` stays a list of channel *types* — making its members instance
+ids would break every consumer. What is not built because of it: per-monitor ambilight (only
+macOS capture is ready for two streams; Windows and X11 each need their capture pull reworked
+first, and Wayland is not viable), several Hue areas on one bridge (closed), several bridges
+(deferred). The worker-count assertions stay valid under this shape, and the `_frame_source`
+drop order (`lighting_mode/runtime.rs`) — the last reference to a capture source is dropped on the
+command thread, never the worker, or a rapid mode switch crashes macOS — must hold for every source.
+
+**Test patterns are synthetic frames, not a window that capture then sees.** The LED test renders
+its pattern straight into a `CapturedFrame` (`test_pattern.rs`, `SyntheticFrameSource`) with capture
+off. That gives the strip exact bytes — the scene stage and the black-border crop are bypassed —
+needs no screen-recording permission, and runs the same pipeline rather than a fork of it. The
+original concept drew a full-screen animation for capture to sample, which needs the twin and the
+popup excluded from capture on every platform (`SCContentFilter`, `SetWindowDisplayAffinity`).
+The cost is that a test says nothing about capture or its latency.
+
 **Every sampler crops the same black borders.** `BlackBorderCache` re-detects letterbox and
 pillarbox bars at most every 2.5 s, and the strip, the scene stage and Hue all sample inside those
 insets: `sample_frame_within_insets` maps each LED onto the picture rectangle and keeps its window
@@ -86,7 +107,12 @@ and a first-run user would never be asked at all. That ordering is load-bearing,
 can match whole, so each platform keys on the part it can see. Windows keys on the
 `\\.\DISPLAY<N>` device name and Linux on the xrandr output name, dropping the `:x:y` tail, so
 moving a display keeps the match. macOS keys on the `x:y` origin alone, because `SCDisplay` exposes
-no name, so rearranging displays in System Settings breaks it. All three then go through
+no name, so rearranging displays in System Settings breaks it. That origin is in points on both
+sides: `tao` multiplies `CGDisplayBounds().origin` by the display's backing scale while
+`SCDisplay.frame()` reports points, so `list_displays` divides it back (`logical_origin`,
+`calibration.rs`) — without that, a HiDPI display at a non-zero origin never matched and the user
+silently got the primary. Keying on `CGDirectDisplayID` instead would survive a rearrangement, but
+changes the contract shape. All three then go through
 `select_display_index`: the exact id, else the primary, else the first display. The fallback is
 what stops a replug failing the start. It is also silent, with no log line and no status code, so
 a user can end up capturing the wrong monitor with nothing saying so. Keep the fallback, and

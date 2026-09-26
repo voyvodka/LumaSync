@@ -86,14 +86,19 @@ export interface UseActiveWledSinkDeps {
   saveShellState?: (partial: Partial<ShellState>) => Promise<void>;
 }
 
+// Stable across renders: `refresh` depends on them, and a fresh arrow per render
+// re-ran its effect on every App render — two IPC reads each time.
+const loadShell = () => shellStore.load();
+const saveShell = (partial: Partial<ShellState>) => shellStore.save(partial);
+
 export function useActiveWledSink(
   deps: UseActiveWledSinkDeps = {},
 ): ActiveWledSink {
   const bus = deps.wledSinkEvents ?? defaultWledSinkEvents;
   const getStatus = deps.getStatus ?? getWledSinkStatus;
   const forgetDevice = deps.forgetDevice ?? forgetWledDevice;
-  const loadShellState = deps.loadShellState ?? (() => shellStore.load());
-  const saveShellState = deps.saveShellState ?? ((partial) => shellStore.save(partial));
+  const loadShellState = deps.loadShellState ?? loadShell;
+  const saveShellState = deps.saveShellState ?? saveShell;
 
   const [activeWledIp, setActiveWledIp] = useState<string | null>(null);
   const [savedSink, setSavedSink] = useState<WledUdpSinkConfig | null>(null);

@@ -284,7 +284,7 @@ function migrateV1ToV2(state: ShellState): ShellState {
   if (droppedLogicalCount > 0) {
     console.warn(
       `[LumaSync] migration: dropping unsupported logical zones (count: ${droppedLogicalCount})`,
-      "— logical zone concept removed in v1.5 W4-F2 (see RFC direction reversal)",
+      "— logical zone concept removed in v1.5 W4-F2 (see docs/architecture/hue.md)",
     );
   }
 
