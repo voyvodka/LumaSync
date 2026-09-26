@@ -96,6 +96,22 @@ describe("windowVisibility", () => {
     expect(isWindowVisible()).toBe(true);
   });
 
+  it("stays quiet when the page hides on its way out", async () => {
+    const seen = vi.fn<(visible: boolean) => void>();
+    subscribeWindowVisible(seen);
+    await flush();
+    seen.mockClear();
+
+    window.dispatchEvent(new Event("pagehide"));
+    setDocumentVisibility("hidden");
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(seen).not.toHaveBeenCalled();
+
+    window.dispatchEvent(new Event("pageshow"));
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(seen).toHaveBeenLastCalledWith(false);
+  });
+
   it("still honours a hidden document", async () => {
     subscribeWindowVisible(vi.fn<(visible: boolean) => void>());
     await flush();
