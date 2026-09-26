@@ -24,9 +24,7 @@
   @keyframes in-ccw { from { opacity: 0; transform: rotate(150deg) scale(0.7); } }
   @keyframes out-ccw { 40% { opacity: 0.75; } to { opacity: 0; transform: rotate(-150deg) scale(0.7); } }
 
-  @media (prefers-reduced-motion: reduce) {
-    .in { animation: none; }
-    /* No animation means no animationend: the old icon would never be removed. */
-    .out { display: none; }
-  }
+  :global(:root[data-reduced-motion]) .in { animation: none; }
+  /* No animation means no animationend: the old icon would never be removed. */
+  :global(:root[data-reduced-motion]) .out { display: none; }
 }

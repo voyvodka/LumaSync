@@ -243,6 +243,10 @@ function requiredCommands(entries) {
       mark(target, MODULE);
       for (const segment of parse(target).segments.keys()) mark(target, segment);
     }
+    // An export used by another part of its own module (a registry naming a panel) is live too.
+    for (const segment of mod.segments.keys()) {
+      if (segment !== name && new RegExp(`\\b${segment}\\b`).test(text)) mark(file, segment);
+    }
     for (const [local, [target, imported]] of mod.imports) {
       if (!new RegExp(`\\b${local}\\b`).test(text)) continue;
       const targetModule = parse(target);

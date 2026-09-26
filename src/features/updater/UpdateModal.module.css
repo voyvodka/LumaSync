@@ -1,0 +1,178 @@
+@layer components {
+  /* Below the title bar, which is the window's drag region; above everything else. Dims only — a
+     blur over the whole window re-rendered it on every frame the modal was open. */
+  .scrim {
+    position: fixed;
+    inset: var(--lm-titlebar-h) 0 0 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 24px 48px;
+    background: rgb(0 0 0 / 55%);
+    animation: scrim-in var(--lm-dur-base) var(--lm-ease-out);
+  }
+  .scrim:focus { outline: none; }
+  .scrim[data-leaving] { animation: scrim-out var(--lm-dur-base) var(--lm-ease-leave) forwards; }
+
+  .card {
+    position: relative;
+    width: 100%;
+    max-width: 420px;
+    max-height: 100%;
+    overflow: hidden;
+    border: 1px solid var(--lm-line-2);
+    border-radius: 14px;
+    background: var(--lm-panel);
+    box-shadow: 0 24px 60px rgb(0 0 0 / 55%);
+    animation: card-in var(--lm-dur-base) var(--lm-ease-out);
+  }
+  /* Only a change of state animates the card's height. Something inside that opens on its own
+     (Details) already moves smoothly, and a card easing after it lagged a beat behind. */
+  .card[data-sized][data-swapping] { transition: height var(--lm-dur-base) var(--lm-ease-out); }
+  .scrim[data-leaving] .card { animation: card-out var(--lm-dur-base) var(--lm-ease-leave) forwards; }
+
+  .inner { display: flex; flex-direction: column; gap: 14px; max-height: calc(100vh - 140px); padding: 22px; }
+  .incoming { animation: body-in var(--lm-dur-slow) var(--lm-dur-follow) var(--lm-ease-out) backwards; }
+  .outgoing {
+    position: absolute;
+    inset: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 22px;
+    pointer-events: none;
+    animation: body-out var(--lm-dur-base) var(--lm-ease-leave) forwards;
+  }
+
+  .head { display: grid; gap: 3px; }
+  .title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--lm-ink); }
+  .sub { margin: 0; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--lm-ink-faint); }
+  /* A failure is said by its words and one red mark, not a red headline. */
+  .dot { flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--lm-red); }
+
+  .notes {
+    display: grid;
+    gap: 14px;
+    min-height: 0;
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 14px 4px 2px 0;
+    border-top: 1px solid var(--lm-line);
+    scrollbar-gutter: stable;
+  }
+  .notes[data-more] { mask-image: linear-gradient(to bottom, black calc(100% - 32px), transparent); }
+  .group ul { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+  .group li {
+    position: relative;
+    padding-left: 14px;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--lm-ink-dim);
+  }
+  .group li::before {
+    content: "";
+    position: absolute;
+    top: 0.62em;
+    left: 2px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--lm-ink-faint);
+  }
+  .groupTitle { margin: 0 0 7px; font-size: 12px; font-weight: 600; color: var(--lm-ink); }
+
+  .track { height: 4px; overflow: hidden; border-radius: 999px; background: var(--lm-line-2); }
+  .fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--lm-amber);
+    transition: width var(--lm-dur-base) linear;
+  }
+  .line {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.45;
+    font-variant-numeric: tabular-nums;
+    color: var(--lm-ink-dim);
+  }
+  .value { color: var(--lm-ink); }
+
+  .details { font-size: 12px; color: var(--lm-ink-faint); }
+  .summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 24px;
+    padding: 0 4px 0 0;
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--lm-ink-faint);
+    transition: color var(--lm-dur-quick);
+  }
+  .summary:hover { color: var(--lm-ink-dim); }
+  .summary:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .chevron { width: 11px; height: 11px; transition: transform var(--lm-dur-base) var(--lm-ease-out); }
+  .details[data-open] .chevron { transform: rotate(90deg); }
+  /* Grows open and folds shut the same way; the card's height follows it. */
+  .fold {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition:
+      grid-template-rows var(--lm-dur-base) var(--lm-ease-out),
+      opacity var(--lm-dur-base) var(--lm-ease-out);
+  }
+  .details[data-open] .fold { grid-template-rows: 1fr; opacity: 1; }
+  .foldInner { min-height: 0; overflow: hidden; }
+  .foldInner p {
+    margin: 6px 0 0;
+    max-height: 96px;
+    overflow-y: auto;
+    font: 11px/1.5 var(--lm-mono);
+    word-break: break-word;
+    color: var(--lm-ink-dim);
+  }
+
+  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+  .ghost,
+  .primary {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick), border-color var(--lm-dur-quick);
+  }
+  .ghost { color: var(--lm-ink-dim); }
+  .ghost:hover { color: var(--lm-ink); background: var(--lm-panel-2); }
+  .primary { border: 1px solid var(--lm-amber); background: var(--lm-amber); color: var(--lm-bg); font-weight: 600; }
+  .primary:hover { background: color-mix(in srgb, var(--lm-amber) 88%, white); }
+  .ghost:focus-visible,
+  .primary:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .ghost:disabled,
+  .primary:disabled { cursor: default; }
+  .ghost:disabled { opacity: 0.5; }
+
+  @keyframes scrim-in { from { opacity: 0; } }
+  @keyframes scrim-out { to { opacity: 0; } }
+  @keyframes card-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } }
+  @keyframes card-out { to { opacity: 0; transform: translateY(4px) scale(0.98); } }
+  @keyframes body-in { from { opacity: 0; transform: translateY(4px); } }
+  @keyframes body-out { to { opacity: 0; } }
+
+  :global(:root[data-reduced-motion]) :is(.scrim, .card, .incoming, .outgoing) { animation: none; }
+  :global(:root[data-reduced-motion]) .card[data-sized][data-swapping],
+  :global(:root[data-reduced-motion]) :is(.fill, .fold, .chevron) { transition: none; }
+
+  @media (forced-colors: active) {
+    .card { border-color: CanvasText; }
+    .fill { background: Highlight; }
+    .primary { border-color: ButtonText; }
+  }
+}

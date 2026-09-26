@@ -7,7 +7,7 @@
  * the speed control is disabled with `aria-disabled` so it reads as
  * intentionally inert rather than broken.
  *
- * The "running" indicator pulse is guarded by `prefers-reduced-motion` through
+ * The "running" indicator pulse is guarded by reduced motion (`data-reduced-motion`) through
  * the `.lm-test-pulse` rule in `src/styles/preview.css`.
  */
 

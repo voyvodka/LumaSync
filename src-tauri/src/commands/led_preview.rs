@@ -24,8 +24,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    window::Color, AppHandle, Emitter, LogicalPosition, Manager, Position, Runtime, State,
-    WebviewUrl, WebviewWindowBuilder,
+    window::Color, AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Position, Runtime,
+    State, WebviewUrl, WebviewWindowBuilder,
 };
 
 use super::calibration::{build_transparent_overlay, list_displays};
@@ -484,6 +484,40 @@ pub fn close_led_twin_overlay<R: Runtime>(
 
 const POPUP_WIDTH: f64 = 320.0;
 const POPUP_HEIGHT: f64 = 460.0;
+const POPUP_MIN_WIDTH: f64 = 300.0;
+const POPUP_MIN_HEIGHT: f64 = 420.0;
+
+/// Settings → Interface size, on the webviews that follow it. The popup's
+/// frame grows with it so its layout keeps its 320×460 viewport; the main
+/// window's frame is sized by its own animator. Off the store's lock, since a
+/// window call there would wait on the main thread while holding it. The
+/// value is read when the task runs, not passed in: tasks from quick changes
+/// (⌘+ held) may run in any order, and whichever runs last applies the latest.
+pub(crate) fn apply_ui_zoom_later<R: Runtime>(app: &AppHandle<R>) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let zoom = shell_state::persisted(&app).map_or(1.0, |state| state.ui_zoom());
+        if let Some(main) = app.get_webview_window(crate::MAIN_WINDOW_LABEL) {
+            if let Err(error) = main.set_zoom(zoom) {
+                log::warn!("[ui-zoom] main webview zoom failed: {error}");
+            }
+        }
+        if let Some(popup) = app.get_webview_window(LED_CONTROL_POPUP_LABEL) {
+            let resized = popup
+                .set_min_size(Some(LogicalSize::new(
+                    POPUP_MIN_WIDTH * zoom,
+                    POPUP_MIN_HEIGHT * zoom,
+                )))
+                .and_then(|()| {
+                    popup.set_size(LogicalSize::new(POPUP_WIDTH * zoom, POPUP_HEIGHT * zoom))
+                })
+                .and_then(|()| popup.set_zoom(zoom));
+            if let Err(error) = resized {
+                log::warn!("[ui-zoom] control popup zoom failed: {error}");
+            }
+        }
+    });
+}
 
 /// Create the interactive control popup window if it doesn't exist yet, or
 /// bring the existing one to the front.
@@ -493,11 +527,13 @@ pub fn open_led_control_popup<R: Runtime>(
     twin_state: State<'_, LedTwinState>,
 ) -> Result<ControlPopupResult, String> {
     if app.get_webview_window(LED_CONTROL_POPUP_LABEL).is_none() {
+        let zoom = shell_state::persisted(&app).map_or(1.0, |state| state.ui_zoom());
+        let (width, height) = (POPUP_WIDTH * zoom, POPUP_HEIGHT * zoom);
         let url = WebviewUrl::App(PathBuf::from("index.html"));
         let builder = WebviewWindowBuilder::new(&app, LED_CONTROL_POPUP_LABEL, url)
             .title("LumaSync LED Controls")
-            .inner_size(POPUP_WIDTH, POPUP_HEIGHT)
-            .min_inner_size(300.0, 420.0)
+            .inner_size(width, height)
+            .min_inner_size(POPUP_MIN_WIDTH * zoom, POPUP_MIN_HEIGHT * zoom)
             .decorations(false)
             .resizable(false)
             .skip_taskbar(true)
@@ -523,11 +559,17 @@ pub fn open_led_control_popup<R: Runtime>(
         if let Some((cx, cy)) = shell_state::persisted(&app).and_then(|state| state.popup_center())
         {
             let _ = window.set_position(Position::Logical(LogicalPosition::new(
-                cx - POPUP_WIDTH / 2.0,
-                cy - POPUP_HEIGHT / 2.0,
+                cx - width / 2.0,
+                cy - height / 2.0,
             )));
         } else {
             let _ = window.center();
+        }
+
+        if zoom != 1.0 {
+            if let Err(error) = window.set_zoom(zoom) {
+                log::warn!("[ui-zoom] control popup zoom failed: {error}");
+            }
         }
 
         #[cfg(target_os = "macos")]

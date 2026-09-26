@@ -30,7 +30,5 @@
 
   .none { font-size: 12px; color: var(--lm-ink-dim); }
 
-  @media (prefers-reduced-motion: reduce) {
-    .chevron { transition: none; }
-  }
+  :global(:root[data-reduced-motion]) .chevron { transition: none; }
 }

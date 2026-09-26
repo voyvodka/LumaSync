@@ -17,6 +17,7 @@ import {
   captureSetPositionArgs,
   centerMock,
   innerSizeMock,
+  isMaximizedMock,
   makePersistedState,
   MONITOR_1080P,
   outerPositionMock,
@@ -137,6 +138,18 @@ describe("Scenario 3 — persistWindowState reads outerSize, never innerSize", (
 
     // innerSize must NOT have been called.
     expect(innerSizeMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("a zoomed window", () => {
+  it("records nothing, so the next launch opens at the size the user chose", async () => {
+    isMaximizedMock.mockResolvedValue(true);
+    outerSizeMock.mockResolvedValue({ width: 1920, height: 1055 });
+    setupPersistedState(makePersistedState({ windowCenterX: 700, windowCenterY: 400 }));
+
+    await persistWindowState();
+
+    expect(backend.patches()).toHaveLength(0);
   });
 });
 

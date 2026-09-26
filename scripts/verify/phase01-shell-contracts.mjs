@@ -108,6 +108,16 @@ const REQUIRED_V15_STATE_FIELDS = [
   "ledColorOrder",
   // Stats for nerds; additive, absent ⇒ off and no telemetry poll.
   "showNerdStats",
+  // Reduce motion; additive, absent ⇒ follow the OS.
+  "motion",
+  // Interface size in percent; additive, absent ⇒ 100.
+  "uiZoom",
+  // Close button; additive, absent ⇒ hide to tray.
+  "closeAction",
+  // OS notifications; additive, absent ⇒ on.
+  "notifications",
+  // Lights on launch; additive, absent ⇒ resume the saved mode.
+  "launchLights",
 ];
 
 /** v1.5 contract surface that must be exported alongside the new fields. */
@@ -627,6 +637,7 @@ console.log("\n[ Notification result codes ]");
 const REQUIRED_NOTIFICATION_RESULT_CODES = [
   "NOTIF_PERMISSION_DENIED",
   "NOTIF_UNSUPPORTED_OS",
+  "NOTIF_SUPPRESSED",
 ];
 for (const code of REQUIRED_NOTIFICATION_RESULT_CODES) {
   check(

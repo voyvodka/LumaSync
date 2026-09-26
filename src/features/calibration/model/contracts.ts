@@ -16,7 +16,6 @@ export type {
   LedStartAnchor,
   LedSegmentCounts,
   LedCalibrationConfig,
-  CalibrationTemplate,
 } from "@/shared/contracts/calibration";
 
 import type {

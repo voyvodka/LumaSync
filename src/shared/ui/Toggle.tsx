@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 
 type NativeButtonProps = Omit<
   ButtonHTMLAttributes<HTMLButtonElement>,
@@ -14,6 +14,7 @@ interface ToggleProps extends NativeButtonProps {
   /** `lm-toggle` is the pill switch; a row that draws its own track passes its class and children. */
   className?: string;
   children?: ReactNode;
+  ref?: Ref<HTMLButtonElement>;
 }
 
 /** An on/off setting that applies at once, announced as a switch. */

@@ -34,7 +34,7 @@ export function TotalControl({ draft, display, knownTotal, chipType, onDistribut
       value={total}
       min={floor}
       max={ceiling}
-      unit="LED"
+      unit={t("calibration:setup.ledUnit")}
       labels={{
         edit: t("calibration:setup.editTotal", { n: total }),
         field: t("calibration:setup.totalField"),

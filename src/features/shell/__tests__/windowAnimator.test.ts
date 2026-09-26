@@ -404,3 +404,54 @@ describe("Scenario 18 — a resize event mid-animation is not persisted", () => 
   });
 });
 
+
+// ---------------------------------------------------------------------------
+// Interface size
+// ---------------------------------------------------------------------------
+
+describe("Interface size", () => {
+  const lastSize = () => setSizeMock.mock.calls[setSizeMock.mock.calls.length - 1]?.[0] as { width: number; height: number };
+  const lastMin = () => setMinSizeMock.mock.calls[setMinSizeMock.mock.calls.length - 1]?.[0] as { width: number; height: number };
+
+  it("scales the fixed compact window and its floor with the zoom", async () => {
+    setupPersistedState(makePersistedState({ uiMode: "compact", uiZoom: 125 }));
+
+    await resizeToMode("compact", { animate: false });
+
+    expect(lastSize()).toMatchObject({ width: 400, height: 600 });
+    expect(lastMin()).toMatchObject({ width: 375, height: 525 });
+  });
+
+  it("keeps a full window the user sized, and only grows one that falls under the zoomed floor", async () => {
+    setupPersistedState(makePersistedState({ uiMode: "full", uiZoom: 125, lastFullSize: { width: 1200, height: 800 } }));
+    await resizeToMode("full", { animate: false });
+    expect(lastSize()).toMatchObject({ width: 1200, height: 800 });
+    expect(lastMin()).toMatchObject({ width: 1000, height: 700 });
+
+    setupPersistedState(makePersistedState({ uiMode: "full", uiZoom: 125, lastFullSize: { width: 900, height: 620 } }));
+    await resizeToMode("full", { animate: false });
+    expect(lastSize()).toMatchObject({ width: 1000, height: 700 });
+  });
+
+  it("a size change in full keeps the current frame unless the new floor is larger, and remembers it as the user's", async () => {
+    innerSizeMock.mockResolvedValue({ width: 900, height: 620 });
+    setupPersistedState(makePersistedState({ uiMode: "full", uiZoom: 100, lastFullSize: { width: 900, height: 620 } }));
+
+    await resizeToMode("full", { animate: false, zoom: 1.25, fromZoom: 1 });
+    expect(lastSize()).toMatchObject({ width: 1000, height: 700 });
+
+    innerSizeMock.mockResolvedValue({ width: 1000, height: 700 });
+    await resizeToMode("full", { animate: false, zoom: 0.9, fromZoom: 1.25 });
+    expect(lastSize()).toMatchObject({ width: 1000, height: 700 });
+  });
+
+  it("leaving full at a zoom stores the frame as it is", async () => {
+    innerSizeMock.mockResolvedValue({ width: 1100, height: 760 });
+    setupPersistedState(makePersistedState({ uiMode: "full", uiZoom: 110 }));
+
+    await resizeToMode("compact", { animate: false });
+
+    expect(captureLastSavedState().lastFullSize).toMatchObject({ width: 1100, height: 760 });
+    expect(lastSize()).toMatchObject({ width: 352, height: 528 });
+  });
+});

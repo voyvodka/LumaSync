@@ -424,13 +424,47 @@ export interface ShellState {
    */
   updateChannel?: UpdateChannel;
   /**
-   * Settings → General "Show stats for nerds". `true` shows the FPS and CAP
+   * Settings → Appearance "Show stats for nerds". `true` shows the FPS and CAP
    * pills and the telemetry readout, and runs the `get_runtime_telemetry`
    * poll behind them; anything else — absent included — shows the status
    * chips only and polls nothing. Additive, no schema bump: absent is the
    * default for new installs and upgraders alike.
    */
   showNerdStats?: boolean;
+  /**
+   * Settings → Appearance "Reduce motion". `"reduce"` turns the interface's
+   * motion down in every window; anything else — absent included — follows
+   * the OS `prefers-reduced-motion`. An enum rather than a boolean, like
+   * `updateChannel`, so a later value needs no second field. Additive, no
+   * schema bump.
+   */
+  motion?: MotionPreference;
+  /**
+   * Settings → Appearance "Interface size", in percent. The main window and the
+   * control popup scale their webview by it and grow their frames by the same
+   * factor, so every layout still sees its design viewport. Anything but a
+   * listed step reads as 100. Additive, no schema bump.
+   */
+  uiZoom?: UiZoom;
+  /**
+   * Settings → General "Close button". `"quit"` makes the main window's close
+   * quit the app through the normal shutdown; anything else hides to the tray.
+   * Read by Rust on each close. Additive, no schema bump.
+   */
+  closeAction?: CloseAction;
+  /**
+   * Settings → General "Notifications". `"off"` makes `show_notification`
+   * answer `suppressed` without showing anything, for every window; anything
+   * else shows them. Additive, no schema bump.
+   */
+  notifications?: NotificationsPreference;
+  /**
+   * Settings → General "Lights on launch". `"off"` starts the app with the
+   * lights off; the saved `lightingMode` is left as it was, so the next choice
+   * still gets its settings. Anything else resumes the saved mode. Read by
+   * Rust's launch restore. Additive, no schema bump.
+   */
+  launchLights?: LaunchLights;
   // -------------------------------------------------------------------------
   // v1.6 — LED Preview & Test Experience (all OPTIONAL / additive; no schema
   // bump — absence degrades to the documented default below).
@@ -597,6 +631,46 @@ export function defaultUpdateChannel(appVersion: string): UpdateChannel {
 export function resolveUpdateChannel(stored: unknown, appVersion: string): UpdateChannel {
   if (typeof stored === "string") return stored === "beta" ? "beta" : "stable";
   return defaultUpdateChannel(appVersion);
+}
+
+export const MOTION_PREFERENCES = ["system", "reduce"] as const;
+export type MotionPreference = (typeof MOTION_PREFERENCES)[number];
+
+/** Absent or unrecognised ⇒ `"system"`. */
+export function resolveMotionPreference(stored: unknown): MotionPreference {
+  return stored === "reduce" ? "reduce" : "system";
+}
+
+export const UI_ZOOM_STEPS = [90, 100, 110, 125] as const;
+export type UiZoom = (typeof UI_ZOOM_STEPS)[number];
+
+/** Whole percents: a float step such as 1.1 does not survive a JSON round trip through Rust bit for bit. */
+export function resolveUiZoom(stored: unknown): UiZoom {
+  return UI_ZOOM_STEPS.find((step) => step === stored) ?? 100;
+}
+
+export const CLOSE_ACTIONS = ["tray", "quit"] as const;
+export type CloseAction = (typeof CLOSE_ACTIONS)[number];
+
+/** Absent or unrecognised ⇒ `"tray"`. Mirrors `close_quits` in `commands/shell_state.rs`. */
+export function resolveCloseAction(stored: unknown): CloseAction {
+  return stored === "quit" ? "quit" : "tray";
+}
+
+export const NOTIFICATIONS_PREFERENCES = ["on", "off"] as const;
+export type NotificationsPreference = (typeof NOTIFICATIONS_PREFERENCES)[number];
+
+/** Absent or unrecognised ⇒ `"on"`. Mirrors `notifications_off` in `commands/shell_state.rs`. */
+export function resolveNotificationsPreference(stored: unknown): NotificationsPreference {
+  return stored === "off" ? "off" : "on";
+}
+
+export const LAUNCH_LIGHTS = ["resume", "off"] as const;
+export type LaunchLights = (typeof LAUNCH_LIGHTS)[number];
+
+/** Absent or unrecognised ⇒ `"resume"`. Mirrors `launch_lights_off` in `commands/shell_state.rs`. */
+export function resolveLaunchLights(stored: unknown): LaunchLights {
+  return stored === "off" ? "off" : "resume";
 }
 
 /** Logical pixel dimensions for each UI mode */

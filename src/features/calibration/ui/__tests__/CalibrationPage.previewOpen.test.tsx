@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import { CalibrationPage } from "../CalibrationPage";
+import { __resetLedSetupSourceForTests } from "../../state/ledSetupSource";
 import type * as calibrationApiModule from "@/features/calibration/calibrationApi";
 import type * as modeApiModule from "@/features/mode/modeApi";
 import type * as previewApiModule from "@/features/preview/previewApi";
@@ -69,11 +70,12 @@ const POPUP_OK: ControlPopupResult = { ok: true, code: "CONTROL_POPUP_SHOWN", me
 async function clickPreview() {
   const user = userEvent.setup();
   render(<CalibrationPage initialConfig={SAVED} onNavigateBack={() => {}} onSaved={() => {}} />);
-  await user.click(screen.getByRole("button", { name: "calibration:setup.preview" }));
+  await user.click(await screen.findByRole("button", { name: "calibration:setup.preview" }));
 }
 
 describe("CalibrationPage — opening the LED preview", () => {
   beforeEach(() => {
+    __resetLedSetupSourceForTests();
     vi.spyOn(console, "error").mockImplementation(() => {});
     saveMock.mockReset().mockResolvedValue(undefined);
     openOverlayMock.mockReset().mockResolvedValue(OVERLAY_OK);

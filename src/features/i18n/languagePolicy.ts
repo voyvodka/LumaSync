@@ -8,6 +8,7 @@
  */
 
 import { shellStore } from "../persistence/shellStore";
+import type { ShellState } from "@/shared/contracts/shell";
 import { changeLanguage, i18next } from "./i18n";
 
 // ---------------------------------------------------------------------------
@@ -32,9 +33,11 @@ export const DEFAULT_LANGUAGE: SupportedLanguage = "en";
  * A supported language persisted in shell state wins; otherwise English
  * (see module header for why not the system locale).
  */
-export async function resolveInitialLanguage(): Promise<SupportedLanguage> {
+export async function resolveInitialLanguage(
+  load: () => Promise<ShellState> = () => shellStore.load(),
+): Promise<SupportedLanguage> {
   try {
-    const state = await shellStore.load();
+    const state = await load();
     const persisted = state.language;
 
     // If a supported language is explicitly saved, honour the user's choice.

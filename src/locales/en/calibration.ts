@@ -1,6 +1,5 @@
 export default {
   page: {
-    testUpdating: "Sending your changes to the running test…",
     testKeepsLastValid: "The running test keeps the last valid layout until the counts are valid again.",
     totalStep: {
       question: "How many LEDs does your strip have?",
@@ -35,6 +34,7 @@ export default {
     test: "Test",
     starting: "Starting…",
     stopping: "Stopping…",
+    updating: "Updating…",
     stop: "Stop",
     revert: "Revert",
     unsaved: "Unsaved changes",
@@ -52,6 +52,8 @@ export default {
     countHint: "It is on the reel: metres × LEDs per metre.",
     skipTotal: "I'll set the edges myself",
     firstLed: "First LED",
+    firstLedAt: "First LED: {{place}}",
+    ledUnit: "LED",
     cw: "Clockwise",
     ccw: "Counter-clockwise",
     toCw: "Switch to clockwise",
@@ -95,7 +97,7 @@ export default {
   },
   overlay: {
     save: "Save",
-    saving: "Saving...",
+    saving: "Saving…",
     retrySave: "Retry",
     previewOnly: "Preview only",
     outputActive: "On the strip",

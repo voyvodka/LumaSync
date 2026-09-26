@@ -188,15 +188,13 @@
 .lm-notice-icon-btn:focus-visible {
   color: var(--lm-amber);
 }
-@media (prefers-reduced-motion: reduce) {
-  .lm-notice-arrow,
-  .lm-notice-icon-btn,
-  .lm-notice-icon-btn svg {
-    transition: none;
-  }
-  .lm-notice-action:hover:not(:disabled) .lm-notice-arrow {
-    transform: none;
-  }
+:root[data-reduced-motion] .lm-notice-arrow,
+:root[data-reduced-motion] .lm-notice-icon-btn,
+:root[data-reduced-motion] .lm-notice-icon-btn svg {
+  transition: none;
+}
+:root[data-reduced-motion] .lm-notice-action:hover:not(:disabled) .lm-notice-arrow {
+  transform: none;
 }
 @media (forced-colors: active) {
   .lm-notice-slot {

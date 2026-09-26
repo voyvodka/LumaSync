@@ -76,7 +76,6 @@ import {
 } from "./layoutEdit";
 import {
   closeDisplayOverlay,
-  listDisplays,
   openDisplayOverlay,
   updateDisplayOverlayPreview,
 } from "../calibrationApi";
@@ -85,14 +84,15 @@ import {
   isTestPatternFailure,
   type TestPatternSnapshot,
 } from "./testPatternFlow";
-import { createDisplayTargetState, type DisplayTargetSnapshot } from "./displayTargetState";
+import { createDisplayTargetState, type DisplayTargetSnapshot, type DisplayTargetState } from "./displayTargetState";
+import { peekLedSetupSource, readLedSetupSource, type LedSetupSource } from "./ledSetupSource";
 import type { DisplayId, DisplayInfo, OverlayPreviewPayload } from "@/shared/contracts/display";
 import { LED_CHIP_TYPE, type LedChipType } from "@/shared/contracts/device";
 import { parseCommandError } from "@/shared/contracts/status";
 
 /** Quiet time after the last edit before a running test picks the layout up.
  * Each restart rebuilds the output worker, so a run of clicks is one restart. */
-export const TEST_PATTERN_RETUNE_DELAY_MS = 400;
+const TEST_PATTERN_RETUNE_DELAY_MS = 400;
 
 function reclaimFocus() {
   void focusCurrentWindow();
@@ -133,6 +133,38 @@ function reportedStripTotal(ledCount: number | undefined): number | null {
   return Math.min(Math.floor(ledCount), MAX_COUNT);
 }
 
+/** The saved display when it is still attached, else the first one. */
+function selectSaved(target: DisplayTargetState, source: LedSetupSource): DisplayTargetSnapshot {
+  let next = target.setDisplays(source.displays);
+  const saved = source.selectedDisplayId;
+  if (saved && source.displays.some((candidate) => candidate.id === saved)) {
+    next = target.selectDisplay(saved);
+  } else if (source.displays[0] && !next.selectedDisplayId) {
+    next = target.selectDisplay(source.displays[0].id);
+  }
+  return next;
+}
+
+/**
+ * A bound WLED panel knows its own length, so an empty layout starts from that total split over
+ * the selected display. An autofill, not an edit: a first visit that touched nothing must not ask
+ * "discard changes?" on Cancel. Without a reported total nothing is guessed — pixels say nothing
+ * about how long the strip is.
+ */
+function withReportedTotal(
+  state: CalibrationEditorState,
+  reported: number | null,
+  display: DisplayInfo | undefined,
+): CalibrationEditorState {
+  if (reported === null || state.current.totalLeds !== 0) return state;
+  const { patch } = distributedPatch(state.current, layoutUiFrom(state.current), reported, aspectOf(display));
+  return autofillEditorConfig(state, patch);
+}
+
+function selectedIn(source: LedSetupSource, snapshot: DisplayTargetSnapshot): DisplayInfo | undefined {
+  return source.displays.find((candidate) => candidate.id === snapshot.selectedDisplayId);
+}
+
 /** A layout the backend would accept for a test: valid, and more than one LED. */
 function isTestableLayout(config: LedCalibrationConfig): boolean {
   return validateCalibrationConfig(config).ok && config.totalLeds > 1;
@@ -154,9 +186,22 @@ export function useCalibrationSession({
   onSaved,
   registerLeaveGuard,
 }: CalibrationSessionOptions) {
-  const [editorState, setEditorState] = useState<CalibrationEditorState>(() =>
-    createCalibrationEditorState(initialConfig ?? resetToManual()),
+  // The last read this session, when there is one, so the page opens on it rather than filling in.
+  const [cached] = useState(peekLedSetupSource);
+  const displayTargetRef = useRef(
+    createDisplayTargetState({ openDisplayOverlay, closeDisplayOverlay }),
   );
+  const [displayTarget, setDisplayTarget] = useState<DisplayTargetSnapshot>(() =>
+    cached ? selectSaved(displayTargetRef.current, cached) : displayTargetRef.current.getSnapshot(),
+  );
+  /** False until the displays and saved values are known; the page draws nothing true before. */
+  const [loaded, setLoaded] = useState(cached !== null);
+  const [editorState, setEditorState] = useState<CalibrationEditorState>(() => {
+    const opened = createCalibrationEditorState(initialConfig ?? resetToManual());
+    return cached
+      ? withReportedTotal(opened, reportedStripTotal(cached.wledLedCount), selectedIn(cached, displayTarget))
+      : opened;
+  });
   const hasSavedLayout = initialConfig !== undefined && sumSegmentCounts(initialConfig.counts) > 0;
   // With no saved layout the page asks for the strip's total first; the
   // per-edge rows refine the split it makes.
@@ -165,64 +210,42 @@ export function useCalibrationSession({
   const [savedOnce, setSavedOnce] = useState(hasSavedLayout);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [layoutUi, setLayoutUi] = useState<LayoutUi>(() => layoutUiFrom(editorState.current));
-  const [knownTotal, setKnownTotal] = useState<number | null>(null);
+  const [knownTotal, setKnownTotal] = useState<number | null>(() =>
+    cached ? reportedStripTotal(cached.wledLedCount) : null,
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<CalibrationNotice | null>(null);
-  const [chipType, setChipType] = useState<LedChipType>(LED_CHIP_TYPE.WS2812B_GRB);
+  const [chipType, setChipType] = useState<LedChipType>(() =>
+    cached?.chipType === LED_CHIP_TYPE.SK6812_RGBW ? LED_CHIP_TYPE.SK6812_RGBW : LED_CHIP_TYPE.WS2812B_GRB,
+  );
 
   const flowRef = useRef(createDefaultTestPatternFlow(initialConfig));
   const [testPattern, setTestPattern] = useState<TestPatternSnapshot>(flowRef.current.getSnapshot());
-  const displayTargetRef = useRef(
-    createDisplayTargetState({ openDisplayOverlay, closeDisplayOverlay }),
-  );
-  const [displayTarget, setDisplayTarget] = useState<DisplayTargetSnapshot>(
-    displayTargetRef.current.getSnapshot(),
-  );
   const [validationErrors, setValidationErrors] = useState<CalibrationValidationError[] | null>(null);
   const [testPatternError, setTestPatternError] = useState<CalibrationNotice | null>(null);
   const [previewOpenFailure, setPreviewOpenFailure] = useState<PreviewOpenFailure | null>(null);
 
-  // Load displays on mount. Honour any persisted selection so the
-  // capture source survives app restarts.
+  // Read on every visit: a display plugged in since the last one is a real change. Honour any
+  // persisted selection so the capture source survives app restarts.
   useEffect(() => {
     let cancelled = false;
-    Promise.all([listDisplays(), shellStore.load()])
-      .then(([displays, shell]) => {
+    readLedSetupSource()
+      .then((source) => {
         if (cancelled) return;
-        if (shell.selectedChipType === LED_CHIP_TYPE.SK6812_RGBW) setChipType(LED_CHIP_TYPE.SK6812_RGBW);
-        let newState = displayTargetRef.current.setDisplays(displays);
-        const persisted = shell.selectedDisplayId;
-        if (persisted && displays.some((candidate) => candidate.id === persisted)) {
-          newState = displayTargetRef.current.selectDisplay(persisted);
-        } else if (displays[0] && !newState.selectedDisplayId) {
-          newState = displayTargetRef.current.selectDisplay(displays[0].id);
-        }
-        setDisplayTarget(newState);
-
-        // A bound WLED panel knows its own length, so an empty layout starts
-        // from that total split over the selected display. An autofill, not an
-        // edit: a first visit that touched nothing must not ask "discard
-        // changes?" on Cancel. Without a reported total nothing is guessed —
-        // pixels say nothing about how long the strip is.
-        const reported = reportedStripTotal(shell.lastWledSink?.ledCount);
+        if (source.chipType === LED_CHIP_TYPE.SK6812_RGBW) setChipType(LED_CHIP_TYPE.SK6812_RGBW);
+        const selected = selectSaved(displayTargetRef.current, source);
+        setDisplayTarget(selected);
+        const reported = reportedStripTotal(source.wledLedCount);
         setKnownTotal(reported);
-        const selectedId = newState.selectedDisplayId;
-        const selectedDisplay = selectedId
-          ? displays.find((candidate) => candidate.id === selectedId)
-          : undefined;
-        if (reported !== null) {
-          setEditorState((prev) => {
-            if (prev.current.totalLeds !== 0) return prev;
-            const { patch } = distributedPatch(prev.current, layoutUiFrom(prev.current), reported, aspectOf(selectedDisplay));
-            return autofillEditorConfig(prev, patch);
-          });
-        }
+        setEditorState((prev) => withReportedTotal(prev, reported, selectedIn(source, selected)));
+        setLoaded(true);
       })
       .catch((error) => {
         if (cancelled) return;
         const reason = parseCommandError(error).message;
         console.warn(`[LumaSync] Display list unavailable: ${reason}`);
         setDisplayTarget(displayTargetRef.current.setDisplays([]));
+        setLoaded(true);
       });
     return () => { cancelled = true; };
   }, []);
@@ -267,7 +290,7 @@ export function useCalibrationSession({
     registerLeaveGuard((proceed) => {
       if (!dirtyRef.current) return false;
       pendingLeaveRef.current = proceed;
-      setEditorState((prev) => ({ ...prev, confirmDiscard: true, shouldClose: false }));
+      setEditorState((prev) => ({ ...prev, confirmDiscard: true }));
       return true;
     });
     return () => registerLeaveGuard(null);
@@ -302,8 +325,7 @@ export function useCalibrationSession({
     [],
   );
 
-  const runPreviewToggle = useCallback(async () => {
-    const shouldEnable = !flowRef.current.getSnapshot().isEnabled;
+  const runPreviewToggle = useCallback(async (shouldEnable: boolean) => {
     try {
       if (shouldEnable) {
         if (displayTarget.blocked) {
@@ -374,21 +396,24 @@ export function useCalibrationSession({
   const previewToggleRunningRef = useRef(false);
   const [isTogglingTestPattern, setIsTogglingTestPattern] = useState(false);
   // A layout restart in flight. Kept apart from the toggle so a restart does
-  // not flash the monitor picker busy; a press waits for neither, it is ignored.
-  const retuneRunningRef = useRef(false);
+  // not flash the monitor picker busy.
+  const retuneRunningRef = useRef<Promise<void> | null>(null);
 
   const handlePreviewToggle = useCallback(async () => {
     // Read from the store, not the render: a second press can land before React
     // has re-rendered with the in-flight snapshot.
-    if (
-      previewToggleRunningRef.current
-      || retuneRunningRef.current
-      || displayTargetRef.current.getSnapshot().isSwitching
-    ) return;
+    if (previewToggleRunningRef.current || displayTargetRef.current.getSnapshot().isSwitching) return;
+    // What the press asked for, fixed now: a restart in flight that fails stops
+    // the test itself, and reading the intent after it would start a new one.
+    const shouldEnable = !flowRef.current.getSnapshot().isEnabled;
     previewToggleRunningRef.current = true;
+    // Also clears a restart still waiting out its debounce (the effect below).
     setIsTogglingTestPattern(true);
     try {
-      await runPreviewToggle();
+      // A stop pressed mid-restart waits for that start to land, then stops it.
+      await retuneRunningRef.current;
+      if (flowRef.current.getSnapshot().isEnabled === shouldEnable) return;
+      await runPreviewToggle(shouldEnable);
     } finally {
       previewToggleRunningRef.current = false;
       setIsTogglingTestPattern(false);
@@ -413,9 +438,8 @@ export function useCalibrationSession({
   useEffect(() => {
     if (retuneKey === null || isTogglingTestPattern) return;
     const timer = setTimeout(() => {
-      if (previewToggleRunningRef.current || retuneRunningRef.current) return;
-      retuneRunningRef.current = true;
-      void (async () => {
+      if (previewToggleRunningRef.current || retuneRunningRef.current !== null) return;
+      retuneRunningRef.current = (async () => {
         try {
           const next = await flowRef.current.retune();
           setTestPattern(next);
@@ -430,7 +454,7 @@ export function useCalibrationSession({
             detail: noticeDetail(null, parseCommandError(error).message),
           });
         } finally {
-          retuneRunningRef.current = false;
+          retuneRunningRef.current = null;
         }
       })();
     }, TEST_PATTERN_RETUNE_DELAY_MS);
@@ -656,6 +680,7 @@ export function useCalibrationSession({
     testPattern,
     testLayoutStale,
     draftTestable,
+    loaded,
     isTogglingTestPattern,
     displayTarget,
     overlayBlocked,

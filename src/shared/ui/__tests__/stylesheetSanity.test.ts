@@ -115,6 +115,16 @@ describe("stylesheet sanity", () => {
     expect(loose.sort()).toEqual(["features/shell/GlobalErrorBoundary.css", "fonts.css", "styles.css"]);
   });
 
+  // Settings → Reduce motion sets `data-reduced-motion` on the root (with the OS request folded
+  // in); a media query cannot be switched on by the app, so a guard written that way ignores it.
+  it("guards reduced motion on the root attribute, never the media query", () => {
+    const onMedia = cssFiles
+      .filter(({ css }) => /prefers-reduced-motion/.test(css))
+      .map(({ file }) => file.slice(SRC.length + 1));
+    expect(onMedia).toEqual([]);
+    expect(stylesCss).toMatch(/@custom-variant motion-reduce \(&:where\(:root\[data-reduced-motion\] \*\)\);/);
+  });
+
   it("names a selected state `is-on` or reads it from ARIA, never `is-sel`/`is-selected`", () => {
     const retired = /\bis-(sel|selected)\b/;
     const offenders = [

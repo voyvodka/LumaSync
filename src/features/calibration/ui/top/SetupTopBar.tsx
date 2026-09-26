@@ -1,4 +1,6 @@
 import { useId, useRef, useState, type ReactNode } from "react";
+
+import { usePresence } from "@/shared/lib/usePresence";
 import { useTranslation } from "react-i18next";
 
 import type { DisplayInfo } from "@/shared/contracts/display";
@@ -28,13 +30,22 @@ export function SetupTopBar({
   onPreview,
 }: SetupTopBarProps) {
   const { t } = useTranslation();
+  // Kept while the status fades out, so it leaves saying what it said.
+  const lastTargetRef = useRef(testTarget);
+  if (testTarget) lastTargetRef.current = testTarget;
+  const status = usePresence(testTarget !== null, 300);
+  const shownTarget = lastTargetRef.current;
   return (
     <div className={styles.bar}>
       <DisplayMenu displays={displays} selectedId={selectedDisplayId} busy={switching} onSelect={onSelectDisplay} />
       <span className={styles.spacer} />
-      {testTarget && (
-        <span className={testTarget === "preview" ? `${styles.status} ${styles.isPreview}` : styles.status}>
-          {testTarget === "preview" ? t("calibration:overlay.previewOnly") : t("calibration:overlay.outputActive")}
+      {status.mounted && (
+        <span
+          className={[styles.status, shownTarget === "preview" && styles.isPreview, status.leaving && styles.leaving]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          {shownTarget === "preview" ? t("calibration:overlay.previewOnly") : t("calibration:overlay.outputActive")}
         </span>
       )}
       <button type="button" disabled={previewDisabled} onClick={onPreview} className={styles.button}>

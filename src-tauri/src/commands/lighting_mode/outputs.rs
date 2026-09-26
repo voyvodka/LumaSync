@@ -359,9 +359,17 @@ impl OutputsState {
                 .clone()
                 .or_else(|| persisted.and_then(PersistedShellState::lighting_mode))
                 .unwrap_or_default();
+            // Only while nothing runs: a webview reload restores too, and must
+            // not turn off lights the user has on.
+            let stay_off = running_kind == LightingModeKind::Off
+                && persisted.is_some_and(PersistedShellState::launch_lights_off);
             intent.clone_from(&LightingIntent {
                 known: true,
-                kind: mode.kind,
+                kind: if stay_off {
+                    LightingModeKind::Off
+                } else {
+                    mode.kind
+                },
                 targets: request.targets.clone().unwrap_or_else(saved),
                 persist_mode: false,
             });

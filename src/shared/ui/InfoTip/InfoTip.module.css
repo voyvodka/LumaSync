@@ -1,0 +1,25 @@
+@layer components {
+  /* A 32 px hit area around a small glyph: the floor for anything clickable. */
+  .button {
+    display: inline-grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    margin: -8px -6px;
+    border-radius: 50%;
+    color: var(--lm-ink-faint);
+    transition: color var(--lm-dur-quick);
+  }
+  .button svg { width: 15px; height: 15px; }
+  .button:hover,
+  .button[aria-expanded="true"] { color: var(--lm-ink); }
+  .button:focus-visible { outline: none; box-shadow: var(--lm-focus-ring-inset); }
+
+  .text {
+    margin: 0;
+    padding: 2px 4px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--lm-ink);
+  }
+}

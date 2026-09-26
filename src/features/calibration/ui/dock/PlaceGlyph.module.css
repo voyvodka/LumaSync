@@ -7,21 +7,19 @@
   .dot {
     transform-box: fill-box;
     transform-origin: center;
-    transition: fill 0.18s, stroke 0.18s;
+    transition: fill var(--lm-dur-quick), stroke var(--lm-dur-quick);
   }
 
   .ring {
-    fill: var(--place-ring-fill, rgb(255 176 32 / 18%));
+    fill: var(--place-ring-fill, color-mix(in srgb, var(--lm-amber) 18%, transparent));
     stroke: var(--place-ring, var(--lm-amber));
     stroke-width: 1.2;
   }
 
   .dot { fill: var(--place-dot, var(--lm-amber)); }
-  .land { animation: land 0.3s var(--lm-ease-land); }
+  .land { animation: land var(--lm-dur-slow) var(--lm-ease-land); }
 
   @keyframes land { from { opacity: 0; transform: scale(0.3); } }
 
-  @media (prefers-reduced-motion: reduce) {
-    .land { animation: none; }
-  }
+  :global(:root[data-reduced-motion]) .land { animation: none; }
 }

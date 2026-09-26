@@ -2,6 +2,10 @@
 @source "../index.html";
 @source "./**/*.{ts,tsx}";
 
+/* Tailwind's `motion-reduce:` reads the OS media query, which the app cannot switch on; it reads
+   the root attribute that folds Settings → Reduce motion and the OS request together instead. */
+@custom-variant motion-reduce (&:where(:root[data-reduced-motion] *));
+
 /* ─────────────────────────────────────────────────────────────────────
    Self-hosted IBM Plex (Rev 07 typography). The woff2 files still come
    from @fontsource so the app stays offline-safe and the existing CSP
@@ -22,7 +26,6 @@
 @import "./styles/compact.css" layer(components);
 @import "./styles/notices.css" layer(components);
 @import "./styles/compact-controls.css" layer(components);
-@import "./styles/updater.css" layer(components);
 @import "./styles/settings.css" layer(components);
 @import "./styles/devices.css" layer(components);
 @import "./styles/lights.css" layer(components);
@@ -32,5 +35,4 @@
 @import "./styles/room-map-menu.css" layer(components);
 @import "./styles/strip-settings.css" layer(components);
 @import "./styles/preview.css" layer(components);
-@import "./styles/telemetry.css" layer(components);
 @import "./styles/led-color-order.css" layer(components);

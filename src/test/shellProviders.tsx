@@ -104,6 +104,7 @@ export function renderWithShellStores(
     checkForUpdatesInBackground: vi.fn(async () => "done" as const),
     downloadAndInstall: vi.fn(async () => {}),
     dismiss: vi.fn(),
+    showUpdate: vi.fn<() => void>(),
     devSetState: vi.fn(),
     ...options.updaterActions,
   };

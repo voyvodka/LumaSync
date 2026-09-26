@@ -1,48 +1,8 @@
-import type { LedCalibrationConfig } from "../model/contracts";
-
-export interface CalibrationOverlayEntry {
-  open: boolean;
-  reason: "first-connection" | "settings-edit" | "none";
-  initialConfig?: LedCalibrationConfig;
-}
-
-interface DeriveCalibrationOverlayEntryInput {
-  hasConnectedDevice: boolean;
-  savedCalibration?: LedCalibrationConfig;
-}
-
 interface PromptOnConnectionInput {
   /** The user pressed Connect; a boot auto-reconnect or a recovery is not a first connect. */
   userInitiated: boolean;
   hasCalibration: boolean;
   alreadyPrompted: boolean;
-}
-
-export function deriveCalibrationOverlayEntry(
-  input: DeriveCalibrationOverlayEntryInput,
-): CalibrationOverlayEntry {
-  if (input.hasConnectedDevice && !input.savedCalibration) {
-    return {
-      open: true,
-      reason: "first-connection",
-    };
-  }
-
-  return {
-    open: false,
-    reason: "none",
-    initialConfig: input.savedCalibration,
-  };
-}
-
-export function startCalibrationFromSettings(
-  savedCalibration?: LedCalibrationConfig,
-): CalibrationOverlayEntry {
-  return {
-    open: true,
-    reason: "settings-edit",
-    initialConfig: savedCalibration,
-  };
 }
 
 /**

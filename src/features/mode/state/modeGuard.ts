@@ -13,18 +13,6 @@ export interface LedModeGuardResult {
   reason: ModeGuardReason | null;
 }
 
-export interface LedModeEnableAttemptInput {
-  currentEnabled: boolean;
-  calibration?: LedCalibrationConfig;
-  selectedTargets?: HueRuntimeTarget[];
-}
-
-export interface LedModeEnableAttempt {
-  nextEnabled: boolean;
-  reason: ModeGuardReason | null;
-  shouldOpenCalibration: boolean;
-}
-
 /**
  * `localOutputBound`: a strip or WLED panel is connected. Every fresh install
  * has `usb` selected, so selection alone would lock a Hue-only user out of
@@ -53,25 +41,5 @@ export function canEnableLedMode(
   return {
     canEnable: true,
     reason: null,
-  };
-}
-
-export function resolveLedModeEnableAttempt(
-  input: LedModeEnableAttemptInput,
-): LedModeEnableAttempt {
-  const gate = canEnableLedMode(input.calibration, input.selectedTargets);
-
-  if (!gate.canEnable) {
-    return {
-      nextEnabled: input.currentEnabled,
-      reason: gate.reason,
-      shouldOpenCalibration: true,
-    };
-  }
-
-  return {
-    nextEnabled: true,
-    reason: null,
-    shouldOpenCalibration: false,
   };
 }

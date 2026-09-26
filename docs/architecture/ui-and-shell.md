@@ -28,11 +28,12 @@ statically is parsed by the main window, the control popup, and one twin overlay
 entry holds only React, i18next, the console bridge, the error boundaries, and the label switch;
 each window's root (`App`, `ControlPopupApp`, `LedTwinOverlay`) is a dynamic `import()` started
 before the language read, so the chunk and the shell-state IPC load in parallel rather than one
-after the other. Inside the main window, `SettingsLayout` splits out the
-three full-only sections that outweigh the rest of the shell — `CalibrationPage`, `DeviceSection`,
-`RoomMapEditor` — through `preloadableComponent` (`src/shared/lib/`). Compact mode never renders
-them, so it never fetches them; full mode warms all three on idle after it paints, so a tab switch
-rarely meets the blank `SectionPlaceholder`. `LightsSection` and `SystemSection` stay in the `App`
+after the other. Inside the main window, the three full-only sections that outweigh the rest of
+the shell — `CalibrationPage` (through `calibration/ui/CalibrationPanel`), `DeviceSection`,
+`RoomMapEditor` — are split out through `preloadableComponent` (`src/shared/lib/`). Compact mode
+never renders them, so it never fetches them; full mode warms all three on idle after it paints, so
+a tab switch rarely meets the blank `SectionPlaceholder`. LED Setup's warm-up also reads the
+displays it opens on, so even a first visit draws the real monitor rather than filling in. `LightsSection` and `SettingsPage` stay in the `App`
 chunk: Lights is the page full mode opens on, and neither is big enough to be worth a first-paint
 wait. Locale catalogues load per language (`LOCALE_LOADERS` in `i18n.ts`); a switch fetches the
 other catalogue before `changeLanguage`, so no frame renders raw keys. A TR window does not fetch
@@ -201,12 +202,12 @@ for good. The Hue health store declares `visible` to Rust's monitor from the sam
 
 **Telemetry is read only while "Show stats for nerds" is on.** The setting (`ShellState.showNerdStats`,
 absent ⇒ off) gates by *mounting*: off, the status bar leaves out the FPS pill and every item marked
-`nerdStat` (CAP), and the General section leaves out the telemetry readout, so no subscriber of the
+`nerdStat` (CAP), and Settings → Appearance leaves out the telemetry readout, so no subscriber of the
 shared telemetry loop exists and nothing polls. Hiding them with CSS would have kept the IPC running.
 What must show regardless — the capture-stall notice and the serial link-budget note — reads the
-pushed `RuntimeHealth` instead ([`capture-and-pipeline.md`](capture-and-pipeline.md)). One store
-(`telemetry/nerdStatsSetting.ts`) holds the value for both readers and follows other windows' writes,
-so a flip takes effect at once.
+pushed `RuntimeHealth` instead ([`capture-and-pipeline.md`](capture-and-pipeline.md)). The preferences
+store (`persistence/preferences.ts`, one row per preference) holds the value for both readers and
+follows other windows' writes, so a flip takes effect at once.
 
 **Every window's lighting choices go to one Rust transaction.** The main window, the LED control
 popup, the tray and the launch restore all send `apply_outputs`, and every window renders the same
@@ -508,7 +509,7 @@ agree.
 - **An async `listen()` registration carries an `alive` flag.** The unlisten function arrives with the promise, and unmount can win that race; without the flag the handler registers after cleanup ran and never comes off. StrictMode's double mount hits it on every dev launch (`useTrayIntegration.ts`, `useLightingRuntime.ts`, `LedTwinOverlay.tsx`).
 - **Dismissing the update prompt records the dismissed *status*, not `idle`.** Setting `idle` let the progress listener write `downloading` on its next tick and reopen the prompt (`useAutoUpdater.ts`, `dismissedStatus`). A dismissed download still reopens at `installing`, on purpose: the app is about to relaunch.
 - **`onboarding` does not include the room map.** The two are separate surfaces despite both being setup-shaped.
-- **Native fullscreen draws a second title bar over the custom amber one.** Tauri/tao has an open upstream bug (`tauri-apps/tauri#5115`, `tao#548`) that re-applies the system `NSTitledWindow` styleMask during the fullscreen transition, so a delegate patch loses the race. `macos_window.rs` forbids native fullscreen instead of fighting it: `NSWindowCollectionBehavior::FullScreenNone` removes the fullscreen pathways, and the zoom button is separately disabled so the green dot renders as inert rather than a live control with no effect.
+- **Native fullscreen draws a second title bar over the custom amber one.** Tauri/tao has an open upstream bug (`tauri-apps/tauri#5115`, `tao#548`) that re-applies the system `NSTitledWindow` styleMask during the fullscreen transition, so a delegate patch loses the race. `macos_window.rs` forbids native fullscreen instead of fighting it: `NSWindowCollectionBehavior::FullScreenNone` removes the fullscreen pathways, and the green button then zooms instead. It stays enabled: tao answers `is_maximizable` from that button, Tauri's `internal_toggle_maximize` checks it, and while it was disabled the title bar's double-click neither zoomed nor restored. A zoomed window does not persist its geometry (`persistWindowState`), so the next launch opens at the size the user chose rather than at screen size. The zoom itself goes through `animate_zoom_on_run_loop` (`macos_window.rs`): `zoom:` animates in a run-loop mode that blocks the main thread, so WKWebView commits no frame until it ends and the page jumped into place at the end (tauri-apps/tauri#13898). A `windowShouldZoom:toFrame:` added to tao's delegate class declines it and runs the same frame change through the window's animator with AppKit's own duration, so the animation stays native and the page follows it. Unzoom returns to the frame recorded before the zoom.
 - **Compact mode is not a narrow full mode.** It has its own layout under `settings/sections/compact/`; a component added only to the full layout simply does not exist for compact users.
 - **A popover in compact has to be portalled and positioned from a measured height.** `.lm-compact { overflow: hidden }` over `.lm-compact-body { overflow: auto }` clips anything anchored inside the layout, so the colour picker renders through a portal into `document.body` and computes its position from the trigger's rect, refreshed on resize and scroll. Height then has to be *measured*, not estimated: the recent-colours strip mounts lazily and the picker grows after first paint, and at 320×480 the difference is the popover hanging off-screen. A `useLayoutEffect` re-measure follows the first paint and a `ResizeObserver` catches later growth, so the visible position is always the second pass.
 - **`RoomMapEditor` is among the largest single pieces of UI in the codebase** — around 800 lines, at the head of a `features/room-map/` tree of roughly fifty more source files — for a surface most users never open. Worth knowing before adding to it. It is a settings *section* that lives in its own feature module, the same way `CalibrationPage` does: `SettingsLayout` is a router, not an owner.

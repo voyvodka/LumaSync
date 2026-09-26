@@ -5,7 +5,6 @@ import {
   autofillEditorConfig,
   createCalibrationEditorState,
   isSameCalibrationLayout,
-  requestEditorClose,
   saveEditorCalibration,
   updateEditorConfig,
 } from "../calibrationEditorState";
@@ -102,24 +101,17 @@ describe("calibrationEditorState", () => {
     expect(state.current.totalLeds).toBe(30);
   });
 
-  it("updates baseline after save and requires confirm only when dirty", () => {
+  it("updates the baseline after a save", () => {
     const dirtyState = updateEditorConfig(createCalibrationEditorState(BASELINE), {
       counts: {
         right: 24,
       },
     });
-
-    const dirtyCloseAttempt = requestEditorClose(dirtyState);
-    expect(dirtyCloseAttempt.shouldClose).toBe(false);
-    expect(dirtyCloseAttempt.confirmDiscard).toBe(true);
+    expect(dirtyState.isDirty).toBe(true);
 
     const saved = saveEditorCalibration(dirtyState);
     expect(saved.baseline.counts.right).toBe(24);
     expect(saved.isDirty).toBe(false);
-
-    const cleanCloseAttempt = requestEditorClose(saved);
-    expect(cleanCloseAttempt.shouldClose).toBe(true);
-    expect(cleanCloseAttempt.confirmDiscard).toBe(false);
   });
 });
 
@@ -138,7 +130,6 @@ describe("calibrationEditorState — automatic fills and handed-over counts", ()
     expect(filled.current.counts).toEqual(DEFAULTS);
     expect(filled.baseline.counts).toEqual(DEFAULTS);
     expect(filled.isDirty).toBe(false);
-    expect(requestEditorClose(filled).shouldClose).toBe(true);
   });
 
   it("lands the fill on the draft alone once the user has edited", () => {

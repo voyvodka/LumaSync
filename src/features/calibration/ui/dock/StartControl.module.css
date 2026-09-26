@@ -6,7 +6,7 @@
   .start button:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
 
   .nudge {
-    width: 22px;
+    width: 32px;
     height: 32px;
     border-radius: 8px;
     font-size: 16px;
@@ -40,7 +40,7 @@
     height: 32px;
     border-radius: 8px;
     color: var(--lm-ink-dim);
-    transition: background var(--lm-dur-quick), color 0.2s ease;
+    transition: background var(--lm-dur-quick), color var(--lm-dur-base) var(--lm-ease-out);
   }
 
   .direction:hover,
@@ -49,9 +49,7 @@
   /* The counter-clockwise arrow is the clockwise one mirrored. */
   .mirrored { display: grid; transform: scaleX(-1); }
 
-  @media (prefers-reduced-motion: reduce) {
-    .nudge,
-    .name,
-    .direction { transition: none; }
-  }
+  :global(:root[data-reduced-motion]) .nudge,
+  :global(:root[data-reduced-motion]) .name,
+  :global(:root[data-reduced-motion]) .direction { transition: none; }
 }

@@ -71,18 +71,6 @@ export interface LedCalibrationConfig {
  */
 export const LED_CALIBRATION_MAX_TOTAL_LEDS = 4096;
 
-/** A named preset of calibration values, offered as a starting point in the editor. */
-export interface CalibrationTemplate {
-  id: string;
-  label: string;
-  counts: LedSegmentCounts;
-  bottomMissing: number;
-  cornerOwnership: CornerOwnership;
-  visualPreset: LedVisualPreset;
-  startAnchor: LedStartAnchor;
-  direction: LedDirection;
-}
-
 // The `CALIBRATION_PATTERN_*` status surface was removed once LED Setup moved
 // onto `start_led_test_pattern` (`contracts/preview.ts`). Do not add a second
 // test-pattern path — having one is what let the old no-op survive unnoticed.

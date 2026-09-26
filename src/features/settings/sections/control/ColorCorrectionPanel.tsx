@@ -17,7 +17,7 @@
  *   - Each slider carries a descriptive `aria-label` + live value label.
  *   - `focus-visible` amber ring inherited from `.lm-settings-seg` tokens.
  *   - Slider step sizes match the contract ranges — no silent quantisation.
- *   - `prefers-reduced-motion` honoured via global utility on transitions.
+ *   - Reduced motion honoured via the global `data-reduced-motion` guards.
  *   - Reset button is keyboard reachable and labelled.
  */
 
@@ -57,7 +57,7 @@ export interface ColorCorrectionPanelProps {
   /**
    * Initial config hydrated from shellStore by the parent on first mount.
    * Re-reads are done internally to survive external resets (e.g. factory
-   * reset from SystemSection).
+   * reset from Settings).
    */
   initialConfig?: ColorCorrectionConfig;
   /**

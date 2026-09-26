@@ -7,9 +7,15 @@
  * user's browser, where they read, edit and submit it — or close the tab.
  */
 
-const REPO_URL = "https://github.com/voyvodka/LumaSync";
-
+export const SITE_URL = "https://lumasync.app";
+export const REPO_URL = "https://github.com/voyvodka/LumaSync";
+export const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
 export const DISCUSSIONS_URL = `${REPO_URL}/discussions`;
+
+/** The release page of the running build; tags are `v` + the version, prereleases included. */
+export function releaseNotesUrl(appVersion: string): string {
+  return `${REPO_URL}/releases/tag/v${appVersion}`;
+}
 
 export type OsName = "macOS" | "Windows" | "Linux";
 

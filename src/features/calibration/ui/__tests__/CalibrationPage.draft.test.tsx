@@ -19,6 +19,7 @@ import { LED_TEST_STATUS, type LedTestStatusCode } from "@/shared/contracts/prev
 import { invokeFromCommands } from "@/test/mockCommands";
 
 import { CalibrationPage } from "../CalibrationPage";
+import { __resetLedSetupSourceForTests } from "../../state/ledSetupSource";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -66,10 +67,14 @@ const SAVED: LedCalibrationConfig = {
 let startedWith: Array<LedCalibrationConfig | undefined> = [];
 /** Status the next start answers with; a started test by default. */
 let startStatus: LedTestStatusCode = LED_TEST_STATUS.PATTERN_STARTED;
+/** Holds the next start's answer until released, for a press that lands mid-start. */
+let startGate: Promise<void> | null = null;
 
 beforeEach(() => {
+  __resetLedSetupSourceForTests();
   startedWith = [];
   startStatus = LED_TEST_STATUS.PATTERN_STARTED;
+  startGate = null;
   saveMock.mockReset().mockResolvedValue(undefined);
   vi.mocked(invoke).mockImplementation(
     invokeFromCommands({
@@ -79,8 +84,11 @@ beforeEach(() => {
       update_display_overlay_preview: { ...OVERLAY_OPENED, code: DISPLAY_OVERLAY_STATUS.PREVIEW_SYNCED },
       start_led_test_pattern: ({ payload }) => {
         startedWith.push(payload.ledCalibration ?? undefined);
-        const active = startStatus === LED_TEST_STATUS.PATTERN_STARTED;
-        return { active, previewOnly: false, status: { code: startStatus, message: "", details: null } };
+        const answer = () => {
+          const active = startStatus === LED_TEST_STATUS.PATTERN_STARTED;
+          return { active, previewOnly: false, status: { code: startStatus, message: "", details: null } };
+        };
+        return startGate !== null ? startGate.then(answer) : answer();
       },
       stop_led_test_pattern: {
         active: false,
@@ -271,11 +279,57 @@ describe("CalibrationPage — editing while the test runs", () => {
     expect(startedWith).toHaveLength(1);
 
     await user.click(increaseTop()[0]);
-    expect(screen.getByTestId("calibration-test-stale")).toBeInTheDocument();
+    // Said on the button, not in a line above the stage that pushed the canvas down.
+    const toggle = screen.getByRole("button", { name: "calibration:setup.stop" });
+    expect(toggle).toHaveTextContent("calibration:setup.updating");
+    expect(toggle).toBeEnabled();
+    expect(screen.queryByTestId("calibration-test-stale")).toBeNull();
 
     await waitFor(() => expect(startedWith).toHaveLength(2), { timeout: 2000 });
     expect(startedWith[1]?.counts.top).toBe(41);
-    await waitFor(() => expect(screen.queryByTestId("calibration-test-stale")).toBeNull());
+  });
+
+  it("stops at once when Stop is pressed while an edit is still waiting to reach the test", async () => {
+    const user = userEvent.setup();
+    await renderPage({ initialConfig: SAVED });
+    await user.click(screen.getByRole("button", { name: "calibration:setup.test" }));
+    await screen.findByRole("button", { name: "calibration:setup.stop" });
+
+    await user.click(increaseTop()[0]);
+    await user.click(screen.getByRole("button", { name: "calibration:setup.stop" }));
+
+    expect(await screen.findByRole("button", { name: "calibration:setup.test" })).toBeInTheDocument();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+    });
+    expect(startedWith).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "calibration:setup.test" })).toBeInTheDocument();
+  });
+
+  it("a Stop pressed while the restart is under way still means stop, even when that restart fails", async () => {
+    const user = userEvent.setup();
+    await renderPage({ initialConfig: SAVED });
+    await user.click(screen.getByRole("button", { name: "calibration:setup.test" }));
+    await screen.findByRole("button", { name: "calibration:setup.stop" });
+
+    let release: () => void = () => {};
+    startGate = new Promise((resolve) => {
+      release = resolve;
+    });
+    await user.click(increaseTop()[0]);
+    await waitFor(() => expect(startedWith).toHaveLength(2), { timeout: 2000 });
+
+    await user.click(screen.getByRole("button", { name: "calibration:setup.stop" }));
+    startStatus = LED_TEST_STATUS.PATTERN_INVALID_PARAMS;
+    await act(async () => {
+      release();
+    });
+
+    expect(await screen.findByRole("button", { name: "calibration:setup.test" })).toBeInTheDocument();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+    });
+    expect(startedWith).toHaveLength(2);
   });
 });
 
@@ -297,15 +351,15 @@ describe("CalibrationPage — picking the first LED from its list", () => {
     const user = userEvent.setup();
     await renderPage({ initialConfig: SAVED });
     const chip = () => screen.getByRole("button", { name: /calibration:setup\.firstLed/ });
-    const before = chip().getAttribute("aria-label");
+    const before = chip().textContent;
 
     await user.click(chip());
     const options = screen.getAllByRole("option");
     const target = options.find((o) => o.getAttribute("aria-selected") === "false")!;
     await user.click(target);
 
-    await waitFor(() => expect(chip().getAttribute("aria-label")).not.toBe(before));
+    await waitFor(() => expect(chip().textContent).not.toBe(before));
     await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
-    expect(chip().getAttribute("aria-label")).toContain(target.textContent ?? "");
+    expect(chip().textContent).toContain(target.textContent ?? "");
   });
 });

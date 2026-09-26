@@ -24,6 +24,7 @@ import { invokeFromCommands } from "@/test/mockCommands";
 
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import { CalibrationPage } from "../CalibrationPage";
+import { __resetLedSetupSourceForTests } from "../../state/ledSetupSource";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -82,6 +83,7 @@ let holdStart = false;
 let finishStarting: () => void = () => {};
 
 beforeEach(() => {
+  __resetLedSetupSourceForTests();
   openedOn = [];
   startCount = 0;
   holdStart = false;

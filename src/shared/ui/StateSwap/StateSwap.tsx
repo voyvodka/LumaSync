@@ -8,6 +8,8 @@ interface StateSwapProps<K extends string> {
   state: K;
   /** Every face, stacked in one box and kept mounted: a change is a crossfade, never a remount. */
   faces: Record<K, ReactNode>;
+  /** Sizes the box to its widest face, for a box with no fixed size of its own. */
+  fit?: boolean;
   className?: string;
 }
 
@@ -18,10 +20,19 @@ interface StateSwapProps<K extends string> {
  * show are `inert` (out of the tab order) and `aria-hidden` (out of the accessibility tree where
  * `inert` is not honoured), interactive or not.
  */
-export function StateSwap<K extends string>({ state, faces, className }: StateSwapProps<K>) {
+export function StateSwap<K extends string>({ state, faces, fit = false, className }: StateSwapProps<K>) {
+  const keys = Object.keys(faces) as K[];
   return (
-    <span className={cx(styles.swap, className)}>
-      {(Object.keys(faces) as K[]).map((key) => (
+    <span className={cx(styles.swap, fit && styles.fit, className)}>
+      {/* Every face over one cell, unseen: the box takes the widest, in any language. */}
+      {fit && (
+        <span className={styles.sizer} aria-hidden="true">
+          {keys.map((key) => (
+            <span key={key}>{faces[key]}</span>
+          ))}
+        </span>
+      )}
+      {keys.map((key) => (
         <span
           key={key}
           inert={key !== state || undefined}

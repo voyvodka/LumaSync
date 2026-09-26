@@ -69,6 +69,7 @@ export const setMinSizeMock = vi.fn((_arg: unknown) => Promise.resolve<void>(und
 export const showMock = vi.fn(() => Promise.resolve<void>(undefined));
 export const unminimizeMock = vi.fn(() => Promise.resolve<void>(undefined));
 export const setFocusMock = vi.fn(() => Promise.resolve<void>(undefined));
+export const isMaximizedMock = vi.fn(() => Promise.resolve(false));
 export const onMovedMock = vi.fn((_cb: unknown) =>
   Promise.resolve<() => void>(() => {}),
 );
@@ -101,6 +102,7 @@ export const tauriWindowModule = {
     show: () => showMock(),
     unminimize: () => unminimizeMock(),
     setFocus: () => setFocusMock(),
+    isMaximized: () => isMaximizedMock(),
     onMoved: (cb: unknown) => onMovedMock(cb),
     onResized: (cb: unknown) => onResizedMock(cb),
   }),
@@ -195,6 +197,7 @@ export function resetWindowHarness(): void {
   });
   availableMonitorsMock.mockResolvedValue([MONITOR_1080P]);
   scaleFactorMock.mockResolvedValue(1);
+  isMaximizedMock.mockResolvedValue(false);
   currentBackend = createFakeShellStateBackend();
   setPositionMock.mockResolvedValue(undefined);
   showMock.mockResolvedValue(undefined);

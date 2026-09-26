@@ -40,9 +40,11 @@
   .help svg { width: 18px; height: 18px; color: var(--lm-ink-faint); }
   .amber { color: var(--lm-amber); stroke: var(--lm-amber); }
 
-  @keyframes fade-in { from { opacity: 0; } }
+  .leaving { animation: fade-out var(--lm-dur-base) var(--lm-ease-leave) forwards; }
 
-  @media (prefers-reduced-motion: reduce) {
-    .status { animation: none; }
-  }
+  @keyframes fade-in { from { opacity: 0; } }
+  @keyframes fade-out { to { opacity: 0; } }
+
+  :global(:root[data-reduced-motion]) .status,
+  :global(:root[data-reduced-motion]) .leaving { animation: none; }
 }

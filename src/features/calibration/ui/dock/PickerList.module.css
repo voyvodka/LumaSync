@@ -8,7 +8,7 @@
     left: 0;
     height: 32px;
     border-radius: 7px;
-    background: rgb(255 176 32 / 12%);
+    background: color-mix(in srgb, var(--lm-amber) 12%, transparent);
     transition: transform var(--lm-dur-base) var(--lm-ease-out), opacity var(--lm-dur-quick);
   }
 
@@ -26,7 +26,7 @@
     text-align: left;
     color: var(--lm-ink-dim);
     outline: none;
-    transition: background 0.12s, color 0.18s;
+    transition: background var(--lm-dur-quick), color var(--lm-dur-quick);
     animation: option-in var(--lm-dur-base) var(--lm-ease-out) backwards;
     /* A row's glyph reads these (see PlaceGlyph): muted until chosen, warm on hover. */
     --place-ring: var(--lm-ink-faint);
@@ -41,17 +41,15 @@
   .option[aria-selected="true"] {
     color: var(--lm-amber);
     --place-ring: var(--lm-amber);
-    --place-ring-fill: rgb(255 176 32 / 18%);
+    --place-ring-fill: color-mix(in srgb, var(--lm-amber) 18%, transparent);
     --place-dot: var(--lm-amber);
   }
 
   .option[aria-selected="true"]:hover,
-  .option[aria-selected="true"]:focus-visible { background: rgb(255 176 32 / 6%); }
+  .option[aria-selected="true"]:focus-visible { background: color-mix(in srgb, var(--lm-amber) 6%, transparent); }
 
   @keyframes option-in { from { opacity: 0; transform: translateY(4px); } }
 
-  @media (prefers-reduced-motion: reduce) {
-    .mark,
-    .option { transition: none; animation: none; }
-  }
+  :global(:root[data-reduced-motion]) .mark,
+  :global(:root[data-reduced-motion]) .option { transition: none; animation: none; }
 }

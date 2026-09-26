@@ -30,10 +30,10 @@ vi.mock("@/features/persistence/shellStore", () => ({
 
 import { __resetTelemetrySourceForTests } from "@/features/telemetry/telemetrySource";
 import {
-  __resetShowNerdStatsForTests,
-  __setShowNerdStatsForTests,
-  setShowNerdStats,
-} from "@/features/telemetry/nerdStatsSetting";
+  __resetPreferencesForTests,
+  __setPreferenceForTests,
+  setPreference,
+} from "@/features/persistence/preferences";
 
 import { StatusBar, type StatusItem } from "../StatusBar";
 import type * as telemetryApiModule from "@/features/telemetry/telemetryApi";
@@ -73,7 +73,7 @@ describe("StatusBar — stats for nerds", () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     __resetTelemetrySourceForTests();
-    __resetShowNerdStatsForTests();
+    __resetPreferencesForTests();
     Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
     getFullTelemetrySnapshotMock.mockResolvedValue(SNAPSHOT);
     saveMock.mockResolvedValue(undefined);
@@ -82,7 +82,7 @@ describe("StatusBar — stats for nerds", () => {
   afterEach(() => {
     cleanup();
     __resetTelemetrySourceForTests();
-    __resetShowNerdStatsForTests();
+    __resetPreferencesForTests();
     vi.useRealTimers();
   });
 
@@ -99,7 +99,7 @@ describe("StatusBar — stats for nerds", () => {
   });
 
   it("shows CAP and the FPS pill when on, polling as before", async () => {
-    __setShowNerdStatsForTests(true);
+    __setPreferenceForTests("showNerdStats", true);
     renderBar();
     await advance(3_000);
 
@@ -114,14 +114,14 @@ describe("StatusBar — stats for nerds", () => {
     expect(getFullTelemetrySnapshotMock).not.toHaveBeenCalled();
 
     await act(async () => {
-      await setShowNerdStats(true);
+      await setPreference("showNerdStats", true);
     });
     await advance(2_000);
     expect(screen.getByTestId("status-fps")).toBeInTheDocument();
     expect(getFullTelemetrySnapshotMock).toHaveBeenCalled();
 
     await act(async () => {
-      await setShowNerdStats(false);
+      await setPreference("showNerdStats", false);
     });
     const callsWhenTurnedOff = getFullTelemetrySnapshotMock.mock.calls.length;
     await advance(10_000);

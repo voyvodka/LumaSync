@@ -19,6 +19,8 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_notification::NotificationExt;
 
+use super::shell_state::{self, PersistedShellState};
+
 /// Payload for [`show_notification`]. Mirrors `NotificationPayload` in
 /// the TypeScript platform contract.
 #[derive(Debug, Deserialize)]
@@ -62,6 +64,7 @@ impl NotificationKind {
 pub mod codes {
     pub const PERMISSION_DENIED: &str = "NOTIF_PERMISSION_DENIED";
     pub const UNSUPPORTED_OS: &str = "NOTIF_UNSUPPORTED_OS";
+    pub const SUPPRESSED: &str = "NOTIF_SUPPRESSED";
 }
 
 /// Discriminated union returned by every platform notification command.
@@ -85,6 +88,8 @@ pub enum NotificationResult {
         code: &'static str,
         message: Option<String>,
     },
+    /// Settings → Notifications is off; nothing reached the OS.
+    Suppressed { code: &'static str },
 }
 
 impl NotificationResult {
@@ -92,6 +97,12 @@ impl NotificationResult {
         Self::Denied {
             code: codes::PERMISSION_DENIED,
             message: Some(message.into()),
+        }
+    }
+
+    fn suppressed() -> Self {
+        Self::Suppressed {
+            code: codes::SUPPRESSED,
         }
     }
 
@@ -152,6 +163,11 @@ pub async fn show_notification<R: Runtime>(
         payload.title
     );
 
+    if let Some(result) = suppressed_by(shell_state::persisted(&app).as_ref()) {
+        log::info!("[notifications] suppressed: notifications are off in Settings");
+        return Ok(result);
+    }
+
     let builder = app
         .notification()
         .builder()
@@ -176,5 +192,37 @@ pub async fn show_notification<R: Runtime>(
                 Ok(NotificationResult::unsupported(msg))
             }
         }
+    }
+}
+
+/// The Settings switch, checked on every show; the permission request is not gated, since it shows nothing.
+fn suppressed_by(state: Option<&PersistedShellState>) -> Option<NotificationResult> {
+    state
+        .is_some_and(PersistedShellState::notifications_off)
+        .then(NotificationResult::suppressed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_an_explicit_off_suppresses_and_it_says_so_with_a_code() {
+        let state = |raw: &str| PersistedShellState::from_file_json(raw).unwrap();
+        assert!(suppressed_by(None).is_none());
+        assert!(suppressed_by(Some(&state(r#"{ "shell-state": {} }"#))).is_none());
+        assert!(suppressed_by(Some(&state(
+            r#"{ "shell-state": { "notifications": "on" } }"#
+        )))
+        .is_none());
+
+        let off = suppressed_by(Some(&state(
+            r#"{ "shell-state": { "notifications": "off" } }"#,
+        )))
+        .expect("off suppresses");
+        assert_eq!(
+            serde_json::to_value(off).unwrap(),
+            serde_json::json!({ "status": "suppressed", "code": "NOTIF_SUPPRESSED" })
+        );
     }
 }

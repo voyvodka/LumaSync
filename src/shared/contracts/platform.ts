@@ -70,6 +70,8 @@ export const NOTIFICATION_RESULT_CODES = {
   PERMISSION_DENIED: "NOTIF_PERMISSION_DENIED",
   /** OS does not expose a notification surface we can use. */
   UNSUPPORTED_OS: "NOTIF_UNSUPPORTED_OS",
+  /** Settings → Notifications is off; nothing was shown. */
+  SUPPRESSED: "NOTIF_SUPPRESSED",
 } as const;
 
 export type NotificationResultCode =
@@ -83,7 +85,7 @@ export type NotificationResultCode =
 export type NotificationResult =
   | { status: "shown" }
   | {
-      status: "denied" | "unsupported";
+      status: "denied" | "unsupported" | "suppressed";
       code: NotificationResultCode;
       message?: string;
     };

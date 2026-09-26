@@ -18,7 +18,7 @@ export function layoutUiFrom(config: LedCalibrationConfig): LayoutUi {
   return { links, memo };
 }
 
-export function shapeOf(config: LedCalibrationConfig): StripShape {
+function shapeOf(config: LedCalibrationConfig): StripShape {
   return { counts: config.counts, gap: config.bottomMissing };
 }
 

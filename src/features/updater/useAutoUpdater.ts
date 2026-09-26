@@ -32,7 +32,14 @@ export type UpdaterState =
   /** `phase` decides the wording: a check that failed for any reason, coded or
    *  not, is not a failed installation. `message` is the raw backend detail,
    *  which for a failed check embeds the feed URL and must not be the headline. */
-  | { status: "error"; phase: UpdaterErrorPhase; code?: UpdaterStatusCode; message: string };
+  | {
+      status: "error";
+      phase: UpdaterErrorPhase;
+      code?: UpdaterStatusCode;
+      message: string;
+      /** "Try again" pressed: the prompt stays up and its button says it is checking. */
+      retrying?: boolean;
+    };
 
 export type UpdaterErrorPhase = "check" | "install";
 
@@ -84,9 +91,19 @@ export function useAutoUpdater() {
   // A check that lost to a later one reports `done`: the later one answers for both.
   const runCheck = useCallback(
     async (trigger: UpdateCheckTrigger): Promise<"done" | "failed"> => {
-      // A newer version is new information even though the status is `available`
-      // again, so it must not stay hidden behind the previous "Later".
-      setDismissedStatus(null);
+      // A check the user asked for shows its answer; a background one only
+      // changes what the status bar offers, and never puts the prompt over the
+      // window — an update found on its own is not worth interrupting for.
+      if (trigger === "user") setDismissedStatus(null);
+      // A background re-check while an update is on offer keeps offering it
+      // until a newer answer lands, so the status bar item never blinks out.
+      const offered = trigger === "background" && stateRef.current.status === "available" ? stateRef.current : null;
+      // "Try again" on the prompt keeps it up while it checks, rather than closing it and opening a
+      // new one a moment later with the answer.
+      const current = stateRef.current;
+      const retrying = trigger === "user" && current.status === "error" && dismissedStatusRef.current !== "error" ? current : null;
+      // At the press, not after the channel read: the button answers the moment it is pressed.
+      if (retrying) setState({ ...retrying, retrying: true });
       // The startup check and a Retry press can be in flight together and resolve
       // in either order; without this the older answer lands last and wins.
       const isLatest = checkGuardRef.current.begin();
@@ -98,13 +115,13 @@ export function useAutoUpdater() {
       const storedChannel = await readUpdateChannel();
       if (!isLatest()) return "done";
       setChannel(storedChannel);
-      setState({ status: "checking" });
+      if (!retrying && !offered) setState({ status: "checking" });
 
       // A background failure is logged and offered as a notice; only a check the
       // user asked for may put the modal over the window.
       const fail = (failure: UpdateCheckFailure): "failed" => {
         if (trigger === "background") {
-          setState({ status: "idle" });
+          setState(offered ?? { status: "idle" });
           reportCheckFailed(failure);
         } else {
           clearCheckFailed();
@@ -122,6 +139,7 @@ export function useAutoUpdater() {
 
         if (response.status.code === UPDATER_STATUS.UPDATE_AVAILABLE && response.update) {
           clearCheckFailed();
+          if (trigger === "background") setDismissedStatus("available");
           setState({ status: "available", update: response.update });
         } else if (response.status.code === UPDATER_STATUS.UP_TO_DATE) {
           clearCheckFailed();
@@ -158,13 +176,12 @@ export function useAutoUpdater() {
       console.info("[LumaSync] e2e build: background update checks skipped");
       return "off";
     }
-    // Never on top of a check in flight, an update already found, or one being
-    // installed: a re-check would reopen a prompt the user put off with "Later",
-    // or reset a download under way. The next scheduled check tries again.
+    // Never on top of a check in flight, a download or install, or a prompt the
+    // user is reading. An update put off with "Later" is re-checked, so a newer
+    // one replaces it in the status bar; it does not reopen the prompt.
     const busy = stateRef.current.status;
-    if (busy === "checking" || busy === "available" || busy === "downloading" || busy === "installing") {
-      return "done";
-    }
+    if (busy === "checking" || busy === "downloading" || busy === "installing") return "done";
+    if (busy === "available" && dismissedStatusRef.current !== "available") return "done";
     // An error the prompt still shows is the user's to answer.
     if (busy === "error" && dismissedStatusRef.current !== "error") return "done";
     return runCheck("background");
@@ -232,9 +249,17 @@ export function useAutoUpdater() {
     }
   }, []);
 
+  // A download cannot be put away: download and install are one backend call,
+  // so a hidden download used to relaunch the app when it finished, unasked.
   const dismiss = useCallback(() => {
+    if (state.status === "downloading" || state.status === "installing") return;
     setDismissedStatus(state.status);
   }, [state.status]);
+
+  /** Brings back an update put off with "Later" or found in the background. */
+  const showUpdate = useCallback(() => {
+    setDismissedStatus(null);
+  }, []);
 
   // Dev-only escape hatch for testing the 4 modal states without a real updater endpoint.
   // Kept permanently in DEV so the panel remains usable across sessions.
@@ -244,9 +269,6 @@ export function useAutoUpdater() {
     setState(next);
   }, []);
 
-  // A dismissed `downloading` still reaches `installing`, and that transition
-  // re-opens on purpose: the app is about to be replaced and relaunched, which
-  // is not the interruption the user declined.
   const isModalOpen = state.status !== dismissedStatus;
 
   return {
@@ -259,6 +281,7 @@ export function useAutoUpdater() {
     upToDateAt,
     downloadAndInstall,
     dismiss,
+    showUpdate,
     devSetState,
   };
 }

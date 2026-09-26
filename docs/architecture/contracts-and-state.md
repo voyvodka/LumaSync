@@ -208,6 +208,17 @@ unchanged.
 single-instance. Two debug instances each keep their own copy, and the last one to write wins on
 disk, as before.
 
+**Preferences Rust acts on are reverted when their save fails.** Settings preferences live in one
+store (`persistence/preferences.ts`): flat top-level keys, each with a resolver in `contracts/shell.ts`
+that turns an absent or unknown value into the default. Most only change what a window draws and
+hold for the session even when a save fails. Five are also read by Rust off disk —
+`updateChannel` (the update feed), `uiZoom` (the webview zoom, applied from `window_wrote` and at
+setup), `closeAction` (the main window's `CloseRequested` quits through the shutdown coordinator),
+`notifications` (`show_notification` answers `suppressed`) and `launchLights` (the boot restore
+starts Off, only while nothing runs, so a reload keeps lights the user has on). Those revert on a
+failed save (`READ_BY_RUST`), and each has a Rust accessor in `shell_state.rs` whose test uses the
+same inputs as `shellPreferences.test.ts`, so both sides read a stored value alike.
+
 ## Gotchas
 
 - **A wire union is checked for *equality* with the emitted set, not containment.** `verify:shell-contracts` harvests the codes Rust puts on each status shape and fails in both directions — an emitted code missing from the union, and a union member no producer emits. Containment alone is what let a declared-but-unemitted member sit in a union indefinitely.

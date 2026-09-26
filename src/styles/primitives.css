@@ -185,6 +185,18 @@
   margin-top: 12px;
 }
 
+/* The scrim behind a confirmation (`ConfirmDialog`): below the title bar, which is the window's
+   drag region, and above the update prompt. */
+.lm-modal-scrim {
+  position: fixed;
+  inset: var(--lm-titlebar-h) 0 0 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 50%);
+}
+
 /* Callout — inline feedback in the notice strip's vocabulary (notices.css):
    error a disc, warning a diamond, info a ring, ok a square. */
 .lm-callout {
@@ -262,13 +274,11 @@
   box-shadow: var(--lm-focus-ring);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .lm-btn,
-  .lm-btn-md,
-  .lm-toggle,
-  .lm-toggle::after {
-    transition: none;
-  }
+:root[data-reduced-motion] .lm-btn,
+:root[data-reduced-motion] .lm-btn-md,
+:root[data-reduced-motion] .lm-toggle,
+:root[data-reduced-motion] .lm-toggle::after {
+  transition: none;
 }
 @media (forced-colors: active) {
   .lm-btn,

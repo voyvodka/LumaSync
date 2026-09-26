@@ -33,8 +33,7 @@ draws `bg-cyan-500`. Those are not a legacy palette to migrate. `--lm-cyan` is d
 referenced nowhere; it is not a focus or accent colour.
 
 **What is left of the old palette is small, and it only shrinks.** Slate is gone. Raw Tailwind
-`zinc-*` and palette colours survive in the room-map canvas objects and overlays (`room-map/ui/`)
-and the dev-only `DevUpdaterMenu`. A file touched for another reason moves to the tokens in the
+`zinc-*` and palette colours survive in the room-map canvas objects and overlays (`room-map/ui/`). A file touched for another reason moves to the tokens in the
 same change; nothing new starts on the raw palette, and there is no third palette.
 `statusBannerConvention.test.ts` keeps the raw `emerald-900/20` / `rose-900/20` banner idiom out of
 the files it was removed from — it was once re-planted behind a false "kept for tests" comment.
@@ -60,6 +59,15 @@ rebuilding LED Setup; apply it to every new screen:
 - **Nothing moves under the pointer.** Controls that change label or state keep a fixed width; a
   control that is not needed yet keeps its place instead of shifting the others, and never leaves an
   empty hole — a state it can show instead (the save capsule's "✓ Saved").
+- **A screen opens on its stored values.** A control never renders a default and then slides to
+  the real value when a read comes back. A stored preference comes from the preferences store
+  (`persistence/preferences.ts`), read at boot before the first render; a value only the OS or a
+  device knows keeps its place empty until the first answer and is remembered for the session
+  (launch at login in Settings; LED Setup's display list, which a page with nothing true to draw
+  yet waits for rather than drawing a guess).
+- **Opening a page is not a change.** What mounts as a page opens is already in place; entrances
+  answer something happening on it (an edge switched on, LED #1 moved), not the visit. LED Setup
+  opened with seven animations at once before this was a rule.
 - **Typing applies.** A field applies on leaving it, not only on Enter; Esc and out-of-range put the
   old value back.
 - **Realistic limits.** Bounds come from the hardware (LED density per metre, screen size), not from
@@ -70,9 +78,18 @@ rebuilding LED Setup; apply it to every new screen:
   needs them. No surface inside a surface — separators group, a tint appears only on hover.
 - **Values at rest, controls on intent.** At rest a screen shows values; the controls that change
   them (− + ⛓ × beside a count, where LED #1 can go, adding a stand) appear on hover or focus of the
-  thing they act on, and what they act on lights while the rest steps back.
+  thing they act on, and what they act on lights while the rest steps back. A value's controls open
+  on the value itself, not on a wider area around it: opened from an edge, a count's controls
+  covered the very LED the pointer was there to pick, and hidden controls must not catch the pointer.
 - **Light and fast.** Static canvas, one delegated listener, memoised geometry, hover through CSS on
-  a data attribute rather than a render; performance is a requirement, not a polish step.
+  a data attribute rather than a render; performance is a requirement, not a polish step. No
+  `filter`, `backdrop-filter` or `will-change` held at rest on a window-sized surface: each is
+  redrawn on every frame of a resize (the title bar's blur and the shell's resting `blur(0px)` made
+  the zoom stutter). Apply them only while the motion that needs them runs.
+- **Something that opens does not push.** A question or a list that appears from a control floats
+  over the page (`Popover`) rather than opening a panel that moves the rows below it; the beta
+  channel's confirmation started inline and moved to a popover for that reason. Pressing the
+  control that opened it closes it again.
 - **Before building, show options.** Two or three directions with a sketch each, a recommendation,
   then build; iterate on the running app with hot reload.
 
@@ -96,6 +113,9 @@ before writing a transition by hand: `StateSwap`, `PageSwap`, `SpinSwap` and `Po
   Long travel across the screen is out (a pick "flying" 80 px into its control was tried and removed).
 - **Motion says where it came from:** ‹ › page sideways, a pick from a list that opens above drops in
   from above, a list grows out of the control that opened it (its notch is the scale origin).
+- **What arrives with motion leaves with it.** Something that eases in and is then unmounted at
+  once has no exit; keep it mounted for its exit (`Popover`'s closing state) or leave it mounted and
+  transition it both ways.
 - A persistent state is a static cue (a soft halo, a filled dot), not a pulse. Timing comes from the
   motion tokens in `tokens.css` (`--lm-ease-out`, `--lm-ease-leave`, `--lm-ease-land`,
   `--lm-dur-quick/base/slow`, `--lm-dur-follow`), not raw values; direction goes in class names, not
@@ -116,10 +136,15 @@ name; a hand-rolled control has to guarantee both itself.
 **Colour is never the only signal.** A status pairs its colour with text or a shape — the notice and
 `Callout` tone dots differ in shape (disc, diamond, ring, square) so they survive forced colours.
 
-**Every animation carries its own `prefers-reduced-motion` guard**, and every chrome surface its own
+**Every animation carries its own reduced-motion guard**, and every chrome surface its own
 `@media (forced-colors: active)` rule, in the stylesheet of the component that animates or draws it (Tailwind's
-`motion-reduce:` is the inline form). Nothing checks either is present, and forced colours can only
-be verified by hand on Windows.
+`motion-reduce:` is the inline form). The guard is a `:root[data-reduced-motion]` selector (`:global(…)` in a
+CSS Module), never `@media (prefers-reduced-motion)`: Settings → Appearance "Reduce motion" has to switch it
+on, and a media query only answers the OS. `applyReducedMotion` (`shared/lib/motion.ts`) keeps the attribute
+on the Settings choice or the OS request in every window, set from the boot read before the first render;
+`prefersReducedMotion()` reads it for motion driven from JavaScript, and `motion-reduce:` is redefined on it in
+`styles.css`. `stylesheetSanity.test.ts` fails on a media-query guard; nothing checks that a guard is present,
+and forced colours can only be verified by hand on Windows.
 
 **A modal dialog is `role="dialog"` + `aria-modal="true"` + `aria-labelledby`, with
 `useDialogFocus`** (`src/shared/ui/`) trapping focus, closing on Escape through `onClose`, and

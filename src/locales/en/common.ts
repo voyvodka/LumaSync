@@ -1,9 +1,6 @@
 export default {
-  title: "General",
-  description: "General application settings.",
   mode: {
     title: "LED mode",
-    description: "Choose output mode and tune static color when needed.",
     options: {
       off: "Off",
       ambilight: "Ambilight",

@@ -125,10 +125,8 @@
 }
 
 /* ── Reduced-motion: drop transitions under 120ms floor ─────────── */
-@media (prefers-reduced-motion: reduce) {
-  .lm-errboundary-btn {
-    transition: none;
-  }
+:root[data-reduced-motion] .lm-errboundary-btn {
+  transition: none;
 }
 
 /* ── Forced-colors: use system tokens so high-contrast / Windows

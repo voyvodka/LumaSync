@@ -15,7 +15,7 @@
    A11y guarantees:
    - `:focus-visible` everywhere via amber soft ring.
    - All interactive controls clear the 28-32px tap-area floor.
-   - `prefers-reduced-motion` disables the selected-dot pulse.
+   - Reduced motion (`data-reduced-motion`) disables the selected-dot pulse.
    - `forced-colors: active` mirrors selection chrome to system colors.
    ────────────────────────────────────────────────────────────────── */
 

@@ -79,6 +79,7 @@ the failure or say plainly that the work is unfinished — never report it done.
 
 Learned across the v1.5 frontend decomposition, where each of these cost a cycle before it was written down.
 
+- **Any change to a screen goes through the screen pass.** A redesign, a new control or a bug fix on a screen meets the same bar — structure, design language, opening states, motion, performance, accessibility, EN + TR, tests, a visual check — without the maintainer listing it; the `screen-pass` skill holds the checklist. A screen not yet on the feature layout gets the move offered, not done silently, when the change is only a fix.
 - **A screen reworked for its UI brings its code with it.** The maintainer improves the app screen by screen; each pass also moves that screen's code to the layout rule (`ui-and-shell.md`, "Code lives with the feature") in the same change, so the frontend converges without a big-bang move.
 - **A plan document is stale until proven otherwise.** Audit it against current `main` and re-derive every line number and file list before editing.
 - **"Behaviour unchanged" is a claim to prove, not assert.** Diff the exported surface against `main`. Where a guard is the point of the change, break the guard and confirm the test fails.
@@ -137,7 +138,7 @@ quiet" and "Motion is small"). Read it before any UI work instead of asking agai
 Agent and skill definitions, toolchains and available models drift silently — when you notice one
 out of date, say so in a sentence rather than opening a project.
 
-Skills: `debug-runtime` and `ui-audit` (above), `release`, and `sweep` — a find-and-fix pass where
+Skills: `debug-runtime` and `ui-audit` (above), `screen-pass` (the bar for any screen change), `release`, and `sweep` — a find-and-fix pass where
 read-only auditors report, the maintainer picks, and the main session fixes one finding at a time
 through the verification gate.
 

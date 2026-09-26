@@ -6,6 +6,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 
 import {
+  applyOutputsMock,
   checkForUpdatesInBackgroundMock,
   checkForUpdatesMock,
   env,
@@ -108,4 +109,45 @@ it("draws download progress in the modal without re-rendering the shell", async 
   expect(env.statusBarRenders).toBe(appBefore);
   expect(env.layoutRenders).toBe(layoutBefore);
   expect(env.layoutProbeRenders).toBe(probeBefore);
+});
+
+// ⌥1–3 used to change the mode behind the prompt: its focus trap holds Tab and Escape only.
+it("keeps the mode keys from reaching the lights while the update prompt is open", async () => {
+  loadShellStateMock.mockResolvedValue({ lastSection: "lights", uiMode: "full", hasCompletedOnboarding: true });
+  env.updaterState = {
+    status: "available",
+    update: { version: "9.9.9", currentVersion: "1.0.0", body: null, date: null },
+  };
+
+  render(<App />);
+  await screen.findByRole("dialog");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const before = applyOutputsMock.mock.calls.length;
+
+  document.dispatchEvent(new KeyboardEvent("keydown", { code: "Digit2", key: "2", altKey: true, bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  expect(applyOutputsMock.mock.calls.length).toBe(before);
+});
+
+// The prompt's scrim leaves the title bar live (drag region, window controls), and its section tabs
+// used to change the page under the prompt.
+it("holds the section tabs and the mode toggle while the update prompt is open", async () => {
+  loadShellStateMock.mockResolvedValue({ lastSection: "lights", uiMode: "full", hasCompletedOnboarding: true });
+  env.updaterState = {
+    status: "available",
+    update: { version: "9.9.9", currentVersion: "1.0.0", body: null, date: null },
+  };
+
+  render(<App />);
+  await screen.findByRole("dialog");
+  const devices = await screen.findByTestId("section-tab-devices");
+  expect(devices.closest("[role=tablist]")).toHaveAttribute("data-locked");
+  expect(screen.getByTestId("ui-mode-toggle")).toHaveAttribute("data-locked");
+
+  devices.click();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  expect(devices).toHaveAttribute("aria-selected", "false");
+  expect(screen.getByTestId("section-tab-lights")).toHaveAttribute("aria-selected", "true");
 });

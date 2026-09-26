@@ -1,30 +1,12 @@
 export default {
   title: "Settings",
-  subtitle: "Startup, language, updates, help and about",
-  groups: {
-    startup: {
-      title: "Startup",
-      sub: "Launch at login",
-    },
-    language: {
-      title: "Language",
-      sub: "Interface locale",
-    },
-    updates: {
-      title: "Updates",
-      sub: "Version check",
-    },
-    help: {
-      title: "Help",
-      sub: "Guide · logs · feedback",
-    },
-    about: {
-      title: "About",
-      sub: "Build · license",
-    },
-    telemetry: {
-      sub: "Live throughput",
-    },
+  hintFor: "About {{label}}",
+  pages: {
+    general: "General",
+    appearance: "Appearance",
+    updates: "Updates",
+    help: "Help",
+    about: "About",
   },
   help: {
     opensInBrowser: "opens in your browser",
@@ -52,14 +34,25 @@ export default {
       description: "Ask, suggest or show your setup in GitHub Discussions.",
       action: "Discussions",
     },
+    shortcuts: {
+      label: "Keyboard shortcuts",
+      zoomIn: "Make the interface larger",
+      zoomOut: "Make the interface smaller",
+      zoomReset: "Interface at normal size",
+    },
   },
   language: {
     label: "Interface language",
-    description: "Applies to every LumaSync window right away",
   },
   about: {
     tagline: "Screen-synced ambient lighting",
-    license: "MIT",
+    local: "Everything runs on this computer. Nothing is sent anywhere.",
+    copyVersion: "Copy version",
+    copied: "Copied",
+    site: "Website",
+    source: "Source",
+    notes: "Release notes",
+    license: "MIT licence",
   },
   nav: {
     switchToCompact: "Compact view",
@@ -74,9 +67,36 @@ export default {
   },
   startupTray: {
     launchAtLogin: "Launch at login",
-    launchAtLoginDescription: "Start LumaSync automatically when you log in.",
     readError: "Couldn't read whether LumaSync launches at login",
     writeError: "Couldn't change launch at login — try again",
+  },
+  launchLights: {
+    label: "Lights on launch",
+    hint: "What the lights do when LumaSync starts, at login included.",
+    resume: "Resume last mode",
+    off: "Stay off",
+  },
+  closeAction: {
+    label: "Close button",
+    hint: "What closing the window does. Running in the background keeps its icon in the menu bar (the notification area on Windows); quitting stops the lights.",
+    tray: "Keep running",
+    quit: "Quit",
+  },
+  notifications: {
+    label: "Notifications",
+    hint: "System notifications, such as a choice from the icon's menu that failed while the window was hidden.",
+  },
+  uiZoom: {
+    label: "Interface size",
+    hint: "Scales the main window and the control popup. The compact window grows with it; the full window only when it would be too small. ⌘/Ctrl and + − 0 change it too.",
+    p90: "90%",
+    p100: "100%",
+    p110: "110%",
+    p125: "125%",
+  },
+  motion: {
+    label: "Reduce motion",
+    hint: "Turns animations down in every LumaSync window. Off, your system's setting applies.",
   },
   nerdStats: {
     label: "Show stats for nerds",

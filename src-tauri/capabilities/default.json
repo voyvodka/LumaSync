@@ -51,6 +51,15 @@
         },
         {
           "url": "https://github.com/voyvodka/LumaSync/discussions*"
+        },
+        {
+          "url": "https://github.com/voyvodka/LumaSync"
+        },
+        {
+          "url": "https://github.com/voyvodka/LumaSync/releases/tag/*"
+        },
+        {
+          "url": "https://github.com/voyvodka/LumaSync/blob/main/LICENSE"
         }
       ]
     },

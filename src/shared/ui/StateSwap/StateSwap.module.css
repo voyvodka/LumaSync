@@ -6,6 +6,23 @@
     height: 100%;
   }
 
+  .fit {
+    display: inline-grid;
+    width: auto;
+    height: auto;
+  }
+  .sizer {
+    display: grid;
+    visibility: hidden;
+  }
+  .sizer > span {
+    grid-area: 1 / 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--swap-gap, 7px);
+  }
+
   .face {
     position: absolute;
     inset: 0;
@@ -29,10 +46,8 @@
       transform var(--lm-dur-base) var(--lm-ease-out) var(--lm-dur-follow);
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .face,
-    .shown {
-      transition: none;
-    }
+  :global(:root[data-reduced-motion]) .face,
+  :global(:root[data-reduced-motion]) .shown {
+    transition: none;
   }
 }

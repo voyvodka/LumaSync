@@ -43,9 +43,7 @@
   @keyframes drop-in { from { opacity: 0; transform: translateY(-6px); } }
   @keyframes drop-out { to { opacity: 0; transform: translateY(4px); } }
 
-  @media (prefers-reduced-motion: reduce) {
-    .in { animation: none; }
-    /* No animation means no animationend: the old page would never be removed. */
-    .out { display: none; }
-  }
+  :global(:root[data-reduced-motion]) .in { animation: none; }
+  /* No animation means no animationend: the old page would never be removed. */
+  :global(:root[data-reduced-motion]) .out { display: none; }
 }

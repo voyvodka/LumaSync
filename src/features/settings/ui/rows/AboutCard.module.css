@@ -1,0 +1,99 @@
+@layer components {
+  .card {
+    display: grid;
+    justify-items: center;
+    padding: 40px 0 16px;
+    text-align: center;
+  }
+
+  /* A lit screen: the dark panel, its warm light on the wall around it. Static — nothing loops. */
+  .mark {
+    display: grid;
+    justify-items: center;
+    margin-bottom: 20px;
+  }
+  .screen {
+    width: 76px;
+    height: 46px;
+    border: 1px solid var(--lm-line-2);
+    border-radius: 6px;
+    background: linear-gradient(160deg, var(--lm-panel-2), var(--lm-bg));
+    box-shadow:
+      0 0 0 3px rgb(255 176 32 / 10%),
+      0 0 34px 6px rgb(255 176 32 / 22%),
+      0 0 70px 14px rgb(255 122 26 / 10%);
+  }
+  .stand {
+    width: 22px;
+    height: 5px;
+    margin-top: 3px;
+    border-radius: 0 0 3px 3px;
+    background: var(--lm-line-2);
+  }
+
+  .name {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--lm-ink);
+  }
+
+  .version {
+    display: inline-flex;
+    height: 26px;
+    margin-top: 6px;
+    padding: 0 10px;
+    border-radius: 7px;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--lm-ink-dim);
+    --swap-gap: 6px;
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .glyph { color: var(--lm-ink-faint); transition: color var(--lm-dur-quick); }
+  .version:hover { background: var(--lm-panel); color: var(--lm-ink); }
+  .version:hover .glyph { color: var(--lm-ink-dim); }
+  .version:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .ok { display: inline-grid; color: var(--lm-green); }
+
+  .tagline {
+    margin: 18px 0 0;
+    font-size: 13px;
+    color: var(--lm-ink);
+  }
+  .local {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: var(--lm-ink-dim);
+  }
+
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 18px;
+    margin-top: 24px;
+  }
+  .links a {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 32px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--lm-ink-dim);
+    text-decoration: none;
+    transition: color var(--lm-dur-quick);
+  }
+  .links a span[aria-hidden] { color: var(--lm-ink-faint); transition: color var(--lm-dur-quick); }
+  .links a:hover,
+  .links a:hover span[aria-hidden] { color: var(--lm-amber); }
+  .links a:focus-visible { outline: none; box-shadow: var(--lm-focus-ring-soft); }
+
+  @media (forced-colors: active) {
+    .screen { border-color: CanvasText; box-shadow: none; }
+    .version { border: 1px solid ButtonText; }
+    .links a { color: LinkText; }
+    .ok { color: CanvasText; }
+  }
+}

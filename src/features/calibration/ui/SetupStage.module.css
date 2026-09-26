@@ -10,15 +10,15 @@
     padding: 4px 16px 76px;
   }
   .fit { position: absolute; inset: 4px 16px 76px; pointer-events: none; }
-  .stage { position: relative; }
+  .stage { position: relative; width: 600px; height: 420px; }
 
-  /* The strip's light on the wall: the picture's own colours, blurred wide behind the monitor. */
+  /* The strip's light on the wall: the picture's own colours, fading out wide behind the monitor.
+     A mask rather than `filter: blur()`, which re-rasterised a monitor-sized layer on every
+     resize frame. */
   .halo {
     position: absolute;
-    border-radius: 18%;
-    background: linear-gradient(135deg, #d9a06a 0%, #b8532f 40%, #5a2c5c 70%, #1c2f5a 100%);
-    filter: blur(34px);
     opacity: 0.24;
+    mask-image: radial-gradient(closest-side, black 55%, transparent);
     pointer-events: none;
     animation: halo-in var(--lm-dur-slow) var(--lm-ease-out);
   }
@@ -45,8 +45,10 @@
     color: var(--lm-ink-faint);
     transition: color var(--lm-dur-quick), border-color var(--lm-dur-quick), background var(--lm-dur-quick), opacity var(--lm-dur-base) var(--lm-ease-out);
   }
-  .ghost:hover { color: var(--lm-amber); border-color: color-mix(in srgb, var(--lm-amber) 60%, transparent); background: rgb(255 176 32 / 6%); }
+  .ghost:hover { color: var(--lm-amber); border-color: color-mix(in srgb, var(--lm-amber) 60%, transparent); background: color-mix(in srgb, var(--lm-amber) 6%, transparent); }
   .ghost:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  /* A 24 px mark with a 32 px hit area. */
+  .ghost::after { content: ""; position: absolute; inset: -4px; border-radius: inherit; }
   /* Adding a stand is rare: it waits until the pointer is over the stage, or a key reaches it. */
   .addStand { opacity: 0; }
   .stage[data-pointer] .addStand,
@@ -54,9 +56,7 @@
 
   @keyframes halo-in { from { opacity: 0; } }
 
-  @media (prefers-reduced-motion: reduce) {
-    .halo { animation: none; }
-  }
+  :global(:root[data-reduced-motion]) .halo { animation: none; }
 
   @media (forced-colors: active) {
     .halo { display: none; }

@@ -21,7 +21,7 @@
  * Ambilight is inactive the pill shows "FPS —" as a neutral placeholder.
  *
  * The FPS pill and every item marked `nerdStat` (CAP) render only with
- * Settings → General "Show stats for nerds" on. Off, the pill is not mounted,
+ * Settings → Appearance "Show stats for nerds" on. Off, the pill is not mounted,
  * so its poll does not exist — hiding it would have kept the IPC running.
  *
  * A `StatusItem` that needs attention may carry a link via `onReconnect`: a
@@ -32,7 +32,7 @@
  * the state never leaves the user on a dead-end pill.
  */
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { APP_VERSION } from "@/shared/constants/app";
@@ -42,7 +42,7 @@ import {
   resolveKeybindPlatform,
 } from "@/shared/contracts/shell";
 import { useRuntimeTelemetry } from "../telemetry/hooks/useRuntimeTelemetry";
-import { useShowNerdStats } from "../telemetry/nerdStatsSetting";
+import { usePreference } from "../persistence/preferences";
 
 export const STATUS_BAR_HEIGHT_FULL_PX = 24;
 export const STATUS_BAR_HEIGHT_COMPACT_PX = 22;
@@ -88,17 +88,19 @@ interface StatusBarProps {
    * tests / consumers that have not yet wired the signal.
    */
   lightingActive?: boolean;
+  /** Something to act on, before the hints: an update that is ready. Owns its own subscription. */
+  trailing?: ReactNode;
 }
 
 /** Fixed FPS thresholds — the user explicitly rejected a per-user preference. */
 const FPS_GREEN_THRESHOLD = 45;
 const FPS_AMBER_THRESHOLD = 25;
 
-export function StatusBar({ items, uiMode, lightingActive = true }: StatusBarProps) {
+export function StatusBar({ items, uiMode, lightingActive = true, trailing }: StatusBarProps) {
   const { t } = useTranslation();
   const isCompact = uiMode === "compact";
   const platform = useMemo(() => resolveKeybindPlatform(), []);
-  const showNerdStats = useShowNerdStats();
+  const showNerdStats = usePreference("showNerdStats");
   const shownItems = showNerdStats ? items : items.filter((item) => item.nerdStat !== true);
 
   // Mode badge renders the digit as a "1-3" span so the hint stays compact.
@@ -131,6 +133,7 @@ export function StatusBar({ items, uiMode, lightingActive = true }: StatusBarPro
       ))}
       {showNerdStats && <FpsPill isCompact={isCompact} enabled={lightingActive} />}
       <div className="lm-statusbar-spacer" />
+      {trailing}
       {!isCompact && (
         <>
           <KbdHint
