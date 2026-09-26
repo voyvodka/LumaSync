@@ -3,14 +3,10 @@ export default {
   tray: {
     show: "Show LED Preview",
   },
-  entry: {
-    ledSetupButton: "Test & Preview",
-    ledSetupHint: "Open the digital-twin overlay and control popup to test patterns without screen capture.",
-  },
   control: {
     close: "Close",
-    closeHint: "Close the LED preview — the test pattern stops and your lighting returns to normal. Reopen it with Test & Preview in LED Setup.",
-    reopenHint: "LED preview closed. Reopen it any time with Test & Preview in LED Setup, or from the tray menu.",
+    closeHint: "Close the LED preview — the test pattern stops and your lighting returns to normal. Reopen it with Preview in LED Setup.",
+    reopenHint: "LED preview closed. Reopen it any time with Preview in LED Setup, or from the tray menu.",
     dragHint: "Drag the header to move this popup.",
     calibrationRequired: "The LED strip needs a calibration first. Set it up in LED Setup, then pick the mode again.",
     autoStart: {

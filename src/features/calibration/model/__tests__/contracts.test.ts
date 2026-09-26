@@ -31,17 +31,61 @@ describe("normalizeLedCalibrationConfig", () => {
     expect(result?.totalLeds).toBe(sumSegmentCounts(result!.counts));
   });
 
-  it("clamps bottomMissing to counts.bottom so stand gap never exceeds the edge", () => {
-    const result = normalizeLedCalibrationConfig({
-      counts: { top: 10, right: 5, bottom: 4, left: 5 },
-      bottomMissing: 99,
+  it("keeps a stand gap wider than the bottom edge, and drops one with no bottom edge", () => {
+    const base = {
       cornerOwnership: "horizontal",
       visualPreset: "vivid",
       startAnchor: "top-start",
       direction: "cw",
+    };
+    const wide = normalizeLedCalibrationConfig({ ...base, counts: { top: 10, right: 5, bottom: 4, left: 5 }, bottomMissing: 9 });
+    expect(wide?.bottomMissing).toBe(9);
+    const none = normalizeLedCalibrationConfig({ ...base, counts: { top: 10, right: 5, bottom: 0, left: 5 }, bottomMissing: 9 });
+    expect(none?.bottomMissing).toBe(0);
+  });
+
+  describe("startLocalIndex", () => {
+    const withStart = (startAnchor: string, startLocalIndex: unknown, bottomMissing = 0) =>
+      normalizeLedCalibrationConfig({
+        counts: { top: 10, right: 5, bottom: 8, left: 5 },
+        bottomMissing,
+        cornerOwnership: "horizontal",
+        visualPreset: "vivid",
+        startAnchor,
+        startLocalIndex,
+        direction: "cw",
+      });
+
+    it("keeps a mid-edge start and anchors it to the nearer end", () => {
+      expect(withStart("top-start", 3)).toMatchObject({ startAnchor: "top-start", startLocalIndex: 3 });
+      expect(withStart("top-start", 7)).toMatchObject({ startAnchor: "top-end", startLocalIndex: 7 });
     });
 
-    expect(result?.bottomMissing).toBe(4);
+    it("drops the index when the anchor alone names that LED", () => {
+      expect(withStart("top-start", 0)).not.toHaveProperty("startLocalIndex");
+      expect(withStart("top-start", 9)).toMatchObject({ startAnchor: "top-end" });
+      expect(withStart("top-start", 9)).not.toHaveProperty("startLocalIndex");
+      expect(withStart("bottom-start", 3, 2)).toMatchObject({ startAnchor: "bottom-gap-right" });
+      expect(withStart("bottom-start", 3, 2)).not.toHaveProperty("startLocalIndex");
+    });
+
+    it("clamps an index past the edge onto its last LED", () => {
+      expect(withStart("top-start", 40)).toMatchObject({ startAnchor: "top-end" });
+    });
+
+    it("drops the index with an anchor that had to be healed", () => {
+      const healed = normalizeLedCalibrationConfig({
+        counts: { top: 10, right: 5, bottom: 0, left: 5 },
+        bottomMissing: 0,
+        cornerOwnership: "horizontal",
+        visualPreset: "vivid",
+        startAnchor: "bottom-start",
+        startLocalIndex: 3,
+        direction: "cw",
+      });
+      expect(healed).toMatchObject({ startAnchor: "top-start" });
+      expect(healed).not.toHaveProperty("startLocalIndex");
+    });
   });
 
   it("floors fractional counts and rejects negative values to zero", () => {

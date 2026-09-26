@@ -1,0 +1,27 @@
+@layer components {
+  .glyph { width: 20px; height: 15px; flex: none; }
+  .screen { fill: rgb(255 255 255 / 4%); stroke: var(--lm-ink-faint); stroke-width: 1.1; }
+  .gap { stroke: var(--lm-panel-2); stroke-width: 2.2; }
+
+  .ring,
+  .dot {
+    transform-box: fill-box;
+    transform-origin: center;
+    transition: fill 0.18s, stroke 0.18s;
+  }
+
+  .ring {
+    fill: var(--place-ring-fill, rgb(255 176 32 / 18%));
+    stroke: var(--place-ring, var(--lm-amber));
+    stroke-width: 1.2;
+  }
+
+  .dot { fill: var(--place-dot, var(--lm-amber)); }
+  .land { animation: land 0.3s var(--lm-ease-land); }
+
+  @keyframes land { from { opacity: 0; transform: scale(0.3); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .land { animation: none; }
+  }
+}

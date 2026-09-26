@@ -601,6 +601,7 @@ mod tests {
             corner_ownership: "horizontal".to_string(),
             visual_preset: "vivid".to_string(),
             start_anchor: "top-start".to_string(),
+            start_local_index: None,
             direction: "cw".to_string(),
         }
     }

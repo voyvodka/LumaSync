@@ -1,0 +1,21 @@
+@layer components {
+  /* LED Setup is canvas first: the screen is the page, the numbers sit on its edges, one floating
+     dock carries the total, LED #1 and the actions. Motion answers a press and nothing moves on
+     its own; every part's motion is off under prefers-reduced-motion. */
+  .page {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .notices {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: min(560px, calc(100% - 32px));
+    margin: 8px auto 0;
+  }
+}

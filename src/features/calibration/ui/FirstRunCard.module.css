@@ -1,0 +1,61 @@
+@layer components {
+  /* Over the dimmed screen, and never wider than it: a small window keeps the monitor around it. */
+  .card {
+    position: absolute;
+    top: 45%;
+    left: 50%;
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: min(300px, 62%);
+    padding: 18px;
+    border: 1px solid var(--lm-line-2);
+    border-radius: 16px;
+    background: rgb(14 16 20 / 88%);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 20px 50px rgb(0 0 0 / 55%);
+    transform: translate(-50%, -50%);
+    animation: card-in var(--lm-dur-slow) var(--lm-ease-out);
+  }
+  .question { font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--lm-ink); }
+  .row { display: flex; gap: 8px; }
+  .input {
+    width: 100%;
+    min-width: 0;
+    padding: 6px 10px;
+    border: 1px solid var(--lm-line-2);
+    border-radius: 9px;
+    background: var(--lm-bg);
+    font: 600 22px/1.2 var(--lm-sans);
+    font-variant-numeric: tabular-nums;
+    color: var(--lm-ink);
+    outline: none;
+    transition: border-color var(--lm-dur-quick);
+  }
+  .input:focus { border-color: var(--lm-amber); }
+  .input:focus-visible { box-shadow: var(--lm-focus-ring); }
+  .input[aria-invalid="true"] { border-color: color-mix(in srgb, var(--lm-red) 70%, transparent); }
+  .primary {
+    flex-shrink: 0;
+    padding: 0 14px;
+    border-radius: 9px;
+    background: var(--lm-amber);
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--lm-bg);
+    transition: opacity var(--lm-dur-quick);
+  }
+  .primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .primary:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--lm-ink-faint); }
+  .skip { align-self: flex-start; padding: 2px; border-radius: 4px; font-size: 11.5px; color: var(--lm-ink-dim); }
+  .skip:hover { color: var(--lm-ink); text-decoration: underline; }
+  .skip:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+
+  @keyframes card-in { from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card { animation: none; }
+  }
+}

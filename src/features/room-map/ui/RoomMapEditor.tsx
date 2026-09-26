@@ -11,7 +11,6 @@ import { TvAnchorObject } from "./objects/TvAnchorObject";
 import { UsbStripObject } from "./objects/UsbStripObject";
 import { HueChannelOverlay } from "./HueChannelOverlay";
 import { RoomDockPanel } from "./RoomDockPanel";
-import { deriveZones, type ZoneDeriveResult } from "../model/deriveZones";
 import { setHueChannelWorldZ } from "../model/hueChannelPosition";
 import {
   furnitureObjectId,
@@ -40,8 +39,6 @@ import { PropertyBar } from "./PropertyBar";
 import { RenameDialog } from "./RenameDialog";
 import { TemplateSelector } from "./TemplateSelector";
 import { applyRoomTemplate, isRoomMapEmpty } from "../model/roomTemplate";
-import { ZoneDeriveActionBar, ZoneDeriveOverlay } from "./ZoneDeriveOverlay";
-import { deriveSource } from "../model/calibrationStrip";
 import type {
   FurniturePlacement,
   HueChannelPlacement,
@@ -56,7 +53,6 @@ import {
   ROOM_MAP_BACKGROUND_ERROR,
   ROOM_MAP_BACKGROUND_MAX_MB,
 } from "@/shared/contracts/roomMap";
-import type { LedSegmentCounts } from "@/features/calibration/model/contracts";
 import type React from "react";
 import { useUsbConnectionStatus } from "@/features/device/useUsbConnectionStatus";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
@@ -64,10 +60,6 @@ import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachabil
 import { roomAwareStatus } from "../model/roomAware";
 
 export interface RoomMapEditorProps {
-  /** "LED counts from the map" was confirmed; the shell opens LED Setup with them. */
-  onZoneCountsConfirmed?: (counts: LedSegmentCounts) => void;
-  /** Saved LED Setup total — what the counts are shared out of. */
-  savedLedTotal?: number | null;
   /**
    * Invoked when the dock state strip's CTA prompts the
    * user to finish Hue onboarding (pair bridge or pick an entertainment
@@ -106,8 +98,6 @@ const HUE_ZONE_REJECTION_KEYS = {
 } as const satisfies Record<HueZoneStatusCode, string>;
 
 export function RoomMapEditor({
-  onZoneCountsConfirmed,
-  savedLedTotal = null,
   onNavigateToDevices,
   hueReachable,
   outputTargets = [],
@@ -133,7 +123,6 @@ export function RoomMapEditor({
     error,
   } = useRoomMapState();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [derivePreview, setDerivePreview] = useState<ZoneDeriveResult | null>(null);
   const [renameTarget, setRenameTarget] = useState<{ id: string; currentLabel: string } | null>(null);
   const [objectPanelOpen, setObjectPanelOpen] = useState(true);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; targetId: string } | null>(null);
@@ -335,42 +324,12 @@ export function RoomMapEditor({
     [apply],
   );
 
-  // Derived
   const hasTv = !!config.tvAnchor;
-  const hasUsb = config.usbStrips.length > 0;
-  const derivePreviewActive = derivePreview !== null;
   const isEmpty = isRoomMapEmpty(config, visibleHueChannels.length);
   const handleTemplateSelect = useCallback(
     (template: RoomMapConfig) => replace(applyRoomTemplate(config, template)),
     [config, replace],
   );
-
-  // Zone derivation handlers
-  const handleDeriveZones = useCallback(() => {
-    if (derivePreview) {
-      // Toggle off if already active
-      setDerivePreview(null);
-      return;
-    }
-    const source = deriveSource(config.usbStrips, usb.connectedPort, savedLedTotal);
-    const tv = config.tvAnchor;
-    if (!source || !tv) return;
-    const result = deriveZones(source.strip, tv, source.totalLeds);
-    if (result.counts.top + result.counts.right + result.counts.bottom + result.counts.left === 0) {
-      return;
-    }
-    setDerivePreview(result);
-  }, [config.usbStrips, config.tvAnchor, derivePreview, usb.connectedPort, savedLedTotal]);
-
-  const handleDeriveConfirm = useCallback(() => {
-    if (!derivePreview) return;
-    onZoneCountsConfirmed?.(derivePreview.counts);
-    setDerivePreview(null);
-  }, [derivePreview, onZoneCountsConfirmed]);
-
-  const handleDeriveDiscard = useCallback(() => {
-    setDerivePreview(null);
-  }, []);
 
   const handleSelectObject = useCallback((id: string | null) => {
     select(id);
@@ -542,16 +501,12 @@ export function RoomMapEditor({
       tabIndex={0}
     >
       <RoomMapToolbar
-        hasTv={hasTv}
-        hasUsb={hasUsb}
         roomAware={roomAwareStatus(config.tvAnchor, outputTargets, {
           configured: hueConfigured,
           reachable: hueReachable ?? false,
           verdict: hueProbeVerdict,
         })}
-        derivePreviewActive={derivePreviewActive}
         zoneCount={config.zones.length}
-        onDeriveZones={handleDeriveZones}
         onAddZone={handleAddHueZone}
         settingsOpen={settingsOpen}
         onToggleSettings={() => setSettingsOpen((v) => !v)}
@@ -705,15 +660,6 @@ export function RoomMapEditor({
               />
             )}
 
-            {/* Zone derive preview overlay */}
-            {derivePreview && config.tvAnchor && (
-              <ZoneDeriveOverlay
-                result={derivePreview}
-                tv={config.tvAnchor}
-                pxPerMeter={pxPerMeter}
-              />
-            )}
-
             {/* Snap alignment guides */}
             <SnapGuideOverlay
               guides={snapGuides}
@@ -733,10 +679,6 @@ export function RoomMapEditor({
             onFitToView={() => fitToView(16)}
             isMac={IS_MAC}
           />
-
-          {derivePreview && config.tvAnchor && (
-            <ZoneDeriveActionBar onConfirm={handleDeriveConfirm} onDiscard={handleDeriveDiscard} />
-          )}
 
           {/* Mouse coordinate display — fixed to bottom-right of canvas container */}
           <MouseCoordinateDisplay

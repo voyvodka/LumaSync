@@ -1,0 +1,57 @@
+@layer components {
+  .list { position: relative; display: flex; flex-direction: column; }
+
+  .mark {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 32px;
+    border-radius: 7px;
+    background: rgb(255 176 32 / 12%);
+    transition: transform var(--lm-dur-base) var(--lm-ease-out), opacity var(--lm-dur-quick);
+  }
+
+  .none { opacity: 0; }
+
+  .option {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    height: 32px;
+    padding: 0 9px;
+    border-radius: 7px;
+    font-size: 12.5px;
+    text-align: left;
+    color: var(--lm-ink-dim);
+    outline: none;
+    transition: background 0.12s, color 0.18s;
+    animation: option-in var(--lm-dur-base) var(--lm-ease-out) backwards;
+    /* A row's glyph reads these (see PlaceGlyph): muted until chosen, warm on hover. */
+    --place-ring: var(--lm-ink-faint);
+    --place-ring-fill: none;
+    --place-dot: var(--lm-ink-dim);
+  }
+
+  .option:hover,
+  .option:focus-visible { background: rgb(255 255 255 / 4%); color: var(--lm-ink); --place-ring: var(--lm-amber); }
+
+  /* The current row: amber text on the sliding tint and a lit marker; no tick. */
+  .option[aria-selected="true"] {
+    color: var(--lm-amber);
+    --place-ring: var(--lm-amber);
+    --place-ring-fill: rgb(255 176 32 / 18%);
+    --place-dot: var(--lm-amber);
+  }
+
+  .option[aria-selected="true"]:hover,
+  .option[aria-selected="true"]:focus-visible { background: rgb(255 176 32 / 6%); }
+
+  @keyframes option-in { from { opacity: 0; transform: translateY(4px); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mark,
+    .option { transition: none; animation: none; }
+  }
+}

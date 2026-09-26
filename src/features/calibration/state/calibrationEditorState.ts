@@ -27,6 +27,8 @@ interface EditorConfigPatch {
   cornerOwnership?: CornerOwnership;
   visualPreset?: LedVisualPreset;
   startAnchor?: LedStartAnchor;
+  /** `undefined` clears it. Left out of a patch that moves `startAnchor`, it is cleared too. */
+  startLocalIndex?: number;
   direction?: LedDirection;
 }
 
@@ -70,6 +72,7 @@ function modelFingerprint(config: LedCalibrationConfig): string {
     cornerOwnership: normalized.cornerOwnership,
     visualPreset: normalized.visualPreset,
     startAnchor: normalized.startAnchor,
+    startLocalIndex: normalized.startLocalIndex ?? null,
     direction: normalized.direction,
     totalLeds: normalized.totalLeds,
   });
@@ -101,22 +104,23 @@ function buildState(
   };
 }
 
-export function createCalibrationEditorState(
-  initial: LedCalibrationConfig,
-  draftCounts?: LedSegmentCounts | null,
-): CalibrationEditorState {
-  const clean = buildState(initial, initial);
-  // Counts handed over from elsewhere (the room map) are a proposal, not the
-  // saved layout: they start as the draft so Cancel and leaving both ask.
-  return draftCounts ? updateEditorConfig(clean, { counts: draftCounts }) : clean;
+export function createCalibrationEditorState(initial: LedCalibrationConfig): CalibrationEditorState {
+  return buildState(initial, initial);
 }
 
 export function updateEditorConfig(
   state: CalibrationEditorState,
   patch: EditorConfigPatch,
 ): CalibrationEditorState {
+  const startLocalIndex = "startLocalIndex" in patch
+    ? patch.startLocalIndex
+    : patch.startAnchor !== undefined
+      ? undefined
+      : state.current.startLocalIndex;
+  const { startLocalIndex: _previous, ...current } = state.current;
   const next: LedCalibrationConfig = {
-    ...state.current,
+    ...current,
+    ...(startLocalIndex !== undefined ? { startLocalIndex } : {}),
     templateId: patch.templateId ?? state.current.templateId,
     counts: {
       ...state.current.counts,

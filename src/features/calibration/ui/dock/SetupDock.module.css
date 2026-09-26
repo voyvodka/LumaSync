@@ -1,0 +1,29 @@
+@layer components {
+  .dock {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px;
+    border: 1px solid var(--lm-line-2);
+    border-radius: 14px;
+    background: rgb(20 23 29 / 85%);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 16px 40px rgb(0 0 0 / 50%);
+    transform: translateX(-50%);
+    animation: dock-in 0.35s var(--lm-ease-out);
+  }
+
+  .separator { width: 1px; height: 22px; margin: 0 2px; background: var(--lm-line-2); }
+  .play { width: 12px; height: 12px; }
+  .live { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+  @keyframes dock-in { from { opacity: 0; transform: translate(-50%, 10px); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dock { animation: none; }
+  }
+}

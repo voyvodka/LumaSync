@@ -85,6 +85,36 @@ describe("stylesheet sanity", () => {
     }
   });
 
+  it("puts every component stylesheet (CSS Module) wholly inside the components layer", () => {
+    // A module is loaded by its component, not through styles.css, so nothing
+    // else places it in a layer. Unlayered, its rules would outrank utilities.
+    const modules = cssFiles.filter(({ file }) => file.endsWith(".module.css"));
+    for (const { file, css } of modules) {
+      const body = css.trim();
+      expect(body.startsWith("@layer components {"), `${file} does not open with @layer components`).toBe(true);
+      // The layer block is the whole file: its closing brace is the last character.
+      let depth = 0;
+      let closedAt = -1;
+      for (let i = body.indexOf("{"); i < body.length; i += 1) {
+        if (body[i] === "{") depth += 1;
+        else if (body[i] === "}" && --depth === 0) {
+          closedAt = i;
+          break;
+        }
+      }
+      expect(closedAt, `${file} has rules outside its @layer components block`).toBe(body.length - 1);
+    }
+  });
+
+  it("keeps plain stylesheets in src/styles; a component's own styles are a CSS Module beside it", () => {
+    // Global sheets are the ordered list in styles.css; anything else is scoped to
+    // its component. The two exceptions load outside that list on purpose.
+    const loose = cssFiles
+      .map(({ file }) => file.slice(SRC.length + 1))
+      .filter((file) => !file.startsWith("styles/") && !file.endsWith(".module.css"));
+    expect(loose.sort()).toEqual(["features/shell/GlobalErrorBoundary.css", "fonts.css", "styles.css"]);
+  });
+
   it("names a selected state `is-on` or reads it from ARIA, never `is-sel`/`is-selected`", () => {
     const retired = /\bis-(sel|selected)\b/;
     const offenders = [

@@ -1,10 +1,9 @@
-import { useState, memo, useEffect, useCallback, Suspense, type ReactNode } from "react";
+import { memo, useEffect, useCallback, Suspense, type ReactNode } from "react";
 import { SECTION_IDS, SECTION_ORDER, type SectionId, type UIMode } from "@/shared/contracts/shell";
 import { preloadableComponent } from "@/shared/lib/preloadableComponent";
 import { shallowEqual } from "@/shared/lib/store";
 import { LightsSection } from "./sections/LightsSection";
 import { SystemSection } from "./sections/SystemSection";
-import type { LedSegmentCounts } from "../calibration/model/contracts";
 import {
   useLightingActions,
   useLightingControlState,
@@ -105,28 +104,15 @@ const selectCalibration = (state: LightingControlState) => state.calibration;
 const selectSerialPort = (state: LightingControlState) =>
   state.localSink?.transport === "serial" ? state.localSink.id || null : null;
 
-const CalibrationPanel = memo(function CalibrationPanel({
-  pendingZoneCounts,
-  onPendingZoneCountsChange,
-}: {
-  pendingZoneCounts: LedSegmentCounts | null;
-  onPendingZoneCountsChange: (counts: LedSegmentCounts | null) => void;
-}) {
+const CalibrationPanel = memo(function CalibrationPanel() {
   const calibration = useLightingControlState(selectCalibration);
   const serialPort = useLightingControlState(selectSerialPort);
   const { saveCalibration } = useLightingActions();
   const { goToSection } = useNavigationActions();
   const registerLeaveGuard = useLeaveGuardRegistrar();
-  // Read once: the page takes them as its opening draft, and they must not come
-  // back on the next visit after the user has saved or discarded them.
-  const [draftCounts] = useState(pendingZoneCounts);
-  useEffect(() => {
-    if (draftCounts) onPendingZoneCountsChange(null);
-  }, [draftCounts, onPendingZoneCountsChange]);
   return (
     <CalibrationPage.Component
       initialConfig={calibration}
-      draftCounts={draftCounts}
       registerLeaveGuard={registerLeaveGuard}
       onNavigateBack={() => {
         void goToSection(SECTION_IDS.LIGHTS);
@@ -203,32 +189,14 @@ const selectRoomMapHue = (status: HueShellStatus) => ({
   probeVerdict: status.probeVerdict,
 });
 
-const selectSavedLedTotal = (state: LightingControlState) => state.calibration?.totalLeds ?? null;
-
-const RoomMapPanel = memo(function RoomMapPanel({
-  onZoneCountsConfirmed,
-}: {
-  onZoneCountsConfirmed: (counts: LedSegmentCounts) => void;
-}) {
+const RoomMapPanel = memo(function RoomMapPanel() {
   const outputTargets = useLightingControlState(selectOutputTargets);
-  const savedLedTotal = useLightingControlState(selectSavedLedTotal);
   const hue = useHueShellStatus(selectRoomMapHue, shallowEqual);
   const { goToSection } = useNavigationActions();
   const openDevices = useCallback(() => void goToSection(SECTION_IDS.DEVICES), [goToSection]);
-  // The counts open LED Setup as its draft; left in memory they would silently
-  // become the baseline of whatever visit came next.
-  const openCountsInLedSetup = useCallback(
-    (counts: LedSegmentCounts) => {
-      onZoneCountsConfirmed(counts);
-      void goToSection(SECTION_IDS.LED_SETUP);
-    },
-    [onZoneCountsConfirmed, goToSection],
-  );
   return (
     <div className="h-full overflow-hidden">
       <RoomMapEditor.Component
-        onZoneCountsConfirmed={openCountsInLedSetup}
-        savedLedTotal={savedLedTotal}
         onNavigateToDevices={openDevices}
         hueReachable={hue.reachable}
         outputTargets={outputTargets}
@@ -239,13 +207,8 @@ const RoomMapPanel = memo(function RoomMapPanel({
   );
 });
 
-interface SectionPanelContext {
-  pendingZoneCounts: LedSegmentCounts | null;
-  setPendingZoneCounts: (counts: LedSegmentCounts | null) => void;
-}
-
 export interface SectionEntry {
-  render: (context: SectionPanelContext) => ReactNode;
+  render: () => ReactNode;
   /** Warms a split-out chunk; set for the full-only sections that are lazy. */
   preload?: () => void;
 }
@@ -256,13 +219,7 @@ export const SECTION_REGISTRY = {
     render: () => <LightsPanel />,
   },
   [SECTION_IDS.LED_SETUP]: {
-    render: ({ pendingZoneCounts, setPendingZoneCounts }) => (
-      <CalibrationPanel
-        key="calibration-page"
-        pendingZoneCounts={pendingZoneCounts}
-        onPendingZoneCountsChange={setPendingZoneCounts}
-      />
-    ),
+    render: () => <CalibrationPanel key="calibration-page" />,
     preload: CalibrationPage.preload,
   },
   [SECTION_IDS.DEVICES]: {
@@ -273,9 +230,7 @@ export const SECTION_REGISTRY = {
     render: () => <SystemPanel />,
   },
   [SECTION_IDS.ROOM_MAP]: {
-    render: ({ setPendingZoneCounts }) => (
-      <RoomMapPanel onZoneCountsConfirmed={setPendingZoneCounts} />
-    ),
+    render: () => <RoomMapPanel />,
     preload: RoomMapEditor.preload,
   },
 } satisfies Record<SectionId, SectionEntry>;
@@ -286,7 +241,6 @@ function sectionEntry(id: SectionId): SectionEntry {
 
 export const SettingsLayout = memo(function SettingsLayout() {
   const { uiMode, activeSection } = useNavigationState(selectLayoutNavigation, shallowEqual);
-  const [pendingZoneCounts, setPendingZoneCounts] = useState<LedSegmentCounts | null>(null);
   useFullOnlySectionPreload(uiMode);
 
   // ── Compact mode ──────────────────────────────────────────────────────
@@ -300,10 +254,7 @@ export const SettingsLayout = memo(function SettingsLayout() {
       {/* Main content */}
       <main className="min-h-0 min-w-0 flex-1 overflow-hidden" role="main" data-testid={`section-panel-${activeSection}`}>
         <Suspense fallback={<SectionPlaceholder />}>
-          {sectionEntry(activeSection).render({
-            pendingZoneCounts,
-            setPendingZoneCounts,
-          })}
+          {sectionEntry(activeSection).render()}
         </Suspense>
       </main>
     </div>

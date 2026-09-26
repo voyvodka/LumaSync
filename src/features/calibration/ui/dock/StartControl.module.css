@@ -1,0 +1,57 @@
+@layer components {
+  /* No surface of its own, not even on hover: the dock's separators group it, and only the part
+     under the pointer (‹, the name, the direction, ›) lights — exactly what a click hits. */
+  .start { display: flex; flex-shrink: 0; align-items: center; gap: 1px; padding: 0 2px; }
+
+  .start button:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+
+  .nudge {
+    width: 22px;
+    height: 32px;
+    border-radius: 8px;
+    font-size: 16px;
+    color: var(--lm-ink-faint);
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+
+  .nudge:hover { background: var(--lm-panel-2); color: var(--lm-ink); }
+
+  .name {
+    display: inline-flex;
+    align-items: center;
+    width: 178px;
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 9px;
+    font-size: 12.5px;
+    color: var(--lm-ink);
+    transition: background var(--lm-dur-quick);
+  }
+
+  .name:hover,
+  .name[aria-expanded="true"] { background: var(--lm-panel-2); }
+  .text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Grey at rest — at rest only the primary action is amber; the arrow warms when reached for. */
+  .direction {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 32px;
+    border-radius: 8px;
+    color: var(--lm-ink-dim);
+    transition: background var(--lm-dur-quick), color 0.2s ease;
+  }
+
+  .direction:hover,
+  .direction:focus-visible { background: var(--lm-panel-2); color: var(--lm-amber); }
+  .direction svg { width: 16px; height: 16px; }
+  /* The counter-clockwise arrow is the clockwise one mirrored. */
+  .mirrored { display: grid; transform: scaleX(-1); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .nudge,
+    .name,
+    .direction { transition: none; }
+  }
+}

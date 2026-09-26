@@ -1,0 +1,130 @@
+@layer components {
+  .chip {
+    position: absolute;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    padding: 2px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    transform: translate(-50%, -50%);
+    transition: background var(--lm-dur-quick), border-color var(--lm-dur-quick);
+  }
+
+  /* Open: the pointer is on the number or on its edge's LEDs, or a key is in it. */
+  .chip:hover,
+  .chip:focus-within,
+  .chip.isEditing,
+  :global([data-active~="top"]) .chip[data-edges~="top"],
+  :global([data-active~="right"]) .chip[data-edges~="right"],
+  :global([data-active~="bottom"]) .chip[data-edges~="bottom"],
+  :global([data-active~="left"]) .chip[data-edges~="left"] {
+    z-index: 3;
+    background: rgb(20 23 29 / 94%);
+    border-color: var(--lm-line-2);
+  }
+
+  .before,
+  .after {
+    position: absolute;
+    top: -1px;
+    bottom: -1px;
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    padding: 0 2px;
+    border: 1px solid transparent;
+    background: transparent;
+    transition: background var(--lm-dur-quick), border-color var(--lm-dur-quick);
+  }
+  .before { right: calc(100% - 6px); border-right: 0; border-radius: 999px 0 0 999px; }
+  .after { left: calc(100% - 6px); border-left: 0; border-radius: 0 999px 999px 0; }
+
+  .value {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font: 600 13px/1.2 var(--lm-sans);
+    font-variant-numeric: tabular-nums;
+    color: var(--lm-ink-dim);
+    cursor: text;
+    transition: color var(--lm-dur-quick);
+  }
+  .num { display: inline-block; animation: tick 0.18s var(--lm-ease-out); }
+  .input {
+    width: auto;
+    min-width: 2.2ch;
+    padding: 2px 6px;
+    border: 0;
+    border-bottom: 2px solid var(--lm-amber);
+    border-radius: 4px 4px 0 0;
+    background: var(--lm-bg);
+    font: 600 13px/1.2 var(--lm-sans);
+    font-variant-numeric: tabular-nums;
+    color: var(--lm-ink);
+    text-align: center;
+    outline: none;
+  }
+
+  .step,
+  .remove,
+  .link {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    font-size: 14px;
+    line-height: 1;
+    color: var(--lm-ink-dim);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--lm-dur-quick), background var(--lm-dur-quick), color var(--lm-dur-quick);
+  }
+  .link svg { width: 12px; height: 12px; }
+  .link.isOn { color: var(--lm-amber); }
+
+  .chip:hover :is(.before, .after),
+  .chip:focus-within :is(.before, .after),
+  :global([data-active~="top"]) .chip[data-edges~="top"] :is(.before, .after),
+  :global([data-active~="right"]) .chip[data-edges~="right"] :is(.before, .after),
+  :global([data-active~="bottom"]) .chip[data-edges~="bottom"] :is(.before, .after),
+  :global([data-active~="left"]) .chip[data-edges~="left"] :is(.before, .after) {
+    background: rgb(20 23 29 / 94%);
+    border-color: var(--lm-line-2);
+  }
+  .chip:hover .value,
+  .chip:focus-within .value,
+  :global([data-active~="top"]) .chip[data-edges~="top"] .value,
+  :global([data-active~="right"]) .chip[data-edges~="right"] .value,
+  :global([data-active~="bottom"]) .chip[data-edges~="bottom"] .value,
+  :global([data-active~="left"]) .chip[data-edges~="left"] .value { color: var(--lm-ink); }
+  .chip:hover :is(.step, .remove, .link),
+  .chip:focus-within :is(.step, .remove, .link),
+  :global([data-active~="top"]) .chip[data-edges~="top"] :is(.step, .remove, .link),
+  :global([data-active~="right"]) .chip[data-edges~="right"] :is(.step, .remove, .link),
+  :global([data-active~="bottom"]) .chip[data-edges~="bottom"] :is(.step, .remove, .link),
+  :global([data-active~="left"]) .chip[data-edges~="left"] :is(.step, .remove, .link) {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .step:hover:not(:disabled),
+  .link:hover,
+  .remove:hover { background: var(--lm-line-2); color: var(--lm-ink); }
+  .link.isOn:hover { color: var(--lm-amber); }
+  .remove:hover { color: var(--lm-red); }
+  .step:disabled { color: var(--lm-line-2); }
+  .value:focus-visible,
+  .link:focus-visible,
+  .remove:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+
+  @keyframes tick { from { opacity: 0.35; transform: translateY(-3px); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .num { animation: none; }
+  }
+
+}

@@ -1,0 +1,53 @@
+@layer components {
+  .pop {
+    position: fixed;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px;
+    border: 1px solid var(--lm-line-2);
+    border-radius: 12px;
+    background: var(--lm-panel-2);
+    box-shadow: 0 16px 40px rgb(0 0 0 / 55%);
+  }
+
+  /* Rises out of its anchor and settles back into it: the notch points at the anchor and is also
+     where the scale grows from, so the popover reads as coming out of the control that opened it. */
+  .pop::after {
+    content: "";
+    position: absolute;
+    left: var(--arrow-x, 50%);
+    width: 10px;
+    height: 10px;
+    border: 1px solid var(--lm-line-2);
+    background: var(--lm-panel-2);
+    transform: translateX(-50%) rotate(45deg);
+  }
+
+  .above::after { bottom: -6px; border-top: 0; border-left: 0; }
+  .below::after { top: -6px; border-bottom: 0; border-right: 0; }
+
+  .above {
+    transform-origin: var(--arrow-x, 50%) calc(100% + 6px);
+    animation: in-above var(--lm-dur-base) var(--lm-ease-out);
+  }
+
+  .below {
+    transform-origin: var(--arrow-x, 50%) -6px;
+    animation: in-below var(--lm-dur-base) var(--lm-ease-out);
+  }
+
+  .closing { pointer-events: none; }
+  .above.closing { animation: out-above 0.14s ease-in forwards; }
+  .below.closing { animation: out-below 0.14s ease-in forwards; }
+
+  @keyframes in-above { from { opacity: 0; transform: translateY(4px) scale(0.92); } }
+  @keyframes in-below { from { opacity: 0; transform: translateY(-4px) scale(0.92); } }
+  @keyframes out-above { to { opacity: 0; transform: translateY(3px) scale(0.95); } }
+  @keyframes out-below { to { opacity: 0; transform: translateY(-3px) scale(0.95); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pop { animation: none; }
+  }
+}

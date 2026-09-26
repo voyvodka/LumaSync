@@ -108,6 +108,7 @@ mod tests {
             corner_ownership: "horizontal".into(),
             visual_preset: "vivid".into(),
             start_anchor: "top-start".into(),
+            start_local_index: None,
             direction: "cw".into(),
             total_leds: total,
         }
@@ -154,10 +155,11 @@ mod tests {
         assert!(reason.contains("4096"), "{reason}");
     }
 
+    /// A wide stand under a narrow monitor is a real layout, and a file an
+    /// older build saved with a wide gap must keep running after an update.
     #[test]
-    fn a_gap_wider_than_the_bottom_edge_is_refused() {
-        let reason = calibration(20, 4, 5, 44).validate().unwrap_err();
-        assert!(reason.contains("bottomMissing"), "{reason}");
+    fn a_gap_wider_than_the_bottom_edge_is_accepted() {
+        assert_eq!(calibration(20, 4, 5, 44).validate(), Ok(()));
     }
 
     #[test]

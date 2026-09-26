@@ -167,26 +167,53 @@ describe("CalibrationPage — leaving with an unsaved draft", () => {
     await user.click(screen.getByRole("button", { name: "calibration:overlay.keepEditing" }));
 
     expect(dialog()).toBeNull();
-    // A later Cancel → Discard is the page's own exit, not the forgotten move.
-    await user.click(screen.getByRole("button", { name: "calibration:overlay.cancel" }));
+    // A later move is held on its own; Discard sends the user there, not to the forgotten one.
+    const later = vi.fn<() => void>();
+    act(() => {
+      page.guard()(later);
+    });
     await user.click(screen.getByRole("button", { name: "calibration:overlay.discard" }));
     expect(proceed).not.toHaveBeenCalled();
-    expect(page.onNavigateBack).toHaveBeenCalledTimes(1);
+    expect(later).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("CalibrationPage — counts from the room map", () => {
-  it("opens them as an unsaved draft, says where they came from, and Cancel asks", async () => {
+describe("CalibrationPage — saving and Cancel", () => {
+  it("stays on the page after a save and shows it saved", async () => {
     const user = userEvent.setup();
-    const page = await renderPage({
-      initialConfig: SAVED,
-      draftCounts: { top: 50, right: 30, bottom: 50, left: 30 },
-    });
+    const page = await renderPage({ initialConfig: SAVED });
+    const revert = () => screen.queryByRole("button", { name: "calibration:setup.revert" });
+    const save = () => screen.queryByRole("button", { name: "calibration:overlay.save" });
+    // At rest the capsule says the layout is saved; there is nothing to press.
+    expect(screen.getByText("calibration:setup.savedState")).toBeInTheDocument();
+    expect(save()).toBeNull();
+    expect(revert()).toBeNull();
 
-    expect(screen.getByTestId("calibration-counts-from-room-map")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "calibration:overlay.cancel" }));
+    await user.click(increaseTop()[0]);
+    expect(save()).toHaveAttribute("title", "calibration:setup.unsaved");
+    expect(revert()).toBeInTheDocument();
+    await user.click(save()!);
 
-    expect(dialog()).not.toBeNull();
+    await waitFor(() => expect(page.onSaved).toHaveBeenCalledTimes(1));
+    expect(page.onNavigateBack).not.toHaveBeenCalled();
+    expect(await screen.findByText("calibration:setup.saved")).toBeInTheDocument();
+    expect(save()).toBeNull();
+    expect(revert()).toBeNull();
+    expect(page.guard()(vi.fn<() => void>())).toBe(false);
+  });
+
+  it("puts the saved layout back on Cancel, without leaving", async () => {
+    const user = userEvent.setup();
+    const page = await renderPage({ initialConfig: SAVED });
+    const values = () => screen.getAllByRole("button", { name: "calibration:page.aria.countInput" }).map((b) => b.textContent);
+    const before = values();
+
+    await user.click(increaseTop()[0]);
+    await user.click(screen.getByRole("button", { name: "calibration:setup.revert" }));
+
+    const after = values();
+    expect(after).toEqual(before);
+    expect(dialog()).toBeNull();
     expect(page.onNavigateBack).not.toHaveBeenCalled();
   });
 });
@@ -216,6 +243,21 @@ describe("CalibrationPage — a failed save", () => {
     expect(page.onSaved.mock.calls[0][0].counts.top).toBe(41);
     consoleError.mockRestore();
   });
+
+  it("drops the failure once Revert puts the saved layout back", async () => {
+    const user = userEvent.setup();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    saveMock.mockRejectedValueOnce(new Error("disk full"));
+    await renderPage({ initialConfig: SAVED });
+    await user.click(increaseTop()[0]);
+    await user.click(screen.getByRole("button", { name: "calibration:overlay.save" }));
+    expect(await screen.findByText("calibration:overlay.errors.saveFailed")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "calibration:setup.revert" }));
+
+    expect(screen.queryByText("calibration:overlay.errors.saveFailed")).toBeNull();
+    consoleError.mockRestore();
+  });
 });
 
 describe("CalibrationPage — editing while the test runs", () => {
@@ -224,8 +266,8 @@ describe("CalibrationPage — editing while the test runs", () => {
   it("restarts the running test with the edited layout", async () => {
     const user = userEvent.setup();
     await renderPage({ initialConfig: SAVED });
-    await user.click(screen.getByRole("button", { name: "calibration:page.runTestPattern" }));
-    await screen.findByRole("button", { name: "calibration:page.stopTestPattern" });
+    await user.click(screen.getByRole("button", { name: "calibration:setup.test" }));
+    await screen.findByRole("button", { name: "calibration:setup.stop" });
     expect(startedWith).toHaveLength(1);
 
     await user.click(increaseTop()[0]);
@@ -243,9 +285,27 @@ describe("CalibrationPage — a refused test", () => {
     startStatus = LED_TEST_STATUS.PATTERN_INVALID_PARAMS;
     await renderPage({ initialConfig: SAVED });
 
-    await user.click(screen.getByRole("button", { name: "calibration:page.runTestPattern" }));
+    await user.click(screen.getByRole("button", { name: "calibration:setup.test" }));
 
     expect(await screen.findByText("calibration:overlay.errors.testPatternInvalidLayout")).toBeInTheDocument();
     expect(screen.getByText(LED_TEST_STATUS.PATTERN_INVALID_PARAMS)).toBeInTheDocument();
+  });
+});
+
+describe("CalibrationPage — picking the first LED from its list", () => {
+  it("moves LED #1 to the picked place, then closes the list", async () => {
+    const user = userEvent.setup();
+    await renderPage({ initialConfig: SAVED });
+    const chip = () => screen.getByRole("button", { name: /calibration:setup\.firstLed/ });
+    const before = chip().getAttribute("aria-label");
+
+    await user.click(chip());
+    const options = screen.getAllByRole("option");
+    const target = options.find((o) => o.getAttribute("aria-selected") === "false")!;
+    await user.click(target);
+
+    await waitFor(() => expect(chip().getAttribute("aria-label")).not.toBe(before));
+    await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
+    expect(chip().getAttribute("aria-label")).toContain(target.textContent ?? "");
   });
 });

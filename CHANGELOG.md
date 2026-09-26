@@ -74,17 +74,29 @@ https://keepachangelog.com/en/1.1.0/
   you prefer that, choose "Go back" under "When you press Off, Hue lights" on Devices → Hue
   Bridges. Quitting LumaSync, another app taking over your Hue lights, or taking Hue out of a
   running mode still puts them back as they were, and launching with lighting off touches nothing.
+- LED Setup is laid out on your screen itself. Each edge's LED count sits beside it: point at an
+  edge or its number and the edge lights up, − and + change it, or click the number and type. The
+  bar at the bottom holds the total, LED #1, Test and Save. Saving keeps the page open, and unsaved
+  changes show on Save with an undo beside it.
+- LED Setup: LED #1 can be any LED, not only a corner. Run the test and click the LED that lit
+  first, or step through the corners and the stand's sides in the bottom bar. An amber line on the
+  screen shows where the light starts and which way it runs.
+- LED Setup: with a gap for the monitor's stand, the bottom no longer has to match the top, for
+  example 60 on top and 30 + 30 at the bottom around a 10-LED gap. The stand is drawn only when
+  your strip has a gap for it.
 - LED Setup asks how many LEDs your strip has before anything else, then shares them out over the
-  edges by your screen's shape, leaving room for the stand gap, so the edges always add up to your
-  strip. Adjust any edge afterwards, or choose which edges the strip runs along. With a WLED device
-  its own LED count is filled in for you. Until now the first layout was guessed from the screen's
-  resolution, so a high-resolution laptop screen got 164 LEDs whatever strip was on it. Reset keeps
-  your total and shares it out again; "Change total LED count" asks again. A saved layout opens
-  as before.
+  edges by your screen's shape, so the edges always add up to your strip; a WLED device fills in
+  its own count. Until now the first layout was guessed from the screen's resolution, so a
+  high-resolution laptop screen got 164 LEDs whatever strip was on it. Counts are capped at a
+  realistic density, about 200 LEDs per metre on a 100-inch screen. A saved layout opens as
+  before.
+- LED Setup: if you go back to an older LumaSync version after saving a layout here, an LED #1 in
+  the middle of an edge starts from that edge's nearest corner, so the colors come out shifted, and
+  a stand gap wider than the bottom edge's LEDs keeps lighting from starting until you save LED
+  Setup again in the older version.
 - Keyboard: the mode buttons — on the Lights page, in the compact window and in the LED test
   popup — are one group you Tab into once and move through with the arrow keys, Home and End. The
-  same goes for the test pattern tiles and speeds, and for LED Setup's start edge, start point and
-  direction. Screen readers announce each group as a set of choices and the Settings toggles as
+  same goes for the test pattern tiles and speeds. Screen readers announce each group as a set of choices and the Settings toggles as
   switches, and the brightness and saturation sliders on the Lights page show a focus ring.
 - Inline error messages — in LED Setup and in the USB strip color order step — have one look: a
   small dot and one sentence under the control they are about, without the red box or side bar.
@@ -187,6 +199,8 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Removed
 
+- Room map: "LED counts from map". LED Setup is the one place that sets how many LEDs each edge
+  has, and the strip on the room map follows the total you save there.
 - Devices: the Manual Entry page, which only said manual entry was not available yet. A Hue bridge
   is added by IP address on Hue Bridges and a WLED device on WLED, as before.
 
@@ -245,9 +259,7 @@ https://keepachangelog.com/en/1.1.0/
   says so with a Retry, errors are explained in your language instead of raw error codes, the
   power figure is the full-white maximum to size a power supply by, and the +/− buttons are
   larger and keyboard-visible.
-- Room map: "Reset map" keeps your Hue lights, Hue zones and the strips connected in Devices.
-  "Derive Zones" is now "LED counts from map": it uses your saved LED total and opens LED Setup
-  with the counts as unsaved changes to review, rather than applying them silently later. Room
+- Room map: "Reset map" keeps your Hue lights, Hue zones and the strips connected in Devices. Room
   height can be edited, a Hue light's height slider inside a zone only covers the heights the zone
   allows, and Hue lights are numbered the same in the list as on the map.
 - Settings: "Launch at login" now sets what you asked for instead of flipping whatever the system

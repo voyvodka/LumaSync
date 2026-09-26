@@ -56,6 +56,12 @@ export interface LedCalibrationConfig {
   startAnchor: LedStartAnchor;
   direction: LedDirection;
   totalLeds: number;
+  /**
+   * LED #1 as an index along `startAnchor`'s edge, for a start between the
+   * edge's ends. Absent when the anchor alone names LED #1; `startAnchor` is
+   * then the edge's nearer end, so a build without this field starts close by.
+   */
+  startLocalIndex?: number;
 }
 
 /**

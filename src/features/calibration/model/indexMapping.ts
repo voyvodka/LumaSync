@@ -27,7 +27,7 @@ const SEGMENT_ANCHOR_TO_KEY: Record<
   "left-end": { segment: "left", localIndex: "end" },
 };
 
-function resolveBottomGapAnchorLocalIndex(
+export function resolveBottomGapAnchorLocalIndex(
   bottomCount: number,
   bottomMissing: number,
   side: "right" | "left",
@@ -66,8 +66,14 @@ function buildCanonicalSequence(config: LedCalibrationConfig): LedSequenceItem[]
 }
 
 function resolveAnchorIndex(sequence: LedSequenceItem[], config: LedCalibrationConfig): number {
-  const { startAnchor } = config;
+  const { startAnchor, startLocalIndex } = config;
   const anchor = SEGMENT_ANCHOR_TO_KEY[startAnchor];
+  const edgeCount = config.counts[anchor.segment];
+  if (startLocalIndex !== undefined && edgeCount > 0) {
+    const target = Math.min(startLocalIndex, edgeCount - 1);
+    const index = sequence.findIndex((item) => item.segment === anchor.segment && item.localIndex === target);
+    return index < 0 ? 0 : index;
+  }
   const anchorCandidate = (() => {
     if (anchor.localIndex === "start") {
       return sequence.find((item) => item.segment === anchor.segment && item.localIndex === 0);

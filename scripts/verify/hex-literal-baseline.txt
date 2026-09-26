@@ -2,4 +2,4 @@
 # excluded), counted by design-tokens.mjs, which fails when the count rises.
 # Ratchet: the number may only go down. What remains is mostly deliberate —
 # SVG and canvas art, zone identity data, LED test-pattern swatches.
-144
+133

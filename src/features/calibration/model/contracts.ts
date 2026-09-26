@@ -28,6 +28,7 @@ import type {
   LedSegmentCounts,
   LedCalibrationConfig,
 } from "@/shared/contracts/calibration";
+import { anchorForLed, ledOfAnchor } from "./startAnchor";
 
 type LegacyLedStartAnchor =
   | "bottom-left-start"
@@ -168,10 +169,22 @@ export function normalizeLedCalibrationConfig(input?: unknown): LedCalibrationCo
 
   const source = input as Record<string, unknown>;
   const counts = normalizeCounts(source.counts);
-  const rawBottomMissing = toNonNegativeInt(source.bottomMissing);
-  const bottomMissing = Math.min(rawBottomMissing, counts.bottom);
+  // A gap may be wider than the LEDs beside it (a wide stand under a narrow
+  // screen); only a bottom with no LEDs has no gap.
+  const bottomMissing = counts.bottom > 0 ? toNonNegativeInt(source.bottomMissing) : 0;
   const normalizedStartAnchor = normalizeStartAnchor(source.startAnchor);
-  const startAnchor = healStartAnchor(normalizedStartAnchor, counts, bottomMissing);
+  const healedAnchor = healStartAnchor(normalizedStartAnchor, counts, bottomMissing);
+  const rawLocalIndex =
+    healedAnchor === normalizedStartAnchor && typeof source.startLocalIndex === "number"
+      ? toNonNegativeInt(source.startLocalIndex)
+      : undefined;
+  const start = counts[edgeOfAnchor(healedAnchor)] > 0
+    ? anchorForLed(
+        counts,
+        bottomMissing,
+        ledOfAnchor({ counts, bottomMissing, startAnchor: healedAnchor, startLocalIndex: rawLocalIndex }),
+      )
+    : { startAnchor: healedAnchor };
 
   return {
     templateId: typeof source.templateId === "string" ? source.templateId : undefined,
@@ -179,8 +192,9 @@ export function normalizeLedCalibrationConfig(input?: unknown): LedCalibrationCo
     bottomMissing,
     cornerOwnership: toCornerOwnership(source.cornerOwnership),
     visualPreset: toVisualPreset(source.visualPreset),
-    startAnchor,
+    startAnchor: start.startAnchor,
     direction: toDirection(source.direction),
     totalLeds: sumSegmentCounts(counts),
+    ...(start.startLocalIndex !== undefined ? { startLocalIndex: start.startLocalIndex } : {}),
   };
 }

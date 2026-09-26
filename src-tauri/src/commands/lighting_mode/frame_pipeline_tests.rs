@@ -67,6 +67,7 @@ fn calibration(top: u16, right: u16, bottom: u16, left: u16) -> LedCalibrationCo
         corner_ownership: "horizontal".to_string(),
         visual_preset: "subtle".to_string(),
         start_anchor: "top-start".to_string(),
+        start_local_index: None,
         direction: "cw".to_string(),
         total_leds: top + right + bottom + left,
     }
