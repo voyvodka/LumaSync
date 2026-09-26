@@ -31,7 +31,7 @@ describe("AboutCard", () => {
       version.click();
     });
 
-    expect(writeText).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`^LumaSync ${APP_VERSION.replace(/\./g, "\\.")}`)));
+    expect(writeText.mock.calls[0]?.[0].startsWith(`LumaSync ${APP_VERSION}`)).toBe(true);
     expect(version).toHaveAccessibleName("settings:about.copied");
     expect(screen.getByRole("status")).toHaveTextContent("settings:about.copied");
 
