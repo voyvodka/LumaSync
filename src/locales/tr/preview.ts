@@ -6,14 +6,10 @@ const preview: Catalogue<typeof enPreview> = {
   tray: {
     show: "LED Önizlemesini Göster",
   },
-  entry: {
-    ledSetupButton: "Test ve Önizleme",
-    ledSetupHint: "Ekran yakalama olmadan desenleri test etmek için dijital ikiz kaplamasını ve kontrol penceresini aç.",
-  },
   control: {
     close: "Kapat",
-    closeHint: "LED önizlemesini kapat — test deseni durur ve aydınlatman normale döner. LED Kurulumu'ndaki Test ve Önizleme ile yeniden açabilirsin.",
-    reopenHint: "LED önizlemesi kapatıldı. İstediğin zaman LED Kurulumu'ndaki Test ve Önizleme ile ya da tepsi menüsünden yeniden açabilirsin.",
+    closeHint: "LED önizlemesini kapat — test deseni durur ve aydınlatman normale döner. LED Kurulumu'ndaki Önizle ile yeniden açabilirsin.",
+    reopenHint: "LED önizlemesi kapatıldı. İstediğin zaman LED Kurulumu'ndaki Önizle ile ya da tepsi menüsünden yeniden açabilirsin.",
     dragHint: "Pencereyi taşımak için başlığı sürükle.",
     calibrationRequired: "LED şeridin önce kalibre edilmesi gerekiyor. LED Kurulumu'ndan ayarla, sonra modu yeniden seç.",
     autoStart: {

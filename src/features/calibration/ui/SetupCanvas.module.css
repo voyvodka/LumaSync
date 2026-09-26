@@ -1,0 +1,101 @@
+@layer components {
+  .canvas { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+
+  .bezel { fill: #0b0d11; stroke: rgb(255 255 255 / 7%); stroke-width: 1; }
+  .bezelEdge { stroke: rgb(255 255 255 / 10%); stroke-width: 1; stroke-linecap: round; }
+  .panel { fill: var(--lm-panel); }
+  .picture { opacity: 0.4; transition: opacity var(--lm-dur-slow) var(--lm-ease-out); }
+  .picture.isEmpty { opacity: 0.12; }
+  .stand { animation: fade-in var(--lm-dur-base) var(--lm-ease-out); }
+  .foot { fill: #151920; stroke: rgb(255 255 255 / 6%); }
+
+  /* The whole run, faint, and the stretch from LED #1 brightening to its head. */
+  .track { fill: none; stroke: rgb(255 255 255 / 13%); stroke-width: 1; stroke-dasharray: 1.5 3.5; stroke-linecap: round; }
+  .flow { pointer-events: none; }
+  /* One path, drawn out once in the light's direction on a change of LED #1 or direction. */
+  .flowLine {
+    fill: none;
+    stroke: var(--lm-amber);
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0.9;
+    stroke-dasharray: 1;
+    animation: draw 0.42s var(--lm-ease-out) backwards;
+  }
+  .tail { fill: var(--lm-amber); opacity: 0.55; animation: fade-in var(--lm-dur-quick) var(--lm-ease-out) backwards; }
+  .head {
+    fill: none;
+    stroke: var(--lm-amber);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    animation: fade-in var(--lm-dur-quick) 0.38s var(--lm-ease-out) backwards;
+  }
+
+  .edge { animation: fade-in 0.28s var(--lm-ease-out); transition: opacity var(--lm-dur-base) var(--lm-ease-out); }
+  .led { cursor: pointer; }
+  .hit { fill: transparent; }
+  .dot { transform-box: fill-box; transform-origin: center; transition: transform var(--lm-dur-quick) var(--lm-ease-out); }
+  .led:hover .dot { stroke: #fff; stroke-width: 1.4; transform: scale(1.35); }
+
+  /* A number or an edge under the pointer lights its edge (and a linked pair); the rest steps back. */
+  :global([data-active]) .edge { opacity: 0.28; }
+  :global([data-active~="top"]) .edge[data-edge="top"],
+  :global([data-active~="right"]) .edge[data-edge="right"],
+  :global([data-active~="bottom"]) .edge[data-edge="bottom"],
+  :global([data-active~="left"]) .edge[data-edge="left"] { opacity: 1; }
+  :global([data-active~="top"]) .edge[data-edge="top"] .dot,
+  :global([data-active~="right"]) .edge[data-edge="right"] .dot,
+  :global([data-active~="bottom"]) .edge[data-edge="bottom"] .dot,
+  :global([data-active~="left"]) .edge[data-edge="left"] .dot { transform: scale(1.2); }
+
+  /* Where LED #1 can go: shown while the pointer is over the stage, gone at rest. */
+  .ring { cursor: pointer; opacity: 0; transition: opacity var(--lm-dur-base) var(--lm-ease-out); }
+  :global([data-pointer]) .ring { opacity: 1; }
+  .ringMark { fill: rgb(7 8 10 / 80%); stroke: var(--lm-ink-faint); stroke-width: 1.2; transition: stroke var(--lm-dur-quick); }
+  .ring.isEnd .ringMark { stroke: color-mix(in srgb, var(--lm-amber) 55%, transparent); stroke-dasharray: 2 2; }
+  .ring:hover .ringMark { stroke: var(--lm-amber); }
+
+  /* LED #1 lands where it was picked (no slide across the screen) and a ripple marks the spot. */
+  .first { pointer-events: none; }
+  /* On a corner, LED #1's ring is the corner's: a press flips the way the strip leaves it. */
+  .first.flips { pointer-events: auto; cursor: pointer; }
+  .flipGlyph {
+    fill: none;
+    stroke: var(--lm-amber);
+    stroke-width: 1.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0;
+    transition: opacity var(--lm-dur-quick);
+  }
+  .first.flips:hover .flipGlyph { opacity: 1; }
+  .first.flips:hover .firstRing { fill: rgb(7 8 10 / 88%); }
+  .first circle { transform-box: fill-box; transform-origin: center; }
+  .firstRing {
+    fill: rgb(255 176 32 / 14%);
+    stroke: var(--lm-amber);
+    stroke-width: 1.6;
+    animation: land 0.32s var(--lm-ease-land);
+  }
+  .ripple { fill: none; stroke: var(--lm-amber); stroke-width: 1.2; opacity: 0; animation: ripple 0.6s ease-out; }
+
+  @keyframes fade-in { from { opacity: 0; } }
+  @keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+  @keyframes land { from { transform: scale(0.3); opacity: 0; } }
+  @keyframes ripple {
+    from { transform: scale(1); opacity: 0.7; }
+    to { transform: scale(2.6); opacity: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .stand, .flowLine, .head, .tail, .edge, .firstRing, .ripple { animation: none; }
+    .ripple { display: none; }
+  }
+
+  @media (forced-colors: active) {
+    .flowLine, .head, .firstRing { stroke: Highlight; }
+    .dot { fill: CanvasText; }
+  }
+}

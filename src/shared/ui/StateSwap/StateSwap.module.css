@@ -1,0 +1,38 @@
+@layer components {
+  .swap {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .face {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--swap-gap, 7px);
+    opacity: 0;
+    transform: translateY(4px);
+    /* Leaving fades evenly and a little longer than arriving: the box is never empty mid-swap. */
+    transition:
+      opacity var(--lm-dur-base) linear,
+      transform var(--lm-dur-base) var(--lm-ease-out);
+  }
+
+  .shown {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity var(--lm-dur-quick) ease-out var(--lm-dur-follow),
+      transform var(--lm-dur-base) var(--lm-ease-out) var(--lm-dur-follow);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .face,
+    .shown {
+      transition: none;
+    }
+  }
+}

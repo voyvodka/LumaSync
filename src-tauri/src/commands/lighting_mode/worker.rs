@@ -194,6 +194,7 @@ pub(super) fn start_ambilight_worker(
             corner_ownership: "horizontal".to_string(),
             visual_preset: "subtle".to_string(),
             start_anchor: "top-start".to_string(),
+            start_local_index: None,
             direction: "cw".to_string(),
             total_leds: 1,
         };

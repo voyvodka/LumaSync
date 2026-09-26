@@ -48,4 +48,16 @@
   --lm-focus-ring:       0 0 0 2px rgba(255, 176, 32, 0.45);
   --lm-focus-ring-inset: inset 0 0 0 2px rgba(255, 176, 32, 0.45);
   --lm-focus-ring-soft:  0 0 0 2px rgba(255, 176, 32, 0.35), 0 0 0 4px rgba(255, 176, 32, 0.12);
+
+  /* Motion. Small, light, answering a change (design-language.md): one set of
+     curves and durations so every surface moves with the same feel. */
+  --lm-ease-out:   cubic-bezier(0.2, 0.8, 0.2, 1); /* arrive and settle */
+  --lm-ease-leave: cubic-bezier(0.3, 0.6, 0.5, 1); /* leave while staying seen */
+  --lm-ease-land:  cubic-bezier(0.3, 1.4, 0.5, 1); /* a small overshoot, for a mark that lands */
+  --lm-dur-quick:  0.15s;
+  --lm-dur-base:   0.22s;
+  --lm-dur-slow:   0.32s;
+  /* How long an arriving element waits for the leaving one: short enough that
+     the two pass each other and nothing blinks. */
+  --lm-dur-follow: 0.04s;
 }

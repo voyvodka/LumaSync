@@ -1,0 +1,159 @@
+@layer components {
+  .box {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: var(--field-width, 104px);
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 10px;
+    transition: background 0.2s ease;
+  }
+
+  .box:hover,
+  .editing { background: var(--lm-panel-2); }
+  .hit { position: absolute; inset: 0; border-radius: inherit; }
+  .hit:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+
+  /* The number's slot has one width at rest and while typing: nothing beside it moves. */
+  .value { display: inline-flex; justify-content: flex-end; width: 4.2ch; font: 650 19px/1 var(--lm-sans); }
+  .number { display: inline-block; height: 19px; font-variant-numeric: tabular-nums; color: var(--lm-ink); }
+  .tick { animation: tick 0.2s ease-out; }
+
+  /* Same box as the number it replaces (height and line-height), so the swap moves nothing. */
+  .input {
+    width: 100%;
+    height: 19px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    text-align: right;
+    color: var(--lm-ink);
+    caret-color: var(--lm-amber);
+    outline: none;
+  }
+
+  .input::selection { background: rgb(255 176 32 / 35%); color: var(--lm-ink); }
+
+  .unit { font-size: 11px; color: var(--lm-ink-faint); transition: color 0.2s; }
+  .editing .unit { color: var(--lm-ink-dim); }
+
+  .mark { position: relative; display: grid; place-items: center; width: 18px; height: 18px; }
+  .mark > * { grid-area: 1 / 1; }
+
+  .pen {
+    width: 12px;
+    height: 12px;
+    color: var(--lm-ink-faint);
+    transition: opacity 0.18s ease, color var(--lm-dur-quick), transform 0.2s ease;
+  }
+
+  .box:hover .pen { color: var(--lm-amber); }
+  .editing .pen { opacity: 0; transform: scale(0.6) rotate(-20deg); }
+
+  .apply {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    color: var(--lm-amber);
+    opacity: 0;
+    transform: scale(0.6) rotate(-35deg);
+    pointer-events: none;
+    transition:
+      opacity 0.18s ease,
+      transform 0.26s var(--lm-ease-out),
+      background var(--lm-dur-quick),
+      color var(--lm-dur-quick);
+  }
+
+  .apply svg { width: 13px; height: 13px; }
+  .editing .apply { opacity: 1; transform: none; pointer-events: auto; transition-delay: var(--lm-dur-follow); }
+  .apply:hover { background: rgb(255 176 32 / 14%); }
+  .invalid { color: var(--lm-ink-faint); }
+  .invalid:hover { background: transparent; }
+
+  /* Opens from the middle out under the number, closes back into it. */
+  .line {
+    position: absolute;
+    bottom: 5px;
+    left: 12px;
+    width: calc(4.2ch * 19 / 16 + 1px);
+    height: 2px;
+    border-radius: 1px;
+    background: var(--lm-amber);
+    transform: scaleX(0);
+    transition: transform var(--lm-dur-base) var(--lm-ease-out), background 0.2s;
+  }
+
+  .editing .line { transform: scaleX(1); }
+  .box:has([aria-invalid="true"]) .line { background: var(--lm-ink-faint); }
+
+  /* Rises in a few pixels while editing and settles back out the same way; always mounted. */
+  .hint {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    border: 1px solid var(--lm-line-2);
+    border-radius: 8px;
+    background: var(--lm-panel-2);
+    font-size: 11px;
+    white-space: nowrap;
+    color: var(--lm-ink-dim);
+    box-shadow: 0 8px 20px rgb(0 0 0 / 40%);
+    opacity: 0;
+    transform: translateY(4px);
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity 0.18s ease,
+      transform 0.2s var(--lm-ease-out),
+      visibility 0s linear 0.2s;
+  }
+
+  .editing .hint {
+    opacity: 1;
+    transform: none;
+    visibility: visible;
+    pointer-events: auto;
+    transition:
+      opacity 0.18s ease,
+      transform 0.2s var(--lm-ease-out),
+      visibility 0s;
+  }
+
+  .suggestion {
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: rgb(255 176 32 / 12%);
+    color: var(--lm-amber);
+    transition: background var(--lm-dur-quick);
+  }
+
+  .suggestion:hover { background: rgb(255 176 32 / 22%); }
+
+  @keyframes tick { from { opacity: 0.35; transform: translateY(-3px); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .box,
+    .pen,
+    .apply,
+    .line,
+    .hint { transition: none; }
+    .tick { animation: none; }
+  }
+}

@@ -54,6 +54,11 @@ pub struct LedCalibrationConfig {
     /// `"cw"` | `"ccw"`
     pub direction: String,
     pub total_leds: u16,
+    /// LED #1 as an index along `start_anchor`'s edge, for a start between the
+    /// edge's ends. Absent: the anchor alone names LED #1. Out of range is
+    /// clamped to the edge's last LED, never refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_local_index: Option<u16>,
 }
 
 /// `LED_CALIBRATION_MAX_TOTAL_LEDS` in `src/shared/contracts/calibration.ts`.
@@ -97,12 +102,6 @@ impl LedCalibrationConfig {
         if sum > MAX_TOTAL_LEDS {
             return Err(format!(
                 "{sum} LEDs is more than the {MAX_TOTAL_LEDS} a calibration may hold"
-            ));
-        }
-        if self.bottom_missing > counts.bottom {
-            return Err(format!(
-                "bottomMissing {} is more than the {} bottom LEDs",
-                self.bottom_missing, counts.bottom
             ));
         }
         for (field, value, allowed) in [
@@ -231,6 +230,17 @@ fn resolve_anchor_index(sequence: &[LedSequenceItem], config: &LedCalibrationCon
         "left-end" => (LedSegment::Left, AnchorMode::End),
         _ => return 0, // unknown anchor → default to 0
     };
+
+    if let Some(local) = config.start_local_index {
+        let count = anchor_segment.count(&config.counts);
+        if count > 0 {
+            let target = local.min(count - 1);
+            return sequence
+                .iter()
+                .position(|item| item.segment == anchor_segment && item.local_index == target)
+                .unwrap_or(0);
+        }
+    }
 
     let target_local: u16 = match mode {
         AnchorMode::Start => 0,
@@ -514,6 +524,7 @@ mod tests {
             corner_ownership: "horizontal".to_string(),
             visual_preset: "subtle".to_string(),
             start_anchor: "top-start".to_string(),
+            start_local_index: None,
             direction: "cw".to_string(),
             total_leds: top + right + bottom + left,
         }
@@ -568,6 +579,7 @@ mod tests {
             corner_ownership: "horizontal".to_string(),
             visual_preset: "subtle".to_string(),
             start_anchor: "bottom-gap-right".to_string(),
+            start_local_index: None,
             direction: "cw".to_string(),
             total_leds: 80,
         };
@@ -592,6 +604,7 @@ mod tests {
             corner_ownership: "horizontal".to_string(),
             visual_preset: "subtle".to_string(),
             start_anchor: "bottom-gap-left".to_string(),
+            start_local_index: None,
             direction: "cw".to_string(),
             total_leds: 80,
         };
@@ -733,6 +746,7 @@ mod tests {
             corner_ownership: "horizontal".to_string(),
             visual_preset: "subtle".to_string(),
             start_anchor: "top-start".to_string(),
+            start_local_index: None,
             direction: "cw".to_string(),
             total_leds: 2,
         };
@@ -816,6 +830,7 @@ mod tests {
             corner_ownership: "horizontal".to_string(),
             visual_preset: "subtle".to_string(),
             start_anchor: start_anchor.to_string(),
+            start_local_index: None,
             direction: direction.to_string(),
             total_leds: top + right + bottom + left,
         }
@@ -858,8 +873,42 @@ mod tests {
                 "worker fallback 1/0/0/0 top-start cw".to_string(),
                 golden_config((1, 0, 0, 0), 0, "top-start", "cw"),
             ),
+            (
+                "gap wider than the bottom 6/4/4-10/4 bottom-gap-left cw".to_string(),
+                golden_config((6, 4, 4, 4), 10, "bottom-gap-left", "cw"),
+            ),
+        ]);
+        for direction in ["cw", "ccw"] {
+            for (anchor, local) in [
+                ("top-start", 3),
+                ("right-start", 2),
+                ("bottom-start", 3),
+                ("left-end", 2),
+            ] {
+                configs.push((
+                    format!("mid-edge 7/5/8-2/5 {anchor}@{local} {direction}"),
+                    with_start_local(golden_config((7, 5, 8, 5), 2, anchor, direction), local),
+                ));
+            }
+        }
+        configs.extend([
+            (
+                "local index past the edge 7/3/6/5 top-start@40 cw".to_string(),
+                with_start_local(golden_config((7, 3, 6, 5), 0, "top-start", "cw"), 40),
+            ),
+            (
+                "local index wins over a gap anchor 9/5/8-3/4 bottom-gap-right@1 ccw".to_string(),
+                with_start_local(golden_config((9, 5, 8, 4), 3, "bottom-gap-right", "ccw"), 1),
+            ),
         ]);
         configs
+    }
+
+    fn with_start_local(config: LedCalibrationConfig, local: u16) -> LedCalibrationConfig {
+        LedCalibrationConfig {
+            start_local_index: Some(local),
+            ..config
+        }
     }
 
     fn rust_geometry(config: &LedCalibrationConfig) -> Vec<(&'static str, u16, f32, f32)> {

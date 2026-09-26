@@ -69,8 +69,26 @@ the layout itself takes no props, and neither does `CompactLayout`. `SettingsLay
 identity between renders when unchanged — `localSink` is memoised for exactly this — or every
 reader of it re-renders.
 
+**Code lives with the feature that uses it.** A feature owns its components and their styles:
+`features/<feature>/ui/Foo.tsx` sits beside `Foo.module.css` (and `__tests__/Foo.test.tsx`). A
+component moves to `src/shared/ui/<Foo>/` — with its stylesheet and tests — when a second feature
+needs it, or when it is a primitive that knows nothing of any feature (`Toggle`, a motion swap);
+written for one feature but without importing it, the move is a folder change. `src/styles/` keeps
+only what is global: tokens, the theme mapping, element rules, the window chrome, and the feature
+sheets not yet moved. The rule is for the whole frontend, applied screen by screen rather than in a
+sweep: when a screen is reworked, its code comes to this shape in the same change — components split
+and kept beside their styles, a feature sheet out of `src/styles/` into modules, anything a second
+feature uses promoted to `shared/ui`, motion on the tokens. A feature has no `index.ts` barrel: callers import
+the module that owns the symbol, so a grep lands on it, and `verify:window-grants`, which follows
+imports, does not see a whole feature's commands behind one import. `stylesheetSanity.test.ts` holds both halves: no plain
+`.css` outside `src/styles/` (bar `fonts.css` and `GlobalErrorBoundary.css`), and every
+`*.module.css` wholly inside `@layer components`.
+
 **Stylesheet layers.** `src/styles.css` is an ordered import list over `src/styles/`: tokens and
 the element rules go into Tailwind's `base` layer, every `lm-*` feature file into `components`.
+A CSS Module wraps its whole file in `@layer components { … }` itself, since its component, not
+the list, loads it; its class names are scoped, so its place in the source order cannot tie with
+another sheet's.
 `theme.css` maps the colour tokens and `--lm-mono` into `@theme inline`, so a utility names the
 token — `text-ink`, `bg-panel-2`, `ring-amber/60`, `font-mono` — and still compiles to
 `var(--lm-*)`; `verify:design-tokens` rejects the old arbitrary `[var(--lm-*)]` form where a named
@@ -338,34 +356,68 @@ layout, and only for a connect the user made: the manual connect's `connectionEv
 `userInitiated`, the boot auto-reconnect's and recovery's do not. Keyed on `connected` flipping, it
 had nudged a user with no layout on every launch. It gives way to the onboarding step and the calibration notice, which say the same.
 
-**LED Setup asks for the strip's total before the per-edge counts.** With no saved layout the dock
-opens on "How many LEDs does your strip have?" in place of the four steppers. The first fill used
-to come from the display's pixel width (60/22/60/22 for anything 3440 px and up), so a 3600-px
-laptop panel got 164 LEDs whatever strip was on it: pixels say nothing about how long a strip is.
-The count is a fact about the hardware, so the user supplies it — or a bound WLED panel does, since
-it reports its own (`lastWledSink.ledCount`), and that pre-fills the question and the draft. Without
-one nothing is guessed. `splitTotalAcrossEdges` (`calibration/model/splitTotal.ts`) then shares the
-total out:
+**LED Setup asks for the strip's total before the per-edge counts.** With no saved layout the panel
+opens on "How many LEDs does your strip have?" with the rows hidden. The first fill used to come
+from the display's pixel width (60/22/60/22 for anything 3440 px and up), so a 3600-px laptop panel
+got 164 LEDs whatever strip was on it: pixels say nothing about how long a strip is. The count is a
+fact about the hardware, so the user supplies it — or a bound WLED panel does, since it reports its
+own (`lastWledSink.ledCount`), and that pre-fills the question and the draft; a saved layout that
+disagrees with the panel offers its count one click away. Without one nothing is guessed.
+`distribute` (`calibration/model/ledLayout.ts`) then shares the total out:
 
-- Each chosen edge gets a share proportional to its length on the display — top and bottom its
-  width, the sides its height — so only the aspect ratio counts, and a portrait display gives the
-  sides the long share. Unchosen edges get zero.
-- Pitch is uniform along the strip, so the stand gap is `bottomMissing` pitches of perimeter that
-  carry no LED: the total plus the gap is shared out, and the gap comes off the bottom edge. A gap
-  the bottom cannot hold (fewer LEDs beside it than it is wide, which validation refuses) shrinks to
-  half the bottom edge.
-- The shares are floored and the LEDs left over go one each to the largest fractions, ties in
-  top → right → bottom → left order (Hamilton's method), so the counts add up to the total exactly.
-  Rounding each share instead can come out one over or under, and a total that does not match the
-  strip leaves its tail dark or holding a stale colour (`WLED_LENGTH_MISMATCH`).
+- Each lit edge gets a share proportional to its length on the display — top and bottom its width,
+  the sides its height — so only the aspect ratio counts, and a portrait display gives the sides the
+  long share.
+- Linked pairs (top/bottom, left/right) stay equal: they take LEDs two at a time. One LED left over
+  goes to the top, which splits it from the bottom — except beside a stand, where a side takes it,
+  because the gap is a measurement and a side one LED longer is how an odd strip really ends.
+- The stand gap is `bottomMissing` LED pitches with no LED in them. An unlinked bottom gives up the
+  gap's share (the strip's pitch is even); a linked one keeps the top's count. The only rule is one
+  LED each side of the gap (`BOTTOM_GAP_NEEDS_TWO_LEDS`); a gap wider than the bottom LEDs is
+  legitimate, and Rust does not refuse it, so a file an older build saved keeps running.
 
-The start anchor and direction are left alone; normalisation moves an anchor off an edge that went
-to zero, as it does for a hand edit. The steppers are the refinement step for corners that fall
-differently, and "Change total LED count" re-opens the question over the edges the layout lights.
-Reset keeps the total and re-splits it over all four edges. A saved layout opens straight on the
-steppers, and counts from the room map skip the question. The WLED fill, like the old one, moves the
-baseline while nothing has been touched, so a first visit is not unsaved work; a total the user
-types and splits is.
+The counts are the user's: nothing moves another edge. The page is the canvas — each lit edge's
+number sits beside it, quiet until the pointer is on the number or on that edge's LEDs; then the
+edge (with its linked partner) lights, the rest steps back, and − + ⛓ × open around the number
+(type, or ↑/↓). × puts an edge out and a dashed + brings it back with its old count. The stand is
+drawn only when the strip has a gap for it, so the bottom number never sits on it, and adding one is
+a + that shows while the pointer is over the stage. A linked pair edits as one; its chain splits it. Only a changed total typed into the dock shares the LEDs out again, over the edges that are lit;
+the same number confirmed again leaves counts set edge by edge alone. Links are not saved; they are derived from equal counts
+whenever the saved layout moves under the page. A save keeps the page open.
+
+**LED #1 can be any LED.** Users find it by running the test and clicking the LED that lit first,
+so `LedCalibrationConfig.startLocalIndex` (optional) names an index along `startAnchor`'s edge. It
+is written only when no anchor names that LED alone, and then `startAnchor` is the edge's nearest
+anchor (gap anchors included), so a build that drops the field starts as close as it can. Both
+`buildLedSequence` and `build_led_sequence` clamp an index past the edge onto its last LED; the
+golden geometry fixture carries mid-edge cases for both. The first-LED chip in the dock (‹ ›, or its
+list) stops only where a person can find the place on the strip — corners and the stand's two
+sides; any other LED is picked on the canvas. Flipping the direction at a corner keeps LED #1 at that corner, on the edge the strip now
+leaves along, and an open strip is only ever read heading in from an end.
+
+**The canvas is static.** The strip shows the chase; the canvas does not replay it, because
+re-rendering the SVG every frame replaced the element under the pointer between press and release,
+so a click during a test — the one moment it matters — was lost. Picks go through one delegated
+listener, and the LED dots are pointer-only (`aria-hidden`): a few thousand buttons would bury the
+page for a screen reader, and the first-LED chip reaches every stop. Hover is not a render either:
+the stage writes `data-active` (the lit edges) and `data-pointer` on its own element, and CSS reads
+them, so moving between edges re-renders nothing. Each dot takes the colour the sample picture has
+next to it, lifted to full drive, so the strip reads as the light it will throw; a blurred copy of
+the picture behind the monitor is that light on the wall (one composited layer, not an SVG filter).
+
+**The way the light runs is a line on the screen, not an arrow at LED #1.** The whole strip is a
+faint dashed track inset on the screen, broken wherever the light does not continue (a gap, a
+missing edge); from a dot beside LED #1 an amber line runs along about 40 % of it to a head. An
+arrow beside LED #1 could not show which way the light turns at the next corner, and read as
+"straight on" for a start on a long edge; the line turns the corner with the strip. It is one path:
+built from short fading pieces it showed beads at their overlapping caps. The head keeps 10 units
+off any corner, because a line ending exactly on one pointed its head along the next edge by a
+rounding hair. On a change of LED #1 or the direction the line draws itself once
+(`stroke-dashoffset`); a count change only redraws it.
+
+**The monitor grows with the window up to 1.5×.** Past that it only gets bigger than the numbers
+around it. The stage box sits in the page grid's flexible row by name: in the `auto` row it sized to
+the stage, and the stage — sized from the box — never grew past its first size.
 
 **A Devices rail badge counts what is active.** A connected strip, a streaming bridge, a bound WLED
 panel; displays have no badge. An enumerated port or a paired-but-idle bridge

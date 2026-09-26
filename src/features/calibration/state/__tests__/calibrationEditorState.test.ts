@@ -70,7 +70,7 @@ describe("calibrationEditorState", () => {
     expect(zeroedTop.current.startAnchor.startsWith("top")).toBe(false);
   });
 
-  it("clamps bottom stand gap to bottom count and collapses bottom-gap anchors", () => {
+  it("keeps a stand gap wider than the bottom and collapses bottom-gap anchors without one", () => {
     const gapped: LedCalibrationConfig = {
       ...BASELINE,
       bottomMissing: 4,
@@ -84,8 +84,8 @@ describe("calibrationEditorState", () => {
     expect(zeroGap.current.bottomMissing).toBe(0);
     expect(zeroGap.current.startAnchor).toBe("bottom-start");
 
-    const overflow = updateEditorConfig(state, { bottomMissing: 9999 });
-    expect(overflow.current.bottomMissing).toBe(BASELINE.counts.bottom);
+    const wide = updateEditorConfig(state, { bottomMissing: BASELINE.counts.bottom + 5 });
+    expect(wide.current.bottomMissing).toBe(BASELINE.counts.bottom + 5);
   });
 
   it("accepts a partial-edge configuration (only top strip)", () => {
@@ -148,18 +148,31 @@ describe("calibrationEditorState — automatic fills and handed-over counts", ()
     expect(filled.isDirty).toBe(true);
   });
 
-  it("opens counts handed over from the room map as an unsaved draft over the saved layout", () => {
-    const counts = { top: 40, right: 20, bottom: 40, left: 20 };
-    const state = createCalibrationEditorState(BASELINE, counts);
-    expect(state.baseline).toEqual(BASELINE);
-    expect(state.current.counts).toEqual(counts);
-    expect(state.current.totalLeds).toBe(120);
-    expect(state.isDirty).toBe(true);
-    expect(requestEditorClose(state).confirmDiscard).toBe(true);
-  });
-
   it("compares layouts by what normalisation keeps", () => {
     expect(isSameCalibrationLayout(BASELINE, { ...BASELINE })).toBe(true);
     expect(isSameCalibrationLayout(BASELINE, { ...BASELINE, direction: "ccw" })).toBe(false);
+  });
+});
+
+describe("startLocalIndex in the editor", () => {
+  const midTop = () => updateEditorConfig(createCalibrationEditorState(BASELINE), { startAnchor: "top-start", startLocalIndex: 5 });
+
+  it("a start moved along the same anchor is unsaved work and a different layout", () => {
+    const at5 = midTop();
+    const at6 = updateEditorConfig(at5, { startAnchor: "top-start", startLocalIndex: 6 });
+    expect(at6.current.startAnchor).toBe(at5.current.startAnchor);
+    expect(isSameCalibrationLayout(at5.current, at6.current)).toBe(false);
+    expect(updateEditorConfig(saveEditorCalibration(at5), { startAnchor: "top-start", startLocalIndex: 6 }).isDirty).toBe(true);
+  });
+
+  it("keeps the index through an edit that does not touch the start", () => {
+    expect(updateEditorConfig(midTop(), { direction: "ccw" }).current.startLocalIndex).toBe(5);
+  });
+
+  it("clears it when the patch moves the anchor alone, or clears it by name", () => {
+    expect(updateEditorConfig(midTop(), { startAnchor: "left-start" }).current).not.toHaveProperty("startLocalIndex");
+    expect(updateEditorConfig(midTop(), { startAnchor: "top-start", startLocalIndex: undefined }).current).not.toHaveProperty(
+      "startLocalIndex",
+    );
   });
 });

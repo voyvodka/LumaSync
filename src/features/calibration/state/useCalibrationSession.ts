@@ -16,9 +16,30 @@ import {
 import type {
   LedCalibrationConfig,
   LedDirection,
-  LedSegmentCounts,
   LedSegmentKey,
 } from "../model/contracts";
+import {
+  distribute,
+  draftFromCounts,
+  setCount,
+  setStand,
+  toggleEdge,
+  toggleLink,
+  MAX_COUNT,
+  type CountKey,
+  type DisplayAspect,
+  type LinkedPair,
+} from "../model/ledLayout";
+import {
+  nudge,
+  pickCorner,
+  pickEnd,
+  pickLed,
+  setDirection,
+  type Corner,
+  type LedRef,
+  type StartPoint,
+} from "../model/startPoint";
 import { sumSegmentCounts } from "../model/contracts";
 import {
   CALIBRATION_NOTICE_KEYS,
@@ -28,14 +49,6 @@ import {
   type CalibrationNotice,
 } from "../model/calibrationNotices";
 import { buildLedSequence } from "../model/indexMapping";
-import {
-  anchorFromEdgeEndpoint,
-  edgeOfAnchor,
-  endpointOfAnchor,
-  type AnchorEdge,
-  type AnchorEndpoint,
-} from "../model/startAnchor";
-import { ALL_EDGES, litEdges, MAX_STRIP_LEDS, splitTotalAcrossEdges } from "../model/splitTotal";
 import { resetToManual } from "../model/templates";
 import {
   validateCalibrationConfig,
@@ -48,12 +61,19 @@ import {
   isSameCalibrationLayout,
   keepEditing,
   loadEditorConfig,
-  requestEditorClose,
   saveEditorCalibration,
-  updateEditorConfig,
   discardEditorChanges,
   type CalibrationEditorState,
 } from "./calibrationEditorState";
+import {
+  commitLayout,
+  draftOf,
+  layoutPatch,
+  layoutUiFrom,
+  startOf,
+  type LayoutUi,
+  type StartRule,
+} from "./layoutEdit";
 import {
   closeDisplayOverlay,
   listDisplays,
@@ -68,7 +88,6 @@ import {
 import { createDisplayTargetState, type DisplayTargetSnapshot } from "./displayTargetState";
 import type { DisplayId, DisplayInfo, OverlayPreviewPayload } from "@/shared/contracts/display";
 import { LED_CHIP_TYPE, type LedChipType } from "@/shared/contracts/device";
-import { clamp } from "@/shared/lib/math";
 import { parseCommandError } from "@/shared/contracts/status";
 
 /** Quiet time after the last edit before a running test picks the layout up.
@@ -97,25 +116,21 @@ function buildOverlayPreviewPayload(
   };
 }
 
-/** The counts and gap a strip total splits into on `display` (16:9 when unknown). */
-function splitPatch(
-  total: number,
-  display: Pick<DisplayInfo, "width" | "height"> | undefined,
-  edges: readonly LedSegmentKey[],
-  bottomGap: number,
-) {
-  return splitTotalAcrossEdges({
-    total,
-    display: display ?? { width: 16, height: 9 },
-    edges,
-    bottomGap,
-  });
+const UNKNOWN_DISPLAY: DisplayAspect = { width: 16, height: 9 };
+
+const aspectOf = (display: Pick<DisplayInfo, "width" | "height"> | undefined): DisplayAspect =>
+  display && display.width > 0 && display.height > 0 ? display : UNKNOWN_DISPLAY;
+
+/** A total shared over the edges the layout lights (all four when it lights none), as an autofill patch. */
+function distributedPatch(config: LedCalibrationConfig, ui: LayoutUi, total: number, display: DisplayAspect) {
+  const draft = distribute(draftOf(config, ui), total, display);
+  return layoutPatch(config, ui, draft, { kind: "hold" });
 }
 
 /** The LED count a bound WLED panel reported, which is the strip's total. */
 function reportedStripTotal(ledCount: number | undefined): number | null {
   if (typeof ledCount !== "number" || !Number.isFinite(ledCount) || ledCount <= 0) return null;
-  return Math.min(Math.floor(ledCount), MAX_STRIP_LEDS);
+  return Math.min(Math.floor(ledCount), MAX_COUNT);
 }
 
 /** A layout the backend would accept for a test: valid, and more than one LED. */
@@ -125,11 +140,6 @@ function isTestableLayout(config: LedCalibrationConfig): boolean {
 
 export interface CalibrationSessionOptions {
   initialConfig?: LedCalibrationConfig;
-  /**
-   * Counts proposed from elsewhere (the room map), applied as an unsaved draft
-   * over `initialConfig`. Read once, on mount.
-   */
-  draftCounts?: LedSegmentCounts | null;
   onNavigateBack: () => void;
   onSaved: (config: LedCalibrationConfig) => void;
   /** Registers the guard that asks before the page is navigated away from. */
@@ -140,19 +150,21 @@ export interface CalibrationSessionOptions {
  * overlay, the test pattern, and the save/close flow. `CalibrationPage` renders it. */
 export function useCalibrationSession({
   initialConfig,
-  draftCounts,
   onNavigateBack,
   onSaved,
   registerLeaveGuard,
 }: CalibrationSessionOptions) {
   const [editorState, setEditorState] = useState<CalibrationEditorState>(() =>
-    createCalibrationEditorState(initialConfig ?? resetToManual(), draftCounts),
+    createCalibrationEditorState(initialConfig ?? resetToManual()),
   );
-  const [countsFromRoomMap, setCountsFromRoomMap] = useState(() => Boolean(draftCounts));
   const hasSavedLayout = initialConfig !== undefined && sumSegmentCounts(initialConfig.counts) > 0;
   // With no saved layout the page asks for the strip's total first; the
-  // per-edge steppers refine the split it makes.
-  const [totalStepOpen, setTotalStepOpen] = useState(() => !hasSavedLayout && !draftCounts);
+  // per-edge rows refine the split it makes.
+  const [firstRun, setFirstRun] = useState(() => !hasSavedLayout);
+  // A layout never saved can be saved as it stands (a WLED fill is not an edit).
+  const [savedOnce, setSavedOnce] = useState(hasSavedLayout);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [layoutUi, setLayoutUi] = useState<LayoutUi>(() => layoutUiFrom(editorState.current));
   const [knownTotal, setKnownTotal] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<CalibrationNotice | null>(null);
@@ -201,10 +213,8 @@ export function useCalibrationSession({
         if (reported !== null) {
           setEditorState((prev) => {
             if (prev.current.totalLeds !== 0) return prev;
-            return autofillEditorConfig(
-              prev,
-              splitPatch(reported, selectedDisplay, ALL_EDGES, prev.current.bottomMissing),
-            );
+            const { patch } = distributedPatch(prev.current, layoutUiFrom(prev.current), reported, aspectOf(selectedDisplay));
+            return autofillEditorConfig(prev, patch);
           });
         }
       })
@@ -216,6 +226,19 @@ export function useCalibrationSession({
       });
     return () => { cancelled = true; };
   }, []);
+
+  // Links and "Özel" are derived from counts whenever the baseline moves under
+  // the page (autofill, discard, a reload) — never on an ordinary edit, which
+  // leaves the baseline alone. Keyed by content: the object is rebuilt per edit.
+  // A save moves the baseline to what is on screen already, so it keeps them.
+  // Set during render, not in an effect, so the page never paints stale links.
+  const baselineKey = calibrationLayoutKey(editorState.baseline);
+  const [uiBaselineKey, setUiBaselineKey] = useState(baselineKey);
+  const [keepUiFor, setKeepUiFor] = useState<string | null>(null);
+  if (uiBaselineKey !== baselineKey) {
+    setUiBaselineKey(baselineKey);
+    if (keepUiFor !== baselineKey) setLayoutUi(layoutUiFrom(editorState.baseline));
+  }
 
   // Sync editor config to test pattern flow
   useEffect(() => {
@@ -429,12 +452,8 @@ export function useCalibrationSession({
 
     // An untouched automatic split follows the display it was made for.
     if (!hasSavedLayout && !editorState.isDirty && editorState.current.totalLeds > 0) {
-      setEditorState((prev) =>
-        autofillEditorConfig(
-          prev,
-          splitPatch(prev.current.totalLeds, display, litEdges(prev.current.counts), prev.current.bottomMissing),
-        ),
-      );
+      const { patch } = distributedPatch(editorState.current, layoutUi, editorState.current.totalLeds, aspectOf(display));
+      setEditorState((prev) => autofillEditorConfig(prev, patch));
     }
 
     if (!testPattern.isEnabled) return;
@@ -456,90 +475,81 @@ export function useCalibrationSession({
         detail: noticeDetail(null, parseCommandError(error).message),
       });
     }
-  }, [editorState, hasSavedLayout, overlayPreviewPayload, testPattern.isEnabled, beginDisplaySwitch]);
+  }, [editorState, hasSavedLayout, layoutUi, overlayPreviewPayload, testPattern.isEnabled, beginDisplaySwitch]);
 
-  // Accept the absolute next value, not a delta. Stepper buttons
-  // pass `value + 1` / `value - 1` so the +/- affordance is preserved
-  // while the new keyboard-input path can submit any integer directly.
-  // Defensive cap at 1000 — the build still validates totalLeds downstream
-  // for protocol-specific budgets, but a hard upper bound here stops a
-  // typo (e.g. an extra trailing digit) from blowing up the editor state.
-  const handleCountChange = useCallback((segment: "top" | "right" | "bottom" | "left", nextValue: number) => {
-    setEditorState((prev) => {
-      const clamped = clamp(Math.floor(nextValue), 0, 1000);
-      return updateEditorConfig(prev, { counts: { [segment]: clamped } });
-    });
-    setValidationErrors(null);
-  }, []);
-
-  const selectedDisplay = useCallback(() => {
+  const displayAspect = useCallback((): DisplayAspect => {
     const snapshot = displayTargetRef.current.getSnapshot();
-    return snapshot.displays.find((candidate) => candidate.id === snapshot.selectedDisplayId);
+    return aspectOf(snapshot.displays.find((candidate) => candidate.id === snapshot.selectedDisplayId));
   }, []);
 
-  const handleApplyTotal = useCallback((total: number, edges: readonly LedSegmentKey[]) => {
-    const display = selectedDisplay();
-    setEditorState((prev) =>
-      updateEditorConfig(prev, splitPatch(total, display, edges, prev.current.bottomMissing)),
-    );
-    setTotalStepOpen(false);
-    setCountsFromRoomMap(false);
-    setValidationErrors(null);
-  }, [selectedDisplay]);
+  /** Every layout or start edit goes through here: model step, then back into the saved shape. */
+  const edit = useCallback(
+    (step: (draft: ReturnType<typeof draftOf>, start: StartPoint) => { draft?: ReturnType<typeof draftOf>; rule: StartRule }) => {
+      const draft = draftOf(editorState.current, layoutUi);
+      const result = step(draft, startOf(editorState.current));
+      const committed = commitLayout(editorState, layoutUi, result.draft ?? draft, result.rule);
+      setEditorState(committed.state);
+      setLayoutUi(committed.ui);
+      setValidationErrors(null);
+    },
+    [editorState, layoutUi],
+  );
 
-  const handleOpenTotalStep = useCallback(() => setTotalStepOpen(true), []);
-  const handleCloseTotalStep = useCallback(() => setTotalStepOpen(false), []);
+  const handleEdgeToggle = useCallback((edge: LedSegmentKey, lit: boolean) => {
+    edit((draft) => ({ draft: toggleEdge(draft, edge, lit, displayAspect()), rule: { kind: "layout" } }));
+  }, [edit, displayAspect]);
 
-  // Reset keeps the strip's total — a fact about the hardware — and re-splits
-  // it over all four edges. With no total yet it goes back to asking for one.
-  const handleReset = useCallback(() => {
-    const display = selectedDisplay();
-    const total = editorState.current.totalLeds || knownTotal || 0;
-    if (total > 0) {
-      setEditorState((prev) =>
-        updateEditorConfig(prev, splitPatch(total, display, ALL_EDGES, prev.current.bottomMissing)),
-      );
-    } else {
-      setEditorState((prev) => loadEditorConfig(prev, resetToManual()));
-      setTotalStepOpen(true);
-    }
-    setCountsFromRoomMap(false);
-    setValidationErrors(null);
-  }, [editorState, knownTotal, selectedDisplay]);
+  const handleCountChange = useCallback((key: CountKey, value: number) => {
+    edit((draft) => ({ draft: setCount(draft, key, value, displayAspect()), rule: { kind: "hold" } }));
+  }, [edit, displayAspect]);
 
-  // Accept the absolute next value, not a delta. Same shape as
-  // handleCountChange so StandGapStepper can use the unified API.
-  const handleBottomMissingChange = useCallback((nextValue: number) => {
-    setEditorState((prev) => {
-      const max = prev.current.counts.bottom;
-      const next = Math.max(0, Math.min(max, Math.floor(nextValue)));
-      return updateEditorConfig(prev, { bottomMissing: next });
-    });
-    setValidationErrors(null);
-  }, []);
+  const handleStandToggle = useCallback((on: boolean) => {
+    edit((draft) => ({ draft: setStand(draft, on), rule: { kind: "layout" } }));
+  }, [edit]);
+
+  /** The chain between a pair: linked comes apart, split is made equal and linked again. */
+  const handleChainToggle = useCallback((pair: LinkedPair) => {
+    edit((draft) => ({ draft: toggleLink(draft, pair), rule: { kind: "hold" } }));
+  }, [edit]);
+
+  /** A typed total shared out over the lit edges (all four on a first visit). */
+  const handleDistribute = useCallback((total: number) => {
+    const t = Math.min(Math.floor(total), MAX_COUNT);
+    if (!(t > 0)) return;
+    edit((draft) => ({ draft: distribute(draft, t, displayAspect()), rule: { kind: "hold" } }));
+    setFirstRun(false);
+  }, [edit, displayAspect]);
+
+  /** Skipping the total: one LED per edge, both pairs linked, for the numbers on the canvas to take from there. */
+  const handleSkipTotal = useCallback(() => {
+    edit(() => ({ draft: draftFromCounts({ top: 1, right: 1, bottom: 1, left: 1 }, 0), rule: { kind: "layout" } }));
+    setFirstRun(false);
+  }, [edit]);
+
+  const handlePickLed = useCallback((led: LedRef) => {
+    edit((draft, start) => ({ rule: { kind: "set", start: pickLed(draft, led, start) } }));
+  }, [edit]);
+
+  const handlePickCorner = useCallback((corner: Corner) => {
+    edit((draft, start) => ({ rule: { kind: "set", start: pickCorner(draft, corner, start) } }));
+  }, [edit]);
+
+  const handlePickEnd = useCallback((end: "A" | "B") => {
+    edit((draft, start) => ({ rule: { kind: "set", start: pickEnd(draft, end, start) } }));
+  }, [edit]);
+
+  /** A place picked from the first-LED list. */
+  const handleSetStart = useCallback((start: StartPoint) => {
+    edit(() => ({ rule: { kind: "set", start } }));
+  }, [edit]);
+
+  const handleNudge = useCallback((step: 1 | -1) => {
+    edit((draft, start) => ({ rule: { kind: "set", start: nudge(draft, start, step) } }));
+  }, [edit]);
 
   const handleDirectionChange = useCallback((direction: LedDirection) => {
-    setEditorState((prev) => updateEditorConfig(prev, { direction }));
-    setValidationErrors(null);
-  }, []);
-
-  const handleEdgeChange = useCallback((edge: AnchorEdge) => {
-    setEditorState((prev) => {
-      if (prev.current.counts[edge] === 0) return prev;
-      const currentEndpoint = endpointOfAnchor(prev.current.startAnchor);
-      const keep = currentEndpoint === "end" ? "end" : "start";
-      return updateEditorConfig(prev, { startAnchor: anchorFromEdgeEndpoint(edge, keep) });
-    });
-    setValidationErrors(null);
-  }, []);
-
-  const handleEndpointChange = useCallback((endpoint: AnchorEndpoint) => {
-    setEditorState((prev) => {
-      const edge = edgeOfAnchor(prev.current.startAnchor);
-      return updateEditorConfig(prev, { startAnchor: anchorFromEdgeEndpoint(edge, endpoint) });
-    });
-    setValidationErrors(null);
-  }, []);
+    edit((draft, start) => ({ rule: { kind: "set", start: setDirection(draft, start, direction) } }));
+  }, [edit]);
 
   const handleSave = useCallback(async () => {
     setIsSaving(true);
@@ -564,28 +574,23 @@ export function useCalibrationSession({
       setIsSaving(false);
       return;
     }
-    try {
-      onSaved(savedState.current);
-      setEditorState(savedState);
-      setCountsFromRoomMap(false);
-      dirtyRef.current = false;
-      await flowRef.current.dispose();
-      setTestPattern(flowRef.current.getSnapshot());
-      onNavigateBack();
-    } finally {
-      setIsSaving(false);
-    }
-  }, [editorState, onNavigateBack, onSaved]);
+    // The page stays open after a save, and a running test keeps going on the saved layout.
+    onSaved(savedState.current);
+    setKeepUiFor(calibrationLayoutKey(savedState.baseline));
+    setEditorState(savedState);
+    setSavedOnce(true);
+    setLastSavedAt(Date.now());
+    dirtyRef.current = false;
+    setIsSaving(false);
+  }, [editorState, onSaved]);
 
-  const handleClose = useCallback(() => {
-    const closeState = requestEditorClose(editorState);
-    setEditorState(closeState);
-    if (closeState.shouldClose) {
-      void flowRef.current.dispose();
-      setTestPattern(flowRef.current.getSnapshot());
-      onNavigateBack();
-    }
-  }, [editorState, onNavigateBack]);
+  /** "İptal": back to the last saved layout, staying on the page. */
+  const handleRevert = useCallback(() => {
+    setEditorState((prev) => loadEditorConfig(prev, prev.baseline));
+    setLayoutUi(layoutUiFrom(editorState.baseline));
+    setValidationErrors(null);
+    setSaveError(null);
+  }, [editorState.baseline]);
 
   const handleKeepEditing = useCallback(() => {
     pendingLeaveRef.current = null;
@@ -597,7 +602,7 @@ export function useCalibrationSession({
     pendingLeaveRef.current = null;
     dirtyRef.current = false;
     setEditorState((prev) => discardEditorChanges(prev));
-    setCountsFromRoomMap(false);
+    setSaveError(null);
     void flowRef.current.dispose();
     setTestPattern(flowRef.current.getSnapshot());
     // A leave the guard held goes where the user was heading, not to Lights.
@@ -640,8 +645,10 @@ export function useCalibrationSession({
     config: editorState.current,
     isDirty: editorState.isDirty,
     confirmDiscard: editorState.confirmDiscard,
-    countsFromRoomMap: countsFromRoomMap && editorState.isDirty,
-    totalStepOpen,
+    firstRun,
+    canSave: editorState.isDirty || !savedOnce,
+    lastSavedAt,
+    layoutUi,
     knownTotal,
     chipType,
     isSaving,
@@ -657,17 +664,20 @@ export function useCalibrationSession({
     previewOpenFailure,
     handlePreviewToggle,
     handleSelectDisplay,
+    handleEdgeToggle,
+    handleStandToggle,
     handleCountChange,
-    handleReset,
-    handleApplyTotal,
-    handleOpenTotalStep,
-    handleCloseTotalStep,
-    handleBottomMissingChange,
+    handleChainToggle,
+    handleDistribute,
+    handleSkipTotal,
+    handlePickLed,
+    handlePickCorner,
+    handlePickEnd,
+    handleSetStart,
+    handleNudge,
     handleDirectionChange,
-    handleEdgeChange,
-    handleEndpointChange,
     handleSave,
-    handleClose,
+    handleRevert,
     handleKeepEditing,
     handleDiscard,
     handleOpenPreview,

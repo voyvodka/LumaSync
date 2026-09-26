@@ -15,7 +15,7 @@
  * read by vitest and by `cargo test`: a change on one side fails the other
  * side's test until the fixture and both implementations move together.
  *
- * Canonical per-edge local coordinates (see `LedRoomCanvas.tsx`):
+ * Canonical per-edge local coordinates (see `led_to_screen_pos` in led_calibration.rs):
  *
  *   - Top edge:    local 0 = LEFT,   n-1 = RIGHT  (L → R)
  *   - Right edge:  local 0 = TOP,    m-1 = BOTTOM (T → B)

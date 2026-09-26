@@ -1,0 +1,32 @@
+@layer components {
+  .box {
+    position: relative;
+    display: inline-block;
+    width: var(--spin-size, 16px);
+    height: var(--spin-size, 16px);
+  }
+
+  .icon {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+  }
+
+  /* The old icon keeps some presence while it turns away; the new one arrives a beat later. */
+  .cw > .in { animation: in-cw var(--lm-dur-slow) var(--lm-ease-out) var(--lm-dur-follow) backwards; }
+  .cw > .out { animation: out-cw 0.24s var(--lm-ease-leave) forwards; }
+  .ccw > .in { animation: in-ccw var(--lm-dur-slow) var(--lm-ease-out) var(--lm-dur-follow) backwards; }
+  .ccw > .out { animation: out-ccw 0.24s var(--lm-ease-leave) forwards; }
+
+  @keyframes in-cw { from { opacity: 0; transform: rotate(-150deg) scale(0.7); } }
+  @keyframes out-cw { 40% { opacity: 0.75; } to { opacity: 0; transform: rotate(150deg) scale(0.7); } }
+  @keyframes in-ccw { from { opacity: 0; transform: rotate(150deg) scale(0.7); } }
+  @keyframes out-ccw { 40% { opacity: 0.75; } to { opacity: 0; transform: rotate(-150deg) scale(0.7); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .in { animation: none; }
+    /* No animation means no animationend: the old icon would never be removed. */
+    .out { display: none; }
+  }
+}

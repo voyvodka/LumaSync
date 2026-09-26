@@ -47,6 +47,60 @@ icon used in more than one place goes there, a single-use one may stay inline be
 (`settings/sections/compact/`) in compact mode, so a control added only to a full-mode section does
 not exist for a compact user. Decide which mode it belongs to; do not assume it appears in both.
 
+**The interface is direct and quiet, not corporate.** What the maintainer asked for, settled while
+rebuilding LED Setup; apply it to every new screen:
+
+- **Work on the thing itself.** Edit where the object is drawn (numbers on the canvas edges, × and +
+  on the edge) rather than in a form of labelled rows beside it.
+- **Few words.** No labels above controls, no uppercase or monospace captions, no explanatory
+  sentences on screen: values, short names and buttons. An explanation goes in one ⓘ, in plain
+  sentence case, a line or two.
+- **No enterprise chrome.** No left-border accent on rows, no button stack in the bottom-right, no
+  "card of rows". Actions live in one place close to the work (LED Setup's floating dock).
+- **Nothing moves under the pointer.** Controls that change label or state keep a fixed width; a
+  control that is not needed yet keeps its place instead of shifting the others, and never leaves an
+  empty hole — a state it can show instead (the save capsule's "✓ Saved").
+- **Typing applies.** A field applies on leaving it, not only on Enter; Esc and out-of-range put the
+  old value back.
+- **Realistic limits.** Bounds come from the hardware (LED density per metre, screen size), not from
+  the backend's safety ceiling.
+- **One accent at rest.** Amber marks what to do next: at rest only the primary action (and the
+  marker the canvas shares) is amber; secondary controls are grey and warm up on hover. A passive
+  state reads as text, not as a framed disabled button; its frame and fill arrive with the state that
+  needs them. No surface inside a surface — separators group, a tint appears only on hover.
+- **Values at rest, controls on intent.** At rest a screen shows values; the controls that change
+  them (− + ⛓ × beside a count, where LED #1 can go, adding a stand) appear on hover or focus of the
+  thing they act on, and what they act on lights while the rest steps back.
+- **Light and fast.** Static canvas, one delegated listener, memoised geometry, hover through CSS on
+  a data attribute rather than a render; performance is a requirement, not a polish step.
+- **Before building, show options.** Two or three directions with a sketch each, a recommendation,
+  then build; iterate on the running app with hot reload.
+
+**Motion is small, light and answers a change.** The maintainer's taste, stated plainly: tiny,
+sweet micro-animations, never big ones and never a loop on a button. Each one shows what just
+changed and is gone in about a quarter of a second. The patterns are components — reach for them
+before writing a transition by hand: `StateSwap`, `PageSwap`, `SpinSwap` and `Popover` in
+`src/shared/ui/`, and LED Setup's dock parts (`NumberField`, `PickerList`, `CommitCapsule`,
+`AsyncToggle` in `features/calibration/ui/dock/`, feature-agnostic, promoted on a second use):
+
+- **State swap:** both states stay mounted in a fixed-size box and crossfade with a few pixels of
+  travel; nothing around them moves (the LED Setup save capsule, "Saved" ⇄ "↶ | Save").
+- **Pass, don't blink:** the leaving item keeps moving while it fades (~.2 s), the arriving one
+  follows ~40 ms later (~.26–.32 s). They cross in different places, so there is no pile-up and no
+  blank moment — a longer gap reads as a flicker (the first-LED name paging with ‹ ›, the direction
+  arrow spinning the new way).
+- **Land, don't slide:** a mark that moves reappears where it now is with a small scale-in and a
+  one-shot ripple, rather than travelling across the stage.
+- **Tick:** a number that changes nudges in by ~3 px.
+- **One or two things per gesture,** near where the eye already is; the canvas reacting counts as one.
+  Long travel across the screen is out (a pick "flying" 80 px into its control was tried and removed).
+- **Motion says where it came from:** ‹ › page sideways, a pick from a list that opens above drops in
+  from above, a list grows out of the control that opened it (its notch is the scale origin).
+- A persistent state is a static cue (a soft halo, a filled dot), not a pulse. Timing comes from the
+  motion tokens in `tokens.css` (`--lm-ease-out`, `--lm-ease-leave`, `--lm-ease-land`,
+  `--lm-dur-quick/base/slow`, `--lm-dur-follow`), not raw values; direction goes in class names, not
+  CSS variables inside keyframes (WebKit is unreliable with those).
+
 ## Accessibility
 
 **Focus is an amber ring on `:focus-visible`.** The `--lm-focus-ring`, `-inset` and `-soft` tokens
@@ -63,7 +117,7 @@ name; a hand-rolled control has to guarantee both itself.
 `Callout` tone dots differ in shape (disc, diamond, ring, square) so they survive forced colours.
 
 **Every animation carries its own `prefers-reduced-motion` guard**, and every chrome surface its own
-`@media (forced-colors: active)` rule, beside the feature's styles in `src/styles/` (Tailwind's
+`@media (forced-colors: active)` rule, in the stylesheet of the component that animates or draws it (Tailwind's
 `motion-reduce:` is the inline form). Nothing checks either is present, and forced colours can only
 be verified by hand on Windows.
 

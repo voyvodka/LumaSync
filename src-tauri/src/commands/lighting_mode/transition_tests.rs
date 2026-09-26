@@ -850,6 +850,7 @@ fn ambilight_calibration_with_total_leds(
         corner_ownership: "horizontal".to_string(),
         visual_preset: "subtle".to_string(),
         start_anchor: "top-start".to_string(),
+        start_local_index: None,
         direction: "cw".to_string(),
         total_leds: total,
     }

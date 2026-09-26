@@ -1,0 +1,51 @@
+@layer components {
+  .box {
+    position: relative;
+    display: block;
+    flex: 1;
+    min-width: 0;
+    height: var(--page-height, 22px);
+    overflow: hidden;
+  }
+
+  /* Soft edges only while the two are passing; at rest the content stays crisp. */
+  .passing {
+    mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+  }
+
+  .page {
+    position: absolute;
+    inset: 0 var(--page-inset, 6px);
+    display: flex;
+    align-items: center;
+    gap: var(--page-gap, 7px);
+    min-width: 0;
+  }
+
+  /* The old page keeps moving while it fades; the new one follows a beat later. */
+  .fade > .in { animation: fade-in var(--lm-dur-base) ease-out var(--lm-dur-follow) backwards; }
+  .fade > .out { animation: fade-out 0.18s linear forwards; }
+  .next > .in { animation: in-next 0.26s var(--lm-ease-out) var(--lm-dur-follow) backwards; }
+  .next > .out { animation: out-next 0.2s var(--lm-ease-leave) forwards; }
+  .prev > .in { animation: in-prev 0.26s var(--lm-ease-out) var(--lm-dur-follow) backwards; }
+  .prev > .out { animation: out-prev 0.2s var(--lm-ease-leave) forwards; }
+  /* From a list that opens above: the new content drops in a few pixels, the old sinks away. */
+  .drop > .in { animation: drop-in 0.24s var(--lm-ease-out) var(--lm-dur-follow) backwards; }
+  .drop > .out { animation: drop-out 0.14s ease-in forwards; }
+
+  @keyframes fade-in { from { opacity: 0; } }
+  @keyframes fade-out { to { opacity: 0; } }
+  @keyframes in-next { from { opacity: 0; transform: translateX(45%); } }
+  @keyframes out-next { 40% { opacity: 0.7; } to { opacity: 0; transform: translateX(-45%); } }
+  @keyframes in-prev { from { opacity: 0; transform: translateX(-45%); } }
+  @keyframes out-prev { 40% { opacity: 0.7; } to { opacity: 0; transform: translateX(45%); } }
+  @keyframes drop-in { from { opacity: 0; transform: translateY(-6px); } }
+  @keyframes drop-out { to { opacity: 0; transform: translateY(4px); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .in { animation: none; }
+    /* No animation means no animationend: the old page would never be removed. */
+    .out { display: none; }
+  }
+}

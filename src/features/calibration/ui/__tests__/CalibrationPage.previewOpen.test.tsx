@@ -1,4 +1,4 @@
-// "Test & Preview" on LED Setup opens the twin overlay and the control popup.
+// "Preview" on LED Setup opens the twin overlay and the control popup.
 // The preview API never throws, so a refused open comes back as `ok: false`
 // and used to vanish — the click did nothing and said nothing.
 
@@ -7,6 +7,7 @@ import type { ControlPopupResult, TwinOverlayResult } from "@/shared/contracts/p
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import { CalibrationPage } from "../CalibrationPage";
 import type * as calibrationApiModule from "@/features/calibration/calibrationApi";
 import type * as modeApiModule from "@/features/mode/modeApi";
@@ -52,13 +53,23 @@ vi.mock("@/features/preview/previewApi", () => ({
   stopLedTestPattern: () => Promise.resolve({ status: { code: "LED_TEST_PATTERN_STOPPED" } }),
 }));
 
+const SAVED: LedCalibrationConfig = {
+  counts: { top: 40, right: 20, bottom: 40, left: 20 },
+  bottomMissing: 0,
+  cornerOwnership: "horizontal",
+  visualPreset: "vivid",
+  startAnchor: "left-start",
+  direction: "cw",
+  totalLeds: 120,
+};
+
 const OVERLAY_OK: TwinOverlayResult = { ok: true, code: "TWIN_OVERLAY_OPENED", message: "" };
 const POPUP_OK: ControlPopupResult = { ok: true, code: "CONTROL_POPUP_SHOWN", message: "", visible: true };
 
 async function clickPreview() {
   const user = userEvent.setup();
-  render(<CalibrationPage onNavigateBack={() => {}} onSaved={() => {}} />);
-  await user.click(screen.getByRole("button", { name: /preview:entry\.ledSetupButton/ }));
+  render(<CalibrationPage initialConfig={SAVED} onNavigateBack={() => {}} onSaved={() => {}} />);
+  await user.click(screen.getByRole("button", { name: "calibration:setup.preview" }));
 }
 
 describe("CalibrationPage — opening the LED preview", () => {

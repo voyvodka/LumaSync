@@ -1,7 +1,8 @@
 // LED Setup asks for the strip's total before anything else when there is no
 // saved layout, and splits it over the edges by the display's shape. The old
 // first fill guessed counts from the display's pixel width, so a 3600-px
-// laptop panel got 164 LEDs whatever strip was on it.
+// laptop panel got 164 LEDs whatever strip was on it. The numbers sit on the
+// canvas edges and read top, right, left, bottom.
 
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -88,91 +89,95 @@ async function renderPage(
   return { onNavigateBack };
 }
 
-const step = () => screen.queryByTestId("calibration-total-step");
-const totalInput = () => screen.getByLabelText("calibration:page.totalStep.question");
+const question = () => screen.queryByLabelText("calibration:page.totalStep.question");
+const distributeButton = () => screen.getByRole("button", { name: "calibration:setup.distribute" });
 const edgeValues = () =>
   screen
-    .getAllByRole("textbox", { name: "calibration:page.aria.countInput" })
-    .map((input) => Number((input as HTMLInputElement).value));
-const dialog = () => screen.queryByTestId("calibration-discard-dialog");
+    .queryAllByRole("button", { name: "calibration:page.aria.countInput" })
+    .map((chip) => Number(chip.textContent));
+
+async function changeTotal(user: ReturnType<typeof userEvent.setup>, total: string) {
+  await user.click(screen.getByRole("button", { name: "calibration:setup.editTotal" }));
+  const field = screen.getByRole("textbox", { name: "calibration:setup.totalField" });
+  await user.clear(field);
+  await user.type(field, total);
+}
+
+async function pickDisplay(user: ReturnType<typeof userEvent.setup>, name: RegExp) {
+  await user.click(screen.getByRole("button", { name: "calibration:setup.displayLabel" }));
+  await user.click(screen.getByRole("option", { name }));
+  // A pick is handed over once its tint lands, and the list then settles out.
+  await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
+}
 
 describe("LED Setup with no saved layout", () => {
   it("asks for the total first and guesses no counts from the display", async () => {
-    const user = userEvent.setup();
     const page = await renderPage();
 
-    expect(step()).not.toBeNull();
-    expect(totalInput()).toHaveValue("");
-    expect(screen.queryAllByRole("textbox", { name: "calibration:page.aria.countInput" })).toHaveLength(0);
-
-    // Nothing was entered, so there is nothing to discard.
-    await user.click(screen.getByRole("button", { name: "calibration:overlay.cancel" }));
-    expect(dialog()).toBeNull();
-    expect(page.onNavigateBack).toHaveBeenCalledTimes(1);
+    expect(question()).toHaveValue("");
+    expect(edgeValues()).toHaveLength(0);
+    // Nothing to save or put back yet; the dock waits for the total.
+    expect(screen.queryByRole("button", { name: "calibration:overlay.save" })).toBeNull();
+    expect(page.onNavigateBack).not.toHaveBeenCalled();
   });
 
   it("splits a typed total over the edges so they add up to it exactly", async () => {
     const user = userEvent.setup();
     await renderPage();
 
-    await user.type(totalInput(), "121");
-    await user.click(screen.getByRole("button", { name: "calibration:page.totalStep.apply" }));
+    await user.type(question()!, "121");
+    await user.click(distributeButton());
 
-    expect(step()).toBeNull();
-    // Top, right, bottom, left on a 16:9 display.
-    expect(edgeValues()).toEqual([39, 22, 38, 22]);
-    expect(screen.getByRole("button", { name: "calibration:page.totalStep.change" })).toHaveFocus();
+    expect(question()).toBeNull();
+    // 16:9: the odd LED goes to the top, which splits top from bottom.
+    expect(edgeValues()).toEqual([39, 22, 22, 38]);
   });
 
-  it("counts the split as the user's edit, so leaving asks", async () => {
+  it("counts the split as the user's edit", async () => {
     const user = userEvent.setup();
     await renderPage();
 
-    await user.type(totalInput(), "120{Enter}");
-    expect(step()).toBeNull();
-    await user.click(screen.getByRole("button", { name: "calibration:overlay.cancel" }));
+    await user.type(question()!, "120{Enter}");
 
-    expect(dialog()).not.toBeNull();
+    expect(screen.getByRole("button", { name: "calibration:overlay.save" })).toHaveAttribute("title", "calibration:setup.unsaved");
+    expect(screen.getByRole("button", { name: "calibration:setup.revert" })).toBeInTheDocument();
   });
 
-  it("splits only over the edges the strip runs along", async () => {
+  it("shares a new total only over the edges still lit", async () => {
+    const user = userEvent.setup();
+    await renderPage();
+    await user.type(question()!, "120{Enter}");
+
+    const removes = screen.getAllByRole("button", { name: "calibration:setup.remove" });
+    await user.click(removes[removes.length - 1]!);
+    await changeTotal(user, "120{Enter}");
+
+    expect(edgeValues()).toEqual([56, 32, 32]);
+    expect(screen.getByRole("button", { name: "calibration:setup.add.bottom" })).toBeInTheDocument();
+  });
+
+  it("refuses a total the edges cannot hold", async () => {
     const user = userEvent.setup();
     await renderPage();
 
-    await user.type(totalInput(), "120");
-    await user.click(screen.getByRole("button", { name: "calibration:page.edgeBottom" }));
-    await user.click(screen.getByRole("button", { name: "calibration:page.totalStep.apply" }));
+    await user.type(question()!, "2");
+    expect(distributeButton()).toBeDisabled();
+    expect(question()).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText("calibration:setup.atLeast")).toBeInTheDocument();
 
-    expect(edgeValues()).toEqual([56, 32, 0, 32]);
-  });
-
-  it("refuses a total out of range, and no edges at all", async () => {
-    const user = userEvent.setup();
-    await renderPage();
-    const apply = () => screen.getByRole("button", { name: "calibration:page.totalStep.apply" });
-
-    await user.type(totalInput(), "0");
-    expect(apply()).toBeDisabled();
-    expect(totalInput()).toHaveAttribute("aria-invalid", "true");
-
-    await user.clear(totalInput());
-    await user.type(totalInput(), "90");
-    expect(apply()).toBeEnabled();
-    for (const edge of ["edgeTop", "edgeRight", "edgeBottom", "edgeLeft"]) {
-      await user.click(screen.getByRole("button", { name: `calibration:page.${edge}` }));
-    }
-    expect(apply()).toBeDisabled();
-    expect(screen.getByText("calibration:page.totalStep.noEdges")).toBeInTheDocument();
+    await user.clear(question()!);
+    await user.type(question()!, "90");
+    expect(distributeButton()).toBeEnabled();
   });
 
   it("lets the user skip to setting each edge by hand", async () => {
     const user = userEvent.setup();
     await renderPage();
 
-    await user.click(screen.getByRole("button", { name: "calibration:page.totalStep.skip" }));
+    await user.click(screen.getByRole("button", { name: "calibration:setup.skipTotal" }));
 
-    expect(step()).toBeNull();
-    expect(edgeValues()).toEqual([0, 0, 0, 0]);
+    expect(question()).toBeNull();
+    expect(edgeValues()).toEqual([1, 1, 1, 1]);
   });
 });
 
@@ -183,70 +188,115 @@ describe("LED Setup with a bound WLED panel", () => {
     };
   });
 
-  it("pre-fills the panel's own count, already split, without counting it as unsaved", async () => {
-    const user = userEvent.setup();
-    const page = await renderPage();
+  it("pre-fills the panel's own count without counting it as unsaved", async () => {
+    await renderPage();
 
-    await waitFor(() => expect(totalInput()).toHaveValue("150"));
+    await waitFor(() => expect(question()).toHaveValue("150"));
     expect(screen.getByText("calibration:page.totalStep.fromWled")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "calibration:overlay.cancel" }));
-    expect(dialog()).toBeNull();
-    expect(page.onNavigateBack).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "calibration:setup.revert" })).toBeNull();
   });
 
-  it("re-splits the untouched fill for a display of another shape", async () => {
+  it("re-splits the untouched fill for a display of another shape, and it can be saved as it stands", async () => {
     const user = userEvent.setup();
     await renderPage();
-    await waitFor(() => expect(totalInput()).toHaveValue("150"));
+    await waitFor(() => expect(question()).toHaveValue("150"));
 
-    await user.click(screen.getByRole("radio", { name: /Portrait/ }));
-    await user.click(screen.getByRole("button", { name: "calibration:page.totalStep.apply" }));
+    await pickDisplay(user, /Portrait/);
+    await user.click(distributeButton());
 
     // 150 over a 9:16 perimeter: the sides are the long edges now.
-    expect(edgeValues()).toEqual([27, 48, 27, 48]);
+    expect(edgeValues()).toEqual([27, 48, 48, 27]);
+    expect(screen.getByRole("button", { name: "calibration:overlay.save" })).toBeEnabled();
   });
 
-  it("offers the panel's count, not a saved total that disagrees with it", async () => {
+  it("offers the panel's count when a saved total disagrees with it", async () => {
     const user = userEvent.setup();
     await renderPage({ initialConfig: SAVED });
-    expect(step()).toBeNull();
 
-    await user.click(screen.getByRole("button", { name: "calibration:page.totalStep.change" }));
+    await user.click(screen.getByRole("button", { name: "calibration:setup.editTotal" }));
+    await user.click(await screen.findByRole("button", { name: "calibration:setup.wledTotal" }));
+    const field = screen.getByRole("textbox", { name: "calibration:setup.totalField" });
+    expect(field).toHaveValue("150");
+    await user.type(field, "{Enter}");
 
-    expect(totalInput()).toHaveValue("150");
+    expect(edgeValues()).toEqual([70, 40, 40]);
   });
 });
 
 describe("LED Setup with a saved layout", () => {
-  it("opens straight on the per-edge editor", async () => {
+  it("opens straight on the numbers, with the unlit edge offered back", async () => {
     await renderPage({ initialConfig: SAVED });
 
-    expect(step()).toBeNull();
-    expect(edgeValues()).toEqual([40, 20, 0, 20]);
+    expect(question()).toBeNull();
+    expect(edgeValues()).toEqual([40, 20, 20]);
+    expect(screen.getByRole("button", { name: "calibration:setup.add.bottom" })).toBeInTheDocument();
   });
 
   it("re-splits a changed total over the edges the layout lights", async () => {
     const user = userEvent.setup();
     await renderPage({ initialConfig: SAVED });
 
-    await user.click(screen.getByRole("button", { name: "calibration:page.totalStep.change" }));
-    expect(totalInput()).toHaveFocus();
-    expect(totalInput()).toHaveValue("80");
-    expect(screen.getByRole("button", { name: "calibration:page.edgeBottom" })).toHaveAttribute("aria-pressed", "false");
+    await changeTotal(user, "120{Enter}");
 
-    await user.clear(totalInput());
-    await user.type(totalInput(), "120{Enter}");
-
-    expect(edgeValues()).toEqual([56, 32, 0, 32]);
+    expect(edgeValues()).toEqual([56, 32, 32]);
   });
 
-  it("keeps the total on Reset and splits it over all four edges again", async () => {
+  it("shares a typed total out when the field is left, without Enter", async () => {
     const user = userEvent.setup();
     await renderPage({ initialConfig: SAVED });
 
-    await user.click(screen.getByRole("button", { name: "calibration:page.reset" }));
+    await changeTotal(user, "120");
+    await user.click(document.body);
 
-    expect(edgeValues()).toEqual([26, 14, 26, 14]);
+    expect(edgeValues()).toEqual([56, 32, 32]);
+  });
+
+  it("steps the total with the arrow keys and applies it on leaving", async () => {
+    const user = userEvent.setup();
+    await renderPage({ initialConfig: SAVED });
+
+    screen.getByRole("button", { name: "calibration:setup.editTotal" }).focus();
+    await user.keyboard("{ArrowUp}");
+    const field = screen.getByRole("textbox", { name: "calibration:setup.totalField" });
+    expect(field).toHaveValue("81");
+    await user.keyboard("{Shift>}{ArrowUp}{/Shift}{ArrowDown}");
+    expect(field).toHaveValue("90");
+    await user.click(document.body);
+
+    // Top, right and left are each their own number here, so they add up to the total.
+    expect(edgeValues().reduce((sum, n) => sum + n, 0)).toBe(90);
+  });
+
+  it("applies a typed total with the ✓ beside it", async () => {
+    const user = userEvent.setup();
+    await renderPage({ initialConfig: SAVED });
+
+    await changeTotal(user, "120");
+    await user.click(screen.getByRole("button", { name: "calibration:setup.applyTotal" }));
+
+    expect(edgeValues()).toEqual([56, 32, 32]);
+    expect(screen.queryByRole("textbox", { name: "calibration:setup.totalField" })).toBeNull();
+  });
+
+  it("leaves the counts alone when the total is closed with Esc", async () => {
+    const user = userEvent.setup();
+    await renderPage({ initialConfig: SAVED });
+
+    await changeTotal(user, "120{Escape}");
+
+    expect(screen.queryByRole("textbox", { name: "calibration:setup.totalField" })).toBeNull();
+    expect(edgeValues()).toEqual([40, 20, 20]);
+  });
+
+  it("leaves counts set edge by edge alone when the same total is confirmed", async () => {
+    const user = userEvent.setup();
+    await renderPage({ initialConfig: { ...SAVED, counts: { top: 50, right: 10, bottom: 0, left: 20 }, totalLeds: 80 } });
+
+    await changeTotal(user, "80{Enter}");
+    expect(edgeValues()).toEqual([50, 10, 20]);
+
+    await changeTotal(user, "80");
+    await user.click(screen.getByRole("button", { name: "calibration:setup.applyTotal" }));
+    expect(edgeValues()).toEqual([50, 10, 20]);
   });
 });

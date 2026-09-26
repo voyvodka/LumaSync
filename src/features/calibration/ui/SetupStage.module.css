@@ -1,0 +1,65 @@
+@layer components {
+  .box {
+    /* The flexible row, named: with no notices the box would land in the auto row, size to the
+       stage, and the stage — sized from the box — could never grow past its first size. */
+    grid-row: 3;
+    position: relative;
+    display: grid;
+    place-items: center;
+    min-height: 0;
+    padding: 4px 16px 76px;
+  }
+  .fit { position: absolute; inset: 4px 16px 76px; pointer-events: none; }
+  .stage { position: relative; }
+
+  /* The strip's light on the wall: the picture's own colours, blurred wide behind the monitor. */
+  .halo {
+    position: absolute;
+    border-radius: 18%;
+    background: linear-gradient(135deg, #d9a06a 0%, #b8532f 40%, #5a2c5c 70%, #1c2f5a 100%);
+    filter: blur(34px);
+    opacity: 0.24;
+    pointer-events: none;
+    animation: halo-in var(--lm-dur-slow) var(--lm-ease-out);
+  }
+
+  /* While a total is being typed, the numbers are what it would make: amber, and not editable. */
+  .isPreviewing :global([data-count]) { color: color-mix(in srgb, var(--lm-amber) 80%, transparent); pointer-events: none; }
+
+  .glyph { width: 14px; height: 11px; color: var(--lm-ink-faint); }
+
+  .ghost {
+    position: absolute;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 7px;
+    border: 1px dashed var(--lm-line-2);
+    border-radius: 999px;
+    transform: translate(-50%, -50%);
+    font-size: 14px;
+    color: var(--lm-ink-faint);
+    transition: color var(--lm-dur-quick), border-color var(--lm-dur-quick), background var(--lm-dur-quick), opacity var(--lm-dur-base) var(--lm-ease-out);
+  }
+  .ghost:hover { color: var(--lm-amber); border-color: color-mix(in srgb, var(--lm-amber) 60%, transparent); background: rgb(255 176 32 / 6%); }
+  .ghost:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  /* Adding a stand is rare: it waits until the pointer is over the stage, or a key reaches it. */
+  .addStand { opacity: 0; }
+  .stage[data-pointer] .addStand,
+  .addStand:focus-visible { opacity: 1; }
+
+  @keyframes halo-in { from { opacity: 0; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .halo { animation: none; }
+  }
+
+  @media (forced-colors: active) {
+    .halo { display: none; }
+    .ghost { border-color: CanvasText; color: CanvasText; }
+  }
+}

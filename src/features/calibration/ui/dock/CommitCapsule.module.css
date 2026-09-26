@@ -1,0 +1,85 @@
+@layer components {
+  /* At rest a quiet status, not a disabled button: no frame. Frame, fill and a soft static halo
+     (no pulse) arrive with something to save, in the same place and width. */
+  .capsule {
+    display: flex;
+    flex-shrink: 0;
+    width: 124px;
+    height: 32px;
+    overflow: hidden;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    transition:
+      border-color var(--lm-dur-slow) ease,
+      background var(--lm-dur-slow) ease,
+      box-shadow 0.4s ease;
+  }
+
+  .ready {
+    border-color: var(--lm-amber);
+    background: var(--lm-amber);
+    box-shadow: 0 0 0 3px rgb(255 176 32 / 9%), 0 4px 14px rgb(255 176 32 / 16%);
+  }
+
+  .revert {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 0;
+    overflow: hidden;
+    color: var(--lm-bg);
+    opacity: 0;
+    transition:
+      width 0.26s var(--lm-ease-out),
+      opacity 0.2s ease,
+      background var(--lm-dur-quick);
+  }
+
+  .dirty .revert {
+    width: 32px;
+    opacity: 1;
+    box-shadow: inset -1px 0 rgb(0 0 0 / 18%);
+  }
+
+  .revert:hover:not(:disabled) { background: rgb(0 0 0 / 10%); }
+  .revert:focus-visible,
+  .commit:focus-visible { outline: none; box-shadow: var(--lm-focus-ring-inset); }
+
+  .slot {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    font-size: 12.5px;
+    white-space: nowrap;
+    --swap-gap: 6px;
+  }
+
+  .commit {
+    width: 100%;
+    height: 100%;
+    font-weight: 600;
+    color: var(--lm-bg);
+  }
+
+  .commit:hover:not(:disabled) { background: rgb(255 255 255 / 8%); }
+  .commit:disabled { cursor: progress; }
+
+  .rest {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--lm-ink-faint);
+  }
+
+  .rest svg { width: 13px; height: 13px; color: var(--lm-green); opacity: 0.75; transition: opacity 0.2s; }
+  .flash { color: var(--lm-green); }
+  .flash svg { opacity: 1; animation: land 0.3s var(--lm-ease-land); }
+
+  @keyframes land { from { opacity: 0; transform: scale(0.3); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .capsule,
+    .revert { transition: none; }
+    .flash svg { animation: none; }
+  }
+}

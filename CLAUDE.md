@@ -42,7 +42,7 @@ Frontend (React/TS)  →  Tauri Commands (Rust)  →  Device Layer (Serial / WLE
 ```
 
 - **Contracts first.** Everything crossing the IPC boundary is defined in `src/shared/contracts/` **before** implementation; that directory is the source of truth — list it rather than trusting a summary. `bun run verify:shell-contracts` checks Rust against it. A green verifier means every status code is *declared*, not that it is *correct*.
-- **Feature modules** (`src/features/`) use some of `ui/`, `state/`, `model/`, and an `*Api.ts` `invoke()` bridge; `ls src/features/` is the authoritative list. `hue` holds no UI — placement is authored only in the room map (`docs/architecture/hue.md`). `onboarding` does not include the room map.
+- **Feature modules** (`src/features/`) use some of `ui/`, `state/`, `model/`, and an `*Api.ts` `invoke()` bridge; `ls src/features/` is the authoritative list. A component and its `*.module.css` sit together in the feature that uses them, and move to `src/shared/ui/` only when a second feature needs them or they know nothing of any feature (`ui-and-shell.md`, "Code lives with the feature"). `hue` holds no UI — placement is authored only in the room map (`docs/architecture/hue.md`). `onboarding` does not include the room map.
 - **Rust commands** live in `src-tauri/src/commands/`; the `generate_handler![]` block in `src-tauri/src/lib.rs` is the authoritative registration list.
 - **State** persists in `shell-state.json` in the app data directory, and Rust owns it (`commands/shell_state.rs`, atomic writes plus `.bak`). The frontend goes through the `shellStore.ts` facade; shape changes go through `migrations.ts`. Hue credentials live in the OS keychain, never in that file. See `contracts-and-state.md`.
 - **Auto-update** uses GitHub Releases with minisign verification (`build-and-release.md`).
@@ -79,6 +79,7 @@ the failure or say plainly that the work is unfinished — never report it done.
 
 Learned across the v1.5 frontend decomposition, where each of these cost a cycle before it was written down.
 
+- **A screen reworked for its UI brings its code with it.** The maintainer improves the app screen by screen; each pass also moves that screen's code to the layout rule (`ui-and-shell.md`, "Code lives with the feature") in the same change, so the frontend converges without a big-bang move.
 - **A plan document is stale until proven otherwise.** Audit it against current `main` and re-derive every line number and file list before editing.
 - **"Behaviour unchanged" is a claim to prove, not assert.** Diff the exported surface against `main`. Where a guard is the point of the change, break the guard and confirm the test fails.
 - **Invariant comments travel verbatim with the code they guard.** The comment-guard hook will object when you move one; overriding it is correct in exactly that case.
@@ -130,6 +131,9 @@ more than they return, while a clean-context reviewer catches what the author ca
 Consult when a domain's risk is real, not by reflex; one targeted question beats a broad fan-out.
 A consultant's answer is a draft — if it reads thin or contradicts the code, say so and check it.
 The maintainer prefers to settle a UI direction in conversation before any code is written.
+Their UI taste — direct, quiet, not corporate; few words; nothing shifting under the pointer; tiny
+motion that answers a change — is written down in `design-language.md` ("The interface is direct and
+quiet" and "Motion is small"). Read it before any UI work instead of asking again.
 Agent and skill definitions, toolchains and available models drift silently — when you notice one
 out of date, say so in a sentence rather than opening a project.
 
