@@ -3,10 +3,10 @@
    Always dark regardless of system theme: chrome lives outside the
    light/dark body and remains visually consistent.
    ───────────────────────────────────────────────────────────────────── */
+/* No backdrop blur: the content slot starts below the bar, so there is nothing
+   under it to blur, and a window-wide blur redrew on every frame of a resize. */
 .lm-titlebar {
   background-color: rgba(8, 9, 12, 0.85);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--lm-line);
   color: var(--lm-ink);
 }
@@ -37,7 +37,8 @@
   transition:
     border-color 180ms ease,
     background-color 180ms ease,
-    color 180ms ease;
+    color 180ms ease,
+    opacity var(--lm-dur-base) var(--lm-ease-out);
   padding: 0;
 }
 .lm-titlebar-toggle:hover {
@@ -52,6 +53,16 @@
 .lm-titlebar-toggle svg {
   width: 13px;
   height: 13px;
+}
+
+/* Held while a prompt owns the window: still there, plainly not for now. */
+.lm-titlebar-tabs {
+  transition: opacity var(--lm-dur-base) var(--lm-ease-out);
+}
+:root[data-reduced-motion] .lm-titlebar-tabs { transition: none; }
+.lm-titlebar-tabs[data-locked],
+.lm-titlebar-toggle[data-locked] {
+  opacity: 0.35;
 }
 
 /* Titlebar tabs — full mode navigation (Phase 10) */
@@ -246,10 +257,8 @@
   height: 32px;
   transform: translate(-50%, -50%);
 }
-@media (prefers-reduced-motion: reduce) {
-  .lm-statusbar-reconnect {
-    transition: none;
-  }
+:root[data-reduced-motion] .lm-statusbar-reconnect {
+  transition: none;
 }
 
 /* Forced-colors (Windows high contrast / accessibility skins) — the amber

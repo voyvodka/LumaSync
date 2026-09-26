@@ -41,6 +41,14 @@ type StateMap = Map<String, Value>;
 // Typed reads
 // ---------------------------------------------------------------------------
 
+/// `uiZoom` as a factor, for a value read or just written; `resolveUiZoom` in TS.
+pub fn ui_zoom_factor(value: Option<&Value>) -> f64 {
+    match value.and_then(Value::as_u64) {
+        Some(percent @ (90 | 100 | 110 | 125)) => percent as f64 / 100.0,
+        _ => 1.0,
+    }
+}
+
 /// A copy of the persisted object, read through the accessors below so each
 /// key Rust depends on is spelled in exactly one place.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -169,6 +177,27 @@ impl PersistedShellState {
     pub fn hue_off_behavior(&self) -> HueLightsAfterStop {
         self.read("hueOffBehavior")
             .unwrap_or(HueLightsAfterStop::TurnOff)
+    }
+
+    /// The interface size as a factor. Whole percents only, matching
+    /// `resolveUiZoom`: anything but a listed step is 100 %.
+    pub fn ui_zoom(&self) -> f64 {
+        ui_zoom_factor(self.0.get("uiZoom"))
+    }
+
+    /// Settings → Close button. Anything but `"quit"` hides to the tray.
+    pub fn close_quits(&self) -> bool {
+        self.read::<String>("closeAction").as_deref() == Some("quit")
+    }
+
+    /// Settings → Notifications. Anything but `"off"` shows them.
+    pub fn notifications_off(&self) -> bool {
+        self.read::<String>("notifications").as_deref() == Some("off")
+    }
+
+    /// Settings → Lights on launch. Anything but `"off"` resumes the saved mode.
+    pub fn launch_lights_off(&self) -> bool {
+        self.read::<String>("launchLights").as_deref() == Some("off")
     }
 
     /// Bridge, area and pairing evidence for a Hue start. The legacy keys are
@@ -671,6 +700,9 @@ fn window_wrote<R: Runtime>(app: &AppHandle<R>, changed: &ShellStateChanged) {
     };
     super::lighting_mode::outputs::note_settings_saved(app, keys());
     super::hue::health::note_settings_saved(app, keys());
+    if changed.set.contains_key("uiZoom") || changed.remove.iter().any(|key| key == "uiZoom") {
+        super::led_preview::apply_ui_zoom_later(app);
+    }
 }
 
 #[tauri::command]
@@ -1248,6 +1280,36 @@ mod tests {
         assert_eq!(unplaced.popup_center(), None);
         let wrong_type = persisted(r#"{ "shell-state": { "updateChannel": 3 } }"#).unwrap();
         assert_eq!(wrong_type.update_channel(), None);
+    }
+
+    /// The four Settings preferences Rust reads: absent, unknown and wrong-typed
+    /// values all read as the default, as their TS resolvers do.
+    #[test]
+    fn settings_preferences_default_unless_set_to_a_known_value() {
+        let read =
+            |value: &str| persisted(&format!(r#"{{"shell-state": {{ {value} }} }}"#)).unwrap();
+        let absent = read(r#""schemaVersion": 6"#);
+        assert_eq!(absent.ui_zoom(), 1.0);
+        assert!(!absent.close_quits());
+        assert!(!absent.notifications_off());
+        assert!(!absent.launch_lights_off());
+
+        assert_eq!(read(r#""uiZoom": 125"#).ui_zoom(), 1.25);
+        assert_eq!(read(r#""uiZoom": 90"#).ui_zoom(), 0.9);
+        assert_eq!(read(r#""uiZoom": 150"#).ui_zoom(), 1.0);
+        assert_eq!(read(r#""uiZoom": 1.1"#).ui_zoom(), 1.0);
+        assert_eq!(read(r#""uiZoom": "110""#).ui_zoom(), 1.0);
+
+        assert!(read(r#""closeAction": "quit""#).close_quits());
+        assert!(!read(r#""closeAction": "tray""#).close_quits());
+        assert!(!read(r#""closeAction": "exit""#).close_quits());
+
+        assert!(read(r#""notifications": "off""#).notifications_off());
+        assert!(!read(r#""notifications": "on""#).notifications_off());
+        assert!(!read(r#""notifications": false"#).notifications_off());
+
+        assert!(read(r#""launchLights": "off""#).launch_lights_off());
+        assert!(!read(r#""launchLights": "resume""#).launch_lights_off());
     }
 
     /// What the lighting transaction reads to restore a mode and start Hue.

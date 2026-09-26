@@ -13,13 +13,15 @@ import { readStylesheet } from "@/test/stylesheetSource";
 const src = (path: string) => readFileSync(resolve(process.cwd(), "src", path), "utf8");
 const stylesCss = readStylesheet();
 const titleBarSource = src("features/shell/TitleBar.tsx");
-const calibrationPageSource = src("features/calibration/ui/CalibrationPage.tsx");
 const updateModalSource = src("features/updater/UpdateModal.tsx");
+const updateModalCss = src("features/updater/UpdateModal.module.css");
 
 describe("modal scrim layering", () => {
   it("keeps both scrims below the title bar", () => {
-    const css = stylesCss;
-    for (const selector of [".lm-updater-backdrop", ".lm-modal-scrim"]) {
+    for (const [css, selector] of [
+      [updateModalCss, ".scrim"],
+      [stylesCss, ".lm-modal-scrim"],
+    ] as const) {
       const block = css.slice(css.indexOf(`${selector} {`));
       const inset = /inset:\s*([^;]+);/.exec(block.slice(0, block.indexOf("}")))?.[1];
       expect(inset, `${selector} must declare an inset`).toBeDefined();
@@ -33,10 +35,7 @@ describe("modal scrim layering", () => {
     expect(declared).toBe(source);
   });
 
-  it("does not let either modal root fall back to a full-viewport inset", () => {
-    expect(calibrationPageSource).not.toContain(
-      "fixed inset-0 z-[60]",
-    );
+  it("does not let the update modal root fall back to a full-viewport inset", () => {
     expect(updateModalSource).not.toContain("inset-0");
   });
 });

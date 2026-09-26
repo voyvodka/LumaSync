@@ -123,11 +123,17 @@ only exposes it to every later step.
   an ignore rule.
 
 **Updates ship through GitHub Releases with minisign verification.** The updater checks on startup
-and then daily while the app runs, retrying a failed check after 1, 5 and 15 minutes, and surfaces
-`UpdateModal.tsx` when a version is available. A failed automatic check is only logged and raised as
-a low-priority shell notice with "Try again"; the modal reports a failure only for a check the user
-started (see `ui-and-shell.md`). The e2e build skips automatic checks. Artefacts must include a
-`latest.json` endpoint.
+and then daily while the app runs, retrying a failed check after 1, 5 and 15 minutes. **An update an
+automatic check finds is offered, not put over the window:** a quiet "Update X.Y.Z" item in the status
+bar (`UpdateStatusItem`) opens `UpdateModal.tsx`; a check the user started opens it directly. An
+update put off with "Later" stays in the status bar and is re-checked, so a newer one replaces it.
+A failed automatic check is only logged and raised as a low-priority shell notice with "Try again";
+the modal reports a failure only for a check the user started (see `ui-and-shell.md`). **A download
+cannot be put away:** `download_and_install` downloads and installs in one call, so a download
+hidden behind "continue in background" relaunched the app when it finished, unasked; splitting it
+(the plugin's `download` then `install`) is what a background download would need. The prompt holds
+the keyboard while open — the mode shortcuts are off behind it. The e2e build skips automatic
+checks. Artefacts must include a `latest.json` endpoint.
 
 **The update channel defaults to the running build.** An install that never chose a channel checks
 beta while it runs a prerelease (a version with a `-` suffix) and stable otherwise;

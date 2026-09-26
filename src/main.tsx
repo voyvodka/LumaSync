@@ -12,6 +12,8 @@ import "./styles.css";
 import { Providers } from "./app/providers";
 import { followSavedLanguage, resolveInitialLanguage } from "./features/i18n/languagePolicy";
 import { initI18n } from "./features/i18n/i18n";
+import { shellStore } from "./features/persistence/shellStore";
+import { followMotionPreference } from "./features/shell/motionPreference";
 import { GlobalErrorBoundaryWithI18n } from "./features/shell/GlobalErrorBoundary";
 import { TwinErrorBoundary } from "./features/preview/ui/TwinErrorBoundary";
 import {
@@ -188,8 +190,13 @@ function renderRoot(Root: ComponentType) {
 }
 
 async function bootstrap() {
+  // One read serves the language and the preferences, before the first render: reduced motion
+  // applied after it would let the first transitions run.
+  const state = shellStore.load();
+  followMotionPreference(state);
+
   // 1. Resolve language (honours I18N-02: English default on first launch)
-  const language = await resolveInitialLanguage();
+  const language = await resolveInitialLanguage(() => state);
 
   // 2. Initialise i18next with resolved language
   await initI18n(language);
@@ -204,6 +211,7 @@ async function bootstrap() {
 bootstrap().catch((err) => {
   // Bootstrap failure is non-fatal: fall back to English i18n and render anyway
   console.error("[LumaSync] Bootstrap error:", err);
+  followMotionPreference();
   // Render even if the fallback init also fails — an uninitialised i18next
   // echoes keys, but skipping renderRoot leaves a permanently blank webview
   // with the ErrorBoundary trapped inside a tree that never mounted.

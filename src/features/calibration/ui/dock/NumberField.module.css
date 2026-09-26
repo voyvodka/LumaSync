@@ -10,7 +10,7 @@
     height: 34px;
     padding: 0 10px;
     border-radius: 10px;
-    transition: background 0.2s ease;
+    transition: background var(--lm-dur-base) var(--lm-ease-out);
   }
 
   .box:hover,
@@ -21,7 +21,7 @@
   /* The number's slot has one width at rest and while typing: nothing beside it moves. */
   .value { display: inline-flex; justify-content: flex-end; width: 4.2ch; font: 650 19px/1 var(--lm-sans); }
   .number { display: inline-block; height: 19px; font-variant-numeric: tabular-nums; color: var(--lm-ink); }
-  .tick { animation: tick 0.2s ease-out; }
+  .tick { animation: tick var(--lm-dur-base) var(--lm-ease-out); }
 
   /* Same box as the number it replaces (height and line-height), so the swap moves nothing. */
   .input {
@@ -40,9 +40,9 @@
     outline: none;
   }
 
-  .input::selection { background: rgb(255 176 32 / 35%); color: var(--lm-ink); }
+  .input::selection { background: color-mix(in srgb, var(--lm-amber) 35%, transparent); color: var(--lm-ink); }
 
-  .unit { font-size: 11px; color: var(--lm-ink-faint); transition: color 0.2s; }
+  .unit { font-size: 11px; color: var(--lm-ink-faint); transition: color var(--lm-dur-base); }
   .editing .unit { color: var(--lm-ink-dim); }
 
   .mark { position: relative; display: grid; place-items: center; width: 18px; height: 18px; }
@@ -52,7 +52,7 @@
     width: 12px;
     height: 12px;
     color: var(--lm-ink-faint);
-    transition: opacity 0.18s ease, color var(--lm-dur-quick), transform 0.2s ease;
+    transition: opacity var(--lm-dur-quick) var(--lm-ease-out), color var(--lm-dur-quick), transform var(--lm-dur-base) var(--lm-ease-out);
   }
 
   .box:hover .pen { color: var(--lm-amber); }
@@ -71,15 +71,15 @@
     transform: scale(0.6) rotate(-35deg);
     pointer-events: none;
     transition:
-      opacity 0.18s ease,
-      transform 0.26s var(--lm-ease-out),
+      opacity var(--lm-dur-quick) var(--lm-ease-out),
+      transform var(--lm-dur-base) var(--lm-ease-out),
       background var(--lm-dur-quick),
       color var(--lm-dur-quick);
   }
 
   .apply svg { width: 13px; height: 13px; }
   .editing .apply { opacity: 1; transform: none; pointer-events: auto; transition-delay: var(--lm-dur-follow); }
-  .apply:hover { background: rgb(255 176 32 / 14%); }
+  .apply:hover { background: color-mix(in srgb, var(--lm-amber) 14%, transparent); }
   .invalid { color: var(--lm-ink-faint); }
   .invalid:hover { background: transparent; }
 
@@ -93,7 +93,7 @@
     border-radius: 1px;
     background: var(--lm-amber);
     transform: scaleX(0);
-    transition: transform var(--lm-dur-base) var(--lm-ease-out), background 0.2s;
+    transition: transform var(--lm-dur-base) var(--lm-ease-out), background var(--lm-dur-base);
   }
 
   .editing .line { transform: scaleX(1); }
@@ -120,9 +120,9 @@
     visibility: hidden;
     pointer-events: none;
     transition:
-      opacity 0.18s ease,
-      transform 0.2s var(--lm-ease-out),
-      visibility 0s linear 0.2s;
+      opacity var(--lm-dur-quick) var(--lm-ease-out),
+      transform var(--lm-dur-base) var(--lm-ease-out),
+      visibility 0s linear var(--lm-dur-base);
   }
 
   .editing .hint {
@@ -131,29 +131,27 @@
     visibility: visible;
     pointer-events: auto;
     transition:
-      opacity 0.18s ease,
-      transform 0.2s var(--lm-ease-out),
+      opacity var(--lm-dur-quick) var(--lm-ease-out),
+      transform var(--lm-dur-base) var(--lm-ease-out),
       visibility 0s;
   }
 
   .suggestion {
     padding: 1px 6px;
     border-radius: 999px;
-    background: rgb(255 176 32 / 12%);
+    background: color-mix(in srgb, var(--lm-amber) 12%, transparent);
     color: var(--lm-amber);
     transition: background var(--lm-dur-quick);
   }
 
-  .suggestion:hover { background: rgb(255 176 32 / 22%); }
+  .suggestion:hover { background: color-mix(in srgb, var(--lm-amber) 22%, transparent); }
 
   @keyframes tick { from { opacity: 0.35; transform: translateY(-3px); } }
 
-  @media (prefers-reduced-motion: reduce) {
-    .box,
-    .pen,
-    .apply,
-    .line,
-    .hint { transition: none; }
-    .tick { animation: none; }
-  }
+  :global(:root[data-reduced-motion]) .box,
+  :global(:root[data-reduced-motion]) .pen,
+  :global(:root[data-reduced-motion]) .apply,
+  :global(:root[data-reduced-motion]) .line,
+  :global(:root[data-reduced-motion]) .hint { transition: none; }
+  :global(:root[data-reduced-motion]) .tick { animation: none; }
 }

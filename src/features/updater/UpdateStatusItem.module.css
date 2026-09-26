@@ -1,0 +1,32 @@
+@layer components {
+  /* In the status bar's own type; amber, the one accent, because it is something to act on. */
+  .item {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-right: 10px;
+    padding: 0 4px;
+    border-radius: 4px;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: var(--lm-amber);
+    animation: item-in var(--lm-dur-base) var(--lm-ease-out);
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .item:hover { background: color-mix(in srgb, var(--lm-amber) 10%, transparent); }
+  .item:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  /* The bar is 22–24 px tall; the hit area meets the 32 px floor. */
+  .item::after { content: ""; position: absolute; inset: -5px 0; }
+  .leaving { pointer-events: none; animation: item-out var(--lm-dur-base) var(--lm-ease-leave) forwards; }
+
+  @keyframes item-in { from { opacity: 0; } }
+  @keyframes item-out { to { opacity: 0; } }
+
+  :global(:root[data-reduced-motion]) :is(.item, .leaving) { animation: none; }
+
+  @media (forced-colors: active) {
+    .item { color: LinkText; }
+  }
+}

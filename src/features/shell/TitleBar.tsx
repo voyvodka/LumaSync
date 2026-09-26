@@ -44,11 +44,17 @@ interface TitleBarProps {
   activeSection?: SectionId;
   /** Called when user clicks a tab — only relevant in full mode. */
   onSectionChange?: (id: SectionId) => void;
+  /**
+   * A prompt owns the window (the update prompt): the tabs and the mode toggle
+   * step back and take no input. The bar itself stays live — it is the drag
+   * region and holds the window controls, which is why no scrim covers it.
+   */
+  navLocked?: boolean;
 }
 
 export const TITLE_BAR_HEIGHT_PX = 36;
 
-export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChange }: TitleBarProps) {
+export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChange, navLocked = false }: TitleBarProps) {
   const { t } = useTranslation();
   const [platform] = useState<Platform>(detectPlatform);
   const [isMaximized, setIsMaximized] = useState(false);
@@ -119,7 +125,13 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
 
       {/* Nav tabs — full mode only, between brand and spacer. */}
       {uiMode === "full" && activeSection != null && onSectionChange != null && (
-        <div className="lm-titlebar-tabs" role="tablist" aria-label={t("shell:titleBar.sectionsAriaLabel")}>
+        <div
+          className="lm-titlebar-tabs"
+          role="tablist"
+          aria-label={t("shell:titleBar.sectionsAriaLabel")}
+          inert={navLocked}
+          data-locked={navLocked || undefined}
+        >
           {SECTION_ORDER.map((id) => (
             <button
               key={id}
@@ -149,6 +161,8 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
           title={toggleTitle}
           aria-label={toggleTitle}
           className="lm-titlebar-toggle"
+          inert={navLocked}
+          data-locked={navLocked || undefined}
           data-testid="ui-mode-toggle"
         >
           {toggleVariant === "to-full" ? <ExpandIcon /> : <CollapseIcon />}

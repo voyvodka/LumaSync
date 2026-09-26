@@ -724,16 +724,14 @@
 .lm-hue-retry-tx b { color: var(--lm-ink-dim); font-weight: 400; }
 
 /* After both spinners on purpose: a guard earlier in the cascade loses to
-   their `animation` shorthand, which is how the one in updater.css never
+   their `animation` shorthand, which is how the one in the old updater sheet never
    applied. Functional spinners slow down rather than stop. */
-@media (prefers-reduced-motion: reduce) {
-  .lm-hue-wait-sp,
-  .lm-hue-retry-sp {
-    animation-duration: 2.2s;
-  }
-  .lm-hue-area-item {
-    transition: none;
-  }
+:root[data-reduced-motion] .lm-hue-wait-sp,
+:root[data-reduced-motion] .lm-hue-retry-sp {
+  animation-duration: 2.2s;
+}
+:root[data-reduced-motion] .lm-hue-area-item {
+  transition: none;
 }
 @media (forced-colors: active) {
   .lm-hue-area-item {
@@ -1093,10 +1091,8 @@
   line-height: 1.45;
   color: var(--lm-ink-dim);
 }
-@media (prefers-reduced-motion: reduce) {
-  .lm-usb-other-h::before {
-    transition: none;
-  }
+:root[data-reduced-motion] .lm-usb-other-h::before {
+  transition: none;
 }
 @media (forced-colors: active) {
   .lm-usb-other,

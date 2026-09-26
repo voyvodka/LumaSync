@@ -32,10 +32,21 @@ https://keepachangelog.com/en/1.1.0/
   the strip one color at a time and asks what you see, then saves the right order and lets you
   undo it if the colors still look wrong. The order can also be picked by hand. WLED devices set
   their color order in WLED itself, so the setting is hidden for them.
-- Settings → General: "Show stats for nerds" shows frame rate and live output numbers in the
+- Settings → Appearance: "Show stats for nerds" shows frame rate and live output numbers in the
   status bar and the telemetry readout. It is off by default, and while it is off the app no longer
   asks for those numbers at all; the status bar shows just the connection chips. A capture that
   stops mid-stream is still reported either way.
+- Settings → Appearance: "Reduce motion" turns animations down in every LumaSync window. While it
+  is off, your system's own reduce-motion setting still applies.
+- Settings → Appearance: "Interface size" makes the interface 90%, 100%, 110% or 125% of its
+  normal size, in the main window and the control popup; ⌘/Ctrl with + − 0 change it too. The
+  compact window grows with it; the full window keeps the size you gave it unless that would be
+  too small.
+- Settings → General: "Lights on launch" can start LumaSync with the lights off instead of resuming
+  the last mode; the mode's settings are kept for the next time you turn it on. "Close button" can
+  quit LumaSync instead of keeping it running in the background, and "Notifications" turns its
+  system notifications off.
+- Settings → Help lists the keyboard shortcuts.
 - Hue: the channel list on Devices → Hue Bridges names each channel's lights the way the Hue app
   does, and an Identify button makes a channel's lights blink once so you can tell which lamp is
   which. Identify is off while Hue is streaming to them.
@@ -45,6 +56,28 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Settings is split into pages — General, Appearance, Updates, Help and About — listed on the
+  left. Each row shows just its name and control; an explanation, where one helps, is behind the
+  ⓘ beside the name.
+- Settings → Updates: "Check now" shows its result in the button itself ("Checking…", then
+  "✓ Up to date"). Turning on the beta channel asks once more in a small popover beside the switch.
+- Updates: an update LumaSync finds on its own no longer opens a prompt over the window. A quiet
+  "Update 1.x.y" item appears in the status bar instead; pressing it shows the update. "Later" keeps
+  it there, and a newer version replaces it. A download can no longer be sent to the background,
+  where it used to restart the app without asking once it finished, and neither the mode shortcuts
+  nor the section tabs and compact toggle in the title bar act behind the update prompt any more;
+  the tabs dim while it is open.
+- The update prompt is one quiet card: the new version and its notes grouped under Added, Changed
+  and Fixed; a thin bar that fills with one line under it while it downloads and installs; and, when
+  something fails, one sentence with the technical detail behind "Details". It no longer blurs the
+  window behind it, nothing in it loops, and it opens, changes state and closes with a small motion.
+  "Try again" keeps the prompt up and says "Checking…" on the button instead of closing it and
+  opening a new one, and "Details" folds open and shut.
+- Settings → Appearance: the "Show stats for nerds" readout is a short list in the page's own
+  style, with whole frame rates and plain names. It opens and closes with a small motion, shows its
+  numbers together once the first reading arrives, and no longer adds rows while it opens.
+- Settings → About: pressing the version copies it, with your system, for a bug report. Links go
+  to the website, the source, this version's release notes and the licence.
 - Tray: the lighting items are now Lights Off, Ambilight and Solid Color, with a check beside the
   one that is running. "Resume Last Mode" is gone: after a Solid color it did the same as Solid
   Color, and there was no way back to Ambilight from the tray. Solid Color shows your last color,
@@ -206,6 +239,16 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- LED Setup opens on your real display straight away: it no longer shows "No displays detected"
+  for a moment, draws the monitor in the wrong shape before correcting it, or turns Test on as the
+  page opens. Messages float over the screen instead of pushing it down, and while a test runs an
+  edit shows "Updating…" on the Test button, which still stops the test at once when pressed.
+  Opening the page no longer plays a burst of animations, and what fades in (the first-run card, an
+  edge, the stand, the test status) also fades out. Resizing the window is lighter on the page.
+- macOS: double-clicking the title bar zooms the window, and double-clicking again puts it back.
+  The green window button zooms as well; full screen stays off. The window keeps the system's zoom
+  animation and the status bar and controls follow its edge instead of jumping into place at the
+  end. A zoomed window no longer becomes the size LumaSync opens at next time.
 - LED Setup: with a Hue bridge that is not answering, "Run test pattern" starts and can be stopped
   at once. It used to wait about seven seconds for the bridge before the pattern ran, and Stop
   waited with it.

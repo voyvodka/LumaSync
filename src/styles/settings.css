@@ -1,29 +1,4 @@
-/* ── Settings page ────────────────────────────────────────────────── */
-.lm-settings-page {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: 22px 28px 24px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  height: 100%;
-}
-.lm-settings-page > * {
-  flex-shrink: 0;
-}
-.lm-settings-head h1 {
-  margin: 0 0 2px;
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.015em;
-  color: #fff;
-}
-.lm-settings-head-sub {
-  font-family: var(--lm-mono);
-  font-size: 10.5px;
-  color: var(--lm-ink-dim);
-  letter-spacing: 0.02em;
-}
+/* ── Settings groups and controls still drawn by the Devices and Lights panels ── */
 .lm-settings-group {
   background: var(--lm-panel);
   border: 1px solid var(--lm-line);
@@ -65,57 +40,6 @@
   color: var(--lm-ink-faint);
   letter-spacing: 0.02em;
 }
-.lm-settings-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 11px 16px;
-  border-bottom: 1px solid var(--lm-line);
-  gap: 16px;
-}
-.lm-settings-row:last-child {
-  border-bottom: 0;
-}
-.lm-settings-row-l {
-  flex: 1;
-  min-width: 0;
-}
-.lm-settings-row-name {
-  font-size: 12.5px;
-  color: var(--lm-ink);
-  font-weight: 500;
-  letter-spacing: -0.005em;
-}
-.lm-settings-row-desc {
-  font-family: var(--lm-mono);
-  font-size: 9.5px;
-  color: var(--lm-ink-faint);
-  margin-top: 2px;
-  line-height: 1.5;
-  letter-spacing: 0.01em;
-}
-.lm-settings-row-r {
-  flex-shrink: 0;
-}
-/* Inline outcome of a row's own action: a failed write, a finished check. */
-.lm-settings-row-error,
-.lm-settings-row-result {
-  margin: 4px 0 0;
-  font-family: var(--lm-mono);
-  font-size: 9.5px;
-  line-height: 1.5;
-  letter-spacing: 0.01em;
-}
-.lm-settings-row-error {
-  color: var(--lm-red);
-}
-.lm-settings-row-result {
-  color: var(--lm-green);
-}
-.lm-settings-row-result:empty {
-  display: none;
-}
-
 /* Segmented (2-up for language) */
 .lm-settings-select {
   min-height: 32px;
@@ -208,69 +132,7 @@
   box-shadow: var(--lm-focus-ring-soft);
 }
 
-/* About block */
-.lm-settings-about {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 16px;
-  padding: 16px;
-  align-items: center;
-}
-.lm-settings-about-logo {
-  width: 46px;
-  height: 46px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--lm-amber), #ff6a3d);
-  box-shadow: 0 0 24px rgba(255, 176, 32, 0.3);
-  display: grid;
-  place-items: center;
-  font-family: var(--lm-mono);
-  font-size: 22px;
-  font-weight: 700;
-  color: #05070a;
-}
-.lm-settings-about-tx-n {
-  font-size: 16px;
-  font-weight: 600;
-  color: #fff;
-  letter-spacing: -0.01em;
-}
-.lm-settings-about-tx-s {
-  font-family: var(--lm-mono);
-  font-size: 10px;
-  color: var(--lm-ink-faint);
-  margin-top: 2px;
-  letter-spacing: 0.04em;
-}
-.lm-settings-about-tx-s b {
-  color: var(--lm-ink-dim);
-  font-weight: 500;
-}
-/* The page's only link read as plain caption text. */
-.lm-settings-about-tx-s a {
-  color: var(--lm-amber);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  border-radius: 3px;
-}
-.lm-settings-about-tx-s a:hover {
-  color: var(--lm-amber-2);
-}
-.lm-settings-about-tx-s a:focus-visible {
-  outline: none;
-  box-shadow: var(--lm-focus-ring-soft);
-}
 @media (forced-colors: active) {
-  .lm-settings-about-tx-s a {
-    color: LinkText;
-  }
-  .lm-settings-about-tx-s a:focus-visible {
-    outline: 2px solid Highlight;
-  }
-  .lm-settings-row-error,
-  .lm-settings-row-result {
-    color: CanvasText;
-  }
   /* The link form would otherwise read as body text in a button's box. */
   .lm-settings-btn {
     border-color: ButtonText;
@@ -282,14 +144,4 @@
   .lm-settings-btn:focus-visible {
     outline: 2px solid Highlight;
   }
-}
-.lm-settings-about-v {
-  font-family: var(--lm-mono);
-  font-size: 11px;
-  color: var(--lm-amber);
-  padding: 5px 10px;
-  background: rgba(255, 176, 32, 0.1);
-  border: 1px solid rgba(255, 176, 32, 0.3);
-  border-radius: 20px;
-  letter-spacing: 0.1em;
 }

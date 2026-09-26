@@ -44,6 +44,7 @@ pub(crate) enum ShutdownTrigger {
     RestartRequested,
     AppExit,
     UpdateInstaller,
+    WindowClose,
 }
 
 impl ShutdownTrigger {
@@ -55,6 +56,7 @@ impl ShutdownTrigger {
             Self::RestartRequested => "restart-requested",
             Self::AppExit => "app-exit",
             Self::UpdateInstaller => "update-installer",
+            Self::WindowClose => "window-close",
         }
     }
 }

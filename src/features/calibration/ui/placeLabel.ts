@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { LedSegmentKey } from "../model/contracts";
 import { placeName, type Corner, type LedRef, type StripShape } from "../model/startPoint";
 
-export const CORNER_KEYS = {
+const CORNER_KEYS = {
   tl: "calibration:setup.place.tl",
   tr: "calibration:setup.place.tr",
   br: "calibration:setup.place.br",

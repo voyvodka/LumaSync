@@ -11,7 +11,7 @@ interface CountChipProps {
   min: number;
   max: number;
   style: CSSProperties;
-  /** The edges this number sets; hovering their LEDs shows its controls too. */
+  /** The edges this number sets; hovering their LEDs lights the number. */
   edges: readonly LedSegmentKey[];
   /** Shown before the number, e.g. the stand's glyph. */
   icon?: ReactNode;
@@ -24,7 +24,7 @@ interface CountChipProps {
 
 /**
  * A number sitting on the canvas, quiet at rest. Click it to type; ↑/↓ step it (⇧ by ten);
- * − and + and the edge's other controls show on hover or focus, of the number or of its LEDs.
+ * − and + and the edge's other controls show on hover or focus of the number itself.
  */
 export function CountChip({ label, value, min, max, style, edges, icon, link, onRemove, removeLabel, onChange, onActive }: CountChipProps) {
   const { t } = useTranslation();
@@ -32,6 +32,16 @@ export function CountChip({ label, value, min, max, style, edges, icon, link, on
   const [draft, setDraft] = useState(String(value));
   const inputRef = useRef<HTMLInputElement | null>(null);
   const valueRef = useRef<HTMLButtonElement | null>(null);
+  // The number ticks only when the value changes from elsewhere. Coming back from the field — the
+  // same value or the one just typed — it must simply be there (NumberField's rule).
+  const shownRef = useRef(value);
+  const fromFieldRef = useRef(false);
+  const tickedRef = useRef<number | null>(null);
+  if (!editing && value !== shownRef.current && !fromFieldRef.current) tickedRef.current = value;
+  useEffect(() => {
+    shownRef.current = value;
+    if (!editing) fromFieldRef.current = false;
+  });
 
   useEffect(() => {
     if (!editing) setDraft(String(value));
@@ -44,6 +54,7 @@ export function CountChip({ label, value, min, max, style, edges, icon, link, on
   const finish = (commit: boolean) => {
     const parsed = Number.parseInt(draft, 10);
     if (commit && Number.isFinite(parsed) && parsed !== value) onChange(parsed);
+    fromFieldRef.current = true;
     setEditing(false);
     setDraft(String(value));
   };
@@ -57,7 +68,7 @@ export function CountChip({ label, value, min, max, style, edges, icon, link, on
   return (
     <div
       className={editing ? `${styles.chip} ${styles.isEditing}` : styles.chip}
-      style={style}
+      style={{ ...style, "--trailing": 1 + (link ? 1 : 0) + (onRemove ? 1 : 0) } as CSSProperties}
       data-edges={edges.join(" ")}
       onFocus={() => onActive(true)}
       onBlur={(e) => {
@@ -114,7 +125,9 @@ export function CountChip({ label, value, min, max, style, edges, icon, link, on
           data-count
         >
           {icon}
-          <span key={value} className={styles.num}>{value}</span>
+          <span key={value} className={tickedRef.current === value ? `${styles.num} ${styles.tick}` : styles.num}>
+            {value}
+          </span>
         </button>
       )}
       {/* The number stays on its anchor; its controls float either side of it. */}

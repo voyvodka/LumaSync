@@ -1,10 +1,10 @@
 // Windows 1.5.4 report: a check that never reached the feed was shown as a
 // failed installation, explained by the plugin's raw endpoint-URL message.
 
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { UPDATER_STATUS } from "@/shared/contracts/updater";
+import { UPDATER_STATUS, type UpdateMetadata } from "@/shared/contracts/updater";
 import type { UpdaterErrorPhase } from "../useAutoUpdater";
 
 vi.mock("react-i18next", () => ({
@@ -20,9 +20,9 @@ function renderError(phase: UpdaterErrorPhase, code: string | undefined, message
   render(
     <UpdateModal
       state={{ status: "error", phase, code: code as never, message }}
-      onInstall={vi.fn()}
-      onDismiss={vi.fn()}
-      onRetry={vi.fn()}
+      onInstall={vi.fn<(update: UpdateMetadata) => void>()}
+      onDismiss={vi.fn<() => void>()}
+      onRetry={vi.fn<() => void>()}
     />,
   );
 }
@@ -35,11 +35,18 @@ describe("UpdateModal error wording", () => {
     expect(screen.queryByText("updater:error.title")).not.toBeInTheDocument();
   });
 
-  it("demotes the raw message to a technical detail rather than the explanation", () => {
+  it("keeps the raw message behind Details rather than as the explanation", () => {
     renderError("check", UPDATER_STATUS.CHECK_FAILED, `Could not fetch ${FEED_URL}`);
 
-    expect(screen.getByText("updater:error.detailTitle")).toBeInTheDocument();
-    expect(screen.queryByText("updater:error.boxTitle")).not.toBeInTheDocument();
+    expect(screen.getByText("updater:error.checkBody")).toBeInTheDocument();
+    const toggle = screen.getByRole("button", { name: "updater:error.details" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(document.getElementById(toggle.getAttribute("aria-controls") ?? "")).toHaveTextContent(`Could not fetch ${FEED_URL}`);
+
+    act(() => {
+      toggle.click();
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
   });
 
   it("uses the same wording when the endpoint itself is unusable", () => {
@@ -54,7 +61,6 @@ describe("UpdateModal error wording", () => {
   it("calls an uncoded check rejection a check failure, not a failed installation", () => {
     renderError("check", undefined, "check_for_update not allowed");
 
-    expect(screen.getByText("updater:error.checkEyebrow")).toBeInTheDocument();
     expect(screen.getByText("updater:error.checkTitle")).toBeInTheDocument();
     expect(screen.queryByText("updater:error.title")).not.toBeInTheDocument();
   });
@@ -65,7 +71,7 @@ describe("UpdateModal error wording", () => {
     renderError("install", UPDATER_STATUS.INSTALL_FAILED, "signature mismatch");
 
     expect(screen.getByText("updater:error.title")).toBeInTheDocument();
-    expect(screen.getByText("updater:error.boxTitle")).toBeInTheDocument();
+    expect(screen.getByText("signature mismatch")).toBeInTheDocument();
   });
 
   it("reports an uncoded install rejection as an install failure", () => {
@@ -83,5 +89,75 @@ describe("UpdateModal markup", () => {
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveAttribute("aria-labelledby", "lm-updater-title");
+  });
+});
+
+describe("UpdateModal states", () => {
+  const UPDATE: UpdateMetadata = {
+    currentVersion: "1.2.0",
+    version: "1.3.0",
+    date: "2026-04-13",
+    body: ["### Added", "- Multi-bridge Hue", "### Fixed", "- Permission loop", "- Frame drift"].join("\n"),
+  };
+  const handlers = {
+    onInstall: vi.fn<(update: UpdateMetadata) => void>(),
+    onDismiss: vi.fn<() => void>(),
+    onRetry: vi.fn<() => void>(),
+  };
+
+  it("groups the release notes under the changelog's own headings", () => {
+    render(<UpdateModal state={{ status: "available", update: UPDATE }} {...handlers} />);
+
+    expect(screen.getByRole("heading", { name: "updater:noteKind.add" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "updater:noteKind.fix" })).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Multi-bridge Hue",
+      "Permission loop",
+      "Frame drift",
+    ]);
+  });
+
+  it("shows download progress as a filling bar with one line under it, and nothing that loops", () => {
+    render(
+      <UpdateModal
+        state={{
+          status: "downloading",
+          update: UPDATE,
+          progress: 62,
+          downloadedBytes: 8_800_000,
+          totalBytes: 14_200_000,
+          bytesPerSecond: 2_300_000,
+          etaSeconds: 2,
+        }}
+        {...handlers}
+      />,
+    );
+
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "62");
+    expect(screen.getByText(/updater:downloading\.amount · updater:downloading\.left/)).toBeInTheDocument();
+  });
+
+  it("offers no way out while installing, outside dev builds", () => {
+    render(<UpdateModal state={{ status: "installing", update: UPDATE }} {...handlers} />);
+
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
+    expect(screen.getByText("updater:installing.body")).toBeInTheDocument();
+  });
+});
+
+describe("UpdateModal retry", () => {
+  it("keeps the failure up while Try again checks, and says so on the button", () => {
+    render(
+      <UpdateModal
+        state={{ status: "error", phase: "check", message: "offline", retrying: true }}
+        onInstall={vi.fn<(update: UpdateMetadata) => void>()}
+        onDismiss={vi.fn<() => void>()}
+        onRetry={vi.fn<() => void>()}
+      />,
+    );
+
+    const retry = screen.getByRole("button", { name: /updater:checking/ });
+    expect(retry).toBeDisabled();
+    expect(retry).toHaveAttribute("aria-busy", "true");
   });
 });

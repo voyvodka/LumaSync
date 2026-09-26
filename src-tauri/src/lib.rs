@@ -598,6 +598,16 @@ pub fn run() {
             // Before the banner below, which reads the update channel from it.
             app.manage(ShellStateStore::for_app(app.handle()));
 
+            // Before the page loads, so the first frame is already at size.
+            let zoom = commands::shell_state::persisted(app.handle()).map_or(1.0, |state| state.ui_zoom());
+            if zoom != 1.0 {
+                if let Some(main) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+                    if let Err(error) = main.set_zoom(zoom) {
+                        log::warn!("[ui-zoom] main webview zoom failed: {error}");
+                    }
+                }
+            }
+
             // Stable and beta are one install writing the same file in turn, so
             // no line says which build wrote it. Per-launch: a mid-session
             // rotation can still leave a file with no banner.
@@ -669,6 +679,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             if let Some(main_window) = app.get_webview_window("main") {
                 macos_window::forbid_native_fullscreen(&main_window);
+                macos_window::animate_zoom_on_run_loop(&main_window);
             }
 
             // Debug builds: auto-open WebView devtools in a detached window so
@@ -814,23 +825,37 @@ pub fn run() {
 
             Ok(())
         })
-        // Close-to-tray interception (main window only — overlay windows must close freely).
+        // Close interception (main window only — overlay windows must close freely).
         //
-        // This handles red-X and Cmd+W cleanly. Cmd+Q on macOS ALSO routes
-        // through here (NSApp's terminate broadcast hits each window's
-        // windowShouldClose:), but the NSApp terminate flow proceeds
-        // independently of our prevent_close — applicationWillTerminate
-        // fires next regardless, surfaced as RunEvent::Exit below. So for
-        // Cmd+Q the user sees the window vanish (hide_to_tray) and then
-        // the process dies via the .run() callback's RunEvent::Exit branch.
+        // Red-X and Cmd+W hide to the tray, or quit through the shutdown
+        // coordinator when Settings → Close button says so. Cmd+Q on macOS
+        // ALSO routes through here (NSApp's terminate broadcast hits each
+        // window's windowShouldClose:), but the NSApp terminate flow proceeds
+        // independently of our prevent_close — applicationWillTerminate fires
+        // next regardless, surfaced as RunEvent::Exit below. So for Cmd+Q the
+        // window vanishes (or the quit starts as `window-close`) and the
+        // process dies via the .run() callback's RunEvent::Exit branch; the
+        // coordinator takes whichever trigger arrives first.
         .on_window_event(|window, event| {
             let label = window.label();
-            // Main shell: red-X / Cmd+W hides to tray instead of quitting.
+            // Main shell: red-X / Cmd+W hides to tray, or quits by the setting.
             if label == "main" {
                 match event {
                     tauri::WindowEvent::CloseRequested { api, .. } => {
+                        // Held even when quitting: the shutdown coordinator
+                        // tears down lights and Hue before the process exits.
                         api.prevent_close();
-                        hide_to_tray(window);
+                        let quits = commands::shell_state::persisted(window.app_handle())
+                            .is_some_and(|state| state.close_quits());
+                        if quits {
+                            shutdown::begin(
+                                window.app_handle(),
+                                shutdown::ShutdownTrigger::WindowClose,
+                                false,
+                            );
+                        } else {
+                            hide_to_tray(window);
+                        }
                     }
                     // Nothing reports show, hide or minimise as such; a
                     // minimise or restore resizes (Windows) and a window

@@ -16,50 +16,28 @@ vi.mock("react-i18next", () => ({
     i18n: { language: "en" },
     t: (key: string, opts?: Record<string, unknown>) => {
       const dict: Record<string, string> = {
-        "telemetry:title": "Runtime telemetry",
-        "telemetry:description": "Live runtime quality metrics.",
-        "telemetry:metrics.captureFps": "Capture FPS",
-        "telemetry:metrics.sendFps": "Send FPS",
-        "telemetry:metrics.queueHealth": "Queue health",
-        "telemetry:metrics.linkMaxFps": "Link max",
-        "telemetry:link.fpsFormat": "{{fps}} fps",
-        "telemetry:link.absent": "—",
-        "telemetry:link.absentTitle": "No serial link in this session",
+        "telemetry:capture": "Screen capture",
+        "telemetry:send": "Sent to the strip",
+        "telemetry:queue": "Send queue",
+        "telemetry:linkLimit": "Link limit",
+        "telemetry:hueStream": "Hue stream",
+        "telemetry:huePackets": "Hue packets",
+        "telemetry:hueLastError": "Last Hue error",
+        "telemetry:hueReconnects": "Hue reconnects",
+        "telemetry:fps": "{{fps}} fps",
+        "telemetry:packetRate": "{{rate}} per second",
+        "telemetry:uptimeMinutes": "{{minutes}} min",
+        "telemetry:uptimeSeconds": "{{seconds}} s",
+        "telemetry:reconnectsFailed": "{{total}} · {{failed}} failed",
+        "telemetry:notRunning": "Not running",
+        "telemetry:none": "None",
+        "telemetry:unmeasured": "Not measured",
+        "telemetry:error": "Couldn't read the numbers",
         "telemetry:queueHealth.healthy": "Healthy",
-        "telemetry:queueHealth.warning": "Warning",
-        "telemetry:queueHealth.critical": "Critical",
-        "telemetry:states.loading": "Loading telemetry...",
-        "telemetry:states.empty": "No runtime activity yet.",
-        "telemetry:states.error": "Telemetry unavailable.",
-        "telemetry:hue.title": "Hue Stream",
-        "telemetry:hue.status": "Status",
-        "telemetry:hue.packetRate": "Packet Rate",
-        "telemetry:hue.lastError": "Last Error",
-        "telemetry:hue.reconnects": "Reconnects",
-        "telemetry:hue.dtlsCipher": "DTLS Cipher",
-        "telemetry:hue.connectionAge": "Connection Age",
-        "telemetry:hue.uptimeFormat": "{{minutes}} min {{seconds}} sec",
-        "telemetry:hue.packetRateFormat": "{{rate}} pkt/s",
-        "telemetry:hue.reconnectsFormat": "{{total}} ({{success}} successful, {{failed}} failed)",
-        "telemetry:hue.noError": "—",
         "hue:runtime.states.Running": "Running",
-        "settings:nav.sections.lights": "Lights",
-        "settings:nav.sections.led-setup": "LED Setup",
-        "settings:nav.sections.devices": "Devices",
-        "settings:nav.sections.system": "System",
-        "common:title": "General",
-        "common:description": "General application settings.",
-        "common:mode.title": "LED mode",
-        "common:mode.description": "Choose output mode.",
-        "common:mode.options.off": "Off",
-        "common:mode.options.ambilight": "Ambilight",
-        "common:mode.options.solid": "Solid",
-        "common:mode.brightness": "Brightness",
-        "common:mode.solidColor": "Solid color",
         "settings:language.label": "Interface language",
       };
-
-      const template = dict[key] ?? key;
+      const template = dict[key] ?? (typeof opts?.defaultValue === "string" ? opts.defaultValue : key);
       if (!opts) return template;
       return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(opts[name] ?? ""));
     },
@@ -68,9 +46,9 @@ vi.mock("react-i18next", () => ({
 
 import { TelemetrySection } from "../TelemetrySection";
 import { __resetTelemetrySourceForTests } from "../../telemetrySource";
-import { __resetShowNerdStatsForTests } from "../../nerdStatsSetting";
+import { __resetPreferencesForTests } from "@/features/persistence/preferences";
 import type * as telemetryApiModule from "@/features/telemetry/telemetryApi";
-import type { RuntimeTelemetrySnapshot } from "@/shared/contracts/telemetry";
+import type { HueTelemetrySnapshot, RuntimeTelemetrySnapshot } from "@/shared/contracts/telemetry";
 
 // Every field Rust sends; a test overrides only what it is about.
 function usbSnapshot(overrides: Partial<RuntimeTelemetrySnapshot>): RuntimeTelemetrySnapshot {
@@ -87,187 +65,159 @@ function usbSnapshot(overrides: Partial<RuntimeTelemetrySnapshot>): RuntimeTelem
   };
 }
 
+function hueSnapshot(overrides: Partial<HueTelemetrySnapshot>): HueTelemetrySnapshot {
+  return {
+    state: "Running",
+    uptimeSecs: 128,
+    packetRate: 20,
+    lastErrorCode: null,
+    lastErrorAtSecs: null,
+    totalReconnects: 0,
+    successfulReconnects: 0,
+    failedReconnects: 0,
+    dtlsActive: true,
+    dtlsCipher: "TLS_PSK_WITH_AES_128_GCM_SHA256",
+    dtlsConnectedAtSecs: 128,
+    ...overrides,
+  };
+}
+
+const value = (id: string) => screen.getByTestId(`telemetry-${id}`).querySelector("dd")?.textContent;
+const rowIds = () => [...screen.getByTestId("telemetry-readout").querySelectorAll("[data-testid^=telemetry-]")].map((el) => el.getAttribute("data-testid"));
+const list = () => screen.getByTestId("telemetry-readout").querySelector("dl");
+
+async function flush() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 describe("TelemetrySection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    __resetTelemetrySourceForTests();
     getFullTelemetrySnapshotMock.mockResolvedValue({
-      usb: usbSnapshot({ captureFps: 60, sendFps: 58 }),
+      usb: usbSnapshot({ captureFps: 59.6, sendFps: 58.2, linkMaxFps: 74 }),
       hue: null,
     });
   });
 
   afterEach(() => {
+    cleanup();
     vi.useRealTimers();
+    __resetTelemetrySourceForTests();
   });
 
-  it("fetches runtime telemetry on mount and renders capture/send/queue values", async () => {
-    render(<TelemetrySection localOutputConnected={true} />);
+  it("holds the values hidden in place until the first reading, then shows them in whole fps", async () => {
+    let resolve: (snapshot: Awaited<ReturnType<typeof getFullTelemetrySnapshotMock>>) => void = () => {};
+    getFullTelemetrySnapshotMock.mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+    render(<TelemetrySection open localOutputConnected />);
 
-    await waitFor(() => {
-      expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
-    });
-
-    expect(screen.getByText("Capture FPS")).toBeInTheDocument();
-    expect(screen.getByText("60.00")).toBeInTheDocument();
-    expect(screen.getByText("Send FPS")).toBeInTheDocument();
-    expect(screen.getByText("58.00")).toBeInTheDocument();
-    expect(screen.getByText("Queue health")).toBeInTheDocument();
-    expect(screen.getByText("Healthy")).toBeInTheDocument();
-  });
-
-  it("cleans the pending poll on unmount and does not leak ticks after remount", async () => {
-    vi.useFakeTimers();
-    const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
-    const firstRender = render(<TelemetrySection localOutputConnected={true} />);
+    expect(list()).not.toHaveAttribute("data-ready");
+    const before = rowIds();
 
     await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
+      resolve({ usb: usbSnapshot({ captureFps: 59.6, sendFps: 58.2, linkMaxFps: 74 }), hue: null });
     });
-    expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
 
+    expect(list()).toHaveAttribute("data-ready");
+    expect(rowIds()).toEqual(before);
+    expect(value("capture")).toBe("60 fps");
+    expect(value("send")).toBe("58 fps");
+    expect(value("queue")).toBe("Healthy");
+    expect(value("link")).toBe("74 fps");
+  });
+
+  it("picks its rows from what is connected when it opens, so Hue data arriving adds none", async () => {
+    getFullTelemetrySnapshotMock.mockResolvedValueOnce({ usb: usbSnapshot({ captureFps: 60 }), hue: null });
+    getFullTelemetrySnapshotMock.mockResolvedValue({
+      usb: usbSnapshot({ captureFps: 60 }),
+      hue: hueSnapshot({ failedReconnects: 1, totalReconnects: 3 }),
+    });
+    vi.useFakeTimers();
+    render(<TelemetrySection open localOutputConnected={false} hueActive />);
+    const atOpen = rowIds();
+    expect(atOpen).toEqual([
+      "telemetry-capture",
+      "telemetry-hue-stream",
+      "telemetry-hue-packets",
+      "telemetry-hue-error",
+      "telemetry-hue-reconnects",
+    ]);
+
+    await flush();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
-      await Promise.resolve();
-      await Promise.resolve();
     });
-    expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(2);
 
-    firstRender.unmount();
+    expect(rowIds()).toEqual(atOpen);
+    expect(value("hue-stream")).toBe("Running · 2 min");
+    expect(value("hue-packets")).toBe("20 per second");
+    expect(value("hue-error")).toBe("None");
+    expect(value("hue-reconnects")).toBe("3 · 1 failed");
+  });
 
+  it("reads a strip without a serial link budget as not measured, never 0 fps", async () => {
+    getFullTelemetrySnapshotMock.mockResolvedValue({ usb: usbSnapshot({ captureFps: 60 }), hue: null });
+    render(<TelemetrySection open localOutputConnected />);
+    await waitFor(() => expect(list()).toHaveAttribute("data-ready"));
+
+    expect(value("link")).toBe("—Not measured");
+  });
+
+  it("polls nothing with no output at all and says capture is not running, from the first frame", async () => {
+    render(<TelemetrySection open localOutputConnected={false} />);
+    await flush();
+
+    expect(list()).toHaveAttribute("data-ready");
+    expect(value("capture")).toBe("Not running");
+    expect(getFullTelemetrySnapshotMock).not.toHaveBeenCalled();
+  });
+
+  it("says so when the numbers cannot be read", async () => {
+    getFullTelemetrySnapshotMock.mockRejectedValueOnce(new Error("boom"));
+    render(<TelemetrySection open localOutputConnected />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't read the numbers");
+    expect(list()).toHaveAttribute("data-ready");
+  });
+
+  it("closing keeps the last values while it folds away, then unmounts them and stops polling", async () => {
+    vi.useFakeTimers();
+    const view = render(<TelemetrySection open localOutputConnected />);
+    await flush();
+    expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
+
+    view.rerender(<TelemetrySection open={false} localOutputConnected />);
+    expect(value("capture")).toBe("60 fps");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    expect(screen.queryByTestId("telemetry-readout")).not.toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6000);
+    });
+    expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops polling on unmount and starts afresh on remount", async () => {
+    vi.useFakeTimers();
+    const first = render(<TelemetrySection open localOutputConnected />);
+    await flush();
+    expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
+
+    first.unmount();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(4000);
     });
+    expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
+
+    render(<TelemetrySection open localOutputConnected />);
+    await flush();
     expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(2);
-    expect(clearTimeoutSpy).toHaveBeenCalled();
-
-    render(<TelemetrySection localOutputConnected={true} />);
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(3);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(2000);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(4);
-
-    clearTimeoutSpy.mockRestore();
-  });
-
-  it("renders Hue Stream section when hue telemetry is present", async () => {
-    getFullTelemetrySnapshotMock.mockResolvedValue({
-      usb: usbSnapshot({ captureFps: 60, sendFps: 58 }),
-      hue: {
-        state: "Running",
-        uptimeSecs: 754,
-        packetRate: 18.4,
-        lastErrorCode: null,
-        lastErrorAtSecs: null,
-        totalReconnects: 0,
-        successfulReconnects: 0,
-        failedReconnects: 0,
-        dtlsActive: true,
-        dtlsCipher: "PSK-AES128-GCM-SHA256",
-        dtlsConnectedAtSecs: 754,
-      },
-    });
-
-    render(<TelemetrySection localOutputConnected={true} />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Hue Stream")).toBeInTheDocument();
-    });
-
-    expect(screen.getByText("18.4 pkt/s")).toBeInTheDocument();
-    expect(screen.getByText("PSK-AES128-GCM-SHA256")).toBeInTheDocument();
-    // Every figure goes through the catalogue; these were English literals.
-    expect(screen.getByText("0 (0 successful, 0 failed)")).toBeInTheDocument();
-    expect(screen.getAllByText("12 min 34 sec").length).toBeGreaterThan(0);
-    expect(screen.getByText(/^Running/)).toBeInTheDocument();
-  });
-
-  it("does not render Hue section when hue is null", async () => {
-    render(<TelemetrySection localOutputConnected={true} />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Capture FPS")).toBeInTheDocument();
-    });
-
-    expect(screen.queryByText("Hue Stream")).not.toBeInTheDocument();
-  });
-
-  it("renders the link ceiling as absent, never as 0 fps, without a serial link", async () => {
-    getFullTelemetrySnapshotMock.mockResolvedValue({
-      usb: usbSnapshot({
-        captureFps: 60,
-        sendFps: 58,
-        frameLatencyMs: 12,
-        linkConstrained: false,
-        linkMaxFps: 0,
-      }),
-      hue: null,
-    });
-
-    render(<TelemetrySection localOutputConnected={true} />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Link max")).toBeInTheDocument();
-    });
-
-    expect(screen.getByLabelText("No serial link in this session")).toHaveTextContent("—");
-    expect(screen.queryByText("0.00 fps")).not.toBeInTheDocument();
-  });
-
-  it("tints the link ceiling as a warning when the strip is link-constrained", async () => {
-    getFullTelemetrySnapshotMock.mockResolvedValue({
-      usb: usbSnapshot({
-        captureFps: 60,
-        sendFps: 19,
-        frameLatencyMs: 12,
-        linkConstrained: true,
-        linkMaxFps: 19.01,
-      }),
-      hue: null,
-    });
-
-    render(<TelemetrySection localOutputConnected={true} />);
-
-    const value = await screen.findByText("19.01 fps");
-    expect(value).toHaveClass("is-warn");
-  });
-
-  // The status bar showed a Hue-only user's FPS while this panel stayed empty.
-  it("polls for a Hue-only session, and reads the local tiles as absent, never 0", async () => {
-    render(<TelemetrySection localOutputConnected={false} hueActive />);
-
-    await waitFor(() => expect(getFullTelemetrySnapshotMock).toHaveBeenCalled());
-    expect(await screen.findByText("60.00")).toBeInTheDocument();
-    expect(screen.queryByText("58.00")).not.toBeInTheDocument();
-    expect(screen.getAllByLabelText("telemetry:local.absentTitle")).toHaveLength(2);
-  });
-
-  it("polls nothing with no output at all, and says there is no activity", async () => {
-    render(<TelemetrySection localOutputConnected={false} />);
-
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    });
-    expect(getFullTelemetrySnapshotMock).not.toHaveBeenCalled();
-    expect(screen.getByText("No runtime activity yet.")).toBeInTheDocument();
-  });
-
-  it("renders error fallback when telemetry request fails", async () => {
-    getFullTelemetrySnapshotMock.mockRejectedValueOnce(new Error("boom"));
-
-    render(<TelemetrySection localOutputConnected={true} />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Telemetry unavailable.")).toBeInTheDocument();
-    });
   });
 });
 
@@ -301,7 +251,7 @@ describe("Settings telemetry wiring", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     __resetTelemetrySourceForTests();
-    __resetShowNerdStatsForTests();
+    __resetPreferencesForTests();
     shellSaveMock.mockResolvedValue(undefined);
     getFullTelemetrySnapshotMock.mockResolvedValue({
       usb: usbSnapshot({ captureFps: 60, sendFps: 58 }),
@@ -312,11 +262,19 @@ describe("Settings telemetry wiring", () => {
   afterEach(() => {
     cleanup();
     __resetTelemetrySourceForTests();
-    __resetShowNerdStatsForTests();
+    __resetPreferencesForTests();
   });
+
+  async function openAppearance() {
+    const page = await screen.findByTestId("settings-page-appearance");
+    await act(async () => {
+      page.click();
+    });
+  }
 
   it("keeps the readout unmounted, and polls nothing, with stats for nerds off", async () => {
     renderWithShellStores(<SettingsLayout />, SYSTEM_SECTION);
+    await openAppearance();
 
     const toggle = await screen.findByTestId("nerd-stats-toggle");
     expect(toggle).toHaveAttribute("aria-checked", "false");
@@ -329,6 +287,7 @@ describe("Settings telemetry wiring", () => {
 
   it("turning it on shows the readout, starts the poll and saves the choice", async () => {
     renderWithShellStores(<SettingsLayout />, SYSTEM_SECTION);
+    await openAppearance();
     const toggle = await screen.findByTestId("nerd-stats-toggle");
 
     await act(async () => {
@@ -337,16 +296,17 @@ describe("Settings telemetry wiring", () => {
 
     expect(toggle).toHaveAttribute("aria-checked", "true");
     expect(shellSaveMock).toHaveBeenCalledWith({ showNerdStats: true });
-    await waitFor(() => expect(screen.getByText("60.00")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("60 fps")).toBeInTheDocument());
     expect(getFullTelemetrySnapshotMock).toHaveBeenCalled();
   });
 
-  it("renders TelemetrySection when system section is active", async () => {
+  it("keeps stats for nerds on the Appearance page, not on the first one", async () => {
     renderWithShellStores(<SettingsLayout />, SYSTEM_SECTION);
 
-    await waitFor(() => {
-      expect(screen.getByText("Runtime telemetry")).toBeInTheDocument();
-    });
+    await screen.findByTestId("settings-page-general");
+    expect(screen.queryByTestId("nerd-stats-toggle")).not.toBeInTheDocument();
+    await openAppearance();
+    expect(await screen.findByTestId("nerd-stats-toggle")).toBeInTheDocument();
   });
 
   // The picker moved from a two-button segmented control to a dropdown so more

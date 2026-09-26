@@ -24,6 +24,8 @@ vi.mock("../launchApi", () => harness.launchApiModule);
 
 beforeEach(() => {
   harness.resetWindowHarness();
+  // Each case is a fresh launch unless it reloads on purpose.
+  sessionStorage.clear();
 });
 
 afterEach(() => {
@@ -67,5 +69,36 @@ describe("Scenario 17 — an autostart launch stays in the tray", () => {
 
     expect(showMock).toHaveBeenCalledTimes(1);
     expect(setFocusMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A page reload (Vite in dev, the error boundary's fallback) is not a launch
+// ---------------------------------------------------------------------------
+
+describe("a page reload of the same window", () => {
+  it("leaves the window where it is and never takes focus", async () => {
+    readStartHiddenMock.mockResolvedValue(false);
+    setupPersistedState(makePersistedState({ windowCenterX: 960, windowCenterY: 540 }));
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    vi.resetModules();
+    await (await import("../windowLifecycle")).initWindowLifecycle();
+    expect(showMock).toHaveBeenCalledTimes(1);
+    expect(setFocusMock).toHaveBeenCalledTimes(1);
+
+    showMock.mockClear();
+    setFocusMock.mockClear();
+    unminimizeMock.mockClear();
+    setPositionMock.mockClear();
+    vi.resetModules();
+    const reloaded = await import("../windowLifecycle");
+    await reloaded.initWindowLifecycle();
+
+    expect(showMock).not.toHaveBeenCalled();
+    expect(unminimizeMock).not.toHaveBeenCalled();
+    expect(setFocusMock).not.toHaveBeenCalled();
+    expect(setPositionMock).not.toHaveBeenCalled();
+    expect(info).toHaveBeenCalledWith(reloaded.STARTUP_READY_MARKER);
   });
 });

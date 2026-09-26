@@ -8,6 +8,7 @@ import { getCurrentWindow, LogicalSize, LogicalPosition } from "@tauri-apps/api/
 import {
   UI_MODE_SIZES,
   UI_MODE_MIN_SIZES,
+  resolveUiZoom,
   type ShellState,
   type UIMode,
 } from "@/shared/contracts/shell";
@@ -20,6 +21,7 @@ import {
   fitSizeToWorkArea,
   logicalWorkAreaNear,
   persistWindowState,
+  scaleSize,
   setModeAnimationActive,
   type WindowRect,
 } from "./windowGeometry";
@@ -32,6 +34,17 @@ import { loadShellState, saveShellState } from "./windowShellState";
 /** Duration of the animated window resize between UI modes. */
 const UI_MODE_RESIZE_DURATION_MS = 220;
 
+/** The interface size the window's frame was last sized for. */
+let framedZoom = 1;
+
+export function framedUiZoom(): number {
+  return framedZoom;
+}
+
+export function noteFramedUiZoom(zoom: number): void {
+  framedZoom = zoom;
+}
+
 /**
  * Apply the per-mode minimum window size (logical px). Keeps the OS-level
  * resize handles from letting the user drag the window smaller than each
@@ -41,11 +54,19 @@ export async function applyModeMinSize(
   win: ReturnType<typeof getCurrentWindow>,
   mode: UIMode,
   workArea?: { width: number; height: number } | null,
+  zoom = 1,
 ): Promise<void> {
   // A floor larger than the screen is worse than no floor: the OS refuses every
   // resize below it, so the window cannot be made to fit at all.
-  const min = fitSizeToWorkArea(UI_MODE_MIN_SIZES[mode], workArea ?? null);
+  const min = fitSizeToWorkArea(scaleSize(UI_MODE_MIN_SIZES[mode], zoom), workArea ?? null);
   await win.setMinSize(new LogicalSize(min.width, min.height));
+}
+
+function atLeast(
+  size: { width: number; height: number },
+  floor: { width: number; height: number },
+): { width: number; height: number } {
+  return { width: Math.max(size.width, floor.width), height: Math.max(size.height, floor.height) };
 }
 
 /** easeOutCubic — fast start, gentle settle. */
@@ -121,14 +142,22 @@ async function animateWindowRect(
  * The window is anchored to its current center point — it grows/shrinks in
  * place rather than jumping to monitor center. Final position is clamped
  * inside the nearest monitor so we never animate off-screen.
+ *
+ * Interface size: compact has one fixed size, so it scales with the zoom and
+ * its layout keeps the 320×480 viewport. Full keeps the size the user gave it
+ * and only grows to the zoomed floor, so its viewport never drops below the
+ * width its layouts are built for. `zoom` and `fromZoom` are passed on a size
+ * change, whose save may not have landed yet.
  */
 export async function resizeToMode(
   mode: UIMode,
-  opts?: { animate?: boolean },
+  opts?: { animate?: boolean; zoom?: number; fromZoom?: number },
 ): Promise<void> {
   const win = getCurrentWindow();
   const currentState = await loadShellState();
   const currentMode: UIMode = currentState.uiMode ?? "compact";
+  const zoom = opts?.zoom ?? resolveUiZoom(currentState.uiZoom) / 100;
+  const fromZoom = opts?.fromZoom ?? zoom;
 
   const partialUpdate: Partial<ShellState> = { uiMode: mode };
 
@@ -145,6 +174,7 @@ export async function resizeToMode(
   if (currentMode === "full" && mode !== "full") {
     partialUpdate.lastFullSize = { width: fromWidth, height: fromHeight };
   }
+  const rescalingFull = currentMode === "full" && mode === "full" && fromZoom !== zoom;
 
   // Neither the 900×620 full default nor a size remembered from a larger
   // display is checked against the screen it is about to land on.
@@ -159,8 +189,13 @@ export async function resizeToMode(
   );
 
   const requested = mode === "full"
-    ? currentState.lastFullSize ?? firstRunFullSize(workArea)
-    : UI_MODE_SIZES[mode];
+    ? atLeast(
+        rescalingFull
+          ? { width: fromWidth, height: fromHeight }
+          : currentState.lastFullSize ?? scaleSize(firstRunFullSize(workArea ? scaleSize(workArea, 1 / zoom) : null), zoom),
+        scaleSize(UI_MODE_MIN_SIZES.full, zoom),
+      )
+    : scaleSize(UI_MODE_SIZES[mode], zoom);
   const { width: targetWidth, height: targetHeight } = fitSizeToWorkArea(requested, workArea);
 
   // Anchor target around the current window center so the window grows/shrinks
@@ -187,7 +222,7 @@ export async function resizeToMode(
   // Lower min-size to the smallest floor for the duration of the animation
   // so neither OS clamping nor Tauri's setSize call rejects intermediate
   // frames. The target mode's min-size is re-applied at the end.
-  const animFloor = UI_MODE_MIN_SIZES.compact;
+  const animFloor = scaleSize(UI_MODE_MIN_SIZES.compact, Math.min(zoom, fromZoom));
   await win.setMinSize(new LogicalSize(animFloor.width, animFloor.height));
 
   // Suppress debounced geometry persistence while the animator is driving
@@ -221,7 +256,8 @@ export async function resizeToMode(
   }
 
   // Re-apply the target mode's min-size so OS resize handles enforce the floor.
-  await applyModeMinSize(win, mode, workArea);
+  await applyModeMinSize(win, mode, workArea, zoom);
+  framedZoom = zoom;
 
   await saveShellState(partialUpdate);
   await persistWindowState({ captureSize: false });

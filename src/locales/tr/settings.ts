@@ -3,31 +3,13 @@ import type enSettings from "@/locales/en/settings";
 
 const settings: Catalogue<typeof enSettings> = {
   title: "Ayarlar",
-  subtitle: "Başlangıç, dil, güncellemeler, yardım ve hakkında",
-  groups: {
-    startup: {
-      title: "Başlangıç",
-      sub: "Girişte başlatma",
-    },
-    language: {
-      title: "Dil",
-      sub: "Arayüz yerelleştirmesi",
-    },
-    updates: {
-      title: "Güncellemeler",
-      sub: "Sürüm kontrolü",
-    },
-    help: {
-      title: "Yardım",
-      sub: "Rehber · kayıtlar · geri bildirim",
-    },
-    about: {
-      title: "Hakkında",
-      sub: "Sürüm · lisans",
-    },
-    telemetry: {
-      sub: "Canlı akış",
-    },
+  hintFor: "{{label}} hakkında",
+  pages: {
+    general: "Genel",
+    appearance: "Görünüm",
+    updates: "Güncellemeler",
+    help: "Yardım",
+    about: "Hakkında",
   },
   help: {
     opensInBrowser: "tarayıcında açılır",
@@ -55,14 +37,25 @@ const settings: Catalogue<typeof enSettings> = {
       description: "GitHub Discussions'ta soru sor, öneride bulun ya da kurulumunu paylaş.",
       action: "Forum",
     },
+    shortcuts: {
+      label: "Klavye kısayolları",
+      zoomIn: "Arayüzü büyüt",
+      zoomOut: "Arayüzü küçült",
+      zoomReset: "Arayüz normal boyutta",
+    },
   },
   language: {
     label: "Arayüz dili",
-    description: "Tüm LumaSync pencerelerinde hemen uygulanır",
   },
   about: {
     tagline: "Ekran senkronlu ortam aydınlatması",
-    license: "MIT",
+    local: "Her şey bu bilgisayarda çalışır. Hiçbir veri gönderilmez.",
+    copyVersion: "Sürümü kopyala",
+    copied: "Kopyalandı",
+    site: "Site",
+    source: "Kaynak kod",
+    notes: "Sürüm notları",
+    license: "MIT lisansı",
   },
   nav: {
     switchToCompact: "Kompakt görünüm",
@@ -77,9 +70,36 @@ const settings: Catalogue<typeof enSettings> = {
   },
   startupTray: {
     launchAtLogin: "Girişte başlat",
-    launchAtLoginDescription: "Oturum açtığında LumaSync'i kendiliğinden başlat.",
     readError: "LumaSync'in girişte başlayıp başlamadığı okunamadı",
     writeError: "Girişte başlatma değiştirilemedi — tekrar dene",
+  },
+  launchLights: {
+    label: "Açılışta ışıklar",
+    hint: "LumaSync başladığında, girişte başlama dahil, ışıkların ne yapacağı.",
+    resume: "Son modu sürdür",
+    off: "Kapalı başla",
+  },
+  closeAction: {
+    label: "Kapat düğmesi",
+    hint: "Pencereyi kapatınca ne olacağı. Arka planda çalışırken simgesi menü çubuğunda (Windows'ta bildirim alanında) durur; çıkmak ışıkları durdurur.",
+    tray: "Arka planda çalış",
+    quit: "Çık",
+  },
+  notifications: {
+    label: "Bildirimler",
+    hint: "Sistem bildirimleri; örneğin pencere gizliyken simge menüsünden yapılan bir seçim başarısız olduğunda.",
+  },
+  uiZoom: {
+    label: "Arayüz boyutu",
+    hint: "Ana pencereyi ve kontrol penceresini ölçekler. Kompakt pencere onunla büyür; tam pencere yalnızca fazla küçük kalırsa. ⌘/Ctrl ile + − 0 da değiştirir.",
+    p90: "%90",
+    p100: "%100",
+    p110: "%110",
+    p125: "%125",
+  },
+  motion: {
+    label: "Hareketi azalt",
+    hint: "Tüm LumaSync pencerelerinde animasyonları azaltır. Kapalıyken sisteminin ayarı geçerli olur.",
   },
   nerdStats: {
     label: "Meraklısı için istatistikler",

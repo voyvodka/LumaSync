@@ -12,9 +12,9 @@
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { SHELL_EVENTS } from "@/shared/contracts/shell";
+import { resolveNotificationsPreference, resolveUiZoom, SHELL_EVENTS } from "@/shared/contracts/shell";
 import { readStartHidden } from "./launchApi";
-import { applyModeMinSize, resizeToMode } from "./windowAnimator";
+import { applyModeMinSize, noteFramedUiZoom, resizeToMode } from "./windowAnimator";
 import { persistWindowState, restoreWindowState, schedulePersistWindowState } from "./windowGeometry";
 import { loadShellState, saveShellState } from "./windowShellState";
 
@@ -50,6 +50,20 @@ let unlistenCloseToTray: UnlistenFn | null = null;
 let unlistenMove: UnlistenFn | null = null;
 let unlistenResize: UnlistenFn | null = null;
 let lifecycleInitPromise: Promise<void> | null = null;
+
+/** Set once per webview: a page reload keeps it, a new launch starts without it. */
+const LIFECYCLE_RAN_KEY = "lumasync:window-lifecycle-ran";
+
+function isReloadOfThisWindow(): boolean {
+  try {
+    const ran = sessionStorage.getItem(LIFECYCLE_RAN_KEY) !== null;
+    sessionStorage.setItem(LIFECYCLE_RAN_KEY, "1");
+    return ran;
+  } catch {
+    // No storage to remember a launch in: every start is a launch, as before this check.
+    return false;
+  }
+}
 
 async function initWindowGeometryPersistence(): Promise<void> {
   const win = getCurrentWindow();
@@ -95,7 +109,9 @@ export async function initCloseToTrayHint(
         await persistWindowState();
 
         const state = await loadShellState();
-        if (!state.trayHintShown) {
+        // With notifications off the hint cannot show, so it waits for a close where it can
+        // rather than being marked shown and never appearing.
+        if (!state.trayHintShown && resolveNotificationsPreference(state.notifications) === "on") {
           await saveShellState({ trayHintShown: true });
           onFirstClose?.();
         }
@@ -124,34 +140,45 @@ export async function initWindowLifecycle(opts?: {
   if (!lifecycleInitPromise) {
     lifecycleInitPromise = (async () => {
       const win = getCurrentWindow();
-      // Compact's floor from frame 0; `resizeToMode` raises it on a toggle to full.
-      await applyModeMinSize(win, "compact");
-      await restoreWindowState();
-      // Grow to the persisted mode around the restored centre, via the same path
-      // a manual toggle takes. Still hidden, so nothing of this is visible.
-      const { uiMode } = await loadShellState();
-      if ((uiMode ?? "compact") !== "compact") {
-        await resizeToMode(uiMode ?? "compact", { animate: false });
-      }
-      // Geometry is restored either way, so the first tray click opens the
-      // window where it was left.
-      if (await readStartHidden()) {
-        console.info("[LumaSync] [startup] launched with --tray; staying in the tray");
+      if (isReloadOfThisWindow()) {
+        // A page reload of a window that is already up (Vite in dev, the error boundary's
+        // fallback): it keeps its size, place and visibility. Restoring and showing it again
+        // moved it and took focus from whatever the user was doing on every reload.
+        const { uiMode, uiZoom } = await loadShellState();
+        const zoom = resolveUiZoom(uiZoom) / 100;
+        await applyModeMinSize(win, uiMode ?? "compact", undefined, zoom);
+        noteFramedUiZoom(zoom);
       } else {
-        await win.show();
-        // `show()` alone can reveal the window *behind* the active app on a cold
-        // launch (notably macOS), leaving the user to click the dock icon.
-        try {
-          await win.unminimize();
-        } catch {
-          // Some platforms throw if the window isn't minimized — ignore.
+        const { uiMode, uiZoom } = await loadShellState();
+        const zoom = resolveUiZoom(uiZoom) / 100;
+        // Compact's floor from frame 0; `resizeToMode` raises it on a toggle to full.
+        await applyModeMinSize(win, "compact", undefined, zoom);
+        await restoreWindowState();
+        // Grow to the persisted mode (and interface size) around the restored centre, via
+        // the same path a manual toggle takes. Still hidden, so nothing of this is visible.
+        if ((uiMode ?? "compact") !== "compact" || zoom !== 1) {
+          await resizeToMode(uiMode ?? "compact", { animate: false });
         }
-        try {
-          await win.setFocus();
-        } catch {
-          // Focus is cosmetic and must never reject this promise: bootstrap awaits
-          // it before calibration, targets and Hue, so a throw here would surface
-          // to the user as "calibration required / Hue offline".
+        // Geometry is restored either way, so the first tray click opens the
+        // window where it was left.
+        if (await readStartHidden()) {
+          console.info("[LumaSync] [startup] launched with --tray; staying in the tray");
+        } else {
+          await win.show();
+          // `show()` alone can reveal the window *behind* the active app on a cold
+          // launch (notably macOS), leaving the user to click the dock icon.
+          try {
+            await win.unminimize();
+          } catch {
+            // Some platforms throw if the window isn't minimized — ignore.
+          }
+          try {
+            await win.setFocus();
+          } catch {
+            // Focus is cosmetic and must never reject this promise: bootstrap awaits
+            // it before calibration, targets and Hue, so a throw here would surface
+            // to the user as "calibration required / Hue offline".
+          }
         }
       }
       await initWindowGeometryPersistence();
@@ -163,4 +190,9 @@ export async function initWindowLifecycle(opts?: {
   }
 
   await lifecycleInitPromise;
+}
+
+/** Settles once the window has its boot size; a resize before then would race it. */
+export async function windowLifecycleSettled(): Promise<void> {
+  await lifecycleInitPromise?.catch(() => undefined);
 }

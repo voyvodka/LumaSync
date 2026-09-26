@@ -4,7 +4,7 @@
 // laptop panel got 164 LEDs whatever strip was on it. The numbers sit on the
 // canvas edges and read top, right, left, bottom.
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -22,6 +22,7 @@ import { WLED_PROTOCOL } from "@/shared/contracts/device";
 import { invokeFromCommands } from "@/test/mockCommands";
 
 import { CalibrationPage } from "../CalibrationPage";
+import { __resetLedSetupSourceForTests } from "../../state/ledSetupSource";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -68,6 +69,7 @@ const SAVED: LedCalibrationConfig = {
 };
 
 beforeEach(() => {
+  __resetLedSetupSourceForTests();
   storedShell = {};
   saveMock.mockReset().mockResolvedValue(undefined);
   vi.mocked(invoke).mockImplementation(
@@ -110,6 +112,36 @@ async function pickDisplay(user: ReturnType<typeof userEvent.setup>, name: RegEx
   await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
 }
 
+describe("LED Setup opening", () => {
+  // An empty display list read as "no displays", the monitor drew 16:9 and reshaped, and Test
+  // turned on — each as the page opened.
+  it("draws nothing until the displays are known, then the real display", async () => {
+    render(<CalibrationPage onNavigateBack={vi.fn<() => void>()} onSaved={vi.fn<(config: LedCalibrationConfig) => void>()} />);
+
+    expect(screen.getByTestId("led-setup-loading")).toBeInTheDocument();
+    expect(screen.queryByText("calibration:overlay.noDisplays")).toBeNull();
+    expect(await screen.findByText("Display 1")).toBeInTheDocument();
+  });
+
+  it("opens a return visit on the last read at once, WLED count included", async () => {
+    storedShell = {
+      lastWledSink: { ip: "192.168.1.40", port: 4048, ledCount: 150, protocol: WLED_PROTOCOL.DDP },
+    };
+    await renderPage();
+    cleanup();
+
+    render(<CalibrationPage onNavigateBack={vi.fn<() => void>()} onSaved={vi.fn<(config: LedCalibrationConfig) => void>()} />);
+
+    expect(screen.queryByTestId("led-setup-loading")).toBeNull();
+    expect(screen.getByText("Display 1")).toBeInTheDocument();
+    expect(question()).toHaveValue("150");
+    // The visit still reads again; let it land inside the test.
+    await act(async () => {
+      await Promise.resolve();
+    });
+  });
+});
+
 describe("LED Setup with no saved layout", () => {
   it("asks for the total first and guesses no counts from the display", async () => {
     const page = await renderPage();
@@ -128,7 +160,8 @@ describe("LED Setup with no saved layout", () => {
     await user.type(question()!, "121");
     await user.click(distributeButton());
 
-    expect(question()).toBeNull();
+    // It plays its exit, then goes.
+    await waitFor(() => expect(question()).toBeNull());
     // 16:9: the odd LED goes to the top, which splits top from bottom.
     expect(edgeValues()).toEqual([39, 22, 22, 38]);
   });
@@ -176,7 +209,8 @@ describe("LED Setup with no saved layout", () => {
 
     await user.click(screen.getByRole("button", { name: "calibration:setup.skipTotal" }));
 
-    expect(question()).toBeNull();
+    // It plays its exit, then goes.
+    await waitFor(() => expect(question()).toBeNull());
     expect(edgeValues()).toEqual([1, 1, 1, 1]);
   });
 });
@@ -227,7 +261,8 @@ describe("LED Setup with a saved layout", () => {
   it("opens straight on the numbers, with the unlit edge offered back", async () => {
     await renderPage({ initialConfig: SAVED });
 
-    expect(question()).toBeNull();
+    // It plays its exit, then goes.
+    await waitFor(() => expect(question()).toBeNull());
     expect(edgeValues()).toEqual([40, 20, 20]);
     expect(screen.getByRole("button", { name: "calibration:setup.add.bottom" })).toBeInTheDocument();
   });

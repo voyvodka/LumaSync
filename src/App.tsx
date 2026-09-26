@@ -45,6 +45,7 @@ import {
 } from "./features/onboarding/state/onboardingState";
 import { SetupGuideProvider, type SetupGuideRestartResult } from "./features/onboarding/state/setupGuideControl";
 import { useBackgroundUpdateChecks } from "./features/updater/useBackgroundUpdateChecks";
+import { UpdateStatusItem } from "./features/updater/UpdateStatusItem";
 import {
   UpdateModalHost,
   UpdaterProvider,
@@ -58,7 +59,6 @@ import { useCapturePermissionRecheck } from "./features/mode/state/useCapturePer
 import type { DeviceCategory } from "./features/settings/sections/DeviceSection";
 import { CAPTURE_FAILURE_BUCKET } from "./shared/contracts/capture";
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "./shared/contracts/hue";
-import { startCalibrationFromSettings } from "./features/calibration/state/entryFlow";
 import { useLedSetupPrompt } from "./features/calibration/state/useLedSetupPrompt";
 import { useDeviceConnection } from "./features/device/useDeviceConnection";
 import { useActiveWledSink, useWledSinkRestore } from "./features/device/useWledSink";
@@ -85,6 +85,7 @@ import {
   UI_MODE_FADE_TIMING,
 } from "./features/shell/useUIMode";
 import { useGlobalKeybinds, type KeybindHandlers } from "./features/shell/useGlobalKeybinds";
+import { useUiZoom } from "./features/shell/useUiZoom";
 import { modeKeybindHandlers } from "./features/shell/modeKeybinds";
 import { MODE_KIND_ORDER, modeKind } from "./features/mode/model/modeKinds";
 import { useWindowVisible } from "./features/shell/windowVisibility";
@@ -115,6 +116,9 @@ function Shell() {
   const updaterStatus = useUpdaterState(selectUpdaterStatus);
   const updateCheckFailedNotice = useUpdaterState(selectUpdateCheckFailedNotice);
   const updateModalShown = useUpdaterState(selectUpdateModalShown);
+  // Read by the navigation handlers, which are memoised and must not go stale.
+  const updateModalShownRef = useRef(updateModalShown);
+  updateModalShownRef.current = updateModalShown;
   const { checkForUpdates, checkForUpdatesInBackground } = useUpdaterActions();
   const {
     currentMode,
@@ -166,13 +170,12 @@ function Shell() {
   const { notice: previewOpenNotice, report: reportPreviewOpenFailure } = usePreviewOpenNotice();
 
   const handleOpenCalibration = useCallback(() => {
-    const entry = startCalibrationFromSettings(savedCalibration);
     // Through the leave guard like every other move: a mode press that needs a
     // layout must not unmount another screen's unsaved work either.
-    if (entry.open && navigation.get().activeSection !== SECTION_IDS.LED_SETUP) {
+    if (navigation.get().activeSection !== SECTION_IDS.LED_SETUP) {
       navigation.requestLeave(() => setActiveSection(SECTION_IDS.LED_SETUP));
     }
-  }, [navigation, savedCalibration, setActiveSection]);
+  }, [navigation, setActiveSection]);
 
   const mode = useLightingModeOrchestrator({
     onRequireCalibration: handleOpenCalibration,
@@ -290,6 +293,8 @@ function Shell() {
   // an unsaved draft that would otherwise unmount without a word. A held move
   // resolves at once; it runs later, or never, on the user's answer.
   const handleSectionChange = useCallback((sectionId: SectionId, deviceCategory?: DeviceCategory) => {
+    // The update prompt owns the window; a move from anywhere waits until it closes.
+    if (updateModalShownRef.current) return Promise.resolve();
     if (sectionId === navigation.get().activeSection) return runSectionChange(sectionId, deviceCategory);
     let pending: Promise<void> = Promise.resolve();
     navigation.requestLeave(() => {
@@ -300,6 +305,7 @@ function Shell() {
 
   // Compact never shows the full-only screens, so going there is a leave too.
   const guardedSwitchUIMode = useCallback((nextMode: UIMode): Promise<void> => {
+    if (updateModalShownRef.current) return Promise.resolve();
     if (nextMode !== "compact") return switchUIMode(nextMode);
     let pending: Promise<void> = Promise.resolve();
     navigation.requestLeave(() => {
@@ -429,7 +435,9 @@ function Shell() {
     [KEYBIND_ACTIONS.OPEN_SETTINGS]: () => void handleSectionChange(SECTION_IDS.SYSTEM),
     ...modeKeybindHandlers(lightingControlActions.changeMode, isModeKindDisabled),
   };
-  useGlobalKeybinds(keybindHandlers, { disabled: !isContentVisible });
+  // The update prompt owns the keyboard: ⌥1–3 used to change the mode behind it.
+  useGlobalKeybinds(keybindHandlers, { disabled: !isContentVisible || updateModalShown });
+  useUiZoom({ disabled: !isContentVisible || updateModalShown });
 
   useCapturePermissionRecheck(
     mode.startFailedNotice?.bucket === CAPTURE_FAILURE_BUCKET.PERMISSION,
@@ -588,6 +596,7 @@ function Shell() {
           onSwitchUIMode={guardedSwitchUIMode}
           activeSection={activeSection}
           onSectionChange={(id) => void handleSectionChange(id)}
+          navLocked={updateModalShown}
         />
 
         {/* Persistent dark backdrop so the space between the fade-out and
@@ -624,10 +633,15 @@ function Shell() {
               opacity: isContentVisible ? 1 : 0,
               // The recede-and-settle is deliberate: with a matched backdrop it
               // reads as a breathe rather than as content vanishing.
+              // `scale(1)` stays at rest: it is the containing block the content's
+              // fixed-position menus and dialogs are placed against.
               transform: isContentVisible ? "scale(1)" : "scale(0.985)",
-              filter: isContentVisible ? "blur(0px)" : "blur(6px)",
+              // The filter and the layer hint only while the content is leaving or
+              // arriving: held at rest they made a native resize (the zoom) redraw a
+              // window-sized filtered layer on every frame, and the edges lagged.
+              filter: isContentVisible ? "none" : "blur(6px)",
               transformOrigin: "center center",
-              willChange: "opacity, transform, filter",
+              willChange: isContentVisible ? "auto" : "opacity, transform, filter",
               transitionProperty: "opacity, transform, filter",
               transitionDuration: `${UI_MODE_FADE_DURATION_MS}ms`,
               transitionTimingFunction: UI_MODE_FADE_TIMING,
@@ -650,6 +664,7 @@ function Shell() {
           items={statusItems}
           uiMode={currentMode}
           lightingActive={lightingMode.kind !== LIGHTING_MODE_KIND.OFF}
+          trailing={<UpdateStatusItem compact={currentMode === "compact"} />}
         />
         <ShellNoticeAnnouncer queue={noticeQueue} />
         {/* After the notices, and above them: the modal owns the screen, and the

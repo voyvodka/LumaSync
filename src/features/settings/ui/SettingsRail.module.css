@@ -1,0 +1,38 @@
+@layer components {
+  .rail {
+    padding: 20px 10px;
+    border-right: 1px solid var(--lm-line);
+    overflow-y: auto;
+  }
+  .list { position: relative; display: grid; }
+
+  .tint {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 34px;
+    border-radius: 8px;
+    background: var(--lm-panel-2);
+    transition: transform var(--lm-dur-base) var(--lm-ease-out);
+  }
+
+  .item {
+    position: relative;
+    height: 34px;
+    padding: 0 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    text-align: left;
+    color: var(--lm-ink-dim);
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .item:hover { color: var(--lm-ink); }
+  .item[aria-current="page"] { color: var(--lm-ink); }
+  .item:focus-visible { outline: none; box-shadow: var(--lm-focus-ring-inset); }
+
+  :global(:root[data-reduced-motion]) .tint { transition: none; }
+
+  @media (forced-colors: active) {
+    .tint { background: Highlight; forced-color-adjust: none; }
+    .item[aria-current="page"] { color: HighlightText; forced-color-adjust: none; }
+  }
+}

@@ -12,12 +12,12 @@
     padding: 18px;
     border: 1px solid var(--lm-line-2);
     border-radius: 16px;
-    background: rgb(14 16 20 / 88%);
-    backdrop-filter: blur(10px);
+    background: var(--lm-panel);
     box-shadow: 0 20px 50px rgb(0 0 0 / 55%);
     transform: translate(-50%, -50%);
     animation: card-in var(--lm-dur-slow) var(--lm-ease-out);
   }
+  .leaving { animation: card-out var(--lm-dur-base) var(--lm-ease-leave) forwards; }
   .question { font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--lm-ink); }
   .row { display: flex; gap: 8px; }
   .input {
@@ -54,8 +54,8 @@
   .skip:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
 
   @keyframes card-in { from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)); } }
+  @keyframes card-out { to { opacity: 0; transform: translate(-50%, calc(-50% - 6px)); } }
 
-  @media (prefers-reduced-motion: reduce) {
-    .card { animation: none; }
-  }
+  :global(:root[data-reduced-motion]) .card,
+  :global(:root[data-reduced-motion]) .leaving { animation: none; }
 }

@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { LedSegmentKey } from "../model/contracts";
@@ -16,7 +16,7 @@ import {
 import { holdStart, restoreStart, type Corner, type LedRef, type StartPoint } from "../model/startPoint";
 import { CountChip } from "./CountChip";
 import { SetupCanvas } from "./SetupCanvas";
-import { computeStage, frameFor, VIEW_H, VIEW_W, type ChipAnchor } from "./stageGeometry";
+import { computeStage, frameFor, SCREEN_STOPS, VIEW_H, VIEW_W, type ChipAnchor } from "./stageGeometry";
 import styles from "./SetupStage.module.css";
 
 interface SetupStageProps {
@@ -56,6 +56,10 @@ const OTHER: Record<LedSegmentKey, LedSegmentKey> = { top: "bottom", bottom: "to
 const otherOf = (edge: LedSegmentKey) => OTHER[edge];
 /** Past this the monitor only gets bigger than the numbers around it, and the page emptier. */
 const MAX_SCALE = 1.5;
+/** How far past the frame the light reaches, in view units; the mask fades it out over that. */
+const HALO_SPREAD = 70;
+/** The screen's own picture, as the colour the strip throws on the wall. */
+const HALO_GRADIENT = `linear-gradient(135deg, ${SCREEN_STOPS.map(([at, color]) => `${color} ${Number(at) * 100}%`).join(", ")})`;
 
 /** The canvas at the size the space allows, with its numbers laid over it in the same coordinates. */
 export function SetupStage(props: SetupStageProps) {
@@ -64,13 +68,18 @@ export function SetupStage(props: SetupStageProps) {
   const { t } = useTranslation();
   const fitRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const [scale, setScale] = useState(1);
 
   useLayoutEffect(() => {
-    // Measures the space left once the dock's room is taken off, not the padded box.
+    // Measures the space left once the dock's room is taken off, not the padded box. Written to
+    // the element, not React state: a window resize would otherwise re-render the stage per frame.
     const box = fitRef.current;
-    if (!box) return;
-    const fit = () => setScale(Math.max(0.5, Math.min(MAX_SCALE, box.clientWidth / VIEW_W, box.clientHeight / VIEW_H)));
+    const stage = stageRef.current;
+    if (!box || !stage) return;
+    const fit = () => {
+      const scale = Math.max(0.5, Math.min(MAX_SCALE, box.clientWidth / VIEW_W, box.clientHeight / VIEW_H));
+      stage.style.width = `${VIEW_W * scale}px`;
+      stage.style.height = `${VIEW_H * scale}px`;
+    };
     fit();
     const observer = new ResizeObserver(fit);
     observer.observe(box);
@@ -201,12 +210,13 @@ export function SetupStage(props: SetupStageProps) {
   };
 
   const f = layout.frame;
-  // The light the strip throws on the wall, around the screen: one blurred layer, composited once.
+  // The light the strip throws on the wall, around the screen: a soft-edged layer, no live filter.
   const halo: CSSProperties = {
-    left: `${((f.x - 26) / VIEW_W) * 100}%`,
-    top: `${((f.y - 26) / VIEW_H) * 100}%`,
-    width: `${((f.w + 52) / VIEW_W) * 100}%`,
-    height: `${((f.h + 52) / VIEW_H) * 100}%`,
+    background: HALO_GRADIENT,
+    left: `${((f.x - HALO_SPREAD) / VIEW_W) * 100}%`,
+    top: `${((f.y - HALO_SPREAD) / VIEW_H) * 100}%`,
+    width: `${((f.w + 2 * HALO_SPREAD) / VIEW_W) * 100}%`,
+    height: `${((f.h + 2 * HALO_SPREAD) / VIEW_H) * 100}%`,
   };
 
   return (
@@ -215,7 +225,6 @@ export function SetupStage(props: SetupStageProps) {
       <div
         ref={stageRef}
         className={preview ? `${styles.stage} ${styles.isPreviewing}` : styles.stage}
-        style={{ width: VIEW_W * scale, height: VIEW_H * scale }}
         // What only matters while the pointer is here (where LED #1 can go, adding a stand) waits for it.
         onPointerEnter={(e) => {
           e.currentTarget.dataset.pointer = "";

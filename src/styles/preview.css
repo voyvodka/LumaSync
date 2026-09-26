@@ -5,7 +5,7 @@
      - the click-through digital-twin overlay (`.lm-twin-*`)
      - the interactive control popup (`.lm-control-*`)
    Both honour the amber Rev 07 tokens, ship a forced-colors fallback, and
-   guard every >120 ms animation behind prefers-reduced-motion. The twin dots
+   guard every >120 ms animation behind reduced motion (`data-reduced-motion`). The twin dots
    deliberately carry NO color transition so they track the live stream 1:1.
    =========================================================================== */
 
@@ -314,9 +314,7 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .lm-test-pulse { animation: none; }
-}
+:root[data-reduced-motion] .lm-test-pulse { animation: none; }
 
 .lm-control-drag-hint {
   font-family: var(--lm-mono);

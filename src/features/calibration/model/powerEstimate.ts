@@ -1,7 +1,7 @@
 import { LED_CHIP_TYPE, type LedChipType } from "@/shared/contracts/device";
 
 /** Every strip this app drives runs on 5 V. */
-export const STRIP_SUPPLY_VOLTS = 5;
+const STRIP_SUPPLY_VOLTS = 5;
 
 /**
  * Datasheet worst case per pixel with every channel at full: a WS2812B draws

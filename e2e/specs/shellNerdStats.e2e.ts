@@ -35,20 +35,26 @@ async function waitForBar(on: boolean, context: string): Promise<void> {
   });
 }
 
-async function openGeneral(): Promise<void> {
+async function openAppearance(): Promise<void> {
   await switchUiMode("full");
   await clickTestId(`section-tab-${SECTION_IDS.SYSTEM}`);
-  // The section is lazy, so its panel can mount before the row does.
-  await browser.waitUntil(async () => exists(TOGGLE), {
+  // The section is lazy, so its panel can mount before the rail does.
+  await browser.waitUntil(async () => exists('[data-testid="settings-page-appearance"]'), {
     timeout: 15_000,
     interval: 100,
-    timeoutMsg: "the General section never rendered the stats-for-nerds toggle",
+    timeoutMsg: "the Settings rail never rendered its Appearance page",
+  });
+  await clickTestId("settings-page-appearance");
+  await browser.waitUntil(async () => exists(TOGGLE), {
+    timeout: 5_000,
+    interval: 100,
+    timeoutMsg: "the Appearance page never rendered the stats-for-nerds toggle",
   });
 }
 
 /** Clicks the toggle only when it is not already where `on` wants it. */
 async function setNerdStats(on: boolean): Promise<void> {
-  await openGeneral();
+  await openAppearance();
   if ((await attribute(TOGGLE, "aria-checked")) !== String(on)) {
     await clickTestId(TOGGLE_ID);
   }
@@ -76,7 +82,7 @@ async function expectChipsOnly(context: string): Promise<void> {
 }
 
 /**
- * Settings → General "Show stats for nerds". Off, the status bar shows the
+ * Settings → Appearance "Show stats for nerds". Off, the status bar shows the
  * chips alone; on, CAP and the FPS pill come back; the choice is saved and
  * survives a compact ↔ full round trip.
  *
@@ -173,7 +179,7 @@ describe("stats for nerds", () => {
     await waitForBar(false, "full, off");
     await expectChipsOnly("full, off");
     expect(persistedShowNerdStats()).toBe(false);
-    await openGeneral();
+    await openAppearance();
     expect(await attribute(TOGGLE, "aria-checked")).toBe("false");
   });
 });

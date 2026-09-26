@@ -1,0 +1,30 @@
+@layer components {
+  .page {
+    display: grid;
+    grid-template-columns: 188px 1fr;
+    height: 100%;
+    min-height: 0;
+    background: var(--lm-bg);
+    color: var(--lm-ink);
+  }
+
+  .scroll { min-height: 0; overflow-y: auto; }
+  /* A column centred in the space beside the rail: past ~720 px a row's name and its control
+     drift too far apart to read as one line. */
+  .content {
+    max-width: 720px;
+    margin-inline: auto;
+    padding: 22px 32px 32px;
+    animation: enter var(--lm-dur-base) var(--lm-ease-out);
+  }
+  .title {
+    margin: 0 0 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--lm-ink);
+  }
+
+  @keyframes enter { from { opacity: 0; transform: translateY(4px); } }
+
+  :global(:root[data-reduced-motion]) .content { animation: none; }
+}

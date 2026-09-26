@@ -1,8 +1,10 @@
-import { memo, type MouseEvent, type PointerEvent } from "react";
+import { memo, useRef, type MouseEvent, type PointerEvent } from "react";
+
+import { usePresence } from "@/shared/lib/usePresence";
 
 import type { LedSegmentKey } from "../model/contracts";
 import type { Corner, LedRef } from "../model/startPoint";
-import type { StageLayout } from "./stageGeometry";
+import type { Point, StageLayout } from "./stageGeometry";
 import { SCREEN_STOPS, VIEW_H, VIEW_W } from "./stageGeometry";
 import styles from "./SetupCanvas.module.css";
 
@@ -22,6 +24,8 @@ interface SetupCanvasProps {
 }
 
 const EDGE_ORDER: readonly LedSegmentKey[] = ["top", "right", "bottom", "left"];
+/** Past the edge's and the stand's fade-out. */
+const EXIT_MS = 300;
 
 /**
  * The screen, its LEDs and the way the light runs. Static: the strip shows the chase, so the
@@ -88,12 +92,7 @@ export const SetupCanvas = memo(function SetupCanvas({
         </linearGradient>
       </defs>
 
-      {stand && (
-        <g className={styles.stand}>
-          <path d={`M${cx - 13} ${bottom + 4} L${cx + 13} ${bottom + 4} L${cx + 17} ${bottom + 32} L${cx - 17} ${bottom + 32} Z`} fill="url(#setup-stand)" />
-          <rect x={cx - 58} y={bottom + 31} width="116" height="6" rx="3" className={styles.foot} />
-        </g>
-      )}
+      <Stand shown={stand} cx={cx} bottom={bottom} />
       <rect x={f.x - 5} y={f.y - 5} width={f.w + 10} height={f.h + 10} rx="9" className={styles.bezel} />
       <path d={`M${f.x + 4} ${f.y - 4.5} H${f.x + f.w - 4}`} className={styles.bezelEdge} />
       {/* A dark panel with the picture turned down: the strip's light and the amber line are what
@@ -130,21 +129,10 @@ export const SetupCanvas = memo(function SetupCanvas({
       )}
 
       {!empty &&
-        EDGE_ORDER.map((edge) => {
-          const edgePts = pts.map((p, i) => [p, i] as const).filter(([p]) => p.edge === edge);
-          if (!edgePts.length) return null;
-          // Keyed by edge: an edge switched on mounts and fades in once; count changes do not re-run it.
-          return (
-            <g key={edge} data-edge={edge} className={styles.edge}>
-              {edgePts.map(([p, i]) => (
-                <g key={i} data-pick={`led|${i}`} className={styles.led}>
-                  <circle cx={p.x} cy={p.y} r="5.5" className={styles.hit} />
-                  <circle cx={p.x} cy={p.y} r="2.7" fill={p.color} className={styles.dot} />
-                </g>
-              ))}
-            </g>
-          );
-        })}
+        EDGE_ORDER.map((edge) => (
+          // Keyed by edge: an edge switched on fades in once; count changes do not re-run it.
+          <EdgeDots key={edge} edge={edge} dots={pts.map((p, i) => [p, i] as const).filter(([p]) => p.edge === edge)} />
+        ))}
 
       {!empty &&
         rings.map((r) => (
@@ -170,3 +158,33 @@ export const SetupCanvas = memo(function SetupCanvas({
     </svg>
   );
 });
+
+/** One edge's LEDs. Switched off, it fades out from where it was instead of vanishing. */
+function EdgeDots({ edge, dots }: { edge: LedSegmentKey; dots: readonly (readonly [Point, number])[] }) {
+  const lastRef = useRef(dots);
+  if (dots.length) lastRef.current = dots;
+  const { mounted, leaving } = usePresence(dots.length > 0, EXIT_MS);
+  if (!mounted) return null;
+  return (
+    <g data-edge={edge} className={leaving ? `${styles.edge} ${styles.leaving}` : styles.edge}>
+      {lastRef.current.map(([p, i]) => (
+        <g key={i} data-pick={leaving ? undefined : `led|${i}`} className={styles.led}>
+          <circle cx={p.x} cy={p.y} r="5.5" className={styles.hit} />
+          <circle cx={p.x} cy={p.y} r="2.7" fill={p.color} className={styles.dot} />
+        </g>
+      ))}
+    </g>
+  );
+}
+
+/** The monitor's stand, drawn only while the strip leaves a gap for it; it goes the way it came. */
+function Stand({ shown, cx, bottom }: { shown: boolean; cx: number; bottom: number }) {
+  const { mounted, leaving } = usePresence(shown, EXIT_MS);
+  if (!mounted) return null;
+  return (
+    <g className={leaving ? `${styles.stand} ${styles.leaving}` : styles.stand}>
+      <path d={`M${cx - 13} ${bottom + 4} L${cx + 13} ${bottom + 4} L${cx + 17} ${bottom + 32} L${cx - 17} ${bottom + 32} Z`} fill="url(#setup-stand)" />
+      <rect x={cx - 58} y={bottom + 31} width="116" height="6" rx="3" className={styles.foot} />
+    </g>
+  );
+}

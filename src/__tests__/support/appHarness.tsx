@@ -131,6 +131,7 @@ export const mockAutoUpdater = {
       upToDateAt: null,
       downloadAndInstall: vi.fn().mockResolvedValue(undefined),
       dismiss: vi.fn(),
+      showUpdate: vi.fn<() => void>(),
       devSetState: vi.fn(),
     };
   },
@@ -170,7 +171,6 @@ export const mockWledSink = {
 
 export const mockEntryFlow = {
   shouldPromptLedSetupOnConnection: () => false,
-  startCalibrationFromSettings: () => ({ open: true, step: "editor" }),
 };
 
 export const mockModeGuard = {

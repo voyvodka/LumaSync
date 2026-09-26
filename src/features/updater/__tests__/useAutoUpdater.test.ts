@@ -371,39 +371,41 @@ describe("useAutoUpdater", () => {
       return { result, getHandler };
     }
 
-    it("keeps the modal shut while the download it dismissed keeps reporting", async () => {
+    // Download and install are one backend call: a download put away used to
+    // relaunch the app when it finished, with nothing on screen to say so.
+    it("cannot put a download away, so it never relaunches the app unseen", async () => {
       const { result, getHandler } = await startDownload();
-      expect(result.current.state.status).toBe("downloading");
 
       act(() => {
         result.current.dismiss();
       });
-      expect(result.current.isModalOpen).toBe(false);
-
-      // The exact event that used to reopen it — the download is still running,
-      // which is what "continue in background" asked for.
-      act(() => {
-        getHandler()?.({ payload: { downloadedBytes: 512, totalBytes: 2048, finished: false } });
-      });
-
-      expect(result.current.isModalOpen).toBe(false);
-      expect(result.current.state.status).toBe("downloading");
-      if (result.current.state.status === "downloading") {
-        expect(result.current.state.downloadedBytes).toBe(512);
-      }
-    });
-
-    it("re-opens when the download finishes, because a relaunch is not what was declined", async () => {
-      const { result, getHandler } = await startDownload();
-      act(() => {
-        result.current.dismiss();
-      });
+      expect(result.current.isModalOpen).toBe(true);
 
       act(() => {
         getHandler()?.({ payload: { downloadedBytes: 2048, totalBytes: 2048, finished: true } });
       });
-
       expect(result.current.state.status).toBe("installing");
+      expect(result.current.isModalOpen).toBe(true);
+    });
+
+    it("brings back an update put off with Later", async () => {
+      vi.mocked(checkForUpdate).mockResolvedValue({
+        status: status(UPDATER_STATUS.UPDATE_AVAILABLE),
+        channel: "stable",
+        update: UPDATE,
+      });
+      const { result } = renderHook(() => useAutoUpdater());
+      await act(async () => {
+        await result.current.checkForUpdates();
+      });
+      act(() => {
+        result.current.dismiss();
+      });
+      expect(result.current.isModalOpen).toBe(false);
+
+      act(() => {
+        result.current.showUpdate();
+      });
       expect(result.current.isModalOpen).toBe(true);
     });
 
@@ -431,6 +433,32 @@ describe("useAutoUpdater", () => {
 
       expect(result.current.isModalOpen).toBe(true);
     });
+  });
+
+  // Closing the prompt on "Try again" and opening a new one with the answer was a flash.
+  it("keeps the failed prompt up while Try again checks, then shows the answer in it", async () => {
+    vi.mocked(checkForUpdate).mockRejectedValueOnce(new Error("offline"));
+    const { result } = renderHook(() => useAutoUpdater());
+    await act(async () => {
+      await result.current.checkForUpdates();
+    });
+    expect(result.current.state.status).toBe("error");
+
+    let resolveCheck: (value: Awaited<ReturnType<typeof checkForUpdate>>) => void = () => {};
+    vi.mocked(checkForUpdate).mockReturnValueOnce(new Promise((resolve) => { resolveCheck = resolve; }));
+    let pending: Promise<unknown> = Promise.resolve();
+    await act(async () => {
+      pending = result.current.checkForUpdates();
+    });
+    expect(result.current.state).toMatchObject({ status: "error", retrying: true });
+    expect(result.current.isModalOpen).toBe(true);
+
+    await act(async () => {
+      resolveCheck({ status: status(UPDATER_STATUS.UPDATE_AVAILABLE), channel: "stable", update: UPDATE });
+      await pending;
+    });
+    expect(result.current.state.status).toBe("available");
+    expect(result.current.isModalOpen).toBe(true);
   });
 
   /** The startup check nobody asked for. It fails on every offline boot, so a
@@ -478,7 +506,8 @@ describe("useAutoUpdater", () => {
       );
     });
 
-    it("still opens the modal when an update is available", async () => {
+    // Found on its own, an update is offered in the status bar, not put over the window.
+    it("offers an update it finds without opening the prompt", async () => {
       vi.mocked(checkForUpdate).mockResolvedValue({
         status: status(UPDATER_STATUS.UPDATE_AVAILABLE),
         channel: "stable",
@@ -488,7 +517,7 @@ describe("useAutoUpdater", () => {
       const { result } = await runBackground();
 
       expect(result.current.state.status).toBe("available");
-      expect(modalShown(result.current)).toBe(true);
+      expect(modalShown(result.current)).toBe(false);
       expect(result.current.checkFailedNotice).toBeNull();
     });
 
@@ -526,35 +555,20 @@ describe("useAutoUpdater", () => {
       expect(outcomes).toEqual(["failed", "done"]);
     });
 
-    // The daily check must not reopen a prompt the user put off with "Later",
-    // nor restart a download that is running.
-    it.each(["available", "downloading"] as const)("leaves an update already %s alone", async (busy) => {
-      vi.mocked(checkForUpdate).mockResolvedValue({
-        status: status(UPDATER_STATUS.UPDATE_AVAILABLE),
-        channel: "stable",
-        update: UPDATE,
-      });
+    // A download under way is never restarted by the daily check.
+    it("leaves a download under way alone", async () => {
       const { result } = renderHook(() => useAutoUpdater());
-      await act(async () => {
-        await result.current.checkForUpdatesInBackground();
-      });
-      if (busy === "downloading") {
-        act(() => {
-          result.current.devSetState({
-            status: "downloading",
-            update: UPDATE,
-            progress: 10,
-            downloadedBytes: 1,
-            totalBytes: 10,
-            bytesPerSecond: 1,
-            etaSeconds: 9,
-          });
-        });
-      }
       act(() => {
-        result.current.dismiss();
+        result.current.devSetState({
+          status: "downloading",
+          update: UPDATE,
+          progress: 10,
+          downloadedBytes: 1,
+          totalBytes: 10,
+          bytesPerSecond: 1,
+          etaSeconds: 9,
+        });
       });
-      vi.mocked(checkForUpdate).mockClear();
 
       let outcome: unknown;
       await act(async () => {
@@ -563,6 +577,45 @@ describe("useAutoUpdater", () => {
 
       expect(outcome).toBe("done");
       expect(checkForUpdate).not.toHaveBeenCalled();
+    });
+
+    // An update put off with Later is checked again, so a newer one replaces it — quietly, and
+    // without the offer blinking out while the check runs or when it fails.
+    it("re-checks an update put off with Later, keeps it offered, and never reopens the prompt", async () => {
+      vi.mocked(checkForUpdate).mockResolvedValue({
+        status: status(UPDATER_STATUS.UPDATE_AVAILABLE),
+        channel: "stable",
+        update: UPDATE,
+      });
+      const { result } = renderHook(() => useAutoUpdater());
+      await act(async () => {
+        await result.current.checkForUpdates();
+      });
+      act(() => {
+        result.current.dismiss();
+      });
+
+      const newer = { ...UPDATE, version: `${UPDATE.version}1` };
+      let resolveCheck: (value: Awaited<ReturnType<typeof checkForUpdate>>) => void = () => {};
+      vi.mocked(checkForUpdate).mockReturnValueOnce(new Promise((resolve) => { resolveCheck = resolve; }));
+      let pending: Promise<unknown> = Promise.resolve();
+      await act(async () => {
+        pending = result.current.checkForUpdatesInBackground();
+      });
+      expect(result.current.state.status).toBe("available");
+
+      await act(async () => {
+        resolveCheck({ status: status(UPDATER_STATUS.UPDATE_AVAILABLE), channel: "stable", update: newer });
+        await pending;
+      });
+      expect(result.current.state.status === "available" && result.current.state.update.version).toBe(newer.version);
+      expect(result.current.isModalOpen).toBe(false);
+
+      vi.mocked(checkForUpdate).mockRejectedValueOnce(new Error("offline"));
+      await act(async () => {
+        await result.current.checkForUpdatesInBackground();
+      });
+      expect(result.current.state.status).toBe("available");
       expect(result.current.isModalOpen).toBe(false);
     });
 

@@ -145,6 +145,11 @@ export function fitSizeToWorkArea(
 const FIRST_RUN_FULL_FRACTION = 0.62;
 const FIRST_RUN_FULL_MAX_SCALE = 1.6;
 
+/** A logical size at `factor`, rounded to whole px. */
+export function scaleSize(size: { width: number; height: number }, factor: number): { width: number; height: number } {
+  return { width: Math.round(size.width * factor), height: Math.round(size.height * factor) };
+}
+
 /** Full-mode size when nothing is persisted: `UI_MODE_SIZES.full` scaled
  *  uniformly (so the aspect holds) toward a fraction of the logical work area,
  *  never below the design size — `fitSizeToWorkArea` still has the last word
@@ -356,6 +361,9 @@ export async function persistWindowState(
   opts?: { captureSize?: boolean },
 ): Promise<void> {
   const win = getCurrentWindow();
+  // A zoomed window's frame is the screen's, not the user's: recording it opened the next launch
+  // at screen size as an ordinary window, with nothing to zoom back to.
+  if (await isZoomed(win)) return;
   const { width, height } = await win.outerSize();
   const { x, y } = await win.outerPosition();
   const center = rectCenter({ x, y, width, height });
@@ -378,6 +386,15 @@ export async function persistWindowState(
   }
 
   await saveShellState(update);
+}
+
+async function isZoomed(win: ReturnType<typeof getCurrentWindow>): Promise<boolean> {
+  try {
+    return await win.isMaximized();
+  } catch {
+    // Unknown is treated as not zoomed: persisting as before beats never persisting.
+    return false;
+  }
 }
 
 /** Read the current main-window inner size in LOGICAL (DPI-independent) px. */

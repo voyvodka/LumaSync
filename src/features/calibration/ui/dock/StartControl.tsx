@@ -54,7 +54,7 @@ export function StartControl({ shape, start, onSetStart, onNudge, onDirection }:
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
-        aria-label={`${t("calibration:setup.firstLed")}: ${name}`}
+        aria-label={t("calibration:setup.firstLedAt", { place: name })}
         onClick={() => setOpen((v) => !v)}
         onKeyDown={(e) => {
           if (e.key === "ArrowLeft") nudge(-1);

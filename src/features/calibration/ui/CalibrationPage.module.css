@@ -1,7 +1,7 @@
 @layer components {
   /* LED Setup is canvas first: the screen is the page, the numbers sit on its edges, one floating
      dock carries the total, LED #1 and the actions. Motion answers a press and nothing moves on
-     its own; every part's motion is off under prefers-reduced-motion. */
+     its own; every part's motion is off under reduced motion. */
   .page {
     position: relative;
     display: grid;
@@ -11,11 +11,32 @@
     overflow: hidden;
   }
 
+  /* Floats over the top of the stage: a notice pushing the stage down moved the number under the
+     pointer as it arrived. */
   .notices {
+    position: absolute;
+    top: 52px;
+    left: 50%;
+    z-index: 5;
     display: flex;
     flex-direction: column;
     gap: 4px;
     width: min(560px, calc(100% - 32px));
-    margin: 8px auto 0;
+    transform: translateX(-50%);
+  }
+  .alerts { display: flex; flex-direction: column; gap: 4px; }
+  .noticeDetail {
+    display: block;
+    margin-top: 2px;
+    font: 10px/1.4 var(--lm-mono);
+    word-break: break-all;
+    color: var(--lm-ink-faint);
+  }
+
+  /* Whatever mounts as the page opens is already in place: its entrance ends at once. Duration,
+     not `animation: none`, so the animation is not started again when the page stops opening. */
+  .page[data-opening] :global(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
   }
 }

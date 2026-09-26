@@ -5,12 +5,15 @@ import styles from "./FirstRunCard.module.css";
 
 /** First visit: the one question LED Setup cannot answer itself, over the dimmed screen. */
 export function FirstRunCard({
+  leaving = false,
   knownTotal,
   floor,
   ceiling,
   onDistribute,
   onSkip,
 }: {
+  /** Answered: it plays its exit, and takes no more input. */
+  leaving?: boolean;
   knownTotal: number | null;
   floor: number;
   ceiling: number;
@@ -21,7 +24,8 @@ export function FirstRunCard({
   const inputId = useId();
   const [text, setText] = useState(knownTotal ? String(knownTotal) : "");
   const [touched, setTouched] = useState(false);
-  // A WLED count read after the card mounted still pre-fills it, unless the user has typed.
+  // The page opens on the count it knows. One that changes after (a panel bound since the last
+  // visit) still fills the card, unless the user has typed.
   useEffect(() => {
     if (!touched && knownTotal) setText(String(knownTotal));
   }, [knownTotal, touched]);
@@ -30,7 +34,8 @@ export function FirstRunCard({
 
   return (
     <form
-      className={styles.card}
+      className={leaving ? `${styles.card} ${styles.leaving}` : styles.card}
+      inert={leaving}
       onSubmit={(e) => {
         e.preventDefault();
         if (valid) onDistribute(total);

@@ -3,7 +3,6 @@ import type enCalibration from "@/locales/en/calibration";
 
 const calibration: Catalogue<typeof enCalibration> = {
   page: {
-    testUpdating: "Değişikliklerin çalışan teste gönderiliyor…",
     testKeepsLastValid: "Sayılar yeniden geçerli olana kadar çalışan test son geçerli düzeni kullanıyor.",
     totalStep: {
       question: "Şeridinde kaç LED var?",
@@ -38,6 +37,7 @@ const calibration: Catalogue<typeof enCalibration> = {
     test: "Test et",
     starting: "Başlıyor…",
     stopping: "Duruyor…",
+    updating: "Güncelleniyor…",
     stop: "Durdur",
     revert: "Geri al",
     unsaved: "Kaydedilmemiş değişiklik",
@@ -55,6 +55,8 @@ const calibration: Catalogue<typeof enCalibration> = {
     countHint: "Makarada yazar: metre × metre başına LED.",
     skipTotal: "Kenarları kendim gireceğim",
     firstLed: "İlk LED",
+    firstLedAt: "İlk LED: {{place}}",
+    ledUnit: "LED",
     cw: "Saat yönünde",
     ccw: "Saatin tersine",
     toCw: "Saat yönüne çevir",
@@ -98,7 +100,7 @@ const calibration: Catalogue<typeof enCalibration> = {
   },
   overlay: {
     save: "Kaydet",
-    saving: "Kaydediliyor...",
+    saving: "Kaydediliyor…",
     retrySave: "Tekrar dene",
     previewOnly: "Yalnız önizleme",
     outputActive: "Şeritte",

@@ -35,8 +35,8 @@ vi.mock("../sections/LightsSection", () => ({
   },
 }));
 
-vi.mock("../sections/SystemSection", () => ({
-  SystemSection: ({ isCheckingForUpdates }: { isCheckingForUpdates: boolean }) => {
+vi.mock("../ui/SettingsPage", () => ({
+  SettingsPage: ({ isCheckingForUpdates }: { isCheckingForUpdates: boolean }) => {
     count("system");
     return <p data-testid="system-checking">{String(isCheckingForUpdates)}</p>;
   },

@@ -14,8 +14,17 @@ import { SetupTopBar } from "./top/SetupTopBar";
 import styles from "./CalibrationPage.module.css";
 import { SetupDock } from "./dock/SetupDock";
 import { SetupStage } from "./SetupStage";
+import { usePresence } from "@/shared/lib/usePresence";
 import { Callout } from "@/shared/ui/Callout";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
+
+/**
+ * Past the longest entrance on the page (the ripple): what mounts as the page opens finishes its
+ * entrance at once, so opening the page is not seven animations answering nothing.
+ */
+const OPENING_MS = 1000;
+/** Past the first-run card's exit. */
+const CARD_EXIT_MS = 400;
 
 interface CalibrationPageProps {
   initialConfig?: LedCalibrationConfig;
@@ -68,7 +77,16 @@ export function CalibrationPage({
     validationErrors,
     testPatternError,
     previewOpenFailure,
+    loaded,
   } = session;
+
+  const [opening, setOpening] = useState(true);
+  useEffect(() => {
+    if (!loaded) return undefined;
+    const timer = setTimeout(() => setOpening(false), OPENING_MS);
+    return () => clearTimeout(timer);
+  }, [loaded]);
+  const card = usePresence(firstRun, CARD_EXIT_MS);
 
   const [savedFlash, setSavedFlash] = useState(false);
   useEffect(() => {
@@ -118,8 +136,12 @@ export function CalibrationPage({
     )),
   ].filter(Boolean);
 
+  // Nothing true can be drawn before the displays are known: an empty list read as "no displays",
+  // a 16:9 monitor reshaped to the real one, and Test turned on, all as the page opened.
+  if (!loaded) return <div className={styles.page} aria-busy="true" data-testid="led-setup-loading" />;
+
   return (
-    <div className={styles.page}>
+    <div className={styles.page} data-opening={opening || undefined}>
       <SetupTopBar
         displays={displayTarget.displays}
         selectedDisplayId={displayTarget.selectedDisplayId}
@@ -130,12 +152,12 @@ export function CalibrationPage({
         onPreview={() => void session.handleOpenPreview()}
       />
 
-      {(notices.length > 0 || testLayoutStale) && (
+      {(notices.length > 0 || (testLayoutStale && !draftTestable)) && (
         <div className={styles.notices}>
-          {notices.length > 0 && <div role="alert" className="flex flex-col gap-1">{notices}</div>}
-          {testLayoutStale && (
-            <Callout tone={draftTestable ? "info" : "warning"} testId="calibration-test-stale">
-              {draftTestable ? t("calibration:page.testUpdating") : t("calibration:page.testKeepsLastValid")}
+          {notices.length > 0 && <div role="alert" className={styles.alerts}>{notices}</div>}
+          {testLayoutStale && !draftTestable && (
+            <Callout tone="warning" testId="calibration-test-stale">
+              {t("calibration:page.testKeepsLastValid")}
             </Callout>
           )}
         </div>
@@ -155,8 +177,9 @@ export function CalibrationPage({
         onPickCorner={session.handlePickCorner}
         onPickEnd={session.handlePickEnd}
       >
-        {firstRun && (
+        {card.mounted && (
           <FirstRunCard
+            leaving={card.leaving}
             knownTotal={knownTotal}
             floor={minTotal(draft)}
             ceiling={maxTotal(draft, display)}
@@ -177,6 +200,7 @@ export function CalibrationPage({
           testBusy={isSwitching}
           testToggling={isTogglingTestPattern}
           testDisabled={displayTarget.displays.length === 0}
+          testUpdating={testLayoutStale && draftTestable}
           dirty={isDirty}
           canSave={canSave}
           saving={isSaving}
@@ -223,7 +247,7 @@ function NoticeCallout({
     <Callout tone="error" announce={false} action={action}>
       {t(notice.key)}
       {notice.detail && (
-        <span className="mt-0.5 block break-all font-mono text-[10px] text-ink-faint">
+        <span className={styles.noticeDetail}>
           {notice.detail}
         </span>
       )}

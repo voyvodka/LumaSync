@@ -16,7 +16,7 @@
    A11y guarantees:
    - Tab buttons + chips clear the 32px tap floor.
    - `:focus-visible` ⇒ amber soft ring (no plain `:focus`).
-   - `prefers-reduced-motion` disables the underline slide.
+   - Reduced motion (`data-reduced-motion`) disables the underline slide.
    - `forced-colors: active` mirrors active tab + chip chrome.
    ────────────────────────────────────────────────────────────────── */
 
@@ -187,10 +187,8 @@
   background: rgba(255, 176, 32, 0.1);
   color: var(--lm-amber);
 }
-@media (prefers-reduced-motion: reduce) {
-  .lm-room-dock-h.is-clickable {
-    transition: none;
-  }
+:root[data-reduced-motion] .lm-room-dock-h.is-clickable {
+  transition: none;
 }
 .lm-room-dock-h-dot {
   width: 6px;
@@ -837,11 +835,9 @@
   border: 1px solid rgba(0, 0, 0, 0.3);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .lm-room-dock-row-grip,
-  .lm-room-dock-row-action--move {
-    transition: none;
-  }
+:root[data-reduced-motion] .lm-room-dock-row-grip,
+:root[data-reduced-motion] .lm-room-dock-row-action--move {
+  transition: none;
 }
 @media (forced-colors: active) {
   .lm-room-dock-area-state {
@@ -870,12 +866,10 @@
 }
 
 /* Reduced motion + forced colors */
-@media (prefers-reduced-motion: reduce) {
-  .lm-room-dock-tab,
-  .lm-room-dock-row,
-  .lm-room-dock-cta {
-    transition: none;
-  }
+:root[data-reduced-motion] .lm-room-dock-tab,
+:root[data-reduced-motion] .lm-room-dock-row,
+:root[data-reduced-motion] .lm-room-dock-cta {
+  transition: none;
 }
 @media (forced-colors: active) {
   .lm-room-dock {
@@ -1131,11 +1125,9 @@
   padding: 2px 2px 4px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .lm-room-toolbar-btn,
-  .lm-room-aware-pill {
-    transition: none;
-  }
+:root[data-reduced-motion] .lm-room-toolbar-btn,
+:root[data-reduced-motion] .lm-room-aware-pill {
+  transition: none;
 }
 @media (forced-colors: active) {
   .lm-room-aware-pill {
@@ -1798,10 +1790,8 @@
   cursor: not-allowed;
   color: var(--lm-ink-dim);
 }
-@media (prefers-reduced-motion: reduce) {
-  .lm-room-chip {
-    transition: none;
-  }
+:root[data-reduced-motion] .lm-room-chip {
+  transition: none;
 }
 
 .lm-room-overlay {
@@ -1870,10 +1860,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .lm-room-viewport-btn {
-    transition: none;
-  }
+:root[data-reduced-motion] .lm-room-viewport-btn {
+  transition: none;
 }
 
 @media (forced-colors: active) {

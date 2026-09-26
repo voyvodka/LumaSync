@@ -81,10 +81,8 @@
   text-transform: uppercase;
   flex-shrink: 0;
 }
-@media (prefers-reduced-motion: reduce) {
-  .lm-context-menu-item {
-    transition: none;
-  }
+:root[data-reduced-motion] .lm-context-menu-item {
+  transition: none;
 }
 @media (forced-colors: active) {
   .lm-context-menu {

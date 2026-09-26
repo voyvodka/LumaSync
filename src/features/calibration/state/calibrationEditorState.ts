@@ -17,7 +17,6 @@ export interface CalibrationEditorState {
   current: LedCalibrationConfig;
   isDirty: boolean;
   confirmDiscard: boolean;
-  shouldClose: boolean;
 }
 
 interface EditorConfigPatch {
@@ -90,7 +89,7 @@ export function isSameCalibrationLayout(a: LedCalibrationConfig, b: LedCalibrati
 function buildState(
   baseline: LedCalibrationConfig,
   current: LedCalibrationConfig,
-  extra?: Partial<Pick<CalibrationEditorState, "confirmDiscard" | "shouldClose">>,
+  extra?: Partial<Pick<CalibrationEditorState, "confirmDiscard">>,
 ): CalibrationEditorState {
   const normalizedBaseline = normalizeConfig(baseline);
   const normalizedCurrent = normalizeConfig(current);
@@ -100,7 +99,6 @@ function buildState(
     current: normalizedCurrent,
     isDirty: modelFingerprint(normalizedBaseline) !== modelFingerprint(normalizedCurrent),
     confirmDiscard: extra?.confirmDiscard ?? false,
-    shouldClose: extra?.shouldClose ?? false,
   };
 }
 
@@ -163,34 +161,16 @@ export function saveEditorCalibration(state: CalibrationEditorState): Calibratio
   return buildState(state.current, state.current);
 }
 
-export function requestEditorClose(state: CalibrationEditorState): CalibrationEditorState {
-  if (state.isDirty) {
-    return {
-      ...state,
-      confirmDiscard: true,
-      shouldClose: false,
-    };
-  }
-
-  return {
-    ...state,
-    confirmDiscard: false,
-    shouldClose: true,
-  };
-}
-
 export function keepEditing(state: CalibrationEditorState): CalibrationEditorState {
   return {
     ...state,
     confirmDiscard: false,
-    shouldClose: false,
   };
 }
 
 export function discardEditorChanges(state: CalibrationEditorState): CalibrationEditorState {
   return {
     ...buildState(state.baseline, state.baseline),
-    shouldClose: true,
     confirmDiscard: false,
   };
 }

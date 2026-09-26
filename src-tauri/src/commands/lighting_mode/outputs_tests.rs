@@ -1760,6 +1760,29 @@ fn a_boot_restore_without_a_strip_runs_on_hue_and_keeps_the_selection() {
     assert!(rig.written_keys().is_empty());
 }
 
+#[test]
+fn launch_lights_off_starts_off_and_a_later_reload_keeps_what_the_user_turned_on() {
+    let rig = Rig::new(RigSetup {
+        state: json!({
+            "lightingMode": { "kind": "solid", "solid": { "r": 5, "g": 6, "b": 7, "brightness": 1 }, "targets": ["usb"] },
+            "lastOutputTargets": ["usb"],
+            "launchLights": "off"
+        }),
+        ..RigSetup::default()
+    });
+
+    let launch = apply(&rig, request(LightingOrigin::Boot, None, None));
+    assert_eq!(launch.snapshot.mode.kind, LightingModeKind::Off);
+    assert!(
+        rig.written_keys().is_empty(),
+        "the saved mode is kept for the next choice"
+    );
+
+    apply(&rig, request(LightingOrigin::Tray, Some(solid(9)), None));
+    let reload = apply(&rig, request(LightingOrigin::Boot, None, None));
+    assert_eq!(reload.snapshot.mode.kind, LightingModeKind::Solid);
+}
+
 fn paused_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_current_thread()
         .enable_time()

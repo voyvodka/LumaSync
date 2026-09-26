@@ -2,8 +2,10 @@
   .toggle {
     position: relative;
     flex-shrink: 0;
-    width: 98px;
+    /* The widest face sets the width (StateSwap `fit`), so no face ever resizes the button. */
+    min-width: 98px;
     height: 32px;
+    padding: 0 14px;
     border: 1px solid color-mix(in srgb, var(--lm-amber) 55%, transparent);
     border-radius: 10px;
     font-size: 12.5px;
@@ -11,13 +13,13 @@
     white-space: nowrap;
     color: var(--lm-amber);
     transition:
-      background 0.25s ease,
-      color 0.25s ease,
-      border-color 0.25s ease,
-      opacity 0.2s;
+      background var(--lm-dur-base) var(--lm-ease-out),
+      color var(--lm-dur-base) var(--lm-ease-out),
+      border-color var(--lm-dur-base) var(--lm-ease-out),
+      opacity var(--lm-dur-base);
   }
 
-  .toggle:hover:not(:disabled):not(.on) { background: rgb(255 176 32 / 9%); }
+  .toggle:hover:not(:disabled):not(.on) { background: color-mix(in srgb, var(--lm-amber) 9%, transparent); }
   .toggle:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
   .on { border-color: var(--lm-amber); background: var(--lm-amber); color: var(--lm-bg); }
   .on:hover:not(:disabled) { filter: brightness(1.06); }
@@ -26,7 +28,5 @@
   .toggle[aria-disabled="true"]:not(.waiting) { opacity: 0.55; cursor: not-allowed; }
   .waiting { cursor: progress; font-weight: 500; }
 
-  @media (prefers-reduced-motion: reduce) {
-    .toggle { transition: none; }
-  }
+  :global(:root[data-reduced-motion]) .toggle { transition: none; }
 }

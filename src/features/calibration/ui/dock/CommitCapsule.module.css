@@ -10,15 +10,15 @@
     border: 1px solid transparent;
     border-radius: 10px;
     transition:
-      border-color var(--lm-dur-slow) ease,
-      background var(--lm-dur-slow) ease,
-      box-shadow 0.4s ease;
+      border-color var(--lm-dur-slow) var(--lm-ease-out),
+      background var(--lm-dur-slow) var(--lm-ease-out),
+      box-shadow var(--lm-dur-slow) var(--lm-ease-out);
   }
 
   .ready {
     border-color: var(--lm-amber);
     background: var(--lm-amber);
-    box-shadow: 0 0 0 3px rgb(255 176 32 / 9%), 0 4px 14px rgb(255 176 32 / 16%);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lm-amber) 9%, transparent), 0 4px 14px color-mix(in srgb, var(--lm-amber) 16%, transparent);
   }
 
   .revert {
@@ -30,8 +30,8 @@
     color: var(--lm-bg);
     opacity: 0;
     transition:
-      width 0.26s var(--lm-ease-out),
-      opacity 0.2s ease,
+      width var(--lm-dur-base) var(--lm-ease-out),
+      opacity var(--lm-dur-base) var(--lm-ease-out),
       background var(--lm-dur-quick);
   }
 
@@ -71,15 +71,13 @@
     color: var(--lm-ink-faint);
   }
 
-  .rest svg { width: 13px; height: 13px; color: var(--lm-green); opacity: 0.75; transition: opacity 0.2s; }
+  .rest svg { width: 13px; height: 13px; color: var(--lm-green); opacity: 0.75; transition: opacity var(--lm-dur-base); }
   .flash { color: var(--lm-green); }
-  .flash svg { opacity: 1; animation: land 0.3s var(--lm-ease-land); }
+  .flash svg { opacity: 1; animation: land var(--lm-dur-slow) var(--lm-ease-land); }
 
   @keyframes land { from { opacity: 0; transform: scale(0.3); } }
 
-  @media (prefers-reduced-motion: reduce) {
-    .capsule,
-    .revert { transition: none; }
-    .flash svg { animation: none; }
-  }
+  :global(:root[data-reduced-motion]) .capsule,
+  :global(:root[data-reduced-motion]) .revert { transition: none; }
+  :global(:root[data-reduced-motion]) .flash svg { animation: none; }
 }

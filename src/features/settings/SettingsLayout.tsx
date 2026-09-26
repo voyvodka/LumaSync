@@ -3,14 +3,13 @@ import { SECTION_IDS, SECTION_ORDER, type SectionId, type UIMode } from "@/share
 import { preloadableComponent } from "@/shared/lib/preloadableComponent";
 import { shallowEqual } from "@/shared/lib/store";
 import { LightsSection } from "./sections/LightsSection";
-import { SystemSection } from "./sections/SystemSection";
+import { SettingsPage } from "./ui/SettingsPage";
 import {
   useLightingActions,
   useLightingControlState,
   type LightingControlState,
 } from "../mode/state/lightingControl";
 import {
-  useLeaveGuardRegistrar,
   useNavigationActions,
   useNavigationState,
   useVisibleDeviceCategoryReporter,
@@ -19,16 +18,13 @@ import {
 import { useUpdaterActions, useUpdaterState, type UpdaterSnapshot } from "../updater/UpdaterProvider";
 import { useHueShellStatus, type HueShellStatus } from "../hue/state/hueShellStatus";
 import { useSetupGuideActions } from "../onboarding/state/setupGuideControl";
-import { syncStripLedCount } from "./sections/device/usbStripRoster";
 import { CompactLayout } from "./sections/compact/CompactLayout";
+import { CalibrationPanel, preloadCalibrationPanel } from "../calibration/ui/CalibrationPanel";
 import type { RoomMapEditorProps } from "@/features/room-map/ui/RoomMapEditor";
 
-// The three full-only sections that each outweigh the rest of the shell are
-// split out, so the compact window never parses them. See
+// The full-only sections that each outweigh the rest of the shell are split out,
+// so the compact window never parses them (LED Setup's is in its own panel). See
 // docs/architecture/ui-and-shell.md, "Per-window bundles".
-const CalibrationPage = preloadableComponent("CalibrationPage", () =>
-  import("../calibration/ui/CalibrationPage").then((m) => m.CalibrationPage),
-);
 const DeviceSection = preloadableComponent("DeviceSection", () =>
   import("./sections/DeviceSection").then((m) => m.DeviceSection),
 );
@@ -100,33 +96,6 @@ const LightsPanel = memo(function LightsPanel() {
   );
 });
 
-const selectCalibration = (state: LightingControlState) => state.calibration;
-const selectSerialPort = (state: LightingControlState) =>
-  state.localSink?.transport === "serial" ? state.localSink.id || null : null;
-
-const CalibrationPanel = memo(function CalibrationPanel() {
-  const calibration = useLightingControlState(selectCalibration);
-  const serialPort = useLightingControlState(selectSerialPort);
-  const { saveCalibration } = useLightingActions();
-  const { goToSection } = useNavigationActions();
-  const registerLeaveGuard = useLeaveGuardRegistrar();
-  return (
-    <CalibrationPage.Component
-      initialConfig={calibration}
-      registerLeaveGuard={registerLeaveGuard}
-      onNavigateBack={() => {
-        void goToSection(SECTION_IDS.LIGHTS);
-      }}
-      onSaved={(cfg) => {
-        saveCalibration(cfg);
-        void syncStripLedCount(cfg.totalLeds, serialPort).catch((error) => {
-          console.error("[LumaSync] Room map strip LED count could not follow the saved layout:", error);
-        });
-      }}
-    />
-  );
-});
-
 const selectDeviceCategoryRequest = (state: NavigationState) => state.deviceCategoryRequest;
 const selectHueActive = (status: HueShellStatus) => status.configured && status.streaming;
 const selectAmbilightActive = (state: LightingControlState) => state.lightingMode.kind === "ambilight";
@@ -169,7 +138,7 @@ const SystemPanel = memo(function SystemPanel() {
   const setupGuide = useSetupGuideActions();
   return (
     <div className="h-full overflow-hidden">
-      <SystemSection
+      <SettingsPage
         onRestartSetupGuide={setupGuide?.restart}
         onCheckForUpdates={checkForUpdates}
         isCheckingForUpdates={isCheckingForUpdates}
@@ -220,7 +189,7 @@ export const SECTION_REGISTRY = {
   },
   [SECTION_IDS.LED_SETUP]: {
     render: () => <CalibrationPanel key="calibration-page" />,
-    preload: CalibrationPage.preload,
+    preload: preloadCalibrationPanel,
   },
   [SECTION_IDS.DEVICES]: {
     render: () => <DevicesPanel />,

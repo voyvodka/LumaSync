@@ -10,11 +10,10 @@
     padding: 5px;
     border: 1px solid var(--lm-line-2);
     border-radius: 14px;
-    background: rgb(20 23 29 / 85%);
-    backdrop-filter: blur(12px);
+    background: var(--lm-panel-2);
     box-shadow: 0 16px 40px rgb(0 0 0 / 50%);
     transform: translateX(-50%);
-    animation: dock-in 0.35s var(--lm-ease-out);
+    animation: dock-in var(--lm-dur-slow) var(--lm-ease-out);
   }
 
   .separator { width: 1px; height: 22px; margin: 0 2px; background: var(--lm-line-2); }
@@ -23,7 +22,5 @@
 
   @keyframes dock-in { from { opacity: 0; transform: translate(-50%, 10px); } }
 
-  @media (prefers-reduced-motion: reduce) {
-    .dock { animation: none; }
-  }
+  :global(:root[data-reduced-motion]) .dock { animation: none; }
 }

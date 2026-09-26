@@ -1,0 +1,61 @@
+@layer components {
+  .strip {
+    position: relative;
+    display: inline-flex;
+    padding: 2px;
+    border: 1px solid var(--lm-line-2);
+    border-radius: 8px;
+    background: var(--lm-panel);
+  }
+  .group {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    gap: 2px;
+  }
+
+  /* One fill under the options that travels to the chosen one. The group is positioned so the
+     options paint above it, which makes a button's offset relative to the group, not the strip. */
+  .thumb {
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    border-radius: 6px;
+    background: rgb(255 176 32 / 12%);
+  }
+  /* The edge on the side it moves to leads and the other follows, so between options of unequal
+     width it stretches over and settles instead of shrinking and growing at once, which read as
+     a jump. */
+  .moving {
+    transition-property: left, right;
+    transition-timing-function: var(--lm-ease-out);
+  }
+  .moving.toRight {
+    transition-duration: var(--lm-dur-slow), var(--lm-dur-base);
+    transition-delay: var(--lm-dur-follow), 0s;
+  }
+  .moving.toLeft {
+    transition-duration: var(--lm-dur-base), var(--lm-dur-slow);
+    transition-delay: 0s, var(--lm-dur-follow);
+  }
+  :global(:root[data-reduced-motion]) .moving { transition: none; }
+
+  .item {
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    white-space: nowrap;
+    color: var(--lm-ink-dim);
+    transition: color var(--lm-dur-base) var(--lm-ease-out);
+  }
+  .item:hover:not(:disabled) { color: var(--lm-ink); }
+  .item[aria-checked="true"] { color: var(--lm-amber); }
+  .item:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+
+  @media (forced-colors: active) {
+    .strip { border-color: ButtonText; }
+    .thumb { background: Highlight; }
+    .item[aria-checked="true"] { color: HighlightText; }
+  }
+}
