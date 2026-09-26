@@ -5,8 +5,8 @@
  * misattributed: the TV add button lives in LeftToolbar (hasTv prop), not in
  * RoomMapToolbar. That test has been moved to LeftToolbar.test.tsx.
  *
- * This file covers RoomMapToolbar's own behaviour (undo/redo gate, derive
- * zones disabled state, settings toggle).
+ * This file covers RoomMapToolbar's own behaviour (undo/redo gate, settings
+ * toggle).
  */
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
@@ -42,28 +42,6 @@ describe("RoomMapToolbar", () => {
     render(<RoomMapToolbar {...BASE_PROPS} canUndo={false} canRedo={false} />);
     const redoBtn = screen.getByRole("button", { name: "roomMap:toolbar.redo" });
     expect(redoBtn).toHaveAttribute("aria-disabled", "true");
-  });
-
-  it("derive zones button is disabled when neither TV nor USB is present", () => {
-    render(<RoomMapToolbar {...BASE_PROPS} hasTv={false} hasUsb={false} />);
-    const deriveBtn = screen.getByRole("button", { name: "roomMap:deriveCounts.button" });
-    expect(deriveBtn).toHaveAttribute("aria-disabled", "true");
-  });
-
-  it("derive zones button is enabled when both TV and USB are present", () => {
-    const onDeriveZones = vi.fn();
-    render(
-      <RoomMapToolbar
-        {...BASE_PROPS}
-        hasTv={true}
-        hasUsb={true}
-        onDeriveZones={onDeriveZones}
-      />,
-    );
-    const deriveBtn = screen.getByRole("button", { name: "roomMap:deriveCounts.button" });
-    expect(deriveBtn).not.toBeDisabled();
-    fireEvent.click(deriveBtn);
-    expect(onDeriveZones).toHaveBeenCalledTimes(1);
   });
 
   it("settings button toggles aria-pressed and calls onToggleSettings", () => {

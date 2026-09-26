@@ -61,14 +61,6 @@ const roomMap: Catalogue<typeof enRoomMap> = {
   zones: {
     addZoneButton: "+ Bölge",
   },
-  deriveCounts: {
-    button: "Haritadan LED sayıları",
-    tooltip: "Şeridin LED'lerini boyunca uzandığı TV kenarlarına paylaştır, sonra LED Kurulumu'nda kontrol et",
-    disabledTooltip: "Önce haritaya bir LED şeridi ve bir TV yerleştir",
-    previewLabel: "Haritadan LED sayıları",
-    confirm: "LED Kurulumu'nda aç",
-    cancel: "Önizlemeden vazgeç",
-  },
   hueZones: {
     title: "Hue Bölgeleri",
     addAction: "+ Bölge",
@@ -219,12 +211,6 @@ const roomMap: Catalogue<typeof enRoomMap> = {
       scaleX: "Yatay ölçek",
       scaleY: "Dikey ölçek",
     },
-  },
-  edges: {
-    top: "Üst",
-    right: "Sağ",
-    bottom: "Alt",
-    left: "Sol",
   },
   contextMenu: {
     duplicate: "Çoğalt",

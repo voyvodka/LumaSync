@@ -2,19 +2,15 @@ import { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { IconButton } from "@/shared/ui/Button";
 
-import { IconGear, IconGrid, IconUndo, IconRedo, IconInfoAlt } from "@/shared/ui/icons";
+import { IconGear, IconUndo, IconRedo, IconInfoAlt } from "@/shared/ui/icons";
 import type { RoomAwareStatus } from "../model/roomAware";
 import { RoomAwareIndicator } from "./RoomAwareIndicator";
 
 interface RoomMapToolbarProps {
   settingsOpen: boolean;
   onToggleSettings: () => void;
-  hasTv?: boolean;
-  hasUsb?: boolean;
   roomAware?: RoomAwareStatus | null;
-  derivePreviewActive?: boolean;
   zoneCount?: number;
-  onDeriveZones?: () => void;
   onAddZone?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
@@ -28,12 +24,8 @@ const TOOLBAR_BTN = "lm-room-toolbar-btn";
 export function RoomMapToolbar({
   settingsOpen,
   onToggleSettings,
-  hasTv = false,
-  hasUsb = false,
   roomAware = null,
-  derivePreviewActive = false,
   zoneCount = 0,
-  onDeriveZones = () => {},
   onAddZone = () => {},
   canUndo = false,
   canRedo = false,
@@ -41,25 +33,9 @@ export function RoomMapToolbar({
   onRedo = () => {},
 }: RoomMapToolbarProps) {
   const { t } = useTranslation();
-  const deriveDisabled = !hasUsb || !hasTv;
 
   return (
     <div className="lm-room-toolbar shrink-0">
-      {/* LED counts from the map — not a Hue zone, whatever the old name said. */}
-      <button
-        type="button"
-        className={`${TOOLBAR_BTN} ${
-          deriveDisabled ? "is-disabled" : derivePreviewActive ? "is-on" : ""
-        }`}
-        onClick={deriveDisabled ? undefined : onDeriveZones}
-        aria-disabled={deriveDisabled}
-        aria-pressed={deriveDisabled ? undefined : derivePreviewActive}
-        title={t(deriveDisabled ? "roomMap:deriveCounts.disabledTooltip" : "roomMap:deriveCounts.tooltip")}
-      >
-        <IconGrid />
-        <span>{t("roomMap:deriveCounts.button")}</span>
-      </button>
-
       {/* + Zone */}
       <button type="button" className={TOOLBAR_BTN} onClick={onAddZone}>
         <span>{t("roomMap:zones.addZoneButton")}</span>

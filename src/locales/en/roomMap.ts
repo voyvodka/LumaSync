@@ -58,14 +58,6 @@ export default {
   zones: {
     addZoneButton: "+ Zone",
   },
-  deriveCounts: {
-    button: "LED counts from map",
-    tooltip: "Share the strip's LEDs across the TV edges it runs along, then review them in LED Setup",
-    disabledTooltip: "Place an LED strip and a TV on the map first",
-    previewLabel: "LED counts from the map",
-    confirm: "Open in LED Setup",
-    cancel: "Discard preview",
-  },
   hueZones: {
     title: "Hue Zones",
     addAction: "+ Zone",
@@ -216,12 +208,6 @@ export default {
       scaleX: "Horizontal scale",
       scaleY: "Vertical scale",
     },
-  },
-  edges: {
-    top: "Top",
-    right: "Right",
-    bottom: "Bottom",
-    left: "Left",
   },
   contextMenu: {
     duplicate: "Duplicate",

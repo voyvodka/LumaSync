@@ -63,6 +63,13 @@ channel from its zone in a way the user had not asked for *and* shifted every la
 Detaching goes through "Move to → Unassigned" instead. Anything reaching for a channel by array
 position rather than `channelIndex` is repeating that bug.
 
+**LED Setup owns the strip's edge counts; the map does not propose them.** The map once measured a
+strip against the TV and handed per-edge counts to LED Setup as a draft ("LED counts from the map").
+It was removed with the canvas-first LED Setup: two places that could set the same counts meant the
+user had to reconcile them, and a strip drawn by eye on a room plan is a worse measurement than the
+number printed on the strip. A strip's `ledCount` on the map follows LED Setup's save
+(`syncStripLedCount`), never the other way.
+
 **The editor never mints a Hue channel, and every consumer addresses one by the bridge's
 `channelId`.** An "Add Hue channel" button once stamped a local `channelIndex` — by array length,
 which on a gapped map duplicated a live index — for a marker matching nothing on the bridge. It is
@@ -145,9 +152,9 @@ middle of an import.
 - **Several writers save `roomMap`, and mounting one settings section at a time is what keeps them apart.** The editor saves the whole config from its reducer, and the Devices channel map and the USB roster write it too. They cannot clobber each other only because `SettingsLayout` mounts one section at a time — so never hoist room-map state above the section router or render two sections at once. A writer outside the editor belongs on `shellStore.update` (`contracts-and-state.md`); the USB roster is, while the Devices channel map (`DeviceSection`) still loads and then saves, and is the one left to move. `roomMapVersion` is not a guard: every writer bumps it and nothing checks it.
 - **The TV anchor's `x`/`y` is the footprint's top-left corner, not its centre.** The contract says
   so, the canvas draws it so, and Rust's room-aware sampler adds half the width to find the screen
-  centre. Zone derivation and its preview overlay read it as the centre, so every derived edge sat
-  half a TV to the upper left of the drawn one, and a test pinned that. `tvFootprintBounds` in
-  `model/deriveZones.ts` is the one conversion; a new reader of the anchor goes through it.
+  centre. The one frontend reader that took it for the centre — the since-removed "LED counts from
+  the map" — put every derived edge half a TV up and to the left of the drawn one, and a test had
+  pinned that. A new reader of the anchor converts from the corner.
 - **Resizing the room moves metre objects, never Hue channels or zones.** TV, furniture, strips and
   image layers are in metres and shift by half the growth so they keep their place around the
   centre. Channels and zones live in the bridge's `[-1, 1]` cube, which spans the room, so they
@@ -157,12 +164,6 @@ middle of an import.
   with `DEFAULT_ROOM_MAP`, so the Hue channels and zones (the bridge sync's) and every port-linked
   strip (Devices') survive, the first one keeping its placement. Writing `DEFAULT_ROOM_MAP` over the
   config once wiped all three, and the map then disagreed with both owners until they re-synced.
-- **"LED counts from the map" hands LED Setup a draft, never a baseline.** The counts share out the
-  saved LED Setup total (`model/calibrationStrip.ts`), not the strip's `ledCount`, which is stamped
-  at connect and kept in step only by LED Setup's save (`syncStripLedCount`). Confirm navigates to
-  LED Setup, which opens them as unsaved edits over the saved layout: the shell once parked them in
-  memory with no navigation and merged them into the *baseline* of the next visit, so Cancel lost
-  them silently and Save applied them unseen.
 - **Editor shortcuts stand aside for form fields.** The editor root owns Delete/Backspace, Cmd+Z,
   arrows and the rest, and the dock's fields sit inside it: Backspace in the on-canvas LED count
   deleted the strip, and Cmd+Z in a field ran the editor's undo instead of the field's own.
