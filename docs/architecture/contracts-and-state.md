@@ -23,6 +23,27 @@ frontend has a same-named (or aliased) contract interface; the verifier's unpair
 is empty and a new unpaired struct fails. A struct that only ever *enters* Rust derives
 `Deserialize` alone.
 
+**Presence parity is not nullability parity.** The verifier also checks each paired field three
+ways: an `Option` without `skip_serializing_if` is always on the wire, as `null`, so the TS type must
+admit `null`; a skipped `Option` can be absent, so the TS field must be `?:`; a non-`Option` without
+`#[serde(default)]` is always sent, so it must not be `?:`. The presence-only check it replaced let
+`details?: string` sit against a wire that always sent `null`, and six call sites grew `?? undefined`
+shims around it; pairing also used to skip a struct whose name did not match, silently dropping the
+whole `*Payload` convention. The rules catch a TS type that is too narrow, not one that is too broad:
+`?: T | null` on an always-present `Option` still passes.
+
+**One command per verb.** Create, update and remove are separate commands, never one
+`manage_x(action, payload)` dispatcher. A command name maps to its status codes one to one, which is
+what the drift guard checks; a dispatcher moves the discriminator into the request's `action`, and
+the status code belongs on the response.
+
+**Rust re-validates what it sizes from.** `check_mode_config` (`lighting_mode/config_check.rs`) and
+`LedCalibrationConfig::validate` refuse a calibration whose counts do not add up, that holds more
+than `MAX_TOTAL_LEDS`, or that names an unknown enum value or target. The payload can come from a
+hand-edited `shell-state.json` or an older build, not only through the frontend normaliser, and a
+bad one would otherwise size an allocation directly. The cost is two bounds to keep in step:
+`LED_CALIBRATION_MAX_TOTAL_LEDS` in TypeScript and `MAX_TOTAL_LEDS` in Rust.
+
 **Coded status, never a bare string.** A command returns a stable machine-readable status code
 alongside the human-readable message. Never a bare string error, and never a code invented at the
 call site — a code that exists in one place cannot be handled, translated, or searched for.
@@ -77,8 +98,9 @@ the main window's driver — `shell/windowLifecycle.ts`, `windowGeometry.ts` and
 `persistence/shellStateApi.ts`) — and `tray/trayController.ts` (tray events
 and autostart) — a component or hook that wants the window, an event or a plugin goes through a
 bridge, so a test can mock one module and a capability audit has one caller to read. Events use a
-`*EventsApi.ts` beside the command bridge. `plugin-store` is opened only by `windowLifecycle.ts`,
-behind `shellStore`; `plugin-fs` and `plugin-dialog` only by `room-map/roomMapFilesApi.ts`. And
+`*EventsApi.ts` beside the command bridge. `plugin-store` is gone — Rust owns the file — and stays
+banned so it cannot come back beside `shellStore`; `plugin-fs` and `plugin-dialog` are imported only
+by `room-map/roomMapFilesApi.ts`. And
 `src/shared/**` never imports `src/features/**`: a type both need moves into `shared/contracts/`,
 which is why the lighting-mode contract is `shared/contracts/mode.ts`. Tests are exempt.
 
@@ -88,7 +110,18 @@ enforces it, so a key added to one and not the other fails the suite. `check:i18
 only the children its contract value set can produce — so a key whose value left the contract turns
 orphan instead of hiding under the prefix, and a contract value with no message fails. Neither
 check can see a hardcoded string: an English literal in JSX has no key in either locale, so parity
-and `check:i18n` both pass. Catching it is review's job.
+and `check:i18n` both pass. Catching it is review's job. Unit glyphs (`LED`, `m`, `°`, `W`) stay
+literal on purpose: they read the same in Turkish.
+
+Catalogues are TypeScript modules, one per namespace (`src/locales/<lang>/<ns>.ts`), not JSON. TR is
+typed `Catalogue<typeof en…>` and `CustomTypeOptions` types `t()`, so a missing, extra or misspelt
+key is a compile error; JSON gives none of that, and its one advantage, loading one language at a
+time, the modules keep through `LOCALE_LOADERS`. Keys are colon-qualified from a bare
+`useTranslation()`, one call style everywhere, which is why the type-level `defaultNS` is the whole
+namespace registry (`src/types/i18next.d.ts`): a single default would reject every cross-namespace
+call. `fallbackNS` is deliberately unset, so a missing key reaches `missingKeyHandler` instead of
+being rescued from a sibling namespace. The runtime parity test stays despite the types, because a
+type cannot see an empty string.
 
 ## Shell-state ownership
 

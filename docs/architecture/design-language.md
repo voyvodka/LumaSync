@@ -103,7 +103,9 @@ multi-line blocks.
 **Every window is wrapped in an error boundary at its root** (`renderRoot` in `main.tsx`):
 `GlobalErrorBoundaryWithI18n`, which logs and offers a real process relaunch, or `TwinErrorBoundary`
 for the transparent overlay ([`ui-and-shell.md`](ui-and-shell.md)). A new window goes through the
-same function.
+same function. The boundary reaches Tauri only through `platform/platformApi.ts` and
+`shell/launchApi.ts`, which import nothing but `shared/`: the fallback has to render when a feature
+module is what threw, so no bridge it uses may pull feature code in.
 
 **No false affordances.** A global shortcut is declared once in `KEYBIND_REGISTRY`
 (`shared/contracts/shell.ts`); `useGlobalKeybinds` handles it and `StatusBar` and `ModeStrip` draw

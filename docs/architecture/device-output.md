@@ -89,6 +89,27 @@ realtime protocols; there is no HTTP request per frame. WLED is also the documen
 strip the serial path cannot drive yet — APA102 and SK9822
 ([`serial-protocol.md`](serial-protocol.md) §4).
 
+WARLS is not offered. It spends four bytes per LED on an index for sparse updates this pipeline
+never sends, and caps at 255 LEDs; the encoder that once shipped for it wrote a packet no WLED
+protocol parses, so colours landed on scattered LEDs while the test said OK. A persisted `"warls"`
+is read as DRGB (`normalizeWledProtocol`, `device.ts`) — same port, same transport — so no saved
+config breaks.
+
+A frame goes out in datagrams that fit one 1500-byte MTU, because an IP-fragmented datagram is
+usually lost over Wi-Fi, where most WLED boards are. DDP sends 1440-byte chunks and sets the push
+flag on the last chunk only — pushing every chunk makes WLED latch each fragment as a complete
+frame — and stops at the first failed chunk rather than push a partial frame. DRGB promotes itself
+to DNRGB above 490 LEDs. The two offsets are different units: DDP's counts bytes, DNRGB's counts
+LEDs; the module header of `wled_sink.rs` spells out both, and the tests pin both.
+
+**The WLED test says "confirmed" only when the device confirms it.** A returning `send_to` proves
+nothing about delivery, and the first test called a wrong port, a rejected format or disabled
+realtime a pass. `test_wled_bridge` (`wled_discovery.rs`) now fails closed with
+`WLED_REALTIME_PORT_MISMATCH` when the DRGB port is not the device's `udpport`, re-reads
+`/json/info` 250 ms after the frame, and answers `WLED_TEST_LIVE_CONFIRMED` only when `live` reads
+true — otherwise `WLED_TEST_SENT_UNCONFIRMED`. Its timing is `sendLatencyMs`, host-side send time;
+it is deliberately not called a round trip.
+
 **A WLED device is found by the IP the user types, never by browsing.** `discover_wled_devices`
 probes that one address over HTTP `/json/info`; there is no WLED mDNS browse yet. When one is
 added it attaches to the shared registry in `network/mdns.rs` — a second mDNS daemon in the process
@@ -135,7 +156,9 @@ Arduino-style boards; the bootloader owns the bus for ~1.5–2 s before jumping 
 PING sent inside that window is a guaranteed `SERIAL_HEALTH_HANDSHAKE_TIMEOUT`. The delay must run
 inside `spawn_blocking` — on the IPC dispatcher thread it froze the whole app for ~4 s during Run
 Health Check (observed on v1.5.0-rc). Cost is +2 s per connect and per health check, accepted: the
-alternative is a guaranteed handshake failure on every Arduino-class board.
+alternative is a guaranteed handshake failure on every Arduino-class board. The frontend never bounds
+that await (`connectionLifecycle.ts`, `healthCheck.ts`): a client-side timeout would race a settle
+window it cannot see and report a failure on a connect that is about to succeed.
 
 **Off paints the strip black, and switches a WLED device off.** Only a user's Off does
 (`lighting-transaction.md`, "Off turns the lights off"). Before, Off stopped the worker and
@@ -178,6 +201,7 @@ address.
 - **A failed connect must not leave its port name in the connection status.** `SerialConnectionStatus.portName` is the port that was opened, and is `null` whenever `connected` is false. The refused name goes in `status.details` (`port="…"`). It used to be echoed back, and that did two kinds of damage. `apply_mode_change` (`lighting_mode/transition.rs`) planned USB output from `port_name` even while `connected` was false, so the next Solid or Ambilight start opened and wrote to a port that had just been refused `PORT_UNSUPPORTED`, which bypassed the allowlist. It also fed `useUsbConnectionStatus`, so the room map showed a refused or unplugged port as ONLINE. `failed_connect_status` in `device_connection.rs` builds every failure status and has no way to set a port name, and `apply_mode_change` now requires `connected` as well, so neither side alone can reopen the hole. The LED test pattern needed the second guard most: with no output available it sends `targets: []`, which the legacy rule reads as "USB required", and a test skips the USB gate — so only the plan stood between a stale name and the worker.
 - **macOS exposes every USB adapter under two paths, and only one of them works.** `/dev/cu.*` is the call-out device and is correct; its `/dev/tty.*` sibling is a blocking terminal device that waits on DCD, and CH340/FTDI/CP2102/Arduino boards never assert it — so the `tty.*` port opens successfully and then stalls, producing "Connect and verify: Pass" followed by a handshake timeout. Real incident, 2026-04-26. All `/dev/tty.*` paths are filtered, including `usbmodem*`, because the `cu.*` sibling always exists. The filter used to cover only the listing: connect looked names up in the raw inventory, where the `tty.*` sibling carries the same allowlisted VID:PID, so a stale or directly invoked name still opened it. Connect and the health check now refuse an enumerated `tty.*` path with `PORT_UNSUPPORTED` and name the `cu.*` path in `details`, rather than silently opening the sibling — the caller asked for a path, and quietly substituting another would hide the stale value instead of surfacing it. The filter stays macOS-only; no other platform names a serial device `/dev/tty.<name>`.
 - **A test pattern must use the same output settings as everything else** — chip type, firmware profile, colour correction, and colour order. Bypassing them means the test lights nothing, or the wrong colours, on exactly the hardware it exists to verify. This shipped broken once.
+  There is one test engine, `start_led_test_pattern`, and LED Setup and the popup both use it. LED Setup once called a separate calibration command that read a cached "connected" flag and returned "started" without building a frame, while the page showed output as active. An "output active" indicator must come from a sink that actually sent.
   **One exception: `channelProbe` pins the identity colour order.** It lights a single wire slot pure red, green or blue so the user can report which colour that slot shows, and the answer is only meaningful when nothing reorders the slots — under a saved order the probe would confirm the saved order instead of measuring the firmware. Only the order is overridden (set on the test config, and hydration is caller-wins); chip type, profile and correction still apply. A slot above 2 is refused with `LED_TEST_PATTERN_INVALID_PARAMS`.
 - **Every serial encoder corrects pixels through one `EncoderPlan`** (`led_output/correction.rs`), built from the colour correction when a `SerialSink` is constructed and once per Solid write — never per frame, because a gamma other than 2.2 costs 768 `powf`s to tabulate. A colour correction change restarts the worker, so a running sink never needs to rebuild it. The colour order is the one field patched in place (`SerialSink::set_color_order`), which touches nothing else in the plan. Before the plan existed each encoder derived its own corrections, and the default one (LumaSync v1 + WS2812B) quietly hardcoded gamma 2.2, so the gamma sliders did nothing on the most common setup. A new per-pixel stage belongs in the plan, not in one encoder.
 - **Adalight carries no brightness, so the host scales the pixels.** Third-party Adalight firmware has no brightness input, so the Adalight encoder multiplies the corrected pixels by brightness, the same way `CorrectedWledSink` does. Only LumaSync v1 frames carry a brightness byte. The slider used to do nothing under Adalight.

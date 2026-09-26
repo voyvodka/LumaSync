@@ -9,8 +9,9 @@ like it proves more than it does.
 
 | Layer | Runs | Proves |
 |---|---|---|
-| Vitest | every PR | logic, state machines, contract shapes — fast and hermetic |
+| Vitest | every PR, Linux runner only | logic, state machines, contract shapes — fast and hermetic |
 | `cargo test` | every PR, three OSes | Rust units, coded-status contracts |
+| `ipc_tests/` (inside `cargo test`) | every PR, three OSes | a command's real handler behind `MockRuntime`: argument names, grants, ordering |
 | `verify:shell-contracts` | every PR | every status code crossing IPC is *declared* — a drift guard, not a coverage score |
 | `verify:design-tokens` | every PR | every bare `var(--lm-*)` names a token that exists — see below |
 | `launch-smoke` / `overlay-smoke` | CI | the debug binary starts; on Windows, the overlay paints and passes clicks through |
@@ -22,6 +23,18 @@ below), but the caveat only narrows, it does not disappear: the job is not a req
 so a red run does not block a merge, and it proves only what a macOS runner shows — Linux and
 Windows are still unverified by this layer. **Treat anything this layer asserts on a platform it did
 not just run on as unverified until you have run it yourself.**
+
+Vitest runs on the Linux runner only (`ci.yml` gates `check:all` and `bun run test` on
+`runner.os == 'Linux'`), so a Vitest case skipped on Linux runs in no CI job at all — two Ambilight
+regression guards once sat there unseen. A platform-bound check belongs in `cargo test` or the e2e
+job. The IPC tests have their own blind spots: `MockRuntime::available_monitors` is
+`unimplemented!()`, so nothing reaching `list_displays` or `open_display_overlay` can run there, nor
+anything past a bridge command's input guards (a real request, the OS keychain). A non-finite guard
+cannot be reached over IPC either — NaN and infinity serialise to `null` and fail deserialisation
+first — so test it as a unit test on the validator.
+
+A test asserts an observable end state, not a call count read right after an async `act()`: the
+count couples the test to how much async work has drained by then.
 
 ## The CI e2e job (`e2e-macos`)
 
@@ -148,7 +161,10 @@ written with `$()` will look hung rather than slow.
 A run **shares the installed app's state**. It reads and writes the same `shell-state.json`, with no
 isolated profile, and it opens a visible window that cycles through modes and tabs. So: say so
 before running it on a machine someone is using, put back anything a spec seeds, and never assume a
-starting state. `shell.e2e.ts` asserted the app "boots into compact mode" long after boot began
+starting state. A run with real lights attached changes someone's room: before it, snapshot the
+area's lights and restore them afterwards, turn them off on anything unexpected, and never open the
+LED control popup from an unattended run — revealing it starts a pattern on its own (`hue.md`).
+`shell.e2e.ts` asserted the app "boots into compact mode" long after boot began
 restoring the persisted mode; on a machine last left in full, the first three specs failed — and
 then the suite *repaired itself*, because the section-routing spec ends by switching back to
 compact, so a second run passed and the failure read as a flake.

@@ -220,6 +220,14 @@ Off pressed during a start from Off read "nothing running" and left the start's 
 transaction writes each request as the intent on arrival and reconciles to the newest one, so an
 overtaken choice leaves nothing to undo.
 
+Frontend work that is not a lighting request follows the same rule with
+`createLatestOperationGuard` (`shared/lib/latestOperation.ts`): a run that commits state checks
+`isLatest()` after every `await`, not once at the top. Nothing is cancelled; a slower earlier run
+simply stops committing. The display picker queues a second pick behind an in-flight switch rather
+than handing back the first one's promise — handing it back dropped the newer `displayId` and left
+the store, the page and the overlay on three different monitors — and the updater's checks use the
+same guard.
+
 **No full-screen blocking welcome wizard.** Onboarding is inline. The wizard is a mobile pattern
 that fights the tray-first shape.
 
@@ -445,6 +453,8 @@ agree.
 
 ## Gotchas
 
+- **An async `listen()` registration carries an `alive` flag.** The unlisten function arrives with the promise, and unmount can win that race; without the flag the handler registers after cleanup ran and never comes off. StrictMode's double mount hits it on every dev launch (`useTrayIntegration.ts`, `useLightingRuntime.ts`, `LedTwinOverlay.tsx`).
+- **Dismissing the update prompt records the dismissed *status*, not `idle`.** Setting `idle` let the progress listener write `downloading` on its next tick and reopen the prompt (`useAutoUpdater.ts`, `dismissedStatus`). A dismissed download still reopens at `installing`, on purpose: the app is about to relaunch.
 - **`onboarding` does not include the room map.** The two are separate surfaces despite both being setup-shaped.
 - **Native fullscreen draws a second title bar over the custom amber one.** Tauri/tao has an open upstream bug (`tauri-apps/tauri#5115`, `tao#548`) that re-applies the system `NSTitledWindow` styleMask during the fullscreen transition, so a delegate patch loses the race. `macos_window.rs` forbids native fullscreen instead of fighting it: `NSWindowCollectionBehavior::FullScreenNone` removes the fullscreen pathways, and the zoom button is separately disabled so the green dot renders as inert rather than a live control with no effect.
 - **Compact mode is not a narrow full mode.** It has its own layout under `settings/sections/compact/`; a component added only to the full layout simply does not exist for compact users.
