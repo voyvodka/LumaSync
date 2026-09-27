@@ -244,6 +244,15 @@ through the `PersistedShellState` accessors.
   and announces the top-level diff. Colour correction is written to the global key and the primary
   strip's copy together — one plan still corrects Hue and the strip — and never creates a strip:
   a Hue-only install has none.
+- **A strip's `name` is the user's, and optional.** Absent, the UI names the strip after its device
+  (the port's product name, "USB strip", "WLED <ip>"), so the name follows a controller swap until
+  the user picks one. `withStripName` finds the strip by id and writes nothing when none has it — a
+  rename never lands on the primary strip or creates one — trims, caps at 40 code points, and a
+  blank rename deletes the field. Readers keep a stored name as written and drop only a blank or
+  non-string one, on both sides (the parity fixture pins it). The name belongs to the run of LEDs,
+  like its layout: it survives a change of transport and a forgotten WLED device. Rust reads it and
+  never writes it, and a rename is not among the fields that restart a running mode. No schema step:
+  an absent field is the old meaning.
 - **A `ledStrips` save is named by what it changed.** The settings refresh reads key names, and one
   key for every strip field would restart the mode on each LED Setup step. `window_wrote` compares
   the primary strip before and after the write and passes `ledCalibration`, `firmwareProfile`,

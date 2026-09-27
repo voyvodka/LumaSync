@@ -30,6 +30,9 @@ export interface StripHardware {
 
 export interface LedStrip {
   id: StripId;
+  /** The user's name for it. Absent until renamed: the UI names a strip after its device, so the
+   *  name follows a controller swap until the user chooses one. Never blank when present. */
+  name?: string;
   enabled: boolean;
   /** `null`: a layout with no controller bound yet. */
   transport: StripTransport | null;

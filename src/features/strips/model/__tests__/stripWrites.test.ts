@@ -8,6 +8,7 @@ import {
   withSerialTransport,
   withStripHardware,
   withStripLayout,
+  withStripName,
   withWledSink,
   withWledTransport,
   withoutWledDevice,
@@ -124,3 +125,34 @@ describe("withoutWledDevice", () => {
     expect(withoutWledDevice(current, "10.0.0.6")).toBeNull();
   });
 });
+
+describe("withStripName", () => {
+  it("names the strip it is given, trimmed, and leaves the others", () => {
+    const patch = withStripName(state({ ledStrips: [strip("a"), strip("b")] }), "b", "  Desk  ");
+    expect(patch?.ledStrips).toEqual([strip("a"), strip("b", { name: "Desk" })]);
+  });
+
+  it("clears the name on a blank one, back to the device's name", () => {
+    const patch = withStripName(state({ ledStrips: [strip("a", { name: "Desk" })] }), "a", "   ");
+    expect(patch?.ledStrips).toEqual([strip("a")]);
+  });
+
+  // A rename must never land on the primary strip or create one.
+  it("writes nothing for an id no strip has", () => {
+    expect(withStripName(state({ ledStrips: [strip("a")] }), "zzz", "Desk")).toBeNull();
+    expect(withStripName(state(), "a", "Desk")).toBeNull();
+  });
+
+  it("caps a long name by characters, never splitting an emoji", () => {
+    const long = `${"a".repeat(39)}🎛️🎛️`;
+    const name = withStripName(state({ ledStrips: [strip("a")] }), "a", long)?.ledStrips?.[0]?.name;
+    expect(Array.from(name ?? "")).toHaveLength(40);
+    expect(name?.endsWith("🎛")).toBe(true);
+  });
+
+  it("keeps a name through a change of transport: it belongs to the run of LEDs", () => {
+    const renamed = { ...state({ ledStrips: [strip("a", { name: "Desk" })] }) };
+    expect(withSerialTransport(renamed, "COM3").ledStrips?.[0]?.name).toBe("Desk");
+  });
+});
+

@@ -139,3 +139,21 @@ export function withoutWledDevice(state: ShellState, ip: string): StripsPatch | 
   });
   return { ledStrips: next };
 }
+
+/** Longest name a strip keeps, in characters as the user sees them. */
+export const STRIP_NAME_MAX = 40;
+
+/**
+ * The strip `stripId` renamed; a blank name clears it, back to the name of its device. `null` when
+ * no strip has that id — a rename never lands on another strip or creates one.
+ */
+export function withStripName(state: ShellState, stripId: string, name: string): StripsPatch | null {
+  const strips = [...stripsOf(state)];
+  const index = strips.findIndex((strip) => strip.id === stripId);
+  if (index === -1) return null;
+  // By code point, so an emoji at the cut is not split in half.
+  const trimmed = Array.from(name.trim()).slice(0, STRIP_NAME_MAX).join("").trim();
+  const { name: _previous, ...rest } = strips[index]!;
+  strips[index] = trimmed === "" ? rest : { ...rest, name: trimmed };
+  return { ledStrips: strips };
+}

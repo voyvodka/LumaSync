@@ -34,10 +34,12 @@ export function readStoredStrips(value: unknown): LedStrip[] {
   const strips: LedStrip[] = [];
   for (const row of value) {
     if (!isRow(row) || typeof row.id !== "string") continue;
-    const { layout, colorCorrection, ...rest } = row;
+    const { layout, colorCorrection, name, ...rest } = row;
     const strip = {
       ...rest,
       id: row.id,
+      // Kept as written: only a blank or non-string value reads as no name.
+      ...(typeof name === "string" && name.trim() !== "" ? { name } : {}),
       enabled: typeof row.enabled === "boolean" ? row.enabled : true,
       transport: transportOf(row.transport),
       hardware: hardwareOf(row.hardware),
