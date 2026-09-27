@@ -47,7 +47,16 @@ export interface RuntimeTelemetrySnapshot {
   /** Its age in seconds; every new failure resets it, so a value under
    *  {@link CAPTURE_FAILURE_ONGOING_MAX_AGE_SECS} means capture is failing *now*. */
   lastCaptureErrorAtSecs: number | null;
+  /**
+   * The most frames per second capture was asked for — a ceiling, not a goal:
+   * capture counts distinct frames, so a still screen reads well under it with
+   * nothing wrong. {@link CAPTURE_TARGET_FPS_ABSENT} before any worker ran.
+   */
+  captureTargetFps: number;
 }
+
+/** Sentinel for `captureTargetFps`: no worker has started yet. */
+export const CAPTURE_TARGET_FPS_ABSENT = 0;
 
 /** Two telemetry windows plus slack — one window can elapse before a fresh
  *  failure is flushed, so a one-window threshold would flicker. Mirrors the
@@ -127,8 +136,22 @@ export function hasSerialLinkBudget(snapshot: Pick<RuntimeTelemetrySnapshot, "li
   return snapshot.linkMaxFps > LINK_MAX_FPS_ABSENT;
 }
 
-/** Thrown by `get_runtime_telemetry` as `Err("CODE: detail")` when the snapshot
- * mutex is poisoned. Polled at 1 Hz, so a `catch` here must not spam. */
+/** One telemetry window of capture, for the stats-for-nerds history. */
+export interface CaptureFpsSample {
+  /** Wall clock. Samples arrive in the order taken; a clock that jumps back is a gap, not a reordering. */
+  epochMs: number;
+  fps: number;
+  targetFps: number;
+}
+
+/** `get_runtime_telemetry_history`: up to five minutes, oldest first. Spans mode changes; a stopped worker adds no samples. */
+export interface RuntimeTelemetryHistory {
+  samples: CaptureFpsSample[];
+}
+
+/** Thrown by `get_runtime_telemetry` and `get_runtime_telemetry_history` as
+ * `Err("CODE: detail")` when the snapshot mutex is poisoned. Polled, so a
+ * `catch` here must not spam. */
 export const TELEMETRY_COMMAND_ERRORS = {
   STATE_LOCK_FAILED: "RUNTIME_TELEMETRY_STATE_LOCK_FAILED",
 } as const;

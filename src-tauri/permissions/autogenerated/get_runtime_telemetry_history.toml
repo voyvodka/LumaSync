@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-runtime-telemetry-history"
+description = "Enables the get_runtime_telemetry_history command without any pre-configured scope."
+commands.allow = ["get_runtime_telemetry_history"]
+
+[[permission]]
+identifier = "deny-get-runtime-telemetry-history"
+description = "Denies the get_runtime_telemetry_history command without any pre-configured scope."
+commands.deny = ["get_runtime_telemetry_history"]

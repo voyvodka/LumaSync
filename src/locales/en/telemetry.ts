@@ -8,6 +8,7 @@ export default {
   hueLastError: "Last Hue error",
   hueReconnects: "Hue reconnects",
   fps: "{{fps}} fps",
+  fpsOf: "{{fps}} / {{target}} fps",
   packetRate: "{{rate}} per second",
   uptimeMinutes: "{{minutes}} min",
   uptimeSeconds: "{{seconds}} s",
@@ -23,4 +24,10 @@ export default {
   },
   errorAgo: "{{message}} — {{minutes}} min ago",
   errorJustNow: "{{message}} — just now",
+  historyLabel: "Capture rate over the last 5 minutes: average {{avg}} fps, lowest {{min}} fps",
+  historySummary: "avg {{avg}} · low {{min}}",
+  historyEmpty: "No readings yet",
+  historyTarget: "target {{fps}}",
+  historyStart: "−5 min",
+  historyEnd: "now",
 };

@@ -38,6 +38,7 @@ function makeSnapshot(partial?: Partial<FullTelemetrySnapshot["usb"]>): FullTele
       linkMaxFps: 0,
       lastCaptureErrorCode: null,
       lastCaptureErrorAtSecs: null,
+      captureTargetFps: 30,
       ...partial,
     },
     hue: null,

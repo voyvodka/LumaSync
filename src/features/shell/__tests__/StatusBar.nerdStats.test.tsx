@@ -54,6 +54,7 @@ const SNAPSHOT: FullTelemetrySnapshot = {
     linkMaxFps: 0,
     lastCaptureErrorCode: null,
     lastCaptureErrorAtSecs: null,
+    captureTargetFps: 30,
   },
   hue: null,
 };

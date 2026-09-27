@@ -3,12 +3,14 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
+  CAPTURE_TARGET_FPS_ABSENT,
   hasSerialLinkBudget,
   type FullTelemetrySnapshot,
   type HueTelemetrySnapshot,
 } from "@/shared/contracts/telemetry";
 import { prefersReducedMotion } from "@/shared/lib/motion";
 import { useFullTelemetryPoll } from "../hooks/useFullTelemetryPoll";
+import { CaptureRateChart } from "./CaptureRateChart";
 import styles from "./TelemetrySection.module.css";
 
 const POLL_INTERVAL_MS = 2000;
@@ -104,7 +106,13 @@ function readoutRows(
     {
       id: "capture",
       label: t("telemetry:capture"),
-      value: !running ? t("telemetry:notRunning") : usb ? fps(t, usb.captureFps) : absent,
+      value: !running
+        ? t("telemetry:notRunning")
+        : !usb
+          ? absent
+          : usb.captureTargetFps > CAPTURE_TARGET_FPS_ABSENT
+            ? t("telemetry:fpsOf", { fps: Math.round(usb.captureFps), target: Math.round(usb.captureTargetFps) })
+            : fps(t, usb.captureFps),
     },
   ];
   if (local) {
@@ -159,10 +167,21 @@ export function TelemetrySection({ open, localOutputConnected, hueActive = false
 
   const rendered = open || closing;
   const running = localOutputConnected || hueActive;
-  const { snapshot, error } = useFullTelemetryPoll(rendered && running, POLL_INTERVAL_MS);
+  // Read with nothing running too: the history outlives the lights, and a gap up to now is the answer.
+  const { snapshot, history, historyReadAtMs, error } = useFullTelemetryPoll(rendered, POLL_INTERVAL_MS, {
+    history: true,
+  });
   const failed = error !== null && snapshot === null;
-  const ready = !running || snapshot !== null || failed;
-  const rows = readoutRows(t, snapshot, { local: localOutputConnected, hue: hueActive, running });
+  const ready = (snapshot !== null && history !== null) || failed;
+  const [captureRow, ...rows] = readoutRows(t, snapshot, { local: localOutputConnected, hue: hueActive, running });
+  const renderRow = (row: Row) => (
+    <div key={row.id} className={styles.item} data-testid={`telemetry-${row.id}`}>
+      <dt>{row.label}</dt>
+      <dd className={row.tone && styles[row.tone]} title={row.title}>
+        {row.value}
+      </dd>
+    </div>
+  );
 
   return (
     <div
@@ -175,17 +194,12 @@ export function TelemetrySection({ open, localOutputConnected, hueActive = false
     >
       <div className={styles.clip}>
         {rendered && (
-          <div data-testid="telemetry-readout">
-            <dl className={styles.list} data-ready={ready || undefined}>
-              {rows.map((row) => (
-                <div key={row.id} className={styles.item} data-testid={`telemetry-${row.id}`}>
-                  <dt>{row.label}</dt>
-                  <dd className={row.tone && styles[row.tone]} title={row.title}>
-                    {row.value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
+          <div data-testid="telemetry-readout" className={styles.readout} data-ready={ready || undefined}>
+            {captureRow && <dl className={styles.list}>{renderRow(captureRow)}</dl>}
+            <div className={styles.history}>
+              <CaptureRateChart samples={history?.samples ?? []} endMs={historyReadAtMs ?? 0} />
+            </div>
+            {rows.length > 0 && <dl className={styles.list}>{rows.map(renderRow)}</dl>}
             {failed && (
               <p className={styles.error} role="alert">
                 {t("telemetry:error")}

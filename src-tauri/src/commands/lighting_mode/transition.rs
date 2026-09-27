@@ -26,9 +26,7 @@ use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionSta
 use crate::commands::hue::state_store::{apply_hue_color_with_context, HueOutputLive};
 use crate::commands::led_output::apply_color_correction_rgb;
 use crate::commands::led_preview::{emit_preview_state_changed, LedTwinState};
-use crate::commands::runtime_telemetry::{
-    RuntimeTelemetrySnapshot, RuntimeTelemetryState, SharedRuntimeTelemetry,
-};
+use crate::commands::runtime_telemetry::{RuntimeTelemetryState, SharedRuntimeTelemetry};
 use crate::commands::status::CommandStatus;
 use crate::commands::test_pattern::TestPatternLive;
 use crate::commands::wled_sink::WledSinkConfig;
@@ -592,8 +590,7 @@ fn apply_mode_change_inner(
                 normalized_next.led_calibration.clone(),
                 Arc::clone(&live_settings),
                 frame_source,
-                telemetry_snapshot
-                    .unwrap_or_else(|| Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default()))),
+                telemetry_snapshot.unwrap_or_default(),
                 hue_output,
                 edge_signal_emitter,
                 corrections,

@@ -22,8 +22,11 @@ import type { FullTelemetrySnapshot } from "@/shared/contracts/telemetry";
 
 const getFullTelemetrySnapshotMock = vi.fn<typeof telemetryApiModule.getFullTelemetrySnapshot>();
 
+const getRuntimeTelemetryHistoryMock = vi.fn<typeof telemetryApiModule.getRuntimeTelemetryHistory>();
+
 vi.mock("../telemetryApi", () => ({
   getFullTelemetrySnapshot: () => getFullTelemetrySnapshotMock(),
+  getRuntimeTelemetryHistory: () => getRuntimeTelemetryHistoryMock(),
 }));
 
 let pushWindowVisibility: ((visibility: MainWindowVisibility) => void) | null = null;
@@ -54,10 +57,13 @@ function makeSnapshot(captureFps = 60): FullTelemetrySnapshot {
       linkMaxFps: 0,
       lastCaptureErrorCode: null,
       lastCaptureErrorAtSecs: null,
+      captureTargetFps: 30,
     },
     hue: null,
   };
 }
+
+const HISTORY = { samples: [{ epochMs: 1_000, fps: 19.5, targetFps: 20 }] };
 
 /** Drain the await chain inside `tick()`. */
 async function flush() {
@@ -77,6 +83,7 @@ describe("telemetrySource", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getFullTelemetrySnapshotMock.mockResolvedValue(makeSnapshot());
+    getRuntimeTelemetryHistoryMock.mockResolvedValue(HISTORY);
     setVisibility("visible");
     vi.useFakeTimers();
   });
@@ -140,7 +147,13 @@ describe("telemetrySource", () => {
 
     const fresh = vi.fn();
     const off2 = subscribeTelemetry(1000, fresh);
-    expect(fresh).toHaveBeenNthCalledWith(1, { snapshot: null, error: null, isLoading: true });
+    expect(fresh).toHaveBeenNthCalledWith(1, {
+      snapshot: null,
+      history: null,
+      historyReadAtMs: null,
+      error: null,
+      isLoading: true,
+    });
     off2();
   });
 
@@ -212,4 +225,74 @@ describe("telemetrySource", () => {
 
     off();
   });
+
+  describe("history", () => {
+    it("is read only while a subscriber asks for it", async () => {
+      const off = subscribeTelemetry(1000, vi.fn<TelemetrySourceListener>());
+      await flush();
+      expect(getRuntimeTelemetryHistoryMock).not.toHaveBeenCalled();
+
+      const chart = vi.fn<TelemetrySourceListener>();
+      const offChart = subscribeTelemetry(2000, chart, { history: true });
+      await flush();
+      expect(getRuntimeTelemetryHistoryMock).toHaveBeenCalledTimes(1);
+      expect(chart).toHaveBeenLastCalledWith(expect.objectContaining({ history: HISTORY }));
+
+      offChart();
+      await vi.advanceTimersByTimeAsync(1000);
+      await flush();
+      expect(getRuntimeTelemetryHistoryMock).toHaveBeenCalledTimes(1);
+      off();
+    });
+
+    it("comes on the joiner's first tick, not an interval after the numbers", async () => {
+      const off = subscribeTelemetry(1000, vi.fn<TelemetrySourceListener>());
+      await flush();
+
+      const chart = vi.fn<TelemetrySourceListener>();
+      const offChart = subscribeTelemetry(1000, chart, { history: true });
+      await flush();
+
+      expect(chart).toHaveBeenLastCalledWith(
+        expect.objectContaining({ history: HISTORY, snapshot: makeSnapshot() }),
+      );
+      off();
+      offChart();
+    });
+
+    it("reads again when a joiner arrives while a tick without it is in flight", async () => {
+      let release: (value: FullTelemetrySnapshot) => void = () => {};
+      getFullTelemetrySnapshotMock.mockReturnValueOnce(
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+      );
+      const off = subscribeTelemetry(1000, vi.fn<TelemetrySourceListener>());
+      const chart = vi.fn<TelemetrySourceListener>();
+      const offChart = subscribeTelemetry(1000, chart, { history: true });
+
+      release(makeSnapshot());
+      await flush();
+      await flush();
+
+      expect(getRuntimeTelemetryHistoryMock).toHaveBeenCalledTimes(1);
+      expect(chart).toHaveBeenLastCalledWith(expect.objectContaining({ history: HISTORY }));
+      off();
+      offChart();
+    });
+
+    it("forgets the history when its last reader leaves", async () => {
+      const off = subscribeTelemetry(1000, vi.fn<TelemetrySourceListener>());
+      const offChart = subscribeTelemetry(1000, vi.fn<TelemetrySourceListener>(), { history: true });
+      await flush();
+      offChart();
+
+      const reopened = vi.fn<TelemetrySourceListener>();
+      const offAgain = subscribeTelemetry(1000, reopened, { history: true });
+      expect(reopened).toHaveBeenNthCalledWith(1, expect.objectContaining({ history: null }));
+      off();
+      offAgain();
+    });
+  });
+
 });

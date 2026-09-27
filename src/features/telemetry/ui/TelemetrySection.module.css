@@ -14,7 +14,9 @@
   }
   .clip { min-height: 0; overflow: hidden; }
 
-  .list { margin: 0 0 4px; padding-left: 12px; }
+  .readout { padding-left: 12px; }
+  .list { margin: 0; }
+  .readout > :last-child { margin-bottom: 4px; }
   .item {
     display: flex;
     align-items: center;
@@ -32,22 +34,25 @@
     color: var(--lm-ink);
   }
   /* Values keep their place until the first reading, then arrive together. */
-  .list dd {
+  .list dd,
+  .history {
     opacity: 0;
     transition: opacity var(--lm-dur-base) var(--lm-ease-out);
   }
-  .list[data-ready] dd { opacity: 1; }
+  .readout[data-ready] dd,
+  .readout[data-ready] .history { opacity: 1; }
 
   .item dd.warn { color: var(--lm-amber); }
   .item dd.crit { color: var(--lm-red); }
   .item dd.ok { color: var(--lm-green); }
 
   .error {
-    margin: 4px 0 0 12px;
+    margin: 4px 0 0;
     font-size: 12px;
     color: var(--lm-red);
   }
 
   :global(:root[data-reduced-motion]) .reveal,
-  :global(:root[data-reduced-motion]) .list dd { transition: none; }
+  :global(:root[data-reduced-motion]) .list dd,
+  :global(:root[data-reduced-motion]) .history { transition: none; }
 }

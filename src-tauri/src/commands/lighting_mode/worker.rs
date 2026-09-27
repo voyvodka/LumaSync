@@ -222,6 +222,10 @@ pub(super) fn start_ambilight_worker(
     // A synthetic test paints exact per-LED blocks; the live 0.05 box is wider
     // than the whole comet, so it averaged in unlit screen and dimmed the head.
     let synthetic = preview.as_ref().is_some_and(|ctx| ctx.source == "test");
+    telemetry_window.set_capture_interval(pacing.capture_interval);
+    if synthetic {
+        telemetry_window.skip_history();
+    }
     let sample_window = if synthetic {
         SYNTHETIC_SAMPLE_WINDOW
     } else {

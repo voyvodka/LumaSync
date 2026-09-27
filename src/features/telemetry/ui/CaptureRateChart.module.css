@@ -1,0 +1,91 @@
+@layer components {
+  .chart { padding: 6px 0 8px; }
+
+  .plot {
+    position: relative;
+    height: 56px;
+    border-radius: 4px;
+    outline: none;
+  }
+  .plot:focus-visible { box-shadow: var(--lm-focus-ring); }
+  .plot svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+  .line,
+  .target {
+    fill: none;
+    vector-effect: non-scaling-stroke;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+  .line { stroke: var(--lm-ink-dim); stroke-width: 1.5px; }
+  .target { stroke: var(--lm-ink-faint); stroke-width: 1px; stroke-dasharray: 3 3; }
+
+  .targetLabel {
+    position: absolute;
+    right: 0;
+    transform: translateY(calc(-100% - 2px));
+    font-size: 11px;
+    color: var(--lm-ink-faint);
+    pointer-events: none;
+    transition: opacity var(--lm-dur-quick) var(--lm-ease-out);
+  }
+  /* The bubble is the reading now; the label under it would only crowd it. */
+  .plot[data-reading] .targetLabel { opacity: 0; }
+
+  /* Placed by style from the pointer; only their visibility is CSS. */
+  .cursor,
+  .dot,
+  .bubble {
+    position: absolute;
+    left: 0;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--lm-dur-quick) var(--lm-ease-out);
+  }
+  .plot[data-reading] .cursor,
+  .plot[data-reading] .dot,
+  .plot[data-reading] .bubble { opacity: 1; }
+
+  .cursor { top: 0; bottom: 0; width: 1px; background: var(--lm-line-2); }
+  .dot {
+    top: 0;
+    width: 7px;
+    height: 7px;
+    margin: -3.5px 0 0 -3.5px;
+    border-radius: 50%;
+    background: var(--lm-ink);
+  }
+  .bubble {
+    top: -30px;
+    padding: 3px 8px;
+    border: 1px solid var(--lm-line-2);
+    border-radius: 7px;
+    background: var(--lm-panel-2);
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--lm-ink);
+  }
+
+  .axis {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--lm-ink-faint);
+  }
+  .summary { color: var(--lm-ink-dim); font-variant-numeric: tabular-nums; }
+
+  :global(:root[data-reduced-motion]) .targetLabel,
+  :global(:root[data-reduced-motion]) .cursor,
+  :global(:root[data-reduced-motion]) .dot,
+  :global(:root[data-reduced-motion]) .bubble { transition: none; }
+
+  @media (forced-colors: active) {
+    .line { stroke: CanvasText; }
+    .target { stroke: GrayText; }
+    .cursor, .dot { background: CanvasText; }
+    .bubble { border-color: CanvasText; }
+  }
+}

@@ -35,7 +35,12 @@ https://keepachangelog.com/en/1.1.0/
 - Settings → Appearance: "Show stats for nerds" shows frame rate and live output numbers in the
   status bar and the telemetry readout. It is off by default, and while it is off the app no longer
   asks for those numbers at all; the status bar shows just the connection chips. A capture that
-  stops mid-stream is still reported either way.
+  stops mid-stream is still reported either way. "Screen capture" reads against the rate capture
+  was asked for (20 fps for Hue alone, about 30 with a strip), as in "15 / 20 fps", and under it
+  the readout draws the last five minutes of capture rate against that line, with the average and
+  the low; hover it, or use the arrow keys, to read any second's
+  time and rate. Time with the lights off shows as a gap. A still screen reads under the dashed
+  line with nothing wrong: capture counts only frames that changed.
 - Settings → Appearance: "Reduce motion" turns animations down in every LumaSync window. While it
   is off, your system's own reduce-motion setting still applies.
 - Settings → Appearance: "Interface size" makes the interface 90%, 100%, 110% or 125% of its

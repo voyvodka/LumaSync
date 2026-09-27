@@ -9,13 +9,17 @@
  * window hidden in the tray as visible.
  */
 
-import type { FullTelemetrySnapshot } from "@/shared/contracts/telemetry";
-import { getFullTelemetrySnapshot } from "./telemetryApi";
+import type { FullTelemetrySnapshot, RuntimeTelemetryHistory } from "@/shared/contracts/telemetry";
+import { getFullTelemetrySnapshot, getRuntimeTelemetryHistory } from "./telemetryApi";
 import { parseCommandError } from "@/shared/contracts/status";
 import { isWindowVisible, subscribeWindowVisible } from "@/features/shell/windowVisibility";
 
 export interface TelemetrySourceState {
   snapshot: FullTelemetrySnapshot | null;
+  /** Read on the same tick as the snapshot, and only while a subscriber asked for it. */
+  history: RuntimeTelemetryHistory | null;
+  /** Wall clock of the tick that read `history`, which the chart's time axis ends at. */
+  historyReadAtMs: number | null;
   error: Error | null;
   isLoading: boolean;
 }
@@ -24,6 +28,8 @@ export type TelemetrySourceListener = (state: TelemetrySourceState) => void;
 
 const INITIAL_STATE: TelemetrySourceState = {
   snapshot: null,
+  history: null,
+  historyReadAtMs: null,
   error: null,
   isLoading: true,
 };
@@ -31,6 +37,7 @@ const INITIAL_STATE: TelemetrySourceState = {
 interface Subscriber {
   intervalMs: number;
   listener: TelemetrySourceListener;
+  history: boolean;
 }
 
 const subscribers = new Map<symbol, Subscriber>();
@@ -46,6 +53,13 @@ function effectiveIntervalMs(): number {
     if (sub.intervalMs < min) min = sub.intervalMs;
   }
   return Number.isFinite(min) ? min : 1000;
+}
+
+function wantsHistory(): boolean {
+  for (const sub of subscribers.values()) {
+    if (sub.history) return true;
+  }
+  return false;
 }
 
 function publish(next: TelemetrySourceState): void {
@@ -70,18 +84,31 @@ async function tick(): Promise<void> {
   if (inFlight) return;
   if (!isWindowVisible()) return;
   inFlight = true;
+  const readsHistory = wantsHistory();
   try {
-    const snapshot = await getFullTelemetrySnapshot();
+    const [snapshot, history] = await Promise.all([
+      getFullTelemetrySnapshot(),
+      readsHistory ? getRuntimeTelemetryHistory() : Promise.resolve(null),
+    ]);
     if (subscribers.size === 0) return;
-    publish({ snapshot, error: null, isLoading: false });
+    publish({
+      snapshot,
+      history,
+      historyReadAtMs: history ? Date.now() : null,
+      error: null,
+      isLoading: false,
+    });
   } catch (raw) {
     if (subscribers.size === 0) return;
     const error = raw instanceof Error ? raw : new Error(parseCommandError(raw).message);
     console.error("[LumaSync] telemetry poll failed:", error);
-    publish({ snapshot: state.snapshot, error, isLoading: false });
+    publish({ ...state, error, isLoading: false });
   } finally {
     inFlight = false;
-    scheduleNext();
+    // A history subscriber that joined mid-tick would otherwise open a whole
+    // interval after the numbers beside it.
+    if (!readsHistory && wantsHistory() && subscribers.size > 0) void tick();
+    else scheduleNext();
   }
 }
 
@@ -111,10 +138,11 @@ function teardown(): void {
 export function subscribeTelemetry(
   intervalMs: number,
   listener: TelemetrySourceListener,
+  { history = false }: { history?: boolean } = {},
 ): () => void {
   const key = Symbol("telemetry-subscriber");
   const wasIdle = subscribers.size === 0;
-  subscribers.set(key, { intervalMs, listener });
+  subscribers.set(key, { intervalMs, listener, history });
 
   releaseVisibility ??= subscribeWindowVisible(handleVisibilityChange);
 
@@ -123,7 +151,7 @@ export function subscribeTelemetry(
   // A joiner rides the running loop's cadence rather than firing its own
   // round-trip — that duplicate request is the whole bug. Only an idle loop
   // (or one with nothing to show yet) needs an immediate tick.
-  if (wasIdle || state.snapshot === null) {
+  if (wasIdle || state.snapshot === null || (history && state.history === null)) {
     void tick();
   } else {
     scheduleNext();
@@ -132,6 +160,8 @@ export function subscribeTelemetry(
   return () => {
     subscribers.delete(key);
     if (subscribers.size === 0) teardown();
+    // Reopening must not draw a history minutes old.
+    else if (!wantsHistory()) state = { ...state, history: null, historyReadAtMs: null };
   };
 }
 

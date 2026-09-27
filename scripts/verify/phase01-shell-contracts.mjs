@@ -1421,10 +1421,12 @@ console.log("\n[ Runtime telemetry — Rust → telemetry.ts field parity ]");
 // Same degradation shape as the lighting harvest: a removed Rust field silently
 // stops being checked. Pin the count so the loop cannot quietly narrow.
 const EXPECTED_TELEMETRY_FIELD_COUNTS = {
-  RuntimeTelemetrySnapshot: 8,
+  RuntimeTelemetrySnapshot: 9,
   HueTelemetrySnapshot: 11,
   FullTelemetrySnapshot: 2,
   RuntimeHealth: 3,
+  CaptureFpsSample: 3,
+  RuntimeTelemetryHistory: 1,
 };
 for (const [structName, expectedCount] of Object.entries(EXPECTED_TELEMETRY_FIELD_COUNTS)) {
   const fields = rustStructFields(rustTelemetrySource, structName);
@@ -2575,7 +2577,9 @@ const checkedPairs = nullabilityPairs.filter(
 // 83 → 86: `HueLightName`, `HueLightNamesResponse` (`get_hue_light_names`) and
 // `WledForgetResponse` (`forget_wled_device`).
 // 86 → 87: `LightingOutcome`, the snapshot's `lastOutcome`.
-const EXPECTED_NULLABILITY_PAIR_COUNT = 87;
+// 87 → 89: `CaptureFpsSample` and `RuntimeTelemetryHistory`
+// (`get_runtime_telemetry_history`).
+const EXPECTED_NULLABILITY_PAIR_COUNT = 89;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

@@ -217,6 +217,26 @@ export const deviceHandlers = {
   }),
 
   /**
+   * Five minutes ending now, one sample a second, with a half-minute gap where
+   * the lights were off — the case a line through zero would get wrong.
+   * Empty while nothing captures, like a fresh app.
+   */
+  [DEVICE_COMMANDS.GET_RUNTIME_TELEMETRY_HISTORY]: () => {
+    const t = getWorld().telemetry;
+    if (t.captureTargetFps === 0) return { samples: [] };
+    const end = Math.floor(now() / 1000) * 1000;
+    const samples = [];
+    for (let age = 299; age >= 0; age -= 1) {
+      if (age >= 170 && age < 200) continue;
+      const wobble = Math.sin(age / 7) * 2 + Math.sin(age / 23) * 3;
+      const dip = age > 90 && age < 110 ? 12 : 0;
+      const fps = Math.max(0, Math.min(t.captureTargetFps, t.captureFps + wobble - dip));
+      samples.push({ epochMs: end - age * 1000, fps: Math.round(fps * 100) / 100, targetFps: t.captureTargetFps });
+    }
+    return { samples };
+  },
+
+  /**
    * `FullTelemetrySnapshot` is `{usb, hue|null}`. `hue: null` is a third state
    * beyond streaming and idle — "Hue has not been active this session" — and
    * `linkMaxFps` uses a sentinel for absent rather than zero, which is exactly
@@ -241,6 +261,7 @@ export const deviceHandlers = {
         linkMaxFps: usbLive ? t.linkMaxFps : LINK_MAX_FPS_ABSENT,
         lastCaptureErrorCode: t.lastCaptureErrorCode,
         lastCaptureErrorAtSecs: t.lastCaptureErrorAtSecs,
+        captureTargetFps: t.captureTargetFps,
       },
       hue: w.hue.everActive
         ? {

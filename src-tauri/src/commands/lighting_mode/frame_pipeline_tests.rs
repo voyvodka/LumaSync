@@ -39,7 +39,7 @@ use crate::commands::led_output::{
     SerialSink, WirePixelLayout,
 };
 use crate::commands::led_sink::LedSink;
-use crate::commands::runtime_telemetry::RuntimeTelemetrySnapshot;
+use crate::commands::runtime_telemetry::{read_runtime_telemetry, SharedRuntimeTelemetry};
 use crate::commands::test_pattern::{
     create_synthetic_frame_source, TestPatternConfig, TestPatternKind, TestPatternSpeed,
 };
@@ -617,7 +617,7 @@ fn assert_worker_matches_reference(profile: FirmwareProfile, chip_type: LedChipT
             room: Arc::clone(&room),
             served: Arc::clone(&served),
         }),
-        Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default())),
+        SharedRuntimeTelemetry::default(),
         Some(hue_output),
         None,
         color_correction(),
@@ -962,7 +962,7 @@ fn a_frame_is_analysed_once_however_often_the_worker_looks() {
         .lock()
         .unwrap_or_else(|err| err.into_inner());
     let calls = Arc::new(AtomicUsize::new(0));
-    let telemetry = Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default()));
+    let telemetry = SharedRuntimeTelemetry::default();
     let (color_sender, hue_updates) = HueColorSender::recording(2);
     let runtime = start_ambilight_worker(
         LedOutputBridge::from_sender(Arc::new(NullSender)),
@@ -990,7 +990,7 @@ fn a_frame_is_analysed_once_however_often_the_worker_looks() {
 
     let deadline = Instant::now() + Duration::from_secs(10);
     let flushed = loop {
-        let snapshot = telemetry.lock().expect("telemetry").clone();
+        let snapshot = read_runtime_telemetry(&telemetry).expect("telemetry");
         if snapshot.send_fps > 0.0 {
             break snapshot;
         }
