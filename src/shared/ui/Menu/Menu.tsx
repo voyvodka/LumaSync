@@ -11,6 +11,8 @@ export interface MenuItem {
   /** Lets something go (forget, remove): drawn red. */
   danger?: boolean;
   disabled?: boolean;
+  /** The id of the line that says why it is off. */
+  describedBy?: string;
 }
 
 interface MenuProps {
@@ -62,6 +64,7 @@ export function Menu({ label, items, testId }: MenuProps) {
               key={item.id}
               type="button"
               disabled={item.disabled}
+              aria-describedby={item.describedBy}
               className={cx(styles.item, item.danger && styles.danger)}
               onClick={() => {
                 setOpen(false);

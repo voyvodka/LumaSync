@@ -434,12 +434,14 @@ export function HueChannels({
                         id: "pull",
                         label: t("hue:channelMap.pullFromBridge"),
                         disabled: bridgeBusy || actionBusy,
+                        describedBy: busyNote ? busyNoteId : undefined,
                         onSelect: () => setPendingConfirm("pull"),
                       },
                       {
                         id: "save",
                         label: t("hue:channelMap.saveToBridgeMenu"),
                         disabled: bridgeBusy || actionBusy,
+                        describedBy: busyNote ? busyNoteId : undefined,
                         onSelect: () => setPendingConfirm("save"),
                       },
                     ]}

@@ -227,9 +227,11 @@ describe("CHAN-05: save to bridge write-back", () => {
     render(<HueChannels {...writebackProps} isStreaming={true} />);
     const note = screen.getByTestId("hue-chmap-streaming-note");
     expect(note).toHaveTextContent("hue:channelMap.streamingNote");
-    // Behind "…", both actions are off; the reason is the line under the row.
-    expect(bridgeAction("save")).toBeDisabled();
-    expect(bridgeAction("pull")).toBeDisabled();
+    // Behind "…", both actions are off, and each is described by the line that says why.
+    for (const item of [bridgeAction("save"), bridgeAction("pull")]) {
+      expect(item).toBeDisabled();
+      expect(item).toHaveAccessibleDescription("hue:channelMap.streamingNote");
+    }
   });
 
   it("shows no streaming note while idle", () => {
