@@ -23,6 +23,7 @@
     gap: 8px;
     margin-left: auto;
   }
+  .fills { flex: 1; min-width: 0; }
 
   .action {
     display: inline-flex;

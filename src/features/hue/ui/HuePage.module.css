@@ -6,12 +6,33 @@
     margin-inline: auto;
   }
 
+  .arrive { animation: arrive var(--lm-dur-base) var(--lm-ease-out); }
+  @keyframes arrive { from { opacity: 0; transform: translateY(4px); } }
+  :global(:root[data-reduced-motion]) .arrive { animation: none; }
+
   .title {
     margin: 0 0 8px;
     font-size: 15px;
     font-weight: 600;
     color: var(--lm-ink);
   }
+
+  /* The bridge row's right side: the word and its actions pass over together when the state
+     changes, right-aligned, tall enough that a focus ring is not clipped. */
+  .swap {
+    --page-height: 36px;
+    --page-inset: 3px;
+    --page-gap: 8px;
+  }
+  .swap > span { justify-content: flex-end; }
+
+  /* Rows come and go with the state (Reveal): the line between two sits on the second, and a
+     closed one draws none. */
+  .rows > [data-reveal] + [data-reveal] {
+    border-top: 1px solid var(--lm-line);
+    transition: border-color var(--lm-dur-base) linear;
+  }
+  .rows > [data-reveal][data-open="false"] { border-top-color: transparent; }
 
   .state {
     display: inline-flex;

@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
 
 import { HuePage } from "../HuePage";
-import { hueState, renderPage } from "./hueFixture";
+import { hueState, renderPage, shownByTestId } from "./hueFixture";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -140,7 +140,7 @@ describe("HuePage — an area the state only shows", () => {
         runtimeStatus: { state: "Reconnecting", code: "TRANSIENT_RETRY_SCHEDULED", message: "", details: null, triggerSource: "system" },
       }),
     );
-    expect(screen.queryByTestId("hue-area-row")).toBeNull();
+    expect(shownByTestId("hue-area-row")).toBeNull();
     expect(screen.queryByText("hue:areas.empty")).toBeNull();
   });
 

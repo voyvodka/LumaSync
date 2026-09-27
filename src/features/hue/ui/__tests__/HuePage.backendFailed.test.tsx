@@ -27,6 +27,7 @@ import {
 import { useHueRuntimeStatus } from "@/features/hue/state/useHueRuntimeStatus";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
 import { HuePage } from "../HuePage";
+import { shownByTestId } from "./hueFixture";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -151,10 +152,10 @@ function commandResult(status: BackendStatus) {
 function expectStreamFailed(reasonKey: string) {
   expect(screen.getByTestId("hue-stream-failed")).toHaveTextContent(reasonKey);
   expect(screen.getByTestId("hue-state")).toHaveTextContent("hue:state.streamFailed");
-  expect(screen.queryByText("hue:state.idle")).toBeNull();
-  expect(screen.queryByText("hue:state.streaming")).toBeNull();
-  expect(screen.queryByText("hue:state.reconnecting")).toBeNull();
-  expect(screen.queryByTestId("hue-status-unavailable")).toBeNull();
+  expect(screen.getByTestId("hue-state")).not.toHaveTextContent("hue:state.idle");
+  expect(screen.getByTestId("hue-state")).not.toHaveTextContent("hue:state.streaming");
+  expect(screen.getByTestId("hue-state")).not.toHaveTextContent("hue:state.reconnecting");
+  expect(shownByTestId("hue-status-unavailable")).toBeNull();
 }
 
 describe("HuePage — a Failed stream the backend reported", () => {
@@ -185,7 +186,7 @@ describe("HuePage — a Failed stream the backend reported", () => {
   it("says the stream stopped once retries run out, and Start Again brings it back", async () => {
     render(<Harness />);
     await flush(0);
-    expect(screen.getByText("hue:state.streaming")).toBeInTheDocument();
+    expect(screen.getByTestId("hue-state")).toHaveTextContent("hue:state.streaming");
 
     act(() => {
       publishHealth(backendIs({ state: "Failed", code: "TRANSIENT_RETRY_EXHAUSTED", actionHint: "retry" }));
@@ -209,8 +210,8 @@ describe("HuePage — a Failed stream the backend reported", () => {
         }),
       }),
     );
-    expect(screen.getByText("hue:state.streaming")).toBeInTheDocument();
-    expect(screen.queryByTestId("hue-stream-failed")).toBeNull();
+    expect(screen.getByTestId("hue-state")).toHaveTextContent("hue:state.streaming");
+    expect(shownByTestId("hue-stream-failed")).toBeNull();
   });
 
   it("names an aborted start on the first read", async () => {
@@ -254,7 +255,7 @@ describe("HuePage — a Failed stream the backend reported", () => {
     await flush(0);
     expect(fakeHueHealthApi.getHueHealth).toHaveBeenCalledOnce();
     expect(screen.getByTestId("hue-status-unavailable")).toBeInTheDocument();
-    expect(screen.queryByTestId("hue-stream-failed")).toBeNull();
+    expect(shownByTestId("hue-stream-failed")).toBeNull();
 
     await flush(runtimeStatusRetryDelayMs(1));
     expectStreamFailed("hue:runtime.codes.TRANSIENT_RETRY_EXHAUSTED");

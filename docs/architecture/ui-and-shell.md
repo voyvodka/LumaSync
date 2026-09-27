@@ -447,7 +447,12 @@ uses; its tint is placed by measuring, since group headings make the rows uneven
 `SettingRow`s: the bridge with its state in a word and a dot, the area, what Off does. A closed table
 (`HUE_STATE_VIEW`) gives each state its word, its note, its one amber action and what sits behind
 "…" (the shared `Menu`), so a state cannot show Validate twice or two amber buttons. The note says
-what happened in a line and keeps the raw code behind an ⓘ at its end. The area is picked from a
+what happened in a line and keeps the raw code behind an ⓘ at its end. A state change passes the
+word and its actions over together (`PageSwap`) beside one stable live region — the swapped word is
+remounted, and a live region mounted with its text is not read out — and the rows and notes a state
+brings or takes away grow and shrink (`Reveal`, `grid-template-rows` 0fr↔1fr) instead of jumping
+the rows below. A busy label is short ("Checking…"), since a button keeps the width of its longer
+label. The area is picked from a
 `PickerList` that floats from the area row, and picking is the choice: the card's in-place list with
 Confirm and Cancel pushed the rows below it. Start is not on the page — lighting starts from Lights —
 and a disabled Start that no state here could enable is gone with it. A found bridge the rail opens

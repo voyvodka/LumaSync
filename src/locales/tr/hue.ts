@@ -3,12 +3,8 @@ import type enHue from "@/locales/en/hue";
 
 const hue: Catalogue<typeof enHue> = {
   actions: {
-    discovering: "Keşfediliyor...",
     pairing: "Eşleştiriliyor...",
     refreshAreas: "Alanları yenile",
-    loadingAreas: "Alanlar yükleniyor...",
-    checkingReadiness: "Alan kontrol ediliyor...",
-    checkingBridge: "Köprü kontrol ediliyor...",
     start: "Hue'yu başlat",
     stop: "Hue'yu durdur",
   },
@@ -196,7 +192,6 @@ const hue: Catalogue<typeof enHue> = {
   page: {
     title: "Hue köprüsü",
     scanNetwork: "Ağda ara",
-    scanning: "Aranıyor…",
     forgotBridge: "Unut",
     forceForget: "Zorla unut",
     forgetting: "Unutuluyor…",
@@ -251,6 +246,12 @@ const hue: Catalogue<typeof enHue> = {
     searchFailed: "Arama başarısız",
     noneFound: "Bulunamadı",
     none: "Henüz köprü yok",
+  },
+  busy: {
+    checking: "Doğrulanıyor…",
+    trying: "Deneniyor…",
+    refreshing: "Yenileniyor…",
+    searching: "Aranıyor…",
   },
   row: {
     bridge: "Köprü",

@@ -1,11 +1,7 @@
 export default {
   actions: {
-    discovering: "Discovering...",
     pairing: "Pairing...",
     refreshAreas: "Refresh areas",
-    loadingAreas: "Loading areas...",
-    checkingReadiness: "Checking readiness...",
-    checkingBridge: "Checking the bridge...",
     start: "Start Hue",
     stop: "Stop Hue",
   },
@@ -193,7 +189,6 @@ export default {
   page: {
     title: "Hue bridge",
     scanNetwork: "Search",
-    scanning: "Searching…",
     forgotBridge: "Forget",
     forceForget: "Force forget",
     forgetting: "Forgetting…",
@@ -248,6 +243,13 @@ export default {
     searchFailed: "Search failed",
     noneFound: "None found",
     none: "No bridge yet",
+  },
+  // Short, so a button that swaps to one keeps close to its own width.
+  busy: {
+    checking: "Checking…",
+    trying: "Trying…",
+    refreshing: "Refreshing…",
+    searching: "Searching…",
   },
   row: {
     bridge: "Bridge",

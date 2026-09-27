@@ -96,8 +96,8 @@ rebuilding LED Setup; apply it to every new screen:
 **Motion is small, light and answers a change.** The maintainer's taste, stated plainly: tiny,
 sweet micro-animations, never big ones and never a loop on a button. Each one shows what just
 changed and is gone in about a quarter of a second. The patterns are components — reach for them
-before writing a transition by hand: `StateSwap`, `PageSwap`, `SpinSwap`, `Popover`, `PickerList`
-and `Menu` in `src/shared/ui/`, and LED Setup's dock parts (`NumberField`, `CommitCapsule`,
+before writing a transition by hand: `StateSwap`, `PageSwap`, `SpinSwap`, `Popover`, `PickerList`,
+`Menu` and `Reveal` in `src/shared/ui/`, and LED Setup's dock parts (`NumberField`, `CommitCapsule`,
 `AsyncToggle` in `features/calibration/ui/dock/`, feature-agnostic, promoted on a second use):
 
 - **State swap:** both states stay mounted in a fixed-size box and crossfade with a few pixels of

@@ -106,11 +106,15 @@ describe("found bridges", () => {
 });
 
 describe("state word", () => {
-  it("is a live region, and its dot says nothing a screen reader has not heard", () => {
+  // The drawn word passes over when the state changes, so it is not the live region: one that is
+  // mounted with its text is not read out. A stable one beside it is.
+  it("is read out from one live region, and the drawn word and its dot are not read twice", () => {
     renderPage(hueState({ ...noBridge, isDiscovering: true }));
-    const word = screen.getByTestId("hue-state");
-    expect(word).toHaveAttribute("role", "status");
-    expect(word).toHaveTextContent("hue:state.searching");
-    expect(word.firstElementChild).toHaveAttribute("aria-hidden", "true");
+    const live = screen.getByTestId("hue-state");
+    expect(live).toHaveAttribute("role", "status");
+    expect(live).toHaveTextContent("hue:state.searching");
+    const drawn = document.querySelector("[data-tone]");
+    expect(drawn).toHaveAttribute("aria-hidden", "true");
+    expect(drawn).toHaveTextContent("hue:state.searching");
   });
 });

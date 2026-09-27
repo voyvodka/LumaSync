@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 
 import type { HueRuntimeState, HueRuntimeWireStatusCode } from "@/shared/contracts/hue";
 import type { HueBridgeSummary } from "@/features/hue/hueOnboardingApi";
@@ -94,4 +94,11 @@ export function renderPage(hue: UseHueOnboardingResult, props: Partial<HuePagePr
       {...props}
     />,
   );
+}
+
+/** The element with this test id as a person meets it: `null` while it only lingers for its exit
+ *  (a closing Reveal is `aria-hidden` until its motion ends). */
+export function shownByTestId(testId: string): HTMLElement | null {
+  const element = screen.queryByTestId(testId);
+  return element && !element.closest('[aria-hidden="true"]') ? element : null;
 }

@@ -17,11 +17,13 @@ import type { HueBridgeSummary } from "@/features/hue/hueOnboardingApi";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
 import { HueChannelMapPanel } from "@/features/settings/sections/HueChannelMapPanel";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
+import { cx } from "@/shared/ui/cx";
+import { Reveal } from "@/shared/ui/Reveal/Reveal";
 import { RowButton, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
 
 import { HueAddressRow } from "./HueAddressRow";
 import { HueAreaRow } from "./HueAreaRow";
-import { HueActionButton, HueBridgeRow, HueNoteLine, HueStateWord } from "./HueBridgeRow";
+import { HueBridgeRow, HueNoteLine } from "./HueBridgeRow";
 import { HueOffBehaviorRow } from "./HueOffBehaviorRow";
 import { HUE_ACTIONS, HUE_STATE_VIEW, resolveActions, type HueContext, type HueTone } from "./hueStateView";
 import { useHueAreaChoice } from "./useHueAreaChoice";
@@ -156,10 +158,21 @@ export function HuePage({
       ? bridgeDisplayName(selectedBridge.name)
       : t("hue:page.title");
 
+  // A found bridge and the paired one are two pages: moving between them rises in like a rail
+  // switch. The first showing does not; the pane's own entrance covers it.
+  const bodyKey = showsFound ? `found:${foundBridge.id}` : "bridge";
+  const [lastBodyKey, setLastBodyKey] = useState(bodyKey);
+  const [bodyMoved, setBodyMoved] = useState(false);
+  if (bodyKey !== lastBodyKey) {
+    setLastBodyKey(bodyKey);
+    setBodyMoved(true);
+  }
+
   let body: ReactNode;
   if (showsFound) {
     body = (
-      <FoundBridgeRows
+      <div className={styles.rows}>
+        <FoundBridgeRows
         bridge={foundBridge}
         replaces={credentials !== null && selectedBridge ? bridgeDisplayName(selectedBridge.name) : null}
         // The stream is the paired bridge's, and this page has no way to stop it.
@@ -168,37 +181,56 @@ export function HuePage({
           void hue.pair(foundBridge.id);
         }}
       />
+      </div>
     );
   } else if (!selectedBridgeId) {
-    body = <NoBridgeRows hue={hue} forgetResult={forgetResult} />;
+    body = (
+      <div className={styles.rows}>
+        <NoBridgeRows hue={hue} forgetResult={forgetResult} />
+      </div>
+    );
   } else if (selectedBridge && view) {
     const primary = view.primary === null ? null : (resolveActions([view.primary], ctx)[0] ?? null);
     const change = view.area === "change" ? HUE_ACTIONS.changeArea(ctx) : null;
+    const showsArea = view.area === "change" || (view.area === "show" && selectedArea !== null);
     body = (
       <>
-        <HueBridgeRow
-          address={selectedBridge.ip}
+        <div className={styles.rows}>
+          <Reveal open>
+            <HueBridgeRow
+              stateKey={state ?? "none"}
+              address={selectedBridge.ip}
           word={t(view.word)}
           tone={view.tone}
           note={view.note?.(ctx) ?? null}
           primary={primary?.id === "changeArea" ? null : primary}
           secondary={resolveActions(view.secondary, ctx)}
           more={resolveActions(view.more, ctx)}
-          moreLabel={t("hue:page.more", { name: title })}
-        >
-          {forgetResult ? <ForgetResultNote result={forgetResult} /> : null}
-        </HueBridgeRow>
-        {view.area === "change" || (view.area === "show" && selectedArea) ? (
-          <HueAreaRow
-            hue={hue}
-            choice={areaChoice}
-            change={change}
-            refresh={{ id: "refreshAreas", ...HUE_ACTIONS.refreshAreas(ctx) }}
-            primary={view.primary === "changeArea"}
-          />
-        ) : null}
-        {state === "offline" ? <HueAddressRow hue={hue} hint={t("hue:manualIp.movedDescription")} /> : null}
-        {onOffBehaviorChange ? <HueOffBehaviorRow value={offBehavior} onChange={onOffBehaviorChange} /> : null}
+              moreLabel={t("hue:page.more", { name: title })}
+            >
+              <Reveal open={forgetResult !== null}>
+                {forgetResult ? <ForgetResultNote result={forgetResult} /> : null}
+              </Reveal>
+            </HueBridgeRow>
+          </Reveal>
+          <Reveal open={showsArea}>
+            <HueAreaRow
+              hue={hue}
+              choice={areaChoice}
+              change={change}
+              refresh={{ id: "refreshAreas", ...HUE_ACTIONS.refreshAreas(ctx) }}
+              primary={view.primary === "changeArea"}
+            />
+          </Reveal>
+          <Reveal open={state === "offline"}>
+            {state === "offline" ? <HueAddressRow hue={hue} hint={t("hue:manualIp.movedDescription")} /> : null}
+          </Reveal>
+          {onOffBehaviorChange ? (
+            <Reveal open>
+              <HueOffBehaviorRow value={offBehavior} onChange={onOffBehaviorChange} />
+            </Reveal>
+          ) : null}
+        </div>
 
         {selectedAreaId && credentialState === "valid" ? (
           <div className={styles.channels}>
@@ -237,10 +269,12 @@ export function HuePage({
 
   return (
     <section className={styles.page} hidden={!isActive} aria-labelledby={headingId} data-testid="hue-page">
-      <h1 id={headingId} className={styles.title}>
-        {title}
-      </h1>
-      {body}
+      <div key={bodyKey} className={cx(bodyMoved && styles.arrive)}>
+        <h1 id={headingId} className={styles.title}>
+          {title}
+        </h1>
+        {body}
+      </div>
 
       {forgetOpen ? (
         <ConfirmDialog
@@ -307,52 +341,57 @@ function NoBridgeRows({ hue, forgetResult }: NoBridgeRowsProps) {
 
   return (
     <>
-      <SettingRow
-        label={t("hue:row.bridge")}
-        testId="hue-bridge-row"
-        control={
-          <>
-            <HueStateWord tone={tone}>{word}</HueStateWord>
-            <HueActionButton
-              primary={bridges.length === 0}
-              action={{
-                id: "discover",
-                label: t("hue:page.scanNetwork"),
-                busyLabel: t("hue:page.scanning"),
-                busy: isDiscovering,
-                onClick: () => {
-                  void discover();
-                },
-              }}
-            />
-          </>
-        }
-      >
-        {forgetResult ? <ForgetResultNote result={forgetResult} /> : null}
-      </SettingRow>
+      <Reveal open>
+        <HueBridgeRow
+          stateKey={tone}
+          word={word}
+          tone={tone}
+          note={null}
+          // The word says it is searching; the button only waits.
+          primary={
+            bridges.length === 0
+              ? { id: "discover", label: t("hue:page.scanNetwork"), busy: isDiscovering, onClick: () => void discover() }
+              : null
+          }
+          secondary={
+            bridges.length === 0
+              ? []
+              : [{ id: "discover", label: t("hue:page.scanNetwork"), busy: isDiscovering, onClick: () => void discover() }]
+          }
+          more={[]}
+          moreLabel=""
+        >
+          <Reveal open={forgetResult !== null}>
+            {forgetResult ? <ForgetResultNote result={forgetResult} /> : null}
+          </Reveal>
+        </HueBridgeRow>
+      </Reveal>
       {bridges.map((bridge) => {
         const name = sameName(bridge) ? bridge.ip : bridgeDisplayName(bridge.name);
         return (
-          <SettingRow
-            key={bridge.id}
-            label={name}
-            value={bridge.ip}
-            testId="hue-found-bridge"
-            control={
-              <RowButton
-                primary={bridges.length === 1}
-                aria-label={t("hue:page.pairNamed", { name })}
-                onClick={() => {
-                  void pair(bridge.id);
-                }}
-              >
-                {t("hue:page.pair")}
-              </RowButton>
-            }
-          />
+          <Reveal key={bridge.id} open appear>
+            <SettingRow
+              label={name}
+              value={bridge.ip}
+              testId="hue-found-bridge"
+              control={
+                <RowButton
+                  primary={bridges.length === 1}
+                  aria-label={t("hue:page.pairNamed", { name })}
+                  onClick={() => {
+                    void pair(bridge.id);
+                  }}
+                >
+                  {t("hue:page.pair")}
+                </RowButton>
+              }
+            />
+          </Reveal>
         );
       })}
-      <HueAddressRow hue={hue} hint={t("hue:manualIp.description")} />
+      <Reveal open>
+        <HueAddressRow hue={hue} hint={t("hue:manualIp.description")} />
+      </Reveal>
     </>
   );
 }
@@ -376,7 +415,9 @@ function FoundBridgeRows({ bridge, replaces, streaming, onPair }: FoundBridgeRow
         ? [t("hue:page.replaces", { name: replaces }), t("hue:page.stopFirst")]
         : [t("hue:page.replaces", { name: replaces }), t("hue:pair.promptHint")];
   return (
-    <HueBridgeRow
+    <Reveal open>
+      <HueBridgeRow
+      stateKey="found"
       address={bridge.ip}
       word={t("hue:state.unpaired")}
       tone="idle"
@@ -386,5 +427,6 @@ function FoundBridgeRows({ bridge, replaces, streaming, onPair }: FoundBridgeRow
       more={[]}
       moreLabel=""
     />
+    </Reveal>
   );
 }

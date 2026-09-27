@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { cx } from "@/shared/ui/cx";
 import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
 import { Menu } from "@/shared/ui/Menu/Menu";
+import { PageSwap } from "@/shared/ui/PageSwap/PageSwap";
+import { Reveal } from "@/shared/ui/Reveal/Reveal";
 import { RowButton, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
 import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
 
@@ -13,8 +15,10 @@ import styles from "./HuePage.module.css";
 type ResolvedAction = HueActionSpec & { id: HueActionId | string };
 
 interface HueBridgeRowProps {
-  /** The address, beside "Bridge". */
-  address: string;
+  /** Which state it shows: a new one passes the word and its actions over, the same one updates them. */
+  stateKey: string;
+  /** The address, beside "Bridge"; none before a bridge is known. */
+  address?: string;
   word: string;
   tone: HueTone;
   note: HueNote | null;
@@ -29,6 +33,7 @@ interface HueBridgeRowProps {
 
 /** The bridge: where it is, the state it is in, and the one thing to do about it. */
 export function HueBridgeRow({
+  stateKey,
   address,
   word,
   tone,
@@ -45,9 +50,12 @@ export function HueBridgeRow({
       label={t("hue:row.bridge")}
       value={address}
       testId="hue-bridge-row"
+      controlFills
       control={
-        <>
-          <HueStateWord tone={tone}>{word}</HueStateWord>
+        <PageSwap id={stateKey} way="fade" className={styles.swap}>
+          <HueStateWord tone={tone} live={false}>
+            {word}
+          </HueStateWord>
           {secondary.map((action) => (
             <HueActionButton key={action.id} action={action} />
           ))}
@@ -63,19 +71,31 @@ export function HueBridgeRow({
               disabled: action.disabled || action.busy,
             }))}
           />
-        </>
+        </PageSwap>
       }
     >
-      {note ? <HueNoteLine note={note} /> : null}
+      {/* Outside the swap: a live region mounted with its text is not read out. */}
+      <span className="sr-only" role="status" aria-live="polite" data-testid="hue-state">
+        {word}
+      </span>
+      <Reveal open={note !== null}>{note ? <HueNoteLine note={note} /> : null}</Reveal>
       {children}
     </SettingRow>
   );
 }
 
-/** The state in a word, with a dot that says the same in colour. Read out when it changes. */
-export function HueStateWord({ tone, children }: { tone: HueTone; children: ReactNode }) {
+/** The state in a word, with a dot that says the same in colour. Read out when it changes, unless
+ *  the caller reads it out itself (`live={false}`). */
+export function HueStateWord({ tone, live = true, children }: { tone: HueTone; live?: boolean; children: ReactNode }) {
   return (
-    <span className={styles.state} role="status" aria-live="polite" data-tone={tone} data-testid="hue-state">
+    <span
+      className={styles.state}
+      role={live ? "status" : undefined}
+      aria-live={live ? "polite" : undefined}
+      aria-hidden={live ? undefined : true}
+      data-tone={tone}
+      data-testid={live ? "hue-state" : undefined}
+    >
       <span className={cx(styles.dot, styles[tone])} aria-hidden="true" />
       {children}
     </span>

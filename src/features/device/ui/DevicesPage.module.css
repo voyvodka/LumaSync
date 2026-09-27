@@ -21,4 +21,8 @@
     overscroll-behavior: contain;
   }
   .main > * { flex-shrink: 0; }
+  /* A row's page rises in when it is chosen: un-hiding a pane restarts its animation. */
+  .main > :not([hidden]) { animation: arrive var(--lm-dur-base) var(--lm-ease-out); }
+  @keyframes arrive { from { opacity: 0; transform: translateY(4px); } }
+  :global(:root[data-reduced-motion]) .main > :not([hidden]) { animation: none; }
 }

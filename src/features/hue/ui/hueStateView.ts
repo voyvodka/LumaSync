@@ -108,7 +108,7 @@ export const HUE_ACTIONS = {
   }),
   refreshAreas: ({ t, hue, gates }) => ({
     label: t("hue:actions.refreshAreas"),
-    busyLabel: t("hue:actions.loadingAreas"),
+    busyLabel: t("hue:busy.refreshing"),
     onClick: () => {
       void hue.refreshAreas();
     },
@@ -117,7 +117,7 @@ export const HUE_ACTIONS = {
   }),
   validate: ({ t, hue, gates }) => ({
     label: t("hue:page.validate"),
-    busyLabel: t("hue:actions.checkingReadiness"),
+    busyLabel: t("hue:busy.checking"),
     onClick: () => {
       void hue.revalidateArea();
     },
@@ -170,7 +170,7 @@ export const HUE_ACTIONS = {
   }),
   retryBridge: ({ t, hue }) => ({
     label: t("hue:page.retry"),
-    busyLabel: t("hue:actions.checkingBridge"),
+    busyLabel: t("hue:busy.trying"),
     onClick: () => {
       void hue.recheckBridge();
     },
@@ -188,7 +188,7 @@ export const HUE_ACTIONS = {
     ctx.runtimeModel.actionHints.includes(HUE_RUNTIME_ACTION_HINT.REPAIR) ? repairAction(ctx) : null,
   rediscover: ({ t, hue }) => ({
     label: t("hue:wizard.offlineRediscover"),
-    busyLabel: t("hue:actions.discovering"),
+    busyLabel: t("hue:busy.searching"),
     onClick: () => {
       void hue.discover();
     },
@@ -361,8 +361,9 @@ export const HUE_STATE_VIEW = {
     tone: "error",
     note: note("hue:state.offlineNote"),
     primary: "retryBridge",
-    secondary: ["rediscover"],
-    more: ["forget"],
+    // The address row below is the other way back; a search of the network is the rarer one.
+    secondary: [],
+    more: ["rediscover", "forget"],
     area: null,
   },
   pairing: {

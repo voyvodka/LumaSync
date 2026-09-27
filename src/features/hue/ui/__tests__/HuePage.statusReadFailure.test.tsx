@@ -20,6 +20,7 @@ import {
   setHealth,
 } from "@/features/hue/__tests__/fakeHueHealth";
 import { HuePage } from "../HuePage";
+import { shownByTestId } from "./hueFixture";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -109,8 +110,8 @@ const flush = async (ms = 0) => {
 };
 
 function expectNotReady() {
-  expect(screen.queryByText("hue:state.idle")).toBeNull();
-  expect(screen.queryByText("hue:state.streaming")).toBeNull();
+  expect(screen.getByTestId("hue-state")).not.toHaveTextContent("hue:state.idle");
+  expect(screen.getByTestId("hue-state")).not.toHaveTextContent("hue:state.streaming");
   expect(screen.getByTestId("hue-status-unavailable")).toHaveTextContent("hue:runtime.statusUnavailable.body");
   expect(screen.getAllByText("hue:state.statusUnknown").length).toBeGreaterThan(0);
 }
@@ -150,8 +151,8 @@ describe("HuePage — a rejected runtime-status read", () => {
 
     await flush(runtimeStatusRetryDelayMs(3));
     expect(reads()).toBe(4);
-    expect(screen.getByText("hue:state.streaming")).toBeInTheDocument();
-    expect(screen.queryByTestId("hue-status-unavailable")).toBeNull();
+    expect(screen.getByTestId("hue-state")).toHaveTextContent("hue:state.streaming");
+    expect(shownByTestId("hue-status-unavailable")).toBeNull();
 
     // Nothing polls once a read has landed: Rust publishes what changes.
     await flush(60_000);
@@ -169,6 +170,6 @@ describe("HuePage — a rejected runtime-status read", () => {
     await flush(runtimeStatusRetryDelayMs(1));
     expect(reads()).toBe(2);
     expect(screen.getAllByText("hue:state.idle").length).toBeGreaterThan(0);
-    expect(screen.queryByTestId("hue-status-unavailable")).toBeNull();
+    expect(shownByTestId("hue-status-unavailable")).toBeNull();
   });
 });

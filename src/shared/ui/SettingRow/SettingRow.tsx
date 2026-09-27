@@ -12,13 +12,15 @@ interface SettingRowProps {
   /** What it is set to, beside the name, when the control on the right does not show it. */
   value?: ReactNode;
   control?: ReactNode;
+  /** The control takes the rest of the line, for one whose content changes width. */
+  controlFills?: boolean;
   /** A result or a failure that belongs to this row, under it. */
   children?: ReactNode;
   testId?: string;
 }
 
 /** One setting: its name, its control on the right, and whatever it has to say under it. */
-export function SettingRow({ label, hint, value, control, children, testId }: SettingRowProps) {
+export function SettingRow({ label, hint, value, control, controlFills = false, children, testId }: SettingRowProps) {
   const { t } = useTranslation();
   return (
     <div className={styles.row} data-testid={testId}>
@@ -26,7 +28,7 @@ export function SettingRow({ label, hint, value, control, children, testId }: Se
         <span className={styles.name}>{label}</span>
         {hint && <InfoTip label={t("common:hintFor", { label })}>{hint}</InfoTip>}
         {value !== undefined && <span className={styles.value}>{value}</span>}
-        <span className={styles.control}>{control}</span>
+        <span className={cx(styles.control, controlFills && styles.fills)}>{control}</span>
       </div>
       {children}
     </div>

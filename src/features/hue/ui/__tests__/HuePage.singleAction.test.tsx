@@ -57,7 +57,7 @@ describe("HuePage — one Validate control", () => {
 
   it("the busy label stays on the single control while a check runs", () => {
     renderCard(hueState({ isReadinessStale: true, isCheckingReadiness: true }));
-    const busy = screen.getAllByRole("button", { name: "hue:actions.checkingReadiness" });
+    const busy = screen.getAllByRole("button", { name: "hue:busy.checking" });
     expect(busy).toHaveLength(1);
     expect(busy[0]).toHaveAttribute("aria-busy", "true");
   });
