@@ -17,7 +17,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("@/features/mode/modeApi", () => ({}));
-vi.mock("@/features/settings/sections/HueChannelMapPanel", () => ({ HueChannelMapPanel: () => null }));
+vi.mock("@/features/hue/ui/HueChannels", () => ({ HueChannels: () => null }));
 
 const office: HueBridgeSummary = { id: "bridge-2", ip: "192.168.1.11", name: "Hue Bridge (192.168.1.11)" };
 

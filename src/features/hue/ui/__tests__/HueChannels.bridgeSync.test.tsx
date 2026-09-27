@@ -14,7 +14,8 @@ import type {
   HueChannelWritebackStatus,
 } from "@/shared/contracts/hue";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
-import { HueChannelMapPanel } from "../HueChannelMapPanel";
+import { bridgeAction, channelsValue } from "./channelsMenu";
+import { HueChannels } from "../HueChannels";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -194,7 +195,7 @@ function Harness({ initialPlacements, initialSnapshot, zones = [ZONE], onRepair,
   refresh = channels.refreshChannels;
   echoedPlacements = placements;
   return (
-    <HueChannelMapPanel
+    <HueChannels
       channels={channels.areaChannels}
       isLoading={channels.isLoadingChannels}
       channelsStatus={channels.channelsStatus}
@@ -223,8 +224,8 @@ async function renderLoaded(props: HarnessProps) {
   return view;
 }
 
-async function confirmAction(user: ReturnType<typeof userEvent.setup>, button: RegExp) {
-  await user.click(screen.getByRole("button", { name: button }));
+async function confirmAction(user: ReturnType<typeof userEvent.setup>, which: "save" | "pull") {
+  await user.click(bridgeAction(which));
   const dialog = await screen.findByRole("dialog");
   const buttons = dialog.querySelectorAll("button");
   await user.click(buttons[buttons.length - 1]!);
@@ -242,9 +243,7 @@ async function rereadBridge() {
   await waitFor(() => expect(settled).toBe(true));
 }
 
-function syncLine(): string {
-  return screen.getByText(/hue:channelMap\.sync\./).textContent ?? "";
-}
+const syncLine = channelsValue;
 
 function byId(id: number) {
   return latestPlacements.find((p) => p.channelId === id)!;
@@ -257,7 +256,7 @@ describe("taking the bridge's arrangement", () => {
     const user = userEvent.setup();
     await renderLoaded({ initialPlacements: boundPlacements() });
 
-    await confirmAction(user, /pullFromBridge/);
+    await confirmAction(user, "pull");
     await screen.findByText("hue:channelMap.pulled");
 
     const ch0 = byId(0);
@@ -275,7 +274,7 @@ describe("taking the bridge's arrangement", () => {
     const user = userEvent.setup();
     await renderLoaded({ initialPlacements: boundPlacements() });
 
-    await confirmAction(user, /pullFromBridge/);
+    await confirmAction(user, "pull");
     await screen.findByText("hue:channelMap.pulled");
 
     expect(byId(1).z).toBeCloseTo(-0.2, 6);
@@ -296,10 +295,10 @@ describe("taking the bridge's arrangement", () => {
       onSnapshot: (s) => snapshots.push(s),
     });
 
-    await confirmAction(user, /pullFromBridge/);
+    await confirmAction(user, "pull");
     await screen.findByText("hue:channelMap.pulled");
 
-    expect(syncLine()).toBe("hue:channelMap.sync.inSync");
+    expect(syncLine()).toBe("hue:channelMap.sync.inSyncShort");
     expect(snapshots[snapshots.length - 1]).toEqual([
       { channelId: 0, positionX: 0.168, positionY: 1.0, positionZ: -0.524 },
       { channelId: 1, positionX: -0.563, positionY: 1.0, positionZ: -0.641 },
@@ -313,7 +312,7 @@ describe("taking the bridge's arrangement", () => {
       zones: [{ ...ZONE, centerZ: 0.2, scaleZ: 0.5 }],
     });
 
-    await confirmAction(user, /pullFromBridge/);
+    await confirmAction(user, "pull");
 
     // -0.524 and -0.641 both sit below a zone spanning -0.3 … 0.7.
     expect(await screen.findByText(/hue:channelMap\.pulledClamped/)).toBeTruthy();
@@ -326,7 +325,7 @@ describe("taking the bridge's arrangement", () => {
     await renderLoaded({ initialPlacements: boundPlacements() });
     world.bridge[0]!.x = -0.9;
 
-    await confirmAction(user, /pullFromBridge/);
+    await confirmAction(user, "pull");
     await screen.findByText("hue:channelMap.pulled");
 
     expect(byId(0).x).toBeCloseTo(-0.9, 6);
@@ -340,7 +339,7 @@ describe("taking the bridge's arrangement", () => {
     // not polled since, so the button is still enabled.
     world.runtimeState = "Running";
 
-    await confirmAction(user, /pullFromBridge/);
+    await confirmAction(user, "pull");
 
     expect(await screen.findByText("hue:channelMap.pullFailed")).toBeTruthy();
     expect(byId(0).z).toBe(0.5);
@@ -361,13 +360,13 @@ describe("whether the bridge has this arrangement", () => {
         { channelId: 1, positionX: -0.5, positionY: 0.8 },
       ],
     });
-    await waitFor(() => expect(syncLine()).toBe("hue:channelMap.sync.inSync"));
+    await waitFor(() => expect(syncLine()).toBe("hue:channelMap.sync.inSyncShort"));
 
     // Rearranged in the Hue app; the snapshot of our last push still matches.
     world.bridge[1]!.x = 0.4;
     await rereadBridge();
 
-    await waitFor(() => expect(syncLine()).toBe("hue:channelMap.sync.localAhead"));
+    await waitFor(() => expect(syncLine()).toBe("hue:channelMap.sync.localAheadShort"));
   });
 
   it("ignores a read made while lighting is on, which only echoes our own layout", async () => {
@@ -386,7 +385,7 @@ describe("whether the bridge has this arrangement", () => {
     await rereadBridge();
 
     await waitFor(() => expect(screen.queryByText("hue:channelMap.loading")).toBeNull());
-    expect(syncLine()).toBe("hue:channelMap.sync.localAhead");
+    expect(syncLine()).toBe("hue:channelMap.sync.localAheadShort");
     expect(snapshots).toEqual([]);
   });
 
@@ -398,7 +397,7 @@ describe("whether the bridge has this arrangement", () => {
     ];
     await renderLoaded({ initialPlacements: local });
 
-    await waitFor(() => expect(syncLine()).toBe("hue:channelMap.sync.inSync"));
+    await waitFor(() => expect(syncLine()).toBe("hue:channelMap.sync.inSyncShort"));
   });
 });
 
@@ -417,10 +416,10 @@ describe("saving to the bridge", () => {
       initialPlacements: boundPlacements(),
       onSnapshot: (s) => snapshots.push(s),
     });
-    await waitFor(() => expect(syncLine()).toBe("hue:channelMap.sync.localAhead"));
+    await waitFor(() => expect(syncLine()).toBe("hue:channelMap.sync.localAheadShort"));
     snapshots.length = 0;
 
-    await confirmAction(user, /saveToBridge$/);
+    await confirmAction(user, "save");
 
     const notice = await screen.findByText(/hue:channelMap\.savedPartial/);
     expect(notice.textContent).toContain("#1");
@@ -428,17 +427,17 @@ describe("saving to the bridge", () => {
     expect(recorded.find((s) => s.channelId === 0)).toMatchObject({ positionX: 0.2 });
     // Still the bridge's own position, not ours.
     expect(recorded.find((s) => s.channelId === 1)).toMatchObject({ positionX: -0.563 });
-    await waitFor(() => expect(syncLine()).toBe("hue:channelMap.sync.localAhead"));
+    await waitFor(() => expect(syncLine()).toBe("hue:channelMap.sync.localAheadShort"));
   });
 
   it("reads the bridge back after a full save and settles in sync", async () => {
     const user = userEvent.setup();
     await renderLoaded({ initialPlacements: boundPlacements() });
 
-    await confirmAction(user, /saveToBridge$/);
+    await confirmAction(user, "save");
 
     await screen.findByText("hue:channelMap.savedToBridge");
-    await waitFor(() => expect(syncLine()).toBe("hue:channelMap.sync.inSync"));
+    await waitFor(() => expect(syncLine()).toBe("hue:channelMap.sync.inSyncShort"));
   });
 
   it("offers a re-pair, not a retry, when the bridge rejects the key", async () => {
@@ -447,7 +446,7 @@ describe("saving to the bridge", () => {
     const user = userEvent.setup();
     await renderLoaded({ initialPlacements: boundPlacements(), onRepair });
 
-    await confirmAction(user, /saveToBridge$/);
+    await confirmAction(user, "save");
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("hue:runtime.writeback.codes.AUTH_INVALID_RE_PAIR_REQUIRED");
@@ -461,7 +460,7 @@ describe("saving to the bridge", () => {
     const user = userEvent.setup();
     await renderLoaded({ initialPlacements: boundPlacements() });
 
-    await confirmAction(user, /saveToBridge$/);
+    await confirmAction(user, "save");
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("hue:runtime.writeback.codes.CHAN_WB_UNRESOLVED_CHANNEL");
@@ -474,7 +473,7 @@ describe("confirmation", () => {
     const user = userEvent.setup();
     await renderLoaded({ initialPlacements: boundPlacements() });
 
-    await user.click(screen.getByRole("button", { name: /saveToBridge$/ }));
+    await user.click(bridgeAction("save"));
     const dialog = await screen.findByRole("dialog");
     expect(dialog.getAttribute("aria-modal")).toBe("true");
     expect(dialog.textContent).toContain("hue:channelMap.saveConfirmTitle");
@@ -490,7 +489,7 @@ describe("confirmation", () => {
     const user = userEvent.setup();
     await renderLoaded({ initialPlacements: boundPlacements() });
 
-    await user.click(screen.getByRole("button", { name: /pullFromBridge/ }));
+    await user.click(bridgeAction("pull"));
     const dialog = await screen.findByRole("dialog");
     await user.click(dialog.querySelectorAll("button")[0]!);
 

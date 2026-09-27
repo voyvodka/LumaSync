@@ -39,7 +39,7 @@ vi.mock("@/features/hue/hueOnboardingApi", () => ({
 
 // Stubbed so nothing here can reach the Tauri transport.
 vi.mock("@/features/mode/modeApi", () => ({}));
-vi.mock("@/features/settings/sections/HueChannelMapPanel", () => ({ HueChannelMapPanel: () => null }));
+vi.mock("@/features/hue/ui/HueChannels", () => ({ HueChannels: () => null }));
 
 let hook: ReturnType<typeof useHueOnboardingCore>;
 

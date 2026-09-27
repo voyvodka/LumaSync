@@ -32,7 +32,7 @@ vi.mock("@/features/persistence/shellStore", () => ({
 
 vi.mock("@/features/hue/hueHealthApi", async () => (await import("@/features/hue/__tests__/fakeHueHealth")).fakeHueHealthApi);
 
-vi.mock("@/features/settings/sections/HueChannelMapPanel", () => ({ HueChannelMapPanel: () => null }));
+vi.mock("@/features/hue/ui/HueChannels", () => ({ HueChannels: () => null }));
 
 const bridge: HueBridgeSummary = { id: "bridge-1", ip: "192.168.1.10", name: "Test Bridge" };
 const credentials: HuePairingCredentials = { username: "app-user", clientKey: "AABBCCDD" };

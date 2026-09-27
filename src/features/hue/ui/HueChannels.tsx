@@ -29,11 +29,16 @@ import {
   differingChannelIds,
   sameSnapshot,
   snapshotAfterPush,
+  type HueSyncState,
 } from "@/features/hue/model/hueSyncState";
+import type { TranslationKey } from "@/features/i18n/catalogue";
 import { parseSkippedChannelIds } from "@/features/hue/model/hueWritebackResult";
-import { Button } from "@/shared/ui/Button";
-import { Callout } from "@/shared/ui/Callout";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
+import { Menu } from "@/shared/ui/Menu/Menu";
+import { Reveal } from "@/shared/ui/Reveal/Reveal";
+import { RowButton, RowNote, rowStyles, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
+import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
+import styles from "./HuePage.module.css";
 
 interface Props {
   channels: HueAreaChannelInfo[];
@@ -119,6 +124,12 @@ const EMPTY_STATE_KEYS = {
   },
 } as const;
 
+const SYNC_WORD = {
+  [HUE_SYNC_STATE.IN_SYNC]: "hue:channelMap.sync.inSyncShort",
+  [HUE_SYNC_STATE.LOCAL_AHEAD]: "hue:channelMap.sync.localAheadShort",
+  [HUE_SYNC_STATE.UNKNOWN]: "hue:channelMap.sync.unknownShort",
+} as const satisfies Record<HueSyncState, TranslationKey>;
+
 function channelList(ids: readonly number[]): string {
   return ids.map((id) => `#${id}`).join(", ");
 }
@@ -129,7 +140,8 @@ function namedLights(lightIds: readonly string[], names: Readonly<Record<string,
   return named.length > 0 ? named : null;
 }
 
-export function HueChannelMapPanel({
+/** The area's channels: one row each with its lights and Identify, and the bridge sync behind "…". */
+export function HueChannels({
   channels,
   isLoading,
   channelsStatus,
@@ -361,92 +373,108 @@ export function HueChannelMapPanel({
   // Render
   // ---------------------------------------------------------------------------
 
-  const frame = (body: React.ReactNode) => (
-    <section
-      className="lm-settings-group lm-chmap"
-      role="region"
-      aria-label={t("hue:channelMap.title")}
-    >
-      <div className="lm-settings-group-h">
-        <span className="t">{t("hue:channelMap.title")}</span>
-      </div>
-      {body}
-    </section>
-  );
-
-  // A re-read this panel asked for keeps the rows, the dialog and the result on
-  // screen rather than blinking to "loading".
-  if (isLoading && !isPulling && !isSaving && actionResult === null) {
-    return frame(
-      <div className="lm-chmap-body">
-        <p className="lm-chmap-hint">{t("hue:channelMap.loading")}</p>
-      </div>,
-    );
-  }
-
-  if (channels.length === 0) {
-    // Three different facts arrive as the same empty list, and one "no channels"
-    // line for all of them is what made a dropped bridge look like an empty area.
-    if (channelsStatus === undefined || channelsStatus === null) return null;
-    const state =
-      channelsStatus === HUE_AREA_CHANNELS_STATUS.EMPTY
+  // A re-read this section asked for keeps the rows, the dialog and the result on screen rather
+  // than blinking to "loading".
+  const loading = isLoading && !isPulling && !isSaving && actionResult === null;
+  // Three different facts arrive as the same empty list, and one "no channels" line for all of
+  // them is what made a dropped bridge look like an empty area.
+  const emptyState: keyof typeof EMPTY_STATE_KEYS | null =
+    loading || channels.length > 0 || channelsStatus === undefined || channelsStatus === null
+      ? null
+      : channelsStatus === HUE_AREA_CHANNELS_STATUS.EMPTY
         ? "empty"
         : channelsStatus === HUE_AREA_CHANNELS_STATUS.UNREACHABLE
           ? "unreachable"
           : "failed";
-    const keys = EMPTY_STATE_KEYS[state];
-    return frame(
-      <div className="lm-chmap-body">
-        <div className={`lm-chmap-state is-${state}`} role="status">
-          <span className="lm-chmap-state-h">{t(keys.heading)}</span>
-          <span className="lm-chmap-state-b">{t(keys.body)}</span>
-        </div>
-      </div>,
-    );
-  }
+  if (!loading && channels.length === 0 && emptyState === null) return null;
 
   const syncState = deriveHueSyncState(channelPlacements, bridgeArrangement);
-  // Gated on the runtime, not just on streaming: a solid-colour session also
-  // holds a channel list with our placements applied.
+  // Gated on the runtime, not just on streaming: a solid-colour session also holds a channel list
+  // with our placements applied.
   const bridgeBusy = isStreaming || isStale;
-  const hasSaveAction = Boolean(bridgeIp && areaId) && username !== undefined;
-  // Same pairing prerequisites as the save, and its streaming note says why
-  // the button is off.
+  const hasSaveAction = Boolean(bridgeIp && areaId) && username !== undefined && channels.length > 0;
+  // Same pairing prerequisites as the save, and its streaming note says why the button is off.
   const identifyEnabled = hasSaveAction && onIdentify !== undefined;
   const actionBusy = isSaving || isPulling;
   // Said on the page, not in a tooltip: a disabled button shows no title.
-  const busyNote = isStreaming && !isStale ? t("hue:channelMap.streamingNote") : null;
+  const busyNote = isStreaming && !isStale && hasSaveAction ? t("hue:channelMap.streamingNote") : null;
+
+  const value = loading
+    ? t("hue:channelMap.loading")
+    : emptyState
+      ? t(EMPTY_STATE_KEYS[emptyState].heading)
+      : isSaving
+        ? t("hue:channelMap.saving")
+        : isPulling
+          ? t("hue:channelMap.pulling")
+          : hasSaveAction
+            ? t(SYNC_WORD[syncState])
+            : undefined;
+  const valueNode = value === undefined ? undefined : <span data-testid="hue-channels-value">{value}</span>;
 
   return (
-    <section
-      className={`lm-settings-group lm-chmap${isStale ? " is-stale" : ""}`}
-      role="region"
-      aria-label={t("hue:channelMap.title")}
-    >
-      <div className="lm-settings-group-h">
-        <span className="t">{t("hue:channelMap.title")}</span>
-      </div>
+    <section className={styles.channels} aria-label={t("hue:channelMap.title")} data-testid="hue-channels">
+      <div className={styles.rows}>
+        <Reveal open>
+          <SettingRow
+            label={t("hue:row.channels")}
+            hint={t("hue:channelMap.hint")}
+            value={valueNode}
+            control={
+              <>
+                {onNavigateToRoomMap ? (
+                  <RowButton onClick={onNavigateToRoomMap}>{t("hue:channelMap.openRoomMap")}</RowButton>
+                ) : null}
+                {hasSaveAction ? (
+                  <Menu
+                    label={t("hue:channelMap.more")}
+                    testId="hue-channels-more"
+                    items={[
+                      {
+                        id: "pull",
+                        label: t("hue:channelMap.pullFromBridge"),
+                        disabled: bridgeBusy || actionBusy,
+                        describedBy: busyNote ? busyNoteId : undefined,
+                        onSelect: () => setPendingConfirm("pull"),
+                      },
+                      {
+                        id: "save",
+                        label: t("hue:channelMap.saveToBridgeMenu"),
+                        disabled: bridgeBusy || actionBusy,
+                        describedBy: busyNote ? busyNoteId : undefined,
+                        onSelect: () => setPendingConfirm("save"),
+                      },
+                    ]}
+                  />
+                ) : null}
+              </>
+            }
+          >
+            <Reveal open={emptyState !== null}>
+              {emptyState ? (
+                <RowNote tone="status">{t(EMPTY_STATE_KEYS[emptyState].body)}</RowNote>
+              ) : null}
+            </Reveal>
+            <Reveal open={isStale}>
+              <RowNote tone="status">{t("hue:channelMap.state.staleBody")}</RowNote>
+            </Reveal>
+            <Reveal open={hasSaveAction && syncState === HUE_SYNC_STATE.LOCAL_AHEAD && !actionBusy}>
+              <RowNote tone="status">{t("hue:channelMap.sync.localAhead")}</RowNote>
+            </Reveal>
+            <Reveal open={busyNote !== null}>
+              {busyNote ? (
+                <p className={rowStyles.note} id={busyNoteId} data-testid="hue-chmap-streaming-note">
+                  {busyNote}
+                </p>
+              ) : null}
+            </Reveal>
+            <Reveal open={persistError === true}>
+              <RowNote tone="error">{t("hue:channelMap.saveError")}</RowNote>
+            </Reveal>
+            <Reveal open={actionResult !== null}>{actionResult !== null ? renderResult(actionResult) : null}</Reveal>
+          </SettingRow>
+        </Reveal>
 
-      <div className="lm-chmap-body">
-        <p className="lm-chmap-hint">
-          <span className="lm-chmap-hint-text">{t("hue:channelMap.hint")}</span>
-          {onNavigateToRoomMap && (
-            <button type="button" className="lm-chmap-hint-cta" onClick={onNavigateToRoomMap}>
-              {t("hue:channelMap.openRoomMap")}
-            </button>
-          )}
-        </p>
-
-        {isStale && (
-          <div className="lm-chmap-state is-unreachable" role="status">
-            <span className="lm-chmap-state-b">{t("hue:channelMap.state.staleBody")}</span>
-          </div>
-        )}
-
-        {persistError && <Callout tone="error">{t("hue:channelMap.saveError")}</Callout>}
-      </div>
-
-      <div className="lm-chmap-rows">
         {channels.map((ch) => {
           const placement =
             findHueChannel(channelPlacements, ch.index) ??
@@ -456,121 +484,73 @@ export function HueChannelMapPanel({
           const idLabel = `#${ch.channelId}`;
           const named = namedLights(ch.lightIds, lightNames);
           const countLabel =
-            ch.lightCount === 1
-              ? t("hue:channelMap.oneLight")
-              : t("hue:channelMap.lights", { count: ch.lightCount });
+            ch.lightCount === 1 ? t("hue:channelMap.oneLight") : t("hue:channelMap.lights", { count: ch.lightCount });
           const shownNames = named?.slice(0, NAMES_SHOWN) ?? [];
           const unshown = ch.lightIds.length - shownNames.length;
-          const lightsLabel =
+          const label =
             named === null
-              ? countLabel
+              ? idLabel
               : unshown > 0
                 ? t("hue:channelMap.moreLights", { names: shownNames.join(", "), count: unshown })
                 : shownNames.join(", ");
+          const identifying = identifyingIndex === ch.index;
 
           return (
-            <div
-              key={ch.index}
-              className="lm-chmap-row"
-              role="group"
-              aria-label={t("hue:channelMap.channelRowAriaLabel", { index: idLabel })}
-            >
-              <div className="lm-chmap-row-id">
-                <span className="lm-chmap-row-dot" aria-hidden />
-                <span className="lm-chmap-row-num">{idLabel}</span>
-                <span className="lm-chmap-row-lights" title={named?.join(", ")}>
-                  {lightsLabel}
-                </span>
+            <Reveal key={ch.index} open>
+              <div
+                className={styles.channel}
+                role="group"
+                aria-label={t("hue:channelMap.channelRowAriaLabel", { index: idLabel })}
+                title={named?.join(", ")}
+              >
+                <SettingRow
+                  label={label}
+                  value={
+                    named === null || zone ? (
+                      <>
+                        {named === null ? <span>{countLabel}</span> : null}
+                        {named === null && zone ? " · " : null}
+                        {zone ? <span>{zone.name}</span> : null}
+                      </>
+                    ) : undefined
+                  }
+                  control={
+                    identifyEnabled && ch.lightIds.length > 0 ? (
+                      <RowButton
+                        disabled={isStreaming || identifyingIndex !== null}
+                        aria-busy={identifying || undefined}
+                        aria-label={t("hue:channelMap.identifyAriaLabel", { index: idLabel })}
+                        aria-describedby={busyNote ? busyNoteId : undefined}
+                        onClick={() => {
+                          void runIdentify(ch.index, ch.lightIds);
+                        }}
+                        data-testid={`hue-chmap-identify-${ch.channelId}`}
+                      >
+                        <StateSwap
+                          fit
+                          state={identifying ? "busy" : "idle"}
+                          faces={{ idle: t("hue:channelMap.identify"), busy: t("hue:channelMap.identifying") }}
+                        />
+                      </RowButton>
+                    ) : null
+                  }
+                />
               </div>
-
-              <div className="lm-chmap-row-trail">
-                {identifyEnabled && ch.lightIds.length > 0 ? (
-                  <Button
-                    size="md"
-                    disabled={isStreaming || identifyingIndex !== null}
-                    busy={identifyingIndex === ch.index}
-                    aria-label={t("hue:channelMap.identifyAriaLabel", { index: idLabel })}
-                    aria-describedby={busyNote ? busyNoteId : undefined}
-                    onClick={() => { void runIdentify(ch.index, ch.lightIds); }}
-                    data-testid={`hue-chmap-identify-${ch.channelId}`}
-                  >
-                    {identifyingIndex === ch.index
-                      ? t("hue:channelMap.identifying")
-                      : t("hue:channelMap.identify")}
-                  </Button>
-                ) : null}
-                {zone ? (
-                  <span className="lm-chmap-row-zone">{zone.name}</span>
-                ) : (
-                  <span className="lm-chmap-row-zone is-none">
-                    {t("hue:channelMap.noZone")}
-                  </span>
-                )}
-              </div>
-            </div>
+            </Reveal>
           );
         })}
       </div>
 
-      {hasSaveAction && (
-        <div className="lm-chmap-footer">
-          <div className="lm-chmap-sync" role="status">
-            <span className={`lm-chmap-sync-dot is-${syncState}`} aria-hidden />
-            <span className="lm-chmap-sync-tx">
-              {syncState === HUE_SYNC_STATE.IN_SYNC
-                ? t("hue:channelMap.sync.inSync")
-                : syncState === HUE_SYNC_STATE.LOCAL_AHEAD
-                  ? t("hue:channelMap.sync.localAhead")
-                  : t("hue:channelMap.sync.unknown")}
-            </span>
-          </div>
-          <div className="lm-chmap-footer-row">
-            <span className="lm-chmap-beta">{t("hue:channelMap.beta")}</span>
-            <div className="lm-chmap-footer-spacer" />
-            <Button
-              disabled={bridgeBusy || actionBusy || channels.length === 0}
-              busy={isPulling}
-              aria-describedby={busyNote ? busyNoteId : undefined}
-              onClick={() => setPendingConfirm("pull")}
-            >
-              {t("hue:channelMap.pullFromBridge")}
-            </Button>
-            <Button
-              variant="primary"
-              disabled={bridgeBusy || actionBusy}
-              busy={isSaving}
-              title={isStale ? t(EMPTY_STATE_KEYS.unreachable.heading) : undefined}
-              aria-describedby={busyNote ? busyNoteId : undefined}
-              onClick={() => setPendingConfirm("save")}
-            >
-              {isSaving ? t("hue:channelMap.saving") : t("hue:channelMap.saveToBridge")}
-            </Button>
-          </div>
-          {busyNote ? (
-            <p className="lm-chmap-busy-note" id={busyNoteId} data-testid="hue-chmap-streaming-note">
-              {busyNote}
-            </p>
-          ) : null}
-          {actionResult !== null && renderResult(actionResult)}
-        </div>
-      )}
-
       {pendingConfirm !== null && (
         <ConfirmDialog
-          title={
-            pendingConfirm === "save"
-              ? t("hue:channelMap.saveConfirmTitle")
-              : t("hue:channelMap.pullConfirmTitle")
-          }
+          title={pendingConfirm === "save" ? t("hue:channelMap.saveConfirmTitle") : t("hue:channelMap.pullConfirmTitle")}
           body={
             pendingConfirm === "save"
               ? t("hue:channelMap.saveConfirm", { ip: bridgeIp })
               : t("hue:channelMap.pullConfirm")
           }
           confirmLabel={
-            pendingConfirm === "save"
-              ? t("hue:channelMap.saveToBridge")
-              : t("hue:channelMap.pullFromBridge")
+            pendingConfirm === "save" ? t("hue:channelMap.saveToBridge") : t("hue:channelMap.pullFromBridge")
           }
           cancelLabel={t("hue:page.cancel")}
           onConfirm={confirmPending}
@@ -581,18 +561,26 @@ export function HueChannelMapPanel({
     </section>
   );
 
+  /** A result as one line under the section, with the one thing to do about it when there is one. */
   function renderResult(result: BridgeActionResult) {
+    const line = (tone: "status" | "error", text: string, action?: { label: string; onClick: () => void }) => (
+      <RowNote tone={tone}>
+        {text}
+        {action ? (
+          <>
+            {" "}
+            <button type="button" className={styles.inlineAction} onClick={action.onClick}>
+              {action.label}
+            </button>
+          </>
+        ) : null}
+      </RowNote>
+    );
+    const repair = onRepair ? { label: t("hue:runtime.actions.repair"), onClick: onRepair } : undefined;
     switch (result.kind) {
       case "identifyFailed": {
         if (result.code === HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED) {
-          return (
-            <Callout
-              tone="error"
-              action={onRepair ? { label: t("hue:runtime.actions.repair"), onClick: onRepair } : undefined}
-            >
-              {t("hue:credential.repairHint")}
-            </Callout>
-          );
+          return line("error", t("hue:credential.repairHint"), repair);
         }
         const key =
           result.code === HUE_IDENTIFY_STATUS.BLOCKED_STREAMING
@@ -600,44 +588,45 @@ export function HueChannelMapPanel({
             : result.code === HUE_IDENTIFY_STATUS.PARTIAL
               ? "hue:channelMap.identifyPartial"
               : "hue:channelMap.identifyFailed";
-        return <Callout tone={result.code === HUE_IDENTIFY_STATUS.PARTIAL ? "warning" : "error"}>{t(key)}</Callout>;
+        return line(result.code === HUE_IDENTIFY_STATUS.PARTIAL ? "status" : "error", t(key));
       }
       case "saved":
-        return <Callout tone="ok">{t("hue:channelMap.savedToBridge")}</Callout>;
+        return line("status", t("hue:channelMap.savedToBridge"));
       case "savedPartial":
-        return (
-          <Callout tone="warning">
-            {result.skippedIds.length > 0
-              ? t("hue:channelMap.savedPartial", { channels: channelList(result.skippedIds) })
-              : t("hue:channelMap.savedPartialUnnamed")}
-          </Callout>
+        return line(
+          "status",
+          result.skippedIds.length > 0
+            ? t("hue:channelMap.savedPartial", { channels: channelList(result.skippedIds) })
+            : t("hue:channelMap.savedPartialUnnamed"),
         );
       case "pulled":
-        return result.clampedIds.length > 0 ? (
-          <Callout tone="warning">
-            {t("hue:channelMap.pulledClamped", { channels: channelList(result.clampedIds) })}
-          </Callout>
-        ) : (
-          <Callout tone="ok">{t("hue:channelMap.pulled")}</Callout>
+        return line(
+          "status",
+          result.clampedIds.length > 0
+            ? t("hue:channelMap.pulledClamped", { channels: channelList(result.clampedIds) })
+            : t("hue:channelMap.pulled"),
         );
       case "pullFailed":
-        return <Callout tone="error">{t("hue:channelMap.pullFailed")}</Callout>;
+        return line("error", t("hue:channelMap.pullFailed"));
       case "saveFailed": {
         const needsRepair = result.code === HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED;
         const action =
-          needsRepair && onRepair
-            ? { label: t("hue:runtime.actions.repair"), onClick: onRepair }
+          needsRepair && repair
+            ? repair
             : RETRYABLE_WRITEBACK_CODES.has(result.code)
-              ? { label: t("hue:channelMap.saveToBridgeErrorRetry"), onClick: () => { void runSave(); } }
+              ? {
+                  label: t("hue:channelMap.saveToBridgeErrorRetry"),
+                  onClick: () => {
+                    void runSave();
+                  },
+                }
               : undefined;
-        return (
-          <Callout tone="error" action={action}>
-            {t("hue:channelMap.saveToBridgeError", {
-              reason: t(`hue:runtime.writeback.codes.${result.code}`, {
-                defaultValue: result.code,
-              }),
-            })}
-          </Callout>
+        return line(
+          "error",
+          t("hue:channelMap.saveToBridgeError", {
+            reason: t(`hue:runtime.writeback.codes.${result.code}`, { defaultValue: result.code }),
+          }),
+          action,
         );
       }
     }

@@ -5,7 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { HueAreaChannelInfo } from "@/features/hue/hueOnboardingApi";
 import type { HueChannelPlacement } from "@/shared/contracts/roomMap";
 import { HUE_AREA_CHANNELS_STATUS } from "@/shared/contracts/hue";
-import { HueChannelMapPanel } from "../HueChannelMapPanel";
+import { bridgeAction } from "./channelsMenu";
+import { HueChannels } from "../HueChannels";
 
 // Mock i18n — return key as value (with interpolation support)
 vi.mock("react-i18next", () => ({
@@ -81,8 +82,8 @@ async function answerDialog(user: User, confirm: boolean) {
   await user.click(confirm ? buttons[buttons.length - 1]! : buttons[0]!);
 }
 
-async function clickAndConfirm(user: User, name: RegExp) {
-  await user.click(screen.getByRole("button", { name }));
+async function clickAndConfirm(user: User, which: "save" | "pull") {
+  await user.click(bridgeAction(which));
   await answerDialog(user, true);
 }
 
@@ -94,7 +95,7 @@ describe("seeding persisted placements from the bridge list", () => {
   it("persists a channel the store has never seen", () => {
     const onPositionChange = vi.fn();
     render(
-      <HueChannelMapPanel {...defaultProps} placements={[]} onPositionChange={onPositionChange} />,
+      <HueChannels {...defaultProps} placements={[]} onPositionChange={onPositionChange} />,
     );
     expect(onPositionChange).toHaveBeenCalledTimes(1);
     expect(onPositionChange.mock.calls[0]![0]).toEqual([
@@ -107,7 +108,7 @@ describe("seeding persisted placements from the bridge list", () => {
   it("writes nothing when every channel is already stored with its bridge id", () => {
     const onPositionChange = vi.fn();
     render(
-      <HueChannelMapPanel
+      <HueChannels
         {...defaultProps}
         placements={storedAtBridgePositions()}
         onPositionChange={onPositionChange}
@@ -120,7 +121,7 @@ describe("seeding persisted placements from the bridge list", () => {
     const onPositionChange = vi.fn();
     const placements = storedAtBridgePositions().map(({ channelId: _drop, ...rest }) => rest);
     render(
-      <HueChannelMapPanel
+      <HueChannels
         {...defaultProps}
         placements={placements}
         onPositionChange={onPositionChange}
@@ -136,7 +137,7 @@ describe("seeding persisted placements from the bridge list", () => {
 
 describe("channel identity", () => {
   it("labels each row with the bridge id rather than a 1-based ordinal", () => {
-    render(<HueChannelMapPanel {...defaultProps} placements={storedAtBridgePositions()} />);
+    render(<HueChannels {...defaultProps} placements={storedAtBridgePositions()} />);
     expect(screen.getByText("#0")).toBeTruthy();
     expect(screen.getByText("#2")).toBeTruthy();
     expect(screen.getByText("#5")).toBeTruthy();
@@ -159,7 +160,7 @@ describe("empty channel list", () => {
 
   for (const [code, state] of cases) {
     it(`reads as "${state}" on ${code}`, () => {
-      render(<HueChannelMapPanel {...defaultProps} channels={[]} channelsStatus={code} />);
+      render(<HueChannels {...defaultProps} channels={[]} channelsStatus={code} />);
       expect(screen.getByText(`hue:channelMap.state.${state}Heading`)).toBeTruthy();
       for (const other of cases.map(([, s]) => s).filter((s) => s !== state)) {
         expect(screen.queryByText(`hue:channelMap.state.${other}Heading`)).toBeNull();
@@ -169,7 +170,7 @@ describe("empty channel list", () => {
 
   it("renders nothing at all before the first answer", () => {
     const { container } = render(
-      <HueChannelMapPanel {...defaultProps} channels={[]} channelsStatus={null} />,
+      <HueChannels {...defaultProps} channels={[]} channelsStatus={null} />,
     );
     expect(container.firstChild).toBeNull();
   });
@@ -190,14 +191,14 @@ describe("unreachable bridge with last-known channels", () => {
   };
 
   it("keeps the rows and says they are stale", () => {
-    render(<HueChannelMapPanel {...staleProps} />);
+    render(<HueChannels {...staleProps} />);
     expect(rows()).toHaveLength(3);
     expect(screen.getByText("hue:channelMap.state.staleBody")).toBeTruthy();
   });
 
   it("refuses the bridge write while the bridge is not answering", () => {
-    render(<HueChannelMapPanel {...staleProps} />);
-    expect(screen.getByRole("button", { name: /saveToBridge$/ })).toHaveProperty("disabled", true);
+    render(<HueChannels {...staleProps} />);
+    expect(bridgeAction("save")).toHaveProperty("disabled", true);
   });
 });
 
@@ -216,29 +217,31 @@ describe("CHAN-05: save to bridge write-back", () => {
   };
 
   it("save button is disabled when isStreaming is true", () => {
-    render(<HueChannelMapPanel {...writebackProps} isStreaming={true} />);
-    const saveBtn = screen.getByRole("button", { name: /saveToBridge$/ });
+    render(<HueChannels {...writebackProps} isStreaming={true} />);
+    const saveBtn = bridgeAction("save");
     expect(saveBtn).toHaveProperty("disabled", true);
   });
 
   // A disabled button never shows its title, so the reason used to be invisible.
   it("says why save and pull are off while streaming, as text on the page (H-9)", () => {
-    render(<HueChannelMapPanel {...writebackProps} isStreaming={true} />);
+    render(<HueChannels {...writebackProps} isStreaming={true} />);
     const note = screen.getByTestId("hue-chmap-streaming-note");
     expect(note).toHaveTextContent("hue:channelMap.streamingNote");
-    expect(screen.getByRole("button", { name: /saveToBridge$/ })).toHaveAccessibleDescription(
-      "hue:channelMap.streamingNote",
-    );
+    // Behind "…", both actions are off, and each is described by the line that says why.
+    for (const item of [bridgeAction("save"), bridgeAction("pull")]) {
+      expect(item).toBeDisabled();
+      expect(item).toHaveAccessibleDescription("hue:channelMap.streamingNote");
+    }
   });
 
   it("shows no streaming note while idle", () => {
-    render(<HueChannelMapPanel {...writebackProps} isStreaming={false} />);
+    render(<HueChannels {...writebackProps} isStreaming={false} />);
     expect(screen.queryByTestId("hue-chmap-streaming-note")).toBeNull();
   });
 
   it("save button is enabled when isStreaming is false and credentials present", () => {
-    render(<HueChannelMapPanel {...writebackProps} isStreaming={false} />);
-    const saveBtn = screen.getByRole("button", { name: /saveToBridge$/ });
+    render(<HueChannels {...writebackProps} isStreaming={false} />);
+    const saveBtn = bridgeAction("save");
     expect(saveBtn).toHaveProperty("disabled", false);
   });
 
@@ -247,8 +250,8 @@ describe("CHAN-05: save to bridge write-back", () => {
     vi.mocked(mockInvoke).mockClear();
 
     const user = userEvent.setup();
-    render(<HueChannelMapPanel {...writebackProps} />);
-    await user.click(screen.getByRole("button", { name: /saveToBridge$/ }));
+    render(<HueChannels {...writebackProps} />);
+    await user.click(bridgeAction("save"));
     await answerDialog(user, false);
 
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -263,8 +266,8 @@ describe("CHAN-05: save to bridge write-back", () => {
     });
 
     const user = userEvent.setup();
-    render(<HueChannelMapPanel {...writebackProps} />);
-    await clickAndConfirm(user, /saveToBridge$/);
+    render(<HueChannels {...writebackProps} />);
+    await clickAndConfirm(user, "save");
 
     const errorEls = await screen.findAllByText(/channelMap\.saveToBridgeError/);
     expect(errorEls.length).toBeGreaterThan(0);
@@ -308,7 +311,7 @@ describe("zone-bound channels survive an edit here", () => {
     const placements = storedAtBridgePositions();
     placements[0] = boundPlacement;
     render(
-      <HueChannelMapPanel
+      <HueChannels
         {...defaultProps}
         placements={placements}
         zones={[ZONE]}
@@ -326,7 +329,7 @@ describe("zone-bound channels survive an edit here", () => {
   async function pull(onPositionChange: PositionSpy) {
     const user = userEvent.setup();
     renderBound(onPositionChange);
-    await clickAndConfirm(user, /pullFromBridge/);
+    await clickAndConfirm(user, "pull");
     await screen.findByText(/hue:channelMap\.pulled/);
   }
 
@@ -351,19 +354,20 @@ describe("zone-bound channels survive an edit here", () => {
     expect(channel.x).toBeCloseTo(-1, 5);
   });
 
-  it("names the zone a channel belongs to, and says so when it belongs to none", () => {
+  it("names the zone a channel belongs to, and nothing for one in none", () => {
     // Two zones, and the bound channel is the FIRST row while its zone is the
     // SECOND entry — so resolving by list position picks the wrong name.
     const other = { ...ZONE, id: "zone-0", name: "Behind sofa", channelIndices: [] };
     const placements = storedAtBridgePositions();
     placements[0] = boundPlacement;
     render(
-      <HueChannelMapPanel {...defaultProps} placements={placements} zones={[other, ZONE]} />,
+      <HueChannels {...defaultProps} placements={placements} zones={[other, ZONE]} />,
     );
 
     expect(screen.getByText("TV wall")).toBeTruthy();
     expect(screen.queryByText("Behind sofa")).toBeNull();
-    expect(screen.getAllByText("hue:channelMap.noZone")).toHaveLength(2);
+    // A channel in no zone says nothing about zones: an absence is not a value.
+    expect(rows()[1]).not.toHaveTextContent(/zone|sofa|TV wall/i);
   });
 });
 
@@ -389,27 +393,27 @@ describe("bridge sync state", () => {
     }));
 
   it("says the bridge's arrangement is unknown with neither a read nor a snapshot", () => {
-    render(<HueChannelMapPanel {...syncProps} />);
-    expect(screen.getByText("hue:channelMap.sync.unknown")).toBeTruthy();
+    render(<HueChannels {...syncProps} />);
+    expect(screen.getByText("hue:channelMap.sync.unknownShort")).toBeTruthy();
   });
 
   it("says the bridge has this arrangement when the snapshot matches", () => {
-    render(<HueChannelMapPanel {...syncProps} syncedPositions={matchingSnapshot()} />);
-    expect(screen.getByText("hue:channelMap.sync.inSync")).toBeTruthy();
+    render(<HueChannels {...syncProps} syncedPositions={matchingSnapshot()} />);
+    expect(screen.getByText("hue:channelMap.sync.inSyncShort")).toBeTruthy();
   });
 
   it("reports an unpushed edit without calling it a fault", () => {
     const moved = storedAtBridgePositions();
     moved[0] = { ...moved[0]!, x: 0.6 };
     render(
-      <HueChannelMapPanel
+      <HueChannels
         {...syncProps}
         placements={moved}
         syncedPositions={matchingSnapshot()}
       />,
     );
 
-    expect(screen.getByText("hue:channelMap.sync.localAhead")).toBeTruthy();
+    expect(screen.getByText("hue:channelMap.sync.localAheadShort")).toBeTruthy();
   });
 
   it("records what was pushed, so the state survives a restart", async () => {
@@ -422,9 +426,9 @@ describe("bridge sync state", () => {
 
     const user = userEvent.setup();
     render(
-      <HueChannelMapPanel {...syncProps} onSyncedPositionsChange={onSyncedPositionsChange} />,
+      <HueChannels {...syncProps} onSyncedPositionsChange={onSyncedPositionsChange} />,
     );
-    await clickAndConfirm(user, /saveToBridge$/);
+    await clickAndConfirm(user, "save");
 
     await vi.waitFor(() => expect(onSyncedPositionsChange).toHaveBeenCalled());
     expect(onSyncedPositionsChange.mock.calls[0]![0]).toEqual([
@@ -439,10 +443,10 @@ describe("bridge sync state", () => {
 
     const user = userEvent.setup();
     render(
-      <HueChannelMapPanel {...syncProps} channelsFromBridge onPositionChange={onPositionChange} />,
+      <HueChannels {...syncProps} channelsFromBridge onPositionChange={onPositionChange} />,
     );
     onPositionChange.mockClear();
-    await user.click(screen.getByRole("button", { name: /pullFromBridge/ }));
+    await user.click(bridgeAction("pull"));
     expect(screen.getByRole("dialog").textContent).toContain("hue:channelMap.pullConfirmTitle");
     await answerDialog(user, false);
 
@@ -457,7 +461,7 @@ describe("bridge sync state", () => {
 
     const user = userEvent.setup();
     render(
-      <HueChannelMapPanel
+      <HueChannels
         {...syncProps}
         placements={moved}
         onPositionChange={onPositionChange}
@@ -470,7 +474,7 @@ describe("bridge sync state", () => {
       />,
     );
     onPositionChange.mockClear();
-    await clickAndConfirm(user, /pullFromBridge/);
+    await clickAndConfirm(user, "pull");
 
     await vi.waitFor(() => expect(onPositionChange).toHaveBeenCalled());
     const adopted = onPositionChange.mock.calls[0]![0];
@@ -487,16 +491,16 @@ describe("bridge sync state", () => {
     const onRefreshChannels = vi.fn(async () => null);
 
     const user = userEvent.setup();
-    render(<HueChannelMapPanel {...syncProps} onRefreshChannels={onRefreshChannels} />);
-    await clickAndConfirm(user, /pullFromBridge/);
+    render(<HueChannels {...syncProps} onRefreshChannels={onRefreshChannels} />);
+    await clickAndConfirm(user, "pull");
 
     expect(onRefreshChannels).toHaveBeenCalled();
     expect(await screen.findByText("hue:channelMap.pullFailed")).toBeTruthy();
   });
 
   it("refuses to take the bridge's arrangement while the runtime holds the channels", () => {
-    render(<HueChannelMapPanel {...syncProps} isStreaming={true} />);
-    expect(screen.getByRole("button", { name: /pullFromBridge/ })).toHaveProperty(
+    render(<HueChannels {...syncProps} isStreaming={true} />);
+    expect(bridgeAction("pull")).toHaveProperty(
       "disabled",
       true,
     );

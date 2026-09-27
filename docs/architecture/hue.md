@@ -6,7 +6,7 @@ protocol limits rather than preferences — changing them breaks the stream rath
 Implementation lives in `src-tauri/src/commands/hue/`, the contract in
 `src/shared/contracts/hue.ts`, and the frontend state in `src/features/hue/`.
 Its `ui/` holds the bridge page the Devices rail opens (`HuePage.tsx`), and
-`HueChannelMapPanel.tsx` lists the area's channels and owns the bridge sync. Neither places a
+`HueChannels.tsx` lists the area's channels and owns the bridge sync. Neither places a
 channel; that is the room map's, and only the room map's.
 
 ## Decisions

@@ -15,7 +15,7 @@ import { deriveHueBridgeCardState, huePairingErrorDescriptionKey } from "@/featu
 import { buildHueRuntimeStatusCard } from "@/features/hue/model/hueRuntimeStatusCard";
 import type { HueBridgeSummary } from "@/features/hue/hueOnboardingApi";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
-import { HueChannelMapPanel } from "@/features/settings/sections/HueChannelMapPanel";
+import { HueChannels } from "@/features/hue/ui/HueChannels";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { cx } from "@/shared/ui/cx";
 import { Reveal } from "@/shared/ui/Reveal/Reveal";
@@ -233,33 +233,31 @@ export function HuePage({
         </div>
 
         {selectedAreaId && credentialState === "valid" ? (
-          <div className={styles.channels}>
-            <HueChannelMapPanel
-              channels={hue.areaChannels}
-              isLoading={hue.isLoadingChannels}
-              channelsStatus={hue.channelsStatus}
-              channelsFromBridge={hue.channelsFromBridge}
-              syncedPositions={syncedPositions}
-              onSyncedPositionsChange={(snapshot) => {
-                void onSyncedPositionsChange?.(snapshot);
-              }}
-              onRefreshChannels={hue.refreshChannels}
-              onRepair={() => {
-                void hue.pair();
-              }}
-              onNavigateToRoomMap={onNavigateToRoomMap}
-              placements={channelPlacements}
-              onPositionChange={onPositionChange}
-              persistError={persistError}
-              bridgeIp={selectedBridge.ip}
-              username={credentials?.username}
-              areaId={selectedArea?.id}
-              isStreaming={runtimeStatus?.state === "Running"}
-              zones={zones}
-              lightNames={hue.lightNames}
-              onIdentify={hue.identifyLights}
-            />
-          </div>
+          <HueChannels
+            channels={hue.areaChannels}
+            isLoading={hue.isLoadingChannels}
+            channelsStatus={hue.channelsStatus}
+            channelsFromBridge={hue.channelsFromBridge}
+            syncedPositions={syncedPositions}
+            onSyncedPositionsChange={(snapshot) => {
+              void onSyncedPositionsChange?.(snapshot);
+            }}
+            onRefreshChannels={hue.refreshChannels}
+            onRepair={() => {
+              void hue.pair();
+            }}
+            onNavigateToRoomMap={onNavigateToRoomMap}
+            placements={channelPlacements}
+            onPositionChange={onPositionChange}
+            persistError={persistError}
+            bridgeIp={selectedBridge.ip}
+            username={credentials?.username}
+            areaId={selectedArea?.id}
+            isStreaming={runtimeStatus?.state === "Running"}
+            zones={zones}
+            lightNames={hue.lightNames}
+            onIdentify={hue.identifyLights}
+          />
         ) : null}
       </>
     );

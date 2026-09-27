@@ -9,7 +9,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { HueAreaChannelInfo } from "@/features/hue/hueOnboardingApi";
 import { HUE_AREA_CHANNELS_STATUS } from "@/shared/contracts/hue";
-import { HueChannelMapPanel } from "../HueChannelMapPanel";
+import { bridgeAction } from "./channelsMenu";
+import { HueChannels } from "../HueChannels";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -33,7 +34,7 @@ const channels: HueAreaChannelInfo[] = [0, 2].map((channelId, index) => ({
 
 function renderPanel() {
   return render(
-    <HueChannelMapPanel
+    <HueChannels
       channels={channels}
       isLoading={false}
       channelsStatus={HUE_AREA_CHANNELS_STATUS.OK}
@@ -49,7 +50,7 @@ function renderPanel() {
 const wroteToBridge = () =>
   invoke.mock.calls.some(([command]) => command === "update_hue_channel_positions");
 
-describe("HueChannelMapPanel — bridge push confirm", () => {
+describe("HueChannels — bridge push confirm", () => {
   beforeEach(() => {
     invoke.mockReset();
   });
@@ -57,7 +58,7 @@ describe("HueChannelMapPanel — bridge push confirm", () => {
   it("asks in the shared dialog, named by its title and described by its body", async () => {
     const user = userEvent.setup();
     renderPanel();
-    await user.click(screen.getByRole("button", { name: /saveToBridge$/ }));
+    await user.click(bridgeAction("save"));
 
     const dialog = screen.getByTestId("hue-channel-map-confirm");
     expect(dialog).toHaveAttribute("role", "dialog");
@@ -74,7 +75,7 @@ describe("HueChannelMapPanel — bridge push confirm", () => {
   it("Escape cancels without writing to the bridge", async () => {
     const user = userEvent.setup();
     renderPanel();
-    await user.click(screen.getByRole("button", { name: /saveToBridge$/ }));
+    await user.click(bridgeAction("save"));
     await user.keyboard("{Escape}");
 
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -84,7 +85,7 @@ describe("HueChannelMapPanel — bridge push confirm", () => {
   it("a backdrop click cancels, a click inside the card does not", async () => {
     const user = userEvent.setup();
     renderPanel();
-    await user.click(screen.getByRole("button", { name: /pullFromBridge/ }));
+    await user.click(bridgeAction("pull"));
 
     const dialog = screen.getByRole("dialog");
     fireEvent.click(dialog.firstElementChild as HTMLElement);
@@ -98,7 +99,7 @@ describe("HueChannelMapPanel — bridge push confirm", () => {
     invoke.mockResolvedValue({ code: "HUE_CHANNEL_POSITIONS_UPDATED", message: "ok", details: null });
     const user = userEvent.setup();
     renderPanel();
-    await user.click(screen.getByRole("button", { name: /saveToBridge$/ }));
+    await user.click(bridgeAction("save"));
     await user.click(within(screen.getByRole("dialog")).getAllByRole("button")[1]!);
 
     expect(screen.queryByRole("dialog")).toBeNull();

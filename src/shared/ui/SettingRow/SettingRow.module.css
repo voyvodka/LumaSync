@@ -41,6 +41,8 @@
   }
   .action:hover:not(:disabled) { border-color: var(--lm-ink-faint); color: var(--lm-ink); background: var(--lm-panel); }
   .action:disabled { cursor: default; }
+  /* Off, not busy: it steps back. A busy one keeps its look; its label says it is working. */
+  .action:disabled:not([aria-busy="true"]) { border-color: var(--lm-line); color: var(--lm-ink-faint); }
 
   .primary {
     border-color: color-mix(in srgb, var(--lm-amber) 55%, transparent);
