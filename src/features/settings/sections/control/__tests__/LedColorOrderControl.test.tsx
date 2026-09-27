@@ -21,13 +21,19 @@ vi.mock("react-i18next", () => ({
 const calls: string[] = [];
 const mockState: { ledColorOrder?: string } = {};
 const mockSave = vi.fn(async (partial: Record<string, unknown>) => {
-  calls.push(`save:${String(partial.ledColorOrder)}`);
+  calls.push(`save:${String(partial.colorOrder)}`);
 });
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: vi.fn(async () => ({ ...mockState })),
-    save: (partial: Record<string, unknown>) => mockSave(partial),
+    // A strips write lands as the target strip's hardware; the assertions read that.
+    update: async (fn: (current: Record<string, unknown>) => Record<string, unknown> | null) => {
+      const partial = fn({ ...mockState }) ?? {};
+      const strips = partial.ledStrips as { hardware: Record<string, unknown> }[] | undefined;
+      await mockSave(strips?.[0]?.hardware ?? partial);
+      return { ...mockState, ...partial };
+    },
   },
 }));
 
@@ -96,7 +102,7 @@ describe("LedColorOrderControl identify flow", () => {
     fireEvent.click(await screen.findByRole("button", { name: new RegExp(`^${K}.apply`) }));
 
     await waitFor(() => expect(onColorOrderChange).toHaveBeenCalledWith("grb"));
-    expect(mockSave).toHaveBeenCalledWith({ ledColorOrder: "grb" });
+    expect(mockSave).toHaveBeenCalledWith({ colorOrder: "grb" });
     expect(calls).toEqual(["start:0", "start:1", "start:2", "save:grb", "stop", "apply:grb"]);
     expect(start.mock.calls.map(([p]) => p.targets)).toEqual([["usb"], ["usb"], ["usb"]]);
     expect(await screen.findByText(new RegExp(`^${K}.verify\\|`))).toBeInTheDocument();
@@ -186,7 +192,7 @@ describe("LedColorOrderControl identify flow", () => {
     fireEvent.click(await screen.findByRole("button", { name: new RegExp(`^${K}.undo`) }));
 
     await waitFor(() => expect(onColorOrderChange).toHaveBeenLastCalledWith("bgr"));
-    expect(mockSave).toHaveBeenLastCalledWith({ ledColorOrder: "bgr" });
+    expect(mockSave).toHaveBeenLastCalledWith({ colorOrder: "bgr" });
     // Undo runs with no probe lit, so it sends no second stop.
     expect(stop).toHaveBeenCalledTimes(1);
   });

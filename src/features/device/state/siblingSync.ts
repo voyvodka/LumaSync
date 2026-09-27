@@ -1,4 +1,4 @@
-import { DEVICE_STATUS } from "@/shared/contracts/device";
+import { DEVICE_STATUS, SERIAL_CONNECT_STATUS } from "@/shared/contracts/device";
 import type { ConnectionEventBus } from "../connectionEvents";
 import type { ConnectionStore } from "./connectionStore";
 import { nextStatusForReadyState, toConnectionCard } from "./connectionStateHelpers";
@@ -50,6 +50,9 @@ export function createSiblingSync(
           connectedPort: null,
           statusCard: toConnectionCard(status),
         }));
+      } else if (status.status.code === SERIAL_CONNECT_STATUS.REPLUG_REQUIRED) {
+        // A sibling's auto-reconnect met a wedged driver; this mount was already disconnected.
+        store.setState((prev) => ({ ...prev, statusCard: toConnectionCard(status) }));
       }
     } catch (err) {
       console.error("[LumaSync] getSerialConnectionStatus hydration failed:", err);

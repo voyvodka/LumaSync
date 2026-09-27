@@ -89,10 +89,10 @@ mod transitions {
     use tauri::{App, AppHandle, Manager};
 
     use super::super::{apply_mode, mock_app, running_mode, status_code, stop_mode};
-    use crate::commands::device_connection::ActiveSinkRegistry;
     use crate::commands::lighting_mode::{
         stop_lighting_blocking, AppliedModeProbe, LightingModeKind, LightingRuntimeState,
     };
+    use crate::commands::local_outputs::LocalOutputRegistry;
     use crate::commands::wled_sink::{WledProtocol, WledSinkConfig};
 
     /// A mode app whose "usb" channel is a WLED sink on a loopback socket
@@ -107,8 +107,7 @@ mod transitions {
             led_count: 1,
             protocol: WledProtocol::Drgb,
         };
-        app.state::<ActiveSinkRegistry>()
-            .replace_wled(Box::new(config.build()), config);
+        app.state::<LocalOutputRegistry>().wled_bound(config);
         (app, receiver)
     }
 

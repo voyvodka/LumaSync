@@ -16,8 +16,7 @@
  *
  * The FPS pill is the runtime-performance HUD. It polls
  * `get_runtime_telemetry` through `useRuntimeTelemetry` and renders a dot +
- * value whose color tracks fixed thresholds (>=45 green, 25-44 amber, <25
- * red + "Low FPS" text — text label avoids a color-only state). While
+ * value whose color says whether the output keeps up (see `FpsPill`). While
  * Ambilight is inactive the pill shows "FPS —" as a neutral placeholder.
  *
  * The FPS pill and every item marked `nerdStat` (CAP) render only with
@@ -41,7 +40,7 @@ import {
   getKeybindDefinition,
   resolveKeybindPlatform,
 } from "@/shared/contracts/shell";
-import { useRuntimeTelemetry } from "../telemetry/hooks/useRuntimeTelemetry";
+import { useRuntimeTelemetry, type PipelineHealth } from "../telemetry/hooks/useRuntimeTelemetry";
 import { usePreference } from "../persistence/preferences";
 
 export const STATUS_BAR_HEIGHT_FULL_PX = 24;
@@ -93,8 +92,6 @@ interface StatusBarProps {
 }
 
 /** Fixed FPS thresholds — the user explicitly rejected a per-user preference. */
-const FPS_GREEN_THRESHOLD = 45;
-const FPS_AMBER_THRESHOLD = 25;
 
 export function StatusBar({ items, uiMode, lightingActive = true, trailing }: StatusBarProps) {
   const { t } = useTranslation();
@@ -183,7 +180,7 @@ function StatusPill({ item }: { item: StatusItem }) {
 /**
  * Tiny circular-arrow glyph rendered next to an offline chip's value. Pure
  * SVG — no external icon library — so the StatusBar stays self-contained
- * and matches the rest of the chrome (TitleBar / DeviceSection follow the
+ * and matches the rest of the chrome (TitleBar / DevicesPage follow the
  * same inline-SVG pattern).
  */
 function ReconnectIcon() {
@@ -229,16 +226,17 @@ function SetUpIcon() {
  * Ambilight pipeline shows a neutral "FPS —" placeholder rather than hiding
  * the pill so the HUD layout stays stable.
  *
- * Threshold color mapping (fixed, no user preference):
- *   >= 45 FPS → `is-ok` (green)
- *   25 — 44  → `is-active` (amber — warn but running)
- *   < 25 FPS → `is-off` repurposed via `is-low` (red) + "Low FPS" text label
- *             so the state is never expressed by color alone (a11y).
+ * The colour says whether the output keeps up, not how high the number is: capture counts distinct
+ * frames and aims at 20–30 fps, so fixed 45/25 thresholds read a Hue session, or a still screen,
+ * as failing. `ok` → `is-ok` (green); `strained` → `is-active` (amber); `behind` → `is-low` (red)
+ * plus the "Low FPS" words, so the state is never expressed by colour alone (a11y).
  *
  * Compact mode renders only the numeric FPS value (space budget inside the
  * 320 px tray window); full mode also tacks on the latency in `N · Xms`
  * form, fed by the shared latency unit key.
  */
+const FPS_KIND = { ok: "ok", strained: "active", behind: "low" } as const satisfies Record<PipelineHealth, string>;
+
 interface FpsPillProps {
   isCompact: boolean;
   /**
@@ -260,19 +258,7 @@ function FpsPill({ isCompact, enabled }: FpsPillProps) {
   const fpsRounded = isActive ? Math.round(fps) : null;
   const latencyRounded = latencyMs !== null ? Math.round(latencyMs) : null;
 
-  // Color class: map into the existing `.lm-statusbar-value.is-*` palette
-  // so the CSS contract stays centralized. `is-low` is a new variant added
-  // in styles.css alongside this commit.
-  let kind: "idle" | "ok" | "active" | "low";
-  if (!isActive) {
-    kind = "idle";
-  } else if (fpsRounded! >= FPS_GREEN_THRESHOLD) {
-    kind = "ok";
-  } else if (fpsRounded! >= FPS_AMBER_THRESHOLD) {
-    kind = "active";
-  } else {
-    kind = "low";
-  }
+  const kind = !isActive || snapshot.health === null ? "idle" : FPS_KIND[snapshot.health];
 
   const label = t("shell:fpsHud.title");
 

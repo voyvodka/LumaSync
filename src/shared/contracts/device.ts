@@ -31,6 +31,12 @@ export const DEVICE_COMMANDS = {
   /** Stop sending to the device, unbind it and drop the saved device.
    * Contacts nothing on the network. */
   FORGET_WLED_DEVICE: "forget_wled_device",
+  /** Every local output this session knows of: the serial ports with a status, and the bound WLED
+   * device. Never rejects. Registered ahead of the frontend that reads it; granted to no window yet. */
+  GET_LOCAL_OUTPUTS: "get_local_outputs",
+  /** Let go of the connected strip: a running mode stops sending to it as after an unplug (session
+   * only), then its writer closes the port. Granted to no window yet. */
+  DISCONNECT_SERIAL_PORT: "disconnect_serial_port",
 } as const;
 
 export const DEVICE_STATUS = {
@@ -99,10 +105,31 @@ export const SERIAL_CONNECT_STATUS = {
   PERMISSION_DENIED: "CONNECT_PERMISSION_DENIED",
   TIMEOUT: "CONNECT_TIMEOUT",
   IO_ERROR: "CONNECT_IO_ERROR",
+  /** The OS refuses the port's setup until the cable is re-plugged (macOS CH340 driver, after a
+   * force-quit mid-stream or rapid open/close). Never retried: that re-triggers it. */
+  REPLUG_REQUIRED: "CONNECT_REPLUG_REQUIRED",
 } as const;
 
 export type SerialConnectStatusCode =
   (typeof SERIAL_CONNECT_STATUS)[keyof typeof SERIAL_CONNECT_STATUS];
+
+/** What a serial port's registry entry says once it stops driving without failing: the user let
+ * go of it, or another output took its place (one local output at a time). Not a connect outcome,
+ * so it is kept out of {@link SERIAL_CONNECT_STATUS}, which the health steps share. */
+export const SERIAL_OUTPUT_STATUS = {
+  DISCONNECTED: "DISCONNECTED",
+} as const;
+
+/** `disconnect_serial_port`'s `status.code`. `FAILED`: the running mode would not let go, and
+ * nothing was changed. */
+export const SERIAL_DISCONNECT_STATUS = {
+  OK: "SERIAL_DISCONNECT_OK",
+  NOT_CONNECTED: "SERIAL_DISCONNECT_NOT_CONNECTED",
+  FAILED: "SERIAL_DISCONNECT_FAILED",
+} as const;
+
+export type SerialDisconnectStatusCode =
+  (typeof SERIAL_DISCONNECT_STATUS)[keyof typeof SERIAL_DISCONNECT_STATUS];
 
 /** Thrown by `get_serial_connection_status` as `Err(String)`, formatted
  * `"CODE: detail"`. A `catch` sees these; a `switch (status.code)` never will. */
@@ -119,6 +146,7 @@ export type SerialCommandErrorCode =
 export type SerialCommandStatusCode =
   | SerialPortListStatusCode
   | SerialConnectStatusCode
+  | typeof SERIAL_OUTPUT_STATUS.DISCONNECTED
   | typeof DEVICE_ERROR_CODES.PORT_NOT_FOUND
   | typeof DEVICE_ERROR_CODES.PORT_UNSUPPORTED;
 
@@ -147,11 +175,6 @@ export const DEVICE_HEALTH_STEPS = {
 } as const;
 
 export type DeviceHealthStep = (typeof DEVICE_HEALTH_STEPS)[keyof typeof DEVICE_HEALTH_STEPS];
-
-/** Persisted shellStore keys owned by the device feature. */
-export const DEVICE_STORE_KEYS = {
-  LAST_SUCCESSFUL_PORT: "lastSuccessfulPort",
-} as const;
 
 // ---------------------------------------------------------------------------
 // Firmware profile (Adalight encoder toggle)
@@ -430,6 +453,57 @@ export interface SerialConnectionStatus {
    *  not answer or answered garbage — unknown firmware, and connect still
    *  succeeds. */
   firmware?: SerialFirmwareInfo;
+}
+
+/** A serial port's entry in the local-output registry (`local_outputs.rs`). */
+export interface SerialOutputStatus {
+  portName: string;
+  connected: boolean;
+  status: SerialCommandStatus;
+  firmware: SerialFirmwareInfo | null;
+  updatedAtUnixMs: number;
+}
+
+/** The bound WLED device's entry; present only while bound. */
+export interface WledOutputStatus {
+  ip: string;
+  ledCount: number;
+  connected: true;
+}
+
+export type LocalOutputStatus =
+  | ({ kind: "serial" } & SerialOutputStatus)
+  | ({ kind: "wled" } & WledOutputStatus);
+
+/** `get_local_outputs`, and the payload of {@link DEVICE_EVENTS}`.LOCAL_OUTPUTS_CHANGED`. Serial
+ * entries by port name, then WLED. `revision` grows with every change; events are sent outside the
+ * registry's lock and can arrive out of order, so a reader drops one that is not newer than what it
+ * has. */
+export interface LocalOutputsSnapshot {
+  revision: number;
+  outputs: LocalOutputStatus[];
+}
+
+/** `disconnect_serial_port`. */
+export interface SerialDisconnectResult {
+  portName: string;
+  status: CommandStatusOf<SerialDisconnectStatusCode>;
+}
+
+export const DEVICE_EVENTS = {
+  /** The serial port watcher (`device_connection.rs`, `spawn_serial_watch`). */
+  SERIAL_PORTS_CHANGED: "device://serial-ports-changed",
+  /** The local-output registry changed; the payload is its {@link LocalOutputsSnapshot}. */
+  LOCAL_OUTPUTS_CHANGED: "device://local-outputs-changed",
+} as const;
+
+/** A supported port appeared or went (gone for two polls in a row). */
+export interface SerialPortsChangedEvent {
+  ports: SerialPortDescriptor[];
+  appeared: string[];
+  lost: string[];
+  /** The connection after the watcher's write: an unplugged port reads not connected. */
+  connection: SerialConnectionStatus;
 }
 
 /** One step of `run_serial_health_check`. */

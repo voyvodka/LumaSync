@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 
-import type { DeviceCategory, DeviceCategoryRequest } from "@/features/settings/sections/DeviceSection";
+import type { DeviceCategory, DeviceCategoryRequest } from "@/features/device/model/deviceCategories";
 import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/shell";
 import { createStore, useStoreSelector, type Store } from "@/shared/lib/store";
 import { useStableHandlers } from "@/shared/lib/useStableCallback";

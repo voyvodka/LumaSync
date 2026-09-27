@@ -13,7 +13,7 @@ interface PickerListProps<T> {
   side?: "above" | "below";
   id: string;
   label: string;
-  width?: number;
+  width?: number | "fit";
   items: readonly T[];
   itemKey: (item: T) => string;
   renderItem: (item: T, selected: boolean) => ReactNode;

@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { LedSegmentKey } from "../model/contracts";
@@ -56,6 +56,8 @@ const OTHER: Record<LedSegmentKey, LedSegmentKey> = { top: "bottom", bottom: "to
 const otherOf = (edge: LedSegmentKey) => OTHER[edge];
 /** Past this the monitor only gets bigger than the numbers around it, and the page emptier. */
 const MAX_SCALE = 1.5;
+/** How long an edge keeps its highlight after the pointer leaves it. */
+const EDGE_LEAVE_MS = 90;
 /** How far past the frame the light reaches, in view units; the mask fades it out over that. */
 const HALO_SPREAD = 70;
 /** The screen's own picture, as the colour the strip throws on the wall. */
@@ -98,7 +100,19 @@ export function SetupStage(props: SetupStageProps) {
 
   // Hover and focus light an edge through an attribute on the stage, read by CSS: a state here
   // would re-render every LED on each pointer move between edges.
+  // Leaving an edge waits a beat: the pointer crossing a corner or sweeping over the stage would
+  // otherwise dim and brighten the strip for every edge it grazes. Reaching one is immediate, and
+  // any new highlight (an edge, a number) cancels a pending leave.
+  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (leaveTimer.current) clearTimeout(leaveTimer.current);
+    },
+    [],
+  );
   const activate = useCallback((edges: readonly LedSegmentKey[], on: boolean) => {
+    if (leaveTimer.current) clearTimeout(leaveTimer.current);
+    leaveTimer.current = null;
     const stage = stageRef.current;
     if (!stage) return;
     if (on && edges.length) stage.dataset.active = edges.join(" ");
@@ -109,7 +123,14 @@ export function SetupStage(props: SetupStageProps) {
     [draft],
   );
   const onHoverEdge = useCallback(
-    (edge: LedSegmentKey | null) => activate(edge ? edgesOf(edge) : [], edge !== null),
+    (edge: LedSegmentKey | null) => {
+      if (edge) {
+        activate(edgesOf(edge), true);
+        return;
+      }
+      if (leaveTimer.current) clearTimeout(leaveTimer.current);
+      leaveTimer.current = setTimeout(() => activate([], false), EDGE_LEAVE_MS);
+    },
     [activate, edgesOf],
   );
 

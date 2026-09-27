@@ -119,7 +119,7 @@ afterEach(() => {
   controller.dispose();
 });
 
-/** The page wired to a live controller, as DeviceSection does through the hook. */
+/** The page wired to a live controller, as DevicesPage does through the hook. */
 function Page({ source }: { source: DeviceConnectionController }) {
   const [state, setState] = useState(source.getState());
   const [pairedStrips, setPairedStrips] = useState<UsbStripPlacement[]>([]);

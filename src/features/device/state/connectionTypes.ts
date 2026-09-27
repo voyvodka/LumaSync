@@ -1,5 +1,5 @@
 import type { TranslationKey } from "@/features/i18n/catalogue";
-import type { DeviceOperation, DeviceStatus, HealthCheckView } from "@/shared/contracts/device";
+import type { DeviceOperation, DeviceStatus, HealthCheckView, SerialPortsChangedEvent } from "@/shared/contracts/device";
 import type {
   HealthCheckResult,
   SerialConnectionStatus,
@@ -78,6 +78,17 @@ export interface DeviceConnectionControllerDeps {
    * without mounting their own controller.
    */
   firmwareProfileEvents?: FirmwareProfileEventBus;
+  /** The Rust serial port watcher's event; absent in tests that do not exercise it. */
+  listenSerialPortsChanged?: (handler: (event: SerialPortsChangedEvent) => void) => Promise<() => void>;
+  /**
+   * Bring the saved port back when the watcher sees it reappear. One mount only (App): two
+   * controllers reconnecting at once would race for the port.
+   */
+  reconnectOnReplug?: boolean;
+  /** The saved strip's serial port as the store holds it now; `undefined` when it is WLED or unset. */
+  readSavedSerialPort?: () => Promise<string | undefined>;
+  replugDelayMs?: number;
+  replugRetryMs?: number;
 }
 
 export interface DeviceConnectionController {

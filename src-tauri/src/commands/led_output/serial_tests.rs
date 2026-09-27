@@ -64,64 +64,6 @@ fn serial_sender_reuses_open_port_for_repeated_hot_path_writes() {
 }
 
 #[test]
-fn first_frame_settles_before_the_bootloader_gets_the_bytes() {
-    // Connect opens, settles, verifies and drops its handle, so this open is
-    // a second DTR assert. Without the settle frame 1 lands in the bootloader.
-    let settles = Arc::new(AtomicUsize::new(0));
-    let settles_for_hook = Arc::clone(&settles);
-    let sender = super::serial::SerialLedPacketSender::with_open_hook_for_tests(
-        |_port_name| Ok(Box::new(FakePort::default())),
-        move || {
-            settles_for_hook.fetch_add(1, Ordering::SeqCst);
-        },
-    );
-
-    sender.send("COM42", &[1, 2, 3]).expect("first write");
-    assert_eq!(settles.load(Ordering::SeqCst), 1);
-}
-
-#[test]
-fn the_settle_is_per_session_not_per_frame() {
-    // The 2 s cost is only acceptable once. Paying it per frame would put the
-    // capture-to-output path 40x over its budget.
-    let settles = Arc::new(AtomicUsize::new(0));
-    let settles_for_hook = Arc::clone(&settles);
-    let sender = super::serial::SerialLedPacketSender::with_open_hook_for_tests(
-        |_port_name| Ok(Box::new(FakePort::default())),
-        move || {
-            settles_for_hook.fetch_add(1, Ordering::SeqCst);
-        },
-    );
-
-    for _ in 0..5 {
-        sender.send("COM42", &[1, 2, 3]).expect("write");
-    }
-    assert_eq!(settles.load(Ordering::SeqCst), 1);
-
-    // A reopen is a fresh DTR assert, so it settles again.
-    sender.disconnect_session("COM42");
-    sender
-        .send("COM42", &[4, 5, 6])
-        .expect("write after reopen");
-    assert_eq!(settles.load(Ordering::SeqCst), 2);
-}
-
-#[test]
-fn a_failed_open_does_not_settle() {
-    let settles = Arc::new(AtomicUsize::new(0));
-    let settles_for_hook = Arc::clone(&settles);
-    let sender = super::serial::SerialLedPacketSender::with_open_hook_for_tests(
-        |_port_name| Err(LedOutputError::new("LED_OUTPUT_PORT_OPEN_FAILED", None)),
-        move || {
-            settles_for_hook.fetch_add(1, Ordering::SeqCst);
-        },
-    );
-
-    assert!(sender.send("COM42", &[1, 2, 3]).is_err());
-    assert_eq!(settles.load(Ordering::SeqCst), 0);
-}
-
-#[test]
 fn disconnect_session_removes_cached_handle_and_forces_reopen() {
     let open_count = Arc::new(AtomicUsize::new(0));
     let open_count_for_factory = Arc::clone(&open_count);
@@ -242,6 +184,147 @@ fn scripted_sender(
         pacing,
     );
     (sender, logs)
+}
+
+/// A sender whose writers hold each new port's first byte back for `settle`.
+/// Each open gets a fresh port; the logs are per open, in order.
+fn settling_sender(
+    settle: Duration,
+) -> (
+    super::serial::SerialLedPacketSender,
+    Arc<Mutex<Vec<Arc<PortLog>>>>,
+) {
+    let logs: Arc<Mutex<Vec<Arc<PortLog>>>> = Arc::default();
+    let logs_for_factory = Arc::clone(&logs);
+    let sender = super::serial::SerialLedPacketSender::with_settle_for_tests(
+        move |_port_name| {
+            let log = Arc::new(PortLog::default());
+            logs_for_factory
+                .lock()
+                .expect("logs lock")
+                .push(Arc::clone(&log));
+            Ok(Box::new(ScriptedPort {
+                log,
+                script: PortScript::default(),
+            }) as Box<dyn Write + Send>)
+        },
+        settle,
+    );
+    (sender, logs)
+}
+
+fn log_of(logs: &Mutex<Vec<Arc<PortLog>>>, open: usize) -> Arc<PortLog> {
+    Arc::clone(&logs.lock().expect("logs lock")[open])
+}
+
+const SETTLE: Duration = Duration::from_millis(300);
+
+// Connect opens, settles, verifies and drops its handle, so this open is a
+// second DTR assert. Without the settle frame 1 lands in the bootloader.
+#[test]
+fn the_first_frame_waits_out_the_settle_but_the_caller_does_not() {
+    let (sender, logs) = settling_sender(SETTLE);
+    let opened_at = Instant::now();
+
+    sender.send("COM42", &[1, 2, 3]).expect("first write");
+    let returned_after = opened_at.elapsed();
+    sender.wait_idle("COM42");
+
+    assert!(
+        returned_after < SETTLE / 3,
+        "send blocked for {returned_after:?}"
+    );
+    let first_write = log_of(&logs, 0).write_times()[0];
+    assert!(first_write.duration_since(opened_at) >= SETTLE);
+}
+
+// The 2 s cost is only acceptable once. Paying it per frame would put the
+// capture-to-output path 40x over its budget.
+#[test]
+fn the_settle_is_per_session_not_per_frame() {
+    let (sender, logs) = settling_sender(SETTLE);
+    sender.send("COM42", &[1]).expect("first write");
+    sender.wait_idle("COM42");
+
+    let settled = Instant::now();
+    sender.send("COM42", &[2]).expect("second write");
+    sender.wait_idle("COM42");
+    assert!(settled.elapsed() < SETTLE / 3, "a later frame waited again");
+
+    // A reopen is a fresh DTR assert, so it settles again.
+    sender.disconnect_session("COM42");
+    let reopened_at = Instant::now();
+    sender.send("COM42", &[3]).expect("write after reopen");
+    sender.wait_idle("COM42");
+    assert!(log_of(&logs, 1).write_times()[0].duration_since(reopened_at) >= SETTLE);
+}
+
+#[test]
+fn a_port_that_will_not_open_fails_at_once_with_its_code() {
+    let sender = super::serial::SerialLedPacketSender::with_settle_for_tests(
+        |_port_name| Err(LedOutputError::new("LED_OUTPUT_PORT_OPEN_FAILED", None)),
+        SETTLE,
+    );
+    let started = Instant::now();
+
+    let error = sender.send("COM42", &[1, 2, 3]).expect_err("open fails");
+
+    assert_eq!(error.code, "LED_OUTPUT_PORT_OPEN_FAILED");
+    assert!(started.elapsed() < SETTLE / 3);
+}
+
+// The sessions lock used to be held across the settle, so opening strip B
+// froze strip A for two seconds.
+#[test]
+fn opening_one_port_does_not_hold_back_another() {
+    let (sender, logs) = settling_sender(SETTLE);
+    sender.send("COM-A", &[1]).expect("A opens");
+    sender.wait_idle("COM-A");
+
+    let b_opened_at = Instant::now();
+    sender.send("COM-B", &[2]).expect("B opens");
+    sender.send("COM-A", &[3]).expect("A keeps sending");
+    sender.wait_idle("COM-A");
+
+    let a_second_write = log_of(&logs, 0).write_times()[1];
+    assert!(
+        a_second_write.duration_since(b_opened_at) < SETTLE / 3,
+        "A waited {:?} behind B's settle",
+        a_second_write.duration_since(b_opened_at)
+    );
+    assert!(log_of(&logs, 1).packets().is_empty(), "B is still settling");
+}
+
+// An unplug or a port switch during the settle must let the port go at once,
+// or a reopen finds it still held for up to two seconds.
+#[test]
+fn a_session_dropped_while_settling_lets_go_without_writing() {
+    let (sender, logs) = settling_sender(Duration::from_secs(5));
+    sender.send("COM42", &[1, 2, 3]).expect("opens");
+
+    let started = Instant::now();
+    sender.disconnect_session("COM42");
+
+    assert!(
+        started.elapsed() < Duration::from_secs(1),
+        "the drop waited for the settle"
+    );
+    let log = log_of(&logs, 0);
+    assert!(log.dropped.load(Ordering::SeqCst), "the port is still held");
+    assert_eq!(log.writes_started.load(Ordering::SeqCst), 0);
+}
+
+// Solid's one-shot write confirms its own outcome; its time budget starts
+// once the port has settled, not when it was queued.
+#[test]
+fn a_one_shot_write_on_a_fresh_port_waits_out_the_settle() {
+    let (sender, logs) = settling_sender(SETTLE);
+
+    sender
+        .send_and_wait("COM42", &[9])
+        .expect("confirmed after the settle");
+
+    assert_eq!(log_of(&logs, 0).packets(), vec![vec![9]]);
 }
 
 fn first_log(logs: &Mutex<Vec<Arc<PortLog>>>) -> Arc<PortLog> {

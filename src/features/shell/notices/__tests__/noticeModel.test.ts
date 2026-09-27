@@ -8,7 +8,7 @@ describe("currentNoticeView", () => {
   it("names Devices → Hue only while full mode shows it", () => {
     const hue = { uiMode: "full", activeSection: SECTION_IDS.DEVICES, visibleDeviceCategory: "hue" } as const;
     expect(currentNoticeView(hue)).toBe(NOTICE_VIEW.DEVICES_HUE);
-    expect(currentNoticeView({ ...hue, visibleDeviceCategory: "usb" })).toBeNull();
+    expect(currentNoticeView({ ...hue, visibleDeviceCategory: "strips" })).toBeNull();
     expect(currentNoticeView({ ...hue, visibleDeviceCategory: null })).toBeNull();
     expect(currentNoticeView({ ...hue, activeSection: SECTION_IDS.LIGHTS })).toBeNull();
   });

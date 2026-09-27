@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { ShellState } from "@/shared/contracts/shell";
 import type { WledUdpSinkConfig } from "@/shared/contracts/device";
+import { savedWledSink } from "@/features/strips/model/stripSelectors";
 import { restoreWledSink, type WledRestoreOutcome } from "../wledSinkRestore";
 
 const SAVED: WledUdpSinkConfig = {
@@ -30,6 +31,12 @@ function shellState(partial: Partial<ShellState> = {}): ShellState {
   } as ShellState;
 }
 
+function withSaved(sink: WledUdpSinkConfig): ShellState {
+  return shellState({
+    ledStrips: [{ id: "strip-1", enabled: true, transport: { kind: "wled", sink }, hardware: {} }],
+  });
+}
+
 function discoveryOk(ledCount = 60) {
   return {
     status: { code: "WLED_DISCOVERY_OK", message: "ok", details: null },
@@ -38,9 +45,14 @@ function discoveryOk(ledCount = 60) {
 }
 
 function buildDeps(overrides: Record<string, unknown> = {}) {
+  const stored = withSaved(SAVED);
   return {
-    loadShellState: vi.fn().mockResolvedValue(shellState({ lastWledSink: SAVED })),
-    saveShellState: vi.fn().mockResolvedValue(undefined),
+    loadShellState: vi.fn().mockResolvedValue(stored),
+    /** Resolves with, and records, the state the update produced. */
+    updateShellState: vi.fn(async (update: (current: ShellState) => Partial<ShellState> | null) => ({
+      ...stored,
+      ...update(stored),
+    })),
     discover: vi.fn().mockResolvedValue(discoveryOk()),
     connect: vi.fn().mockResolvedValue({
       status: { code: "WLED_CONNECT_OK", message: "ok", details: null },
@@ -124,7 +136,7 @@ describe("restoreWledSink", () => {
     const deps = buildDeps({
       loadShellState: vi
         .fn()
-        .mockResolvedValue(shellState({ lastWledSink: LEGACY_WARLS_SAVED })),
+        .mockResolvedValue(withSaved(LEGACY_WARLS_SAVED)),
     });
 
     await restoreWledSink(deps);
@@ -146,9 +158,8 @@ describe("restoreWledSink", () => {
       kind: "restored",
       sink: { ...SAVED, ledCount: 144 },
     });
-    expect(deps.saveShellState).toHaveBeenCalledWith({
-      lastWledSink: { ...SAVED, ledCount: 144 },
-    });
+    const written = await deps.updateShellState.mock.results[0]!.value;
+    expect(savedWledSink(written)).toEqual({ ...SAVED, ledCount: 144 });
   });
 
   it("skips the write when the LED count is unchanged", async () => {
@@ -156,7 +167,7 @@ describe("restoreWledSink", () => {
 
     await restoreWledSink(deps);
 
-    expect(deps.saveShellState).not.toHaveBeenCalled();
+    expect(deps.updateShellState).not.toHaveBeenCalled();
   });
 
   it("resolves with a coded failure instead of throwing when discovery rejects", async () => {

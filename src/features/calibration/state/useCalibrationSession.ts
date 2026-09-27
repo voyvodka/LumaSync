@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 
 import { shellStore } from "@/features/persistence/shellStore";
+import { withStripLayout } from "@/features/strips/model/stripWrites";
 import { focusCurrentWindow } from "@/features/shell/windowApi";
 import type { LeaveGuard } from "@/features/shell/navigationStore";
 import {
@@ -587,7 +588,7 @@ export function useCalibrationSession({
     setValidationErrors(null);
     const savedState = saveEditorCalibration(editorState);
     try {
-      await shellStore.save({ ledCalibration: savedState.current });
+      await shellStore.update((current) => withStripLayout(current, savedState.current));
     } catch (error) {
       // The draft stays as it was, so Retry saves exactly what failed.
       console.error("[LumaSync] LED Setup could not save the layout:", error);

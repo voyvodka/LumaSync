@@ -63,6 +63,18 @@ export function removeShellStateKeys(keys: readonly string[]): void {
   announceShellStateChange({ set: {}, remove: [...keys], revision: shellStateRevision, writerId: "rust" });
 }
 
+/** Sets shell-state keys the way Rust's own writes do, announced like {@link removeShellStateKeys}. */
+export function patchShellStateAsRust(set: Record<string, unknown>): void {
+  ensureSeeded();
+  const next: Record<string, unknown> = { ...shellStateBacking, ...set };
+  shellStateBacking = next;
+  shellStateRevision += 1;
+  mutate((w) => {
+    w.shellState = next as Partial<ShellState>;
+  });
+  announceShellStateChange({ set, remove: [], revision: shellStateRevision, writerId: "rust" });
+}
+
 function ensureSeeded(): void {
   const w = getWorld();
   if (seededGeneration === w.generation) return;

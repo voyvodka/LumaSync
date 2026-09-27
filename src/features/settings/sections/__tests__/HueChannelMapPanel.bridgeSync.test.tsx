@@ -177,13 +177,13 @@ let refresh: () => Promise<unknown> = async () => null;
 const BRIDGE = { id: "bridge-1", ip: "192.168.1.20", name: "Bridge" };
 const CREDENTIALS = { username: "app-key", clientKey: "psk" };
 
-/** What `DeviceSection` + `HueBridgesCategory` hand the panel, minus the rest
+/** What `DevicesPage` + `HueBridgesCategory` hand the panel, minus the rest
  *  of the Devices page. */
 function Harness({ initialPlacements, initialSnapshot, zones = [ZONE], onRepair, onSnapshot }: HarnessProps) {
   const channels = useHueAreaChannels(BRIDGE, CREDENTIALS, "area-1");
   const [placements, setPlacements] = useState(initialPlacements);
   const [snapshot, setSnapshot] = useState(initialSnapshot);
-  // Snapshotted once, at mount, the way the real `DeviceSection` prop is a poll
+  // Snapshotted once, at mount, the way the real `DevicesPage` prop is a poll
   // result rather than a live read: `world.runtimeState` flips mid-test to
   // simulate a stream started elsewhere, and re-deriving `isStreaming` from it
   // on every render would let an unrelated re-render (the bridgeRead sync

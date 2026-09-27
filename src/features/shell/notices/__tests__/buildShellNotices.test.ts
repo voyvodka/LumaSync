@@ -141,7 +141,7 @@ describe("buildShellNotices", () => {
         SHELL_NOTICE_IDS.START_FAILED,
         handlers,
       ).action?.onClick();
-      expect(handlers.openDevices).toHaveBeenCalledWith("usb");
+      expect(handlers.openDevices).toHaveBeenCalledWith("strips");
     });
 
     it("uses the reasonless stall copy when the stall carries no reason", () => {
@@ -285,7 +285,7 @@ describe("buildShellNotices", () => {
       const notice = byId({ usbLeftOut: true }, SHELL_NOTICE_IDS.USB_LEFT_OUT, handlers);
       expect(notice.message).toBe("shell:notices.messages.usbLeftOut");
       notice.action?.onClick();
-      expect(handlers.openDevices).toHaveBeenCalledWith("usb");
+      expect(handlers.openDevices).toHaveBeenCalledWith("strips");
     });
 
     it("never claims a switch to Hue when nothing took over from the unrecognised port", () => {
@@ -297,7 +297,7 @@ describe("buildShellNotices", () => {
       );
       expect(notice.message).toBe("shell:notices.messages.usbUnsupportedNoFallback");
       notice.action?.onClick();
-      expect(handlers.openDevices).toHaveBeenCalledWith("usb");
+      expect(handlers.openDevices).toHaveBeenCalledWith("strips");
     });
   });
 

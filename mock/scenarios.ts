@@ -10,6 +10,7 @@
  * that is precisely why both need to be one click away.
  */
 
+import type { LedCalibrationConfig } from "../src/shared/contracts/calibration";
 import { SHELL_STATE_SCHEMA_VERSION } from "../src/shared/contracts/shell";
 import type { MockWorld } from "./state";
 
@@ -94,6 +95,17 @@ function base(): MockWorld {
     shellState: { schemaVersion: SHELL_STATE_SCHEMA_VERSION, uiMode: "full", trayHintShown: true },
   };
 }
+
+export const FURNISHED_LAYOUT: LedCalibrationConfig = {
+  templateId: null,
+  counts: { top: 60, right: 22, bottom: 60, left: 22 },
+  bottomMissing: 0,
+  cornerOwnership: "horizontal",
+  visualPreset: "subtle",
+  startAnchor: "top-start",
+  direction: "cw",
+  totalLeds: 164,
+};
 
 const PORTS: MockWorld["serial"]["ports"] = [
   {
@@ -188,9 +200,27 @@ function furnished(): MockWorld {
   };
   w.shellState = {
     ...w.shellState,
-    lastSuccessfulPort: PORTS[0].name,
+    // The USB strip drives; the WLED panel waits as a second, disabled strip — what a file
+    // holding both a port and a WLED device migrates to.
+    ledStrips: [
+      {
+        id: "strip-1",
+        enabled: true,
+        transport: { kind: "serial", portName: PORTS[0].name },
+        hardware: {},
+        // Without a layout the Lights screen opens on "calibration required"
+        // and every LED count reads zero, so a furnished world needs one.
+        layout: FURNISHED_LAYOUT,
+      },
+      {
+        id: "strip-2",
+        enabled: false,
+        transport: { kind: "wled", sink: { ip: "192.168.1.42", port: 4048, ledCount: 120, protocol: "ddp" } },
+        hardware: {},
+        layout: FURNISHED_LAYOUT,
+      },
+    ],
     lastOutputTargets: ["usb", "hue"],
-    lastWledSink: { ip: "192.168.1.42", port: 4048, ledCount: 120, protocol: "ddp" },
     lastHueBridge: { id: BRIDGE.id, ip: BRIDGE.ip, name: BRIDGE.name },
     lastHueAreaId: AREAS[0].id,
     hueAppKey: "mock-application-key",
@@ -199,18 +229,6 @@ function furnished(): MockWorld {
     hueCredentialStatus: "valid",
     credentialStorageBackend: "keychain",
     lightingMode: { kind: "ambilight" },
-    // Without a calibration the Lights screen opens on "calibration required"
-    // and every LED count reads zero, so a furnished world needs one.
-    ledCalibration: {
-      templateId: null,
-      counts: { top: 60, right: 22, bottom: 60, left: 22 },
-      bottomMissing: 0,
-      cornerOwnership: "horizontal",
-      visualPreset: "subtle",
-      startAnchor: "top-start",
-      direction: "cw",
-      totalLeds: 164,
-    },
   };
   return w;
 }
@@ -238,7 +256,9 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
       w.lighting = { mode: { kind: "ambilight" } };
       w.shellState = {
         ...w.shellState,
-        lastSuccessfulPort: PORTS[0].name,
+        ledStrips: [
+          { id: "strip-1", enabled: true, transport: { kind: "serial", portName: PORTS[0].name }, hardware: {} },
+        ],
         lastOutputTargets: ["usb"],
         lightingMode: { kind: "ambilight" },
       };
@@ -342,8 +362,11 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
       w.hue.activeStreamerElsewhere = true;
       w.hue.activeStreamerReleasesAt = Date.now() + 12_000;
       w.lighting = { mode: { kind: "off" } };
-      const { lastWledSink: _unused, ...shellState } = w.shellState;
-      w.shellState = { ...shellState, lastOutputTargets: ["usb", "hue"] };
+      w.shellState = {
+        ...w.shellState,
+        ledStrips: (w.shellState.ledStrips ?? []).filter((strip) => strip.transport?.kind !== "wled"),
+        lastOutputTargets: ["usb", "hue"],
+      };
       return { ...w, scenario: "usb-hue-busy-at-boot" };
     },
   },

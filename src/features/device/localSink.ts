@@ -24,8 +24,8 @@ export type LocalSink =
 /**
  * Serial wins when both are bound.
  *
- * Not a preference: `ActiveSinkRegistry::replace` stops whatever was there, so
- * a serial connect evicts WLED and the registry holds the serial sink. Naming
+ * Not a preference: a serial connect evicts WLED from `LocalOutputRegistry`, so
+ * Rust drives the serial strip. Naming
  * WLED while Rust is driving the strip would be the same class of lie this
  * function exists to remove.
  */

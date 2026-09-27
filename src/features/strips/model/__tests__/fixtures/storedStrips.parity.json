@@ -1,0 +1,206 @@
+{
+  "cases": [
+    {
+      "name": "a value that is not a list reads as no strips",
+      "stored": {
+        "id": "s1"
+      },
+      "strips": []
+    },
+    {
+      "name": "rows that are not objects or have no string id are skipped",
+      "stored": [
+        null,
+        5,
+        "s1",
+        {
+          "enabled": true
+        },
+        {
+          "id": 7
+        }
+      ],
+      "strips": []
+    },
+    {
+      "name": "a full strip reads its known fields; unknown ones do not change them",
+      "stored": [
+        {
+          "id": "s1",
+          "enabled": false,
+          "name": "desk",
+          "brightness": 0.5,
+          "transport": {
+            "kind": "serial",
+            "portName": "COM3",
+            "serialNumber": "A1"
+          },
+          "hardware": {
+            "chipType": "sk6812-rgbw",
+            "future": 1
+          },
+          "layout": {
+            "totalLeds": 60,
+            "futureField": 7
+          },
+          "colorCorrection": {
+            "gammaR": 2.2,
+            "gammaG": 2.2,
+            "gammaB": 2.2,
+            "kelvin": 6500,
+            "saturation": 1
+          }
+        }
+      ],
+      "strips": [
+        {
+          "id": "s1",
+          "enabled": false,
+          "transport": {
+            "kind": "serial",
+            "portName": "COM3"
+          },
+          "hardware": {
+            "chipType": "sk6812-rgbw"
+          },
+          "layout": {
+            "totalLeds": 60,
+            "futureField": 7
+          },
+          "colorCorrection": {
+            "gammaR": 2.2,
+            "gammaG": 2.2,
+            "gammaB": 2.2,
+            "kelvin": 6500,
+            "saturation": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "malformed fields fall back one by one",
+      "stored": [
+        {
+          "id": "a",
+          "enabled": "yes",
+          "transport": {
+            "kind": "usb"
+          },
+          "hardware": 5
+        },
+        {
+          "id": "b",
+          "transport": {
+            "kind": "serial",
+            "portName": 3
+          }
+        },
+        {
+          "id": "c",
+          "transport": {
+            "kind": "wled",
+            "sink": "10.0.0.5"
+          }
+        },
+        {
+          "id": "d",
+          "transport": {
+            "kind": "wled",
+            "sink": {
+              "ip": "10.0.0.5",
+              "port": 21324,
+              "ledCount": 60,
+              "protocol": "drgb"
+            }
+          },
+          "layout": null,
+          "colorCorrection": null
+        },
+        {
+          "id": "e",
+          "transport": "COM3",
+          "hardware": {
+            "firmwareProfile": null,
+            "colorOrder": "grb"
+          }
+        }
+      ],
+      "strips": [
+        {
+          "id": "a",
+          "enabled": true,
+          "transport": null,
+          "hardware": {}
+        },
+        {
+          "id": "b",
+          "enabled": true,
+          "transport": null,
+          "hardware": {}
+        },
+        {
+          "id": "c",
+          "enabled": true,
+          "transport": null,
+          "hardware": {}
+        },
+        {
+          "id": "d",
+          "enabled": true,
+          "transport": {
+            "kind": "wled",
+            "sink": {
+              "ip": "10.0.0.5",
+              "port": 21324,
+              "ledCount": 60,
+              "protocol": "drgb"
+            }
+          },
+          "hardware": {}
+        },
+        {
+          "id": "e",
+          "enabled": true,
+          "transport": null,
+          "hardware": {
+            "colorOrder": "grb"
+          }
+        }
+      ]
+    },
+    {
+      "name": "an empty list is no strips",
+      "stored": [],
+      "strips": []
+    },
+    {
+      "name": "array values are not objects on either side",
+      "stored": [
+        [
+          "id",
+          "s1"
+        ],
+        {
+          "id": "f",
+          "hardware": [
+            "chipType"
+          ],
+          "transport": {
+            "kind": "wled",
+            "sink": [
+              "10.0.0.5"
+            ]
+          }
+        }
+      ],
+      "strips": [
+        {
+          "id": "f",
+          "enabled": true,
+          "transport": null,
+          "hardware": {}
+        }
+      ]
+    }
+  ]
+}

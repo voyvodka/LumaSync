@@ -14,6 +14,14 @@
 /// Re-exported from `commands::lighting_mode::snapshot`.
 pub const LIGHTING_RUNTIME_CHANGED_EVENT: &str = "lighting://runtime-changed";
 
+/// `DEVICE_EVENTS.SERIAL_PORTS_CHANGED` in `src/shared/contracts/device.ts`: the serial port
+/// watcher saw a port appear or go.
+pub const DEVICE_SERIAL_PORTS_CHANGED_EVENT: &str = "device://serial-ports-changed";
+
+/// `DEVICE_EVENTS.LOCAL_OUTPUTS_CHANGED` in `src/shared/contracts/device.ts`: a strip or WLED device
+/// connected, failed, went away or was let go.
+pub const DEVICE_LOCAL_OUTPUTS_CHANGED_EVENT: &str = "device://local-outputs-changed";
+
 /// `SHELL_EVENTS.STATE_CHANGED` in `src/shared/contracts/shell.ts`.
 /// Re-exported from `commands::shell_state`.
 pub const SHELL_STATE_CHANGED_EVENT: &str = "shell://state-changed";

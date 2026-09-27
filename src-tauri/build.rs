@@ -69,6 +69,8 @@ const APP_COMMANDS: &[&str] = &[
     "get_hue_light_names",
     "identify_hue_lights",
     "forget_wled_device",
+    "get_local_outputs",
+    "disconnect_serial_port",
 ];
 
 fn main() {

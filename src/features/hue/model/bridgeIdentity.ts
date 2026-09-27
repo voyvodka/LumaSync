@@ -51,3 +51,12 @@ export function relocatedBridge(
   const found = fresh.find((candidate) => sameBridgeId(candidate.id, bridge.id));
   return found && found.ip !== bridge.ip ? { ...bridge, ip: found.ip } : null;
 }
+
+/**
+ * A bridge's name without the address Rust appends when the bridge reports none ("Hue Bridge
+ * (192.168.1.180)"). The address is shown on its own where it matters, and a moved bridge keeps the
+ * old one in its saved name.
+ */
+export function bridgeDisplayName(name: string): string {
+  return name.replace(/\s*\(\d{1,3}(?:\.\d{1,3}){3}\)\s*$/, "") || name;
+}

@@ -2,12 +2,12 @@ import { useId } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useSessionState } from "@/shared/lib/useSessionState";
+import { Rail } from "@/shared/ui/Rail/Rail";
 
 import { PreferenceChoice } from "./rows/PreferenceChoice";
 import { PreferenceSwitch } from "./rows/PreferenceSwitch";
 import type { SettingsEnv } from "./settingsEnv";
-import { settingRow, settingsPage, type SettingRowId, type SettingsPageId } from "./settingsRegistry";
-import { SettingsRail } from "./SettingsRail";
+import { SETTINGS_PAGE_IDS, settingRow, settingsPage, type SettingRowId, type SettingsPageId } from "./settingsRegistry";
 import styles from "./SettingsPage.module.css";
 
 function Row({ id, env }: { id: SettingRowId; env: SettingsEnv }) {
@@ -33,7 +33,12 @@ export function SettingsPage(env: SettingsEnv) {
   const { labelKey, rows } = settingsPage(page);
   return (
     <div className={styles.page}>
-      <SettingsRail active={page} onSelect={setPage} />
+      <Rail
+        label={t("settings:title")}
+        items={SETTINGS_PAGE_IDS.map((id) => ({ id, label: t(settingsPage(id).labelKey), testId: `settings-page-${id}` }))}
+        active={page}
+        onSelect={setPage}
+      />
       <div className={styles.scroll}>
         {/* Keyed by page: the new page's rows arrive with a small rise. */}
         <section key={page} className={styles.content} aria-labelledby={headingId}>

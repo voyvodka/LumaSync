@@ -1,8 +1,8 @@
-import { DEVICE_OPERATION, DEVICE_STATUS } from "@/shared/contracts/device";
+import { DEVICE_OPERATION, DEVICE_STATUS, SERIAL_CONNECT_STATUS } from "@/shared/contracts/device";
 import type { ConnectionEventBus } from "../connectionEvents";
 import { applySuccessfulConnection } from "./connectionOutcomes";
 import type { ConnectionStore } from "./connectionStore";
-import { nextStatusForReadyState } from "./connectionStateHelpers";
+import { nextStatusForReadyState, toConnectionCard } from "./connectionStateHelpers";
 import type { DeviceConnectionControllerDeps, DeviceStatusCard } from "./connectionTypes";
 import { parseCommandError } from "@/shared/contracts/status";
 
@@ -122,6 +122,17 @@ export function createAutoRecovery(
               details: connected.status.details ?? undefined,
             },
           });
+          return;
+        }
+
+        // Re-opening a wedged driver is what keeps it wedged; only a re-plug clears it.
+        if (connected.status?.code === SERIAL_CONNECT_STATUS.REPLUG_REQUIRED) {
+          store.finishOperation(token);
+          store.setState((prev) => ({
+            ...prev,
+            status: DEVICE_STATUS.MANUAL_REQUIRED,
+            statusCard: toConnectionCard(connected),
+          }));
           return;
         }
 

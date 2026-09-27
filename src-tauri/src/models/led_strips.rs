@@ -1,13 +1,15 @@
 //! The saved setup read as strips: one run of LEDs behind one local
 //! controller, with the hardware, layout and correction that belong to it.
-//! Until the saved state holds strips of its own they are derived from the
-//! single-output keys, by the same rules as `stripsFromLegacy` in
-//! `src/features/strips/model/legacyStrips.ts`; one fixture tests both.
+//! Stored under `ledStrips` from schema 8 and read by the same rules as
+//! `readStoredStrips` in `src/features/strips/model/storedStrips.ts`. A file
+//! without the key (never migrated) is derived from the single-output keys,
+//! as `stripsFromLegacy` in `src/features/strips/model/legacyStrips.ts` does.
+//! A parity fixture per rule tests both sides.
 //!
 //! Values are carried as the JSON they were saved as and decoded where they
 //! are read, so a field this build does not know survives the trip.
 
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 
 /// `FIRST_STRIP_ID` in `src/shared/contracts/strips.ts`.
 pub const FIRST_STRIP_ID: &str = "strip-1";
@@ -122,53 +124,202 @@ pub fn strips_from_legacy(state: &Map<String, Value>) -> Vec<LedStrip> {
     strips
 }
 
+/// The strips a saved state describes: `ledStrips` when the key holds a
+/// value, the legacy derivation when it does not.
+pub fn strips_of(state: &Map<String, Value>) -> Vec<LedStrip> {
+    match present(state, "ledStrips") {
+        Some(stored) => strips_from_stored(stored),
+        None => strips_from_legacy(state),
+    }
+}
+
+/// Stored strips, read leniently: the file may have been edited by hand. A row
+/// that is not an object or has no string `id` is skipped; the rest of a row
+/// falls back field by field rather than taking the strip down with it.
+pub fn strips_from_stored(stored: &Value) -> Vec<LedStrip> {
+    let Some(rows) = stored.as_array() else {
+        return Vec::new();
+    };
+    rows.iter()
+        .filter_map(Value::as_object)
+        .filter_map(|row| {
+            let id = row.get("id").and_then(Value::as_str)?.to_owned();
+            let hardware = row.get("hardware").and_then(Value::as_object);
+            let hardware_field = |key: &str| hardware.and_then(|map| present(map, key)).cloned();
+            Some(LedStrip {
+                id,
+                enabled: row.get("enabled").and_then(Value::as_bool).unwrap_or(true),
+                transport: row.get("transport").and_then(transport_from_stored),
+                hardware: StripHardware {
+                    firmware_profile: hardware_field("firmwareProfile"),
+                    chip_type: hardware_field("chipType"),
+                    color_order: hardware_field("colorOrder"),
+                },
+                layout: present(row, "layout").cloned(),
+                color_correction: present(row, "colorCorrection").cloned(),
+            })
+        })
+        .collect()
+}
+
+fn transport_from_stored(value: &Value) -> Option<StripTransport> {
+    let transport = value.as_object()?;
+    match transport.get("kind").and_then(Value::as_str)? {
+        "serial" => Some(StripTransport::Serial {
+            port_name: transport
+                .get("portName")
+                .and_then(Value::as_str)?
+                .to_owned(),
+        }),
+        "wled" => transport
+            .get("sink")
+            .filter(|sink| sink.is_object())
+            .map(|sink| StripTransport::Wled { sink: sink.clone() }),
+        _ => None,
+    }
+}
+
 /// The strip a setting with no strip named applies to: the first one enabled.
 pub fn primary_strip(strips: Vec<LedStrip>) -> Option<LedStrip> {
     strips.into_iter().find(|strip| strip.enabled)
 }
 
+/// Drops a saved WLED device from the strips, editing the stored JSON so
+/// fields this build does not know survive. The primary strip keeps its
+/// layout and hardware with no transport, as removing `lastWledSink` left
+/// them; a strip left describing nothing goes, as the legacy derivation gives
+/// none. A file never migrated gets `ledStrips` written from the derivation
+/// first, the way the frontend's migration would. Returns whether it changed.
+pub fn forget_wled_in(state: &mut Map<String, Value>, ip: &str) -> bool {
+    let mut rows: Vec<Value> = match present(state, "ledStrips") {
+        Some(stored) => stored.as_array().cloned().unwrap_or_default(),
+        None => strips_from_legacy(state).iter().map(strip_json).collect(),
+    };
+    let primary = rows.iter().position(|row| {
+        row.get("id").is_some_and(Value::is_string)
+            && row.get("enabled").and_then(Value::as_bool).unwrap_or(true)
+    });
+    let is_this_device = |row: &Value| {
+        row.get("transport")
+            .and_then(transport_from_stored)
+            .is_some_and(|transport| match transport {
+                StripTransport::Wled { sink } => {
+                    sink.get("ip").and_then(Value::as_str).map(str::trim) == Some(ip.trim())
+                }
+                StripTransport::Serial { .. } => false,
+            })
+    };
+    let mut changed = false;
+    let mut index = 0;
+    rows.retain_mut(|row| {
+        let at = index;
+        index += 1;
+        if !is_this_device(row) {
+            return true;
+        }
+        changed = true;
+        if Some(at) != primary {
+            return false;
+        }
+        if let Some(object) = row.as_object_mut() {
+            object.insert("transport".into(), Value::Null);
+        }
+        describes_something(row)
+    });
+    if changed || present(state, "ledStrips").is_none() {
+        state.insert("ledStrips".into(), Value::Array(rows));
+    }
+    changed
+}
+
+fn describes_something(row: &Value) -> bool {
+    row.get("layout").is_some_and(|layout| !layout.is_null())
+        || row
+            .get("hardware")
+            .and_then(Value::as_object)
+            .is_some_and(|hardware| hardware.values().any(|value| !value.is_null()))
+}
+
+/// A strip as the frontend's migration writes it, so a list Rust stores first
+/// reads the same to both sides.
+pub fn strip_json(strip: &LedStrip) -> Value {
+    let mut out = Map::new();
+    out.insert("id".into(), Value::from(strip.id.clone()));
+    out.insert("enabled".into(), Value::from(strip.enabled));
+    out.insert(
+        "transport".into(),
+        match &strip.transport {
+            Some(StripTransport::Serial { port_name }) => {
+                json!({ "kind": "serial", "portName": port_name })
+            }
+            Some(StripTransport::Wled { sink }) => json!({ "kind": "wled", "sink": sink }),
+            None => Value::Null,
+        },
+    );
+    let mut hardware = Map::new();
+    for (key, value) in [
+        ("firmwareProfile", &strip.hardware.firmware_profile),
+        ("chipType", &strip.hardware.chip_type),
+        ("colorOrder", &strip.hardware.color_order),
+    ] {
+        if let Some(value) = value {
+            hardware.insert(key.into(), value.clone());
+        }
+    }
+    out.insert("hardware".into(), Value::Object(hardware));
+    if let Some(layout) = &strip.layout {
+        out.insert("layout".into(), layout.clone());
+    }
+    if let Some(correction) = &strip.color_correction {
+        out.insert("colorCorrection".into(), correction.clone());
+    }
+    Value::Object(out)
+}
+
+/// What a write changed on the primary strip, named by the single-output keys
+/// the running mode's refresh already understands: a layout-only save still
+/// takes the calibration fast path. Both sides are read by the same rule, so a
+/// change of which strip is primary shows as the fields that differ.
+pub fn primary_strip_changes(
+    before: &Map<String, Value>,
+    after: &Map<String, Value>,
+) -> Vec<&'static str> {
+    let before = primary_strip(strips_of(before));
+    let after = primary_strip(strips_of(after));
+    let fields = |strip: &Option<LedStrip>| {
+        strip
+            .as_ref()
+            .map(|strip| {
+                [
+                    strip.layout.clone(),
+                    strip.hardware.firmware_profile.clone(),
+                    strip.hardware.chip_type.clone(),
+                    strip.hardware.color_order.clone(),
+                ]
+            })
+            .unwrap_or_default()
+    };
+    let keys = [
+        "ledCalibration",
+        "firmwareProfile",
+        "selectedChipType",
+        "ledColorOrder",
+    ];
+    keys.into_iter()
+        .zip(fields(&before).into_iter().zip(fields(&after)))
+        .filter(|(_, (was, now))| was != now)
+        .map(|(key, _)| key)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{primary_strip, strips_from_legacy, LedStrip, StripTransport};
-    use serde_json::{json, Map, Value};
+    use super::{primary_strip, strip_json, strips_from_legacy, StripTransport};
+    use serde_json::{json, Value};
 
     const FIXTURE: &str = include_str!(
         "../../../src/features/strips/model/__tests__/fixtures/legacyStrips.parity.json"
     );
-
-    fn strip_json(strip: &LedStrip) -> Value {
-        let mut out = Map::new();
-        out.insert("id".into(), json!(strip.id));
-        out.insert("enabled".into(), json!(strip.enabled));
-        out.insert(
-            "transport".into(),
-            match &strip.transport {
-                Some(StripTransport::Serial { port_name }) => {
-                    json!({ "kind": "serial", "portName": port_name })
-                }
-                Some(StripTransport::Wled { sink }) => json!({ "kind": "wled", "sink": sink }),
-                None => Value::Null,
-            },
-        );
-        let mut hardware = Map::new();
-        for (key, value) in [
-            ("firmwareProfile", &strip.hardware.firmware_profile),
-            ("chipType", &strip.hardware.chip_type),
-            ("colorOrder", &strip.hardware.color_order),
-        ] {
-            if let Some(value) = value {
-                hardware.insert(key.into(), value.clone());
-            }
-        }
-        out.insert("hardware".into(), Value::Object(hardware));
-        if let Some(layout) = &strip.layout {
-            out.insert("layout".into(), layout.clone());
-        }
-        if let Some(correction) = &strip.color_correction {
-            out.insert("colorCorrection".into(), correction.clone());
-        }
-        Value::Object(out)
-    }
 
     #[test]
     fn derives_the_same_strips_as_the_frontend() {
@@ -183,6 +334,100 @@ mod tests {
                 case["name"]
             );
         }
+    }
+
+    const STORED_FIXTURE: &str = include_str!(
+        "../../../src/features/strips/model/__tests__/fixtures/storedStrips.parity.json"
+    );
+
+    #[test]
+    fn reads_stored_strips_as_the_frontend_does() {
+        let fixture: Value = serde_json::from_str(STORED_FIXTURE).expect("fixture parses");
+        for case in fixture["cases"].as_array().expect("cases") {
+            let derived: Vec<Value> = super::strips_from_stored(&case["stored"])
+                .iter()
+                .map(strip_json)
+                .collect();
+            assert_eq!(
+                Value::Array(derived),
+                case["strips"],
+                "case: {}",
+                case["name"]
+            );
+        }
+    }
+
+    #[test]
+    fn stored_strips_win_over_the_legacy_keys() {
+        let state = json!({
+            "lastSuccessfulPort": "COM3",
+            "ledStrips": [{ "id": "a", "enabled": true, "transport": null, "hardware": {} }]
+        });
+        let strips = super::strips_of(state.as_object().unwrap());
+        assert_eq!(strips.len(), 1);
+        assert_eq!(strips[0].transport, None);
+        let null = json!({ "lastSuccessfulPort": "COM3", "ledStrips": null });
+        assert!(matches!(
+            super::strips_of(null.as_object().unwrap())[0].transport,
+            Some(StripTransport::Serial { .. })
+        ));
+    }
+
+    fn wled(ip: &str) -> Value {
+        json!({ "ip": ip, "port": 21324, "ledCount": 60, "protocol": "drgb" })
+    }
+
+    #[test]
+    fn forgetting_a_wled_device_keeps_the_primary_strip_layout() {
+        let mut state = json!({
+            "ledStrips": [{
+                "id": "s1", "enabled": true, "future": 1,
+                "transport": { "kind": "wled", "sink": wled("10.0.0.5") },
+                "hardware": {}, "layout": { "totalLeds": 60 }
+            }]
+        });
+        let map = state.as_object_mut().unwrap();
+        assert!(super::forget_wled_in(map, " 10.0.0.5 "));
+        assert_eq!(
+            map["ledStrips"],
+            json!([{ "id": "s1", "enabled": true, "future": 1, "transport": null,
+                     "hardware": {}, "layout": { "totalLeds": 60 } }])
+        );
+    }
+
+    #[test]
+    fn forgetting_drops_a_waiting_strip_and_one_that_describes_nothing() {
+        let mut state = json!({
+            "ledStrips": [
+                { "id": "s1", "enabled": true, "transport": { "kind": "wled", "sink": wled("10.0.0.5") }, "hardware": {} },
+                { "id": "s2", "enabled": false, "transport": { "kind": "wled", "sink": wled("10.0.0.6") }, "hardware": {} }
+            ]
+        });
+        let map = state.as_object_mut().unwrap();
+        assert!(super::forget_wled_in(map, "10.0.0.6"));
+        assert_eq!(map["ledStrips"].as_array().unwrap().len(), 1);
+        assert!(super::forget_wled_in(map, "10.0.0.5"));
+        assert_eq!(map["ledStrips"], json!([]));
+        assert!(!super::forget_wled_in(map, "10.0.0.5"));
+    }
+
+    #[test]
+    fn forgetting_on_an_unmigrated_file_writes_the_strips_first() {
+        let mut state = json!({
+            "lastWledSink": wled("10.0.0.5"),
+            "ledCalibration": { "totalLeds": 60 }
+        });
+        let map = state.as_object_mut().unwrap();
+        assert!(super::forget_wled_in(map, "10.0.0.5"));
+        assert_eq!(
+            map["ledStrips"],
+            json!([{ "id": "strip-1", "enabled": true, "transport": null,
+                     "hardware": {}, "layout": { "totalLeds": 60 } }])
+        );
+        assert!(
+            map.contains_key("lastWledSink"),
+            "the legacy keys stay frozen"
+        );
     }
 
     #[test]

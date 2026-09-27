@@ -30,8 +30,8 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
-use super::device_connection::ActiveSinkRegistry;
 use super::led_sink::LedSink;
+use super::local_outputs::{self, LocalOutputRegistry};
 use super::status::CommandStatus;
 use super::wled_sink::{WledProtocol, WledSinkConfig, WledUdpSink};
 
@@ -509,29 +509,33 @@ fn discover_wled_devices_blocking(request: WledDiscoveryRequest) -> WledDiscover
     }
 }
 
-/// Build and register a `WledUdpSink` for the "usb" output channel,
-/// evicting any previously connected serial or WLED sink.
-// Off the main thread: replacing the registered sink stops the old one, and a
-// serial sink's stop can wait on its port.
+/// Bind a WLED device to the "usb" output channel, evicting a connected serial
+/// strip or another WLED device.
+// Off the main thread: binding the probe socket is a syscall the main thread
+// need not wait on.
 #[tauri::command]
 pub async fn connect_wled_sink<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     request: WledConnectRequest,
 ) -> WledConnectResponse {
     let worker_app = app.clone();
-    let response = tokio::task::spawn_blocking(move || {
+    let (response, bound) = tokio::task::spawn_blocking(move || {
         use tauri::Manager;
-        connect_wled_sink_blocking(request, &worker_app.state::<ActiveSinkRegistry>())
+        connect_wled_sink_blocking(request, &worker_app.state::<LocalOutputRegistry>())
     })
     .await
-    .unwrap_or_else(|join_error| WledConnectResponse {
-        status: CommandStatus::new(
-            "WLED_CONNECT_WORKER_FAILED",
-            "WLED connect worker terminated unexpectedly.",
-            Some(join_error.to_string()),
-        ),
+    .unwrap_or_else(|join_error| {
+        let response = WledConnectResponse {
+            status: CommandStatus::new(
+                "WLED_CONNECT_WORKER_FAILED",
+                "WLED connect worker terminated unexpectedly.",
+                Some(join_error.to_string()),
+            ),
+        };
+        (response, None)
     });
-    if response.status.code == "WLED_CONNECT_OK" {
+    if let Some(snapshot) = bound {
+        local_outputs::announce(&app, snapshot);
         super::lighting_mode::outputs::note_local_sink_connected(&app);
     }
     response
@@ -539,27 +543,34 @@ pub async fn connect_wled_sink<R: tauri::Runtime>(
 
 fn connect_wled_sink_blocking(
     request: WledConnectRequest,
-    sink_registry: &ActiveSinkRegistry,
-) -> WledConnectResponse {
+    registry: &LocalOutputRegistry,
+) -> (
+    WledConnectResponse,
+    Option<local_outputs::LocalOutputsSnapshot>,
+) {
     let device = &request.device;
 
     // Guard: led_count == 0 is not a valid strip configuration.
     if device.led_count == 0 {
-        return WledConnectResponse {
-            status: CommandStatus::new(
-                "WLED_INVALID_LED_COUNT",
-                "LED count must be greater than zero.",
-                None,
-            ),
-        };
+        return (
+            WledConnectResponse {
+                status: CommandStatus::new(
+                    "WLED_INVALID_LED_COUNT",
+                    "LED count must be greater than zero.",
+                    None,
+                ),
+            },
+            None,
+        );
     }
 
     let ip = match parse_ipv4(&device.ip) {
         Ok(addr) => addr,
         Err(msg) => {
-            return WledConnectResponse {
+            let response = WledConnectResponse {
                 status: CommandStatus::new("WLED_INVALID_IP", &msg, None),
-            }
+            };
+            return (response, None);
         }
     };
 
@@ -575,39 +586,38 @@ fn connect_wled_sink_blocking(
     let mut sink = config.build();
 
     if let Err(e) = sink.start() {
-        return WledConnectResponse {
-            status: CommandStatus::new(
-                "WLED_BRIDGE_UNREACHABLE",
-                "Failed to bind UDP socket for WLED sink.",
-                Some(e),
-            ),
-        };
+        return (
+            WledConnectResponse {
+                status: CommandStatus::new(
+                    "WLED_BRIDGE_UNREACHABLE",
+                    "Failed to bind UDP socket for WLED sink.",
+                    Some(e),
+                ),
+            },
+            None,
+        );
     }
 
     // `sink` only proved the UDP socket could bind; `lighting_mode.rs`
     // rebuilds a fresh sink per mode-change from `config`, so it sees live
     // colour-correction settings (mirrors `SerialSink`'s rebuild-from-`port_name`).
-    sink_registry.replace_wled(Box::new(sink), config);
+    let _ = sink.stop();
+    let snapshot = registry.wled_bound(config);
 
-    WledConnectResponse {
+    let response = WledConnectResponse {
         status: CommandStatus::ok("WLED_CONNECT_OK", "WLED sink connected and registered."),
-    }
+    };
+    (response, Some(snapshot))
 }
 
 /// Report the WLED sink currently bound to the "usb" output channel.
 ///
-/// Reads `wled_config`, not `sink` — the stored trait object is decorative
-/// (see `ActiveSinkRegistry`), and a serial connect clears the config, which
-/// is exactly the eviction the frontend needs to observe.
+/// A serial connect unbinds it, which is exactly the eviction the frontend needs to observe.
 #[tauri::command]
 pub fn get_wled_sink_status(
-    sink_registry: tauri::State<'_, ActiveSinkRegistry>,
+    registry: tauri::State<'_, LocalOutputRegistry>,
 ) -> WledSinkStatusResponse {
-    let config = sink_registry
-        .wled_config
-        .lock()
-        .ok()
-        .and_then(|guard| *guard);
+    let config = registry.wled_config();
 
     match config {
         Some(cfg) => WledSinkStatusResponse {
@@ -647,8 +657,8 @@ pub(crate) async fn forget_wled_with<R: tauri::Runtime>(
         };
     };
     let bound_here = |app: &tauri::AppHandle<R>| {
-        app.state::<ActiveSinkRegistry>()
-            .active_wled_config()
+        app.state::<LocalOutputRegistry>()
+            .wled_config()
             .is_some_and(|config| config.ip == addr)
     };
 
@@ -683,8 +693,8 @@ pub(crate) async fn forget_wled_with<R: tauri::Runtime>(
             }
         }
         // A strip connected meanwhile replaced it already, and is not ours to drop.
-        if bound_here(app) {
-            app.state::<ActiveSinkRegistry>().clear();
+        if let Some(snapshot) = app.state::<LocalOutputRegistry>().wled_forgotten(addr) {
+            local_outputs::announce(app, snapshot);
         }
     }
 
@@ -692,7 +702,10 @@ pub(crate) async fn forget_wled_with<R: tauri::Runtime>(
         .and_then(|state| state.saved_wled_ip())
         .is_some_and(|saved| saved.trim() == ip.trim());
     if saved_here {
-        if let Err(error) = super::shell_state::remove_from_rust(app, &["lastWledSink"]) {
+        let forgotten = super::shell_state::update_from_rust(app, |state| {
+            crate::models::led_strips::forget_wled_in(state, ip)
+        });
+        if let Err(error) = forgotten {
             return WledForgetResponse {
                 status: CommandStatus::new(
                     "WLED_FORGET_FAILED",
@@ -1203,13 +1216,13 @@ mod forget_tests {
     use tauri::async_runtime::block_on;
     use tauri::Manager;
 
-    use super::super::device_connection::ActiveSinkRegistry;
     use super::super::lighting_mode::outputs::{
         apply_outputs_with, ApplyOutputsRequest, LightingOrigin,
     };
     use super::super::lighting_mode::{
         LightingModeConfig, LightingModeKind, Rig, RigSetup, SolidColorPayload,
     };
+    use super::super::local_outputs::LocalOutputRegistry;
     use super::super::wled_sink::{WledProtocol, WledSinkConfig};
     use super::forget_wled_with;
 
@@ -1235,9 +1248,7 @@ mod forget_tests {
                 led_count: 59,
                 protocol: WledProtocol::Drgb,
             };
-            rig.app
-                .state::<ActiveSinkRegistry>()
-                .replace_wled(Box::new(config.build()), config);
+            rig.app.state::<LocalOutputRegistry>().wled_bound(config);
         }
         (rig, receiver)
     }
@@ -1278,10 +1289,10 @@ mod forget_tests {
         assert!(!rig.worker_running(), "nothing drives the device any more");
         assert!(rig
             .app
-            .state::<ActiveSinkRegistry>()
-            .active_wled_config()
+            .state::<LocalOutputRegistry>()
+            .wled_config()
             .is_none());
-        assert_eq!(rig.saved("lastWledSink"), None);
+        assert_eq!(rig.saved_wled_ip(), None);
         assert_eq!(
             rig.saved("lastOutputTargets"),
             Some(json!(["usb"])),
@@ -1297,7 +1308,11 @@ mod forget_tests {
 
         assert_eq!(response.status.code, "WLED_FORGET_OK");
         assert!(rig.log.events().is_empty(), "{:?}", rig.log.events());
-        assert_eq!(rig.saved("lastWledSink"), None);
+        assert_eq!(rig.saved_wled_ip(), None);
+        assert!(
+            rig.saved("lastWledSink").is_some(),
+            "the legacy key stays frozen for a downgrade"
+        );
     }
 
     #[test]
@@ -1309,9 +1324,10 @@ mod forget_tests {
         assert_eq!(response.status.code, "WLED_FORGET_OK");
         assert!(rig
             .app
-            .state::<ActiveSinkRegistry>()
-            .active_wled_config()
+            .state::<LocalOutputRegistry>()
+            .wled_config()
             .is_some());
-        assert!(rig.saved("lastWledSink").is_some());
+        assert_eq!(rig.saved_wled_ip().as_deref(), Some(IP));
+        assert_eq!(rig.saved("ledStrips"), None, "nothing was written");
     }
 }

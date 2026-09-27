@@ -1,4 +1,4 @@
-/** Boot-time re-bind of `ShellState.lastWledSink`. Probes `/json/info` first: `connect_wled_sink` only binds a local socket, so a blind restore reports success and then streams into the void. */
+/** Boot-time re-bind of the saved WLED strip. Probes `/json/info` first: `connect_wled_sink` only binds a local socket, so a blind restore reports success and then streams into the void. */
 import type { ShellState } from "@/shared/contracts/shell";
 import {
   normalizeWledProtocol,
@@ -14,6 +14,8 @@ import type {
 } from "./wledApi";
 import { parseCommandError } from "@/shared/contracts/status";
 import { savedWledSink } from "@/features/strips/model/stripSelectors";
+import { withWledSink } from "@/features/strips/model/stripWrites";
+import type { ShellStateUpdater } from "./outputChannelPersistence";
 
 export type WledRestoreOutcome =
   | { kind: "idle" }
@@ -24,7 +26,7 @@ export type WledRestoreOutcome =
 
 export interface WledSinkRestoreDeps {
   loadShellState: () => Promise<ShellState>;
-  saveShellState: (partial: Partial<ShellState>) => Promise<void>;
+  updateShellState: ShellStateUpdater;
   discover: (ip: string) => Promise<WledDiscoveryResponse>;
   connect: (
     device: WledDeviceInfo,
@@ -113,7 +115,7 @@ export async function restoreWledSink(
   const restored: WledUdpSinkConfig = { ...saved, ledCount: device.ledCount };
   if (restored.ledCount !== saved.ledCount) {
     try {
-      await deps.saveShellState({ lastWledSink: restored });
+      await deps.updateShellState((current) => withWledSink(current, restored));
     } catch (err) {
       console.error("[LumaSync] WLED restore: persisting refreshed sink failed:", err);
     }

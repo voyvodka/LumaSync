@@ -38,6 +38,12 @@ vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => Promise.resolve({}),
     save: (partial: Parameters<typeof shellStoreType.save>[0]) => saveMock(partial),
+    // The layout is written as a strips update; it fails or lands through the same mock.
+    update: async (update: Parameters<typeof shellStoreType.update>[0]) => {
+      const partial = update({} as never) ?? {};
+      await saveMock(partial);
+      return partial as never;
+    },
   },
 }));
 

@@ -105,4 +105,5 @@ mod test_support;
 #[cfg(test)]
 pub(crate) use test_support::{
     calibration as calibration_for_tests, EventLog, FakeHue, Rig, RigSetup, Watchdog,
+    PORT as TEST_PORT,
 };

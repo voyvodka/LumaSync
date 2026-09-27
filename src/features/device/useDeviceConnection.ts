@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LedChipType } from "@/shared/contracts/device";
 import { shellStore } from "../persistence/shellStore";
+import { listenSerialPortsChanged } from "./deviceEventsApi";
 import { persistSerialPort } from "./outputChannelPersistence";
 import {
   connectSerialPort,
@@ -23,7 +24,12 @@ export interface UseDeviceConnectionResult extends DeviceConnectionControllerSta
   runHealthCheck: () => Promise<void>;
 }
 
-export function useDeviceConnection(): UseDeviceConnectionResult {
+export interface UseDeviceConnectionOptions {
+  /** Reconnect the saved strip when the serial watcher sees it plugged back in. One mount only. */
+  reconnectOnReplug?: boolean;
+}
+
+export function useDeviceConnection({ reconnectOnReplug = false }: UseDeviceConnectionOptions = {}): UseDeviceConnectionResult {
   const [initialLastSuccessfulPort, setInitialLastSuccessfulPort] = useState<string | undefined>(undefined);
 
   useEffect(() => {
@@ -86,7 +92,7 @@ export function useDeviceConnection(): UseDeviceConnectionResult {
       getSerialConnectionStatus,
       runSerialHealthCheck,
       persistLastSuccessfulPort: async (portName: string) => {
-        await persistSerialPort((partial) => shellStore.save(partial), portName);
+        await persistSerialPort((update) => shellStore.update(update), portName);
       },
       initialLastSuccessfulPort,
       // Bug 10A — opt the live React hook into auto-reconnect so the user
@@ -97,6 +103,9 @@ export function useDeviceConnection(): UseDeviceConnectionResult {
       // useDeviceConnection() instances (App / DEVICES) stay in sync.
       connectionEvents: defaultConnectionEvents,
       firmwareProfileEvents: defaultFirmwareProfileEvents,
+      listenSerialPortsChanged,
+      reconnectOnReplug,
+      readSavedSerialPort: async () => savedSerialPort(await shellStore.load()),
     });
     controllerRef.current = controller;
     setState(controller.getState());
@@ -111,7 +120,7 @@ export function useDeviceConnection(): UseDeviceConnectionResult {
       controller.dispose();
       if (controllerRef.current === controller) controllerRef.current = null;
     };
-  }, [initialLastSuccessfulPort]);
+  }, [initialLastSuccessfulPort, reconnectOnReplug]);
 
   const refreshPorts = useCallback(async () => {
     await controllerRef.current?.refreshPorts();

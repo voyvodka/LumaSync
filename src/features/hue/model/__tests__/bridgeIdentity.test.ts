@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { dedupeBridges, normalizeIpValue, relocatedBridge, resolveManualIpError } from "../bridgeIdentity";
+import { dedupeBridges, normalizeIpValue, relocatedBridge, resolveManualIpError, bridgeDisplayName } from "../bridgeIdentity";
 
 describe("normalizeIpValue", () => {
   it("trims surrounding whitespace", () => {
@@ -76,5 +76,13 @@ describe("relocatedBridge", () => {
   it("is null when the bridge is where it was, or not in the answer", () => {
     expect(relocatedBridge(saved, [{ ...saved }])).toBeNull();
     expect(relocatedBridge(saved, [{ id: "other", ip: "10.0.0.7", name: "Other" }])).toBeNull();
+  });
+});
+
+describe("bridgeDisplayName", () => {
+  it("drops the address Rust appends to a bridge that reports no name, even an old one", () => {
+    expect(bridgeDisplayName("Hue Bridge (192.168.1.180)")).toBe("Hue Bridge");
+    expect(bridgeDisplayName("Living room")).toBe("Living room");
+    expect(bridgeDisplayName("Living room (upstairs)")).toBe("Living room (upstairs)");
   });
 });

@@ -5,7 +5,7 @@ use std::io::Write;
 use std::sync::Mutex;
 
 use super::serial::{LedOutputError, LedPacketSender};
-use crate::commands::device_connection::{SerialConnectionState, SerialConnectionStatus};
+use crate::commands::device_connection::SerialConnectionStatus;
 use crate::commands::status::CommandStatus;
 
 #[derive(Default)]
@@ -80,18 +80,16 @@ impl LedPacketSender for FakeSender {
     }
 }
 
-pub(super) fn connected_state(port_name: &str) -> SerialConnectionState {
-    SerialConnectionState {
-        last_status: Mutex::new(SerialConnectionStatus {
-            port_name: Some(port_name.to_string()),
-            connected: true,
-            status: CommandStatus {
-                code: "CONNECT_OK".to_string(),
-                message: "Connected".to_string(),
-                details: None,
-            },
-            updated_at_unix_ms: 0,
-            firmware: None,
-        }),
+pub(super) fn connected_state(port_name: &str) -> SerialConnectionStatus {
+    SerialConnectionStatus {
+        port_name: Some(port_name.to_string()),
+        connected: true,
+        status: CommandStatus {
+            code: "CONNECT_OK".to_string(),
+            message: "Connected".to_string(),
+            details: None,
+        },
+        updated_at_unix_ms: 0,
+        firmware: None,
     }
 }

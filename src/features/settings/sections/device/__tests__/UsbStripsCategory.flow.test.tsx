@@ -80,7 +80,7 @@ function device(overrides: Partial<UseDeviceConnectionResult> = {}): UseDeviceCo
   };
 }
 
-/** The page as DeviceSection mounts it: the roster is state it writes back to. */
+/** The page as DevicesPage mounts it: the roster is state it writes back to. */
 function LivePage({ connection, initial = [] }: { connection: UseDeviceConnectionResult; initial?: UsbStripPlacement[] }) {
   const [pairedStrips, setPairedStrips] = useState<UsbStripPlacement[]>(initial);
   return (
@@ -176,7 +176,7 @@ describe("which ports the page offers", () => {
 
 describe("Connect is the one way a strip is added", () => {
   it("connects the port and adds its strip to the roster once", async () => {
-    stateRef.current = { ledCalibration: { totalLeds: 96 } as ShellState["ledCalibration"] };
+    stateRef.current = { ledStrips: [{ id: "strip-1", enabled: true, transport: null, hardware: {}, layout: { totalLeds: 96 } as never }] };
     const connection = device({ ports: [STRIP_PORT] });
     const { setPairedStrips } = await renderCategory(connection);
     const user = userEvent.setup();
@@ -214,7 +214,7 @@ describe("Connect is the one way a strip is added", () => {
   // A setup from before the roster reconnects at boot with an empty list; the
   // page said "No strips yet" under "Connection established".
   it("says a connected strip is missing from the list, and adds it only when asked", async () => {
-    stateRef.current = { ledCalibration: { totalLeds: 120 } as ShellState["ledCalibration"] };
+    stateRef.current = { ledStrips: [{ id: "strip-1", enabled: true, transport: null, hardware: {}, layout: { totalLeds: 120 } as never }] };
     const connection = device({ ports: [STRIP_PORT], connectedPort: STRIP_PORT.portName, isConnected: true, status: "connected" });
     const { setPairedStrips } = await renderCategory(connection);
 
@@ -371,14 +371,14 @@ describe("strip settings", () => {
 
   // The chip picker was mounted without the profile, so this never showed.
   it("warns about SK6812 under the saved Adalight profile", async () => {
-    stateRef.current = { firmwareProfile: "adalight", selectedChipType: "sk6812-rgbw" };
+    stateRef.current = { ledStrips: [{ id: "strip-1", enabled: true, transport: null, hardware: { firmwareProfile: "adalight", chipType: "sk6812-rgbw" } }] };
     await renderCategory(device());
 
     expect(await screen.findByText("lights:led.chipType.sk6812AdalightWarning")).toBeInTheDocument();
   });
 
   it("warns as soon as Adalight is picked on the same page", async () => {
-    stateRef.current = { firmwareProfile: "lumasync-v1", selectedChipType: "sk6812-rgbw" };
+    stateRef.current = { ledStrips: [{ id: "strip-1", enabled: true, transport: null, hardware: { firmwareProfile: "lumasync-v1", chipType: "sk6812-rgbw" } }] };
     await renderCategory(device());
     const adalight = await screen.findByRole("radio", { name: /lights:led.firmwareProfile.adalightLabel/ });
     expect(screen.queryByText("lights:led.chipType.sk6812AdalightWarning")).toBeNull();

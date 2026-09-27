@@ -67,14 +67,71 @@ the OS buffer never holds a backlog, so what reaches the strip is never older th
 Streaming never flushes; only Solid, a one-shot write, uses `send_and_wait`, which drains and
 reports that packet's own outcome.
 
+Solid's one-shot write retries once when it fails on a cached session (`LED_OUTPUT_WRITE_FAILED`
+or `_FLUSH_FAILED`): after an unplug and replug the cached writer is dead, the sender has already
+dropped it, and the retry opens the port afresh (`SolidUsbOutput::send`). Only there: the worker's
+per-frame sends never retry, or an unplug would become a loop of DTR resets.
+
 What did not change: a failed write still reaches the worker as the same coded error
 (`LED_OUTPUT_WRITE_FAILED`, `LED_OUTPUT_FLUSH_FAILED`), one send later, and removes the session so
-the send after reopens the port; the bootloader settle still runs once per newly opened handle, on
-the caller. Dropping a session — `disconnect_session`, or a failure — interrupts a pacing wait at
+the send after reopens the port; the bootloader settle still runs once per newly opened handle.
+Dropping a session — `disconnect_session`, or a failure — interrupts a pacing wait at
 once, closes the port before reporting the writer gone, and waits at most `OUTPUT_TIMEOUT_MS` +
 100 ms for a write in progress before detaching the thread. The writer allocates nothing per frame
 once its two ping-pong buffers have grown; the allocation guard runs the production writer to prove
 it (`capture-and-pipeline.md`).
+
+**One registry holds what is connected: `LocalOutputRegistry` (`local_outputs.rs`).** It keeps a
+status per serial port that passed admission (connected, failed, lost, let go of) and the bound WLED
+device, and `driven()` is the one place the "WLED first, else a connected strip" rule lives — the
+mode plan, the Off blank, a retune, the test pattern and the launch's wait for a strip all ask it.
+It replaced a single serial status that every connect attempt overwrote and a sink slot that stored a
+`Box<dyn LedSink>` nothing ever wrote to. That split had three faults: a failed serial attempt emptied
+the slot and unbound a working WLED device the UI still showed, binding WLED never marked the serial
+strip replaced, and a failed attempt on a second port erased a live connection on the first. Each
+change bumps `revision` and emits `device://local-outputs-changed` (payload: `get_local_outputs`'s
+snapshot) to the main window. One local output is driven at a time until the worker drives several:
+a connect evicts the others, and the evicted entry reads `DISCONNECTED`. `get_serial_connection_status`
+still returns the last attempt's status exactly as before, whatever the entries say — the frontend
+reads it until it moves to the registry, and has no copy for the states the entries can now name.
+`disconnect_serial_port` marks the entry first (so no mode applied meanwhile plans the port again),
+takes `usb` out of a running mode the way an unplug does (session only), paints the strip black if
+the mode was lighting it — stopping only stops writing, and a Solid colour would stay lit on a strip
+the user let go of — then closes the writer; if the lighting would not let go, the entry is put back
+and the call reports `SERIAL_DISCONNECT_FAILED`. Until the frontend reads the registry (PR 4), two
+cases differ between the two: after a strip was replaced by WLED and the WLED device is forgotten,
+Rust drives nothing while the UI still reads the strip connected (a mode start is refused
+`DEVICE_NOT_CONNECTED`; the old fallback to the stale status was an accident), and after a failed
+attempt on a second port Rust keeps driving the first while the UI reads it disconnected.
+
+**The serial port watcher.** A thread in Rust (`spawn_serial_watch`, `device_connection.rs`) lists the
+serial inventory every 1.5 s — through `listed_ports`, so the macOS `cu`/`tty` filter holds, and
+without opening anything, so it never collides with a connect or its settle. It diffs the supported
+ports and emits `device://serial-ports-changed` (`{ ports, appeared, lost, connection }`) to the
+main window. A port is lost only after two polls in a row without it (one bad listing is not an
+unplug). When the connected port is lost it writes the status not connected (`PORT_NOT_FOUND`,
+details `unplugged`) — only if no connect landed after the listing was taken — and drops the
+lighting runtime's cached writer for that port, so the replug opens a fresh handle. The loss is
+announced once, but the clear is retried on every poll while the connected port stays missing: a
+connect that finished after one listing must not leave the status "connected" for good. Every lost
+port's writer is dropped, connected or not — a strip WLED replaced is no longer connected, yet its
+cached writer may still hold the port exclusively — unless a connect of it landed after the
+listing. The watcher never unbinds WLED. The App-mounted controller reconnects the saved port when it
+reappears: once ~0.5 s after, once more ~2 s later on a transient failure, never on
+`CONNECT_REPLUG_REQUIRED` (re-opening a wedged driver is what wedges it); after that, a Rescan or the
+next appearance. It reads the saved strip from the store at the attempt, not the port it remembered
+at mount: a connect evicts WLED in Rust and in the saved strips, so reconnecting a USB port the user
+has since moved away from would silently undo that choice. A replug refusal never strips `usb` from
+the saved selection — only the launch's attempt does that. A writer stuck in a write past `WRITER_EXIT_TIMEOUT` is detached with its
+exclusive handle, so a very fast replug can find the port held once.
+
+**`CONNECT_REPLUG_REQUIRED`.** The macOS CH340 driver can wedge — after the app is killed
+mid-stream, or after rapid open/close — and then refuses every open's termios setup with EINVAL
+until the cable is re-plugged. serialport keeps no errno, only nix's fixed description, so
+`connect_error_code` matches `ErrorKind::Unknown` with "Invalid argument"; the copy asks for a
+re-plug. It is the one refusal the automatic paths show rather than swallow — at launch, at a replug,
+and in auto-recovery, which stops there instead of spending its attempts on the same port. POSIX only: on Windows the same failure reads `CONNECT_IO_ERROR`. It is the driver's
+fault, not the app's close discipline, so the answer is the code, not a workaround.
 
 **Every sink goes through the `LedSink` trait.** Serial and WLED differ in transport, not in what
 they are asked to do. New output types implement the trait rather than branching at the call site,
@@ -116,7 +173,7 @@ added it attaches to the shared registry in `network/mdns.rs` — a second mDNS 
 makes one responder silently miss replies on macOS.
 
 **Serial colour order is a host-side correction, relative to the firmware.** `LedColorOrder`
-(`led_output/wire.rs`, persisted as `ledColorOrder`) permutes the three colour bytes after the
+(`led_output/wire.rs`, persisted as the strip's `hardware.colorOrder`) permutes the three colour bytes after the
 correction LUTs. It says how to fix what the firmware already sends, not what order the strip's
 datasheet names — so a strip showing red and green swapped wants `grb` regardless of its chip —
 because the host cannot see what order a flashed build compiled in, and an absolute value would be
@@ -127,8 +184,8 @@ fast-path equality list that forces a restart, because a restart re-opens screen
 byte shuffle. WLED ignores it — WLED has its own per-output colour order, and applying both would
 correct twice.
 
-The lighting transaction stamps the order from `ledColorOrder` when it applies a mode (`rgb` when
-unset), and a save of `ledColorOrder` re-applies the running mode, which retunes the order in place
+The lighting transaction stamps the order from the primary strip when it applies a mode (`rgb` when
+unset), and a save that changes it re-applies the running mode, which retunes the order in place
 (`lighting-transaction.md`, "Settings refresh"). The stamp is caller-wins for anything that does
 send one, unlike chip type and profile, which means nothing may put a `colorOrder` into the persisted
 `lightingMode` — `normalizeColorOrder` never invents one for that reason. The
@@ -186,8 +243,8 @@ The WLED page now keeps a card for the saved or bound device, with Forget device
 confirmation (`forget_wled_device`, `wled_discovery.rs`). When that device is the bound "usb" sink,
 the transaction takes `usb` out of the session's selection with a `usbUnplug` request — the mode
 keeps running on Hue, or ends if the device was its only output — and only then is the registry
-cleared, unless a strip replaced it meanwhile. The saved `lastWledSink` goes too, so the next
-launch binds nothing. `lastOutputTargets` keeps `usb` on purpose: that entry means "the local
+cleared, unless a strip replaced it meanwhile. The saved WLED strip goes too — the primary one keeps its layout
+with no transport — so the next launch binds nothing. `lastOutputTargets` keeps `usb` on purpose: that entry means "the local
 channel", which a strip or another WLED device serves just as well, and dropping it would leave the
 next device undriven until the user re-selects it. The command contacts nothing on the network — no
 power-off, the device leaves realtime mode on its own — which is also why its tests can use any
@@ -195,8 +252,8 @@ address.
 
 ## Gotchas
 
-- **Opening a serial port toggles DTR, which resets many boards.** Reconnecting on every mode change makes an Arduino-class controller reboot each time, so a cached session is deliberately preserved across mode changes — the log line `cached serial session preserved to avoid DTR-reset cycle` is that working as intended, not a leak. That preservation is scoped to the *same* port only: `set_active_port` (`lighting_mode/transition.rs`) releases the previous port's cached session via `output_bridge.disconnect_session` the moment the active port actually changes, so switching away from a port does not hold its OS handle open until the app quits. A future `LedSink`-from-registry unification (see `ActiveSinkRegistry` in `commands/device_connection.rs`) must carry this same release-on-switch rule, not just the DTR-preserving cache.
-- **The output path settles too, because connect drops its handle.** `connect_serial_port` opens, waits `BOOTLOADER_SETTLE_DELAY_MS`, PINGs on that same handle (`serial-protocol.md` §1.5), and drops it (`drop(handle)` in `connect_serial_port_blocking`). So the first frame reopens the port through `SerialLedPacketSender`'s factory, which is a *second* DTR assert and a second auto-reset; the session cache above only protects frame 2 onward. Frame 1 is the one the user is watching, so the same settle runs after any newly opened output handle. It is an `after_open` hook rather than a `sleep` inside the factory so tests can assert *when* it fires — once per session, never per frame — without waiting 2 s. Paying it per frame would put the capture-to-output path forty times over budget.
+- **Opening a serial port toggles DTR, which resets many boards.** Reconnecting on every mode change makes an Arduino-class controller reboot each time, so a cached session is deliberately preserved across mode changes — the log line `cached serial session preserved to avoid DTR-reset cycle` is that working as intended, not a leak. That preservation is scoped to the *same* port only: `set_active_port` (`lighting_mode/transition.rs`) releases the previous port's cached session via `output_bridge.disconnect_session` the moment the active port actually changes, so switching away from a port does not hold its OS handle open until the app quits. Driving several strips at once (the worker fan-out after `LocalOutputRegistry`) must carry this same release-on-switch rule, not just the DTR-preserving cache.
+- **The output path settles too, because connect drops its handle.** `connect_serial_port` opens, waits `BOOTLOADER_SETTLE_DELAY_MS`, PINGs on that same handle (`serial-protocol.md` §1.5), and drops it (`drop(handle)` in `connect_serial_port_blocking`). So the first frame reopens the port through `SerialLedPacketSender`'s factory, which is a *second* DTR assert and a second auto-reset; the session cache above only protects frame 2 onward. Frame 1 is the one the user is watching, so the same settle runs after any newly opened output handle — once per session, never per frame; per frame it would put the capture-to-output path forty times over budget. The open stays on the caller, so a port that will not open still fails that send with `LED_OUTPUT_PORT_OPEN_FAILED`, but the settle is the writer's: the session's `ready_at` holds its first byte back, and the caller returns at once. It used to be a `sleep` run by the caller under the sessions lock, which froze every other port's sends for 2 s while one opened — fatal with more than one strip — and charged the worker's first frame 2 s of send cost. Frames queued meanwhile collapse into the latest-wins slot; `send_and_wait` starts its time budget at `ready_at`; dropping the session cuts the wait short and lets the port go at once. Two consequences to read a report against: the worker's first frame now costs microseconds, so the quality controller starts at its base interval instead of seeding its average with 2 s and throttling the first frames; and the open itself is still on the caller under the sessions lock, so a driver whose `open()` hangs still holds every port for as long as that call takes — bounded by the OS, not by the settle. Latest-wins also means two `send_and_wait` calls on one port inside one settle both resolve `Ok` with only the second packet written; mode transitions stop the previous output before a Solid write, so nothing issues two today.
 - **macOS phantom serial endpoints accept `open()` and `write()` and go nowhere.** `/dev/cu.Bluetooth-Incoming-Port` and similar route to nothing — every frame "succeeds" at 20 Hz while the strip stays dark, which a user reads as a crash. This is why the allowlist rejects up front instead of trying and failing.
 - **A failed connect must not leave its port name in the connection status.** `SerialConnectionStatus.portName` is the port that was opened, and is `null` whenever `connected` is false. The refused name goes in `status.details` (`port="…"`). It used to be echoed back, and that did two kinds of damage. `apply_mode_change` (`lighting_mode/transition.rs`) planned USB output from `port_name` even while `connected` was false, so the next Solid or Ambilight start opened and wrote to a port that had just been refused `PORT_UNSUPPORTED`, which bypassed the allowlist. It also fed `useUsbConnectionStatus`, so the room map showed a refused or unplugged port as ONLINE. `failed_connect_status` in `device_connection.rs` builds every failure status and has no way to set a port name, and `apply_mode_change` now requires `connected` as well, so neither side alone can reopen the hole. The LED test pattern needed the second guard most: with no output available it sends `targets: []`, which the legacy rule reads as "USB required", and a test skips the USB gate — so only the plan stood between a stale name and the worker.
 - **macOS exposes every USB adapter under two paths, and only one of them works.** `/dev/cu.*` is the call-out device and is correct; its `/dev/tty.*` sibling is a blocking terminal device that waits on DCD, and CH340/FTDI/CP2102/Arduino boards never assert it — so the `tty.*` port opens successfully and then stalls, producing "Connect and verify: Pass" followed by a handshake timeout. Real incident, 2026-04-26. All `/dev/tty.*` paths are filtered, including `usbmodem*`, because the `cu.*` sibling always exists. The filter used to cover only the listing: connect looked names up in the raw inventory, where the `tty.*` sibling carries the same allowlisted VID:PID, so a stale or directly invoked name still opened it. Connect and the health check now refuse an enumerated `tty.*` path with `PORT_UNSUPPORTED` and name the `cu.*` path in `details`, rather than silently opening the sibling — the caller asked for a path, and quietly substituting another would hide the stale value instead of surfacing it. The filter stays macOS-only; no other platform names a serial device `/dev/tty.<name>`.
@@ -207,9 +264,9 @@ address.
 - **Adalight carries no brightness, so the host scales the pixels.** Third-party Adalight firmware has no brightness input, so the Adalight encoder multiplies the corrected pixels by brightness, the same way `CorrectedWledSink` does. Only LumaSync v1 frames carry a brightness byte. The slider used to do nothing under Adalight.
 - **An absent `firmwareProfile` is LumaSync v1, and nothing detects otherwise.** The `FIRMWARE_PROFILE` JSDoc in `device.ts` describes an auto-detect (v1 when the handshake answers, else Adalight) that is not implemented: the picker is the only writer, and Rust resolves an absent value with `unwrap_or_default()`. A stock Adalight sketch stays dark until the user switches profile, which is why LumaSync is never described as plainly "Adalight-compatible".
 - **The frame budget sizes pixels by what the encoder actually writes, not by the chip type.** `WirePixelLayout::for_output` decides both the encoder dispatch and the 115 200-baud budget. SK6812 under Adalight is sent as 3-byte pixels, because Adalight has no RGBW frame, and sizing it at 4 bytes held it a quarter below the frame rate the link can carry.
-- **`lastSuccessfulPort` and `lastWledSink` are mutually exclusive, and the code that writes one clears the other.** `ActiveSinkRegistry` holds one sink per output channel, so a serial connect evicts WLED in Rust and vice versa. If both were persisted, both boot paths would fire: the WLED restore lands first, then the serial auto-reconnect evicts it — the 2 s `BOOTLOADER_SETTLE_DELAY_MS` guarantees serial finishes last. The user would see a "connected" WLED device receiving nothing. Mirroring the eviction in persisted state is what keeps the restore honest; there is no separate "which family is active" flag to drift.
+- **A saved serial strip and a saved WLED strip are mutually exclusive, and the write that binds one drops the other (`stripWrites.ts`).** `LocalOutputRegistry` drives one local output at a time, so a serial connect evicts WLED in Rust and vice versa. If both were persisted, both boot paths would fire: the WLED restore lands first, then the serial auto-reconnect evicts it — the 2 s `BOOTLOADER_SETTLE_DELAY_MS` guarantees serial finishes last. The user would see a "connected" WLED device receiving nothing. Mirroring the eviction in persisted state is what keeps the restore honest; there is no separate "which family is active" flag to drift.
 - **A WLED restore probes before it connects, because `connect_wled_sink` cannot fail for an absent device.** `WledUdpSink::start()` binds a local `0.0.0.0:0` socket and never contacts the bridge, so a blind restore reports `WLED_CONNECT_OK` for a device that is powered off. `restoreWledSink` runs `discover_wled_devices` (an HTTP `/json/info` probe) first and only registers the sink once the device has answered. `test_wled_bridge` would prove reachability too, but it sends a red-ramp frame — not something to do to someone's lights at every launch.
 - **The room map is currently Hue-only.** `src/shared/contracts/roomMap.ts` models positions and room dimensions, and `commands/room_map/hue_zone.rs` maps zones onto Hue channels — but no serial or WLED sink reads any of it. Placement does not yet affect what a USB strip is sent.
-- **`connectionEvents.ts` exists because pairing in one mount used to be invisible to the others.** `useDeviceConnection` is instantiated separately per caller, each with its own connection state; before the pub-sub, a pair completed in `DeviceSection.tsx` left the Lights surface believing USB was still offline until a WebView reload. A single shared instance would have fixed that too, but breaks every per-scenario controller test fixture, which builds a fresh controller per test. The pub-sub is the fix that keeps both: whichever mount observes a pair broadcasts it, and the others re-pull from Rust — but it bridges *state* only, not the *work* each mount does to get there.
-- **`useDeviceConnection` is mounted twice, each with its own controller instance:** `App.tsx` (Lights surface, StatusBar pill, `usbConnected` prop) and `DeviceSection.tsx` (the pair UI). Each mount runs its own boot-time port scan and, when a `lastSuccessfulPort` is persisted, its own auto-reconnect attempt — so a cold launch does that work twice concurrently instead of once, and the pub-sub above does not dedupe it. Collapsing the two mounts to a singleton is still a real architecture change beyond the pub-sub fix and remains untaken.
-- **`control/FirmwareProfilePicker.tsx` used to be a third full controller mount, solely to read `latestHealthCheck.advertisedFirmwareProfile`.** Fixed: `runHealthCheck` (in `state/healthCheck.ts`) now broadcasts the advertised profile on a dedicated `firmwareProfileEvents` bus, and the picker reads it via the lightweight `useAdvertisedFirmwareProfile` hook — same pattern as `useUsbConnectionStatus`. This also fixed a latent correctness bug: because each controller mount is fully isolated, the picker's own (never-triggered) health check meant `advertised` was always `undefined` in its mount site at the time (`LightsSection.tsx`; it now sits under Devices → USB Strips, and never passes the `advertisedFirmwareProfile` prop) — the Bug H4 mismatch UX had never actually fired in production. The new bus receives the broadcast from whichever controller (`DeviceSection.tsx`) ran the real health check.
+- **`connectionEvents.ts` exists because pairing in one mount used to be invisible to the others.** `useDeviceConnection` is instantiated separately per caller, each with its own connection state; before the pub-sub, a pair completed in `DevicesPage.tsx` left the Lights surface believing USB was still offline until a WebView reload. A single shared instance would have fixed that too, but breaks every per-scenario controller test fixture, which builds a fresh controller per test. The pub-sub is the fix that keeps both: whichever mount observes a pair broadcasts it, and the others re-pull from Rust — but it bridges *state* only, not the *work* each mount does to get there.
+- **`useDeviceConnection` is mounted twice, each with its own controller instance:** `App.tsx` (Lights surface, StatusBar pill, `usbConnected` prop) and `DevicesPage.tsx` (the pair UI). Each mount runs its own boot-time port scan and, when a serial strip is saved, its own auto-reconnect attempt — so a cold launch does that work twice concurrently instead of once, and the pub-sub above does not dedupe it. Collapsing the two mounts to a singleton is still a real architecture change beyond the pub-sub fix and remains untaken.
+- **`control/FirmwareProfilePicker.tsx` used to be a third full controller mount, solely to read `latestHealthCheck.advertisedFirmwareProfile`.** Fixed: `runHealthCheck` (in `state/healthCheck.ts`) now broadcasts the advertised profile on a dedicated `firmwareProfileEvents` bus, and the picker reads it via the lightweight `useAdvertisedFirmwareProfile` hook — same pattern as `useUsbConnectionStatus`. This also fixed a latent correctness bug: because each controller mount is fully isolated, the picker's own (never-triggered) health check meant `advertised` was always `undefined` in its mount site at the time (`LightsSection.tsx`; it now sits under Devices → USB Strips, and never passes the `advertisedFirmwareProfile` prop) — the Bug H4 mismatch UX had never actually fired in production. The new bus receives the broadcast from whichever controller (`DevicesPage.tsx`) ran the real health check.

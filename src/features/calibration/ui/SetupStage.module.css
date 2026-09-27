@@ -11,6 +11,11 @@
   }
   .fit { position: absolute; inset: 4px 16px 76px; pointer-events: none; }
   .stage { position: relative; width: 600px; height: 420px; }
+  /* The numbers and the halo follow the monitor while it changes shape (a display switch). */
+  .stage:has(> svg[data-morphing]) > :not(svg) {
+    transition: left var(--lm-dur-base) var(--lm-ease-out), top var(--lm-dur-base) var(--lm-ease-out),
+      width var(--lm-dur-base) var(--lm-ease-out), height var(--lm-dur-base) var(--lm-ease-out);
+  }
 
   /* The strip's light on the wall: the picture's own colours, fading out wide behind the monitor.
      A mask rather than `filter: blur()`, which re-rasterised a monitor-sized layer on every

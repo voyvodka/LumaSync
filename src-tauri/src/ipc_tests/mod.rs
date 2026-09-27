@@ -31,9 +31,7 @@ use tauri::webview::InvokeRequest;
 use tauri::{App, AppHandle, Manager, WebviewWindow, WebviewWindowBuilder};
 
 use crate::commands::calibration::OverlayState;
-use crate::commands::device_connection::{
-    ActiveSinkRegistry, SerialConnectionState, SerialPortAccess,
-};
+use crate::commands::device_connection::SerialPortAccess;
 use crate::commands::hue::state_store::HueRuntimeStateStore;
 use crate::commands::led_preview::LedTwinState;
 use crate::commands::lighting_mode::LightingRuntimeState;
@@ -67,9 +65,8 @@ where
         .build(crate::app_context())
         .expect("mock app should build");
 
-    app.manage(SerialConnectionState::default());
+    app.manage(crate::commands::local_outputs::LocalOutputRegistry::default());
     app.manage(serial_ports);
-    app.manage(ActiveSinkRegistry::default());
     app.manage(LightingRuntimeState::default());
     app.manage(LedTwinState::default());
     app.manage(OverlayState::default());

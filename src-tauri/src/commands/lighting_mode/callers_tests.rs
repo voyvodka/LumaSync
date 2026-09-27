@@ -15,9 +15,9 @@ use super::outputs::{
 use super::snapshot::OutputTarget::{self, Hue, Usb};
 use super::test_support::{Rig, RigSetup};
 use super::{AmbilightPayload, LightingModeConfig, LightingModeKind, SolidColorPayload};
-use crate::commands::device_connection::SerialConnectionState;
 use crate::commands::hue::state_store::HueRuntimeStateStore;
 use crate::commands::led_preview::LedTwinState;
+use crate::commands::local_outputs::LocalOutputRegistry;
 use crate::commands::runtime_telemetry::RuntimeTelemetryState;
 use crate::commands::test_pattern::{TestPatternConfig, TestPatternKind, TestPatternSpeed};
 use tauri::Manager;
@@ -485,6 +485,91 @@ fn a_led_layout_save_that_changes_nothing_re_applies_nothing() {
     assert_eq!(mode_applies(&rig), 0, "{:?}", rig.log.events());
 }
 
+/// The window's own write path, so a strips save is translated as it is in the app.
+fn save_strips_as_window(rig: &Rig, strips: serde_json::Value) {
+    let store = rig
+        .app
+        .state::<crate::commands::shell_state::ShellStateStore>();
+    let mut set = serde_json::Map::new();
+    set.insert("ledStrips".into(), strips);
+    crate::commands::shell_state::patch_as_window(
+        &rig.handle(),
+        &store,
+        crate::commands::shell_state::ShellStatePatchRequest {
+            set,
+            remove: Vec::new(),
+            writer_id: Some("main".into()),
+        },
+    )
+    .unwrap();
+}
+
+fn strip(layout: serde_json::Value, port: &str, chip: Option<&str>) -> serde_json::Value {
+    let mut hardware = serde_json::Map::new();
+    if let Some(chip) = chip {
+        hardware.insert("chipType".into(), json!(chip));
+    }
+    json!([{
+        "id": "strip-1", "enabled": true,
+        "transport": { "kind": "serial", "portName": port },
+        "hardware": hardware, "layout": layout
+    }])
+}
+
+#[test]
+fn a_strips_save_that_moves_the_layout_reaches_the_running_mode_once() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(), &["usb"]);
+    save_strips_as_window(&rig, strip(super::calibration_for_tests(), "COM3", None));
+    std::thread::sleep(SETTINGS_REFRESH_DEBOUNCE * 2);
+    assert_eq!(mode_applies(&rig), 0, "same layout: {:?}", rig.log.events());
+
+    let mut layout = super::calibration_for_tests();
+    layout["counts"]["top"] = json!(31);
+    layout["totalLeds"] = json!(60);
+    save_strips_as_window(&rig, strip(layout, "COM3", None));
+
+    wait_until("the layout never reached the mode", || {
+        mode_applies(&rig) >= 1
+    });
+    assert_eq!(
+        rig.running().led_calibration.map(|c| c.total_leds),
+        Some(60)
+    );
+    std::thread::sleep(SETTINGS_REFRESH_DEBOUNCE * 2);
+    assert_eq!(mode_applies(&rig), 1, "{:?}", rig.log.events());
+}
+
+#[test]
+fn a_strips_save_that_moves_only_the_transport_re_applies_nothing() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(), &["usb"]);
+    save_strips_as_window(&rig, strip(super::calibration_for_tests(), "COM3", None));
+    std::thread::sleep(SETTINGS_REFRESH_DEBOUNCE * 2);
+
+    save_strips_as_window(&rig, strip(super::calibration_for_tests(), "COM4", None));
+
+    std::thread::sleep(SETTINGS_REFRESH_DEBOUNCE * 2);
+    assert_eq!(mode_applies(&rig), 0, "{:?}", rig.log.events());
+}
+
+#[test]
+fn a_strips_save_that_changes_the_chip_re_applies_the_mode() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(), &["usb"]);
+    save_strips_as_window(&rig, strip(super::calibration_for_tests(), "COM3", None));
+    std::thread::sleep(SETTINGS_REFRESH_DEBOUNCE * 2);
+
+    save_strips_as_window(
+        &rig,
+        strip(super::calibration_for_tests(), "COM3", Some("sk6812-rgbw")),
+    );
+
+    wait_until("the chip never reached the mode", || {
+        mode_applies(&rig) >= 1
+    });
+}
+
 #[test]
 fn a_led_layout_save_leaves_a_mode_off_the_strip_alone() {
     let rig = Rig::new(RigSetup::default());
@@ -532,7 +617,7 @@ fn start_test(rig: &Rig) {
         &handle,
         mode,
         rig.state().inner(),
-        rig.app.state::<SerialConnectionState>().inner(),
+        rig.app.state::<LocalOutputRegistry>().driven().as_ref(),
         rig.app.state::<HueRuntimeStateStore>().inner(),
         rig.app.state::<RuntimeTelemetryState>().inner(),
         rig.app.state::<LedTwinState>().inner(),
@@ -542,7 +627,6 @@ fn start_test(rig: &Rig) {
             speed: TestPatternSpeed::default(),
             display_aspect: 16.0 / 9.0,
         }),
-        None,
     )
     .unwrap();
     assert_eq!(

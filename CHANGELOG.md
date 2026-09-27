@@ -63,6 +63,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Devices lists your devices down the left: each strip (USB or WLED) and the Hue bridge by name,
+  with a dot while it is connected, and a USB controller that is plugged in but not added yet as
+  "… · Add". The Displays page is gone: the display Ambilight reads is chosen in LED Setup, where
+  the layout is drawn on it.
 - Settings is split into pages — General, Appearance, Updates, Help and About — listed on the
   left. Each row shows just its name and control; an explanation, where one helps, is behind the
   ⓘ beside the name.
@@ -248,6 +252,11 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- A USB strip that fails to connect no longer switches off a working WLED device the app still
+  showed as connected.
+- Stats for nerds: the frame-rate chip in the status bar no longer turns red with "Low FPS" while
+  everything is fine — with Hue alone, which runs at 20 fps, or on a still screen, where fewer
+  frames change. Its colour now shows whether the output keeps up.
 - LED Setup opens on your real display straight away: it no longer shows "No displays detected"
   for a moment, draws the monitor in the wrong shape before correcting it, or turns Test on as the
   page opens. Messages float over the screen instead of pushing it down, and while a test runs an

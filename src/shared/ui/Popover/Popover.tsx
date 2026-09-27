@@ -11,7 +11,8 @@ interface PopoverProps {
   anchorRef: RefObject<HTMLElement | null>;
   /** Opens above the anchor (the dock sits at the bottom) or below it. */
   side?: "above" | "below";
-  width?: number;
+  /** A fixed width, or `"fit"`: as wide as its content, never narrower than the anchor. */
+  width?: number | "fit";
   id?: string;
   label?: string;
   role?: "dialog" | "listbox";
@@ -26,7 +27,7 @@ interface PopoverProps {
  */
 export function Popover({ open, onClose, anchorRef, side = "above", width = 240, id, label, role, children }: PopoverProps) {
   const ref = useRef<HTMLDivElement | null>(null);
-  const [pos, setPos] = useState<{ left: number; top: number; arrow: number } | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; arrow: number; width: number } | null>(null);
   const [mounted, setMounted] = useState(open);
   const [closing, setClosing] = useState(false);
 
@@ -37,6 +38,8 @@ export function Popover({ open, onClose, anchorRef, side = "above", width = 240,
     if (open) {
       setMounted(true);
       setClosing(false);
+      // Unplaced until measured, so a "fit" popover sizes to this opening's content.
+      setPos(null);
     } else if (mounted) {
       // No animation runs under reduced motion, so no animationend would ever unmount it.
       if (prefersReducedMotion()) setMounted(false);
@@ -58,9 +61,11 @@ export function Popover({ open, onClose, anchorRef, side = "above", width = 240,
     if (!open || !anchorRef.current || !ref.current) return;
     const a = anchorRef.current.getBoundingClientRect();
     const h = ref.current.offsetHeight;
-    const left = Math.max(8, Math.min(a.left + a.width / 2 - width / 2, window.innerWidth - width - 8));
+    const w =
+      width === "fit" ? Math.min(Math.max(ref.current.offsetWidth, a.width), window.innerWidth - 16) : width;
+    const left = Math.max(8, Math.min(a.left + a.width / 2 - w / 2, window.innerWidth - w - 8));
     const top = side === "above" ? Math.max(8, a.top - h - 10) : a.bottom + 10;
-    setPos({ left, top, arrow: a.left + a.width / 2 - left });
+    setPos({ left, top, arrow: a.left + a.width / 2 - left, width: w });
   }, [open, anchorRef, side, width]);
 
   useEffect(() => {
@@ -92,7 +97,14 @@ export function Popover({ open, onClose, anchorRef, side = "above", width = 240,
       aria-label={label}
       aria-hidden={closing || undefined}
       // The notch points at the anchor and the popover grows out of it (and settles back into it).
-      style={{ width, left: pos?.left ?? -9999, top: pos?.top ?? -9999, "--arrow-x": `${pos?.arrow ?? width / 2}px` } as CSSProperties}
+      style={
+        {
+          width: pos?.width ?? (width === "fit" ? "max-content" : width),
+          left: pos?.left ?? -9999,
+          top: pos?.top ?? -9999,
+          "--arrow-x": `${pos?.arrow ?? 0}px`,
+        } as CSSProperties
+      }
       className={cx(styles.pop, styles[side], closing && styles.closing)}
       onAnimationEnd={(event) => {
         if (closing && event.target === event.currentTarget) {

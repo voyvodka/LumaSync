@@ -73,7 +73,7 @@ impl PersistedShellState {
 
     /// Every strip the saved setup describes.
     pub fn strips(&self) -> Vec<LedStrip> {
-        led_strips::strips_from_legacy(&self.0)
+        led_strips::strips_of(&self.0)
     }
 
     /// The strip a setting with no strip named applies to.
@@ -413,13 +413,14 @@ impl ShellStateStore {
     }
 
     /// Merges top-level keys and writes. `notify` runs under the lock, so the
-    /// change events leave in the order the writes landed.
+    /// change events leave in the order the writes landed; it must not touch
+    /// the store again (the lock is not re-entrant).
     pub fn patch(
         &self,
         set: StateMap,
         remove: Vec<String>,
         writer_id: Option<String>,
-        notify: impl FnOnce(&ShellStateChanged),
+        notify: impl FnOnce(&ShellStateChanged, StateTransition<'_>),
     ) -> Result<u64, String> {
         self.with_loaded(|loaded| {
             let mut root = loaded.root.clone();
@@ -430,14 +431,52 @@ impl ShellStateStore {
             for key in &remove {
                 state.remove(key);
             }
-            self.commit(loaded, root)?;
-            notify(&ShellStateChanged {
-                set,
-                remove,
-                revision: loaded.revision,
-                writer_id,
-            });
+            let before = self.commit(loaded, root)?;
+            notify(
+                &ShellStateChanged {
+                    set,
+                    remove,
+                    revision: loaded.revision,
+                    writer_id,
+                },
+                StateTransition::between(&before, &loaded.root),
+            );
             Ok(loaded.revision)
+        })
+    }
+
+    /// A read-modify-write of the whole state object under the lock, for Rust's
+    /// own edits of a nested key. `edit` returns `false` to write nothing; the
+    /// announced change is the top-level diff, as for `replace`.
+    pub fn update(
+        &self,
+        writer_id: Option<String>,
+        edit: impl FnOnce(&mut StateMap) -> bool,
+        notify: impl FnOnce(&ShellStateChanged, StateTransition<'_>),
+    ) -> Result<Option<u64>, String> {
+        self.with_loaded(|loaded| {
+            let previous = state_of(&loaded.root).cloned().unwrap_or_default();
+            let mut next = previous.clone();
+            if !edit(&mut next) {
+                return Ok(None);
+            }
+            let (set, remove) = diff(&previous, &next);
+            if set.is_empty() && remove.is_empty() {
+                return Ok(None);
+            }
+            let mut root = loaded.root.clone();
+            root.insert(SHELL_STORE_KEY.to_string(), Value::Object(next));
+            let before = self.commit(loaded, root)?;
+            notify(
+                &ShellStateChanged {
+                    set,
+                    remove,
+                    revision: loaded.revision,
+                    writer_id,
+                },
+                StateTransition::between(&before, &loaded.root),
+            );
+            Ok(Some(loaded.revision))
         })
     }
 
@@ -448,7 +487,7 @@ impl ShellStateStore {
         next: StateMap,
         expected_revision: u64,
         writer_id: Option<String>,
-        notify: impl FnOnce(&ShellStateChanged),
+        notify: impl FnOnce(&ShellStateChanged, StateTransition<'_>),
     ) -> Result<ShellStateWriteResult, String> {
         self.with_loaded(|loaded| {
             if loaded.revision != expected_revision {
@@ -458,26 +497,20 @@ impl ShellStateStore {
                 });
             }
             let previous = state_of(&loaded.root).cloned().unwrap_or_default();
-            let set: StateMap = next
-                .iter()
-                .filter(|(key, value)| previous.get(*key) != Some(*value))
-                .map(|(key, value)| (key.clone(), value.clone()))
-                .collect();
-            let remove: Vec<String> = previous
-                .keys()
-                .filter(|key| !next.contains_key(*key))
-                .cloned()
-                .collect();
+            let (set, remove) = diff(&previous, &next);
 
             let mut root = loaded.root.clone();
             root.insert(SHELL_STORE_KEY.to_string(), Value::Object(next));
-            self.commit(loaded, root)?;
-            notify(&ShellStateChanged {
-                set,
-                remove,
-                revision: loaded.revision,
-                writer_id,
-            });
+            let before = self.commit(loaded, root)?;
+            notify(
+                &ShellStateChanged {
+                    set,
+                    remove,
+                    revision: loaded.revision,
+                    writer_id,
+                },
+                StateTransition::between(&before, &loaded.root),
+            );
             Ok(ShellStateWriteResult {
                 applied: true,
                 revision: loaded.revision,
@@ -486,19 +519,54 @@ impl ShellStateStore {
     }
 
     /// Disk first: a failed write leaves memory as it was, so what is held
-    /// never runs ahead of what the next launch will read.
-    fn commit(&self, loaded: &mut Loaded, root: StateMap) -> Result<(), String> {
+    /// never runs ahead of what the next launch will read. Returns the root
+    /// the write replaced.
+    fn commit(&self, loaded: &mut Loaded, root: StateMap) -> Result<StateMap, String> {
         if let Some(path) = &self.path {
             write_state_file(path, &root, loaded.disk_is_good).map_err(|error| {
                 error!("[shell-state] could not write {}: {error}", path.display());
                 format!("{SHELL_STATE_WRITE_FAILED}: {error}")
             })?;
         }
-        loaded.root = root;
+        let before = std::mem::replace(&mut loaded.root, root);
         loaded.revision += 1;
         loaded.disk_is_good = true;
-        Ok(())
+        Ok(before)
     }
+}
+
+/// The state object before and after one accepted write, for a listener that
+/// needs more than the changed keys.
+#[derive(Clone, Copy)]
+pub struct StateTransition<'a> {
+    pub before: &'a StateMap,
+    pub after: &'a StateMap,
+}
+
+impl<'a> StateTransition<'a> {
+    fn between(before_root: &'a StateMap, after_root: &'a StateMap) -> Self {
+        static EMPTY: std::sync::OnceLock<StateMap> = std::sync::OnceLock::new();
+        let empty = EMPTY.get_or_init(StateMap::new);
+        Self {
+            before: state_of(before_root).unwrap_or(empty),
+            after: state_of(after_root).unwrap_or(empty),
+        }
+    }
+}
+
+/// Top-level keys `next` sets or changes, and those it drops.
+fn diff(previous: &StateMap, next: &StateMap) -> (StateMap, Vec<String>) {
+    let set = next
+        .iter()
+        .filter(|(key, value)| previous.get(*key) != Some(*value))
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
+    let remove = previous
+        .keys()
+        .filter(|key| !next.contains_key(*key))
+        .cloned()
+        .collect();
+    (set, remove)
 }
 
 fn state_of(root: &StateMap) -> Option<&StateMap> {
@@ -680,8 +748,24 @@ pub fn patch_from_rust<R: Runtime>(app: &AppHandle<R>, set: StateMap) -> Result<
         set,
         Vec::new(),
         Some(RUST_WRITER_ID.to_string()),
-        |changed| emit_changed(app, changed),
+        |changed, _| emit_changed(app, changed),
     )
+}
+
+/// A read-modify-write Rust makes on its own behalf, announced the way
+/// [`patch_from_rust`] is. `edit` runs under the store lock and must not touch
+/// the store; returning `false` writes nothing. Like every Rust write, it does
+/// not re-apply the running mode.
+pub fn update_from_rust<R: Runtime>(
+    app: &AppHandle<R>,
+    edit: impl FnOnce(&mut StateMap) -> bool,
+) -> Result<Option<u64>, String> {
+    let Some(store) = app.try_state::<ShellStateStore>() else {
+        return Err(format!("{SHELL_STATE_WRITE_FAILED}: no shell-state store"));
+    };
+    store.update(Some(RUST_WRITER_ID.to_string()), edit, |changed, _| {
+        emit_changed(app, changed)
+    })
 }
 
 /// Removes `keys` on Rust's own behalf, announced the way [`patch_from_rust`] is.
@@ -693,7 +777,7 @@ pub fn remove_from_rust<R: Runtime>(app: &AppHandle<R>, keys: &[&str]) -> Result
         StateMap::new(),
         keys.iter().map(|key| key.to_string()).collect(),
         Some(RUST_WRITER_ID.to_string()),
-        |changed| emit_changed(app, changed),
+        |changed, _| emit_changed(app, changed),
     )
 }
 
@@ -715,14 +799,28 @@ pub async fn get_shell_state(
 
 /// A window's write: announced, and handed to the lighting runtime, which
 /// re-applies the running mode when a setting it reads changed.
-fn window_wrote<R: Runtime>(app: &AppHandle<R>, changed: &ShellStateChanged) {
+fn window_wrote<R: Runtime>(
+    app: &AppHandle<R>,
+    changed: &ShellStateChanged,
+    transition: StateTransition<'_>,
+) {
     emit_changed(app, changed);
+    // A strips write is named by what it changed on the primary strip, so a
+    // layout-only save keeps the refresh's calibration fast path.
+    let strip_keys = if changed.set.contains_key("ledStrips")
+        || changed.remove.iter().any(|key| key == "ledStrips")
+    {
+        led_strips::primary_strip_changes(transition.before, transition.after)
+    } else {
+        Vec::new()
+    };
     let keys = || {
         changed
             .set
             .keys()
             .map(String::as_str)
             .chain(changed.remove.iter().map(String::as_str))
+            .chain(strip_keys.iter().copied())
     };
     super::lighting_mode::outputs::note_settings_saved(app, keys());
     super::hue::health::note_settings_saved(app, keys());
@@ -737,13 +835,25 @@ pub async fn patch_shell_state<R: Runtime>(
     store: State<'_, ShellStateStore>,
     patch: ShellStatePatchRequest,
 ) -> Result<ShellStateWriteResult, String> {
-    let revision = store.patch(patch.set, patch.remove, patch.writer_id, |changed| {
-        window_wrote(&app, changed)
-    })?;
+    let revision = patch_as_window(&app, &store, patch)?;
     Ok(ShellStateWriteResult {
         applied: true,
         revision,
     })
+}
+
+/// `patch_shell_state`'s write, reachable from tests.
+pub(crate) fn patch_as_window<R: Runtime>(
+    app: &AppHandle<R>,
+    store: &ShellStateStore,
+    patch: ShellStatePatchRequest,
+) -> Result<u64, String> {
+    store.patch(
+        patch.set,
+        patch.remove,
+        patch.writer_id,
+        |changed, transition| window_wrote(app, changed, transition),
+    )
 }
 
 #[tauri::command]
@@ -756,7 +866,7 @@ pub async fn replace_shell_state<R: Runtime>(
         request.state,
         request.expected_revision,
         request.writer_id,
-        |changed| window_wrote(&app, changed),
+        |changed, transition| window_wrote(&app, changed, transition),
     )
 }
 
@@ -807,7 +917,7 @@ mod tests {
 
     fn patch(store: &ShellStateStore, set: Value) -> u64 {
         store
-            .patch(map(set), Vec::new(), None, |_| {})
+            .patch(map(set), Vec::new(), None, |_, _| {})
             .expect("patch writes")
     }
 
@@ -871,6 +981,74 @@ mod tests {
     }
 
     #[test]
+    fn update_announces_the_top_level_diff_and_keeps_what_it_did_not_touch() {
+        let dir = TempDir::new();
+        let store = dir.store();
+        patch(
+            &store,
+            json!({ "language": "en", "ledStrips": [{ "id": "a", "future": 1 }], "gone": true }),
+        );
+        let before = store.snapshot().revision;
+        let mut announced = None;
+
+        let revision = store
+            .update(
+                Some("rust".into()),
+                |state| {
+                    state["ledStrips"][0]["enabled"] = json!(false);
+                    state.remove("gone");
+                    true
+                },
+                |changed, transition| {
+                    assert_eq!(transition.before["gone"], json!(true));
+                    assert!(!transition.after.contains_key("gone"));
+                    announced = Some(changed.clone());
+                },
+            )
+            .unwrap();
+
+        assert_eq!(revision, Some(before + 1));
+        let announced = announced.expect("the write was announced");
+        assert_eq!(
+            Value::Object(announced.set),
+            json!({ "ledStrips": [{ "id": "a", "future": 1, "enabled": false }] })
+        );
+        assert_eq!(announced.remove, vec!["gone".to_string()]);
+        assert_eq!(announced.writer_id.as_deref(), Some("rust"));
+        assert_eq!(state(&store)["language"], json!("en"));
+        assert_eq!(dir.disk(&dir.file())["shell-state"], state(&store));
+    }
+
+    #[test]
+    fn an_update_that_declines_or_changes_nothing_writes_nothing() {
+        let dir = TempDir::new();
+        let store = dir.store();
+        patch(&store, json!({ "language": "en" }));
+        let before = store.snapshot().revision;
+
+        let declined = store
+            .update(
+                None,
+                |_| false,
+                |_, _| panic!("a declined update must not announce"),
+            )
+            .unwrap();
+        let unchanged = store
+            .update(
+                None,
+                |state| {
+                    state.insert("language".into(), json!("en"));
+                    true
+                },
+                |_, _| panic!("an update that changes nothing must not announce"),
+            )
+            .unwrap();
+
+        assert_eq!((declined, unchanged), (None, None));
+        assert_eq!(store.snapshot().revision, before);
+    }
+
+    #[test]
     fn remove_deletes_keys_and_set_merges_the_rest() {
         let dir = TempDir::new();
         let store = dir.store();
@@ -883,7 +1061,7 @@ mod tests {
                 map(json!({ "credentialStorageBackend": "keychain" })),
                 vec!["hueAppKey".into(), "hueClientKey".into()],
                 None,
-                |_| {},
+                |_, _| {},
             )
             .unwrap();
 
@@ -901,9 +1079,12 @@ mod tests {
         let store = ShellStateStore::new(blocker.join(SHELL_STATE_FILE));
 
         let error = store
-            .patch(map(json!({ "language": "tr" })), Vec::new(), None, |_| {
-                panic!("a failed write must not announce a change")
-            })
+            .patch(
+                map(json!({ "language": "tr" })),
+                Vec::new(),
+                None,
+                |_, _| panic!("a failed write must not announce a change"),
+            )
             .expect_err("the write cannot succeed");
         assert!(error.starts_with("SHELL_STATE_WRITE_FAILED: "), "{error}");
         let snapshot = store.snapshot();
@@ -1060,7 +1241,7 @@ mod tests {
         patch(&store, json!({ "lastSection": "devices" }));
 
         let outcome = store
-            .replace(map(json!({ "schemaVersion": 6 })), read_at, None, |_| {
+            .replace(map(json!({ "schemaVersion": 6 })), read_at, None, |_, _| {
                 panic!("a refused replace must not announce a change")
             })
             .unwrap();
@@ -1087,7 +1268,7 @@ mod tests {
                 map(json!({ "schemaVersion": 6, "language": "en", "windowCenterX": 170 })),
                 read_at,
                 Some("writer-a".into()),
-                |changed| announced = Some(changed.clone()),
+                |changed, _| announced = Some(changed.clone()),
             )
             .unwrap();
 

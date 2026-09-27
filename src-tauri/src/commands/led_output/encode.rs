@@ -8,7 +8,7 @@ use super::correction::{scale_brightness, EncoderPlan};
 use super::serial::{LedOutputBridge, LedOutputError};
 use super::wire::{FirmwareProfile, LedChipType, WirePixelLayout};
 #[cfg(test)]
-use crate::commands::device_connection::SerialConnectionState;
+use crate::commands::device_connection::SerialConnectionStatus;
 
 // ---------------------------------------------------------------------------
 // Packet encoders
@@ -212,14 +212,14 @@ pub fn encode_sk6812_packet(
 #[cfg(test)]
 pub fn apply_solid_payload(
     bridge: &LedOutputBridge,
-    connection_state: &SerialConnectionState,
+    status: &SerialConnectionStatus,
     r: u8,
     g: u8,
     b: u8,
     brightness: f32,
 ) -> Result<(), LedOutputError> {
     let packet = encode_led_packet(brightness, &[[r, g, b]]);
-    bridge.send_packet(connection_state, &packet)
+    bridge.send_packet(status, &packet)
 }
 
 /// Test helper: encode a full ambilight frame and write it through the
@@ -227,10 +227,10 @@ pub fn apply_solid_payload(
 #[cfg(test)]
 pub fn send_ambilight_frame(
     bridge: &LedOutputBridge,
-    connection_state: &SerialConnectionState,
+    status: &SerialConnectionStatus,
     frame: &[[u8; 3]],
     brightness: f32,
 ) -> Result<(), LedOutputError> {
     let packet = encode_led_packet(brightness, frame);
-    bridge.send_packet(connection_state, &packet)
+    bridge.send_packet(status, &packet)
 }

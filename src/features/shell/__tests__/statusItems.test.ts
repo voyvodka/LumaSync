@@ -120,7 +120,7 @@ describe("buildStatusItems", () => {
     const onOpenDevices = vi.fn<StatusItemsInput["onOpenDevices"]>();
     const unhealthy = { ...healthy, localSink: null, hueStreaming: false, hueReachable: false, onOpenDevices };
     byLabel(unhealthy, "USB").onReconnect?.();
-    expect(onOpenDevices).toHaveBeenLastCalledWith("usb");
+    expect(onOpenDevices).toHaveBeenLastCalledWith("strips");
     byLabel(unhealthy, "HUE").onReconnect?.();
     expect(onOpenDevices).toHaveBeenLastCalledWith("hue");
   });
@@ -159,7 +159,7 @@ describe("buildStatusItems", () => {
     expect(item).toMatchObject({ state: "—", kind: "idle", linkKind: "setUp" });
     expect(item.reconnectAriaLabel).toBe("shell:statusBar.setUp.localAriaLabel");
     item.onReconnect?.();
-    expect(onOpenDevices).toHaveBeenCalledWith("usb");
+    expect(onOpenDevices).toHaveBeenCalledWith("strips");
   });
 
   it("keeps the outage reading for a strip that was set up and is gone", () => {

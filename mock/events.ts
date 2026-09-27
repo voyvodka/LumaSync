@@ -39,6 +39,7 @@ import {
   runtimeHealthFromSnapshot,
 } from "../src/shared/contracts/telemetry";
 import { SHELL_EVENTS, TRAY_EVENTS } from "../src/shared/contracts/shell";
+import { primaryStripOf } from "../src/features/strips/model/stripSelectors";
 import { getWorld } from "./state";
 
 /** ~10 Hz. The real worker feeds an open twin at ~30 Hz; the mock does not need to. */
@@ -100,8 +101,7 @@ function hsvToRgb(h: number, s: number, v: number): Rgb {
  * like a working stream of no pixels instead of an unconfigured strip.
  */
 function calibratedLedCount(): number {
-  const calibration = getWorld().shellState.ledCalibration as { totalLeds?: number } | undefined;
-  const total = calibration?.totalLeds;
+  const total = primaryStripOf(getWorld().shellState)?.layout?.totalLeds;
   return typeof total === "number" && total > 0 ? total : 60;
 }
 

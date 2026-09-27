@@ -9,7 +9,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 #[cfg(test)]
-use crate::commands::device_connection::SerialConnectionState;
+use crate::commands::device_connection::SerialConnectionStatus;
 use crate::commands::device_connection::BOOTLOADER_SETTLE_DELAY_MS;
 use crate::commands::led_calibration::wire_duration;
 
@@ -110,10 +110,13 @@ struct WriterSlot {
     exited: bool,
 }
 
-#[derive(Default)]
 struct WriterShared {
     slot: Mutex<WriterSlot>,
     changed: Condvar,
+    /// Nothing is written before this: the open asserted DTR, and bytes sent
+    /// while the bootloader owns the bus are lost. The writer waits it out, not
+    /// the caller, so opening one port never holds up a send to another.
+    ready_at: Instant,
 }
 
 impl WriterShared {
@@ -124,8 +127,9 @@ impl WriterShared {
     }
 
     /// Wait until the writer has finished packet `seq` (or a newer one).
+    /// `timeout` starts once the port has settled.
     fn wait_written(&self, seq: u64, timeout: Duration) -> Result<(), LedOutputError> {
-        let deadline = Instant::now() + timeout;
+        let deadline = Instant::now().max(self.ready_at) + timeout;
         let mut slot = self.lock();
         loop {
             if let Some(failure) = &slot.failure {
@@ -161,8 +165,16 @@ struct WriterSession {
 }
 
 impl WriterSession {
-    fn spawn(port: Box<dyn Write + Send>, pacing: WriterPacing) -> Result<Self, LedOutputError> {
-        let shared = Arc::new(WriterShared::default());
+    fn spawn(
+        port: Box<dyn Write + Send>,
+        pacing: WriterPacing,
+        settle: Duration,
+    ) -> Result<Self, LedOutputError> {
+        let shared = Arc::new(WriterShared {
+            slot: Mutex::default(),
+            changed: Condvar::new(),
+            ready_at: Instant::now() + settle,
+        });
         let for_thread = Arc::clone(&shared);
         let thread = std::thread::Builder::new()
             .name("lumasync-serial-writer".into())
@@ -247,9 +259,10 @@ impl Drop for WriterSession {
 
 /// The writer thread: takes the newest packet, writes it, then waits out its
 /// wire time before taking another, so the OS buffer never holds a backlog.
+/// The first write also waits for the settle; a close cuts that wait short.
 fn run_writer(mut port: Box<dyn Write + Send>, shared: &WriterShared, pacing: WriterPacing) {
     let mut packet = Vec::new();
-    let mut next_write_at = Instant::now();
+    let mut next_write_at = shared.ready_at;
     let failure = loop {
         let (seq, drain) = {
             let mut slot = shared.lock();
@@ -322,22 +335,17 @@ fn run_writer(mut port: Box<dyn Write + Send>, shared: &WriterShared, pacing: Wr
 pub(super) struct SerialLedPacketSender {
     sessions: Mutex<HashMap<String, WriterSession>>,
     port_factory: Arc<PortFactory>,
-    /// Runs once per newly opened handle, before its first byte. Separate from
-    /// `port_factory` so tests can observe *when* it fires without sleeping.
-    after_open: Arc<dyn Fn() + Send + Sync>,
+    /// How long a newly opened handle's writer holds its first byte back.
+    settle: Duration,
     pacing: WriterPacing,
 }
 
 impl SerialLedPacketSender {
-    fn new(
-        port_factory: Arc<PortFactory>,
-        after_open: Arc<dyn Fn() + Send + Sync>,
-        pacing: WriterPacing,
-    ) -> Self {
+    fn new(port_factory: Arc<PortFactory>, settle: Duration, pacing: WriterPacing) -> Self {
         Self {
             sessions: Mutex::new(HashMap::new()),
             port_factory,
-            after_open,
+            settle,
             pacing,
         }
     }
@@ -347,16 +355,15 @@ impl SerialLedPacketSender {
     where
         F: Fn(&str) -> Result<Box<dyn Write + Send>, LedOutputError> + Send + Sync + 'static,
     {
-        Self::new(Arc::new(factory), Arc::new(|| {}), |_| Duration::ZERO)
+        Self::new(Arc::new(factory), Duration::ZERO, |_| Duration::ZERO)
     }
 
     #[cfg(test)]
-    pub(super) fn with_open_hook_for_tests<F, H>(factory: F, after_open: H) -> Self
+    pub(super) fn with_settle_for_tests<F>(factory: F, settle: Duration) -> Self
     where
         F: Fn(&str) -> Result<Box<dyn Write + Send>, LedOutputError> + Send + Sync + 'static,
-        H: Fn() + Send + Sync + 'static,
     {
-        Self::new(Arc::new(factory), Arc::new(after_open), |_| Duration::ZERO)
+        Self::new(Arc::new(factory), settle, |_| Duration::ZERO)
     }
 
     #[cfg(test)]
@@ -364,7 +371,7 @@ impl SerialLedPacketSender {
     where
         F: Fn(&str) -> Result<Box<dyn Write + Send>, LedOutputError> + Send + Sync + 'static,
     {
-        Self::new(Arc::new(factory), Arc::new(|| {}), pacing)
+        Self::new(Arc::new(factory), Duration::ZERO, pacing)
     }
 
     fn lock_sessions(
@@ -376,8 +383,10 @@ impl SerialLedPacketSender {
     }
 
     /// Queue `packet` on the port's writer, opening the port first if needed.
-    /// A writer that has failed is removed here, so the error reaches the
-    /// caller once and the next send reopens the port.
+    /// The open stays on the caller, so a port that will not open fails this
+    /// call with its coded error; the settle after it is the writer's. A writer
+    /// that has failed is removed here, so the error reaches the caller once
+    /// and the next send reopens the port.
     fn queue(
         &self,
         port_name: &str,
@@ -388,8 +397,7 @@ impl SerialLedPacketSender {
 
         if !sessions.contains_key(port_name) {
             let opened = (self.port_factory)(port_name)?;
-            (self.after_open)();
-            let session = WriterSession::spawn(opened, self.pacing)?;
+            let session = WriterSession::spawn(opened, self.pacing, self.settle)?;
             sessions.insert(port_name.to_string(), session);
         }
 
@@ -438,9 +446,7 @@ impl Default for SerialLedPacketSender {
             // Connect opens, settles, verifies and then *drops* its handle, so
             // this open is a second DTR assert and a second auto-reset. Frame 1
             // is written into the bootloader without it.
-            Arc::new(|| {
-                std::thread::sleep(Duration::from_millis(BOOTLOADER_SETTLE_DELAY_MS));
-            }),
+            Duration::from_millis(BOOTLOADER_SETTLE_DELAY_MS),
             link_pacing,
         )
     }
@@ -528,25 +534,14 @@ impl LedOutputBridge {
         self.sender.disconnect_session(port_name);
     }
 
-    /// Look up the currently connected port from `connection_state` and
-    /// write `packet` to it. Test-only convenience over `send_packet_to_port`.
+    /// Write `packet` to the port `status` names as connected. Test-only convenience over
+    /// `send_packet_to_port`.
     #[cfg(test)]
     pub fn send_packet(
         &self,
-        connection_state: &SerialConnectionState,
+        status: &SerialConnectionStatus,
         packet: &[u8],
     ) -> Result<(), LedOutputError> {
-        let status = connection_state
-            .last_status
-            .lock()
-            .map_err(|error| {
-                LedOutputError::new(
-                    "LED_OUTPUT_CONNECTION_STATE_LOCK_FAILED",
-                    Some(error.to_string()),
-                )
-            })?
-            .clone();
-
         if !status.connected {
             return Err(LedOutputError::new(
                 "LED_OUTPUT_DEVICE_NOT_CONNECTED",
@@ -554,7 +549,7 @@ impl LedOutputBridge {
             ));
         }
 
-        let port_name = status.port_name.ok_or_else(|| {
+        let port_name = status.port_name.clone().ok_or_else(|| {
             LedOutputError::new(
                 "LED_OUTPUT_PORT_UNAVAILABLE",
                 Some("No connected serial port is recorded in connection state.".to_string()),

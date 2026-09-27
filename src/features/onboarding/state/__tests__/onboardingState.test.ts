@@ -8,14 +8,18 @@ import {
   onboardingRevealDelayMs,
   stepIndex,
 } from "../onboardingState";
+import type { LedStrip } from "@/shared/contracts/strips";
 
 describe("onboardingBootFacts", () => {
   it("remembers an output from a port, a WLED panel or a paired bridge", () => {
     expect(onboardingBootFacts({}, false).outputRemembered).toBe(false);
-    expect(onboardingBootFacts({ lastSuccessfulPort: "COM3" }, false).outputRemembered).toBe(true);
+    const strip = (transport: LedStrip["transport"]): LedStrip[] => [{ id: "strip-1", enabled: true, transport, hardware: {} }];
+    expect(onboardingBootFacts({ ledStrips: strip({ kind: "serial", portName: "COM3" }) }, false).outputRemembered).toBe(true);
     expect(
-      onboardingBootFacts({ lastWledSink: { ip: "192.168.1.40" } as never }, false).outputRemembered,
+      onboardingBootFacts({ ledStrips: strip({ kind: "wled", sink: { ip: "192.168.1.40" } as never }) }, false)
+        .outputRemembered,
     ).toBe(true);
+    expect(onboardingBootFacts({ ledStrips: strip(null) }, false).outputRemembered).toBe(false);
     expect(onboardingBootFacts({}, true).outputRemembered).toBe(true);
   });
 

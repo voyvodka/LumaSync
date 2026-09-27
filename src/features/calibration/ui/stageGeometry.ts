@@ -190,13 +190,14 @@ const polyline = (run: [number, number][]) => run.map(([x, y], i) => `${i ? "L" 
 const HEAD_CLEAR = 10;
 
 /**
- * The flow: the first stretch of the first run, as one path. It shows where the light goes and
- * which way it turns at a corner, which an arrow beside LED #1 could not. The head is placed on an
- * edge, never on a corner: landing exactly on one left it pointing along the next edge by a
- * rounding hair.
+ * The flow: the first stretch of the strip in order, as one path. It shows where the light goes and
+ * which way it turns at a corner, which an arrow beside LED #1 could not. Across a stand gap it goes
+ * straight on to the far side, as the wire behind the stand does: following only the first run drew
+ * nothing when LED #1 sat at the gap heading into it. The head is placed on an edge, never on a
+ * corner: landing exactly on one left it pointing along the next edge by a rounding hair.
  */
 function flowOf(runs: [number, number][][]): { flow: string | null; head: StageLayout["head"] } {
-  const run = runs[0]?.filter((p, i, all) => i === 0 || Math.hypot(p[0] - all[i - 1]![0], p[1] - all[i - 1]![1]) > 0.01);
+  const run = runs.flat().filter((p, i, all) => i === 0 || Math.hypot(p[0] - all[i - 1]![0], p[1] - all[i - 1]![1]) > 0.01);
   if (!run || run.length < 2) return { flow: null, head: null };
   const total = runs.reduce((sum, r) => sum + r.slice(1).reduce((d, p, i) => d + Math.hypot(p[0] - r[i]![0], p[1] - r[i]![1]), 0), 0);
   let left = Math.max(40, total * FLOW_SHARE);

@@ -145,7 +145,7 @@ describe("migrateShellState — schemaVersion 2 → 3 (window center)", () => {
       windowWidth: 900,
       windowHeight: 620,
       language: "tr",
-      lastSuccessfulPort: "/dev/tty.usbserial",
+      showNerdStats: true,
       hasCompletedOnboarding: true,
       uiMode: "full",
       lastFullSize: { width: 1024, height: 720 },
@@ -154,7 +154,7 @@ describe("migrateShellState — schemaVersion 2 → 3 (window center)", () => {
     const out = migrateShellState(input);
 
     expect(out.language).toBe("tr");
-    expect(out.lastSuccessfulPort).toBe("/dev/tty.usbserial");
+    expect(out.showNerdStats).toBe(true);
     expect(out.hasCompletedOnboarding).toBe(true);
     expect(out.uiMode).toBe("full");
     expect(out.lastFullSize).toEqual({ width: 1024, height: 720 });

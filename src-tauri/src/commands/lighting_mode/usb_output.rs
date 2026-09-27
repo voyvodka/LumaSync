@@ -59,12 +59,21 @@ impl ActiveUsbSink {
 
 /// Resolved output for the "usb" channel — serial and WLED are alternate
 /// transports for the same logical LED-strip output, not separate targets
-/// (see docs/architecture/device-output.md). Whichever sink `ActiveSinkRegistry` currently
-/// holds wins; `None` falls back to `SerialConnectionState`.
+/// (see docs/architecture/device-output.md). What `LocalOutputRegistry::driven` names.
 #[derive(Clone, Debug)]
 pub(super) enum UsbOutputPlan {
     Serial(String),
     Wled(WledSinkConfig),
+}
+
+impl From<crate::commands::local_outputs::DrivenLocal> for UsbOutputPlan {
+    fn from(driven: crate::commands::local_outputs::DrivenLocal) -> Self {
+        use crate::commands::local_outputs::DrivenLocal;
+        match driven {
+            DrivenLocal::Serial(port) => Self::Serial(port),
+            DrivenLocal::Wled(config) => Self::Wled(config),
+        }
+    }
 }
 
 /// A solid frame's destination on the "usb" channel and how that strip wants
@@ -132,9 +141,26 @@ impl SolidUsbOutput {
                     &triplets,
                     &EncoderPlan::new(&self.corrections).with_color_order(self.color_order),
                 );
-                self.bridge
-                    .send_packet_to_port_and_wait(port_name, &packet)
-                    .map_err(|error| error.as_reason())
+                // A cached session can be dead after an unplug and replug: its write fails and the
+                // sender drops it, so one more try opens the port afresh. Once, and only for this
+                // one-shot write — retrying the worker's per-frame sends would turn an unplug
+                // into a loop of DTR resets.
+                match self.bridge.send_packet_to_port_and_wait(port_name, &packet) {
+                    Err(error)
+                        if matches!(
+                            error.code,
+                            "LED_OUTPUT_WRITE_FAILED" | "LED_OUTPUT_FLUSH_FAILED"
+                        ) =>
+                    {
+                        log::warn!(
+                            "[solid] write on {port_name} failed ({}); reopening once",
+                            error.as_reason()
+                        );
+                        self.bridge.send_packet_to_port_and_wait(port_name, &packet)
+                    }
+                    other => other,
+                }
+                .map_err(|error| error.as_reason())
             }
             UsbOutputPlan::Wled(cfg) => {
                 let mut sink = CorrectedWledSink::new(cfg.build(), self.corrections.clone());

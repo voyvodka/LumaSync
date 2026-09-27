@@ -191,6 +191,9 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     ("set_hue_solid_color", NO_WINDOW),
     // Read by the health monitor in Rust; its test grants it.
     ("get_hue_stream_status", NO_WINDOW),
+    // The local-output registry: registered ahead of the frontend that reads it; tests grant it.
+    ("get_local_outputs", NO_WINDOW),
+    ("disconnect_serial_port", NO_WINDOW),
 ];
 
 /// The commands a compromised overlay or popup page must never reach, named so

@@ -1,7 +1,7 @@
 import type { TFunction } from "i18next";
 
 import type { LocalSink } from "@/features/device/localSink";
-import type { DeviceCategory } from "@/features/settings/sections/DeviceSection";
+import type { DeviceCategory } from "@/features/device/model/deviceCategories";
 import type { BootHueRetryState } from "@/shared/contracts/lightingRuntime";
 import { HUE_LEFT_OUT_REASON, type HueLeftOutReason } from "@/shared/contracts/lighting";
 import type { StatusItem } from "./StatusBar";
@@ -97,7 +97,7 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
           ? t("shell:statusBar.state.off")
           : "—",
       kind: localConnected ? "ok" : localEverConfigured ? "off" : "idle",
-      onReconnect: localConnected ? undefined : () => onOpenDevices("usb"),
+      onReconnect: localConnected ? undefined : () => onOpenDevices("strips"),
       reconnectAriaLabel: localEverConfigured
         ? t("shell:statusBar.reconnect.usbAriaLabel")
         : t("shell:statusBar.setUp.localAriaLabel"),

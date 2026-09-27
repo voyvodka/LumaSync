@@ -122,7 +122,7 @@ describe("ensureStripForPort", () => {
   });
 
   it("writes one entry however often the same port connects", async () => {
-    stateRef.current = { ledCalibration: LAYOUT, roomMapVersion: 3 };
+    stateRef.current = { ledStrips: [{ id: "strip-1", enabled: true, transport: null, hardware: {}, layout: LAYOUT }], roomMapVersion: 3 };
 
     const first = await ensureStripForPort(PORT);
     const second = await ensureStripForPort(PORT);

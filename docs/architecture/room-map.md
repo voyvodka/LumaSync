@@ -149,7 +149,7 @@ middle of an import.
 
 ## Gotchas
 
-- **Several writers save `roomMap`, and mounting one settings section at a time is what keeps them apart.** The editor saves the whole config from its reducer, and the Devices channel map and the USB roster write it too. They cannot clobber each other only because `SettingsLayout` mounts one section at a time — so never hoist room-map state above the section router or render two sections at once. A writer outside the editor belongs on `shellStore.update` (`contracts-and-state.md`); the USB roster is, while the Devices channel map (`DeviceSection`) still loads and then saves, and is the one left to move. `roomMapVersion` is not a guard: every writer bumps it and nothing checks it.
+- **Several writers save `roomMap`, and mounting one settings section at a time is what keeps them apart.** The editor saves the whole config from its reducer, and the Devices channel map and the USB roster write it too. They cannot clobber each other only because `SettingsLayout` mounts one section at a time — so never hoist room-map state above the section router or render two sections at once. A writer outside the editor belongs on `shellStore.update` (`contracts-and-state.md`); the USB roster is, while the Devices channel map (`DevicesPage`) still loads and then saves, and is the one left to move. `roomMapVersion` is not a guard: every writer bumps it and nothing checks it.
 - **The TV anchor's `x`/`y` is the footprint's top-left corner, not its centre.** The contract says
   so, the canvas draws it so, and Rust's room-aware sampler adds half the width to find the screen
   centre. The one frontend reader that took it for the centre — the since-removed "LED counts from

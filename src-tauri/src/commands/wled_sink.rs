@@ -189,8 +189,8 @@ impl LedSink for WledUdpSink {
 /// mostly-stateless per-frame constructs; only the transient resource, a
 /// serial handle or a UDP socket, is short-lived).
 /// `WledSinkConfig` gives the lighting runtime the same option for WLED:
-/// `ActiveSinkRegistry` stores this alongside the live sink it validated at
-/// connect time, so `lighting_mode.rs` can build a fresh `WledUdpSink` per
+/// `LocalOutputRegistry` holds this for the bound device (the connect proved its
+/// socket binds, then let it go), so `lighting_mode.rs` can build a fresh `WledUdpSink` per
 /// mode-change without sharing a live trait object across threads or
 /// freezing the config to whatever was true at connect time.
 #[derive(Clone, Copy, Debug, PartialEq)]

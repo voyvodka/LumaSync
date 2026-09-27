@@ -6,6 +6,7 @@ import { createHealthCheck } from "./healthCheck";
 import { createAutoRecovery } from "./autoRecovery";
 import { createAutoReconnectOnInit } from "./autoReconnectOnInit";
 import { createSiblingSync } from "./siblingSync";
+import { createSerialWatchFollower } from "./serialWatch";
 import type { DeviceConnectionController, DeviceConnectionControllerDeps } from "./connectionTypes";
 
 const REFRESH_MIN_VISIBLE_MS = 600;
@@ -68,6 +69,10 @@ export function createDeviceConnectionController(
   const healthCheck = createHealthCheck(store, deps, firmwareProfileEventsBus);
   const autoReconnect = createAutoReconnectOnInit(store, connectDeps, connectionEventsBus);
   const siblingSync = createSiblingSync(store, deps, connectionEventsBus);
+  const serialWatch = createSerialWatchFollower(store, deps, autoReconnect, {
+    replugDelayMs: deps.replugDelayMs ?? 500,
+    replugRetryMs: deps.replugRetryMs ?? 2_000,
+  });
 
   const initialize = async () => {
     await portDiscovery.runInitialScan();
@@ -91,12 +96,14 @@ export function createDeviceConnectionController(
     // listener added now would never be removed.
     if (store.isDisposed()) return;
     siblingSync.subscribeToSiblings();
+    serialWatch.subscribe();
   };
 
   const dispose = () => {
     store.dispose();
     autoRecovery.clearRecoveryTimer();
     siblingSync.unsubscribe();
+    serialWatch.unsubscribe();
   };
 
   return {
