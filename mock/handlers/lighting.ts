@@ -27,11 +27,13 @@ import {
   type LightingRuntimeSnapshot,
 } from "../../src/shared/contracts/lightingRuntime";
 import type { LightingModeConfig } from "../../src/shared/contracts/mode";
+import type { ShellState } from "../../src/shared/contracts/shell";
 import { emitMockEvent } from "../events";
 import { getWorld, mutate } from "../state";
 import { applyLightingMode, stopLightingMode } from "./device";
 import { hueHandlers, stopHueStream } from "./hue";
-import { removeShellStateKeys, writeShellStateKey } from "./shell";
+import { patchShellStateAsRust, removeShellStateKeys, writeShellStateKey } from "./shell";
+import { withoutWledDevice } from "../../src/features/strips/model/stripWrites";
 import { status } from "./status";
 import type { TypedHandlers } from "./types";
 
@@ -277,8 +279,8 @@ export const lightingRuntimeHandlers = {
         w.wled.connectedHost = null;
       });
     }
-    const savedSink = getWorld().shellState?.lastWledSink;
-    if (savedSink?.ip === request.ip) removeShellStateKeys(["lastWledSink"]);
+    const forgotten = withoutWledDevice(getWorld().shellState as ShellState, request.ip);
+    if (forgotten !== null) patchShellStateAsRust(forgotten);
     publish();
     return { status: status("WLED_FORGET_OK", "The WLED device was forgotten.") };
   },

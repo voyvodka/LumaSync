@@ -26,6 +26,13 @@ vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: vi.fn(async () => ({})),
     save: (partial: Record<string, unknown>) => mockSave(partial),
+    // A strips write lands as the target strip's hardware; the assertions read that.
+    update: async (fn: (current: Record<string, unknown>) => Record<string, unknown> | null) => {
+      const partial = fn({}) ?? {};
+      const strips = partial.ledStrips as { hardware: Record<string, unknown> }[] | undefined;
+      await mockSave(strips?.[0]?.hardware ?? partial);
+      return partial;
+    },
   },
 }));
 

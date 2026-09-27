@@ -169,6 +169,19 @@ impl LightingRuntimeState {
     pub fn is_closing(&self) -> bool {
         self.closing.load(Ordering::SeqCst)
     }
+
+    /// Drops `port_name`'s cached serial writer, for a strip that was unplugged: the next write
+    /// opens the port afresh instead of failing on a dead handle. The bridge is cloned under the
+    /// runtime lock and the drop — which may wait for the writer to exit — runs after it.
+    pub fn forget_serial_session(&self, port_name: &str) {
+        let bridge = self
+            .runtime
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .output_bridge
+            .clone();
+        bridge.disconnect_session(port_name);
+    }
 }
 
 #[cfg(test)]

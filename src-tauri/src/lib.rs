@@ -24,6 +24,7 @@ mod commands {
     pub mod led_preview;
     pub mod led_sink;
     pub mod lighting_mode;
+    pub mod local_outputs;
     pub mod notifications;
     pub mod platform;
     pub mod room_affinity;
@@ -72,7 +73,7 @@ use commands::calibration::{
 };
 use commands::device_connection::{
     connect_serial_port, get_serial_connection_status, list_serial_ports, run_serial_health_check,
-    ActiveSinkRegistry, SerialConnectionState, SerialPortAccess,
+    SerialPortAccess,
 };
 use commands::hue::commands::{
     get_hue_area_channels, get_hue_stream_status, restart_hue_stream, set_hue_solid_color,
@@ -101,6 +102,7 @@ use commands::lighting_mode::LightingModeKind;
 use commands::lighting_mode::{
     get_led_preview_status, start_led_test_pattern, stop_led_test_pattern, LightingRuntimeState,
 };
+use commands::local_outputs::{disconnect_serial_port, get_local_outputs, LocalOutputRegistry};
 use commands::notifications::{request_notification_permission, show_notification};
 use commands::platform::open_log_dir;
 use commands::room_map::hue_zone::{
@@ -696,9 +698,8 @@ pub fn run() {
             }
 
             app.manage(tray_state);
-            app.manage(SerialConnectionState::default());
+            app.manage(LocalOutputRegistry::default());
             app.manage(SerialPortAccess::default());
-            app.manage(ActiveSinkRegistry::default());
             app.manage(OverlayState::default());
             app.manage(LightingRuntimeState::default());
             app.manage(LedTwinState::default());
@@ -711,6 +712,8 @@ pub fn run() {
             // Before the monitor starts, so its first publish is heard.
             commands::lighting_mode::outputs::listen_hue_health(app.handle());
             commands::hue::health::install(app.handle());
+            // After the `manage` calls: its first poll reads the serial state and the lighting runtime.
+            commands::device_connection::spawn_serial_watch(app.handle().clone());
 
             // After the `manage` calls, not next to `LUMASYNC_NO_DEVTOOLS`: the
             // hook resolves `OverlayState` when it fires.
@@ -965,6 +968,8 @@ pub fn run() {
             get_hue_light_names,
             identify_hue_lights,
             forget_wled_device,
+            get_local_outputs,
+            disconnect_serial_port,
         ])
         .build(app_context())
         .expect("error while building tauri application");

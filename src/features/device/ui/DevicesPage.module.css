@@ -1,0 +1,24 @@
+@layer components {
+  .page {
+    display: grid;
+    grid-template-columns: 188px 1fr;
+    height: 100%;
+    min-height: 0;
+    background: var(--lm-bg);
+    color: var(--lm-ink);
+  }
+
+  /* Holds the rail's column and border while the strips are read. */
+  .railPlaceholder { border-right: 1px solid var(--lm-line); }
+
+  .main {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-height: 0;
+    padding: 22px 32px 32px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .main > * { flex-shrink: 0; }
+}

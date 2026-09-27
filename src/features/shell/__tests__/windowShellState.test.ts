@@ -97,7 +97,7 @@ describe("Scenario 10 — the write queue under load and failure", () => {
       saveShellState({ trayHintShown: true }),
       saveShellState({ showNerdStats: true }),
       saveShellState({ hasCompletedOnboarding: false }),
-      saveShellState({ lastSuccessfulPort: "/dev/ttyUSB0" }),
+      saveShellState({ lastHueAreaId: "area-1" }),
     ]);
 
     expect(read()).toMatchObject({
@@ -105,7 +105,7 @@ describe("Scenario 10 — the write queue under load and failure", () => {
       trayHintShown: true,
       showNerdStats: true,
       hasCompletedOnboarding: false,
-      lastSuccessfulPort: "/dev/ttyUSB0",
+      lastHueAreaId: "area-1",
     });
   });
 

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-disconnect-serial-port"
+description = "Enables the disconnect_serial_port command without any pre-configured scope."
+commands.allow = ["disconnect_serial_port"]
+
+[[permission]]
+identifier = "deny-disconnect-serial-port"
+description = "Denies the disconnect_serial_port command without any pre-configured scope."
+commands.deny = ["disconnect_serial_port"]

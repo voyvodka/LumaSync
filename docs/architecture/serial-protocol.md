@@ -29,7 +29,8 @@ or a version the handshake gates (1.5), never in place.
 | Settle after open | 2 000 ms before the first byte | `BOOTLOADER_SETTLE_DELAY_MS` `device_connection.rs`, `led_output/serial.rs` |
 
 **DTR.** Opening the port asserts DTR, which auto-resets Arduino-class boards. The host therefore
-waits the settle delay after *every* open before writing, and keeps the output handle open across
+waits the settle delay after *every* open before writing (on the output path, the port's writer
+thread waits it, not the caller), and keeps the output handle open across
 mode changes so that streaming does not reboot the board. A device must assume it can be reset at
 any time the host opens the port, and must be ready to parse within 2 s of reset.
 
@@ -91,7 +92,7 @@ whatever its build compiled in. A strip that shows red and green swapped is a de
 wrong order, not a host bug.
 
 **The host can correct that order without a reflash.** `LedColorOrder` (`led_output/wire.rs`, persisted
-as `ledColorOrder`) permutes the three colour bytes after correction: wire slot `i` carries logical
+as the strip's `hardware.colorOrder`) permutes the three colour bytes after correction: wire slot `i` carries logical
 channel `order[i]`, so `grb` sends G, R, B. It is *relative* — a correction applied on top of
 whatever the firmware already does, not the strip's datasheet order — so the right value for a
 strip with red and green swapped is `grb` whatever the chip's data sheet says. `rgb` is the

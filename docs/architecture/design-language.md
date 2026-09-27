@@ -109,6 +109,12 @@ before writing a transition by hand: `StateSwap`, `PageSwap`, `SpinSwap` and `Po
 - **Land, don't slide:** a mark that moves reappears where it now is with a small scale-in and a
   one-shot ripple, rather than travelling across the stage.
 - **Tick:** a number that changes nudges in by ~3 px.
+- **Morph a change of shape:** when what is drawn changes proportion (LED Setup's monitor on a
+  display switch), it eases from the old shape to the new with a transform (FLIP), and what cannot
+  morph (an SVG path — WebKit does not animate `d`) steps out and draws again once it has landed.
+- **A hover highlight never flickers:** its target is one continuous area (LED Setup's edge band, not
+  the gaps between LEDs), and leaving it waits a beat (~90 ms) so a pointer grazing past does not
+  dim and brighten everything around it.
 - **One or two things per gesture,** near where the eye already is; the canvas reacting counts as one.
   Long travel across the screen is out (a pick "flying" 80 px into its control was tried and removed).
 - **Motion says where it came from:** ‹ › page sideways, a pick from a list that opens above drops in

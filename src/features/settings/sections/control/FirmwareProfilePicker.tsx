@@ -58,6 +58,7 @@ import { shellStore } from "@/features/persistence/shellStore";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { Toggle } from "@/shared/ui/Toggle";
 import { primaryStripOf } from "@/features/strips/model/stripSelectors";
+import { withStripHardware } from "@/features/strips/model/stripWrites";
 
 const DEFAULT_PROFILE: FirmwareProfile = FIRMWARE_PROFILE.LUMASYNC_V1;
 
@@ -287,10 +288,10 @@ export function FirmwareProfilePicker({
     (next: FirmwareProfile) => {
       setProfile(next);
       void shellStore
-        .save({ firmwareProfile: next })
+        .update((current) => withStripHardware(current, { firmwareProfile: next }))
         .catch((error) => {
           console.error(
-            "[LumaSync] shellStore.save(firmwareProfile) failed:",
+            "[LumaSync] saving the firmware profile failed:",
             error,
           );
         });

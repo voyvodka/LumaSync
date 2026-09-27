@@ -39,6 +39,7 @@ import {
 import { useAdvertisedPixelLayout } from "@/features/device/useAdvertisedFirmwareProfile";
 import { shellStore } from "@/features/persistence/shellStore";
 import { primaryStripOf } from "@/features/strips/model/stripSelectors";
+import { withStripHardware } from "@/features/strips/model/stripWrites";
 
 const DEFAULT_CHIP_TYPE: LedChipType = LED_CHIP_TYPE.WS2812B_GRB;
 
@@ -156,10 +157,10 @@ export function LedChipTypePicker({
       if (next === chipType) return;
       setChipType(next);
       void shellStore
-        .save({ selectedChipType: next })
+        .update((current) => withStripHardware(current, { chipType: next }))
         .catch((error) => {
           console.error(
-            "[LumaSync] shellStore.save(selectedChipType) failed:",
+            "[LumaSync] saving the chip type failed:",
             error,
           );
         });

@@ -12,6 +12,8 @@
   /* The whole run, faint, and the stretch from LED #1 brightening to its head. */
   .track { fill: none; stroke: rgb(255 255 255 / 13%); stroke-width: 1; stroke-dasharray: 1.5 3.5; stroke-linecap: round; }
   .flow { pointer-events: none; }
+  /* Back after a display switch's morph: the track fades in while the flow draws from LED #1. */
+  .trackBack { animation: fade-in var(--lm-dur-base) var(--lm-ease-out) backwards; }
   /* One path, drawn out once in the light's direction on a change of LED #1 or direction. */
   .flowLine {
     fill: none;
@@ -36,6 +38,7 @@
   .edge { animation: fade-in var(--lm-dur-base) var(--lm-ease-out); transition: opacity var(--lm-dur-base) var(--lm-ease-out); }
   .led { cursor: pointer; }
   .hit { fill: transparent; }
+  .band { fill: none; stroke: transparent; stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; pointer-events: stroke; }
   .dot { transform-box: fill-box; transform-origin: center; transition: transform var(--lm-dur-quick) var(--lm-ease-out); }
   .led:hover .dot { stroke: var(--lm-ink); stroke-width: 1.4; transform: scale(1.35); }
 

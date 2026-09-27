@@ -1,7 +1,8 @@
-//! USB serial port enumeration, connect/health-check commands, and the
-//! `ActiveSinkRegistry` that hands the built `LedSink` to the ambilight worker.
+//! USB serial port enumeration, the connect and health-check commands, and the serial port watcher.
+//! What is connected lives in `local_outputs::LocalOutputRegistry`.
 
-use std::sync::{Arc, Mutex};
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
@@ -11,13 +12,9 @@ use super::device_handshake::{
     perform_handshake, probe_firmware, FirmwareProbe, HandshakeError, HandshakePongResponse,
     SerialRoundTrip, TimedSerialPort, MAX_FW_MAJOR,
 };
-use super::led_output::{
-    ColorCorrectionConfig, FirmwareProfile, LedChipType, LedOutputBridge, SerialSink,
-    WirePixelLayout,
-};
-use super::led_sink::LedSink;
+use super::led_output::{FirmwareProfile, LedChipType, WirePixelLayout};
+use super::local_outputs::{self, LocalOutputRegistry};
 use super::status::CommandStatus;
-use super::wled_sink::WledSinkConfig;
 
 const DEFAULT_CONNECT_BAUD_RATE: u32 = 115_200;
 
@@ -183,132 +180,6 @@ impl HealthCheckResult {
             advertised_firmware_profile: None,
             firmware: None,
         }
-    }
-}
-
-/// Tauri-managed state holding the most recently recorded serial connection status.
-pub struct SerialConnectionState {
-    pub(crate) last_status: Mutex<SerialConnectionStatus>,
-}
-
-impl Default for SerialConnectionState {
-    fn default() -> Self {
-        Self {
-            last_status: Mutex::new(SerialConnectionStatus {
-                port_name: None,
-                connected: false,
-                status: command_status("NOT_CONNECTED", "No serial connection attempt yet.", None),
-                updated_at_unix_ms: now_unix_ms(),
-                firmware: None,
-            }),
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// ActiveSinkRegistry — persists the active `LedSink` handle across commands
-//
-// Populated by `connect_serial_port` on success. Cleared on disconnect or
-// when a connection attempt fails. The ambilight worker (v1.4) creates its
-// own `SerialSink` independently; this registry is the foundation for the
-// v1.5 path where `start_ambilight_worker` will `take()` the pre-built sink
-// from the registry instead of constructing one from scratch.
-//
-// Design:
-//   - `Box<dyn LedSink>` keeps the registry type-erased so v1.5+ sinks
-//     (WledUdpSink, OpenRgbClientSink) can be stored without changing the
-//     registry type or any callers.
-//   - `Mutex<Option<...>>` allows safe access from the Tauri command threads
-//     without an async runtime.
-//   - One active sink per registry instance (per output channel). Hue and
-//     USB run as separate channels with separate state.
-// ---------------------------------------------------------------------------
-
-/// Tauri app state that holds the currently active `LedSink` handle.
-///
-/// `None` when no port is connected. Replaced on every successful
-/// `connect_serial_port` / `connect_wled_sink` call — connecting one family
-/// evicts the other, so at most one "usb"-channel sink is ever registered at
-/// a time (one active sink per output channel —
-/// docs/architecture/device-output.md). The sink is stopped and cleared on
-/// disconnect or failed connect.
-pub struct ActiveSinkRegistry {
-    pub sink: Mutex<Option<Box<dyn LedSink>>>,
-    /// Snapshot of the config needed to rebuild a fresh `WledUdpSink`,
-    /// populated by `connect_wled_sink` alongside `sink` and cleared
-    /// whenever a non-WLED sink replaces it (or on `clear()`).
-    ///
-    /// `lighting_mode.rs` reads this — never the `sink` field above — to
-    /// decide whether the live output path should target WLED: the stored
-    /// `Box<dyn LedSink>` for WLED, like the one built for serial, is
-    /// otherwise decorative (validated at connect time, then left unused)
-    /// because both the ambilight worker and Solid mode rebuild a fresh sink
-    /// per mode-change so live firmware-profile / colour-correction /
-    /// chip-type settings changes take effect without a reconnect.
-    pub wled_config: Mutex<Option<WledSinkConfig>>,
-}
-
-impl Default for ActiveSinkRegistry {
-    fn default() -> Self {
-        Self {
-            sink: Mutex::new(None),
-            wled_config: Mutex::new(None),
-        }
-    }
-}
-
-impl ActiveSinkRegistry {
-    /// Replace the stored sink with a new non-WLED one (serial).
-    ///
-    /// Stops the previous sink (if any) before replacing it, so the serial
-    /// session is always released cleanly. Also clears any stale WLED config
-    /// so a serial connect correctly evicts a previously-connected WLED
-    /// device from the "usb" output channel.
-    pub fn replace(&self, new_sink: Box<dyn LedSink>) {
-        if let Ok(mut guard) = self.sink.lock() {
-            if let Some(mut old) = guard.take() {
-                let _ = old.stop();
-            }
-            *guard = Some(new_sink);
-        }
-        if let Ok(mut cfg) = self.wled_config.lock() {
-            *cfg = None;
-        }
-    }
-
-    /// Replace the stored sink with a new WLED one, recording `config`
-    /// alongside it so `lighting_mode.rs` can rebuild a fresh `WledUdpSink`
-    /// on demand.
-    pub fn replace_wled(&self, new_sink: Box<dyn LedSink>, config: WledSinkConfig) {
-        if let Ok(mut guard) = self.sink.lock() {
-            if let Some(mut old) = guard.take() {
-                let _ = old.stop();
-            }
-            *guard = Some(new_sink);
-        }
-        if let Ok(mut cfg) = self.wled_config.lock() {
-            *cfg = Some(config);
-        }
-    }
-
-    /// Remove and stop the stored sink.
-    pub fn clear(&self) {
-        if let Ok(mut guard) = self.sink.lock() {
-            if let Some(mut old) = guard.take() {
-                let _ = old.stop();
-            }
-        }
-        if let Ok(mut cfg) = self.wled_config.lock() {
-            *cfg = None;
-        }
-    }
-
-    /// Snapshot of the currently active WLED config, if the most recently
-    /// connected "usb"-channel sink was WLED. `None` when serial is active
-    /// or nothing is connected — callers fall back to `SerialConnectionState`
-    /// in that case.
-    pub fn active_wled_config(&self) -> Option<WledSinkConfig> {
-        self.wled_config.lock().ok().and_then(|guard| *guard)
     }
 }
 
@@ -557,35 +428,34 @@ impl SerialPortAccess {
 
 /// Internal outcome of the blocking portion of `connect_serial_port`.
 ///
-/// Carried back from the worker thread to the async front so state mutation
-/// (sink registry replace/clear, last-status update) happens on the runtime
-/// side, keeping `Send` requirements clean.
+/// Carried back from the worker thread to the async front, where the registry is written.
 enum ConnectOutcome {
     Connected {
         status: SerialConnectionStatus,
-        sink: Box<dyn LedSink>,
     },
     Failed {
         status: SerialConnectionStatus,
-        clear_sink: bool,
+        /// The port passed admission. A refused name is never recorded: it came straight from IPC.
+        admitted: bool,
     },
 }
 
-/// Open the given serial port, run the bootloader settle delay, and
-/// register a fresh `SerialSink` in `ActiveSinkRegistry` on success.
+/// Open the given serial port, run the bootloader settle delay and probe the firmware. The output
+/// path builds its own sink from live settings, so `chip_type` is accepted for the contract and
+/// otherwise unused.
 #[tauri::command]
 pub async fn connect_serial_port<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     port_name: String,
     chip_type: Option<LedChipType>,
-    connection_state: tauri::State<'_, SerialConnectionState>,
-    sink_registry: tauri::State<'_, ActiveSinkRegistry>,
+    registry: tauri::State<'_, LocalOutputRegistry>,
     port_access: tauri::State<'_, SerialPortAccess>,
 ) -> Result<SerialConnectionStatus, String> {
+    let _ = chip_type;
     let port_name_for_blocking = port_name.clone();
     let io = port_access.io();
     let outcome = tokio::task::spawn_blocking(move || {
-        connect_serial_port_blocking(io.as_ref(), port_name_for_blocking, chip_type)
+        connect_serial_port_blocking(io.as_ref(), port_name_for_blocking)
     })
     .await
     .unwrap_or_else(|join_error| ConnectOutcome::Failed {
@@ -595,23 +465,21 @@ pub async fn connect_serial_port<R: tauri::Runtime>(
             "Serial connect worker terminated unexpectedly.",
             Some(join_error.to_string()),
         ),
-        clear_sink: true,
+        admitted: false,
     });
 
-    let status = match outcome {
-        ConnectOutcome::Connected { status, sink } => {
-            sink_registry.replace(sink);
-            status
+    let (status, snapshot) = match outcome {
+        ConnectOutcome::Connected { status } => {
+            let snapshot = registry.serial_connected(status.clone());
+            (status, snapshot)
         }
-        ConnectOutcome::Failed { status, clear_sink } => {
-            if clear_sink {
-                sink_registry.clear();
-            }
-            status
+        ConnectOutcome::Failed { status, admitted } => {
+            let admitted_port = admitted.then_some(port_name.as_str());
+            let snapshot = registry.serial_failed(admitted_port, status.clone());
+            (status, snapshot)
         }
     };
-
-    set_last_status(&connection_state, status.clone());
+    local_outputs::announce(&app, snapshot);
     if status.connected {
         super::lighting_mode::outputs::note_local_sink_connected(&app);
     }
@@ -627,14 +495,8 @@ pub async fn connect_serial_port<R: tauri::Runtime>(
 ///   - `available_ports()` (USB enumeration; up to ~50 ms on Windows).
 ///   - `serialport::new(...).open()` (driver call; can stall on permission).
 ///   - `BOOTLOADER_SETTLE_DELAY_MS` (~2 s std::thread::sleep).
-///   - `SerialSink::with_chip_type(...)` (constant-time, but kept here for
-///     locality so the returned `Box<dyn LedSink>` is built once and handed
-///     back as a `Send` value).
-fn connect_serial_port_blocking(
-    io: &dyn SerialPortIo,
-    port_name: String,
-    chip_type: Option<LedChipType>,
-) -> ConnectOutcome {
+///   - the PING/PONG firmware probe.
+fn connect_serial_port_blocking(io: &dyn SerialPortIo, port_name: String) -> ConnectOutcome {
     let known_ports = match io.available_ports() {
         Ok(ports) => ports,
         Err(error) => {
@@ -645,7 +507,7 @@ fn connect_serial_port_blocking(
                     "Connection check failed while reading available serial ports.",
                     Some(error.to_string()),
                 ),
-                clear_sink: true,
+                admitted: false,
             };
         }
     };
@@ -670,7 +532,7 @@ fn connect_serial_port_blocking(
         };
         return ConnectOutcome::Failed {
             status: failed_connect_status(&port_name, refusal.code(), message, details),
-            clear_sink: true,
+            admitted: false,
         };
     }
 
@@ -681,18 +543,6 @@ fn connect_serial_port_blocking(
             // handle and settles again. See docs/architecture/device-output.md.
             drop(handle);
             let (firmware, details) = connect_firmware_outcome(&port_name, &probe);
-
-            // The worker and Solid build their own sinks from live settings;
-            // this is the registry entry `ActiveSinkRegistry` documents.
-            // Absent chip type => WS2812B GRB (backward-compat default).
-            let new_sink = SerialSink::with_chip_type(
-                LedOutputBridge::new(),
-                Some(port_name.clone()),
-                1.0,
-                FirmwareProfile::default(),
-                ColorCorrectionConfig::default(),
-                chip_type.unwrap_or_default(),
-            );
 
             ConnectOutcome::Connected {
                 status: SerialConnectionStatus {
@@ -706,7 +556,6 @@ fn connect_serial_port_blocking(
                     updated_at_unix_ms: now_unix_ms(),
                     firmware,
                 },
-                sink: Box::new(new_sink),
             }
         }
         Err(error) => ConnectOutcome::Failed {
@@ -716,7 +565,7 @@ fn connect_serial_port_blocking(
                 "Serial port connection attempt failed.",
                 Some(error.to_string()),
             ),
-            clear_sink: true,
+            admitted: true,
         },
     }
 }
@@ -771,18 +620,13 @@ fn version_window_warning(pong: &HandshakePongResponse) -> Option<String> {
     })
 }
 
-/// Return the most recently recorded serial connection status.
+/// Return the most recently recorded serial connection status — the last attempt's, as before the
+/// registry kept one entry per port.
 #[tauri::command]
 pub fn get_serial_connection_status(
-    connection_state: tauri::State<'_, SerialConnectionState>,
+    registry: tauri::State<'_, LocalOutputRegistry>,
 ) -> Result<SerialConnectionStatus, String> {
-    connection_state
-        .last_status
-        .lock()
-        .map(|status| status.clone())
-        .map_err(|error| {
-            format!("STATUS_READ_FAILED: Could not read serial connection status ({error})")
-        })
+    registry.serial_status_checked()
 }
 
 /// Run a multi-step health check on `port_name`.
@@ -1048,6 +892,12 @@ fn is_macos_tty_path(name: &str) -> bool {
 
 fn connect_error_code(error: &serialport::Error) -> &'static str {
     match error.kind() {
+        // The macOS CH340 driver can wedge — after the app was killed mid-stream, or after rapid
+        // open/close — and then refuses every open's termios setup with EINVAL until the cable is
+        // re-plugged. serialport keeps no errno, only nix's fixed description for it.
+        serialport::ErrorKind::Unknown if error.description == "Invalid argument" => {
+            "CONNECT_REPLUG_REQUIRED"
+        }
         serialport::ErrorKind::NoDevice => "PORT_NOT_FOUND",
         serialport::ErrorKind::InvalidInput => "CONNECT_INVALID_INPUT",
         serialport::ErrorKind::Io(std::io::ErrorKind::PermissionDenied) => {
@@ -1104,7 +954,7 @@ pub fn command_status(code: &str, message: &str, details: Option<String>) -> Com
 /// port to the frontend, and before `apply_mode_change` also required
 /// `connected` it was opened by the next mode change — past the allowlist. See
 /// docs/architecture/device-output.md. The name goes in `details` instead.
-fn failed_connect_status(
+pub(crate) fn failed_connect_status(
     attempted_port: &str,
     code: &str,
     message: &str,
@@ -1123,13 +973,189 @@ fn failed_connect_status(
     }
 }
 
-fn set_last_status(state: &SerialConnectionState, status: SerialConnectionStatus) {
-    if let Ok(mut guard) = state.last_status.lock() {
-        *guard = status;
+// ---------------------------------------------------------------------------
+// Serial port watcher — notices a strip unplugged and plugged back in
+// ---------------------------------------------------------------------------
+
+/// `SerialPortsChangedEvent` in `src/shared/contracts/device.ts`.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SerialPortsChangedEvent {
+    pub ports: Vec<SerialPortDescriptor>,
+    /// Supported ports that were not there at the last poll.
+    pub appeared: Vec<String>,
+    /// Supported ports gone for `MISSES_BEFORE_LOST` polls in a row.
+    pub lost: Vec<String>,
+    pub connection: SerialConnectionStatus,
+}
+
+pub const SERIAL_WATCH_INTERVAL: Duration = Duration::from_millis(1_500);
+/// One listing that misses a port is not an unplug.
+const MISSES_BEFORE_LOST: u8 = 2;
+
+/// What one poll decided: the event to announce, the ports whose cached writers to drop, and the
+/// registry after any port it cleared.
+#[derive(Default)]
+pub struct SerialWatchOutcome {
+    pub event: Option<SerialPortsChangedEvent>,
+    pub forget: Vec<String>,
+    pub registry: Option<local_outputs::LocalOutputsSnapshot>,
+}
+
+/// The watcher's memory between polls. Enumeration opens nothing on any platform, so a poll never
+/// collides with a connect or its settle.
+#[derive(Default)]
+pub struct SerialWatch {
+    /// Supported ports seen at the last poll; `None` before the first, which is a baseline.
+    present: Option<BTreeSet<String>>,
+    misses: BTreeMap<String, u8>,
+}
+
+impl SerialWatch {
+    /// One poll over a listing taken at `listed_at`. The connected port is checked on every poll,
+    /// so a connect that finished after its port vanished is still caught; a connect that finished
+    /// after the listing is never cleared by it.
+    pub fn poll(
+        &mut self,
+        ports: Vec<SerialPortDescriptor>,
+        listed_at: u128,
+        registry: &LocalOutputRegistry,
+    ) -> SerialWatchOutcome {
+        let now: BTreeSet<String> = ports
+            .iter()
+            .filter(|port| port.is_supported)
+            .map(|port| port.name.clone())
+            .collect();
+        let connected = registry.connected_serial_port();
+
+        let Some(present) = self.present.as_mut() else {
+            self.present = Some(now);
+            return SerialWatchOutcome::default();
+        };
+        let mut watched: BTreeSet<String> = present.clone();
+        watched.extend(connected.clone());
+        let mut lost = Vec::new();
+        for name in &watched {
+            if now.contains(name) {
+                self.misses.remove(name);
+                continue;
+            }
+            let count = self
+                .misses
+                .get(name)
+                .copied()
+                .unwrap_or(0)
+                .saturating_add(1);
+            self.misses.insert(name.clone(), count);
+            if count == MISSES_BEFORE_LOST {
+                lost.push(name.clone());
+            }
+        }
+        for name in &lost {
+            present.remove(name);
+        }
+        let appeared: Vec<String> = now.difference(present).cloned().collect();
+        present.extend(appeared.iter().cloned());
+
+        // Every lost port's writer is dropped, connected or not — a port WLED evicted may still hold
+        // its cached exclusive handle — unless a connect landed after the listing.
+        let mut forget: Vec<String> = lost
+            .iter()
+            .filter(|port| !registry.connected_since(port, listed_at))
+            .cloned()
+            .collect();
+        let mut cleared = None;
+        for port in &lost {
+            cleared = registry.serial_lost(port, listed_at).or(cleared);
+        }
+        // `>=`, not `lost`: a connect that finished after the listing skips the clear once, and the
+        // port stays in `watched` while it is the connected one, so the next poll tries again.
+        if let Some(port) = connected.filter(|port| {
+            !lost.contains(port)
+                && self
+                    .misses
+                    .get(port)
+                    .is_some_and(|m| *m >= MISSES_BEFORE_LOST)
+        }) {
+            if let Some(snapshot) = registry.serial_lost(&port, listed_at) {
+                cleared = Some(snapshot);
+                forget.push(port);
+            }
+        }
+
+        if appeared.is_empty() && lost.is_empty() && cleared.is_none() {
+            return SerialWatchOutcome::default();
+        }
+        SerialWatchOutcome {
+            event: Some(SerialPortsChangedEvent {
+                ports,
+                appeared,
+                lost,
+                connection: registry.serial_status(),
+            }),
+            forget,
+            registry: cleared,
+        }
     }
 }
 
-fn now_unix_ms() -> u128 {
+/// Polls the serial inventory for the life of the app. Not tied to window visibility: lighting runs
+/// from the tray with every window hidden.
+pub fn spawn_serial_watch<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
+    let spawned = std::thread::Builder::new()
+        .name("lumasync-serial-watch".into())
+        .spawn(move || {
+            let mut watch = SerialWatch::default();
+            loop {
+                std::thread::sleep(SERIAL_WATCH_INTERVAL);
+                serial_watch_tick(&app, &mut watch);
+            }
+        });
+    if let Err(error) = spawned {
+        log::warn!("[serial-watch] could not start: {error}");
+    }
+}
+
+pub(crate) fn serial_watch_tick<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    watch: &mut SerialWatch,
+) {
+    use tauri::{Emitter, Manager};
+    let listed_at = now_unix_ms();
+    let Ok(listing) = list_serial_ports_blocking(&app.state::<SerialPortAccess>()) else {
+        return;
+    };
+    let outcome = watch.poll(
+        listing.ports,
+        listed_at,
+        &app.state::<LocalOutputRegistry>(),
+    );
+    if let Some(event) = outcome.event {
+        log::info!(
+            "[serial-watch] appeared={:?} lost={:?} connected={:?}",
+            event.appeared,
+            event.lost,
+            event.connection.port_name
+        );
+        if let Err(error) = app.emit_to(
+            crate::MAIN_WINDOW_LABEL,
+            crate::events::DEVICE_SERIAL_PORTS_CHANGED_EVENT,
+            event,
+        ) {
+            log::warn!("[serial-watch] could not announce the change: {error}");
+        }
+    }
+    if let Some(snapshot) = outcome.registry {
+        local_outputs::announce(app, snapshot);
+    }
+    if let Some(lighting) = app.try_state::<super::lighting_mode::LightingRuntimeState>() {
+        for port in &outcome.forget {
+            lighting.forget_serial_session(port);
+        }
+    }
+}
+
+pub(crate) fn now_unix_ms() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis())
@@ -1153,6 +1179,124 @@ mod tests {
         HealthStepResult, SerialFirmwareInfo, SerialPortIo, SettledPort,
         SUPPORTED_USB_DEVICE_ALLOWLIST,
     };
+
+    // ---------------------------------------------------------------------------
+    // Serial port watcher
+    // ---------------------------------------------------------------------------
+
+    fn supported(name: &str) -> super::SerialPortDescriptor {
+        super::SerialPortDescriptor {
+            name: name.to_string(),
+            kind: "usb".to_string(),
+            is_supported: true,
+            support_reason: "PORT_SUPPORTED".to_string(),
+            usb: None,
+        }
+    }
+
+    fn connected_at(state: &super::LocalOutputRegistry, port: &str, at: u128) {
+        state.set_serial_for_tests(port, true, at);
+    }
+
+    fn is_connected(state: &super::LocalOutputRegistry) -> bool {
+        state.connected_serial_port().is_some()
+    }
+
+    #[test]
+    fn the_first_poll_is_a_baseline_and_announces_nothing() {
+        let mut watch = super::SerialWatch::default();
+        let state = super::LocalOutputRegistry::default();
+        let outcome = watch.poll(vec![supported("COM3")], 10, &state);
+        assert!(outcome.event.is_none());
+        assert!(outcome.forget.is_empty());
+    }
+
+    // One listing that misses a port is not an unplug.
+    #[test]
+    fn a_connected_port_is_lost_after_two_missed_polls_and_its_status_cleared() {
+        let mut watch = super::SerialWatch::default();
+        let state = super::LocalOutputRegistry::default();
+        connected_at(&state, "COM3", 5);
+        watch.poll(vec![supported("COM3")], 10, &state);
+
+        let first = watch.poll(Vec::new(), 20, &state);
+        assert!(first.event.is_none());
+        assert!(is_connected(&state));
+
+        let second = watch.poll(Vec::new(), 30, &state);
+        let event = second.event.expect("the loss is announced");
+        assert_eq!(event.lost, vec!["COM3".to_string()]);
+        assert!(!event.connection.connected);
+        assert_eq!(event.connection.status.code, "PORT_NOT_FOUND");
+        assert_eq!(second.forget, vec!["COM3".to_string()]);
+        assert!(!is_connected(&state));
+        assert!(second.registry.is_some());
+
+        let back = watch.poll(vec![supported("COM3")], 40, &state);
+        assert_eq!(
+            back.event.expect("the return is announced").appeared,
+            vec!["COM3".to_string()]
+        );
+    }
+
+    // A replug connect that landed after the listing was taken is not wiped by it.
+    #[test]
+    fn a_connect_newer_than_the_listing_is_left_alone() {
+        let mut watch = super::SerialWatch::default();
+        let state = super::LocalOutputRegistry::default();
+        watch.poll(vec![supported("COM3")], 10, &state);
+        watch.poll(Vec::new(), 20, &state);
+        connected_at(&state, "COM3", 35);
+
+        let outcome = watch.poll(Vec::new(), 30, &state);
+
+        assert!(outcome.forget.is_empty());
+        assert!(is_connected(&state));
+    }
+
+    // The loss is announced once, but a connected port still missing is cleared on a later poll.
+    #[test]
+    fn a_connected_port_that_skipped_its_clear_is_cleared_on_the_next_poll() {
+        let mut watch = super::SerialWatch::default();
+        let state = super::LocalOutputRegistry::default();
+        watch.poll(vec![supported("COM3")], 10, &state);
+        watch.poll(Vec::new(), 20, &state);
+        connected_at(&state, "COM3", 35);
+        let skipped = watch.poll(Vec::new(), 30, &state);
+        assert!(skipped.forget.is_empty());
+
+        let next = watch.poll(Vec::new(), 40, &state);
+
+        assert_eq!(next.forget, vec!["COM3".to_string()]);
+        let event = next.event.expect("the clear is announced");
+        assert!(event.lost.is_empty());
+        assert!(!event.connection.connected);
+    }
+
+    // A port WLED evicted is no longer connected, yet its cached writer may still hold it.
+    #[test]
+    fn a_lost_port_that_was_not_connected_still_has_its_writer_dropped() {
+        let mut watch = super::SerialWatch::default();
+        let state = super::LocalOutputRegistry::default();
+        watch.poll(vec![supported("COM3")], 10, &state);
+        watch.poll(Vec::new(), 20, &state);
+
+        let outcome = watch.poll(Vec::new(), 30, &state);
+
+        assert_eq!(outcome.forget, vec!["COM3".to_string()]);
+        assert!(outcome.registry.is_none());
+    }
+
+    #[test]
+    fn a_port_the_system_refuses_asks_for_a_replug() {
+        let wedged = serialport::Error::new(serialport::ErrorKind::Unknown, "Invalid argument");
+        assert_eq!(
+            super::connect_error_code(&wedged),
+            "CONNECT_REPLUG_REQUIRED"
+        );
+        let other = serialport::Error::new(serialport::ErrorKind::Unknown, "Something else");
+        assert_eq!(super::connect_error_code(&other), "CONNECT_FAILED");
+    }
 
     // ---------------------------------------------------------------------------
     // Original v1.x allowlist entries (regression)

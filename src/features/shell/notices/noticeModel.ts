@@ -7,7 +7,7 @@
  */
 
 import type { TranslationKey } from "@/features/i18n/catalogue";
-import type { DeviceCategory } from "@/features/settings/sections/DeviceSection";
+import type { DeviceCategory } from "@/features/device/model/deviceCategories";
 import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/shell";
 
 export const NOTICE_SEVERITY = {

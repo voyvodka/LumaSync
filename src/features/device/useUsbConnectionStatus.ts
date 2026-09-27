@@ -8,7 +8,7 @@
  * on every `UsbStripObject` and inside `UsbStripInspector`, but
  * mounting the full `useDeviceConnection` hook there would:
  *   1. duplicate the auto-reconnect state machine that already runs
- *      inside `App.tsx` and `DeviceSection.tsx`,
+ *      inside `App.tsx` and `DevicesPage.tsx`,
  *   2. spawn an extra `getSerialConnectionStatus` poll loop,
  *   3. drag in scan / connect / health-check actions the editor does
  *      not need.

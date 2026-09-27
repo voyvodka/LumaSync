@@ -109,6 +109,31 @@ describe("StatusBar — stats for nerds", () => {
     expect(getFullTelemetrySnapshotMock.mock.calls.length).toBeGreaterThanOrEqual(3);
   });
 
+  // Hue alone aims at 20 fps and a still screen captures a few: neither was ever wrong, yet the
+  // fixed 45/25 thresholds painted both red with "Low FPS".
+  it("stays green at 20 fps while the output keeps up, and says Low FPS only when it falls behind", async () => {
+    __setPreferenceForTests("showNerdStats", true);
+    getFullTelemetrySnapshotMock.mockResolvedValue({
+      ...SNAPSHOT,
+      usb: { ...SNAPSHOT.usb, captureFps: 19.6, sendFps: 19.6, captureTargetFps: 20 },
+    });
+    renderBar();
+    await advance(1_500);
+
+    const value = () => screen.getByTestId("status-fps-value").parentElement!;
+    expect(value()).toHaveClass("is-ok");
+    expect(screen.queryByText("shell:fpsHud.lowFps")).toBeNull();
+
+    getFullTelemetrySnapshotMock.mockResolvedValue({
+      ...SNAPSHOT,
+      usb: { ...SNAPSHOT.usb, captureFps: 19.6, sendFps: 6, queueHealth: "critical" },
+    });
+    await advance(1_500);
+
+    expect(value()).toHaveClass("is-low");
+    expect(screen.getByText("shell:fpsHud.lowFps")).toBeInTheDocument();
+  });
+
   it("starts and stops the poll live as the setting flips, with no restart", async () => {
     renderBar();
     await advance(3_000);

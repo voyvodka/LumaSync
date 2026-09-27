@@ -75,7 +75,7 @@ export function DisplayMenu({ displays, selectedId, busy, onSelect }: DisplayMen
         side="below"
         id={listId}
         label={t("calibration:setup.displayLabel")}
-        width={300}
+        width="fit"
         items={displays}
         itemKey={(d) => d.id}
         selectedIndex={displays.findIndex((d) => d.id === selected.id)}

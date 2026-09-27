@@ -2,10 +2,10 @@
  * Plugging and unplugging, as the app actually experiences it.
  *
  * Editing `world.serial.connectedPort` in the panel does nothing on its own,
- * and that is not a bug in the panel — it is how the app works. Nothing polls
- * `get_serial_connection_status` after boot; the controller re-reads it only
- * when a sibling publishes on the process-wide `connectionEvents` bus
- * (`state/siblingSync.ts`). So a world that says "unplugged" sits next to a UI
+ * and that is not a bug in the panel — it is how the app works. The app hears
+ * of a cable only through Rust's serial port watcher
+ * (`device://serial-ports-changed`) and, for a pairing, the process-wide
+ * `connectionEvents` bus (`state/siblingSync.ts`). So a world that says "unplugged" sits next to a UI
  * that still says "connected", with nothing to explain the disagreement. The
  * hot-plug edge — `wasConnected → false`, the disconnect toast, dropping
  * `usb` from the active targets — was unreachable from the mock entirely.
@@ -22,8 +22,13 @@
  */
 
 import { connectionEvents } from "../src/features/device/connectionEvents";
+import { DEVICE_COMMANDS, DEVICE_EVENTS, type SerialPortsChangedEvent } from "../src/shared/contracts/device";
+import { emitMockEvent } from "./events";
+import { deviceHandlers } from "./handlers/device";
 import { wledSinkEvents } from "../src/features/device/wledSinkEvents";
 import type { WledUdpSinkConfig } from "../src/shared/contracts/device";
+import type { ShellState } from "../src/shared/contracts/shell";
+import { withSerialTransport, withoutWledDevice, withWledTransport } from "../src/features/strips/model/stripWrites";
 import { getWorld, mutate } from "./state";
 
 /**
@@ -36,12 +41,19 @@ import { getWorld, mutate } from "./state";
 export function setSerialConnected(portName: string, connected: boolean): void {
   mutate((w) => {
     w.serial.connectedPort = connected ? portName : null;
-    w.shellState = {
-      ...w.shellState,
-      lastSuccessfulPort: connected ? portName : w.shellState.lastSuccessfulPort,
-    };
+    if (connected) {
+      w.shellState = { ...w.shellState, ...withSerialTransport(w.shellState as ShellState, portName) };
+    }
   });
   connectionEvents.emit({ portName, connected });
+  // What the watcher would say about the same cable.
+  const event: SerialPortsChangedEvent = {
+    ports: deviceHandlers[DEVICE_COMMANDS.LIST_PORTS]().ports,
+    appeared: connected ? [portName] : [],
+    lost: connected ? [] : [portName],
+    connection: deviceHandlers[DEVICE_COMMANDS.GET_CONNECTION_STATUS](),
+  };
+  void emitMockEvent(DEVICE_EVENTS.SERIAL_PORTS_CHANGED, event);
 }
 
 /**
@@ -76,7 +88,10 @@ export function setWledBound(host: string, bound: boolean): void {
 
   mutate((w) => {
     w.wled.connectedHost = bound ? host : null;
-    w.shellState = { ...w.shellState, lastWledSink: bound ? sink : undefined };
+    const strips = bound
+      ? withWledTransport(w.shellState as ShellState, sink)
+      : withoutWledDevice(w.shellState as ShellState, sink.ip);
+    w.shellState = { ...w.shellState, ...strips };
   });
 
   // `no-saved-device` rather than a synthetic failure: unbinding is not an

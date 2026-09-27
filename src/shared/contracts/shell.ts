@@ -1,11 +1,4 @@
-import type { LedCalibrationConfig } from "./calibration";
-import type {
-  ColorCorrectionConfig,
-  FirmwareProfile,
-  LedChipType,
-  LedColorOrder,
-  WledUdpSinkConfig,
-} from "./device";
+import type { ColorCorrectionConfig } from "./device";
 import type { DisplayId } from "./display";
 import type { LedTestPattern } from "./preview";
 import type { LightingModeConfig, LightingModeKind } from "./mode";
@@ -20,6 +13,7 @@ import type {
   HueRuntimeTarget,
 } from "./hue";
 import type { RoomMapConfig } from "./roomMap";
+import type { LedStrip } from "./strips";
 
 /**
  * Shell Contracts
@@ -198,8 +192,10 @@ export const SECTION_ORDER: SectionId[] = [
  *  `4 → 5` stamps each `hueChannels` record with its entertainment area.
  *  `5 → 6` folds the retired region overrides into channel positions.
  *  `6 → 7` drops keys nothing read: `startupEnabled`, `notificationsEnabled`,
- *  `roomMapBackgroundOpacity` and `lightingMode.targets`. */
-export const SHELL_STATE_SCHEMA_VERSION = 7 as const;
+ *  `roomMapBackgroundOpacity` and `lightingMode.targets`.
+ *  `7 → 8` stores the local output as `ledStrips`; the six keys it came from
+ *  stay on disk, frozen, so a v7 build still boots (`LegacyV7StripKeys`). */
+export const SHELL_STATE_SCHEMA_VERSION = 8 as const;
 
 /** Shape of shell state persisted to `shell-state.json` */
 export interface ShellState {
@@ -240,17 +236,11 @@ export interface ShellState {
    */
   language?: string;
   /**
-   * Last port name that connected successfully.
-   * Updated only after a successful connection attempt.
+   * The local output: each strip's transport, hardware, layout and tuning.
+   * Kept out of `DEFAULT_SHELL_STATE` — absent means "not migrated yet" and
+   * reads through the legacy keys; `[]` means no strips.
    */
-  lastSuccessfulPort?: string;
-  /** WLED sink re-bound on next launch. MUTUALLY EXCLUSIVE with `lastSuccessfulPort` — both set races at boot and serial always wins; see docs/architecture/device-output.md. */
-  lastWledSink?: WledUdpSinkConfig;
-  /**
-   * Last saved LED calibration model.
-   * Absent until user completes calibration flow.
-   */
-  ledCalibration?: LedCalibrationConfig;
+  ledStrips?: LedStrip[];
   /**
    * Last selected LED lighting mode state: the kind and both payloads. Its
    * `targets` is never stored — `lastOutputTargets` is the saved selection.
@@ -359,12 +349,6 @@ export interface ShellState {
    */
   colorCorrection?: ColorCorrectionConfig;
   /**
-   * Preferred firmware profile. Absent ⇒ backend falls back to
-   * `LUMASYNC_V1` on successful handshake, then `ADALIGHT` if the handshake
-   * fails, so plain Adalight sketches continue to light up.
-   */
-  firmwareProfile?: FirmwareProfile;
-  /**
    * v1.5 H4 — when `true`, the FirmwareProfilePicker override-warning
    * dialog is suppressed and the user's mismatched-profile commit
    * proceeds without confirmation. Set by the "Don't ask again" checkbox
@@ -394,19 +378,6 @@ export interface ShellState {
    * v1.4 (they will see the banner once and dismiss it).
    */
   hasCompletedOnboarding?: boolean;
-  /**
-   * LED chip type for the USB serial sink. Controls the per-pixel
-   * byte layout: `ws2812b-grb` (3 bytes, default) or `sk6812-rgbw` (4 bytes
-   * with host-side W = min(R,G,B) extraction). Absent ⇒ `WS2812B_GRB`.
-   */
-  selectedChipType?: LedChipType;
-  /**
-   * Host-side colour-order correction for the USB serial sink, relative to
-   * the firmware's own order (see `LED_COLOR_ORDER`). Absent ⇒ `"rgb"`, the
-   * identity. Read by the backend straight off disk when a mode payload
-   * carries no `colorOrder`. Additive — no schema bump, no migration.
-   */
-  ledColorOrder?: LedColorOrder;
   /**
    * Update channel preference, written only by an explicit choice in
    * Settings. Absent ⇒ `defaultUpdateChannel(APP_VERSION)`: `"beta"` on a

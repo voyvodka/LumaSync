@@ -88,7 +88,6 @@ const REQUIRED_STATE_FIELDS = [
 const REQUIRED_V14_STATE_FIELDS = [
   "lightingIntensityPreset",
   "colorCorrection",
-  "firmwareProfile",
   "selectedDisplayId",
 ];
 
@@ -102,10 +101,7 @@ const REQUIRED_V14_STATE_FIELDS = [
 const REQUIRED_V15_STATE_FIELDS = [
   "hasCompletedOnboarding",
   "updateChannel",
-  "selectedChipType",
   "dontWarnFirmwareProfileMismatch",
-  // Colour-order correction; additive like the rest, absent ⇒ "rgb".
-  "ledColorOrder",
   // Stats for nerds; additive, absent ⇒ off and no telemetry poll.
   "showNerdStats",
   // Reduce motion; additive, absent ⇒ follow the OS.
@@ -287,11 +283,11 @@ if (orderMatch) {
 // ---------------------------------------------------------------------------
 // Schema version bump — gates the newest migration step; earlier steps chain.
 // ---------------------------------------------------------------------------
-console.log("\n[ Shell state schema version (unread keys retired) ]");
+console.log("\n[ Shell state schema version (strips stored) ]");
 check(
-  /SHELL_STATE_SCHEMA_VERSION\s*=\s*7\b/.test(source),
-  "SHELL_STATE_SCHEMA_VERSION === 7 (unread-key drop gate)",
-  "SHELL_STATE_SCHEMA_VERSION not bumped to 7 — the 6 → 7 drop step has no trigger"
+  /SHELL_STATE_SCHEMA_VERSION\s*=\s*8\b/.test(source),
+  "SHELL_STATE_SCHEMA_VERSION === 8 (strips storage gate)",
+  "SHELL_STATE_SCHEMA_VERSION not bumped to 8 — the 7 → 8 strips step has no trigger"
 );
 for (const retired of ["startupEnabled", "notificationsEnabled", "roomMapBackgroundOpacity"]) {
   check(
@@ -565,6 +561,10 @@ const RUST_HEALTH_CHECK_RESULT_FILE = resolve(
   "src-tauri/src/commands/device_connection.rs"
 );
 const rustHealthSource = readOrEmpty(RUST_HEALTH_CHECK_RESULT_FILE, "rust device_connection");
+const rustLocalOutputsSource = readOrEmpty(
+  resolve(ROOT, "src-tauri/src/commands/local_outputs.rs"),
+  "rust local_outputs"
+);
 check(
   deviceSource.includes("advertisedFirmwareProfile: FirmwareProfile | null"),
   "device.ts HealthCheckResult.advertisedFirmwareProfile field declared",
@@ -1338,16 +1338,51 @@ const rustShellStateSource = readOrEmpty(
   "rust shell_state"
 );
 const rustShellStateProduction = rustShellStateSource.split(/\nmod tests\s*\{/)[0];
-// The strip keys are read by `led_strips.rs`, which derives strips from them.
+// `led_strips.rs` reads `ledStrips`, and the frozen v7 keys for a file not yet migrated.
 const rustStripsProduction = readOrEmpty(
   resolve(ROOT, "src-tauri/src/models/led_strips.rs"),
   "rust led_strips"
 ).split(/\nmod tests\s*\{/)[0];
-check(
-  source.includes("ledColorOrder?:") && rustStripsProduction.includes('present(state, "ledColorOrder")'),
-  "ShellState.ledColorOrder is the key led_strips.rs hydrates from",
-  "PERSISTED KEY DRIFT: ShellState.ledColorOrder and led_strips.rs present(state, \"ledColorOrder\") disagree"
+const stripsContractSource = readOrEmpty(resolve(ROOT, "src/shared/contracts/strips.ts"), "strips contract");
+const legacyStripKeysBlock = stripsContractSource.match(/export interface LegacyV7StripKeys \{([\s\S]*?)\n\}/);
+const legacyStripKeys = new Set(
+  legacyStripKeysBlock ? [...legacyStripKeysBlock[1].matchAll(/^\s{2}([a-zA-Z]\w*)\??:/gm)].map((m) => m[1]) : []
 );
+check(
+  ["lastSuccessfulPort", "lastWledSink", "ledCalibration", "firmwareProfile", "selectedChipType", "ledColorOrder"].every(
+    (key) => legacyStripKeys.has(key)
+  ),
+  "LegacyV7StripKeys declares the six frozen single-output keys",
+  "LEGACY KEY DRIFT: LegacyV7StripKeys is missing one of the six keys a v7 file stores"
+);
+check(
+  source.includes("ledStrips?: LedStrip[]") && rustStripsProduction.includes('present(state, "ledStrips")'),
+  "ShellState.ledStrips is the key led_strips.rs reads strips from",
+  'PERSISTED KEY DRIFT: ShellState.ledStrips and led_strips.rs present(state, "ledStrips") disagree'
+);
+// Only the derivation and the migration may see the frozen keys; anything else
+// reading them would bypass the stored strips.
+{
+  const allowed = new Set(["src/features/strips/model/legacyStrips.ts", "src/features/persistence/migrations.ts"]);
+  const offenders = [];
+  const visit = (dir) => {
+    for (const entry of readdirSync(resolve(ROOT, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) {
+        if (entry.name !== "__tests__" && entry.name !== "node_modules") visit(rel);
+      } else if (/\.(ts|tsx)$/.test(entry.name) && !allowed.has(rel) && rel !== "src/shared/contracts/strips.ts") {
+        if (/import[^;]*\bLegacyV7StripKeys\b[^;]*;/.test(readFileSync(resolve(ROOT, rel), "utf8"))) offenders.push(rel);
+      }
+    }
+  };
+  visit("src");
+  visit("mock");
+  check(
+    offenders.length === 0,
+    "LegacyV7StripKeys is imported only by legacyStrips.ts and migrations.ts",
+    `LEGACY KEY LEAK: ${offenders.join(", ")} import LegacyV7StripKeys — read strips through stripSelectors`
+  );
+}
 
 // Every key a Rust typed read names must be a ShellState field: a misspelt key
 // reads as "never saved", and every hydration fallback built on it goes quiet.
@@ -1359,20 +1394,25 @@ console.log("\n[ Persisted keys — shell_state.rs / led_strips.rs typed reads �
       ? [...shellStateInterface[1].matchAll(/^\s{2}([a-zA-Z]\w*)\??:/gm)].map((m) => m[1])
       : []
   );
+  // The frozen v7 keys are fine only where the legacy derivation reads them; a
+  // typed read of one anywhere else would bypass the stored strips.
+  const stripReadFields = new Set([...fields, ...legacyStripKeys]);
   const readKeys = [
-    ...rustShellStateProduction.matchAll(/self\.(?:read|0\.get)\("([a-zA-Z]\w*)"\)/g),
-    ...rustStripsProduction.matchAll(/present\(state, "([a-zA-Z]\w*)"\)/g),
-  ].map((m) => m[1]);
+    ...[...rustShellStateProduction.matchAll(/self\.(?:read|0\.get)\("([a-zA-Z]\w*)"\)/g)].map((m) => [m[1], fields]),
+    ...[...rustStripsProduction.matchAll(/present\(state, "([a-zA-Z]\w*)"\)/g)].map((m) => [m[1], stripReadFields]),
+  ];
   check(
     fields.size > 0 && readKeys.length > 0,
     `extracted ${fields.size} ShellState fields and ${readKeys.length} Rust-read keys`,
     "EXTRACTION FAILED: could not read ShellState fields or shell_state.rs typed reads"
   );
-  for (const key of readKeys) {
+  for (const [key, allowed] of readKeys) {
     check(
-      fields.has(key),
-      `shell_state.rs reads "${key}", a ShellState field`,
-      `PERSISTED KEY DRIFT: shell_state.rs reads "${key}", which ShellState does not declare`
+      allowed.has(key),
+      `Rust reads "${key}", a key it may read there`,
+      allowed === fields && legacyStripKeys.has(key)
+        ? `PERSISTED KEY DRIFT: shell_state.rs reads the frozen "${key}" — read it through the strips`
+        : `PERSISTED KEY DRIFT: Rust reads "${key}", which ShellState does not declare`
     );
   }
 }
@@ -1646,7 +1686,8 @@ function checkWireUnion(label, emitted, declared, pinnedCount) {
   );
 }
 
-const rustSerialProduction = stripComments(rustHealthSource);
+// The registry (`local_outputs.rs`) writes the same `SerialConnectionStatus` / entry statuses.
+const rustSerialProduction = stripComments(rustHealthSource + "\n" + rustLocalOutputsSource);
 checkWireUnion(
   "SerialCommandStatusCode",
   [
@@ -1665,10 +1706,20 @@ checkWireUnion(
   [
     ...constMembers(deviceSource, "SERIAL_PORT_LIST_STATUS"),
     ...constMembers(deviceSource, "SERIAL_CONNECT_STATUS"),
+    ...constMembers(deviceSource, "SERIAL_OUTPUT_STATUS"),
     "PORT_NOT_FOUND",
     "PORT_UNSUPPORTED",
   ],
-  11
+  // 12 → 13: DISCONNECTED, a registry entry let go of or replaced (`local_outputs.rs`).
+  13
+);
+
+checkWireUnion(
+  "SerialDisconnectStatusCode",
+  [...stripComments(rustLocalOutputsSource).matchAll(/disconnect_result\(\s*\w+,\s*"([A-Z][A-Z0-9_]*)"/g)]
+    .map((m) => m[1]),
+  constMembers(deviceSource, "SERIAL_DISCONNECT_STATUS"),
+  3
 );
 
 checkWireUnion(
@@ -2109,7 +2160,8 @@ const emittedLedOutputReasons = [
     ].map((m) => m[1])
   ),
 ].sort();
-const EXPECTED_LED_OUTPUT_REASON_COUNT = 7;
+// 7 → 6: LED_OUTPUT_CONNECTION_STATE_LOCK_FAILED went with the test-only helper that produced it.
+const EXPECTED_LED_OUTPUT_REASON_COUNT = 6;
 check(
   emittedLedOutputReasons.length === EXPECTED_LED_OUTPUT_REASON_COUNT,
   `harvested exactly ${EXPECTED_LED_OUTPUT_REASON_COUNT} LED output reasons from led_output/serial.rs`,
@@ -2585,7 +2637,11 @@ const checkedPairs = nullabilityPairs.filter(
 // 86 → 87: `LightingOutcome`, the snapshot's `lastOutcome`.
 // 87 → 89: `CaptureFpsSample` and `RuntimeTelemetryHistory`
 // (`get_runtime_telemetry_history`).
-const EXPECTED_NULLABILITY_PAIR_COUNT = 89;
+// 89 → 90: `SerialPortsChangedEvent` (`device://serial-ports-changed`).
+// 90 → 94: the local-output registry — `SerialOutputStatus`, `WledOutputStatus`,
+// `LocalOutputsSnapshot` (`get_local_outputs`, `device://local-outputs-changed`) and
+// `SerialDisconnectResult` (`disconnect_serial_port`).
+const EXPECTED_NULLABILITY_PAIR_COUNT = 94;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

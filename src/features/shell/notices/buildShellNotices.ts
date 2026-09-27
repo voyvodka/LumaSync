@@ -11,7 +11,7 @@ import {
   type OnboardingStep,
 } from "@/features/onboarding/state/onboardingState";
 import type { PreviewOpenFailure } from "@/features/preview/previewOpenFailure";
-import type { DeviceCategory } from "@/features/settings/sections/DeviceSection";
+import type { DeviceCategory } from "@/features/device/model/deviceCategories";
 import type { UpdateCheckFailure } from "@/features/updater/useUpdateCheckFailedNotice";
 import {
   CAPTURE_FAILURE_BUCKET,
@@ -243,7 +243,7 @@ export function buildShellNotices(
         startFailure.bucket === CAPTURE_FAILURE_BUCKET.DISPLAY
           ? ledSetupAction
           : startFailure.bucket === CAPTURE_FAILURE_BUCKET.OUTPUT
-            ? devicesAction("usb")
+            ? devicesAction("strips")
             : undefined,
       dismissible: true,
       source: startFailure,
@@ -336,7 +336,7 @@ export function buildShellNotices(
       severity: NOTICE_SEVERITY.WARNING,
       kind: "event",
       message: t("shell:notices.messages.usbLeftOut"),
-      action: devicesAction("usb"),
+      action: devicesAction("strips"),
       dismissible: true,
       source: true,
       testId: "usb-left-out-notice",
@@ -382,7 +382,7 @@ export function buildShellNotices(
         ? t("shell:notices.messages.usbUnsupportedFallback")
         : t("shell:notices.messages.usbUnsupportedNoFallback"),
       // Only the no-fallback copy sends the user to Devices.
-      action: input.usbUnsupportedHueFallback ? undefined : devicesAction("usb"),
+      action: input.usbUnsupportedHueFallback ? undefined : devicesAction("strips"),
       dismissible: true,
       source: input.usbUnsupportedHueFallback,
       testId: "usb-unsupported-notice",

@@ -32,6 +32,7 @@ import {
   type ColorCorrectionConfig,
 } from "@/shared/contracts/device";
 import { shellStore } from "@/features/persistence/shellStore";
+import { withColorCorrection } from "@/features/strips/model/stripWrites";
 import { clamp } from "@/shared/lib/math";
 import { RangeRow } from "@/shared/ui/RangeRow";
 
@@ -123,10 +124,10 @@ export function ColorCorrectionPanel({
       persistTimeoutRef.current = window.setTimeout(() => {
         persistTimeoutRef.current = null;
         void shellStore
-          .save({ colorCorrection: next })
+          .update((current) => withColorCorrection(current, next))
           .catch((error) => {
             console.error(
-              "[LumaSync] shellStore.save(colorCorrection) failed:",
+              "[LumaSync] saving the colour correction failed:",
               error,
             );
           });

@@ -41,10 +41,10 @@ describe("createNavigationStore", () => {
 
   it("clears the category on any other way in, and keeps it on a plain section set", () => {
     const store = createNavigationStore();
-    store.openSection(SECTION_IDS.DEVICES, "wled");
+    store.openSection(SECTION_IDS.DEVICES, "strips");
 
     store.setActiveSection(SECTION_IDS.SYSTEM);
-    expect(store.get().deviceCategoryRequest?.category).toBe("wled");
+    expect(store.get().deviceCategoryRequest?.category).toBe("strips");
 
     store.openSection(SECTION_IDS.DEVICES);
     expect(store.get().deviceCategoryRequest).toBeNull();

@@ -104,7 +104,7 @@ The baseline may only go down. A count below it is printed (and annotated on Git
 a partial run always sees fewer, and the step sits inside a required check where a timing-dependent
 miss must not turn a PR red. Lower the file by hand when a full run reports fewer. When it was
 introduced the count was 122, all from three files — `RoomMapEditor.test.tsx` (50),
-`LightsSection.test.tsx` (48) and `DeviceSection.test.tsx` (24) — and stable across worker counts.
+`LightsSection.test.tsx` (48) and `DevicesPage.test.tsx` (formerly `DeviceSection.test.tsx`, 24) — and stable across worker counts.
 
 Two ways it goes blind: a `--reporter` flag replaces the configured list and drops the ratchet with
 it, and a test that stubs `console.error` swallows the warning before any reporter sees it.

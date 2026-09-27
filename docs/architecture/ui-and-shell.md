@@ -29,7 +29,7 @@ entry holds only React, i18next, the console bridge, the error boundaries, and t
 each window's root (`App`, `ControlPopupApp`, `LedTwinOverlay`) is a dynamic `import()` started
 before the language read, so the chunk and the shell-state IPC load in parallel rather than one
 after the other. Inside the main window, the three full-only sections that outweigh the rest of
-the shell — `CalibrationPage` (through `calibration/ui/CalibrationPanel`), `DeviceSection`,
+the shell — `CalibrationPage` (through `calibration/ui/CalibrationPanel`), `DevicesPage`,
 `RoomMapEditor` — are split out through `preloadableComponent` (`src/shared/lib/`). Compact mode
 never renders them, so it never fetches them; full mode warms all three on idle after it paints, so
 a tab switch rarely meets the blank `SectionPlaceholder`. LED Setup's warm-up also reads the
@@ -125,7 +125,7 @@ the value the user let go on. A new control that needs one of these behaviours u
 a feature that is touched for another reason migrates its hand-rolled copy then.
 
 **A closed set of kinds is a table, not a scattered `switch`.** Sections (`SECTION_REGISTRY` in
-`SettingsLayout.tsx`), Devices rail categories (`DEVICE_CATEGORIES`), lighting mode kinds
+`SettingsLayout.tsx`), Devices rail rows (`RAIL_ROWS` in `device/ui/deviceRailRows.ts`), lighting mode kinds
 (`MODE_KINDS` in `features/mode/model/modeKinds.ts`), output targets (`OUTPUT_TARGETS` in the mode
 contract, and the Lights dock's rows) and room-map object kinds (`ROOM_OBJECT_KINDS` in
 `features/room-map/model/roomObjectKinds.ts`) are each one object declared `satisfies Record<Kind,
@@ -186,7 +186,9 @@ every `visibilitychange` whether the window is visible, and the monitor stops as
 while it is not (`hue.md`, "One health monitor"). The tray window can sit hidden for hours with the
 React tree mounted, so an unconditional interval keeps firing requests nobody can see; the immediate
 resume is what makes a chip look fresh the instant the window comes back. A new poll that skips this
-is a regression even though nothing will fail.
+is a regression even though nothing will fail. The one deliberate exception is Rust's serial port
+watcher (`spawn_serial_watch`, `device-output.md`): lighting runs from the tray with every window
+hidden, and an unplug must still be noticed there. It lists ports without opening any.
 
 **`document.visibilityState` alone is not enough on Windows.** WebView2 can keep reporting
 `visible` while the window sits hidden in the tray, so the telemetry loop and
@@ -208,6 +210,12 @@ What must show regardless — the capture-stall notice and the serial link-budge
 pushed `RuntimeHealth` instead ([`capture-and-pipeline.md`](capture-and-pipeline.md)). The preferences
 store (`persistence/preferences.ts`, one row per preference) holds the value for both readers and
 follows other windows' writes, so a flip takes effect at once.
+
+**The FPS pill's colour says whether the output keeps up, never how high the number is.** Capture
+counts distinct frames and asks for 20–30 fps, so the fixed 45/25 thresholds it started with painted
+Hue-only sessions and any still screen red with "Low FPS". The colour now comes from the queue and the
+link (`useRuntimeTelemetry`'s `health`): green while healthy, amber when the link limits the effect or
+frames start being overwritten, red with the words only when the queue is critical.
 
 **Every window's lighting choices go to one Rust transaction.** The main window, the LED control
 popup, the tray and the launch restore all send `apply_outputs`, and every window renders the same
@@ -362,7 +370,7 @@ opens on "How many LEDs does your strip have?" with the rows hidden. The first f
 from the display's pixel width (60/22/60/22 for anything 3440 px and up), so a 3600-px laptop panel
 got 164 LEDs whatever strip was on it: pixels say nothing about how long a strip is. The count is a
 fact about the hardware, so the user supplies it — or a bound WLED panel does, since it reports its
-own (`lastWledSink.ledCount`), and that pre-fills the question and the draft; a saved layout that
+own (the saved WLED strip's `ledCount`), and that pre-fills the question and the draft; a saved layout that
 disagrees with the panel offers its count one click away. Without one nothing is guessed.
 `distribute` (`calibration/model/ledLayout.ts`) then shares the total out:
 
@@ -420,9 +428,26 @@ rounding hair. On a change of LED #1 or the direction the line draws itself once
 around it. The stage box sits in the page grid's flexible row by name: in the `auto` row it sized to
 the stage, and the stage — sized from the box — never grew past its first size.
 
-**A Devices rail badge counts what is active.** A connected strip, a streaming bridge, a bound WLED
-panel; displays have no badge. An enumerated port or a paired-but-idle bridge
-used to put a number beside a header saying nothing was connected.
+**The Devices rail lists the devices, not kinds of device.** Each strip and the Hue bridge is its
+own row with a dot — filled while it is connected (or streaming), hollow while not — and "+ Add a
+strip" closes the strips. What was detected but not added — a supported port plugged in ("… · Add"),
+a bridge found on the network and not paired ("… · Pair") — sits in a last group, "Found": those come
+and go with a cable or a scan, and at the end a row that arrives never moves one above it, where the
+pointer may be. Two found bridges that would read the same are named by address. A bridge becomes the
+Hue row once it is paired; the app pairs one bridge at a time, so the Hue group has one row. Groups are named groups (`role="group"` labelled by
+the heading), so a screen reader hears "Strips" before the strips, as the eye sees it. A
+row opens that device's page. The category rail it replaced had two rows once Displays went, and
+its count badges said "1" beside a single device. The rail keeps its place empty until the strips
+are read from the saved state, then remembers them for the session, so it never fills in under the
+pointer on a return. Deep links keep the `strips | hue` vocabulary (`DeviceCategory`) and land on
+the first strip or the bridge. It is the shared `Rail` (`shared/ui/Rail/`), the same one Settings
+uses; its tint is placed by measuring, since group headings make the rows uneven.
+
+**Devices has no Displays page.** A display is the capture source, not something connected, and
+most machines have one. The captured display is chosen in one place, LED Setup's top bar, where the
+layout is drawn on its shape; a second picker in Devices raised "which one counts?" and showed one
+row on most machines. When strips carry their own display, the strip page names it as a property of
+the strip ("Built-in · 60 LED · 4 kenar"), not as a page of its own.
 
 ## Capabilities
 
@@ -518,6 +543,16 @@ agree.
 - **Bootstrap must not strip `usb` from the output targets when the live snapshot says disconnected.** Cold launch races `tryAutoReconnect`, which waits out the ~2 s bootloader settle before it can report anything; roughly a quarter of starts finish bootstrap first, see `connected: false`, and drop the user's persisted USB target. Auto-reconnect then succeeds and emits `connected: true`, but the hot-plug reconciler's membership check no longer matches, so the output stays silently off until the user toggles it by hand. The target is kept regardless of the snapshot — `modeGuard` already renders the disabled state from `isConnected`, so nothing is hidden from the user. The separate "was USB physically present last time we looked" flag is *not* part of this and must keep tracking the snapshot, or the false→true transition re-fires on every cold start. Keeping the target was not enough on its own: the restore itself had run without the strip, and the reconciler, seeing `usb` still selected, had nothing to add, so the strip stayed dark until a mode press. Rust now answers the strip's connect by resuming the restore on it (`lighting-transaction.md`, "The launch's wait for a strip").
 - **A structurally unavailable USB port does get dropped from the targets, but only for two codes.** `PORT_UNSUPPORTED` and `PORT_NOT_FOUND` mean the port will not work for the rest of this session — typically a phantom endpoint the allowlist now rejects — and leaving `usb` selected sends every later mode start into the Rust gate, which refuses it with `DEVICE_NOT_CONNECTED`. From the user's seat, Ambilight does nothing. Transient codes (`CONNECT_TIMEOUT`, `CONNECT_IO_ERROR`, `CONNECT_FAILED`) must *not* trigger this: stripping the target on a retryable failure loses a setting the user chose. The surviving set is sent as a saved choice, like the auto-add above.
 - **Removing a target from a running mode re-applies the mode on what stays; it never calls `stop_lighting` for one target.** `stop_lighting` is not a USB stop — it turns the whole backend mode Off, so removing USB from `[usb, hue]` that way took the worker feeding Hue with it while the stream stayed open, holding the bridge's one streamer slot and keep-aliving its last frame. The transaction re-applies the mode on the targets that stay (`lighting-transaction.md`, phase 2), which stops the old worker and starts one that never plans the removed output, so an unplugged port is never opened. The Outputs toggle saves the new set; the hot-plug unplug in `useUsbTargetReconciler.ts` sends it with `origin: "usbUnplug"`, which does not: a cable falling out is not the user giving up the strip, and the launch restore keeps `usb` selected while no strip is there.
+- **An unplug reaches the reconciler through the serial port watcher.** Nothing noticed one before:
+  the controller's port list was read at boot and on Rescan only, and Rust's status was written only
+  by a connect, so a strip pulled while Solid ran went unnoticed until the next write failed. Rust
+  now polls the inventory (`device-output.md`, "The serial port watcher") and emits
+  `device://serial-ports-changed`; every controller applies `lost` directly (not through a refresh,
+  whose missing-port path started auto-recovery in every mount), and the App mount — the only one
+  with `reconnectOnReplug` — brings the saved port back when it reappears. From there the ordinary
+  paths take over: the reconciler's false→true transition adds `usb` back and starts a running mode
+  on it, while an unplug that ended a USB-only mode leaves it Off after the replug — the lights
+  coming back on by themselves after the user saw them stop would be the surprise.
 - **Unplugging the strip that was the only target ends the mode, the way Off does.** `useUsbTargetReconciler.ts` used to act on an unplug only when another target stayed selected, so a USB-only mode — or a `[usb, hue]` restore running on USB alone while it waited for a busy bridge (#441) — got no notice, a worker still capturing for a port that was gone, and the mode still shown running; the busy notice kept saying "running on USB only". Now the reconciler calls the orchestrator's `endLightingOnUsbUnplug`, which sends the empty set with `origin: "usbUnplug"`: session-only (`lastOutputTargets` is never written, nor the persisted mode), the worker stopped whatever the active set says, then Off with the selection kept. The empty set also cancels a pending rejoin the way any output change does, and the left-out reason is cleared with it. The "continuing on the other outputs" notice for an unplug beside another target is raised only while a mode runs; with the mode Off it named nothing that continued. The reconciler raises its own notice, `shell:notices.messages.usbDisconnectedLightingOff`, only once the mode has actually ended — with the mode already Off, or a stop that failed (which raises the stop-failed toast instead), there is nothing to report. `normalizeOutputTargets([])` keeps an explicit empty set, which is what lets the delta path see "nothing left".
 - **The HUE chip says when Hue is out of the running mode, and says it for longer than the toast.** A bridge that is merely held by another session answers the reachability probe, so while the #441 busy notice said Hue was not running the chip read OK. The runtime snapshot carries the left-out reason (`hueHeldOutReason`), and the main window raises the notice from it: raised and retry-cleared together, but not dismissed by the notice's 8 s timer — the reason holds until Hue joins, or the user makes a mode or output choice. `resolveHueHeldOut` in `statusItems.ts` turns it into WAITING (the busy wait, or the Off-resume wait, amber, no reconnect button) or LEFT OUT (any other reason while a mode runs, with the Devices deep-link). It yields to a live Hue session, so a stop that timed out and left Hue listed active still reads STREAMING beside its stop-failed toast. Every chip value now comes from `shell:statusBar.state.*`; the labels (CAP, USB, WLED, HUE) stay as they are.
 - **Removing Hue from a running mode lets the worker go of Hue before the stream stops, and Off stops the worker before Hue whatever the targets.** A stop under a worker still holding its handle on the Hue sender waited out 3 s, reported `HUE_STOP_TIMEOUT_PARTIAL`, and ran the #425 light restore with the sender alive; on the HTTP fallback the next frame painted the restored lights again. The transaction's phase 3 ("Hue down, after the worker has let go") owns this now, and the reasoning is in `hue.md`. Since the worker follows the Hue runtime's live output slot it lets go at its next frame on its own, so the sender's exit no longer depends on this order; the order stays anyway.
@@ -551,5 +586,5 @@ agree.
   - *Nothing times out in the tray.* The queue's `suppressed` is the update prompt *or* the main window being off screen (`useWindowVisible`, not `document.visibilityState`, which WebView2 keeps `visible` in the tray). An event raised or let go while hidden is retained unseen and gets its fair look once the window is back; the preview-open and update-check notices pause their own countdowns on the same Rust-backed signal. The live region is cleared when the notice it spoke leaves, so a screen reader never finds "Checking outputs…" standing there after the check.
   - *A failed settings write says so once.* `windowShellState.ts` latches every rejected shell-state write (`persistence/writeHealth.ts`) and clears the latch on the next one that lands; the shell turns it into one dismissible warning, `settings-not-saved`. Choices already applied — the language, stats for nerds — hold for the session, which is what the notice promises. The update channel still snaps back, because Rust reads that field off disk to pick the feed.
   - *Space is held, not jumped.* Checking outputs occupies the slot from the first frame, and "no output" or onboarding replaces it in place. While boot or an onboarding reveal is still pending, a slot that has shown something keeps its 32 px even when empty, so the strip does not rise and fall again. The cost is a brief empty band on a set-up machine whose checking notice clears before a pending reveal resolves to nothing.
-  - *Actions only where a destination exists.* Hue auth, unreachable and not-set-up open the Hue category in Devices (`DeviceSection`'s `categoryRequest`, a nonce so asking twice counts); a vanished display opens LED setup, as the copy says; a failed Hue stop retries through `stopHueOutput`, never `stopHue`. A strip that would not stop has no button — the copy says to switch the mode Off instead — rather than a retry that could not reach it.
+  - *Actions only where a destination exists.* Hue auth, unreachable and not-set-up open the Hue category in Devices (`DevicesPage`'s `categoryRequest`, a nonce so asking twice counts); a vanished display opens LED setup, as the copy says; a failed Hue stop retries through `stopHueOutput`, never `stopHue`. A strip that would not stop has no button — the copy says to switch the mode Off instead — rather than a retry that could not reach it.
 - **Frontend console output is bridged into the Rust log sink.** `src/main.tsx` wraps `console.log/info/warn/error` and forwards them into `tauri-plugin-log`, so frontend lines land in the same file as `log::info!`. Plugin-log records with a caller use targets shaped like `webview::<location>` (2.9.2 onward; earlier releases wrote `webview:<location>`, which fern's `level_for` inheritance — it only walks Rust's `::` separator — never matched). The debug logger keeps `Info` as its global floor, which covers frontend records under either shape, so do not reintroduce a `level_for("webview", ..)` as the only thing letting them through. A rejected bridge call is reported once through the original console.

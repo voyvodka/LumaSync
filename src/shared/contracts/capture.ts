@@ -30,13 +30,12 @@ export const AMBILIGHT_CAPTURE_REASON = {
   LED_OUTPUT_WRITE_FAILED: "LED_OUTPUT_WRITE_FAILED",
   LED_OUTPUT_FLUSH_FAILED: "LED_OUTPUT_FLUSH_FAILED",
   LED_OUTPUT_SESSION_LOCK_FAILED: "LED_OUTPUT_SESSION_LOCK_FAILED",
-  LED_OUTPUT_CONNECTION_STATE_LOCK_FAILED: "LED_OUTPUT_CONNECTION_STATE_LOCK_FAILED",
 } as const;
 
 export type AmbilightCaptureReason =
   (typeof AMBILIGHT_CAPTURE_REASON)[keyof typeof AMBILIGHT_CAPTURE_REASON];
 
-/** What the user can do about it — 25 reasons, 6 buckets, because most are log-only. */
+/** What the user can do about it — 23 reasons, 6 buckets, because most are log-only. */
 export const CAPTURE_FAILURE_BUCKET = {
   /** macOS screen recording. The preflight cannot separate "denied" from "never
    *  asked", so copy must read "check this permission", never "you denied it". */
@@ -85,7 +84,6 @@ const BUCKET_BY_REASON: Readonly<Record<AmbilightCaptureReason, CaptureFailureBu
   [AMBILIGHT_CAPTURE_REASON.LED_OUTPUT_FLUSH_FAILED]: CAPTURE_FAILURE_BUCKET.OUTPUT,
   // Poisoned mutexes, not a device problem — the user can only restart.
   [AMBILIGHT_CAPTURE_REASON.LED_OUTPUT_SESSION_LOCK_FAILED]: CAPTURE_FAILURE_BUCKET.INTERNAL,
-  [AMBILIGHT_CAPTURE_REASON.LED_OUTPUT_CONNECTION_STATE_LOCK_FAILED]: CAPTURE_FAILURE_BUCKET.INTERNAL,
 };
 
 /** A classified `status.details`, carrying the raw reason for the log-facing copy. */

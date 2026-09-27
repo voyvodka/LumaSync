@@ -87,7 +87,12 @@ opened; an unplug behind a queued start runs that start on what the cable left. 
 
 A refused start leaves what was running, unless it drives a target the user just deselected: that
 one is stopped rather than left lit. A start that tore the old mode down and then failed is
-`OUTPUTS_START_FAILED`; the Hue stream it leaves unfed is given back.
+`OUTPUTS_START_FAILED`; the Hue stream it leaves unfed is given back — except when the failure is
+the local output's own (a start failure whose details are an `LED_OUTPUT_*` or `WLED_*` code: a dead
+port after a replug, a WLED device that stopped answering) beside another output. Then the mode
+starts again without USB and `usb` drops from the session's selection, as a device-gate refusal
+does; a failure of anything else (capture) still ends the mode (`usb_output_failed`, `outputs.rs`).
+It used to end the mode with Hue in it, so a replugged strip turned the user's Hue lights off.
 
 **A refused choice says why.** Every refusal used to reach the main window as a status code it did
 not read, so a press that changed nothing changed nothing on screen either:
@@ -307,6 +312,9 @@ restores the mode from the saved settings — and does nothing while Off.
   the strip, which the refresh already leaves alone, and on steps that change nothing, so a save
   naming only `ledCalibration` is skipped when the running mode already carries that layout or does
   not drive the strip (`calibration_is_current`).
+- The strips are one key, `ledStrips`, so a save of it is named by what it changed on the primary
+  strip — the layout as `ledCalibration`, the hardware as the three keys above — and a layout-only
+  save keeps this fast path. A transport change names nothing, as a saved port never did.
 - A saved `lastHueAreaId` that differs from the live stream's area moves the stream (phase 1 above).
   A move the new area refuses leaves Hue out with its reason and keeps the rest running; a Hue-only
   mode with nowhere left to run ends.

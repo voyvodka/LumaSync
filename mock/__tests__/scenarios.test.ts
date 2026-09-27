@@ -15,6 +15,7 @@
 import { describe, expect, it } from "vitest";
 
 import { toHueStartConfig } from "../../src/features/hue/model/hueStartConfig";
+import { primaryStripOf, savedSerialPort } from "../../src/features/strips/model/stripSelectors";
 import { SCENARIOS, SCENARIO_IDS } from "../scenarios";
 
 /** Scenarios whose label promises a bridge that is paired and area-selected. */
@@ -54,8 +55,8 @@ describe("scenarios put the app in the state they claim", () => {
     const world = SCENARIOS["usb-first-connect"].build();
     expect(world.serial.ports.some((port) => port.supported)).toBe(true);
     expect(world.serial.connectedPort).toBeNull();
-    expect(world.shellState.ledCalibration).toBeUndefined();
-    expect(world.shellState.lastSuccessfulPort).toBeUndefined();
+    expect(primaryStripOf(world.shellState)?.layout).toBeUndefined();
+    expect(savedSerialPort(world.shellState)).toBeUndefined();
   });
 
   it("usb-only resolves no Hue config", () => {
@@ -86,7 +87,7 @@ describe("scenarios put the app in the state they claim", () => {
     // `totalLeds` is what the frame generator and the dock both read; an edge
     // sum that disagrees with it is the kind of fixture that sends someone
     // hunting an off-by-one in the strip mapping.
-    const calibration = SCENARIOS.furnished.build().shellState.ledCalibration;
+    const calibration = primaryStripOf(SCENARIOS.furnished.build().shellState)?.layout;
     expect(calibration).toBeDefined();
     const { top, right, bottom, left } = calibration!.counts;
     expect(top + right + bottom + left).toBe(calibration!.totalLeds);

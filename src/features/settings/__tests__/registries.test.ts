@@ -8,11 +8,6 @@ import type { Equals } from "@/test/typeEquals";
 vi.mock("@/features/hue/useHueOnboarding", () => ({ useHueOnboarding: () => ({}) }));
 
 import { SECTION_REGISTRY, type SectionEntry } from "../SettingsLayout";
-import {
-  DEVICE_CATEGORIES,
-  type DeviceCategory,
-  type DeviceCategoryDescriptor,
-} from "../sections/DeviceSection";
 
 describe("SECTION_REGISTRY", () => {
   it("has exactly one panel per section", () => {
@@ -26,21 +21,6 @@ describe("SECTION_REGISTRY", () => {
     // @ts-expect-error — the room map would have no panel.
     const incomplete = withoutRoomMap satisfies Record<SectionId, SectionEntry>;
     expect(Object.keys(incomplete)).not.toContain(SECTION_IDS.ROOM_MAP);
-  });
-});
-
-describe("DEVICE_CATEGORIES", () => {
-  it("has exactly one rail row per device category", () => {
-    const covered: Equals<keyof typeof DEVICE_CATEGORIES, DeviceCategory> = true;
-    expect(covered).toBe(true);
-    expect(Object.keys(DEVICE_CATEGORIES)).toEqual(["usb", "hue", "wled", "displays"]);
-  });
-
-  it("does not compile with a category missing", () => {
-    const { displays: _displays, ...withoutDisplays } = DEVICE_CATEGORIES;
-    // @ts-expect-error — displays would have no rail button.
-    const incomplete = withoutDisplays satisfies Record<DeviceCategory, DeviceCategoryDescriptor>;
-    expect(Object.keys(incomplete)).not.toContain("displays");
   });
 });
 

@@ -44,8 +44,8 @@ vi.mock("../ui/SettingsPage", () => ({
   },
 }));
 
-vi.mock("../sections/DeviceSection", () => ({
-  DeviceSection: ({
+vi.mock("@/features/device/ui/DevicesPage", () => ({
+  DevicesPage: ({
     categoryRequest,
     hueActive,
   }: {
@@ -250,12 +250,10 @@ describe("SettingsLayout render boundaries", () => {
     const shell = await renderFull(SECTION_IDS.DEVICES);
     const before = renders.devices;
 
-    // Devices reads whether Ambilight runs (Displays marks the captured
-    // display), so the change it must ignore is one inside the running mode.
+    // Devices reads nothing of the running mode.
     shell.setLighting({ lightingMode: { kind: "solid" } });
-    const afterMode = renders.devices;
     shell.setLighting({ lightingMode: { kind: "solid", solid: { r: 1, g: 2, b: 3, brightness: 1 } } });
-    expect(renders.devices).toBe(afterMode);
+    expect(renders.devices).toBe(before);
     act(() => shell.navigation.openSection(SECTION_IDS.DEVICES, "hue"));
 
     expect(screen.getByTestId("devices-category")).toHaveTextContent("hue");

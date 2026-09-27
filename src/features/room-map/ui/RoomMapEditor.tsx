@@ -225,9 +225,9 @@ export function RoomMapEditor({
       : hueReachable
         ? "connected"
         : "disconnected";
-  // There is no Rust `disconnect_serial_port` yet, so this deep-links to Devices.
-  // Kept as a callback so a real disconnect can replace it without touching
-  // consumers.
+  // Deep-links to Devices: `disconnect_serial_port` exists but no window may call it until the
+  // frontend reads the local-output registry. Kept as a callback so a real disconnect can replace
+  // it without touching consumers.
   const handleManageUsb = useCallback(() => {
     onNavigateToDevices?.();
   }, [onNavigateToDevices]);

@@ -56,6 +56,36 @@ describe("createAutoRecovery", () => {
     expect(deps.listSerialPorts).toHaveBeenCalledTimes(callsAtGiveUp);
   });
 
+  // Re-opening a wedged driver is what keeps it wedged.
+  it("stops at a port the system refuses until it is re-plugged, and says so", async () => {
+    const port = {
+      name: "COM3",
+      kind: "usb",
+      isSupported: true,
+      supportReason: "Supported USB serial adapter",
+      usb: null,
+    };
+    const deps = baseDeps({
+      listSerialPorts: vi.fn<() => Promise<SerialPortListResponse>>().mockResolvedValue({ ...emptyPorts(), ports: [port] }),
+      connectSerialPort: vi.fn<() => Promise<SerialConnectionStatus>>().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "CONNECT_REPLUG_REQUIRED", message: "Re-plug the cable.", details: "Invalid argument" },
+      }),
+    });
+    const store = createConnectionStore(DEFAULT_STATE);
+    const recovery = createAutoRecovery(store, deps, { ...timing, recoveryMaxAttempts: 4 }, null);
+
+    recovery.startAutoRecovery("COM3");
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(deps.connectSerialPort).toHaveBeenCalledTimes(1);
+    expect(store.getState().status).toBe(DEVICE_STATUS.MANUAL_REQUIRED);
+    expect(store.getState().statusCard?.code).toBe("CONNECT_REPLUG_REQUIRED");
+    expect(store.getState().activeOperation).toBe(DEVICE_OPERATION.IDLE);
+  });
+
   it("leaves a foreign operation's slot untouched when cancelRecovery is called after it has moved on", async () => {
     const deps = baseDeps();
     const store = createConnectionStore(DEFAULT_STATE);

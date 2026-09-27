@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-local-outputs"
+description = "Enables the get_local_outputs command without any pre-configured scope."
+commands.allow = ["get_local_outputs"]
+
+[[permission]]
+identifier = "deny-get-local-outputs"
+description = "Denies the get_local_outputs command without any pre-configured scope."
+commands.deny = ["get_local_outputs"]

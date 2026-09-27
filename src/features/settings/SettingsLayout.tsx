@@ -31,8 +31,8 @@ import type { RoomMapEditorProps } from "@/features/room-map/ui/RoomMapEditor";
 // The full-only sections that each outweigh the rest of the shell are split out,
 // so the compact window never parses them (LED Setup's is in its own panel). See
 // docs/architecture/ui-and-shell.md, "Per-window bundles".
-const DeviceSection = preloadableComponent("DeviceSection", () =>
-  import("./sections/DeviceSection").then((m) => m.DeviceSection),
+const DevicesPage = preloadableComponent("DevicesPage", () =>
+  import("@/features/device/ui/DevicesPage").then((m) => m.DevicesPage),
 );
 const RoomMapEditor = preloadableComponent<RoomMapEditorProps>("RoomMapEditor", () =>
   import("@/features/room-map/ui/RoomMapEditor").then((m) => m.RoomMapEditor),
@@ -104,27 +104,22 @@ const LightsPanel = memo(function LightsPanel() {
 
 const selectDeviceCategoryRequest = (state: NavigationState) => state.deviceCategoryRequest;
 const selectHueActive = (status: HueShellStatus) => status.configured && status.streaming;
-const selectAmbilightActive = (state: LightingControlState) => state.lightingMode.kind === "ambilight";
 
 const DevicesPanel = memo(function DevicesPanel() {
   const categoryRequest = useNavigationState(selectDeviceCategoryRequest);
   const hueActive = useHueShellStatus(selectHueActive);
-  const ambilightActive = useLightingControlState(selectAmbilightActive);
   const reportVisibleCategory = useVisibleDeviceCategoryReporter();
   const { goToSection } = useNavigationActions();
   const { stopHueOutput } = useLightingActions();
   const openRoomMap = useCallback(() => void goToSection(SECTION_IDS.ROOM_MAP), [goToSection]);
-  const openLedSetup = useCallback(() => void goToSection(SECTION_IDS.LED_SETUP), [goToSection]);
   return (
     <div className="h-full overflow-hidden">
-      <DeviceSection.Component
+      <DevicesPage.Component
         onNavigateToRoomMap={openRoomMap}
         onStopHueOutput={stopHueOutput}
         categoryRequest={categoryRequest}
         onVisibleCategoryChange={reportVisibleCategory}
         hueActive={hueActive}
-        ambilightActive={ambilightActive}
-        onOpenLedSetup={openLedSetup}
       />
     </div>
   );
@@ -221,7 +216,7 @@ export const SECTION_REGISTRY = {
   },
   [SECTION_IDS.DEVICES]: {
     render: () => <DevicesPanel />,
-    preload: DeviceSection.preload,
+    preload: DevicesPage.preload,
   },
   [SECTION_IDS.SYSTEM]: {
     render: () => <SystemPanel />,

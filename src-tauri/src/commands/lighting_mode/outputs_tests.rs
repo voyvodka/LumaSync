@@ -32,12 +32,12 @@ use super::{
     stop_lighting_blocking, AmbilightPayload, LightingModeConfig, LightingModeKind,
     SolidColorPayload, ACTIVE_AMBILIGHT_WORKERS,
 };
-use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionState};
 use crate::commands::hue::light_restore::HueLightsAfterStop;
 use crate::commands::hue::state_store::HueRuntimeTriggerSource;
 use crate::commands::led_output::{
     encode_packet_for_output, ColorCorrectionConfig, EncoderPlan, FirmwareProfile, LedChipType,
 };
+use crate::commands::local_outputs::LocalOutputRegistry;
 use crate::commands::wled_sink::{WledProtocol, WledSinkConfig};
 use crate::shutdown::{app_cleanup_steps, run_cleanup, CleanupBudget};
 
@@ -577,9 +577,7 @@ fn off_on_a_wled_strip_paints_it_black_and_switches_it_off() {
         led_count: 59,
         protocol: WledProtocol::Drgb,
     };
-    rig.app
-        .state::<ActiveSinkRegistry>()
-        .replace_wled(Box::new(config.build()), config);
+    rig.app.state::<LocalOutputRegistry>().wled_bound(config);
     running(&rig, solid(200), &[Usb]);
     let mut datagram = [0u8; 2048];
     let (len, _) = receiver.recv_from(&mut datagram).expect("the Solid frame");
@@ -611,9 +609,7 @@ fn a_wled_strip_is_not_switched_off_when_its_mode_ends_another_way() {
         led_count: 59,
         protocol: WledProtocol::Drgb,
     };
-    rig.app
-        .state::<ActiveSinkRegistry>()
-        .replace_wled(Box::new(config.build()), config);
+    rig.app.state::<LocalOutputRegistry>().wled_bound(config);
     running(&rig, solid(200), &[Usb]);
 
     apply(&rig, user(None, Some(&[])));
@@ -1154,6 +1150,68 @@ fn running_on_hue() -> Rig {
     rig
 }
 
+// A strip unplugged and plugged back in leaves a dead cached session: the next start's first write
+// fails. That used to end the whole mode, Hue with it (live, 27 Sep).
+
+#[test]
+fn a_solid_start_whose_first_write_fails_once_reopens_and_runs_everywhere() {
+    let rig = Rig::new(RigSetup::default());
+    rig.fail_usb_writes(1);
+
+    let result = apply(&rig, user(Some(solid(1)), Some(&[Usb, Hue])));
+
+    assert_eq!(result.status.code, "OUTPUTS_APPLIED", "{:?}", events(&rig));
+    assert_eq!(result.snapshot.active_targets, vec![Usb, Hue]);
+    assert!(has(&rig, "usb:write-failed"));
+}
+
+#[test]
+fn a_solid_start_whose_usb_keeps_failing_runs_on_hue_alone() {
+    let rig = Rig::new(RigSetup::default());
+    rig.fail_usb_writes(2);
+
+    let result = apply(&rig, user(Some(solid(1)), Some(&[Usb, Hue])));
+
+    assert_eq!(
+        result.snapshot.mode.kind,
+        LightingModeKind::Solid,
+        "{:?}",
+        events(&rig)
+    );
+    assert_eq!(result.snapshot.active_targets, vec![Hue]);
+    assert_eq!(result.outcome.dropped_targets, vec![Usb]);
+    assert_eq!(result.snapshot.selected_targets, vec![Hue]);
+}
+
+#[test]
+fn an_ambilight_start_whose_usb_write_fails_runs_on_hue_alone() {
+    let rig = Rig::new(RigSetup::default());
+    rig.fail_usb_writes(1);
+
+    let result = apply(&rig, user(Some(ambilight(1.0)), Some(&[Usb, Hue])));
+
+    assert_eq!(
+        result.snapshot.mode.kind,
+        LightingModeKind::Ambilight,
+        "{:?}",
+        events(&rig)
+    );
+    assert_eq!(result.snapshot.active_targets, vec![Hue]);
+    assert_eq!(result.outcome.dropped_targets, vec![Usb]);
+}
+
+#[test]
+fn a_usb_only_start_whose_write_keeps_failing_still_fails() {
+    let rig = Rig::new(RigSetup::default());
+    rig.fail_usb_writes(2);
+
+    let result = apply(&rig, user(Some(solid(1)), Some(&[Usb])));
+
+    assert_ne!(result.status.code, "OUTPUTS_APPLIED");
+    assert_eq!(result.snapshot.mode.kind, LightingModeKind::Off);
+    assert!(result.outcome.dropped_targets.is_empty());
+}
+
 /// "keeps USB out of the active set when the device gate refuses the re-apply"
 #[test]
 fn adding_usb_the_device_gate_refuses_leaves_hue_running_untouched() {
@@ -1182,7 +1240,7 @@ fn adding_usb_the_device_gate_refuses_leaves_hue_running_untouched() {
 #[test]
 fn adding_usb_when_the_apply_errors_keeps_hue_running() {
     let rig = running_on_hue();
-    poison(&rig.app.state::<SerialConnectionState>().last_status);
+    rig.app.state::<LocalOutputRegistry>().poison_for_tests();
 
     let result = apply(&rig, user(None, Some(&[Usb, Hue])));
 
@@ -1729,9 +1787,7 @@ fn a_boot_restore_counts_a_wled_sink_as_the_usb_output() {
         led_count: 59,
         protocol: WledProtocol::Drgb,
     };
-    rig.app
-        .state::<ActiveSinkRegistry>()
-        .replace_wled(Box::new(config.build()), config);
+    rig.app.state::<LocalOutputRegistry>().wled_bound(config);
 
     let result = apply(&rig, request(LightingOrigin::Boot, None, None));
 
@@ -2471,7 +2527,7 @@ fn a_forgotten_bridge_or_a_quit_takes_the_parked_resume_back() {
             serde_json::Map::new(),
             vec!["lastHueBridge".to_string()],
             None,
-            |_| {},
+            |_, _| {},
         )
         .unwrap();
     note_settings_saved(&forgotten.handle(), ["lastHueBridge"]);

@@ -68,7 +68,7 @@ describe("useRuntimeTelemetry", () => {
     expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
     expect(result.current.fps).toBe(60);
     expect(result.current.latencyMs).toBe(12);
-    expect(result.current.frameDrops).toBe(2);
+    expect(result.current.health).toBe("ok");
     expect(result.current.timestamp).toBeGreaterThan(0);
   });
 
@@ -200,7 +200,24 @@ describe("useRuntimeTelemetry", () => {
     });
     expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
     expect(result.current.fps).toBeNull();
-    expect(result.current.frameDrops).toBe(0);
+    expect(result.current.health).toBeNull();
+  });
+
+  // Capture counts distinct frames: a still screen, or Hue alone at 20 fps, is low with nothing wrong.
+  it.each([
+    [{ captureFps: 4, queueHealth: "healthy" as const }, "ok"],
+    [{ queueHealth: "warning" as const }, "strained"],
+    [{ linkConstrained: true }, "strained"],
+    [{ queueHealth: "critical" as const, linkConstrained: true }, "behind"],
+  ])("judges %o as %s from the queue and the link, never from the rate", async (partial, health) => {
+    getFullTelemetrySnapshotMock.mockResolvedValue(makeSnapshot(partial));
+
+    const { result } = renderHook(() => useRuntimeTelemetry());
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(result.current.health).toBe(health);
   });
 
   it("projects captureFps=0 as fps=null so consumers render the inactive placeholder", async () => {
@@ -216,6 +233,6 @@ describe("useRuntimeTelemetry", () => {
 
     expect(result.current.fps).toBeNull();
     expect(result.current.latencyMs).toBeNull();
-    expect(result.current.frameDrops).toBe(0);
+    expect(result.current.health).toBeNull();
   });
 });

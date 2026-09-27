@@ -104,6 +104,11 @@ const HEALTH_CODE_COPY: Partial<Record<SerialHealthStepCode, HealthCodeCopy>> = 
     hintKey: "device:healthCheck.serialHealthCodes.CONNECT_IO_ERROR.hint",
     showDetails: true,
   },
+  CONNECT_REPLUG_REQUIRED: {
+    labelKey: "device:healthCheck.serialHealthCodes.CONNECT_REPLUG_REQUIRED.label",
+    hintKey: "device:healthCheck.serialHealthCodes.CONNECT_REPLUG_REQUIRED.hint",
+    showDetails: true,
+  },
 };
 
 function healthCodeCopy(code: string): HealthCodeCopy | null {

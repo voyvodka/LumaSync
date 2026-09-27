@@ -30,12 +30,12 @@ use super::{
     stop_lighting_blocking, AmbilightPayload, LightingModeCommandResult, LightingModeConfig,
     LightingModeKind, LightingRuntimeState,
 };
-use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionState};
 use crate::commands::hue::health::{self, BOOT_RESUME_PROBE_WINDOW};
 use crate::commands::hue::hue_config::{hue_start_request, room_geometry_from_state};
 use crate::commands::hue::light_restore::HueLightsAfterStop;
 use crate::commands::hue::state_store::{HueRuntimeTriggerSource, StartHueStreamRequest};
 use crate::commands::hue_onboarding::ACTIVE_STREAMER_REASON;
+use crate::commands::local_outputs::LocalOutputRegistry;
 use crate::commands::shell_state::{self, PersistedShellState};
 use crate::commands::status::CommandStatus;
 use crate::commands::wled_discovery::{power_off_wled, WledPowerOffError};
@@ -594,6 +594,19 @@ fn hue_refusal_reason(
     }
 }
 
+/// A start that failed on the local output alone: its own open or write error, carried in the
+/// details of the mode's start failure.
+fn usb_output_failed(result: &LightingModeCommandResult) -> bool {
+    matches!(
+        result.status.code.as_str(),
+        "SOLID_MODE_APPLY_FAILED" | "AMBILIGHT_MODE_START_FAILED"
+    ) && result
+        .status
+        .details
+        .as_deref()
+        .is_some_and(|details| details.starts_with("LED_OUTPUT_") || details.starts_with("WLED_"))
+}
+
 /// Refusals `apply_mode_change` returns before it touches the running mode.
 fn is_gate_code(code: &str) -> bool {
     matches!(
@@ -606,17 +619,7 @@ fn is_gate_code(code: &str) -> bool {
 }
 
 fn usb_available<R: Runtime>(app: &AppHandle<R>) -> bool {
-    let serial = app
-        .state::<SerialConnectionState>()
-        .last_status
-        .lock()
-        .map(|status| status.output_port().is_some())
-        .unwrap_or(false);
-    serial
-        || app
-            .state::<ActiveSinkRegistry>()
-            .active_wled_config()
-            .is_some()
+    app.state::<LocalOutputRegistry>().driven().is_some()
 }
 
 /// The mode to apply: the newest payloads, stamped the way the frontend's
@@ -1334,6 +1337,41 @@ impl<'a, R: Runtime> Transaction<'a, R> {
                         }
                     };
                 }
+            }
+            // The local output failed its own start beside another output — a dead port after a
+            // replug, a WLED device that stopped answering. Unlike a gate refusal this comes after
+            // the teardown, so the mode starts again on the rest, and USB drops from the
+            // session's selection until a strip connects. Any other failure (capture) still ends
+            // the mode.
+            if usb_output_failed(&result) && run_on.len() > 1 && run_on.contains(&OutputTarget::Usb)
+            {
+                warn!(
+                    "[outputs] #{} the local output failed beside another; running without it: {:?}",
+                    self.ticket, result.status.details
+                );
+                run_on.retain(|t| *t != OutputTarget::Usb);
+                self.outcome.dropped_targets.push(OutputTarget::Usb);
+                self.state
+                    .outputs
+                    .update_intent(|intent| intent.targets.retain(|t| *t != OutputTarget::Usb));
+                if self.superseded() {
+                    return Ok(Ending::Superseded);
+                }
+                result = match self.apply(&intent.kind, &run_on).await {
+                    Ok(result) => result,
+                    Err(error) => {
+                        return self
+                            .refuse(
+                                intent,
+                                running,
+                                running.clone(),
+                                error,
+                                hue_ran_before,
+                                had_config,
+                            )
+                            .await;
+                    }
+                };
             }
             running_after = result.mode;
             apply_code = Some(result.status.code);

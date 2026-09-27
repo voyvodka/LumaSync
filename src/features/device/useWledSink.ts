@@ -21,7 +21,7 @@ import {
   wledSinkEvents as defaultWledSinkEvents,
   type WledSinkEventBus,
 } from "./wledSinkEvents";
-import { persistWledSink } from "./outputChannelPersistence";
+import { persistWledSink, type ShellStateUpdater } from "./outputChannelPersistence";
 import {
   restoreWledSink,
   type WledRestoreOutcome,
@@ -38,7 +38,7 @@ export function resetWledRestoreGuard(): void {
 }
 
 export interface UseWledSinkRestoreDeps
-  extends Partial<Pick<WledSinkRestoreDeps, "loadShellState" | "saveShellState" | "discover" | "connect">> {
+  extends Partial<Pick<WledSinkRestoreDeps, "loadShellState" | "updateShellState" | "discover" | "connect">> {
   wledSinkEvents?: WledSinkEventBus;
 }
 
@@ -46,7 +46,7 @@ export interface UseWledSinkRestoreDeps
 export function useWledSinkRestore(deps: UseWledSinkRestoreDeps = {}): void {
   const bus = deps.wledSinkEvents ?? defaultWledSinkEvents;
   const loadShellState = deps.loadShellState ?? (() => shellStore.load());
-  const saveShellState = deps.saveShellState ?? ((partial) => shellStore.save(partial));
+  const updateShellState = deps.updateShellState ?? ((update) => shellStore.update(update));
   const discover = deps.discover ?? discoverWledDevices;
   const connect = deps.connect ?? connectWledSink;
 
@@ -56,12 +56,12 @@ export function useWledSinkRestore(deps: UseWledSinkRestoreDeps = {}): void {
 
     void restoreWledSink({
       loadShellState,
-      saveShellState,
+      updateShellState,
       discover,
       connect,
       onOutcome: (outcome) => bus.publish(outcome),
     });
-  }, [bus, loadShellState, saveShellState, discover, connect]);
+  }, [bus, loadShellState, updateShellState, discover, connect]);
 }
 
 export interface ActiveWledSink {
@@ -84,13 +84,13 @@ export interface UseActiveWledSinkDeps {
   getStatus?: typeof getWledSinkStatus;
   forgetDevice?: typeof forgetWledDevice;
   loadShellState?: () => Promise<ShellState>;
-  saveShellState?: (partial: Partial<ShellState>) => Promise<void>;
+  updateShellState?: ShellStateUpdater;
 }
 
 // Stable across renders: `refresh` depends on them, and a fresh arrow per render
 // re-ran its effect on every App render — two IPC reads each time.
 const loadShell = () => shellStore.load();
-const saveShell = (partial: Partial<ShellState>) => shellStore.save(partial);
+const updateShell: ShellStateUpdater = (update) => shellStore.update(update);
 
 export function useActiveWledSink(
   deps: UseActiveWledSinkDeps = {},
@@ -99,7 +99,7 @@ export function useActiveWledSink(
   const getStatus = deps.getStatus ?? getWledSinkStatus;
   const forgetDevice = deps.forgetDevice ?? forgetWledDevice;
   const loadShellState = deps.loadShellState ?? loadShell;
-  const saveShellState = deps.saveShellState ?? saveShell;
+  const updateShellState = deps.updateShellState ?? updateShell;
 
   const [activeWledIp, setActiveWledIp] = useState<string | null>(null);
   const [savedSink, setSavedSink] = useState<WledUdpSinkConfig | null>(null);
@@ -135,24 +135,21 @@ export function useActiveWledSink(
   const markConnected = useCallback(
     async (device: WledDeviceInfo) => {
       try {
-        const stored = await loadShellState();
-        const previous = savedWledSink(stored);
         // Rust defaults an omitted port/protocol to DDP:4048; the picker has
         // no transport UI yet, so a prior choice is the only other source.
-        const sink: WledUdpSinkConfig = {
+        const sink = await persistWledSink(updateShellState, (previous) => ({
           ip: device.ip,
           port: previous?.ip === device.ip ? previous.port : WLED_DEFAULT_DDP_PORT,
           ledCount: device.ledCount,
           protocol: previous?.ip === device.ip ? previous.protocol : "ddp",
-        };
-        await persistWledSink(saveShellState, sink);
+        }));
         setSavedSink(sink);
       } catch (err) {
         console.error("[LumaSync] persisting the connected WLED sink failed:", err);
       }
       await refresh();
     },
-    [loadShellState, saveShellState, refresh],
+    [updateShellState, refresh],
   );
 
   const forget = useCallback(

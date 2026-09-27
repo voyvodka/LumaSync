@@ -72,11 +72,11 @@ describe("two windows writing the same shell state", () => {
     main.shellStore.onSaved((saved) => heardInMain.push(saved));
     popup.shellStore.onSaved((saved) => heardInPopup.push(saved));
 
-    await popup.shellStore.save({ ledTwinEnabledTest: false, lastSuccessfulPort: undefined });
+    await popup.shellStore.save({ ledTwinEnabledTest: false, lastHueAreaId: undefined });
     await flush();
 
-    expect(heardInMain).toEqual([{ ledTwinEnabledTest: false, lastSuccessfulPort: undefined }]);
-    expect(heardInPopup).toEqual([{ ledTwinEnabledTest: false, lastSuccessfulPort: undefined }]);
+    expect(heardInMain).toEqual([{ ledTwinEnabledTest: false, lastHueAreaId: undefined }]);
+    expect(heardInPopup).toEqual([{ ledTwinEnabledTest: false, lastHueAreaId: undefined }]);
   });
 });
 

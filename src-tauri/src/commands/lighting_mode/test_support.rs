@@ -21,7 +21,6 @@ use super::{
 use crate::commands::ambilight_capture::{
     AmbilightCaptureError, AmbilightFrameSource, CapturedFrame,
 };
-use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionState};
 use crate::commands::hue::frame::{HueAreaChannel, HueColorSender, HueFrameRx, HueScreenRegion};
 use crate::commands::hue::light_restore::HueLightsAfterStop;
 use crate::commands::hue::state_store::{
@@ -30,6 +29,7 @@ use crate::commands::hue::state_store::{
 };
 use crate::commands::led_output::{LedOutputBridge, LedOutputError, LedPacketSender};
 use crate::commands::led_preview::LedTwinState;
+use crate::commands::local_outputs::LocalOutputRegistry;
 use crate::commands::runtime_telemetry::RuntimeTelemetryState;
 use crate::commands::shell_state::{ShellStateStore, SHELL_STATE_CHANGED_EVENT};
 
@@ -92,6 +92,8 @@ pub(crate) struct EventLog {
     seq: AtomicU64,
     entries: Mutex<Vec<(u64, String)>>,
     packets: Mutex<Vec<(u64, Vec<u8>)>>,
+    /// Ports whose cached writer was dropped; kept apart from `entries`, which tests match exactly.
+    forgotten: Mutex<Vec<String>>,
 }
 
 impl EventLog {
@@ -128,22 +130,52 @@ impl EventLog {
         self.packets.lock().unwrap().clone()
     }
 
+    pub(crate) fn forgotten(&self) -> Vec<String> {
+        self.forgotten.lock().unwrap().clone()
+    }
+
     pub(crate) fn clear(&self) {
         self.entries.lock().unwrap().clear();
         self.packets.lock().unwrap().clear();
     }
 }
 
-struct RecordingUsb(Arc<EventLog>);
+/// Records every packet; the next `failures` writes fail the way a dead
+/// session's write does after an unplug and replug.
+struct RecordingUsb {
+    log: Arc<EventLog>,
+    failures: Arc<AtomicUsize>,
+}
 
 impl LedPacketSender for RecordingUsb {
     fn send(&self, _port_name: &str, packet: &[u8]) -> Result<(), LedOutputError> {
-        let seq = self.0.next();
-        self.0.packets.lock().unwrap().push((seq, packet.to_vec()));
+        let failing = self
+            .failures
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
+            .is_ok();
+        if failing {
+            self.log.record("usb:write-failed");
+            return Err(LedOutputError {
+                code: "LED_OUTPUT_WRITE_FAILED",
+                details: Some("Broken pipe".to_string()),
+            });
+        }
+        let seq = self.log.next();
+        self.log
+            .packets
+            .lock()
+            .unwrap()
+            .push((seq, packet.to_vec()));
         Ok(())
     }
 
-    fn disconnect_session(&self, _port_name: &str) {}
+    fn disconnect_session(&self, port_name: &str) {
+        self.log
+            .forgotten
+            .lock()
+            .unwrap()
+            .push(port_name.to_string());
+    }
 }
 
 struct StillFrame;
@@ -457,6 +489,7 @@ pub(crate) struct Rig {
     pub(crate) log: Arc<EventLog>,
     pub(crate) hue: Arc<FakeHue>,
     capture_failure: Arc<Mutex<Option<&'static str>>>,
+    usb_failures: Arc<AtomicUsize>,
     snapshots: Arc<Mutex<Vec<Value>>>,
     shell_writes: Arc<Mutex<Vec<Value>>>,
     _worker_guard: MutexGuard<'static, ()>,
@@ -482,8 +515,12 @@ impl Rig {
         let hue = FakeHue::new(Arc::clone(&log));
         let capture_failure: Arc<Mutex<Option<&'static str>>> = Arc::default();
         let failure = Arc::clone(&capture_failure);
+        let usb_failures: Arc<AtomicUsize> = Arc::default();
         let owner = LightingRuntimeOwner {
-            output_bridge: LedOutputBridge::from_sender(Arc::new(RecordingUsb(Arc::clone(&log)))),
+            output_bridge: LedOutputBridge::from_sender(Arc::new(RecordingUsb {
+                log: Arc::clone(&log),
+                failures: Arc::clone(&usb_failures),
+            })),
             frame_source_factory: Arc::new(move |_request| match *failure.lock().unwrap() {
                 Some(reason) => Err(AmbilightCaptureError::InvalidFrame(reason)),
                 None => Ok(Box::new(StillFrame) as Box<dyn AmbilightFrameSource>),
@@ -500,8 +537,7 @@ impl Rig {
             Ok(())
         })));
         app.manage(HueRuntimeStateStore::default());
-        app.manage(SerialConnectionState::default());
-        app.manage(ActiveSinkRegistry::default());
+        app.manage(LocalOutputRegistry::default());
         app.manage(LedTwinState::default());
         app.manage(RuntimeTelemetryState::default());
         app.manage(ShellStateStore::in_memory());
@@ -511,6 +547,7 @@ impl Rig {
             log,
             hue,
             capture_failure,
+            usb_failures,
             snapshots: Arc::default(),
             shell_writes: Arc::default(),
             _worker_guard: worker_guard,
@@ -577,8 +614,15 @@ impl Rig {
         let set = state.as_object().cloned().unwrap_or_default();
         self.app
             .state::<ShellStateStore>()
-            .patch(set, Vec::new(), None, |_| {})
+            .patch(set, Vec::new(), None, |_, _| {})
             .expect("seed the shell state");
+    }
+
+    pub(crate) fn saved_wled_ip(&self) -> Option<String> {
+        self.app
+            .state::<ShellStateStore>()
+            .persisted()
+            .and_then(|state| state.saved_wled_ip())
     }
 
     pub(crate) fn saved(&self, key: &str) -> Option<Value> {
@@ -608,10 +652,17 @@ impl Rig {
     }
 
     pub(crate) fn set_serial_connected(&self, connected: bool) {
-        let serial = self.app.state::<SerialConnectionState>();
-        let mut status = serial.last_status.lock().unwrap();
-        status.connected = connected;
-        status.port_name = connected.then(|| PORT.to_string());
+        let registry = self.app.state::<LocalOutputRegistry>();
+        if connected {
+            registry.set_serial_for_tests(PORT, true, 0);
+        } else {
+            registry.serial_disconnected(PORT);
+        }
+    }
+
+    /// The next `writes` USB writes fail with `LED_OUTPUT_WRITE_FAILED`.
+    pub(crate) fn fail_usb_writes(&self, writes: usize) {
+        self.usb_failures.store(writes, Ordering::SeqCst);
     }
 
     pub(crate) fn fail_capture(&self, reason: Option<&'static str>) {

@@ -1,6 +1,6 @@
 /**
  * The Hue page's "When you press Off" choice. Loading and saving belong to
- * `DeviceSection` (DeviceSection.test.tsx); this is the control itself.
+ * `DevicesPage` (DevicesPage.test.tsx); this is the control itself.
  */
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";

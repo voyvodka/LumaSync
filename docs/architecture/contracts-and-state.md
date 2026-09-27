@@ -147,8 +147,8 @@ The key names Rust reads are spelled once, in that module.
 - `patch_shell_state({ set, remove, writerId })` merges top-level keys under the mutex, writes,
   and emits `shell://state-changed`. `remove` exists because the old write path dropped a key
   whose partial value was `undefined` (`{ ...current, ...partial }` serialised through JSON), and
-  callers rely on that: clearing `hueAppKey`/`hueClientKey` once the keychain holds them,
-  swapping `lastSuccessfulPort` for `lastWledSink`. `invoke` would drop an `undefined` silently,
+  callers rely on that: clearing `hueAppKey`/`hueClientKey` once the keychain holds them.
+  `invoke` would drop an `undefined` silently,
   so the bridge moves those keys into `remove`. Losing that would leave a plaintext Hue key on
   disk.
 - `replace_shell_state({ state, expectedRevision, writerId })` swaps the whole object only if no
@@ -219,21 +219,36 @@ starts Off, only while nothing runs, so a reload keeps lights the user has on). 
 failed save (`READ_BY_RUST`), and each has a Rust accessor in `shell_state.rs` whose test uses the
 same inputs as `shellPreferences.test.ts`, so both sides read a stored value alike.
 
-**What describes the local output is read as strips.** A strip is one run of LEDs behind one
+**The local output is stored as strips (schema 8).** A strip is one run of LEDs behind one
 controller, with its transport, hardware (firmware profile, chip, colour order), layout and colour
-correction (`contracts/strips.ts`). The saved state still stores one output in flat keys —
-`lastSuccessfulPort`, `lastWledSink`, `ledCalibration`, `firmwareProfile`, `selectedChipType`,
-`ledColorOrder` — and both sides derive the strips from them by one rule: `stripsFromLegacy`
-(`features/strips/model/legacyStrips.ts`) and `strips_from_legacy` (`models/led_strips.rs`),
-held together by `legacyStrips.parity.json`. Every app reader goes through the primary strip (the
-first enabled one) or the saved transport of each kind (`features/strips/model/stripSelectors.ts`),
-never the flat keys, so moving the storage to a list of strips changes where the rule reads from.
-The dev mock (`mock/`) still reads and writes the flat keys and moves with the storage. Colour
-correction is still read from the top-level key: one correction plan serves Hue as well as the
-strip. An install with only a Hue pairing and colour correction derives no strip; one that also
-saved a chip, firmware profile or colour order does, with no transport. When strips get a key of
-their own, `SETTINGS_THE_MODE_READS` (`lighting_mode/outputs.rs`) must list it, or a save stops
-re-applying the running mode.
+correction (`contracts/strips.ts`), stored as `ledStrips`. Every reader goes through the primary
+strip (the first enabled one) or the saved transport of each kind (`stripSelectors.ts`); Rust
+through the `PersistedShellState` accessors.
+
+- **Reading.** Stored strips are read leniently on both sides — `readStoredStrips` and
+  `strips_from_stored`, held together by `storedStrips.parity.json` — and a valid value is kept as
+  the object it was, so fields a later schema-8 build adds survive an older build's write. A
+  transport of a kind this build does not know is kept too, and read by nothing.
+- **The six v7 keys are frozen, not deleted.** `lastSuccessfulPort`, `lastWledSink`,
+  `ledCalibration`, `firmwareProfile`, `selectedChipType` and `ledColorOrder` stay on disk and are
+  never written again, so a v7 build still boots on them; a setting changed since is lost to it.
+  They live in `LegacyV7StripKeys`, which only the derivation and the migration may import
+  (`verify:shell-contracts` checks it). A file with no `ledStrips` — never migrated, or `null` — is
+  read through them by `stripsFromLegacy` / `strips_from_legacy` (`legacyStrips.parity.json`).
+- **`ledStrips` is not in `DEFAULT_SHELL_STATE`**, because absent means "read the legacy keys".
+  The 7 → 8 step writes it always (`[]` included) and keeps a list already there: Rust writes one
+  before any window migrates when a WLED device is forgotten, and deriving again from the frozen
+  keys would bring the device back.
+- **Writes are read-modify-writes.** The frontend writes through `stripWrites.ts` inside
+  `shellStore.update`; Rust through `update_from_rust`, which runs its edit under the store lock
+  and announces the top-level diff. Colour correction is written to the global key and the primary
+  strip's copy together — one plan still corrects Hue and the strip — and never creates a strip:
+  a Hue-only install has none.
+- **A `ledStrips` save is named by what it changed.** The settings refresh reads key names, and one
+  key for every strip field would restart the mode on each LED Setup step. `window_wrote` compares
+  the primary strip before and after the write and passes `ledCalibration`, `firmwareProfile`,
+  `selectedChipType` or `ledColorOrder` for the fields that moved (`primary_strip_changes`), so
+  the calibration fast path holds (`lighting-transaction.md`, "Settings refresh").
 
 ## Gotchas
 

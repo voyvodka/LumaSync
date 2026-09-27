@@ -36,6 +36,8 @@ import {
   type HueRegionPreset,
 } from "@/features/hue/model/regionPresets";
 import { moveHueChannelToWorld } from "@/features/room-map/model/hueChannelPosition";
+import { stripsFromLegacy } from "@/features/strips/model/legacyStrips";
+import type { LegacyV7StripKeys } from "@/shared/contracts/strips";
 
 // ---------------------------------------------------------------------------
 // Legacy ShellState shape — used by the v2 → v3 migration step to read the
@@ -128,7 +130,28 @@ export function migrateShellState(state: ShellState): ShellState {
     next = migrateV6ToV7(next);
   }
 
+  // 7 → 8: store the local output as strips
+  if ((next.schemaVersion ?? 1) < 8) {
+    next = migrateV7ToV8(next);
+  }
+
   return next;
+}
+
+// ---------------------------------------------------------------------------
+// 7 → 8 — the local output becomes `ledStrips`
+// ---------------------------------------------------------------------------
+
+/** One strip derived from the six single-output keys, by the rule Rust reads an unmigrated file
+ *  with. A list already there is kept: Rust writes one before any window migrates when a WLED
+ *  device is forgotten, and deriving again from the frozen keys would bring that device back. The
+ *  six keys stay on disk, never written again, so a v7 build still boots. */
+function migrateV7ToV8(state: ShellState): ShellState {
+  return {
+    ...state,
+    schemaVersion: 8,
+    ledStrips: state.ledStrips ?? stripsFromLegacy(state as ShellState & LegacyV7StripKeys),
+  };
 }
 
 // ---------------------------------------------------------------------------

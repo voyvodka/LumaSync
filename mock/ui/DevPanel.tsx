@@ -45,7 +45,10 @@ import { ROOM_MAP_PRESETS, ROOM_MAP_PRESET_IDS, type RoomMapPresetId } from "../
 import { PICKER_PATTERN_KINDS } from "../../src/features/preview/ui/PatternPicker";
 import { LIGHTING_ORIGIN, LIGHTING_RUNTIME_COMMANDS } from "../../src/shared/contracts/lightingRuntime";
 import { MOCK_HAS_REAL_IPC } from "../runtime";
-import { SCENARIOS, SCENARIO_IDS, type ScenarioId } from "../scenarios";
+import { FURNISHED_LAYOUT, SCENARIOS, SCENARIO_IDS, type ScenarioId } from "../scenarios";
+import type { LedCalibrationConfig } from "../../src/shared/contracts/calibration";
+import type { LedStrip } from "../../src/shared/contracts/strips";
+import { primaryStripOf } from "../../src/features/strips/model/stripSelectors";
 import { clearStoredWorld, getWorld, mutate, setWorld, subscribe } from "../state";
 import type { MockWorld } from "../state";
 
@@ -618,18 +621,29 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                       hasCompletedOnboarding: false,
                     };
                     const port = w.serial.ports[0]?.name ?? null;
+                    const serialStrip = (layout?: LedCalibrationConfig): LedStrip[] =>
+                      port === null
+                        ? []
+                        : [
+                            {
+                              id: "strip-1",
+                              enabled: true,
+                              transport: { kind: "serial", portName: port },
+                              hardware: {},
+                              ...(layout ? { layout } : {}),
+                            },
+                          ];
                     if (v === "step 1") {
                       delete base.lightingMode;
-                      delete base.ledCalibration;
-                      delete base.lastSuccessfulPort;
+                      base.ledStrips = [];
                       w.serial.connectedPort = null;
                     } else if (v === "step 2") {
                       delete base.lightingMode;
-                      delete base.ledCalibration;
+                      base.ledStrips = serialStrip();
                       w.serial.connectedPort = port;
                     } else if (v === "step 3") {
                       base.lightingMode = { kind: "off" };
-                      base.ledCalibration ??= SCENARIOS.furnished.build().shellState.ledCalibration;
+                      base.ledStrips = serialStrip(primaryStripOf(base)?.layout ?? FURNISHED_LAYOUT);
                       w.serial.connectedPort = port;
                     } else if (v === "complete") {
                       base.hasCompletedOnboarding = true;

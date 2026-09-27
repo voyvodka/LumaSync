@@ -20,18 +20,17 @@ use super::transition::{
     apply_mode_change, command_status, note_applied_mode, run_mode_transition,
 };
 use crate::commands::calibration::list_displays;
-use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionState};
 use crate::commands::hue::state_store::{snapshot_hue_output_context, HueRuntimeStateStore};
 use crate::commands::led_calibration::LedCalibrationConfig;
 use crate::commands::led_output::LedColorOrder;
 use crate::commands::led_preview::{emit_preview_state_changed, LedTwinState};
+use crate::commands::local_outputs::{DrivenLocal, LocalOutputRegistry};
 use crate::commands::runtime_telemetry::RuntimeTelemetryState;
 use crate::commands::shell_state::{self, PersistedShellState};
 use crate::commands::status::CommandStatus;
 use crate::commands::test_pattern::{
     TestPatternConfig, TestPatternKind, TestPatternSpeed, DEFAULT_DISPLAY_ASPECT,
 };
-use crate::commands::wled_sink::WledSinkConfig;
 
 const LED_TEST_PATTERN_STARTED: &str = "LED_TEST_PATTERN_STARTED";
 const LED_TEST_PATTERN_PREVIEW_ONLY: &str = "LED_TEST_PATTERN_PREVIEW_ONLY";
@@ -68,23 +67,17 @@ pub(super) fn apply_and_broadcast<R: Runtime>(
     app: &AppHandle<R>,
     mut payload: LightingModeConfig,
     runtime_state: &LightingRuntimeState,
-    connection_state: &SerialConnectionState,
+    // The whole "usb" channel, WLED included: collapsed to the serial one, a WLED-only session
+    // ran preview-only and its restore was gated on stop.
+    driven: Option<&DrivenLocal>,
     hue_runtime_state: &HueRuntimeStateStore,
     telemetry_state: &RuntimeTelemetryState,
     twin_state: &LedTwinState,
     test_pattern: Option<TestPatternConfig>,
-    // Without this snapshot the "usb" channel collapses to the serial one, so a
-    // WLED-only session runs preview-only and its restore is gated on stop.
-    wled_sink: Option<WledSinkConfig>,
 ) -> Result<LightingModeCommandResult, String> {
     runtime_state.tuning.close_blocking();
     hydrate_mode_payload(&mut payload, &|| read_persisted_shell_state(app));
-
-    let connection_snapshot = connection_state
-        .last_status
-        .lock()
-        .map(|status| status.clone())
-        .map_err(|error| format!("LIGHTING_CONNECTION_STATE_LOCK_FAILED: {error}"))?;
+    let (device_connected, connected_port, wled_sink) = DrivenLocal::plan_args(driven);
 
     let edge_emitter = Some(build_edge_emitter(app));
 
@@ -100,8 +93,8 @@ pub(super) fn apply_and_broadcast<R: Runtime>(
         apply_mode_change(
             &mut owner,
             payload,
-            connection_snapshot.connected,
-            connection_snapshot.port_name.as_deref(),
+            device_connected,
+            connected_port,
             wled_sink,
             hue_output,
             Some(telemetry_state.shared_snapshot()),
@@ -184,11 +177,9 @@ fn start_led_test_pattern_blocking<R: Runtime>(
     payload: StartLedTestPatternPayload,
 ) -> Result<LedTestPatternResult, String> {
     let runtime_state = app.state::<LightingRuntimeState>();
-    let connection_state = app.state::<SerialConnectionState>();
     let hue_runtime_state = app.state::<HueRuntimeStateStore>();
     let telemetry_state = app.state::<RuntimeTelemetryState>();
     let led_twin_state = app.state::<LedTwinState>();
-    let sink_registry = app.state::<ActiveSinkRegistry>();
     if !payload.brightness.is_finite() || !(0.0..=1.0).contains(&payload.brightness) {
         return Ok(LedTestPatternResult {
             active: false,
@@ -232,12 +223,7 @@ fn start_led_test_pattern_blocking<R: Runtime>(
 
     // Resolve sink availability up front to choose targets + report
     // preview-only without re-deriving it from apply_mode_change.
-    let device_connected = connection_state
-        .last_status
-        .lock()
-        .map(|status| status.output_port().is_some())
-        .map_err(|error| format!("LIGHTING_CONNECTION_STATE_LOCK_FAILED: {error}"))?;
-    let wled_sink = sink_registry.active_wled_config();
+    let driven = app.state::<LocalOutputRegistry>().driven_checked()?;
     let hue_available = snapshot_hue_output_context(hue_runtime_state.inner())?
         .map(|ctx| !ctx.channels.is_empty())
         .unwrap_or(false);
@@ -245,8 +231,8 @@ fn start_led_test_pattern_blocking<R: Runtime>(
     let requested = payload.targets.clone().unwrap_or_default();
     let want_usb = requested.is_empty() || requested.iter().any(|t| t == "usb");
     let want_hue = requested.iter().any(|t| t == "hue");
-    // A registered WLED sink IS the "usb" channel — see `UsbOutputPlan`.
-    let use_usb = (device_connected || wled_sink.is_some()) && want_usb;
+    // A bound WLED device IS the "usb" channel — see `UsbOutputPlan`.
+    let use_usb = driven.is_some() && want_usb;
     let use_hue = hue_available && want_hue;
     let preview_only = !use_usb && !use_hue;
 
@@ -325,12 +311,11 @@ fn start_led_test_pattern_blocking<R: Runtime>(
         app,
         config,
         runtime_state.inner(),
-        connection_state.inner(),
+        driven.as_ref(),
         hue_runtime_state.inner(),
         telemetry_state.inner(),
         led_twin_state.inner(),
         Some(test_config),
-        wled_sink,
     )?;
 
     emit_preview_state_changed(app);
@@ -415,12 +400,10 @@ fn stop_led_test_pattern_blocking<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<LedTestPatternResult, String> {
     let runtime_state = app.state::<LightingRuntimeState>();
-    let connection_state = app.state::<SerialConnectionState>();
     let hue_runtime_state = app.state::<HueRuntimeStateStore>();
     let telemetry_state = app.state::<RuntimeTelemetryState>();
     let led_twin_state = app.state::<LedTwinState>();
-    let sink_registry = app.state::<ActiveSinkRegistry>();
-    let wled_sink = sink_registry.active_wled_config();
+    let driven = app.state::<LocalOutputRegistry>().driven_checked()?;
     let restore = restore_mode_after_test(led_twin_state.take_prior_mode(), &|| {
         read_persisted_shell_state(app)
     });
@@ -428,12 +411,11 @@ fn stop_led_test_pattern_blocking<R: Runtime>(
         app,
         restore,
         runtime_state.inner(),
-        connection_state.inner(),
+        driven.as_ref(),
         hue_runtime_state.inner(),
         telemetry_state.inner(),
         led_twin_state.inner(),
         None,
-        wled_sink,
     )?;
 
     // A gated restore (DEVICE_NOT_CONNECTED / HUE_NOT_READY) returns before
@@ -448,12 +430,11 @@ fn stop_led_test_pattern_blocking<R: Runtime>(
             app,
             LightingModeConfig::default(),
             runtime_state.inner(),
-            connection_state.inner(),
+            driven.as_ref(),
             hue_runtime_state.inner(),
             telemetry_state.inner(),
             led_twin_state.inner(),
             None,
-            wled_sink,
         )?;
     }
 

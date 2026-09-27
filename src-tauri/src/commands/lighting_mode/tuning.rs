@@ -17,9 +17,9 @@ use super::live::{retune_ambilight_live, AmbilightLiveSettings};
 use super::snapshot::SnapshotSink;
 use super::usb_output::{SolidUsbOutput, UsbOutputPlan};
 use super::{AmbilightPayload, LightingModeKind, LightingRuntimeState, SolidColorPayload};
-use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionState};
 use crate::commands::hue::state_store::{apply_hue_color_with_context, HueOutputLive};
 use crate::commands::led_output::{apply_color_correction_rgb, ColorCorrectionConfig};
+use crate::commands::local_outputs::LocalOutputRegistry;
 use crate::commands::status::CommandStatus;
 
 /// A retune's persisted write waits this long for the drag to settle.
@@ -295,13 +295,7 @@ pub(crate) fn accepting_for_running<R: Runtime>(
     app: &AppHandle<R>,
     hue_output: Arc<HueOutputLive>,
 ) -> Option<Accepting> {
-    let wled = app.state::<ActiveSinkRegistry>().active_wled_config();
-    let serial = app
-        .state::<SerialConnectionState>()
-        .last_status
-        .lock()
-        .ok()
-        .and_then(|status| status.output_port().map(str::to_string));
+    let driven = app.state::<LocalOutputRegistry>().driven();
     let state = app.state::<LightingRuntimeState>();
     let owner = state.runtime.lock().ok()?;
     if owner.preview.active_test_pattern.is_some() {
@@ -313,10 +307,7 @@ pub(crate) fn accepting_for_running<R: Runtime>(
         LightingModeKind::Solid => {
             let targets = owner.active_mode.targets.clone().unwrap_or_default();
             let needs_usb = targets.is_empty() || targets.iter().any(|t| t == "usb");
-            let plan = match wled {
-                Some(config) => Some(UsbOutputPlan::Wled(config)),
-                None => serial.map(UsbOutputPlan::Serial),
-            };
+            let plan = driven.map(UsbOutputPlan::from);
             Some(Accepting::Solid {
                 usb: plan.filter(|_| needs_usb).map(|plan| {
                     SolidUsbOutput::for_mode(&owner.output_bridge, plan, &owner.active_mode)

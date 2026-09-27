@@ -56,7 +56,7 @@ import {
 import { isUpdateModalStatus } from "./features/updater/updateModalStatus";
 import { outputAvailability } from "./features/mode/model/outputAvailability";
 import { useCapturePermissionRecheck } from "./features/mode/state/useCapturePermissionRecheck";
-import type { DeviceCategory } from "./features/settings/sections/DeviceSection";
+import type { DeviceCategory } from "@/features/device/model/deviceCategories";
 import { CAPTURE_FAILURE_BUCKET } from "./shared/contracts/capture";
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "./shared/contracts/hue";
 import { useLedSetupPrompt } from "./features/calibration/state/useLedSetupPrompt";
@@ -140,7 +140,8 @@ function Shell() {
   // useEffect with `[]` deps) can read the latest paired-bridge state
   // without re-subscribing on every state mutation.
   const hueStartConfigRef = useRef<HueStartConfig | null>(null);
-  const { isConnected, connectedPort, ports, lastSuccessfulPort } = useDeviceConnection();
+  // The one mount that brings the strip back on a replug; Devices' mount only follows.
+  const { isConnected, connectedPort, ports, lastSuccessfulPort } = useDeviceConnection({ reconnectOnReplug: true });
   // Boot restore of the persisted WLED sink. Mounted here, not in the picker:
   // the sink must be bound before a lighting mode starts.
   useWledSinkRestore();

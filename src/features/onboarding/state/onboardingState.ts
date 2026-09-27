@@ -18,7 +18,7 @@
  * The room map is deliberately not a step; see docs/architecture/ui-and-shell.md.
  */
 import type { ShellState } from "@/shared/contracts/shell";
-import { savedSerialPort, savedWledSink } from "@/features/strips/model/stripSelectors";
+import { savedSerialPort, savedWledSink, type StripSource } from "@/features/strips/model/stripSelectors";
 
 /** Discrete onboarding step identifiers. */
 export const ONBOARDING_STEPS = {
@@ -132,7 +132,7 @@ export const NO_ONBOARDING_BOOT_FACTS: OnboardingBootFacts = {
 };
 
 export function onboardingBootFacts(
-  state: Pick<ShellState, "lastSuccessfulPort" | "lastWledSink" | "lightingMode">,
+  state: StripSource & Pick<ShellState, "lightingMode">,
   hueConfigured: boolean,
 ): OnboardingBootFacts {
   return {

@@ -2,22 +2,18 @@ import type { ShellState } from "@/shared/contracts/shell";
 import {
   FIRST_STRIP_ID,
   type LedStrip,
+  type LegacyV7StripKeys,
   type StripHardware,
   type StripTransport,
 } from "@/shared/contracts/strips";
 
-/** The keys a strip is built from until the saved state holds strips of its own. */
-export type LegacyStripSource = Pick<
-  ShellState,
-  | "lastSuccessfulPort"
-  | "lastWledSink"
-  | "ledCalibration"
-  | "firmwareProfile"
-  | "selectedChipType"
-  | "ledColorOrder"
-  | "colorCorrection"
-  | "roomMap"
->;
+/** The keys strips are derived from in a file that has no `ledStrips` yet. */
+export type LegacyStripSource = LegacyV7StripKeys & Pick<ShellState, "colorCorrection" | "roomMap">;
+
+/** A loaded state read through the frozen keys it may still carry on disk. */
+export function legacyStripsOf(state: Pick<ShellState, "colorCorrection" | "roomMap">): LedStrip[] {
+  return stripsFromLegacy(state as LegacyStripSource);
+}
 
 const SECOND_STRIP_ID = "strip-2";
 
@@ -34,7 +30,7 @@ function hardwareOf(state: LegacyStripSource): StripHardware {
 type PlacementRow = Record<string, unknown>;
 
 // The file may have been edited by hand: rows that are not objects are skipped, as Rust skips them.
-function placementsOf(state: LegacyStripSource): PlacementRow[] {
+export function placementsOf(state: Pick<ShellState, "roomMap">): PlacementRow[] {
   const rows: unknown = state.roomMap?.usbStrips;
   if (!Array.isArray(rows)) return [];
   return rows.filter(
@@ -43,7 +39,7 @@ function placementsOf(state: LegacyStripSource): PlacementRow[] {
   );
 }
 
-function stripIdOf(placement: PlacementRow | undefined): string | undefined {
+export function stripIdOf(placement: PlacementRow | undefined): string | undefined {
   const id = placement?.stripId;
   return typeof id === "string" ? id : undefined;
 }

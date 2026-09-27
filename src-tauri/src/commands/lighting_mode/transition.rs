@@ -22,10 +22,10 @@ use super::snapshot;
 use super::usb_output::{SolidUsbOutput, UsbOutputPlan};
 use super::worker::{start_ambilight_worker, WorkerPacing};
 use super::SOLID_OUTPUT_ATTEMPTS;
-use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionState};
 use crate::commands::hue::state_store::{apply_hue_color_with_context, HueOutputLive};
 use crate::commands::led_output::apply_color_correction_rgb;
 use crate::commands::led_preview::{emit_preview_state_changed, LedTwinState};
+use crate::commands::local_outputs::{DrivenLocal, LocalOutputRegistry};
 use crate::commands::runtime_telemetry::{RuntimeTelemetryState, SharedRuntimeTelemetry};
 use crate::commands::status::CommandStatus;
 use crate::commands::test_pattern::TestPatternLive;
@@ -138,7 +138,7 @@ fn apply_mode_change_inner(
     next_mode: LightingModeConfig,
     device_connected: bool,
     connected_port: Option<&str>,
-    // Snapshot of `ActiveSinkRegistry::active_wled_config()`. `Some` means a
+    // Snapshot of `LocalOutputRegistry::wled_config()`. `Some` means a
     // WLED device is the most recently connected "usb"-channel sink and
     // takes priority over `connected_port` for this mode change.
     wled_sink: Option<WledSinkConfig>,
@@ -672,8 +672,7 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
     waive_hue_gate: bool,
 ) -> Result<LightingModeCommandResult, String> {
     let runtime_state = app.state::<LightingRuntimeState>();
-    let connection_state = app.state::<SerialConnectionState>();
-    let sink_registry = app.state::<ActiveSinkRegistry>();
+    let local_outputs = app.state::<LocalOutputRegistry>();
     let telemetry_state = app.state::<RuntimeTelemetryState>();
     let led_twin_state = app.state::<LedTwinState>();
     let t_cmd = std::time::Instant::now();
@@ -716,11 +715,7 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
     // the same caller-wins rule; the LED control popup sends none of them.
     hydrate_mode_payload(&mut payload, &|| read_persisted_shell_state(app));
 
-    let connection_snapshot = connection_state
-        .last_status
-        .lock()
-        .map(|status| status.clone())
-        .map_err(|error| format!("LIGHTING_CONNECTION_STATE_LOCK_FAILED: {error}"))?;
+    let driven = local_outputs.driven_checked()?;
 
     let lock_t = std::time::Instant::now();
     let mut owner = runtime_state
@@ -744,14 +739,14 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
     // supersedes the test can drop the captured prior mode below.
     let superseded_test = owner.preview.active_test_pattern.is_some();
     let edge_emitter = Some(build_edge_emitter(app));
-    let wled_sink = sink_registry.active_wled_config();
+    let (device_connected, connected_port, wled_sink) = DrivenLocal::plan_args(driven.as_ref());
 
     owner.hue_gate_waived = waive_hue_gate;
     let result = apply_mode_change(
         &mut owner,
         payload,
-        connection_snapshot.connected,
-        connection_snapshot.port_name.as_deref(),
+        device_connected,
+        connected_port,
         wled_sink,
         hue_output,
         Some(telemetry_state.shared_snapshot()),
@@ -864,19 +859,28 @@ pub(crate) fn blank_usb_after_off<R: Runtime>(
     if !drove_usb {
         return None;
     }
-    let wled = app
-        .try_state::<ActiveSinkRegistry>()
-        .and_then(|registry| registry.active_wled_config());
-    let serial_port = app.try_state::<SerialConnectionState>().and_then(|state| {
-        let status = state.last_status.lock().ok()?;
-        status.port_name.clone().filter(|_| status.connected)
-    });
-    // The precedence `apply_mode_change` plans the channel with.
-    let plan = match (wled, serial_port) {
-        (Some(cfg), _) => UsbOutputPlan::Wled(cfg),
-        (None, Some(port)) => UsbOutputPlan::Serial(port),
-        (None, None) => return None,
-    };
+    let plan = UsbOutputPlan::from(
+        app.try_state::<LocalOutputRegistry>()
+            .and_then(|registry| registry.driven())?,
+    );
+    Some(blank_plan(app, plan, ended))
+}
+
+/// Paints `port` black with the layout of the mode that last drove it: a strip let go of while lit
+/// holds its last frame as an Off would have left it. Run after the mode stopped driving it.
+pub(crate) fn blank_serial_port<R: Runtime>(
+    app: &AppHandle<R>,
+    port: &str,
+    ended: &LightingModeConfig,
+) -> Result<(), String> {
+    blank_plan(app, UsbOutputPlan::Serial(port.to_string()), ended).black_frame
+}
+
+fn blank_plan<R: Runtime>(
+    app: &AppHandle<R>,
+    plan: UsbOutputPlan,
+    ended: &LightingModeConfig,
+) -> UsbOff {
     let bridge = app
         .state::<LightingRuntimeState>()
         .runtime
@@ -893,13 +897,13 @@ pub(crate) fn blank_usb_after_off<R: Runtime>(
         ),
         Err(reason) => warn!("[lighting-off] black frame FAILED — sink={plan:?} reason={reason}"),
     }
-    Some(UsbOff {
+    UsbOff {
         black_frame,
         wled: match plan {
             UsbOutputPlan::Wled(cfg) => Some(cfg),
             UsbOutputPlan::Serial(_) => None,
         },
-    })
+    }
 }
 
 /// Test hook called wherever a mode is applied, after the runtime lock is

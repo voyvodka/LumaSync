@@ -4,7 +4,7 @@
    Replaces the legacy zinc/Tailwind-default surface that used to ship
    inside `HueChannelMapPanel.tsx`. Aligned with `lm-settings-group` and
    the shared `lm-btn` so the panel stops looking like a foreign island
-   underneath the amber-tokenized DeviceSection cards.
+   underneath the amber-tokenized DevicesPage cards.
 
    Tokens consumed:
    - `--lm-panel`, `--lm-panel-2`, `--lm-line`, `--lm-line-2`
@@ -19,7 +19,7 @@
    - `forced-colors: active` mirrors selection chrome to system colors.
    ────────────────────────────────────────────────────────────────── */
 
-/* Outer card sits in the same DeviceSection column as `.lm-settings-group`
+/* Outer card sits in the same DevicesPage column as `.lm-settings-group`
    and adopts the same shell so they read as one continuous surface. Its
    spacing is the grid's gap, never a margin of its own. */
 .lm-chmap-body {

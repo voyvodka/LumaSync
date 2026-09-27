@@ -9,14 +9,24 @@
   .tint {
     position: absolute;
     inset: 0 0 auto;
-    height: 34px;
     border-radius: 8px;
     background: var(--lm-panel-2);
-    transition: transform var(--lm-dur-base) var(--lm-ease-out);
   }
+  .moving { transition: transform var(--lm-dur-base) var(--lm-ease-out), height var(--lm-dur-base) var(--lm-ease-out); }
+
+  .group { display: grid; }
+  .heading {
+    padding: 14px 12px 6px;
+    font-size: 11.5px;
+    color: var(--lm-ink-faint);
+  }
+  .group:first-of-type .heading { padding-top: 0; }
 
   .item {
     position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     height: 34px;
     padding: 0 12px;
     border-radius: 8px;
@@ -28,11 +38,26 @@
   .item:hover { color: var(--lm-ink); }
   .item[aria-current="page"] { color: var(--lm-ink); }
   .item:focus-visible { outline: none; box-shadow: var(--lm-focus-ring-inset); }
+  /* Something to add: faint until hovered or chosen. */
+  .ghost { color: var(--lm-ink-faint); }
 
-  :global(:root[data-reduced-motion]) .tint { transition: none; }
+  .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .dot {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    border: 1px solid var(--lm-ink-faint);
+  }
+  .dotOn { border-color: transparent; background: var(--lm-green); }
+
+  :global(:root[data-reduced-motion]) .moving { transition: none; }
 
   @media (forced-colors: active) {
     .tint { background: Highlight; forced-color-adjust: none; }
     .item[aria-current="page"] { color: HighlightText; forced-color-adjust: none; }
+    .dot { border-color: ButtonText; }
+    .dotOn { background: ButtonText; }
   }
 }

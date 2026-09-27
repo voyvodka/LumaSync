@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { WledCategory } from "../WledCategory";
 import type * as wledApiModule from "@/features/device/wledApi";
+import type { ShellState } from "@/shared/contracts/shell";
+import { savedWledSink } from "@/features/strips/model/stripSelectors";
 
 const getWledSinkStatusMock = vi.fn<typeof wledApiModule.getWledSinkStatus>();
 const forgetWledDeviceMock = vi.fn<typeof wledApiModule.forgetWledDevice>();
@@ -26,6 +28,12 @@ vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => loadMock(),
     save: (partial: unknown) => saveMock(partial),
+    update: async (update: (current: ShellState) => Partial<ShellState> | null) => {
+      const current = (await loadMock()) as ShellState;
+      const next = { ...current, ...update(current) };
+      saveMock(next);
+      return next;
+    },
   },
 }));
 
@@ -42,7 +50,9 @@ beforeEach(() => {
   loadMock.mockReset();
   saveMock.mockReset();
   getWledSinkStatusMock.mockResolvedValue({ connected: true, sink: SAVED });
-  loadMock.mockResolvedValue({ lastWledSink: SAVED });
+  loadMock.mockResolvedValue({
+    ledStrips: [{ id: "strip-1", enabled: true, transport: { kind: "wled", sink: SAVED }, hardware: {} }],
+  });
   saveMock.mockResolvedValue(undefined);
 });
 
@@ -94,10 +104,8 @@ describe("WledCategory → WledDevicePicker wiring", () => {
     );
 
     await waitFor(() => {
-      expect(saveMock).toHaveBeenCalledWith({
-        lastWledSink: SAVED,
-        lastSuccessfulPort: undefined,
-      });
+      expect(saveMock).toHaveBeenCalled();
+      expect(savedWledSink(saveMock.mock.calls[saveMock.mock.calls.length - 1]![0] as ShellState)).toEqual(SAVED);
     });
   });
 

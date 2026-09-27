@@ -115,14 +115,14 @@ describe("lighting mode contracts", () => {
     expect(normalizeAmbilightPayload({ blackBorderDetection: true }).blackBorderDetection).toBe(true);
   });
 
-  it("keeps ledCalibration contract intact when shell state includes lighting mode fields", () => {
+  it("keeps the strip layout contract intact when shell state includes lighting mode fields", () => {
     const shellState: ShellState = {
       schemaVersion: 1,
       windowCenterX: null,
       windowCenterY: null,
       lastSection: "lights",
       trayHintShown: true,
-      ledCalibration: CALIBRATION,
+      ledStrips: [{ id: "strip-1", enabled: true, transport: null, hardware: {}, layout: CALIBRATION }],
       lightingMode: {
         kind: "solid",
         solid: {
@@ -134,7 +134,7 @@ describe("lighting mode contracts", () => {
       },
     };
 
-    expect(shellState.ledCalibration).toEqual(CALIBRATION);
+    expect(shellState.ledStrips?.[0]?.layout).toEqual(CALIBRATION);
   });
 
   it("exports Hue runtime lifecycle states as Idle/Starting/Running/Reconnecting/Stopping/Failed", () => {

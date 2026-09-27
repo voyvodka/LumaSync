@@ -110,7 +110,7 @@ fn connect_to_unsupported_port_is_blocked() {
     );
 }
 
-/// The failed attempt has to land in `SerialConnectionState`, otherwise the UI
+/// The failed attempt has to land in the compatibility status, otherwise the UI
 /// re-reads a stale "connected" status after a failure.
 #[test]
 fn failed_connect_is_readable_from_connection_status() {

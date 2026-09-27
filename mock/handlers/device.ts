@@ -16,8 +16,10 @@ import {
   DEVICE_HEALTH_STEPS,
   DEVICE_COMMANDS,
   SERIAL_CONNECT_STATUS,
+  SERIAL_DISCONNECT_STATUS,
   SERIAL_PORT_LIST_STATUS,
   pixelLayoutForChipType,
+  type LocalOutputStatus,
   type SerialCommandStatusCode,
   type SerialFirmwareInfo,
 } from "../../src/shared/contracts/device";
@@ -197,6 +199,40 @@ export const deviceHandlers = {
       w.wled.connectedHost = host;
     });
     return { status: status("WLED_CONNECT_OK", "Connected") };
+  },
+
+  /** The registry as the world holds it: the connected strip and the bound WLED device. */
+  [DEVICE_COMMANDS.GET_LOCAL_OUTPUTS]: () => {
+    const { serial, wled } = getWorld();
+    const port = serial.ports.find((p) => p.name === serial.connectedPort);
+    const device = wled.devices.find((d) => d.host === wled.connectedHost);
+    const outputs: LocalOutputStatus[] = [];
+    if (port !== undefined) {
+      outputs.push({
+        kind: "serial",
+        portName: port.name,
+        connected: true,
+        status: status(SERIAL_CONNECT_STATUS.OK, "Connected"),
+        firmware: mockFirmware(port),
+        updatedAtUnixMs: now(),
+      });
+    }
+    if (device !== undefined) {
+      outputs.push({ kind: "wled", ip: device.host, ledCount: device.ledCount, connected: true });
+    }
+    // Grows like Rust's, so a reader dropping stale snapshots behaves the same against the mock.
+    return { revision: Math.floor(now()), outputs };
+  },
+
+  [DEVICE_COMMANDS.DISCONNECT_SERIAL_PORT]: (args) => {
+    const { portName } = args;
+    if (getWorld().serial.connectedPort !== portName) {
+      return { portName, status: status(SERIAL_DISCONNECT_STATUS.NOT_CONNECTED, "That strip is not connected.") };
+    }
+    mutate((w) => {
+      w.serial.connectedPort = null;
+    });
+    return { portName, status: status(SERIAL_DISCONNECT_STATUS.OK, "The strip was disconnected.") };
   },
 
   [DEVICE_COMMANDS.GET_WLED_SINK_STATUS]: () => {

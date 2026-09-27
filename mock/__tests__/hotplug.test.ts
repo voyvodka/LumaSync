@@ -12,6 +12,7 @@ import { connectionEvents } from "../../src/features/device/connectionEvents";
 import type { ConnectionEvent } from "../../src/features/device/connectionEvents";
 import { wledSinkEvents } from "../../src/features/device/wledSinkEvents";
 import type { WledRestoreOutcome } from "../../src/features/device/wledSinkRestore";
+import { savedSerialPort, savedWledSink } from "../../src/features/strips/model/stripSelectors";
 import { rejectSerialPort, setSerialConnected, setWledBound } from "../hotplug";
 import { SCENARIOS } from "../scenarios";
 import { getWorld, setWorld } from "../state";
@@ -48,14 +49,14 @@ describe("serial hot-plug", () => {
     expect(connectionSeen).toEqual([{ portName: PORT, connected: false }]);
   });
 
-  it("announces a plug-in and records the port as the last successful one", () => {
+  it("announces a plug-in and records the port as the saved one", () => {
     setSerialConnected(PORT, false);
     connectionSeen.length = 0;
 
     setSerialConnected(PORT, true);
 
     expect(getWorld().serial.connectedPort).toBe(PORT);
-    expect(getWorld().shellState.lastSuccessfulPort).toBe(PORT);
+    expect(savedSerialPort(getWorld().shellState)).toBe(PORT);
     expect(connectionSeen).toEqual([{ portName: PORT, connected: true }]);
   });
 
@@ -69,7 +70,7 @@ describe("serial hot-plug", () => {
     setSerialConnected(PORT, false);
     // The auto-reconnect hint is the whole reason the field exists; clearing
     // it on unplug would mean the strip is never re-found on the next launch.
-    expect(getWorld().shellState.lastSuccessfulPort).toBe(PORT);
+    expect(savedSerialPort(getWorld().shellState)).toBe(PORT);
   });
 });
 
@@ -110,7 +111,7 @@ describe("WLED binding", () => {
     setWledBound(WLED_HOST, false);
 
     expect(getWorld().wled.connectedHost).toBeNull();
-    expect(getWorld().shellState.lastWledSink).toBeUndefined();
+    expect(savedWledSink(getWorld().shellState)).toBeUndefined();
     // `failed` would make the picker render a fault the user did not cause.
     expect(last(wledSeen)).toEqual({ kind: "no-saved-device" });
   });

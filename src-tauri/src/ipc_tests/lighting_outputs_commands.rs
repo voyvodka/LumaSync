@@ -9,10 +9,10 @@ use tauri::test::MockRuntime;
 use tauri::{App, Manager, WebviewWindow};
 
 use super::{assert_camel_case_keys, invoke, main_webview, mock_app, status_code};
-use crate::commands::device_connection::SerialConnectionState;
 use crate::commands::led_output::{LedOutputBridge, LedOutputError, LedPacketSender};
 use crate::commands::lighting_mode::hue_driver::HueDriverHandle;
 use crate::commands::lighting_mode::{EventLog, FakeHue, LightingRuntimeState};
+use crate::commands::local_outputs::LocalOutputRegistry;
 use crate::commands::shell_state::ShellStateStore;
 
 struct SilentStrip;
@@ -37,17 +37,18 @@ fn app() -> App<MockRuntime> {
     app.manage(HueDriverHandle(FakeHue::new(Arc::new(EventLog::default()))));
     app.state::<LightingRuntimeState>()
         .replace_output_bridge_for_tests(LedOutputBridge::from_sender(Arc::new(SilentStrip)));
-    {
-        let serial = app.state::<SerialConnectionState>();
-        let mut status = serial.last_status.lock().unwrap();
-        status.connected = true;
-        status.port_name = Some("COM-IPC".to_string());
-    }
+    app.state::<LocalOutputRegistry>()
+        .set_serial_for_tests("COM-IPC", true, 0);
     let seed = json!({
         "ledCalibration": crate::commands::lighting_mode::calibration_for_tests(),
     });
     app.state::<ShellStateStore>()
-        .patch(seed.as_object().cloned().unwrap(), Vec::new(), None, |_| {})
+        .patch(
+            seed.as_object().cloned().unwrap(),
+            Vec::new(),
+            None,
+            |_, _| {},
+        )
         .unwrap();
     app
 }

@@ -1,6 +1,6 @@
 // A strip: one run of LEDs behind one local controller, with the hardware, layout and tuning that
-// belong to it. Rust handoff: `src-tauri/src/models/led_strips.rs`, where the same shape is
-// derived from the saved state.
+// belong to it. Stored as `ShellState.ledStrips` from schema 8. Rust handoff:
+// `src-tauri/src/models/led_strips.rs`, which reads the same shape by the same rules.
 
 import type { LedCalibrationConfig } from "./calibration";
 import type {
@@ -37,4 +37,21 @@ export interface LedStrip {
   layout?: LedCalibrationConfig;
   /** Not read yet: the top-level `colorCorrection` still drives the strip and Hue alike. */
   colorCorrection?: ColorCorrectionConfig;
+}
+
+/**
+ * The keys one local output was stored in up to schema 7. Frozen in schema 8 — still on disk so a
+ * v7 build boots, never written — and read only to derive strips from a file that has no
+ * `ledStrips` yet. Only `features/strips/model/legacyStrips.ts` and `persistence/migrations.ts`
+ * may import this; `verify:shell-contracts` checks it.
+ */
+export interface LegacyV7StripKeys {
+  /** The port a launch reconnects. */
+  lastSuccessfulPort?: string;
+  /** The WLED device a launch binds again; the app never wrote it beside a port. */
+  lastWledSink?: WledUdpSinkConfig;
+  ledCalibration?: LedCalibrationConfig;
+  firmwareProfile?: FirmwareProfile;
+  selectedChipType?: LedChipType;
+  ledColorOrder?: LedColorOrder;
 }

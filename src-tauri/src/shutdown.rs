@@ -10,11 +10,11 @@ use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Manager, Runtime};
 
-use crate::commands::device_connection::ActiveSinkRegistry;
 use crate::commands::hue::commands::stop_hue_stream_before_exit;
 use crate::commands::hue::state_store::HueRuntimeStateStore;
 use crate::commands::launch::AUTOSTART_TRAY_ARG;
 use crate::commands::lighting_mode::{stop_lighting_blocking, LightingRuntimeState};
+use crate::commands::local_outputs::LocalOutputRegistry;
 
 /// Hard-exit deadline for shutdown. The cleanup path joins worker threads,
 /// drops SCStream, deactivates DTLS — each of which can theoretically hang
@@ -99,7 +99,7 @@ pub(crate) fn app_cleanup_steps<R: Runtime>(app: &AppHandle<R>) -> CleanupSteps 
                 .status
                 .code
         }),
-        clear_sink: Box::new(move || sink_app.state::<ActiveSinkRegistry>().clear()),
+        clear_sink: Box::new(move || sink_app.state::<LocalOutputRegistry>().clear()),
     }
 }
 

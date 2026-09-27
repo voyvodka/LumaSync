@@ -26,7 +26,7 @@ describe("deriveLocalSink", () => {
 
   /**
    * Serial wins, and not as a preference: a serial connect evicts WLED from
-   * `ActiveSinkRegistry`, so Rust is driving the strip. Naming WLED here would
+   * `LocalOutputRegistry`, so Rust is driving the strip. Naming WLED here would
    * be the same class of lie this function removes.
    */
   it("names serial when both are bound, because that is what Rust is driving", () => {

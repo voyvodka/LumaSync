@@ -20,6 +20,7 @@ import {
   type ProbeAnswer,
 } from "./useColorOrderIdentify";
 import { primaryStripOf } from "@/features/strips/model/stripSelectors";
+import { withStripHardware } from "@/features/strips/model/stripWrites";
 
 const ORDER_OPTIONS: LedColorOrder[] = Object.values(LED_COLOR_ORDER);
 
@@ -92,7 +93,7 @@ export function LedColorOrderControl({
   }, []);
 
   const save = useCallback(async (next: LedColorOrder) => {
-    await shellStore.save({ ledColorOrder: next });
+    await shellStore.update((current) => withStripHardware(current, { colorOrder: next }));
   }, []);
 
   const onApplied = useCallback(

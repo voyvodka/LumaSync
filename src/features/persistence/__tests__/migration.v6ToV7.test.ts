@@ -51,11 +51,16 @@ describe("migrateV6ToV7 — keys nothing read are dropped", () => {
 
     const out = migrateShellState(input);
 
-    expect(out).toEqual({ ...input, schemaVersion: 7 });
+    // 7 → 8 then derives the strip from the port; nothing else moves.
+    expect(out).toEqual({
+      ...input,
+      schemaVersion: SHELL_STATE_SCHEMA_VERSION,
+      ledStrips: [{ id: "strip-1", enabled: true, transport: { kind: "serial", portName: "/dev/ttyUSB0" }, hardware: {} }],
+    });
   });
 
-  it("does not run again on a v7 state", () => {
-    const current = { ...makeBaseState({ schemaVersion: 7 }) };
+  it("does not run again on a current state", () => {
+    const current = { ...makeBaseState({ schemaVersion: SHELL_STATE_SCHEMA_VERSION }) };
 
     expect(migrateShellState(current)).toBe(current);
   });

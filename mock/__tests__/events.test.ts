@@ -46,8 +46,12 @@ describe("buildEdgeSignalFrame", () => {
     expect(buildEdgeSignalFrame("solid", 1, "live").ledCount).toBe(164);
 
     mutate((w) => {
-      const calibration = w.shellState.ledCalibration;
-      if (calibration) w.shellState = { ...w.shellState, ledCalibration: { ...calibration, totalLeds: 42 } };
+      w.shellState = {
+        ...w.shellState,
+        ledStrips: (w.shellState.ledStrips ?? []).map((strip) =>
+          strip.layout ? { ...strip, layout: { ...strip.layout, totalLeds: 42 } } : strip,
+        ),
+      };
     });
 
     const frame = buildEdgeSignalFrame("solid", 1, "live");
@@ -59,7 +63,7 @@ describe("buildEdgeSignalFrame", () => {
     // An empty `leds` array is a valid payload the twin renders as "nothing",
     // so zero would read as a working stream rather than a missing setup.
     mutate((w) => {
-      w.shellState = { ...w.shellState, ledCalibration: undefined };
+      w.shellState = { ...w.shellState, ledStrips: [] };
     });
     expect(buildEdgeSignalFrame("solid", 1, "live").ledCount).toBeGreaterThan(0);
   });

@@ -8,7 +8,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("../../telemetry/hooks/useRuntimeTelemetry", () => ({
-  useRuntimeTelemetry: () => ({ fps: 58.4, latencyMs: 4 }),
+  useRuntimeTelemetry: () => ({ fps: 58.4, latencyMs: 4, health: "ok" }),
 }));
 
 vi.mock("@/features/persistence/shellStore", () => ({

@@ -125,7 +125,7 @@ describe("LED Setup opening", () => {
 
   it("opens a return visit on the last read at once, WLED count included", async () => {
     storedShell = {
-      lastWledSink: { ip: "192.168.1.40", port: 4048, ledCount: 150, protocol: WLED_PROTOCOL.DDP },
+      ledStrips: [{ id: "strip-1", enabled: true, transport: { kind: "wled", sink: { ip: "192.168.1.40", port: 4048, ledCount: 150, protocol: WLED_PROTOCOL.DDP } }, hardware: {} }],
     };
     await renderPage();
     cleanup();
@@ -218,7 +218,7 @@ describe("LED Setup with no saved layout", () => {
 describe("LED Setup with a bound WLED panel", () => {
   beforeEach(() => {
     storedShell = {
-      lastWledSink: { ip: "192.168.1.40", port: 4048, ledCount: 150, protocol: WLED_PROTOCOL.DDP },
+      ledStrips: [{ id: "strip-1", enabled: true, transport: { kind: "wled", sink: { ip: "192.168.1.40", port: 4048, ledCount: 150, protocol: WLED_PROTOCOL.DDP } }, hardware: {} }],
     };
   });
 
