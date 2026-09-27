@@ -19,7 +19,6 @@ import {
   SERIAL_DISCONNECT_STATUS,
   SERIAL_PORT_LIST_STATUS,
   pixelLayoutForChipType,
-  type LocalOutputStatus,
   type SerialCommandStatusCode,
   type SerialFirmwareInfo,
 } from "../../src/shared/contracts/device";
@@ -27,6 +26,7 @@ import { HUE_RUNTIME_STATES } from "../../src/shared/contracts/hue";
 import type { LightingModeCommandResult, LightingModeConfig } from "../../src/shared/contracts/mode";
 import { LINK_MAX_FPS_ABSENT } from "../../src/shared/contracts/telemetry";
 import type { HealthStepResult } from "../../src/shared/contracts/device";
+import { localOutputsSnapshot } from "../localOutputs";
 import { getWorld, mutate, type MockSerialPort } from "../state";
 import { hueRuntimeFault } from "./hue";
 import { status } from "./status";
@@ -99,8 +99,10 @@ export const deviceHandlers = {
     if (port.connectOutcome !== "OK") {
       return refused(SERIAL_CONNECT_STATUS[port.connectOutcome], "Open refused");
     }
+    // A strip connect unbinds WLED, as Rust's registry does.
     mutate((w) => {
       w.serial.connectedPort = portName;
+      w.wled.connectedHost = null;
     });
     return {
       portName,
@@ -201,28 +203,8 @@ export const deviceHandlers = {
     return { status: status("WLED_CONNECT_OK", "Connected") };
   },
 
-  /** The registry as the world holds it: the connected strip and the bound WLED device. */
-  [DEVICE_COMMANDS.GET_LOCAL_OUTPUTS]: () => {
-    const { serial, wled } = getWorld();
-    const port = serial.ports.find((p) => p.name === serial.connectedPort);
-    const device = wled.devices.find((d) => d.host === wled.connectedHost);
-    const outputs: LocalOutputStatus[] = [];
-    if (port !== undefined) {
-      outputs.push({
-        kind: "serial",
-        portName: port.name,
-        connected: true,
-        status: status(SERIAL_CONNECT_STATUS.OK, "Connected"),
-        firmware: mockFirmware(port),
-        updatedAtUnixMs: now(),
-      });
-    }
-    if (device !== undefined) {
-      outputs.push({ kind: "wled", ip: device.host, ledCount: device.ledCount, connected: true });
-    }
-    // Grows like Rust's, so a reader dropping stale snapshots behaves the same against the mock.
-    return { revision: Math.floor(now()), outputs };
-  },
+  /** The registry as the world holds it; see `mock/localOutputs.ts`. */
+  [DEVICE_COMMANDS.GET_LOCAL_OUTPUTS]: () => localOutputsSnapshot(),
 
   [DEVICE_COMMANDS.DISCONNECT_SERIAL_PORT]: (args) => {
     const { portName } = args;
@@ -233,18 +215,6 @@ export const deviceHandlers = {
       w.serial.connectedPort = null;
     });
     return { portName, status: status(SERIAL_DISCONNECT_STATUS.OK, "The strip was disconnected.") };
-  },
-
-  [DEVICE_COMMANDS.GET_WLED_SINK_STATUS]: () => {
-    const { wled } = getWorld();
-    const device = wled.devices.find((d) => d.host === wled.connectedHost);
-    return {
-      connected: device !== undefined,
-      sink:
-        device === undefined
-          ? null
-          : { ip: device.host, port: device.port, ledCount: device.ledCount, protocol: device.protocol },
-    };
   },
 
   /** Three live outcomes, not one: confirmed, sent-unconfirmed, and failed. */

@@ -1,6 +1,7 @@
 /** Two hooks over one restore: `useWledSinkRestore` runs it once at boot from App.tsx, `useActiveWledSink` is the read-only view the WLED picker mounts later. */
 import { useCallback, useEffect, useState } from "react";
 
+
 import {
   WLED_DEFAULT_DDP_PORT,
   WLED_STATUS,
@@ -11,12 +12,10 @@ import {
 import { parseCommandError } from "@/shared/contracts/status";
 import type { ShellState } from "@/shared/contracts/shell";
 import { shellStore } from "../persistence/shellStore";
-import {
-  connectWledSink,
-  discoverWledDevices,
-  forgetWledDevice,
-  getWledSinkStatus,
-} from "./wledApi";
+import { connectWledSink, discoverWledDevices, forgetWledDevice } from "./wledApi";
+import { wledOutput } from "./model/localOutputs";
+import { localOutputs as defaultLocalOutputs, type LocalOutputs } from "./state/localOutputsStore";
+import { useStoreSelector } from "@/shared/lib/store";
 import {
   wledSinkEvents as defaultWledSinkEvents,
   type WledSinkEventBus,
@@ -65,14 +64,14 @@ export function useWledSinkRestore(deps: UseWledSinkRestoreDeps = {}): void {
 }
 
 export interface ActiveWledSink {
-  /** IP Rust actually has bound, or null. Drives the picker's active-card highlight. */
+  /** IP Rust actually has bound, or null, from the local-output registry. Drives the picker's active-card highlight. */
   activeWledIp: string | null;
   /** Persisted restore intent, which survives a failed restore. */
   savedSink: WledUdpSinkConfig | null;
   restoreOutcome: WledRestoreOutcome;
-  /** True once both the Rust snapshot and the persisted record have resolved. */
+  /** True once both the registry and the persisted record have resolved. */
   ready: boolean;
-  /** Record a successful manual connect and re-read the Rust snapshot. */
+  /** Record a successful manual connect and re-read the registry. */
   markConnected: (device: WledDeviceInfo) => Promise<void>;
   /** Stop sending to the device, unbind it and drop it from the saved state.
    *  Never throws; check `code`. */
@@ -81,7 +80,7 @@ export interface ActiveWledSink {
 
 export interface UseActiveWledSinkDeps {
   wledSinkEvents?: WledSinkEventBus;
-  getStatus?: typeof getWledSinkStatus;
+  localOutputs?: LocalOutputs;
   forgetDevice?: typeof forgetWledDevice;
   loadShellState?: () => Promise<ShellState>;
   updateShellState?: ShellStateUpdater;
@@ -96,12 +95,13 @@ export function useActiveWledSink(
   deps: UseActiveWledSinkDeps = {},
 ): ActiveWledSink {
   const bus = deps.wledSinkEvents ?? defaultWledSinkEvents;
-  const getStatus = deps.getStatus ?? getWledSinkStatus;
+  const outputs = deps.localOutputs ?? defaultLocalOutputs;
   const forgetDevice = deps.forgetDevice ?? forgetWledDevice;
   const loadShellState = deps.loadShellState ?? loadShell;
   const updateShellState = deps.updateShellState ?? updateShell;
 
-  const [activeWledIp, setActiveWledIp] = useState<string | null>(null);
+  useEffect(() => outputs.start(), [outputs]);
+  const activeWledIp = useStoreSelector(outputs.store, (state) => wledOutput(state.snapshot)?.ip ?? null);
   const [savedSink, setSavedSink] = useState<WledUdpSinkConfig | null>(null);
   const [ready, setReady] = useState(false);
   const [restoreOutcome, setRestoreOutcome] = useState<WledRestoreOutcome>(() =>
@@ -110,18 +110,14 @@ export function useActiveWledSink(
 
   const refresh = useCallback(async () => {
     try {
-      const [status, stored] = await Promise.all([
-        getStatus(),
-        loadShellState(),
-      ]);
-      setActiveWledIp(status.sink?.ip ?? null);
+      const [, stored] = await Promise.all([outputs.refresh(), loadShellState()]);
       setSavedSink(savedWledSink(stored) ?? null);
     } catch (err) {
       console.error("[LumaSync] useActiveWledSink refresh failed:", err);
     } finally {
       setReady(true);
     }
-  }, [getStatus, loadShellState]);
+  }, [outputs, loadShellState]);
 
   useEffect(() => {
     void refresh();

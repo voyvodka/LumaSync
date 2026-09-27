@@ -26,13 +26,12 @@ export const DEVICE_COMMANDS = {
    * frame, then re-read `info.live` to decide confirmed vs unconfirmed.
    * "Round trip" is historical — UDP has no ACK. See {@link WledTestResponse}. */
   TEST_WLED_BRIDGE: "test_wled_bridge",
-  /** Registry snapshot of the bound WLED sink. `lastWledSink` is intent; this is what Rust holds — they diverge when a boot restore fails or serial evicts WLED. */
-  GET_WLED_SINK_STATUS: "get_wled_sink_status",
   /** Stop sending to the device, unbind it and drop the saved device.
    * Contacts nothing on the network. */
   FORGET_WLED_DEVICE: "forget_wled_device",
-  /** Every local output this session knows of: the serial ports with a status, and the bound WLED
-   * device. Never rejects. Registered ahead of the frontend that reads it; granted to no window yet. */
+  /** Every local output this session knows of: the serial ports with a status, the bound WLED
+   * device, and which one the "usb" channel drives. Never rejects. The main window's store of it is
+   * `features/device/state/localOutputsStore.ts`. */
   GET_LOCAL_OUTPUTS: "get_local_outputs",
   /** Let go of the connected strip: a running mode stops sending to it as after an unplug (session
    * only), then its writer closes the port. Granted to no window yet. */
@@ -482,7 +481,13 @@ export type LocalOutputStatus =
 export interface LocalOutputsSnapshot {
   revision: number;
   outputs: LocalOutputStatus[];
+  /** The output the "usb" channel drives, `null` when none. Rust's rule, named here so no reader
+   * repeats it. */
+  driven: DrivenOutputRef | null;
 }
+
+/** Which output {@link LocalOutputsSnapshot.driven} names. */
+export type DrivenOutputRef = { kind: "serial"; portName: string } | { kind: "wled"; ip: string };
 
 /** `disconnect_serial_port`. */
 export interface SerialDisconnectResult {
@@ -615,12 +620,6 @@ export interface WledDeviceInfo {
   ledCount: number;
   name?: string | null;
   version?: string | null;
-}
-
-/** Snapshot from `get_wled_sink_status`. `sink` is `null` once a serial connect has evicted WLED, even while `lastWledSink` stays populated. */
-export interface WledSinkStatus {
-  connected: boolean;
-  sink: WledUdpSinkConfig | null;
 }
 
 /** Response from `test_wled_bridge`. The numeric fields carry what the status

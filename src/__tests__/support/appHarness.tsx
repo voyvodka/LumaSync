@@ -19,7 +19,7 @@ import { useLeaveGuardRegistrar, useNavigationState } from "@/features/shell/nav
 import { useHueShellStatus } from "@/features/hue/state/hueShellStatus";
 import { useSetupGuideActions, type SetupGuideActions } from "@/features/onboarding/state/setupGuideControl";
 import { runtimeStatus } from "@/features/hue/__tests__/fakeHueHealth";
-import { DEVICE_COMMANDS } from "@/shared/contracts/device";
+import { DEVICE_COMMANDS, type DrivenOutputRef } from "@/shared/contracts/device";
 import type {
   ApplyOutputsOutcome,
   ApplyOutputsRequest,
@@ -36,6 +36,8 @@ export const env = {
   // Controllable isConnected for hot-plug tests
   isConnected: true,
   activeWledIp: null as string | null,
+  /** The registry's `driven`; unset follows `installInvokeDispatch`'s serial flag. */
+  driven: undefined as DrivenOutputRef | null | undefined,
   // Idle unless a test opens the update prompt on purpose.
   updaterState: { status: "idle" } as { status: string; update?: unknown; progress?: number },
   checkFailedNotice: null as { message: string } | null,
@@ -355,11 +357,27 @@ export function installInvokeDispatch(serialConnected: boolean): void {
           },
           hue: null,
         });
+      // A fresh revision per read: the registry store keeps the newest it has seen, across tests.
+      case DEVICE_COMMANDS.GET_LOCAL_OUTPUTS:
+        localOutputsRevision += 1;
+        return Promise.resolve({
+          revision: localOutputsRevision,
+          outputs: [],
+          // What Rust drives, as the test says; never a rule worked out here.
+          driven:
+            env.driven !== undefined
+              ? env.driven
+              : serialConnected
+                ? { kind: "serial", portName: "/dev/cu.usbserial-test" }
+                : null,
+        });
       default:
         return Promise.resolve({ connected: serialConnected });
     }
   });
 }
+
+let localOutputsRevision = 0;
 
 /** A fresh revision every time, whatever `overrides` carries over. */
 export function snapshot(overrides: Partial<LightingRuntimeSnapshot> = {}): LightingRuntimeSnapshot {
@@ -465,6 +483,7 @@ export function resetAppHarness(): void {
   vi.useRealTimers();
   env.isConnected = true;
   env.activeWledIp = null;
+  env.driven = undefined;
   env.updaterState = { status: "idle" };
   env.checkFailedNotice = null;
   env.rerenderUpdater = null;

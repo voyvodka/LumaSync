@@ -42,7 +42,6 @@ const APP_COMMANDS: &[&str] = &[
     "discover_wled_devices",
     "connect_wled_sink",
     "test_wled_bridge",
-    "get_wled_sink_status",
     "start_led_test_pattern",
     "stop_led_test_pattern",
     "get_led_preview_status",

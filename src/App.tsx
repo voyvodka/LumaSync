@@ -62,7 +62,8 @@ import { HUE_RUNTIME_TRIGGER_SOURCE } from "./shared/contracts/hue";
 import { useLedSetupPrompt } from "./features/calibration/state/useLedSetupPrompt";
 import { useDeviceConnection } from "./features/device/useDeviceConnection";
 import { useActiveWledSink, useWledSinkRestore } from "./features/device/useWledSink";
-import { deriveLocalSink } from "./features/device/localSink";
+import { localSinkOf, sameDriven } from "./features/device/model/localOutputs";
+import { useLocalOutputs } from "./features/device/state/localOutputsStore";
 import { useUsbTargetReconciler } from "./features/device/state/useUsbTargetReconciler";
 import {
   canEnableLedMode,
@@ -141,7 +142,7 @@ function Shell() {
   // without re-subscribing on every state mutation.
   const hueStartConfigRef = useRef<HueStartConfig | null>(null);
   // The one mount that brings the strip back on a replug; Devices' mount only follows.
-  const { isConnected, connectedPort, ports, lastSuccessfulPort } = useDeviceConnection({ reconnectOnReplug: true });
+  const { isConnected, ports, lastSuccessfulPort } = useDeviceConnection({ reconnectOnReplug: true });
   // Boot restore of the persisted WLED sink. Mounted here, not in the picker:
   // the sink must be bound before a lighting mode starts.
   useWledSinkRestore();
@@ -149,13 +150,13 @@ function Shell() {
   // whether a serial port is. Without this a WLED-only setup reads as "no
   // strip connected" and every non-Off mode stays disabled, while Rust is
   // perfectly able to drive the panel.
-  const { activeWledIp, savedSink: savedWledSink } = useActiveWledSink();
-  const connectedProduct = ports.find((port) => port.portName === connectedPort)?.product;
-  // Memoised because the lighting store compares by identity: a fresh object
-  // per render would re-render every section that reads it.
+  const { savedSink: savedWledSink } = useActiveWledSink();
+  // Which output Rust drives, as the registry names it. Memoised because the lighting store compares
+  // by identity: a fresh object per render would re-render every section that reads it.
+  const driven = useLocalOutputs((state) => state.snapshot?.driven ?? null, sameDriven);
   const localSink = useMemo(
-    () => deriveLocalSink(isConnected, connectedPort ?? null, activeWledIp, connectedProduct),
-    [isConnected, connectedPort, activeWledIp, connectedProduct],
+    () => localSinkOf(driven, ports),
+    [driven, ports],
   );
   // Latched: a strip unplugged this session is an outage, not "never set up".
   const [localSinkSeen, setLocalSinkSeen] = useState(false);

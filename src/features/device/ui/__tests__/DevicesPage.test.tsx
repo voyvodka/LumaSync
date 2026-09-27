@@ -2,6 +2,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { DrivenOutputRef, LocalOutputsSnapshot } from "@/shared/contracts/device";
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
 import { DevicesPage } from "../DevicesPage";
 import { primaryStripOf } from "@/features/strips/model/stripSelectors";
@@ -26,6 +27,13 @@ vi.mock("@/features/mode/modeApi", () => ({
 
 vi.mock("@/features/device/useDeviceConnection", () => ({
   useDeviceConnection: () => useDeviceConnectionMock(),
+}));
+
+// What the registry says the "usb" channel drives: the colour-order control reads it.
+let drivenMock: DrivenOutputRef | null = null;
+vi.mock("@/features/device/state/localOutputsStore", () => ({
+  useLocalOutputs: <S,>(selector: (state: { snapshot: LocalOutputsSnapshot | null }) => S) =>
+    selector({ snapshot: drivenMock === null ? null : { revision: 1, outputs: [], driven: drivenMock } }),
 }));
 
 // Stubbed rather than left real: `useActiveWledSink` reads shell state through
@@ -61,7 +69,6 @@ vi.mock("@/features/device/wledApi", () => ({
   discoverWledDevices: vi.fn<typeof wledApiModule.discoverWledDevices>(),
   connectWledSink: vi.fn<typeof wledApiModule.connectWledSink>(),
   testWledBridge: vi.fn<typeof wledApiModule.testWledBridge>(),
-  getWledSinkStatus: vi.fn<typeof wledApiModule.getWledSinkStatus>().mockResolvedValue({ connected: false, sink: null }),
 }));
 
 // Stub heavy sub-components that make their own invoke calls.
@@ -577,12 +584,14 @@ describe("DevicesPage — colour order", () => {
     const { shellStore } = await import("@/features/persistence/shellStore");
     vi.mocked(shellStore.save).mockReset().mockResolvedValue(undefined);
     activeWledIpMock = null;
+    drivenMock = null;
     useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
     useHueOnboardingMock.mockReturnValue(createHueHookState());
   });
 
   it("replaces the control with a WLED hint when the local output is WLED", async () => {
     activeWledIpMock = "192.168.1.42";
+    drivenMock = { kind: "wled", ip: "192.168.1.42" };
 
     render(<DevicesPage onStopHueOutput={stopHueOutputMock} />);
 
@@ -590,8 +599,9 @@ describe("DevicesPage — colour order", () => {
     expect(screen.queryByText("lights:led.colorOrder.identify.button")).toBeNull();
   });
 
-  it("offers Identify when a serial strip is bound, even with a WLED address saved", async () => {
+  it("offers Identify when the registry drives a serial strip, even with a WLED address saved", async () => {
     activeWledIpMock = "192.168.1.42";
+    drivenMock = { kind: "serial", portName: "/dev/cu.usbserial-1420" };
     useDeviceConnectionMock.mockReturnValue({
       ...defaultDeviceConnectionState(),
       isConnected: true,

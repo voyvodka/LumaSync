@@ -457,7 +457,6 @@ fn registry_app(ports: Arc<FakeSerialPorts>) -> App<MockRuntime> {
         ],
         SerialPortAccess::from_io(ports),
     );
-    // Registered but granted to no window until the frontend reads it.
     super::grant_main_for_tests(&app, &["allow-get-local-outputs"]);
     app
 }
@@ -482,6 +481,10 @@ fn get_local_outputs_lists_a_connected_strip() {
             "firmware": null,
             "updatedAtUnixMs": connected["updatedAtUnixMs"],
         }])
+    );
+    assert_eq!(
+        snapshot["driven"],
+        json!({ "kind": "serial", "portName": CALL_OUT })
     );
 }
 

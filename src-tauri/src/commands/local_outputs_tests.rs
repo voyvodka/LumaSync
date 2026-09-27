@@ -234,6 +234,47 @@ fn the_snapshot_serialises_as_the_contract_says() {
     assert_eq!(json["outputs"][1]["connected"], true);
 }
 
+// Two boot reconnects of one port: the second fails on the open, and the strip that lights stays on.
+#[test]
+fn a_failed_attempt_on_the_connected_port_leaves_it_connected() {
+    let registry = LocalOutputRegistry::default();
+    registry.serial_connected(connected("COM3", 5));
+
+    registry.serial_failed(Some("COM3"), failed("CONNECT_IO_ERROR"));
+
+    assert_eq!(
+        serial_entry(&registry, "COM3"),
+        Some((true, "CONNECT_OK".into()))
+    );
+    assert_eq!(registry.driven(), Some(DrivenLocal::Serial("COM3".into())));
+    // `get_serial_connection_status` too, or the UI would read the strip that lights as failed.
+    assert!(registry.serial_status().connected);
+}
+
+// The frontend reads which output is driven from here, instead of repeating the rule.
+#[test]
+fn the_snapshot_names_the_driven_output() {
+    let registry = LocalOutputRegistry::default();
+    assert_eq!(
+        serde_json::to_value(registry.snapshot()).expect("serialises")["driven"],
+        serde_json::Value::Null
+    );
+
+    registry.serial_connected(connected("COM3", 5));
+    let json = serde_json::to_value(registry.snapshot()).expect("serialises");
+    assert_eq!(
+        json["driven"],
+        serde_json::json!({ "kind": "serial", "portName": "COM3" })
+    );
+
+    registry.wled_bound(wled(42));
+    let json = serde_json::to_value(registry.snapshot()).expect("serialises");
+    assert_eq!(
+        json["driven"],
+        serde_json::json!({ "kind": "wled", "ip": "192.168.1.42" })
+    );
+}
+
 // ---------------------------------------------------------------------------
 // disconnect_serial_port, over the lighting transaction
 // ---------------------------------------------------------------------------

@@ -300,7 +300,6 @@ export function DevicesPage({
           flagPersistError={usbPersistError.raise}
           clearPersistError={usbPersistError.clear}
           onNavigateToRoomMap={onNavigateToRoomMap}
-          activeWledIp={activeWledIp}
         />
 
         <WledCategory isActive={showsWled} />

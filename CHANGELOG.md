@@ -261,6 +261,10 @@ https://keepachangelog.com/en/1.1.0/
 
 - A USB strip that fails to connect no longer switches off a working WLED device the app still
   showed as connected.
+- With a WLED device and a USB strip both set up, the Lights screen, the tray and the status bar
+  name the one that is actually lit; they named the strip while the WLED device was lighting.
+- A second attempt to connect a strip that is already connected (two reconnects at once, at
+  launch) no longer marks the working strip as disconnected.
 - Stats for nerds: the frame-rate chip in the status bar no longer turns red with "Low FPS" while
   everything is fine — with Hue alone, which runs at 20 fps, or on a still screen, where fewer
   frames change. Its colour now shows whether the output keeps up.

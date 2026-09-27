@@ -90,7 +90,14 @@ It replaced a single serial status that every connect attempt overwrote and a si
 the slot and unbound a working WLED device the UI still showed, binding WLED never marked the serial
 strip replaced, and a failed attempt on a second port erased a live connection on the first. Each
 change bumps `revision` and emits `device://local-outputs-changed` (payload: `get_local_outputs`'s
-snapshot) to the main window. One local output is driven at a time until the worker drives several:
+snapshot) to the main window. The snapshot names the output `driven()` picked (`driven`), so the
+frontend reads the rule instead of repeating it: it once kept its own copy, "serial wins", while Rust
+let a bound WLED device win, and named the strip while the panel was what lit. The main window holds
+the snapshot in one store (`features/device/state/localOutputsStore.ts`) that listens before its first
+read — a change between the two is then in the read or in a later event — and keeps the newest
+revision it has seen, since events are sent outside the lock and can arrive out of order. A failed
+attempt on a port that is connected leaves it connected: two reconnects of one port race on the
+open, and the loser must not mark the strip that lights as off. One local output is driven at a time until the worker drives several:
 a connect evicts the others, and the evicted entry reads `DISCONNECTED`. `get_serial_connection_status`
 still returns the last attempt's status exactly as before, whatever the entries say — the frontend
 reads it until it moves to the registry, and has no copy for the states the entries can now name.
