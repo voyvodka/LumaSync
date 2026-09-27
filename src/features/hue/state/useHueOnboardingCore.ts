@@ -492,11 +492,30 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
 
   useEffect(() => stopPairingPoll, [stopPairingPoll]);
 
+  // The paired bridge a pairing of another one set aside, until that pairing lands. Letting go of
+  // the new one (Cancel) brings it back, key and all: the key is still saved, and without this the
+  // bridge read as unpaired until a restart.
+  const setAsideRef = useRef<Pick<HueOnboardingState, "selectedBridgeId" | "credentials" | "credentialState"> | null>(
+    null,
+  );
+
   const selectBridge = useCallback(
     (bridgeId: string | null) => {
       const stopsPairing = pairingBridgeIdRef.current !== null && pairingBridgeIdRef.current !== bridgeId;
       if (stopsPairing) {
         stopPairingPoll();
+      }
+      const setAside = setAsideRef.current;
+      if (bridgeId === null && setAside !== null) {
+        setAsideRef.current = null;
+        patchState((prev) => ({
+          ...prev,
+          ...setAside,
+          bridgeUnreachable: false,
+          isPairing: false,
+          status: isPairingStatus(prev.status) ? null : prev.status,
+        }));
+        return;
       }
       patchState((prev) => {
         const bridgeChanged = bridgeId === null || bridgeId !== prev.selectedBridgeId;
@@ -631,13 +650,28 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
     pairingBridgeIdRef.current = bridge.id;
     const deadline = Date.now() + HUE_PAIRING_POLL_WINDOW_MS;
 
-    patchState((prev) => ({
-      ...prev,
-      selectedBridgeId: bridge.id,
-      bridgeUnreachable: bridge.id === prev.selectedBridgeId ? prev.bridgeUnreachable : false,
-      isPairing: true,
-      status: isPairingStatus(prev.status) ? null : prev.status,
-    }));
+    // Pairing another bridge than the one in use: the key belongs to that one, so this bridge
+    // starts unpaired, as a typed address does. The saved bridge stays until this one is paired.
+    const before = stateRef.current;
+    if (bridge.id !== before.selectedBridgeId && before.credentials !== null) {
+      setAsideRef.current = {
+        selectedBridgeId: before.selectedBridgeId,
+        credentials: before.credentials,
+        credentialState: before.credentialState,
+      };
+    }
+    patchState((prev) => {
+      const same = bridge.id === prev.selectedBridgeId;
+      return {
+        ...prev,
+        selectedBridgeId: bridge.id,
+        credentials: same ? prev.credentials : null,
+        credentialState: same ? prev.credentialState : HUE_CREDENTIAL_STATUS.UNKNOWN,
+        bridgeUnreachable: same ? prev.bridgeUnreachable : false,
+        isPairing: true,
+        status: isPairingStatus(prev.status) ? null : prev.status,
+      };
+    });
 
     const attempt = async (): Promise<void> => {
       try {
@@ -689,6 +723,7 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
         }));
 
         if (response.credentials) {
+          setAsideRef.current = null;
           // Only the literal `"keychain"` licenses the delete — see docs/architecture/hue.md.
           const keychainOwnsCredentials =
             response.credentialStorageBackend === HUE_CREDENTIAL_BACKENDS.KEYCHAIN;

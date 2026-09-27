@@ -156,8 +156,6 @@ const device: Catalogue<typeof enDevice> = {
       usbTitle: "USB Şeritleri",
       usbSub: "{{count}} bağlı",
       usbSubNone: "Bağlı şerit yok",
-      hueTitle: "Hue Köprüleri",
-      hueSub: "Philips Hue eğlence alanları",
     },
     actions: {
       rescan: "Yeniden Tara",

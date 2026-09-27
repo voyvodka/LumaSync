@@ -3,7 +3,6 @@ import type enSettings from "@/locales/en/settings";
 
 const settings: Catalogue<typeof enSettings> = {
   title: "Ayarlar",
-  hintFor: "{{label}} hakkında",
   pages: {
     general: "Genel",
     appearance: "Görünüm",
@@ -12,7 +11,6 @@ const settings: Catalogue<typeof enSettings> = {
     about: "Hakkında",
   },
   help: {
-    opensInBrowser: "tarayıcında açılır",
     guide: {
       label: "Kurulum rehberi",
       description: "İlk çalıştırma adımları: bir ışık bağla, LED'leri ayarla, Ambilight'ı aç.",

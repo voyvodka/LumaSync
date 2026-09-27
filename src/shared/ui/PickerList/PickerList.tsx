@@ -18,6 +18,8 @@ interface PickerListProps<T> {
   itemKey: (item: T) => string;
   renderItem: (item: T, selected: boolean) => ReactNode;
   selectedIndex: number;
+  /** A row shown but not pickable; it stays focusable, so what it says is read out. */
+  isDisabled?: (item: T) => boolean;
   /** Called once the tint has landed on the picked row; the caller commits and closes. */
   onPick: (index: number) => void;
 }
@@ -38,6 +40,7 @@ export function PickerList<T>({
   itemKey,
   renderItem,
   selectedIndex,
+  isDisabled,
   onPick,
 }: PickerListProps<T>) {
   const [picked, setPicked] = useState<number | null>(null);
@@ -57,6 +60,16 @@ export function PickerList<T>({
   }, [open]);
   const mark = picked ?? selectedIndex;
 
+  // Opened from the keyboard, the list is at the end of the document: focus lands on the current
+  // row (or the first) so the arrows work from there.
+  const listRef = useRef<HTMLDivElement | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per opening — a selection that moves while open must not pull focus after it
+  useEffect(() => {
+    if (!open) return;
+    const rows = listRef.current?.querySelectorAll<HTMLElement>('[role="option"]');
+    (rows?.[Math.max(0, selectedIndex)] ?? rows?.[0])?.focus();
+  }, [open]);
+
   const pick = (i: number) => {
     if (timer.current) return;
     setPicked(i);
@@ -72,7 +85,7 @@ export function PickerList<T>({
 
   return (
     <Popover open={open} onClose={onClose} anchorRef={anchorRef} side={side} id={id} role="listbox" label={label} width={width}>
-      <div className={styles.list}>
+      <div className={styles.list} ref={listRef}>
         <span
           aria-hidden
           className={cx(styles.mark, mark < 0 && styles.none)}
@@ -80,15 +93,19 @@ export function PickerList<T>({
         />
         {items.map((item, i) => {
           const selected = i === mark;
+          const disabled = isDisabled?.(item) ?? false;
           return (
             <button
               key={itemKey(item)}
               type="button"
               role="option"
               aria-selected={selected}
+              aria-disabled={disabled || undefined}
               // Rows nearest the anchor come in first.
               style={{ animationDelay: `${30 + (side === "above" ? items.length - 1 - i : i) * 18}ms` } as CSSProperties}
-              onClick={() => pick(i)}
+              onClick={() => {
+                if (!disabled) pick(i);
+              }}
               onKeyDown={(e) => {
                 if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
                 e.preventDefault();

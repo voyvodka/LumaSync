@@ -136,4 +136,108 @@ describe("useHueOnboarding — pairing lists areas with the key it just received
       expect(result.current.areaGroups[0]?.areas[0]?.id).toBe("area-1");
     });
   });
+
+  // Pairing a second bridge from the rail: the key in hand is the first one's and must not be
+  // offered as this one's while the button is pressed.
+  it("drops the paired bridge's key from memory while another bridge pairs", async () => {
+    const OTHER = { id: "bridge-other", ip: "192.168.1.77", name: "Office" };
+    shellLoadMock.mockResolvedValue({
+      lastHueBridge: BRIDGE,
+      hueAppKey: OLD_APP_KEY,
+      hueClientKey: "psk-old",
+      hueCredentialStatus: HUE_CREDENTIAL_STATUS.VALID,
+    });
+    validateCredentialsMock.mockResolvedValue({
+      status: { code: "HUE_CREDENTIAL_VALID", message: "ok", details: null },
+      valid: true,
+    });
+    discoverBridgesMock.mockResolvedValue({
+      status: { code: "HUE_DISCOVERY_OK", message: "ok", details: null },
+      bridges: [BRIDGE, OTHER],
+    });
+    let finishPairing: (value: Awaited<ReturnType<typeof hueOnboardingApiModule.pairHueBridge>>) => void = () => {};
+    pairBridgeMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishPairing = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useHueOnboarding());
+    await waitFor(() => expect(result.current.credentials?.username).toBe(OLD_APP_KEY));
+    await act(async () => {
+      await result.current.discover();
+    });
+
+    let pairing: Promise<void> = Promise.resolve();
+    act(() => {
+      pairing = result.current.pair(OTHER.id);
+    });
+
+    expect(result.current.selectedBridgeId).toBe(OTHER.id);
+    expect(result.current.credentials).toBeNull();
+    expect(result.current.credentialState).toBe(HUE_CREDENTIAL_STATUS.UNKNOWN);
+    expect(result.current.isPairing).toBe(true);
+
+    await act(async () => {
+      finishPairing({
+        status: { code: "HUE_PAIRING_OK", message: "Paired.", details: null },
+        credentials: { username: NEW_APP_KEY, clientKey: "psk-new" },
+        credentialStorageBackend: "keychain",
+      });
+      await pairing;
+    });
+    expect(result.current.credentials?.username).toBe(NEW_APP_KEY);
+    expect(shellSaveMock).toHaveBeenCalledWith(expect.objectContaining({ lastHueBridge: OTHER }));
+  });
+
+  // Cancel mid-run, or after a refusal: the bridge set aside comes back with its key, instead of
+  // reading as unpaired until a restart.
+  it.each([
+    ["mid-run", () => new Promise<never>(() => {})],
+    [
+      "after a refusal",
+      async () => ({
+        status: { code: "HUE_PAIRING_BRIDGE_BUSY" as const, message: "busy", details: null },
+        credentials: null,
+      }),
+    ],
+  ])("brings the paired bridge back when pairing another is cancelled %s", async (_when, answer) => {
+    const OTHER = { id: "bridge-other", ip: "192.168.1.77", name: "Office" };
+    shellLoadMock.mockResolvedValue({
+      lastHueBridge: BRIDGE,
+      hueAppKey: OLD_APP_KEY,
+      hueClientKey: "psk-old",
+      hueCredentialStatus: HUE_CREDENTIAL_STATUS.VALID,
+    });
+    validateCredentialsMock.mockResolvedValue({
+      status: { code: "HUE_CREDENTIAL_VALID", message: "ok", details: null },
+      valid: true,
+    });
+    discoverBridgesMock.mockResolvedValue({
+      status: { code: "HUE_DISCOVERY_OK", message: "ok", details: null },
+      bridges: [BRIDGE, OTHER],
+    });
+    pairBridgeMock.mockImplementation(answer as typeof hueOnboardingApiModule.pairHueBridge);
+
+    const { result } = renderHook(() => useHueOnboarding());
+    await waitFor(() => expect(result.current.credentialState).toBe(HUE_CREDENTIAL_STATUS.VALID));
+    await act(async () => {
+      await result.current.discover();
+    });
+    await act(async () => {
+      void result.current.pair(OTHER.id);
+      await Promise.resolve();
+    });
+    expect(result.current.credentials).toBeNull();
+
+    act(() => {
+      result.current.selectBridge(null);
+    });
+
+    expect(result.current.selectedBridgeId).toBe(BRIDGE.id);
+    expect(result.current.credentials?.username).toBe(OLD_APP_KEY);
+    expect(result.current.credentialState).toBe(HUE_CREDENTIAL_STATUS.VALID);
+    expect(result.current.isPairing).toBe(false);
+  });
 });

@@ -2,7 +2,7 @@ import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { DisplayInfo } from "@/shared/contracts/display";
-import { PickerList } from "../dock/PickerList";
+import { PickerList } from "@/shared/ui/PickerList/PickerList";
 import { displayName } from "./displayName";
 import styles from "./DisplayMenu.module.css";
 

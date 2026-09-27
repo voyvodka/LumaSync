@@ -9,7 +9,7 @@ import { IconCheck } from "@/shared/ui/icons";
 import { Popover } from "@/shared/ui/Popover/Popover";
 import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
 import { Toggle } from "@/shared/ui/Toggle";
-import { RowButton, SettingRow } from "../SettingRow";
+import { RowButton, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
 import type { SettingsEnv } from "../settingsEnv";
 import styles from "./UpdateRows.module.css";
 

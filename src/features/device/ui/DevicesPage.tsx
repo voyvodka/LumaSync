@@ -16,7 +16,7 @@ import type {
 } from "@/shared/contracts/roomMap";
 import { shellStore } from "@/features/persistence/shellStore";
 import { useHueOnboarding } from "@/features/hue/useHueOnboarding";
-import { HueBridgesCategory } from "@/features/settings/sections/device/HueBridgesCategory";
+import { HuePage } from "@/features/hue/ui/HuePage";
 import { UsbStripsCategory } from "@/features/settings/sections/device/UsbStripsCategory";
 import { WledCategory } from "@/features/settings/sections/device/WledCategory";
 import { useTransientFlag } from "@/features/settings/sections/device/useTransientFlag";
@@ -43,7 +43,7 @@ export interface DevicesPageProps {
    * count live. Inert when omitted.
    */
   onNavigateToRoomMap?: () => void;
-  /** Forwarded to the Hue card; see `HueBridgesCategoryProps.onStopHue`. */
+  /** Forwarded to the Hue page; see `HuePageProps.onStopHue`. */
   onStopHueOutput: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
   /** Opens a category from outside, e.g. a notice's "Devices" action for Hue. */
   categoryRequest?: DeviceCategoryRequest | null;
@@ -135,6 +135,8 @@ export function DevicesPage({
     };
   }, [setStrips]);
 
+  // A bridge is the Hue row once it is paired; before that it is something found.
+  const pairedBridgeId = hue.credentials !== null ? hue.selectedBridgeId : null;
   const entries: DeviceRailEntry[] | null =
     strips === null
       ? null
@@ -144,9 +146,8 @@ export function DevicesPage({
           connectedPort,
           activeWledIp,
           hue: {
-            // A bridge is the Hue row once it is paired; before that it is something found.
-            bridgeName: hue.credentials !== null ? (hue.selectedBridge?.name ?? null) : null,
-            pairedBridgeId: hue.credentials !== null ? hue.selectedBridgeId : null,
+            bridgeName: pairedBridgeId !== null ? (hue.selectedBridge?.name ?? null) : null,
+            pairedBridgeId,
             streaming: hueActive,
             found: hue.bridges,
           },
@@ -159,11 +160,15 @@ export function DevicesPage({
     setHandledRequest(categoryRequest.nonce);
     setStoredEntry(entryForCategory(entries, categoryRequest.category));
   }
-  // A row that went away (a port unplugged, a strip forgotten) falls back to the first strip.
+  // A row that went away (a port unplugged, a strip forgotten) falls back to the first strip; a
+  // found bridge that was just paired is the Hue row now.
   const activeEntry: DeviceRailEntry | null =
     entries === null
       ? null
       : (entries.find((entry) => entry.id === storedEntry) ??
+        (pairedBridgeId !== null && storedEntry === `bridge:${pairedBridgeId}`
+          ? entries.find((entry) => entry.kind === "hue")
+          : undefined) ??
         entries.find((entry) => entry.id === entryForCategory(entries, "strips")) ??
         null);
   const activeCategory: DeviceCategory = activeEntry ? categoryOfEntry(activeEntry) : "strips";
@@ -300,9 +305,10 @@ export function DevicesPage({
 
         <WledCategory isActive={showsWled} />
 
-        <HueBridgesCategory
+        <HuePage
           isActive={showsHue}
           hue={hue}
+          foundBridge={activeEntry?.kind === "bridge" ? activeEntry.bridge : null}
           channelPlacements={channelPlacements}
           onPositionChange={handlePositionChange}
           syncedPositions={syncedPositions}

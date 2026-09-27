@@ -1,4 +1,6 @@
 export default {
+  hintFor: "About {{label}}",
+  opensInBrowser: "opens in your browser",
   mode: {
     title: "LED mode",
     options: {

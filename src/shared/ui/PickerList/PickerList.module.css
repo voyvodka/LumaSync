@@ -48,6 +48,9 @@
   .option[aria-selected="true"]:hover,
   .option[aria-selected="true"]:focus-visible { background: color-mix(in srgb, var(--lm-amber) 6%, transparent); }
 
+  .option[aria-disabled="true"] { color: var(--lm-ink-faint); cursor: default; }
+  .option[aria-disabled="true"]:hover { background: none; color: var(--lm-ink-faint); }
+
   @keyframes option-in { from { opacity: 0; transform: translateY(4px); } }
 
   :global(:root[data-reduced-motion]) .mark,

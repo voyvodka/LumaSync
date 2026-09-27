@@ -4,20 +4,20 @@
 // afterwards, so the page itself says what happened and what is left to do on
 // the bridge's side.
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { HueForgetStatus } from "@/shared/contracts/hue";
 import type { HueRuntimeStatusView } from "@/features/hue/model/onboardingStatusCodes";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
-import { HueBridgesCategory } from "../HueBridgesCategory";
+import { HuePage } from "../HuePage";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("../../HueChannelMapPanel", () => ({ HueChannelMapPanel: () => null }));
+vi.mock("@/features/settings/sections/HueChannelMapPanel", () => ({ HueChannelMapPanel: () => null }));
 
 const bridge = { id: "bridge-1", ip: "192.168.1.10", name: "Test Bridge" };
 const area = { id: "area-1", name: "Living Room", readiness: { ready: true } } as UseHueOnboardingResult["selectedArea"];
@@ -81,7 +81,7 @@ function hueState(overrides: Partial<UseHueOnboardingResult>): UseHueOnboardingR
 
 function renderCategory(hue: UseHueOnboardingResult) {
   return render(
-    <HueBridgesCategory
+    <HuePage
       isActive
       hue={hue}
       channelPlacements={[]}
@@ -93,16 +93,22 @@ function renderCategory(hue: UseHueOnboardingResult) {
   );
 }
 
+/** Forget sits behind the bridge row's "…". */
+async function forget(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "hue:page.more" }));
+  await user.click(screen.getByRole("button", { name: "hue:page.forgotBridge" }));
+}
+
 const forgotten = (code: HueForgetStatus["code"]): HueForgetStatus => ({ code, message: "", details: null });
 
-describe("HueBridgesCategory — Forget", () => {
+describe("HuePage — Forget", () => {
   it("asks first, and forgets nothing when the answer is Cancel", async () => {
     const forgetBridge = vi.fn(async () => forgotten("HUE_FORGET_OK"));
     const selectBridge = vi.fn<UseHueOnboardingResult["selectBridge"]>();
     const user = userEvent.setup();
     renderCategory(hueState({ forgetBridge, selectBridge }));
 
-    await user.click(screen.getByRole("button", { name: "hue:page.forgotBridge" }));
+    await forget(user);
 
     const dialog = screen.getByTestId("hue-forget-confirm");
     expect(dialog).toHaveTextContent("hue:page.forgetConfirm.body");
@@ -118,13 +124,13 @@ describe("HueBridgesCategory — Forget", () => {
     const user = userEvent.setup();
     renderCategory(hueState({ forgetBridge }));
 
-    await user.click(screen.getByRole("button", { name: "hue:page.forgotBridge" }));
+    await forget(user);
     await user.click(screen.getByTestId("hue-forget-confirm-yes"));
 
     expect(forgetBridge).toHaveBeenCalledTimes(1);
     const note = await screen.findByTestId("hue-forget-result");
     expect(note).toHaveTextContent("hue:page.forgetResult.ok");
-    expect(note).not.toHaveTextContent("HUE_FORGET_OK");
+    expect(within(note).queryByRole("button", { name: "hue:page.codeTip" })).toBeNull();
   });
 
   it.each([
@@ -134,12 +140,13 @@ describe("HueBridgesCategory — Forget", () => {
     const user = userEvent.setup();
     renderCategory(hueState({ forgetBridge: async () => forgotten(code) }));
 
-    await user.click(screen.getByRole("button", { name: "hue:page.forgotBridge" }));
+    await forget(user);
     await user.click(screen.getByTestId("hue-forget-confirm-yes"));
 
     const note = await screen.findByTestId("hue-forget-result");
     expect(note).toHaveTextContent(copy);
-    expect(note).toHaveTextContent(code);
+    await user.click(within(note).getByRole("button", { name: "hue:page.codeTip" }));
+    expect(screen.getByTestId("hue-fault-code")).toHaveTextContent(code);
   });
 
   it("a bridge with no key is only let go of: nothing to confirm, nothing to forget", async () => {
@@ -156,7 +163,7 @@ describe("HueBridgesCategory — Forget", () => {
       }),
     );
 
-    await user.click(screen.getByRole("button", { name: "hue:page.forgotBridge" }));
+    await forget(user);
 
     await waitFor(() => expect(selectBridge).toHaveBeenCalledWith(null));
     expect(screen.queryByTestId("hue-forget-confirm")).toBeNull();

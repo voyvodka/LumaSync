@@ -155,8 +155,6 @@ export default {
       usbTitle: "USB Strips",
       usbSub: "{{count}} connected",
       usbSubNone: "No strips connected",
-      hueTitle: "Hue Bridges",
-      hueSub: "Philips Hue entertainment areas",
     },
     actions: {
       rescan: "Rescan",

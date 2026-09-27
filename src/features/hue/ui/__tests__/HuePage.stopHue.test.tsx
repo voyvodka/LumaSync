@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import { HUE_RUNTIME_TRIGGER_SOURCE, type HueRuntimeState, type HueRuntimeWireStatusCode } from "@/shared/contracts/hue";
 import type { HueRuntimeStatusView } from "@/features/hue/model/onboardingStatusCodes";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
-import { HueBridgesCategory } from "../HueBridgesCategory";
+import { HuePage } from "../HuePage";
 
 const stopHueMock = vi.fn();
 
@@ -18,7 +18,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("@/features/mode/modeApi", () => ({ stopHue: (...args: unknown[]) => stopHueMock(...args) }));
-vi.mock("../../HueChannelMapPanel", () => ({ HueChannelMapPanel: () => null }));
+vi.mock("@/features/settings/sections/HueChannelMapPanel", () => ({ HueChannelMapPanel: () => null }));
 
 const bridge = { id: "bridge-1", ip: "192.168.1.10", name: "Test Bridge" };
 const area = { id: "area-1", name: "Living Room", readiness: { ready: true } } as UseHueOnboardingResult["selectedArea"];
@@ -76,7 +76,7 @@ function hueState(runtimeStatus: HueRuntimeStatusView): UseHueOnboardingResult {
   };
 }
 
-describe("HueBridgesCategory — the card's Hue stops go through onStopHue", () => {
+describe("HuePage — the card's Hue stops go through onStopHue", () => {
   it.each([
     { name: "Stop retrying", label: "hue:page.stopRetrying", status: runtime("Reconnecting", "TRANSIENT_RETRY_SCHEDULED") },
     { name: "Stop Hue", label: "hue:actions.stop", status: runtime("Idle", "HUE_STOP_TIMEOUT_PARTIAL") },
@@ -84,7 +84,7 @@ describe("HueBridgesCategory — the card's Hue stops go through onStopHue", () 
     stopHueMock.mockClear();
     const onStopHue = vi.fn(async () => {});
     render(
-      <HueBridgesCategory
+      <HuePage
         isActive
         hue={hueState(status)}
         channelPlacements={[]}
@@ -100,5 +100,26 @@ describe("HueBridgesCategory — the card's Hue stops go through onStopHue", () 
     expect(onStopHue).toHaveBeenCalledTimes(1);
     expect(onStopHue).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
     expect(stopHueMock).not.toHaveBeenCalled();
+  });
+
+  it("Stop Hue behind … while streaming", () => {
+    const onStopHue = vi.fn(async () => {});
+    render(
+      <HuePage
+        isActive
+        hue={hueState(runtime("Running", "HUE_STREAM_RUNNING"))}
+        channelPlacements={[]}
+        onPositionChange={async () => {}}
+        persistError={false}
+        zones={[]}
+        onStopHue={onStopHue}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "hue:actions.stop" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "hue:page.more" }));
+    fireEvent.click(screen.getByRole("button", { name: "hue:actions.stop" }));
+
+    expect(onStopHue).toHaveBeenCalledExactlyOnceWith(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
   });
 });

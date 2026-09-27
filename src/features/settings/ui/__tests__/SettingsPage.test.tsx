@@ -130,7 +130,7 @@ describe("SettingsPage", () => {
       expect(screen.queryByText("updater:betaChannelDescription")).not.toBeInTheDocument();
 
       await act(async () => {
-        screen.getByRole("button", { name: "settings:hintFor", expanded: false }).click();
+        screen.getByRole("button", { name: "common:hintFor", expanded: false }).click();
       });
 
       expect(screen.getByRole("dialog")).toHaveTextContent("updater:betaChannelDescription");

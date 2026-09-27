@@ -6,7 +6,7 @@ import { shellStore } from "@/features/persistence/shellStore";
 import { getStartupEnabled, setStartup } from "@/features/tray/trayController";
 import { Toggle } from "@/shared/ui/Toggle";
 import { cx } from "@/shared/ui/cx";
-import { RowNote, rowStyles, SettingRow } from "../SettingRow";
+import { RowNote, rowStyles, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
 
 type StartupError = "read" | "write";
 

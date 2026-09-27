@@ -1,0 +1,43 @@
+@layer components {
+  .trigger {
+    display: inline-grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    color: var(--lm-ink-faint);
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .trigger svg { width: 15px; height: 15px; }
+  .trigger:hover,
+  .trigger[aria-expanded="true"] { color: var(--lm-ink); background: var(--lm-panel); }
+  .trigger:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+
+  .list { display: flex; flex-direction: column; }
+
+  .item {
+    display: flex;
+    align-items: center;
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 7px;
+    font-size: 12.5px;
+    white-space: nowrap;
+    text-align: left;
+    color: var(--lm-ink-dim);
+    transition: background var(--lm-dur-quick), color var(--lm-dur-quick);
+  }
+  .item:hover:not(:disabled),
+  .item:focus-visible { outline: none; background: rgb(255 255 255 / 4%); color: var(--lm-ink); }
+  .item:disabled { color: var(--lm-ink-faint); cursor: default; }
+  .danger:hover:not(:disabled),
+  .danger:focus-visible { color: var(--lm-red); }
+
+  :global(:root[data-reduced-motion]) .trigger,
+  :global(:root[data-reduced-motion]) .item { transition: none; }
+
+  @media (forced-colors: active) {
+    .trigger[aria-expanded="true"] { border: 1px solid ButtonText; }
+    .item:focus-visible { outline: 1px solid Highlight; }
+  }
+}

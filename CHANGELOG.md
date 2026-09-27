@@ -67,6 +67,11 @@ https://keepachangelog.com/en/1.1.0/
   with a dot while it is connected, and a USB controller that is plugged in but not added yet as
   "… · Add". The Displays page is gone: the display Ambilight reads is chosen in LED Setup, where
   the layout is drawn on it.
+- Devices → Hue is a few quiet rows instead of a card: the bridge's state in a word with the one
+  thing to do next beside it, the entertainment area (picked from a small list), and what Off does
+  to the lights. Rarer actions such as Forget are behind "…", and an error code is behind the ⓘ at
+  the end of its line. A bridge found on the network has a page of its own with Pair, which says
+  so when it would replace the bridge you have.
 - Settings is split into pages — General, Appearance, Updates, Help and About — listed on the
   left. Each row shows just its name and control; an explanation, where one helps, is behind the
   ⓘ beside the name.

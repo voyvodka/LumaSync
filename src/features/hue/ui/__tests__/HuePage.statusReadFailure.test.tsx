@@ -19,7 +19,7 @@ import {
   runtimeStatus,
   setHealth,
 } from "@/features/hue/__tests__/fakeHueHealth";
-import { HueBridgesCategory } from "../HueBridgesCategory";
+import { HuePage } from "../HuePage";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -31,7 +31,7 @@ vi.mock("@/features/persistence/shellStore", () => ({
 
 vi.mock("@/features/hue/hueHealthApi", async () => (await import("@/features/hue/__tests__/fakeHueHealth")).fakeHueHealthApi);
 
-vi.mock("../../HueChannelMapPanel", () => ({ HueChannelMapPanel: () => null }));
+vi.mock("@/features/settings/sections/HueChannelMapPanel", () => ({ HueChannelMapPanel: () => null }));
 
 const bridge: HueBridgeSummary = { id: "bridge-1", ip: "192.168.1.10", name: "Test Bridge" };
 const credentials: HuePairingCredentials = { username: "app-user", clientKey: "AABBCCDD" };
@@ -90,7 +90,7 @@ function Harness() {
     identifyLights: async () => ({ code: "HUE_IDENTIFY_OK" as const, message: "", details: null }),
   };
   return (
-    <HueBridgesCategory
+    <HuePage
       isActive
       hue={hue}
       channelPlacements={[]}
@@ -109,13 +109,13 @@ const flush = async (ms = 0) => {
 };
 
 function expectNotReady() {
-  expect(screen.queryByText("hue:page.pill.ready")).toBeNull();
-  expect(screen.queryByText("hue:page.pill.streaming")).toBeNull();
+  expect(screen.queryByText("hue:state.idle")).toBeNull();
+  expect(screen.queryByText("hue:state.streaming")).toBeNull();
   expect(screen.getByTestId("hue-status-unavailable")).toHaveTextContent("hue:runtime.statusUnavailable.body");
-  expect(screen.getAllByText("hue:page.pill.checking").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("hue:state.statusUnknown").length).toBeGreaterThan(0);
 }
 
-describe("HueBridgesCategory — a rejected runtime-status read", () => {
+describe("HuePage — a rejected runtime-status read", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     __resetHueHealthStoreForTests();
@@ -150,7 +150,7 @@ describe("HueBridgesCategory — a rejected runtime-status read", () => {
 
     await flush(runtimeStatusRetryDelayMs(3));
     expect(reads()).toBe(4);
-    expect(screen.getByText("hue:page.pill.streaming")).toBeInTheDocument();
+    expect(screen.getByText("hue:state.streaming")).toBeInTheDocument();
     expect(screen.queryByTestId("hue-status-unavailable")).toBeNull();
 
     // Nothing polls once a read has landed: Rust publishes what changes.
@@ -168,7 +168,7 @@ describe("HueBridgesCategory — a rejected runtime-status read", () => {
 
     await flush(runtimeStatusRetryDelayMs(1));
     expect(reads()).toBe(2);
-    expect(screen.getAllByText("hue:page.pill.ready").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("hue:state.idle").length).toBeGreaterThan(0);
     expect(screen.queryByTestId("hue-status-unavailable")).toBeNull();
   });
 });

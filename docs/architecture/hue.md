@@ -5,9 +5,9 @@ protocol limits rather than preferences — changing them breaks the stream rath
 
 Implementation lives in `src-tauri/src/commands/hue/`, the contract in
 `src/shared/contracts/hue.ts`, and the frontend state in `src/features/hue/`.
-**That module holds no UI** — the Hue screens are in
-`device/ui/DevicesPage.tsx` and `HueChannelMapPanel.tsx` — which list channels and own
-the bridge sync, but do not place them; that is the room map's, and only the room map's.
+Its `ui/` holds the bridge page the Devices rail opens (`HuePage.tsx`), and
+`HueChannelMapPanel.tsx` lists the area's channels and owns the bridge sync. Neither places a
+channel; that is the room map's, and only the room map's.
 
 ## Decisions
 
@@ -733,36 +733,38 @@ stream too.
 
 ## Hue state vocabulary
 
-One name per state on every surface — the bridge card's pill, the status bar chip, the Lights row
-and any notice. The card state comes from `deriveHueBridgeCardState`; its row in `HUE_CARD_VIEW`
-picks the pill. Words the table does not use (TR "Entertainment alanı", "kimlik", "hazırlık",
+One name per state on every surface — the bridge row's state word, the status bar chip, the Lights
+row and any notice. The state comes from `deriveHueBridgeCardState`; its row in `HUE_STATE_VIEW`
+(`features/hue/ui/hueStateView.ts`) picks the word, the dot, the note and the one amber action. Words the table does not use (TR "Entertainment alanı", "kimlik", "hazırlık",
 "akış", abbreviations such as "KİM. HATASI") are retired; the area is an **Eğlence alanı** in
 Turkish and the pairing secret is the **key / anahtar**, never "credentials". Turkish copy is
 informal (**sen**) throughout.
 
-| Card state | Pill (EN / TR) | Means |
+| State | Word (EN / TR) | Means |
 |---|---|---|
-| `unpaired` | NOT PAIRED / EŞLEŞMEDİ | A bridge is selected and no key exists for it yet. Never "credentials expired". |
-| `checkingCredentials` | CHECKING / KONTROL | A saved key the bridge has not answered about yet. |
-| `pairing`, `pairingLinkButton` | AWAITING / BEKLİYOR | A pairing run, waiting for the link button. |
-| `pairingTimedOut` | TIMED OUT / SÜRE DOLDU | The link-button window ran out. |
-| `pairingDeferred` | WAIT / BEKLE | The bridge asked us to wait (busy, rate-limited). |
-| `pairingFailed` | FAILED / BAŞARISIZ | The pairing request was refused. |
-| `authError` | RE-PAIR / YENİDEN EŞLE | A saved key the bridge refuses (the 401/403 re-pair rule). |
-| `offline` | Unreachable / Ulaşılamıyor | The bridge does not answer. Outranks every card but a running stream, including a gate-blocked start. |
-| `areaSelect` | PAIRED / EŞLEŞTİ | Paired, no entertainment area chosen. |
-| `areaBusy` | IN USE / KULLANIMDA | Another app streams to the area (`HUE_STREAM_NOT_READY_ACTIVE_STREAMER` in the readiness reasons). |
-| `gateBlocked` | AWAITING / BEKLİYOR | A start the readiness gate refused for a reachable, free area. |
-| `stale` | AWAITING / BEKLİYOR | The last readiness check is too old to start on. |
-| `idle` | READY / HAZIR | Paired, area chosen, free, readiness current. |
-| `streaming` | STREAMING / YAYINDA | Our stream runs. |
-| `reconnecting` | RECONNECTING / BAĞLANIYOR | Our stream dropped and the runtime is retrying. |
-| `streamFailed`, `stopPartial` | FAILED / BAŞARISIZ | The runtime gave up, or a stop timed out. |
-| `statusUnknown` | CHECKING / KONTROL | The runtime status read itself failed. |
+| `unpaired` | Not paired / Eşleşmedi | A bridge is selected and no key exists for it yet. Never "credentials expired". |
+| `checkingCredentials` | Checking… / Kontrol ediliyor… | A saved key the bridge has not answered about yet. |
+| `pairing` | Pairing… / Eşleştiriliyor… | A pairing run has started. |
+| `pairingLinkButton` | Press the button / Düğmeye bas | A pairing run, waiting for the link button. |
+| `pairingTimedOut` | Timed out / Süre doldu | The link-button window ran out. |
+| `pairingDeferred` | Try again soon / Biraz sonra dene | The bridge asked us to wait (busy, rate-limited). |
+| `pairingFailed` | Pairing failed / Eşleşme başarısız | The pairing request was refused. |
+| `authError` | Key refused / Anahtar geçersiz | A saved key the bridge refuses (the 401/403 re-pair rule). |
+| `offline` | Unreachable / Ulaşılamıyor | The bridge does not answer. Outranks every state but a running stream, including a gate-blocked start. |
+| `areaSelect` | Paired / Eşleşti | Paired, no entertainment area chosen. |
+| `areaBusy` | Area in use / Alan kullanımda | Another app streams to the area (`HUE_STREAM_NOT_READY_ACTIVE_STREAMER` in the readiness reasons). |
+| `gateBlocked` | Couldn't start / Başlatılamadı | A start the readiness gate refused for a reachable, free area. |
+| `stale` | Needs a check / Doğrulanmalı | The last readiness check is too old to start on. |
+| `idle` | Ready / Hazır | Paired, area chosen, free, readiness current. |
+| `streaming` | Streaming / Yayında | Our stream runs. |
+| `reconnecting` | Reconnecting… / Yeniden bağlanıyor… | Our stream dropped and the runtime is retrying. |
+| `streamFailed` | Stopped / Durdu | The runtime gave up. |
+| `stopPartial` | Didn't fully stop / Tam durmadı | A stop timed out. |
+| `statusUnknown` | Status unknown / Durum okunamadı | The runtime status read itself failed. |
 
-A card's raw-code caption is a failure's code: runtime states caption the runtime's code, and a
-success code (`HUE_DISCOVERY_OK`, `…_VALID`, `…_READY`) never captions a failure card
-(`failureCaptionCode` in `hueCardView.tsx`).
+The code behind a note's ⓘ is a failure's code: runtime states show the runtime's code, and a
+success code (`HUE_DISCOVERY_OK`, `…_VALID`, `…_READY`) never stands for a failure
+(`failureCaptionCode` in `hueStateView.ts`).
 
 ## Gotchas
 
