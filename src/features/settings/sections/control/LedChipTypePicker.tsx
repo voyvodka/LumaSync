@@ -38,6 +38,7 @@ import {
 } from "@/shared/contracts/device";
 import { useAdvertisedPixelLayout } from "@/features/device/useAdvertisedFirmwareProfile";
 import { shellStore } from "@/features/persistence/shellStore";
+import { primaryStripOf } from "@/features/strips/model/stripSelectors";
 
 const DEFAULT_CHIP_TYPE: LedChipType = LED_CHIP_TYPE.WS2812B_GRB;
 
@@ -139,7 +140,8 @@ export function LedChipTypePicker({
       .load()
       .then((state) => {
         if (cancelled) return;
-        if (state.selectedChipType) setChipType(state.selectedChipType);
+        const saved = primaryStripOf(state)?.hardware.chipType;
+        if (saved) setChipType(saved);
       })
       .catch((error) => {
         console.error("[LumaSync] LedChipTypePicker hydrate failed:", error);

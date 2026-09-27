@@ -27,6 +27,7 @@ import {
   type WledRestoreOutcome,
   type WledSinkRestoreDeps,
 } from "./wledSinkRestore";
+import { savedWledSink } from "@/features/strips/model/stripSelectors";
 
 /** Guards StrictMode's double-mount, which would otherwise probe and connect twice. */
 let restoreStarted = false;
@@ -114,7 +115,7 @@ export function useActiveWledSink(
         loadShellState(),
       ]);
       setActiveWledIp(status.sink?.ip ?? null);
-      setSavedSink(stored.lastWledSink ?? null);
+      setSavedSink(savedWledSink(stored) ?? null);
     } catch (err) {
       console.error("[LumaSync] useActiveWledSink refresh failed:", err);
     } finally {
@@ -135,7 +136,7 @@ export function useActiveWledSink(
     async (device: WledDeviceInfo) => {
       try {
         const stored = await loadShellState();
-        const previous = stored.lastWledSink;
+        const previous = savedWledSink(stored);
         // Rust defaults an omitted port/protocol to DDP:4048; the picker has
         // no transport UI yet, so a prior choice is the only other source.
         const sink: WledUdpSinkConfig = {

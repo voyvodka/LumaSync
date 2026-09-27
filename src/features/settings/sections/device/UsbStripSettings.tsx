@@ -6,6 +6,7 @@ import type { FirmwareProfile, LedChipType } from "@/shared/contracts/device";
 import { FirmwareProfilePicker } from "../control/FirmwareProfilePicker";
 import { LedChipTypePicker } from "../control/LedChipTypePicker";
 import { LedColorOrderControl } from "../control/LedColorOrderControl";
+import { primaryStripOf } from "@/features/strips/model/stripSelectors";
 
 interface StoredStripSettings {
   firmwareProfile?: FirmwareProfile;
@@ -34,8 +35,9 @@ export function UsbStripSettings({ localTransport }: UsbStripSettingsProps) {
       .load()
       .then((state) => {
         if (cancelled) return;
-        setFirmwareProfile(state.firmwareProfile);
-        setStored({ firmwareProfile: state.firmwareProfile, chipType: state.selectedChipType });
+        const { firmwareProfile, chipType } = primaryStripOf(state)?.hardware ?? {};
+        setFirmwareProfile(firmwareProfile);
+        setStored({ firmwareProfile, chipType });
       })
       .catch((error: unknown) => {
         console.error("[LumaSync] UsbStripSettings hydrate failed:", error);

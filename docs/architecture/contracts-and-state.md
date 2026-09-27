@@ -219,6 +219,22 @@ starts Off, only while nothing runs, so a reload keeps lights the user has on). 
 failed save (`READ_BY_RUST`), and each has a Rust accessor in `shell_state.rs` whose test uses the
 same inputs as `shellPreferences.test.ts`, so both sides read a stored value alike.
 
+**What describes the local output is read as strips.** A strip is one run of LEDs behind one
+controller, with its transport, hardware (firmware profile, chip, colour order), layout and colour
+correction (`contracts/strips.ts`). The saved state still stores one output in flat keys —
+`lastSuccessfulPort`, `lastWledSink`, `ledCalibration`, `firmwareProfile`, `selectedChipType`,
+`ledColorOrder` — and both sides derive the strips from them by one rule: `stripsFromLegacy`
+(`features/strips/model/legacyStrips.ts`) and `strips_from_legacy` (`models/led_strips.rs`),
+held together by `legacyStrips.parity.json`. Every app reader goes through the primary strip (the
+first enabled one) or the saved transport of each kind (`features/strips/model/stripSelectors.ts`),
+never the flat keys, so moving the storage to a list of strips changes where the rule reads from.
+The dev mock (`mock/`) still reads and writes the flat keys and moves with the storage. Colour
+correction is still read from the top-level key: one correction plan serves Hue as well as the
+strip. An install with only a Hue pairing and colour correction derives no strip; one that also
+saved a chip, firmware profile or colour order does, with no transport. When strips get a key of
+their own, `SETTINGS_THE_MODE_READS` (`lighting_mode/outputs.rs`) must list it, or a save stops
+re-applying the running mode.
+
 ## Gotchas
 
 - **A wire union is checked for *equality* with the emitted set, not containment.** `verify:shell-contracts` harvests the codes Rust puts on each status shape and fails in both directions — an emitted code missing from the union, and a union member no producer emits. Containment alone is what let a declared-but-unemitted member sit in a union indefinitely.

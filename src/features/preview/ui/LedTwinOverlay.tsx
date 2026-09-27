@@ -35,6 +35,7 @@ import {
 } from "../ledColor";
 import { useLedPreviewFrame } from "../state/useLedPreviewFrame";
 import { LedGlowDot } from "./LedGlowDot";
+import { primaryStripOf } from "@/features/strips/model/stripSelectors";
 
 export interface LedTwinOverlayProps {
   /** Display this overlay mirrors. Threaded from the Rust-injected global. */
@@ -111,8 +112,9 @@ export function LedTwinOverlay({ displayId, scope = "test" }: LedTwinOverlayProp
       .load()
       .then((state) => {
         if (!alive) return;
-        if (state.ledCalibration) {
-          setCalibration(normalizeLedCalibrationConfig(state.ledCalibration) ?? null);
+        const layout = primaryStripOf(state)?.layout;
+        if (layout) {
+          setCalibration(normalizeLedCalibrationConfig(layout) ?? null);
         }
       })
       .catch((error) => {

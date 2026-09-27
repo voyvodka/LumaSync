@@ -20,6 +20,7 @@ use super::hue_intensity::LightingSmoothingPreset;
 use super::led_calibration::LedCalibrationConfig;
 use super::led_output::{ColorCorrectionConfig, FirmwareProfile, LedChipType, LedColorOrder};
 use super::lighting_mode::{AmbilightPayload, LightingModeConfig};
+use crate::models::led_strips::{self, LedStrip, StripTransport};
 use crate::models::room_map::{RoomDimensions, TvAnchorPlacement};
 
 pub const SHELL_STATE_FILE: &str = "shell-state.json";
@@ -70,8 +71,18 @@ impl PersistedShellState {
         read_value(self.0.get(key)?, key)
     }
 
+    /// Every strip the saved setup describes.
+    pub fn strips(&self) -> Vec<LedStrip> {
+        led_strips::strips_from_legacy(&self.0)
+    }
+
+    /// The strip a setting with no strip named applies to.
+    pub fn primary_strip(&self) -> Option<LedStrip> {
+        led_strips::primary_strip(self.strips())
+    }
+
     pub fn led_calibration(&self) -> Option<LedCalibrationConfig> {
-        self.read("ledCalibration")
+        read_value(self.primary_strip()?.layout.as_ref()?, "ledCalibration")
     }
 
     /// `lightingMode.ambilight` — the last Ambilight settings the user saved.
@@ -84,24 +95,34 @@ impl PersistedShellState {
 
     /// Clamped as the frontend's normaliser clamps it, so a value an older
     /// build saved still runs rather than failing the mode's range check.
+    /// Read from the top-level key, not a strip: one plan corrects Hue too.
     pub fn color_correction(&self) -> Option<ColorCorrectionConfig> {
         self.read("colorCorrection")
             .map(super::lighting_mode::config_check::clamp_color_correction)
     }
 
     pub fn firmware_profile(&self) -> Option<FirmwareProfile> {
-        self.read("firmwareProfile")
+        read_value(
+            self.primary_strip()?.hardware.firmware_profile.as_ref()?,
+            "firmwareProfile",
+        )
     }
 
     /// The chip picker persists under `selectedChipType`; the IPC field name
     /// `chipType` is not a shell-state key.
     pub fn chip_type(&self) -> Option<LedChipType> {
-        self.read("selectedChipType")
+        read_value(
+            self.primary_strip()?.hardware.chip_type.as_ref()?,
+            "selectedChipType",
+        )
     }
 
     /// Persisted as `ledColorOrder`; `colorOrder` is only the IPC field name.
     pub fn color_order(&self) -> Option<LedColorOrder> {
-        self.read("ledColorOrder")
+        read_value(
+            self.primary_strip()?.hardware.color_order.as_ref()?,
+            "ledColorOrder",
+        )
     }
 
     pub fn selected_display_id(&self) -> Option<String> {
@@ -160,12 +181,17 @@ impl PersistedShellState {
             .and_then(|id| read_value(id, "lastHueBridge.id"))
     }
 
-    /// `lastWledSink.ip` — the WLED device a launch binds again.
+    /// The WLED device a launch binds again, whether or not its strip is the
+    /// primary one.
     pub fn saved_wled_ip(&self) -> Option<String> {
-        self.0
-            .get("lastWledSink")
-            .and_then(|sink| sink.get("ip"))
-            .and_then(|ip| read_value(ip, "lastWledSink.ip"))
+        self.strips()
+            .into_iter()
+            .find_map(|strip| match strip.transport {
+                Some(StripTransport::Wled { sink }) => {
+                    read_value(sink.get("ip")?, "lastWledSink.ip")
+                }
+                _ => None,
+            })
     }
 
     pub fn lighting_intensity_preset(&self) -> Option<LightingSmoothingPreset> {

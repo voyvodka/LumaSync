@@ -19,6 +19,7 @@ import {
   type IdentifyState,
   type ProbeAnswer,
 } from "./useColorOrderIdentify";
+import { primaryStripOf } from "@/features/strips/model/stripSelectors";
 
 const ORDER_OPTIONS: LedColorOrder[] = Object.values(LED_COLOR_ORDER);
 
@@ -80,7 +81,7 @@ export function LedColorOrderControl({
       .load()
       .then((state) => {
         if (cancelled) return;
-        setOrder(normalizeColorOrder(state.ledColorOrder) ?? DEFAULT_LED_COLOR_ORDER);
+        setOrder(normalizeColorOrder(primaryStripOf(state)?.hardware.colorOrder) ?? DEFAULT_LED_COLOR_ORDER);
       })
       .catch((error) => {
         console.error("[LumaSync] LedColorOrderControl hydrate failed:", error);

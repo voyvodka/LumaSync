@@ -50,6 +50,7 @@ import { Toggle } from "@/shared/ui/Toggle";
 import { SolidColorPanel } from "./control/SolidColorPanel";
 import { ColorCorrectionPanel } from "./control/ColorCorrectionPanel";
 import { LightingSmoothingPresetControl } from "./control/LightingSmoothingPresetControl";
+import { primaryStripOf } from "@/features/strips/model/stripSelectors";
 
 const selectLinkBudget = (health: RuntimeHealth) => ({
   linkConstrained: health.linkConstrained,
@@ -182,7 +183,7 @@ export function LightsSection({
       .then((state) => {
         if (cancelled) return;
         setInitialColorCorrection(state.colorCorrection);
-        setFirmwareProfile(state.firmwareProfile);
+        setFirmwareProfile(primaryStripOf(state)?.hardware.firmwareProfile);
         setInitialHueIntensityPreset(state.lightingIntensityPreset);
         setAdvancedHydrated(true);
       })
