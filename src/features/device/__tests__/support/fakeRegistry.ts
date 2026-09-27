@@ -31,16 +31,20 @@ export interface FakeRegistry {
   /** Let go of, or another output took its place. */
   release: (portName: string) => void;
   bindWled: (ip: string, ledCount?: number) => void;
+  forgetWled: () => void;
 }
 
 /**
- * Rust's local-output registry for tests: one output at a time (a connect or a WLED bind evicts the
- * rest), a revision per change, and an event per change to whoever listens.
+ * Rust's local-output registry for tests: several outputs can be connected and the earliest connected
+ * is driven (a connect never moves it), a revision per change, and an event per change to whoever
+ * listens.
  */
 export function fakeRegistry(initial: { connected?: string } = {}): FakeRegistry {
   let revision = 0;
   const serial = new Map<string, SerialOutputStatus>();
   let wled: { ip: string; ledCount: number } | null = null;
+  // Connect order, earliest first: `serial:<port>` and `wled`.
+  let order: string[] = [];
   const listeners = new Set<(snapshot: LocalOutputsSnapshot) => void>();
 
   const snapshot = (): LocalOutputsSnapshot => {
@@ -48,12 +52,13 @@ export function fakeRegistry(initial: { connected?: string } = {}): FakeRegistry
       .sort((a, b) => a.portName.localeCompare(b.portName))
       .map((entry) => ({ kind: "serial" as const, ...entry }));
     if (wled) outputs.push({ kind: "wled", ip: wled.ip, ledCount: wled.ledCount, connected: true });
-    const connected = [...serial.values()].find((entry) => entry.connected);
-    const driven = wled
-      ? ({ kind: "wled", ip: wled.ip } as const)
-      : connected
-        ? ({ kind: "serial", portName: connected.portName } as const)
-        : null;
+    const first = order.find((key) => (key === "wled" ? wled !== null : serial.get(key.slice(7))?.connected));
+    const driven =
+      first === undefined
+        ? null
+        : first === "wled" && wled
+          ? ({ kind: "wled", ip: wled.ip } as const)
+          : ({ kind: "serial", portName: first.slice(7) } as const);
     return { revision, outputs, driven };
   };
 
@@ -71,15 +76,12 @@ export function fakeRegistry(initial: { connected?: string } = {}): FakeRegistry
     updatedAtUnixMs: revision + 1,
   });
 
-  const evict = (except?: string) => {
-    for (const [name, current] of serial) {
-      if (current.connected && name !== except) serial.set(name, entry(name, false, SERIAL_OUTPUT_STATUS.DISCONNECTED));
-    }
+  const leave = (key: string) => {
+    order = order.filter((held) => held !== key);
   };
 
   const connect = (portName: string) => {
-    evict(portName);
-    wled = null;
+    if (!serial.get(portName)?.connected) order.push(`serial:${portName}`);
     serial.set(portName, entry(portName, true, SERIAL_CONNECT_STATUS.OK));
     changed();
   };
@@ -123,16 +125,27 @@ export function fakeRegistry(initial: { connected?: string } = {}): FakeRegistry
       const current = serial.get(portName);
       if (!current?.connected) return;
       serial.set(portName, entry(portName, false, DEVICE_ERROR_CODES.PORT_NOT_FOUND));
+      leave(`serial:${portName}`);
       changed();
     },
     release: (portName) => {
       if (!serial.get(portName)?.connected) return;
       serial.set(portName, entry(portName, false, SERIAL_OUTPUT_STATUS.DISCONNECTED));
+      leave(`serial:${portName}`);
       changed();
     },
     bindWled: (ip, ledCount = 60) => {
-      evict();
+      if (wled?.ip !== ip) {
+        leave("wled");
+        order.push("wled");
+      }
       wled = { ip, ledCount };
+      changed();
+    },
+    forgetWled: () => {
+      if (wled === null) return;
+      wled = null;
+      leave("wled");
       changed();
     },
   };

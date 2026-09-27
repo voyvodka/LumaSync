@@ -1,7 +1,8 @@
 //! The local outputs — USB serial strips and the bound WLED device — as one registry of hardware
 //! facts. It replaces a status that every connect attempt overwrote and a sink slot that a failed
-//! serial attempt emptied. Serial and WLED still evict each other (one local output at a time) until
-//! the worker drives several; see docs/architecture/device-output.md.
+//! serial attempt emptied. Several can be connected at once; until the worker drives several, the
+//! earliest connected of them is the one the "usb" channel drives. See
+//! docs/architecture/device-output.md.
 
 use std::collections::BTreeMap;
 use std::sync::{Mutex, MutexGuard};
@@ -64,9 +65,9 @@ pub struct LocalOutputsSnapshot {
     pub driven: Option<DrivenOutputRef>,
 }
 
-/// What the "usb" channel drives. A bound WLED device wins over a connected serial port — with
-/// eviction both at once only happens for the instant between two writes, and the order is the one
-/// every planner used.
+/// What the "usb" channel drives: the earliest connected of the local outputs. A connect never moves
+/// it — a strip lighting a running mode keeps lighting it when another is connected — only a leave
+/// does.
 #[derive(Clone, Debug, PartialEq)]
 pub enum DrivenLocal {
     Serial(String),
@@ -87,12 +88,17 @@ impl DrivenLocal {
 /// What `serial_disconnected` replaced.
 pub struct DisconnectedSerial {
     entry: SerialOutputStatus,
+    connected_at: u64,
 }
 
 struct Inner {
     revision: u64,
     serial: BTreeMap<String, SerialOutputStatus>,
     wled: Option<WledSinkConfig>,
+    /// Connect order: stamped when an output becomes connected, so `driven_in` picks the earliest.
+    next_connect: u64,
+    serial_connected_at: BTreeMap<String, u64>,
+    wled_connected_at: u64,
 }
 
 pub struct LocalOutputRegistry {
@@ -106,6 +112,9 @@ impl Default for LocalOutputRegistry {
                 revision: 0,
                 serial: BTreeMap::new(),
                 wled: None,
+                next_connect: 0,
+                serial_connected_at: BTreeMap::new(),
+                wled_connected_at: 0,
             }),
         }
     }
@@ -147,16 +156,18 @@ impl Inner {
         self.snapshot()
     }
 
-    /// Every connected serial port but `except` stops being connected: one local output at a time.
-    fn evict_serial(&mut self, except: Option<&str>, by: &str) {
+    fn stamp(&mut self) -> u64 {
+        self.next_connect += 1;
+        self.next_connect
+    }
+
+    /// Every connected serial port stops being connected: the app is shutting down.
+    fn release_all_serial(&mut self, by: &str) {
         let now = now_unix_ms();
         for entry in self.serial.values_mut() {
-            if entry.connected && Some(entry.port_name.as_str()) != except {
+            if entry.connected {
                 entry.connected = false;
-                entry.status = disconnected_status(
-                    "Another output took the strip's place.",
-                    Some(format!("replaced by {by}")),
-                );
+                entry.status = disconnected_status("Disconnected.", Some(by.to_string()));
                 entry.updated_at_unix_ms = now;
             }
         }
@@ -164,14 +175,25 @@ impl Inner {
 }
 
 fn driven_in(inner: &Inner) -> Option<DrivenLocal> {
-    if let Some(config) = inner.wled {
-        return Some(DrivenLocal::Wled(config));
-    }
-    inner
+    let serial = inner
         .serial
         .values()
-        .find(|entry| entry.connected)
-        .map(|entry| DrivenLocal::Serial(entry.port_name.clone()))
+        .filter(|entry| entry.connected)
+        .map(|entry| {
+            let at = inner
+                .serial_connected_at
+                .get(&entry.port_name)
+                .copied()
+                .unwrap_or(u64::MAX);
+            (at, DrivenLocal::Serial(entry.port_name.clone()))
+        });
+    let wled = inner
+        .wled
+        .map(|config| (inner.wled_connected_at, DrivenLocal::Wled(config)));
+    serial
+        .chain(wled)
+        .min_by_key(|(at, _)| *at)
+        .map(|(_, driven)| driven)
 }
 
 impl LocalOutputRegistry {
@@ -182,12 +204,16 @@ impl LocalOutputRegistry {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    /// A connect that succeeded. Evicts the other local outputs.
+    /// A connect that succeeded. The other local outputs stay connected; a port connected again keeps
+    /// its place in the connect order.
     pub fn serial_connected(&self, status: SerialConnectionStatus) -> LocalOutputsSnapshot {
         let mut inner = self.lock();
         if let Some(port) = status.output_port().map(str::to_owned) {
-            inner.evict_serial(Some(&port), &format!("port={port:?}"));
-            inner.wled = None;
+            let already = inner.serial.get(&port).is_some_and(|entry| entry.connected);
+            if !already {
+                let at = inner.stamp();
+                inner.serial_connected_at.insert(port.clone(), at);
+            }
             inner.serial.insert(
                 port.clone(),
                 SerialOutputStatus {
@@ -229,12 +255,36 @@ impl LocalOutputRegistry {
         inner.changed()
     }
 
-    /// A WLED device bound to the "usb" channel. Evicts a connected serial port.
+    /// A WLED device bound to the "usb" channel. Connected strips stay connected; the same device bound
+    /// again keeps its place in the connect order, a different one takes a new place.
     pub fn wled_bound(&self, config: WledSinkConfig) -> LocalOutputsSnapshot {
         let mut inner = self.lock();
-        inner.evict_serial(None, &format!("wled {}", config.ip));
+        if inner.wled.is_none_or(|bound| bound.ip != config.ip) {
+            inner.wled_connected_at = inner.stamp();
+        }
         inner.wled = Some(config);
         inner.changed()
+    }
+
+    /// Binds `config` again in the place it had, for a forget the lighting refused. `None` when
+    /// another device was bound meanwhile.
+    pub fn restore_wled(
+        &self,
+        config: WledSinkConfig,
+        connected_at: u64,
+    ) -> Option<LocalOutputsSnapshot> {
+        let mut inner = self.lock();
+        if inner.wled.is_some() {
+            return None;
+        }
+        inner.wled = Some(config);
+        inner.wled_connected_at = connected_at;
+        Some(inner.changed())
+    }
+
+    /// Where the bound WLED device stands in the connect order, for `restore_wled`.
+    pub fn wled_connected_at(&self) -> u64 {
+        self.lock().wled_connected_at
     }
 
     /// Unbinds the WLED device at `ip`; `None` when a different one (or none) is bound.
@@ -277,6 +327,7 @@ impl LocalOutputRegistry {
         port: &str,
     ) -> Option<(LocalOutputsSnapshot, DisconnectedSerial)> {
         let mut inner = self.lock();
+        let connected_at = inner.serial_connected_at.get(port).copied().unwrap_or(0);
         let entry = inner.serial.get_mut(port).filter(|entry| entry.connected)?;
         let before_entry = entry.clone();
         entry.connected = false;
@@ -286,20 +337,23 @@ impl LocalOutputRegistry {
             inner.changed(),
             DisconnectedSerial {
                 entry: before_entry,
+                connected_at,
             },
         ))
     }
 
-    /// Puts back a disconnect the lighting refused, unless another output was connected since.
+    /// Puts back a disconnect the lighting refused, in its old place in the connect order — unless the
+    /// port was connected again since, which is newer than what this would restore.
     pub fn restore_serial(&self, previous: DisconnectedSerial) -> Option<LocalOutputsSnapshot> {
         let mut inner = self.lock();
-        let taken = inner.wled.is_some() || inner.serial.values().any(|entry| entry.connected);
-        if taken {
+        let port = previous.entry.port_name.clone();
+        if inner.serial.get(&port).is_some_and(|entry| entry.connected) {
             return None;
         }
         inner
-            .serial
-            .insert(previous.entry.port_name.clone(), previous.entry);
+            .serial_connected_at
+            .insert(port.clone(), previous.connected_at);
+        inner.serial.insert(port, previous.entry);
         Some(inner.changed())
     }
 
@@ -307,7 +361,7 @@ impl LocalOutputRegistry {
     pub fn clear(&self) {
         let mut inner = self.lock();
         inner.wled = None;
-        inner.evict_serial(None, "shutdown");
+        inner.release_all_serial("shutdown");
         inner.changed();
     }
 
@@ -344,12 +398,23 @@ impl LocalOutputRegistry {
             .is_some_and(|entry| entry.connected && entry.updated_at_unix_ms >= listed_at)
     }
 
+    #[cfg(test)]
     pub fn connected_serial_port(&self) -> Option<String> {
         self.lock()
             .serial
             .values()
             .find(|entry| entry.connected)
             .map(|entry| entry.port_name.clone())
+    }
+
+    /// Every connected serial port: the watcher checks each one on every poll.
+    pub fn connected_serial_ports(&self) -> Vec<String> {
+        self.lock()
+            .serial
+            .values()
+            .filter(|entry| entry.connected)
+            .map(|entry| entry.port_name.clone())
+            .collect()
     }
 
     pub fn wled_config(&self) -> Option<WledSinkConfig> {
@@ -443,12 +508,8 @@ pub(crate) async fn disconnect_serial_with<R: tauri::Runtime>(
 ) -> SerialDisconnectResult {
     use tauri::Manager;
 
-    use super::lighting_mode::outputs::{apply_outputs_with, ApplyOutputsRequest, LightingOrigin};
-    use super::lighting_mode::snapshot::OutputTarget;
-    use super::lighting_mode::LightingRuntimeState;
-
     let registry = app.state::<LocalOutputRegistry>();
-    // Marked first, so no mode applied while the lighting lets go plans this port again.
+    // Marked first, so the lighting re-plans onto what remains rather than onto this port again.
     let Some((snapshot, previous)) = registry.serial_disconnected(port) else {
         return disconnect_result(
             port,
@@ -459,54 +520,17 @@ pub(crate) async fn disconnect_serial_with<R: tauri::Runtime>(
     };
     announce(app, snapshot);
 
-    let lighting = app.state::<LightingRuntimeState>();
-    let before = lighting.snapshot.read();
-    let selected = before.selected_targets;
-    let lit = before.active_targets.contains(&OutputTarget::Usb);
-    if selected.contains(&OutputTarget::Usb) {
-        let rest = selected
-            .into_iter()
-            .filter(|target| *target != OutputTarget::Usb)
-            .map(|target| target.as_str().to_string())
-            .collect();
-        let request = ApplyOutputsRequest {
-            mode: None,
-            targets: Some(rest),
-            origin: LightingOrigin::UsbUnplug,
-        };
-        // A refusal answers `Ok` too: what counts is whether the strip is still driven.
-        let refusal = match apply_outputs_with(app, request).await {
-            Err(error) => Some(error),
-            Ok(result) if result.snapshot.active_targets.contains(&OutputTarget::Usb) => Some(
-                format!("{}: the mode still drives the strip", result.status.code),
-            ),
-            Ok(_) => None,
-        };
-        if let Some(error) = refusal {
-            log::warn!("[serial-disconnect] the lighting did not let go of {port}: {error}");
-            if let Some(snapshot) = registry.restore_serial(previous) {
-                announce(app, snapshot);
-            }
-            return disconnect_result(
-                port,
-                "SERIAL_DISCONNECT_FAILED",
-                "The strip was not disconnected.",
-                Some(error),
-            );
+    if let Err(error) = let_go(app, &Left::Serial(port.to_string())).await {
+        log::warn!("[serial-disconnect] the lighting did not let go of {port}: {error}");
+        if let Some(snapshot) = registry.restore_serial(previous) {
+            announce(app, snapshot);
         }
-    }
-    // Stopping only stops writing; the strip would hold its last frame. Nothing drives it now, so
-    // no worker frame can follow the black one.
-    if lit && registry.connected_serial_port().is_none() {
-        if let Err(reason) =
-            super::lighting_mode::transition::blank_serial_port(app, port, &before.mode)
-        {
-            log::warn!("[serial-disconnect] {port} kept its last frame: {reason}");
-        }
-    }
-    // A connect of the same port meanwhile owns the cached writer now.
-    if registry.connected_serial_port().as_deref() != Some(port) {
-        lighting.forget_serial_session(port);
+        return disconnect_result(
+            port,
+            "SERIAL_DISCONNECT_FAILED",
+            "The strip was not disconnected.",
+            Some(error),
+        );
     }
     log::info!("[serial-disconnect] {port} disconnected");
     disconnect_result(
@@ -515,6 +539,86 @@ pub(crate) async fn disconnect_serial_with<R: tauri::Runtime>(
         "The strip was disconnected.",
         None,
     )
+}
+
+/// A local output that stopped being connected, for `let_go`.
+pub(crate) enum Left {
+    Serial(String),
+    Wled(WledSinkConfig),
+}
+
+/// Runs after `left` stopped being connected in the registry. A mode writing to it moves onto what
+/// remains — the earliest connected output — or, with nothing left, drops `usb` as an unplug does
+/// (session only; a mode it ran alone ends as Off does). Then a strip it lit is painted black — a
+/// strip holds its last frame, a Solid colour indefinitely — and a WLED device it lit is switched
+/// off. `Err` when the lighting still writes to `left`.
+pub(crate) async fn let_go<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    left: &Left,
+) -> Result<(), String> {
+    use super::lighting_mode::outputs::{
+        apply_outputs_with, power_off_left_wled, refresh_running_with, ApplyOutputsRequest,
+        LightingOrigin,
+    };
+    use super::lighting_mode::snapshot::OutputTarget;
+    use super::lighting_mode::LightingRuntimeState;
+    use tauri::Manager;
+
+    let registry = app.state::<LocalOutputRegistry>();
+    let lighting = app.state::<LightingRuntimeState>();
+    let drives = |lighting: &LightingRuntimeState| match left {
+        Left::Serial(port) => lighting.drives_serial(port),
+        Left::Wled(config) => lighting.drives_wled(config.ip),
+    };
+    let drove = drives(&lighting);
+    let before = lighting.snapshot.read();
+
+    if drove {
+        let moved = if registry.driven().is_some() {
+            refresh_running_with(app).await.map(|_| ())
+        } else {
+            let rest = before
+                .selected_targets
+                .iter()
+                .filter(|target| **target != OutputTarget::Usb)
+                .map(|target| target.as_str().to_string())
+                .collect();
+            let request = ApplyOutputsRequest {
+                mode: None,
+                targets: Some(rest),
+                origin: LightingOrigin::UsbUnplug,
+            };
+            apply_outputs_with(app, request).await.map(|_| ())
+        };
+        moved?;
+        // A refusal can answer `Ok` too: what counts is whether the output is still written to.
+        if drives(&lighting) {
+            return Err("the running mode still drives it".to_string());
+        }
+    }
+
+    match left {
+        Left::Serial(port) => {
+            // Moving onto another strip already painted it black through its session.
+            if drove && lighting.holds_port(port) {
+                if let Err(reason) =
+                    super::lighting_mode::transition::blank_serial_port(app, port, &before.mode)
+                {
+                    log::warn!("[let-go] {port} kept its last frame: {reason}");
+                }
+            }
+            // A connect of the same port meanwhile owns the cached writer now.
+            if !registry.connected_serial_ports().iter().any(|p| p == port) {
+                lighting.forget_serial_session(port);
+            }
+        }
+        Left::Wled(config) => {
+            if drove {
+                power_off_left_wled(app, config.ip).await;
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

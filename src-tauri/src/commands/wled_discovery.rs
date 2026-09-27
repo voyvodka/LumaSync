@@ -481,8 +481,8 @@ fn discover_wled_devices_blocking(request: WledDiscoveryRequest) -> WledDiscover
     }
 }
 
-/// Bind a WLED device to the "usb" output channel, evicting a connected serial
-/// strip or another WLED device.
+/// Bind a WLED device to the "usb" output channel, replacing another WLED device. A connected strip
+/// stays connected; the earliest connected output is the one driven.
 // Off the main thread: binding the probe socket is a syscall the main thread
 // need not wait on.
 #[tauri::command]
@@ -589,10 +589,6 @@ pub(crate) async fn forget_wled_with<R: tauri::Runtime>(
 ) -> WledForgetResponse {
     use tauri::Manager;
 
-    use super::lighting_mode::outputs::{apply_outputs_with, ApplyOutputsRequest, LightingOrigin};
-    use super::lighting_mode::snapshot::OutputTarget;
-    use super::lighting_mode::LightingRuntimeState;
-
     let Ok(addr) = Ipv4Addr::from_str(ip.trim()) else {
         return WledForgetResponse {
             status: CommandStatus::new(
@@ -602,45 +598,29 @@ pub(crate) async fn forget_wled_with<R: tauri::Runtime>(
             ),
         };
     };
-    let bound_here = |app: &tauri::AppHandle<R>| {
-        app.state::<LocalOutputRegistry>()
-            .wled_config()
-            .is_some_and(|config| config.ip == addr)
-    };
-
-    if bound_here(app) {
-        // The "usb" channel is whichever local sink is bound; with this one
-        // gone it has nothing, as after an unplug. Session only, like one.
-        let selected = app
-            .state::<LightingRuntimeState>()
-            .snapshot
-            .read()
-            .selected_targets;
-        if selected.contains(&OutputTarget::Usb) {
-            let rest = selected
-                .into_iter()
-                .filter(|target| *target != OutputTarget::Usb)
-                .map(|target| target.as_str().to_string())
-                .collect();
-            let request = ApplyOutputsRequest {
-                mode: None,
-                targets: Some(rest),
-                origin: LightingOrigin::UsbUnplug,
-            };
-            if let Err(error) = apply_outputs_with(app, request).await {
-                log::warn!("[wled-forget] the lighting did not let go of {addr}: {error}");
-                return WledForgetResponse {
-                    status: CommandStatus::new(
-                        "WLED_FORGET_FAILED",
-                        "The WLED device was not forgotten.",
-                        Some(error),
-                    ),
-                };
-            }
-        }
-        // A strip connected meanwhile replaced it already, and is not ours to drop.
-        if let Some(snapshot) = app.state::<LocalOutputRegistry>().wled_forgotten(addr) {
+    if let Some(config) = app
+        .state::<LocalOutputRegistry>()
+        .wled_config()
+        .filter(|config| config.ip == addr)
+    {
+        let registry = app.state::<LocalOutputRegistry>();
+        let connected_at = registry.wled_connected_at();
+        // Unbound first, so the lighting re-plans onto what remains rather than onto this device.
+        if let Some(snapshot) = registry.wled_forgotten(addr) {
             local_outputs::announce(app, snapshot);
+        }
+        if let Err(error) = local_outputs::let_go(app, &local_outputs::Left::Wled(config)).await {
+            log::warn!("[wled-forget] the lighting did not let go of {addr}: {error}");
+            if let Some(snapshot) = registry.restore_wled(config, connected_at) {
+                local_outputs::announce(app, snapshot);
+            }
+            return WledForgetResponse {
+                status: CommandStatus::new(
+                    "WLED_FORGET_FAILED",
+                    "The WLED device was not forgotten.",
+                    Some(error),
+                ),
+            };
         }
     }
 

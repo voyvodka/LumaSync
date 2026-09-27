@@ -43,7 +43,7 @@ describe("releaseOtherLocalOutputs", () => {
     expect(d.forgetWled).not.toHaveBeenCalled();
   });
 
-  // Under eviction Rust already let go of the rest; nothing is sent.
+  // Nothing else is connected: nothing is sent.
   it("does nothing when the kept output is the only one connected", async () => {
     const d = deps([strip("COM3", true), strip("COM4", false)]);
 

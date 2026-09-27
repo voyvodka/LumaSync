@@ -108,9 +108,10 @@ export const SERIAL_CONNECT_STATUS = {
 export type SerialConnectStatusCode =
   (typeof SERIAL_CONNECT_STATUS)[keyof typeof SERIAL_CONNECT_STATUS];
 
-/** What a serial port's registry entry says once it stops driving without failing: the user let
- * go of it, or another output took its place (one local output at a time). Not a connect outcome,
- * so it is kept out of {@link SERIAL_CONNECT_STATUS}, which the health steps share. */
+/** What a serial port's registry entry says once it stops being connected without failing: the
+ * user let go of it (or connected another output, which lets it go), or the app is shutting down.
+ * Not a connect outcome, so it is kept out of {@link SERIAL_CONNECT_STATUS}, which the health steps
+ * share. */
 export const SERIAL_OUTPUT_STATUS = {
   DISCONNECTED: "DISCONNECTED",
 } as const;

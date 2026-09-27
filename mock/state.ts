@@ -91,6 +91,9 @@ export interface MockWorld {
      *  entry says: `PORT_NOT_FOUND` for an unplug, `DISCONNECTED` for a release. Rust keeps such an
      *  entry, and the app tells an unplug from a release by it. */
     idleEntry?: { portName: string; code: SerialCommandStatusCode } | null;
+    /** With a strip and a WLED device both connected, the one connected first: Rust drives the
+     *  earliest connected output. Unset reads as the strip. */
+    connectedFirst?: "serial" | "wled";
     /** Which health step fails, or `null` for a clean pass. */
     healthFailsAt: string | null;
   };

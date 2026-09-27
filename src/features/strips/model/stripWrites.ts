@@ -89,7 +89,7 @@ export function withColorCorrection(
 
 /**
  * The target strip is now driven through `transport`. One local sink is bound at a time, so any
- * other strip holding the other kind is dropped — its boot path would evict this one — as saving
+ * other strip holding the other kind is dropped — its boot path would connect it beside this one — as saving
  * one key used to delete the other.
  */
 function withTransport(state: ShellState, transport: StripTransport, portName?: string): StripsPatch {

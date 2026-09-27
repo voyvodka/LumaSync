@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use super::live::AmbilightLiveSettings;
 use super::pacing::resolve_quality_config;
 use super::runtime::LightingRuntimeOwner;
-use super::transition::{apply_mode_change, set_active_port, stop_previous};
+use super::transition::{apply_mode_change, set_active_port, stop_previous, Outgoing};
 use super::usb_output::UsbOutputPlan;
 use super::worker::start_ambilight_worker;
 use super::{
@@ -78,6 +78,7 @@ fn owner_with_fake_sender() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
         active_mode: LightingModeConfig::default(),
         active_port: None,
+        active_usb_plan: None,
         worker: None,
         ambilight_live: None,
         room_geometry_live: None,
@@ -102,6 +103,7 @@ fn owner_with_unavailable_capture() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
         active_mode: LightingModeConfig::default(),
         active_port: None,
+        active_usb_plan: None,
         worker: None,
         ambilight_live: None,
         room_geometry_live: None,
@@ -189,6 +191,7 @@ fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
     let owner = LightingRuntimeOwner {
         active_mode: LightingModeConfig::default(),
         active_port: None,
+        active_usb_plan: None,
         worker: None,
         ambilight_live: None,
         room_geometry_live: None,
@@ -214,11 +217,61 @@ fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
 // set_active_port — release the old port's cached session only on switch
 // -----------------------------------------------------------------------
 
+fn nothing_running() -> Outgoing {
+    Outgoing {
+        mode: LightingModeConfig::default(),
+        plan: None,
+    }
+}
+
+fn lighting(port: &str, total_leds: u16) -> Outgoing {
+    Outgoing {
+        mode: ambilight_mode_with_calibration(total_leds),
+        plan: Some(UsbOutputPlan::Serial(port.to_string())),
+    }
+}
+
+/// The black frame `set_active_port` paints on `COM_A` when the mode that lit it had `total_leds`.
+fn black_frame_on_release(total_leds: u16) -> Vec<u8> {
+    let (mut owner, recorder) = owner_with_recording_sender();
+    set_active_port(&mut owner, "COM_A".to_string(), &nothing_running());
+
+    set_active_port(
+        &mut owner,
+        "COM_B".to_string(),
+        &lighting("COM_A", total_leds),
+    );
+
+    let writes = recorder.writes.lock().expect("writes").clone();
+    assert_eq!(writes.len(), 1, "one black frame: {writes:?}");
+    assert_eq!(writes[0].0, "COM_A");
+    assert_eq!(recorder.disconnected_ports(), vec!["COM_A".to_string()]);
+    writes[0].1.clone()
+}
+
+// A strip the outgoing mode lit would hold its last frame; a black frame after the release would
+// reopen the port and reset the board. It is sized for the strip that was lit, not the next one.
+#[test]
+fn a_released_port_the_outgoing_mode_lit_is_blanked_through_its_session() {
+    assert!(black_frame_on_release(60).len() < black_frame_on_release(120).len());
+}
+
+#[test]
+fn a_released_port_nothing_lit_is_only_let_go() {
+    let (mut owner, recorder) = owner_with_recording_sender();
+    set_active_port(&mut owner, "COM_A".to_string(), &nothing_running());
+
+    set_active_port(&mut owner, "COM_B".to_string(), &lighting("COM_C", 60));
+
+    assert!(recorder.writes.lock().expect("writes").is_empty());
+    assert_eq!(recorder.disconnected_ports(), vec!["COM_A".to_string()]);
+}
+
 #[test]
 fn set_active_port_preserves_same_port_but_releases_a_different_one() {
     let (mut owner, recorder) = owner_with_recording_sender();
 
-    set_active_port(&mut owner, "COM_A".to_string());
+    set_active_port(&mut owner, "COM_A".to_string(), &nothing_running());
     assert_eq!(owner.active_port.as_deref(), Some("COM_A"));
     assert!(
         recorder.disconnected_ports().is_empty(),
@@ -227,7 +280,7 @@ fn set_active_port_preserves_same_port_but_releases_a_different_one() {
 
     // Same port again — a mode restart on the port already in use. The
     // cached session must be left alone (DTR invariant).
-    set_active_port(&mut owner, "COM_A".to_string());
+    set_active_port(&mut owner, "COM_A".to_string(), &nothing_running());
     assert!(
         recorder.disconnected_ports().is_empty(),
         "re-assigning the SAME port must not release its cached session"
@@ -236,7 +289,7 @@ fn set_active_port_preserves_same_port_but_releases_a_different_one() {
     // A genuine switch — COM_A's cached session must be released so
     // another app (e.g. the Arduino IDE) can open it, and COM_B becomes
     // the new active port without being touched itself.
-    set_active_port(&mut owner, "COM_B".to_string());
+    set_active_port(&mut owner, "COM_B".to_string(), &nothing_running());
     assert_eq!(owner.active_port.as_deref(), Some("COM_B"));
     assert_eq!(
         recorder.disconnected_ports(),
@@ -489,6 +542,7 @@ fn set_ambilight_stops_previous_then_starts_new_runtime() {
     owner = LightingRuntimeOwner {
         active_mode: ambilight_mode(),
         active_port: Some("COM1".to_string()),
+        active_usb_plan: None,
         worker: Some(
             start_ambilight_worker(
                 owner.output_bridge.clone(),
@@ -883,6 +937,7 @@ fn owner_with_recording_sender_for_ambilight() -> (LightingRuntimeOwner, Arc<Fak
     let owner = LightingRuntimeOwner {
         active_mode: LightingModeConfig::default(),
         active_port: None,
+        active_usb_plan: None,
         worker: None,
         ambilight_live: None,
         room_geometry_live: None,
@@ -982,6 +1037,7 @@ fn owner_with_red_frame() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
     let owner = LightingRuntimeOwner {
         active_mode: LightingModeConfig::default(),
         active_port: None,
+        active_usb_plan: None,
         worker: None,
         ambilight_live: None,
         room_geometry_live: None,
@@ -1153,4 +1209,79 @@ fn a_wled_sink_ignores_the_color_order() {
     sink.set_color_order(LedColorOrder::Bgr);
     assert_eq!(pixels(&mut sink), vec![255, 0, 0, 0, 0, 255]);
     sink.stop().expect("stop");
+}
+
+fn apply_driving(
+    owner: &mut LightingRuntimeOwner,
+    mode: LightingModeConfig,
+    port: &str,
+) -> super::LightingModeCommandResult {
+    apply_mode_change(
+        owner,
+        mode,
+        true,
+        Some(port),
+        None,
+        None,
+        Some(shared_runtime_telemetry()),
+        None,
+        None,
+    )
+}
+
+// The driven output moved (the strip the worker wrote to left): a retune must start a worker on the
+// new one, not keep writing to the old one.
+#[test]
+fn a_retune_after_the_driven_output_moved_restarts_the_worker_on_the_new_one() {
+    let _guard = acquire_worker_test_guard();
+    let (mut owner, recorder) = owner_with_red_frame();
+    let mode = ambilight_mode_with_calibration(8);
+    assert_eq!(
+        apply_driving(&mut owner, mode.clone(), "COM-A").status.code,
+        "AMBILIGHT_MODE_STARTED"
+    );
+
+    let result = apply_driving(&mut owner, mode.clone(), "COM-B");
+
+    assert_eq!(result.status.code, "AMBILIGHT_MODE_STARTED");
+    assert_eq!(owner.active_port.as_deref(), Some("COM-B"));
+    assert_eq!(
+        owner.active_usb_plan,
+        Some(UsbOutputPlan::Serial("COM-B".to_string()))
+    );
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !recorder
+        .writes
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|(port, _)| port == "COM-B")
+    {
+        assert!(
+            Instant::now() < deadline,
+            "the new worker never wrote to COM-B"
+        );
+        thread::sleep(Duration::from_millis(5));
+    }
+    let _ = apply_on(&mut owner, LightingModeConfig::default());
+}
+
+#[test]
+fn a_retune_on_the_same_output_still_updates_in_place() {
+    let _guard = acquire_worker_test_guard();
+    let (mut owner, _recorder) = owner_with_red_frame();
+    let mode = ambilight_mode_with_calibration(8);
+    apply_driving(&mut owner, mode.clone(), "COM-A");
+
+    let brighter = LightingModeConfig {
+        ambilight: Some(AmbilightPayload {
+            brightness: 0.5,
+            ..Default::default()
+        }),
+        ..mode
+    };
+    let result = apply_driving(&mut owner, brighter, "COM-A");
+
+    assert_eq!(result.status.code, "AMBILIGHT_MODE_UPDATED");
+    let _ = apply_on(&mut owner, LightingModeConfig::default());
 }

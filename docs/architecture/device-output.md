@@ -83,8 +83,8 @@ it (`capture-and-pipeline.md`).
 
 **One registry holds what is connected: `LocalOutputRegistry` (`local_outputs.rs`).** It keeps a
 status per serial port that passed admission (connected, failed, lost, let go of) and the bound WLED
-device, and `driven()` is the one place the "WLED first, else a connected strip" rule lives — the
-mode plan, the Off blank, a retune, the test pattern and the launch's wait for a strip all ask it.
+device, and `driven()` is the one place the "earliest connected" rule lives — the mode plan, the Off
+blank, a retune, the test pattern and the launch's wait for a strip all ask it.
 It replaced a single serial status that every connect attempt overwrote and a sink slot that stored a
 `Box<dyn LedSink>` nothing ever wrote to. That split had three faults: a failed serial attempt emptied
 the slot and unbound a working WLED device the UI still showed, binding WLED never marked the serial
@@ -97,8 +97,21 @@ the snapshot in one store (`features/device/state/localOutputsStore.ts`) that li
 read — a change between the two is then in the read or in a later event — and keeps the newest
 revision it has seen, since events are sent outside the lock and can arrive out of order. A failed
 attempt on a port that is connected leaves it connected: two reconnects of one port race on the
-open, and the loser must not mark the strip that lights as off. One local output is driven at a time until the worker drives several:
-a connect evicts the others, and the evicted entry reads `DISCONNECTED`.
+open, and the loser must not mark the strip that lights as off. Several outputs can be connected, but
+one is driven until the worker drives several: the earliest connected (a connect stamps its place;
+connecting a connected port again keeps it). A connect never moves the drive — a strip lighting a
+running mode keeps lighting it when a WLED device is bound beside it — only a leave does, and every
+leave (`let_go` in `local_outputs.rs`: a disconnect, a WLED forget, an unplug the watcher sees) runs
+the same way: if the running mode wrote to what left, it re-applies onto the earliest that remains
+(the settings refresh, whose Ambilight fast path now also compares the output it would write to, so a
+worker never keeps writing to one that left); with nothing left it drops `usb` as an unplug does. A
+strip it lit is then painted black and a WLED device it lit switched off — a black frame alone lasts
+only until the device leaves realtime mode and goes back to its own effect. Moving from one strip to
+another paints the old one black inside `set_active_port`, through its still-cached session and
+sized by the outgoing mode: after the release a black frame would reopen the port, and the reopen
+resets the board. A leave the lighting refuses (it still writes there afterwards) is put back in its
+old place in the order. An unplug moves the mode only when another output remains; with none left the
+main window's unplug handling trims or ends it, as before.
 Every connection controller (the shell's and the Devices page's) takes its connected port from that
 store (`state/registryFollower.ts`), never from a command's answer: a connect is a success only once
 the registry holds the port connected, a failed attempt on another port leaves the one that lights
@@ -111,8 +124,7 @@ launch — connects.
 **One output at a time, as the user sees it.** After the user's own connect — a strip's Connect, or a
 WLED device's — and once it is saved, every other connected local output is let go of through Rust
 (`disconnect_serial_port` for a strip, `forget_wled_device` for a device; `state/releaseOthers.ts`).
-A launch or replug reconnect lets nothing go: the user chose nothing. While Rust evicts on connect the
-switch finds nothing to do; it is what keeps the choice single once Rust can drive several.
+A launch or replug reconnect lets nothing go: the user chose nothing.
 `disconnect_serial_port` marks the entry first (so no mode applied meanwhile plans the port again),
 takes `usb` out of a running mode the way an unplug does (session only), paints the strip black if
 the mode was lighting it — stopping only stops writing, and a Solid colour would stay lit on a strip
@@ -137,8 +149,8 @@ listing. The watcher never unbinds WLED. The App-mounted controller reconnects t
 reappears: once ~0.5 s after, once more ~2 s later on a transient failure, never on
 `CONNECT_REPLUG_REQUIRED` (re-opening a wedged driver is what wedges it); after that, a Rescan or the
 next appearance. It reads the saved strip from the store at the attempt, not the port it remembered
-at mount: a connect evicts WLED in Rust and in the saved strips, so reconnecting a USB port the user
-has since moved away from would silently undo that choice. A replug refusal never strips `usb` from
+at mount: a connect drops WLED from the saved strips and lets the device go, so reconnecting a USB
+port the user has since moved away from would silently undo that choice. A replug refusal never strips `usb` from
 the saved selection — only the launch's attempt does that. A writer stuck in a write past `WRITER_EXIT_TIMEOUT` is detached with its
 exclusive handle, so a very fast replug can find the port held once.
 
@@ -281,7 +293,7 @@ address.
 - **Adalight carries no brightness, so the host scales the pixels.** Third-party Adalight firmware has no brightness input, so the Adalight encoder multiplies the corrected pixels by brightness, the same way `CorrectedWledSink` does. Only LumaSync v1 frames carry a brightness byte. The slider used to do nothing under Adalight.
 - **An absent `firmwareProfile` is LumaSync v1, and nothing detects otherwise.** The `FIRMWARE_PROFILE` JSDoc in `device.ts` describes an auto-detect (v1 when the handshake answers, else Adalight) that is not implemented: the picker is the only writer, and Rust resolves an absent value with `unwrap_or_default()`. A stock Adalight sketch stays dark until the user switches profile, which is why LumaSync is never described as plainly "Adalight-compatible".
 - **The frame budget sizes pixels by what the encoder actually writes, not by the chip type.** `WirePixelLayout::for_output` decides both the encoder dispatch and the 115 200-baud budget. SK6812 under Adalight is sent as 3-byte pixels, because Adalight has no RGBW frame, and sizing it at 4 bytes held it a quarter below the frame rate the link can carry.
-- **A saved serial strip and a saved WLED strip are mutually exclusive, and the write that binds one drops the other (`stripWrites.ts`).** `LocalOutputRegistry` drives one local output at a time, so a serial connect evicts WLED in Rust and vice versa. If both were persisted, both boot paths would fire: the WLED restore lands first, then the serial auto-reconnect evicts it — the 2 s `BOOTLOADER_SETTLE_DELAY_MS` guarantees serial finishes last. The user would see a "connected" WLED device receiving nothing. Mirroring the eviction in persisted state is what keeps the restore honest; there is no separate "which family is active" flag to drift.
+- **A saved serial strip and a saved WLED strip are mutually exclusive, and the write that binds one drops the other (`stripWrites.ts`).** `LocalOutputRegistry` drives one local output at a time, and the user's own connect lets the other go. If both were persisted, both boot paths would fire and both would connect — the WLED restore first, the serial reconnect 2 s later (`BOOTLOADER_SETTLE_DELAY_MS`) — and the user would see a "connected" strip receiving nothing while the device lit. Keeping one of them in the persisted state is what keeps the restore honest; there is no separate "which family is active" flag to drift.
 - **A WLED restore probes before it connects, because `connect_wled_sink` cannot fail for an absent device.** `WledUdpSink::start()` binds a local `0.0.0.0:0` socket and never contacts the bridge, so a blind restore reports `WLED_CONNECT_OK` for a device that is powered off. `restoreWledSink` runs `discover_wled_devices` (an HTTP `/json/info` probe) first and only registers the sink once the device has answered. `test_wled_bridge` would prove reachability too, but it sends a red-ramp frame — not something to do to someone's lights at every launch.
 - **The room map is currently Hue-only.** `src/shared/contracts/roomMap.ts` models positions and room dimensions, and `commands/room_map/hue_zone.rs` maps zones onto Hue channels — but no serial or WLED sink reads any of it. Placement does not yet affect what a USB strip is sent.
 - **Every connection controller follows one registry, so a pair in one mount is never invisible to the others.** `useDeviceConnection` is instantiated separately per caller, each with its own controller; before a shared source, a pair completed in `DevicesPage.tsx` left the Lights surface believing USB was still offline until a WebView reload. The controllers now take the connected port from the local-output store (`registryFollower.ts`), which Rust's announcements keep current, so nothing has to be broadcast between them. `connectionEvents.ts` is left carrying what a connect *meant* — the user's own pair (the LED Setup nudge) and a boot reconnect that found the saved port unusable. The store shares *state* only, not the *work* each mount does to get there.

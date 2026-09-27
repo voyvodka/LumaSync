@@ -110,6 +110,23 @@ describe("serial hot-plug", () => {
   });
 });
 
+describe("a strip and a WLED device both connected", () => {
+  // Rust drives the earliest connected output; a connect never moves it.
+  it("drives the one connected first", () => {
+    setWledBound(WLED_HOST, false);
+    setSerialConnected(PORT, false);
+
+    setSerialConnected(PORT, true);
+    setWledBound(WLED_HOST, true);
+    expect(localOutputsSnapshot().driven).toEqual({ kind: "serial", portName: PORT });
+
+    setSerialConnected(PORT, false);
+    setSerialConnected(PORT, true);
+    expect(localOutputsSnapshot().driven).toEqual({ kind: "wled", ip: WLED_HOST });
+    expect(serialEntry(localOutputsSnapshot())).toMatchObject({ portName: PORT, connected: true });
+  });
+});
+
 describe("boot-time port rejection", () => {
   it.each(["PORT_UNSUPPORTED", "PORT_NOT_FOUND"] as const)(
     "stamps %s as the structural-unavailability reason",

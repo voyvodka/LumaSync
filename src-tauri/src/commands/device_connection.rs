@@ -1002,7 +1002,7 @@ pub struct SerialWatch {
 }
 
 impl SerialWatch {
-    /// One poll over a listing taken at `listed_at`. The connected port is checked on every poll,
+    /// One poll over a listing taken at `listed_at`. Every connected port is checked on every poll,
     /// so a connect that finished after its port vanished is still caught; a connect that finished
     /// after the listing is never cleared by it.
     pub fn poll(
@@ -1016,7 +1016,7 @@ impl SerialWatch {
             .filter(|port| port.is_supported)
             .map(|port| port.name.clone())
             .collect();
-        let connected = registry.connected_serial_port();
+        let connected = registry.connected_serial_ports();
 
         let Some(present) = self.present.as_mut() else {
             self.present = Some(now);
@@ -1047,7 +1047,7 @@ impl SerialWatch {
         let appeared: Vec<String> = now.difference(present).cloned().collect();
         present.extend(appeared.iter().cloned());
 
-        // Every lost port's writer is dropped, connected or not — a port WLED evicted may still hold
+        // Every lost port's writer is dropped, connected or not — a port let go of may still hold
         // its cached exclusive handle — unless a connect landed after the listing.
         let mut forget: Vec<String> = lost
             .iter()
@@ -1059,8 +1059,8 @@ impl SerialWatch {
             cleared = registry.serial_lost(port, listed_at).or(cleared);
         }
         // `>=`, not `lost`: a connect that finished after the listing skips the clear once, and the
-        // port stays in `watched` while it is the connected one, so the next poll tries again.
-        if let Some(port) = connected.filter(|port| {
+        // port stays in `watched` while it is a connected one, so the next poll tries again.
+        for port in connected.into_iter().filter(|port| {
             !lost.contains(port)
                 && self
                     .misses
@@ -1138,8 +1138,24 @@ pub(crate) fn serial_watch_tick<R: tauri::Runtime>(
         }
     }
     if let Some(lighting) = app.try_state::<super::lighting_mode::LightingRuntimeState>() {
+        // The running mode wrote to a strip that went while another output remains: it moves onto
+        // that one. With nothing left, the main window's unplug handling trims or ends the mode.
+        let moves = outcome
+            .forget
+            .iter()
+            .any(|port| lighting.drives_serial(port))
+            && app.state::<LocalOutputRegistry>().driven().is_some();
         for port in &outcome.forget {
             lighting.forget_serial_session(port);
+        }
+        if moves {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = super::lighting_mode::outputs::refresh_running_with(&app).await
+                {
+                    log::warn!("[serial-watch] the mode did not move onto what remains: {error}");
+                }
+            });
         }
     }
 }
@@ -1265,7 +1281,7 @@ mod tests {
         assert!(!is_connected(&state));
     }
 
-    // A port WLED evicted is no longer connected, yet its cached writer may still hold it.
+    // A port let go of is no longer connected, yet its cached writer may still hold it.
     #[test]
     fn a_lost_port_that_was_not_connected_still_has_its_writer_dropped() {
         let mut watch = super::SerialWatch::default();

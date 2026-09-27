@@ -283,7 +283,7 @@ describe("the registry decides what is connected", () => {
     expect(controller.getState().statusCard?.code).toBe("CONNECT_IO_ERROR");
   });
 
-  it("another output taking the strip's place reads as information, not a failure", async () => {
+  it("a strip let go of for another output reads as information, not a failure", async () => {
     const registry = fakeRegistry({ connected: "COM3" });
     const controller = createDeviceConnectionController(withRegistry({
       ...base(),
@@ -292,6 +292,8 @@ describe("the registry decides what is connected", () => {
     await controller.initialize();
 
     registry.bindWled("192.168.1.42");
+    expect(controller.getState().connectedPort).toBe("COM3");
+    registry.release("COM3");
 
     expect(controller.getState().connectedPort).toBeNull();
     expect(controller.getState().statusCard).toMatchObject({ variant: "info", code: "DISCONNECTED" });
@@ -356,13 +358,13 @@ describe("the registry decides what is connected", () => {
   // A connect whose port another output took before the answer landed is not a success.
   it("a connect Rust no longer holds by the time it answers is not reported connected", async () => {
     const registry = fakeRegistry();
-    // Not `withRegistry`: its recording would connect the port again after the bind.
+    // Not `withRegistry`: its recording would connect the port again after the release.
     const controller = createDeviceConnectionController({
       ...base(),
       localOutputs: registry.outputs,
       connectSerialPort: async (portName) => {
         registry.connect(portName);
-        registry.bindWled("192.168.1.42");
+        registry.release(portName);
         return {
           connected: true,
           portName,

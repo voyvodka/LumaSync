@@ -60,7 +60,7 @@ impl ActiveUsbSink {
 /// Resolved output for the "usb" channel — serial and WLED are alternate
 /// transports for the same logical LED-strip output, not separate targets
 /// (see docs/architecture/device-output.md). What `LocalOutputRegistry::driven` names.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) enum UsbOutputPlan {
     Serial(String),
     Wled(WledSinkConfig),

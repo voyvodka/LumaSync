@@ -104,11 +104,11 @@ export const deviceHandlers = {
     if (port.connectOutcome !== "OK") {
       return refused(SERIAL_CONNECT_STATUS[port.connectOutcome], "Open refused");
     }
-    // A strip connect unbinds WLED, as Rust's registry does.
+    // The WLED device stays bound, as in Rust's registry; whichever was connected first is driven.
     mutate((w) => {
+      if (w.serial.connectedPort === null) w.serial.connectedFirst = w.wled.connectedHost !== null ? "wled" : "serial";
       w.serial.connectedPort = portName;
       w.serial.idleEntry = null;
-      w.wled.connectedHost = null;
     });
     return {
       portName,
@@ -189,6 +189,7 @@ export const deviceHandlers = {
       return { status: status("WLED_BRIDGE_UNREACHABLE", "No such device") };
     }
     mutate((w) => {
+      if (w.wled.connectedHost === null) w.serial.connectedFirst = w.serial.connectedPort !== null ? "serial" : "wled";
       w.wled.connectedHost = host;
     });
     return { status: status("WLED_CONNECT_OK", "Connected") };

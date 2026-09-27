@@ -273,6 +273,12 @@ https://keepachangelog.com/en/1.1.0/
   used to ask on its own and could disagree after a pairing, an unplug or a replacement.
 - At launch the saved strip is reconnected once, not twice at the same moment from two screens; the
   second attempt could fail on the busy port and leave a working strip marked as failed.
+- Connecting a WLED device while a USB strip lights a mode moves the mode onto the device and turns
+  the strip off; the strip used to keep its last colour while the mode went on writing to it.
+  Connecting a strip while a WLED device lights a mode moves it back and switches the device off,
+  instead of leaving it on its own effect.
+- Disconnecting the output a running mode uses, with another one still connected, moves the mode onto
+  that one instead of ending it.
 - Stats for nerds: the frame-rate chip in the status bar no longer turns red with "Low FPS" while
   everything is fine — with Hue alone, which runs at 20 fps, or on a still screen, where fewer
   frames change. Its colour now shows whether the output keeps up.

@@ -21,7 +21,7 @@ export function serialEntry(snapshot: LocalOutputsSnapshot | null, portName: str
   return entry?.kind === "serial" ? entry : null;
 }
 
-/** The connected serial port, or `null`. One at a time while outputs evict each other. */
+/** A connected serial port, or `null`: the first by name when several are. */
 export function connectedSerialPort(snapshot: LocalOutputsSnapshot | null): string | null {
   const entry = snapshot?.outputs.find((output) => output.kind === "serial" && output.connected);
   return entry?.kind === "serial" ? entry.portName : null;

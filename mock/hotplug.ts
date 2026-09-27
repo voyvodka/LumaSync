@@ -45,11 +45,12 @@ import { getWorld, mutate } from "./state";
 export function setSerialConnected(portName: string, connected: boolean): void {
   // The registry announces from inside `mutate`, so it reaches the app before the ports do.
   mutate((w) => {
+    if (connected && w.serial.connectedPort === null) {
+      w.serial.connectedFirst = w.wled.connectedHost !== null ? "wled" : "serial";
+    }
     w.serial.connectedPort = connected ? portName : null;
     w.serial.idleEntry = connected ? null : { portName, code: DEVICE_ERROR_CODES.PORT_NOT_FOUND };
     if (connected) {
-      // A strip connect unbinds WLED, as Rust's registry does.
-      w.wled.connectedHost = null;
       w.shellState = { ...w.shellState, ...withSerialTransport(w.shellState as ShellState, portName) };
     }
   });
@@ -92,6 +93,9 @@ export function setWledBound(host: string, bound: boolean): void {
   };
 
   mutate((w) => {
+    if (bound && w.wled.connectedHost === null) {
+      w.serial.connectedFirst = w.serial.connectedPort !== null ? "serial" : "wled";
+    }
     w.wled.connectedHost = bound ? host : null;
     const strips = bound
       ? withWledTransport(w.shellState as ShellState, sink)
