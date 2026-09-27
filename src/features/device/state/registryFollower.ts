@@ -15,8 +15,8 @@ export interface RegistryFollower {
 
 /**
  * The controller's `connectedPort` as Rust's local-output registry says it, never as a command's
- * answer guessed it: every mount reads the same facts, so a connect, an unplug or another output
- * taking the strip's place reaches all of them without them telling each other.
+ * answer guessed it: every mount reads the same facts, so a connect, an unplug or a strip let go of
+ * reaches all of them without them telling each other.
  */
 export function createRegistryFollower(store: ConnectionStore, outputs: LocalOutputs): RegistryFollower {
   let unsubscribe: (() => void) | null = null;

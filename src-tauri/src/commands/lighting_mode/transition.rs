@@ -74,6 +74,8 @@ pub(super) struct Outgoing {
 /// reopen the port, and the reopen resets the board. The outgoing mode is
 /// passed in because the Ambilight branch has already replaced the owner's
 /// by now, and a black frame sized for the new strip is the wrong length.
+/// The write runs under the runtime lock, bounded by the serial write timeout;
+/// its duration is logged so a slow controller shows up in the log.
 pub(super) fn set_active_port(
     owner: &mut LightingRuntimeOwner,
     new_port: String,

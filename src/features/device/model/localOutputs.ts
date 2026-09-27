@@ -21,8 +21,10 @@ export function serialEntry(snapshot: LocalOutputsSnapshot | null, portName: str
   return entry?.kind === "serial" ? entry : null;
 }
 
-/** A connected serial port, or `null`: the first by name when several are. */
+/** The strip the app shows as connected, or `null`: the driven one when a strip is driven, else the
+ *  first connected by name (a WLED device drives, a strip waits beside it). */
 export function connectedSerialPort(snapshot: LocalOutputsSnapshot | null): string | null {
+  if (snapshot?.driven?.kind === "serial") return snapshot.driven.portName;
   const entry = snapshot?.outputs.find((output) => output.kind === "serial" && output.connected);
   return entry?.kind === "serial" ? entry.portName : null;
 }

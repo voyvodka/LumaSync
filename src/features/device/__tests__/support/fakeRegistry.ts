@@ -28,7 +28,7 @@ export interface FakeRegistry {
   connect: (portName: string) => void;
   /** The watcher found the port gone. */
   unplug: (portName: string) => void;
-  /** Let go of, or another output took its place. */
+  /** Let go of: a disconnect, or the switch after another connect. */
   release: (portName: string) => void;
   bindWled: (ip: string, ledCount?: number) => void;
   forgetWled: () => void;

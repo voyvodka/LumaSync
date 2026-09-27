@@ -18,8 +18,8 @@ const wled = (ip: string) => ({ kind: "wled", ip, ledCount: 60, connected: true 
 function deps(outputs: LocalOutputsSnapshot["outputs"] | null) {
   return {
     read: vi.fn<ReleaseOthersDeps["read"]>().mockResolvedValue(outputs === null ? null : { revision: 1, outputs, driven: null }),
-    disconnectSerial: vi.fn<ReleaseOthersDeps["disconnectSerial"]>().mockResolvedValue(undefined),
-    forgetWled: vi.fn<ReleaseOthersDeps["forgetWled"]>().mockResolvedValue(undefined),
+    disconnectSerial: vi.fn<ReleaseOthersDeps["disconnectSerial"]>().mockResolvedValue("SERIAL_DISCONNECT_OK"),
+    forgetWled: vi.fn<ReleaseOthersDeps["forgetWled"]>().mockResolvedValue("WLED_FORGET_OK"),
   };
 }
 
@@ -59,6 +59,17 @@ describe("releaseOtherLocalOutputs", () => {
     await releaseOtherLocalOutputs({ kind: "serial", portName: "COM3" }, d);
 
     expect(d.disconnectSerial).not.toHaveBeenCalled();
+  });
+
+  // Both commands answer with a code instead of throwing; a refusal is not lost.
+  it("says so when a release is refused", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const d = deps([strip("COM3", true), strip("COM4", true)]);
+    d.disconnectSerial.mockResolvedValue("SERIAL_DISCONNECT_FAILED");
+
+    await releaseOtherLocalOutputs({ kind: "serial", portName: "COM3" }, d);
+
+    expect(warn).toHaveBeenCalledWith(expect.any(String), "SERIAL_DISCONNECT_FAILED");
   });
 
   it("goes on to the others when one release fails", async () => {

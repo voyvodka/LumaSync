@@ -319,6 +319,32 @@ describe("the registry decides what is connected", () => {
     expect(releaseOtherOutputs).toHaveBeenCalledWith({ kind: "serial", portName: "COM4" });
   });
 
+  // Rust keeps the first strip connected (and driven) beside the second until the switch lets it go.
+  it("switching to another strip connects it, lets the first go, and shows the new one", async () => {
+    const registry = fakeRegistry({ connected: "COM3" });
+    const persistLastSuccessfulPort = vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>();
+    const controller = createDeviceConnectionController(withRegistry({
+      ...base(),
+      persistLastSuccessfulPort,
+      connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>().mockResolvedValue({
+        connected: true,
+        portName: "COM4",
+        updatedAtUnixMs: Date.now(),
+        status: { code: "CONNECT_OK", message: "Connected", details: null },
+      }),
+      releaseOtherOutputs: async () => registry.release("COM3"),
+    }, registry));
+    await controller.initialize();
+    expect(controller.getState().connectedPort).toBe("COM3");
+
+    controller.selectPort("COM4");
+    expect(await controller.connectSelectedPort()).toBe(true);
+
+    expect(controller.getState().connectedPort).toBe("COM4");
+    expect(persistLastSuccessfulPort).toHaveBeenCalledWith("COM4");
+    expect(registry.snapshot().driven).toEqual({ kind: "serial", portName: "COM4" });
+  });
+
   // The launch chose nothing: whatever else is connected stays.
   it("a launch reconnect lets nothing go", async () => {
     const releaseOtherOutputs = vi.fn<NonNullable<DeviceConnectionControllerDeps["releaseOtherOutputs"]>>().mockResolvedValue();

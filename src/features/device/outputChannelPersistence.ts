@@ -1,4 +1,4 @@
-/** Both halves of one invariant: Rust drives one local output at a time (`LocalOutputRegistry`), so the persisted record of the loser must be cleared or its boot path will evict the winner. See docs/architecture/device-output.md. */
+/** Both halves of one invariant: one local output is used at a time, so the persisted record of the one let go of must be cleared, or its boot path would connect it again beside the chosen one. See docs/architecture/device-output.md. */
 import type { ShellState } from "@/shared/contracts/shell";
 import type { WledUdpSinkConfig } from "@/shared/contracts/device";
 import { savedWledSink } from "@/features/strips/model/stripSelectors";

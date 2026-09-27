@@ -106,7 +106,11 @@ export function createConnectionLifecycle(
         statusCard: toConnectionCard(connection),
         userInitiated: true,
       });
-      if (held) await deps.releaseOtherOutputs?.({ kind: "serial", portName: connectedPortName });
+      if (held && deps.releaseOtherOutputs) {
+        await deps.releaseOtherOutputs({ kind: "serial", portName: connectedPortName });
+        // The strip let go of was the driven one until now; the registry names this one after it.
+        await callbacks.sync();
+      }
       return held;
     }
 

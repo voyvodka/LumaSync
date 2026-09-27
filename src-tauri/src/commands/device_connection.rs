@@ -1137,26 +1137,29 @@ pub(crate) fn serial_watch_tick<R: tauri::Runtime>(
             log::warn!("[serial-watch] could not announce the change: {error}");
         }
     }
-    if let Some(lighting) = app.try_state::<super::lighting_mode::LightingRuntimeState>() {
-        // The running mode wrote to a strip that went while another output remains: it moves onto
-        // that one. With nothing left, the main window's unplug handling trims or ends the mode.
-        let moves = outcome
-            .forget
-            .iter()
-            .any(|port| lighting.drives_serial(port))
-            && app.state::<LocalOutputRegistry>().driven().is_some();
-        for port in &outcome.forget {
-            lighting.forget_serial_session(port);
-        }
-        if moves {
-            let app = app.clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(error) = super::lighting_mode::outputs::refresh_running_with(&app).await
-                {
-                    log::warn!("[serial-watch] the mode did not move onto what remains: {error}");
-                }
-            });
-        }
+    follow_lost_ports(app, &outcome.forget);
+}
+
+/// Drops the lost ports' cached writers. When the running mode wrote to one of them and another
+/// output remains, it moves onto that one; with nothing left, the main window's unplug handling
+/// trims or ends the mode.
+pub(crate) fn follow_lost_ports<R: tauri::Runtime>(app: &tauri::AppHandle<R>, lost: &[String]) {
+    use tauri::Manager;
+    let Some(lighting) = app.try_state::<super::lighting_mode::LightingRuntimeState>() else {
+        return;
+    };
+    let moves = lost.iter().any(|port| lighting.drives_serial(port))
+        && app.state::<LocalOutputRegistry>().driven().is_some();
+    for port in lost {
+        lighting.forget_serial_session(port);
+    }
+    if moves {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(error) = super::lighting_mode::outputs::refresh_running_with(&app).await {
+                log::warn!("[serial-watch] the mode did not move onto what remains: {error}");
+            }
+        });
     }
 }
 

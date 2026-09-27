@@ -309,7 +309,7 @@ describe("a strip that stopped being driven", () => {
   it("reads Disconnected as information, in the user's language", () => {
     const card = buildDeviceStatusCard({
       status: "ready",
-      statusCard: { variant: "info", code: "DISCONNECTED", message: "Another output took the strip's place." },
+      statusCard: { variant: "info", code: "DISCONNECTED", message: "Disconnected." },
       connectedPort: null,
     });
     expect(card).toMatchObject({

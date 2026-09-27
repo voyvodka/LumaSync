@@ -589,4 +589,55 @@ mod leave {
         assert!(rig.state().drives_serial(PORT));
         assert_eq!(rig.log.forgotten(), vec![OTHER_PORT.to_string()]);
     }
+
+    // The watcher's loss of the driven strip, with a WLED device still bound: the mode moves onto it.
+    #[test]
+    fn an_unplugged_driven_strip_moves_the_mode_onto_what_remains() {
+        let rig = Rig::new(RigSetup::default());
+        rig.set_serial_connected(true);
+        rig.app.state::<LocalOutputRegistry>().wled_bound(wled());
+        solid_on_usb(&rig);
+        rig.app
+            .state::<LocalOutputRegistry>()
+            .serial_lost(PORT, u128::MAX)
+            .expect("cleared");
+
+        crate::commands::device_connection::follow_lost_ports(&rig.handle(), &[PORT.to_string()]);
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        while !rig.state().drives_wled(wled().ip) {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the mode never moved onto the WLED device"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(rig
+            .state()
+            .snapshot
+            .read()
+            .active_targets
+            .contains(&OutputTarget::Usb));
+        assert_eq!(rig.log.forgotten(), vec![PORT.to_string()]);
+    }
+
+    #[test]
+    fn an_unplugged_strip_nothing_drives_moves_nothing() {
+        let rig = Rig::new(RigSetup::default());
+        rig.set_serial_connected(true);
+        rig.app
+            .state::<LocalOutputRegistry>()
+            .set_serial_for_tests(OTHER_PORT, true, 0);
+        solid_on_usb(&rig);
+        let applied = modes_applied(&rig);
+
+        crate::commands::device_connection::follow_lost_ports(
+            &rig.handle(),
+            &[OTHER_PORT.to_string()],
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        assert_eq!(modes_applied(&rig), applied);
+        assert!(rig.state().drives_serial(PORT));
+    }
 }

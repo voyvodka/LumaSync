@@ -145,10 +145,11 @@ export function useActiveWledSink(
           protocol: previous?.ip === device.ip ? previous.protocol : "ddp",
         }));
         setSavedSink(sink);
+        // Once saved: a launch would bind this device, so the strip it replaces goes now too.
+        await releaseOthers({ kind: "wled", ip: device.ip });
       } catch (err) {
         console.error("[LumaSync] persisting the connected WLED sink failed:", err);
       }
-      await releaseOthers({ kind: "wled", ip: device.ip });
       await refresh();
     },
     [updateShellState, releaseOthers, refresh],

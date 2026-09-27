@@ -599,7 +599,9 @@ pub(crate) async fn let_go<R: tauri::Runtime>(
 
     match left {
         Left::Serial(port) => {
-            // Moving onto another strip already painted it black through its session.
+            // Moving onto another strip already painted it black through its session. With nothing
+            // left, no apply reached `set_active_port`, so the runtime still names this port: that
+            // stale record is what tells the blank below to run.
             if drove && lighting.holds_port(port) {
                 if let Err(reason) =
                     super::lighting_mode::transition::blank_serial_port(app, port, &before.mode)

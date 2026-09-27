@@ -1,4 +1,9 @@
-import type { DrivenOutputRef, LocalOutputsSnapshot } from "@/shared/contracts/device";
+import {
+  SERIAL_DISCONNECT_STATUS,
+  WLED_STATUS,
+  type DrivenOutputRef,
+  type LocalOutputsSnapshot,
+} from "@/shared/contracts/device";
 
 import { disconnectSerialPort } from "../deviceConnectionApi";
 import { sameDriven } from "../model/localOutputs";
@@ -7,9 +12,16 @@ import { localOutputs } from "./localOutputsStore";
 
 export interface ReleaseOthersDeps {
   read: () => Promise<LocalOutputsSnapshot | null>;
-  disconnectSerial: (portName: string) => Promise<unknown>;
-  forgetWled: (ip: string) => Promise<unknown>;
+  /** Resolves with the command's status code. */
+  disconnectSerial: (portName: string) => Promise<string>;
+  forgetWled: (ip: string) => Promise<string>;
 }
+
+const RELEASED: ReadonlySet<string> = new Set([
+  SERIAL_DISCONNECT_STATUS.OK,
+  SERIAL_DISCONNECT_STATUS.NOT_CONNECTED,
+  WLED_STATUS.FORGET_OK,
+]);
 
 /**
  * One local output at a time, as the user sees it, while Rust can drive several: after the user
@@ -27,8 +39,10 @@ export async function releaseOtherLocalOutputs(kept: DrivenOutputRef, deps: Rele
   await Promise.all(
     others.map(async (output) => {
       try {
-        if (output.kind === "serial") await deps.disconnectSerial(output.portName);
-        else await deps.forgetWled(output.ip);
+        const code =
+          output.kind === "serial" ? await deps.disconnectSerial(output.portName) : await deps.forgetWled(output.ip);
+        // Still connected: the next connect of it, or a restart, is where it goes.
+        if (!RELEASED.has(code)) console.warn("[LumaSync] another local output was not let go of:", code);
       } catch (error) {
         console.error("[LumaSync] letting go of another local output failed:", error);
       }
@@ -40,7 +54,7 @@ export async function releaseOtherLocalOutputs(kept: DrivenOutputRef, deps: Rele
 export function releaseOthersInApp(kept: DrivenOutputRef): Promise<void> {
   return releaseOtherLocalOutputs(kept, {
     read: () => localOutputs.refresh(),
-    disconnectSerial: disconnectSerialPort,
-    forgetWled: forgetWledDevice,
+    disconnectSerial: async (portName) => (await disconnectSerialPort(portName)).status.code,
+    forgetWled: async (ip) => (await forgetWledDevice(ip)).status.code,
   });
 }

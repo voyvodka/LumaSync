@@ -105,10 +105,16 @@ export const deviceHandlers = {
       return refused(SERIAL_CONNECT_STATUS[port.connectOutcome], "Open refused");
     }
     // The WLED device stays bound, as in Rust's registry; whichever was connected first is driven.
+    // One strip at a time in the world: a second port stands for the switch that follows it in the app,
+    // which lets the first go.
     mutate((w) => {
-      if (w.serial.connectedPort === null) w.serial.connectedFirst = w.wled.connectedHost !== null ? "wled" : "serial";
+      const previous = w.serial.connectedPort;
+      if (previous === null) w.serial.connectedFirst = w.wled.connectedHost !== null ? "wled" : "serial";
       w.serial.connectedPort = portName;
-      w.serial.idleEntry = null;
+      w.serial.idleEntry =
+        previous !== null && previous !== portName
+          ? { portName: previous, code: SERIAL_OUTPUT_STATUS.DISCONNECTED }
+          : null;
     });
     return {
       portName,
