@@ -66,6 +66,8 @@ https://keepachangelog.com/en/1.1.0/
 - Settings is split into pages — General, Appearance, Updates, Help and About — listed on the
   left. Each row shows just its name and control; an explanation, where one helps, is behind the
   ⓘ beside the name.
+- Settings and Devices open on the page you left them on when you come back from another tab. A
+  restart opens them on their first page again.
 - Settings → Updates: "Check now" shows its result in the button itself ("Checking…", then
   "✓ Up to date"). Turning on the beta channel asks once more in a small popover beside the switch.
 - Updates: an update LumaSync finds on its own no longer opens a prompt over the window. A quiet

@@ -1,6 +1,8 @@
 import { beforeEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
 
+import { __resetSessionStateForTests } from "@/shared/lib/useSessionState";
+
 // Node >= 24's experimental `localStorage` global reads back as `undefined`
 // without `--localstorage-file` and shadows happy-dom's, so install ours before
 // anything reads the key. See docs/architecture/build-and-release.md.
@@ -41,4 +43,6 @@ for (const target of targets) {
 
 beforeEach(() => {
   memoryStorage.clear();
+  // A remembered side-menu page would open the next test's section on the last one's.
+  __resetSessionStateForTests();
 });
