@@ -178,7 +178,7 @@ async function renderHueTab(state: ReturnType<typeof createHueHookState>) {
 }
 
 
-describe("HueReadySummaryCard", () => {
+describe("DevicesPage — Hue page states", () => {
   beforeEach(() => {
     stopHueMock.mockReset();
     activeWledIpMock = null;
@@ -186,7 +186,7 @@ describe("HueReadySummaryCard", () => {
     useHueOnboardingMock.mockReturnValue(createHueHookState());
   });
 
-  it("renders idle state with area name and ready pill", async () => {
+  it("renders the ready state with the area name", async () => {
     await renderHueTab(createHueHookState({
       selectedArea: { id: "test-area", name: "Living Room", readiness: { ready: true } },
       selectedBridge: { id: "test-bridge", name: "Test Bridge", ip: "192.168.1.100" },
@@ -195,13 +195,13 @@ describe("HueReadySummaryCard", () => {
     }));
 
     await waitFor(() => {
-      expect(screen.getByText("Living Room")).toBeInTheDocument();
-      const pill = document.querySelector(".lm-dcard-pill.is-idle");
-      expect(pill).toBeTruthy();
+      expect(screen.getByTestId("hue-area-row")).toHaveTextContent("Living Room");
+      expect(screen.getByTestId("hue-state")).toHaveTextContent("hue:state.idle");
     });
   });
 
-  it("disables start button when readiness is stale", async () => {
+  // Start used to sit here disabled for as long as the state lasted; Validate is the way on.
+  it("offers Validate, not a Start that cannot be pressed, when readiness is stale", async () => {
     await renderHueTab(createHueHookState({
       canStartHue: false,
       isReadinessStale: true,
@@ -211,11 +211,12 @@ describe("HueReadySummaryCard", () => {
     }));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "hue:actions.start" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "hue:page.validate" }).className).toMatch(/primary/);
     });
+    expect(screen.queryByRole("button", { name: "hue:actions.start" })).toBeNull();
   });
 
-  it("shows streaming pill when runtimeStatus state is Running", async () => {
+  it("says Streaming when runtimeStatus state is Running", async () => {
     await renderHueTab(createHueHookState({
       selectedArea: { id: "test-area", name: "Test Zone", readiness: { ready: true } },
       selectedBridge: { id: "test-bridge", name: "Test Bridge", ip: "192.168.1.100" },
@@ -228,8 +229,7 @@ describe("HueReadySummaryCard", () => {
     }));
 
     await waitFor(() => {
-      const pill = document.querySelector(".lm-dcard-pill.is-streaming");
-      expect(pill).toBeTruthy();
+      expect(screen.getByTestId("hue-state")).toHaveTextContent("hue:state.streaming");
     });
   });
 
@@ -248,11 +248,11 @@ describe("HueReadySummaryCard", () => {
     }));
 
     await waitFor(() => {
-      expect(screen.getByText("hue:page.pill.awaiting")).toBeInTheDocument();
+      expect(screen.getByTestId("hue-state")).toHaveTextContent("hue:state.pairingLinkButton");
     });
     const live = screen.getByText("hue:pair.linkButtonHint").closest("[aria-live]");
     expect(live).toHaveAttribute("aria-live", "polite");
-    expect(screen.queryByText("hue:page.pill.authError")).not.toBeInTheDocument();
+    expect(screen.queryByText("hue:state.authError")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "hue:page.cancel" })).toBeInTheDocument();
   });
 
@@ -275,9 +275,9 @@ describe("HueReadySummaryCard", () => {
     }));
 
     await waitFor(() => {
-      expect(screen.getByText("hue:page.pill.timedOut")).toBeInTheDocument();
+      expect(screen.getByTestId("hue-state")).toHaveTextContent("hue:state.pairingTimedOut");
     });
-    expect(screen.queryByText("hue:page.pill.authError")).not.toBeInTheDocument();
+    expect(screen.queryByText("hue:state.authError")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "hue:pair.tryAgain" }));
     expect(pair).toHaveBeenCalledWith();
@@ -286,7 +286,7 @@ describe("HueReadySummaryCard", () => {
     expect(selectBridge).toHaveBeenCalledWith(null);
   });
 
-  it("starts pairing straight from + Pair on a discovered bridge", async () => {
+  it("starts pairing straight from Pair on a discovered bridge", async () => {
     const pair = vi.fn();
     const selectBridge = vi.fn();
     const user = userEvent.setup();
@@ -301,7 +301,7 @@ describe("HueReadySummaryCard", () => {
       selectBridge,
     }));
 
-    await user.click(await screen.findByRole("button", { name: "hue:page.addBridge" }));
+    await user.click(await screen.findByRole("button", { name: "hue:page.pairNamed" }));
     expect(pair).toHaveBeenCalledWith("test-bridge");
   });
 
@@ -319,7 +319,7 @@ describe("HueReadySummaryCard", () => {
     }));
 
     await waitFor(() => {
-      expect(screen.getByText("hue:page.pill.authError")).toBeInTheDocument();
+      expect(screen.getByTestId("hue-state")).toHaveTextContent("hue:state.authError");
     });
   });
 });
@@ -332,7 +332,7 @@ describe("DevicesPage hue runtime controls", () => {
     useHueOnboardingMock.mockReturnValue(createHueHookState());
   });
 
-  it("keeps Start disabled in stale state and shows revalidate hint", async () => {
+  it("shows the revalidate hint and no Start in the stale state", async () => {
     await renderHueTab(createHueHookState({
       credentialState: "valid",
       isValidatingCredential: true,
@@ -341,9 +341,9 @@ describe("DevicesPage hue runtime controls", () => {
     }));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "hue:actions.start" })).toBeDisabled();
+      expect(screen.getAllByText("hue:runtime.checklist.revalidate")[0]).toBeInTheDocument();
     });
-    expect(screen.getAllByText("hue:runtime.checklist.revalidate")[0]).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "hue:actions.start" })).toBeNull();
   });
 
   // Through the mode orchestrator, never `stopHue` itself: a running mode that
@@ -368,7 +368,7 @@ describe("DevicesPage hue runtime controls", () => {
     expect(stopHueMock).not.toHaveBeenCalled();
   });
 
-  it("routes reconnect action to startRuntime when streaming", async () => {
+  it("routes reconnect, behind …, to startRuntime when streaming", async () => {
     const user = userEvent.setup();
     const startRuntime = vi.fn();
     await renderHueTab(createHueHookState({
@@ -381,9 +381,7 @@ describe("DevicesPage hue runtime controls", () => {
       },
     }));
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "hue:page.reconnectNow" })).toBeInTheDocument();
-    });
+    await user.click(await screen.findByRole("button", { name: "hue:page.more" }));
     await user.click(screen.getByRole("button", { name: "hue:page.reconnectNow" }));
 
     expect(startRuntime).toHaveBeenCalledTimes(1);
@@ -807,6 +805,28 @@ describe("DevicesPage — the rail lists the devices", () => {
     expect(rowLabels()).toContain("Test Bridge, device:page.rail.off");
     await userEvent.setup().click(within(found).getAllByRole("button")[0]!);
     expect(onVisibleCategoryChange).toHaveBeenLastCalledWith("hue");
+  });
+
+  // Its row goes once it is paired; the page stays on the bridge, now as the Hue row.
+  it("opens a found bridge's own page, and lands on the Hue row once it is paired", async () => {
+    const office = { id: "b2", name: "Office", ip: "192.168.1.181" };
+    const bridges = [{ id: "test-bridge", name: "Test Bridge", ip: "192.168.1.100" }, office];
+    useHueOnboardingMock.mockReturnValue(createHueHookState({ bridges }));
+    const view = await renderSettled();
+
+    const found = screen.getByRole("group", { name: "device:page.rail.found" });
+    await userEvent.setup().click(within(found).getByRole("button"));
+    expect(screen.getByRole("heading", { name: "Office" })).toBeInTheDocument();
+
+    useHueOnboardingMock.mockReturnValue(
+      createHueHookState({ bridges, selectedBridgeId: office.id, selectedBridge: office, credentials: { username: "u", clientKey: "k" } }),
+    );
+    view.rerender(<DevicesPage onStopHueOutput={stopHueOutputMock} />);
+
+    // One found bridge still: the one it replaced.
+    expect(screen.getAllByTestId("device-entry-bridge")).toHaveLength(1);
+    expect(screen.getByTestId("device-entry-hue")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("heading", { name: "Office" })).toBeInTheDocument();
   });
 
   it("dots the bridge while it streams", async () => {

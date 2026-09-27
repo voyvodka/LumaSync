@@ -9,7 +9,7 @@ import { IconCheck } from "@/shared/ui/icons";
 import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
 import { getKeybindDefinition, KEYBIND_ACTIONS, resolveKeybindPlatform } from "@/shared/contracts/shell";
 import { buildIssueReportUrl, detectOsName, DISCUSSIONS_URL } from "../helpLinks";
-import { RowButton, RowLink, RowNote, SettingRow } from "../SettingRow";
+import { RowButton, RowLink, RowNote, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
 import type { SettingsEnv } from "../settingsEnv";
 import styles from "./HelpRows.module.css";
 

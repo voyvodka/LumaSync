@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 
-import { RowButton } from "../SettingRow";
+import { RowButton } from "@/shared/ui/SettingRow/SettingRow";
 import { Popover } from "@/shared/ui/Popover/Popover";
 import type { UpdateMetadata } from "@/shared/contracts/updater";
 import type { UpdaterState } from "@/features/updater/useAutoUpdater";

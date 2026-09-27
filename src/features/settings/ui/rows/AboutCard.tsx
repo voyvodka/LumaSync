@@ -96,7 +96,7 @@ export function AboutCard() {
           <a key={href} href={href} target="_blank" rel="noreferrer noopener">
             {label}
             <span aria-hidden="true">↗</span>
-            <span className="sr-only"> ({t("settings:help.opensInBrowser")})</span>
+            <span className="sr-only"> ({t("common:opensInBrowser")})</span>
           </a>
         ))}
       </nav>

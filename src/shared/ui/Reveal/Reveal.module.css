@@ -1,0 +1,24 @@
+@layer components {
+  /* Height from 0fr to 1fr: the row grows to whatever it holds, with no measuring. */
+  .reveal {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition:
+      grid-template-rows var(--lm-dur-base) var(--lm-ease-out),
+      opacity var(--lm-dur-quick) linear;
+  }
+  .open {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transition:
+      grid-template-rows var(--lm-dur-base) var(--lm-ease-out),
+      opacity var(--lm-dur-base) linear var(--lm-dur-follow);
+  }
+  .inner { min-height: 0; overflow: hidden; }
+  .settled > .inner { overflow: visible; }
+
+  :global(:root[data-reduced-motion]) .reveal { transition: none; }
+  /* No transition means no transitionend to settle on. */
+  :global(:root[data-reduced-motion]) .open > .inner { overflow: visible; }
+}

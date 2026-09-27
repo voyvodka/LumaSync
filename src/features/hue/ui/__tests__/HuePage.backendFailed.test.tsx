@@ -26,7 +26,8 @@ import {
 } from "@/features/hue/__tests__/fakeHueHealth";
 import { useHueRuntimeStatus } from "@/features/hue/state/useHueRuntimeStatus";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
-import { HueBridgesCategory } from "../HueBridgesCategory";
+import { HuePage } from "../HuePage";
+import { shownByTestId } from "./hueFixture";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -43,7 +44,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 vi.mock("@/features/hue/hueHealthApi", async () => (await import("@/features/hue/__tests__/fakeHueHealth")).fakeHueHealthApi);
 
-vi.mock("../../HueChannelMapPanel", () => ({ HueChannelMapPanel: () => null }));
+vi.mock("@/features/settings/sections/HueChannelMapPanel", () => ({ HueChannelMapPanel: () => null }));
 
 const bridge: HueBridgeSummary = { id: "bridge-1", ip: "192.168.1.10", name: "Test Bridge" };
 const credentials: HuePairingCredentials = { username: "app-user", clientKey: "AABBCCDD" };
@@ -116,7 +117,7 @@ function Harness() {
     identifyLights: async () => ({ code: "HUE_IDENTIFY_OK" as const, message: "", details: null }),
   };
   return (
-    <HueBridgesCategory
+    <HuePage
       isActive
       hue={hue}
       channelPlacements={[]}
@@ -150,14 +151,14 @@ function commandResult(status: BackendStatus) {
 
 function expectStreamFailed(reasonKey: string) {
   expect(screen.getByTestId("hue-stream-failed")).toHaveTextContent(reasonKey);
-  expect(screen.getAllByText("hue:page.pill.failed").length).toBeGreaterThan(0);
-  expect(screen.queryByText("hue:page.pill.ready")).toBeNull();
-  expect(screen.queryByText("hue:page.pill.streaming")).toBeNull();
-  expect(screen.queryByText("hue:page.pill.reconnecting")).toBeNull();
-  expect(screen.queryByTestId("hue-status-unavailable")).toBeNull();
+  expect(screen.getByTestId("hue-state")).toHaveTextContent("hue:state.streamFailed");
+  expect(screen.getByTestId("hue-state")).not.toHaveTextContent("hue:state.idle");
+  expect(screen.getByTestId("hue-state")).not.toHaveTextContent("hue:state.streaming");
+  expect(screen.getByTestId("hue-state")).not.toHaveTextContent("hue:state.reconnecting");
+  expect(shownByTestId("hue-status-unavailable")).toBeNull();
 }
 
-describe("HueBridgesCategory — a Failed stream the backend reported", () => {
+describe("HuePage — a Failed stream the backend reported", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     invokeMock.mockReset();
@@ -185,16 +186,17 @@ describe("HueBridgesCategory — a Failed stream the backend reported", () => {
   it("says the stream stopped once retries run out, and Start Again brings it back", async () => {
     render(<Harness />);
     await flush(0);
-    expect(screen.getByText("hue:page.pill.streaming")).toBeInTheDocument();
+    expect(screen.getByTestId("hue-state")).toHaveTextContent("hue:state.streaming");
 
     act(() => {
       publishHealth(backendIs({ state: "Failed", code: "TRANSIENT_RETRY_EXHAUSTED", actionHint: "retry" }));
     });
     await flush(0);
     expectStreamFailed("hue:runtime.codes.TRANSIENT_RETRY_EXHAUSTED");
-    expect(screen.getByText("TRANSIENT_RETRY_EXHAUSTED")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "hue:page.codeTip" }));
+    expect(screen.getByTestId("hue-fault-code")).toHaveTextContent("TRANSIENT_RETRY_EXHAUSTED");
     // Not a key problem, so no re-pair on offer.
-    expect(screen.queryByText("hue:runtime.actions.repair")).toBeNull();
+    expect(screen.queryByRole("button", { name: "hue:runtime.actions.repair" })).toBeNull();
 
     fireEvent.click(screen.getByText("hue:page.startAgain"));
     await flush(0);
@@ -208,8 +210,8 @@ describe("HueBridgesCategory — a Failed stream the backend reported", () => {
         }),
       }),
     );
-    expect(screen.getByText("hue:page.pill.streaming")).toBeInTheDocument();
-    expect(screen.queryByTestId("hue-stream-failed")).toBeNull();
+    expect(screen.getByTestId("hue-state")).toHaveTextContent("hue:state.streaming");
+    expect(shownByTestId("hue-stream-failed")).toBeNull();
   });
 
   it("names an aborted start on the first read", async () => {
@@ -226,7 +228,7 @@ describe("HueBridgesCategory — a Failed stream the backend reported", () => {
     await flush(0);
     expectStreamFailed("hue:runtime.codes.AUTH_INVALID_CREDENTIALS");
 
-    fireEvent.click(screen.getByText("hue:runtime.actions.repair"));
+    fireEvent.click(screen.getByRole("button", { name: "hue:runtime.actions.repair" }));
     expect(pairMock).toHaveBeenCalledTimes(1);
     expect(screen.getByText("hue:page.startAgain")).toBeInTheDocument();
   });
@@ -253,7 +255,7 @@ describe("HueBridgesCategory — a Failed stream the backend reported", () => {
     await flush(0);
     expect(fakeHueHealthApi.getHueHealth).toHaveBeenCalledOnce();
     expect(screen.getByTestId("hue-status-unavailable")).toBeInTheDocument();
-    expect(screen.queryByTestId("hue-stream-failed")).toBeNull();
+    expect(shownByTestId("hue-stream-failed")).toBeNull();
 
     await flush(runtimeStatusRetryDelayMs(1));
     expectStreamFailed("hue:runtime.codes.TRANSIENT_RETRY_EXHAUSTED");

@@ -35,7 +35,6 @@ describe("device card footer actions", () => {
   });
 
   it.each([
-    "features/settings/sections/device/HueBridgesCategory.tsx",
     "features/settings/sections/device/UsbPortCards.tsx",
     "features/settings/sections/WledDevicePicker.tsx",
   ])("%s renders its footer actions with the sized class", (file) => {

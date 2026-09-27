@@ -67,4 +67,58 @@ describe("PickerList", () => {
     expect(onPick).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
+
+  it("lists a disabled row but never hands it over", () => {
+    vi.useFakeTimers();
+    const onPick = vi.fn<(i: number) => void>();
+    const anchor = createRef<HTMLButtonElement>();
+    render(
+      <>
+        <button ref={anchor} type="button">anchor</button>
+        <PickerList
+          open
+          onClose={() => {}}
+          anchorRef={anchor}
+          id="list"
+          label="areas"
+          items={["Free", "Held"]}
+          itemKey={(s) => s}
+          renderItem={(s) => s}
+          selectedIndex={0}
+          isDisabled={(s) => s === "Held"}
+          onPick={onPick}
+        />
+      </>,
+    );
+    const held = screen.getByRole("option", { name: "Held" });
+    expect(held).toHaveAttribute("aria-disabled", "true");
+    act(() => held.click());
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(onPick).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("puts focus on the current row when it opens", () => {
+    const anchor = createRef<HTMLButtonElement>();
+    render(
+      <>
+        <button ref={anchor} type="button">anchor</button>
+        <PickerList
+          open
+          onClose={() => {}}
+          anchorRef={anchor}
+          id="list"
+          label="places"
+          items={["Top-left", "Top-right"]}
+          itemKey={(s) => s}
+          renderItem={(s) => s}
+          selectedIndex={1}
+          onPick={() => {}}
+        />
+      </>,
+    );
+    expect(screen.getByRole("option", { name: "Top-right" })).toHaveFocus();
+  });
 });

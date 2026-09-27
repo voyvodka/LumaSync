@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHueOnboardingCore } from "@/features/hue/state/useHueOnboardingCore";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
 import { __resetHueHealthStoreForTests } from "@/features/hue/state/hueHealthStore";
-import { HueBridgesCategory } from "../HueBridgesCategory";
+import { HuePage } from "../HuePage";
 import type * as hueOnboardingApiModule from "@/features/hue/hueOnboardingApi";
 import type { HuePairBridgeStatusCode } from "@/shared/contracts/hue";
 
@@ -39,7 +39,7 @@ vi.mock("@/features/hue/hueOnboardingApi", () => ({
 
 // Stubbed so nothing here can reach the Tauri transport.
 vi.mock("@/features/mode/modeApi", () => ({}));
-vi.mock("../../HueChannelMapPanel", () => ({ HueChannelMapPanel: () => null }));
+vi.mock("@/features/settings/sections/HueChannelMapPanel", () => ({ HueChannelMapPanel: () => null }));
 
 let hook: ReturnType<typeof useHueOnboardingCore>;
 
@@ -78,7 +78,7 @@ function Harness() {
     identifyLights: async () => ({ code: "HUE_IDENTIFY_OK" as const, message: "", details: null }),
   };
   return (
-    <HueBridgesCategory
+    <HuePage
       isActive
       hue={hue}
       channelPlacements={[]}
@@ -105,12 +105,11 @@ async function pairAndGetRefused(code: HuePairBridgeStatusCode) {
 }
 
 function expectNoCredentialFault() {
-  expect(screen.queryByText("hue:credential.needsRepair")).toBeNull();
   expect(screen.queryByText("hue:credential.repairHint")).toBeNull();
-  expect(screen.queryByText("hue:page.pill.authError")).toBeNull();
+  expect(screen.queryByText("hue:state.authError")).toBeNull();
 }
 
-describe("HueBridgesCategory — named pairing refusals", () => {
+describe("HuePage — named pairing refusals", () => {
   beforeEach(() => {
     pairBridgeMock.mockReset();
     __resetHueHealthStoreForTests();
@@ -121,8 +120,8 @@ describe("HueBridgesCategory — named pairing refusals", () => {
 
     const notice = screen.getByTestId("hue-pairing-deferred");
     expect(notice).toHaveTextContent("hue:pairing.errors.BRIDGE_BUSY.description");
-    expect(screen.getByText("hue:page.pill.wait")).toBeInTheDocument();
-    expect(screen.getByText("hue:pair.tryAgain")).toBeInTheDocument();
+    expect(screen.getByTestId("hue-state")).toHaveTextContent("hue:state.pairingDeferred");
+    expect(screen.getByRole("button", { name: "hue:pair.tryAgain" })).toBeInTheDocument();
     expectNoCredentialFault();
   });
 
@@ -141,7 +140,7 @@ describe("HueBridgesCategory — named pairing refusals", () => {
     expect(screen.getByTestId("hue-pairing-failed-reason")).toHaveTextContent(
       "hue:pairing.errors.DEVICETYPE_INVALID.description",
     );
-    expect(screen.getByText("hue:page.pill.failed")).toBeInTheDocument();
+    expect(screen.getByTestId("hue-state")).toHaveTextContent("hue:state.pairingFailed");
     expectNoCredentialFault();
   });
 

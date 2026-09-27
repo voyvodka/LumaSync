@@ -1,6 +1,5 @@
 export default {
   title: "Settings",
-  hintFor: "About {{label}}",
   pages: {
     general: "General",
     appearance: "Appearance",
@@ -9,7 +8,6 @@ export default {
     about: "About",
   },
   help: {
-    opensInBrowser: "opens in your browser",
     guide: {
       label: "Setup guide",
       description: "The first-run steps: connect a light, set up the LEDs, turn on Ambilight.",

@@ -9,30 +9,41 @@ interface SettingRowProps {
   label: string;
   /** What the setting does, behind an ⓘ beside its name. */
   hint?: string;
+  /** What it is set to, beside the name, when the control on the right does not show it. */
+  value?: ReactNode;
   control?: ReactNode;
+  /** The control takes the rest of the line, for one whose content changes width. */
+  controlFills?: boolean;
   /** A result or a failure that belongs to this row, under it. */
   children?: ReactNode;
   testId?: string;
 }
 
 /** One setting: its name, its control on the right, and whatever it has to say under it. */
-export function SettingRow({ label, hint, control, children, testId }: SettingRowProps) {
+export function SettingRow({ label, hint, value, control, controlFills = false, children, testId }: SettingRowProps) {
   const { t } = useTranslation();
   return (
     <div className={styles.row} data-testid={testId}>
       <div className={styles.line}>
         <span className={styles.name}>{label}</span>
-        {hint && <InfoTip label={t("settings:hintFor", { label })}>{hint}</InfoTip>}
-        <span className={styles.control}>{control}</span>
+        {hint && <InfoTip label={t("common:hintFor", { label })}>{hint}</InfoTip>}
+        {value !== undefined && <span className={styles.value}>{value}</span>}
+        <span className={cx(styles.control, controlFills && styles.fills)}>{control}</span>
       </div>
       {children}
     </div>
   );
 }
 
-/** A quiet secondary action: grey at rest, warm on hover. */
-export function RowButton({ className, type = "button", ...rest }: ComponentPropsWithRef<"button">) {
-  return <button type={type} className={cx(styles.action, className)} {...rest} />;
+/** A quiet secondary action: grey at rest, warm on hover. `primary` is the page's one amber
+ *  action, the thing to do next. */
+export function RowButton({
+  className,
+  type = "button",
+  primary = false,
+  ...rest
+}: ComponentPropsWithRef<"button"> & { primary?: boolean }) {
+  return <button type={type} className={cx(styles.action, primary && styles.primary, className)} {...rest} />;
 }
 
 interface RowLinkProps {
@@ -48,7 +59,7 @@ export function RowLink({ href, label, testId }: RowLinkProps) {
     <a className={styles.action} href={href} target="_blank" rel="noreferrer noopener" data-testid={testId}>
       {label}
       <span aria-hidden="true">↗</span>
-      <span className="sr-only"> ({t("settings:help.opensInBrowser")})</span>
+      <span className="sr-only"> ({t("common:opensInBrowser")})</span>
     </a>
   );
 }

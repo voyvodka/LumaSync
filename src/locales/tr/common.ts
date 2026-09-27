@@ -2,6 +2,8 @@ import type { Catalogue } from "@/features/i18n/catalogue";
 import type enCommon from "@/locales/en/common";
 
 const common: Catalogue<typeof enCommon> = {
+  hintFor: "{{label}} hakkında",
+  opensInBrowser: "tarayıcında açılır",
   mode: {
     title: "LED modu",
     options: {

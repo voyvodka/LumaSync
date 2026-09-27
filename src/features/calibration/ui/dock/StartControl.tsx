@@ -7,7 +7,7 @@ import { usePlaceLabel } from "../placeLabel";
 import { IconRefresh } from "@/shared/ui/icons";
 import { PageSwap, type PageWay } from "@/shared/ui/PageSwap/PageSwap";
 import { SpinSwap } from "@/shared/ui/SpinSwap/SpinSwap";
-import { PickerList } from "./PickerList";
+import { PickerList } from "@/shared/ui/PickerList/PickerList";
 import { PlaceGlyph } from "./PlaceGlyph";
 import styles from "./StartControl.module.css";
 
