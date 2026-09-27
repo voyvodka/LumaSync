@@ -10,6 +10,7 @@ export const DEVICE_COMMANDS = {
   GET_CONNECTION_STATUS: "get_serial_connection_status",
   RUN_HEALTH_CHECK: "run_serial_health_check",
   GET_RUNTIME_TELEMETRY: "get_runtime_telemetry",
+  GET_RUNTIME_TELEMETRY_HISTORY: "get_runtime_telemetry_history",
   /**
    * Probe a single user-supplied IP's `/json/info` endpoint.
    * Manual-IP only; not a LAN scan. Returns `WledDeviceInfo[]` (0 or 1).

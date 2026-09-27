@@ -30,7 +30,7 @@ use crate::commands::led_output::{
     ColorCorrectionConfig, FirmwareProfile, LedChipType, LedColorOrder, LedOutputBridge,
     LedOutputError, LedPacketSender,
 };
-use crate::commands::runtime_telemetry::RuntimeTelemetrySnapshot;
+use crate::commands::runtime_telemetry::{read_runtime_telemetry, SharedRuntimeTelemetry};
 use crate::commands::test_pattern::{TestPatternConfig, TestPatternKind, TestPatternSpeed};
 use crate::models::room_map::{RoomDimensions, RoomGeometry, TvAnchorPlacement};
 
@@ -84,8 +84,8 @@ fn owner_with_fake_sender() -> LightingRuntimeOwner {
     }
 }
 
-fn shared_telemetry() -> Arc<Mutex<RuntimeTelemetrySnapshot>> {
-    Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default()))
+fn shared_telemetry() -> SharedRuntimeTelemetry {
+    SharedRuntimeTelemetry::default()
 }
 
 /// Warms up once, then fails forever — the display-unplugged-mid-stream
@@ -1287,7 +1287,7 @@ fn a_worker_failing_mid_stream_reaches_telemetry() {
     let mut observed = None;
     for _ in 0..60 {
         std::thread::sleep(std::time::Duration::from_millis(50));
-        let snapshot = telemetry.lock().expect("telemetry lock").clone();
+        let snapshot = read_runtime_telemetry(&telemetry).expect("telemetry lock");
         if snapshot.last_capture_error_code.is_some() && snapshot.capture_fps == 0.0 {
             observed = Some(snapshot);
             break;

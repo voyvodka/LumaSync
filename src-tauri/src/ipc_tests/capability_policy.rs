@@ -158,6 +158,7 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     ("identify_hue_lights", MAIN_ONLY),
     ("forget_hue_bridge", MAIN_ONLY),
     ("get_runtime_telemetry", MAIN_ONLY),
+    ("get_runtime_telemetry_history", MAIN_ONLY),
     ("get_screen_capture_permission", MAIN_ONLY),
     ("open_screen_capture_settings", MAIN_ONLY),
     ("list_displays", MAIN_ONLY),

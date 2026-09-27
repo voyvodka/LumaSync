@@ -108,7 +108,7 @@ import type {
   TrayLabels,
 } from "./shell";
 import type { CommandStatusOf } from "./status";
-import type { FullTelemetrySnapshot } from "./telemetry";
+import type { FullTelemetrySnapshot, RuntimeTelemetryHistory } from "./telemetry";
 import type { UPDATER_COMMANDS, UpdateCheckResponse, UpdateInstallResponse } from "./updater";
 
 interface Command<TArgs, TResult> {
@@ -139,6 +139,7 @@ export interface CommandMap {
 
   /** The wire DTO; `telemetryApi` normalises it on the way through. */
   get_runtime_telemetry: NoArgs<FullTelemetrySnapshot>;
+  get_runtime_telemetry_history: NoArgs<RuntimeTelemetryHistory>;
 
   // --- device: WLED (every handler takes one struct named `request`) -------
   discover_wled_devices: Command<{ request: { ip: string } }, WledDiscoveryResponse>;

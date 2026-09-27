@@ -7,8 +7,9 @@
 //! when it changes, so nothing polls for it. See
 //! docs/architecture/capture-and-pipeline.md.
 
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use tauri::State;
@@ -16,6 +17,9 @@ use tauri::State;
 use super::hue::state_store::{acquire_hue_runtime, HueRuntimeStateStore};
 
 const TELEMETRY_WINDOW: Duration = Duration::from_secs(1);
+
+/// Five minutes of one-per-window samples.
+const HISTORY_CAPACITY: usize = 300;
 
 /// `TELEMETRY_EVENTS.HEALTH_CHANGED` in `src/shared/contracts/telemetry.ts`.
 /// Defined in `crate::events`; re-exported here since this is the emit site.
@@ -65,6 +69,10 @@ pub struct RuntimeTelemetrySnapshot {
     /// means it recovered. Reading the code without this is how a display
     /// unplugged an hour ago looks identical to one unplugged a second ago.
     pub last_capture_error_at_secs: Option<u64>,
+    /// The most frames per second capture was asked for — a ceiling, not a
+    /// goal: capture counts distinct frames, so a still screen reads well
+    /// under it with nothing wrong. **0.0 means no worker has started yet.**
+    pub capture_target_fps: f32,
 }
 
 impl Default for RuntimeTelemetrySnapshot {
@@ -78,8 +86,27 @@ impl Default for RuntimeTelemetrySnapshot {
             link_max_fps: 0.0,
             last_capture_error_code: None,
             last_capture_error_at_secs: None,
+            capture_target_fps: 0.0,
         }
     }
+}
+
+/// One telemetry window of capture, for the stats-for-nerds history.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CaptureFpsSample {
+    /// Wall clock, for display. Samples are in the order they were taken; a
+    /// clock that jumps back shows as a gap, not a reordering.
+    pub epoch_ms: u64,
+    pub fps: f32,
+    pub target_fps: f32,
+}
+
+/// `get_runtime_telemetry_history` payload, oldest sample first.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeTelemetryHistory {
+    pub samples: Vec<CaptureFpsSample>,
 }
 
 /// What the UI shows whether or not stats for nerds is on. Pushed through
@@ -118,10 +145,29 @@ fn registered_runtime_health_sink() -> Option<RuntimeHealthSink> {
         .clone()
 }
 
+/// The latest window and the recent ones. Lives for the app, not a worker,
+/// so the history spans mode changes; a stopped worker adds nothing and the
+/// UI draws the gap.
+#[derive(Debug)]
+pub struct TelemetryStore {
+    snapshot: RuntimeTelemetrySnapshot,
+    history: VecDeque<CaptureFpsSample>,
+}
+
+impl Default for TelemetryStore {
+    fn default() -> Self {
+        Self {
+            snapshot: RuntimeTelemetrySnapshot::default(),
+            // Allocated once, so a flush never allocates.
+            history: VecDeque::with_capacity(HISTORY_CAPACITY),
+        }
+    }
+}
+
 /// Tauri-managed holder for the shared USB telemetry snapshot.
 #[derive(Default)]
 pub struct RuntimeTelemetryState {
-    snapshot: Arc<Mutex<RuntimeTelemetrySnapshot>>,
+    snapshot: SharedRuntimeTelemetry,
 }
 
 impl RuntimeTelemetryState {
@@ -132,7 +178,7 @@ impl RuntimeTelemetryState {
     }
 }
 
-pub type SharedRuntimeTelemetry = Arc<Mutex<RuntimeTelemetrySnapshot>>;
+pub type SharedRuntimeTelemetry = Arc<Mutex<TelemetryStore>>;
 
 /// Point-in-time Hue runtime health — the `get_runtime_telemetry` command's
 /// `hue` field, `None` when Hue has never been active this session.
@@ -232,20 +278,37 @@ pub fn read_runtime_telemetry(
 ) -> Result<RuntimeTelemetrySnapshot, String> {
     snapshot
         .lock()
-        .map(|value| value.clone())
+        .map(|store| store.snapshot.clone())
         .map_err(|error| format!("RUNTIME_TELEMETRY_STATE_LOCK_FAILED: {error}"))
 }
 
-/// Replace the shared snapshot with `next`. Called by
-/// `RuntimeTelemetryWindow::flush_if_due` once per window.
+pub fn read_runtime_telemetry_history(
+    snapshot: &SharedRuntimeTelemetry,
+) -> Result<RuntimeTelemetryHistory, String> {
+    let samples = snapshot
+        .lock()
+        .map(|store| store.history.iter().cloned().collect())
+        .map_err(|error| format!("RUNTIME_TELEMETRY_STATE_LOCK_FAILED: {error}"))?;
+    Ok(RuntimeTelemetryHistory { samples })
+}
+
+/// Replace the shared snapshot with `next` and append `sample` to the
+/// history. Called by `RuntimeTelemetryWindow::flush_if_due` once per window.
 pub fn write_runtime_telemetry(
     snapshot: &SharedRuntimeTelemetry,
     next: RuntimeTelemetrySnapshot,
+    sample: Option<CaptureFpsSample>,
 ) -> Result<(), String> {
-    let mut state = snapshot
+    let mut store = snapshot
         .lock()
         .map_err(|error| format!("RUNTIME_TELEMETRY_STATE_LOCK_FAILED: {error}"))?;
-    *state = next;
+    store.snapshot = next;
+    if let Some(sample) = sample {
+        if store.history.len() == HISTORY_CAPACITY {
+            store.history.pop_front();
+        }
+        store.history.push_back(sample);
+    }
     Ok(())
 }
 
@@ -257,6 +320,13 @@ pub fn get_runtime_telemetry(
     let usb = read_runtime_telemetry(&telemetry_state.shared_snapshot())?;
     let hue = collect_hue_telemetry(&hue_state);
     Ok(FullTelemetrySnapshot { usb, hue })
+}
+
+#[tauri::command]
+pub fn get_runtime_telemetry_history(
+    telemetry_state: State<'_, RuntimeTelemetryState>,
+) -> Result<RuntimeTelemetryHistory, String> {
+    read_runtime_telemetry_history(&telemetry_state.shared_snapshot())
 }
 
 /// Accumulates per-frame counters for one `TELEMETRY_WINDOW` and flushes them
@@ -277,6 +347,10 @@ pub struct RuntimeTelemetryWindow {
     /// Last capture failure, sticky across flushes like the link budget: a
     /// counter reset would erase the only evidence of an ongoing outage.
     last_capture_error: Option<(String, Instant)>,
+    capture_target_fps: f32,
+    /// Off for a synthetic test pattern: it captures nothing, so its rate
+    /// would read as capture in the history.
+    records_history: bool,
     health_sink: Option<RuntimeHealthSink>,
     /// `None` until this worker's first flush, so that flush always publishes
     /// and overwrites whatever the previous worker left behind.
@@ -298,6 +372,8 @@ impl RuntimeTelemetryWindow {
             link_constrained: false,
             link_max_fps: 0.0,
             last_capture_error: None,
+            capture_target_fps: 0.0,
+            records_history: true,
             health_sink,
             published_health: None,
         }
@@ -308,6 +384,20 @@ impl RuntimeTelemetryWindow {
     pub fn set_link_budget(&mut self, link_max_fps: f32, link_constrained: bool) {
         self.link_max_fps = link_max_fps.max(0.0);
         self.link_constrained = link_constrained;
+    }
+
+    /// Capture's shortest gap between frames, from the output plan.
+    pub fn set_capture_interval(&mut self, interval: Duration) {
+        let secs = interval.as_secs_f32();
+        self.capture_target_fps = if secs > 0.0 {
+            round_two_decimals(1.0 / secs)
+        } else {
+            0.0
+        };
+    }
+
+    pub fn skip_history(&mut self) {
+        self.records_history = false;
     }
 
     pub fn record_capture(&mut self) {
@@ -370,11 +460,17 @@ impl RuntimeTelemetryWindow {
             _ => None,
         };
         let link_max_fps = round_two_decimals(self.link_max_fps);
+        let capture_fps = round_two_decimals(self.capture_count as f32 / elapsed_secs);
+        let sample = self.records_history.then(|| CaptureFpsSample {
+            epoch_ms: epoch_ms_now(),
+            fps: capture_fps,
+            target_fps: self.capture_target_fps,
+        });
 
         write_runtime_telemetry(
             snapshot,
             RuntimeTelemetrySnapshot {
-                capture_fps: round_two_decimals(self.capture_count as f32 / elapsed_secs),
+                capture_fps,
                 send_fps: round_two_decimals(self.send_count as f32 / elapsed_secs),
                 queue_health: queue_health_from_ratio(overwrite_ratio),
                 frame_latency_ms: round_two_decimals(self.latest_latency_ms),
@@ -382,7 +478,9 @@ impl RuntimeTelemetryWindow {
                 link_max_fps,
                 last_capture_error_code,
                 last_capture_error_at_secs,
+                capture_target_fps: self.capture_target_fps,
             },
+            sample,
         )?;
         self.publish_health(RuntimeHealth {
             capture_failure_code,
@@ -436,6 +534,14 @@ fn queue_health_from_ratio(ratio: f32) -> TelemetryQueueHealth {
     }
 }
 
+fn epoch_ms_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |since| {
+            u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
+        })
+}
+
 fn round_two_decimals(value: f32) -> f32 {
     (value * 100.0).round() / 100.0
 }
@@ -443,16 +549,16 @@ fn round_two_decimals(value: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::{
-        queue_health_from_ratio, read_runtime_telemetry, RuntimeHealth, RuntimeHealthSink,
-        RuntimeTelemetrySnapshot, RuntimeTelemetryWindow, SharedRuntimeTelemetry,
-        TelemetryQueueHealth,
+        queue_health_from_ratio, read_runtime_telemetry, read_runtime_telemetry_history,
+        RuntimeHealth, RuntimeHealthSink, RuntimeTelemetrySnapshot, RuntimeTelemetryWindow,
+        SharedRuntimeTelemetry, TelemetryQueueHealth, HISTORY_CAPACITY,
     };
     use std::sync::{Arc, Mutex};
     use std::thread;
     use std::time::{Duration, Instant};
 
     fn shared() -> SharedRuntimeTelemetry {
-        Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default()))
+        SharedRuntimeTelemetry::default()
     }
 
     type Published = Arc<Mutex<Vec<RuntimeHealth>>>;
@@ -603,6 +709,7 @@ mod tests {
         assert_eq!(snapshot.link_max_fps, 0.0);
         assert!(snapshot.last_capture_error_code.is_none());
         assert!(snapshot.last_capture_error_at_secs.is_none());
+        assert_eq!(snapshot.capture_target_fps, 0.0);
     }
 
     #[test]
@@ -817,5 +924,119 @@ mod tests {
         let err =
             read_runtime_telemetry(&poisoned).expect_err("poisoned lock should return coded error");
         assert!(err.starts_with("RUNTIME_TELEMETRY_STATE_LOCK_FAILED:"));
+    }
+
+    fn run_windows(
+        metrics: &SharedRuntimeTelemetry,
+        window: &mut RuntimeTelemetryWindow,
+        base: Instant,
+        seconds: std::ops::RangeInclusive<u64>,
+    ) {
+        for second in seconds {
+            window.record_capture();
+            window
+                .flush_if_due(base + Duration::from_secs(second), metrics)
+                .expect("flush should succeed");
+        }
+    }
+
+    #[test]
+    fn each_window_adds_one_history_sample_with_its_target() {
+        let metrics = shared();
+        let base = Instant::now();
+        let mut window = RuntimeTelemetryWindow::new(base);
+        window.set_capture_interval(Duration::from_millis(50));
+
+        run_windows(&metrics, &mut window, base, 1..=3);
+
+        let history = read_runtime_telemetry_history(&metrics).expect("history");
+        assert_eq!(history.samples.len(), 3);
+        assert!(history
+            .samples
+            .iter()
+            .all(|s| s.fps == 1.0 && s.target_fps == 20.0));
+        assert!(history
+            .samples
+            .windows(2)
+            .all(|w| w[0].epoch_ms <= w[1].epoch_ms));
+        let snapshot = read_runtime_telemetry(&metrics).expect("snapshot");
+        assert_eq!(snapshot.capture_target_fps, 20.0);
+    }
+
+    #[test]
+    fn history_keeps_only_the_last_five_minutes() {
+        let metrics = shared();
+        let base = Instant::now();
+        let mut window = RuntimeTelemetryWindow::new(base);
+
+        run_windows(
+            &metrics,
+            &mut window,
+            base,
+            1..=(HISTORY_CAPACITY as u64 + 20),
+        );
+
+        let history = read_runtime_telemetry_history(&metrics).expect("history");
+        assert_eq!(history.samples.len(), HISTORY_CAPACITY);
+    }
+
+    #[test]
+    fn history_outlives_the_worker_that_wrote_it() {
+        // A mode change ends one worker and starts another on the same store.
+        let metrics = shared();
+        let base = Instant::now();
+        let mut first = RuntimeTelemetryWindow::new(base);
+        first.set_capture_interval(Duration::from_millis(50));
+        run_windows(&metrics, &mut first, base, 1..=2);
+        drop(first);
+
+        let mut second = RuntimeTelemetryWindow::new(base);
+        second.set_capture_interval(Duration::from_millis(33));
+        run_windows(&metrics, &mut second, base, 1..=2);
+
+        let targets: Vec<f32> = read_runtime_telemetry_history(&metrics)
+            .expect("history")
+            .samples
+            .iter()
+            .map(|s| s.target_fps)
+            .collect();
+        assert_eq!(targets, vec![20.0, 20.0, 30.3, 30.3]);
+    }
+
+    #[test]
+    fn a_test_pattern_leaves_no_history() {
+        // It captures nothing; its rate in the history would read as capture.
+        let metrics = shared();
+        let base = Instant::now();
+        let mut window = RuntimeTelemetryWindow::new(base);
+        window.skip_history();
+
+        run_windows(&metrics, &mut window, base, 1..=3);
+
+        assert!(read_runtime_telemetry_history(&metrics)
+            .expect("history")
+            .samples
+            .is_empty());
+        assert_eq!(
+            read_runtime_telemetry(&metrics)
+                .expect("snapshot")
+                .capture_fps,
+            1.0
+        );
+    }
+
+    #[test]
+    fn history_serializes_as_camel_case() {
+        let metrics = shared();
+        let base = Instant::now();
+        let mut window = RuntimeTelemetryWindow::new(base);
+        run_windows(&metrics, &mut window, base, 1..=1);
+
+        let json = serde_json::to_value(read_runtime_telemetry_history(&metrics).expect("history"))
+            .expect("history should serialize");
+        let sample = &json["samples"][0];
+        for key in ["epochMs", "fps", "targetFps"] {
+            assert!(sample[key].is_number(), "`{key}` missing in {json}");
+        }
     }
 }

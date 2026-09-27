@@ -481,7 +481,7 @@ inside another branch's binary that way.
 
 | Window | App commands |
 |---|---|
-| `main` | 54 of the 60: the 53 its `*Api.ts` bridges reach, and `simulate_hue_fault` for the dev mock's panel, which passes it through to Rust from this window. Not the popup's three below, and not the three in the last row |
+| `main` | 59 of the 65: the 58 its `*Api.ts` bridges reach, and `simulate_hue_fault` for the dev mock's panel, which passes it through to Rust from this window. Not the popup's three below, and not the three in the last row |
 | `led-control-popup` | `get_shell_state`, `patch_shell_state` (its position, last pattern, hint flag); `apply_outputs`, `retune_lighting`, `get_lighting_runtime` (its mode strip, its Solid drag, the Hue test lease, and `useLightingRuntime`); `start_led_test_pattern`, `stop_led_test_pattern` (`useTestPatternRunner`); `get_led_preview_status` (`usePreviewStatusSync`); `close_led_twin_overlay`, `hide_led_control_popup` (its close button); `show_notification` (the one-time hint); `open_log_dir` (`GlobalErrorBoundary`'s "Show logs") |
 | `led-twin-overlay-*` | `get_shell_state` only — it reads the calibration it draws |
 | `calibration-overlay-*` | none |

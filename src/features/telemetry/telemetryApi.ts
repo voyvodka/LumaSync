@@ -1,8 +1,10 @@
 import { DEVICE_COMMANDS } from "@/shared/contracts/device";
 import {
   TELEMETRY_QUEUE_HEALTH,
+  type CaptureFpsSample,
   type FullTelemetrySnapshot,
   type HueTelemetrySnapshot,
+  type RuntimeTelemetryHistory,
   type RuntimeTelemetrySnapshot,
 } from "@/shared/contracts/telemetry";
 import { invokeCommand, type CommandInvoker } from "@/shared/ipcApi";
@@ -16,6 +18,7 @@ interface RuntimeTelemetrySnapshotDto {
   linkMaxFps: number;
   lastCaptureErrorCode: string | null;
   lastCaptureErrorAtSecs: number | null;
+  captureTargetFps: number;
 }
 
 interface HueTelemetrySnapshotDto {
@@ -82,6 +85,8 @@ export function mapRuntimeTelemetrySnapshot(dto: RuntimeTelemetrySnapshotDto): R
       typeof dto.lastCaptureErrorAtSecs === "number" && !Number.isNaN(dto.lastCaptureErrorAtSecs)
         ? Math.max(0, dto.lastCaptureErrorAtSecs)
         : null,
+    // Floors at CAPTURE_TARGET_FPS_ABSENT, like the link budget.
+    captureTargetFps: normalizeFps(dto.captureTargetFps),
   };
 }
 
@@ -114,4 +119,19 @@ export async function getFullTelemetrySnapshot(
 ): Promise<FullTelemetrySnapshot> {
   const snapshot: FullTelemetrySnapshotDto = await invoker(DEVICE_COMMANDS.GET_RUNTIME_TELEMETRY);
   return mapFullTelemetrySnapshot(snapshot);
+}
+
+function isSample(value: unknown): value is CaptureFpsSample {
+  if (typeof value !== "object" || value === null) return false;
+  const { epochMs, fps, targetFps } = value as Record<string, unknown>;
+  return [epochMs, fps, targetFps].every((n) => typeof n === "number" && Number.isFinite(n));
+}
+
+/** Up to five minutes of capture rate, oldest first. A malformed sample is dropped rather than drawn. */
+export async function getRuntimeTelemetryHistory(
+  invoker: CommandInvoker = invokeCommand,
+): Promise<RuntimeTelemetryHistory> {
+  const history: RuntimeTelemetryHistory = await invoker(DEVICE_COMMANDS.GET_RUNTIME_TELEMETRY_HISTORY);
+  const samples = Array.isArray(history?.samples) ? history.samples.filter(isSample) : [];
+  return { samples: samples.map((s) => ({ ...s, fps: Math.max(0, s.fps) })) };
 }

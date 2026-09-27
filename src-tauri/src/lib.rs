@@ -107,8 +107,8 @@ use commands::room_map::hue_zone::{
 };
 use commands::room_map::save_load::{copy_background_image, update_hue_channel_positions};
 use commands::runtime_telemetry::{
-    get_runtime_telemetry, register_runtime_health_sink, RuntimeHealth, RuntimeTelemetryState,
-    RUNTIME_HEALTH_CHANGED_EVENT,
+    get_runtime_telemetry, get_runtime_telemetry_history, register_runtime_health_sink,
+    RuntimeHealth, RuntimeTelemetryState, RUNTIME_HEALTH_CHANGED_EVENT,
 };
 use commands::screen_capture_permission::{
     get_screen_capture_permission, open_screen_capture_settings,
@@ -917,6 +917,7 @@ pub fn run() {
             get_hue_stream_status,
             get_hue_area_channels,
             get_runtime_telemetry,
+            get_runtime_telemetry_history,
             show_notification,
             request_notification_permission,
             open_log_dir,

@@ -91,6 +91,7 @@
     "allow-identify-hue-lights",
     "allow-forget-hue-bridge",
     "allow-get-runtime-telemetry",
+    "allow-get-runtime-telemetry-history",
     "allow-show-notification",
     "allow-open-log-dir",
     "allow-get-screen-capture-permission",

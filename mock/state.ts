@@ -149,6 +149,7 @@ export interface MockWorld {
     linkMaxFps: number;
     lastCaptureErrorCode: string | null;
     lastCaptureErrorAtSecs: number | null;
+    captureTargetFps: number;
   };
   /** Every shell-state write fails, reproducing the persist banners. */
   persistFails: boolean;

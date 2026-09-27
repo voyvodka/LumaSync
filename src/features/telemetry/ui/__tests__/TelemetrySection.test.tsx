@@ -7,8 +7,11 @@ import { renderWithShellStores } from "@/test/shellProviders";
 
 const getFullTelemetrySnapshotMock = vi.fn<typeof telemetryApiModule.getFullTelemetrySnapshot>();
 
+const getRuntimeTelemetryHistoryMock = vi.fn<typeof telemetryApiModule.getRuntimeTelemetryHistory>();
+
 vi.mock("@/features/telemetry/telemetryApi", () => ({
   getFullTelemetrySnapshot: () => getFullTelemetrySnapshotMock(),
+  getRuntimeTelemetryHistory: () => getRuntimeTelemetryHistoryMock(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -25,6 +28,7 @@ vi.mock("react-i18next", () => ({
         "telemetry:hueLastError": "Last Hue error",
         "telemetry:hueReconnects": "Hue reconnects",
         "telemetry:fps": "{{fps}} fps",
+        "telemetry:fpsOf": "{{fps}} / {{target}} fps",
         "telemetry:packetRate": "{{rate}} per second",
         "telemetry:uptimeMinutes": "{{minutes}} min",
         "telemetry:uptimeSeconds": "{{seconds}} s",
@@ -34,6 +38,10 @@ vi.mock("react-i18next", () => ({
         "telemetry:unmeasured": "Not measured",
         "telemetry:error": "Couldn't read the numbers",
         "telemetry:queueHealth.healthy": "Healthy",
+        "telemetry:historySummary": "avg {{avg}} · low {{min}}",
+        "telemetry:historyEmpty": "No readings yet",
+        "telemetry:historyTarget": "target {{fps}}",
+        "telemetry:historyLabel": "Capture rate: average {{avg}} fps, lowest {{min}} fps",
         "hue:runtime.states.Running": "Running",
         "settings:language.label": "Interface language",
       };
@@ -61,6 +69,7 @@ function usbSnapshot(overrides: Partial<RuntimeTelemetrySnapshot>): RuntimeTelem
     linkMaxFps: 0,
     lastCaptureErrorCode: null,
     lastCaptureErrorAtSecs: null,
+    captureTargetFps: 0,
     ...overrides,
   };
 }
@@ -84,7 +93,7 @@ function hueSnapshot(overrides: Partial<HueTelemetrySnapshot>): HueTelemetrySnap
 
 const value = (id: string) => screen.getByTestId(`telemetry-${id}`).querySelector("dd")?.textContent;
 const rowIds = () => [...screen.getByTestId("telemetry-readout").querySelectorAll("[data-testid^=telemetry-]")].map((el) => el.getAttribute("data-testid"));
-const list = () => screen.getByTestId("telemetry-readout").querySelector("dl");
+const list = () => screen.getByTestId("telemetry-readout");
 
 async function flush() {
   await act(async () => {
@@ -101,6 +110,7 @@ describe("TelemetrySection", () => {
       usb: usbSnapshot({ captureFps: 59.6, sendFps: 58.2, linkMaxFps: 74 }),
       hue: null,
     });
+    getRuntimeTelemetryHistoryMock.mockResolvedValue({ samples: [] });
   });
 
   afterEach(() => {
@@ -140,6 +150,7 @@ describe("TelemetrySection", () => {
     const atOpen = rowIds();
     expect(atOpen).toEqual([
       "telemetry-capture",
+      "telemetry-history",
       "telemetry-hue-stream",
       "telemetry-hue-packets",
       "telemetry-hue-error",
@@ -158,6 +169,16 @@ describe("TelemetrySection", () => {
     expect(value("hue-reconnects")).toBe("3 · 1 failed");
   });
 
+  it("reads capture against the rate it was asked for once a worker said one", async () => {
+    getFullTelemetrySnapshotMock.mockResolvedValue({
+      usb: usbSnapshot({ captureFps: 15.4, captureTargetFps: 20 }),
+      hue: null,
+    });
+    render(<TelemetrySection open localOutputConnected />);
+
+    await waitFor(() => expect(value("capture")).toBe("15 / 20 fps"));
+  });
+
   it("reads a strip without a serial link budget as not measured, never 0 fps", async () => {
     getFullTelemetrySnapshotMock.mockResolvedValue({ usb: usbSnapshot({ captureFps: 60 }), hue: null });
     render(<TelemetrySection open localOutputConnected />);
@@ -166,13 +187,40 @@ describe("TelemetrySection", () => {
     expect(value("link")).toBe("—Not measured");
   });
 
-  it("polls nothing with no output at all and says capture is not running, from the first frame", async () => {
+  it("with no output still reads the history, since it outlives the lights, and says capture is not running", async () => {
     render(<TelemetrySection open localOutputConnected={false} />);
+    expect(value("capture")).toBe("Not running");
     await flush();
 
     expect(list()).toHaveAttribute("data-ready");
-    expect(value("capture")).toBe("Not running");
-    expect(getFullTelemetrySnapshotMock).not.toHaveBeenCalled();
+    expect(getRuntimeTelemetryHistoryMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("telemetry-history")).toHaveTextContent("No readings yet");
+  });
+
+  it("waits for the history as well as the numbers before showing either", async () => {
+    let resolve: (history: { samples: [] }) => void = () => {};
+    getRuntimeTelemetryHistoryMock.mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+    render(<TelemetrySection open localOutputConnected />);
+    await flush();
+
+    expect(list()).not.toHaveAttribute("data-ready");
+    await act(async () => {
+      resolve({ samples: [] });
+    });
+    expect(list()).toHaveAttribute("data-ready");
+  });
+
+  it("draws the history under the capture row with its average, low and target", async () => {
+    const now = Date.now();
+    getRuntimeTelemetryHistoryMock.mockResolvedValue({
+      samples: [18, 20, 12].map((fps, i) => ({ epochMs: now - (3 - i) * 1000, fps, targetFps: 20 })),
+    });
+    render(<TelemetrySection open localOutputConnected />);
+
+    const chart = await screen.findByTestId("telemetry-history");
+    await waitFor(() => expect(chart).toHaveTextContent("avg 17 · low 12"));
+    expect(chart).toHaveTextContent("target 20");
+    expect(rowIds().slice(0, 3)).toEqual(["telemetry-capture", "telemetry-history", "telemetry-send"]);
   });
 
   it("says so when the numbers cannot be read", async () => {
@@ -253,6 +301,7 @@ describe("Settings telemetry wiring", () => {
     __resetTelemetrySourceForTests();
     __resetPreferencesForTests();
     shellSaveMock.mockResolvedValue(undefined);
+    getRuntimeTelemetryHistoryMock.mockResolvedValue({ samples: [] });
     getFullTelemetrySnapshotMock.mockResolvedValue({
       usb: usbSnapshot({ captureFps: 60, sendFps: 58 }),
       hue: null,

@@ -8,7 +8,8 @@ use super::{assert_camel_case_keys, invoke, main_webview, mock_app};
 
 fn app() -> App<MockRuntime> {
     mock_app(tauri::generate_handler![
-        crate::commands::runtime_telemetry::get_runtime_telemetry
+        crate::commands::runtime_telemetry::get_runtime_telemetry,
+        crate::commands::runtime_telemetry::get_runtime_telemetry_history
     ])
 }
 
@@ -35,4 +36,18 @@ fn telemetry_snapshot_is_well_formed_when_idle() {
         json!(null),
         "the Hue arm stays null until a stream exists"
     );
+}
+
+/// The history is read the moment stats for nerds opens, before any worker
+/// may have run.
+#[test]
+fn telemetry_history_is_empty_and_well_formed_when_idle() {
+    let app = app();
+    let webview = main_webview(&app);
+
+    let response =
+        invoke(&webview, "get_runtime_telemetry_history", json!({})).expect("history must resolve");
+
+    assert_camel_case_keys(&response);
+    assert_eq!(response, json!({ "samples": [] }));
 }

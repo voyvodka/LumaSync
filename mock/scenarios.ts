@@ -81,6 +81,7 @@ function base(): MockWorld {
       linkMaxFps: 0,
       lastCaptureErrorCode: null,
       lastCaptureErrorAtSecs: null,
+      captureTargetFps: 0,
     },
     persistFails: false,
     forcedCodes: {},
@@ -175,14 +176,15 @@ function furnished(): MockWorld {
   };
   w.lighting = { mode: { kind: "ambilight" } };
   w.telemetry = {
-    captureFps: 58.4,
-    sendFps: 58.1,
+    captureFps: 29.6,
+    sendFps: 29.4,
     queueHealth: "healthy",
     frameLatencyMs: 4.2,
     linkConstrained: false,
     linkMaxFps: 74,
     lastCaptureErrorCode: null,
     lastCaptureErrorAtSecs: null,
+    captureTargetFps: 30.3,
   };
   w.shellState = {
     ...w.shellState,

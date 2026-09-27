@@ -22,6 +22,7 @@ const APP_COMMANDS: &[&str] = &[
     "get_hue_stream_status",
     "get_hue_area_channels",
     "get_runtime_telemetry",
+    "get_runtime_telemetry_history",
     "show_notification",
     "request_notification_permission",
     "open_log_dir",

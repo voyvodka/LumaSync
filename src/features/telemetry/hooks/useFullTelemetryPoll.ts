@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import type { FullTelemetrySnapshot } from "@/shared/contracts/telemetry";
+import type { FullTelemetrySnapshot, RuntimeTelemetryHistory } from "@/shared/contracts/telemetry";
 import { subscribeTelemetry } from "../telemetrySource";
 
 const DEFAULT_POLL_INTERVAL_MS = 1000;
@@ -14,12 +14,17 @@ const DEFAULT_POLL_INTERVAL_MS = 1000;
  */
 export interface FullTelemetryPollResult {
   snapshot: FullTelemetrySnapshot | null;
+  /** `null` unless asked for with `{ history: true }`, and until its first read. */
+  history: RuntimeTelemetryHistory | null;
+  historyReadAtMs: number | null;
   error: Error | null;
   isLoading: boolean;
 }
 
 const INITIAL_RESULT: FullTelemetryPollResult = {
   snapshot: null,
+  history: null,
+  historyReadAtMs: null,
   error: null,
   isLoading: true,
 };
@@ -29,7 +34,9 @@ function sameResult(a: FullTelemetryPollResult, b: FullTelemetryPollResult): boo
     a.isLoading === b.isLoading &&
     a.error?.message === b.error?.message &&
     // Small, flat, and serialised by one Rust struct, so key order is stable.
-    JSON.stringify(a.snapshot) === JSON.stringify(b.snapshot)
+    JSON.stringify(a.snapshot) === JSON.stringify(b.snapshot) &&
+    // Each read moves the time axis, so a new read is always a new result.
+    a.historyReadAtMs === b.historyReadAtMs
   );
 }
 
@@ -42,6 +49,7 @@ function sameResult(a: FullTelemetryPollResult, b: FullTelemetryPollResult): boo
 export function useFullTelemetryPoll(
   enabled: boolean,
   pollIntervalMs: number = DEFAULT_POLL_INTERVAL_MS,
+  { history = false }: { history?: boolean } = {},
 ): FullTelemetryPollResult {
   const [result, setResult] = useState<FullTelemetryPollResult>(INITIAL_RESULT);
   const lastRef = useRef<FullTelemetryPollResult>(INITIAL_RESULT);
@@ -59,18 +67,24 @@ export function useFullTelemetryPoll(
       // Reset so re-enabling does not flash a stale value while the first
       // tick is still pending. `isLoading=false` because the consumer is
       // explicitly idle, not waiting on a fetch.
-      publish({ snapshot: null, error: null, isLoading: false });
+      publish({ ...INITIAL_RESULT, isLoading: false });
       return;
     }
 
-    return subscribeTelemetry(pollIntervalMs, (next) => {
-      publish({
-        snapshot: next.snapshot,
-        error: next.error,
-        isLoading: next.isLoading,
-      });
-    });
-  }, [enabled, pollIntervalMs]);
+    return subscribeTelemetry(
+      pollIntervalMs,
+      (next) => {
+        publish({
+          snapshot: next.snapshot,
+          history: history ? next.history : null,
+          historyReadAtMs: history ? next.historyReadAtMs : null,
+          error: next.error,
+          isLoading: next.isLoading,
+        });
+      },
+      { history },
+    );
+  }, [enabled, pollIntervalMs, history]);
 
   return result;
 }

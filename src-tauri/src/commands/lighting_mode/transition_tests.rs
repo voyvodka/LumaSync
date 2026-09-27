@@ -25,7 +25,7 @@ use crate::commands::led_output::{
     FirmwareProfile, LedChipType, LedColorOrder, LedOutputBridge, LedOutputError, LedPacketSender,
 };
 use crate::commands::runtime_quality::RuntimeQualityConfig;
-use crate::commands::runtime_telemetry::RuntimeTelemetrySnapshot;
+use crate::commands::runtime_telemetry::SharedRuntimeTelemetry;
 use crate::commands::wled_sink::{WledProtocol, WledSinkConfig};
 
 #[derive(Default)]
@@ -178,8 +178,8 @@ fn acquire_worker_test_guard() -> std::sync::MutexGuard<'static, ()> {
         .unwrap_or_else(|e| e.into_inner())
 }
 
-fn shared_runtime_telemetry() -> Arc<Mutex<RuntimeTelemetrySnapshot>> {
-    Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default()))
+fn shared_runtime_telemetry() -> SharedRuntimeTelemetry {
+    SharedRuntimeTelemetry::default()
 }
 
 /// Mirrors `owner_with_fake_sender` but exposes the recorder `Arc` so a
