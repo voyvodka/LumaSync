@@ -11,6 +11,7 @@ import {
 } from "@/shared/contracts/roomMap";
 import {
   HUE_AREA_CHANNELS_STATUS,
+  HUE_IDENTIFY_SIGNAL_MS,
   HUE_IDENTIFY_STATUS,
   HUE_RUNTIME_STATUS,
   type HueChannelPlacementOverride,
@@ -354,11 +355,17 @@ export function HueChannels({
       if (!onIdentify) return;
       setIdentifyingIndex(channelIndex);
       showResult(null);
+      const started = Date.now();
       try {
         const status = await onIdentify(lightIds);
         if (status.code !== HUE_IDENTIFY_STATUS.OK) {
           console.warn(`[LumaSync] Hue identify: ${status.code}${status.details ? ` — ${status.details}` : ""}`);
           showResult({ kind: "identifyFailed", code: status.code }, DETAIL_DISMISS_MS);
+        } else {
+          // The bridge answers at once; the light blinks for seconds after. The button says so
+          // for as long, or it flicked back to "Identify" before the light had started.
+          const left = HUE_IDENTIFY_SIGNAL_MS - (Date.now() - started);
+          if (left > 0) await new Promise((resolve) => setTimeout(resolve, left));
         }
       } finally {
         setIdentifyingIndex(null);

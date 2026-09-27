@@ -278,18 +278,74 @@ enum IdentifyPut {
     Failed(String),
 }
 
+/// How long a light that supports it toggles on and off when identified. `HUE_IDENTIFY_SIGNAL_MS`
+/// in `src/shared/contracts/hue.ts`: the button says it is blinking for as long.
+pub const HUE_IDENTIFY_SIGNAL_MS: u64 = 4000;
+
+/// What one identify asks the bridge for. A light that lists the `on_off` signal toggles for a few
+/// seconds; anything else gets the device's own identify, which is one breathe cycle — easy to miss
+/// on a light already at full brightness, which is why it is only the fallback.
+#[derive(Debug, PartialEq)]
+enum IdentifyTarget {
+    Signal(String),
+    Device(String),
+}
+
+fn signals_on_off(light: &Value) -> bool {
+    light
+        .pointer("/signaling/signal_values")
+        .and_then(Value::as_array)
+        .is_some_and(|values| values.iter().any(|value| value == "on_off"))
+}
+
+/// The requests for `wanted`, in the order the row lists them: a signal per light that can, the
+/// owning device (once) for each that cannot.
+fn identify_targets(lights: &[Value], wanted: &[String]) -> Vec<IdentifyTarget> {
+    let signalling: Vec<String> = wanted
+        .iter()
+        .filter(|id| {
+            lights
+                .iter()
+                .any(|item| light_id(item) == Some(id.as_str()) && signals_on_off(item))
+        })
+        .cloned()
+        .collect();
+    let rest: Vec<String> = wanted
+        .iter()
+        .filter(|id| !signalling.contains(id))
+        .cloned()
+        .collect();
+    signalling
+        .into_iter()
+        .map(IdentifyTarget::Signal)
+        .chain(
+            owner_devices(lights, &rest)
+                .into_iter()
+                .map(IdentifyTarget::Device),
+        )
+        .collect()
+}
+
 async fn put_identify(
     client: &reqwest::Client,
     bridge_ip: &str,
     username: &str,
-    device_id: &str,
+    target: &IdentifyTarget,
 ) -> IdentifyPut {
+    let (path, body) = match target {
+        IdentifyTarget::Signal(light) => (
+            format!("light/{light}"),
+            json!({ "signaling": { "signal": "on_off", "duration": HUE_IDENTIFY_SIGNAL_MS } }),
+        ),
+        IdentifyTarget::Device(device) => (
+            format!("device/{device}"),
+            json!({ "identify": { "action": "identify" } }),
+        ),
+    };
     let response = match client
-        .put(format!(
-            "https://{bridge_ip}/clip/v2/resource/device/{device_id}"
-        ))
+        .put(format!("https://{bridge_ip}/clip/v2/resource/{path}"))
         .header("hue-application-key", username)
-        .json(&json!({ "identify": { "action": "identify" } }))
+        .json(&body)
         .send()
         .await
     {
@@ -374,8 +430,8 @@ pub(crate) async fn identify_lights_on_bridge(
             )
         }
     };
-    let devices = owner_devices(&lights, &light_ids);
-    if devices.is_empty() {
+    let targets = identify_targets(&lights, &light_ids);
+    if targets.is_empty() {
         return identify_status(
             "HUE_IDENTIFY_FAILED",
             "No Hue light was identified.",
@@ -396,7 +452,7 @@ pub(crate) async fn identify_lights_on_bridge(
     let mut pacer = identify_pacer().lock().await;
     let mut identified = 0_usize;
     let mut failures: Vec<String> = Vec::new();
-    for device in &devices {
+    for target in &targets {
         let mut throttled_once = false;
         loop {
             let wait = pacer.time_until_slot(Instant::now());
@@ -408,7 +464,7 @@ pub(crate) async fn identify_lights_on_bridge(
                 return blocked();
             }
             pacer.consume(Instant::now());
-            match put_identify(&client, bridge_ip, username, device).await {
+            match put_identify(&client, bridge_ip, username, target).await {
                 IdentifyPut::Ok => {
                     pacer.on_success();
                     identified += 1;
@@ -418,7 +474,7 @@ pub(crate) async fn identify_lights_on_bridge(
                     throttled_once = true;
                     continue;
                 }
-                IdentifyPut::Throttled(_) => failures.push(format!("{device}: throttled")),
+                IdentifyPut::Throttled(_) => failures.push(format!("{target:?}: throttled")),
                 IdentifyPut::AuthInvalid => {
                     return identify_status(
                         "AUTH_INVALID_RE_PAIR_REQUIRED",
@@ -426,7 +482,7 @@ pub(crate) async fn identify_lights_on_bridge(
                         None,
                     )
                 }
-                IdentifyPut::Failed(reason) => failures.push(format!("{device}: {reason}")),
+                IdentifyPut::Failed(reason) => failures.push(format!("{target:?}: {reason}")),
             }
             break;
         }
@@ -434,11 +490,12 @@ pub(crate) async fn identify_lights_on_bridge(
     drop(pacer);
 
     info!(
-        "[hue-lights] identify: {identified}/{} device(s) blinked",
-        devices.len()
+        "[hue-lights] identify: {identified}/{} blinked ({:?})",
+        targets.len(),
+        targets
     );
     if failures.is_empty() {
-        identify_status("HUE_IDENTIFY_OK", "The light blinks once.", None)
+        identify_status("HUE_IDENTIFY_OK", "The light blinks.", None)
     } else if identified > 0 {
         identify_status(
             "HUE_IDENTIFY_PARTIAL",
@@ -454,8 +511,8 @@ pub(crate) async fn identify_lights_on_bridge(
     }
 }
 
-/// Blink the lights in `light_ids` once, through their owning devices.
-/// Refused while a stream owns them.
+/// Blink the lights in `light_ids`: a few seconds on and off where the light can, its device's
+/// identify where not. Refused while a stream owns them.
 #[tauri::command]
 pub async fn identify_hue_lights(
     bridge_ip: String,
@@ -577,7 +634,7 @@ mod tests {
         }
         assert!(
             hue.bridge.puts_to("/clip/v2/resource/light/").is_empty(),
-            "identify never writes a light's state"
+            "a light that cannot signal is not written to"
         );
         // The pacer spaces request starts, so the gap is read where each
         // connection arrived: a request's arrival after its TLS handshake
@@ -590,6 +647,43 @@ mod tests {
         assert!(
             gap + std::time::Duration::from_millis(20) >= floor,
             "two identifies {gap:?} apart; the light budget allows one per {floor:?}"
+        );
+    }
+
+    // One breathe cycle is easy to miss on a light at full brightness; a light that can toggles
+    // on and off for a few seconds instead, and only the rest fall back to the device's identify.
+    #[tokio::test]
+    async fn a_light_that_signals_toggles_for_a_while_and_the_rest_breathe() {
+        let mut signalling = named("Sofa lamp");
+        signalling["signaling"] =
+            json!({ "signal_values": ["no_signal", "on_off", "alternating"] });
+        let hue = FakeHue::start(
+            &[(AREA, &["light-1", "light-2"])],
+            &[("light-1", signalling), ("light-2", named("TV left"))],
+            |_| Reply::ok(),
+        );
+        let runtime = HueRuntimeStateStore::default();
+
+        let status = identify_lights_on_bridge(
+            &hue.bridge.authority,
+            "app-key",
+            ids(&["light-1", "light-2"]),
+            &runtime,
+        )
+        .await;
+
+        assert_eq!(status.code, "HUE_IDENTIFY_OK");
+        let signals = hue.bridge.puts_to("/clip/v2/resource/light/");
+        assert_eq!(signals.len(), 1);
+        assert_eq!(signals[0].path, "/clip/v2/resource/light/light-1");
+        assert_eq!(
+            signals[0].json(),
+            json!({ "signaling": { "signal": "on_off", "duration": HUE_IDENTIFY_SIGNAL_MS } })
+        );
+        let devices = hue.bridge.puts_to("/clip/v2/resource/device/");
+        assert_eq!(
+            devices.iter().map(|r| r.path.as_str()).collect::<Vec<_>>(),
+            vec!["/clip/v2/resource/device/dev-light-2"]
         );
     }
 

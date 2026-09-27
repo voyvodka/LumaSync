@@ -719,10 +719,16 @@ the answer for the session (`useHueLightNames`); nothing polls, and Revalidate r
 stream-start metadata fetch is per light and carries no name, so the same bulk read serves a running
 stream too.
 
-- **Identify is the owning device's action.** The OpenHue spec puts `identify: {action: "identify"}`
-  on `device` ("Lights perform one breathe cycle"), not on `light`, so `identify_hue_lights` reads
-  the light list for each light's `owner` and PUTs `{"identify":{"action":"identify"}}` to
-  `/clip/v2/resource/device/{id}`, once per device, never writing a light's state.
+- **Identify toggles the light where it can.** The device's own identify (`identify: {action:
+  "identify"}` on `device`) is one breathe cycle, and on a light already at full brightness it read as
+  nothing happening — the maintainer pressed it and saw only the button. A light whose `signaling`
+  lists `on_off` (read from the same bulk light list, so no extra request) gets
+  `{"signaling":{"signal":"on_off","duration":HUE_IDENTIFY_SIGNAL_MS}}` on `/clip/v2/resource/light/{id}`
+  and toggles between full and off for four seconds; any other light falls back to its owning device's
+  identify, once per device. The bridge answers at once, so the button holds "Blinking…" for the same
+  `HUE_IDENTIFY_SIGNAL_MS` (paired in `hue.ts`, checked by `verify:shell-contracts`); it used to flick
+  back before the light had started. That the light returns to its own state when the signal ends is
+  what the spec implies but has not been watched on hardware yet.
 - **Paced to the light budget** by one process-wide `RequestPacer` at
   `HUE_HTTP_FALLBACK_MAX_REQUESTS_PER_SEC`, held across a whole press so two presses queue rather
   than burst; a 429 widens it and is retried once.

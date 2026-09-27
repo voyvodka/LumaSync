@@ -1558,6 +1558,18 @@ check(
     + `vs telemetry.ts ${tsOngoingAge ? tsOngoingAge[1] : "?"}`
 );
 
+// How long an identified Hue light blinks: the button holds its label for as long.
+const rustIdentifySignal = readFileSync(resolve(ROOT, "src-tauri/src/commands/hue/lights.rs"), "utf8").match(
+  /HUE_IDENTIFY_SIGNAL_MS:\s*u64\s*=\s*([0-9_]+)/
+);
+const tsIdentifySignal = hueSource.match(/HUE_IDENTIFY_SIGNAL_MS\s*=\s*([0-9_]+)/);
+check(
+  rustIdentifySignal !== null && tsIdentifySignal !== null && rustIdentifySignal[1] === tsIdentifySignal[1],
+  `HUE_IDENTIFY_SIGNAL_MS matches (${rustIdentifySignal ? rustIdentifySignal[1] : "?"})`,
+  `DRIFT: Rust HUE_IDENTIFY_SIGNAL_MS=${rustIdentifySignal ? rustIdentifySignal[1] : "?"} `
+    + `vs hue.ts ${tsIdentifySignal ? tsIdentifySignal[1] : "?"}`
+);
+
 // ---------------------------------------------------------------------------
 // USB VID/PID allowlist parity. `SUPPORTED_CONTROLLER_IDS` already mirrors the
 // Rust allowlist with no consumer and nothing asserting agreement until now.

@@ -284,6 +284,8 @@ https://keepachangelog.com/en/1.1.0/
   channel its room-map zone keeps inside is named as the reason it differs, instead of a suggestion
   to send yours back.
 - Turkish: the Hue Bridge is called "Hue Bridge" throughout, not "köprü".
+- Hue: Identify blinks the light on and off for a few seconds where the light supports it, instead of
+  one faint breath that was easy to miss, and the button says it is blinking for as long.
 - Stats for nerds: the frame-rate chip in the status bar no longer turns red with "Low FPS" while
   everything is fine — with Hue alone, which runs at 20 fps, or on a still screen, where fewer
   frames change. Its colour now shows whether the output keeps up.
