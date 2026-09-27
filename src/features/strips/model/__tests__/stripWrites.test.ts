@@ -185,5 +185,20 @@ describe("withoutStrip", () => {
   it("writes nothing for an id no strip has", () => {
     expect(withoutStrip(state({ ledStrips: [strip("a")] }), "zzz")).toBeNull();
   });
+
+  // The primary is the first enabled strip, here and in Rust: forgetting it must leave one.
+  it("forgetting the primary makes the next strip the primary", () => {
+    const current = state({ ledStrips: [strip("a"), strip("b", { enabled: false }), strip("c", { enabled: false })] });
+    const next = withoutStrip(current, "a")?.ledStrips;
+    expect(next?.map((each) => [each.id, each.enabled])).toEqual([
+      ["b", true],
+      ["c", false],
+    ]);
+  });
+
+  it("leaves the primary alone when another strip is forgotten", () => {
+    const current = state({ ledStrips: [strip("a"), strip("b", { enabled: false })] });
+    expect(withoutStrip(current, "b")?.ledStrips).toEqual([strip("a")]);
+  });
 });
 

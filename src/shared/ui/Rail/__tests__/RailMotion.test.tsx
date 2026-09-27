@@ -21,6 +21,14 @@ describe("Rail — rows that come and go", () => {
     const leaving = screen.getByTestId("row-b");
     expect(leaving.className).toMatch(/leaving/);
     expect(leaving).toHaveAttribute("aria-hidden", "true");
-    expect(leaving).toBeDisabled();
+    expect(leaving).toHaveAttribute("tabindex", "-1");
+  });
+
+  // A device unplugged while its row has focus must not drop focus to nowhere.
+  it("focus on a row that leaves goes to the page on view", () => {
+    const { rerender } = render(rail(["a", "b"]));
+    screen.getByTestId("row-b").focus();
+    rerender(rail(["a"]));
+    expect(screen.getByTestId("row-a")).toHaveFocus();
   });
 });

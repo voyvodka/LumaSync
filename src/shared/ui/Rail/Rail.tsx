@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { cx } from "../cx";
 import { useLeavingItems, type ListRow } from "../Reveal/useLeavingItems";
@@ -36,8 +36,9 @@ export function Rail<Id extends string>({ label, items, active, onSelect }: Rail
   // The first placement lands without travel: the page opens with the tint already on its row.
   const [placed, setPlaced] = useState(false);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: items is the trigger — a row added above the active one moves it
-  useLayoutEffect(() => {
+  // Which rows are drawn and which are leaving: a leave keeps the count, so the count is no trigger.
+  const rowsShape = rows.map((row) => (row.leaving ? `~${row.key}` : row.key)).join("\u0000");
+  const measure = useCallback(() => {
     const row = listRef.current?.querySelector<HTMLElement>('[aria-current="page"]');
     if (!row) {
       setTint(null);
@@ -45,14 +46,24 @@ export function Rail<Id extends string>({ label, items, active, onSelect }: Rail
     }
     const next = { top: row.offsetTop, height: row.offsetHeight };
     setTint((prev) => (prev && prev.top === next.top && prev.height === next.height ? prev : next));
-  }, [active, items]);
+  }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: active and the rows are the trigger — a row added or leaving above the active one moves it
+  useLayoutEffect(() => {
+    measure();
+    // Focus on a row that is leaving would be dropped with it; it goes to the page on view instead.
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && listRef.current?.contains(focused) && focused.getAttribute("aria-hidden") === "true") {
+      listRef.current.querySelector<HTMLElement>('[aria-current="page"]')?.focus();
+    }
+  }, [active, rowsShape, measure]);
   useLayoutEffect(() => {
     if (tint && !placed) setPlaced(true);
   }, [tint, placed]);
 
   return (
     <nav className={styles.rail} aria-label={label}>
-      <div className={styles.list} ref={listRef}>
+      {/* A row above the active one closes over a moment: the tint follows once it has gone. */}
+      <div className={styles.list} ref={listRef} onAnimationEnd={measure}>
         {tint && (
           <span
             className={cx(styles.tint, placed && styles.moving)}
@@ -117,8 +128,10 @@ function RailButton<Id extends string>({
       aria-current={item.id === active && !leaving ? "page" : undefined}
       aria-hidden={leaving || undefined}
       tabIndex={leaving ? -1 : undefined}
-      disabled={leaving}
-      onClick={() => onSelect(item.id)}
+      // Not `disabled`: that drops focus to the page before the rail can hand it on.
+      onClick={() => {
+        if (!leaving) onSelect(item.id);
+      }}
       data-testid={item.testId}
     >
       {item.dot && <span className={cx(styles.dot, item.dot.tone === "on" && styles.dotOn)} aria-hidden="true" />}

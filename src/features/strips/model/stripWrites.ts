@@ -176,5 +176,9 @@ export function withStripName(state: ShellState, stripId: string, name: string):
 export function withoutStrip(state: ShellState, stripId: string): StripsPatch | null {
   const strips = stripsOf(state);
   if (!strips.some((strip) => strip.id === stripId)) return null;
-  return { ledStrips: strips.filter((strip) => strip.id !== stripId) };
+  const rest = strips.filter((strip) => strip.id !== stripId);
+  // Readers here and in Rust take the first enabled strip as the primary; with none enabled the
+  // next write with no strip named would land on whichever came first.
+  if (rest.length > 0 && !rest.some((strip) => strip.enabled)) rest[0] = { ...rest[0]!, enabled: true };
+  return { ledStrips: rest };
 }

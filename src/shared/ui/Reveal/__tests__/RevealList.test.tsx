@@ -52,3 +52,17 @@ describe("RevealList", () => {
     expect(rowOf("b")).toHaveAttribute("data-open", "false");
   });
 });
+
+describe("RevealList — two leaving a moment apart", () => {
+  it("keeps the order they stood in", () => {
+    vi.useFakeTimers();
+    const { rerender, container } = render(list(["a", "b", "c", "d"]));
+    rerender(list(["a", "c", "d"]));
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    rerender(list(["a", "c"]));
+    const order = [...container.querySelectorAll("[data-reveal]")].map((row) => row.textContent);
+    expect(order).toEqual(["a", "b", "c", "d"]);
+  });
+});
