@@ -5,7 +5,7 @@ import type { PreferenceKey } from "@/features/persistence/preferences";
 import type { SettingsEnv } from "./settingsEnv";
 import { AboutCard } from "./rows/AboutCard";
 import { LanguageRow, LaunchAtLoginRow } from "./rows/GeneralRows";
-import { DiscussionsRow, LogFolderRow, ReportIssueRow, SetupGuideRow, ShortcutsRow } from "./rows/HelpRows";
+import { DiagnosticsRow, DiscussionsRow, LogFolderRow, ReportIssueRow, SetupGuideRow, ShortcutsRow } from "./rows/HelpRows";
 import { NerdStatsRow } from "./rows/NerdStatsRow";
 import type { PreferenceChoiceDef } from "./rows/PreferenceChoice";
 import type { PreferenceSwitchDef } from "./rows/PreferenceSwitch";
@@ -86,6 +86,7 @@ export const SETTING_ROWS = {
   reportIssue: { kind: "custom", Row: ReportIssueRow },
   discussions: { kind: "custom", Row: DiscussionsRow },
   shortcuts: { kind: "custom", Row: ShortcutsRow },
+  diagnostics: { kind: "custom", Row: DiagnosticsRow },
   about: { kind: "custom", Row: AboutCard },
 } satisfies Record<string, SettingRowDef>;
 
@@ -103,7 +104,7 @@ export const SETTINGS_PAGES = {
   general: { labelKey: "settings:pages.general", rows: ["launchAtLogin", "launchLights", "closeAction", "notifications", "language"] },
   appearance: { labelKey: "settings:pages.appearance", rows: ["uiZoom", "reduceMotion", "nerdStats"] },
   updates: { labelKey: "settings:pages.updates", rows: ["updateCheck", "betaChannel"] },
-  help: { labelKey: "settings:pages.help", rows: ["setupGuide", "shortcuts", "logFolder", "reportIssue", "discussions"] },
+  help: { labelKey: "settings:pages.help", rows: ["setupGuide", "shortcuts", "logFolder", "diagnostics", "reportIssue", "discussions"] },
   about: { labelKey: "settings:pages.about", rows: ["about"] },
 } satisfies Record<SettingsPageId, SettingsPageDef>;
 

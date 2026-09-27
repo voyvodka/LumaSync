@@ -35,9 +35,11 @@ vi.mock("../sections/LightsSection", () => ({
   },
 }));
 
+const diagnostics = vi.hoisted(() => ({ read: null as null | (() => string) }));
 vi.mock("../ui/SettingsPage", () => ({
-  SettingsPage: ({ isCheckingForUpdates }: { isCheckingForUpdates: boolean }) => {
+  SettingsPage: ({ isCheckingForUpdates, readDiagnostics }: { isCheckingForUpdates: boolean; readDiagnostics?: () => string }) => {
     count("system");
+    diagnostics.read = readDiagnostics ?? null;
     return <p data-testid="system-checking">{String(isCheckingForUpdates)}</p>;
   },
 }));
@@ -194,6 +196,23 @@ describe("SettingsLayout render boundaries", () => {
       expect(renders[NAME[section]]).toBe(before);
     },
   );
+
+  // A copy for a bug report says what is true at the press, without the panel subscribing to it.
+  it("reads the diagnostics at the press, and does not re-render Settings for them", async () => {
+    const shell = await renderFull(SECTION_IDS.SYSTEM);
+    const before = renders.system;
+
+    act(() => {
+      shell.setLighting({ outputTargets: ["hue"] });
+    });
+    // Reachable but not streaming: nothing the panel draws (it shows only an active session).
+    shell.setHue({ configured: true, reachable: true });
+
+    expect(renders.system).toBe(before);
+    const text = diagnostics.read?.() ?? "";
+    expect(text).toContain("outputs: hue");
+    expect(text).toContain("Hue: reachable, idle");
+  });
 
   // The rail's Hue badge counts an active bridge, and nothing else about Hue.
   it("re-renders Devices when Hue starts streaming, and not for a probe it does not show", async () => {

@@ -23,6 +23,13 @@ export default {
       action: "Open folder",
       error: "Couldn't open the log folder",
     },
+    diagnostics: {
+      label: "Diagnostics",
+      description:
+        "Copies the app version, your system and what is connected, for a bug report. No addresses, device ids or keys, and nothing is sent.",
+      action: "Copy",
+      copied: "Copied",
+    },
     issue: {
       label: "Report an issue",
       description:

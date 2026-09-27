@@ -26,6 +26,13 @@ const settings: Catalogue<typeof enSettings> = {
       action: "Klasörü aç",
       error: "Kayıt klasörü açılamadı",
     },
+    diagnostics: {
+      label: "Tanılama bilgisi",
+      description:
+        "Hata bildirimi için uygulama sürümünü, sistemini ve nelerin bağlı olduğunu kopyalar. Adres, cihaz kimliği ya da anahtar içermez; hiçbir şey gönderilmez.",
+      action: "Kopyala",
+      copied: "Kopyalandı",
+    },
     issue: {
       label: "Sorun bildir",
       description:

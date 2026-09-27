@@ -46,7 +46,9 @@ https://keepachangelog.com/en/1.1.0/
   the last mode; the mode's settings are kept for the next time you turn it on. "Close button" can
   quit LumaSync instead of keeping it running in the background, and "Notifications" turns its
   system notifications off.
-- Settings → Help lists the keyboard shortcuts.
+- Settings → Help lists the keyboard shortcuts, and "Diagnostics" copies the app version, your
+  system, the mode and what is connected, as text to paste into a bug report. It holds no network
+  addresses, device ids or keys, and nothing is sent.
 - Hue: the channel list on Devices → Hue Bridges names each channel's lights the way the Hue app
   does, and an Identify button makes a channel's lights blink once so you can tell which lamp is
   which. Identify is off while Hue is streaming to them.

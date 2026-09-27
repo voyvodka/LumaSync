@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { SetupGuideRestartResult } from "@/features/onboarding/state/setupGuideControl";
 import { openLogDir } from "@/features/platform/platformApi";
 import { zoomBadges } from "@/features/shell/zoomKeybinds";
 import { APP_VERSION } from "@/shared/constants/app";
+import { IconCheck } from "@/shared/ui/icons";
+import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
 import { getKeybindDefinition, KEYBIND_ACTIONS, resolveKeybindPlatform } from "@/shared/contracts/shell";
 import { buildIssueReportUrl, detectOsName, DISCUSSIONS_URL } from "../helpLinks";
 import { RowButton, RowLink, RowNote, SettingRow } from "../SettingRow";
@@ -115,6 +117,67 @@ export function ShortcutsRow() {
           </div>
         ))}
       </dl>
+    </SettingRow>
+  );
+}
+
+/** How long "Copied" stays on the button before it reads as the action again. */
+const COPIED_MS = 1_800;
+
+/**
+ * The install's state as plain text for a bug report, copied at a press — never sent anywhere.
+ * The shell reads it at the press, so it says what is true then.
+ */
+export function DiagnosticsRow({ readDiagnostics }: SettingsEnv) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return undefined;
+    const timer = window.setTimeout(() => setCopied(false), COPIED_MS);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+
+  if (!readDiagnostics) return null;
+  const read = readDiagnostics;
+
+  async function copy() {
+    const text = read();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+    } catch (err) {
+      console.error("[LumaSync] copying the diagnostics failed:", err);
+    }
+  }
+
+  return (
+    <SettingRow
+      label={t("settings:help.diagnostics.label")}
+      hint={t("settings:help.diagnostics.description")}
+      control={
+        <RowButton onClick={() => void copy()} data-testid="copy-diagnostics">
+          <StateSwap
+            state={copied ? "done" : "idle"}
+            fit
+            faces={{
+              idle: t("settings:help.diagnostics.action"),
+              done: (
+                <>
+                  <span className={styles.ok} aria-hidden="true">
+                    <IconCheck />
+                  </span>
+                  {t("settings:help.diagnostics.copied")}
+                </>
+              ),
+            }}
+          />
+        </RowButton>
+      }
+    >
+      <p className="sr-only" role="status" aria-live="polite">
+        {copied ? t("settings:help.diagnostics.copied") : ""}
+      </p>
     </SettingRow>
   );
 }
