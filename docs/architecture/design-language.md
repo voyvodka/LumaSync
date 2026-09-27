@@ -81,6 +81,9 @@ rebuilding LED Setup; apply it to every new screen:
   thing they act on, and what they act on lights while the rest steps back. A value's controls open
   on the value itself, not on a wider area around it: opened from an edge, a count's controls
   covered the very LED the pointer was there to pick, and hidden controls must not catch the pointer.
+- **A value that opens a list looks like one at rest.** A quiet box with a chevron that turns while
+  the list is open, as LED Setup's display. The strip's colour order first showed as bare "RGB"
+  beside its label, and read as plain text: nothing said it could be changed.
 - **Light and fast.** Static canvas, one delegated listener, memoised geometry, hover through CSS on
   a data attribute rather than a render; performance is a requirement, not a polish step. No
   `filter`, `backdrop-filter` or `will-change` held at rest on a window-sized surface: each is

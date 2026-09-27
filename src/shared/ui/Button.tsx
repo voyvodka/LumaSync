@@ -3,9 +3,9 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { cx } from "./cx";
 
 export type ButtonVariant = "secondary" | "primary" | "danger";
-export type ButtonSize = "sm" | "md" | "card";
+export type ButtonSize = "sm" | "md";
 
-const SIZE_CLASS = { sm: "lm-btn", md: "lm-btn-md", card: "lm-dcard-act" } satisfies Record<ButtonSize, string>;
+const SIZE_CLASS = { sm: "lm-btn", md: "lm-btn-md" } satisfies Record<ButtonSize, string>;
 const VARIANT_CLASS = {
   secondary: undefined,
   primary: "is-primary",
@@ -14,9 +14,7 @@ const VARIANT_CLASS = {
 
 interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type"> {
   variant?: ButtonVariant;
-  /** All three are mono caps. `sm` is the header chip of the device pages, `md`
-   *  the 32 px row button, `card` a device card's footer action (it grows to
-   *  share the row). */
+  /** Both are mono caps. `sm` is a header chip, `md` the 32 px row button. */
   size?: ButtonSize;
   /** Disables the button and marks it `aria-busy` while its action runs. */
   busy?: boolean;

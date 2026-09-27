@@ -1,7 +1,7 @@
 import { memo } from "react";
 
 import { useLightingActions, useLightingControlState, type LightingControlState } from "@/features/mode/state/lightingControl";
-import { syncStripLedCount } from "@/features/settings/sections/device/usbStripRoster";
+import { syncStripLedCount } from "@/features/device/model/usbStripRoster";
 import { useLeaveGuardRegistrar, useNavigationActions } from "@/features/shell/navigationStore";
 import { SECTION_IDS } from "@/shared/contracts/shell";
 import { preloadableComponent } from "@/shared/lib/preloadableComponent";

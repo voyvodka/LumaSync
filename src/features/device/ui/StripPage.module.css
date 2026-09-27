@@ -25,6 +25,31 @@
     color: var(--lm-ink);
     overflow-wrap: anywhere;
   }
+  .heading {
+    margin: 0 0 8px;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 28px;
+    color: var(--lm-ink);
+  }
+  /* What adding changes, under the heading: a consequence, not a caption. */
+  .heading + [data-testid="add-strip-replaces"] { margin: -4px 0 8px; }
+
+  .input {
+    width: 150px;
+    height: 30px;
+    padding: 0 10px;
+    border: 1px solid var(--lm-line-2);
+    border-radius: 8px;
+    background: var(--lm-panel);
+    font-size: 12.5px;
+    color: var(--lm-ink);
+  }
+  .input::placeholder { color: var(--lm-ink-faint); }
+  .input:hover { border-color: var(--lm-ink-faint); }
+  .input:focus-visible { outline: none; border-color: var(--lm-amber); box-shadow: var(--lm-focus-ring); }
+  .input[aria-invalid="true"] { border-color: var(--lm-red); }
+
   .nameInput {
     width: min(320px, 60vw);
     height: 28px;
@@ -84,21 +109,35 @@
   .help li::marker { color: var(--lm-ink-faint); }
   .help li + li { margin-top: 2px; }
 
-  /* A value that opens its own list. */
+  /* A value that opens its own list: drawn as a choice at rest — a quiet box and a chevron — so it
+     does not read as plain text. The chevron turns while the list is open, as LED Setup's display. */
   .valueButton {
-    height: 26px;
-    margin-left: -6px;
-    padding: 0 6px;
-    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 8px 0 10px;
+    border: 1px solid var(--lm-line-2);
+    border-radius: 8px;
+    background: var(--lm-panel);
     font-family: var(--lm-mono);
     font-size: 12px;
-    color: var(--lm-ink-dim);
-    transition: color var(--lm-dur-quick) linear, background-color var(--lm-dur-quick) linear;
+    color: var(--lm-ink);
+    transition: border-color var(--lm-dur-quick) linear, background-color var(--lm-dur-quick) linear;
   }
-  .valueButton:hover:not(:disabled) { color: var(--lm-ink); background: var(--lm-panel-2); }
-  .valueButton[aria-expanded="true"] { color: var(--lm-ink); }
+  .valueButton:hover:not(:disabled),
+  .valueButton[aria-expanded="true"] { border-color: var(--lm-ink-faint); background: var(--lm-panel-2); }
   .valueButton:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
-  .valueButton:disabled { cursor: default; }
+  .valueButton:disabled { cursor: default; color: var(--lm-ink-dim); }
+  .chevron {
+    flex: none;
+    width: 12px;
+    height: 12px;
+    color: var(--lm-ink-faint);
+    transition: transform var(--lm-dur-base) var(--lm-ease-out);
+  }
+  .chevron[data-open] { transform: rotate(180deg); }
+  :global(:root[data-reduced-motion]) .chevron { transition: none; }
 
   /* A question asked beside the button that raised it. */
   .question { display: grid; gap: 10px; padding: 4px; max-width: 300px; }
@@ -138,7 +177,9 @@
   .swatch[data-color="other"] { border: 1px dashed var(--lm-ink-faint); }
 
   @media (forced-colors: active) {
-    .nameInput { border-color: ButtonText; }
+    .nameInput,
+    .input,
+    .valueButton { border-color: ButtonText; }
     /* The swatches are the only thing tying an answer to a colour on screen, so keep them
        painted; the button text still names the colour. */
     .swatch { forced-color-adjust: none; }

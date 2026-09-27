@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DrivenOutputRef, LocalOutputsSnapshot } from "@/shared/contracts/device";
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
 import { DevicesPage } from "../DevicesPage";
-import { primaryStripOf } from "@/features/strips/model/stripSelectors";
 import type * as wledApiModule from "@/features/device/wledApi";
 
 const stopHueMock = vi.fn();
@@ -33,7 +32,28 @@ vi.mock("@/features/device/useDeviceConnection", () => ({
 let drivenMock: DrivenOutputRef | null = null;
 vi.mock("@/features/device/state/localOutputsStore", () => ({
   useLocalOutputs: <S,>(selector: (state: { snapshot: LocalOutputsSnapshot | null }) => S) =>
-    selector({ snapshot: drivenMock === null ? null : { revision: 1, outputs: [], driven: drivenMock } }),
+    selector({
+      snapshot:
+        drivenMock === null
+          ? null
+          : {
+              revision: 1,
+              outputs:
+                drivenMock.kind === "serial"
+                  ? [
+                      {
+                        kind: "serial",
+                        portName: drivenMock.portName,
+                        connected: true,
+                        status: { code: "CONNECT_OK", message: "", details: null },
+                        firmware: null,
+                        updatedAtUnixMs: 0,
+                      },
+                    ]
+                  : [],
+              driven: drivenMock,
+            },
+    }),
 }));
 
 // Stubbed rather than left real: `useActiveWledSink` reads shell state through
@@ -43,9 +63,10 @@ vi.mock("@/features/device/useWledSink", () => ({
   useActiveWledSink: () => ({
     activeWledIp: activeWledIpMock,
     savedSink: null,
-    restoreOutcome: null,
+    restoreOutcome: { kind: "idle" },
     ready: true,
     markConnected: async () => undefined,
+    forget: async () => ({ code: "WLED_FORGET_OK", message: "", details: null }),
   }),
 }));
 
@@ -53,27 +74,33 @@ vi.mock("@/features/hue/useHueOnboarding", () => ({
   useHueOnboarding: () => useHueOnboardingMock(),
 }));
 
+const savedListeners = vi.hoisted(() => new Set<(saved: Record<string, unknown>) => void>());
+
+// The flash's own timing and IPC are covered in stripFlash.test.ts; here it only has to light.
+vi.mock("@/features/device/state/stripFlash", async (importActual) => ({
+  ...(await importActual<typeof import("@/features/device/state/stripFlash")>()),
+  flashStrip: async () => "lit" as const,
+}));
+
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: vi.fn().mockResolvedValue({ roomMap: null }),
-    onSaved: () => () => {},
+    onSaved: (listener: (saved: Record<string, unknown>) => void) => {
+      savedListeners.add(listener);
+      return () => savedListeners.delete(listener);
+    },
     save: vi.fn().mockResolvedValue(undefined),
     update: vi.fn(async (update: (current: object) => object | null) => update({ roomMap: null })),
   },
 }));
 
-// WledCategory mounts useActiveWledSink, which reaches the Tauri boundary on
+// The page mounts useActiveWledSink, which reaches the Tauri boundary on
 // mount. Unmocked it throws into the hook's own catch, so the section still
 // rendered but every test measured the failure branch.
 vi.mock("@/features/device/wledApi", () => ({
   discoverWledDevices: vi.fn<typeof wledApiModule.discoverWledDevices>(),
   connectWledSink: vi.fn<typeof wledApiModule.connectWledSink>(),
   testWledBridge: vi.fn<typeof wledApiModule.testWledBridge>(),
-}));
-
-// Stub heavy sub-components that make their own invoke calls.
-vi.mock("@/features/settings/sections/WledDevicePicker", () => ({
-  WledDevicePicker: () => null,
 }));
 
 // Stand-in for the real panel: surfaces the two props the persist-banner tests
@@ -94,24 +121,6 @@ vi.mock("@/features/hue/ui/HueChannels", () => ({
     </div>
   ),
 }));
-
-// Path was `./control/…`, which resolves under `__tests__/` and so matched no
-// module in the graph — the real picker rendered here for as long as it existed.
-vi.mock("@/features/settings/sections/control/LedChipTypePicker", () => ({
-  LedChipTypePicker: () => <span>stub:chipTypePicker</span>,
-}));
-
-// The group's own store read and its profile/chip pickers are covered in
-// UsbStripsCategory.flow.test.tsx; here only the colour order control is
-// under test, so it is mounted directly with the transport the page derives.
-vi.mock("@/features/settings/sections/device/UsbStripSettings", async () => {
-  const { LedColorOrderControl } = await import("@/features/settings/sections/control/LedColorOrderControl");
-  return {
-    UsbStripSettings: ({ localTransport }: { localTransport: "serial" | "wled" | null }) => (
-      <LedColorOrderControl localTransport={localTransport} />
-    ),
-  };
-});
 
 function defaultDeviceConnectionState() {
   return {
@@ -428,211 +437,86 @@ describe("DevicesPage hue runtime controls", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Persist banner visibility
+// Adding a strip
 // ---------------------------------------------------------------------------
 
 const SUPPORTED_PORT = { portName: "COM3", product: "CH340", manufacturer: "WCH", isSupported: true };
 
-/** A connected controller whose strip then fails to save into the roster. */
-function connectingDeviceState() {
-  return {
-    ...defaultDeviceConnectionState(),
-    ports: [SUPPORTED_PORT],
-    connectSelectedPort: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
-  };
-}
-
-async function connectFirstPort(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole("button", { name: "device:page.usb.connect" }));
-}
-
-describe("DevicesPage USB tab — persistError banner (A3.6)", () => {
+describe("DevicesPage — adding a controller that is plugged in", () => {
   beforeEach(() => {
-    useDeviceConnectionMock.mockReturnValue(connectingDeviceState());
-    useHueOnboardingMock.mockReturnValue(createHueHookState());
+    vi.clearAllMocks();
+    savedListeners.clear();
   });
 
-  it("shows the persist error when the connected strip cannot be saved to the roster", async () => {
+  it("Add connects it, puts it in the room map, then opens its page and asks whether it lit", async () => {
     const { shellStore } = await import("@/features/persistence/shellStore");
-    vi.mocked(shellStore.update).mockRejectedValueOnce(new Error("disk full"));
-
-    const user = userEvent.setup();
-    render(<DevicesPage onStopHueOutput={stopHueOutputMock} />);
-
-    await connectFirstPort(user);
-
-    await waitFor(() => {
-      expect(screen.getByText("device:page.usb.paired.persistError")).toBeInTheDocument();
+    await withStrips([]);
+    const selectPort = vi.fn<(portName: string | null) => void>();
+    const connectSelectedPort = vi.fn<() => Promise<boolean>>().mockImplementation(async () => {
+      // The connect saves the strip on its port, as the lifecycle does; the page re-reads on save.
+      await withStrips([{ ...SERIAL_STRIP, transport: { kind: "serial", portName: "COM3" } }]);
+      drivenMock = { kind: "serial", portName: "COM3" };
+      return true;
     });
+    useDeviceConnectionMock.mockReturnValue({
+      ...defaultDeviceConnectionState(),
+      ports: [SUPPORTED_PORT],
+      selectPort,
+      connectSelectedPort,
+    });
+    const user = userEvent.setup();
+    await renderSettled();
+
+    await user.click(screen.getByTestId("device-entry-port"));
+    expect(screen.getByTestId("found-port-page")).toBeVisible();
+    await user.click(within(screen.getByTestId("found-port-page")).getByTestId("found-port-add"));
+
+    expect(selectPort).toHaveBeenLastCalledWith("COM3");
+    expect(connectSelectedPort).toHaveBeenCalledTimes(1);
+    // The roster write is the room map's; it goes through a guarded update, never a blind save.
+    expect(vi.mocked(shellStore.update)).toHaveBeenCalled();
+    await act(async () => {
+      for (const listener of savedListeners) listener({ ledStrips: [] });
+    });
+
+    expect(await screen.findByTestId("strip-flash-question")).toBeInTheDocument();
+    expect(screen.getByTestId("strip-page")).toBeVisible();
+    drivenMock = null;
   });
 
-  it("persist error banner auto-dismisses after 3 seconds", async () => {
-    const { shellStore } = await import("@/features/persistence/shellStore");
-    vi.mocked(shellStore.update).mockRejectedValueOnce(new Error("disk full"));
-
-    const user = userEvent.setup();
-    render(<DevicesPage onStopHueOutput={stopHueOutputMock} />);
-
-    await connectFirstPort(user);
-
-    await waitFor(() => {
-      expect(screen.getByText("device:page.usb.paired.persistError")).toBeInTheDocument();
+  it("says which strip moves when one is already driven", async () => {
+    await withStrips([SERIAL_STRIP]);
+    useDeviceConnectionMock.mockReturnValue({
+      ...defaultDeviceConnectionState(),
+      ports: [SUPPORTED_PORT, { portName: "/dev/cu.usbserial-1420", isSupported: true, product: "USB Serial" }],
     });
+    const user = userEvent.setup();
+    await renderSettled();
 
-    // Real timers: fake ones would have to be installed before the click that
-    // arms the 3 s dismissal, which collides with userEvent + waitFor.
-    await waitFor(
-      () => {
-        expect(screen.queryByText("device:page.usb.paired.persistError")).not.toBeInTheDocument();
-      },
-      { timeout: 4000, interval: 100 },
-    );
+    await user.click(screen.getByTestId("device-entry-port"));
+    expect(within(screen.getByTestId("found-port-page")).getByText("device:strip.add.replaces")).toBeInTheDocument();
   });
 });
 
-// ---------------------------------------------------------------------------
-// The USB and Hue persist banners are independent
-// ---------------------------------------------------------------------------
-
-const USB_BANNER = "device:page.usb.paired.persistError";
-const HUE_BANNER = "hue:channelMap.saveError";
-
-describe("DevicesPage — USB and Hue persist banners are independent", () => {
+describe("DevicesPage — a Hue channel save that fails", () => {
   beforeEach(async () => {
     const { shellStore } = await import("@/features/persistence/shellStore");
     vi.mocked(shellStore.save).mockReset().mockResolvedValue(undefined);
-
-    useDeviceConnectionMock.mockReturnValue(connectingDeviceState());
+    useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
     useHueOnboardingMock.mockReturnValue(createHueHookState());
   });
 
-  const failUsbStripAdd = connectFirstPort;
-
-  async function failHueChannelMove(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(await screen.findByText("stub:moveChannel"));
-  }
-
-  it("does not raise the Hue channel-map banner when a USB strip save fails", async () => {
-    const { shellStore } = await import("@/features/persistence/shellStore");
-    vi.mocked(shellStore.update).mockRejectedValueOnce(new Error("disk full"));
-
-    const user = userEvent.setup();
-    render(<DevicesPage onStopHueOutput={stopHueOutputMock} />);
-
-    await failUsbStripAdd(user);
-
-    await waitFor(() => {
-      expect(screen.getByText(USB_BANNER)).toBeInTheDocument();
-    });
-    expect(screen.queryByText(HUE_BANNER)).not.toBeInTheDocument();
-  });
-
-  it("does not raise the USB strips banner when a Hue channel-position save fails", async () => {
+  it("raises the channel-map banner", async () => {
     const { shellStore } = await import("@/features/persistence/shellStore");
     vi.mocked(shellStore.save).mockRejectedValueOnce(new Error("disk full"));
 
     const user = userEvent.setup();
     render(<DevicesPage onStopHueOutput={stopHueOutputMock} />);
-
-    await failHueChannelMove(user);
+    await user.click(await screen.findByText("stub:moveChannel"));
 
     await waitFor(() => {
-      expect(screen.getByText(HUE_BANNER)).toBeInTheDocument();
+      expect(screen.getByText("hue:channelMap.saveError")).toBeInTheDocument();
     });
-    expect(screen.queryByText(USB_BANNER)).not.toBeInTheDocument();
-  });
-
-  // Guards the shared-timer half of the bug: two flags sharing one timer ref
-  // means whichever path fires last cancels the other banner's dismissal.
-  it("dismisses each banner on its own timer when both paths fail in sequence", async () => {
-    const { shellStore } = await import("@/features/persistence/shellStore");
-    vi.mocked(shellStore.save).mockRejectedValue(new Error("disk full"));
-    vi.mocked(shellStore.update).mockRejectedValueOnce(new Error("disk full"));
-
-    const user = userEvent.setup();
-    render(<DevicesPage onStopHueOutput={stopHueOutputMock} />);
-
-    await failHueChannelMove(user);
-    await waitFor(() => {
-      expect(screen.getByText(HUE_BANNER)).toBeInTheDocument();
-    });
-    const hueRaisedAt = Date.now();
-
-    // Second failure lands mid-way through the Hue banner's 3 s window.
-    await new Promise((resolve) => setTimeout(resolve, 1500 - (Date.now() - hueRaisedAt)));
-    await failUsbStripAdd(user);
-    await waitFor(() => {
-      expect(screen.getByText(USB_BANNER)).toBeInTheDocument();
-    });
-
-    // The Hue banner must expire ~3 s after it was raised, not be re-armed by
-    // the later USB failure — while the USB banner is still on screen.
-    await waitFor(
-      () => {
-        expect(screen.queryByText(HUE_BANNER)).not.toBeInTheDocument();
-      },
-      { timeout: 3000, interval: 100 },
-    );
-    expect(screen.getByText(USB_BANNER)).toBeInTheDocument();
-  }, 15000);
-});
-
-describe("DevicesPage — colour order", () => {
-  beforeEach(async () => {
-    vi.clearAllMocks();
-    // An earlier suite can leave an unconsumed `mockRejectedValueOnce` behind.
-    const { shellStore } = await import("@/features/persistence/shellStore");
-    vi.mocked(shellStore.save).mockReset().mockResolvedValue(undefined);
-    activeWledIpMock = null;
-    drivenMock = null;
-    useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
-    useHueOnboardingMock.mockReturnValue(createHueHookState());
-  });
-
-  it("replaces the control with a WLED hint when the local output is WLED", async () => {
-    activeWledIpMock = "192.168.1.42";
-    drivenMock = { kind: "wled", ip: "192.168.1.42" };
-
-    render(<DevicesPage onStopHueOutput={stopHueOutputMock} />);
-
-    expect(await screen.findByText("lights:led.colorOrder.wledHint")).toBeInTheDocument();
-    expect(screen.queryByText("lights:led.colorOrder.identify.button")).toBeNull();
-  });
-
-  it("offers Identify when the registry drives a serial strip, even with a WLED address saved", async () => {
-    activeWledIpMock = "192.168.1.42";
-    drivenMock = { kind: "serial", portName: "/dev/cu.usbserial-1420" };
-    useDeviceConnectionMock.mockReturnValue({
-      ...defaultDeviceConnectionState(),
-      isConnected: true,
-      connectedPort: "/dev/cu.usbserial-1420",
-    });
-
-    render(<DevicesPage onStopHueOutput={stopHueOutputMock} />);
-
-    const identify = await screen.findByRole("button", {
-      name: "lights:led.colorOrder.identify.button",
-    });
-    expect(identify).not.toBeDisabled();
-    expect(screen.queryByText("lights:led.colorOrder.wledHint")).toBeNull();
-  });
-
-  // The save is all that reaches a running strip: Rust re-applies the mode
-  // once a setting it reads is saved (docs/architecture/lighting-transaction.md).
-  it("saves a manual order", async () => {
-    const { shellStore } = await import("@/features/persistence/shellStore");
-    const user = userEvent.setup();
-    render(<DevicesPage onStopHueOutput={stopHueOutputMock} />);
-
-    await user.selectOptions(
-      await screen.findByLabelText("lights:led.colorOrder.manualLabel"),
-      "grb",
-    );
-
-    await waitFor(() => expect(shellStore.update).toHaveBeenCalled());
-    const results = vi.mocked(shellStore.update).mock.results;
-    const written = await results[results.length - 1]!.value;
-    expect(primaryStripOf(written)?.hardware.colorOrder).toBe("grb");
   });
 });
 
@@ -921,7 +805,7 @@ describe("DevicesPage — the rail lists the devices", () => {
   });
 });
 
-describe("DevicesPage — a failed placement read is logged", () => {
+describe("DevicesPage — a failed store read is logged", () => {
   beforeEach(() => {
     useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
     useHueOnboardingMock.mockReturnValue(createHueHookState());
@@ -938,10 +822,7 @@ describe("DevicesPage — a failed placement read is logged", () => {
           "[LumaSync] Devices: loading room-map placements failed:",
           expect.any(Error),
         );
-        expect(errorSpy).toHaveBeenCalledWith(
-          "[LumaSync] Devices: re-reading paired USB strips failed:",
-          expect.any(Error),
-        );
+        expect(errorSpy).toHaveBeenCalledWith("[LumaSync] Devices: reading the strips failed:", expect.any(Error));
       });
     } finally {
       vi.mocked(shellStore.load).mockResolvedValue({ roomMap: null } as never);

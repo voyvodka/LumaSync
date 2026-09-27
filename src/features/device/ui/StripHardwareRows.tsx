@@ -20,7 +20,7 @@ import {
   type ColorOrderIdentifyDeps,
   type IdentifyFailure,
   type ProbeAnswer,
-} from "@/features/settings/sections/control/useColorOrderIdentify";
+} from "../state/useColorOrderIdentify";
 import { withHardwareOf } from "@/features/strips/model/stripWrites";
 import { ChoiceStrip } from "@/shared/ui/ChoiceStrip/ChoiceStrip";
 import { ConfirmPopover } from "@/shared/ui/ConfirmPopover/ConfirmPopover";
@@ -244,14 +244,17 @@ export function ColorOrderRow({ stripId, order, canIdentify, onChange, identifyD
           data-testid="strip-color-order-value"
         >
           {code(order)}
+          <svg aria-hidden viewBox="0 0 12 12" className={styles.chevron} data-open={picking || undefined}>
+            <path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         </button>
       }
       control={
         <RowButton
           ref={identifyRef}
-          disabled={!canIdentify || flowOpen}
+          disabled={!canIdentify && !flowOpen}
           aria-expanded={flowOpen}
-          onClick={identify.begin}
+          onClick={flowOpen ? (state.step === "verify" ? identify.keep : identify.cancel) : identify.begin}
           data-testid="strip-color-order-identify"
         >
           {t("device:strip.action.identify")}

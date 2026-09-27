@@ -40,7 +40,7 @@ import {
   subscribeToEdgeSignalStream,
 } from "../events";
 import { dispatch } from "../dispatch";
-import { rejectSerialPort, setSerialConnected, setWledBound } from "../hotplug";
+import { plugPort, rejectSerialPort, setSerialConnected, setWledBound } from "../hotplug";
 import { ROOM_MAP_PRESETS, ROOM_MAP_PRESET_IDS, type RoomMapPresetId } from "../roomMaps";
 import { PICKER_PATTERN_KINDS } from "../../src/features/preview/ui/PatternPicker";
 import { LIGHTING_ORIGIN, LIGHTING_RUNTIME_COMMANDS } from "../../src/shared/contracts/lightingRuntime";
@@ -753,8 +753,7 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                 type="button"
                 style={{ ...btn, width: "100%" }}
                 onClick={() =>
-                  mutate((w) => {
-                    w.serial.ports.push({
+                  plugPort({
                       name: `/dev/cu.usbserial-${1400 + nextPortIndex}`,
                       supported: true,
                       vid: 0x1a86,
@@ -764,7 +763,6 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                       connectOutcome: "OK",
                       firmwareProfile: "lumasync-v1",
                       chipType: "ws2812b-grb",
-                    });
                   })
                 }
               >

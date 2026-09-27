@@ -2,13 +2,6 @@ import type { Catalogue } from "@/features/i18n/catalogue";
 import type enDevice from "@/locales/en/device";
 
 const device: Catalogue<typeof enDevice> = {
-  actions: {
-    scanning: "Portlar taranıyor...",
-    connecting: "Bağlanıyor...",
-  },
-  port: {
-    missingHint: "{{port}} artık görünmüyor. Cihazı yeniden bağla veya başka bir port seç.",
-  },
   status: {
     idleTitle: "Bağlı şerit yok",
     idleBody: "Aşağıdaki denetleyicinde Bağlan'a bas.",
@@ -62,12 +55,15 @@ const device: Catalogue<typeof enDevice> = {
       chip: "LED çipi",
       colorOrder: "Renk sırası",
       health: "Sağlık kontrolü",
+      device: "Cihaz",
+      ledCount: "LED sayısı",
     },
     hint: {
       firmware: "Denetleyicinin yazılımının konuştuğu protokol. LumaSync v1 el sıkışmaya yanıt verir; Adalight, Prismatik, Hyperion ve çoğu hazır Arduino çiziminde çalışır.",
       chip: "SK6812 RGBW şeritlerde ayrı bir beyaz LED vardır; WS2812B ve WS2811 üç renklidir.",
       colorOrder: "Renkleri yer değiştiren bir şeridi düzeltir; örneğin kırmızı yeşil görünüyorsa. Tanımla bunu senin için bulur.",
       health: "Portun var olduğunu, desteklendiğini, açıldığını ve yazılımın yanıt verdiğini kontrol eder.",
+      wledHealth: "Tek bir test karesi gönderir ve cihaza onu gösterip göstermediğini, LED sayısının ve canlı veri portunun uyup uymadığını sorar.",
     },
     layoutValue: "{{count}} LED · {{edges}} kenar",
     layoutNone: "Kurulmadı",
@@ -86,6 +82,9 @@ const device: Catalogue<typeof enDevice> = {
       checking: "Kontrol ediliyor…",
       identify: "Tanımla",
       more: "{{name}} için diğerleri",
+      add: "Ekle",
+      adding: "Ekleniyor…",
+      forget: "Unut",
     },
     flash: {
       question: "Işık yandı mı?",
@@ -113,7 +112,19 @@ const device: Catalogue<typeof enDevice> = {
     health: {
       passed: "Tüm adımlar geçti · {{time}}",
       never: "Henüz çalıştırılmadı",
+      problem: "Sorun bulundu",
     },
+    add: {
+      title: "Şerit ekle",
+      usb: "USB",
+      usbNone: "Bir denetleyici tak; burada görünür.",
+      wled: "WLED",
+      wledHint: "WLED'in Config → WiFi Setup altında gösterdiği adres, örneğin 192.168.1.42. LumaSync cihaza kaç LED'i olduğunu sorar.",
+      addNamed: "{{name}} ekle",
+      replaces: "{{name}} düzeni ve ayarlarıyla buraya geçer: şimdilik bir seferde tek şerit sürülür.",
+    },
+    ledCountValue: "{{count}} · cihazdan",
+    roomMapFailed: "Bağlandı, ama şerit oda haritasına eklenemedi. Yeniden bağlanmak bir kez daha dener.",
     hardwareFailed: "Değişiklik kaydedilmedi; şerit önceki ayarında kalıyor.",
     disconnectFailed: "Şeridin bağlantısı kesilmedi: çalışan mod onu bırakmadı.",
   },
@@ -124,27 +135,12 @@ const device: Catalogue<typeof enDevice> = {
     },
   },
   healthCheck: {
-    runAction: "Sağlık Kontrolü Çalıştır",
-    runningAction: "Sağlık Kontrolü Çalışıyor...",
     inProgressTitle: "Sağlık kontrolü sürüyor",
     inProgressBody: "Görünürlük, destek durumu ve bağlantı doğrulanıyor.",
     passTitle: "Sağlık kontrolü geçti",
     passBody: "Seçili port için tüm kurulum kontrolleri başarıyla geçti.",
     failTitle: "Sağlık kontrolü başarısız",
     failBody: "Aşağıdaki başarısız adıma bak, sonra yeniden tara, başka bir port seç veya tekrar dene.",
-    steps: {
-      labels: {
-        PORT_VISIBLE: "Port görünürlüğü",
-        PORT_SUPPORTED: "Port desteği",
-        CONNECT_AND_VERIFY: "Bağlan ve doğrula",
-        HANDSHAKE: "Firmware el sıkışması",
-        HEALTH_CHECK_WORKER: "Sağlık kontrolü işçisi",
-      },
-      outcome: {
-        pass: "Geçti",
-        fail: "Kaldı",
-      },
-    },
     serialHealthCodes: {
       SERIAL_HEALTH_OK: {
         label: "El sıkışması başarılı",
@@ -236,100 +232,17 @@ const device: Catalogue<typeof enDevice> = {
       on: "bağlı",
       off: "bağlı değil",
     },
-    header: {
-      usbTitle: "USB Şeritleri",
-      usbSub: "{{count}} bağlı",
-      usbSubNone: "Bağlı şerit yok",
-    },
-    actions: {
-      rescan: "Yeniden Tara",
-    },
-    usb: {
-      connect: "Bağlan",
-      pill: {
-        online: "BAĞLI",
-        ready: "HAZIR",
-        unsupported: "DESTEKLENMİYOR",
-      },
-      stats: {
-        usbId: "USB kimliği",
-        state: "Durum",
-        connected: "Bağlı",
-        notConnected: "Bağlı değil",
-        na: "—",
-      },
-      controller: {
-        title: "Denetleyici",
-        count_one: "1 desteklenen port",
-        count_other: "{{count}} desteklenen port",
-      },
-      other: {
-        title: "Diğer seri portlar",
-        count_one: "1 port",
-        count_other: "{{count}} port",
-        hint: "Bu bilgisayarda bulundu ama LED denetleyici değil — Bluetooth seri portları, hata ayıklama konsolları gibi. LumaSync bunlar üzerinden ışık gönderemez.",
-      },
-      settings: {
-        title: "Şerit ayarları",
-      },
-      paired: {
-        title: "Eşleşen şeritler",
-        count_one: "1 şerit",
-        count_other: "{{count}} şerit",
-        empty: "Henüz şerit yok. Yukarıdan bir denetleyiciye bağlan, şeridi buraya eklenir.",
-        stripName: "{{count}} LED'lik şerit",
-        noPort: "Port bağlı değil",
-        offline: "ÇEVRİMDIŞI",
-        portLabel: "Port",
-        noOtherPort: "Desteklenen başka port yok. Başka bir denetleyici takıp yeniden tara.",
-        unlisted: "{{port}} üzerindeki şerit bağlı ama henüz bu listede yok.",
-        addConnected: "Bağlı şeridi ekle",
-        persistError: "Şerit kaydedilemedi. Tekrar dene.",
-        openInMap: "Haritada aç",
-        changePort: "Portu değiştir",
-        changePortConfirm: "Kaydet",
-        changePortCancel: "İptal",
-      },
-    },
     wled: {
-      title: "WLED Cihazları",
-      subtitle: "Yerel ağda erişilebilen ağ LED panelleri",
       manualIp: "WLED IP",
-      manualIpHint: "WLED cihazının IP adresini gir.",
       manualIpPlaceholder: "192.168.1.42",
-      discoverAction: "Tara",
-      discovering: "Taranıyor...",
-      connectAction: "Bağlan",
-      reconnectAction: "Yeniden bağlan",
-      connecting: "Bağlanılıyor...",
-      testAction: "Test",
-      testing: "Test ediliyor...",
       invalidIp: "Geçerli bir IPv4 veya IPv6 adresi gir.",
       ipRequired: "Cihazı bulmak için WLED cihazının IP adresini gir.",
-      cellLedCount: "LED",
-      cellVersion: "Sürüm",
-      cellMac: "MAC",
-      empty: {
-        title: "Henüz WLED cihazı yok",
-        body: "Taramayı başlat veya bilinen bir IP'yi yapıştırıp Tara'ya bas.",
-      },
-      pill: {
-        discovered: "BULUNDU",
-        connected: "AKTİF",
-        saved: "KAYITLI",
-      },
-      savedDevice: "Kayıtlı WLED cihazı",
-      forgetAction: "Cihazı unut",
-      forgetting: "Unutuluyor...",
       forgetConfirm: {
-        title: "Bu WLED cihazı unutulsun mu?",
         body: "LumaSync {{ip}} adresine göndermeyi bırakır ve açılışta artık ona bağlanmaz. Aydınlatma diğer çıkışlarında sürer; tek çıkış buysa durur.",
         confirm: "Cihazı unut",
         cancel: "İptal",
       },
       restore: {
-        restoring: "{{ip}} adresindeki kayıtlı WLED cihazına yeniden bağlanılıyor...",
-        restored: "{{ip}} adresindeki kayıtlı WLED cihazına yeniden bağlanıldı.",
         failed: "{{ip}} adresindeki kayıtlı WLED cihazına yeniden bağlanılamadı.",
       },
       status: {

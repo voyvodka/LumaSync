@@ -63,6 +63,22 @@ export function setSerialConnected(portName: string, connected: boolean): void {
 }
 
 /**
+ * A cable plugged in that no strip is on yet: the port joins the list and the watcher says so,
+ * with nothing connected. What the Devices rail shows as a found controller.
+ */
+export function plugPort(port: ReturnType<typeof getWorld>["serial"]["ports"][number]): void {
+  mutate((w) => {
+    w.serial.ports.push(port);
+  });
+  const event: SerialPortsChangedEvent = {
+    ports: deviceHandlers[DEVICE_COMMANDS.LIST_PORTS]().ports,
+    appeared: [port.name],
+    lost: [],
+  };
+  void emitMockEvent(DEVICE_EVENTS.SERIAL_PORTS_CHANGED, event);
+}
+
+/**
  * Reject the persisted port at boot, the way the allowlist does.
  *
  * `unsupportedReason` is the narrow signal that means "USB is structurally

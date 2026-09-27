@@ -79,7 +79,15 @@ https://keepachangelog.com/en/1.1.0/
   do beside it. "Flash" lights the strip white for a moment and asks beside the button whether it
   lit; "No" lists what to check, most likely first. The strip can be renamed from the pencil beside
   its name, and the rows below set its layout (in LED Setup), firmware, LED chip and colour order,
-  and run a health check. Disconnect and "Open in room map" are behind "…".
+  and run a health check. Disconnect and "Open in room map" are behind "…". The colour order is a
+  small box with a chevron that opens the list of orders.
+- Devices → adding a strip: a controller you plug in appears in the list at once; "Add" connects
+  it, opens its page and flashes it to ask whether it lit. "Add a strip" lists the controllers
+  plugged in and takes a WLED device by its address, asking the device how many LEDs it has. While
+  one strip is driven at a time, the page says which strip moves before you add another.
+- Devices → a WLED strip has the same kind of page: its state in a word with Connect or Flash, the
+  LED count the device reports, its layout, and Forget behind "…", asked beside it. The old USB
+  Strips and WLED panes, with their cards, are gone.
 - Settings is split into pages — General, Appearance, Updates, Help and About — listed on the
   left. Each row shows just its name and control; an explanation, where one helps, is behind the
   ⓘ beside the name.

@@ -19,6 +19,10 @@ interface StripFlashProps {
   disabled?: boolean;
   /** A flash that could not reach the strip; `null` clears it. */
   onProblem: (outcome: Exclude<FlashOutcome, "lit"> | null) => void;
+  /** Flash once as soon as the button is usable: the strip was just added, and this is its first question. */
+  auto?: boolean;
+  /** The automatic flash has run; the caller stops asking for it. */
+  onAutoDone?: () => void;
   deps?: FlashDeps;
 }
 
@@ -26,7 +30,17 @@ interface StripFlashProps {
  * Lights the strip for a moment, then asks beside the button whether it lit. The answer is the
  * strip's state: "No" turns it into "Didn't light" with what to check, "Yes" clears that.
  */
-export function StripFlash({ stripId, layout, label, primary = false, disabled = false, onProblem, deps }: StripFlashProps) {
+export function StripFlash({
+  stripId,
+  layout,
+  label,
+  primary = false,
+  disabled = false,
+  onProblem,
+  auto = false,
+  onAutoDone,
+  deps,
+}: StripFlashProps) {
   const { t } = useTranslation();
   const ref = useRef<HTMLButtonElement | null>(null);
   const yesRef = useRef<HTMLButtonElement | null>(null);
@@ -49,6 +63,14 @@ export function StripFlash({ stripId, layout, label, primary = false, disabled =
       setFlashing(false);
     }
   };
+
+  const flashRef = useRef(flash);
+  flashRef.current = flash;
+  useEffect(() => {
+    if (!auto || disabled) return;
+    onAutoDone?.();
+    void flashRef.current();
+  }, [auto, disabled, onAutoDone]);
 
   const answer = (lit: boolean) => {
     setAsking(false);

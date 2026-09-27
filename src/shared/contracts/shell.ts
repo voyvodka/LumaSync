@@ -349,11 +349,11 @@ export interface ShellState {
    */
   colorCorrection?: ColorCorrectionConfig;
   /**
-   * v1.5 H4 — when `true`, the FirmwareProfilePicker override-warning
-   * dialog is suppressed and the user's mismatched-profile commit
-   * proceeds without confirmation. Set by the "Don't ask again" checkbox
-   * inside the dialog. Absent / `false` ⇒ the dialog renders on every
-   * mismatched commit. Reset to `false` on factory-reset only.
+   * v1.5 H4 — when `true`, picking a firmware profile other than the one
+   * the controller reports is not asked about first. It was set by a
+   * "Don't ask again" box the old picker's dialog had; the strip page reads
+   * it and has no way to set it. Absent / `false` ⇒ asked on every such
+   * pick. Reset to `false` on factory-reset only.
    *
    * Additive — no schemaVersion bump because absence naturally degrades
    * to "always show the warning", which is exactly the safe default for

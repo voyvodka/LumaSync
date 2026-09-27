@@ -23,13 +23,16 @@ import { buildDeviceStatusCard } from "../deviceStatusCard";
 import { shortPortName } from "../model/deviceRail";
 import { serialEntry } from "../model/localOutputs";
 import { STRIP_STATE_VIEW, serialStripState } from "../model/stripState";
+import { connectAsUser, useRosterFailed } from "../state/connectAsUser";
 import { useLocalOutputs } from "../state/localOutputsStore";
 import { useStripUnlit, type FlashOutcome } from "../state/stripFlash";
 import { useAdvertisedFirmwareProfile, useAdvertisedPixelLayout } from "../useAdvertisedFirmwareProfile";
 import type { UseDeviceConnectionResult } from "../useDeviceConnection";
 import { ChipRow, ColorOrderRow, FirmwareRow, saveHardware } from "./StripHardwareRows";
 import { StripFlash } from "./StripFlash";
+import { StripLayoutRow } from "./StripLayoutRow";
 import { StripName } from "./StripName";
+import { ConnectErrorNote, UnlitHelp, connectFailedOn } from "./StripNotes";
 import styles from "./StripPage.module.css";
 
 export interface StripPageProps {
@@ -41,12 +44,9 @@ export interface StripPageProps {
   device: UseDeviceConnectionResult;
   onNavigateToLedSetup?: () => void;
   onNavigateToRoomMap?: () => void;
-}
-
-/** Edges a layout lights, for the Layout row's value. */
-function edgesOf(strip: LedStrip): number {
-  const counts = strip.layout?.counts;
-  return counts ? Object.values(counts).filter((count) => count > 0).length : 0;
+  /** The strip was just added: flash it and ask as soon as it is connected. */
+  autoFlash?: boolean;
+  onAutoFlashDone?: () => void;
 }
 
 /**
@@ -54,7 +54,16 @@ function edgesOf(strip: LedStrip): number {
  * hardware it is built from, and a health check. Daily controls — on, off, brightness — are on
  * Lights; this page sets the strip up.
  */
-export function StripPage({ isActive, strip, name, device, onNavigateToLedSetup, onNavigateToRoomMap }: StripPageProps) {
+export function StripPage({
+  isActive,
+  strip,
+  name,
+  device,
+  onNavigateToLedSetup,
+  onNavigateToRoomMap,
+  autoFlash = false,
+  onAutoFlashDone,
+}: StripPageProps) {
   const { t } = useTranslation();
   const headingId = useId();
   const port = strip.transport.portName;
@@ -104,9 +113,9 @@ export function StripPage({ isActive, strip, name, device, onNavigateToLedSetup,
 
   const connect = () => {
     setDisconnectFailed(false);
-    device.selectPort(port);
-    void device.connectSelectedPort();
+    void connectAsUser(device, port);
   };
+  const rosterFailed = useRosterFailed(port);
   const disconnect = async () => {
     setDisconnectFailed(false);
     const result = await disconnectSerialPort(port);
@@ -114,7 +123,6 @@ export function StripPage({ isActive, strip, name, device, onNavigateToLedSetup,
   };
 
   // The next thing to do is the page's one amber: connecting a strip that is not, then its layout.
-  const needsLayout = strip.layout === undefined;
   const actionPrimary = view.action === "connect" || view.action === "retry";
   const action =
     view.action === "flash" || (view.action === "retry" && state === "unlit") ? (
@@ -124,6 +132,8 @@ export function StripPage({ isActive, strip, name, device, onNavigateToLedSetup,
         label={state === "unlit" ? "retry" : "flash"}
         primary={state === "unlit"}
         onProblem={setFlashProblem}
+        auto={autoFlash}
+        onAutoDone={onAutoFlashDone}
       />
     ) : view.action === "connect" || view.action === "retry" ? (
       <RowButton primary={actionPrimary} onClick={connect} data-testid="strip-connect">
@@ -138,14 +148,7 @@ export function StripPage({ isActive, strip, name, device, onNavigateToLedSetup,
       </RowButton>
     ) : null;
 
-  // A failed connect of this port, in the user's language, with Rust's detail kept verbatim.
-  const card = buildDeviceStatusCard({
-    status: device.status,
-    statusCard: device.statusCard,
-    connectedPort: connected ? port : null,
-  });
-  const connectError =
-    device.statusCard?.variant === "error" && device.selectedPort === port && !connected ? card : null;
+  const connectError = !connected && connectFailedOn(device, port);
 
   const health = device.latestHealthCheck;
   const failedStep = health
@@ -194,15 +197,7 @@ export function StripPage({ isActive, strip, name, device, onNavigateToLedSetup,
             <span className="sr-only" role="status" aria-live="polite" data-testid="strip-state">
               {t(view.word)}
             </span>
-            <Reveal open={connectError !== null}>
-              {connectError ? (
-                <RowNote tone="error" testId="strip-connect-error">
-                  {t(connectError.titleKey)}. {t(connectError.bodyKey)}
-                  {connectError.detailsKey ? ` ${t(connectError.detailsKey)}` : null}
-                  {connectError.details ? <span className={styles.detail}> {connectError.details}</span> : null}
-                </RowNote>
-              ) : null}
-            </Reveal>
+            <Reveal open={connectError}>{connectError ? <ConnectErrorNote device={device} /> : null}</Reveal>
             <Reveal open={flashProblem !== null}>
               {flashProblem ? (
                 <RowNote tone="error" testId="strip-flash-problem">
@@ -210,39 +205,24 @@ export function StripPage({ isActive, strip, name, device, onNavigateToLedSetup,
                 </RowNote>
               ) : null}
             </Reveal>
+            <Reveal open={rosterFailed}>
+              {rosterFailed ? (
+                <RowNote tone="error" testId="strip-roster-failed">
+                  {t("device:strip.roomMapFailed")}
+                </RowNote>
+              ) : null}
+            </Reveal>
             <Reveal open={disconnectFailed}>
               {disconnectFailed ? <RowNote tone="error">{t("device:strip.disconnectFailed")}</RowNote> : null}
             </Reveal>
             <Reveal open={state === "unlit"}>
-              <div className={styles.help} data-testid="strip-unlit-help">
-                <p>{t("device:strip.flash.help.title")}</p>
-                <ol>
-                  <li>{t("device:strip.flash.help.ground")}</li>
-                  <li>{t("device:strip.flash.help.data")}</li>
-                  <li>{t("device:strip.flash.help.firmware")}</li>
-                </ol>
-              </div>
+              <UnlitHelp />
             </Reveal>
           </SettingRow>
         </Reveal>
 
         <Reveal open>
-          <SettingRow
-            label={t("device:strip.row.layout")}
-            value={
-              needsLayout
-                ? t("device:strip.layoutNone")
-                : t("device:strip.layoutValue", { count: strip.layout?.totalLeds ?? 0, edges: edgesOf(strip) })
-            }
-            testId="strip-layout"
-            control={
-              onNavigateToLedSetup ? (
-                <RowButton primary={needsLayout && !actionPrimary} onClick={onNavigateToLedSetup} data-testid="strip-layout-open">
-                  {t(needsLayout ? "device:strip.action.setUp" : "device:strip.action.edit")} ›
-                </RowButton>
-              ) : null
-            }
-          />
+          <StripLayoutRow strip={strip} primary={!actionPrimary} onOpen={onNavigateToLedSetup} />
         </Reveal>
 
         <Reveal open>

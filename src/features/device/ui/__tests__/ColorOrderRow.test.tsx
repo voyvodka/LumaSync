@@ -6,7 +6,9 @@ import {
   type LedTestPatternResult,
   type StartLedTestPatternPayload,
 } from "@/shared/contracts/preview";
-import { LedColorOrderControl } from "../LedColorOrderControl";
+import type { LedColorOrder } from "@/shared/contracts/device";
+
+import { ColorOrderRow } from "../StripHardwareRows";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -19,20 +21,18 @@ vi.mock("react-i18next", () => ({
 }));
 
 const calls: string[] = [];
-const mockState: { ledColorOrder?: string } = {};
-const mockSave = vi.fn(async (partial: Record<string, unknown>) => {
-  calls.push(`save:${String(partial.colorOrder)}`);
+const mockSave = vi.fn(async (hardware: Record<string, unknown>) => {
+  calls.push(`save:${String(hardware.colorOrder)}`);
 });
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
-    load: vi.fn(async () => ({ ...mockState })),
-    // A strips write lands as the target strip's hardware; the assertions read that.
+    // A write lands on the strip the row belongs to; the assertions read that strip's hardware.
     update: async (fn: (current: Record<string, unknown>) => Record<string, unknown> | null) => {
-      const partial = fn({ ...mockState }) ?? {};
+      const partial = fn({ ledStrips: [{ id: "strip-1", enabled: true, transport: null, hardware: {} }] }) ?? {};
       const strips = partial.ledStrips as { hardware: Record<string, unknown> }[] | undefined;
-      await mockSave(strips?.[0]?.hardware ?? partial);
-      return { ...mockState, ...partial };
+      await mockSave(strips?.[0]?.hardware ?? {});
+      return partial;
     },
   },
 }));
@@ -56,20 +56,22 @@ const stop = vi.fn(async () => {
   calls.push("stop");
   return STOPPED;
 });
-const onColorOrderChange = vi.fn((next: string) => {
+const onColorOrderChange = vi.fn((next: LedColorOrder) => {
   calls.push(`apply:${next}`);
 });
 
 // Derived from a real key: the i18n gate reads every quoted "ns:path" as a key reference.
 const K = "lights:led.colorOrder.identify.button".replace(/\.button$/, "");
+const IDENTIFY = "device:strip.action.identify";
 
-function renderControl(localTransport: "serial" | "wled" | null = "serial") {
+function renderControl({ order = "rgb" as LedColorOrder, canIdentify = true } = {}) {
   return render(
-    <LedColorOrderControl
-      localTransport={localTransport}
-      onColorOrderChange={onColorOrderChange}
-      start={start}
-      stop={stop}
+    <ColorOrderRow
+      stripId="strip-1"
+      order={order}
+      canIdentify={canIdentify}
+      onChange={onColorOrderChange}
+      identifyDeps={{ start, stop }}
     />,
   );
 }
@@ -81,17 +83,15 @@ async function pick(color: "red" | "green" | "blue" | "other") {
 }
 
 async function beginIdentify() {
-  const button = await screen.findByRole("button", { name: `${K}.button` });
-  fireEvent.click(button);
+  fireEvent.click(await screen.findByRole("button", { name: IDENTIFY }));
 }
 
 beforeEach(() => {
   calls.length = 0;
-  delete mockState.ledColorOrder;
   vi.clearAllMocks();
 });
 
-describe("LedColorOrderControl identify flow", () => {
+describe("ColorOrderRow identify flow", () => {
   it("saves the literal answers, stops the probe, then retunes — in that order", async () => {
     renderControl();
     await beginIdentify();
@@ -148,12 +148,13 @@ describe("LedColorOrderControl identify flow", () => {
     await pick("green");
     await screen.findByText(new RegExp(`${K}.step\\|.*"current":2`));
 
-    fireEvent.click(screen.getByRole("button", { name: `${K}.cancel` }));
+    // The button that opened it closes it again, which cancels.
+    fireEvent.click(screen.getByRole("button", { name: IDENTIFY }));
 
     await waitFor(() => expect(stop).toHaveBeenCalledTimes(1));
     expect(mockSave).not.toHaveBeenCalled();
     expect(onColorOrderChange).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: `${K}.button` })).not.toBeDisabled();
+    await waitFor(() => expect(screen.getByRole("button", { name: IDENTIFY })).not.toBeDisabled());
   });
 
   it("'something else' stops the probe and points at chip type and firmware", async () => {
@@ -180,8 +181,7 @@ describe("LedColorOrderControl identify flow", () => {
   });
 
   it("undo in the verify step puts the previous order back", async () => {
-    mockState.ledColorOrder = "bgr";
-    renderControl();
+    renderControl({ order: "bgr" });
     await screen.findByLabelText(/currentAria\|.*"order":"BGR"/);
     await beginIdentify();
     await pick("green");
@@ -198,41 +198,22 @@ describe("LedColorOrderControl identify flow", () => {
   });
 });
 
-describe("LedColorOrderControl surface", () => {
-  it("shows the saved order as an uppercase code, tagged when it is the default", async () => {
+describe("ColorOrderRow surface", () => {
+  it("shows the saved order as an uppercase code", () => {
+    renderControl({ order: "grb" });
+    expect(screen.getByTestId("strip-color-order-value")).toHaveTextContent("GRB");
+  });
+
+  it("cannot identify without a connected strip to light", () => {
+    renderControl({ canIdentify: false });
+    expect(screen.getByRole("button", { name: IDENTIFY })).toBeDisabled();
+  });
+
+  it("the list saves before it retunes", async () => {
     renderControl();
-    expect(await screen.findByLabelText(/currentAria\|.*"order":"RGB"/)).toHaveTextContent(/^RGB$/);
-    expect(screen.getByText("lights:led.colorOrder.defaultTag")).toBeInTheDocument();
-  });
-
-  it("hides the control for a WLED output and says where to set it", async () => {
-    renderControl("wled");
-    expect(await screen.findByText("lights:led.colorOrder.wledHint")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: `${K}.button` })).toBeNull();
-    expect(screen.queryByRole("combobox")).toBeNull();
-  });
-
-  it("disables Identify with a reason when no strip is connected", async () => {
-    renderControl(null);
-    const button = await screen.findByRole("button", { name: `${K}.button` });
-    expect(button).toBeDisabled();
-    expect(button).toHaveAccessibleDescription(`${K}.needsStrip`);
-    // A disabled amber button was the one primary on the page, pointing at a dead end.
-    expect(button).not.toHaveClass("is-primary");
-  });
-
-  it("is the primary action once a strip can run it", async () => {
-    renderControl("serial");
-    expect(await screen.findByRole("button", { name: `${K}.button` })).toHaveClass("is-primary");
-  });
-
-  it("the manual selector saves before it retunes", async () => {
-    renderControl();
-    await screen.findByLabelText(/currentAria\|.*"order":"RGB"/);
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "brg" } });
-
-    await waitFor(() => expect(onColorOrderChange).toHaveBeenCalledWith("brg"));
-    expect(calls).toEqual(["save:brg", "apply:brg"]);
-    expect(start).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("strip-color-order-value"));
+    fireEvent.click(await screen.findByRole("option", { name: "BGR" }));
+    await waitFor(() => expect(onColorOrderChange).toHaveBeenCalledWith("bgr"));
+    expect(calls).toEqual(["save:bgr", "apply:bgr"]);
   });
 });

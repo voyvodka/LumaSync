@@ -72,6 +72,7 @@ vi.mock("../features/device/useDeviceConnection", () => ({
     isConnected: false,
     connectedPort: null,
     ports: [],
+    refreshPorts: async () => {},
   }),
 }));
 
