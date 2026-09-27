@@ -5,6 +5,7 @@ import { DEFAULT_SHELL_STATE, type ShellState } from "@/shared/contracts/shell";
 import type { LedStrip } from "@/shared/contracts/strips";
 import {
   withColorCorrection,
+  withHardwareOf,
   withSerialTransport,
   withStripHardware,
   withStripLayout,
@@ -156,3 +157,20 @@ describe("withStripName", () => {
   });
 });
 
+describe("withHardwareOf", () => {
+  it("sets the fields on the strip it is given and leaves the others, even the primary", () => {
+    const current = state({ ledStrips: [strip("a", { hardware: { chipType: "ws2812b-grb" } }), strip("b")] });
+    const patch = withHardwareOf(current, "b", { chipType: "sk6812-rgbw" });
+    expect(patch?.ledStrips).toEqual([strip("a", { hardware: { chipType: "ws2812b-grb" } }), strip("b", { hardware: { chipType: "sk6812-rgbw" } })]);
+  });
+
+  it("clears a field given as undefined", () => {
+    const current = state({ ledStrips: [strip("a", { hardware: { colorOrder: "grb", chipType: "ws2812b-grb" } })] });
+    expect(withHardwareOf(current, "a", { colorOrder: undefined })?.ledStrips?.[0]?.hardware).toEqual({ chipType: "ws2812b-grb" });
+  });
+
+  it("writes nothing for an id no strip has", () => {
+    expect(withHardwareOf(state({ ledStrips: [strip("a")] }), "zzz", { chipType: "sk6812-rgbw" })).toBeNull();
+    expect(withHardwareOf(state(), "a", { chipType: "sk6812-rgbw" })).toBeNull();
+  });
+});

@@ -31,7 +31,8 @@ import {
   entryForCategory,
   type DeviceRailEntry,
 } from "../model/deviceRail";
-import { railItem } from "./deviceRailRows";
+import { railItem, stripName } from "./deviceRailRows";
+import { StripPage } from "./StripPage";
 import { useDeviceConnection } from "../useDeviceConnection";
 import { useActiveWledSink } from "../useWledSink";
 import styles from "./DevicesPage.module.css";
@@ -43,6 +44,8 @@ export interface DevicesPageProps {
    * count live. Inert when omitted.
    */
   onNavigateToRoomMap?: () => void;
+  /** Opens LED Setup, where a strip's layout is drawn. */
+  onNavigateToLedSetup?: () => void;
   /** Forwarded to the Hue page; see `HuePageProps.onStopHue`. */
   onStopHueOutput: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
   /** Opens a category from outside, e.g. a notice's "Devices" action for Hue. */
@@ -55,6 +58,7 @@ export interface DevicesPageProps {
 
 export function DevicesPage({
   onNavigateToRoomMap,
+  onNavigateToLedSetup,
   onStopHueOutput,
   categoryRequest = null,
   onVisibleCategoryChange,
@@ -270,7 +274,7 @@ export function DevicesPage({
   // Until each row has a page of its own (D2, D3), a row shows the pane it belongs to.
   const kind = activeEntry?.kind ?? null;
   const transport = activeEntry?.kind === "strip" ? (activeEntry.strip.transport?.kind ?? null) : null;
-  const showsUsb = kind === "port" || kind === "add" || (kind === "strip" && transport !== "wled");
+  const showsUsb = kind === "port" || kind === "add" || (kind === "strip" && transport === null);
   const showsHue = kind === "hue" || kind === "bridge";
   const showsWled = kind === "add" || (kind === "strip" && transport === "wled");
 
@@ -301,6 +305,20 @@ export function DevicesPage({
           clearPersistError={usbPersistError.clear}
           onNavigateToRoomMap={onNavigateToRoomMap}
         />
+
+        {entries?.map((entry) =>
+          entry.kind === "strip" && entry.strip.transport?.kind === "serial" ? (
+            <StripPage
+              key={entry.id}
+              isActive={entry.id === activeId}
+              strip={{ ...entry.strip, transport: entry.strip.transport }}
+              name={stripName(entry, t)}
+              device={device}
+              onNavigateToLedSetup={onNavigateToLedSetup}
+              onNavigateToRoomMap={onNavigateToRoomMap}
+            />
+          ) : null,
+        )}
 
         <WledCategory isActive={showsWled} />
 

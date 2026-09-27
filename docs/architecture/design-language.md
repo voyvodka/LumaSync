@@ -94,7 +94,9 @@ rebuilding LED Setup; apply it to every new screen:
   amber (red for a letting-go, which starts on Cancel). The centred `ConfirmDialog` is only for a
   question nothing on screen asked, such as leaving LED Setup with an unsaved layout: the Hue
   channel pull asked through it, with the old uppercase mono buttons, and read as another app's
-  dialog over the page.
+  dialog over the page. A popover opens on the side it asks for unless it would run off the window
+  there and fits on the other: a colour-order list opened below a row near the foot of the window
+  was cut off by it.
 - **Before building, show options.** Two or three directions with a sketch each, a recommendation,
   then build; iterate on the running app with hot reload.
 

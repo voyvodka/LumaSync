@@ -112,10 +112,12 @@ const DevicesPanel = memo(function DevicesPanel() {
   const { goToSection } = useNavigationActions();
   const { stopHueOutput } = useLightingActions();
   const openRoomMap = useCallback(() => void goToSection(SECTION_IDS.ROOM_MAP), [goToSection]);
+  const openLedSetup = useCallback(() => void goToSection(SECTION_IDS.LED_SETUP), [goToSection]);
   return (
     <div className="h-full overflow-hidden">
       <DevicesPage.Component
         onNavigateToRoomMap={openRoomMap}
+        onNavigateToLedSetup={openLedSetup}
         onStopHueOutput={stopHueOutput}
         categoryRequest={categoryRequest}
         onVisibleCategoryChange={reportVisibleCategory}

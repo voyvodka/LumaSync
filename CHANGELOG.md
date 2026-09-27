@@ -74,6 +74,12 @@ https://keepachangelog.com/en/1.1.0/
   so when it would replace the bridge you have. The area's channels are rows too: each light by
   name with Identify, and whether the bridge holds the same arrangement; taking the bridge's
   arrangement or saving yours to it is behind the channels' "…".
+- Devices → a USB strip is a page of quiet rows too. The controller row says where the strip stands
+  in one word — Connected, Not connected, Reconnecting…, Busy, Didn't light — with the one thing to
+  do beside it. "Flash" lights the strip white for a moment and asks beside the button whether it
+  lit; "No" lists what to check, most likely first. The strip can be renamed from the pencil beside
+  its name, and the rows below set its layout (in LED Setup), firmware, LED chip and colour order,
+  and run a health check. Disconnect and "Open in room map" are behind "…".
 - Settings is split into pages — General, Appearance, Updates, Help and About — listed on the
   left. Each row shows just its name and control; an explanation, where one helps, is behind the
   ⓘ beside the name.

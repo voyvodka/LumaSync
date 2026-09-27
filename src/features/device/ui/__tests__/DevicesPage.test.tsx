@@ -774,6 +774,27 @@ describe("DevicesPage — the rail lists the devices", () => {
     ]);
   });
 
+  it("a strip the user named is listed and headed by that name", async () => {
+    await withStrips([{ ...SERIAL_STRIP, name: "Desk" }]);
+    await renderSettled();
+
+    expect(rowLabels()[0]).toBe("Desk, device:page.rail.off");
+    expect(screen.getByRole("heading", { level: 1, name: "Desk" })).toBeInTheDocument();
+  });
+
+  // Each USB strip has a page of its own; a found port and "add a strip" keep the old pane for now.
+  it("a USB strip opens its own page, and only the chosen one shows", async () => {
+    await withStrips([SERIAL_STRIP, { ...SERIAL_STRIP, id: "strip-3", transport: { kind: "serial", portName: "COM4" } }]);
+    await renderSettled();
+
+    const pages = screen.getAllByTestId("strip-page");
+    expect(pages).toHaveLength(2);
+    expect(pages.filter((page) => !page.hidden)).toHaveLength(1);
+    await userEvent.setup().click(screen.getAllByTestId("device-entry-strip")[1]!);
+    expect(pages[0]).not.toBeVisible();
+    expect(pages[1]).toBeVisible();
+  });
+
   // Plugged in but not added: a faint row to add it, not a device.
   it("offers a supported port no strip is bound to, and never an unsupported one", async () => {
     const selectPort = vi.fn<(portName: string | null) => void>();

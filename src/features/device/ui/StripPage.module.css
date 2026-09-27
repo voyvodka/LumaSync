@@ -1,0 +1,146 @@
+@layer components {
+  /* A column like Settings': past ~720 px a row's name and its control drift apart. */
+  .page {
+    width: 100%;
+    max-width: 720px;
+    margin-inline: auto;
+  }
+
+  /* The heading and its pencil. The field takes the heading's box, so the rows below never move. */
+  .nameLine {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin: 0 0 8px;
+    min-height: 28px;
+  }
+  .title {
+    flex: 0 1 auto;
+    min-width: 0;
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 28px;
+    color: var(--lm-ink);
+    overflow-wrap: anywhere;
+  }
+  .nameInput {
+    width: min(320px, 60vw);
+    height: 28px;
+    margin-left: -7px;
+    padding: 0 6px;
+    border: 1px solid var(--lm-line-2);
+    border-radius: 6px;
+    background: var(--lm-panel);
+    font: inherit;
+    color: var(--lm-ink);
+  }
+  .nameInput::placeholder { color: var(--lm-ink-faint); font-weight: 400; }
+  .nameInput:focus-visible { outline: none; border-color: var(--lm-amber); box-shadow: var(--lm-focus-ring); }
+  .rename {
+    display: inline-grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    color: var(--lm-ink-faint);
+    transition: color var(--lm-dur-quick) linear, background-color var(--lm-dur-quick) linear;
+  }
+  .rename svg { width: 13px; height: 13px; }
+  .rename:hover { color: var(--lm-ink); background: var(--lm-panel-2); }
+  .rename:focus-visible { outline: none; color: var(--lm-ink); box-shadow: var(--lm-focus-ring); }
+  .nameLine > [data-testid="strip-name-failed"] { flex-basis: 100%; }
+
+  /* The controller row's right side: the word and its action pass over together when the state
+     changes, right-aligned, tall enough that a focus ring is not clipped. */
+  .swap {
+    --page-height: 36px;
+    --page-inset: 3px;
+    --page-gap: 8px;
+  }
+  .swap > span { justify-content: flex-end; }
+
+  /* Rows come and go with the state (Reveal): the line between two sits on the second, and a
+     closed one draws none. */
+  .rows > [data-reveal] + [data-reveal] {
+    border-top: 1px solid var(--lm-line);
+    transition: border-color var(--lm-dur-base) linear;
+  }
+  .rows > [data-reveal][data-open="false"] { border-top-color: transparent; }
+
+  /* Rust's own words under a note: an OS error, a VID/PID. */
+  .detail { color: var(--lm-ink-faint); overflow-wrap: anywhere; }
+
+  .help {
+    margin: 2px 0 0;
+    max-width: 60ch;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--lm-ink-dim);
+  }
+  .help p { margin: 0; }
+  .help ol { margin: 4px 0 0; padding-left: 18px; list-style: decimal; }
+  .help li::marker { color: var(--lm-ink-faint); }
+  .help li + li { margin-top: 2px; }
+
+  /* A value that opens its own list. */
+  .valueButton {
+    height: 26px;
+    margin-left: -6px;
+    padding: 0 6px;
+    border-radius: 6px;
+    font-family: var(--lm-mono);
+    font-size: 12px;
+    color: var(--lm-ink-dim);
+    transition: color var(--lm-dur-quick) linear, background-color var(--lm-dur-quick) linear;
+  }
+  .valueButton:hover:not(:disabled) { color: var(--lm-ink); background: var(--lm-panel-2); }
+  .valueButton[aria-expanded="true"] { color: var(--lm-ink); }
+  .valueButton:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .valueButton:disabled { cursor: default; }
+
+  /* A question asked beside the button that raised it. */
+  .question { display: grid; gap: 10px; padding: 4px; max-width: 300px; }
+  .questionText {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--lm-ink);
+  }
+  .step { display: block; margin-bottom: 2px; font-size: 11.5px; color: var(--lm-ink-faint); }
+  .questionHint {
+    margin: -4px 0 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--lm-ink-dim);
+  }
+  .questionError {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--lm-red);
+  }
+  .questionActions { display: flex; justify-content: flex-end; gap: 6px; }
+  .answers { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .answers > button { justify-content: flex-start; gap: 7px; }
+
+  .swatch {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+  /* Pure primaries, deliberately not status tokens: they name what the strip shows. */
+  .swatch[data-color="r"] { background: #ff3b30; }
+  .swatch[data-color="g"] { background: #34d05c; }
+  .swatch[data-color="b"] { background: #3b6bff; }
+  .swatch[data-color="other"] { border: 1px dashed var(--lm-ink-faint); }
+
+  @media (forced-colors: active) {
+    .nameInput { border-color: ButtonText; }
+    /* The swatches are the only thing tying an answer to a colour on screen, so keep them
+       painted; the button text still names the colour. */
+    .swatch { forced-color-adjust: none; }
+  }
+}

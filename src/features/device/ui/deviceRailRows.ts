@@ -21,16 +21,7 @@ interface RailRowSpec<K extends Kind> {
 /** One row per kind: a new kind of device fails to compile until it says how its row reads. */
 const RAIL_ROWS: { [K in Kind]: RailRowSpec<K> } = {
   strip: {
-    label: ({ strip, ordinal }, t) => {
-      const transport = strip.transport;
-      const name =
-        transport?.kind === "wled"
-          ? t("device:page.rail.wledStrip", { ip: transport.sink.ip })
-          : transport?.kind === "serial"
-            ? t("device:page.rail.usbStrip")
-            : t("device:page.rail.unboundStrip");
-      return ordinal === null ? name : `${name} ${ordinal}`;
-    },
+    label: (entry, t) => stripName(entry, t),
     group: "device:page.rail.strips",
     ghost: () => false,
     on: ({ connected }) => connected,
@@ -61,6 +52,19 @@ const RAIL_ROWS: { [K in Kind]: RailRowSpec<K> } = {
     on: () => null,
   },
 };
+
+/** A strip's name: the user's, else its device's, numbered among strips of the same kind. */
+export function stripName({ strip, ordinal }: EntryOf<"strip">, t: TFunction): string {
+  if (strip.name !== undefined) return strip.name;
+  const transport = strip.transport;
+  const name =
+    transport?.kind === "wled"
+      ? t("device:page.rail.wledStrip", { ip: transport.sink.ip })
+      : transport?.kind === "serial"
+        ? t("device:page.rail.usbStrip")
+        : t("device:page.rail.unboundStrip");
+  return ordinal === null ? name : `${name} ${ordinal}`;
+}
 
 function rowSpec<K extends Kind>(entry: EntryOf<K>): RailRowSpec<K> {
   return RAIL_ROWS[entry.kind as K];

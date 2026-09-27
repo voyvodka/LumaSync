@@ -54,16 +54,27 @@ function editTarget(
   return { strips, index };
 }
 
+function patchHardware(strip: LedStrip, patch: Partial<StripHardware>): LedStrip {
+  const hardware: StripHardware = { ...strip.hardware };
+  for (const [key, value] of Object.entries(patch) as [keyof StripHardware, unknown][]) {
+    if (value === undefined) delete hardware[key];
+    else (hardware as Record<string, unknown>)[key] = value;
+  }
+  return { ...strip, hardware };
+}
+
 /** Sets the given hardware fields on the target strip; `undefined` clears one. */
 export function withStripHardware(state: ShellState, patch: Partial<StripHardware>): StripsPatch {
-  const { strips } = editTarget(state, (strip) => {
-    const hardware: StripHardware = { ...strip.hardware };
-    for (const [key, value] of Object.entries(patch) as [keyof StripHardware, unknown][]) {
-      if (value === undefined) delete hardware[key];
-      else (hardware as Record<string, unknown>)[key] = value;
-    }
-    return { ...strip, hardware };
-  });
+  const { strips } = editTarget(state, (strip) => patchHardware(strip, patch));
+  return { ledStrips: strips };
+}
+
+/** The same, on strip `stripId`; `null` when no strip has that id, as a rename. */
+export function withHardwareOf(state: ShellState, stripId: string, patch: Partial<StripHardware>): StripsPatch | null {
+  const strips = [...stripsOf(state)];
+  const index = strips.findIndex((strip) => strip.id === stripId);
+  if (index === -1) return null;
+  strips[index] = patchHardware(strips[index]!, patch);
   return { ledStrips: strips };
 }
 
