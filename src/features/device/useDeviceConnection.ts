@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { LedChipType } from "@/shared/contracts/device";
+import type { LedChipType, SerialConnectionStatus } from "@/shared/contracts/device";
 import { shellStore } from "../persistence/shellStore";
 import { listenSerialPortsChanged } from "./deviceEventsApi";
 import { persistSerialPort } from "./outputChannelPersistence";
@@ -12,6 +12,7 @@ import { connectionEvents as defaultConnectionEvents } from "./connectionEvents"
 import { firmwareProfileEvents as defaultFirmwareProfileEvents } from "./firmwareProfileEvents";
 import { createDeviceConnectionController } from "./state/deviceConnectionController";
 import { localOutputs } from "./state/localOutputsStore";
+import { releaseOthersInApp } from "./state/releaseOthers";
 import { DEFAULT_STATE, withDerivedFlags } from "./state/connectionStateHelpers";
 import type { DeviceConnectionController, DeviceConnectionControllerState } from "./state/connectionTypes";
 import { primaryStripOf, savedSerialPort } from "@/features/strips/model/stripSelectors";
@@ -25,11 +26,26 @@ export interface UseDeviceConnectionResult extends DeviceConnectionControllerSta
 }
 
 export interface UseDeviceConnectionOptions {
-  /** Reconnect the saved strip when the serial watcher sees it plugged back in. One mount only. */
-  reconnectOnReplug?: boolean;
+  /**
+   * This mount owns the saved strip's reconnects: once at launch, and when the serial watcher sees it
+   * plugged back in. One mount only (App) — two reconnecting at once race for the port.
+   */
+  ownsReconnects?: boolean;
 }
 
-export function useDeviceConnection({ reconnectOnReplug = false }: UseDeviceConnectionOptions = {}): UseDeviceConnectionResult {
+// Two mounts asking for one port at once share the attempt: a second open of a port the first is
+// opening fails on the OS lock, and Rust would record that failure against a strip that is fine.
+const connecting = new Map<string, Promise<SerialConnectionStatus>>();
+
+function connectOnce(portName: string, chipType: LedChipType | undefined): Promise<SerialConnectionStatus> {
+  const running = connecting.get(portName);
+  if (running !== undefined) return running;
+  const attempt = connectSerialPort(portName, chipType).finally(() => connecting.delete(portName));
+  connecting.set(portName, attempt);
+  return attempt;
+}
+
+export function useDeviceConnection({ ownsReconnects = false }: UseDeviceConnectionOptions = {}): UseDeviceConnectionResult {
   const [initialLastSuccessfulPort, setInitialLastSuccessfulPort] = useState<string | undefined>(undefined);
 
   useEffect(() => {
@@ -87,7 +103,7 @@ export function useDeviceConnection({ reconnectOnReplug = false }: UseDeviceConn
           );
           chipType = undefined;
         }
-        return connectSerialPort(portName, chipType);
+        return connectOnce(portName, chipType);
       },
       localOutputs,
       runSerialHealthCheck,
@@ -95,14 +111,14 @@ export function useDeviceConnection({ reconnectOnReplug = false }: UseDeviceConn
         await persistSerialPort((update) => shellStore.update(update), portName);
       },
       initialLastSuccessfulPort,
-      // Bug 10A — opt the live React hook into auto-reconnect so the user
-      // doesn't have to re-pair on every launch. Tests building their own
-      // controller stay opt-out by default to keep their fixtures terse.
-      autoReconnectOnInit: true,
+      // Bug 10A — the launch brings the saved strip back without a re-pair. One mount does it:
+      // the Devices page's used to try the same port at the same moment.
+      autoReconnectOnInit: ownsReconnects,
       connectionEvents: defaultConnectionEvents,
       firmwareProfileEvents: defaultFirmwareProfileEvents,
       listenSerialPortsChanged,
-      reconnectOnReplug,
+      reconnectOnReplug: ownsReconnects,
+      releaseOtherOutputs: releaseOthersInApp,
       readSavedSerialPort: async () => savedSerialPort(await shellStore.load()),
     });
     controllerRef.current = controller;
@@ -118,7 +134,7 @@ export function useDeviceConnection({ reconnectOnReplug = false }: UseDeviceConn
       controller.dispose();
       if (controllerRef.current === controller) controllerRef.current = null;
     };
-  }, [initialLastSuccessfulPort, reconnectOnReplug]);
+  }, [initialLastSuccessfulPort, ownsReconnects]);
 
   const refreshPorts = useCallback(async () => {
     await controllerRef.current?.refreshPorts();

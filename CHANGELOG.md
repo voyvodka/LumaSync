@@ -271,6 +271,8 @@ https://keepachangelog.com/en/1.1.0/
   showing connected.
 - The Lights screen, the Devices page and the room map now agree on which strip is connected; each
   used to ask on its own and could disagree after a pairing, an unplug or a replacement.
+- At launch the saved strip is reconnected once, not twice at the same moment from two screens; the
+  second attempt could fail on the busy port and leave a working strip marked as failed.
 - Stats for nerds: the frame-rate chip in the status bar no longer turns red with "Low FPS" while
   everything is fine — with Hue alone, which runs at 20 fps, or on a still screen, where fewer
   frames change. Its colour now shows whether the output keeps up.

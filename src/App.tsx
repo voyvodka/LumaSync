@@ -141,8 +141,8 @@ function Shell() {
   // useEffect with `[]` deps) can read the latest paired-bridge state
   // without re-subscribing on every state mutation.
   const hueStartConfigRef = useRef<HueStartConfig | null>(null);
-  // The one mount that brings the strip back on a replug; Devices' mount only follows.
-  const { isConnected, ports, lastSuccessfulPort } = useDeviceConnection({ reconnectOnReplug: true });
+  // The one mount that brings the strip back, at launch and on a replug; Devices' mount only follows.
+  const { isConnected, ports, lastSuccessfulPort } = useDeviceConnection({ ownsReconnects: true });
   // Boot restore of the persisted WLED sink. Mounted here, not in the picker:
   // the sink must be bound before a lighting mode starts.
   useWledSinkRestore();

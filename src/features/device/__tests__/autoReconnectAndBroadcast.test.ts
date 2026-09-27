@@ -297,6 +297,48 @@ describe("the registry decides what is connected", () => {
     expect(controller.getState().statusCard).toMatchObject({ variant: "info", code: "DISCONNECTED" });
   });
 
+  it("the user's own connect lets the other outputs go", async () => {
+    const releaseOtherOutputs = vi.fn<NonNullable<DeviceConnectionControllerDeps["releaseOtherOutputs"]>>().mockResolvedValue();
+    const controller = createDeviceConnectionController(withRegistry({
+      ...base(),
+      connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>().mockResolvedValue({
+        connected: true,
+        portName: "COM4",
+        updatedAtUnixMs: Date.now(),
+        status: { code: "CONNECT_OK", message: "Connected", details: null },
+      }),
+      releaseOtherOutputs,
+    }));
+    await controller.initialize();
+
+    controller.selectPort("COM4");
+    await controller.connectSelectedPort();
+
+    expect(releaseOtherOutputs).toHaveBeenCalledWith({ kind: "serial", portName: "COM4" });
+  });
+
+  // The launch chose nothing: whatever else is connected stays.
+  it("a launch reconnect lets nothing go", async () => {
+    const releaseOtherOutputs = vi.fn<NonNullable<DeviceConnectionControllerDeps["releaseOtherOutputs"]>>().mockResolvedValue();
+    const controller = createDeviceConnectionController(withRegistry({
+      ...base(),
+      connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>().mockResolvedValue({
+        connected: true,
+        portName: "COM3",
+        updatedAtUnixMs: Date.now(),
+        status: { code: "CONNECT_OK", message: "Connected", details: null },
+      }),
+      initialLastSuccessfulPort: "COM3",
+      autoReconnectOnInit: true,
+      releaseOtherOutputs,
+    }));
+
+    await controller.initialize();
+
+    expect(controller.getState().connectedPort).toBe("COM3");
+    expect(releaseOtherOutputs).not.toHaveBeenCalled();
+  });
+
   it("an unplug reads as the port gone", async () => {
     const registry = fakeRegistry({ connected: "COM3" });
     const controller = createDeviceConnectionController(withRegistry({

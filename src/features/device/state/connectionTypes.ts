@@ -1,5 +1,11 @@
 import type { TranslationKey } from "@/features/i18n/catalogue";
-import type { DeviceOperation, DeviceStatus, HealthCheckView, SerialPortsChangedEvent } from "@/shared/contracts/device";
+import type {
+  DeviceOperation,
+  DeviceStatus,
+  DrivenOutputRef,
+  HealthCheckView,
+  SerialPortsChangedEvent,
+} from "@/shared/contracts/device";
 import type {
   HealthCheckResult,
   SerialConnectionStatus,
@@ -43,6 +49,11 @@ export interface DeviceConnectionControllerDeps {
   connectSerialPort: (portName: string) => Promise<SerialConnectionStatus>;
   /** Rust's local-output registry: the only source of what is connected. */
   localOutputs: LocalOutputs;
+  /**
+   * After the user's own connect: let go of every other local output, so one is used at a time
+   * while Rust could drive several. Not after a launch or replug reconnect — the user chose nothing.
+   */
+  releaseOtherOutputs?: (kept: DrivenOutputRef) => Promise<void>;
   runSerialHealthCheck?: (portName: string) => Promise<HealthCheckResult>;
   persistLastSuccessfulPort: (portName: string) => Promise<void>;
   initialLastSuccessfulPort?: string;
@@ -61,9 +72,8 @@ export interface DeviceConnectionControllerDeps {
    * failure (port missing, connect rejected) is swallowed so the user
    * still lands on the manual-pair screen rather than an error toast.
    *
-   * Defaults to `true` from the live `useDeviceConnection()` hook so
-   * day-to-day app launches auto-restore the previously paired strip.
-   * Tests opt in explicitly when they want to exercise the path.
+   * The live hook turns it on for the one mount that owns reconnects (App), so a
+   * launch restores the paired strip once. Tests opt in explicitly.
    */
   autoReconnectOnInit?: boolean;
   /**

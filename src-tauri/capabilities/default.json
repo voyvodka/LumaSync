@@ -110,6 +110,7 @@
     "allow-connect-wled-sink",
     "allow-test-wled-bridge",
     "allow-get-local-outputs",
+    "allow-disconnect-serial-port",
     "allow-forget-wled-device",
     "allow-start-led-test-pattern",
     "allow-stop-led-test-pattern",
