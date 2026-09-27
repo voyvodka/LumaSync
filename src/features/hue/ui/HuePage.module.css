@@ -94,7 +94,20 @@
 
   .optionMeta { margin-left: auto; padding-left: 16px; color: var(--lm-ink-faint); }
 
-  .channels { margin-top: 14px; }
+  .channels { margin-top: 18px; }
+  /* A channel sits under "Channels": indented, a step quieter than a row of its own. */
+  .channel { padding-left: 14px; }
+  .channel :global(span:first-child) { font-size: 12.5px; }
+
+  /* The one thing to do about a result, at the end of its line. */
+  .inlineAction {
+    color: var(--lm-amber);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    border-radius: 3px;
+  }
+  .inlineAction:hover { color: var(--lm-ink); }
+  .inlineAction:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
 
   :global(:root[data-reduced-motion]) .busy { animation: none; }
 

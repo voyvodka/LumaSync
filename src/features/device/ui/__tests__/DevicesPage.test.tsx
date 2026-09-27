@@ -71,8 +71,8 @@ vi.mock("@/features/settings/sections/WledDevicePicker", () => ({
 
 // Stand-in for the real panel: surfaces the two props the persist-banner tests
 // care about — the banner it would render, and the save path it would trigger.
-vi.mock("@/features/settings/sections/HueChannelMapPanel", () => ({
-  HueChannelMapPanel: ({
+vi.mock("@/features/hue/ui/HueChannels", () => ({
+  HueChannels: ({
     persistError,
     onPositionChange,
   }: {

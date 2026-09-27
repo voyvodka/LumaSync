@@ -18,7 +18,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("@/features/mode/modeApi", () => ({ stopHue: (...args: unknown[]) => stopHueMock(...args) }));
-vi.mock("@/features/settings/sections/HueChannelMapPanel", () => ({ HueChannelMapPanel: () => null }));
+vi.mock("@/features/hue/ui/HueChannels", () => ({ HueChannels: () => null }));
 
 const bridge = { id: "bridge-1", ip: "192.168.1.10", name: "Test Bridge" };
 const area = { id: "area-1", name: "Living Room", readiness: { ready: true } } as UseHueOnboardingResult["selectedArea"];

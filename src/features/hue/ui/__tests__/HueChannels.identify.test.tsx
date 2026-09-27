@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { HueAreaChannelInfo } from "@/features/hue/hueOnboardingApi";
 import { HUE_AREA_CHANNELS_STATUS, type HueIdentifyStatus } from "@/shared/contracts/hue";
-import { HueChannelMapPanel } from "../HueChannelMapPanel";
+import { HueChannels } from "../HueChannels";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -41,9 +41,9 @@ const names = { "light-a": "Sofa lamp", "light-b": "Play left", "light-c": "Play
 
 const status = (code: HueIdentifyStatus["code"]): HueIdentifyStatus => ({ code, message: "", details: null });
 
-function renderPanel(props: Partial<Parameters<typeof HueChannelMapPanel>[0]> = {}) {
+function renderPanel(props: Partial<Parameters<typeof HueChannels>[0]> = {}) {
   return render(
-    <HueChannelMapPanel
+    <HueChannels
       channels={channels}
       isLoading={false}
       channelsStatus={HUE_AREA_CHANNELS_STATUS.OK}
@@ -61,7 +61,7 @@ function renderPanel(props: Partial<Parameters<typeof HueChannelMapPanel>[0]> = 
 const row = (channelId: number) =>
   screen.getByRole("group", { name: `hue:channelMap.channelRowAriaLabel {"index":"#${channelId}"}` });
 
-describe("HueChannelMapPanel — light names and Identify", () => {
+describe("HueChannels — light names and Identify", () => {
   it("names each channel's lights, and falls back to the count for an unnamed one", () => {
     renderPanel();
 

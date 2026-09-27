@@ -71,7 +71,9 @@ https://keepachangelog.com/en/1.1.0/
   thing to do next beside it, the entertainment area (picked from a small list), and what Off does
   to the lights. Rarer actions such as Forget are behind "…", and an error code is behind the ⓘ at
   the end of its line. A bridge found on the network has a page of its own with Pair, which says
-  so when it would replace the bridge you have.
+  so when it would replace the bridge you have. The area's channels are rows too: each light by
+  name with Identify, and whether the bridge holds the same arrangement; taking the bridge's
+  arrangement or saving yours to it is behind the channels' "…".
 - Settings is split into pages — General, Appearance, Updates, Help and About — listed on the
   left. Each row shows just its name and control; an explanation, where one helps, is behind the
   ⓘ beside the name.
