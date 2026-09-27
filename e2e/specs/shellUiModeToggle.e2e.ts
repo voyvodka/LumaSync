@@ -88,10 +88,16 @@ describe("ui mode toggle from every section", () => {
       },
     );
 
-    // No skip for an unpaired machine: the rail renders every category
-    // unconditionally, and an unpaired Hue sub-view is the pairing flow.
-    const hueRail = '[data-testid="device-category-hue"]';
-    await clickTestId("device-category-hue");
+    // No skip for an unpaired machine: the rail always has the Hue row, and an
+    // unpaired Hue page is the pairing flow. The rail stays empty until the
+    // saved strips are read.
+    const hueRail = '[data-testid="device-entry-hue"]';
+    await browser.waitUntil(() => exists(hueRail), {
+      timeout: 5_000,
+      interval: 100,
+      timeoutMsg: "the Devices rail never listed the Hue row",
+    });
+    await clickTestId("device-entry-hue");
     await browser.waitUntil(async () => (await attribute(hueRail, "aria-current")) === "page", {
       timeout: 5_000,
       interval: 100,

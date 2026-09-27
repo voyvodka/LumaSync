@@ -386,6 +386,16 @@ fn serial_outputs(app: &App<MockRuntime>) -> Vec<(String, bool, String)> {
         .collect()
 }
 
+/// Every supported port that went away has its writer dropped. Off macOS the `tty.*` sibling is a
+/// listed port of its own, so it goes too (it holds no writer; forgetting it is a no-op).
+fn writers_dropped_by_unplug_all() -> Vec<String> {
+    let mut lost = vec![CALL_OUT.to_string()];
+    if !cfg!(target_os = "macos") {
+        lost.push(TTY_SIBLING.to_string());
+    }
+    lost
+}
+
 /// An unplugged strip loses its connection and its cached writer.
 #[test]
 fn an_unplugged_strip_drops_its_writer_and_its_connection() {
@@ -403,7 +413,7 @@ fn an_unplugged_strip_drops_its_writer_and_its_connection() {
     assert_eq!(recorder.forgotten(), Vec::<String>::new());
     serial_watch_tick(app.handle(), &mut watch);
 
-    assert_eq!(recorder.forgotten(), vec![CALL_OUT.to_string()]);
+    assert_eq!(recorder.forgotten(), writers_dropped_by_unplug_all());
     let status =
         invoke(&webview, "get_serial_connection_status", json!({})).expect("status must resolve");
     assert_eq!(status["connected"], json!(false));
@@ -431,7 +441,7 @@ fn an_unplug_after_wled_took_over_drops_the_old_writer_and_keeps_wled() {
     serial_watch_tick(app.handle(), &mut watch);
     serial_watch_tick(app.handle(), &mut watch);
 
-    assert_eq!(recorder.forgotten(), vec![CALL_OUT.to_string()]);
+    assert_eq!(recorder.forgotten(), writers_dropped_by_unplug_all());
     assert_eq!(registry.wled_config(), Some(loopback_wled()));
 }
 
