@@ -38,7 +38,20 @@ export default {
       healthCheckFailed: "Rescan, pick another port, then retry.",
     },
   },
-  // A registry entry that stopped driving without failing: let go of, or replaced by another output.
+  strip: {
+    // One word per strip state (`model/stripState.ts`); a closed set.
+    state: {
+      connecting: "Connecting…",
+      connected: "Connected",
+      unlit: "Didn't light",
+      reconnecting: "Reconnecting…",
+      disconnected: "Not connected",
+      busy: "Busy",
+      replug: "Replug the cable",
+      firmwareMismatch: "Firmware mismatch",
+    },
+  },
+  // A registry entry that stopped being connected without failing: let go of, or the app closing.
   outputStatus: {
     DISCONNECTED: {
       label: "Disconnected",

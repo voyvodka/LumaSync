@@ -39,6 +39,18 @@ const device: Catalogue<typeof enDevice> = {
       healthCheckFailed: "Yeniden tara, başka bir port seç ve tekrar dene.",
     },
   },
+  strip: {
+    state: {
+      connecting: "Bağlanıyor…",
+      connected: "Bağlı",
+      unlit: "Yanmadı",
+      reconnecting: "Yeniden bağlanıyor…",
+      disconnected: "Bağlı değil",
+      busy: "Meşgul",
+      replug: "Çıkarıp takın",
+      firmwareMismatch: "Uyumsuz yazılım",
+    },
+  },
   outputStatus: {
     DISCONNECTED: {
       label: "Bağlantı kesildi",
