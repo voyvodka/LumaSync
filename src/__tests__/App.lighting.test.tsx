@@ -303,6 +303,7 @@ describe("App lighting", () => {
     it("hands the Lights screen a WLED sink when no serial port is connected", async () => {
       env.isConnected = false;
       env.activeWledIp = "192.168.1.42";
+      env.driven = { kind: "wled", ip: "192.168.1.42" };
       installInvokeDispatch(false);
 
       render(<App />);
@@ -312,9 +313,10 @@ describe("App lighting", () => {
       });
     });
 
-    it("prefers the serial port when both are bound, because the registry holds the serial sink", async () => {
+    it("names the output the registry says it drives, the serial strip here", async () => {
       env.isConnected = true;
       env.activeWledIp = "192.168.1.42";
+      env.driven = { kind: "serial", portName: "/dev/cu.usbserial-test" };
       installInvokeDispatch(true);
 
       render(<App />);

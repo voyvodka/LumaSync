@@ -8,7 +8,8 @@
  * panel and no strip was therefore told "No strip connected", every non-Off
  * mode stayed disabled, and the output they owned was unreachable.
  *
- * Derived here rather than inline so the rule has one home and a test.
+ * Which one is bound is Rust's to say: `localSinkOf` in `model/localOutputs.ts` reads it from the
+ * registry snapshot's `driven`.
  */
 
 export type LocalSink =
@@ -20,30 +21,3 @@ export type LocalSink =
       product?: string;
     }
   | { transport: "wled"; /** LAN address — the only identity the persisted sink config keeps. */ id: string };
-
-/**
- * Serial wins when both are bound.
- *
- * Not a preference: a serial connect evicts WLED from `LocalOutputRegistry`, so
- * Rust drives the serial strip. Naming
- * WLED while Rust is driving the strip would be the same class of lie this
- * function exists to remove.
- */
-export function deriveLocalSink(
-  /** The app's own "a strip is connected" signal. Authoritative for the gate. */
-  serialConnected: boolean,
-  /** Port name, used only to identify the strip; absent is not "disconnected". */
-  serialPort: string | null,
-  activeWledIp: string | null,
-  serialProduct?: string | null,
-): LocalSink | null {
-  if (serialConnected) {
-    return serialProduct
-      ? { transport: "serial", id: serialPort ?? "", product: serialProduct }
-      : { transport: "serial", id: serialPort ?? "" };
-  }
-  if (activeWledIp !== null && activeWledIp.length > 0) {
-    return { transport: "wled", id: activeWledIp };
-  }
-  return null;
-}

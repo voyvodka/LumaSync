@@ -38,7 +38,6 @@ import type {
   WledForgetResponse,
   WledDiscoveryResponse,
   WledProtocol,
-  WledSinkStatus,
   WledTestResponse,
 } from "./device";
 import type {
@@ -152,7 +151,6 @@ export interface CommandMap {
     WledConnectResponse
   >;
   test_wled_bridge: Command<{ request: { device: WledDeviceInfo } }, WledTestResponse>;
-  get_wled_sink_status: NoArgs<WledSinkStatus>;
   forget_wled_device: Command<{ request: { ip: string } }, WledForgetResponse>;
 
   // --- display overlay ----------------------------------------------------

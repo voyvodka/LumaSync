@@ -122,8 +122,7 @@ use commands::shell_state::{
 use commands::updater::{check_for_update, download_and_install_update, PendingUpdate};
 use commands::window_visibility::{get_main_window_visibility, MainWindowVisibilityState};
 use commands::wled_discovery::{
-    connect_wled_sink, discover_wled_devices, forget_wled_device, get_wled_sink_status,
-    test_wled_bridge,
+    connect_wled_sink, discover_wled_devices, forget_wled_device, test_wled_bridge,
 };
 use events::{SHELL_CLOSE_TO_TRAY_EVENT, TRAY_SHOW_LED_PREVIEW_EVENT};
 
@@ -941,7 +940,6 @@ pub fn run() {
             discover_wled_devices,
             connect_wled_sink,
             test_wled_bridge,
-            get_wled_sink_status,
             start_led_test_pattern,
             stop_led_test_pattern,
             get_led_preview_status,

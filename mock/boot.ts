@@ -24,6 +24,7 @@ import { handleEventPluginCommand, isEventPluginCommand } from "./eventBridge";
 import { reloadWithScenario } from "./reload";
 import { DEFAULT_SCENARIO, SCENARIOS, SCENARIO_IDS, type ScenarioId } from "./scenarios";
 import { MOCK_HAS_REAL_IPC } from "./runtime";
+import { installLocalOutputsAnnouncer } from "./localOutputs";
 import { restoreWorld, setWorld } from "./state";
 
 /**
@@ -45,6 +46,7 @@ const scenario = requestedScenario();
 const askedExplicitly = new URLSearchParams(window.location.search).has("scenario");
 const restored = askedExplicitly ? null : restoreWorld();
 setWorld(restored ?? SCENARIOS[scenario].build(), { keepGeneration: restored !== null });
+installLocalOutputsAnnouncer();
 
 if (!hasTauriRuntime) {
   // The label picks the branch `main.tsx` takes between the app tree, the LED

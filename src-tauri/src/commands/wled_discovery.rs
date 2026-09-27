@@ -141,25 +141,6 @@ impl WledTestResponse {
     }
 }
 
-/// The `WledSinkConfig` currently registered, in the frontend's
-/// `WledUdpSinkConfig` shape.
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WledSinkSnapshot {
-    pub ip: String,
-    pub port: u16,
-    pub led_count: u16,
-    pub protocol: String,
-}
-
-/// Response from `get_wled_sink_status`.
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WledSinkStatusResponse {
-    pub connected: bool,
-    pub sink: Option<WledSinkSnapshot>,
-}
-
 /// Request payload for `forget_wled_device`.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -214,15 +195,6 @@ fn default_port_for(protocol: WledProtocol) -> u16 {
     match protocol {
         WledProtocol::Ddp => WLED_DDP_PORT,
         WledProtocol::Drgb => WLED_DEFAULT_REALTIME_PORT,
-    }
-}
-
-/// Inverse of `parse_protocol` — must stay in sync with the
-/// `WledUdpSinkConfig["protocol"]` union in `src/shared/contracts/device.ts`.
-fn protocol_to_str(protocol: WledProtocol) -> &'static str {
-    match protocol {
-        WledProtocol::Ddp => "ddp",
-        WledProtocol::Drgb => "drgb",
     }
 }
 
@@ -610,32 +582,6 @@ fn connect_wled_sink_blocking(
     (response, Some(snapshot))
 }
 
-/// Report the WLED sink currently bound to the "usb" output channel.
-///
-/// A serial connect unbinds it, which is exactly the eviction the frontend needs to observe.
-#[tauri::command]
-pub fn get_wled_sink_status(
-    registry: tauri::State<'_, LocalOutputRegistry>,
-) -> WledSinkStatusResponse {
-    let config = registry.wled_config();
-
-    match config {
-        Some(cfg) => WledSinkStatusResponse {
-            connected: true,
-            sink: Some(WledSinkSnapshot {
-                ip: cfg.ip.to_string(),
-                port: cfg.port,
-                led_count: cfg.led_count,
-                protocol: protocol_to_str(cfg.protocol).to_string(),
-            }),
-        },
-        None => WledSinkStatusResponse {
-            connected: false,
-            sink: None,
-        },
-    }
-}
-
 /// The body of `forget_wled_device`. Contacts nothing on the network.
 pub(crate) async fn forget_wled_with<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
@@ -889,17 +835,6 @@ mod tests {
     #[test]
     fn default_port_drgb_is_the_realtime_port() {
         assert_eq!(default_port_for(WledProtocol::Drgb), 21324);
-    }
-
-    // Round-trips because the frontend persists what this emits and replays it
-    // through `parse_protocol` on the next launch.
-    #[test]
-    fn protocol_to_str_round_trips_through_parse_protocol() {
-        use super::protocol_to_str;
-        for protocol in [WledProtocol::Ddp, WledProtocol::Drgb] {
-            let encoded = protocol_to_str(protocol);
-            assert_eq!(parse_protocol(Some(encoded)), protocol, "{encoded}");
-        }
     }
 
     #[test]

@@ -176,7 +176,6 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     ("discover_wled_devices", MAIN_ONLY),
     ("connect_wled_sink", MAIN_ONLY),
     ("test_wled_bridge", MAIN_ONLY),
-    ("get_wled_sink_status", MAIN_ONLY),
     ("forget_wled_device", MAIN_ONLY),
     ("open_led_twin_overlay", MAIN_ONLY),
     ("open_led_control_popup", MAIN_ONLY),
@@ -191,8 +190,8 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     ("set_hue_solid_color", NO_WINDOW),
     // Read by the health monitor in Rust; its test grants it.
     ("get_hue_stream_status", NO_WINDOW),
-    // The local-output registry: registered ahead of the frontend that reads it; tests grant it.
-    ("get_local_outputs", NO_WINDOW),
+    // The local-output registry: the main window follows it. Disconnect has no caller yet (PR 4b).
+    ("get_local_outputs", MAIN_ONLY),
     ("disconnect_serial_port", NO_WINDOW),
 ];
 

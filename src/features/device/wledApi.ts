@@ -12,7 +12,6 @@ import {
   type WledDeviceInfo,
   type WledDiscoveryResponse,
   type WledForgetResponse,
-  type WledSinkStatus,
   type WledTestResponse,
   type WledUdpSinkConfig,
 } from "@/shared/contracts/device";
@@ -60,14 +59,6 @@ export async function connectWledSink(
       protocol: transport?.protocol,
     },
   });
-}
-
-/**
- * Ask Rust which WLED sink is bound right now. Distinct from reading
- * `ShellState.lastWledSink`, which is only the restore intent.
- */
-export async function getWledSinkStatus(): Promise<WledSinkStatus> {
-  return invokeCommand(DEVICE_COMMANDS.GET_WLED_SINK_STATUS);
 }
 
 /**

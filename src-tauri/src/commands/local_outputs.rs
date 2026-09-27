@@ -42,12 +42,26 @@ pub enum LocalOutputStatus {
     Wled(WledOutputStatus),
 }
 
+/// `DrivenOutputRef` in `src/shared/contracts/device.ts`: which output the "usb" channel drives,
+/// named so the frontend reads the rule instead of repeating it.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum DrivenOutputRef {
+    Serial { port_name: String },
+    Wled { ip: String },
+}
+
 /// `LocalOutputsSnapshot` in `src/shared/contracts/device.ts`.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalOutputsSnapshot {
     pub revision: u64,
     pub outputs: Vec<LocalOutputStatus>,
+    pub driven: Option<DrivenOutputRef>,
 }
 
 /// What the "usb" channel drives. A bound WLED device wins over a connected serial port — with
@@ -135,6 +149,12 @@ impl Inner {
         LocalOutputsSnapshot {
             revision: self.revision,
             outputs,
+            driven: driven_in(self).map(|driven| match driven {
+                DrivenLocal::Serial(port_name) => DrivenOutputRef::Serial { port_name },
+                DrivenLocal::Wled(config) => DrivenOutputRef::Wled {
+                    ip: config.ip.to_string(),
+                },
+            }),
         }
     }
 
@@ -200,14 +220,18 @@ impl LocalOutputRegistry {
     }
 
     /// A connect that failed. `admitted_port` is the port when it passed admission — a refused name
-    /// never becomes an entry. Another connected port and a bound WLED device are left alone.
+    /// never becomes an entry. Another connected port and a bound WLED device are left alone, and so
+    /// is this port when it is connected: a second attempt on a live port (two boot reconnects racing)
+    /// fails on the open, and must not mark the strip that is lighting as off.
     pub fn serial_failed(
         &self,
         admitted_port: Option<&str>,
         status: SerialConnectionStatus,
     ) -> LocalOutputsSnapshot {
         let mut inner = self.lock();
-        if let Some(port) = admitted_port {
+        let live = admitted_port
+            .is_some_and(|port| inner.serial.get(port).is_some_and(|entry| entry.connected));
+        if let Some(port) = admitted_port.filter(|_| !live) {
             inner.serial.insert(
                 port.to_string(),
                 SerialOutputStatus {
@@ -219,7 +243,10 @@ impl LocalOutputRegistry {
                 },
             );
         }
-        inner.last_serial = status;
+        // The compatibility status too: it would read the live strip as failed.
+        if !live {
+            inner.last_serial = status;
+        }
         inner.changed()
     }
 

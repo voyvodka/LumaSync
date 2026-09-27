@@ -110,7 +110,7 @@
     "allow-discover-wled-devices",
     "allow-connect-wled-sink",
     "allow-test-wled-bridge",
-    "allow-get-wled-sink-status",
+    "allow-get-local-outputs",
     "allow-forget-wled-device",
     "allow-start-led-test-pattern",
     "allow-stop-led-test-pattern",

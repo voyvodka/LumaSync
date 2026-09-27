@@ -2449,8 +2449,6 @@ const NULLABILITY_NAME_ALIASES = {
   // Serialised into the calibration overlay window, not returned by a command.
   OverlayPreviewCountsPayload: "OverlayPreviewCounts",
   OverlayPreviewSequenceItemPayload: "OverlayPreviewSequenceItem",
-  WledSinkStatusResponse: "WledSinkStatus",
-  WledSinkSnapshot: "WledUdpSinkConfig",
 };
 
 /**
@@ -2641,7 +2639,9 @@ const checkedPairs = nullabilityPairs.filter(
 // 90 → 94: the local-output registry — `SerialOutputStatus`, `WledOutputStatus`,
 // `LocalOutputsSnapshot` (`get_local_outputs`, `device://local-outputs-changed`) and
 // `SerialDisconnectResult` (`disconnect_serial_port`).
-const EXPECTED_NULLABILITY_PAIR_COUNT = 94;
+// 94 → 92: `get_wled_sink_status` went, and with it `WledSinkStatusResponse` and
+// `WledSinkSnapshot`; the registry says which WLED device is bound.
+const EXPECTED_NULLABILITY_PAIR_COUNT = 92;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

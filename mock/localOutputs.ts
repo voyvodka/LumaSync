@@ -1,0 +1,73 @@
+/**
+ * The local-output registry as the mock world holds it: the connected strip and the bound WLED
+ * device, with a revision that grows on every change and an announcement like Rust's. Derived from
+ * the world rather than kept beside it, so every path that connects, binds, unplugs or forgets —
+ * a command, the DevPanel, a scenario switch — announces without having to remember to.
+ */
+import {
+  DEVICE_EVENTS,
+  SERIAL_CONNECT_STATUS,
+  SERIAL_OUTPUT_STATUS,
+  type LocalOutputStatus,
+  type LocalOutputsSnapshot,
+} from "../src/shared/contracts/device";
+import { emitMockEvent } from "./events";
+import { status } from "./handlers/status";
+import { getWorld, subscribe } from "./state";
+
+let revision = 0;
+let heldKey = "";
+
+/** What a reader can see change, so any of it moves the revision; time stamps alone do not. */
+function key(): string {
+  const { outputs, driven } = localOutputsSnapshot();
+  return JSON.stringify({
+    outputs: outputs.map((output) => (output.kind === "serial" ? { ...output, updatedAtUnixMs: 0 } : output)),
+    driven,
+  });
+}
+
+export function localOutputsSnapshot(): LocalOutputsSnapshot {
+  const { serial, wled } = getWorld();
+  const port = serial.ports.find((p) => p.name === serial.connectedPort);
+  const device = wled.devices.find((d) => d.host === wled.connectedHost);
+  const outputs: LocalOutputStatus[] = [];
+  if (port !== undefined) {
+    // A WLED device bound after the strip evicted it, as Rust's registry does: the entry stays,
+    // no longer connected.
+    const evicted = device !== undefined;
+    outputs.push({
+      kind: "serial",
+      portName: port.name,
+      connected: !evicted,
+      status: evicted
+        ? status(SERIAL_OUTPUT_STATUS.DISCONNECTED, "Another output took the strip's place.")
+        : status(SERIAL_CONNECT_STATUS.OK, "Connected"),
+      firmware: null,
+      updatedAtUnixMs: Date.now(),
+    });
+  }
+  if (device !== undefined) {
+    outputs.push({ kind: "wled", ip: device.host, ledCount: device.ledCount, connected: true });
+  }
+  // Rust's rule under eviction: a bound WLED device, else the connected strip.
+  const driven =
+    device !== undefined
+      ? ({ kind: "wled", ip: device.host } as const)
+      : port !== undefined
+        ? ({ kind: "serial", portName: port.name } as const)
+        : null;
+  return { revision, outputs, driven };
+}
+
+/** Starts announcing: the world changes, and the registry's view of it moves with a new revision. */
+export function installLocalOutputsAnnouncer(): void {
+  heldKey = key();
+  subscribe(() => {
+    const next = key();
+    if (next === heldKey) return;
+    heldKey = next;
+    revision += 1;
+    void emitMockEvent(DEVICE_EVENTS.LOCAL_OUTPUTS_CHANGED, localOutputsSnapshot());
+  });
+}

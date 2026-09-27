@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
 import { buildDeviceStatusCard } from "@/features/device/deviceStatusCard";
 import type { UseDeviceConnectionResult } from "@/features/device/useDeviceConnection";
-import { deriveLocalSink } from "@/features/device/localSink";
+import { useLocalOutputs } from "@/features/device/state/localOutputsStore";
 import { IconRefresh } from "@/shared/ui/icons";
 import { Button } from "@/shared/ui/Button";
 import { cx } from "@/shared/ui/cx";
@@ -31,8 +31,6 @@ export interface UsbStripsCategoryProps {
   flagPersistError: () => void;
   clearPersistError: () => void;
   onNavigateToRoomMap?: () => void;
-  /** The bound WLED panel, if any: its colour order is set on the device. */
-  activeWledIp?: string | null;
 }
 
 const STATUS_TONE_CLASS = { success: "is-ok", error: "is-err", info: "is-info" } as const;
@@ -46,7 +44,6 @@ export function UsbStripsCategory({
   flagPersistError,
   clearPersistError,
   onNavigateToRoomMap,
-  activeWledIp = null,
 }: UsbStripsCategoryProps) {
   const { t } = useTranslation();
   const controllerTitleId = useId();
@@ -59,7 +56,6 @@ export function UsbStripsCategory({
     isConnecting,
     isReconnecting,
     isHealthChecking,
-    isConnected,
     lastSuccessfulPort,
     statusCard,
     latestHealthCheck,
@@ -86,7 +82,7 @@ export function UsbStripsCategory({
   // With nothing enumerated the empty state below says it, with the Rescan beside it.
   const showStatus = statusModel.code !== "NO_PORTS";
 
-  const localSink = deriveLocalSink(isConnected, connectedPort ?? null, activeWledIp);
+  const drivenKind = useLocalOutputs((state) => state.snapshot?.driven?.kind ?? null);
   // Auto-recovery is not busy: pressing Connect is how the user takes over
   // from it, which the reconnecting copy invites.
   const controllerBusy = isScanning || isConnecting || isHealthChecking;
@@ -273,7 +269,7 @@ export function UsbStripsCategory({
         </div>
       </section>
 
-      <UsbStripSettings localTransport={localSink?.transport ?? null} />
+      <UsbStripSettings localTransport={drivenKind} />
 
       <PairedStripsGroup
         pairedStrips={pairedStrips}

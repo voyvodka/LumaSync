@@ -4,10 +4,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { WledCategory } from "../WledCategory";
 import type * as wledApiModule from "@/features/device/wledApi";
+import type { LocalOutputsSnapshot } from "@/shared/contracts/device";
 import type { ShellState } from "@/shared/contracts/shell";
 import { savedWledSink } from "@/features/strips/model/stripSelectors";
 
-const getWledSinkStatusMock = vi.fn<typeof wledApiModule.getWledSinkStatus>();
+// What the registry holds: the bound device, or nothing. A fresh revision per read, since the
+// registry store keeps the newest snapshot it has seen for the whole file.
+let boundIp: string | null = null;
+let revision = 0;
+const getLocalOutputsMock = vi.fn<() => Promise<LocalOutputsSnapshot>>(async () => {
+  revision += 1;
+  return {
+    revision,
+    outputs: boundIp === null ? [] : [{ kind: "wled" as const, ip: boundIp, ledCount: 60, connected: true as const }],
+    driven: boundIp === null ? null : { kind: "wled" as const, ip: boundIp },
+  };
+});
 const forgetWledDeviceMock = vi.fn<typeof wledApiModule.forgetWledDevice>();
 const loadMock = vi.fn();
 const saveMock = vi.fn();
@@ -20,9 +32,11 @@ vi.mock("@/features/device/wledApi", () => ({
   discoverWledDevices: vi.fn<typeof wledApiModule.discoverWledDevices>(),
   connectWledSink: vi.fn<typeof wledApiModule.connectWledSink>(),
   testWledBridge: vi.fn<typeof wledApiModule.testWledBridge>(),
-  getWledSinkStatus: () => getWledSinkStatusMock(),
   forgetWledDevice: (ip: string) => forgetWledDeviceMock(ip),
 }));
+
+vi.mock("@/features/device/localOutputsApi", () => ({ getLocalOutputs: () => getLocalOutputsMock() }));
+vi.mock("@/features/device/deviceEventsApi", () => ({ listenLocalOutputsChanged: async () => () => {} }));
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
@@ -45,11 +59,11 @@ const SAVED = {
 };
 
 beforeEach(() => {
-  getWledSinkStatusMock.mockReset();
+  getLocalOutputsMock.mockClear();
   forgetWledDeviceMock.mockReset();
   loadMock.mockReset();
   saveMock.mockReset();
-  getWledSinkStatusMock.mockResolvedValue({ connected: true, sink: SAVED });
+  boundIp = SAVED.ip;
   loadMock.mockResolvedValue({
     ledStrips: [{ id: "strip-1", enabled: true, transport: { kind: "wled", sink: SAVED }, hardware: {} }],
   });
@@ -63,7 +77,7 @@ describe("WledCategory → WledDevicePicker wiring", () => {
     render(<WledCategory isActive />);
 
     await waitFor(() => {
-      expect(getWledSinkStatusMock).toHaveBeenCalled();
+      expect(getLocalOutputsMock).toHaveBeenCalled();
     });
 
     const input = await screen.findByLabelText<HTMLInputElement>(
@@ -120,7 +134,7 @@ describe("WledCategory → WledDevicePicker wiring", () => {
 
   it("forgets the device only after the confirmation, then says so", async () => {
     forgetWledDeviceMock.mockImplementation(async () => {
-      getWledSinkStatusMock.mockResolvedValue({ connected: false, sink: null });
+      boundIp = null;
       loadMock.mockResolvedValue({});
       return { status: { code: "WLED_FORGET_OK", message: "ok", details: null } };
     });
