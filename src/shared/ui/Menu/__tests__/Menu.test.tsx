@@ -37,4 +37,44 @@ describe("Menu", () => {
     expect(focusedWhenRun).toBe(trigger());
     expect(trigger()).toHaveAttribute("aria-expanded", "false");
   });
+
+  // A confirmation floats beside "…" instead of covering the page; the action waits for yes.
+  it("asks beside … for an item that confirms, and runs it only on yes", () => {
+    const trigger = () => screen.getByRole("button", { name: "More" });
+    const forget = vi.fn<() => void>();
+    render(
+      <Menu
+        label="More"
+        items={[
+          {
+            id: "forget",
+            label: "Forget",
+            onSelect: forget,
+            danger: true,
+            confirm: { text: "Forget it?", confirmLabel: "Forget", cancelLabel: "Keep", testId: "ask" },
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(trigger());
+    fireEvent.click(screen.getByRole("button", { name: "Forget" }));
+    expect(forget).not.toHaveBeenCalled();
+    const question = screen.getByTestId("ask");
+    expect(question).toHaveTextContent("Forget it?");
+    // Letting something go starts on the safe answer.
+    expect(screen.getByRole("button", { name: "Keep" })).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep" }));
+    expect(forget).not.toHaveBeenCalled();
+    expect(trigger()).toHaveFocus();
+
+    fireEvent.click(trigger());
+    fireEvent.click(screen.getByRole("button", { name: "Forget" }));
+    const forgets = screen.getAllByRole("button", { name: "Forget" });
+    const yes = forgets[forgets.length - 1]!;
+    fireEvent.click(yes);
+    expect(forget).toHaveBeenCalledOnce();
+  });
 });
+

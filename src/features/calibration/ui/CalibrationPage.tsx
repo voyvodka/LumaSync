@@ -16,7 +16,7 @@ import { SetupDock } from "./dock/SetupDock";
 import { SetupStage } from "./SetupStage";
 import { usePresence } from "@/shared/lib/usePresence";
 import { Callout } from "@/shared/ui/Callout";
-import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
+import { ConfirmDialog } from "@/shared/ui/ConfirmDialog/ConfirmDialog";
 
 /**
  * Past the longest entrance on the page (the ripple): what mounts as the page opens finishes its

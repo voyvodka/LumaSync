@@ -1,9 +1,8 @@
-// The bridge push and pull asked through their own copy of the app's yes/no
-// dialog. They now use the shared ConfirmDialog; these pin what the copy did
-// (Escape and backdrop cancel, nothing written on cancel) and the
-// shared look (secondary Cancel, primary confirm).
+// The bridge push and pull ask beside the "…" they were picked from, not in a dialog over the
+// page: the question floats, and the page stays put. Escape, an outside press or Cancel says no, and
+// nothing is written then.
 
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -55,21 +54,23 @@ describe("HueChannels — bridge push confirm", () => {
     invoke.mockReset();
   });
 
-  it("asks in the shared dialog, named by its title and described by its body", async () => {
+  it("asks beside the menu, not over the page, with Cancel quiet and the answer amber", async () => {
     const user = userEvent.setup();
     renderPanel();
     await user.click(bridgeAction("save"));
 
-    const dialog = screen.getByTestId("hue-channel-map-confirm");
-    expect(dialog).toHaveAttribute("role", "dialog");
-    expect(dialog).toHaveAttribute("aria-modal", "true");
-    expect(dialog).toHaveAccessibleName("hue:channelMap.saveConfirmTitle");
-    expect(dialog).toHaveAccessibleDescription(/hue:channelMap\.saveConfirm .*192\.168\.1\.10/);
+    const question = screen.getByTestId("hue-channel-map-confirm");
+    const dialog = question.closest("[role='dialog']");
+    expect(dialog).not.toBeNull();
+    expect(dialog).not.toHaveAttribute("aria-modal", "true");
+    expect(question).toHaveTextContent("hue:channelMap.saveConfirmTitle");
+    expect(question).toHaveTextContent(/hue:channelMap\.saveConfirm .*192\.168\.1\.10/);
 
-    const [cancel, confirm] = Array.from(dialog.querySelectorAll("button"));
+    const [cancel, confirm] = Array.from(question.querySelectorAll("button"));
     expect(cancel).toHaveTextContent("hue:page.cancel");
-    expect(cancel).toHaveClass("lm-btn");
-    expect(confirm).toHaveClass("lm-btn", "is-primary");
+    expect(cancel).not.toHaveClass("lm-btn");
+    expect(confirm).toHaveTextContent("hue:channelMap.saveToBridge");
+    expect(confirm).toHaveFocus();
   });
 
   it("Escape cancels without writing to the bridge", async () => {
@@ -78,21 +79,21 @@ describe("HueChannels — bridge push confirm", () => {
     await user.click(bridgeAction("save"));
     await user.keyboard("{Escape}");
 
-    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId("hue-channel-map-confirm")).toBeNull());
     expect(wroteToBridge()).toBe(false);
   });
 
-  it("a backdrop click cancels, a click inside the card does not", async () => {
+  it("an outside press cancels, a press inside the question does not", async () => {
     const user = userEvent.setup();
     renderPanel();
     await user.click(bridgeAction("pull"));
 
-    const dialog = screen.getByRole("dialog");
-    fireEvent.click(dialog.firstElementChild as HTMLElement);
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    const question = screen.getByTestId("hue-channel-map-confirm");
+    fireEvent.pointerDown(question);
+    expect(screen.getByTestId("hue-channel-map-confirm")).toBeInTheDocument();
 
-    fireEvent.click(dialog);
-    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.pointerDown(document.body);
+    await waitFor(() => expect(screen.queryByTestId("hue-channel-map-confirm")).toBeNull());
   });
 
   it("confirming writes once and closes", async () => {
@@ -100,9 +101,9 @@ describe("HueChannels — bridge push confirm", () => {
     const user = userEvent.setup();
     renderPanel();
     await user.click(bridgeAction("save"));
-    await user.click(within(screen.getByRole("dialog")).getAllByRole("button")[1]!);
+    await user.click(within(screen.getByTestId("hue-channel-map-confirm")).getAllByRole("button")[1]!);
 
-    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId("hue-channel-map-confirm")).toBeNull());
     expect(invoke.mock.calls.filter(([command]) => command === "update_hue_channel_positions")).toHaveLength(1);
   });
 });

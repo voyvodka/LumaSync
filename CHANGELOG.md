@@ -279,6 +279,11 @@ https://keepachangelog.com/en/1.1.0/
   instead of leaving it on its own effect.
 - Disconnecting the output a running mode uses, with another one still connected, moves the mode onto
   that one instead of ending it.
+- Hue: taking or saving the channel arrangement, and forgetting the bridge, ask beside the "…" they
+  were picked from instead of in a dialog over the page. After taking the bridge's arrangement, a
+  channel its room-map zone keeps inside is named as the reason it differs, instead of a suggestion
+  to send yours back.
+- Turkish: the Hue Bridge is called "Hue Bridge" throughout, not "köprü".
 - Stats for nerds: the frame-rate chip in the status bar no longer turns red with "Low FPS" while
   everything is fine — with Hue alone, which runs at 20 fps, or on a still screen, where fewer
   frames change. Its colour now shows whether the output keeps up.

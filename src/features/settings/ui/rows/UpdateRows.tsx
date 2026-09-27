@@ -6,7 +6,7 @@ import { DevUpdaterMenu } from "./DevUpdaterMenu";
 import { APP_VERSION } from "@/shared/constants/app";
 import type { UpdateChannel } from "@/shared/contracts/shell";
 import { IconCheck } from "@/shared/ui/icons";
-import { Popover } from "@/shared/ui/Popover/Popover";
+import { ConfirmPopover } from "@/shared/ui/ConfirmPopover/ConfirmPopover";
 import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
 import { Toggle } from "@/shared/ui/Toggle";
 import { RowButton, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
@@ -81,12 +81,6 @@ export function BetaChannelRow() {
   const channel = usePreference("updateChannel");
   const [confirming, setConfirming] = useState(false);
   const switchRef = useRef<HTMLButtonElement | null>(null);
-  const confirmRef = useRef<HTMLButtonElement | null>(null);
-
-  useEffect(() => {
-    if (confirming) confirmRef.current?.focus();
-  }, [confirming]);
-
   // Reverted on failure: Rust reads this same field off disk to pick the endpoint, so a toggle
   // the store rejected must not look on.
   function save(next: UpdateChannel) {
@@ -105,11 +99,6 @@ export function BetaChannelRow() {
     save("stable");
   }
 
-  function cancel() {
-    setConfirming(false);
-    switchRef.current?.focus();
-  }
-
   const label = t("updater:betaChannel");
   return (
     <SettingRow
@@ -126,36 +115,23 @@ export function BetaChannelRow() {
         />
       }
     >
-      {/* A popover from the switch rather than a panel under the row: it covers nothing it
+      {/* A question from the switch rather than a panel under the row: it covers nothing it
           would push, so the rows below never move when it opens or goes. */}
-      <Popover
+      <ConfirmPopover
         open={confirming}
-        onClose={() => setConfirming(false)}
         anchorRef={switchRef}
-        side="below"
-        width={280}
         label={label}
-        role="dialog"
-      >
-        <div className={styles.confirm} data-testid="beta-confirm">
-          <p className={styles.confirmText}>{t("updater:betaConfirm.text")}</p>
-          <div className={styles.confirmActions}>
-            <RowButton onClick={cancel}>{t("updater:betaConfirm.cancel")}</RowButton>
-            <RowButton
-              ref={confirmRef}
-              className={styles.primary}
-              onClick={() => {
-                setConfirming(false);
-                save("beta");
-                switchRef.current?.focus();
-              }}
-              data-testid="beta-confirm-yes"
-            >
-              {t("updater:betaConfirm.confirm")}
-            </RowButton>
-          </div>
-        </div>
-      </Popover>
+        text={t("updater:betaConfirm.text")}
+        confirmLabel={t("updater:betaConfirm.confirm")}
+        cancelLabel={t("updater:betaConfirm.cancel")}
+        onConfirm={() => {
+          setConfirming(false);
+          save("beta");
+        }}
+        onCancel={() => setConfirming(false)}
+        testId="beta-confirm"
+        confirmTestId="beta-confirm-yes"
+      />
     </SettingRow>
   );
 }

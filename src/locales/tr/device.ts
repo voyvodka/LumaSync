@@ -165,7 +165,7 @@ const device: Catalogue<typeof enDevice> = {
       unboundStrip: "Şerit",
       addPort: "{{name}} · Ekle",
       pairBridge: "{{name}} · Eşleştir",
-      addBridge: "+ Köprü ekle",
+      addBridge: "+ Hue Bridge ekle",
       addStrip: "+ Şerit ekle",
       on: "bağlı",
       off: "bağlı değil",

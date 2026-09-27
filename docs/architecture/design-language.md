@@ -89,7 +89,12 @@ rebuilding LED Setup; apply it to every new screen:
 - **Something that opens does not push.** A question or a list that appears from a control floats
   over the page (`Popover`) rather than opening a panel that moves the rows below it; the beta
   channel's confirmation started inline and moved to a popover for that reason. Pressing the
-  control that opened it closes it again.
+  control that opened it closes it again. A yes/no a control asks is a `ConfirmPopover` beside it —
+  from a "…" item, `Menu`'s `confirm` puts it beside "…" — with sentence-case row buttons, the answer
+  amber (red for a letting-go, which starts on Cancel). The centred `ConfirmDialog` is only for a
+  question nothing on screen asked, such as leaving LED Setup with an unsaved layout: the Hue
+  channel pull asked through it, with the old uppercase mono buttons, and read as another app's
+  dialog over the page.
 - **Before building, show options.** Two or three directions with a sketch each, a recommendation,
   then build; iterate on the running app with hot reload.
 

@@ -1,0 +1,26 @@
+@layer components {
+  .confirm { display: grid; gap: 10px; padding: 4px; }
+  .title {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--lm-ink);
+  }
+  .text {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--lm-ink-dim);
+  }
+  .actions { display: flex; justify-content: flex-end; gap: 6px; }
+  .danger { color: var(--lm-red); }
+  .danger:hover:not(:disabled),
+  .danger:focus-visible {
+    border-color: color-mix(in srgb, var(--lm-red) 55%, transparent);
+    color: var(--lm-red);
+  }
+
+  @media (forced-colors: active) {
+    .danger { border-color: ButtonText; }
+  }
+}

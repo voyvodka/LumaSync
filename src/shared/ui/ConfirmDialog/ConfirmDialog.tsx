@@ -1,7 +1,9 @@
 import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 
-import { Button } from "./Button";
-import { useDialogFocus } from "./useDialogFocus";
+import { cx } from "../cx";
+import { RowButton } from "../SettingRow/SettingRow";
+import { useDialogFocus } from "../useDialogFocus";
+import styles from "./ConfirmDialog.module.css";
 
 interface ConfirmDialogProps {
   title: string;
@@ -25,8 +27,9 @@ interface ConfirmDialogProps {
 }
 
 /**
- * The app's one yes/no dialog. In-app rather than `window.confirm`, which
- * blocks the webview's event loop — and every automation driving it — until
+ * A yes/no over the page, for a question nothing on screen asked — leaving LED Setup with a layout
+ * unsaved. A question a control asks floats beside it instead (`ConfirmPopover`). In-app rather than
+ * `window.confirm`, which blocks the webview's event loop — and every automation driving it — until
  * answered. Escape and a backdrop click cancel; focus is trapped and restored.
  */
 export function ConfirmDialog({
@@ -74,26 +77,27 @@ export function ConfirmDialog({
         if (event.target === event.currentTarget) onCancel();
       }}
     >
-      <div className="w-full max-w-sm rounded-xl border border-line-2 bg-panel p-5 shadow-xl">
-        <h3 id={titleId} className="text-sm font-semibold text-ink">
+      <div className={styles.card}>
+        <h3 id={titleId} className={styles.title}>
           {title}
         </h3>
-        <p id={bodyId} className="mt-2 text-xs text-ink-dim">
+        <p id={bodyId} className={styles.body}>
           {body}
         </p>
-        {children && <div className="mt-3">{children}</div>}
-        <div className="mt-4 flex justify-end gap-2">
-          <Button onClick={onCancel} data-testid={cancelTestId}>
+        {children && <div className={styles.extra}>{children}</div>}
+        <div className={styles.actions}>
+          <RowButton onClick={onCancel} data-testid={cancelTestId}>
             {cancelLabel}
-          </Button>
-          <Button
+          </RowButton>
+          <RowButton
             ref={confirmRef}
-            variant={tone === "danger" ? "danger" : "primary"}
+            primary={tone !== "danger"}
+            className={cx(tone === "danger" && styles.danger)}
             onClick={onConfirm}
             data-testid={confirmTestId}
           >
             {confirmLabel}
-          </Button>
+          </RowButton>
         </div>
       </div>
     </div>

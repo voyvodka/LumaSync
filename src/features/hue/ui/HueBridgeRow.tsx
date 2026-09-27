@@ -68,6 +68,7 @@ export function HueBridgeRow({
               label: action.label,
               onSelect: action.onClick,
               danger: action.danger,
+              confirm: action.confirm,
               disabled: action.disabled || action.busy,
             }))}
           />

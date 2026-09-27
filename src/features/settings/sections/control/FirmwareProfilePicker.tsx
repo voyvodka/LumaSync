@@ -55,7 +55,7 @@ import {
 } from "@/shared/contracts/device";
 import { useAdvertisedFirmwareProfile } from "@/features/device/useAdvertisedFirmwareProfile";
 import { shellStore } from "@/features/persistence/shellStore";
-import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
+import { ConfirmDialog } from "@/shared/ui/ConfirmDialog/ConfirmDialog";
 import { Toggle } from "@/shared/ui/Toggle";
 import { primaryStripOf } from "@/features/strips/model/stripSelectors";
 import { withStripHardware } from "@/features/strips/model/stripWrites";

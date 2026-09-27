@@ -114,7 +114,7 @@ stylesheet reads, so the two cannot disagree. Where the element has no such attr
 selection: a step tracker's current step and the status bar's tone scale.
 
 **Controls come from `src/shared/ui/`, looks stay with their surface.** `Button`/`IconButton`,
-`Toggle` (a `role="switch"`), `Segmented` (a radio group), `RangeRow`, `ConfirmDialog`, `Callout`,
+`Toggle` (a `role="switch"`), `Segmented` (a radio group), `RangeRow`, `ConfirmPopover`, `ConfirmDialog`, `Callout`,
 `EmptyState` and `StatusPill` own the behaviour and the accessibility contract — one tab stop per
 radio group with arrow keys, Home and End (`useRadioGroup`), a name on every icon-only button, a
 focus trap in every dialog — while each call site keeps the class that draws it. That split is what

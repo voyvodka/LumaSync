@@ -95,7 +95,8 @@ export default {
       inSyncShort: "Same on the bridge",
       localAheadShort: "Different on the bridge",
       unknownShort: "Bridge not read yet",
-      localAhead: "Your lights already follow this. The bridge has a different arrangement — send yours if the Hue app should match.",
+      localAhead: "Your lights follow this arrangement. The bridge holds a different one; save yours to the bridge if the Hue app should show the same.",
+      heldByZone: "Some channels sit outside their zone on the room map, so they stay at its edge. That is the whole difference from the bridge.",
     },
     state: {
       emptyHeading: "No channels",

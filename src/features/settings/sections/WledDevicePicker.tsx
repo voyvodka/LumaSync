@@ -40,7 +40,7 @@ import type { TranslationKey } from "@/features/i18n/catalogue";
 import { parseCommandError } from "@/shared/contracts/status";
 import { Button } from "@/shared/ui/Button";
 import { Callout, type CalloutTone } from "@/shared/ui/Callout";
-import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
+import { ConfirmDialog } from "@/shared/ui/ConfirmDialog/ConfirmDialog";
 import { EmptyState } from "@/shared/ui/EmptyState";
 import { StatusPill } from "@/shared/ui/StatusPill";
 

@@ -1,24 +1,6 @@
 @layer components {
   .ok { display: inline-grid; color: var(--lm-green); }
 
-  .confirm { display: grid; gap: 10px; padding: 4px; }
-  .confirmText {
-    margin: 0;
-    font-size: 12px;
-    line-height: 1.45;
-    color: var(--lm-ink-dim);
-  }
-  .confirmActions { display: flex; justify-content: flex-end; gap: 6px; }
-  .primary {
-    border-color: rgb(255 176 32 / 55%);
-    color: var(--lm-amber);
-  }
-  .primary:hover:not(:disabled) {
-    border-color: var(--lm-amber);
-    background: rgb(255 176 32 / 9%);
-    color: var(--lm-amber);
-  }
-
   @media (forced-colors: active) {
     .ok { color: CanvasText; }
   }

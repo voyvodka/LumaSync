@@ -1,5 +1,6 @@
 import type { TFunction } from "i18next";
 
+import type { MenuConfirm } from "@/shared/ui/Menu/Menu";
 import type { TranslationKey } from "@/features/i18n/catalogue";
 import { hueStreamFailureReasonKey, type HueBridgeCardState } from "@/features/hue/model/hueBridgeCardState";
 import type { HueRuntimeStatusCardModel } from "@/features/hue/model/hueRuntimeStatusCard";
@@ -27,8 +28,9 @@ export interface HueContext {
   /** Not `stopHue`: a running mode that names Hue has to let go of it first. */
   onStopHue: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
   areaChoice: HueAreaChoice;
-  /** Opens the forget confirmation; nothing is forgotten until it is answered. */
-  requestForget: () => void;
+  /** Forgets the bridge; `forgetConfirm` is the question asked first, when there is a pairing to lose. */
+  forget: () => void;
+  forgetConfirm: MenuConfirm | undefined;
   isForgetting: boolean;
 }
 
@@ -41,6 +43,8 @@ export interface HueActionSpec {
   busy?: boolean;
   /** Lets something go: behind "…" it warms to red on hover or focus. */
   danger?: boolean;
+  /** Behind "…", asked beside it before `onClick` runs. */
+  confirm?: MenuConfirm;
 }
 
 /** The state dot beside the word: live (green, filled), ready (green ring), busy (a turning
@@ -83,10 +87,11 @@ const stopFromPage = ({ onStopHue }: HueContext) => {
 // Forget asks first and then clears everything the app keeps about the bridge.
 const forgetAction =
   (label: TranslationKey) =>
-  ({ t, requestForget, isForgetting }: HueContext): HueActionSpec => ({
+  ({ t, forget, forgetConfirm, isForgetting }: HueContext): HueActionSpec => ({
     label: t(label),
     busyLabel: t("hue:page.forgetting"),
-    onClick: requestForget,
+    onClick: forget,
+    confirm: forgetConfirm,
     busy: isForgetting,
     danger: true,
   });
