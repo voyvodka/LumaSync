@@ -38,6 +38,7 @@ import { LightingSmoothingPresetControl } from "../control/LightingSmoothingPres
 import { shellStore } from "@/features/persistence/shellStore";
 import { CompactSolidSection } from "./CompactSolidSection";
 import { SelfContainedBrightnessRow } from "./SelfContainedBrightnessRow";
+import { primaryStripOf } from "@/features/strips/model/stripSelectors";
 
 const selectCompactHue = (status: HueShellStatus) => ({
   hueConfigured: status.configured,
@@ -88,7 +89,7 @@ export const CompactLayout = memo(function CompactLayout() {
       .load()
       .then((state) => {
         if (cancelled) return;
-        setFirmwareProfile(state.firmwareProfile);
+        setFirmwareProfile(primaryStripOf(state)?.hardware.firmwareProfile);
       })
       .catch((error) => {
         console.error("[LumaSync] CompactLayout firmwareProfile hydrate failed:", error);

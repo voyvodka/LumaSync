@@ -55,6 +55,7 @@ mod smoke_bench;
 mod smoke_overlay;
 
 mod models {
+    pub mod led_strips;
     pub mod room_map;
 }
 

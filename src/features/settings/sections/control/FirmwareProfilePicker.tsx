@@ -57,6 +57,7 @@ import { useAdvertisedFirmwareProfile } from "@/features/device/useAdvertisedFir
 import { shellStore } from "@/features/persistence/shellStore";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { Toggle } from "@/shared/ui/Toggle";
+import { primaryStripOf } from "@/features/strips/model/stripSelectors";
 
 const DEFAULT_PROFILE: FirmwareProfile = FIRMWARE_PROFILE.LUMASYNC_V1;
 
@@ -259,8 +260,9 @@ export function FirmwareProfilePicker({
       .load()
       .then((state) => {
         if (cancelled) return;
-        if (!initialProfile && state.firmwareProfile) {
-          setProfile(state.firmwareProfile);
+        const saved = primaryStripOf(state)?.hardware.firmwareProfile;
+        if (!initialProfile && saved) {
+          setProfile(saved);
         }
         if (
           initialDontWarnFirmwareProfileMismatch === undefined &&

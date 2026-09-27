@@ -13,6 +13,7 @@ import { firmwareProfileEvents as defaultFirmwareProfileEvents } from "./firmwar
 import { createDeviceConnectionController } from "./state/deviceConnectionController";
 import { DEFAULT_STATE, withDerivedFlags } from "./state/connectionStateHelpers";
 import type { DeviceConnectionController, DeviceConnectionControllerState } from "./state/connectionTypes";
+import { primaryStripOf, savedSerialPort } from "@/features/strips/model/stripSelectors";
 
 export interface UseDeviceConnectionResult extends DeviceConnectionControllerState {
   isConnected: boolean;
@@ -32,7 +33,7 @@ export function useDeviceConnection(): UseDeviceConnectionResult {
       try {
         const stored = await shellStore.load();
         if (!cancelled) {
-          setInitialLastSuccessfulPort(stored.lastSuccessfulPort);
+          setInitialLastSuccessfulPort(savedSerialPort(stored));
         }
       } catch (err) {
         // Persistence load failure shouldn't block the controller from
@@ -72,7 +73,7 @@ export function useDeviceConnection(): UseDeviceConnectionResult {
         let chipType: LedChipType | undefined;
         try {
           const stored = await shellStore.load();
-          chipType = stored.selectedChipType;
+          chipType = primaryStripOf(stored)?.hardware.chipType;
         } catch (err) {
           console.error(
             "[LumaSync] shellStore.load() during connectSerialPort failed:",

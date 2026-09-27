@@ -13,6 +13,7 @@ import type {
   WledTransportOverride,
 } from "./wledApi";
 import { parseCommandError } from "@/shared/contracts/status";
+import { savedWledSink } from "@/features/strips/model/stripSelectors";
 
 export type WledRestoreOutcome =
   | { kind: "idle" }
@@ -43,7 +44,7 @@ export async function restoreWledSink(
 
   let saved: WledUdpSinkConfig | undefined;
   try {
-    saved = (await deps.loadShellState()).lastWledSink;
+    saved = savedWledSink(await deps.loadShellState());
   } catch (err) {
     console.error("[LumaSync] WLED restore: shellStore.load() failed:", err);
     return emit({ kind: "no-saved-device" });

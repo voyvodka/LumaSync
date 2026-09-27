@@ -2,6 +2,7 @@ import type { LedCalibrationConfig } from "@/features/calibration/model/contract
 import { shellStore } from "@/features/persistence/shellStore";
 import { stripForCalibration } from "@/features/room-map/model/calibrationStrip";
 import { DEFAULT_ROOM_MAP, type RoomMapConfig, type UsbStripPlacement } from "@/shared/contracts/roomMap";
+import { primaryStripOf } from "@/features/strips/model/stripSelectors";
 
 /** LED count for a strip added before LED Setup has run. */
 export const FALLBACK_STRIP_LED_COUNT = 60;
@@ -83,7 +84,7 @@ export async function ensureStripForPort(
     const next = withStripForPort(
       roomMap,
       portName,
-      stripLedCount(current.ledCalibration),
+      stripLedCount(primaryStripOf(current)?.layout),
       () => newStripId,
       previousPort,
     );

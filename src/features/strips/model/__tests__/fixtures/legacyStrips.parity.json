@@ -1,0 +1,470 @@
+{
+  "cases": [
+    {
+      "name": "a fresh install has no strip",
+      "state": {},
+      "strips": []
+    },
+    {
+      "name": "colour correction alone is Hue's, not a strip",
+      "state": {
+        "colorCorrection": {
+          "gammaR": 2.2,
+          "gammaG": 2.2,
+          "gammaB": 2.2,
+          "kelvin": 5000,
+          "saturation": 1
+        }
+      },
+      "strips": []
+    },
+    {
+      "name": "a serial strip takes the id of the placement on its port",
+      "state": {
+        "lastSuccessfulPort": "/dev/cu.usbserial-1420",
+        "firmwareProfile": "adalight",
+        "selectedChipType": "sk6812-rgbw",
+        "ledColorOrder": "grb",
+        "ledCalibration": {
+          "totalLeds": 164,
+          "direction": "cw",
+          "futureField": 7
+        },
+        "colorCorrection": {
+          "gammaR": 2.2,
+          "gammaG": 2.2,
+          "gammaB": 2.2,
+          "kelvin": 6500,
+          "saturation": 1
+        },
+        "roomMap": {
+          "usbStrips": [
+            {
+              "stripId": "usb-a",
+              "startX": 0,
+              "startY": 0,
+              "endX": 1,
+              "endY": 0,
+              "ledCount": 60,
+              "portName": "/dev/cu.other"
+            },
+            {
+              "stripId": "usb-b",
+              "startX": 0,
+              "startY": 0,
+              "endX": 1,
+              "endY": 0,
+              "ledCount": 164,
+              "portName": "/dev/cu.usbserial-1420"
+            }
+          ]
+        }
+      },
+      "strips": [
+        {
+          "id": "usb-b",
+          "enabled": true,
+          "transport": {
+            "kind": "serial",
+            "portName": "/dev/cu.usbserial-1420"
+          },
+          "hardware": {
+            "firmwareProfile": "adalight",
+            "chipType": "sk6812-rgbw",
+            "colorOrder": "grb"
+          },
+          "layout": {
+            "totalLeds": 164,
+            "direction": "cw",
+            "futureField": 7
+          },
+          "colorCorrection": {
+            "gammaR": 2.2,
+            "gammaG": 2.2,
+            "gammaB": 2.2,
+            "kelvin": 6500,
+            "saturation": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "a WLED strip takes the first placement's id",
+      "state": {
+        "lastWledSink": {
+          "ip": "192.168.1.42",
+          "port": 21324,
+          "ledCount": 120,
+          "protocol": "drgb"
+        },
+        "roomMap": {
+          "usbStrips": [
+            {
+              "stripId": "usb-a",
+              "startX": 0,
+              "startY": 0,
+              "endX": 1,
+              "endY": 0,
+              "ledCount": 120
+            },
+            {
+              "stripId": "usb-b",
+              "startX": 0,
+              "startY": 0,
+              "endX": 1,
+              "endY": 0,
+              "ledCount": 60
+            }
+          ]
+        }
+      },
+      "strips": [
+        {
+          "id": "usb-a",
+          "enabled": true,
+          "transport": {
+            "kind": "wled",
+            "sink": {
+              "ip": "192.168.1.42",
+              "port": 21324,
+              "ledCount": 120,
+              "protocol": "drgb"
+            }
+          },
+          "hardware": {}
+        }
+      ]
+    },
+    {
+      "name": "a layout with no controller yet",
+      "state": {
+        "ledCalibration": {
+          "totalLeds": 60
+        }
+      },
+      "strips": [
+        {
+          "id": "strip-1",
+          "enabled": true,
+          "transport": null,
+          "hardware": {},
+          "layout": {
+            "totalLeds": 60
+          }
+        }
+      ]
+    },
+    {
+      "name": "a port and a WLED device both saved: the port wins, WLED waits disabled",
+      "state": {
+        "lastSuccessfulPort": "COM3",
+        "lastWledSink": {
+          "ip": "10.0.0.5",
+          "port": 4048,
+          "ledCount": 90,
+          "protocol": "ddp"
+        },
+        "ledCalibration": {
+          "totalLeds": 90
+        }
+      },
+      "strips": [
+        {
+          "id": "strip-1",
+          "enabled": true,
+          "transport": {
+            "kind": "serial",
+            "portName": "COM3"
+          },
+          "hardware": {},
+          "layout": {
+            "totalLeds": 90
+          }
+        },
+        {
+          "id": "strip-2",
+          "enabled": false,
+          "transport": {
+            "kind": "wled",
+            "sink": {
+              "ip": "10.0.0.5",
+              "port": 4048,
+              "ledCount": 90,
+              "protocol": "ddp"
+            }
+          },
+          "hardware": {},
+          "layout": {
+            "totalLeds": 90
+          }
+        }
+      ]
+    },
+    {
+      "name": "hardware alone describes a strip with no controller",
+      "state": {
+        "selectedChipType": "sk6812-rgbw"
+      },
+      "strips": [
+        {
+          "id": "strip-1",
+          "enabled": true,
+          "transport": null,
+          "hardware": {
+            "chipType": "sk6812-rgbw"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a WLED strip carries the saved hardware keys",
+      "state": {
+        "lastWledSink": {
+          "ip": "10.0.0.5",
+          "port": 4048,
+          "ledCount": 90,
+          "protocol": "ddp"
+        },
+        "firmwareProfile": "lumasync-v1",
+        "ledColorOrder": "grb"
+      },
+      "strips": [
+        {
+          "id": "strip-1",
+          "enabled": true,
+          "transport": {
+            "kind": "wled",
+            "sink": {
+              "ip": "10.0.0.5",
+              "port": 4048,
+              "ledCount": 90,
+              "protocol": "ddp"
+            }
+          },
+          "hardware": {
+            "firmwareProfile": "lumasync-v1",
+            "colorOrder": "grb"
+          }
+        }
+      ]
+    },
+    {
+      "name": "an empty port is still a saved port",
+      "state": {
+        "lastSuccessfulPort": ""
+      },
+      "strips": [
+        {
+          "id": "strip-1",
+          "enabled": true,
+          "transport": {
+            "kind": "serial",
+            "portName": ""
+          },
+          "hardware": {}
+        }
+      ]
+    },
+    {
+      "name": "a placement already named strip-2 leaves strip-1 to the waiting WLED device",
+      "state": {
+        "lastSuccessfulPort": "COM3",
+        "lastWledSink": {
+          "ip": "10.0.0.5",
+          "port": 4048,
+          "ledCount": 90,
+          "protocol": "ddp"
+        },
+        "roomMap": {
+          "usbStrips": [
+            {
+              "startX": 0,
+              "startY": 0,
+              "endX": 1,
+              "endY": 0,
+              "ledCount": 60,
+              "stripId": "strip-2",
+              "portName": "COM3"
+            }
+          ]
+        }
+      },
+      "strips": [
+        {
+          "id": "strip-2",
+          "enabled": true,
+          "transport": {
+            "kind": "serial",
+            "portName": "COM3"
+          },
+          "hardware": {}
+        },
+        {
+          "id": "strip-1",
+          "enabled": false,
+          "transport": {
+            "kind": "wled",
+            "sink": {
+              "ip": "10.0.0.5",
+              "port": 4048,
+              "ledCount": 90,
+              "protocol": "ddp"
+            }
+          },
+          "hardware": {}
+        }
+      ]
+    },
+    {
+      "name": "a placement with no stripId gives no id",
+      "state": {
+        "lastSuccessfulPort": "COM3",
+        "roomMap": {
+          "usbStrips": [
+            {
+              "startX": 0,
+              "startY": 0,
+              "endX": 1,
+              "endY": 0,
+              "ledCount": 60,
+              "portName": "COM3"
+            }
+          ]
+        }
+      },
+      "strips": [
+        {
+          "id": "strip-1",
+          "enabled": true,
+          "transport": {
+            "kind": "serial",
+            "portName": "COM3"
+          },
+          "hardware": {}
+        }
+      ]
+    },
+    {
+      "name": "malformed: a port that is not a string is ignored",
+      "state": {
+        "lastSuccessfulPort": 42,
+        "ledCalibration": {
+          "totalLeds": 60
+        }
+      },
+      "strips": [
+        {
+          "id": "strip-1",
+          "enabled": true,
+          "transport": null,
+          "hardware": {},
+          "layout": {
+            "totalLeds": 60
+          }
+        }
+      ]
+    },
+    {
+      "name": "malformed: a port that is not a string alone describes no strip",
+      "state": {
+        "lastSuccessfulPort": 42
+      },
+      "strips": []
+    },
+    {
+      "name": "malformed: usbStrips that is not a list is ignored",
+      "state": {
+        "lastSuccessfulPort": "COM3",
+        "roomMap": {
+          "usbStrips": {
+            "stripId": "usb-a",
+            "portName": "COM3"
+          }
+        }
+      },
+      "strips": [
+        {
+          "id": "strip-1",
+          "enabled": true,
+          "transport": {
+            "kind": "serial",
+            "portName": "COM3"
+          },
+          "hardware": {}
+        }
+      ]
+    },
+    {
+      "name": "malformed: rows that are not objects are skipped",
+      "state": {
+        "lastSuccessfulPort": "COM3",
+        "roomMap": {
+          "usbStrips": [
+            null,
+            5,
+            "usb-x",
+            {
+              "startX": 0,
+              "startY": 0,
+              "endX": 1,
+              "endY": 0,
+              "ledCount": 60,
+              "stripId": "usb-c",
+              "portName": "COM4"
+            }
+          ]
+        }
+      },
+      "strips": [
+        {
+          "id": "usb-c",
+          "enabled": true,
+          "transport": {
+            "kind": "serial",
+            "portName": "COM3"
+          },
+          "hardware": {}
+        }
+      ]
+    },
+    {
+      "name": "malformed: a stripId that is not a string is skipped",
+      "state": {
+        "lastSuccessfulPort": "COM3",
+        "roomMap": {
+          "usbStrips": [
+            {
+              "startX": 0,
+              "startY": 0,
+              "endX": 1,
+              "endY": 0,
+              "ledCount": 60,
+              "stripId": "usb-a",
+              "portName": "COM9"
+            },
+            {
+              "startX": 0,
+              "startY": 0,
+              "endX": 1,
+              "endY": 0,
+              "ledCount": 60,
+              "stripId": 7,
+              "portName": "COM3"
+            }
+          ]
+        }
+      },
+      "strips": [
+        {
+          "id": "usb-a",
+          "enabled": true,
+          "transport": {
+            "kind": "serial",
+            "portName": "COM3"
+          },
+          "hardware": {}
+        }
+      ]
+    }
+  ]
+}

@@ -1338,15 +1338,20 @@ const rustShellStateSource = readOrEmpty(
   "rust shell_state"
 );
 const rustShellStateProduction = rustShellStateSource.split(/\nmod tests\s*\{/)[0];
+// The strip keys are read by `led_strips.rs`, which derives strips from them.
+const rustStripsProduction = readOrEmpty(
+  resolve(ROOT, "src-tauri/src/models/led_strips.rs"),
+  "rust led_strips"
+).split(/\nmod tests\s*\{/)[0];
 check(
-  source.includes("ledColorOrder?:") && rustShellStateProduction.includes('self.read("ledColorOrder")'),
-  "ShellState.ledColorOrder is the key shell_state.rs hydrates from",
-  "PERSISTED KEY DRIFT: ShellState.ledColorOrder and shell_state.rs read(\"ledColorOrder\") disagree"
+  source.includes("ledColorOrder?:") && rustStripsProduction.includes('present(state, "ledColorOrder")'),
+  "ShellState.ledColorOrder is the key led_strips.rs hydrates from",
+  "PERSISTED KEY DRIFT: ShellState.ledColorOrder and led_strips.rs present(state, \"ledColorOrder\") disagree"
 );
 
 // Every key a Rust typed read names must be a ShellState field: a misspelt key
 // reads as "never saved", and every hydration fallback built on it goes quiet.
-console.log("\n[ Persisted keys — shell_state.rs typed reads ↔ ShellState ]");
+console.log("\n[ Persisted keys — shell_state.rs / led_strips.rs typed reads ↔ ShellState ]");
 {
   const shellStateInterface = source.match(/export interface ShellState \{([\s\S]*?)\n\}/);
   const fields = new Set(
@@ -1356,6 +1361,7 @@ console.log("\n[ Persisted keys — shell_state.rs typed reads ↔ ShellState ]"
   );
   const readKeys = [
     ...rustShellStateProduction.matchAll(/self\.(?:read|0\.get)\("([a-zA-Z]\w*)"\)/g),
+    ...rustStripsProduction.matchAll(/present\(state, "([a-zA-Z]\w*)"\)/g),
   ].map((m) => m[1]);
   check(
     fields.size > 0 && readKeys.length > 0,

@@ -18,6 +18,7 @@
  * The room map is deliberately not a step; see docs/architecture/ui-and-shell.md.
  */
 import type { ShellState } from "@/shared/contracts/shell";
+import { savedSerialPort, savedWledSink } from "@/features/strips/model/stripSelectors";
 
 /** Discrete onboarding step identifiers. */
 export const ONBOARDING_STEPS = {
@@ -135,7 +136,7 @@ export function onboardingBootFacts(
   hueConfigured: boolean,
 ): OnboardingBootFacts {
   return {
-    outputRemembered: Boolean(state.lastSuccessfulPort) || state.lastWledSink != null || hueConfigured,
+    outputRemembered: Boolean(savedSerialPort(state)) || savedWledSink(state) != null || hueConfigured,
     hasRunLighting: state.lightingMode !== undefined && state.lightingMode.kind !== "off",
   };
 }

@@ -17,6 +17,7 @@ import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/she
 
 import { pushTrayLabels } from "./useTrayIntegration";
 import { initWindowLifecycle, loadShellState } from "./windowLifecycle";
+import { primaryStripOf } from "@/features/strips/model/stripSelectors";
 
 /**
  * Every slice bootstrap writes. Passed as one bag so the ordering spine stays
@@ -126,7 +127,7 @@ export function useShellBootstrap(sink: ShellBootstrapSink): ShellBootstrapState
           const mappedSection = sectionMap[state.lastSection] ?? SECTION_IDS.LIGHTS;
           sink.setActiveSection(mappedSection);
         }
-        const hydratedCalibration = normalizeLedCalibrationConfig(state.ledCalibration);
+        const hydratedCalibration = normalizeLedCalibrationConfig(primaryStripOf(state)?.layout);
         sink.setSavedCalibration(hydratedCalibration);
         // Fresh installs land on `undefined`; treat that as "never completed" so
         // the banner mounts once for upgraders too — no destructive migration.

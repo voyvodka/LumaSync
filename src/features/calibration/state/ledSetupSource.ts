@@ -2,6 +2,7 @@ import { shellStore } from "@/features/persistence/shellStore";
 import type { LedChipType } from "@/shared/contracts/device";
 import type { DisplayInfo } from "@/shared/contracts/display";
 import { listDisplays } from "../calibrationApi";
+import { primaryStripOf, savedWledSink } from "@/features/strips/model/stripSelectors";
 
 /** What LED Setup reads before it can draw anything true: the displays and three saved values. */
 export interface LedSetupSource {
@@ -30,8 +31,8 @@ export function readLedSetupSource(): Promise<LedSetupSource> {
       last = {
         displays,
         selectedDisplayId: shell.selectedDisplayId ?? null,
-        chipType: shell.selectedChipType ?? null,
-        wledLedCount: shell.lastWledSink?.ledCount,
+        chipType: primaryStripOf(shell)?.hardware.chipType ?? null,
+        wledLedCount: savedWledSink(shell)?.ledCount,
       };
       return last;
     })
