@@ -10,7 +10,7 @@ fn app() -> App<MockRuntime> {
     mock_app(tauri::generate_handler![
         crate::commands::device_connection::list_serial_ports,
         crate::commands::device_connection::connect_serial_port,
-        crate::commands::device_connection::get_serial_connection_status
+        crate::commands::local_outputs::get_local_outputs
     ])
 }
 
@@ -101,25 +101,19 @@ fn connect_to_unsupported_port_is_blocked() {
     assert_eq!(response["connected"], json!(false));
     assert_eq!(response["portName"], Value::Null);
 
-    let status =
-        invoke(&webview, "get_serial_connection_status", json!({})).expect("status must resolve");
+    let outputs = invoke(&webview, "get_local_outputs", json!({})).expect("outputs must resolve");
     assert_eq!(
-        status["portName"],
-        Value::Null,
-        "a refused port must not become the recorded port"
+        outputs["outputs"],
+        json!([]),
+        "a refused port must not become an entry"
     );
 }
 
-/// The failed attempt has to land in the compatibility status, otherwise the UI
-/// re-reads a stale "connected" status after a failure.
+/// A failed attempt on a name no enumerator produces leaves nothing behind to read as a strip.
 #[test]
-fn failed_connect_is_readable_from_connection_status() {
+fn failed_connect_leaves_nothing_driven() {
     let app = app();
     let webview = main_webview(&app);
-
-    let before =
-        invoke(&webview, "get_serial_connection_status", json!({})).expect("status must resolve");
-    assert_eq!(before["connected"], json!(false));
 
     invoke(
         &webview,
@@ -128,18 +122,15 @@ fn failed_connect_is_readable_from_connection_status() {
     )
     .expect("connect must resolve");
 
-    let after =
-        invoke(&webview, "get_serial_connection_status", json!({})).expect("status must resolve");
-
-    assert_eq!(status_code(&after), "PORT_NOT_FOUND");
-    assert_eq!(after["connected"], json!(false));
-    assert_eq!(after["portName"], Value::Null);
+    let after = invoke(&webview, "get_local_outputs", json!({})).expect("outputs must resolve");
+    assert_eq!(after["outputs"], json!([]));
+    assert_eq!(after["driven"], Value::Null);
 }
 
 /// Names no enumerator produces, including path-shaped ones, are refused by
-/// the inventory lookup and never recorded as the status's port.
+/// the inventory lookup and never become a registry entry.
 #[test]
-fn path_shaped_port_names_are_refused_without_becoming_the_status_port() {
+fn path_shaped_port_names_are_refused_without_becoming_an_entry() {
     let app = app();
     let webview = main_webview(&app);
 
@@ -154,10 +145,9 @@ fn path_shaped_port_names_are_refused_without_becoming_the_status_port() {
         assert_eq!(status_code(&response), "PORT_NOT_FOUND", "input {name:?}");
         assert_eq!(response["portName"], Value::Null, "input {name:?}");
 
-        let status = invoke(&webview, "get_serial_connection_status", json!({}))
-            .expect("status must resolve");
-        assert_eq!(status["connected"], json!(false), "input {name:?}");
-        assert_eq!(status["portName"], Value::Null, "input {name:?}");
+        let outputs =
+            invoke(&webview, "get_local_outputs", json!({})).expect("outputs must resolve");
+        assert_eq!(outputs["outputs"], json!([]), "input {name:?}");
     }
 }
 

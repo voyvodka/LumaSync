@@ -12,15 +12,17 @@ import { invoke } from "@tauri-apps/api/core";
 
 import {
   connectSerialPort,
-  getSerialConnectionStatus,
   listSerialPorts,
   runSerialHealthCheck,
   type SerialConnectionStatus,
   type SerialPortListResponse,
 } from "@/features/device/deviceConnectionApi";
+import { getLocalOutputs } from "@/features/device/localOutputsApi";
 import { createDeviceConnectionController } from "@/features/device/state/deviceConnectionController";
+import { createLocalOutputs } from "@/features/device/state/localOutputsStore";
 import type { DeviceConnectionController } from "@/features/device/state/connectionTypes";
 import type { UseDeviceConnectionResult } from "@/features/device/useDeviceConnection";
+import type { LocalOutputsSnapshot } from "@/shared/contracts/device";
 import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
 import type { ShellState } from "@/shared/contracts/shell";
 import { invokeFromCommands } from "@/test/mockCommands";
@@ -68,16 +70,24 @@ function port(name: string): SerialPortListResponse["ports"][number] {
   };
 }
 
-function connected(portName: string | null): SerialConnectionStatus {
+function connected(portName: string): SerialConnectionStatus {
+  return { portName, connected: true, status: { code: "CONNECT_OK", message: "m", details: null }, updatedAtUnixMs: 0 };
+}
+
+/** Rust's registry: the connected port, at a revision newer on every read. */
+function registry(): LocalOutputsSnapshot {
+  revision += 1;
   return {
-    portName,
-    connected: portName !== null,
-    status: { code: portName ? "CONNECT_OK" : "NOT_CONNECTED", message: "m", details: null },
-    updatedAtUnixMs: 0,
+    revision,
+    outputs: rustConnected
+      ? [{ kind: "serial", portName: rustConnected, connected: true, status: connected(rustConnected).status, firmware: null, updatedAtUnixMs: 0 }]
+      : [],
+    driven: rustConnected ? { kind: "serial", portName: rustConnected } : null,
   };
 }
 
 let visible: string[];
+let revision = 0;
 let rustConnected: string | null;
 let finishConnect: ((status: SerialConnectionStatus) => void) | null;
 let controller: DeviceConnectionController;
@@ -93,7 +103,7 @@ beforeEach(() => {
         status: { code: "LIST_PORTS_OK", message: "ok", details: null },
         ports: visible.map(port),
       }),
-      get_serial_connection_status: () => connected(rustConnected),
+      get_local_outputs: () => registry(),
       // Held open so the page can be read while the connect runs.
       connect_serial_port: () =>
         new Promise<SerialConnectionStatus>((resolve) => {
@@ -104,7 +114,8 @@ beforeEach(() => {
   controller = createDeviceConnectionController({
     listSerialPorts,
     connectSerialPort: (portName) => connectSerialPort(portName),
-    getSerialConnectionStatus,
+    // Events are not what this test drives: every read is the registry as it is now.
+    localOutputs: createLocalOutputs({ read: getLocalOutputs, listen: async () => () => {} }),
     runSerialHealthCheck,
     persistLastSuccessfulPort: () => Promise.resolve(),
     refreshVisibleWaitMs: 0,

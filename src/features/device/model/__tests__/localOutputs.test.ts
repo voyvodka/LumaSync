@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 
+import type { LocalOutputsSnapshot, SerialCommandStatusCode } from "@/shared/contracts/device";
+
 import type { DevicePort } from "../../types";
-import { localSinkOf, sameDriven, wledOutput } from "../localOutputs";
+import {
+  anyLocalConnected,
+  classifyLoss,
+  connectedSerialPort,
+  localSinkOf,
+  sameDriven,
+  wledOutput,
+} from "../localOutputs";
 
 const ports: DevicePort[] = [
   { portName: "/dev/cu.usbserial-10", product: "USB Serial", isSupported: true, sortKey: "0" },
@@ -45,5 +54,70 @@ describe("wledOutput", () => {
     expect(
       wledOutput({ revision: 1, outputs: [{ kind: "wled", ip: "a", ledCount: 1, connected: true }], driven: null })?.ip,
     ).toBe("a");
+  });
+});
+
+const strip = (portName: string, connected: boolean, code: SerialCommandStatusCode = connected ? "CONNECT_OK" : "DISCONNECTED") =>
+  ({
+    kind: "serial",
+    portName,
+    connected,
+    status: { code, message: code, details: null },
+    firmware: null,
+    updatedAtUnixMs: 0,
+  }) as const;
+const wled = (ip: string) => ({ kind: "wled", ip, ledCount: 60, connected: true }) as const;
+const registry = (revision: number, ...outputs: LocalOutputsSnapshot["outputs"]): LocalOutputsSnapshot => ({
+  revision,
+  outputs,
+  driven: null,
+});
+
+describe("reading the registry", () => {
+  it("finds the connected strip among entries that are not", () => {
+    const snapshot = registry(1, strip("COM3", false, "PORT_NOT_FOUND"), strip("COM4", true));
+    expect(connectedSerialPort(snapshot)).toBe("COM4");
+    expect(connectedSerialPort(registry(1, strip("COM3", false)))).toBeNull();
+    expect(connectedSerialPort(null)).toBeNull();
+  });
+
+  it("counts a WLED device as a local output that is connected", () => {
+    expect(anyLocalConnected(registry(1, strip("COM3", false), wled("10.0.0.5")))).toBe(true);
+    expect(anyLocalConnected(registry(1, strip("COM3", false, "PORT_NOT_FOUND")))).toBe(false);
+    expect(anyLocalConnected(null)).toBe(false);
+  });
+});
+
+describe("classifyLoss", () => {
+  it("calls a strip whose port went away unplugged", () => {
+    expect(classifyLoss(registry(1, strip("COM3", true)), registry(2, strip("COM3", false, "PORT_NOT_FOUND")))).toBe(
+      "unplugged",
+    );
+  });
+
+  it("calls a strip let go of, or replaced by WLED, released", () => {
+    expect(classifyLoss(registry(1, strip("COM3", true)), registry(2, strip("COM3", false)))).toBe("released");
+    expect(classifyLoss(registry(1, strip("COM3", true)), registry(2, strip("COM3", false), wled("10.0.0.5")))).toBe(
+      "released",
+    );
+  });
+
+  it("calls a WLED device that was forgotten released", () => {
+    expect(classifyLoss(registry(1, wled("10.0.0.5")), registry(2))).toBe("released");
+  });
+
+  // An unplug is what takes "usb" out of the targets, so it wins over a release in the same change.
+  it("says unplugged when an unplug and a release land together", () => {
+    const before = registry(1, strip("COM3", true), wled("10.0.0.5"));
+    const after = registry(2, strip("COM3", false, "PORT_NOT_FOUND"));
+    expect(classifyLoss(before, after)).toBe("unplugged");
+  });
+
+  it("finds nothing lost on a connect, a failed attempt beside the strip, or the first read", () => {
+    expect(classifyLoss(registry(1), registry(2, strip("COM3", true)))).toBeNull();
+    expect(
+      classifyLoss(registry(1, strip("COM3", true)), registry(2, strip("COM3", true), strip("COM4", false, "CONNECT_IO_ERROR"))),
+    ).toBeNull();
+    expect(classifyLoss(null, registry(1, strip("COM3", false, "PORT_NOT_FOUND")))).toBeNull();
   });
 });

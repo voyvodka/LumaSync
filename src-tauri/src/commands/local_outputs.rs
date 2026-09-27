@@ -87,17 +87,12 @@ impl DrivenLocal {
 /// What `serial_disconnected` replaced.
 pub struct DisconnectedSerial {
     entry: SerialOutputStatus,
-    last_serial: SerialConnectionStatus,
 }
 
 struct Inner {
     revision: u64,
     serial: BTreeMap<String, SerialOutputStatus>,
     wled: Option<WledSinkConfig>,
-    /// What `get_serial_connection_status` returns, written exactly as before the registry: the
-    /// frontend reads it until it moves to `get_local_outputs`, and it has no copy for the states
-    /// the per-port entries can now say.
-    last_serial: SerialConnectionStatus,
 }
 
 pub struct LocalOutputRegistry {
@@ -111,17 +106,6 @@ impl Default for LocalOutputRegistry {
                 revision: 0,
                 serial: BTreeMap::new(),
                 wled: None,
-                last_serial: SerialConnectionStatus {
-                    port_name: None,
-                    connected: false,
-                    status: command_status(
-                        "NOT_CONNECTED",
-                        "No serial connection attempt yet.",
-                        None,
-                    ),
-                    updated_at_unix_ms: now_unix_ms(),
-                    firmware: None,
-                },
             }),
         }
     }
@@ -215,7 +199,6 @@ impl LocalOutputRegistry {
                 },
             );
         }
-        inner.last_serial = status;
         inner.changed()
     }
 
@@ -243,15 +226,10 @@ impl LocalOutputRegistry {
                 },
             );
         }
-        // The compatibility status too: it would read the live strip as failed.
-        if !live {
-            inner.last_serial = status;
-        }
         inner.changed()
     }
 
-    /// A WLED device bound to the "usb" channel. Evicts a connected serial port; the compatibility
-    /// status keeps saying what it said, as it always has.
+    /// A WLED device bound to the "usb" channel. Evicts a connected serial port.
     pub fn wled_bound(&self, config: WledSinkConfig) -> LocalOutputsSnapshot {
         let mut inner = self.lock();
         inner.evict_serial(None, &format!("wled {}", config.ip));
@@ -289,16 +267,6 @@ impl LocalOutputRegistry {
                 changed = true;
             }
         }
-        let compat = &inner.last_serial;
-        if compat.output_port() == Some(port) && compat.updated_at_unix_ms < listed_at {
-            inner.last_serial = failed_connect_status(
-                port,
-                "PORT_NOT_FOUND",
-                "The serial port went away.",
-                Some("unplugged".to_string()),
-            );
-            changed = true;
-        }
         changed.then(|| inner.changed())
     }
 
@@ -309,26 +277,15 @@ impl LocalOutputRegistry {
         port: &str,
     ) -> Option<(LocalOutputsSnapshot, DisconnectedSerial)> {
         let mut inner = self.lock();
-        let before_last = inner.last_serial.clone();
         let entry = inner.serial.get_mut(port).filter(|entry| entry.connected)?;
         let before_entry = entry.clone();
         entry.connected = false;
         entry.status = disconnected_status("Disconnected.", None);
         entry.updated_at_unix_ms = now_unix_ms();
-        if inner.last_serial.output_port() == Some(port) {
-            inner.last_serial = SerialConnectionStatus {
-                port_name: None,
-                connected: false,
-                status: disconnected_status("Disconnected.", Some(format!("port={port:?}"))),
-                updated_at_unix_ms: now_unix_ms(),
-                firmware: None,
-            };
-        }
         Some((
             inner.changed(),
             DisconnectedSerial {
                 entry: before_entry,
-                last_serial: before_last,
             },
         ))
     }
@@ -343,7 +300,6 @@ impl LocalOutputRegistry {
         inner
             .serial
             .insert(previous.entry.port_name.clone(), previous.entry);
-        inner.last_serial = previous.last_serial;
         Some(inner.changed())
     }
 
@@ -400,21 +356,6 @@ impl LocalOutputRegistry {
         self.lock().wled
     }
 
-    /// The compatibility status, as the watcher's event carries it.
-    pub fn serial_status(&self) -> SerialConnectionStatus {
-        self.lock().last_serial.clone()
-    }
-
-    /// `get_serial_connection_status`'s answer, which has always refused on a poisoned lock.
-    pub fn serial_status_checked(&self) -> Result<SerialConnectionStatus, String> {
-        self.inner
-            .lock()
-            .map(|inner| inner.last_serial.clone())
-            .map_err(|error| {
-                format!("STATUS_READ_FAILED: Could not read serial connection status ({error})")
-            })
-    }
-
     pub fn snapshot(&self) -> LocalOutputsSnapshot {
         self.lock().snapshot()
     }
@@ -422,18 +363,26 @@ impl LocalOutputRegistry {
     /// Test rigs: `port` connected (or merely named, `connected: false`) without a real connect.
     #[cfg(test)]
     pub fn set_serial_for_tests(&self, port: &str, connected: bool, updated_at_unix_ms: u128) {
-        let status = SerialConnectionStatus {
-            port_name: Some(port.to_string()),
-            connected,
-            status: command_status("CONNECT_OK", "test", None),
-            updated_at_unix_ms,
-            firmware: None,
-        };
         if connected {
-            self.serial_connected(status);
+            self.serial_connected(SerialConnectionStatus {
+                port_name: Some(port.to_string()),
+                connected,
+                status: command_status("CONNECT_OK", "test", None),
+                updated_at_unix_ms,
+                firmware: None,
+            });
         } else {
             let mut inner = self.lock();
-            inner.last_serial = status;
+            inner.serial.insert(
+                port.to_string(),
+                SerialOutputStatus {
+                    port_name: port.to_string(),
+                    connected: false,
+                    status: disconnected_status("test", None),
+                    firmware: None,
+                    updated_at_unix_ms,
+                },
+            );
             inner.changed();
         }
     }

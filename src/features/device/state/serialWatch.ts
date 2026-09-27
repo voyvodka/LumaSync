@@ -1,7 +1,7 @@
 import { DEVICE_ERROR_CODES, SERIAL_CONNECT_STATUS, type SerialPortsChangedEvent } from "@/shared/contracts/device";
 import type { AutoReconnectOnInit } from "./autoReconnectOnInit";
 import type { ConnectionStore } from "./connectionStore";
-import { nextStatusForReadyState, toConnectionCard, toDevicePort } from "./connectionStateHelpers";
+import { toDevicePort } from "./connectionStateHelpers";
 import { resolveSelectionAfterRefresh } from "../portSelection";
 import type { DeviceConnectionControllerDeps } from "./connectionTypes";
 
@@ -27,8 +27,8 @@ export interface SerialWatchFollower {
  * Follows the Rust serial port watcher. Every controller keeps its port list and connection in step;
  * only the one that `reconnectOnReplug` brings the saved port back when it reappears — once, and once
  * more on a transient failure, never on `CONNECT_REPLUG_REQUIRED` (re-opening a wedged driver is what
- * wedges it). A lost port is applied here, not through a refresh, whose missing-port path would start
- * auto-recovery in every mount at once.
+ * wedges it). A lost strip is the registry's to say (the follower applies it); the ports are applied
+ * here, not through a refresh, whose missing-port path would start auto-recovery in every mount at once.
  */
 export function createSerialWatchFollower(
   store: ConnectionStore,
@@ -75,16 +75,9 @@ export function createSerialWatchFollower(
   const apply = (event: SerialPortsChangedEvent) => {
     if (store.isDisposed()) return;
     const ports = event.ports.map(toDevicePort);
-    const before = store.getState();
-    // Rust keeps a connect that finished after its listing; the UI must not drop what Rust kept.
-    const rustKept = event.connection.connected && event.connection.portName === before.connectedPort;
-    const lostConnected = before.connectedPort !== null && event.lost.includes(before.connectedPort) && !rustKept;
     store.setState((prev) => ({
       ...prev,
       ports,
-      connectedPort: lostConnected ? null : prev.connectedPort,
-      status: lostConnected ? nextStatusForReadyState(ports) : prev.status,
-      statusCard: lostConnected ? toConnectionCard(event.connection) : prev.statusCard,
       selectedPort: resolveSelectionAfterRefresh(ports, prev.selectedPort, prev.lastSuccessfulPort).selectedPort,
     }));
     if (deps.reconnectOnReplug && event.appeared.length > 0 && idle()) reconnect(event.appeared, 1);

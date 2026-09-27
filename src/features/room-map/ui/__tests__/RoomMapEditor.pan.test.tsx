@@ -26,8 +26,9 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn().mockResolvedValue(null),
 }));
 
-vi.mock("@/features/device/useUsbConnectionStatus", () => ({
-  useUsbConnectionStatus: () => ({ ready: false, connectedPort: null }),
+vi.mock("@/features/device/state/localOutputsStore", () => ({
+  // Not read yet: the strips' chips read "unknown".
+  useLocalOutputs: <S,>(select: (state: { snapshot: null; lastLoss: null }) => S) => select({ snapshot: null, lastLoss: null }),
 }));
 
 vi.mock("@/features/persistence/shellStore", () => ({

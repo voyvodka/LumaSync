@@ -4,6 +4,7 @@ import { DEVICE_OPERATION, DEVICE_STATUS } from "@/shared/contracts/device";
 import type { SerialConnectionStatus, SerialPortListResponse } from "../../deviceConnectionApi";
 import { createAutoRecovery } from "../autoRecovery";
 import { createConnectionStore } from "../connectionStore";
+import { fakeRegistry } from "../../__tests__/support/fakeRegistry";
 import { DEFAULT_STATE } from "../connectionStateHelpers";
 import type { DeviceConnectionControllerDeps } from "../connectionTypes";
 
@@ -15,7 +16,7 @@ function baseDeps(overrides: Partial<DeviceConnectionControllerDeps> = {}): Devi
   return {
     listSerialPorts: vi.fn<() => Promise<SerialPortListResponse>>().mockResolvedValue(emptyPorts()),
     connectSerialPort: vi.fn<() => Promise<SerialConnectionStatus>>(),
-    getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>(),
+    localOutputs: fakeRegistry().outputs,
     persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>().mockResolvedValue(undefined),
     ...overrides,
   };
@@ -35,7 +36,7 @@ describe("createAutoRecovery", () => {
   it("gives up and requires manual reconnect once every retry attempt finds the port missing", async () => {
     const deps = baseDeps();
     const store = createConnectionStore(DEFAULT_STATE);
-    const recovery = createAutoRecovery(store, deps, timing, null);
+    const recovery = createAutoRecovery(store, deps, timing, null, async () => {});
 
     recovery.startAutoRecovery("COM3");
     expect(store.getState().status).toBe(DEVICE_STATUS.RECONNECTING);
@@ -75,7 +76,7 @@ describe("createAutoRecovery", () => {
       }),
     });
     const store = createConnectionStore(DEFAULT_STATE);
-    const recovery = createAutoRecovery(store, deps, { ...timing, recoveryMaxAttempts: 4 }, null);
+    const recovery = createAutoRecovery(store, deps, { ...timing, recoveryMaxAttempts: 4 }, null, async () => {});
 
     recovery.startAutoRecovery("COM3");
     await vi.advanceTimersByTimeAsync(1_000);
@@ -89,7 +90,7 @@ describe("createAutoRecovery", () => {
   it("leaves a foreign operation's slot untouched when cancelRecovery is called after it has moved on", async () => {
     const deps = baseDeps();
     const store = createConnectionStore(DEFAULT_STATE);
-    const recovery = createAutoRecovery(store, deps, timing, null);
+    const recovery = createAutoRecovery(store, deps, timing, null, async () => {});
 
     recovery.startAutoRecovery("COM3");
     expect(store.getState().activeOperation).toBe(DEVICE_OPERATION.RECOVERY);

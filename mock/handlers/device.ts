@@ -3,7 +3,7 @@
  *
  * Every handler reads `getWorld()` rather than closing over a constant, and the
  * connect handlers write back — `connect_serial_port` has to change what
- * `get_serial_connection_status` answers on the next call, or the mock cannot
+ * `get_local_outputs` answers on the next call, or the mock cannot
  * reproduce anything that goes wrong between a write and a later read.
  *
  * Shapes here are checked against the real response types by `TypedHandlers`.
@@ -17,6 +17,7 @@ import {
   DEVICE_COMMANDS,
   SERIAL_CONNECT_STATUS,
   SERIAL_DISCONNECT_STATUS,
+  SERIAL_OUTPUT_STATUS,
   SERIAL_PORT_LIST_STATUS,
   pixelLayoutForChipType,
   type SerialCommandStatusCode,
@@ -70,12 +71,16 @@ export const deviceHandlers = {
   [DEVICE_COMMANDS.CONNECT_PORT]: (args) => {
     const { portName } = args;
     const port = getWorld().serial.ports.find((p) => p.name === portName);
-    // Like Rust, a failed attempt drops any prior session and never reports
-    // the attempted name as `portName` — it only appears in `details`.
+    // Like Rust, a failed attempt leaves a connected strip connected and never
+    // reports the attempted name as `portName` — it only appears in `details`.
+    // A port that passed admission keeps an entry saying why it is not connected.
     const refused = (code: SerialCommandStatusCode, message: string, detail?: string) => {
-      mutate((w) => {
-        w.serial.connectedPort = null;
-      });
+      const admitted = port !== undefined && port.supported;
+      if (admitted && getWorld().serial.connectedPort !== portName) {
+        mutate((w) => {
+          w.serial.idleEntry = { portName, code };
+        });
+      }
       const attempted = `port=${JSON.stringify(portName)}`;
       return {
         portName: null,
@@ -102,6 +107,7 @@ export const deviceHandlers = {
     // A strip connect unbinds WLED, as Rust's registry does.
     mutate((w) => {
       w.serial.connectedPort = portName;
+      w.serial.idleEntry = null;
       w.wled.connectedHost = null;
     });
     return {
@@ -110,21 +116,6 @@ export const deviceHandlers = {
       status: status(SERIAL_CONNECT_STATUS.OK, "Connected"),
       updatedAtUnixMs: now(),
       firmware: mockFirmware(port),
-    };
-  },
-
-  [DEVICE_COMMANDS.GET_CONNECTION_STATUS]: () => {
-    const { serial } = getWorld();
-    const connected = serial.connectedPort !== null;
-    const port = serial.ports.find((p) => p.name === serial.connectedPort);
-    return {
-      portName: serial.connectedPort,
-      connected,
-      status: connected
-        ? status(SERIAL_CONNECT_STATUS.OK, "Connected")
-        : status(SERIAL_CONNECT_STATUS.IDLE, "Nothing connected"),
-      updatedAtUnixMs: now(),
-      ...(port === undefined ? {} : { firmware: mockFirmware(port) }),
     };
   },
 
@@ -213,6 +204,7 @@ export const deviceHandlers = {
     }
     mutate((w) => {
       w.serial.connectedPort = null;
+      w.serial.idleEntry = { portName, code: SERIAL_OUTPUT_STATUS.DISCONNECTED };
     });
     return { portName, status: status(SERIAL_DISCONNECT_STATUS.OK, "The strip was disconnected.") };
   },

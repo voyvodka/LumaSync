@@ -99,7 +99,7 @@ function ok<C extends string>(code: C) {
   return { code, message: code, details: null };
 }
 
-let releaseSerialStatus: () => void = () => {};
+let releaseRegistryRead: () => void = () => {};
 let offlineBannerSeen = false;
 let observer: MutationObserver | null = null;
 
@@ -133,13 +133,13 @@ function pairedState(uiMode: UIMode): Partial<ShellState> {
 beforeEach(() => {
   vi.clearAllMocks();
   sessionStorage.clear();
-  const serialStatus = new Promise<void>((resolve) => {
-    releaseSerialStatus = resolve;
+  const registryRead = new Promise<void>((resolve) => {
+    releaseRegistryRead = resolve;
   });
   invokeMock.mockImplementation(async (command: string) => {
-    if (command === DEVICE_COMMANDS.GET_CONNECTION_STATUS) {
-      await serialStatus;
-      return { connected: false, status: ok("OK"), ports: [] };
+    if (command === DEVICE_COMMANDS.GET_LOCAL_OUTPUTS) {
+      await registryRead;
+      return { revision: 1, outputs: [], driven: null };
     }
     // The health monitor's answer: a paired bridge whose probe found it.
     if (command === HUE_HEALTH_COMMANDS.WATCH_HUE_HEALTH) return idleHealth();
@@ -155,12 +155,12 @@ afterEach(() => {
 
 import App from "../App";
 
-async function bootHeldAtSerialStatus(uiMode: UIMode) {
+async function bootHeldAtRegistryRead(uiMode: UIMode) {
   watchForOfflineBanner();
   render(<App />);
   await screen.findByTestId(uiMode === "compact" ? "compact-layout" : "full-layout");
   await waitFor(() =>
-    expect(invokeMock).toHaveBeenCalledWith(DEVICE_COMMANDS.GET_CONNECTION_STATUS),
+    expect(invokeMock).toHaveBeenCalledWith(DEVICE_COMMANDS.GET_LOCAL_OUTPUTS),
   );
 }
 
@@ -169,13 +169,13 @@ describe("output gate during shell boot", () => {
     "never shows the no-output banner to a paired-bridge user while boot runs (%s)",
     async (uiMode) => {
       shellState = pairedState(uiMode);
-      await bootHeldAtSerialStatus(uiMode);
+      await bootHeldAtRegistryRead(uiMode);
 
       expect(screen.getByTestId("output-checking")).toBeInTheDocument();
       expect(screen.queryByText(OFFLINE_TITLE)).not.toBeInTheDocument();
 
       await act(async () => {
-        releaseSerialStatus();
+        releaseRegistryRead();
       });
       // Settles on a usable bridge once the monitor's probe verdict arrives.
       await waitFor(() =>
@@ -189,12 +189,12 @@ describe("output gate during shell boot", () => {
 
   it("still tells an install with no output that there is none once boot has settled", async () => {
     shellState = { trayHintShown: true, hasCompletedOnboarding: true };
-    await bootHeldAtSerialStatus("compact");
+    await bootHeldAtRegistryRead("compact");
 
     expect(screen.queryByText(OFFLINE_TITLE)).not.toBeInTheDocument();
 
     await act(async () => {
-      releaseSerialStatus();
+      releaseRegistryRead();
     });
     expect(await screen.findByText(OFFLINE_TITLE)).toBeInTheDocument();
     expect(screen.queryByTestId("output-checking")).not.toBeInTheDocument();
@@ -203,10 +203,10 @@ describe("output gate during shell boot", () => {
   // A fresh install opened on the red error with the welcome behind "+1".
   it("greets a fresh install with the guide's first step instead of the error", async () => {
     shellState = { trayHintShown: true };
-    await bootHeldAtSerialStatus("compact");
+    await bootHeldAtRegistryRead("compact");
 
     await act(async () => {
-      releaseSerialStatus();
+      releaseRegistryRead();
     });
     expect(await screen.findByText("shell:notices.messages.onboarding.devices")).toBeInTheDocument();
     expect(screen.getByTestId("shell-notice-slot").getAttribute("data-queue")).toBe("onboarding");

@@ -18,6 +18,7 @@ export function createAutoRecovery(
   deps: DeviceConnectionControllerDeps,
   timing: { recoveryFastDelayMs: number; recoveryRetryDelayMs: number; recoveryMaxAttempts: number },
   connectionEventsBus: ConnectionEventBus | null,
+  sync: () => Promise<void>,
 ): AutoRecovery {
   const scheduleTimeout =
     deps.scheduleTimeout ?? ((callback: () => void, delayMs: number) => setTimeout(callback, delayMs));
@@ -113,7 +114,7 @@ export function createAutoRecovery(
         if (connected.connected && connected.portName) {
           clearRecoveryTimer();
           store.finishOperation(token);
-          await applySuccessfulConnection(store, deps, connectionEventsBus, {
+          await applySuccessfulConnection(store, deps, connectionEventsBus, sync, {
             connectedPortName: connected.portName,
             statusCard: {
               variant: "success",

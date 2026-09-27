@@ -134,7 +134,6 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     ("get_main_window_visibility", MAIN_ONLY),
     ("list_serial_ports", MAIN_ONLY),
     ("connect_serial_port", MAIN_ONLY),
-    ("get_serial_connection_status", MAIN_ONLY),
     ("run_serial_health_check", MAIN_ONLY),
     ("discover_hue_bridges", MAIN_ONLY),
     ("verify_hue_bridge_ip", MAIN_ONLY),

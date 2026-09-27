@@ -4,6 +4,7 @@ import type { SerialCommandStatusCode, SerialConnectionStatus, SerialPortsChange
 import type { SerialPortListResponse } from "../deviceConnectionApi";
 import { createConnectionEventBus } from "../connectionEvents";
 import { createDeviceConnectionController } from "../state/deviceConnectionController";
+import { fakeRegistry, withRegistry } from "./support/fakeRegistry";
 import type { DeviceConnectionControllerDeps } from "../state/connectionTypes";
 
 const PORT = {
@@ -34,20 +35,17 @@ function build(options: {
 }) {
   let emitWatch: (event: SerialPortsChangedEvent) => void = () => {};
   const results = [...(options.connects ?? ["CONNECT_OK"])];
-  // Rust's status follows the last connect, as the sibling sync re-reads it after one.
-  let rust = status(options.connectedAtStart ? "CONNECT_OK" : "NOT_CONNECTED", options.connectedAtStart);
+  const registry = fakeRegistry(options.connectedAtStart ? { connected: "COM3" } : {});
   const connectSerialPort = vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>(async () => {
     const code = results.shift() ?? "CONNECT_OK";
-    rust = status(code, code === "CONNECT_OK");
-    return rust;
+    return status(code, code === "CONNECT_OK");
   });
   const bus = createConnectionEventBus();
   const busEvents: unknown[] = [];
   bus.subscribe((event) => busEvents.push(event));
-  const controller = createDeviceConnectionController({
+  const controller = createDeviceConnectionController(withRegistry({
     listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(list([PORT])),
     connectSerialPort,
-    getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>(async () => rust),
     persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
     initialLastSuccessfulPort: "COM3",
     connectionEvents: bus,
@@ -59,9 +57,12 @@ function build(options: {
     readSavedSerialPort: options.readSavedSerialPort,
     replugDelayMs: 10,
     replugRetryMs: 20,
-  });
-  const watch = (appeared: string[], lost: string[], connection = status("PORT_NOT_FOUND", false)) =>
-    emitWatch({ ports: lost.length ? [] : [PORT], appeared, lost, connection });
+  }, registry));
+  // Rust announces the registry before the ports, so a reader sees the loss first.
+  const watch = (appeared: string[], lost: string[], { registryLoses = true } = {}) => {
+    if (registryLoses) for (const port of lost) registry.unplug(port);
+    emitWatch({ ports: lost.length ? [] : [PORT], appeared, lost });
+  };
   return { controller, connectSerialPort, watch, busEvents };
 }
 
@@ -94,7 +95,7 @@ describe("following the serial port watcher", () => {
     const { controller, watch } = build({ connectedAtStart: true, reconnectOnReplug: false });
     await controller.initialize();
 
-    watch([], ["COM3"], status("CONNECT_OK", true));
+    watch([], ["COM3"], { registryLoses: false });
 
     expect(controller.getState().connectedPort).toBe("COM3");
   });

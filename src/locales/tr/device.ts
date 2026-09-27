@@ -39,6 +39,12 @@ const device: Catalogue<typeof enDevice> = {
       healthCheckFailed: "Yeniden tara, başka bir port seç ve tekrar dene.",
     },
   },
+  outputStatus: {
+    DISCONNECTED: {
+      label: "Bağlantı kesildi",
+      hint: "LumaSync artık bu şeride göndermiyor. Yeniden kullanmak için Bağlan'a bas.",
+    },
+  },
   healthCheck: {
     runAction: "Sağlık Kontrolü Çalıştır",
     runningAction: "Sağlık Kontrolü Çalışıyor...",

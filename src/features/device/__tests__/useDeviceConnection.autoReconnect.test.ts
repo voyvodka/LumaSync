@@ -15,6 +15,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
+import { withRegistry } from "./support/fakeRegistry";
 
 import { createConnectionEventBus, type ConnectionEvent } from "../connectionEvents";
 import type { SerialConnectionStatus, SerialPortListResponse } from "../deviceConnectionApi";
@@ -66,20 +67,14 @@ function makeController(
 ) {
   const connectSerialPort = vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>().mockResolvedValue(connectResult);
 
-  const controller = createDeviceConnectionController({
+  const controller = createDeviceConnectionController(withRegistry({
     listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(listResponse([portInScan])),
     connectSerialPort,
-    getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
-      connected: false,
-      portName: null,
-      updatedAtUnixMs: Date.now(),
-      status: { code: "NOT_CONNECTED", message: "Idle", details: null },
-    }),
     persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
     initialLastSuccessfulPort: persistedPort,
     autoReconnectOnInit: true,
     connectionEvents: bus,
-  });
+  }));
 
   return { controller, connectSerialPort, bus };
 }
@@ -291,20 +286,14 @@ describe("tryAutoReconnect — connectionEvents not provided", () => {
       },
     });
 
-    const controller = createDeviceConnectionController({
+    const controller = createDeviceConnectionController(withRegistry({
       listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(listResponse([BLUETOOTH_PORT])),
       connectSerialPort,
-      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
-        connected: false,
-        portName: null,
-        updatedAtUnixMs: Date.now(),
-        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
-      }),
       persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       initialLastSuccessfulPort: "/dev/cu.Bluetooth-Incoming-Port",
       autoReconnectOnInit: true,
       // connectionEvents deliberately omitted
-    });
+    }));
 
     // Must not throw
     await expect(controller.initialize()).resolves.toBeUndefined();
@@ -333,20 +322,14 @@ describe("tryAutoReconnect — feature flag off", () => {
       },
     });
 
-    const controller = createDeviceConnectionController({
+    const controller = createDeviceConnectionController(withRegistry({
       listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(listResponse([BLUETOOTH_PORT])),
       connectSerialPort,
-      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
-        connected: false,
-        portName: null,
-        updatedAtUnixMs: Date.now(),
-        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
-      }),
       persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       initialLastSuccessfulPort: "/dev/cu.Bluetooth-Incoming-Port",
       autoReconnectOnInit: false,
       connectionEvents: bus,
-    });
+    }));
 
     await controller.initialize();
 

@@ -1711,7 +1711,8 @@ checkWireUnion(
     "PORT_UNSUPPORTED",
   ],
   // 12 → 13: DISCONNECTED, a registry entry let go of or replaced (`local_outputs.rs`).
-  13
+  // 13 → 12: NOT_CONNECTED left with `get_serial_connection_status`, the only status that said it.
+  12
 );
 
 checkWireUnion(

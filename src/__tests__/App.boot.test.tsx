@@ -132,10 +132,10 @@ describe("App boot", () => {
     const completed = () =>
       expect(saveShellStateMock).toHaveBeenCalledWith({ hasCompletedOnboarding: true });
 
-    it("never shows it while the serial status bootstrap awaits is slow", async () => {
+    it("never shows it while the registry read bootstrap awaits is slow", async () => {
       // Every guard is met by the describe-level state: a saved calibration, a
       // persisted mode and a connected strip.
-      delay(DEVICE_COMMANDS.GET_CONNECTION_STATUS, 300);
+      delay(DEVICE_COMMANDS.GET_LOCAL_OUTPUTS, 300);
       const banner = watchForBanner();
 
       render(<App />);

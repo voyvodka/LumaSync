@@ -11,6 +11,10 @@ import {
   type UsbTargetReconcilerInput,
 } from "../useUsbTargetReconciler";
 
+const strip = { serialConnected: true, localConnected: true } as const;
+const nothing = { serialConnected: false, localConnected: false } as const;
+const unplugged = { ...nothing, lastLoss: "unplugged" } as const;
+
 function harness(overrides: Partial<UsbTargetReconcilerInput> = {}) {
   // Pairing and the unsupported-port fallback are both saved choices now: Rust
   // writes `lastOutputTargets` on arrival, so one callback serves both.
@@ -26,7 +30,8 @@ function harness(overrides: Partial<UsbTargetReconcilerInput> = {}) {
   const hueStartConfigRef = { current: null as unknown };
 
   const input: UsbTargetReconcilerInput = {
-    isConnected: true,
+    ...strip,
+    lastLoss: null,
     bootstrapDone: true,
     selectedOutputTargets: ["usb"],
     lightingRunning: true,
@@ -73,20 +78,20 @@ describe("useUsbTargetReconciler", () => {
     it("stays inert until bootstrap arms the edge detector", () => {
       const { view, input, onAutoAddUsbTarget } = harness({
         bootstrapDone: false,
-        isConnected: false,
+        ...unplugged,
         selectedOutputTargets: ["hue"],
       });
-      view.rerender({ ...input, bootstrapDone: false, isConnected: true });
+      view.rerender({ ...input, bootstrapDone: false, ...strip });
       expect(onAutoAddUsbTarget).not.toHaveBeenCalled();
     });
 
     it("does not fire a phantom edge on a cold start that boots connected", () => {
       const { view, input, onAutoAddUsbTarget } = harness({
-        isConnected: true,
+        ...strip,
         selectedOutputTargets: ["hue"],
       });
       act(() => {
-        view.result.current.armUsbConnected(true);
+        view.result.current.armUsbConnected(strip);
       });
       view.rerender({ ...input, selectedOutputTargets: ["hue"] });
       expect(onAutoAddUsbTarget).not.toHaveBeenCalled();
@@ -94,13 +99,13 @@ describe("useUsbTargetReconciler", () => {
 
     it("auto-adds usb on the false→true edge, bypassing the general handler", () => {
       const { view, input, onAutoAddUsbTarget, onDropUsbTarget } = harness({
-        isConnected: false,
+        ...unplugged,
         selectedOutputTargets: ["hue"],
       });
       act(() => {
-        view.result.current.armUsbConnected(false);
+        view.result.current.armUsbConnected(nothing);
       });
-      view.rerender({ ...input, isConnected: true, selectedOutputTargets: ["hue"] });
+      view.rerender({ ...input, ...strip, selectedOutputTargets: ["hue"] });
 
       expect(onAutoAddUsbTarget).toHaveBeenCalledWith(["usb", "hue"]);
       expect(onDropUsbTarget).not.toHaveBeenCalled();
@@ -108,25 +113,25 @@ describe("useUsbTargetReconciler", () => {
 
     it("does not re-add usb when it is already selected", () => {
       const { view, input, onAutoAddUsbTarget } = harness({
-        isConnected: false,
+        ...unplugged,
         selectedOutputTargets: ["usb", "hue"],
       });
       act(() => {
-        view.result.current.armUsbConnected(false);
+        view.result.current.armUsbConnected(nothing);
       });
-      view.rerender({ ...input, isConnected: true, selectedOutputTargets: ["usb", "hue"] });
+      view.rerender({ ...input, ...strip, selectedOutputTargets: ["usb", "hue"] });
       expect(onAutoAddUsbTarget).not.toHaveBeenCalled();
     });
 
     it("drops usb through the delta handler on unplug and raises the toast", () => {
       const { view, input, onDropUsbTarget } = harness({
-        isConnected: true,
+        ...strip,
         selectedOutputTargets: ["usb", "hue"],
       });
       act(() => {
-        view.result.current.armUsbConnected(true);
+        view.result.current.armUsbConnected(strip);
       });
-      view.rerender({ ...input, isConnected: false, selectedOutputTargets: ["usb", "hue"] });
+      view.rerender({ ...input, ...unplugged, selectedOutputTargets: ["usb", "hue"] });
 
       expect(onDropUsbTarget).toHaveBeenCalledWith(["hue"]);
       expect(view.result.current.usbDisconnectNotice).toBe(true);
@@ -135,14 +140,14 @@ describe("useUsbTargetReconciler", () => {
     // "Continuing on the other outputs" with the mode Off named nothing that continued.
     it("drops usb on unplug without the toast while nothing runs", () => {
       const { view, input, onDropUsbTarget } = harness({
-        isConnected: true,
+        ...strip,
         selectedOutputTargets: ["usb", "hue"],
         lightingRunning: false,
       });
       act(() => {
-        view.result.current.armUsbConnected(true);
+        view.result.current.armUsbConnected(strip);
       });
-      view.rerender({ ...input, isConnected: false, selectedOutputTargets: ["usb", "hue"] });
+      view.rerender({ ...input, ...unplugged, selectedOutputTargets: ["usb", "hue"] });
 
       expect(onDropUsbTarget).toHaveBeenCalledWith(["hue"]);
       expect(view.result.current.usbDisconnectNotice).toBe(false);
@@ -150,14 +155,14 @@ describe("useUsbTargetReconciler", () => {
 
     it("ends the mode instead of emptying the set when USB was the only target, and says so", async () => {
       const { view, input, onDropUsbTarget, onLastTargetUnplugged } = harness({
-        isConnected: true,
+        ...strip,
         selectedOutputTargets: ["usb"],
       });
       act(() => {
-        view.result.current.armUsbConnected(true);
+        view.result.current.armUsbConnected(strip);
       });
       await act(async () => {
-        view.rerender({ ...input, isConnected: false, selectedOutputTargets: ["usb"] });
+        view.rerender({ ...input, ...unplugged, selectedOutputTargets: ["usb"] });
       });
 
       expect(onDropUsbTarget).not.toHaveBeenCalled();
@@ -169,15 +174,15 @@ describe("useUsbTargetReconciler", () => {
 
     it("stays quiet when the unplug of the only target ended nothing", async () => {
       const { view, input, onLastTargetUnplugged } = harness({
-        isConnected: true,
+        ...strip,
         selectedOutputTargets: ["usb"],
         onLastTargetUnplugged: vi.fn().mockResolvedValue(false),
       });
       act(() => {
-        view.result.current.armUsbConnected(true);
+        view.result.current.armUsbConnected(strip);
       });
       await act(async () => {
-        view.rerender({ ...input, isConnected: false, selectedOutputTargets: ["usb"] });
+        view.rerender({ ...input, ...unplugged, selectedOutputTargets: ["usb"] });
       });
 
       expect(onLastTargetUnplugged).toHaveBeenCalledTimes(1);
@@ -185,13 +190,46 @@ describe("useUsbTargetReconciler", () => {
       expect(view.result.current.usbDisconnectNotice).toBe(false);
     });
 
+    // WLED took the strip's place: the "usb" channel still has an output.
+    it("keeps usb when another output takes the strip's place", () => {
+      const { view, input, onDropUsbTarget, onLastTargetUnplugged } = harness({ selectedOutputTargets: ["usb", "hue"] });
+      act(() => {
+        view.result.current.armUsbConnected(strip);
+      });
+      view.rerender({ ...input, serialConnected: false, localConnected: true, lastLoss: "released" });
+
+      expect(onDropUsbTarget).not.toHaveBeenCalled();
+      expect(onLastTargetUnplugged).not.toHaveBeenCalled();
+    });
+
+    it("keeps usb when the last output was let go of rather than unplugged", () => {
+      const { view, input, onDropUsbTarget } = harness({ selectedOutputTargets: ["usb", "hue"] });
+      act(() => {
+        view.result.current.armUsbConnected(strip);
+      });
+      view.rerender({ ...input, ...nothing, lastLoss: "released" });
+
+      expect(onDropUsbTarget).not.toHaveBeenCalled();
+    });
+
+    // A WLED device restored at boot binds after arming; counting it would save "usb" every launch.
+    it("does not add usb when a WLED device connects", () => {
+      const { view, input, onAutoAddUsbTarget } = harness({ ...nothing, selectedOutputTargets: ["hue"] });
+      act(() => {
+        view.result.current.armUsbConnected(nothing);
+      });
+      view.rerender({ ...input, serialConnected: false, localConnected: true, selectedOutputTargets: ["hue"] });
+
+      expect(onAutoAddUsbTarget).not.toHaveBeenCalled();
+    });
+
     it("auto-dismisses the disconnect toast and clears its timer on unmount", () => {
       vi.useFakeTimers();
-      const { view, input } = harness({ isConnected: true, selectedOutputTargets: ["usb", "hue"] });
+      const { view, input } = harness({ ...strip, selectedOutputTargets: ["usb", "hue"] });
       act(() => {
-        view.result.current.armUsbConnected(true);
+        view.result.current.armUsbConnected(strip);
       });
-      view.rerender({ ...input, isConnected: false, selectedOutputTargets: ["usb", "hue"] });
+      view.rerender({ ...input, ...unplugged, selectedOutputTargets: ["usb", "hue"] });
       expect(view.result.current.usbDisconnectNotice).toBe(true);
 
       act(() => {

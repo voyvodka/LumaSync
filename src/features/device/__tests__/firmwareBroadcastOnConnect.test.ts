@@ -7,6 +7,7 @@ import {
 } from "@/shared/contracts/device";
 import type { SerialConnectionStatus, SerialPortListResponse } from "../deviceConnectionApi";
 import type { FirmwareProfileEventBus } from "../firmwareProfileEvents";
+import { withRegistry } from "./support/fakeRegistry";
 import { createDeviceConnectionController } from "../state/deviceConnectionController";
 import type { DeviceConnectionControllerDeps } from "../state/connectionTypes";
 
@@ -45,27 +46,19 @@ function connected(firmware?: SerialFirmwareInfo): SerialConnectionStatus {
   };
 }
 
-const DISCONNECTED: SerialConnectionStatus = {
-  connected: false,
-  portName: null,
-  updatedAtUnixMs: 0,
-  status: { code: "NOT_CONNECTED", message: "Idle", details: null },
-};
-
 function controllerWith(
   connectSerialPort: DeviceConnectionControllerDeps["connectSerialPort"],
   extra: Partial<DeviceConnectionControllerDeps> = {},
 ) {
   const emit = vi.fn();
   const firmwareProfileEvents: FirmwareProfileEventBus = { emit, subscribe: vi.fn() };
-  const controller = createDeviceConnectionController({
+  const controller = createDeviceConnectionController(withRegistry({
     listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(LISTING),
     connectSerialPort,
-    getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue(DISCONNECTED),
     persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>().mockResolvedValue(undefined),
     firmwareProfileEvents,
     ...extra,
-  });
+  }));
   return { controller, emit };
 }
 
@@ -99,7 +92,9 @@ describe("firmware broadcast on connect", () => {
   it("says nothing about firmware when the connect failed", async () => {
     const emit = await connectManually(
       vi.fn().mockResolvedValue({
-        ...DISCONNECTED,
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
         status: { code: "CONNECT_FAILED", message: "Failed", details: 'port="COM3"' },
       }),
     );

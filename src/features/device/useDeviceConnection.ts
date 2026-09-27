@@ -5,13 +5,13 @@ import { listenSerialPortsChanged } from "./deviceEventsApi";
 import { persistSerialPort } from "./outputChannelPersistence";
 import {
   connectSerialPort,
-  getSerialConnectionStatus,
   listSerialPorts,
   runSerialHealthCheck,
 } from "./deviceConnectionApi";
 import { connectionEvents as defaultConnectionEvents } from "./connectionEvents";
 import { firmwareProfileEvents as defaultFirmwareProfileEvents } from "./firmwareProfileEvents";
 import { createDeviceConnectionController } from "./state/deviceConnectionController";
+import { localOutputs } from "./state/localOutputsStore";
 import { DEFAULT_STATE, withDerivedFlags } from "./state/connectionStateHelpers";
 import type { DeviceConnectionController, DeviceConnectionControllerState } from "./state/connectionTypes";
 import { primaryStripOf, savedSerialPort } from "@/features/strips/model/stripSelectors";
@@ -89,7 +89,7 @@ export function useDeviceConnection({ reconnectOnReplug = false }: UseDeviceConn
         }
         return connectSerialPort(portName, chipType);
       },
-      getSerialConnectionStatus,
+      localOutputs,
       runSerialHealthCheck,
       persistLastSuccessfulPort: async (portName: string) => {
         await persistSerialPort((update) => shellStore.update(update), portName);
@@ -99,8 +99,6 @@ export function useDeviceConnection({ reconnectOnReplug = false }: UseDeviceConn
       // doesn't have to re-pair on every launch. Tests building their own
       // controller stay opt-out by default to keep their fixtures terse.
       autoReconnectOnInit: true,
-      // Bug 10B — share the process-wide event bus so sibling
-      // useDeviceConnection() instances (App / DEVICES) stay in sync.
       connectionEvents: defaultConnectionEvents,
       firmwareProfileEvents: defaultFirmwareProfileEvents,
       listenSerialPortsChanged,

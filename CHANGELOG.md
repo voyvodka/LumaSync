@@ -265,6 +265,12 @@ https://keepachangelog.com/en/1.1.0/
   name the one that is actually lit; they named the strip while the WLED device was lighting.
 - A second attempt to connect a strip that is already connected (two reconnects at once, at
   launch) no longer marks the working strip as disconnected.
+- A failed connect on one USB port no longer shows the strip on another port as disconnected while
+  it keeps lighting.
+- After a WLED device takes a USB strip's place, the strip reads "Disconnected" instead of still
+  showing connected.
+- The Lights screen, the Devices page and the room map now agree on which strip is connected; each
+  used to ask on its own and could disagree after a pairing, an unplug or a replacement.
 - Stats for nerds: the frame-rate chip in the status bar no longer turns red with "Low FPS" while
   everything is fine — with Hue alone, which runs at 20 fps, or on a still screen, where fewer
   frames change. Its colour now shows whether the output keeps up.

@@ -564,11 +564,17 @@ agree.
 - **An unplug reaches the reconciler through the serial port watcher.** Nothing noticed one before:
   the controller's port list was read at boot and on Rescan only, and Rust's status was written only
   by a connect, so a strip pulled while Solid ran went unnoticed until the next write failed. Rust
-  now polls the inventory (`device-output.md`, "The serial port watcher") and emits
-  `device://serial-ports-changed`; every controller applies `lost` directly (not through a refresh,
-  whose missing-port path started auto-recovery in every mount), and the App mount — the only one
-  with `reconnectOnReplug` — brings the saved port back when it reappears. From there the ordinary
-  paths take over: the reconciler's false→true transition adds `usb` back and starts a running mode
+  now polls the inventory (`device-output.md`, "The serial port watcher"), marks the lost strip's
+  registry entry `PORT_NOT_FOUND` and announces the registry, then emits
+  `device://serial-ports-changed`. Every controller takes the loss from the registry
+  (`registryFollower.ts`) and only the port list from the watcher's event (not through a refresh,
+  whose missing-port path started auto-recovery in every mount); the App mount — the only one with
+  `reconnectOnReplug` — brings the saved port back when it reappears. The reconciler reads the
+  registry too: `usb` goes out of the targets only when the last local output goes *and* the store's
+  `lastLoss` says `unplugged` — another output taking the strip's place, or a device let go of, is
+  not an unplug — and comes back only when a strip connects, never a WLED device (one restored at
+  launch binds after the reconciler is armed, and counting it would save `usb` on every launch).
+  From there the ordinary paths take over: the rising edge adds `usb` back and starts a running mode
   on it, while an unplug that ended a USB-only mode leaves it Off after the replug — the lights
   coming back on by themselves after the user saw them stop would be the surprise.
 - **Unplugging the strip that was the only target ends the mode, the way Off does.** `useUsbTargetReconciler.ts` used to act on an unplug only when another target stayed selected, so a USB-only mode — or a `[usb, hue]` restore running on USB alone while it waited for a busy bridge (#441) — got no notice, a worker still capturing for a port that was gone, and the mode still shown running; the busy notice kept saying "running on USB only". Now the reconciler calls the orchestrator's `endLightingOnUsbUnplug`, which sends the empty set with `origin: "usbUnplug"`: session-only (`lastOutputTargets` is never written, nor the persisted mode), the worker stopped whatever the active set says, then Off with the selection kept. The empty set also cancels a pending rejoin the way any output change does, and the left-out reason is cleared with it. The "continuing on the other outputs" notice for an unplug beside another target is raised only while a mode runs; with the mode Off it named nothing that continued. The reconciler raises its own notice, `shell:notices.messages.usbDisconnectedLightingOff`, only once the mode has actually ended — with the mode already Off, or a stop that failed (which raises the stop-failed toast instead), there is nothing to report. `normalizeOutputTargets([])` keeps an explicit empty set, which is what lets the delta path see "nothing left".

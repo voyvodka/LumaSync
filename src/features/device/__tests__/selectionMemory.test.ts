@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { SerialPortListResponse } from "../deviceConnectionApi";
+import { withRegistry } from "./support/fakeRegistry";
 import { createDeviceConnectionController } from "../state/deviceConnectionController";
 import type { DeviceConnectionControllerDeps } from "@/features/device/state/connectionTypes";
 
@@ -18,7 +19,7 @@ function listResponse(ports: SerialPortListResponse["ports"]): SerialPortListRes
 describe("selection memory", () => {
   it("persists lastSuccessfulPort only after successful connect", async () => {
     const persistLastSuccessfulPort = vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>();
-    const controller = createDeviceConnectionController({
+    const controller = createDeviceConnectionController(withRegistry({
       listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(
         listResponse([
           {
@@ -46,14 +47,8 @@ describe("selection memory", () => {
           details: null,
         },
       }),
-      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
-        connected: false,
-        portName: null,
-        updatedAtUnixMs: 0,
-        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
-      }),
       persistLastSuccessfulPort,
-    });
+    }));
 
     await controller.initialize();
     await controller.connectSelectedPort();
@@ -64,7 +59,7 @@ describe("selection memory", () => {
 
   it("does not persist when connect attempt fails", async () => {
     const persistLastSuccessfulPort = vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>();
-    const controller = createDeviceConnectionController({
+    const controller = createDeviceConnectionController(withRegistry({
       listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(
         listResponse([
           {
@@ -92,14 +87,8 @@ describe("selection memory", () => {
           details: "busy",
         },
       }),
-      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
-        connected: false,
-        portName: null,
-        updatedAtUnixMs: 0,
-        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
-      }),
       persistLastSuccessfulPort,
-    });
+    }));
 
     await controller.initialize();
     await controller.connectSelectedPort();

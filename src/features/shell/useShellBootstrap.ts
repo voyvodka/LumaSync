@@ -5,7 +5,9 @@ import {
   normalizeLedCalibrationConfig,
   type LedCalibrationConfig,
 } from "@/features/calibration/model/contracts";
-import { getSerialConnectionStatus } from "@/features/device/deviceConnectionApi";
+import { anyLocalConnected, connectedSerialPort } from "@/features/device/model/localOutputs";
+import { localOutputs } from "@/features/device/state/localOutputsStore";
+import type { LocalOutputFacts } from "@/features/device/state/useUsbTargetReconciler";
 import { toHueStartConfig, type HueStartConfig } from "@/features/hue/model/hueStartConfig";
 import type { BootLightingInput } from "@/features/mode/state/useLightingModeOrchestrator";
 import {
@@ -31,7 +33,7 @@ export interface ShellBootstrapSink {
   setHasCompletedOnboarding: (completed: boolean) => void;
   setOnboardingBootFacts: (facts: OnboardingBootFacts) => void;
   setHueStartConfig: (config: HueStartConfig | null) => void;
-  armUsbConnected: (connected: boolean) => void;
+  armUsbConnected: (facts: LocalOutputFacts) => void;
   /**
    * The launch restore. Rust reads the saved mode and outputs itself, waits
    * out a held Hue area once, and leaves the saved choice alone whatever runs.
@@ -137,17 +139,13 @@ export function useShellBootstrap(sink: ShellBootstrapSink): ShellBootstrapState
         // launch races auto-reconnect. See docs/architecture/ui-and-shell.md.
         // Rust keeps it selected and runs without it while no strip is there;
         // `armUsbConnected` below tracks the snapshot and must not follow suit.
-        let bootstrapUsbAvailable = false;
-        try {
-          const connectionStatus = await getSerialConnectionStatus();
-          bootstrapUsbAvailable = connectionStatus.connected;
-        } catch (err) {
-          console.error("[LumaSync] bootstrap serial status check failed:", err);
-        }
-
-        // Initialize hot-plug ref AFTER USB status is known
-        // This prevents false "USB detected" events on startup
-        sink.armUsbConnected(bootstrapUsbAvailable);
+        // Armed from what the registry holds now, so a strip already connected at launch is not
+        // taken for one the user just paired. `refresh` never throws; unread, nothing is connected.
+        const outputs = await localOutputs.refresh();
+        sink.armUsbConnected({
+          serialConnected: connectedSerialPort(outputs) !== null,
+          localConnected: anyLocalConnected(outputs),
+        });
 
         const hueStartConfig = toHueStartConfig(state);
         sink.setOnboardingBootFacts(onboardingBootFacts(state, hueStartConfig !== null));

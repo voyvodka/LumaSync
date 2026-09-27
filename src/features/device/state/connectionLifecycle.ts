@@ -24,7 +24,7 @@ export function createConnectionLifecycle(
   store: ConnectionStore,
   deps: DeviceConnectionControllerDeps,
   connectionEventsBus: ConnectionEventBus | null,
-  callbacks: { cancelRecovery: (reasonCard?: DeviceStatusCard) => void },
+  callbacks: { cancelRecovery: (reasonCard?: DeviceStatusCard) => void; sync: () => Promise<void> },
 ): ConnectionLifecycle {
   const selectPort = (portName: string | null) => {
     const state = store.getState();
@@ -82,7 +82,6 @@ export function createConnectionLifecycle(
       store.setState((prev) => ({
         ...prev,
         status: DEVICE_STATUS.ERROR,
-        connectedPort: null,
         statusCard: {
           variant: "error",
           // A coded rejection keeps its code so the banner can name it in the
@@ -102,19 +101,18 @@ export function createConnectionLifecycle(
     if (connection.connected && connection.portName) {
       const connectedPortName = connection.portName;
       store.finishOperation(token);
-      await applySuccessfulConnection(store, deps, connectionEventsBus, {
+      return applySuccessfulConnection(store, deps, connectionEventsBus, callbacks.sync, {
         connectedPortName,
         statusCard: toConnectionCard(connection),
         userInitiated: true,
       });
-      return true;
     }
 
+    // A failed attempt leaves a strip that was lighting connected; the registry says whether one is.
     store.finishOperation(token);
     store.setState((prev) => ({
       ...prev,
       status: DEVICE_STATUS.ERROR,
-      connectedPort: null,
       statusCard: toConnectionCard(connection),
     }));
     return false;

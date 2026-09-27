@@ -31,6 +31,8 @@ vi.mock("../../control/LedColorOrderControl", () => ({ LedColorOrderControl: () 
 const PORT = "/dev/cu.usbserial-110";
 
 let healthCheck: HealthCheckResult;
+// The app's one registry store keeps the highest revision it saw, so each read is newer.
+let revision = 0;
 
 function answer(command: string): unknown {
   switch (command) {
@@ -47,7 +49,22 @@ function answer(command: string): unknown {
           },
         ],
       };
-    case "get_serial_connection_status":
+    case "get_local_outputs":
+      revision += 1;
+      return {
+        revision,
+        outputs: [
+          {
+            kind: "serial",
+            portName: PORT,
+            connected: true,
+            status: { code: "CONNECT_OK", message: "Connected.", details: null },
+            firmware: null,
+            updatedAtUnixMs: 0,
+          },
+        ],
+        driven: { kind: "serial", portName: PORT },
+      };
     case "connect_serial_port":
       return {
         portName: PORT,

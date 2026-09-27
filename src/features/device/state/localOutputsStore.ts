@@ -5,10 +5,13 @@ import { createStore, useStoreSelector, type Store } from "@/shared/lib/store";
 
 import { listenLocalOutputsChanged, type UnlistenFn } from "../deviceEventsApi";
 import { getLocalOutputs } from "../localOutputsApi";
+import { classifyLoss, type LocalLoss } from "../model/localOutputs";
 
 export interface LocalOutputsState {
   /** `null` until the first answer: before it, nothing is known to be connected. */
   snapshot: LocalOutputsSnapshot | null;
+  /** How the last connected output went, kept until the next one goes. */
+  lastLoss: LocalLoss | null;
 }
 
 export interface LocalOutputsDeps {
@@ -33,14 +36,14 @@ export interface LocalOutputs {
  * then either in the read or in an event after it, never lost.
  */
 export function createLocalOutputs(deps: LocalOutputsDeps): LocalOutputs {
-  const store = createStore<LocalOutputsState>({ snapshot: null });
+  const store = createStore<LocalOutputsState>({ snapshot: null, lastLoss: null });
   let holders = 0;
   let unlisten: Promise<UnlistenFn | null> | null = null;
 
   const ingest = (snapshot: LocalOutputsSnapshot): boolean => {
-    const held = store.get().snapshot;
+    const { snapshot: held, lastLoss } = store.get();
     if (held !== null && snapshot.revision <= held.revision) return false;
-    store.set({ snapshot });
+    store.set({ snapshot, lastLoss: classifyLoss(held, snapshot) ?? lastLoss });
     return true;
   };
 

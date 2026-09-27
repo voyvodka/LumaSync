@@ -14,7 +14,7 @@ interface UsbStripObjectProps {
    * `connected` ⇒ green ONLINE chip beside the start handle,
    * `disconnected` ⇒ red OFFLINE chip,
    * `unknown` (default) ⇒ no chip rendered, so legacy maps stay clean
-   *  before the parent has wired `useUsbConnectionStatus`.
+   *  before the parent has read the local-output registry.
    */
   connectionStatus?: "connected" | "disconnected" | "unknown";
   onSelect: (id: string) => void;

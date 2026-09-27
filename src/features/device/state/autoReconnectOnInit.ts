@@ -17,6 +17,7 @@ export function createAutoReconnectOnInit(
   store: ConnectionStore,
   deps: DeviceConnectionControllerDeps,
   connectionEventsBus: ConnectionEventBus | null,
+  sync: () => Promise<void>,
 ): AutoReconnectOnInit {
   /**
    * Bug 10A — auto-reconnect on app launch when the persisted port is
@@ -45,7 +46,7 @@ export function createAutoReconnectOnInit(
 
       if (connection.connected && connection.portName) {
         store.finishOperation(token);
-        await applySuccessfulConnection(store, deps, connectionEventsBus, {
+        await applySuccessfulConnection(store, deps, connectionEventsBus, sync, {
           connectedPortName: connection.portName,
           statusCard: toConnectionCard(connection),
         });
@@ -87,10 +88,9 @@ export function createAutoReconnectOnInit(
         });
       }
       // The one refusal the user can act on — typically after a crash or force-quit mid-stream — so
-      // it is shown, and the emit lets every sibling mount read it from Rust.
+      // it is shown; the other mounts read it from the port's registry entry.
       if (rejectionCode === SERIAL_CONNECT_STATUS.REPLUG_REQUIRED) {
         store.setState((prev) => ({ ...prev, statusCard: toConnectionCard(connection) }));
-        connectionEventsBus?.emit({ portName: targetPort, connected: false });
       }
       return rejectionCode;
     } catch (err) {

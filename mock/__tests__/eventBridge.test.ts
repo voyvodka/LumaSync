@@ -41,7 +41,7 @@ describe("the event bridge", () => {
   it("claims every event-plugin command and nothing else", () => {
     expect(isEventPluginCommand("plugin:event|listen")).toBe(true);
     expect(isEventPluginCommand("plugin:store|get")).toBe(false);
-    expect(isEventPluginCommand("get_serial_connection_status")).toBe(false);
+    expect(isEventPluginCommand("get_local_outputs")).toBe(false);
   });
 
   it("returns the handler id, because that is what unlisten is given back", () => {

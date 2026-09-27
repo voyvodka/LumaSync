@@ -33,11 +33,6 @@ export async function connectSerialPort(
   });
 }
 
-/** Read the last-known serial connection status without touching the port. */
-export async function getSerialConnectionStatus(): Promise<SerialConnectionStatus> {
-  return invokeCommand(DEVICE_COMMANDS.GET_CONNECTION_STATUS);
-}
-
 /** Run the handshake-and-back health check on the named port. Never throws; check `steps`/`pass`. */
 export async function runSerialHealthCheck(portName: string): Promise<HealthCheckResult> {
   return invokeCommand(DEVICE_COMMANDS.RUN_HEALTH_CHECK, { portName });

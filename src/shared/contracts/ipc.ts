@@ -135,7 +135,6 @@ export interface CommandMap {
   // --- device: serial -----------------------------------------------------
   list_serial_ports: NoArgs<SerialPortListResponse>;
   connect_serial_port: Command<{ portName: string; chipType: LedChipType | null }, SerialConnectionStatus>;
-  get_serial_connection_status: NoArgs<SerialConnectionStatus>;
   run_serial_health_check: Command<{ portName: string }, HealthCheckResult>;
   get_local_outputs: NoArgs<LocalOutputsSnapshot>;
   disconnect_serial_port: Command<{ portName: string }, SerialDisconnectResult>;

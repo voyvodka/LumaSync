@@ -3,16 +3,15 @@
  *
  * Editing `world.serial.connectedPort` in the panel does nothing on its own,
  * and that is not a bug in the panel — it is how the app works. The app hears
- * of a cable only through Rust's serial port watcher
- * (`device://serial-ports-changed`) and, for a pairing, the process-wide
- * `connectionEvents` bus (`state/siblingSync.ts`). So a world that says "unplugged" sits next to a UI
- * that still says "connected", with nothing to explain the disagreement. The
- * hot-plug edge — `wasConnected → false`, the disconnect toast, dropping
- * `usb` from the active targets — was unreachable from the mock entirely.
+ * of a cable only through Rust's announcements: the local-output registry
+ * (`device://local-outputs-changed`, sent by `mock/localOutputs.ts` whenever the
+ * world changes it) and then the serial port watcher
+ * (`device://serial-ports-changed`). Without them the hot-plug edge — the
+ * disconnect toast, dropping `usb` from the active targets — was unreachable
+ * from the mock entirely.
  *
- * These helpers flip the world and then publish on the same bus the real pair
- * path publishes on, so the app takes the identical route: re-read Rust,
- * reconcile, react.
+ * These helpers flip the world and send what Rust would, in Rust's order, so the
+ * app takes the identical route: follow the registry, reconcile, react.
  *
  * **Direction matters.** `mock/` importing `src/` is fine and already
  * pervasive; the ship-safety rule is that `src/` must never name `mock/`, and
@@ -22,7 +21,12 @@
  */
 
 import { connectionEvents } from "../src/features/device/connectionEvents";
-import { DEVICE_COMMANDS, DEVICE_EVENTS, type SerialPortsChangedEvent } from "../src/shared/contracts/device";
+import {
+  DEVICE_COMMANDS,
+  DEVICE_ERROR_CODES,
+  DEVICE_EVENTS,
+  type SerialPortsChangedEvent,
+} from "../src/shared/contracts/device";
 import { emitMockEvent } from "./events";
 import { deviceHandlers } from "./handlers/device";
 import { wledSinkEvents } from "../src/features/device/wledSinkEvents";
@@ -32,26 +36,27 @@ import { withSerialTransport, withoutWledDevice, withWledTransport } from "../sr
 import { getWorld, mutate } from "./state";
 
 /**
- * Plug a strip in, or pull the cable.
+ * Plug a strip in and connect it, or pull the cable.
  *
- * `portName` is required to unplug as well as to plug in: the bus carries the
- * port that changed, and a listener keyed on a different port must not react
- * to someone else's cable.
+ * `portName` is required to unplug as well as to plug in: the watcher names the
+ * port that changed, and a listener keyed on a different port must not react to
+ * someone else's cable.
  */
 export function setSerialConnected(portName: string, connected: boolean): void {
+  // The registry announces from inside `mutate`, so it reaches the app before the ports do.
   mutate((w) => {
     w.serial.connectedPort = connected ? portName : null;
+    w.serial.idleEntry = connected ? null : { portName, code: DEVICE_ERROR_CODES.PORT_NOT_FOUND };
     if (connected) {
+      // A strip connect unbinds WLED, as Rust's registry does.
+      w.wled.connectedHost = null;
       w.shellState = { ...w.shellState, ...withSerialTransport(w.shellState as ShellState, portName) };
     }
   });
-  connectionEvents.emit({ portName, connected });
-  // What the watcher would say about the same cable.
   const event: SerialPortsChangedEvent = {
     ports: deviceHandlers[DEVICE_COMMANDS.LIST_PORTS]().ports,
     appeared: connected ? [portName] : [],
     lost: connected ? [] : [portName],
-    connection: deviceHandlers[DEVICE_COMMANDS.GET_CONNECTION_STATUS](),
   };
   void emitMockEvent(DEVICE_EVENTS.SERIAL_PORTS_CHANGED, event);
 }

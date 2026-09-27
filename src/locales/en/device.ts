@@ -38,6 +38,13 @@ export default {
       healthCheckFailed: "Rescan, pick another port, then retry.",
     },
   },
+  // A registry entry that stopped driving without failing: let go of, or replaced by another output.
+  outputStatus: {
+    DISCONNECTED: {
+      label: "Disconnected",
+      hint: "LumaSync no longer sends to this strip. Press Connect to use it again.",
+    },
+  },
   healthCheck: {
     runAction: "Run Health Check",
     runningAction: "Running Health Check...",

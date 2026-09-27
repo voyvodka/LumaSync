@@ -2,7 +2,7 @@
  * The mock's world, and the only mutable thing in `mock/`.
  *
  * Fixtures are not constants. `connect_serial_port` has to change what
- * `get_serial_connection_status` answers next, and `start_hue_stream` has to
+ * `get_local_outputs` answers next, and `start_hue_stream` has to
  * change `get_hue_stream_status` — without that, a whole class of bug (state
  * written on one call and read on another) simply cannot appear, and the mock
  * would train you on an app that has none of it.
@@ -13,6 +13,7 @@
  * refresh would make anyone stop composing and go back to presets.
  */
 
+import type { SerialCommandStatusCode } from "../src/shared/contracts/device";
 import type { LightingModeConfig } from "../src/shared/contracts/mode";
 import type {
   FirmwareProfile,
@@ -86,6 +87,10 @@ export interface MockWorld {
   serial: {
     ports: MockSerialPort[];
     connectedPort: string | null;
+    /** The last port that stopped being connected, or failed to connect, and the code its registry
+     *  entry says: `PORT_NOT_FOUND` for an unplug, `DISCONNECTED` for a release. Rust keeps such an
+     *  entry, and the app tells an unplug from a release by it. */
+    idleEntry?: { portName: string; code: SerialCommandStatusCode } | null;
     /** Which health step fails, or `null` for a clean pass. */
     healthFailsAt: string | null;
   };

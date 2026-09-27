@@ -620,15 +620,6 @@ fn version_window_warning(pong: &HandshakePongResponse) -> Option<String> {
     })
 }
 
-/// Return the most recently recorded serial connection status — the last attempt's, as before the
-/// registry kept one entry per port.
-#[tauri::command]
-pub fn get_serial_connection_status(
-    registry: tauri::State<'_, LocalOutputRegistry>,
-) -> Result<SerialConnectionStatus, String> {
-    registry.serial_status_checked()
-}
-
 /// Run a multi-step health check on `port_name`.
 ///
 /// Steps:
@@ -986,7 +977,6 @@ pub struct SerialPortsChangedEvent {
     pub appeared: Vec<String>,
     /// Supported ports gone for `MISSES_BEFORE_LOST` polls in a row.
     pub lost: Vec<String>,
-    pub connection: SerialConnectionStatus,
 }
 
 pub const SERIAL_WATCH_INTERVAL: Duration = Duration::from_millis(1_500);
@@ -1091,7 +1081,6 @@ impl SerialWatch {
                 ports,
                 appeared,
                 lost,
-                connection: registry.serial_status(),
             }),
             forget,
             registry: cleared,
@@ -1130,12 +1119,15 @@ pub(crate) fn serial_watch_tick<R: tauri::Runtime>(
         listed_at,
         &app.state::<LocalOutputRegistry>(),
     );
+    // The registry first: a reader that sees a port go learns from it whether the strip was lost.
+    if let Some(snapshot) = outcome.registry {
+        local_outputs::announce(app, snapshot);
+    }
     if let Some(event) = outcome.event {
         log::info!(
-            "[serial-watch] appeared={:?} lost={:?} connected={:?}",
+            "[serial-watch] appeared={:?} lost={:?}",
             event.appeared,
-            event.lost,
-            event.connection.port_name
+            event.lost
         );
         if let Err(error) = app.emit_to(
             crate::MAIN_WINDOW_LABEL,
@@ -1144,9 +1136,6 @@ pub(crate) fn serial_watch_tick<R: tauri::Runtime>(
         ) {
             log::warn!("[serial-watch] could not announce the change: {error}");
         }
-    }
-    if let Some(snapshot) = outcome.registry {
-        local_outputs::announce(app, snapshot);
     }
     if let Some(lighting) = app.try_state::<super::lighting_mode::LightingRuntimeState>() {
         for port in &outcome.forget {
@@ -1226,11 +1215,13 @@ mod tests {
         let second = watch.poll(Vec::new(), 30, &state);
         let event = second.event.expect("the loss is announced");
         assert_eq!(event.lost, vec!["COM3".to_string()]);
-        assert!(!event.connection.connected);
-        assert_eq!(event.connection.status.code, "PORT_NOT_FOUND");
         assert_eq!(second.forget, vec!["COM3".to_string()]);
         assert!(!is_connected(&state));
-        assert!(second.registry.is_some());
+        let snapshot = second.registry.expect("the registry is announced");
+        let entry =
+            serde_json::to_value(&snapshot).expect("snapshot serialises")["outputs"][0].clone();
+        assert_eq!(entry["connected"], false);
+        assert_eq!(entry["status"]["code"], "PORT_NOT_FOUND");
 
         let back = watch.poll(vec![supported("COM3")], 40, &state);
         assert_eq!(
@@ -1270,7 +1261,8 @@ mod tests {
         assert_eq!(next.forget, vec!["COM3".to_string()]);
         let event = next.event.expect("the clear is announced");
         assert!(event.lost.is_empty());
-        assert!(!event.connection.connected);
+        assert!(next.registry.is_some());
+        assert!(!is_connected(&state));
     }
 
     // A port WLED evicted is no longer connected, yet its cached writer may still hold it.

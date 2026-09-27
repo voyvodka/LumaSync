@@ -3,10 +3,21 @@
  * A version that only edited the world would pass any test written against
  * `getWorld()` and still leave the app insisting the cable is plugged in —
  * which is exactly the state this module was written to fix. So every case
- * here subscribes to the real bus.
+ * here reads what was announced.
  */
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { emitted } = vi.hoisted(() => ({ emitted: [] as Array<{ event: string; payload: unknown }> }));
+vi.mock("../events", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../events")>()),
+  emitMockEvent: async (event: string, payload?: unknown) => {
+    emitted.push({ event, payload });
+  },
+}));
+
+import { DEVICE_EVENTS, type LocalOutputsSnapshot, type SerialPortsChangedEvent } from "../../src/shared/contracts/device";
+import { installLocalOutputsAnnouncer, localOutputsSnapshot } from "../localOutputs";
 
 import { connectionEvents } from "../../src/features/device/connectionEvents";
 import type { ConnectionEvent } from "../../src/features/device/connectionEvents";
@@ -26,8 +37,17 @@ let wledSeen: WledRestoreOutcome[];
 const last = <T,>(items: T[]): T | undefined => items[items.length - 1];
 let unsubscribe: Array<() => void>;
 
+let announcing = false;
+
+const serialEntry = (snapshot: LocalOutputsSnapshot) => snapshot.outputs.find((output) => output.kind === "serial");
+
 beforeEach(() => {
   setWorld(SCENARIOS.furnished.build());
+  if (!announcing) {
+    installLocalOutputsAnnouncer();
+    announcing = true;
+  }
+  emitted.length = 0;
   connectionSeen = [];
   wledSeen = [];
   unsubscribe = [
@@ -40,29 +60,45 @@ beforeEach(() => {
 });
 
 describe("serial hot-plug", () => {
-  it("announces an unplug on the bus the controller listens to", () => {
+  it("an unplug leaves the strip's entry reading the port gone, as Rust's registry does", () => {
     setSerialConnected(PORT, false);
 
     expect(getWorld().serial.connectedPort).toBeNull();
-    // Without this emission nothing re-reads the status and the UI keeps
-    // showing a connected strip that is no longer there.
-    expect(connectionSeen).toEqual([{ portName: PORT, connected: false }]);
+    // The app tells an unplug from a release by this code; without the entry it read as a release.
+    expect(serialEntry(localOutputsSnapshot())).toMatchObject({
+      portName: PORT,
+      connected: false,
+      status: { code: "PORT_NOT_FOUND" },
+    });
   });
 
-  it("announces a plug-in and records the port as the saved one", () => {
+  // A reader that sees the port go learns from the registry, already announced, whether the strip went.
+  it("announces the registry before the watcher's ports", () => {
     setSerialConnected(PORT, false);
-    connectionSeen.length = 0;
+
+    expect(emitted.map((entry) => entry.event)).toEqual([
+      DEVICE_EVENTS.LOCAL_OUTPUTS_CHANGED,
+      DEVICE_EVENTS.SERIAL_PORTS_CHANGED,
+    ]);
+    const ports = emitted[1]?.payload as SerialPortsChangedEvent;
+    expect(ports.lost).toEqual([PORT]);
+  });
+
+  it("a plug-in connects the port and records it as the saved one", () => {
+    setSerialConnected(PORT, false);
 
     setSerialConnected(PORT, true);
 
     expect(getWorld().serial.connectedPort).toBe(PORT);
     expect(savedSerialPort(getWorld().shellState)).toBe(PORT);
-    expect(connectionSeen).toEqual([{ portName: PORT, connected: true }]);
+    expect(serialEntry(localOutputsSnapshot())).toMatchObject({ portName: PORT, connected: true });
   });
 
-  it("carries the port name on an unplug, so a listener keyed to another cable ignores it", () => {
+  it("names the port on an unplug, so a listener keyed to another cable ignores it", () => {
     setSerialConnected("/dev/cu.other", false);
-    expect(connectionSeen[0]?.portName).toBe("/dev/cu.other");
+
+    const ports = emitted.find((entry) => entry.event === DEVICE_EVENTS.SERIAL_PORTS_CHANGED)?.payload;
+    expect((ports as SerialPortsChangedEvent).lost).toEqual(["/dev/cu.other"]);
   });
 
   it("keeps the last successful port across an unplug", () => {
@@ -86,13 +122,12 @@ describe("boot-time port rejection", () => {
   );
 
   it("is distinguishable from a plain unplug", () => {
-    // App drops `usb` from the output targets on a rejection and does not on
-    // a transient disconnect, so the two must not produce the same event.
+    // App drops `usb` from the output targets on a rejection; an unplug reaches it through the
+    // registry instead, so only the rejection is on the bus.
     setSerialConnected(PORT, false);
     rejectSerialPort(PORT, "PORT_NOT_FOUND");
 
-    expect(connectionSeen[0]?.unsupportedReason).toBeUndefined();
-    expect(connectionSeen[1]?.unsupportedReason).toBe("PORT_NOT_FOUND");
+    expect(connectionSeen).toEqual([{ portName: PORT, connected: false, unsupportedReason: "PORT_NOT_FOUND" }]);
   });
 });
 

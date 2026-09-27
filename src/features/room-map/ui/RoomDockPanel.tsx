@@ -108,7 +108,7 @@ interface RoomDockPanelProps {
   usbConnectedPort?: string | null;
   /**
    * Resolved connection status for USB strips. The dock does not own
-   * the snapshot (`useUsbConnectionStatus` does); it just renders.
+   * the snapshot (the editor reads the registry); it just renders.
    */
   usbConnectionStatus?: UsbStripConnectionStatus;
   /** Drop the active USB connection (Disconnect button in inspector). */

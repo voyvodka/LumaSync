@@ -57,7 +57,6 @@ fn a_connected_strip_is_driven_and_listed() {
         serial_entry(&registry, "COM3"),
         Some((true, "CONNECT_OK".into()))
     );
-    assert!(registry.serial_status().connected);
 }
 
 // Bug A: a failed serial attempt used to empty the sink slot, WLED and all.
@@ -77,7 +76,7 @@ fn a_failed_serial_attempt_leaves_a_bound_wled_device_driven() {
 
 // Bug B: binding WLED never touched the serial side.
 #[test]
-fn binding_wled_evicts_the_connected_strip_but_keeps_the_compat_status() {
+fn binding_wled_evicts_the_connected_strip() {
     let registry = LocalOutputRegistry::default();
     registry.serial_connected(connected("COM3", 5));
 
@@ -88,8 +87,6 @@ fn binding_wled_evicts_the_connected_strip_but_keeps_the_compat_status() {
         serial_entry(&registry, "COM3"),
         Some((false, "DISCONNECTED".into()))
     );
-    // The frontend reads this until it moves to the registry; it has no copy for DISCONNECTED.
-    assert!(registry.serial_status().connected);
     assert_eq!(registry.driven(), Some(DrivenLocal::Wled(wled(42))));
 }
 
@@ -117,8 +114,6 @@ fn a_failed_attempt_on_another_port_leaves_the_connected_strip_driven() {
         serial_entry(&registry, "COM4"),
         Some((false, "CONNECT_IO_ERROR".into()))
     );
-    // The compat status still says what the last attempt did, as it always has.
-    assert!(!registry.serial_status().connected);
 }
 
 #[test]
@@ -143,7 +138,6 @@ fn a_refused_port_name_is_not_recorded() {
     registry.serial_failed(None, failed("PORT_UNSUPPORTED"));
 
     assert!(registry.snapshot().outputs.is_empty());
-    assert_eq!(registry.serial_status().status.code, "PORT_UNSUPPORTED");
 }
 
 #[test]
@@ -160,7 +154,6 @@ fn the_watcher_clears_a_lost_strip_only_when_nothing_connected_it_after_the_list
         serial_entry(&registry, "COM3"),
         Some((false, "PORT_NOT_FOUND".into()))
     );
-    assert!(!registry.serial_status().connected);
     assert!(registry.serial_lost("COM3", 50).is_none());
 }
 
@@ -192,7 +185,10 @@ fn a_disconnect_restores_when_the_lighting_refuses_and_nothing_took_the_place() 
 
     registry.restore_serial(previous).expect("restored");
     assert_eq!(registry.driven(), Some(DrivenLocal::Serial("COM3".into())));
-    assert!(registry.serial_status().connected);
+    assert_eq!(
+        serial_entry(&registry, "COM3"),
+        Some((true, "CONNECT_OK".into()))
+    );
 }
 
 #[test]
@@ -247,8 +243,6 @@ fn a_failed_attempt_on_the_connected_port_leaves_it_connected() {
         Some((true, "CONNECT_OK".into()))
     );
     assert_eq!(registry.driven(), Some(DrivenLocal::Serial("COM3".into())));
-    // `get_serial_connection_status` too, or the UI would read the strip that lights as failed.
-    assert!(registry.serial_status().connected);
 }
 
 // The frontend reads which output is driven from here, instead of repeating the rule.

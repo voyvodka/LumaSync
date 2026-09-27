@@ -68,7 +68,6 @@
     "allow-update-tray-labels",
     "allow-list-serial-ports",
     "allow-connect-serial-port",
-    "allow-get-serial-connection-status",
     "allow-run-serial-health-check",
     "allow-discover-hue-bridges",
     "allow-verify-hue-bridge-ip",

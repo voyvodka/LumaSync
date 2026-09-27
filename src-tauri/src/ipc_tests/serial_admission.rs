@@ -116,7 +116,7 @@ fn connect_app(ports: Arc<FakeSerialPorts>) -> App<MockRuntime> {
         tauri::generate_handler![
             crate::commands::device_connection::list_serial_ports,
             crate::commands::device_connection::connect_serial_port,
-            crate::commands::device_connection::get_serial_connection_status
+            crate::commands::local_outputs::get_local_outputs
         ],
         SerialPortAccess::from_io(ports),
     )
@@ -180,9 +180,8 @@ fn refused_names_never_reach_open() {
     }
 
     assert_eq!(ports.opened(), Vec::<String>::new());
-    let status =
-        invoke(&webview, "get_serial_connection_status", json!({})).expect("status must resolve");
-    assert_eq!(status["portName"], Value::Null);
+    let outputs = invoke(&webview, "get_local_outputs", json!({})).expect("outputs must resolve");
+    assert_eq!(outputs["outputs"], json!([]));
 }
 
 /// The `/dev/tty.*` sibling of an allowlisted adapter shares its VID:PID, so
@@ -396,6 +395,37 @@ fn writers_dropped_by_unplug_all() -> Vec<String> {
     lost
 }
 
+/// The registry is announced before the ports: a reader that sees a port go learns from it, already
+/// held, whether the strip went too.
+#[test]
+fn an_unplug_announces_the_registry_before_the_ports() {
+    use tauri::Listener;
+
+    let ports = mac_inventory();
+    let app = connect_app(Arc::clone(&ports));
+    app.state::<LocalOutputRegistry>()
+        .set_serial_for_tests(CALL_OUT, true, 0);
+    let order = Arc::new(Mutex::new(Vec::<&'static str>::new()));
+    for (event, name) in [
+        (
+            crate::events::DEVICE_LOCAL_OUTPUTS_CHANGED_EVENT,
+            "registry",
+        ),
+        (crate::events::DEVICE_SERIAL_PORTS_CHANGED_EVENT, "ports"),
+    ] {
+        let sink = Arc::clone(&order);
+        app.listen_any(event, move |_| sink.lock().expect("order").push(name));
+    }
+
+    let mut watch = SerialWatch::default();
+    serial_watch_tick(app.handle(), &mut watch);
+    ports.unplug_all();
+    serial_watch_tick(app.handle(), &mut watch);
+    serial_watch_tick(app.handle(), &mut watch);
+
+    assert_eq!(*order.lock().expect("order"), vec!["registry", "ports"]);
+}
+
 /// An unplugged strip loses its connection and its cached writer.
 #[test]
 fn an_unplugged_strip_drops_its_writer_and_its_connection() {
@@ -414,10 +444,8 @@ fn an_unplugged_strip_drops_its_writer_and_its_connection() {
     serial_watch_tick(app.handle(), &mut watch);
 
     assert_eq!(recorder.forgotten(), writers_dropped_by_unplug_all());
-    let status =
-        invoke(&webview, "get_serial_connection_status", json!({})).expect("status must resolve");
-    assert_eq!(status["connected"], json!(false));
-    assert_eq!(status_code(&status), "PORT_NOT_FOUND");
+    let outputs = invoke(&webview, "get_local_outputs", json!({})).expect("outputs must resolve");
+    assert_eq!(outputs["driven"], Value::Null);
     assert_eq!(
         serial_outputs(&app),
         vec![(CALL_OUT.to_string(), false, "PORT_NOT_FOUND".to_string())]

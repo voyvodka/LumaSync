@@ -1,4 +1,10 @@
-import { DEVICE_OPERATION, DEVICE_STATUS, type DeviceStatus } from "@/shared/contracts/device";
+import {
+  DEVICE_OPERATION,
+  DEVICE_STATUS,
+  SERIAL_OUTPUT_STATUS,
+  type DeviceStatus,
+  type SerialOutputStatus,
+} from "@/shared/contracts/device";
 import { canConnectSelectedPort } from "../portSelection";
 import type { SerialConnectionStatus, SerialPortListResponse } from "../deviceConnectionApi";
 import type { DevicePort } from "../types";
@@ -60,6 +66,21 @@ export function toConnectionCard(status: SerialConnectionStatus): DeviceStatusCa
     code: status.status.code,
     message: status.status.message,
     details: status.status.details ?? undefined,
+  };
+}
+
+/** A registry entry as a card: let go of or replaced is information, not a failure. */
+export function toOutputCard(entry: SerialOutputStatus): DeviceStatusCard {
+  const variant = entry.connected
+    ? "success"
+    : entry.status.code === SERIAL_OUTPUT_STATUS.DISCONNECTED
+      ? "info"
+      : "error";
+  return {
+    variant,
+    code: entry.status.code,
+    message: entry.status.message,
+    details: entry.status.details ?? undefined,
   };
 }
 
