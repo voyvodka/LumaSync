@@ -104,6 +104,18 @@ describe("SettingsPage", () => {
       expect(screen.getByRole("navigation", { name: "settings:title" })).toBeInTheDocument();
     });
 
+    it("opens on the page it was left on when the section comes back", async () => {
+      const first = render(<SettingsPage {...BASE} />);
+      await settle();
+      fireEvent.click(screen.getByTestId("settings-page-about"));
+      first.unmount();
+
+      render(<SettingsPage {...BASE} />);
+      await settle();
+
+      expect(screen.getByTestId("settings-page-about")).toHaveAttribute("aria-current", "page");
+    });
+
     it("names each page's region by its heading and shows only that page's rows", async () => {
       await renderPage("help");
 

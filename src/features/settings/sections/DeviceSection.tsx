@@ -32,6 +32,7 @@ import {
   IconWledGlyph,
 } from "@/shared/ui/icons";
 import { parseCommandError } from "@/shared/contracts/status";
+import { useSessionState } from "@/shared/lib/useSessionState";
 import type { TranslationKey } from "@/features/i18n/catalogue";
 
 export type DeviceCategory = "usb" | "hue" | "wled" | "displays";
@@ -203,11 +204,12 @@ export function DeviceSection({
   // -------------------------------------------------------------------------
   // Category rail + displays list
   // -------------------------------------------------------------------------
-  const [activeCategory, setActiveCategory] = useState<DeviceCategory>(categoryRequest?.category ?? "usb");
-  const [handledRequest, setHandledRequest] = useState(categoryRequest);
-  if (categoryRequest !== handledRequest) {
-    setHandledRequest(categoryRequest);
-    if (categoryRequest !== null) setActiveCategory(categoryRequest.category);
+  // A deep link wins once; after that the category the user last chose stays, until a restart.
+  const [activeCategory, setActiveCategory] = useSessionState<DeviceCategory>("devices.category", "usb");
+  const [handledRequest, setHandledRequest] = useSessionState<number | null>("devices.handledRequest", null);
+  if (categoryRequest !== null && categoryRequest.nonce !== handledRequest) {
+    setHandledRequest(categoryRequest.nonce);
+    setActiveCategory(categoryRequest.category);
   }
 
   // Layout effects, so a notice this page already shows is gone before paint.

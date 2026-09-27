@@ -1,5 +1,7 @@
-import { useId, useState } from "react";
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
+
+import { useSessionState } from "@/shared/lib/useSessionState";
 
 import { PreferenceChoice } from "./rows/PreferenceChoice";
 import { PreferenceSwitch } from "./rows/PreferenceSwitch";
@@ -25,7 +27,8 @@ function Row({ id, env }: { id: SettingRowId; env: SettingsEnv }) {
 /** Settings: the pages on a rail, the chosen one's rows beside it. */
 export function SettingsPage(env: SettingsEnv) {
   const { t } = useTranslation();
-  const [page, setPage] = useState<SettingsPageId>("general");
+  // Back on the page it was left on after a visit elsewhere; a restart opens General.
+  const [page, setPage] = useSessionState<SettingsPageId>("settings.page", "general");
   const headingId = useId();
   const { labelKey, rows } = settingsPage(page);
   return (

@@ -841,6 +841,33 @@ describe("the category rail is addressable by test id", () => {
     expect(button).toHaveAttribute("aria-current", "page");
   });
 
+  it("opens on the category left open when the section comes back, until a new deep link", async () => {
+    const user = userEvent.setup();
+    // Each mount reads the store and the display list; let those land inside act.
+    const mount = async (ui: React.ReactElement) => {
+      const view = render(ui);
+      await act(async () => {});
+      return view;
+    };
+    const first = await mount(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
+    await user.click(screen.getByTestId("device-category-wled"));
+    first.unmount();
+
+    const back = await mount(<DeviceSection onStopHueOutput={stopHueOutputMock} />);
+    expect(screen.getByTestId("device-category-wled")).toHaveAttribute("aria-current", "page");
+    back.unmount();
+
+    const request = { category: "hue" as const, nonce: 1 };
+    const linked = await mount(<DeviceSection onStopHueOutput={stopHueOutputMock} categoryRequest={request} />);
+    expect(screen.getByTestId("device-category-hue")).toHaveAttribute("aria-current", "page");
+    await user.click(screen.getByTestId("device-category-displays"));
+    linked.unmount();
+
+    // The same request still held by the shell is not a new one.
+    await mount(<DeviceSection onStopHueOutput={stopHueOutputMock} categoryRequest={request} />);
+    expect(screen.getByTestId("device-category-displays")).toHaveAttribute("aria-current", "page");
+  });
+
   // The shell hides the Hue notices only while this page says they are up.
   it("reports the category on view, and none once it unmounts", async () => {
     const user = userEvent.setup();
