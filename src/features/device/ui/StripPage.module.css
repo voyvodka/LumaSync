@@ -13,7 +13,7 @@
     align-items: center;
     gap: 4px;
     margin: 0 0 8px;
-    min-height: 28px;
+    min-height: 32px;
   }
   .title {
     flex: 0 1 auto;
@@ -37,7 +37,7 @@
 
   .input {
     width: 150px;
-    height: 30px;
+    height: 32px;
     padding: 0 10px;
     border: 1px solid var(--lm-line-2);
     border-radius: 8px;
@@ -66,8 +66,8 @@
   .rename {
     display: inline-grid;
     place-items: center;
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     border-radius: 6px;
     color: var(--lm-ink-faint);
     transition: color var(--lm-dur-quick) linear, background-color var(--lm-dur-quick) linear;
@@ -115,7 +115,7 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    height: 28px;
+    height: 32px;
     padding: 0 8px 0 10px;
     border: 1px solid var(--lm-line-2);
     border-radius: 8px;

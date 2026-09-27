@@ -75,6 +75,7 @@ export default {
       settings: "Adjust",
       disconnect: "Disconnect",
       openInMap: "Open in room map",
+      addToMap: "Add to room map",
       edit: "Edit",
       setUp: "Set up",
       check: "Check",

@@ -75,6 +75,7 @@ const device: Catalogue<typeof enDevice> = {
       settings: "Ayarla",
       disconnect: "Bağlantıyı kes",
       openInMap: "Oda haritasında aç",
+      addToMap: "Oda haritasına ekle",
       edit: "Düzenle",
       setUp: "Kur",
       check: "Kontrol et",

@@ -66,8 +66,15 @@ export function StripFlash({
 
   const flashRef = useRef(flash);
   flashRef.current = flash;
+  // StrictMode runs this effect twice; a second run would light the strip a second time.
+  const autoFired = useRef(false);
   useEffect(() => {
-    if (!auto || disabled) return;
+    if (!auto) {
+      autoFired.current = false;
+      return;
+    }
+    if (disabled || autoFired.current) return;
+    autoFired.current = true;
     onAutoDone?.();
     void flashRef.current();
   }, [auto, disabled, onAutoDone]);

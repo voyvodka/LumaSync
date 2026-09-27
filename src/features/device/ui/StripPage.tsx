@@ -9,6 +9,7 @@ import {
   type LedColorOrder,
 } from "@/shared/contracts/device";
 import { normalizeColorOrder } from "@/shared/contracts/mode";
+import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import type { LedStrip, StripHardware } from "@/shared/contracts/strips";
 import { shellStore } from "@/features/persistence/shellStore";
 import { Menu } from "@/shared/ui/Menu/Menu";
@@ -23,7 +24,7 @@ import { buildDeviceStatusCard } from "../deviceStatusCard";
 import { shortPortName } from "../model/deviceRail";
 import { serialEntry } from "../model/localOutputs";
 import { STRIP_STATE_VIEW, serialStripState } from "../model/stripState";
-import { connectAsUser, useRosterFailed } from "../state/connectAsUser";
+import { addToRoomMap, connectAsUser, useRosterFailed } from "../state/connectAsUser";
 import { useLocalOutputs } from "../state/localOutputsStore";
 import { useStripUnlit, type FlashOutcome } from "../state/stripFlash";
 import { useAdvertisedFirmwareProfile, useAdvertisedPixelLayout } from "../useAdvertisedFirmwareProfile";
@@ -96,20 +97,30 @@ export function StripPage({
     saveHardware(strip.id, patch).catch(() => setHardwareFailed(true));
   };
   const [dontAsk, setDontAsk] = useState(false);
+  // Whether the room map has a placement on this port; `null` until the store answers.
+  const [placed, setPlaced] = useState<boolean | null>(null);
   useEffect(() => {
     let cancelled = false;
+    const placedOn = (roomMap: RoomMapConfig | null | undefined) =>
+      roomMap?.usbStrips.some((placement) => placement.portName === port) ?? false;
     shellStore
       .load()
       .then((stored) => {
-        if (!cancelled) setDontAsk(stored.dontWarnFirmwareProfileMismatch === true);
+        if (cancelled) return;
+        setDontAsk(stored.dontWarnFirmwareProfileMismatch === true);
+        setPlaced(placedOn(stored.roomMap));
       })
       .catch((error: unknown) => {
-        console.error("[LumaSync] reading the firmware warning preference failed:", error);
+        console.error("[LumaSync] reading the strip's settings failed:", error);
       });
+    const stop = shellStore.onSaved((saved) => {
+      if ("roomMap" in saved) setPlaced(placedOn(saved.roomMap));
+    });
     return () => {
       cancelled = true;
+      stop();
     };
-  }, []);
+  }, [port]);
 
   const connect = () => {
     setDisconnectFailed(false);
@@ -170,6 +181,10 @@ export function StripPage({
   const menuItems = [
     ...(connected
       ? [{ id: "disconnect", label: t("device:strip.action.disconnect"), onSelect: () => void disconnect() }]
+      : []),
+    // A launch reconnect writes no placement; this is the way to one without reconnecting.
+    ...(connected && placed === false
+      ? [{ id: "place", label: t("device:strip.action.addToMap"), onSelect: () => void addToRoomMap(port) }]
       : []),
     ...(onNavigateToRoomMap ? [{ id: "map", label: t("device:strip.action.openInMap"), onSelect: onNavigateToRoomMap }] : []),
   ];

@@ -38,6 +38,9 @@ vi.mock("../../state/stripFlash", async (importActual) => {
 const disconnectSerialPort = vi.hoisted(() => vi.fn<typeof import("../../deviceConnectionApi").disconnectSerialPort>());
 vi.mock("../../deviceConnectionApi", () => ({ disconnectSerialPort }));
 
+const ensure = vi.hoisted(() => vi.fn<(port: string, previous: string | null) => Promise<unknown[]>>(async () => []));
+vi.mock("../../model/usbStripRoster", () => ({ ensureStripForPort: ensure }));
+
 vi.mock("../../useAdvertisedFirmwareProfile", () => ({
   useAdvertisedFirmwareProfile: () => undefined,
   useAdvertisedPixelLayout: () => undefined,
@@ -48,6 +51,7 @@ vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: async () => world.stored,
     update,
+    onSaved: () => () => {},
   },
 }));
 
@@ -116,8 +120,16 @@ function device(overrides: Partial<UseDeviceConnectionResult> = {}): UseDeviceCo
   };
 }
 
-function renderPage(props: { strip?: ReturnType<typeof strip>; device?: UseDeviceConnectionResult; onNavigateToLedSetup?: () => void } = {}) {
-  return render(
+async function renderPage(
+  props: {
+    strip?: ReturnType<typeof strip>;
+    device?: UseDeviceConnectionResult;
+    onNavigateToLedSetup?: () => void;
+    autoFlash?: boolean;
+    onAutoFlashDone?: () => void;
+  } = {},
+) {
+  const view = render(
     <StripPage
       isActive
       strip={props.strip ?? strip()}
@@ -125,8 +137,13 @@ function renderPage(props: { strip?: ReturnType<typeof strip>; device?: UseDevic
       device={props.device ?? device()}
       onNavigateToLedSetup={props.onNavigateToLedSetup ?? (() => {})}
       onNavigateToRoomMap={() => {}}
+      autoFlash={props.autoFlash}
+      onAutoFlashDone={props.onAutoFlashDone}
     />,
   );
+  // The page reads the store on mount; settling it here keeps that update inside act.
+  await act(async () => {});
+  return view;
 }
 
 const isPrimary = (element: HTMLElement) => /primary/.test(element.className);
@@ -148,10 +165,10 @@ afterEach(() => {
 });
 
 describe("StripPage — the strip's state and its one action", () => {
-  it("a strip not connected says so and offers Connect as the page's amber", () => {
+  it("a strip not connected says so and offers Connect as the page's amber", async () => {
     registry("released");
     const dev = device();
-    renderPage({ device: dev });
+    await renderPage({ device: dev });
 
     expect(screen.getByTestId("strip-state")).toHaveTextContent("device:strip.state.disconnected");
     const connect = screen.getByTestId("strip-connect");
@@ -164,10 +181,10 @@ describe("StripPage — the strip's state and its one action", () => {
     expect(dev.connectSelectedPort).toHaveBeenCalledTimes(1);
   });
 
-  it("a connected strip with no layout makes Set up the amber, and it opens LED Setup", () => {
+  it("a connected strip with no layout makes Set up the amber, and it opens LED Setup", async () => {
     registry("connected");
     const onNavigateToLedSetup = vi.fn<() => void>();
-    renderPage({ onNavigateToLedSetup });
+    await renderPage({ onNavigateToLedSetup });
 
     expect(screen.getByTestId("strip-state")).toHaveTextContent("device:strip.state.connected");
     expect(isPrimary(screen.getByTestId("strip-flash"))).toBe(false);
@@ -178,9 +195,9 @@ describe("StripPage — the strip's state and its one action", () => {
     expect(onNavigateToLedSetup).toHaveBeenCalledTimes(1);
   });
 
-  it("a strip with a layout reads its size and offers Edit", () => {
+  it("a strip with a layout reads its size and offers Edit", async () => {
     registry("connected");
-    renderPage({
+    await renderPage({
       strip: strip({
         layout: {
           counts: { top: 30, right: 20, bottom: 0, left: 20 },
@@ -197,24 +214,24 @@ describe("StripPage — the strip's state and its one action", () => {
     expect(screen.getByTestId("strip-layout-open")).toHaveTextContent("device:strip.action.edit");
   });
 
-  it("a port that went away waits for it, with nothing to press", () => {
+  it("a port that went away waits for it, with nothing to press", async () => {
     registry("gone");
-    renderPage();
+    await renderPage();
     expect(screen.getByTestId("strip-state")).toHaveTextContent("device:strip.state.reconnecting");
     expect(screen.queryByTestId("strip-connect")).toBeNull();
     expect(screen.queryByTestId("strip-flash")).toBeNull();
   });
 
-  it("a port another app holds reads as busy and offers Try again", () => {
+  it("a port another app holds reads as busy and offers Try again", async () => {
     registry("busy");
-    renderPage();
+    await renderPage();
     expect(screen.getByTestId("strip-state")).toHaveTextContent("device:strip.state.busy");
     expect(screen.getByTestId("strip-connect")).toHaveTextContent("device:strip.action.retry");
   });
 
-  it("a failed connect of this port is told under the row, in the user's words", () => {
+  it("a failed connect of this port is told under the row, in the user's words", async () => {
     registry("busy");
-    renderPage({
+    await renderPage({
       device: device({
         selectedPort: PORT,
         statusCard: { variant: "error", code: SERIAL_CONNECT_STATUS.IO_ERROR, message: "Resource busy", details: "os error 16" },
@@ -225,9 +242,9 @@ describe("StripPage — the strip's state and its one action", () => {
     expect(note).toHaveTextContent("os error 16");
   });
 
-  it("a failed connect of another port stays off this page", () => {
+  it("a failed connect of another port stays off this page", async () => {
     registry("released");
-    renderPage({
+    await renderPage({
       device: device({
         selectedPort: "/dev/cu.other",
         statusCard: { variant: "error", code: SERIAL_CONNECT_STATUS.IO_ERROR, message: "busy" },
@@ -240,7 +257,7 @@ describe("StripPage — the strip's state and its one action", () => {
 describe("StripPage — flash and ask", () => {
   it("No turns the strip into Didn't light with what to check; Yes clears it", async () => {
     registry("connected");
-    renderPage();
+    await renderPage();
 
     fireEvent.click(screen.getByTestId("strip-flash"));
     await screen.findByTestId("strip-flash-question");
@@ -264,7 +281,7 @@ describe("StripPage — flash and ask", () => {
   it("a flash that reached only the preview says so instead of asking", async () => {
     registry("connected");
     world.flash = "notSent";
-    renderPage();
+    await renderPage();
 
     fireEvent.click(screen.getByTestId("strip-flash"));
     expect(await screen.findByTestId("strip-flash-problem")).toHaveTextContent("device:strip.flash.notSent");
@@ -279,7 +296,7 @@ describe("StripPage — the menu", () => {
       portName: PORT,
       status: { code: SERIAL_DISCONNECT_STATUS.FAILED, message: "held", details: null },
     });
-    renderPage();
+    await renderPage();
 
     fireEvent.click(screen.getByTestId("strip-more"));
     fireEvent.click(await screen.findByRole("button", { name: "device:strip.action.disconnect" }));
@@ -289,7 +306,7 @@ describe("StripPage — the menu", () => {
 
   it("a strip not connected has nothing to disconnect", async () => {
     registry("released");
-    renderPage();
+    await renderPage();
     fireEvent.click(screen.getByTestId("strip-more"));
     expect(await screen.findByRole("button", { name: "device:strip.action.openInMap" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "device:strip.action.disconnect" })).toBeNull();
@@ -299,7 +316,7 @@ describe("StripPage — the menu", () => {
 describe("StripPage — name", () => {
   it("the pencil opens an empty field; Enter keeps what was typed on this strip", async () => {
     registry("connected");
-    renderPage();
+    await renderPage();
 
     fireEvent.click(screen.getByTestId("strip-rename"));
     const input = screen.getByTestId("strip-name-input") as HTMLInputElement;
@@ -315,9 +332,9 @@ describe("StripPage — name", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("USB strip");
   });
 
-  it("Esc puts the name back and saves nothing", () => {
+  it("Esc puts the name back and saves nothing", async () => {
     registry("connected");
-    renderPage();
+    await renderPage();
 
     fireEvent.click(screen.getByTestId("strip-rename"));
     const input = screen.getByTestId("strip-name-input");
@@ -333,7 +350,7 @@ describe("StripPage — name", () => {
 describe("StripPage — hardware", () => {
   it("a chip change is saved on this strip by id", async () => {
     registry("connected");
-    renderPage({ strip: strip({ id: "strip-2" }) });
+    await renderPage({ strip: strip({ id: "strip-2" }) });
 
     fireEvent.click(screen.getByTestId("strip-chip-sk6812-rgbw"));
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
@@ -347,7 +364,7 @@ describe("StripPage — hardware", () => {
     registry("connected");
     update.mockRejectedValue(new Error("disk full"));
     vi.spyOn(console, "error").mockImplementation(() => {});
-    renderPage();
+    await renderPage();
 
     fireEvent.click(screen.getByTestId("strip-chip-sk6812-rgbw"));
     expect(await screen.findByTestId("strip-hardware-failed")).toBeInTheDocument();
@@ -364,10 +381,10 @@ describe("StripPage — health", () => {
     ],
   } as unknown as HealthCheckView;
 
-  it("never run reads so, and Check runs it on this port", () => {
+  it("never run reads so, and Check runs it on this port", async () => {
     registry("connected");
     const dev = device();
-    renderPage({ device: dev });
+    await renderPage({ device: dev });
 
     expect(screen.getByTestId("strip-health-value")).toHaveTextContent("device:strip.health.never");
     fireEvent.click(screen.getByTestId("strip-health-run"));
@@ -375,9 +392,9 @@ describe("StripPage — health", () => {
     expect(dev.runHealthCheck).toHaveBeenCalledTimes(1);
   });
 
-  it("a failed check names the failing step and says what to do", () => {
+  it("a failed check names the failing step and says what to do", async () => {
     registry("connected");
-    renderPage({ device: device({ latestHealthCheck: failed }) });
+    await renderPage({ device: device({ latestHealthCheck: failed }) });
 
     expect(screen.getByTestId("strip-health-value")).toHaveTextContent(
       "device:healthCheck.serialHealthCodes.SERIAL_HEALTH_HANDSHAKE_TIMEOUT.label",
@@ -387,15 +404,15 @@ describe("StripPage — health", () => {
     )).toBeInTheDocument();
   });
 
-  it("a strip not connected cannot be checked", () => {
+  it("a strip not connected cannot be checked", async () => {
     registry("released");
-    renderPage();
+    await renderPage();
     expect(screen.getByTestId("strip-health-run")).toBeDisabled();
   });
 
-  it("the check's busy label holds the button's place", () => {
+  it("the check's busy label holds the button's place", async () => {
     registry("connected");
-    renderPage({ device: device({ isHealthChecking: true }) });
+    await renderPage({ device: device({ isHealthChecking: true }) });
     expect(screen.getByTestId("strip-health-run")).toHaveAttribute("aria-busy", "true");
   });
 });
@@ -403,10 +420,53 @@ describe("StripPage — health", () => {
 describe("StripPage — opening", () => {
   it("opens on the strip's stored hardware, with nothing arriving late", async () => {
     registry("connected");
-    renderPage({ strip: strip({ hardware: { chipType: "sk6812-rgbw", colorOrder: "grb" } }) });
+    await renderPage({ strip: strip({ hardware: { chipType: "sk6812-rgbw", colorOrder: "grb" } }) });
     expect(screen.getByTestId("strip-chip-sk6812-rgbw")).toHaveAttribute("aria-checked", "true");
     expect(screen.getByTestId("strip-color-order-value")).toHaveTextContent("GRB");
     await act(async () => {});
     expect(screen.getByTestId("strip-chip-sk6812-rgbw")).toHaveAttribute("aria-checked", "true");
   });
 });
+
+describe("StripPage — after adding", () => {
+  it("a strip just added flashes and asks on its own, once connected", async () => {
+    registry("connected");
+    const onAutoFlashDone = vi.fn<() => void>();
+    await renderPage({ autoFlash: true, onAutoFlashDone });
+    expect(await screen.findByTestId("strip-flash-question")).toBeInTheDocument();
+    expect(onAutoFlashDone).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits while the strip is still connecting", async () => {
+    registry("released");
+    const onAutoFlashDone = vi.fn<() => void>();
+    await renderPage({ autoFlash: true, onAutoFlashDone, device: device({ isConnecting: true, selectedPort: PORT }) });
+    await act(async () => {});
+    expect(onAutoFlashDone).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("strip-flash-question")).toBeNull();
+  });
+});
+
+describe("StripPage — the room map", () => {
+  it("offers a connected strip the room map lacks, and places it on its own port", async () => {
+    registry("connected");
+    world.stored = { roomMap: { usbStrips: [] } } as unknown as Partial<ShellState>;
+    await renderPage();
+
+    fireEvent.click(screen.getByTestId("strip-more"));
+    fireEvent.click(await screen.findByRole("button", { name: "device:strip.action.addToMap" }));
+    await waitFor(() => expect(ensure).toHaveBeenCalledWith(PORT, PORT));
+  });
+
+  it("offers nothing when a placement already names the port", async () => {
+    registry("connected");
+    world.stored = { roomMap: { usbStrips: [{ stripId: "a", portName: PORT }] } } as unknown as Partial<ShellState>;
+    await renderPage();
+    await act(async () => {});
+
+    fireEvent.click(screen.getByTestId("strip-more"));
+    await screen.findByRole("button", { name: "device:strip.action.openInMap" });
+    expect(screen.queryByRole("button", { name: "device:strip.action.addToMap" })).toBeNull();
+  });
+});
+

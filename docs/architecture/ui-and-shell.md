@@ -348,8 +348,9 @@ port (the one connected, or last connected, before this connect) was driving it;
 controller would relabel the first one's strip. The write goes through `shellStore.update`, a
 revision-guarded replace, because a plain save of `roomMap` would revert Hue channels or zones written
 between its read and its write. The boot auto-reconnect never writes, so an existing setup gains no
-strip it did not ask for. A roster write that fails is said on the strip's page, and the next
-connect tries again. What was just added opens as the strip it became and asks whether it lit: one
+strip it did not ask for; a strip connected that way and missing from the roster offers "Add to
+room map" behind its "…", which runs the same function. A roster write that fails is said on the
+strip's page, and the next connect tries again. What was just added opens as the strip it became and asks whether it lit: one
 flash of the test pattern and a question beside the button, because a connect that works says
 nothing about the ground and data wiring a strip also needs. Until several strips are driven at
 once, adding one moves the strip that is driven now — its layout and settings come along — and the

@@ -46,6 +46,21 @@ export async function connectAsUser(
   return true;
 }
 
+/**
+ * Puts a strip that is already connected into the roster: a launch reconnect never writes one, so a
+ * strip connected that way can be missing from the room map until the user asks.
+ */
+export async function addToRoomMap(portName: string, ensure: typeof ensureStripForPort = ensureStripForPort): Promise<void> {
+  try {
+    // The port is its own previous one: an unlinked placement is this strip's when it is the only one.
+    await ensure(portName, portName);
+    markRoster(portName, false);
+  } catch (error) {
+    console.error("[LumaSync] adding the strip to the room map failed:", error);
+    markRoster(portName, true);
+  }
+}
+
 export function useRosterFailed(portName: string): boolean {
   return useStoreSelector(rosterFailed, (failed) => failed.has(portName));
 }
