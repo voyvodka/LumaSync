@@ -12,6 +12,7 @@ import {
   withStripName,
   withWledSink,
   withWledTransport,
+  withoutStrip,
   withoutWledDevice,
 } from "../stripWrites";
 
@@ -174,3 +175,15 @@ describe("withHardwareOf", () => {
     expect(withHardwareOf(state(), "a", { chipType: "sk6812-rgbw" })).toBeNull();
   });
 });
+
+describe("withoutStrip", () => {
+  it("drops the strip it is given and keeps the others as they were", () => {
+    const current = state({ ledStrips: [strip("a", { name: "Desk" }), strip("b")] });
+    expect(withoutStrip(current, "a")?.ledStrips).toEqual([strip("b")]);
+  });
+
+  it("writes nothing for an id no strip has", () => {
+    expect(withoutStrip(state({ ledStrips: [strip("a")] }), "zzz")).toBeNull();
+  });
+});
+

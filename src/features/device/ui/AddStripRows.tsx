@@ -7,12 +7,12 @@ import { RowButton, RowNote, SettingRow } from "@/shared/ui/SettingRow/SettingRo
 import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
 
 import { shortPortName } from "../model/deviceRail";
-import { wledAddressError, wledStatusKey } from "../model/wledStatus";
+import { wledAddressError } from "../model/wledStatus";
 import { connectAsUser } from "../state/connectAsUser";
 import { useWledConnect, type WledConnectDeps } from "../state/useWledConnect";
 import type { DevicePort } from "../types";
 import type { UseDeviceConnectionResult } from "../useDeviceConnection";
-import { ConnectErrorNote, connectFailedOn } from "./StripNotes";
+import { ConnectErrorNote, WledCodedNote, connectFailedOn } from "./StripNotes";
 import styles from "./StripPage.module.css";
 
 /** What was just added, so the page it became can open and ask whether it lit. */
@@ -126,7 +126,6 @@ export function WledAddressRow({ onBound, onAdded, primary, deps }: WledAddressR
     else setFailure(status);
   };
 
-  const failureKey = failure ? wledStatusKey(failure.code) : null;
   return (
     <SettingRow
       label={t("device:strip.add.wled")}
@@ -174,11 +173,7 @@ export function WledAddressRow({ onBound, onAdded, primary, deps }: WledAddressR
         ) : null}
       </Reveal>
       <Reveal open={failure !== null}>
-        {failure ? (
-          <RowNote tone="error" testId="wled-address-failed">
-            {failureKey ? t(failureKey) : failure.message}
-          </RowNote>
-        ) : null}
+        {failure ? <WledCodedNote status={failure} testId="wled-address-failed" /> : null}
       </Reveal>
     </SettingRow>
   );

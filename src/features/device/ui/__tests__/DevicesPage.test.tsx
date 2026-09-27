@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -484,6 +484,41 @@ describe("DevicesPage — adding a controller that is plugged in", () => {
     drivenMock = null;
   });
 
+  // A save that never lands must not leave the page waiting: a later connect of the same port
+  // would otherwise jump the page to it and flash the strip unasked.
+  it("stops waiting for a strip whose save never landed", async () => {
+    await withStrips([]);
+    const connectSelectedPort = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+    useDeviceConnectionMock.mockReturnValue({
+      ...defaultDeviceConnectionState(),
+      ports: [SUPPORTED_PORT],
+      connectSelectedPort,
+    });
+    await renderSettled();
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByTestId("device-entry-port"));
+      fireEvent.click(within(screen.getByTestId("found-port-page")).getByTestId("found-port-add"));
+      await act(async () => {});
+      expect(connectSelectedPort).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        vi.advanceTimersByTime(5000);
+      });
+      // Long after, the same port lands through some other connect.
+      await withStrips([{ ...SERIAL_STRIP, transport: { kind: "serial", portName: "COM3" } }]);
+      drivenMock = { kind: "serial", portName: "COM3" };
+      await act(async () => {
+        for (const listener of savedListeners) listener({ ledStrips: [] });
+      });
+      await act(async () => {});
+      expect(screen.queryByTestId("strip-flash-question")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+      drivenMock = null;
+    }
+  });
+
   it("says which strip moves when one is already driven", async () => {
     await withStrips([SERIAL_STRIP]);
     useDeviceConnectionMock.mockReturnValue({
@@ -738,8 +773,11 @@ describe("DevicesPage — the rail lists the devices", () => {
     );
     view.rerender(<DevicesPage onStopHueOutput={stopHueOutputMock} />);
 
-    // One found bridge still: the one it replaced.
-    expect(screen.getAllByTestId("device-entry-bridge")).toHaveLength(1);
+    // One found bridge still: the one it replaced. The paired one closes out of the found group
+    // (hidden from assistive tech while it goes), then leaves.
+    const closing = screen.getAllByTestId("device-entry-bridge").filter((row) => row.getAttribute("aria-hidden") === "true");
+    expect(closing).toHaveLength(1);
+    await waitFor(() => expect(screen.getAllByTestId("device-entry-bridge")).toHaveLength(1));
     expect(screen.getByTestId("device-entry-hue")).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("heading", { name: "Office" })).toBeInTheDocument();
   });

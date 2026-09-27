@@ -85,6 +85,12 @@ https://keepachangelog.com/en/1.1.0/
   it, opens its page and flashes it to ask whether it lit. "Add a strip" lists the controllers
   plugged in and takes a WLED device by its address, asking the device how many LEDs it has. While
   one strip is driven at a time, the page says which strip moves before you add another.
+- Devices → why a strip is not lighting is said in one short line under its state — "Port read or
+  write failed" — with what to do, the system's own message and the error code behind its ⓘ, also
+  for a strip that failed at launch. A USB strip can be forgotten from its "…", asked beside it;
+  if it is still in use and cannot be let go of, nothing is forgotten. "Add a strip" names the
+  serial ports LumaSync will not open under a folded "Other ports". Devices plugged in or found
+  slide into the list, and slide out when they go.
 - Devices → a WLED strip has the same kind of page: its state in a word with Connect or Flash, the
   LED count the device reports, its layout, and Forget behind "…", asked beside it. The old USB
   Strips and WLED panes, with their cards, are gone.

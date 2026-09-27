@@ -11,7 +11,6 @@ import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
 import { StateWord } from "@/shared/ui/StateWord/StateWord";
 
 import { STRIP_STATE_VIEW, wledStripState } from "../model/stripState";
-import { wledStatusKey } from "../model/wledStatus";
 import { useStripUnlit, type FlashOutcome } from "../state/stripFlash";
 import { useWledConnect, type WledConnectDeps } from "../state/useWledConnect";
 import type { ActiveWledSink } from "../useWledSink";
@@ -19,7 +18,7 @@ import { testWledBridge } from "../wledApi";
 import { StripFlash } from "./StripFlash";
 import { StripLayoutRow } from "./StripLayoutRow";
 import { StripName } from "./StripName";
-import { UnlitHelp } from "./StripNotes";
+import { UnlitHelp, WledCodedNote } from "./StripNotes";
 import styles from "./StripPage.module.css";
 
 type WledTransport = Extract<StripTransport, { kind: "wled" }>;
@@ -70,7 +69,6 @@ export function WledStripPage({
   // A failed launch reconnect is said once, until this page tries again.
   const restoreFailed = restore.kind === "failed" && restore.sink.ip === ip && !bound && failure === null;
   const shownFailure = failure ?? (restoreFailed && restore.kind === "failed" ? restore.status : null);
-  const failureKey = shownFailure ? wledStatusKey(shownFailure.code) : null;
 
   const [check, setCheck] = useState<{ status: WledCommandStatus; at: number } | null>(null);
   const [checking, setChecking] = useState(false);
@@ -87,7 +85,6 @@ export function WledStripPage({
     }
   };
   const checkPassed = check?.status.code === WLED_STATUS.TEST_LIVE_CONFIRMED;
-  const checkKey = check ? wledStatusKey(check.status.code) : null;
 
   const connect = async () => {
     setFailure(null);
@@ -119,7 +116,9 @@ export function WledStripPage({
       </RowButton>
     ) : null;
 
+  // The letting-go action last, as on the Hue page.
   const menuItems = [
+    ...(onNavigateToRoomMap ? [{ id: "map", label: t("device:strip.action.openInMap"), onSelect: onNavigateToRoomMap }] : []),
     {
       id: "forget",
       label: t("device:strip.action.forget"),
@@ -133,7 +132,6 @@ export function WledStripPage({
         confirmTestId: "wled-forget-confirm-yes",
       },
     },
-    ...(onNavigateToRoomMap ? [{ id: "map", label: t("device:strip.action.openInMap"), onSelect: onNavigateToRoomMap }] : []),
   ];
 
   return (
@@ -143,6 +141,7 @@ export function WledStripPage({
         <Reveal open>
           <SettingRow
             label={t("device:strip.row.device")}
+            hint={t("device:strip.wledProtocol", { protocol: strip.transport.sink.protocol.toUpperCase(), port: strip.transport.sink.port })}
             value={ip}
             testId="strip-controller"
             controlFills
@@ -161,10 +160,11 @@ export function WledStripPage({
             </span>
             <Reveal open={shownFailure !== null}>
               {shownFailure ? (
-                <RowNote tone="error" testId="wled-connect-failed">
-                  {restoreFailed ? `${t("device:page.wled.restore.failed", { ip })} ` : null}
-                  {failureKey ? t(failureKey) : shownFailure.message}
-                </RowNote>
+                <WledCodedNote
+                  status={shownFailure}
+                  prefix={restoreFailed ? t("device:page.wled.restore.failed", { ip }) : undefined}
+                  testId="wled-connect-failed"
+                />
               ) : null}
             </Reveal>
             <Reveal open={flashProblem !== null}>
@@ -216,8 +216,10 @@ export function WledStripPage({
             }
             testId="strip-health"
             control={
+              // Nothing to check until the device is bound: the row keeps its last result, not a button.
+              !bound ? null : (
               <RowButton
-                disabled={!bound || checking}
+                disabled={checking}
                 aria-busy={checking || undefined}
                 onClick={() => void runCheck()}
                 data-testid="strip-health-run"
@@ -232,14 +234,11 @@ export function WledStripPage({
                   }}
                 />
               </RowButton>
+              )
             }
           >
             <Reveal open={check !== null && !checkPassed && !checking}>
-              {check && !checkPassed ? (
-                <RowNote tone="error" testId="strip-health-failed">
-                  {checkKey ? t(checkKey) : check.status.message}
-                </RowNote>
-              ) : null}
+              {check && !checkPassed ? <WledCodedNote status={check.status} testId="strip-health-failed" /> : null}
             </Reveal>
           </SettingRow>
         </Reveal>

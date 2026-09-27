@@ -5,13 +5,16 @@ import {
   DEFAULT_LED_COLOR_ORDER,
   FIRMWARE_PROFILE,
   LED_CHIP_TYPE,
+  SERIAL_CONNECT_STATUS,
   SERIAL_DISCONNECT_STATUS,
+  SERIAL_OUTPUT_STATUS,
   type LedColorOrder,
 } from "@/shared/contracts/device";
 import { normalizeColorOrder } from "@/shared/contracts/mode";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import type { LedStrip, StripHardware } from "@/shared/contracts/strips";
 import { shellStore } from "@/features/persistence/shellStore";
+import { withoutStrip } from "@/features/strips/model/stripWrites";
 import { Menu } from "@/shared/ui/Menu/Menu";
 import { PageSwap } from "@/shared/ui/PageSwap/PageSwap";
 import { Reveal } from "@/shared/ui/Reveal/Reveal";
@@ -33,7 +36,7 @@ import { ChipRow, ColorOrderRow, FirmwareRow, saveHardware } from "./StripHardwa
 import { StripFlash } from "./StripFlash";
 import { StripLayoutRow } from "./StripLayoutRow";
 import { StripName } from "./StripName";
-import { ConnectErrorNote, UnlitHelp, connectFailedOn } from "./StripNotes";
+import { CodedNote, UnlitHelp, connectFailedOn } from "./StripNotes";
 import styles from "./StripPage.module.css";
 
 export interface StripPageProps {
@@ -78,7 +81,17 @@ export function StripPage({
   const chip = strip.hardware.chipType ?? LED_CHIP_TYPE.WS2812B_GRB;
   const order: LedColorOrder = normalizeColorOrder(strip.hardware.colorOrder) ?? DEFAULT_LED_COLOR_ORDER;
 
-  const product = device.ports.find((candidate) => candidate.portName === port)?.product ?? null;
+  const plugged = device.ports.find((candidate) => candidate.portName === port);
+  const product = plugged?.product ?? null;
+  const usbId =
+    plugged?.vid !== undefined && plugged.pid !== undefined
+      ? `${plugged.vid.toString(16).padStart(4, "0")}:${plugged.pid.toString(16).padStart(4, "0")}`.toUpperCase()
+      : null;
+  // Only what the row does not show already: with nothing enumerated there is nothing to add.
+  const controllerHint =
+    plugged?.manufacturer || usbId
+      ? [plugged?.manufacturer, usbId && `USB ${usbId}`, port].filter(Boolean).join(" · ")
+      : undefined;
   const connecting = device.isConnecting && device.selectedPort === port;
   const connected = entry?.connected === true;
   const state = serialStripState({
@@ -127,10 +140,24 @@ export function StripPage({
     void connectAsUser(device, port);
   };
   const rosterFailed = useRosterFailed(port);
-  const disconnect = async () => {
+  const disconnect = async (): Promise<boolean> => {
     setDisconnectFailed(false);
     const result = await disconnectSerialPort(port);
-    if (result.status.code === SERIAL_DISCONNECT_STATUS.FAILED) setDisconnectFailed(true);
+    if (result.status.code !== SERIAL_DISCONNECT_STATUS.FAILED) return true;
+    setDisconnectFailed(true);
+    return false;
+  };
+  const [forgetFailed, setForgetFailed] = useState(false);
+  // Let go of first: a strip still driving must not lose its record. A refusal forgets nothing.
+  const forget = async () => {
+    setForgetFailed(false);
+    if (connected && !(await disconnect())) return;
+    try {
+      await shellStore.update((state) => withoutStrip(state, strip.id));
+    } catch (error) {
+      console.error("[LumaSync] forgetting the strip failed:", error);
+      setForgetFailed(true);
+    }
   };
 
   // The next thing to do is the page's one amber: connecting a strip that is not, then its layout.
@@ -159,9 +186,21 @@ export function StripPage({
       </RowButton>
     ) : null;
 
-  const connectError = !connected && connectFailedOn(device, port);
+  // Why it is not lighting: the user's own failed connect first, else what Rust recorded for the port.
+  // A port let go of (DISCONNECTED) is not a failure.
+  const entryFailed =
+    entry !== null &&
+    !entry.connected &&
+    entry.status.code !== SERIAL_OUTPUT_STATUS.DISCONNECTED &&
+    entry.status.code !== SERIAL_CONNECT_STATUS.OK;
+  const userFailed = !connected && connectFailedOn(device, port);
+  const failure = connecting ? null : userFailed ? device.statusCard : entryFailed ? entry.status : null;
 
-  const health = device.latestHealthCheck;
+  // The controller keeps one result for whichever port was checked; this page shows it only for the
+  // port it checked, so a strip moved to another controller does not show the old one's pass.
+  const [checkedPort, setCheckedPort] = useState<string | null>(null);
+  const health = checkedPort === port ? device.latestHealthCheck : null;
+  const checking = device.isHealthChecking && checkedPort === port;
   const failedStep = health
     ? buildDeviceStatusCard({ status: device.status, statusCard: null, connectedPort: port, latestHealthCheck: health })
         .healthSteps?.find((step) => !step.pass)
@@ -176,7 +215,7 @@ export function StripPage({
         : failedStep?.text
           ? t(failedStep.text.labelKey)
           : t("device:healthCheck.failTitle");
-  const healthFailed = health !== null && !health.pass && !device.isHealthChecking;
+  const healthFailed = health !== null && !health.pass && !checking;
 
   const menuItems = [
     ...(connected
@@ -187,6 +226,19 @@ export function StripPage({
       ? [{ id: "place", label: t("device:strip.action.addToMap"), onSelect: () => void addToRoomMap(port) }]
       : []),
     ...(onNavigateToRoomMap ? [{ id: "map", label: t("device:strip.action.openInMap"), onSelect: onNavigateToRoomMap }] : []),
+    {
+      id: "forget",
+      label: t("device:strip.action.forget"),
+      danger: true,
+      onSelect: () => void forget(),
+      confirm: {
+        text: t("device:strip.forgetConfirm", { name }),
+        confirmLabel: t("device:strip.action.forget"),
+        cancelLabel: t("device:strip.firmware.cancel"),
+        testId: "strip-forget-confirm",
+        confirmTestId: "strip-forget-confirm-yes",
+      },
+    },
   ];
 
   return (
@@ -197,6 +249,7 @@ export function StripPage({
           <SettingRow
             label={t("device:strip.row.controller")}
             value={product ? `${product} · ${shortPortName(port)}` : shortPortName(port)}
+            hint={controllerHint}
             testId="strip-controller"
             controlFills
             control={
@@ -212,7 +265,14 @@ export function StripPage({
             <span className="sr-only" role="status" aria-live="polite" data-testid="strip-state">
               {t(view.word)}
             </span>
-            <Reveal open={connectError}>{connectError ? <ConnectErrorNote device={device} /> : null}</Reveal>
+            <Reveal open={failure !== null}>
+              {failure ? (
+                <CodedNote
+                  failure={{ code: failure.code, message: failure.message, details: failure.details }}
+                  testId="strip-connect-error"
+                />
+              ) : null}
+            </Reveal>
             <Reveal open={flashProblem !== null}>
               {flashProblem ? (
                 <RowNote tone="error" testId="strip-flash-problem">
@@ -224,6 +284,13 @@ export function StripPage({
               {rosterFailed ? (
                 <RowNote tone="error" testId="strip-roster-failed">
                   {t("device:strip.roomMapFailed")}
+                </RowNote>
+              ) : null}
+            </Reveal>
+            <Reveal open={forgetFailed}>
+              {forgetFailed ? (
+                <RowNote tone="error" testId="strip-forget-failed">
+                  {t("device:strip.forgetFailed")}
                 </RowNote>
               ) : null}
             </Reveal>
@@ -276,10 +343,13 @@ export function StripPage({
             value={<span data-testid="strip-health-value">{healthValue}</span>}
             testId="strip-health"
             control={
+              // Nothing to check without a connection: the row keeps its value, not a dead button.
+              !connected ? null : (
               <RowButton
-                disabled={!connected || device.isHealthChecking}
-                aria-busy={device.isHealthChecking || undefined}
+                disabled={device.isHealthChecking}
+                aria-busy={checking || undefined}
                 onClick={() => {
+                  setCheckedPort(port);
                   device.selectPort(port);
                   void device.runHealthCheck();
                 }}
@@ -287,7 +357,7 @@ export function StripPage({
               >
                 <StateSwap
                   fit
-                  state={device.isHealthChecking ? "busy" : health === null ? "idle" : "again"}
+                  state={checking ? "busy" : health === null ? "idle" : "again"}
                   faces={{
                     idle: t("device:strip.action.check"),
                     again: t("device:strip.action.checkAgain"),
@@ -295,6 +365,7 @@ export function StripPage({
                   }}
                 />
               </RowButton>
+              )
             }
           >
             <Reveal open={healthFailed}>

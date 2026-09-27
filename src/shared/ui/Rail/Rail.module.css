@@ -52,7 +52,20 @@
   }
   .dotOn { border-color: transparent; background: var(--lm-green); }
 
+  /* A device that turns up (a cable plugged in, a bridge found) slides in; one that goes closes. */
+  .arrive { animation: rail-arrive var(--lm-dur-base) var(--lm-ease-out); }
+  @keyframes rail-arrive { from { opacity: 0; transform: translateX(-4px); } }
+  .leaving {
+    overflow: hidden;
+    pointer-events: none;
+    animation: rail-leave var(--lm-dur-base) var(--lm-ease-leave) forwards;
+  }
+  @keyframes rail-leave { to { opacity: 0; height: 0; } }
+
   :global(:root[data-reduced-motion]) .moving { transition: none; }
+  :global(:root[data-reduced-motion]) .arrive,
+  :global(:root[data-reduced-motion]) .leaving { animation: none; }
+  :global(:root[data-reduced-motion]) .leaving { display: none; }
 
   @media (forced-colors: active) {
     .tint { background: Highlight; forced-color-adjust: none; }

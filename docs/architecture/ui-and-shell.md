@@ -359,7 +359,7 @@ The placement changes no light: output and capture never read `roomMap.usbStrips
 roster and the room map's drawing — so the room map stays off the first-run path. A strip linked to
 a port does not make the map "non-empty" (`room-map/model/roomTemplate.ts`), so a USB user's first
 visit still opens on the template picker, and applying a template keeps every port-linked strip —
-the first takes the template's strip placement — along with the Hue channels and zones. Ports that fail the VID/PID allowlist are not listed.
+the first takes the template's strip placement — along with the Hue channels and zones. Ports that fail the VID/PID allowlist are named under a folded "Other ports" on "Add a strip", with no action: they explain an empty list without inviting a click.
 
 **The first connect points at LED Setup; it does not open it.** It used to switch the window to LED
 Setup, so the chip type and colour order on the page the user connected from went unseen. It now

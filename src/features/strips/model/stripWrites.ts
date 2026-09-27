@@ -168,3 +168,13 @@ export function withStripName(state: ShellState, stripId: string, name: string):
   strips[index] = trimmed === "" ? rest : { ...rest, name: trimmed };
   return { ledStrips: strips };
 }
+
+/**
+ * Strip `stripId` forgotten: its layout, hardware and name go with it, and nothing reconnects it at
+ * launch. `null` when no strip has that id. The room map's drawing is left alone.
+ */
+export function withoutStrip(state: ShellState, stripId: string): StripsPatch | null {
+  const strips = stripsOf(state);
+  if (!strips.some((strip) => strip.id === stripId)) return null;
+  return { ledStrips: strips.filter((strip) => strip.id !== stripId) };
+}

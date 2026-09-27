@@ -250,15 +250,17 @@ export function ColorOrderRow({ stripId, order, canIdentify, onChange, identifyD
         </button>
       }
       control={
+        // Identify lights the strip: with none connected it is not offered rather than greyed.
+        !canIdentify && !flowOpen ? null : (
         <RowButton
           ref={identifyRef}
-          disabled={!canIdentify && !flowOpen}
           aria-expanded={flowOpen}
           onClick={flowOpen ? (state.step === "verify" ? identify.keep : identify.cancel) : identify.begin}
           data-testid="strip-color-order-identify"
         >
           {t("device:strip.action.identify")}
         </RowButton>
+        )
       }
     >
       <PickerList

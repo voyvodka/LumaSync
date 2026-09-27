@@ -18,6 +18,7 @@ import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
 import { HueChannels } from "@/features/hue/ui/HueChannels";
 import { cx } from "@/shared/ui/cx";
 import { Reveal } from "@/shared/ui/Reveal/Reveal";
+import { RevealList } from "@/shared/ui/Reveal/RevealList";
 import { RowButton, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
 
 import { HueAddressRow } from "./HueAddressRow";
@@ -352,10 +353,10 @@ function NoBridgeRows({ hue, forgetResult }: NoBridgeRowsProps) {
           </Reveal>
         </HueBridgeRow>
       </Reveal>
-      {bridges.map((bridge) => {
-        const name = sameName(bridge) ? bridge.ip : bridgeDisplayName(bridge.name);
-        return (
-          <Reveal key={bridge.id} open appear>
+      <RevealList items={bridges} keyOf={(bridge) => bridge.id}>
+        {(bridge) => {
+          const name = sameName(bridge) ? bridge.ip : bridgeDisplayName(bridge.name);
+          return (
             <SettingRow
               label={name}
               value={bridge.ip}
@@ -372,9 +373,9 @@ function NoBridgeRows({ hue, forgetResult }: NoBridgeRowsProps) {
                 </RowButton>
               }
             />
-          </Reveal>
-        );
-      })}
+          );
+        }}
+      </RevealList>
       <Reveal open>
         <HueAddressRow hue={hue} hint={t("hue:manualIp.description")} />
       </Reveal>

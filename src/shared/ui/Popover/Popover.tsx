@@ -104,6 +104,7 @@ export function Popover({ open, onClose, anchorRef, side = "above", width = 240,
       ref={ref}
       id={id}
       role={role}
+      aria-modal={role === "dialog" ? false : undefined}
       aria-label={label}
       aria-hidden={closing || undefined}
       // The notch points at the anchor and the popover grows out of it (and settles back into it).

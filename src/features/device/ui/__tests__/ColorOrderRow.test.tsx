@@ -204,9 +204,11 @@ describe("ColorOrderRow surface", () => {
     expect(screen.getByTestId("strip-color-order-value")).toHaveTextContent("GRB");
   });
 
-  it("cannot identify without a connected strip to light", () => {
+  // A passive state reads as text: Identify is not offered rather than greyed.
+  it("offers no Identify without a connected strip to light", () => {
     renderControl({ canIdentify: false });
-    expect(screen.getByRole("button", { name: IDENTIFY })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: IDENTIFY })).toBeNull();
+    expect(screen.getByTestId("strip-color-order-value")).toHaveTextContent("RGB");
   });
 
   it("the list saves before it retunes", async () => {

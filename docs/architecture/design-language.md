@@ -131,7 +131,9 @@ before writing a transition by hand: `StateSwap`, `PageSwap`, `SpinSwap`, `Popov
   from above, a list grows out of the control that opened it (its notch is the scale origin).
 - **What arrives with motion leaves with it.** Something that eases in and is then unmounted at
   once has no exit; keep it mounted for its exit (`Popover`'s closing state) or leave it mounted and
-  transition it both ways.
+  transition it both ways. A row that leaves a list (a port unplugged, a bridge paired) is the same
+  case: `RevealList` and the rail keep it where it stood, closing, until it has gone
+  (`Reveal/useLeavingItems.ts`); mapped straight from the array it vanished in one frame.
 - A persistent state is a static cue (a soft halo, a filled dot), not a pulse. Timing comes from the
   motion tokens in `tokens.css` (`--lm-ease-out`, `--lm-ease-leave`, `--lm-ease-land`,
   `--lm-dur-quick/base/slow`, `--lm-dur-follow`), not raw values; direction goes in class names, not

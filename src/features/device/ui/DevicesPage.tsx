@@ -33,6 +33,9 @@ import { useDeviceConnection } from "../useDeviceConnection";
 import { useActiveWledSink } from "../useWledSink";
 import styles from "./DevicesPage.module.css";
 
+/** How long an added strip is waited for before the page stops expecting it. */
+const ARRIVAL_WAIT_MS = 5000;
+
 export interface DevicesPageProps {
   /**
    * Deep-link the user from the "Paired strips" sub-card
@@ -173,7 +176,19 @@ export function DevicesPage({
         null);
   const activeCategory: DeviceCategory = activeEntry ? categoryOfEntry(activeEntry) : "strips";
   const activeId = activeEntry?.id ?? null;
+  // What was just added opens as the strip it became, and asks whether it lit. The strip appears
+  // once the save lands, a render or two after the connect answers. A save that never lands must not
+  // leave it waiting: a later connect of the same port would jump the page and flash unasked.
+  const [arriving, setArriving] = useState<AddedOutput | null>(null);
+  const [flashFor, setFlashFor] = useState<string | null>(null);
+  const clearFlash = useCallback(() => setFlashFor(null), []);
+  useEffect(() => {
+    if (arriving === null) return;
+    const timer = setTimeout(() => setArriving(null), ARRIVAL_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [arriving]);
   const selectEntry = (id: string) => {
+    setArriving(null);
     setStoredEntry(id);
     const entry = entries?.find((candidate) => candidate.id === id);
     if (entry?.kind === "port") device.selectPort(entry.port.portName);
@@ -249,11 +264,6 @@ export function DevicesPage({
     [selectedAreaId],
   );
 
-  // What was just added opens as the strip it became, and asks whether it lit. The strip appears
-  // once the save lands, a render or two after the connect answers.
-  const [arriving, setArriving] = useState<AddedOutput | null>(null);
-  const [flashFor, setFlashFor] = useState<string | null>(null);
-  const clearFlash = useCallback(() => setFlashFor(null), []);
   if (arriving !== null && entries !== null) {
     const landed = entries.find(
       (entry) =>
@@ -274,6 +284,7 @@ export function DevicesPage({
   const drivenEntry = entries?.find((entry) => entry.kind === "strip" && entry.strip === driven);
   const replaces = drivenEntry?.kind === "strip" ? stripName(drivenEntry, t) : null;
   const foundPorts = entries?.flatMap((entry) => (entry.kind === "port" ? [entry.port] : [])) ?? [];
+  const otherPorts = device.ports.filter((port) => !port.isSupported);
   const showsHue = activeEntry?.kind === "hue" || activeEntry?.kind === "bridge";
 
   return (
@@ -335,6 +346,7 @@ export function DevicesPage({
                 isActive={isActive}
                 title={name}
                 ports={foundPorts}
+                otherPorts={otherPorts}
                 device={device}
                 onWledBound={wled.markConnected}
                 replaces={null}
@@ -361,6 +373,7 @@ export function DevicesPage({
                 isActive={isActive}
                 title={t("device:strip.add.title")}
                 ports={foundPorts}
+                otherPorts={otherPorts}
                 device={device}
                 onWledBound={wled.markConnected}
                 replaces={replaces}

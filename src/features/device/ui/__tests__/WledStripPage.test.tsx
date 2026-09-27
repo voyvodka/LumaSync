@@ -145,9 +145,17 @@ describe("WledStripPage", () => {
     expect(screen.getByTestId("strip-health-value")).toHaveTextContent("device:strip.health.problem");
   });
 
-  it("a device not bound cannot be checked: the test needs the sink running", () => {
+  it("a device not bound offers no check: the test needs the sink running", () => {
     renderPage();
-    expect(screen.getByTestId("strip-health-run")).toBeDisabled();
+    expect(screen.queryByTestId("strip-health-run")).toBeNull();
+  });
+
+  it("Forget is the last thing in the menu, as on the Hue page", async () => {
+    renderPage({ wled: wled({ activeWledIp: IP }), onNavigateToRoomMap: () => {} });
+    fireEvent.click(screen.getByTestId("strip-more"));
+    await screen.findByRole("button", { name: "device:strip.action.forget" });
+    const items = screen.getAllByRole("button").filter((button) => button.closest("[role=dialog]") !== null);
+    expect(items[items.length - 1]).toHaveAccessibleName("device:strip.action.forget");
   });
 });
 

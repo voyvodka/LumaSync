@@ -96,6 +96,16 @@
 
   /* Rust's own words under a note: an OS error, a VID/PID. */
   .detail { color: var(--lm-ink-faint); overflow-wrap: anywhere; }
+  .code { display: block; margin-top: 4px; color: var(--lm-ink-faint); }
+
+  .portList {
+    margin: 2px 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--lm-ink-dim);
+  }
 
   .help {
     margin: 2px 0 0;

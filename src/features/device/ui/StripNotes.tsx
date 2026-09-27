@@ -1,8 +1,10 @@
 import { useTranslation } from "react-i18next";
 
+import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
 import { RowNote } from "@/shared/ui/SettingRow/SettingRow";
 
 import { buildDeviceStatusCard } from "../deviceStatusCard";
+import { wledStatusKey } from "../model/wledStatus";
 import type { UseDeviceConnectionResult } from "../useDeviceConnection";
 import styles from "./StripPage.module.css";
 
@@ -11,17 +13,61 @@ export function connectFailedOn(device: UseDeviceConnectionResult, port: string)
   return device.statusCard?.variant === "error" && device.selectedPort === port && !device.isConnecting;
 }
 
-/** A failed connect, in the user's words, with Rust's own detail (an OS error) kept verbatim. */
-export function ConnectErrorNote({ device }: { device: UseDeviceConnectionResult }) {
+interface CodedFailure {
+  code: string;
+  message: string;
+  details?: string | null;
+}
+
+/**
+ * Why a strip is not lighting, in one short line, with what to do, Rust's own detail (an OS error,
+ * kept verbatim) and the code behind one ⓘ: the state word says where it stands, this says why.
+ */
+export function CodedNote({ failure, testId }: { failure: CodedFailure; testId?: string }) {
   const { t } = useTranslation();
-  const card = buildDeviceStatusCard({ status: device.status, statusCard: device.statusCard, connectedPort: null });
+  const card = buildDeviceStatusCard({
+    status: "error",
+    statusCard: { variant: "error", code: failure.code, message: failure.message, details: failure.details ?? undefined },
+    connectedPort: null,
+  });
   return (
-    <RowNote tone="error" testId="strip-connect-error">
-      {t(card.titleKey)}. {t(card.bodyKey)}
-      {card.detailsKey ? ` ${t(card.detailsKey)}` : null}
-      {card.details ? <span className={styles.detail}> {card.details}</span> : null}
+    <RowNote tone="error" testId={testId}>
+      {t(card.titleKey)}{" "}
+      <InfoTip label={t("device:strip.codeTip")}>
+        {t(card.bodyKey)}
+        {card.detailsKey ? ` ${t(card.detailsKey)}` : null}
+        {card.details ? <span className={styles.detail}> {card.details}</span> : null}{" "}
+        <span className={styles.code} data-testid="strip-fault-code">
+          {t("device:strip.codeLabel")} <code>{failure.code}</code>
+        </span>
+      </InfoTip>
     </RowNote>
   );
+}
+
+/** A WLED answer that stopped something: its words, and the code behind one ⓘ. */
+export function WledCodedNote({ status, prefix, testId }: { status: CodedFailure; prefix?: string; testId?: string }) {
+  const { t } = useTranslation();
+  const key = wledStatusKey(status.code);
+  return (
+    <RowNote tone="error" testId={testId}>
+      {prefix ? `${prefix} ` : null}
+      {key ? t(key) : status.message}{" "}
+      <InfoTip label={t("device:strip.codeTip")}>
+        {status.details ? <span className={styles.detail}>{status.details} </span> : null}
+        <span className={styles.code} data-testid="strip-fault-code">
+          {t("device:strip.codeLabel")} <code>{status.code}</code>
+        </span>
+      </InfoTip>
+    </RowNote>
+  );
+}
+
+/** The user's own connect that failed, from the controller's card. */
+export function ConnectErrorNote({ device }: { device: UseDeviceConnectionResult }) {
+  const card = device.statusCard;
+  if (card === null) return null;
+  return <CodedNote failure={{ code: card.code, message: card.message, details: card.details }} testId="strip-connect-error" />;
 }
 
 /** What to check when a strip did not light, most likely first. */

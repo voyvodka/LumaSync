@@ -239,7 +239,28 @@ describe("StripPage — the strip's state and its one action", () => {
     });
     const note = screen.getByTestId("strip-connect-error");
     expect(note).toHaveTextContent("device:healthCheck.serialHealthCodes.CONNECT_IO_ERROR.label");
-    expect(note).toHaveTextContent("os error 16");
+    // What to do, the OS's own words and the code sit behind one ⓘ.
+    expect(note).not.toHaveTextContent("os error 16");
+    fireEvent.click(within(note).getByRole("button", { name: "device:strip.codeTip" }));
+    const tip = await screen.findByRole("dialog", { name: "device:strip.codeTip" });
+    expect(tip).toHaveTextContent("os error 16");
+    expect(tip).toHaveTextContent("device:healthCheck.serialHealthCodes.CONNECT_IO_ERROR.hint");
+    expect(within(tip).getByTestId("strip-fault-code")).toHaveTextContent(SERIAL_CONNECT_STATUS.IO_ERROR);
+  });
+
+  // At launch nobody pressed anything: the reason comes from what Rust recorded for the port.
+  it("a port held elsewhere at rest says why, with the code behind ⓘ", async () => {
+    registry("busy");
+    await renderPage();
+    expect(screen.getByTestId("strip-connect-error")).toHaveTextContent(
+      "device:healthCheck.serialHealthCodes.CONNECT_IO_ERROR.label",
+    );
+  });
+
+  it("a strip let go of is not a failure", async () => {
+    registry("released");
+    await renderPage();
+    expect(screen.queryByTestId("strip-connect-error")).toBeNull();
   });
 
   it("a failed connect of another port stays off this page", async () => {
@@ -395,6 +416,7 @@ describe("StripPage — health", () => {
   it("a failed check names the failing step and says what to do", async () => {
     registry("connected");
     await renderPage({ device: device({ latestHealthCheck: failed }) });
+    fireEvent.click(screen.getByTestId("strip-health-run"));
 
     expect(screen.getByTestId("strip-health-value")).toHaveTextContent(
       "device:healthCheck.serialHealthCodes.SERIAL_HEALTH_HANDSHAKE_TIMEOUT.label",
@@ -404,16 +426,45 @@ describe("StripPage — health", () => {
     )).toBeInTheDocument();
   });
 
-  it("a strip not connected cannot be checked", async () => {
+  it("a strip not connected offers no check, only its value", async () => {
     registry("released");
     await renderPage();
-    expect(screen.getByTestId("strip-health-run")).toBeDisabled();
+    expect(screen.queryByTestId("strip-health-run")).toBeNull();
+    expect(screen.getByTestId("strip-health-value")).toHaveTextContent("device:strip.health.never");
   });
 
   it("the check's busy label holds the button's place", async () => {
     registry("connected");
-    await renderPage({ device: device({ isHealthChecking: true }) });
+    const dev = device();
+    dev.runHealthCheck = vi.fn<UseDeviceConnectionResult["runHealthCheck"]>(async () => {
+      dev.isHealthChecking = true;
+    });
+    await renderPage({ device: dev });
+    fireEvent.click(screen.getByTestId("strip-health-run"));
     expect(screen.getByTestId("strip-health-run")).toHaveAttribute("aria-busy", "true");
+  });
+
+  // One result is kept for whichever port was checked; the strip keeps its page when it moves.
+  it("a result from another port is not shown, even on this strip's page", async () => {
+    registry("connected");
+    const passed = { ...failed, pass: true, steps: [] } as unknown as HealthCheckView;
+    const dev = device({ latestHealthCheck: passed });
+    const view = await renderPage({ device: dev });
+    expect(screen.getByTestId("strip-health-value")).toHaveTextContent("device:strip.health.never");
+
+    fireEvent.click(screen.getByTestId("strip-health-run"));
+    expect(screen.getByTestId("strip-health-value")).toHaveTextContent("device:strip.health.passed");
+
+    // The strip moves to another controller: the pass was the old one's.
+    view.rerender(
+      <StripPage
+        isActive
+        strip={strip({ transport: { kind: "serial", portName: "/dev/cu.other" } })}
+        name="USB strip"
+        device={dev}
+      />,
+    );
+    expect(screen.getByTestId("strip-health-value")).toHaveTextContent("device:strip.health.never");
   });
 });
 
@@ -467,6 +518,52 @@ describe("StripPage — the room map", () => {
     fireEvent.click(screen.getByTestId("strip-more"));
     await screen.findByRole("button", { name: "device:strip.action.openInMap" });
     expect(screen.queryByRole("button", { name: "device:strip.action.addToMap" })).toBeNull();
+  });
+});
+
+describe("StripPage — forget", () => {
+  async function askToForget() {
+    fireEvent.click(screen.getByTestId("strip-more"));
+    fireEvent.click(await screen.findByRole("button", { name: "device:strip.action.forget" }));
+    fireEvent.click(await screen.findByTestId("strip-forget-confirm-yes"));
+  }
+
+  it("lets go of the port first, then drops this strip only", async () => {
+    registry("connected");
+    disconnectSerialPort.mockResolvedValue({
+      portName: PORT,
+      status: { code: SERIAL_DISCONNECT_STATUS.OK, message: "", details: null },
+    });
+    await renderPage();
+    await askToForget();
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(disconnectSerialPort).toHaveBeenCalledWith(PORT);
+    const edit = update.mock.calls[0]![0] as (state: ShellState) => Partial<ShellState> | null;
+    const kept = edit({ ledStrips: [strip(), strip({ id: "strip-2" })] } as unknown as ShellState);
+    expect(kept?.ledStrips?.map((each) => each.id)).toEqual(["strip-2"]);
+  });
+
+  // A strip still driving must not lose its record.
+  it("a refused disconnect forgets nothing and says so", async () => {
+    registry("connected");
+    disconnectSerialPort.mockResolvedValue({
+      portName: PORT,
+      status: { code: SERIAL_DISCONNECT_STATUS.FAILED, message: "held", details: null },
+    });
+    await renderPage();
+    await askToForget();
+
+    expect(await screen.findByText("device:strip.disconnectFailed")).toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("a strip not connected is forgotten without a disconnect", async () => {
+    registry("released");
+    await renderPage();
+    await askToForget();
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(disconnectSerialPort).not.toHaveBeenCalled();
   });
 });
 
