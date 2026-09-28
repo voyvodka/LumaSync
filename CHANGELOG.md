@@ -9,11 +9,17 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Added
 
-- Effects: a fourth lighting mode beside Off, Ambilight and Solid, with a rainbow, a breath of
-  colour and a colour cycle, each at the speed and brightness you set. It needs no screen
-  recording, follows your LED layout and your Hue lights' places in the room, and is in the menu
-  bar menu and on ⌥4 (Alt+4). A build from before effects starts with the lights off if the last
-  mode was an effect.
+- Effects: a fourth lighting mode beside Off, Ambilight and Solid, with sixteen effects — wave,
+  colour cycle, breathe, candle, fireplace, drift, gradient, ocean, aurora, twinkle, comet,
+  scanner, chase, plasma, sunrise and natural light — in eleven palettes or up to three colours of
+  your own, with speed, brightness and, where an effect has them, size, intensity, direction or a
+  sunrise's length. Each light is coloured where it is: strip LEDs around the screen, Hue lights
+  where the room map (or the bridge) puts them, so a wave crosses the strip and the room as one and
+  a few Hue lamps each get their own colour. A sunrise carries on where it was after a relaunch.
+  Effects need no screen recording and are in the menu bar menu, the compact window, the LED
+  preview popup and on ⌥4 (Alt+4). A build from before effects starts with the lights off if the
+  last mode was an effect.
+- Solid has a White tab: a colour temperature from 2000 to 6500 K.
 - The lights go off when the computer locks, sleeps or turns its display off, and the mode that
   ran comes back when you return — after the unlock, if waking up shows the lock screen. Settings →
   General → "Lights off when away" turns this off. macOS and Windows.
@@ -70,6 +76,10 @@ https://keepachangelog.com/en/1.1.0/
   it was the only one) and stops LumaSync reconnecting to it at launch.
 
 ### Changed
+
+- Colour correction moved from Lights to Devices: each strip's page has a Colour row that opens
+  gamma, white point and saturation. It is still one setting for every output, strips and Hue
+  alike, until each strip has its own.
 
 - The window opens on your saved layout, guide state and Hue settings from its first frame, rather
   than drawing defaults for a moment. Launching into the full window also no longer rewrites

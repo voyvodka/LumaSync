@@ -23,11 +23,19 @@ const lights: Catalogue<typeof enLights> = {
     solid: {
       title: "Sabit",
       subtitle: "{{hex}} · %{{brightness}}",
+      subtitleWhite: "{{kelvin}} K · %{{brightness}}",
     },
     effect: {
       title: "Efekt",
       subtitle: "{{name}} · %{{brightness}}",
     },
+  },
+  solid: {
+    tone: "Renk ya da beyaz",
+    colour: "Renk",
+    white: "Beyaz",
+    temperature: "Sıcaklık",
+    kelvinValue: "{{kelvin}} K",
   },
   effect: {
     label: "Efekt",
@@ -35,6 +43,10 @@ const lights: Catalogue<typeof enLights> = {
     brightness: "Parlaklık",
     palette: "Palet",
     colors: "Renkler",
+    colorN: "{{n}}. renk",
+    addColor: "Renk ekle",
+    removeColor: "Bu rengi kaldır",
+    bestOnStrip: "En iyisi şeritte — birkaç lambada daha sade hareket eder",
     direction: "Yön",
     duration: "Süre",
     durationValue: "{{count}} dk",
@@ -142,8 +154,6 @@ const lights: Catalogue<typeof enLights> = {
   },
   led: {
     colorCorrection: {
-      title: "Renk Düzeltme",
-      description: "Çıkış öncesi kanal başına renk düzeltmesi.",
       gammaR: "Gamma Kırmızı",
       gammaG: "Gamma Yeşil",
       gammaB: "Gamma Mavi",

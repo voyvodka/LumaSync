@@ -1,0 +1,269 @@
+@layer components {
+  /* The Effect mode's controls. The chrome is amber and grey; only the swatches carry light
+     colours, since they are the lights. Nothing here moves on its own. */
+  .effect {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+    container-type: inline-size;
+    container-name: effect;
+  }
+
+  /* ── Palettes ─────────────────────────────────────────────────────────── */
+  .paletteRow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  /* Wraps rather than scrolls: twelve swatches, none of them hidden off the edge. */
+  .palettes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+    padding: 3px;
+    margin: -3px;
+  }
+  .palette {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    padding: 3px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    box-shadow: 0 0 0 1px var(--lm-line-2);
+    transition: box-shadow var(--lm-dur-quick);
+  }
+  .palette:hover { box-shadow: 0 0 0 1px var(--lm-ink-faint); }
+  .palette[aria-checked="true"] { box-shadow: 0 0 0 1.5px var(--lm-amber); }
+  .palette:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .palette:disabled { opacity: 0.4; }
+  .paletteDot {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+  }
+
+  /* Keeps its place when hidden, so the strip never shifts when "Your colours" is picked. */
+  .edit {
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--lm-dur-base) var(--lm-ease-out), background var(--lm-dur-quick), color var(--lm-dur-quick);
+  }
+  .edit[data-shown] { opacity: 1; pointer-events: auto; }
+  .edit:hover, .edit[aria-expanded="true"] { background: var(--lm-panel-2); color: var(--lm-ink); }
+  .edit:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .edit svg { width: 13px; height: 13px; }
+
+  .custom { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
+  .chips { display: flex; align-items: center; gap: 8px; }
+  .chipWrap { position: relative; }
+  .chip {
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px var(--lm-line-2);
+  }
+  .chip[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--lm-panel), 0 0 0 3.5px var(--lm-amber); }
+  .chip:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .chipRemove {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--lm-panel-2);
+    color: var(--lm-ink-dim);
+    box-shadow: 0 0 0 1px var(--lm-line-2);
+  }
+  .chipRemove:hover { color: var(--lm-ink); }
+  .chipRemove svg { width: 8px; height: 8px; }
+  .chipAdd {
+    width: 28px;
+    height: 28px;
+    border: 1px dashed var(--lm-line-2);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    font-size: 15px;
+    line-height: 1;
+  }
+  .chipAdd:hover { color: var(--lm-ink); border-color: var(--lm-ink-faint); }
+
+  /* ── Gallery ──────────────────────────────────────────────────────────── */
+  .gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 8px;
+  }
+  .tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--lm-line);
+    border-radius: 9px;
+    background: var(--lm-panel);
+    color: var(--lm-ink-dim);
+    text-align: left;
+    transition: border-color var(--lm-dur-quick), color var(--lm-dur-quick), box-shadow var(--lm-dur-quick);
+  }
+  .tile:hover { border-color: var(--lm-line-2); color: var(--lm-ink); }
+  .tile[aria-checked="true"] {
+    border-color: var(--lm-amber);
+    box-shadow: 0 0 0 1px var(--lm-amber);
+    color: var(--lm-ink);
+  }
+  .tile:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .tile:disabled { opacity: 0.45; }
+  .tileSwatch {
+    display: block;
+    height: 34px;
+    background-color: var(--lm-bg);
+    border-bottom: 1px solid var(--lm-line);
+  }
+  .tileName {
+    padding: 6px 9px 7px;
+    overflow: hidden;
+    font-size: 11.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  /* ── Compact picker ───────────────────────────────────────────────────── */
+  .picker {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+    height: 32px;
+    padding: 0 10px 0 6px;
+    border: 1px solid var(--lm-line);
+    border-radius: 9px;
+    background: var(--lm-panel);
+    color: var(--lm-ink);
+    transition: border-color var(--lm-dur-quick);
+  }
+  .picker:hover, .picker[aria-expanded="true"] { border-color: var(--lm-line-2); }
+  .picker:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .picker:disabled { opacity: 0.45; }
+  .pickerSwatch {
+    flex-shrink: 0;
+    width: 26px;
+    height: 18px;
+    border-radius: 5px;
+    background-color: var(--lm-bg);
+    box-shadow: 0 0 0 1px var(--lm-line);
+  }
+  .pickerName {
+    flex: 1;
+    overflow: hidden;
+    font-size: 12.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    text-align: left;
+  }
+  .pickRow { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .chevron {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    color: var(--lm-ink-faint);
+    transition: transform var(--lm-dur-base) var(--lm-ease-out);
+  }
+  .chevron[data-open] { transform: rotate(180deg); }
+
+  /* ── Parameters ───────────────────────────────────────────────────────── */
+  /* Each cell draws its right and bottom line and the frame clips the outer ones, so any wrap
+     keeps straight dividers and a short last row leaves panel, not a grey block. */
+  .params {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    overflow: hidden;
+    border: 1px solid var(--lm-line);
+    border-radius: 10px;
+    background: var(--lm-panel);
+  }
+  .params > :global(.lm-psl),
+  .params > .direction {
+    border-right: 0;
+    box-shadow: 1px 0 0 var(--lm-line), 0 1px 0 var(--lm-line);
+  }
+  .params[data-compact] {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    overflow: visible;
+  }
+  .direction {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 10px 14px 12px;
+  }
+  .directionLabel {
+    font: 9.5px var(--lm-mono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--lm-ink-faint);
+  }
+  .directions { display: flex; gap: 4px; }
+  .directionItem {
+    flex: 1;
+    min-width: 24px;
+    height: 24px;
+    border: 1px solid var(--lm-line);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    font-size: 12px;
+    transition: border-color var(--lm-dur-quick), color var(--lm-dur-quick);
+  }
+  .directionItem:hover { color: var(--lm-ink); border-color: var(--lm-line-2); }
+  .directionItem[aria-checked="true"] { color: var(--lm-amber); border-color: var(--lm-amber); }
+  .directionItem:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+
+  @container effect (max-width: 420px) {
+    .gallery { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 6px; }
+    .tileSwatch { height: 26px; }
+  }
+
+  :global(:root[data-reduced-motion]) .palette,
+  :global(:root[data-reduced-motion]) .edit,
+  :global(:root[data-reduced-motion]) .tile,
+  :global(:root[data-reduced-motion]) .picker,
+  :global(:root[data-reduced-motion]) .chevron,
+  :global(:root[data-reduced-motion]) .directionItem { transition: none; }
+
+  @media (forced-colors: active) {
+    .palette[aria-checked="true"],
+    .tile[aria-checked="true"],
+    .chip[aria-pressed="true"],
+    .directionItem[aria-checked="true"] { outline: 2px solid Highlight; }
+  }
+}

@@ -20,11 +20,19 @@ export default {
     solid: {
       title: "Solid",
       subtitle: "{{hex}} · {{brightness}}%",
+      subtitleWhite: "{{kelvin}} K · {{brightness}}%",
     },
     effect: {
       title: "Effect",
       subtitle: "{{name}} · {{brightness}}%",
     },
+  },
+  solid: {
+    tone: "Solid colour or white",
+    colour: "Colour",
+    white: "White",
+    temperature: "Temperature",
+    kelvinValue: "{{kelvin}} K",
   },
   effect: {
     label: "Effect",
@@ -32,6 +40,10 @@ export default {
     brightness: "Brightness",
     palette: "Palette",
     colors: "Colours",
+    colorN: "Colour {{n}}",
+    addColor: "Add a colour",
+    removeColor: "Remove this colour",
+    bestOnStrip: "Best on a strip — on a few lamps it moves more simply",
     direction: "Direction",
     duration: "Duration",
     durationValue: "{{count}} min",
@@ -139,8 +151,6 @@ export default {
   },
   led: {
     colorCorrection: {
-      title: "Color Correction",
-      description: "Per-channel color correction applied before output.",
       gammaR: "Gamma Red",
       gammaG: "Gamma Green",
       gammaB: "Gamma Blue",

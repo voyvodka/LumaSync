@@ -11,7 +11,9 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("@/features/persistence/shellStore", () => ({ shellStore: { update: async () => ({}) } }));
+vi.mock("@/features/persistence/shellStore", () => ({
+  shellStore: { update: async () => ({}), load: async () => ({}), onSaved: () => () => undefined },
+}));
 vi.mock("../../state/stripFlash", async (importActual) => ({
   ...(await importActual<typeof import("../../state/stripFlash")>()),
   flashStrip: async () => "lit" as const,

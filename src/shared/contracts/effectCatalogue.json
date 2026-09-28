@@ -119,6 +119,7 @@
       "params": ["durationMinutes"],
       "colorSource": "none",
       "defaultPalette": "sunset",
+      "swatch": ["#280200", "#781400", "#ff5000", "#ff963c", "#ffd6aa"],
       "sparse": "native"
     },
     "naturalLight": {
@@ -126,6 +127,7 @@
       "params": [],
       "colorSource": "none",
       "defaultPalette": "warm",
+      "swatch": ["#ff8a2a", "#ffc58f", "#fff1e0", "#e4ecff"],
       "sparse": "native"
     }
   },

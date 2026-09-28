@@ -1,11 +1,13 @@
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import { parseHex, rgbToHex } from "@/shared/lib/color";
 import { HsvColorPicker } from "@/shared/ui/HsvColorPicker/HsvColorPicker";
-import { useSolidColorDraft } from "./useSolidColorDraft";
+import { DEFAULT_WHITE_KELVIN, KelvinSlider, SolidToneTabs } from "./SolidWhite";
+import { useSolidColorDraft, type SolidDraft } from "./useSolidColorDraft";
 
 interface SolidColorPanelProps {
-  incoming: { r: number; g: number; b: number; brightness: number };
+  incoming: SolidDraft;
   disabled: boolean;
   /**
    * When true, the brightness slider is locked with an explanatory notice.
@@ -18,7 +20,7 @@ interface SolidColorPanelProps {
   brightnessDisabled?: boolean;
   /** Tooltip / notice shown next to the brightness slider when locked. */
   brightnessDisabledReason?: string;
-  onCommit: (draft: { r: number; g: number; b: number; brightness: number }) => void;
+  onCommit: (draft: SolidDraft) => void;
 }
 
 export function SolidColorPanel({
@@ -29,7 +31,11 @@ export function SolidColorPanel({
   onCommit,
 }: SolidColorPanelProps) {
   const { t } = useTranslation();
-  const { draft, setColor, setBrightness } = useSolidColorDraft({ incoming, onCommit });
+  const { draft, setColor, setKelvin, setBrightness } = useSolidColorDraft({ incoming, onCommit });
+  // White reopens at the temperature it last had.
+  const lastKelvin = useRef(incoming.kelvin ?? DEFAULT_WHITE_KELVIN);
+  if (draft.kelvin != null) lastKelvin.current = draft.kelvin;
+  const tone = draft.kelvin != null ? "white" : "colour";
 
   const hexColor = rgbToHex(draft);
   const brightnessPercent = Math.round(draft.brightness * 100);
@@ -41,39 +47,50 @@ export function SolidColorPanel({
 
   return (
     <div className="space-y-4">
-      {/* Color picker row */}
-      <div>
-        <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-ink-dim font-mono">
-          {t("common:mode.solidColor")}
-          <span className="ml-2 normal-case tracking-normal tabular-nums text-ink">
-            {hexColor.toUpperCase()}
-          </span>
-        </p>
-        <div
-          className="flex items-center gap-3 rounded-lg border border-line-2 px-3 py-2.5"
-          style={{
-            background: `linear-gradient(135deg, rgba(${draft.r}, ${draft.g}, ${draft.b}, 0.18) 0%, transparent 100%)`,
-          }}
-        >
-          <HsvColorPicker
-            value={hexColor}
-            onChange={(hex) => {
-              const rgb = parseHex(hex);
-              if (rgb) setColor(rgb);
+      <SolidToneTabs
+        tone={tone}
+        disabled={disabled}
+        onChange={(next) =>
+          next === "white" ? setKelvin(lastKelvin.current) : setColor({ r: draft.r, g: draft.g, b: draft.b })
+        }
+      />
+
+      {tone === "white" ? (
+        <KelvinSlider kelvin={draft.kelvin ?? lastKelvin.current} disabled={disabled} onChange={setKelvin} />
+      ) : (
+        <div>
+          <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-ink-dim font-mono">
+            {t("common:mode.solidColor")}
+            <span className="ml-2 normal-case tracking-normal tabular-nums text-ink">
+              {hexColor.toUpperCase()}
+            </span>
+          </p>
+          <div
+            className="flex items-center gap-3 rounded-lg border border-line-2 px-3 py-2.5"
+            style={{
+              background: `linear-gradient(135deg, rgba(${draft.r}, ${draft.g}, ${draft.b}, 0.18) 0%, transparent 100%)`,
             }}
-            disabled={disabled}
-            ariaLabel={t("common:mode.solidColor")}
-          />
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-ink">
-              {t("common:mode.colorModelRgb")}
-            </p>
-            <p className="text-xs tabular-nums text-ink-dim">
-              {draft.r}, {draft.g}, {draft.b}
-            </p>
+          >
+            <HsvColorPicker
+              value={hexColor}
+              onChange={(hex) => {
+                const rgb = parseHex(hex);
+                if (rgb) setColor(rgb);
+              }}
+              disabled={disabled}
+              ariaLabel={t("common:mode.solidColor")}
+            />
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-ink">
+                {t("common:mode.colorModelRgb")}
+              </p>
+              <p className="text-xs tabular-nums text-ink-dim">
+                {draft.r}, {draft.g}, {draft.b}
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Brightness slider — full width */}
       <div>

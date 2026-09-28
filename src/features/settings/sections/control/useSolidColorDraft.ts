@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 
+import { kelvinToRgb } from "@/shared/lib/color";
 import { useThrottledCommit } from "@/shared/lib/useThrottledCommit";
 
-interface SolidDraft {
+/** `kelvin` present: Solid's White tab, its colour that temperature's white. */
+export interface SolidDraft {
   r: number;
   g: number;
   b: number;
   brightness: number;
+  kelvin?: number | null;
 }
 
 const SOLID_COMMIT_MIN_INTERVAL_MS = 50;
@@ -16,13 +19,14 @@ function isSameSolidDraft(left: SolidDraft, right: SolidDraft): boolean {
     left.r === right.r &&
     left.g === right.g &&
     left.b === right.b &&
+    (left.kelvin ?? null) === (right.kelvin ?? null) &&
     Math.abs(left.brightness - right.brightness) < 0.001
   );
 }
 
 export interface UseSolidColorDraftOptions {
-  incoming: { r: number; g: number; b: number; brightness: number };
-  onCommit: (draft: { r: number; g: number; b: number; brightness: number }) => void;
+  incoming: SolidDraft;
+  onCommit: (draft: SolidDraft) => void;
 }
 
 export function useSolidColorDraft({ incoming, onCommit }: UseSolidColorDraftOptions) {
@@ -33,10 +37,18 @@ export function useSolidColorDraft({ incoming, onCommit }: UseSolidColorDraftOpt
   useEffect(() => {
     if (throttle.isPending()) return;
     setDraft((prev) => (isSameSolidDraft(prev, incoming) ? prev : incoming));
-  }, [incoming.brightness, incoming.b, incoming.g, incoming.r]);
+  }, [incoming.brightness, incoming.b, incoming.g, incoming.r, incoming.kelvin]);
 
+  /** A picked colour is Colour, not White: it drops the temperature. */
   const setColor = (color: { r: number; g: number; b: number }) => {
-    const next = { ...draft, ...color };
+    const { kelvin: _white, ...rest } = draft;
+    const next = { ...rest, ...color };
+    setDraft(next);
+    throttle.push(next);
+  };
+
+  const setKelvin = (kelvin: number) => {
+    const next = { ...draft, ...kelvinToRgb(kelvin), kelvin };
     setDraft(next);
     throttle.push(next);
   };
@@ -47,5 +59,5 @@ export function useSolidColorDraft({ incoming, onCommit }: UseSolidColorDraftOpt
     throttle.push(next);
   };
 
-  return { draft, setColor, setBrightness };
+  return { draft, setColor, setKelvin, setBrightness };
 }

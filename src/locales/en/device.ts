@@ -32,6 +32,12 @@ export default {
     },
   },
   strip: {
+    color: {
+      default: "Default",
+      summary: "{{kelvin}} K · γ {{gamma}} · ×{{saturation}}",
+      edit: "Adjust",
+      hint: "Gamma per channel, white point and a saturation trim, so this output's colours match the others. For now one setting drives every output — strips and Hue alike — until each strip has its own.",
+    },
     // One word per strip state (`model/stripState.ts`); a closed set.
     state: {
       connecting: "Connecting…",
@@ -54,6 +60,7 @@ export default {
       firmware: "Firmware",
       chip: "LED chip",
       colorOrder: "Colour order",
+      color: "Colour",
       health: "Health check",
       device: "Device",
       ledCount: "LEDs",

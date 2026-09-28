@@ -180,3 +180,26 @@ fn a_mode_without_an_effect_serialises_without_the_key() {
     let value = serde_json::to_value(LightingModeConfig::default()).unwrap();
     assert!(value.get("effect").is_none(), "{value}");
 }
+
+/// Solid's White tab previews its swatch with `kelvinToRgb` in
+/// `src/shared/lib/color.ts`; both read this fixture, so the swatch is the light.
+#[test]
+fn a_white_matches_the_shared_fixture() {
+    #[derive(serde::Deserialize)]
+    struct Fixture {
+        cases: Vec<(u16, [u8; 3])>,
+    }
+    let fixture: Fixture = serde_json::from_str(include_str!(
+        "../../../../src/shared/lib/__tests__/kelvinWhite.golden.json"
+    ))
+    .unwrap();
+    assert!(fixture.cases.len() >= 10);
+    for (kelvin, rgb) in fixture.cases {
+        let white = SolidColorPayload {
+            kelvin: Some(kelvin),
+            ..DEFAULT_SOLID
+        }
+        .resolved();
+        assert_eq!([white.r, white.g, white.b], rgb, "{kelvin} K");
+    }
+}

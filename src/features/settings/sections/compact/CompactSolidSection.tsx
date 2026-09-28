@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef } from "react";
 
-import { parseHex } from "@/shared/lib/color";
+import { kelvinToRgb, parseHex } from "@/shared/lib/color";
+import type { SolidColorPayload } from "@/shared/contracts/mode";
 
+import { DEFAULT_WHITE_KELVIN, KelvinSlider, SolidToneTabs } from "../control/SolidWhite";
 import { HeroColorCard } from "./HeroColorCard";
 import { SelfContainedBrightnessRow } from "./SelfContainedBrightnessRow";
 
@@ -10,7 +12,7 @@ import { SelfContainedBrightnessRow } from "./SelfContainedBrightnessRow";
  *  scene row too. */
 
 interface CompactSolidSectionProps {
-  incoming: { r: number; g: number; b: number; brightness: number };
+  incoming: SolidColorPayload;
   disabled: boolean;
   /** Adalight firmware lock parity with full Lights view. */
   brightnessDisabled?: boolean;
@@ -18,7 +20,7 @@ interface CompactSolidSectionProps {
   brightnessDisabledReason?: string;
   label: string;
   sublabel: string;
-  onCommit: (payload: { r: number; g: number; b: number; brightness: number }) => void;
+  onCommit: (payload: SolidColorPayload) => void;
 }
 
 export function CompactSolidSection({
@@ -34,11 +36,21 @@ export function CompactSolidSection({
   useEffect(() => {
     incomingRef.current = incoming;
   }, [incoming]);
+  // White reopens at the temperature it last had.
+  const lastKelvin = useRef(incoming.kelvin ?? DEFAULT_WHITE_KELVIN);
+  if (incoming.kelvin != null) lastKelvin.current = incoming.kelvin;
+  const white = incoming.kelvin != null;
 
   const handleBrightnessCommit = useCallback(
     (nextUnit: number) => {
-      const current = incomingRef.current;
-      onCommit({ r: current.r, g: current.g, b: current.b, brightness: nextUnit });
+      onCommit({ ...incomingRef.current, brightness: nextUnit });
+    },
+    [onCommit],
+  );
+
+  const handleKelvin = useCallback(
+    (kelvin: number) => {
+      onCommit({ ...kelvinToRgb(kelvin), brightness: incomingRef.current.brightness, kelvin });
     },
     [onCommit],
   );
@@ -58,13 +70,28 @@ export function CompactSolidSection({
     <div className="lm-compact-card">
       <div className="lm-compact-card-header">
         <div className="l">{label}</div>
+        <SolidToneTabs
+          tone={white ? "white" : "colour"}
+          disabled={disabled}
+          onChange={(tone) =>
+            tone === "white"
+              ? handleKelvin(lastKelvin.current)
+              : onCommit({ r: incoming.r, g: incoming.g, b: incoming.b, brightness: incoming.brightness })
+          }
+        />
       </div>
-      <HeroColorCard
-        rgb={incoming}
-        disabled={disabled}
-        sublabel={sublabel}
-        onChange={handleColorChange}
-      />
+      {white ? (
+        <div className="px-3 pb-2 pt-1">
+          <KelvinSlider kelvin={incoming.kelvin ?? lastKelvin.current} disabled={disabled} onChange={handleKelvin} />
+        </div>
+      ) : (
+        <HeroColorCard
+          rgb={incoming}
+          disabled={disabled}
+          sublabel={sublabel}
+          onChange={handleColorChange}
+        />
+      )}
       <SelfContainedBrightnessRow
         initialPercent={brightnessPct}
         disabled={disabled || brightnessDisabled}

@@ -25,11 +25,7 @@ import { rgbToHex } from "@/shared/lib/color";
 import { roomAwareStatus } from "@/features/room-map/model/roomAware";
 import { RoomAwareIndicator } from "@/features/room-map/ui/RoomAwareIndicator";
 import type { TvAnchorPlacement } from "@/shared/contracts/roomMap";
-import {
-  FIRMWARE_PROFILE,
-  type ColorCorrectionConfig,
-  type FirmwareProfile,
-} from "@/shared/contracts/device";
+import { FIRMWARE_PROFILE, type FirmwareProfile } from "@/shared/contracts/device";
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import { useRuntimeHealth } from "@/features/telemetry/runtimeHealthSource";
 import { hasSerialLinkBudget, type RuntimeHealth } from "@/shared/contracts/telemetry";
@@ -48,9 +44,8 @@ import { Callout } from "@/shared/ui/Callout/Callout";
 import { RangeRow } from "@/shared/ui/RangeRow/RangeRow";
 import { Toggle } from "@/shared/ui/Toggle/Toggle";
 
-import { EffectPanel } from "@/features/mode/ui/EffectPanel";
+import { EffectControls } from "@/features/mode/ui/effects/EffectControls";
 import { SolidColorPanel } from "./control/SolidColorPanel";
-import { ColorCorrectionPanel } from "./control/ColorCorrectionPanel";
 import { LightingSmoothingPresetControl } from "./control/LightingSmoothingPresetControl";
 import { primaryStripOf } from "@/features/strips/model/stripSelectors";
 
@@ -171,8 +166,6 @@ export function LightsSection({
   // callbacks. Kept in state here so the LED advanced-settings panels +
   // the SolidColorPanel brightness lock stay in sync without prop drilling
   // through App.tsx for every knob.
-  const [initialColorCorrection, setInitialColorCorrection] =
-    useState<ColorCorrectionConfig | undefined>(undefined);
   // Chosen on Devices → USB; read here only for the Adalight brightness lock.
   // Sections mount one at a time, so returning here re-reads it.
   const [firmwareProfile, setFirmwareProfile] = useState<FirmwareProfile | undefined>(undefined);
@@ -186,7 +179,6 @@ export function LightsSection({
       .load()
       .then((state) => {
         if (cancelled) return;
-        setInitialColorCorrection(state.colorCorrection);
         setFirmwareProfile(primaryStripOf(state)?.hardware.firmwareProfile);
         setInitialHueIntensityPreset(state.lightingIntensityPreset);
         setAdvancedHydrated(true);
@@ -378,10 +370,16 @@ export function LightsSection({
                 typeof totalLeds === "number" && totalLeds > 0
                   ? t("lights:mode.ambilight.subtitle", { count: totalLeds })
                   : t("lights:mode.ambilight.subtitleFallback"),
-              [LIGHTING_MODE_KIND.SOLID]: t("lights:mode.solid.subtitle", {
-                hex: solidHex.toUpperCase(),
-                brightness: solidBrightnessPct,
-              }),
+              [LIGHTING_MODE_KIND.SOLID]:
+                incomingSolid.kelvin != null
+                  ? t("lights:mode.solid.subtitleWhite", {
+                      kelvin: incomingSolid.kelvin,
+                      brightness: solidBrightnessPct,
+                    })
+                  : t("lights:mode.solid.subtitle", {
+                      hex: solidHex.toUpperCase(),
+                      brightness: solidBrightnessPct,
+                    }),
               [LIGHTING_MODE_KIND.EFFECT]: t("lights:mode.effect.subtitle", {
                 name: t(`lights:effect.names.${incomingEffect.id}`),
                 brightness: Math.round(incomingEffect.brightness * 100),
@@ -426,11 +424,19 @@ export function LightsSection({
         )}
 
         {isEffect && (
-          <EffectPanel
-            effect={incomingEffect}
-            disabled={calibrationLocked}
-            onChange={(effect) => onModeChange({ kind: LIGHTING_MODE_KIND.EFFECT, effect })}
-          />
+          <div>
+            <div className="lm-lights-slab">
+              {t("lights:slab.modeSettingsText")} <b>{t("lights:slab.modeSettingsAccent")}</b>
+            </div>
+            <EffectControls
+              variant="full"
+              effect={incomingEffect}
+              disabled={calibrationLocked}
+              brightnessDisabled={isAdalight}
+              brightnessTitle={isAdalight ? t("lights:led.firmwareProfile.brightnessDisabledTooltip") : undefined}
+              onChange={(effect) => onModeChange({ kind: LIGHTING_MODE_KIND.EFFECT, effect })}
+            />
+          </div>
         )}
 
         {/* Ambilight tuning — only when Ambilight is active */}
@@ -548,17 +554,6 @@ export function LightsSection({
           </div>
         </div>
 
-        {/* v1.4 advanced LED / Hue controls.
-            Hydrated asynchronously so `initial*` props are defined before
-            the child components mount — a bare mount with undefined
-            initial values would cause the children to flash the DEFAULT
-            config for one frame before the async read lands. */}
-        {advancedHydrated && (
-          <ColorCorrectionPanel
-            initialConfig={initialColorCorrection}
-            onConfigChange={setInitialColorCorrection}
-          />
-        )}
       </div>
 
       {/* ── Right dock ────────────────────────────────────────────────── */}

@@ -28,6 +28,7 @@ import { useLightingRuntime } from "@/features/mode/state/useLightingRuntime";
 import {
   DEFAULT_SOLID_COLOR,
   LIGHTING_MODE_KIND,
+  normalizeEffectPayload,
   normalizeSolidColorPayload,
   type LightingModeKind,
 } from "@/shared/contracts/mode";
@@ -49,6 +50,7 @@ import {
   type TestPatternRunRequest,
 } from "../state/useTestPatternRunner";
 import { isPickerPatternKind, PatternPicker, type PickerPatternKind } from "./PatternPicker";
+import { PopupEffectRow } from "./PopupEffectRow";
 
 /** The outputs a pattern-tile test lights: the ones the user last saved. A copy
  * held here goes stale because the webview outlives every hide, so it is
@@ -201,6 +203,8 @@ export function ControlPopupApp() {
   const testEngaged = testDesired || testActive;
   const showColorPicker = testEngaged ? COLOR_PATTERNS.has(patternKind) : isSolid;
   const showBrightness = testEngaged || isSolid;
+  const runningEffect =
+    kind === LIGHTING_MODE_KIND.EFFECT && !testEngaged ? normalizeEffectPayload(mode?.effect) : null;
 
   // ── Solid color draft (shared HSV picker + throttled brightness) ─────────
   const incomingSolid = useMemo(
@@ -209,8 +213,9 @@ export function ControlPopupApp() {
       g: mode?.solid?.g ?? DEFAULT_SOLID_COLOR.g,
       b: mode?.solid?.b ?? DEFAULT_SOLID_COLOR.b,
       brightness: mode?.solid?.brightness ?? DEFAULT_SOLID_COLOR.brightness,
+      kelvin: mode?.solid?.kelvin ?? null,
     }),
-    [mode?.solid?.r, mode?.solid?.g, mode?.solid?.b, mode?.solid?.brightness],
+    [mode?.solid?.r, mode?.solid?.g, mode?.solid?.b, mode?.solid?.brightness, mode?.solid?.kelvin],
   );
 
   // ── Test pattern runner ──────────────────────────────────────────────────
@@ -510,6 +515,13 @@ export function ControlPopupApp() {
               </label>
             </div>
           </div>
+        )}
+
+        {runningEffect && (
+          <PopupEffectRow
+            effect={runningEffect}
+            onBrightness={(brightness) => retunes.push({ effect: { ...runningEffect, brightness } })}
+          />
         )}
 
         {/* Pattern picker — selecting applies immediately, no confirmation step */}

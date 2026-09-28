@@ -1,0 +1,70 @@
+@layer components {
+  /* Solid's Colour | White choice and the temperature slider. The track is the light's own
+     whites; the chrome stays grey and amber. */
+  .tabs {
+    display: inline-flex;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--lm-line);
+    border-radius: 8px;
+    background: var(--lm-bg);
+  }
+  .tab {
+    min-width: 58px;
+    height: 24px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    font-size: 11.5px;
+    font-weight: 500;
+    transition: background var(--lm-dur-quick), color var(--lm-dur-quick);
+  }
+  .tab:hover { color: var(--lm-ink); }
+  .tab[aria-checked="true"] { background: var(--lm-panel-2); color: var(--lm-amber); }
+  .tab:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+
+  .kelvin { display: flex; flex-direction: column; gap: 8px; }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font: 10px var(--lm-mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--lm-ink-dim);
+  }
+  .row b {
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--lm-ink);
+    font-variant-numeric: tabular-nums;
+    min-width: 7ch;
+    text-align: right;
+  }
+  .track {
+    width: 100%;
+    height: 8px;
+    border-radius: 999px;
+    appearance: none;
+    accent-color: var(--lm-amber);
+  }
+  .track::-webkit-slider-thumb {
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--lm-ink);
+    box-shadow: 0 0 0 2px var(--lm-bg), 0 0 0 3px var(--lm-line-2);
+  }
+  .track:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .track:disabled { opacity: 0.5; }
+
+  :global(:root[data-reduced-motion]) .tab { transition: none; }
+
+  @media (forced-colors: active) {
+    .tab[aria-checked="true"] { outline: 2px solid Highlight; }
+  }
+}

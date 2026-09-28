@@ -2,7 +2,7 @@
  * CompactLayout — tray-style compact UI (UI Mockup Rev 07 — `10-compact.html`).
  *
  * Stacked column inside a 320-wide window:
- *   1. Mode strip   — Off / Ambilight / Solid pills (amber glow on active)
+ *   1. Mode strip   — Off / Ambilight / Solid / Effect pills (amber glow on active)
  *   2. Active card  — header + mode-specific controls (hidden for Off)
  *   3. Scene row    — 5 mood tiles with gradient thumbnails
  *
@@ -20,7 +20,14 @@
 import { memo, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { DEFAULT_SOLID_COLOR, LIGHTING_MODE_KIND, type LightingModeKind } from "@/shared/contracts/mode";
+import {
+  DEFAULT_SOLID_COLOR,
+  LIGHTING_MODE_KIND,
+  normalizeEffectPayload,
+  type EffectPayload,
+  type LightingModeKind,
+  type SolidColorPayload,
+} from "@/shared/contracts/mode";
 import { MODE_GUARD_REASONS } from "@/features/mode/state/modeGuard";
 import {
   useLightingActions,
@@ -34,6 +41,7 @@ import { FIRMWARE_PROFILE, type FirmwareProfile } from "@/shared/contracts/devic
 import { SCENE_PRESETS, type ScenePreset } from "@/features/mode/model/scenePresets";
 import { modeKind } from "@/features/mode/model/modeKinds";
 import { ModeStrip } from "@/features/mode/ui/ModeStrip";
+import { EffectControls } from "@/features/mode/ui/effects/EffectControls";
 import { LightingSmoothingPresetControl } from "../control/LightingSmoothingPresetControl";
 import { shellStore } from "@/features/persistence/shellStore";
 import { CompactSolidSection } from "./CompactSolidSection";
@@ -107,6 +115,7 @@ export const CompactLayout = memo(function CompactLayout() {
   const ambilightConfig = lightingMode.ambilight ?? DEFAULT_AMBILIGHT;
   const isSolid = lightingMode.kind === LIGHTING_MODE_KIND.SOLID;
   const isAmbilight = lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT;
+  const isEffect = lightingMode.kind === LIGHTING_MODE_KIND.EFFECT;
 
   // Without this gate the worker spins up with nowhere to send frames — a
   // running Ambilight state and no reachable output. A bridge still being
@@ -143,8 +152,13 @@ export const CompactLayout = memo(function CompactLayout() {
     [ambilightConfig, onLightingModeChange],
   );
 
+  const handleEffectChange = useCallback(
+    (effect: EffectPayload) => onLightingModeChange({ kind: LIGHTING_MODE_KIND.EFFECT, effect }),
+    [onLightingModeChange],
+  );
+
   const handleSolidCommit = useCallback(
-    (payload: { r: number; g: number; b: number; brightness: number }) => {
+    (payload: SolidColorPayload) => {
       onLightingModeChange({
         kind: LIGHTING_MODE_KIND.SOLID,
         solid: payload,
@@ -212,6 +226,19 @@ export const CompactLayout = memo(function CompactLayout() {
             <div className="lm-compact-smoothing">
               <LightingSmoothingPresetControl />
             </div>
+          </div>
+        )}
+
+        {isEffect && (
+          <div className="lm-compact-card px-3 py-2.5">
+            <EffectControls
+              variant="compact"
+              effect={normalizeEffectPayload(lightingMode.effect)}
+              disabled={nonOffDisabled}
+              brightnessDisabled={isAdalight}
+              brightnessTitle={adalightLockReason}
+              onChange={handleEffectChange}
+            />
           </div>
         )}
 

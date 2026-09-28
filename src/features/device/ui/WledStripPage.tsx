@@ -17,6 +17,7 @@ import { useWledConnect, type WledConnectDeps } from "../state/useWledConnect";
 import type { ActiveWledSink } from "../useWledSink";
 import { testWledBridge } from "../wledApi";
 import { StripFlash } from "./StripFlash";
+import { StripColorRow } from "./StripColorRow";
 import { StripLayoutRow } from "./StripLayoutRow";
 import { StripName } from "./StripName";
 import { UnlitHelp, WledCodedNote } from "./StripNotes";
@@ -207,6 +208,10 @@ export function WledStripPage({
             display={capturedDisplay}
             onOpen={onNavigateToLedSetup}
           />
+        </Reveal>
+
+        <Reveal open>
+          <StripColorRow />
         </Reveal>
 
         <Reveal open>

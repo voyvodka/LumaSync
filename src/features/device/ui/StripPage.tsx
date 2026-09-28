@@ -34,6 +34,7 @@ import { useStripUnlit, type FlashOutcome } from "../state/stripFlash";
 import { useAdvertisedFirmwareProfile, useAdvertisedPixelLayout } from "../useAdvertisedFirmwareProfile";
 import type { UseDeviceConnectionResult } from "../useDeviceConnection";
 import { ChipRow, ColorOrderRow, FirmwareRow, saveHardware } from "./StripHardwareRows";
+import { StripColorRow } from "./StripColorRow";
 import { StripFlash } from "./StripFlash";
 import { StripLayoutRow } from "./StripLayoutRow";
 import { StripName } from "./StripName";
@@ -339,6 +340,9 @@ export function StripPage({
         </Reveal>
         <Reveal open>
           <ColorOrderRow stripId={strip.id} order={order} canIdentify={connected} />
+        </Reveal>
+        <Reveal open>
+          <StripColorRow />
         </Reveal>
 
         <Reveal open>

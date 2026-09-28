@@ -26,6 +26,9 @@ const KNOWN_DYNAMIC_PREFIXES = [
   "hue:runtime.triggerSource",
   "hue:runtime.writeback.codes",
   "common:hotplug.targetLabel",
+  "lights:effect.directions",
+  "lights:effect.names",
+  "lights:effect.palettes",
   "preview:pattern",
   "preview:status",
   "preview:test.speed",
@@ -65,6 +68,9 @@ const DYNAMIC_PREFIX_DOMAINS = {
     ],
   },
   "common:hotplug.targetLabel": { sources: ["hue.ts HueRuntimeTarget"] },
+  "lights:effect.directions": { sources: ["effects.ts EFFECT_DIRECTIONS"] },
+  "lights:effect.names": { sources: ["effects.ts EFFECT_IDS"] },
+  "lights:effect.palettes": { sources: ["effects.ts PALETTE_IDS"] },
   "preview:pattern": { sources: ["preview.ts LED_TEST_PATTERN_KIND"] },
   // The popup's error line: exactly useTestPatternRunner's ERROR_CODES.
   "preview:status": {

@@ -33,6 +33,12 @@ const device: Catalogue<typeof enDevice> = {
     },
   },
   strip: {
+    color: {
+      default: "Varsayılan",
+      summary: "{{kelvin}} K · γ {{gamma}} · ×{{saturation}}",
+      edit: "Ayarla",
+      hint: "Kanal başına gamma, beyaz noktası ve bir doygunluk ayarı; bu çıkışın renkleri diğerleriyle eşleşsin diye. Her şeridin kendi ayarı olana dek tek ayar tüm çıkışlara — şeritlere ve Hue'ya — uygulanır.",
+    },
     state: {
       connecting: "Bağlanıyor…",
       connected: "Bağlı",
@@ -54,6 +60,7 @@ const device: Catalogue<typeof enDevice> = {
       firmware: "Yazılım",
       chip: "LED çipi",
       colorOrder: "Renk sırası",
+      color: "Renk",
       health: "Sağlık kontrolü",
       device: "Cihaz",
       ledCount: "LED sayısı",

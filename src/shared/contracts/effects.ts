@@ -75,6 +75,8 @@ export interface EffectSpec {
   defaultPalette: PaletteId;
   /** `#rrggbb`; the colours a `custom` default palette starts with. */
   defaultColors?: readonly string[];
+  /** `#rrggbb`; what the gallery shows for an effect that draws its own colours. */
+  swatch?: readonly string[];
   sparse: EffectSparse;
 }
 
