@@ -71,11 +71,40 @@ describe("GlobalErrorBoundary — fallback surface", () => {
       screen.getByRole("button", { name: /^restart$/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /show logs/i }),
+      screen.getByRole("button", { name: /open log folder/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /copy error/i }),
     ).toBeInTheDocument();
+  });
+
+  // Nothing is sent: the form opens in the browser with the error in it, to read, edit or close.
+  it("links to a new issue with the version and the error filled in", () => {
+    render(
+      <GlobalErrorBoundary>
+        <Boom />
+      </GlobalErrorBoundary>,
+    );
+    const report = screen.getByRole("link", { name: /^report$/i });
+    const url = new URL(report.getAttribute("href") ?? "");
+    expect(url.pathname).toBe("/voyvodka/LumaSync/issues/new");
+    expect(url.searchParams.get("title")).toContain("boom from test child");
+    expect(url.searchParams.get("body")).toContain("boom from test child");
+    expect(report).toHaveAttribute("target", "_blank");
+  });
+
+  it("says Copied after the error is copied", async () => {
+    Object.defineProperty(globalThis.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn<(text: string) => Promise<void>>(async () => {}) },
+    });
+    render(
+      <GlobalErrorBoundary>
+        <Boom />
+      </GlobalErrorBoundary>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /copy error/i }));
+    expect(await screen.findByRole("button", { name: /^copied$/i })).toBeInTheDocument();
   });
 
   it("logs the uncaught error via console.error with [LumaSync] prefix", () => {
@@ -101,7 +130,7 @@ describe("GlobalErrorBoundary — fallback surface", () => {
       </GlobalErrorBoundary>,
     );
 
-    const toggle = screen.getByRole("button", { name: /show details/i });
+    const toggle = screen.getByRole("button", { name: /^details$/i });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
 
     fireEvent.click(toggle);
@@ -109,10 +138,7 @@ describe("GlobalErrorBoundary — fallback surface", () => {
     const stack = document.getElementById("lm-errboundary-details");
     expect(stack).not.toBeNull();
     expect(stack?.textContent ?? "").toContain("boom from test child");
-    expect(screen.getByRole("button", { name: /hide details/i })).toHaveAttribute(
-      "aria-expanded",
-      "true",
-    );
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
   });
 
   it("calls navigator.clipboard.writeText with the error payload on Copy error", async () => {
@@ -147,7 +173,7 @@ describe("GlobalErrorBoundary — fallback surface", () => {
       </GlobalErrorBoundary>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /show logs/i }));
+    fireEvent.click(screen.getByRole("button", { name: /open log folder/i }));
 
     // Handler is async; flush microtasks.
     await Promise.resolve();

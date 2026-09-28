@@ -7,12 +7,13 @@ export default {
   },
   errorBoundary: {
     title: "Something went wrong",
-    body: "We've logged the error. View logs, restart the app, or copy the details for support.",
-    showLogs: "Show logs",
+    body: "The error was saved to the log.",
     restart: "Restart",
+    report: "Report",
+    showLogs: "Open log folder",
     copyError: "Copy error",
-    showDetails: "Show details",
-    hideDetails: "Hide details",
+    copied: "Copied",
+    details: "Details",
   },
   fpsHud: {
     title: "FPS",

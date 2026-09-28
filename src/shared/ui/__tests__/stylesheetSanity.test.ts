@@ -112,7 +112,7 @@ describe("stylesheet sanity", () => {
     const loose = cssFiles
       .map(({ file }) => file.slice(SRC.length + 1))
       .filter((file) => !file.startsWith("styles/") && !file.endsWith(".module.css"));
-    expect(loose.sort()).toEqual(["features/shell/GlobalErrorBoundary.css", "fonts.css", "styles.css"]);
+    expect(loose.sort()).toEqual(["fonts.css", "styles.css"]);
   });
 
   // Settings → Reduce motion sets `data-reduced-motion` on the root (with the OS request folded

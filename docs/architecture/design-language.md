@@ -220,8 +220,13 @@ module is what threw, so no bridge it uses may pull feature code in.
 their badges from the same entry, so a badge cannot outlive its handler — before that hook the badges
 were decorative. Matching is on `event.code`, because on a Turkish layout `Alt+1` produces `¡` in
 `event.key`, and editable targets swallow the key so a rename field is not a mode switch. The
-room-map editor's shortcut list is its own. The same rule hides the error boundary's "Show logs"
-until the command behind it has answered.
+room-map editor's shortcut list is its own.
+
+**The error screen says what happened in a line and offers one thing to do.** Restart is its one
+amber; Report opens a prefilled issue in the browser with the version, the OS and the error cut
+short (nothing is sent — the user reads and submits it, or closes the tab), and the log folder and
+a copy of the error sit beside it as quiet links, with the raw stack behind "Details". It was a
+card of four buttons and a paragraph naming each of them.
 
 ## Gotchas
 

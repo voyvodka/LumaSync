@@ -10,12 +10,13 @@ const shell: Catalogue<typeof enShell> = {
   },
   errorBoundary: {
     title: "Bir şeyler ters gitti",
-    body: "Hatayı kaydettik. Log'ları görüntüle, uygulamayı yeniden başlat veya detayları destek için kopyala.",
-    showLogs: "Log'ları görüntüle",
+    body: "Hata log dosyasına kaydedildi.",
     restart: "Yeniden başlat",
+    report: "Sorun bildir",
+    showLogs: "Log klasörünü aç",
     copyError: "Hatayı kopyala",
-    showDetails: "Detayları göster",
-    hideDetails: "Detayları gizle",
+    copied: "Kopyalandı",
+    details: "Ayrıntılar",
   },
   fpsHud: {
     title: "FPS",

@@ -83,7 +83,7 @@ and kept beside their styles, a feature sheet out of `src/styles/` into modules,
 feature uses promoted to `shared/ui`, motion on the tokens. A feature has no `index.ts` barrel: callers import
 the module that owns the symbol, so a grep lands on it, and `verify:window-grants`, which follows
 imports, does not see a whole feature's commands behind one import. `stylesheetSanity.test.ts` holds both halves: no plain
-`.css` outside `src/styles/` (bar `fonts.css` and `GlobalErrorBoundary.css`), and every
+`.css` outside `src/styles/` (bar `fonts.css`), and every
 `*.module.css` wholly inside `@layer components`.
 
 **Stylesheet layers.** `src/styles.css` is an ordered import list over `src/styles/`: tokens and
@@ -103,9 +103,8 @@ counter-rule needed. The cost is the reverse case. A container rule that sizes i
 sit in such containers declare their default size as `width`/`height` attributes, which any
 stylesheet rule overrides. Within a layer, source order still decides equal-specificity ties,
 which is why the import list is kept in cascade order. `stylesheetSanity.test.ts` fails on a
-feature file imported without a layer. `GlobalErrorBoundary.css` stays unlayered: it is loaded by its
-component rather than through this list, and unlayered it cannot lose to a components-layer rule
-on the `lm-settings-group` card it sits on, whatever order the bundler emits.
+feature file imported without a layer. The error screen is a module like any other: it no longer
+sits on a shared card whose rules it had to outrank.
 
 **Selection state is styled from ARIA where the element carries it.** A tab's selected look is
 `[aria-selected="true"]`, a toggle button's `[aria-pressed="true"]`, a radio's or a switch's `[aria-checked="true"]`, the
