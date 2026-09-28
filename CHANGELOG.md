@@ -66,6 +66,8 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- The button that switches between the compact and full window is a quiet grey icon that lights
+  up on hover, instead of an amber box.
 - The window opens on your saved layout, guide state and Hue settings from its first frame, rather
   than drawing defaults for a moment. Launching into the full window also no longer rewrites
   settings that did not change on the way to the first frame.
