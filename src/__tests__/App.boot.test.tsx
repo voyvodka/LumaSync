@@ -9,6 +9,7 @@ import { DEVICE_COMMANDS } from "@/shared/contracts/device";
 
 import {
   bootDone,
+  hueChip,
   CALIBRATION,
   choices,
   env,
@@ -77,21 +78,20 @@ describe("App boot", () => {
       expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
     });
 
-    it("says it waits for a bridge that still holds the last session, then drops the notice", async () => {
+    // The wait is the Hue chip's "Waiting" and its sentence; only giving up raises a notice.
+    it("raises no notice while it waits for a bridge that still holds the last session", async () => {
       render(<App />);
       await bootDone();
 
       publish({ bootHueRetry: "waiting" });
-      await waitFor(() =>
-        expect(screen.getByTestId("shell-notice-slot").getAttribute("data-queue")).toContain("hue-boot-retry"),
+      await waitFor(() => expect(hueChip()).toHaveTextContent("shell:statusBar.state.waiting"));
+      expect(screen.queryByTestId("shell-notice-slot")?.getAttribute("data-queue") ?? "").not.toContain(
+        "hue-boot-retry",
       );
 
-      publish({ bootHueRetry: null });
+      publish({ bootHueRetry: "gaveUp" });
       await waitFor(() =>
-        // With nothing queued the slot is not mounted at all.
-        expect(screen.queryByTestId("shell-notice-slot")?.getAttribute("data-queue") ?? "").not.toContain(
-          "hue-boot-retry",
-        ),
+        expect(screen.getByTestId("shell-notice-slot").getAttribute("data-queue")).toContain("hue-boot-retry"),
       );
     });
   });

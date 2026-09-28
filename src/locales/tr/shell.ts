@@ -109,10 +109,7 @@ const shell: Catalogue<typeof enShell> = {
       usbLeftOut: "USB şerit bağlı değil — yalnızca Hue ile çalışıyor",
       choiceRefused: "Bu ışık değişikliği uygulanmadı — önceki mod çalışmaya devam ediyor",
       choiceStartFailed: "Bu ışık modu başlatılamadı, ışıklar kapalı",
-      hueBootRetry: {
-        waiting: "Hue Bridge önceki bir oturumu tutuyor — bıraktığında aydınlatma kendiliğinden sürer",
-        gaveUp: "Hue açılışta hazır değildi, aydınlatma kapalı — Hue Bridge geri gelince yeniden aç",
-      },
+      hueBootRetryGaveUp: "Hue açılışta hazır değildi, aydınlatma kapalı — Hue Bridge geri gelince yeniden aç",
       usbDisconnected: "USB şerit çıkarıldı — diğer çıkışlarla devam ediliyor",
       usbDisconnectedLightingOff: "USB şerit çıkarıldı, aydınlatma kapalı — şeridi takıp bir mod seç",
       usbUnsupportedFallback: "USB cihazı tanınmadı — yalnızca Hue'ya geçildi",

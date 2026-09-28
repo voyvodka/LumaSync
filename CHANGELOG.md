@@ -66,6 +66,9 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- The notice strip no longer repeats the Hue status while the app waits at launch for a bridge an
+  earlier session still holds; the Hue chip at the bottom already says "Waiting". The notice still
+  appears if it gives up.
 - Devices lists your devices down the left: each strip (USB or WLED) and the Hue bridge by name,
   with a dot while it is connected, and a USB controller that is plugged in but not added yet as
   "… · Add". The Displays page is gone: the display Ambilight reads is chosen in LED Setup, where
