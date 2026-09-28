@@ -630,10 +630,14 @@ mod platform {
     ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
         let display = select_display(display_id)?;
 
+        let start_failed =
+            |_| AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_SESSION_START_FAILED");
+
         let filter = SCContentFilter::create()
             .with_display(&display)
             .with_excluding_windows(&[])
-            .build();
+            .build()
+            .map_err(start_failed)?;
 
         // Downscale to ~640px max dimension for ambilight color sampling.
         // SCStream performs hardware-accelerated scaling on the GPU — zero extra CPU cost.
@@ -662,9 +666,9 @@ mod platform {
         let latest_frame: SharedFrame = LatestFrame::new();
         let frame_writer = Arc::clone(&latest_frame);
 
-        let mut stream = SCStream::new(&filter, &config);
+        let mut stream = SCStream::new(&filter, &config).map_err(start_failed)?;
 
-        stream.add_output_handler(
+        let registered = stream.add_output_handler(
             move |sample: CMSampleBuffer, of_type: SCStreamOutputType| {
                 if of_type != SCStreamOutputType::Screen {
                     return;
@@ -717,10 +721,10 @@ mod platform {
             },
             SCStreamOutputType::Screen,
         );
+        // A refused handler would start a stream that never delivers a frame.
+        registered.map_err(start_failed)?;
 
-        stream.start_capture().map_err(|_| {
-            AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_SESSION_START_FAILED")
-        })?;
+        stream.start_capture().map_err(start_failed)?;
 
         Ok(Box::new(MacOSLiveFrameSource {
             latest_frame,
