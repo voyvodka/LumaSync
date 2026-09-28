@@ -95,11 +95,8 @@ export function DevicesPage({
   const device = useDeviceConnection();
 
   const { selectedAreaId } = hue;
-  const { connectedPort, refreshPorts } = device;
-  // The port watcher keeps the list in step from here on; what is plugged in already needs a scan.
-  useEffect(() => {
-    void refreshPorts();
-  }, [refreshPorts]);
+  // The controller scans what is plugged in as it starts, and the port watcher keeps the list in step.
+  const { connectedPort } = device;
   const wled = useActiveWledSink();
   const { activeWledIp } = wled;
 
