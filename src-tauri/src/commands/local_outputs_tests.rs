@@ -555,7 +555,7 @@ mod leave {
     fn forgetting_the_driven_wled_device_paints_it_black_first() {
         let device = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind");
         device
-            .set_read_timeout(Some(std::time::Duration::from_millis(200)))
+            .set_read_timeout(Some(std::time::Duration::from_millis(500)))
             .expect("timeout");
         let config = WledSinkConfig {
             port: device.local_addr().expect("addr").port(),
@@ -569,18 +569,21 @@ mod leave {
         rig.set_serial_connected(true);
         solid_on_usb(&rig);
         assert!(rig.state().drives_wled(config.ip));
+        // `recv_from`: Windows refuses `recv` on a socket that is not connected.
+        let mut datagram = [0u8; 2048];
+        let (len, _) = device.recv_from(&mut datagram).expect("the Solid frame");
+        assert!(datagram[2..len].iter().any(|byte| *byte != 0));
 
         let result = block_on(forget_wled_with(&rig.handle(), "127.0.0.1"));
 
         assert_eq!(result.status.code, "WLED_FORGET_OK");
-        let mut last = None;
-        let mut buf = [0u8; 64];
-        while let Ok(len) = device.recv(&mut buf) {
-            last = Some(buf[..len].to_vec());
-        }
-        let last = last.expect("the device was sent frames");
-        // DRGB: protocol byte, timeout byte, then RGB per LED.
-        assert!(last.iter().skip(2).all(|byte| *byte == 0), "{last:?}");
+        let (len, _) = device.recv_from(&mut datagram).expect("a black frame");
+        assert_eq!(datagram[0], 2, "DRGB");
+        assert!(
+            datagram[2..len].iter().all(|byte| *byte == 0),
+            "{:?}",
+            &datagram[..len]
+        );
     }
 
     #[test]
