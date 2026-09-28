@@ -13,7 +13,7 @@
 
 import { useTranslation } from "react-i18next";
 
-import { Segmented } from "@/shared/ui/Segmented";
+import { Segmented } from "@/shared/ui/Segmented/Segmented";
 
 import {
   LED_TEST_PATTERN_KIND,

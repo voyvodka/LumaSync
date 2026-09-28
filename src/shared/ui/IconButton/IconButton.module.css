@@ -1,0 +1,10 @@
+/* The primitives layer sits under components, so a feature's own class on the button (the room-map
+   toolbar's 28 px row) still adjusts it whatever order the sheets load in.
+   docs/architecture/ui-and-shell.md, "Stylesheet layers". */
+@layer primitives {
+  /* The look is the caller's; this only guarantees the hit area. */
+  .icon {
+    min-width: 32px;
+    min-height: 32px;
+  }
+}

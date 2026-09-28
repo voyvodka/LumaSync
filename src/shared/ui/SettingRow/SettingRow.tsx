@@ -1,7 +1,7 @@
 import type { ComponentPropsWithRef, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { cx } from "@/shared/ui/cx";
+import { cx } from "@/shared/lib/cx";
 import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
 import styles from "./SettingRow.module.css";
 

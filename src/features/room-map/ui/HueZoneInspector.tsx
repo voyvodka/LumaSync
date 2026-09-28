@@ -49,7 +49,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { HueZone } from "@/shared/contracts/roomMap";
-import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
+import { HsvColorPicker } from "@/shared/ui/HsvColorPicker/HsvColorPicker";
 import { normalizeHex } from "@/shared/lib/color";
 import { clamp, roundTo } from "@/shared/lib/math";
 

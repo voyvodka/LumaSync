@@ -1,6 +1,6 @@
 import { useRef, type ReactNode } from "react";
 
-import { cx } from "@/shared/ui/cx";
+import { cx } from "@/shared/lib/cx";
 import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
 import styles from "./AsyncToggle.module.css";
 

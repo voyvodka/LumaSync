@@ -16,8 +16,8 @@ import {
   type UnlistenFn,
 } from "@/features/shell/windowApi";
 import { parseHex, rgbToHex } from "@/shared/lib/color";
-import { Callout } from "@/shared/ui/Callout";
-import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
+import { Callout } from "@/shared/ui/Callout/Callout";
+import { HsvColorPicker } from "@/shared/ui/HsvColorPicker/HsvColorPicker";
 import { modeKind } from "@/features/mode/model/modeKinds";
 import { ModeStrip } from "@/features/mode/ui/ModeStrip";
 import { applyOutputs, retuneLighting } from "@/features/mode/modeApi";

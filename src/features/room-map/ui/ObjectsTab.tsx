@@ -5,7 +5,7 @@ import { ObjectRow } from "./ObjectRow";
 import { buildObjectList, type ObjectRowEntry } from "../model/objectList";
 import { getZoneColor, TYPE_DOT_COLOR } from "../model/zoneColor";
 import { parseObjectId } from "../model/objectId";
-import { cx } from "@/shared/ui/cx";
+import { cx } from "@/shared/lib/cx";
 
 interface ObjectsTabProps {
   config: RoomMapConfig;

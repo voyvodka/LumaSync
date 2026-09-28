@@ -1,6 +1,6 @@
 import { useCallback, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
-import { cx } from "../cx";
+import { cx } from "@/shared/lib/cx";
 import { useLeavingItems, type ListRow } from "../Reveal/useLeavingItems";
 import styles from "./Rail.module.css";
 

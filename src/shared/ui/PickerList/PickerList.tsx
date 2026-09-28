@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 
 import { prefersReducedMotion } from "@/shared/lib/motion";
-import { cx } from "@/shared/ui/cx";
+import { cx } from "@/shared/lib/cx";
 import { Popover } from "@/shared/ui/Popover/Popover";
 import styles from "./PickerList.module.css";
 

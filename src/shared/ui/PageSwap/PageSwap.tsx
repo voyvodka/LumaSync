@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
-import { cx } from "../cx";
+import { cx } from "@/shared/lib/cx";
 import styles from "./PageSwap.module.css";
 
 /** How the new content arrives: from the side a step went, dropping from a list above, or in place. */

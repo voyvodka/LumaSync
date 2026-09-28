@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { useDialogFocus } from "@/shared/ui/useDialogFocus";
+import { useDialogFocus } from "@/shared/lib/useDialogFocus";
 
 export function RenameDialog({
   currentLabel,

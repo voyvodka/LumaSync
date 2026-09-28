@@ -34,7 +34,7 @@ import {
 import { shellStore } from "@/features/persistence/shellStore";
 import { withColorCorrection } from "@/features/strips/model/stripWrites";
 import { clamp } from "@/shared/lib/math";
-import { RangeRow } from "@/shared/ui/RangeRow";
+import { RangeRow } from "@/shared/ui/RangeRow/RangeRow";
 
 const PERSIST_DEBOUNCE_MS = 200;
 

@@ -85,13 +85,30 @@ describe("stylesheet sanity", () => {
     }
   });
 
-  it("puts every component stylesheet (CSS Module) wholly inside the components layer", () => {
+  it("orders the primitives layer between base and components, ahead of Tailwind's own list", () => {
+    // Declared after Tailwind's import, the layer would append after utilities and
+    // outrank every rule it is meant to sit under.
+    const entry = readFileSync(join(SRC, "styles.css"), "utf8");
+    const order = /^@layer ([^;{]+);/m.exec(entry);
+    expect(order?.[1].split(",").map((name) => name.trim())).toEqual([
+      "theme",
+      "base",
+      "primitives",
+      "components",
+      "utilities",
+    ]);
+    expect(order!.index).toBeLessThan(entry.indexOf('@import "tailwindcss"'));
+  });
+
+  it("puts every component stylesheet (CSS Module) wholly inside one layer", () => {
     // A module is loaded by its component, not through styles.css, so nothing
     // else places it in a layer. Unlayered, its rules would outrank utilities.
+    // Only a shared control may sit in `primitives`, under the features that adjust it.
     const modules = cssFiles.filter(({ file }) => file.endsWith(".module.css"));
     for (const { file, css } of modules) {
       const body = css.trim();
-      expect(body.startsWith("@layer components {"), `${file} does not open with @layer components`).toBe(true);
+      const layer = file.includes(`${join("src", "shared", "ui")}`) ? /^@layer (components|primitives) \{/ : /^@layer components \{/;
+      expect(body, `${file} does not open with its layer`).toMatch(layer);
       // The layer block is the whole file: its closing brace is the last character.
       let depth = 0;
       let closedAt = -1;
@@ -102,7 +119,7 @@ describe("stylesheet sanity", () => {
           break;
         }
       }
-      expect(closedAt, `${file} has rules outside its @layer components block`).toBe(body.length - 1);
+      expect(closedAt, `${file} has rules outside its @layer block`).toBe(body.length - 1);
     }
   });
 

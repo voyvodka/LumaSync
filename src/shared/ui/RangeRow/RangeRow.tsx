@@ -1,6 +1,6 @@
 import { useId, type CSSProperties, type ReactNode } from "react";
 
-import { cx } from "./cx";
+import { cx } from "@/shared/lib/cx";
 
 export type RangeRowVariant = "profile" | "compact" | "dock";
 

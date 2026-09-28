@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 
-import { cx } from "./cx";
-import { useRadioGroup } from "./useRadioGroup";
+import { cx } from "@/shared/lib/cx";
+import { useRadioGroup } from "@/shared/lib/useRadioGroup";
 
 export interface SegmentedOption<T extends string> {
   value: T;

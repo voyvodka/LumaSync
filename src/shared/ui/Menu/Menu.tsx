@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 
 import { ConfirmPopover } from "../ConfirmPopover/ConfirmPopover";
-import { cx } from "../cx";
+import { cx } from "@/shared/lib/cx";
 import { Popover } from "../Popover/Popover";
 import styles from "./Menu.module.css";
 

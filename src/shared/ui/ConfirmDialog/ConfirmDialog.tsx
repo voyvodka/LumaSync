@@ -1,8 +1,8 @@
 import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 
-import { cx } from "../cx";
+import { cx } from "@/shared/lib/cx";
 import { RowButton } from "../SettingRow/SettingRow";
-import { useDialogFocus } from "../useDialogFocus";
+import { useDialogFocus } from "@/shared/lib/useDialogFocus";
 import styles from "./ConfirmDialog.module.css";
 
 interface ConfirmDialogProps {
@@ -71,7 +71,7 @@ export function ConfirmDialog({
       aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={bodyId}
-      className="lm-modal-scrim"
+      className={styles.scrim}
       data-testid={testId}
       onClick={(event) => {
         if (event.target === event.currentTarget) onCancel();

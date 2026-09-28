@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import type { TranslationKey } from "@/features/i18n/catalogue";
 import { setPreference, usePreference, type PreferenceKey, type PreferenceValue } from "@/features/persistence/preferences";
-import { Toggle } from "@/shared/ui/Toggle";
+import { Toggle } from "@/shared/ui/Toggle/Toggle";
 import { SettingRow } from "@/shared/ui/SettingRow/SettingRow";
 
 export interface PreferenceSwitchDef<K extends PreferenceKey = PreferenceKey> {

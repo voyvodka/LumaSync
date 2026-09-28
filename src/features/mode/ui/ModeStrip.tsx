@@ -7,7 +7,7 @@ import {
   resolveKeybindPlatform,
   type KeybindAction,
 } from "@/shared/contracts/shell";
-import { Segmented, type SegmentedOption } from "@/shared/ui/Segmented";
+import { Segmented, type SegmentedOption } from "@/shared/ui/Segmented/Segmented";
 
 import { MODE_KIND_ORDER, modeKind } from "../model/modeKinds";
 

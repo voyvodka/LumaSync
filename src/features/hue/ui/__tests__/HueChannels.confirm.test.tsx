@@ -68,7 +68,6 @@ describe("HueChannels — bridge push confirm", () => {
 
     const [cancel, confirm] = Array.from(question.querySelectorAll("button"));
     expect(cancel).toHaveTextContent("hue:page.cancel");
-    expect(cancel).not.toHaveClass("lm-btn");
     expect(confirm).toHaveTextContent("hue:channelMap.saveToBridge");
     expect(confirm).toHaveFocus();
   });
