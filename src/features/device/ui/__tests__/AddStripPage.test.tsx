@@ -8,20 +8,25 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 vi.mock("../../model/usbStripRoster", () => ({ ensureStripForPort: async () => [] }));
+// A WLED add that has not answered yet.
+vi.mock("../../wledApi", () => ({
+  discoverWledDevices: () => new Promise(() => {}),
+  connectWledSink: () => new Promise(() => {}),
+}));
 
 import { AddStripPage } from "../AddStripPage";
 
 const device = { isConnecting: false, selectedPort: null, statusCard: null } as unknown as UseDeviceConnectionResult;
 const port = (portName: string, isSupported: boolean, product?: string): DevicePort => ({ portName, isSupported, sortKey: portName, product });
 
-function renderPage(ports: DevicePort[], otherPorts: DevicePort[], replaces: string | null = null) {
+function renderPage(ports: DevicePort[], otherPorts: DevicePort[], replaces: string | null = null, dev = device) {
   return render(
     <AddStripPage
       isActive
       title="device:strip.add.title"
       ports={ports}
       otherPorts={otherPorts}
-      device={device}
+      device={dev}
       onWledBound={async () => {}}
       replaces={replaces}
       onAdded={() => {}}
@@ -58,5 +63,23 @@ describe("AddStripPage", () => {
   it("says which strip moves before anything is added", () => {
     renderPage([], [], "Desk");
     expect(screen.getByTestId("add-strip-replaces")).toHaveTextContent("device:strip.add.replaces");
+  });
+
+  // Each add moves the one driven strip: two at once would race to write it.
+  it("while a WLED add runs, a controller's Add waits", () => {
+    renderPage([port("/dev/cu.a", true, "CH340")], []);
+    expect(screen.getByTestId("found-port-add")).toBeEnabled();
+    fireEvent.change(screen.getByTestId("wled-address-input"), { target: { value: "10.0.0.5" } });
+    fireEvent.click(screen.getByTestId("wled-address-add"));
+    expect(screen.getByTestId("found-port-add")).toBeDisabled();
+  });
+
+  it("while a controller connects, the WLED Add waits, Enter included", () => {
+    const connecting = { ...device, isConnecting: true, selectedPort: "/dev/cu.a" } as UseDeviceConnectionResult;
+    renderPage([port("/dev/cu.a", true, "CH340")], [], null, connecting);
+    fireEvent.change(screen.getByTestId("wled-address-input"), { target: { value: "10.0.0.5" } });
+    expect(screen.getByTestId("wled-address-add")).toBeDisabled();
+    fireEvent.keyDown(screen.getByTestId("wled-address-input"), { key: "Enter" });
+    expect(screen.getByTestId("wled-address-add")).not.toHaveAttribute("aria-busy");
   });
 });

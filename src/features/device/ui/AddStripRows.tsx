@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { WLED_STATUS, type WledCommandStatus, type WledDeviceInfo } from "@/shared/contracts/device";
@@ -62,11 +62,13 @@ interface FoundPortRowProps {
   primary: boolean;
   /** Under the row, before any failure: what adding it changes. */
   note?: ReactNode;
+  /** Another add on the page is running: two at once would race for the one driven strip. */
+  blocked?: boolean;
   onAdded: (added: AddedOutput) => void;
 }
 
 /** A supported controller plugged in and not a strip yet: Add connects it. */
-export function FoundPortRow({ port, device, label, primary, note, onAdded }: FoundPortRowProps) {
+export function FoundPortRow({ port, device, label, primary, note, blocked = false, onAdded }: FoundPortRowProps) {
   const { t } = useTranslation();
   const name = port.product ?? shortPortName(port.portName);
   const adding = useHeldFlag(device.isConnecting && device.selectedPort === port.portName);
@@ -85,7 +87,7 @@ export function FoundPortRow({ port, device, label, primary, note, onAdded }: Fo
         <AddButton
           busy={adding}
           primary={primary}
-          disabled={device.isConnecting && !adding}
+          disabled={blocked || (device.isConnecting && !adding)}
           label={t("device:strip.add.addNamed", { name })}
           onClick={() => void add()}
           testId="found-port-add"
@@ -105,18 +107,26 @@ interface WledAddressRowProps {
   onBound: (device: WledDeviceInfo) => Promise<void>;
   onAdded: (added: AddedOutput) => void;
   primary: boolean;
+  /** Another add on the page is running: two at once would race for the one driven strip. */
+  blocked?: boolean;
+  /** Told when this row's add starts and ends, so the page can hold the others. */
+  onBusyChange?: (busy: boolean) => void;
   deps?: WledConnectDeps;
 }
 
 /** A WLED device by the address WLED shows: Add asks it what it is and binds it. */
-export function WledAddressRow({ onBound, onAdded, primary, deps }: WledAddressRowProps) {
+export function WledAddressRow({ onBound, onAdded, primary, blocked = false, onBusyChange, deps }: WledAddressRowProps) {
   const { t } = useTranslation();
   const errorId = useId();
   const [address, setAddress] = useState("");
   const [invalid, setInvalid] = useState<ReturnType<typeof wledAddressError>>(null);
   const [failure, setFailure] = useState<WledCommandStatus | null>(null);
   const wled = useWledConnect(deps);
-  const adding = useHeldFlag(wled.connecting !== null);
+  const connecting = wled.connecting !== null;
+  const adding = useHeldFlag(connecting);
+  useEffect(() => {
+    onBusyChange?.(connecting);
+  }, [connecting, onBusyChange]);
   const shownFailure = useHeldValue(failure, adding);
 
   const add = async () => {
@@ -149,7 +159,7 @@ export function WledAddressRow({ onBound, onAdded, primary, deps }: WledAddressR
               setInvalid(null);
             }}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && !adding) {
+              if (event.key === "Enter" && !adding && !blocked) {
                 event.preventDefault();
                 void add();
               }
@@ -166,7 +176,7 @@ export function WledAddressRow({ onBound, onAdded, primary, deps }: WledAddressR
           <AddButton
             busy={adding}
             primary={primary && address.trim() !== ""}
-            disabled={address.trim() === ""}
+            disabled={blocked || address.trim() === ""}
             onClick={() => void add()}
             testId="wled-address-add"
           />

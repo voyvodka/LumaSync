@@ -32,6 +32,7 @@ interface AddStripPageProps {
 export function AddStripPage({ isActive, title, ports, otherPorts, device, onWledBound, replaces, onAdded }: AddStripPageProps) {
   const { t } = useTranslation();
   const headingId = useId();
+  const [wledAdding, setWledAdding] = useState(false);
   return (
     <section className={styles.page} hidden={!isActive} aria-labelledby={headingId} data-testid="add-strip-page">
       <h1 id={headingId} className={styles.heading}>
@@ -45,10 +46,18 @@ export function AddStripPage({ isActive, title, ports, otherPorts, device, onWle
           <SettingRow label={t("device:strip.add.usb")} value={t("device:strip.add.usbNone")} testId="add-strip-usb" />
         </Reveal>
         <RevealList items={ports} keyOf={(port) => port.portName}>
-          {(port) => <FoundPortRow port={port} device={device} primary={ports.length === 1} onAdded={onAdded} />}
+          {(port) => (
+            <FoundPortRow port={port} device={device} primary={ports.length === 1} blocked={wledAdding} onAdded={onAdded} />
+          )}
         </RevealList>
         <Reveal open>
-          <WledAddressRow onBound={onWledBound} onAdded={onAdded} primary={ports.length === 0} />
+          <WledAddressRow
+            onBound={onWledBound}
+            onAdded={onAdded}
+            primary={ports.length === 0}
+            blocked={device.isConnecting}
+            onBusyChange={setWledAdding}
+          />
         </Reveal>
         <Reveal open={otherPorts.length > 0}>
           <OtherPortsRow ports={otherPorts} />
