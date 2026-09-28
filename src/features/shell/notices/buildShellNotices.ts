@@ -114,10 +114,6 @@ export const HUE_NOT_STARTED_MESSAGE: Record<HueLeftOutReason, TranslationKey> =
   [HUE_LEFT_OUT_REASON.NO_LIGHTS]: "shell:notices.messages.hueNotStarted.noLights",
 };
 
-const HUE_BOOT_RETRY_MESSAGE: Record<BootHueRetryState, TranslationKey> = {
-  waiting: "shell:notices.messages.hueBootRetry.waiting",
-  gaveUp: "shell:notices.messages.hueBootRetry.gaveUp",
-};
 
 /** `permission` is a notice of its own, and `internal` reads its reason. */
 const START_FAILED_MESSAGE: Record<Exclude<CaptureFailureBucket, "permission" | "internal">, TranslationKey> = {
@@ -344,16 +340,16 @@ export function buildShellNotices(
       testId: "usb-left-out-notice",
     });
   }
-  // Never co-fires with the left-out notice: that one means a mode is running.
-  if (input.hueBootRetry) {
-    const waiting = input.hueBootRetry === "waiting";
+  // Only the give-up: the wait is the Hue chip's "Waiting" and its sentence. Never co-fires with the
+  // left-out notice: that one means a mode is running.
+  if (input.hueBootRetry === "gaveUp") {
     notices.push({
       id: SHELL_NOTICE_IDS.HUE_BOOT_RETRY,
       tier: NOTICE_TIER.WARNING,
       severity: NOTICE_SEVERITY.WARNING,
-      kind: waiting ? "condition" : "event",
-      message: t(HUE_BOOT_RETRY_MESSAGE[input.hueBootRetry]),
-      dismissible: !waiting,
+      kind: "event",
+      message: t("shell:notices.messages.hueBootRetryGaveUp"),
+      dismissible: true,
       source: input.hueBootRetry,
       testId: "hue-boot-retry-notice",
       shownBy: NOTICE_VIEW.DEVICES_HUE,

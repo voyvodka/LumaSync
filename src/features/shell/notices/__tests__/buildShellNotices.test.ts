@@ -257,13 +257,18 @@ describe("buildShellNotices", () => {
       ...Object.values(HUE_LEFT_OUT_REASON).map(
         (reason) => [`left out: ${reason}`, { hueLeftOut: reason }, SHELL_NOTICE_IDS.HUE_LEFT_OUT] as [string, Partial<ShellNoticeInput>, string],
       ),
-      ["boot retry: waiting", { hueBootRetry: "waiting" }, SHELL_NOTICE_IDS.HUE_BOOT_RETRY],
       ["boot retry: gave up", { hueBootRetry: "gaveUp" }, SHELL_NOTICE_IDS.HUE_BOOT_RETRY],
       ["stop failed: Hue", { stopFailedTargets: ["hue"] }, SHELL_NOTICE_IDS.STOP_FAILED],
       ["colour: stream offline", { hueColorNotice: HUE_SOLID_COLOR_STATUS.APPLY_SKIPPED }, SHELL_NOTICE_IDS.HUE_COLOR],
       ["colour: no lights", { hueColorNotice: HUE_SOLID_COLOR_STATUS.APPLY_SKIPPED_NO_LIGHTS }, SHELL_NOTICE_IDS.HUE_COLOR],
     ])("defers to Devices → Hue — %s", (_name, input, id) => {
       expect(byId(input, id).shownBy).toBe(NOTICE_VIEW.DEVICES_HUE);
+    });
+
+    // The Hue chip already says "Waiting" and why; a notice beside it repeated the same fact.
+    it("raises nothing while the launch waits for a held bridge, only when it gives up", () => {
+      expect(build({ hueBootRetry: "waiting" }).map((notice) => notice.id)).not.toContain(SHELL_NOTICE_IDS.HUE_BOOT_RETRY);
+      expect(byId({ hueBootRetry: "gaveUp" }, SHELL_NOTICE_IDS.HUE_BOOT_RETRY).kind).toBe("event");
     });
 
     // The card knows nothing about the strip, so that half of the message stays.

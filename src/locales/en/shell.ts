@@ -108,10 +108,7 @@ export default {
       usbLeftOut: "The USB strip isn't connected — running on Hue only",
       choiceRefused: "That lighting change didn't go through — what was running still runs",
       choiceStartFailed: "That lighting mode couldn't start, so the lights are off",
-      hueBootRetry: {
-        waiting: "The Hue bridge is held by an earlier session — lighting resumes once it lets go",
-        gaveUp: "Hue wasn't available at launch, so lighting is off — turn it on again once the bridge is back",
-      },
+      hueBootRetryGaveUp: "Hue wasn't available at launch, so lighting is off — turn it on again once the bridge is back",
       usbDisconnected: "USB strip disconnected — continuing on the other outputs",
       usbDisconnectedLightingOff: "USB strip disconnected, so lighting is off — reconnect it and pick a mode",
       usbUnsupportedFallback: "USB device not recognised — switched to Hue only",
