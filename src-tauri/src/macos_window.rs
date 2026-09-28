@@ -167,3 +167,42 @@ pub fn elevate_overlay_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R
         ns_window.setLevel(level);
     }
 }
+
+#[cfg(all(debug_assertions, not(feature = "e2e")))]
+pub use dev_focus::{hand_focus_back_after_launch, note_front_app_before_launch};
+
+#[cfg(all(debug_assertions, not(feature = "e2e")))]
+mod dev_focus {
+    use std::sync::Mutex;
+
+    use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication, NSWorkspace};
+
+    /// The app that was in front when a dev build started. tao activates the app it launches, ignoring
+    /// whatever the developer was using, and every Rust edit relaunches it; a debug build hands focus
+    /// back instead. Release builds keep the normal launch: a user who opens the app wants it in front.
+    static FRONT_BEFORE_LAUNCH: Mutex<Option<i32>> = Mutex::new(None);
+
+    /// Before the event loop starts, while the developer's app is still in front.
+    pub fn note_front_app_before_launch() {
+        let pid = NSWorkspace::sharedWorkspace()
+            .frontmostApplication()
+            .map(|app| app.processIdentifier())
+            .filter(|pid| *pid != std::process::id() as i32);
+        *FRONT_BEFORE_LAUNCH
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = pid;
+    }
+
+    /// On the main window's first focus: gives it back to the app noted at launch, once.
+    pub fn hand_focus_back_after_launch() {
+        let pid = FRONT_BEFORE_LAUNCH
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+        if let Some(app) =
+            pid.and_then(NSRunningApplication::runningApplicationWithProcessIdentifier)
+        {
+            app.activateWithOptions(NSApplicationActivationOptions::empty());
+        }
+    }
+}

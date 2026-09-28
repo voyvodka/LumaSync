@@ -497,6 +497,16 @@ stands between a broken binary and a published release on all three platforms.
 - **Linux** — capture and credentials both gate (the credential leg was soft until its first green run on 2026-08-18: `backend=keychain roundtrip=ok set=714 get=2 delete=6`, and Xvfb capture came back `640x512` from a 1280×1024 screen — the integer downscale at work). The Secret Service is started by hand for the run: `dbus-run-session` wraps everything (so `gnome-keyring-daemon` and the app share one session bus — the daemon claims `org.freedesktop.secrets` on it, which is what keyring 4's `zbus-secret-service` backend talks to), `printf "\n"` unlocks the freshly created login keyring with an empty password, and `xvfb-run` nests inside because it only sets `DISPLAY`.
 - **macOS** — capture only, and soft: `--expect-soft "[smoke-capture]"` on the bare prefix, so a frame and a permission SKIP both satisfy it and both get printed. No credential run at all — a Keychain ACL prompt has nobody to answer it, which is the same wall described under "Keychain prompts in dev" below.
 
+## A dev build does not take focus
+
+`bun run tauri dev` relaunches the app on every Rust edit, and tao activates the app it launches
+ignoring whatever else is in front, so each save pulled the developer out of the editor or terminal
+they were typing in. A debug build on macOS notes the frontmost app before the event loop starts and
+hands activation back to it on the main window's first focus (`macos_window.rs`,
+`dev_focus`); the frontend skips its `setFocus` in dev. The window still shows, behind. Release
+builds and the e2e build keep the normal launch: someone who opens the app wants it in front, and
+the suite drives a focused window.
+
 ## Keychain prompts in dev
 
 macOS asks for the login-keychain password on almost every `bun run tauri dev` start —

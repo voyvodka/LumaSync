@@ -30,6 +30,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 // ---------------------------------------------------------------------------
@@ -62,6 +63,7 @@ describe("Scenario 17 — an autostart launch stays in the tray", () => {
   });
 
   it("shows and focuses the window on an ordinary launch", async () => {
+    vi.stubEnv("DEV", false);
     readStartHiddenMock.mockResolvedValue(false);
     vi.spyOn(console, "info").mockImplementation(() => {});
 
@@ -69,6 +71,19 @@ describe("Scenario 17 — an autostart launch stays in the tray", () => {
 
     expect(showMock).toHaveBeenCalledTimes(1);
     expect(setFocusMock).toHaveBeenCalledTimes(1);
+  });
+
+  // Every Rust edit relaunches a dev build; taking focus each time pulled the developer out of
+  // whatever they were typing in. Rust hands activation back on macOS.
+  it("shows a dev build's window without taking focus", async () => {
+    vi.stubEnv("DEV", true);
+    readStartHiddenMock.mockResolvedValue(false);
+    vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await freshInit();
+
+    expect(showMock).toHaveBeenCalledTimes(1);
+    expect(setFocusMock).not.toHaveBeenCalled();
   });
 });
 
@@ -78,6 +93,7 @@ describe("Scenario 17 — an autostart launch stays in the tray", () => {
 
 describe("a page reload of the same window", () => {
   it("leaves the window where it is and never takes focus", async () => {
+    vi.stubEnv("DEV", false);
     readStartHiddenMock.mockResolvedValue(false);
     setupPersistedState(makePersistedState({ windowCenterX: 960, windowCenterY: 540 }));
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
