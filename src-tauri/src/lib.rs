@@ -44,6 +44,9 @@ mod commands {
 #[cfg(target_os = "macos")]
 mod macos_window;
 
+// Lights off while the user is away, and back when they return.
+mod away;
+
 // Single source for every Tauri event name — see its module doc.
 mod events;
 mod panic_log;
@@ -700,6 +703,7 @@ pub fn run() {
             app.manage(SerialPortAccess::default());
             app.manage(OverlayState::default());
             app.manage(LightingRuntimeState::default());
+            app.manage(away::AwayWatch::default());
             app.manage(LedTwinState::default());
             app.manage(HueRuntimeStateStore::default());
             app.manage(RuntimeTelemetryState::default());
@@ -712,6 +716,8 @@ pub fn run() {
             commands::hue::health::install(app.handle());
             // After the `manage` calls: its first poll reads the serial state and the lighting runtime.
             commands::device_connection::spawn_serial_watch(app.handle().clone());
+            // After the lighting runtime and `AwayWatch`: a lock heard at once turns the lights off.
+            away::watch(app.handle());
 
             // After the `manage` calls, not next to `LUMASYNC_NO_DEVTOOLS`: the
             // hook resolves `OverlayState` when it fires.

@@ -36,6 +36,15 @@ export const SETTING_ROWS = {
     hintKey: "settings:launchLights.hint",
     testId: "launch-lights",
   },
+  awayLights: {
+    kind: "switch",
+    pref: "awayLights",
+    on: "off",
+    off: "keep",
+    labelKey: "settings:awayLights.label",
+    hintKey: "settings:awayLights.hint",
+    testId: "away-lights-toggle",
+  },
   closeAction: {
     kind: "choice",
     pref: "closeAction",
@@ -101,7 +110,7 @@ interface SettingsPageDef {
 
 /** The rail in order: a new page fails to compile until it has a row here. */
 export const SETTINGS_PAGES = {
-  general: { labelKey: "settings:pages.general", rows: ["launchAtLogin", "launchLights", "closeAction", "notifications", "language"] },
+  general: { labelKey: "settings:pages.general", rows: ["launchAtLogin", "launchLights", "awayLights", "closeAction", "notifications", "language"] },
   appearance: { labelKey: "settings:pages.appearance", rows: ["uiZoom", "reduceMotion", "nerdStats"] },
   updates: { labelKey: "settings:pages.updates", rows: ["updateCheck", "betaChannel"] },
   help: { labelKey: "settings:pages.help", rows: ["setupGuide", "shortcuts", "logFolder", "diagnostics", "reportIssue", "discussions"] },

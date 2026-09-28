@@ -260,6 +260,9 @@ pub(crate) struct OutputsState {
     hue_stop_unconfirmed: AtomicBool,
     boot_retry: Mutex<Option<BootRetry>>,
     boot_sink_wait: Mutex<Option<BootSinkWait>>,
+    /// What going away put out, for coming back to put back. Memory only: a
+    /// crash while away resumes the last real choice from disk at launch.
+    away: Mutex<Option<LightingModeKind>>,
     /// A launch restore Hue was left out of because the bridge did not
     /// answer, waiting for the health monitor to see it reachable.
     boot_hue_parked: Mutex<Option<BootRetryPlan>>,
@@ -361,8 +364,11 @@ impl OutputsState {
                 .unwrap_or_default();
             // Only while nothing runs: a webview reload restores too, and must
             // not turn off lights the user has on.
-            let stay_off = running_kind == LightingModeKind::Off
-                && persisted.is_some_and(PersistedShellState::launch_lights_off);
+            // Nor light a locked screen: a restore while away (a reload, a
+            // crashed webview) waits for the return like everything else.
+            let stay_off = (running_kind == LightingModeKind::Off
+                && persisted.is_some_and(PersistedShellState::launch_lights_off))
+                || locked(&self.away).is_some();
             intent.clone_from(&LightingIntent {
                 known: true,
                 kind: if stay_off {
@@ -785,6 +791,12 @@ enum TxKind {
     /// A saved setting the running mode reads changed: re-apply what runs, on
     /// what it runs on. Changes no intent and saves nothing.
     Refresh,
+    /// The computer locked, slept or blanked its display (`resume: false`), or
+    /// the user came back. Turns the lights off as Off does, saves nothing and
+    /// raises no outcome: nobody was there to press anything.
+    Away {
+        resume: bool,
+    },
 }
 
 impl TxKind {
@@ -1057,7 +1069,8 @@ impl<'a, R: Runtime> Transaction<'a, R> {
         // Pressing Off — in a window, the popup or the tray — turns the lights
         // off. Every other way lighting ends lets them go back as they were.
         // docs/architecture/lighting-transaction.md ("Off turns the lights off").
-        let user_off = matches!(self.kind, TxKind::Choice(_)) && intent.persist_mode;
+        let user_off = (matches!(self.kind, TxKind::Choice(_)) && intent.persist_mode)
+            || matches!(self.kind, TxKind::Away { resume: false });
         let stop_hue = match self.kind {
             // The user chose Off. As the frontend's Off did, a configured bridge
             // gets its stop even when no stream is known here, which also
@@ -1839,6 +1852,11 @@ pub(crate) async fn apply_outputs_with<R: Runtime>(
         origin => TxKind::Choice(origin),
     };
 
+    // A mode chosen while away is what runs on return.
+    if request.mode.is_some() && request.origin.is_choice() {
+        locked(&state.outputs.away).take();
+    }
+
     // The user always wins over the launch's wait for a held area. A target
     // change that still includes Hue lets a resume keep waiting; a rejoin is
     // answered by any output choice, since the user's own add speaks for itself.
@@ -1914,6 +1932,85 @@ pub(crate) async fn refresh_running_with<R: Runtime>(
     }
     let ticket = state.outputs.latest_ticket.load(Ordering::SeqCst);
     run_ticketed(app, ticket, TxKind::Refresh).await.map(Some)
+}
+
+/// Which way the user went: away (locked, asleep, display off) or back.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AwayEdge {
+    Leave,
+    Return,
+}
+
+/// An away edge whose intent is already recorded and whose ticket is taken,
+/// waiting only for its turn at the lights.
+pub(crate) struct AwayTurn {
+    ticket: u64,
+    kind: TxKind,
+}
+
+impl AwayTurn {
+    pub(crate) async fn run<R: Runtime>(
+        self,
+        app: &AppHandle<R>,
+    ) -> Result<ApplyOutputsResult, String> {
+        run_ticketed(app, self.ticket, self.kind).await
+    }
+}
+
+/// Records an away edge at once, on the thread that heard it, so a quick lock
+/// and unlock take their tickets in the order they happened; only the lights
+/// wait for a turn. `None` when there is nothing to do: the setting keeps the
+/// lights on, they were already off, or nothing was put out to put back.
+/// docs/architecture/lighting-transaction.md ("Away").
+pub(crate) fn prepare_away<R: Runtime>(app: &AppHandle<R>, edge: AwayEdge) -> Option<AwayTurn> {
+    let state = app.state::<LightingRuntimeState>();
+    let outputs = &state.outputs;
+    let kind = match edge {
+        AwayEdge::Leave => {
+            if shell_state::persisted(app).is_some_and(|persisted| persisted.away_lights_kept()) {
+                return None;
+            }
+            let intent = outputs.intent();
+            if !intent.known || intent.kind == LightingModeKind::Off {
+                return None;
+            }
+            // A choice still on its way in is saved now: the Off below takes
+            // its turn before it would have been.
+            if intent.persist_mode {
+                persist_mode(app, &intent.kind, &state.tuning.stored());
+            }
+            locked(&outputs.away).replace(intent.kind);
+            outputs.update_intent(|intent| {
+                intent.kind = LightingModeKind::Off;
+                intent.persist_mode = false;
+            });
+            cancel_boot_retry(app, "the user went away");
+            outputs.cancel_boot_sink_wait("the user went away");
+            TxKind::Away { resume: false }
+        }
+        AwayEdge::Return => {
+            // The mode only: an output unplugged while away stays out of it.
+            let kind = locked(&outputs.away).take()?;
+            outputs.update_intent(|intent| intent.kind = kind);
+            TxKind::Away { resume: true }
+        }
+    };
+    Some(AwayTurn {
+        ticket: outputs.issue_ticket(),
+        kind,
+    })
+}
+
+/// `prepare_away` and its turn in one, for a caller with nothing to order.
+#[cfg(test)]
+pub(crate) async fn away_with<R: Runtime>(
+    app: &AppHandle<R>,
+    edge: AwayEdge,
+) -> Result<Option<ApplyOutputsResult>, String> {
+    match prepare_away(app, edge) {
+        Some(turn) => turn.run(app).await.map(Some),
+        None => Ok(None),
+    }
 }
 
 /// Called for every write a window makes to the shell state. A write naming a

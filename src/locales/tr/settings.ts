@@ -83,6 +83,10 @@ const settings: Catalogue<typeof enSettings> = {
     resume: "Son modu sürdür",
     off: "Kapalı başla",
   },
+  awayLights: {
+    label: "Uzaktayken ışıkları kapat",
+    hint: "Bilgisayar kilitlenince, uyuyunca ya da ekranı kapanınca ışıklar söner; dönünce çalışan mod geri gelir. macOS ve Windows.",
+  },
   closeAction: {
     label: "Kapat düğmesi",
     hint: "Pencereyi kapatınca ne olacağı. Arka planda çalışırken simgesi menü çubuğunda (Windows'ta bildirim alanında) durur; çıkmak ışıkları durdurur.",

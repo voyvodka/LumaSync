@@ -80,6 +80,10 @@ export default {
     resume: "Resume last mode",
     off: "Stay off",
   },
+  awayLights: {
+    label: "Lights off when away",
+    hint: "Locking the computer, putting it to sleep or turning its display off puts the lights out; coming back brings back what ran. macOS and Windows.",
+  },
   closeAction: {
     label: "Close button",
     hint: "What closing the window does. Running in the background keeps its icon in the menu bar (the notification area on Windows); quitting stops the lights.",

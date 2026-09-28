@@ -434,6 +434,12 @@ export interface ShellState {
    * Rust's launch restore. Additive, no schema bump.
    */
   launchLights?: LaunchLights;
+  /**
+   * Settings → General "Lights off when away". Anything but `"keep"` turns the lights off when the
+   * computer locks, sleeps or turns its display off, and brings back what ran when the user
+   * returns; the saved mode is never touched. Read by Rust's away watch. Additive, no schema bump.
+   */
+  awayLights?: AwayLights;
   // -------------------------------------------------------------------------
   // v1.6 — LED Preview & Test Experience (all OPTIONAL / additive; no schema
   // bump — absence degrades to the documented default below).
@@ -640,6 +646,14 @@ export type LaunchLights = (typeof LAUNCH_LIGHTS)[number];
 /** Absent or unrecognised ⇒ `"resume"`. Mirrors `launch_lights_off` in `commands/shell_state.rs`. */
 export function resolveLaunchLights(stored: unknown): LaunchLights {
   return stored === "off" ? "off" : "resume";
+}
+
+export const AWAY_LIGHTS = ["off", "keep"] as const;
+export type AwayLights = (typeof AWAY_LIGHTS)[number];
+
+/** Absent or unrecognised ⇒ `"off"`. Mirrors `away_lights_kept` in `commands/shell_state.rs`. */
+export function resolveAwayLights(stored: unknown): AwayLights {
+  return stored === "keep" ? "keep" : "off";
 }
 
 /** Logical pixel dimensions for each UI mode */

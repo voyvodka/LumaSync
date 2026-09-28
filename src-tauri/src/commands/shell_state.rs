@@ -226,6 +226,11 @@ impl PersistedShellState {
         self.read::<String>("launchLights").as_deref() == Some("off")
     }
 
+    /// Settings → Lights when away. Anything but `"keep"` turns them off.
+    pub fn away_lights_kept(&self) -> bool {
+        self.read::<String>("awayLights").as_deref() == Some("keep")
+    }
+
     /// Bridge, area and pairing evidence for a Hue start. The legacy keys are
     /// what an install that predates the keychain still has on disk.
     pub fn hue_start_view(&self) -> HueStartView {
@@ -1517,6 +1522,10 @@ mod tests {
 
         assert!(read(r#""launchLights": "off""#).launch_lights_off());
         assert!(!read(r#""launchLights": "resume""#).launch_lights_off());
+        assert!(read(r#""awayLights": "keep""#).away_lights_kept());
+        assert!(!read(r#""awayLights": "off""#).away_lights_kept());
+        assert!(!read(r#""awayLights": true"#).away_lights_kept());
+        assert!(!read("").away_lights_kept());
     }
 
     /// What the lighting transaction reads to restore a mode and start Hue.

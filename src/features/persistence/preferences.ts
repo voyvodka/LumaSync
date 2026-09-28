@@ -13,6 +13,7 @@ import { useEffect } from "react";
 import { shellStore } from "@/features/persistence/shellStore";
 import { APP_VERSION } from "@/shared/constants/app";
 import {
+  resolveAwayLights,
   resolveCloseAction,
   resolveLaunchLights,
   resolveMotionPreference,
@@ -31,13 +32,14 @@ const PREFERENCES = {
   closeAction: resolveCloseAction,
   notifications: resolveNotificationsPreference,
   launchLights: resolveLaunchLights,
+  awayLights: resolveAwayLights,
 } satisfies { [K in keyof ShellState]?: (stored: unknown) => NonNullable<ShellState[K]> };
 
 export type PreferenceKey = keyof typeof PREFERENCES;
 
 /**
  * Rust reads these off disk to decide something (the update feed, the webview zoom, what the close
- * button does, notifications, the launch restore). A failed save reverts them: showing a choice
+ * button does, notifications, the launch restore, the lights while away). A failed save reverts them: showing a choice
  * Rust never saw would say one thing while the app did another.
  */
 const READ_BY_RUST: ReadonlySet<PreferenceKey> = new Set<PreferenceKey>([
@@ -46,6 +48,7 @@ const READ_BY_RUST: ReadonlySet<PreferenceKey> = new Set<PreferenceKey>([
   "closeAction",
   "notifications",
   "launchLights",
+  "awayLights",
 ]);
 export type PreferenceValue<K extends PreferenceKey> = ReturnType<(typeof PREFERENCES)[K]>;
 type Preferences = { [K in PreferenceKey]: PreferenceValue<K> };
