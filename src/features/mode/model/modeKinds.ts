@@ -4,12 +4,13 @@ import type { TranslationKey } from "@/features/i18n/catalogue";
 import {
   LIGHTING_MODE_KIND,
   type AmbilightPayload,
+  type EffectPayload,
   type LightingModeConfig,
   type LightingModeKind,
   type SolidColorPayload,
 } from "@/shared/contracts/mode";
 import { KEYBIND_ACTIONS, type KeybindAction } from "@/shared/contracts/shell";
-import { IconAmbilight, IconOff, IconSolid, IconSolidDot } from "@/shared/ui/icons";
+import { IconAmbilight, IconEffect, IconOff, IconSolid, IconSolidDot } from "@/shared/ui/icons";
 
 export interface ModeKindDescriptor {
   keybind: KeybindAction;
@@ -23,14 +24,19 @@ export interface ModeKindDescriptor {
   /** The popup draws Solid as a plain disc. */
   PopupIcon: ComponentType;
   /** The config a click on this kind applies, from whatever payloads the caller has on screen. */
-  config: (payloads: { solid?: SolidColorPayload; ambilight?: AmbilightPayload }) => LightingModeConfig;
+  config: (payloads: {
+    solid?: SolidColorPayload;
+    ambilight?: AmbilightPayload;
+    effect?: EffectPayload;
+  }) => LightingModeConfig;
 }
 
-/** Strip order: left to right in every mode strip, and the ⌥1–⌥3 keybind order. */
+/** Strip order: left to right in every mode strip, and the ⌥1–⌥4 keybind order. */
 export const MODE_KIND_ORDER = [
   LIGHTING_MODE_KIND.OFF,
   LIGHTING_MODE_KIND.AMBILIGHT,
   LIGHTING_MODE_KIND.SOLID,
+  LIGHTING_MODE_KIND.EFFECT,
 ] as const satisfies readonly LightingModeKind[];
 
 /** A new lighting mode kind fails to compile here until every strip can draw it. */
@@ -65,6 +71,16 @@ export const MODE_KINDS = {
     // Without a payload Rust keeps the last colour.
     config: ({ solid }) =>
       solid ? { kind: LIGHTING_MODE_KIND.SOLID, solid } : { kind: LIGHTING_MODE_KIND.SOLID },
+  },
+  [LIGHTING_MODE_KIND.EFFECT]: {
+    keybind: KEYBIND_ACTIONS.MODE_EFFECT,
+    labelKey: "common:mode.options.effect",
+    titleKey: "lights:mode.effect.title",
+    Icon: IconEffect,
+    PopupIcon: IconEffect,
+    // Without a payload Rust keeps the last effect.
+    config: ({ effect }) =>
+      effect ? { kind: LIGHTING_MODE_KIND.EFFECT, effect } : { kind: LIGHTING_MODE_KIND.EFFECT },
   },
 } satisfies Record<LightingModeKind, ModeKindDescriptor>;
 

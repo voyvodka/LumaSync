@@ -9,10 +9,12 @@ import {
 } from "@/shared/contracts/hue";
 import type { ShellState } from "@/shared/contracts/shell";
 import {
+  DEFAULT_EFFECT,
   DEFAULT_SOLID_COLOR,
   LIGHTING_MODE_KIND,
   isLightingModeKind,
   normalizeAmbilightPayload,
+  normalizeEffectPayload,
   normalizeColorOrder,
   normalizeLightingModeConfig,
   normalizeOutputTargets,
@@ -36,17 +38,29 @@ const CALIBRATION: LedCalibrationConfig = {
 };
 
 describe("lighting mode contracts", () => {
-  it("accepts only off | ambilight | solid mode kind values", () => {
+  it("accepts only off | ambilight | solid | effect mode kind values", () => {
     expect(LIGHTING_MODE_KIND).toEqual({
       OFF: "off",
       AMBILIGHT: "ambilight",
       SOLID: "solid",
+      EFFECT: "effect",
     });
 
     expect(isLightingModeKind("off")).toBe(true);
     expect(isLightingModeKind("ambilight")).toBe(true);
     expect(isLightingModeKind("solid")).toBe(true);
+    expect(isLightingModeKind("effect")).toBe(true);
     expect(isLightingModeKind("rainbow")).toBe(false);
+  });
+
+  // Rust reads an unknown id as the rainbow; so does the frontend, or the two would disagree.
+  it("normalises an effect into range, an unknown id to the rainbow", () => {
+    expect(normalizeEffectPayload({ id: "fire" as never, speed: 3, brightness: -1 })).toEqual({
+      id: "rainbow",
+      speed: 1,
+      brightness: 0,
+    });
+    expect(normalizeLightingModeConfig({ kind: "effect" }).effect).toEqual(DEFAULT_EFFECT);
   });
 
   it("normalizes solid mode payload as r,g,b,brightness", () => {

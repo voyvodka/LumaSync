@@ -73,10 +73,11 @@
   background: linear-gradient(to right, var(--lm-line-2), transparent);
 }
 
-/* Mode strip — 3-col grid with amber-glow on active */
+/* Mode strip — one equal column per mode, amber glow on the active one */
 .lm-compact-mode-strip {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   gap: 6px;
 }
 .lm-compact-mbtn {

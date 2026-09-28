@@ -21,6 +21,20 @@ export default {
       title: "Solid",
       subtitle: "{{hex}} · {{brightness}}%",
     },
+    effect: {
+      title: "Effect",
+      subtitle: "{{name}} · {{brightness}}%",
+    },
+  },
+  effect: {
+    label: "Effect",
+    speed: "Speed",
+    brightness: "Brightness",
+    names: {
+      rainbow: "Rainbow",
+      breathe: "Breathe",
+      cycle: "Colour cycle",
+    },
   },
   signal: {
     linkBudget: {

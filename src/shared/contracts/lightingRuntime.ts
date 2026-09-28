@@ -9,7 +9,7 @@
 
 import type { HueRuntimeTarget, HueRuntimeTriggerSource } from "./hue";
 import type { HueLeftOutReason, LightingModeStatusCode } from "./lighting";
-import type { AmbilightPayload, LightingModeConfig, SolidColorPayload } from "./mode";
+import type { AmbilightPayload, EffectPayload, LightingModeConfig, SolidColorPayload } from "./mode";
 import type { CommandStatusOf } from "./status";
 
 export const LIGHTING_RUNTIME_COMMANDS = {
@@ -173,10 +173,11 @@ export interface ApplyOutputsResult {
   outcome: ApplyOutputsOutcome;
 }
 
-/** A settings nudge within the running kind. Exactly one of the two is read. */
+/** A settings nudge within the running kind. Exactly one of them is read. */
 export interface LightingTuning {
   solid?: SolidColorPayload | null;
   ambilight?: AmbilightPayload | null;
+  effect?: EffectPayload | null;
 }
 
 export interface RetuneLightingResult {

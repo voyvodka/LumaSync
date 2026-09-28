@@ -3,6 +3,7 @@ export default {
     modeOff: "Turn lights off",
     modeAmbilight: "Switch to ambilight mode",
     modeSolid: "Switch to solid color mode",
+    modeEffect: "Switch to effect mode",
     openSettings: "Open settings",
   },
   errorBoundary: {

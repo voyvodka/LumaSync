@@ -98,6 +98,7 @@ export function ShortcutsRow() {
     { id: "off", label: t("shell:keybind.modeOff"), keys: getKeybindDefinition(KEYBIND_ACTIONS.MODE_OFF, platform).badge },
     { id: "ambilight", label: t("shell:keybind.modeAmbilight"), keys: getKeybindDefinition(KEYBIND_ACTIONS.MODE_AMBILIGHT, platform).badge },
     { id: "solid", label: t("shell:keybind.modeSolid"), keys: getKeybindDefinition(KEYBIND_ACTIONS.MODE_SOLID, platform).badge },
+    { id: "effect", label: t("shell:keybind.modeEffect"), keys: getKeybindDefinition(KEYBIND_ACTIONS.MODE_EFFECT, platform).badge },
     { id: "settings", label: t("shell:keybind.openSettings"), keys: getKeybindDefinition(KEYBIND_ACTIONS.OPEN_SETTINGS, platform).badge },
     { id: "zoom-in", label: t("settings:help.shortcuts.zoomIn"), keys: zoom.in },
     { id: "zoom-out", label: t("settings:help.shortcuts.zoomOut"), keys: zoom.out },

@@ -21,6 +21,7 @@ import {
 import {
   LIGHTING_MODE_KIND,
   normalizeAmbilightPayload,
+  normalizeEffectPayload,
   normalizeOutputTargets,
   normalizeSolidColorPayload,
   type AmbilightPayload,
@@ -123,6 +124,7 @@ function choiceOf(mode: LightingModeConfig): LightingModeConfig {
     kind: mode.kind,
     ...(mode.solid ? { solid: mode.solid } : {}),
     ...(mode.ambilight ? { ambilight: mode.ambilight } : {}),
+    ...(mode.effect ? { effect: mode.effect } : {}),
   };
 }
 
@@ -333,6 +335,8 @@ export function useLightingModeOrchestrator({
           retunes.push({ solid: normalizeSolidColorPayload(next.solid) });
         } else if (next.kind === LIGHTING_MODE_KIND.AMBILIGHT && next.ambilight) {
           retunes.push({ ambilight: normalizeAmbilightPayload(next.ambilight) });
+        } else if (next.kind === LIGHTING_MODE_KIND.EFFECT && next.effect) {
+          retunes.push({ effect: normalizeEffectPayload(next.effect) });
         }
         return;
       }

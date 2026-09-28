@@ -49,10 +49,12 @@
   font-weight: 500;
 }
 
-/* Mode strip */
+/* Mode strip. The container steps below are per tile (four of them): the badge
+   goes first, then the subtitle, then the tile stacks. */
 .lm-mstrip {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   background: var(--lm-panel);
   border: 1px solid var(--lm-line);
   border-radius: 10px;
@@ -150,7 +152,7 @@
 /* Responsive: when the strip container is narrow, shed non-essential pieces
    so the mode title stays visible. Uses container queries so the breakpoints
    react to the strip's own width (dock + sidebar agnostic). */
-@container mstrip (max-width: 580px) {
+@container mstrip (max-width: 780px) {
   .lm-mbtn {
     padding: 12px 11px;
     gap: 9px;
@@ -159,7 +161,7 @@
     display: none;
   }
 }
-@container mstrip (max-width: 460px) {
+@container mstrip (max-width: 620px) {
   .lm-mbtn {
     padding: 11px 9px;
     gap: 8px;
@@ -176,7 +178,7 @@
     height: 14px;
   }
 }
-@container mstrip (max-width: 340px) {
+@container mstrip (max-width: 460px) {
   .lm-mbtn {
     flex-direction: column;
     align-items: center;
@@ -238,7 +240,8 @@
 
 .lm-profile {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   gap: 0;
   border-top: 1px solid var(--lm-line);
 }

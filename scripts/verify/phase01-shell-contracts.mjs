@@ -1212,7 +1212,8 @@ const emittedLightingCodes = [
 // the other nine still matched. Bump this deliberately when a code is added.
 // 10 → 11: LIGHTING_MODE_SHUTTING_DOWN, a start refused once the quit began.
 // 12 → 11: LIGHTING_MODE_STATUS_OK went with `get_lighting_mode_status`.
-const EXPECTED_LIGHTING_CODE_COUNT = 11;
+// 11 → 14: EFFECT_MODE_STARTED / _UPDATED / _START_FAILED, the Effect mode's own codes.
+const EXPECTED_LIGHTING_CODE_COUNT = 14;
 check(
   emittedLightingCodes.length === EXPECTED_LIGHTING_CODE_COUNT,
   `harvested exactly ${EXPECTED_LIGHTING_CODE_COUNT} command_status codes from lighting_mode/transition.rs`,
@@ -2663,7 +2664,8 @@ const checkedPairs = nullabilityPairs.filter(
 // `SerialDisconnectResult` (`disconnect_serial_port`).
 // 94 → 92: `get_wled_sink_status` went, and with it `WledSinkStatusResponse` and
 // `WledSinkSnapshot`; the registry says which WLED device is bound.
-const EXPECTED_NULLABILITY_PAIR_COUNT = 92;
+// 92 → 94: EffectPayload and EffectColor, the Effect mode's payload.
+const EXPECTED_NULLABILITY_PAIR_COUNT = 94;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

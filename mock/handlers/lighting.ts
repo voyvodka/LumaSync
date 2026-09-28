@@ -221,7 +221,13 @@ export const lightingRuntimeHandlers = {
 
   [LIGHTING_RUNTIME_COMMANDS.RETUNE_LIGHTING]: (args) => {
     const mode = getWorld().lighting.mode;
-    const kind = args.tuning.solid ? "solid" : args.tuning.ambilight ? "ambilight" : null;
+    const kind = args.tuning.solid
+      ? "solid"
+      : args.tuning.ambilight
+        ? "ambilight"
+        : args.tuning.effect
+          ? "effect"
+          : null;
     if (kind === null || mode.kind !== kind) {
       return { status: status("RETUNE_NOT_RUNNING", "Nothing of that kind is running") };
     }
@@ -230,6 +236,7 @@ export const lightingRuntimeHandlers = {
         ...w.lighting.mode,
         solid: args.tuning.solid ?? w.lighting.mode.solid,
         ambilight: args.tuning.ambilight ?? w.lighting.mode.ambilight,
+        effect: args.tuning.effect ?? w.lighting.mode.effect,
       };
     });
     publish();

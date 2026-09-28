@@ -65,6 +65,7 @@ function pushTrayLabels() {
     lightsOff: t("tray:lightsOff"),
     ambilight: t("tray:ambilight"),
     solidColor: t("tray:solidColor"),
+    effect: t("tray:effect"),
     lockedModes: trayLockedModes,
     showLedPreview: t("preview:tray.show"),
     closeOverlays: t("tray:closeOverlays"),

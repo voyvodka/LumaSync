@@ -12,6 +12,7 @@ import {
   OUTPUT_TARGETS,
   normalizeLightingModeConfig,
   normalizeAmbilightPayload,
+  normalizeEffectPayload,
   type LightingModeConfig,
 } from "@/shared/contracts/mode";
 import {
@@ -47,6 +48,7 @@ import { Callout } from "@/shared/ui/Callout/Callout";
 import { RangeRow } from "@/shared/ui/RangeRow/RangeRow";
 import { Toggle } from "@/shared/ui/Toggle/Toggle";
 
+import { EffectPanel } from "@/features/mode/ui/EffectPanel";
 import { SolidColorPanel } from "./control/SolidColorPanel";
 import { ColorCorrectionPanel } from "./control/ColorCorrectionPanel";
 import { LightingSmoothingPresetControl } from "./control/LightingSmoothingPresetControl";
@@ -151,7 +153,9 @@ export function LightsSection({
   const activeKind = normalizedMode.kind;
   const isSolid = activeKind === LIGHTING_MODE_KIND.SOLID;
   const isAmbilight = activeKind === LIGHTING_MODE_KIND.AMBILIGHT;
+  const isEffect = activeKind === LIGHTING_MODE_KIND.EFFECT;
   const incomingSolid = normalizedMode.solid ?? DEFAULT_SOLID_COLOR;
+  const incomingEffect = normalizeEffectPayload(normalizedMode.effect);
   const incomingAmbilight = normalizeAmbilightPayload(normalizedMode.ambilight);
 
   const solidHex = rgbToHex(incomingSolid);
@@ -378,10 +382,18 @@ export function LightsSection({
                 hex: solidHex.toUpperCase(),
                 brightness: solidBrightnessPct,
               }),
+              [LIGHTING_MODE_KIND.EFFECT]: t("lights:mode.effect.subtitle", {
+                name: t(`lights:effect.names.${incomingEffect.id}`),
+                brightness: Math.round(incomingEffect.brightness * 100),
+              }),
             }}
             onSelect={(kind) =>
               onModeChange(
-                MODE_KINDS[kind].config({ solid: { ...incomingSolid }, ambilight: incomingAmbilight }),
+                MODE_KINDS[kind].config({
+                  solid: { ...incomingSolid },
+                  ambilight: incomingAmbilight,
+                  effect: incomingEffect,
+                }),
               )
             }
           />
@@ -411,6 +423,14 @@ export function LightsSection({
               }
             />
           </div>
+        )}
+
+        {isEffect && (
+          <EffectPanel
+            effect={incomingEffect}
+            disabled={calibrationLocked}
+            onChange={(effect) => onModeChange({ kind: LIGHTING_MODE_KIND.EFFECT, effect })}
+          />
         )}
 
         {/* Ambilight tuning — only when Ambilight is active */}

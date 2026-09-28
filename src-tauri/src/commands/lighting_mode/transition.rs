@@ -108,18 +108,33 @@ pub(super) fn set_active_port(
     owner.active_port = Some(new_port);
 }
 
-/// The start and failure codes of the kinds the Ambilight worker runs.
-fn worker_codes(kind: LightingModeKind) -> (&'static str, &'static str, &'static str) {
+/// A worker kind's start, as a literal per kind so the contract verifier finds each code.
+fn worker_started(kind: LightingModeKind) -> CommandStatus {
     match kind {
-        LightingModeKind::Effect => (
+        LightingModeKind::Effect => command_status(
             "EFFECT_MODE_STARTED",
+            "Effect runtime started with frame output pipeline.",
+            None,
+        ),
+        _ => command_status(
+            "AMBILIGHT_MODE_STARTED",
+            "Ambilight runtime started with frame output pipeline.",
+            None,
+        ),
+    }
+}
+
+fn worker_start_failed(kind: LightingModeKind, details: Option<String>) -> CommandStatus {
+    match kind {
+        LightingModeKind::Effect => command_status(
             "EFFECT_MODE_START_FAILED",
             "Effect runtime could not start.",
+            details,
         ),
-        _ => (
-            "AMBILIGHT_MODE_STARTED",
+        _ => command_status(
             "AMBILIGHT_MODE_START_FAILED",
             "Ambilight runtime could not start.",
+            details,
         ),
     }
 }
@@ -394,21 +409,20 @@ fn apply_mode_change_inner(
                 }
                 owner.preview.active_test_pattern = Some(next);
             }
-            let (code, message) = if owner.active_mode.kind == LightingModeKind::Effect {
-                (
+            let status = if owner.active_mode.kind == LightingModeKind::Effect {
+                command_status(
                     "EFFECT_MODE_UPDATED",
                     "Effect settings updated in running worker.",
+                    None,
                 )
             } else {
-                (
+                command_status(
                     "AMBILIGHT_MODE_UPDATED",
                     "Ambilight settings updated in running worker.",
+                    None,
                 )
             };
-            return make_result(
-                owner.active_mode.clone(),
-                command_status(code, message, None),
-            );
+            return make_result(owner.active_mode.clone(), status);
         }
     }
 
@@ -547,7 +561,7 @@ fn apply_mode_change_inner(
         }
         LightingModeKind::Ambilight | LightingModeKind::Effect => {
             push_trace(&mut trace, "start_ambilight");
-            let (started_code, failed_code, failed_message) = worker_codes(normalized_next.kind);
+            let worker_kind = normalized_next.kind;
             // An effect draws its frames; nothing is captured.
             let effect = (normalized_next.kind == LightingModeKind::Effect)
                 .then(|| normalized_next.effect.clone().unwrap_or(DEFAULT_EFFECT));
@@ -637,7 +651,7 @@ fn apply_mode_change_inner(
                         owner.active_mode = LightingModeConfig::default();
                         return make_result(
                             owner.active_mode.clone(),
-                            command_status(failed_code, failed_message, Some(reason.as_reason())),
+                            worker_start_failed(worker_kind, Some(reason.as_reason())),
                         );
                     }
                 }
@@ -654,9 +668,8 @@ fn apply_mode_change_inner(
                         owner.active_mode = LightingModeConfig::default();
                         return make_result(
                             owner.active_mode.clone(),
-                            command_status(
-                                failed_code,
-                                failed_message,
+                            worker_start_failed(
+                                worker_kind,
                                 Some("LED_OUTPUT_PORT_UNAVAILABLE".to_string()),
                             ),
                         );
@@ -709,20 +722,13 @@ fn apply_mode_change_inner(
                         set_active_port(owner, port.clone(), &outgoing);
                     }
                     owner.active_usb_plan = usb_plan_for_worker;
-                    make_result(
-                        owner.active_mode.clone(),
-                        command_status(
-                            started_code,
-                            "Lighting runtime started with frame output pipeline.",
-                            None,
-                        ),
-                    )
+                    make_result(owner.active_mode.clone(), worker_started(worker_kind))
                 }
                 Err(reason) => {
                     owner.active_mode = LightingModeConfig::default();
                     make_result(
                         owner.active_mode.clone(),
-                        command_status(failed_code, failed_message, Some(reason)),
+                        worker_start_failed(worker_kind, Some(reason)),
                     )
                 }
             }

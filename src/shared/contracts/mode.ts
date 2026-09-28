@@ -23,6 +23,8 @@ export const LIGHTING_MODE_KIND = {
   OFF: "off",
   AMBILIGHT: "ambilight",
   SOLID: "solid",
+  /** A drawn animation, run by the Ambilight worker from a synthetic source instead of capture. */
+  EFFECT: "effect",
 } as const;
 
 export type LightingModeKind = (typeof LIGHTING_MODE_KIND)[keyof typeof LIGHTING_MODE_KIND];
@@ -61,10 +63,37 @@ export interface AmbilightPayload {
   hueIntensityPreset?: HueIntensityPreset | null;
 }
 
+/** `EffectId` in `commands/lighting_mode/config.rs`; an id Rust does not know reads as the rainbow. */
+export const EFFECT_IDS = {
+  RAINBOW: "rainbow",
+  BREATHE: "breathe",
+  CYCLE: "cycle",
+} as const;
+
+export type EffectId = (typeof EFFECT_IDS)[keyof typeof EFFECT_IDS];
+
+export interface EffectColor {
+  r: number;
+  g: number;
+  b: number;
+}
+
+export interface EffectPayload {
+  id: EffectId;
+  /** 0..1, mapped per effect onto a loop period on a log scale; not hertz: a breath and a rainbow lap differ. */
+  speed: number;
+  brightness: number;
+  /** The breath's colour; the rainbow and the cycle ignore it. */
+  color?: EffectColor | null;
+}
+
+export const DEFAULT_EFFECT: Readonly<EffectPayload> = { id: EFFECT_IDS.RAINBOW, speed: 0.5, brightness: 1 };
+
 export interface LightingModeConfig {
   kind: LightingModeKind;
   solid?: SolidColorPayload | null;
   ambilight?: AmbilightPayload | null;
+  effect?: EffectPayload | null;
   targets?: HueRuntimeTarget[] | null;
   /**
    * Display the ambilight worker should sample from.
@@ -131,10 +160,11 @@ export interface LightingModeCommandResult {
   wledAdvisory: WledLiveFrameAdvisory | null;
 }
 
+const LIGHTING_MODE_KIND_VALUES: ReadonlySet<unknown> = new Set(Object.values(LIGHTING_MODE_KIND));
+
+/** Derived from the table, so a new kind cannot be read as Off by a forgotten check. */
 export function isLightingModeKind(value: unknown): value is LightingModeKind {
-  return value === LIGHTING_MODE_KIND.OFF
-    || value === LIGHTING_MODE_KIND.AMBILIGHT
-    || value === LIGHTING_MODE_KIND.SOLID;
+  return LIGHTING_MODE_KIND_VALUES.has(value);
 }
 
 function toFiniteNumber(value: unknown, fallback: number): number {
@@ -189,6 +219,27 @@ export function normalizeAmbilightPayload(input?: Partial<AmbilightPayload> | nu
   };
 }
 
+const EFFECT_ID_VALUES: ReadonlySet<string> = new Set(Object.values(EFFECT_IDS));
+
+/** Clamped into range; an unknown id is the default effect, as Rust reads it. */
+export function normalizeEffectPayload(input?: Partial<EffectPayload> | null): EffectPayload {
+  const id =
+    typeof input?.id === "string" && EFFECT_ID_VALUES.has(input.id) ? (input.id as EffectId) : DEFAULT_EFFECT.id;
+  const color = input?.color
+    ? {
+        r: clampInt(input.color.r, 0, 255, 255),
+        g: clampInt(input.color.g, 0, 255, 255),
+        b: clampInt(input.color.b, 0, 255, 255),
+      }
+    : undefined;
+  return {
+    id,
+    speed: clampFloat(input?.speed, 0, 1, DEFAULT_EFFECT.speed),
+    brightness: clampFloat(input?.brightness, 0, 1, DEFAULT_EFFECT.brightness),
+    ...(color ? { color } : {}),
+  };
+}
+
 function normalizeDisplayId(value: unknown): DisplayId | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
@@ -236,6 +287,7 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
   const kind = isLightingModeKind(input?.kind) ? input.kind : LIGHTING_MODE_KIND.OFF;
   const normalizedSolid = input?.solid ? normalizeSolidColorPayload(input.solid) : undefined;
   const normalizedAmbilight = input?.ambilight ? normalizeAmbilightPayload(input.ambilight) : undefined;
+  const normalizedEffect = input?.effect ? normalizeEffectPayload(input.effect) : undefined;
   const normalizedDisplayId = normalizeDisplayId(input?.displayId);
   const normalizedColorCorrection = normalizeColorCorrection(input?.colorCorrection);
   const normalizedFirmwareProfile = normalizeFirmwareProfile(input?.firmwareProfile);
@@ -247,8 +299,23 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
       kind,
       solid: normalizedSolid ?? normalizeSolidColorPayload(),
       ambilight: normalizedAmbilight,
+      effect: normalizedEffect,
       targets: input?.targets,
       displayId: normalizedDisplayId,
+      colorCorrection: normalizedColorCorrection,
+      firmwareProfile: normalizedFirmwareProfile,
+      chipType: normalizedChipType,
+      colorOrder: normalizedColorOrder,
+    };
+  }
+
+  if (kind === LIGHTING_MODE_KIND.EFFECT) {
+    return {
+      kind,
+      effect: normalizedEffect ?? normalizeEffectPayload(),
+      solid: normalizedSolid,
+      ambilight: normalizedAmbilight,
+      targets: input?.targets,
       colorCorrection: normalizedColorCorrection,
       firmwareProfile: normalizedFirmwareProfile,
       chipType: normalizedChipType,
@@ -261,6 +328,7 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
       kind,
       ambilight: normalizedAmbilight ?? normalizeAmbilightPayload(),
       solid: normalizedSolid,
+      effect: normalizedEffect,
       targets: input?.targets,
       displayId: normalizedDisplayId,
       colorCorrection: normalizedColorCorrection,
@@ -274,6 +342,7 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
     kind: LIGHTING_MODE_KIND.OFF,
     solid: normalizedSolid,
     ambilight: normalizedAmbilight,
+    effect: normalizedEffect,
     targets: input?.targets,
     displayId: normalizedDisplayId,
     colorCorrection: normalizedColorCorrection,

@@ -10,6 +10,7 @@ const common: Catalogue<typeof enCommon> = {
       off: "Kapalı",
       ambilight: "Ambilight",
       solid: "Sabit",
+      effect: "Efekt",
     },
     colorModelRgb: "RGB",
     solidColor: "Sabit renk",

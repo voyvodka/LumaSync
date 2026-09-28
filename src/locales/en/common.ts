@@ -7,6 +7,7 @@ export default {
       off: "Off",
       ambilight: "Ambilight",
       solid: "Solid",
+      effect: "Effect",
     },
     colorModelRgb: "RGB",
     solidColor: "Solid color",

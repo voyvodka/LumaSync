@@ -54,10 +54,11 @@ export interface TrayLabels {
   openSettings: string;
   /** The disabled status line under it — the running mode and its outputs. */
   status: string;
-  /** The three mode items, a check group: Rust checks the one that runs. */
+  /** The mode items, a check group: Rust checks the one that runs. */
   lightsOff: string;
   ambilight: string;
   solidColor: string;
+  effect: string;
   /**
    * The modes the main window's own mode buttons have disabled right now — no
    * layout for a bound strip, no output, a choice in flight. The tray greys
@@ -97,6 +98,7 @@ export const TRAY_MENU_IDS = {
   MODE_OFF: "tray-mode-off",
   MODE_AMBILIGHT: "tray-mode-ambilight",
   MODE_SOLID: "tray-mode-solid",
+  MODE_EFFECT: "tray-mode-effect",
   /**
    * v1.6 — opens (or focuses) the LED preview surface: the interactive
    * control popup plus, when enabled, the digital-twin overlay. Lets the
@@ -696,6 +698,7 @@ export const KEYBIND_ACTIONS = {
   MODE_OFF: "mode-off",
   MODE_AMBILIGHT: "mode-ambilight",
   MODE_SOLID: "mode-solid",
+  MODE_EFFECT: "mode-effect",
   OPEN_SETTINGS: "open-settings",
 } as const;
 
@@ -735,12 +738,14 @@ export const KEYBIND_REGISTRY: Readonly<
     [KEYBIND_ACTIONS.MODE_OFF]: { modifier: "alt", code: "Digit1", badge: ["⌥", "1"] },
     [KEYBIND_ACTIONS.MODE_AMBILIGHT]: { modifier: "alt", code: "Digit2", badge: ["⌥", "2"] },
     [KEYBIND_ACTIONS.MODE_SOLID]: { modifier: "alt", code: "Digit3", badge: ["⌥", "3"] },
+    [KEYBIND_ACTIONS.MODE_EFFECT]: { modifier: "alt", code: "Digit4", badge: ["⌥", "4"] },
     [KEYBIND_ACTIONS.OPEN_SETTINGS]: { modifier: "meta", code: "Comma", badge: ["⌘", ","] },
   },
   default: {
     [KEYBIND_ACTIONS.MODE_OFF]: { modifier: "alt", code: "Digit1", badge: ["Alt", "1"] },
     [KEYBIND_ACTIONS.MODE_AMBILIGHT]: { modifier: "alt", code: "Digit2", badge: ["Alt", "2"] },
     [KEYBIND_ACTIONS.MODE_SOLID]: { modifier: "alt", code: "Digit3", badge: ["Alt", "3"] },
+    [KEYBIND_ACTIONS.MODE_EFFECT]: { modifier: "alt", code: "Digit4", badge: ["Alt", "4"] },
     [KEYBIND_ACTIONS.OPEN_SETTINGS]: { modifier: "ctrl", code: "Comma", badge: ["Ctrl", ","] },
   },
 } as const;

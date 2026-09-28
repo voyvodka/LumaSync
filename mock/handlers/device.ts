@@ -382,7 +382,11 @@ export function applyLightingMode(payload: LightingModeConfig): LightingModeComm
     mode: getWorld().lighting.mode,
     wledAdvisory: null,
     status: status(
-      kind === "ambilight" ? "AMBILIGHT_MODE_STARTED" : "SOLID_MODE_APPLIED",
+      kind === "ambilight"
+        ? "AMBILIGHT_MODE_STARTED"
+        : kind === "effect"
+          ? "EFFECT_MODE_STARTED"
+          : "SOLID_MODE_APPLIED",
       "Mode applied",
     ),
   };

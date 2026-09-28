@@ -10,9 +10,9 @@ describe("ModeStrip", () => {
   it.each(["full", "compact", "popup"] as const)("is a radio group in the %s look", (variant) => {
     render(<ModeStrip variant={variant} value={LIGHTING_MODE_KIND.AMBILIGHT} onSelect={() => {}} />);
     const radios = screen.getAllByRole("radio");
-    expect(radios).toHaveLength(3);
-    expect(radios.map((r) => r.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
-    expect(radios.map((r) => r.tabIndex)).toEqual([-1, 0, -1]);
+    expect(radios).toHaveLength(4);
+    expect(radios.map((r) => r.getAttribute("aria-checked"))).toEqual(["false", "true", "false", "false"]);
+    expect(radios.map((r) => r.tabIndex)).toEqual([-1, 0, -1, -1]);
   });
 
   it("walks the popup strip with the arrow keys — the popup had radios but no arrows", async () => {
@@ -56,7 +56,7 @@ describe("ModeStrip", () => {
     const { container, unmount } = render(
       <ModeStrip variant="full" value={LIGHTING_MODE_KIND.OFF} onSelect={() => {}} />,
     );
-    expect(container.querySelectorAll(".kb")).toHaveLength(3);
+    expect(container.querySelectorAll(".kb")).toHaveLength(4);
     unmount();
     const compact = render(<ModeStrip variant="compact" value={LIGHTING_MODE_KIND.OFF} onSelect={() => {}} />);
     expect(compact.container.querySelectorAll(".kb")).toHaveLength(0);

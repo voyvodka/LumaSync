@@ -24,6 +24,20 @@ const lights: Catalogue<typeof enLights> = {
       title: "Sabit",
       subtitle: "{{hex}} · %{{brightness}}",
     },
+    effect: {
+      title: "Efekt",
+      subtitle: "{{name}} · %{{brightness}}",
+    },
+  },
+  effect: {
+    label: "Efekt",
+    speed: "Hız",
+    brightness: "Parlaklık",
+    names: {
+      rainbow: "Gökkuşağı",
+      breathe: "Nefes",
+      cycle: "Renk döngüsü",
+    },
   },
   signal: {
     linkBudget: {

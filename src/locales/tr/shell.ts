@@ -6,6 +6,7 @@ const shell: Catalogue<typeof enShell> = {
     modeOff: "Işıkları kapat",
     modeAmbilight: "Ambilight moduna geç",
     modeSolid: "Tek renk moduna geç",
+    modeEffect: "Efekt moduna geç",
     openSettings: "Ayarları aç",
   },
   errorBoundary: {
