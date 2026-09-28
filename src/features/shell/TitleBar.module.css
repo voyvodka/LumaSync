@@ -1,0 +1,109 @@
+@layer components {
+  /* No backdrop blur: the content starts below the bar, so there is nothing under it to blur, and a
+     window-wide blur redrew on every frame of a resize. */
+  .bar {
+    background-color: var(--lm-bg);
+    border-bottom: 1px solid var(--lm-line);
+    color: var(--lm-ink);
+  }
+
+  /* The wordmark: the one place the brand's mono caps stay. */
+  .brand {
+    font-family: var(--lm-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    color: var(--lm-ink);
+    white-space: nowrap;
+  }
+  .accent { color: var(--lm-amber); }
+  .mark { width: 14px; height: 14px; color: var(--lm-amber); }
+
+  /* Held while a prompt owns the window: still there, plainly not for now. */
+  .tabs,
+  .toggle { transition: opacity var(--lm-dur-base) var(--lm-ease-out); }
+  .tabs[data-locked],
+  .toggle[data-locked] { opacity: 0.35; }
+
+  .tabs {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    height: 100%;
+    margin-left: 4px;
+  }
+  .tab {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    padding: 0 11px;
+    font-size: 12.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    color: var(--lm-ink-faint);
+    transition: color var(--lm-dur-quick);
+  }
+  .tab:hover { color: var(--lm-ink-dim); }
+  .tab[aria-selected="true"] { color: var(--lm-ink); }
+  .tab:focus-visible { outline: none; box-shadow: var(--lm-focus-ring-inset); border-radius: 6px; }
+
+  /* One mark under the open tab that slides to the next one, as the Rail's tint does. Placed
+     without motion the first time, so the window does not open on a slide. */
+  .indicator {
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--lm-amber);
+    pointer-events: none;
+    transition: transform var(--lm-dur-base) var(--lm-ease-out), width var(--lm-dur-base) var(--lm-ease-out);
+  }
+  .indicator:not([data-placed]) { transition: none; }
+
+  .toggle {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--lm-amber) 22%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--lm-amber) 6%, transparent);
+    color: var(--lm-amber);
+    transition:
+      border-color var(--lm-dur-quick),
+      background-color var(--lm-dur-quick),
+      opacity var(--lm-dur-base) var(--lm-ease-out);
+  }
+  .toggle:hover { border-color: color-mix(in srgb, var(--lm-amber) 50%, transparent); background: color-mix(in srgb, var(--lm-amber) 12%, transparent); }
+  .toggle:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .toggle svg { width: 13px; height: 13px; }
+
+  /* Windows and Linux: the window controls the system would draw. */
+  .ctrl {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 100%;
+    color: var(--lm-ink-faint);
+    transition: background-color var(--lm-dur-quick), color var(--lm-dur-quick);
+  }
+  .ctrl:hover { color: var(--lm-ink); background: rgb(255 255 255 / 6%); }
+  .ctrl.danger:hover { background: var(--lm-red); color: #fff; }
+  .ctrl:focus-visible { outline: none; box-shadow: var(--lm-focus-ring-inset); }
+
+  :global(:root[data-reduced-motion]) :is(.tabs, .toggle, .tab, .indicator, .ctrl) { transition: none; }
+
+  @media (forced-colors: active) {
+    .bar { border-bottom-color: CanvasText; color: CanvasText; }
+    .brand, .accent { color: CanvasText; forced-color-adjust: none; }
+    .tab { color: CanvasText; }
+    .tab[aria-selected="true"] { color: Highlight; }
+    .indicator { background: Highlight; }
+    .mark { color: Highlight; }
+    .toggle, .ctrl { color: CanvasText; border-color: CanvasText; background: Canvas; forced-color-adjust: none; }
+    :is(.toggle, .ctrl, .tab):focus-visible { outline: 2px solid Highlight; outline-offset: 1px; box-shadow: none; }
+  }
+}

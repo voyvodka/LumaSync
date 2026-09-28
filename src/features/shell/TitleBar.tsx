@@ -16,7 +16,7 @@
  * component draws custom minimize / maximize-toggle / close buttons.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   closeCurrentWindow,
@@ -26,6 +26,7 @@ import {
   toggleMaximizeCurrentWindow,
 } from "./windowApi";
 import { SECTION_ORDER, type SectionId } from "@/shared/contracts/shell";
+import styles from "./TitleBar.module.css";
 
 type Platform = "macos" | "windows" | "linux";
 
@@ -87,7 +88,7 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
   return (
     <div
       data-tauri-drag-region
-      className="lm-titlebar fixed top-0 right-0 left-0 z-40 flex items-center select-none"
+      className={`${styles.bar} fixed top-0 right-0 left-0 z-40 flex items-center select-none`}
       style={{
         height: `${TITLE_BAR_HEIGHT_PX}px`,
         gap: "20px",
@@ -118,35 +119,14 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
 
       {/* Brand — `LUMA/SYNC` with an amber slash, IBM Plex Mono. */}
       <div data-tauri-drag-region className="flex shrink-0 items-center">
-        <span data-tauri-drag-region className="lm-titlebar-brand">
-          LUMA<span className="accent">/</span>SYNC
+        <span data-tauri-drag-region className={styles.brand}>
+          LUMA<span className={styles.accent}>/</span>SYNC
         </span>
       </div>
 
       {/* Nav tabs — full mode only, between brand and spacer. */}
       {uiMode === "full" && activeSection != null && onSectionChange != null && (
-        <div
-          className="lm-titlebar-tabs"
-          role="tablist"
-          aria-label={t("shell:titleBar.sectionsAriaLabel")}
-          inert={navLocked}
-          data-locked={navLocked || undefined}
-        >
-          {SECTION_ORDER.map((id) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              data-tauri-drag-region="false"
-              className="lm-titlebar-tab"
-              aria-selected={id === activeSection}
-              onClick={() => onSectionChange(id)}
-              data-testid={`section-tab-${id}`}
-            >
-              {t(`settings:nav.sections.${id}`)}
-            </button>
-          ))}
-        </div>
+        <SectionTabs active={activeSection} onChange={onSectionChange} locked={navLocked} />
       )}
 
       {/* Spacer — pushes right cluster to the edge. */}
@@ -160,7 +140,7 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
           onClick={handleToggle}
           title={toggleTitle}
           aria-label={toggleTitle}
-          className="lm-titlebar-toggle"
+          className={styles.toggle}
           inert={navLocked}
           data-locked={navLocked || undefined}
           data-testid="ui-mode-toggle"
@@ -181,6 +161,103 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────
+// Section tabs
+// ────────────────────────────────────────────────────────────────
+
+const STEP_BY_KEY: Record<string, 1 | -1> = { ArrowRight: 1, ArrowLeft: -1 };
+
+/**
+ * The sections as a WAI-ARIA tablist: one tab stop, the arrows move focus and Enter or Space opens,
+ * so an arrow does not leave a page (and ask about its unsaved work) on the way past it. One amber
+ * mark under the open tab slides to the next.
+ */
+function SectionTabs({
+  active,
+  onChange,
+  locked,
+}: {
+  active: SectionId;
+  onChange: (id: SectionId) => void;
+  locked: boolean;
+}) {
+  const { t } = useTranslation();
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const markRef = useRef<HTMLSpanElement | null>(null);
+
+  // Measured, not laid out: a tab's width follows its word, so a language switch re-measures through
+  // the observer.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the active tab is what moves the mark
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const mark = markRef.current;
+    if (!list || !mark) return undefined;
+    const place = () => {
+      const tab = list.querySelector<HTMLElement>('[aria-selected="true"]');
+      if (!tab) return;
+      mark.style.width = `${tab.offsetWidth - 22}px`;
+      mark.style.transform = `translateX(${tab.offsetLeft + 11}px)`;
+    };
+    place();
+    const frame = requestAnimationFrame(() => {
+      mark.dataset.placed = "";
+    });
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(place);
+    observer?.observe(list);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
+  }, [active]);
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const tabs = Array.from(listRef.current?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []);
+    const at = tabs.indexOf(document.activeElement as HTMLElement);
+    if (at === -1) return;
+    const step = STEP_BY_KEY[event.key];
+    const next =
+      step !== undefined
+        ? tabs[(at + step + tabs.length) % tabs.length]
+        : event.key === "Home"
+          ? tabs[0]
+          : event.key === "End"
+            ? tabs[tabs.length - 1]
+            : undefined;
+    if (!next) return;
+    event.preventDefault();
+    next.focus();
+  };
+
+  return (
+    <div
+      ref={listRef}
+      className={styles.tabs}
+      role="tablist"
+      aria-label={t("shell:titleBar.sectionsAriaLabel")}
+      inert={locked}
+      data-locked={locked || undefined}
+      onKeyDown={onKeyDown}
+    >
+      {SECTION_ORDER.map((id) => (
+        <button
+          key={id}
+          type="button"
+          role="tab"
+          data-tauri-drag-region="false"
+          className={styles.tab}
+          aria-selected={id === active}
+          tabIndex={id === active ? 0 : -1}
+          onClick={() => onChange(id)}
+          data-testid={`section-tab-${id}`}
+        >
+          {t(`settings:nav.sections.${id}`)}
+        </button>
+      ))}
+      <span ref={markRef} className={styles.indicator} aria-hidden />
     </div>
   );
 }
@@ -239,7 +316,7 @@ function CtrlButton({
       onClick={onClick}
       title={aria}
       aria-label={aria}
-      className={`lm-titlebar-ctrl${danger ? " is-danger" : ""}`}
+      className={danger ? `${styles.ctrl} ${styles.danger}` : styles.ctrl}
     >
       {children}
     </button>
@@ -254,7 +331,7 @@ function LumaIcon() {
   return (
     <svg
       viewBox="0 0 16 16"
-      className="lm-titlebar-mark"
+      className={styles.mark}
       fill="none"
       stroke="currentColor"
       strokeWidth="1.6"

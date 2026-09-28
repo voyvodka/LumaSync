@@ -224,7 +224,7 @@ export const mockStatusBar = {
     return (
       <ul>
         {items.map((item) => (
-          <li key={item.label} data-testid={`status-chip-${item.label}`}>
+          <li key={item.label} data-testid={`status-chip-${item.label.toUpperCase()}`}>
             {item.state}
           </li>
         ))}

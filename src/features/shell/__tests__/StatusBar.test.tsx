@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { StatusBar } from "../StatusBar";
@@ -15,52 +15,50 @@ vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: { load: () => Promise.resolve({}), save: vi.fn(), onSaved: () => () => {} },
 }));
 
+const attention = (onAction = vi.fn<() => void>()) => ({ hint: "The strip is not connected.", action: "Devices", onAction });
+
 describe("StatusBar", () => {
   // The whole bar was `aria-live`, so a screen reader heard the FPS pill every
   // second. Chip changes worth hearing arrive through the notice queue.
   it("is not a live region", () => {
-    render(
-      <StatusBar
-        uiMode="compact"
-        items={[{ label: "USB", state: "OFF", kind: "off", onReconnect: vi.fn(), reconnectAriaLabel: "reconnect" }]}
-      />,
-    );
+    render(<StatusBar uiMode="compact" items={[{ label: "USB", state: "Off", kind: "off", attention: attention() }]} />);
 
     const bar = screen.getByTestId("status-bar");
     expect(bar).not.toHaveAttribute("aria-live");
     expect(bar).not.toHaveAttribute("role", "status");
     expect(bar.querySelector("[aria-live]")).toBeNull();
-    expect(screen.getByRole("button", { name: "reconnect" })).toBeInTheDocument();
   });
 
-  // A left-out Hue is amber, yet still links to the bridge card.
-  it("keeps a chip's link on every state but ok", () => {
+  // Pressed, a chip says what is wrong beside it and offers the page, instead of taking the window there.
+  it("opens its sentence beside it, and the action goes to the page", async () => {
+    const onAction = vi.fn<() => void>();
+    render(<StatusBar uiMode="full" items={[{ label: "USB", state: "Off", kind: "off", attention: attention(onAction) }]} />);
+
+    const chip = screen.getByTestId("status-chip-USB");
+    expect(chip).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(chip);
+    expect(await screen.findByText("The strip is not connected.")).toBeInTheDocument();
+    expect(onAction).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Devices ›" }));
+    expect(onAction).toHaveBeenCalledOnce();
+  });
+
+  // A left-out Hue is amber, yet still opens its sentence; a healthy chip opens nothing.
+  it("keeps a chip's sentence on every state but ok", () => {
     const { rerender } = render(
-      <StatusBar
-        uiMode="full"
-        items={[{ label: "HUE", state: "LEFT OUT", kind: "active", onReconnect: vi.fn<() => void>(), reconnectAriaLabel: "open" }]}
-      />,
+      <StatusBar uiMode="full" items={[{ label: "Hue", state: "Left out", kind: "active", attention: attention() }]} />,
     );
-    expect(screen.getByRole("button", { name: "open" })).toBeInTheDocument();
+    expect(screen.getByTestId("status-chip-HUE").tagName).toBe("BUTTON");
 
-    rerender(
-      <StatusBar
-        uiMode="full"
-        items={[{ label: "HUE", state: "OK", kind: "ok", onReconnect: vi.fn<() => void>(), reconnectAriaLabel: "open" }]}
-      />,
-    );
-    expect(screen.queryByRole("button", { name: "open" })).toBeNull();
+    rerender(<StatusBar uiMode="full" items={[{ label: "Hue", state: "Ready", kind: "ok", attention: attention() }]} />);
+    expect(screen.getByTestId("status-chip-HUE").tagName).not.toBe("BUTTON");
   });
 
-  it("draws a set-up link apart from a reconnect one", () => {
-    render(
-      <StatusBar
-        uiMode="compact"
-        items={[
-          { label: "USB", state: "—", kind: "idle", onReconnect: vi.fn<() => void>(), reconnectAriaLabel: "set up", linkKind: "setUp" },
-        ]}
-      />,
-    );
-    expect(screen.getByRole("button", { name: "set up" })).toHaveAttribute("data-link-kind", "setUp");
+  // Shortcuts are listed in Settings → Help and the version in About.
+  it("carries no key hints and no version", () => {
+    render(<StatusBar uiMode="full" items={[{ label: "USB", state: "Ready", kind: "ok" }]} />);
+    expect(screen.queryByRole("group")).toBeNull();
+    expect(screen.getByTestId("status-bar").textContent).not.toMatch(/^v\d|\bv\d/);
   });
 });

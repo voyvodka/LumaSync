@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { NOTICE_SEVERITY_LABEL } from "./noticeModel";
 import { NoticeRow } from "./NoticeRow";
 import type { QueuedNotice, ShellNoticeQueue } from "./useShellNoticeQueue";
+import styles from "./Notices.module.css";
 
 interface ShellNoticeSlotProps {
   /**
@@ -103,7 +104,8 @@ export function ShellNoticeSlot({
       ref={sectionRef}
       tabIndex={-1}
       id={slotId}
-      className={compact ? "lm-notice-slot" : "lm-notice-slot is-wide"}
+      className={compact ? styles.slot : `${styles.slot} ${styles.wide}`}
+      data-wide={compact ? undefined : ""}
       aria-label={t("shell:notices.regionLabel")}
       data-testid="shell-notice-slot"
       data-variant={variant}
@@ -114,7 +116,7 @@ export function ShellNoticeSlot({
       {...holdProps}
     >
       {top === undefined ? (
-        <div className="lm-notice-placeholder" aria-hidden="true" data-testid="notice-placeholder" />
+        <div className={styles.placeholder} aria-hidden="true" data-testid="notice-placeholder" />
       ) : (
         <NoticeRow
           key={top.key}

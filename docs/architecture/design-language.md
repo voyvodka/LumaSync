@@ -216,7 +216,7 @@ same function. The boundary reaches Tauri only through `platform/platformApi.ts`
 module is what threw, so no bridge it uses may pull feature code in.
 
 **No false affordances.** A global shortcut is declared once in `KEYBIND_REGISTRY`
-(`shared/contracts/shell.ts`); `useGlobalKeybinds` handles it and `StatusBar` and `ModeStrip` draw
+(`shared/contracts/shell.ts`); `useGlobalKeybinds` handles it and `ModeStrip` and Settings → Help draw
 their badges from the same entry, so a badge cannot outlive its handler — before that hook the badges
 were decorative. Matching is on `event.code`, because on a Turkish layout `Alt+1` produces `¡` in
 `event.key`, and editable targets swallow the key so a rename field is not a mode switch. The

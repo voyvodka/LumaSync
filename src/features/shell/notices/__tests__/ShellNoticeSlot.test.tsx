@@ -47,13 +47,13 @@ function Harness({ input, variant, suppressed = false, holdSpace = false }: Harn
   );
 }
 
-const rows = () => document.querySelectorAll(".lm-notice");
+const rows = () => document.querySelectorAll("[data-notice-id]");
 
 /** happy-dom has no layout: pretend every message line is cut. */
 function stubCutLines() {
   const width = (cut: number) =>
     function (this: HTMLElement) {
-      return this.classList.contains("lm-notice-message") ? cut : 0;
+      return this.hasAttribute("data-notice-message") ? cut : 0;
     };
   vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(width(400));
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(width(180));
@@ -68,7 +68,7 @@ describe("ShellNoticeSlot", () => {
     render(<Harness input={THREE} variant="compact" />);
 
     expect(rows()).toHaveLength(1);
-    expect(screen.getByTestId("capture-start-failed-notice")).not.toHaveClass("is-wrapped");
+    expect(screen.getByTestId("capture-start-failed-notice")).not.toHaveAttribute("data-wrapped");
     const toggle = screen.getByTestId("notice-toggle");
     expect(toggle).toHaveTextContent("shell:notices.moreBadge:2");
     expect(toggle).toHaveAttribute("aria-expanded", "false");
@@ -79,7 +79,7 @@ describe("ShellNoticeSlot", () => {
     expect(rows()).toHaveLength(3);
     expect(screen.getByTestId("notice-toggle")).toHaveAttribute("aria-expanded", "true");
     // Expanded, every line wraps, so no sentence is cut.
-    for (const row of rows()) expect(row).toHaveClass("is-wrapped");
+    for (const row of rows()) expect(row).toHaveAttribute("data-wrapped");
     expect(screen.getByTestId("hue-left-out-notice")).toBeInTheDocument();
     expect(screen.getByTestId("usb-disconnect-notice")).toBeInTheDocument();
   });
@@ -88,7 +88,7 @@ describe("ShellNoticeSlot", () => {
     render(<Harness input={THREE} variant="compact" />);
     const slot = screen.getByTestId("shell-notice-slot");
 
-    expect(slot).toHaveClass("lm-notice-slot");
+    expect(slot).not.toHaveAttribute("data-wide");
     expect(slot.getAttribute("style")).toBeNull();
   });
 
@@ -100,7 +100,7 @@ describe("ShellNoticeSlot", () => {
     render(<Harness input={THREE} variant="full" />);
 
     const slot = screen.getByTestId("shell-notice-slot");
-    expect(slot).toHaveClass("lm-notice-slot", "is-wide");
+    expect(slot).toHaveAttribute("data-wide");
     expect(slot.getAttribute("style")).toBeNull();
     expect(rows()).toHaveLength(1);
     const top = screen.getByTestId("capture-start-failed-notice");
@@ -123,7 +123,7 @@ describe("ShellNoticeSlot", () => {
     const { unmount } = render(<Harness input={gaveUp} variant="full" />);
     const row = screen.getByTestId("output-none-notice");
     expect(within(row).getByRole("button", { name: "shell:notices.actions.checkAgain" })).toBeInTheDocument();
-    expect(within(row).getByRole("button", { name: "shell:notices.actions.devices" })).toHaveClass("is-secondary");
+    expect(within(row).getByRole("button", { name: "shell:notices.actions.devices" })).toHaveAttribute("data-secondary");
     unmount();
 
     render(<Harness input={gaveUp} variant="compact" />);
@@ -150,7 +150,7 @@ describe("ShellNoticeSlot", () => {
 
     await userEvent.click(toggle);
 
-    expect(screen.getByTestId("output-none-notice")).toHaveClass("is-wrapped");
+    expect(screen.getByTestId("output-none-notice")).toHaveAttribute("data-wrapped");
     expect(message).not.toHaveAttribute("title");
     // Wrapped, the line no longer overflows; the toggle stays to fold it back.
     expect(screen.getByTestId("notice-toggle")).toHaveAttribute("aria-expanded", "true");
@@ -169,7 +169,7 @@ describe("ShellNoticeSlot", () => {
     render(<Harness input={{ availability: "none" }} variant="full" />);
 
     const devices = screen.getByRole("button", { name: "shell:notices.actions.devices" });
-    const arrow = devices.querySelector(".lm-notice-arrow");
+    const arrow = devices.querySelector("[data-arrow]");
     expect(arrow).toHaveAttribute("aria-hidden", "true");
   });
 

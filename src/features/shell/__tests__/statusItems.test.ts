@@ -37,8 +37,8 @@ function byLabel(input: StatusItemsInput, label: string) {
 }
 
 describe("buildStatusItems", () => {
-  it("emits CAP, USB and HUE in mockup order", () => {
-    expect(buildStatusItems(healthy, t).map((i) => i.label)).toEqual(["CAP", "USB", "HUE"]);
+  it("emits capture, USB and Hue in that order", () => {
+    expect(buildStatusItems(healthy, t).map((i) => i.label)).toEqual(["shell:statusBar.capture", "USB", "Hue"]);
   });
 
   it("never uses colour as the sole indicator — every chip carries a state string", () => {
@@ -59,59 +59,59 @@ describe("buildStatusItems", () => {
   });
 
   it("marks CAP ok only while ambilight is running", () => {
-    expect(byLabel(healthy, "CAP")).toMatchObject({ state: S.ok, kind: "ok" });
-    expect(byLabel({ ...healthy, ambilightActive: false }, "CAP")).toMatchObject({
+    expect(byLabel(healthy, "shell:statusBar.capture")).toMatchObject({ state: S.ok, kind: "ok" });
+    expect(byLabel({ ...healthy, ambilightActive: false }, "shell:statusBar.capture")).toMatchObject({
       state: "—",
       kind: "idle",
     });
   });
 
   it("walks the Hue chip down streaming → reachable → configured → never set up", () => {
-    expect(byLabel(healthy, "HUE")).toMatchObject({ state: S.streaming, kind: "active" });
-    expect(byLabel({ ...healthy, hueStreaming: false }, "HUE")).toMatchObject({
+    expect(byLabel(healthy, "Hue")).toMatchObject({ state: S.streaming, kind: "active" });
+    expect(byLabel({ ...healthy, hueStreaming: false }, "Hue")).toMatchObject({
       state: S.ok,
       kind: "ok",
     });
     expect(
-      byLabel({ ...healthy, hueStreaming: false, hueReachable: false }, "HUE"),
+      byLabel({ ...healthy, hueStreaming: false, hueReachable: false }, "Hue"),
     ).toMatchObject({ state: S.idle, kind: "idle" });
     expect(
       byLabel(
         { ...healthy, hueStreaming: false, hueReachable: false, hueConfigured: false },
-        "HUE",
+        "Hue",
       ),
-    ).toMatchObject({ state: "—", kind: "idle", linkKind: "setUp" });
+    ).toMatchObject({ state: "—", kind: "idle", attention: { hint: "shell:statusBar.hint.hueNone" } });
   });
 
   // The health reconciler drops "hue" from the active targets on Failed, so
   // with a reachable bridge the chip used to fall through to a green OK.
   it("reads a failed Hue stream as failed and links to Devices, even with the bridge reachable", () => {
     const onOpenDevices = vi.fn<StatusItemsInput["onOpenDevices"]>();
-    const item = byLabel({ ...healthy, hueStreaming: false, hueFailed: true, onOpenDevices }, "HUE");
+    const item = byLabel({ ...healthy, hueStreaming: false, hueFailed: true, onOpenDevices }, "Hue");
     expect(item).toMatchObject({ state: S.failed, kind: "error" });
-    item.onReconnect?.();
+    item.attention?.onAction();
     expect(onOpenDevices).toHaveBeenCalledWith("hue");
   });
 
   // A bridge unreachable for hours kept "hue" in the active targets, so the
   // chip read STREAMING while the Devices card said Reconnecting.
   it("reads a retrying Hue session as retrying, never as streaming", () => {
-    const item = byLabel({ ...healthy, hueReconnecting: true, hueReachable: false }, "HUE");
+    const item = byLabel({ ...healthy, hueReconnecting: true, hueReachable: false }, "Hue");
     expect(item).toMatchObject({ state: S.retrying, kind: "active" });
     // The backend is already retrying; a second retry affordance would lie.
-    expect(item.onReconnect).toBeUndefined();
+    expect(item.attention).toBeUndefined();
   });
 
   it("offers the reconnect deep-link exactly when a chip is unhealthy", () => {
-    expect(byLabel(healthy, "USB").onReconnect).toBeUndefined();
-    expect(byLabel(healthy, "HUE").onReconnect).toBeUndefined();
+    expect(byLabel(healthy, "USB").attention).toBeUndefined();
+    expect(byLabel(healthy, "Hue").attention).toBeUndefined();
     // Reachable-but-not-streaming is still healthy enough to hide the affordance.
-    expect(byLabel({ ...healthy, hueStreaming: false }, "HUE").onReconnect).toBeUndefined();
+    expect(byLabel({ ...healthy, hueStreaming: false }, "Hue").attention).toBeUndefined();
 
     const onOpenDevices = vi.fn<StatusItemsInput["onOpenDevices"]>();
     const unhealthy = { ...healthy, localSink: null, hueStreaming: false, hueReachable: false, onOpenDevices };
-    byLabel(unhealthy, "USB").onReconnect?.();
-    byLabel(unhealthy, "HUE").onReconnect?.();
+    byLabel(unhealthy, "USB").attention?.onAction();
+    byLabel(unhealthy, "Hue").attention?.onAction();
     expect(onOpenDevices).toHaveBeenCalledTimes(2);
   });
 
@@ -119,21 +119,23 @@ describe("buildStatusItems", () => {
   it("opens each chip's own Devices category", () => {
     const onOpenDevices = vi.fn<StatusItemsInput["onOpenDevices"]>();
     const unhealthy = { ...healthy, localSink: null, hueStreaming: false, hueReachable: false, onOpenDevices };
-    byLabel(unhealthy, "USB").onReconnect?.();
+    byLabel(unhealthy, "USB").attention?.onAction();
     expect(onOpenDevices).toHaveBeenLastCalledWith("strips");
-    byLabel(unhealthy, "HUE").onReconnect?.();
+    byLabel(unhealthy, "Hue").attention?.onAction();
     expect(onOpenDevices).toHaveBeenLastCalledWith("hue");
   });
 
-  // The ↻ only ever opened Devices; "Reconnect USB device" promised more.
-  it("names where each link goes for screen readers", () => {
+  // The chip only ever opens Devices, and says so; the sentence says why.
+  it("says what is wrong and offers Devices", () => {
     const unhealthy = { ...healthy, localSink: null, hueStreaming: false, hueReachable: false };
-    expect(byLabel(unhealthy, "USB").reconnectAriaLabel).toBe(
-      "shell:statusBar.reconnect.usbAriaLabel",
-    );
-    expect(byLabel(unhealthy, "HUE").reconnectAriaLabel).toBe(
-      "shell:statusBar.reconnect.hueAriaLabel",
-    );
+    expect(byLabel(unhealthy, "USB").attention).toMatchObject({
+      hint: "shell:statusBar.hint.localOff",
+      action: "settings:nav.sections.devices",
+    });
+    expect(byLabel(unhealthy, "Hue").attention).toMatchObject({
+      hint: "shell:statusBar.hint.hueUnreachable",
+      action: "settings:nav.sections.devices",
+    });
   });
 
   // The chip used to read "USB OFF" for the whole life of a WLED-only
@@ -144,7 +146,7 @@ describe("buildStatusItems", () => {
       localSink: { transport: "wled", id: "192.168.1.42" } satisfies LocalSink,
     };
     expect(byLabel(wled, "WLED").state).toBe(S.ok);
-    expect(buildStatusItems(wled, t).map((i) => i.label)).toEqual(["CAP", "WLED", "HUE"]);
+    expect(buildStatusItems(wled, t).map((i) => i.label)).toEqual(["shell:statusBar.capture", "WLED", "Hue"]);
   });
 
   it("falls back to the USB label when nothing local is bound", () => {
@@ -156,39 +158,36 @@ describe("buildStatusItems", () => {
     const onOpenDevices = vi.fn<StatusItemsInput["onOpenDevices"]>();
     const item = byLabel({ ...healthy, localSink: null, localEverConfigured: false, onOpenDevices }, "USB");
 
-    expect(item).toMatchObject({ state: "—", kind: "idle", linkKind: "setUp" });
-    expect(item.reconnectAriaLabel).toBe("shell:statusBar.setUp.localAriaLabel");
-    item.onReconnect?.();
+    expect(item).toMatchObject({ state: "—", kind: "idle", attention: { hint: "shell:statusBar.hint.localNone" } });
+    item.attention?.onAction();
     expect(onOpenDevices).toHaveBeenCalledWith("strips");
   });
 
   it("keeps the outage reading for a strip that was set up and is gone", () => {
     const item = byLabel({ ...healthy, localSink: null, localEverConfigured: true }, "USB");
-    expect(item).toMatchObject({ state: S.off, kind: "off", linkKind: "reconnect" });
-    expect(item.reconnectAriaLabel).toBe("shell:statusBar.reconnect.usbAriaLabel");
+    expect(item).toMatchObject({ state: S.off, kind: "off", attention: { hint: "shell:statusBar.hint.localOff" } });
   });
 
   it("offers Hue set-up, not reconnect, when no bridge was ever paired", () => {
-    const item = byLabel({ ...healthy, hueStreaming: false, hueReachable: false, hueConfigured: false }, "HUE");
-    expect(item.reconnectAriaLabel).toBe("shell:statusBar.setUp.hueAriaLabel");
-    expect(item.onReconnect).toBeDefined();
+    const item = byLabel({ ...healthy, hueStreaming: false, hueReachable: false, hueConfigured: false }, "Hue");
+    expect(item.attention?.hint).toBe("shell:statusBar.hint.hueNone");
   });
 
   // A bridge the boot retry is waiting on answers the reachability probe, so
   // the chip read OK beside the notice saying Hue was not running.
   it("reads a Hue waiting on a busy bridge as waiting, never as OK", () => {
-    const item = byLabel({ ...healthy, hueStreaming: false, hueHeldOut: "waiting" }, "HUE");
+    const item = byLabel({ ...healthy, hueStreaming: false, hueHeldOut: "waiting" }, "Hue");
     expect(item).toMatchObject({ state: S.waiting, kind: "active" });
     // The app is already waiting on the bridge; a reconnect affordance would lie.
-    expect(item.onReconnect).toBeUndefined();
+    expect(item.attention).toBeUndefined();
   });
 
   // Amber, like the warning notice beside it: the lights still run elsewhere.
   it("reads a Hue left out of the running mode as left out and links to Devices, even with the bridge reachable", () => {
     const onOpenDevices = vi.fn<StatusItemsInput["onOpenDevices"]>();
-    const item = byLabel({ ...healthy, hueStreaming: false, hueHeldOut: "leftOut", onOpenDevices }, "HUE");
+    const item = byLabel({ ...healthy, hueStreaming: false, hueHeldOut: "leftOut", onOpenDevices }, "Hue");
     expect(item).toMatchObject({ state: S.leftOut, kind: "active" });
-    item.onReconnect?.();
+    item.attention?.onAction();
     expect(onOpenDevices).toHaveBeenCalledWith("hue");
   });
 
