@@ -203,6 +203,13 @@ Linux does not listen yet (logind's `PrepareForSleep` and session `Lock` are the
 return does not wait for a strip that is still re-enumerating after wake, as the launch restore
 does; the lights come back on the unlock, usually seconds after.
 
+**Effects** run through the transaction like any mode: `payload_for` takes the newest effect from
+the retune store, then the saved one, and stamps the room geometry as for Ambilight, since an
+effect is drawn in screen space; `persist_mode` saves `lightingMode.effect` beside the other
+payloads, so the tray's Effect item, which sends the kind alone, brings back the last effect. A
+retune carries `LightingTuning.effect` into the running effect's cell. How an effect is drawn is in
+`capture-and-pipeline.md` ("Effects are drawn frames too").
+
 **The intent follows what ran.** A choice the backend did not run is not retried by the next
 transaction: the intent's kind settles back to what runs. A target left out of the running mode
 drops from the session's selection, never from what is saved.

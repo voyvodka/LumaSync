@@ -50,6 +50,21 @@ first, and Wayland is not viable), several Hue areas on one bridge (closed), sev
 drop order (`lighting_mode/runtime.rs`) — the last reference to a capture source is dropped on the
 command thread, never the worker, or a rapid mode switch crashes macOS — must hold for every source.
 
+**Effects are drawn frames too, and a mode of their own.** The Effect mode (`effect_source.rs`)
+renders each frame in screen space — a rainbow around the centre, a breath of one colour, a cycle
+through the hues — and hands it to the Ambilight worker as if captured, so the strip's layout and
+Hue's room placement sample it exactly as they sample the screen. Nothing is captured, so no
+screen-recording permission is asked for and none of the capture notices can fire. The worker is
+told it is drawn (`WorkerPacing::drawn`), so it is paced at the output rate and sampled like a test
+pattern, while the preview still reports it live. Its frame is small — 192 across — because an
+effect changes slowly over the frame and the sampler reads fractions of it. The phase accumulates
+(`phase += dt × rate`) and survives a worker rebuild in `effect_phase`, and the payload is re-read
+every frame from `effect_live`, so a change of effect, speed or brightness retunes the running
+worker instead of rebuilding it. It is its own `LightingModeKind` rather than an Ambilight source,
+or the capture preflight, the retune fast path and the tray check would all have taken an effect for
+Ambilight. An unknown kind or effect id reads as Off and the rainbow, so a mode saved by a newer
+build still reads.
+
 **Test patterns are synthetic frames, not a window that capture then sees.** The LED test renders
 its pattern straight into a `CapturedFrame` (`test_pattern.rs`, `SyntheticFrameSource`) with capture
 off. That gives the strip exact bytes — the scene stage and the black-border crop are bypassed —

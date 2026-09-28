@@ -734,3 +734,33 @@ fn a_saved_calibration_that_does_not_add_up_refuses_the_start_and_keeps_what_run
     assert_eq!(rig.running().kind, LightingModeKind::Solid);
     assert!(!rig.worker_running());
 }
+
+/// An effect chosen in a window is saved with its payload, and the tray's
+/// Effect item — which sends the kind alone — brings back that same effect.
+#[test]
+fn an_effect_is_saved_and_the_tray_brings_the_same_one_back() {
+    let rig = Rig::new(RigSetup::default());
+    let breathe = super::EffectPayload {
+        id: super::config::EffectId::Breathe,
+        speed: 0.8,
+        brightness: 0.6,
+        color: None,
+    };
+    running(
+        &rig,
+        LightingModeConfig {
+            kind: LightingModeKind::Effect,
+            effect: Some(breathe.clone()),
+            ..LightingModeConfig::default()
+        },
+        &["usb"],
+    );
+    let saved = rig.saved("lightingMode").expect("the mode was saved");
+    assert_eq!(saved["kind"], json!("effect"));
+    assert_eq!(saved["effect"]["id"], json!("breathe"));
+
+    apply(&rig, tray_request(TrayLighting::Off));
+    let result = apply(&rig, tray_request(TrayLighting::Effect));
+    assert_eq!(result.snapshot.mode.kind, LightingModeKind::Effect);
+    assert_eq!(result.snapshot.mode.effect, Some(breathe));
+}

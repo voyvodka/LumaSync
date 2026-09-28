@@ -9,6 +9,11 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Added
 
+- Effects: a fourth lighting mode beside Off, Ambilight and Solid, with a rainbow, a breath of
+  colour and a colour cycle, each at the speed and brightness you set. It needs no screen
+  recording, follows your LED layout and your Hue lights' places in the room, and is in the menu
+  bar menu and on ⌥4 (Alt+4). A build from before effects starts with the lights off if the last
+  mode was an effect.
 - The lights go off when the computer locks, sleeps or turns its display off, and the mode that
   ran comes back when you return — after the unlock, if waking up shows the lock screen. Settings →
   General → "Lights off when away" turns this off. macOS and Windows.
