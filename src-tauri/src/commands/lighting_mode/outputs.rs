@@ -670,6 +670,14 @@ fn payload_for(
             mode.ambilight = Some(ambilight);
             mode.room_geometry = persisted.and_then(room_geometry_from_state);
         }
+        LightingModeKind::Effect => {
+            mode.effect = stored
+                .effect
+                .clone()
+                .or_else(|| saved_mode.and_then(|saved| saved.effect));
+            // Drawn in screen space: Hue samples it by room, as it does the screen.
+            mode.room_geometry = persisted.and_then(room_geometry_from_state);
+        }
         LightingModeKind::Off => {}
     }
     mode
@@ -700,6 +708,13 @@ fn persist_mode<R: Runtime>(app: &AppHandle<R>, kind: &LightingModeKind, stored:
             .ambilight
             .as_ref()
             .and_then(|a| serde_json::to_value(a).ok()),
+    );
+    put(
+        "effect",
+        stored
+            .effect
+            .as_ref()
+            .and_then(|e| serde_json::to_value(e).ok()),
     );
     // Stamped per dispatch and never part of the saved mode; `targets` is a
     // copy an older build wrote, which nothing read.
@@ -1885,17 +1900,21 @@ pub(crate) async fn apply_outputs_with<R: Runtime>(
         .outputs
         .record_arrival(&request, running_kind, persisted.as_ref());
     match (&request.mode, request.origin) {
-        (Some(mode), _) => state
-            .tuning
-            .store(mode.solid.as_ref(), mode.ambilight.as_ref()),
+        (Some(mode), _) => state.tuning.store(
+            mode.solid.as_ref(),
+            mode.ambilight.as_ref(),
+            mode.effect.as_ref(),
+        ),
         (None, LightingOrigin::Boot) => {
             if let Some(mode) = persisted
                 .as_ref()
                 .and_then(PersistedShellState::lighting_mode)
             {
-                state
-                    .tuning
-                    .store(mode.solid.as_ref(), mode.ambilight.as_ref());
+                state.tuning.store(
+                    mode.solid.as_ref(),
+                    mode.ambilight.as_ref(),
+                    mode.effect.as_ref(),
+                );
             }
         }
         _ => {}
@@ -2099,16 +2118,18 @@ pub enum TrayLighting {
     Off,
     Ambilight,
     Solid,
+    Effect,
 }
 
 impl TrayLighting {
-    pub const ALL: [Self; 3] = [Self::Off, Self::Ambilight, Self::Solid];
+    pub const ALL: [Self; 4] = [Self::Off, Self::Ambilight, Self::Solid, Self::Effect];
 
     pub fn kind(self) -> LightingModeKind {
         match self {
             Self::Off => LightingModeKind::Off,
             Self::Ambilight => LightingModeKind::Ambilight,
             Self::Solid => LightingModeKind::Solid,
+            Self::Effect => LightingModeKind::Effect,
         }
     }
 
@@ -2118,6 +2139,7 @@ impl TrayLighting {
             Self::Off => "tray-mode-off",
             Self::Ambilight => "tray-mode-ambilight",
             Self::Solid => "tray-mode-solid",
+            Self::Effect => "tray-mode-effect",
         }
     }
 
@@ -2141,7 +2163,7 @@ pub fn tray_mode_items(
     running: LightingModeKind,
     transitioning: bool,
     locked: &[LightingModeKind],
-) -> [TrayModeItem; 3] {
+) -> [TrayModeItem; 4] {
     TrayLighting::ALL.map(|item| TrayModeItem {
         item,
         checked: item.kind() == running,
@@ -2150,8 +2172,8 @@ pub fn tray_mode_items(
 }
 
 /// The request a tray item sends. The payloads are left out on purpose: the
-/// transaction keeps the last colour — `DEFAULT_SOLID` before any — and the
-/// last Ambilight settings.
+/// transaction keeps the last colour — `DEFAULT_SOLID` before any — the last
+/// Ambilight settings, and the last effect.
 pub(crate) fn tray_request(item: TrayLighting) -> ApplyOutputsRequest {
     ApplyOutputsRequest {
         mode: Some(LightingModeConfig {

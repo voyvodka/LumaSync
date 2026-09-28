@@ -10,9 +10,10 @@ use tauri::{AppHandle, Manager, Runtime};
 
 use super::config::{
     frame_led_count_for, normalize_mode_config, wled_frame_advisory, LightingModeCommandResult,
-    LightingModeConfig, LightingModeKind, DEFAULT_SOLID,
+    LightingModeConfig, LightingModeKind, DEFAULT_EFFECT, DEFAULT_SOLID,
 };
 use super::config_check;
+use super::effect_source::effect_ambilight;
 use super::hydrate::{hydrate_mode_payload, read_persisted_shell_state};
 use super::live::{retune_ambilight_live, AmbilightLiveSettings, RoomGeometryLive};
 use super::pacing::{capture_interval_for, SerialSendBudget};
@@ -107,6 +108,22 @@ pub(super) fn set_active_port(
     owner.active_port = Some(new_port);
 }
 
+/// The start and failure codes of the kinds the Ambilight worker runs.
+fn worker_codes(kind: LightingModeKind) -> (&'static str, &'static str, &'static str) {
+    match kind {
+        LightingModeKind::Effect => (
+            "EFFECT_MODE_STARTED",
+            "EFFECT_MODE_START_FAILED",
+            "Effect runtime could not start.",
+        ),
+        _ => (
+            "AMBILIGHT_MODE_STARTED",
+            "AMBILIGHT_MODE_START_FAILED",
+            "Ambilight runtime could not start.",
+        ),
+    }
+}
+
 pub(super) fn stop_previous(
     owner: &mut LightingRuntimeOwner,
     trace: &mut Option<&mut Vec<&'static str>>,
@@ -115,6 +132,7 @@ pub(super) fn stop_previous(
     let t0 = std::time::Instant::now();
     owner.ambilight_live = None;
     owner.room_geometry_live = None;
+    owner.effect_live = None;
     let had_worker = owner.worker.is_some();
     if let Some(worker) = owner.worker.take() {
         worker.stop();
@@ -322,8 +340,12 @@ fn apply_mode_change_inner(
     // restart would re-open capture for what is a byte shuffle.
     // The output the next worker would write to; a retune keeps the running one only when it matches.
     let next_usb_plan = usb_plan.clone().filter(|_| needs_usb);
-    if normalized_next.kind == LightingModeKind::Ambilight
-        && owner.active_mode.kind == LightingModeKind::Ambilight
+    let worker_kind = matches!(
+        normalized_next.kind,
+        LightingModeKind::Ambilight | LightingModeKind::Effect
+    );
+    if worker_kind
+        && normalized_next.kind == owner.active_mode.kind
         && owner.worker.is_some()
         && next_usb_plan == owner.active_usb_plan
         && normalized_next.targets == owner.active_mode.targets
@@ -335,12 +357,19 @@ fn apply_mode_change_inner(
         && preview_retune
     {
         if let Some(live) = &owner.ambilight_live {
-            let cfg = normalized_next
-                .ambilight
-                .as_ref()
-                .cloned()
-                .unwrap_or_default();
+            let effect = normalized_next.effect.clone();
+            let cfg = match &effect {
+                Some(effect) => effect_ambilight(effect),
+                None => normalized_next
+                    .ambilight
+                    .as_ref()
+                    .cloned()
+                    .unwrap_or_default(),
+            };
             retune_ambilight_live(live, &cfg);
+            if let (Some(effect), Some(slot)) = (effect, owner.effect_live.as_ref()) {
+                *slot.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = effect;
+            }
             // Unconditional: the atomic is the worker's only copy, so it must
             // follow every apply, including one that returns to the default.
             live.store_color_order(normalized_next.color_order.unwrap_or_default());
@@ -365,13 +394,20 @@ fn apply_mode_change_inner(
                 }
                 owner.preview.active_test_pattern = Some(next);
             }
-            return make_result(
-                owner.active_mode.clone(),
-                command_status(
+            let (code, message) = if owner.active_mode.kind == LightingModeKind::Effect {
+                (
+                    "EFFECT_MODE_UPDATED",
+                    "Effect settings updated in running worker.",
+                )
+            } else {
+                (
                     "AMBILIGHT_MODE_UPDATED",
                     "Ambilight settings updated in running worker.",
-                    None,
-                ),
+                )
+            };
+            return make_result(
+                owner.active_mode.clone(),
+                command_status(code, message, None),
             );
         }
     }
@@ -509,17 +545,29 @@ fn apply_mode_change_inner(
             };
             make_result(owner.active_mode.clone(), status)
         }
-        LightingModeKind::Ambilight => {
+        LightingModeKind::Ambilight | LightingModeKind::Effect => {
             push_trace(&mut trace, "start_ambilight");
+            let (started_code, failed_code, failed_message) = worker_codes(normalized_next.kind);
+            // An effect draws its frames; nothing is captured.
+            let effect = (normalized_next.kind == LightingModeKind::Effect)
+                .then(|| normalized_next.effect.clone().unwrap_or(DEFAULT_EFFECT));
+            let effect_live = effect.clone().map(|effect| Arc::new(Mutex::new(effect)));
 
             // v1.6 LED Preview — consume any pending synthetic-test request.
-            let test_pattern = owner.preview.pending_test_pattern.take();
+            let test_pattern = if effect.is_some() {
+                None
+            } else {
+                owner.preview.pending_test_pattern.take()
+            };
 
-            let ambilight_cfg = normalized_next
-                .ambilight
-                .as_ref()
-                .cloned()
-                .unwrap_or_default();
+            let ambilight_cfg = match &effect {
+                Some(effect) => effect_ambilight(effect),
+                None => normalized_next
+                    .ambilight
+                    .as_ref()
+                    .cloned()
+                    .unwrap_or_default(),
+            };
             let live_settings = AmbilightLiveSettings::new(
                 ambilight_cfg.brightness,
                 ambilight_cfg.black_border_detection,
@@ -567,9 +615,14 @@ fn apply_mode_change_inner(
                     display_id: normalized_next.display_id.clone(),
                     led_calibration: normalized_next.led_calibration.clone(),
                     test_pattern: test_pattern.clone(),
-                    pattern_phase: Some(Arc::clone(&owner.preview.pattern_phase)),
+                    pattern_phase: Some(Arc::clone(if effect_live.is_some() {
+                        &owner.effect_phase
+                    } else {
+                        &owner.preview.pattern_phase
+                    })),
                     pattern_live: pattern_live.clone(),
                     frame_interval: capture_interval,
+                    effect: effect_live.clone(),
                 };
                 match (owner.frame_source_factory)(req) {
                     Ok(source) => {
@@ -584,11 +637,7 @@ fn apply_mode_change_inner(
                         owner.active_mode = LightingModeConfig::default();
                         return make_result(
                             owner.active_mode.clone(),
-                            command_status(
-                                "AMBILIGHT_MODE_START_FAILED",
-                                "Ambilight runtime could not start.",
-                                Some(reason.as_reason()),
-                            ),
+                            command_status(failed_code, failed_message, Some(reason.as_reason())),
                         );
                     }
                 }
@@ -606,8 +655,8 @@ fn apply_mode_change_inner(
                         return make_result(
                             owner.active_mode.clone(),
                             command_status(
-                                "AMBILIGHT_MODE_START_FAILED",
-                                "Ambilight runtime could not start.",
+                                failed_code,
+                                failed_message,
                                 Some("LED_OUTPUT_PORT_UNAVAILABLE".to_string()),
                             ),
                         );
@@ -642,12 +691,17 @@ fn apply_mode_change_inner(
                 chip,
                 preview_ctx,
                 Arc::clone(&room_geometry_live),
-                WorkerPacing::live(capture_interval),
+                if effect_live.is_some() {
+                    WorkerPacing::drawn(capture_interval)
+                } else {
+                    WorkerPacing::live(capture_interval)
+                },
             ) {
                 Ok(worker) => {
                     owner.worker = Some(worker);
                     owner.ambilight_live = Some(live_settings);
                     owner.room_geometry_live = Some(room_geometry_live);
+                    owner.effect_live = effect_live;
                     owner.active_mode = normalized_next;
                     owner.preview.active_test_pattern = test_pattern;
                     owner.preview.pattern_live = pattern_live;
@@ -658,8 +712,8 @@ fn apply_mode_change_inner(
                     make_result(
                         owner.active_mode.clone(),
                         command_status(
-                            "AMBILIGHT_MODE_STARTED",
-                            "Ambilight runtime started with frame output pipeline.",
+                            started_code,
+                            "Lighting runtime started with frame output pipeline.",
                             None,
                         ),
                     )
@@ -668,11 +722,7 @@ fn apply_mode_change_inner(
                     owner.active_mode = LightingModeConfig::default();
                     make_result(
                         owner.active_mode.clone(),
-                        command_status(
-                            "AMBILIGHT_MODE_START_FAILED",
-                            "Ambilight runtime could not start.",
-                            Some(reason),
-                        ),
+                        command_status(failed_code, failed_message, Some(reason)),
                     )
                 }
             }

@@ -12,14 +12,100 @@ use crate::commands::status::CommandStatus;
 use crate::commands::wled_sink::WledSinkConfig;
 use crate::models::room_map::RoomGeometry;
 
-#[derive(Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq, Debug)]
+/// A kind this build does not know reads as `Off` (`lenient_enum!` below), so
+/// a mode saved by a newer build starts the lights off instead of failing the
+/// whole `lightingMode` read.
+#[derive(Clone, Copy, Default, Serialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum LightingModeKind {
     #[default]
     Off,
     Ambilight,
     Solid,
+    /// A procedural animation, run by the Ambilight worker from a synthetic
+    /// frame source instead of screen capture.
+    Effect,
 }
+
+/// `EFFECT_IDS` in `src/shared/contracts/mode.ts`. An id this build does not
+/// know reads as `Rainbow`.
+#[derive(Clone, Copy, Default, Serialize, PartialEq, Eq, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum EffectId {
+    #[default]
+    Rainbow,
+    Breathe,
+    Cycle,
+}
+
+/// Reads a lowercase tag, falling back to the default for any other string.
+/// `#[serde(other)]` would do it only on the last variant.
+macro_rules! lenient_enum {
+    ($ty:ty { $($tag:literal => $variant:expr),+ $(,)? }) => {
+        impl<'de> Deserialize<'de> for $ty {
+            fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                let tag = String::deserialize(deserializer)?;
+                Ok(match tag.as_str() {
+                    $($tag => $variant,)+
+                    _ => <$ty>::default(),
+                })
+            }
+        }
+    };
+}
+
+lenient_enum!(LightingModeKind {
+    "off" => LightingModeKind::Off,
+    "ambilight" => LightingModeKind::Ambilight,
+    "solid" => LightingModeKind::Solid,
+    "effect" => LightingModeKind::Effect,
+});
+
+lenient_enum!(EffectId {
+    "rainbow" => EffectId::Rainbow,
+    "breathe" => EffectId::Breathe,
+    "cycle" => EffectId::Cycle,
+});
+
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Debug)]
+pub struct EffectColor {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+}
+
+/// `EffectPayload` in `src/shared/contracts/mode.ts`.
+#[derive(Clone, Deserialize, Serialize, PartialEq, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct EffectPayload {
+    #[serde(default)]
+    pub id: EffectId,
+    /// 0..1, mapped per effect onto a period on a log scale: a breath and a
+    /// rainbow lap do not share a sensible range in hertz.
+    #[serde(default = "default_effect_speed")]
+    pub speed: f32,
+    #[serde(default = "default_effect_brightness")]
+    pub brightness: f32,
+    /// The breath's colour; the rainbow and the cycle ignore it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<EffectColor>,
+}
+
+fn default_effect_speed() -> f32 {
+    DEFAULT_EFFECT.speed
+}
+
+fn default_effect_brightness() -> f32 {
+    DEFAULT_EFFECT.brightness
+}
+
+/// `DEFAULT_EFFECT` in `src/shared/contracts/mode.ts`.
+pub(crate) const DEFAULT_EFFECT: EffectPayload = EffectPayload {
+    id: EffectId::Rainbow,
+    speed: 0.5,
+    brightness: 1.0,
+    color: None,
+};
 
 #[derive(Clone, Deserialize, Serialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -83,6 +169,9 @@ pub struct LightingModeConfig {
     pub solid: Option<SolidColorPayload>,
     #[serde(default)]
     pub ambilight: Option<AmbilightPayload>,
+    /// Skipped when absent so a mode that never ran an effect echoes exactly as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect: Option<EffectPayload>,
     #[serde(default)]
     pub targets: Option<Vec<String>>,
     /// Capture display selected by the user.
@@ -132,6 +221,7 @@ impl Default for LightingModeConfig {
             kind: LightingModeKind::Off,
             solid: None,
             ambilight: None,
+            effect: None,
             targets: None,
             display_id: None,
             led_calibration: None,
@@ -241,6 +331,7 @@ pub(super) fn normalize_mode_config(config: LightingModeConfig) -> LightingModeC
                     lighting_smoothing_preset: incoming.lighting_smoothing_preset,
                     hue_intensity_preset: incoming.hue_intensity_preset,
                 }),
+                effect: None,
                 targets,
                 display_id,
                 led_calibration,
@@ -263,6 +354,7 @@ pub(super) fn normalize_mode_config(config: LightingModeConfig) -> LightingModeC
                     brightness: clamp_brightness(Some(solid.brightness), 1.0),
                 }),
                 ambilight: None,
+                effect: None,
                 targets,
                 display_id,
                 led_calibration,
@@ -273,5 +365,38 @@ pub(super) fn normalize_mode_config(config: LightingModeConfig) -> LightingModeC
                 room_geometry: None,
             }
         }
+        LightingModeKind::Effect => {
+            let effect = config.effect.unwrap_or(DEFAULT_EFFECT);
+            LightingModeConfig {
+                kind: LightingModeKind::Effect,
+                solid: None,
+                ambilight: None,
+                effect: Some(EffectPayload {
+                    id: effect.id,
+                    speed: clamp_unit(effect.speed, DEFAULT_EFFECT.speed),
+                    brightness: clamp_unit(effect.brightness, DEFAULT_EFFECT.brightness),
+                    color: effect.color,
+                }),
+                targets,
+                // An effect captures nothing: no display to follow.
+                display_id: None,
+                led_calibration,
+                color_correction,
+                firmware_profile,
+                chip_type,
+                color_order,
+                // Drawn in screen space, so Hue samples it by room like Ambilight.
+                room_geometry: config.room_geometry,
+            }
+        }
+    }
+}
+
+/// A non-finite value is the default, not a clamp to an end.
+fn clamp_unit(value: f32, fallback: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(0.0, 1.0)
+    } else {
+        fallback
     }
 }

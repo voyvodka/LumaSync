@@ -18,6 +18,7 @@ use std::sync::atomic::AtomicUsize;
 
 mod config;
 pub(crate) mod config_check;
+mod effect_source;
 mod frame_pipeline;
 pub mod hue_driver;
 mod hydrate;
@@ -36,8 +37,8 @@ mod usb_output;
 mod worker;
 
 pub use config::{
-    AmbilightPayload, LightingModeCommandResult, LightingModeConfig, LightingModeKind,
-    SolidColorPayload,
+    AmbilightPayload, EffectPayload, LightingModeCommandResult, LightingModeConfig,
+    LightingModeKind, SolidColorPayload,
 };
 pub use led_test_pattern::{start_led_test_pattern, stop_led_test_pattern};
 pub use preview::get_led_preview_status;
@@ -84,6 +85,9 @@ mod away_tests;
 
 #[cfg(test)]
 mod transition_tests;
+
+#[cfg(test)]
+mod effect_tests;
 
 #[cfg(test)]
 mod lighting_mode_tests;

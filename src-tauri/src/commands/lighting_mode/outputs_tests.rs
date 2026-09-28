@@ -1475,6 +1475,7 @@ fn an_unplug_behind_a_queued_start_still_drops_usb() {
 
 fn ambilight_tuning(brightness: f32) -> LightingTuning {
     LightingTuning {
+        effect: None,
         solid: None,
         ambilight: Some(AmbilightPayload {
             brightness,
@@ -1485,6 +1486,7 @@ fn ambilight_tuning(brightness: f32) -> LightingTuning {
 
 fn solid_tuning(r: u8) -> LightingTuning {
     LightingTuning {
+        effect: None,
         solid: Some(SolidColorPayload {
             r,
             g: 0,

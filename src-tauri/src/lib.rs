@@ -141,7 +141,7 @@ struct TrayState<R: Runtime> {
     open_settings: MenuItem<R>,
     status: MenuItem<R>,
     /// In `TrayLighting::ALL` order.
-    modes: [CheckMenuItem<R>; 3],
+    modes: [CheckMenuItem<R>; 4],
     show_led_preview: MenuItem<R>,
     close_overlays: MenuItem<R>,
     quit: MenuItem<R>,
@@ -156,7 +156,7 @@ struct TrayModeView {
     running: LightingModeKind,
     transitioning: bool,
     locked: Vec<LightingModeKind>,
-    shown: Option<[TrayModeItem; 3]>,
+    shown: Option<[TrayModeItem; 4]>,
 }
 
 impl<R: Runtime> TrayState<R> {
@@ -244,11 +244,18 @@ struct TrayLabels {
     lights_off: String,
     ambilight: String,
     solid_color: String,
+    /// Absent from a frontend older than the Effect mode, which pushes three labels.
+    #[serde(default = "default_effect_label")]
+    effect: String,
     /// The modes the main window's own buttons have disabled right now.
     locked_modes: Vec<LightingModeKind>,
     show_led_preview: String,
     close_overlays: String,
     quit: String,
+}
+
+fn default_effect_label() -> String {
+    "Effect".to_string()
 }
 
 // ---------------------------------------------------------------------------
@@ -359,7 +366,12 @@ fn apply_tray_labels<R: Runtime>(
         .status
         .set_text(&labels.status)
         .map_err(|e| e.to_string())?;
-    let mode_labels = [&labels.lights_off, &labels.ambilight, &labels.solid_color];
+    let mode_labels = [
+        &labels.lights_off,
+        &labels.ambilight,
+        &labels.solid_color,
+        &labels.effect,
+    ];
     for (item, label) in tray_state.modes.iter().zip(mode_labels) {
         item.set_text(label).map_err(|e| e.to_string())?;
     }
@@ -403,6 +415,7 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
         check(initial[0], "Lights Off")?,
         check(initial[1], "Ambilight")?,
         check(initial[2], "Solid Color")?,
+        check(initial[3], "Effect")?,
     ];
     let separator_modes = PredefinedMenuItem::separator(app)?;
     let show_led_preview = MenuItem::with_id(
@@ -432,6 +445,7 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
             &modes[0],
             &modes[1],
             &modes[2],
+            &modes[3],
             &separator_modes,
             &show_led_preview,
             &close_overlays,

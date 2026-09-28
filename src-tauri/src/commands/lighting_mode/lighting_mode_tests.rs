@@ -63,6 +63,8 @@ impl AmbilightFrameSource for FakeFrameSource {
 
 fn owner_with_fake_sender() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
+        effect_live: None,
+        effect_phase: Default::default(),
         active_mode: LightingModeConfig::default(),
         active_port: None,
         active_usb_plan: None,
@@ -110,6 +112,8 @@ impl AmbilightFrameSource for FailsAfterFirstFrameSource {
 
 fn owner_that_fails_after_first_frame() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
+        effect_live: None,
+        effect_phase: Default::default(),
         active_mode: LightingModeConfig::default(),
         active_port: None,
         active_usb_plan: None,
@@ -157,6 +161,7 @@ fn wait_for_workers_drained() {
 
 fn ambilight_with_targets(targets: Option<Vec<String>>) -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Ambilight,
         solid: None,
         ambilight: Some(AmbilightPayload {
@@ -176,6 +181,7 @@ fn ambilight_with_targets(targets: Option<Vec<String>>) -> LightingModeConfig {
 
 fn solid_with_targets(targets: Option<Vec<String>>) -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Solid,
         solid: Some(SolidColorPayload {
             r: 255,
@@ -307,6 +313,7 @@ fn hue_only_target_returns_hue_not_ready_when_no_hue_output() {
 
 fn solid_hue_only() -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Solid,
         solid: Some(SolidColorPayload {
             r: 200,
@@ -1244,6 +1251,7 @@ fn solid_hue_only_reports_skipped_when_no_lights_resolve() {
 
 fn ambilight_with_payload(payload: AmbilightPayload) -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Ambilight,
         solid: None,
         ambilight: Some(payload),
@@ -1739,6 +1747,8 @@ fn fast_path_explicit_saturation_overrides_running_atomic() {
 fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
     let recorder: Arc<FakeLedSender> = Arc::new(FakeLedSender::default());
     let owner = LightingRuntimeOwner {
+        effect_live: None,
+        effect_phase: Default::default(),
         active_mode: LightingModeConfig::default(),
         active_port: None,
         active_usb_plan: None,
@@ -1794,6 +1804,7 @@ fn calibration_with_total_leds(
 
 fn solid_with_calibration(total_leds: u16) -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Solid,
         solid: Some(SolidColorPayload {
             r: 255,

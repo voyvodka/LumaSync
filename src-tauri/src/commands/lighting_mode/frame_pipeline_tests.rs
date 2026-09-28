@@ -541,6 +541,7 @@ fn scripted_clock(served: &Arc<AtomicU32>) -> WorkerPacing {
     let base = Instant::now();
     let served = Arc::clone(served);
     WorkerPacing {
+        synthetic: false,
         capture_interval: Duration::from_millis(70),
         clock: Arc::new(move || base + FRAME_GAP * served.load(Ordering::SeqCst)),
     }

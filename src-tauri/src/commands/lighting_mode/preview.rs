@@ -164,7 +164,11 @@ impl LightingRuntimeState {
         let test_active = active_pattern.is_some();
         let source = if test_active {
             "test"
-        } else if owner.active_mode.kind == LightingModeKind::Ambilight && owner.worker.is_some() {
+        } else if matches!(
+            owner.active_mode.kind,
+            LightingModeKind::Ambilight | LightingModeKind::Effect
+        ) && owner.worker.is_some()
+        {
             "live"
         } else {
             "idle"

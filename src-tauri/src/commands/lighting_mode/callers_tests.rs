@@ -276,21 +276,26 @@ fn the_tray_mode_group_checks_what_runs_and_greys_what_the_window_greys() {
             (TrayLighting::Off, false, true),
             (TrayLighting::Ambilight, true, true),
             (TrayLighting::Solid, false, true),
+            (TrayLighting::Effect, false, true),
         ]
     );
 
-    // No layout for a bound strip: the window greys both lit modes, never Off.
-    let locked = [LightingModeKind::Ambilight, LightingModeKind::Solid];
+    // No layout for a bound strip: the window greys every lit mode, never Off.
+    let locked = [
+        LightingModeKind::Ambilight,
+        LightingModeKind::Solid,
+        LightingModeKind::Effect,
+    ];
     let items = tray_mode_items(LightingModeKind::Off, false, &locked);
     assert_eq!(
         items.map(|i| (i.checked, i.enabled)),
-        [(true, true), (false, false), (false, false)]
+        [(true, true), (false, false), (false, false), (false, false)]
     );
 
     let items = tray_mode_items(LightingModeKind::Solid, true, &[]);
     assert!(
         items.iter().all(|i| !i.enabled),
-        "a transaction greys all three"
+        "a transaction greys every item"
     );
     assert!(items[2].checked);
 }

@@ -68,7 +68,7 @@ const EDGE_THICKNESS: f32 = 0.10;
 
 /// Resolve the synthetic frame size for a display aspect (width / height),
 /// keeping the long axis at `SYNTH_LONG_AXIS`.
-fn frame_size_for_aspect(aspect: f32) -> (u32, u32) {
+pub(crate) fn frame_size_for_aspect(aspect: f32) -> (u32, u32) {
     let aspect = if aspect.is_finite() && aspect > 0.05 && aspect < 20.0 {
         aspect
     } else {
@@ -494,7 +494,7 @@ fn channel_probe_color(slot: u8) -> [u8; 3] {
     }
 }
 
-fn render_rainbow(pixels: &mut Vec<[u8; 3]>, w: usize, h: usize, phase: f32) {
+pub(crate) fn render_rainbow(pixels: &mut Vec<[u8; 3]>, w: usize, h: usize, phase: f32) {
     let cx = w as f32 / 2.0;
     let cy = h as f32 / 2.0;
     for y in 0..h {
@@ -542,7 +542,7 @@ fn render_gamut(pixels: &mut Vec<[u8; 3]>, w: usize, h: usize) {
 }
 
 /// HSV → RGB (all components in `[0, 1]`), returning 8-bit channels.
-fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
+pub(crate) fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
     let h = h.rem_euclid(1.0) * 6.0;
     let i = h.floor();
     let f = h - i;

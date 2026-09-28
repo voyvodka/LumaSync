@@ -53,6 +53,9 @@ pub(super) struct WorkerPacing {
     /// What capture was asked for; a pull source is polled at this rate.
     pub capture_interval: Duration,
     pub clock: SmoothingClock,
+    /// The source draws its frames (an effect): sampled and paced like a test
+    /// pattern, though the preview reports it live.
+    pub synthetic: bool,
 }
 
 impl WorkerPacing {
@@ -60,6 +63,14 @@ impl WorkerPacing {
         Self {
             capture_interval,
             clock: Arc::new(Instant::now),
+            synthetic: false,
+        }
+    }
+
+    pub(super) fn drawn(capture_interval: Duration) -> Self {
+        Self {
+            synthetic: true,
+            ..Self::live(capture_interval)
         }
     }
 }
@@ -221,7 +232,7 @@ pub(super) fn start_ambilight_worker(
     AMBILIGHT_CAPTURE_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
     // A synthetic test paints exact per-LED blocks; the live 0.05 box is wider
     // than the whole comet, so it averaged in unlit screen and dimmed the head.
-    let synthetic = preview.as_ref().is_some_and(|ctx| ctx.source == "test");
+    let synthetic = pacing.synthetic || preview.as_ref().is_some_and(|ctx| ctx.source == "test");
     telemetry_window.set_capture_interval(pacing.capture_interval);
     if synthetic {
         telemetry_window.skip_history();
