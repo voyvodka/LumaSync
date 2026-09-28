@@ -605,7 +605,7 @@ fn hue_refusal_reason(
 fn usb_output_failed(result: &LightingModeCommandResult) -> bool {
     matches!(
         result.status.code.as_str(),
-        "SOLID_MODE_APPLY_FAILED" | "AMBILIGHT_MODE_START_FAILED"
+        "SOLID_MODE_APPLY_FAILED" | "AMBILIGHT_MODE_START_FAILED" | "EFFECT_MODE_START_FAILED"
     ) && result
         .status
         .details

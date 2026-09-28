@@ -25,6 +25,7 @@ import {
   normalizeOutputTargets,
   normalizeSolidColorPayload,
   type AmbilightPayload,
+  type EffectPayload,
   type LightingModeConfig,
   type SolidColorPayload,
 } from "@/shared/contracts/mode";
@@ -158,15 +159,21 @@ export function useLightingModeOrchestrator({
 
   // The snapshot says what runs; Off carries no payload. The last colour and
   // Ambilight settings seen are kept so the controls show them while Off.
-  const rememberedRef = useRef<{ solid?: SolidColorPayload; ambilight?: AmbilightPayload }>({});
+  const rememberedRef = useRef<{
+    solid?: SolidColorPayload;
+    ambilight?: AmbilightPayload;
+    effect?: EffectPayload;
+  }>({});
   const running = snapshot?.mode ?? OFF;
   const lightingMode = useMemo<LightingModeConfig>(() => {
     if (running.solid) rememberedRef.current.solid = running.solid;
     if (running.ambilight) rememberedRef.current.ambilight = running.ambilight;
+    if (running.effect) rememberedRef.current.effect = running.effect;
     return {
       ...running,
       solid: running.solid ?? rememberedRef.current.solid,
       ambilight: running.ambilight ?? rememberedRef.current.ambilight,
+      effect: running.effect ?? rememberedRef.current.effect,
     };
   }, [running]);
   const lightingModeRef = useRef(lightingMode);
@@ -424,6 +431,7 @@ export function useLightingModeOrchestrator({
       // Off carries no payload in the snapshot; the saved mode has both.
       if (saved.lightingMode?.solid) rememberedRef.current.solid = saved.lightingMode.solid;
       if (saved.lightingMode?.ambilight) rememberedRef.current.ambilight = saved.lightingMode.ambilight;
+      if (saved.lightingMode?.effect) rememberedRef.current.effect = saved.lightingMode.effect;
       await send({ origin: LIGHTING_ORIGIN.BOOT }, { boot: true });
     },
     [send],

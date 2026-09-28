@@ -1201,6 +1201,64 @@ fn an_ambilight_start_whose_usb_write_fails_runs_on_hue_alone() {
 }
 
 #[test]
+fn an_effect_start_whose_usb_write_fails_runs_on_hue_alone() {
+    let rig = Rig::new(RigSetup::default());
+    rig.fail_usb_writes(1);
+    let effect = LightingModeConfig {
+        kind: LightingModeKind::Effect,
+        effect: Some(super::config::DEFAULT_EFFECT),
+        ..LightingModeConfig::default()
+    };
+
+    let result = apply(&rig, user(Some(effect), Some(&[Usb, Hue])));
+
+    assert_eq!(
+        result.snapshot.mode.kind,
+        LightingModeKind::Effect,
+        "{:?}",
+        events(&rig)
+    );
+    assert_eq!(result.snapshot.active_targets, vec![Hue]);
+    assert_eq!(result.outcome.dropped_targets, vec![Usb]);
+}
+
+/// An effect is placed in the room the way the screen is: Hue lights sample
+/// the drawn frame where the room map puts them.
+#[test]
+fn an_effect_carries_the_room_map_to_hue() {
+    let rig = Rig::new(RigSetup {
+        state: json!({
+            "roomMap": {
+                "dimensions": { "widthMeters": 4, "depthMeters": 5, "heightMeters": 2.5 },
+                "tvAnchor": { "x": 1, "y": 0, "width": 1.2, "height": 0.1 },
+                "hueChannels": [{
+                    "channelIndex": 0, "channelId": 4, "entertainmentAreaId": "area-1",
+                    "x": 0.5, "y": 1, "z": 0.3
+                }],
+                "zones": []
+            }
+        }),
+        ..RigSetup::default()
+    });
+    let effect = LightingModeConfig {
+        kind: LightingModeKind::Effect,
+        effect: Some(super::config::DEFAULT_EFFECT),
+        ..LightingModeConfig::default()
+    };
+
+    apply(&rig, user(Some(effect), Some(&[Usb, Hue])));
+
+    let running = rig.running();
+    assert_eq!(running.kind, LightingModeKind::Effect, "{:?}", events(&rig));
+    let placements = running
+        .room_geometry
+        .expect("the room map reached the effect")
+        .hue_placements;
+    assert_eq!(placements.len(), 1);
+    assert_eq!(placements[0].channel_id, 4);
+}
+
+#[test]
 fn a_usb_only_start_whose_write_keeps_failing_still_fails() {
     let rig = Rig::new(RigSetup::default());
     rig.fail_usb_writes(2);

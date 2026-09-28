@@ -141,6 +141,18 @@ describe("useLightingModeOrchestrator", () => {
       expect(view.result.current.lightingMode.kind).toBe("off");
       expect(view.result.current.lightingMode.solid).toEqual({ r: 9, g: 8, b: 7, brightness: 0.5 });
     });
+
+    it("keeps the last effect through another mode, so choosing Effect again brings it back", async () => {
+      const breathe = { id: "breathe", speed: 0.2, brightness: 0.6 } as const;
+      const { view } = mount();
+      await settle(view);
+
+      publish(running({ kind: "effect", effect: breathe }));
+      publish(running({ kind: "ambilight", ambilight: { brightness: 1 } }));
+
+      expect(view.result.current.lightingMode.kind).toBe("ambilight");
+      expect(view.result.current.lightingMode.effect).toEqual(breathe);
+    });
   });
 
   describe("choices", () => {
@@ -227,12 +239,17 @@ describe("useLightingModeOrchestrator", () => {
 
       await act(() =>
         view.result.current.restoreAtBoot({
-          lightingMode: { kind: "off", ambilight: { brightness: 0.3 } },
+          lightingMode: {
+            kind: "off",
+            ambilight: { brightness: 0.3 },
+            effect: { id: "cycle", speed: 0.1, brightness: 1 },
+          },
         }),
       );
 
       expect(applyOutputsMock).toHaveBeenCalledWith({ origin: "boot" });
       expect(view.result.current.lightingMode.ambilight).toEqual({ brightness: 0.3 });
+      expect(view.result.current.lightingMode.effect).toEqual({ id: "cycle", speed: 0.1, brightness: 1 });
     });
   });
 

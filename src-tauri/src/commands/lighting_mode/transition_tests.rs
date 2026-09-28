@@ -1385,3 +1385,27 @@ fn an_effect_drives_the_strip_and_retunes_in_place() {
     );
     assert!(owner.effect_live.is_none());
 }
+
+/// A worker that never starts names the effect, not Ambilight, and leaves no
+/// effect cell behind for a later start to find.
+#[test]
+fn an_effect_that_cannot_start_reports_its_own_failure() {
+    let _guard = acquire_worker_test_guard();
+    let mut owner = owner_with_unavailable_capture();
+
+    let failed = apply_mode_change(
+        &mut owner,
+        effect_mode(super::config::DEFAULT_EFFECT),
+        true,
+        Some("COM-EFFECT"),
+        None,
+        None,
+        Some(SharedRuntimeTelemetry::default()),
+        None,
+        None,
+    );
+
+    assert_eq!(failed.status.code, "EFFECT_MODE_START_FAILED");
+    assert_eq!(failed.mode.kind, LightingModeKind::Off);
+    assert!(owner.effect_live.is_none());
+}
