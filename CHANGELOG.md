@@ -66,6 +66,8 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- The button that switches between the compact and full window is a quiet grey icon that lights
+  up on hover, instead of an amber box.
 - The notice strip no longer repeats the Hue status while the app waits at launch for a bridge an
   earlier session still holds; the Hue chip at the bottom already says "Waiting". The notice still
   appears if it gives up.

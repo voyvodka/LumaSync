@@ -62,22 +62,24 @@
   }
   .indicator:not([data-placed]) { transition: none; }
 
+  /* Grey at rest and warm on hover, like every secondary control: the one amber at rest is the
+     open tab's mark, and an amber box here outshone it. */
   .toggle {
     display: grid;
     place-items: center;
     width: 32px;
     height: 32px;
     padding: 0;
-    border: 1px solid color-mix(in srgb, var(--lm-amber) 22%, transparent);
+    border: 0;
     border-radius: 8px;
-    background: color-mix(in srgb, var(--lm-amber) 6%, transparent);
-    color: var(--lm-amber);
+    background: transparent;
+    color: var(--lm-ink-faint);
     transition:
-      border-color var(--lm-dur-quick),
+      color var(--lm-dur-quick),
       background-color var(--lm-dur-quick),
       opacity var(--lm-dur-base) var(--lm-ease-out);
   }
-  .toggle:hover { border-color: color-mix(in srgb, var(--lm-amber) 50%, transparent); background: color-mix(in srgb, var(--lm-amber) 12%, transparent); }
+  .toggle:hover { color: var(--lm-ink); background: color-mix(in srgb, var(--lm-ink) 6%, transparent); }
   .toggle:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
   .toggle svg { width: 13px; height: 13px; }
 
