@@ -61,7 +61,6 @@
     font: 600 13px/1.2 var(--lm-sans);
     font-variant-numeric: tabular-nums;
     color: var(--lm-ink-dim);
-    cursor: text;
     transition: color var(--lm-dur-quick);
   }
   .num { display: inline-block; }

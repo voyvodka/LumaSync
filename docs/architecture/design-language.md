@@ -85,6 +85,11 @@ rebuilding LED Setup; apply it to every new screen:
   Setup's rings once answered the whole stage, which runs up under the display picker, so its list
   opening and closing over them blinked them on and off. They come with a short wait and go with a
   longer one, so a pointer passing through does not blink them either.
+- **Whatever answers a click shows the pointer.** `base.css` gives it to every control and role, so a
+  component does not set it; it sets only a cursor that says more (grab, resize, not-allowed). LED
+  Setup's counts once set a text cursor because a click turns them into a field — the field shows
+  that itself, and until then they read as not clickable. A click on a backdrop or a canvas's empty
+  ground is not a control and keeps the arrow.
 - **A value that opens a list looks like one at rest.** A quiet box with a chevron that turns while
   the list is open, as LED Setup's display. The strip's colour order first showed as bare "RGB"
   beside its label, and read as plain text: nothing said it could be changed. In a row of settings
