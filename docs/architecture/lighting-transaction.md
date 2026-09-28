@@ -27,6 +27,7 @@ snapshot (`useLightingRuntime.ts`: seeded by `get_lighting_runtime`, kept by
 | Devices → WLED Forget device | built in Rust (`forget_wled_device`): a `usbUnplug` request without `usb` when that device is the bound local sink |
 | A drag within the running kind (both windows) | `retune_lighting`, through `retuneCoalescer.ts` |
 | A saved setting the mode reads | nothing — Rust re-applies on the save (below) |
+| The computer locks, sleeps or turns its display off, and back | built in Rust (`away.rs` → `away_with`), never through a window (below, "Away is Off with nobody there") |
 
 The main window's orchestrator (`useLightingModeOrchestrator.ts`) is what is left of the frontend
 one: the notices and their timers, and the screen-recording preflight. The bare mode commands it
@@ -176,6 +177,32 @@ test lease giving back what it opened, a boot restore that is refused, and the q
 is pressing Off. A launch whose saved mode is Off has nothing running and writes nothing; so does
 an Off with nothing running (Hue still gets its stop, which finds no session and no snapshot).
 
+**Away is Off with nobody there** (`away_with`, `TxKind::Away`, `src-tauri/src/away.rs`). When the
+computer locks, goes to sleep or turns its display off, the lights go out the way Off puts them out —
+the strip's black frame, WLED's switch-off, Hue per `hueOffBehavior` — and when the user comes back
+the mode that ran comes back. It is Rust's alone: not a `LightingOrigin`, so the webview can never
+ask for it, and no `lastOutcome` is raised, since nobody pressed anything. It saves nothing. The
+mode that ran is kept in memory only, so a crash while away resumes the last real choice at launch
+through the boot restore. A choice still waiting to run when the user leaves is saved first, since
+the away Off takes its turn. The return puts back the mode only, never the targets: a strip
+unplugged while away stays out. A mode chosen while away drops the return, so coming back never
+overturns what the user did; a launch restore while away (a reload, a crashed webview) stays Off
+and leaves the return in place, so it cannot light a locked screen. Each edge is recorded on the
+thread that heard it (`prepare_away`) and only its turn at the lights is queued, so a quick lock and
+unlock take their tickets in order and a return that happens to run first still wins. `ShellState.awayLights` `"keep"` turns the whole
+thing off; it is read when the user leaves, so switching it off while away still brings the lights
+back.
+
+Each way of being away is tracked on its own (lock, display off, sleep): the lights go out on the
+first and come back only when none is left, so waking to a lock screen keeps them off until the
+unlock. Going to sleep waits up to two seconds for the Off to finish, because the system suspends
+soon after it says so and a strip holds its last frame through the whole sleep. macOS hears
+`NSWorkspace`'s sleep and screen notifications and the `com.apple.screenIsLocked` pair; Windows a
+hidden window's `WM_POWERBROADCAST`, the console display-state setting and `WM_WTSSESSION_CHANGE`.
+Linux does not listen yet (logind's `PrepareForSleep` and session `Lock` are the way in). The
+return does not wait for a strip that is still re-enumerating after wake, as the launch restore
+does; the lights come back on the unlock, usually seconds after.
+
 **The intent follows what ran.** A choice the backend did not run is not retried by the next
 transaction: the intent's kind settles back to what runs. A target left out of the running mode
 drops from the session's selection, never from what is saved.
@@ -188,6 +215,7 @@ drops from the session's selection, never from what is saved.
 | `boot` | never | never |
 | `usbUnplug` | never — the selection changes for the session | never |
 | `leaseHue` | never | never touched |
+| away (Rust only) | never | never — what ran is held in memory |
 
 The mode obligation is level, not edge: a choice overtaken by an unplug is saved by the
 transaction that runs it. Writes go through `shell_state::patch_from_rust`, which announces them

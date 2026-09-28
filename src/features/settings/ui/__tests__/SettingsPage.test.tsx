@@ -213,6 +213,28 @@ describe("SettingsPage", () => {
     });
   });
 
+  describe("lights when away", () => {
+    // On unless turned off, as Rust reads it: only a stored "keep" leaves the lights on.
+    it("starts on and stores keep when turned off", async () => {
+      await renderPage("general");
+      const toggle = screen.getByTestId("away-lights-toggle");
+      expect(toggle).toHaveAttribute("aria-checked", "true");
+
+      await act(async () => {
+        toggle.click();
+      });
+      expect(saveShellStoreMock).toHaveBeenLastCalledWith({ awayLights: "keep" });
+      expect(toggle).toHaveAttribute("aria-checked", "false");
+    });
+
+    it("shows a stored keep as off", async () => {
+      loadShellStoreMock.mockResolvedValue({ awayLights: "keep" });
+      await renderPage("general");
+
+      expect(screen.getByTestId("away-lights-toggle")).toHaveAttribute("aria-checked", "false");
+    });
+  });
+
   describe("appearance", () => {
     it("reduces motion by storing it, and follows the system when turned off", async () => {
       await renderPage("appearance");

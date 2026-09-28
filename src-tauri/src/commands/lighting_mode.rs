@@ -80,6 +80,9 @@ mod callers_tests;
 mod outputs_tests;
 
 #[cfg(test)]
+mod away_tests;
+
+#[cfg(test)]
 mod transition_tests;
 
 #[cfg(test)]

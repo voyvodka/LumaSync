@@ -9,6 +9,9 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Added
 
+- The lights go off when the computer locks, sleeps or turns its display off, and the mode that
+  ran comes back when you return — after the unlock, if waking up shows the lock screen. Settings →
+  General → "Lights off when away" turns this off. macOS and Windows.
 - Settings → Help: "Show again" brings back the setup guide, "Open folder" opens LumaSync's log
   folder, "Report" opens a new GitHub issue in your browser with the app version and system filled
   in, and "Discussions" links to questions and ideas. Nothing is sent by the app; you review and

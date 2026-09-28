@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveCloseAction, resolveLaunchLights, resolveNotificationsPreference, resolveUiZoom } from "../shell";
+import {
+  resolveAwayLights,
+  resolveCloseAction,
+  resolveLaunchLights,
+  resolveNotificationsPreference,
+  resolveUiZoom,
+} from "../shell";
 
 // The same inputs as `settings_preferences_default_unless_set_to_a_known_value` in
 // `commands/shell_state.rs`: both sides must read a stored value the same way.
@@ -23,5 +29,9 @@ describe("settings preferences Rust also reads", () => {
     expect(resolveNotificationsPreference(false)).toBe("on");
     expect(resolveLaunchLights(undefined)).toBe("resume");
     expect(resolveLaunchLights("off")).toBe("off");
+    expect(resolveAwayLights(undefined)).toBe("off");
+    expect(resolveAwayLights("keep")).toBe("keep");
+    expect(resolveAwayLights("off")).toBe("off");
+    expect(resolveAwayLights(true)).toBe("off");
   });
 });
