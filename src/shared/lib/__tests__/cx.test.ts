@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cx } from "../cx";
+import { cx } from "@/shared/lib/cx";
 
 describe("cx", () => {
   it("joins the truthy entries with single spaces", () => {

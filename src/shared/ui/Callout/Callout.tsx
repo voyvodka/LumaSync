@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { cx } from "./cx";
+import { cx } from "@/shared/lib/cx";
+import styles from "./Callout.module.css";
 
 export type CalloutTone = "error" | "warning" | "info" | "ok";
 
@@ -42,16 +43,16 @@ export function Callout({ tone, children, action, announce = true, className, te
   const { t } = useTranslation();
   const role = announce ? (tone === "error" ? "alert" : "status") : undefined;
   return (
-    <div className={cx("lm-callout", `is-${tone}`, className)} role={role} data-testid={testId}>
-      <span className="lm-callout-dot" aria-hidden="true" />
-      <p className="lm-callout-message">
+    <div className={cx(styles.callout, className)} data-tone={tone} role={role} data-testid={testId}>
+      <span className={styles.dot} aria-hidden="true" />
+      <p className={styles.message}>
         <span className="sr-only">{t(TONE_LABEL[tone])}: </span>
         {children}
       </p>
       {action && (
         <button
           type="button"
-          className="lm-callout-action"
+          className={styles.action}
           onClick={action.onClick}
           disabled={action.pending}
           aria-busy={action.pending || undefined}

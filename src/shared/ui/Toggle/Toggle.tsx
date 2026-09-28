@@ -1,5 +1,10 @@
 import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 
+import styles from "./Toggle.module.css";
+
+/** The pill's class, for a placeholder that holds its place before the value is known. */
+export const togglePillClass = styles.pill;
+
 type NativeButtonProps = Omit<
   ButtonHTMLAttributes<HTMLButtonElement>,
   "type" | "role" | "onChange" | "onClick" | "aria-checked" | "aria-pressed" | "children"
@@ -11,7 +16,7 @@ interface ToggleProps extends NativeButtonProps {
   /** The switch's accessible name; required because a switch has no text of its own. */
   label: string;
   busy?: boolean;
-  /** `lm-toggle` is the pill switch; a row that draws its own track passes its class and children. */
+  /** The pill switch by default; a row that draws its own track passes its class and children. */
   className?: string;
   children?: ReactNode;
   ref?: Ref<HTMLButtonElement>;
@@ -23,7 +28,7 @@ export function Toggle({
   onChange,
   label,
   busy = false,
-  className = "lm-toggle",
+  className = styles.pill,
   children,
   ...rest
 }: ToggleProps) {

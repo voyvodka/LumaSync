@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { IconButton } from "@/shared/ui/Button";
+import { IconButton } from "@/shared/ui/IconButton/IconButton";
 
 export const ZOOM_MIN = 0.3;
 export const ZOOM_MAX = 3;

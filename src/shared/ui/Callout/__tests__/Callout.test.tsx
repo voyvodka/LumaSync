@@ -14,7 +14,7 @@ describe("Callout", () => {
 
   it.each(["warning", "info", "ok"] as const)("announces a %s politely", (tone) => {
     render(<Callout tone={tone}>Saved.</Callout>);
-    expect(screen.getByRole("status")).toHaveClass(`is-${tone}`);
+    expect(screen.getByRole("status")).toHaveAttribute("data-tone", tone);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
 import { rgbToHex } from "@/shared/lib/color";
-import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
+import { HsvColorPicker } from "@/shared/ui/HsvColorPicker/HsvColorPicker";
 import { EyedropperIcon } from "./EyedropperIcon";
 import { HERO_LIGHT_TILE_THRESHOLD, perceivedLuminance } from "./colorMath";
 

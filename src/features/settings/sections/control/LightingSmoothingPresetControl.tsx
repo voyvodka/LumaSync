@@ -32,7 +32,7 @@ import {
   type LightingSmoothingPreset,
 } from "@/shared/contracts/lighting";
 import { shellStore } from "@/features/persistence/shellStore";
-import { Segmented } from "@/shared/ui/Segmented";
+import { Segmented } from "@/shared/ui/Segmented/Segmented";
 
 const PRESET_ORDER: LightingSmoothingPreset[] = ["subtle", "moderate", "intense"];
 

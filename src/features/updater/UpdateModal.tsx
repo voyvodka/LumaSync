@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import type { UpdateMetadata } from "@/shared/contracts/updater";
 import { clamp } from "@/shared/lib/math";
 import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
-import { useDialogFocus } from "@/shared/ui/useDialogFocus";
+import { useDialogFocus } from "@/shared/lib/useDialogFocus";
 import type { UpdaterErrorPhase, UpdaterState } from "./useAutoUpdater";
 import { isUpdateModalStatus } from "./updateModalStatus";
 import styles from "./UpdateModal.module.css";

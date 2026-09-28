@@ -43,9 +43,9 @@ import { shellStore } from "@/features/persistence/shellStore";
 import { outputAvailability } from "@/features/mode/model/outputAvailability";
 import { MODE_KINDS } from "@/features/mode/model/modeKinds";
 import { ModeStrip } from "@/features/mode/ui/ModeStrip";
-import { Callout } from "@/shared/ui/Callout";
-import { RangeRow } from "@/shared/ui/RangeRow";
-import { Toggle } from "@/shared/ui/Toggle";
+import { Callout } from "@/shared/ui/Callout/Callout";
+import { RangeRow } from "@/shared/ui/RangeRow/RangeRow";
+import { Toggle } from "@/shared/ui/Toggle/Toggle";
 
 import { SolidColorPanel } from "./control/SolidColorPanel";
 import { ColorCorrectionPanel } from "./control/ColorCorrectionPanel";

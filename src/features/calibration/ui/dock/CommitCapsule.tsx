@@ -1,4 +1,4 @@
-import { cx } from "@/shared/ui/cx";
+import { cx } from "@/shared/lib/cx";
 import { IconCheck, IconUndo } from "@/shared/ui/icons";
 import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
 import styles from "./CommitCapsule.module.css";

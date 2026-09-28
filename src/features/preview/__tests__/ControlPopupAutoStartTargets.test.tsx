@@ -20,7 +20,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("@/shared/ui/HsvColorPicker", () => ({
+vi.mock("@/shared/ui/HsvColorPicker/HsvColorPicker", () => ({
   HsvColorPicker: ({ ariaLabel }: { ariaLabel: string }) => (
     <div data-testid="hsv-picker" aria-label={ariaLabel} />
   ),

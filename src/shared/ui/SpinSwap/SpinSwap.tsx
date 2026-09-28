@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 
-import { cx } from "../cx";
+import { cx } from "@/shared/lib/cx";
 import styles from "./SpinSwap.module.css";
 
 interface SpinSwapProps<V extends string> {

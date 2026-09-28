@@ -467,6 +467,9 @@ fn app_context<R: Runtime>() -> tauri::Context<R> {
 // ---------------------------------------------------------------------------
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(all(target_os = "macos", debug_assertions, not(feature = "e2e")))]
+    macos_window::note_front_app_before_launch();
+
     let mut builder = tauri::Builder::default();
 
     // 1. Single-instance must be registered first. Release-only — debug's
@@ -869,6 +872,10 @@ pub fn run() {
                     // minimise or restore resizes (Windows) and a window
                     // coming or going moves focus, so either re-reads it.
                     tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Focused(_) => {
+                        #[cfg(all(target_os = "macos", debug_assertions, not(feature = "e2e")))]
+                        if matches!(event, tauri::WindowEvent::Focused(true)) {
+                            macos_window::hand_focus_back_after_launch();
+                        }
                         commands::window_visibility::refresh(window.app_handle());
                     }
                     _ => {}

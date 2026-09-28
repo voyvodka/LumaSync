@@ -1,0 +1,74 @@
+/* The primitives layer sits under components, so a row that restyles the switch still wins whatever
+   order the sheets load in. docs/architecture/ui-and-shell.md, "Stylesheet layers". */
+@layer primitives {
+  /* A 30 × 16 pill; `::before` widens the hit area to 32 × 32 without moving a pixel of what is
+     drawn. */
+  .pill {
+    width: 30px;
+    height: 16px;
+    border-radius: 10px;
+    background: #1a1d23;
+    border: 1px solid var(--lm-line-2);
+    position: relative;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease;
+    flex-shrink: 0;
+  }
+  .pill::before {
+    content: "";
+    position: absolute;
+    inset: -9px -2px;
+  }
+  .pill::after {
+    content: "";
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #3a3f48;
+    transition: transform 160ms cubic-bezier(0.33, 1, 0.68, 1), background 120ms ease, box-shadow 120ms ease;
+  }
+  .pill[aria-checked="true"] {
+    background: rgba(255, 176, 32, 0.15);
+    border-color: rgba(255, 176, 32, 0.4);
+  }
+  .pill[aria-checked="true"]::after {
+    transform: translateX(13px);
+    background: var(--lm-amber);
+    box-shadow: 0 0 6px rgba(255, 176, 32, 0.6);
+  }
+  .pill:focus-visible {
+    outline: none;
+    box-shadow: var(--lm-focus-ring-soft);
+  }
+  .pill:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  :global(:root[data-reduced-motion]) .pill,
+  :global(:root[data-reduced-motion]) .pill::after {
+    transition: none;
+  }
+
+  @media (forced-colors: active) {
+    .pill {
+      border-color: CanvasText;
+    }
+    .pill::after {
+      background: CanvasText;
+    }
+    .pill[aria-checked="true"] {
+      border-color: Highlight;
+    }
+    .pill[aria-checked="true"]::after {
+      background: Highlight;
+    }
+    .pill:focus-visible {
+      outline: 2px solid Highlight;
+      outline-offset: 2px;
+    }
+  }
+}
