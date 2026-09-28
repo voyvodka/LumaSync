@@ -266,6 +266,36 @@ describe("tryAutoReconnect — single attempt per initialize()", () => {
     expect(state.isConnecting).toBe(false);
     expect(state.connectedPort).toBeNull();
   });
+
+  // Nobody asked for this attempt: it must not leave the controller saying Connecting.
+  it("a refused reconnect does not leave the status at connecting", async () => {
+    const { controller } = makeController("COM3", SUPPORTED_PORT, {
+      connected: false,
+      portName: "COM3",
+      updatedAtUnixMs: Date.now(),
+      status: { code: "CONNECT_TIMEOUT", message: "timed out", details: null },
+    });
+
+    await controller.initialize();
+
+    expect(controller.getState().status).not.toBe("connecting");
+    expect(controller.getState().isConnecting).toBe(false);
+  });
+
+  it("a reconnect that throws does not leave the status at connecting", async () => {
+    const { controller, connectSerialPort } = makeController("COM3", SUPPORTED_PORT, {
+      connected: false,
+      portName: "COM3",
+      updatedAtUnixMs: Date.now(),
+      status: { code: "CONNECT_TIMEOUT", message: "", details: null },
+    });
+    connectSerialPort.mockRejectedValueOnce(new Error("ipc gone"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await controller.initialize();
+
+    expect(controller.getState().status).not.toBe("connecting");
+  });
 });
 
 // ---------------------------------------------------------------------------
