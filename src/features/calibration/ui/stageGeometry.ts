@@ -67,6 +67,16 @@ export interface StageLayout {
   chips: ChipAnchor[];
 }
 
+/** How far from the screen, in view units, the pointer counts as near it: past the LEDs, LED #1's
+ *  rings and the counts, and further below for the stand's "+". */
+export const NEAR_SPREAD = 48;
+export const NEAR_BELOW = 72;
+
+/** Whether a point, in view units, is near the screen: where LED #1's rings and the stand's "+" belong. */
+export function nearFrame(x: number, y: number, f: Frame): boolean {
+  return x >= f.x - NEAR_SPREAD && x <= f.x + f.w + NEAR_SPREAD && y >= f.y - NEAR_SPREAD && y <= f.y + f.h + NEAR_BELOW;
+}
+
 export function frameFor(display: DisplayAspect): Frame {
   const scale = Math.min(BOX_W / display.width, BOX_H / display.height);
   const w = display.width * scale;

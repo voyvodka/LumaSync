@@ -81,6 +81,10 @@ rebuilding LED Setup; apply it to every new screen:
   thing they act on, and what they act on lights while the rest steps back. A value's controls open
   on the value itself, not on a wider area around it: opened from an edge, a count's controls
   covered the very LED the pointer was there to pick, and hidden controls must not catch the pointer.
+  What waits for the pointer waits near the thing it acts on, not anywhere on a large stage: LED
+  Setup's rings once answered the whole stage, which runs up under the display picker, so its list
+  opening and closing over them blinked them on and off. They come with a short wait and go with a
+  longer one, so a pointer passing through does not blink them either.
 - **A value that opens a list looks like one at rest.** A quiet box with a chevron that turns while
   the list is open, as LED Setup's display. The strip's colour order first showed as bare "RGB"
   beside its label, and read as plain text: nothing said it could be changed. In a row of settings

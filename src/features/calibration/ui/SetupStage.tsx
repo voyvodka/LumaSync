@@ -16,7 +16,7 @@ import {
 import { holdStart, restoreStart, type Corner, type LedRef, type StartPoint } from "../model/startPoint";
 import { CountChip } from "./CountChip";
 import { SetupCanvas } from "./SetupCanvas";
-import { computeStage, frameFor, SCREEN_STOPS, VIEW_H, VIEW_W, type ChipAnchor } from "./stageGeometry";
+import { computeStage, frameFor, SCREEN_STOPS, VIEW_H, VIEW_W, type ChipAnchor, type Frame, nearFrame } from "./stageGeometry";
 import styles from "./SetupStage.module.css";
 
 interface SetupStageProps {
@@ -246,9 +246,15 @@ export function SetupStage(props: SetupStageProps) {
       <div
         ref={stageRef}
         className={preview ? `${styles.stage} ${styles.isPreviewing}` : styles.stage}
-        // What only matters while the pointer is here (where LED #1 can go, adding a stand) waits for it.
-        onPointerEnter={(e) => {
-          e.currentTarget.dataset.pointer = "";
+        // What only matters while the pointer is near the screen (where LED #1 can go, adding a stand)
+        // waits for it there: the stage runs up under the display picker, and its list opening and
+        // closing over the stage flashed the rings on and off.
+        onPointerMove={(e) => {
+          const stage = e.currentTarget;
+          const near = nearScreen(stage, e.clientX, e.clientY, layout.frame);
+          if (near === "pointer" in stage.dataset) return;
+          if (near) stage.dataset.pointer = "";
+          else delete stage.dataset.pointer;
         }}
         onPointerLeave={(e) => {
           delete e.currentTarget.dataset.pointer;
@@ -270,6 +276,11 @@ export function SetupStage(props: SetupStageProps) {
       </div>
     </div>
   );
+}
+
+function nearScreen(stage: HTMLElement, clientX: number, clientY: number, f: Frame): boolean {
+  const r = stage.getBoundingClientRect();
+  return nearFrame(((clientX - r.left) / r.width) * VIEW_W, ((clientY - r.top) / r.height) * VIEW_H, f);
 }
 
 function StandGlyph() {
