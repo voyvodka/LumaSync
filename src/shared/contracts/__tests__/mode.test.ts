@@ -53,14 +53,59 @@ describe("lighting mode contracts", () => {
     expect(isLightingModeKind("rainbow")).toBe(false);
   });
 
-  // Rust reads an unknown id as the rainbow; so does the frontend, or the two would disagree.
-  it("normalises an effect into range, an unknown id to the rainbow", () => {
-    expect(normalizeEffectPayload({ id: "fire" as never, speed: 3, brightness: -1 })).toEqual({
-      id: "rainbow",
+  // Rust reads an unknown id as the wave; so does the frontend, or the two would disagree.
+  it("normalises an effect into range, an unknown id to the wave", () => {
+    expect(normalizeEffectPayload({ id: "lightning", speed: 3, brightness: -1 })).toEqual({
+      id: "wave",
       speed: 1,
       brightness: 0,
     });
     expect(normalizeLightingModeConfig({ kind: "effect" }).effect).toEqual(DEFAULT_EFFECT);
+  });
+
+  // Mirrors `a_v1_effect_reads_as_its_v2_equivalent` in effect_tests.rs.
+  it("reads a v1 effect as what it became", () => {
+    expect(normalizeEffectPayload({ id: "rainbow", speed: 0.3, brightness: 1 })).toMatchObject({
+      id: "wave",
+      palette: "rainbow",
+    });
+    expect(normalizeEffectPayload({ id: "cycle" })).toMatchObject({ id: "cycle", palette: "rainbow" });
+    expect(normalizeEffectPayload({ id: "breathe", color: { r: 10, g: 20, b: 30 } })).toMatchObject({
+      id: "breathe",
+      palette: "custom",
+      colors: [{ r: 10, g: 20, b: 30 }],
+    });
+    expect(normalizeEffectPayload({ id: "breathe" }).colors).toEqual([{ r: 255, g: 176, b: 32 }]);
+  });
+
+  // Mirrors `a_bad_field_fails_soft_on_its_own`.
+  it("drops a bad effect field on its own and keeps the rest", () => {
+    const effect = normalizeEffectPayload({
+      id: "candle",
+      speed: "fast" as never,
+      palette: "neon" as never,
+      direction: 7 as never,
+      colors: [{ r: 300, g: 12.7, b: -4 }, "red" as never, { r: 1, g: 2, b: 3 }, { r: 4, g: 5, b: 6 }],
+      intensity: 2,
+      durationMinutes: 900,
+    });
+    expect(effect).toEqual({
+      id: "candle",
+      speed: 0.5,
+      brightness: 1,
+      colors: [
+        { r: 255, g: 12, b: 0 },
+        { r: 1, g: 2, b: 3 },
+        { r: 4, g: 5, b: 6 },
+      ],
+      intensity: 1,
+      durationMinutes: 120,
+    });
+  });
+
+  it("keeps a white solid's temperature in range", () => {
+    expect(normalizeSolidColorPayload({ r: 1, g: 2, b: 3, brightness: 1, kelvin: 99999 }).kelvin).toBe(6500);
+    expect(normalizeSolidColorPayload({ r: 1, g: 2, b: 3, brightness: 1 })).not.toHaveProperty("kelvin");
   });
 
   it("normalizes solid mode payload as r,g,b,brightness", () => {

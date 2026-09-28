@@ -153,6 +153,7 @@ fn solid_mode() -> LightingModeConfig {
             g: 64,
             b: 128,
             brightness: 0.6,
+            kelvin: None,
         }),
         ambilight: None,
         targets: None,
@@ -1185,6 +1186,7 @@ fn solid_writes_in_the_requested_color_order() {
             g: 0,
             b: 0,
             brightness: 1.0,
+            kelvin: None,
         }),
         targets: Some(vec!["usb".to_string()]),
         led_calibration: Some(ambilight_calibration_with_total_leds(4)),
@@ -1368,7 +1370,7 @@ fn an_effect_drives_the_strip_and_retunes_in_place() {
         id: super::config::EffectId::Breathe,
         speed: 0.9,
         brightness: 0.4,
-        color: None,
+        ..super::config::DEFAULT_EFFECT
     };
     assert_eq!(
         apply_effect(&mut owner, effect_mode(breathe.clone())),

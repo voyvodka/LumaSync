@@ -13,6 +13,7 @@ use log::warn;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime};
 
+use super::config::normalize_effect;
 use super::effect_source::{effect_ambilight, EffectLiveSlot};
 use super::live::{retune_ambilight_live, AmbilightLiveSettings};
 use super::snapshot::SnapshotSink;
@@ -41,6 +42,16 @@ pub struct LightingTuning {
 }
 
 impl LightingTuning {
+    /// What `normalize_mode_config` does for a start, so a retune stores,
+    /// publishes and saves the same values a start would have.
+    fn normalized(self) -> Self {
+        Self {
+            solid: self.solid.map(SolidColorPayload::resolved),
+            ambilight: self.ambilight,
+            effect: self.effect.map(normalize_effect),
+        }
+    }
+
     fn kind(&self) -> Option<LightingModeKind> {
         if self.solid.is_some() {
             Some(LightingModeKind::Solid)
@@ -371,6 +382,7 @@ pub async fn retune_lighting<R: Runtime>(
     app: AppHandle<R>,
     tuning: LightingTuning,
 ) -> Result<RetuneLightingResult, String> {
+    let tuning = tuning.normalized();
     let state = app.state::<LightingRuntimeState>();
     let outcome = state.tuning.retune(tuning.clone()).await;
     let status = match outcome {

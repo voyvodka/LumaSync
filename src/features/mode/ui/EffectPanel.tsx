@@ -1,17 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { EFFECT_IDS, type EffectId, type EffectPayload } from "@/shared/contracts/mode";
+import { EFFECT_ORDER } from "@/shared/contracts/effects";
+import type { EffectPayload } from "@/shared/contracts/mode";
 import { RangeRow } from "@/shared/ui/RangeRow/RangeRow";
 import { Segmented } from "@/shared/ui/Segmented/Segmented";
-
-const EFFECT_ORDER = [EFFECT_IDS.RAINBOW, EFFECT_IDS.BREATHE, EFFECT_IDS.CYCLE] as const satisfies readonly EffectId[];
-
-const EFFECT_NAME_KEY = {
-  rainbow: "lights:effect.names.rainbow",
-  breathe: "lights:effect.names.breathe",
-  cycle: "lights:effect.names.cycle",
-} as const satisfies Record<EffectId, string>;
 
 interface EffectPanelProps {
   effect: EffectPayload;
@@ -54,7 +47,7 @@ export function EffectPanel({ effect, disabled = false, onChange }: EffectPanelP
       <div className="lm-psl lm-psl-seg">
         <div className="row">
           <span>{t("lights:effect.label")}</span>
-          <b>{t(EFFECT_NAME_KEY[draft.id])}</b>
+          <b>{t(`lights:effect.names.${draft.id}`)}</b>
         </div>
         <Segmented
           className="lm-settings-seg"
@@ -62,7 +55,7 @@ export function EffectPanel({ effect, disabled = false, onChange }: EffectPanelP
           value={draft.id}
           disabled={disabled}
           onChange={(id) => commit({ ...draft, id })}
-          options={EFFECT_ORDER.map((id) => ({ value: id, label: t(EFFECT_NAME_KEY[id]), testId: `effect-${id}` }))}
+          options={EFFECT_ORDER.map((id) => ({ value: id, label: t(`lights:effect.names.${id}`), testId: `effect-${id}` }))}
         />
       </div>
       <div className="lm-profile">

@@ -188,6 +188,7 @@ fn solid_with_targets(targets: Option<Vec<String>>) -> LightingModeConfig {
             g: 0,
             b: 0,
             brightness: 1.0,
+            kelvin: None,
         }),
         ambilight: None,
         targets,
@@ -320,6 +321,7 @@ fn solid_hue_only() -> LightingModeConfig {
             g: 10,
             b: 40,
             brightness: 1.0,
+            kelvin: None,
         }),
         ambilight: None,
         targets: Some(vec!["hue".to_string()]),
@@ -1811,6 +1813,7 @@ fn solid_with_calibration(total_leds: u16) -> LightingModeConfig {
             g: 0,
             b: 0,
             brightness: 1.0,
+            kelvin: None,
         }),
         ambilight: None,
         targets: Some(vec!["usb".to_string()]),
@@ -2058,6 +2061,7 @@ fn solid_on_sk6812_writes_four_byte_rgbw_pixels() {
         g: 255,
         b: 255,
         brightness: 1.0,
+        kelvin: None,
     });
     let hydrated = hydrated_like_set_lighting_mode(solid, SK6812_SHELL_STATE);
 
@@ -2136,6 +2140,7 @@ fn solid_on_the_default_setup_applies_the_user_gamma() {
             g: 128,
             b: 128,
             brightness: 1.0,
+            kelvin: None,
         });
         solid.color_correction = Some(ColorCorrectionConfig {
             gamma_r: gamma,

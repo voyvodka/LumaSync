@@ -385,6 +385,7 @@ mod tests {
                     g: 0,
                     b: 0,
                     brightness: 1.0,
+                    kelvin: None,
                 })
             });
             std::thread::sleep(Duration::from_millis(5));

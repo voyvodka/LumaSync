@@ -1265,6 +1265,10 @@ console.log("\n[ Lighting transaction — Rust → lightingRuntime.ts parity ]")
     resolve(ROOT, "src/shared/contracts/hueHealth.ts"),
     "hueHealth"
   );
+  const rustModeConfig = stripComments(
+    readOrEmpty(resolve(ROOT, "src-tauri/src/commands/lighting_mode/config.rs"), "rust mode config")
+  );
+  const effectsSource = readOrEmpty(resolve(ROOT, "src/shared/contracts/effects.ts"), "effects");
   const literalCodes = (source, fn) =>
     [...source.matchAll(new RegExp(`${fn}\\(\\s*"([A-Z][A-Z0-9_]*)"`, "g"))].map((m) => m[1]);
   checkWireUnion(
@@ -1299,6 +1303,9 @@ console.log("\n[ Lighting transaction — Rust → lightingRuntime.ts parity ]")
     [rustSnapshot, "BootHueRetryState", lightingRuntimeSource, "BOOT_HUE_RETRY_STATE"],
     [rustOutputs, "LightingOrigin", lightingRuntimeSource, "LIGHTING_ORIGIN"],
     [rustHueHealth, "HueBridgeVerdict", hueHealthSource, "HUE_BRIDGE_VERDICT"],
+    [rustModeConfig, "EffectId", effectsSource, "EFFECT_IDS"],
+    [rustModeConfig, "PaletteId", effectsSource, "PALETTE_IDS"],
+    [rustModeConfig, "EffectDirection", effectsSource, "EFFECT_DIRECTIONS"],
   ]) {
     const rust = rustEnumValues(rustSource, rustName);
     const ts = tsValues(tsSource, tsName);

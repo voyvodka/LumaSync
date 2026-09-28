@@ -5,6 +5,16 @@ import type { DisplayId } from "@/shared/contracts/display";
 import type { LedCalibrationConfig } from "@/shared/contracts/calibration";
 import type { RoomGeometry } from "@/shared/contracts/roomMap";
 import {
+  EFFECT_DEFAULTS,
+  EFFECT_DIRECTIONS,
+  EFFECT_IDS,
+  EFFECT_RANGES,
+  PALETTE_IDS,
+  type EffectDirection,
+  type EffectId,
+  type PaletteId,
+} from "@/shared/contracts/effects";
+import {
   DEFAULT_COLOR_CORRECTION,
   FIRMWARE_PROFILE,
   GAMMA_RANGE,
@@ -34,6 +44,8 @@ export interface SolidColorPayload {
   g: number;
   b: number;
   brightness: number;
+  /** Solid's White tab: a colour temperature, 2000–6500 K. Present ⇒ Rust derives r/g/b from it. */
+  kelvin?: number | null;
 }
 
 export interface AmbilightPayload {
@@ -63,31 +75,36 @@ export interface AmbilightPayload {
   hueIntensityPreset?: HueIntensityPreset | null;
 }
 
-/** `EffectId` in `commands/lighting_mode/config.rs`; an id Rust does not know reads as the rainbow. */
-export const EFFECT_IDS = {
-  RAINBOW: "rainbow",
-  BREATHE: "breathe",
-  CYCLE: "cycle",
-} as const;
-
-export type EffectId = (typeof EFFECT_IDS)[keyof typeof EFFECT_IDS];
-
 export interface EffectColor {
   r: number;
   g: number;
   b: number;
 }
 
+/**
+ * Flat optional fields rather than a tagged union: Rust reads `lightingMode` at launch, and one
+ * unknown shape in a union would fail the whole read; each field here fails soft on its own.
+ */
 export interface EffectPayload {
   id: EffectId;
-  /** 0..1, mapped per effect onto a loop period on a log scale; not hertz: a breath and a rainbow lap differ. */
+  /** 0..1, mapped per effect onto a loop period on a log scale; not hertz: a breath and a wave lap differ. */
   speed: number;
   brightness: number;
-  /** The breath's colour; the rainbow and the cycle ignore it. */
-  color?: EffectColor | null;
+  /** Absent ⇒ the effect's `defaultPalette`; `custom` plays `colors`. */
+  palette?: PaletteId | null;
+  /** 1..3 colours for the `custom` palette; kept while a built-in plays, so switching back restores them. */
+  colors?: EffectColor[] | null;
+  direction?: EffectDirection | null;
+  size?: number | null;
+  intensity?: number | null;
+  durationMinutes?: number | null;
 }
 
-export const DEFAULT_EFFECT: Readonly<EffectPayload> = { id: EFFECT_IDS.RAINBOW, speed: 0.5, brightness: 1 };
+export const DEFAULT_EFFECT: Readonly<EffectPayload> = {
+  id: EFFECT_IDS.WAVE,
+  speed: EFFECT_DEFAULTS.speed,
+  brightness: EFFECT_DEFAULTS.brightness,
+};
 
 export interface LightingModeConfig {
   kind: LightingModeKind;
@@ -106,7 +123,7 @@ export interface LightingModeConfig {
   /**
    * Per-channel color correction. Absent ⇒ backend uses
    * ColorCorrectionConfig defaults (gamma 2.2 / 6500 K / saturation 1.0).
-   * Applied to USB output only — Hue sink is not affected.
+   * Applied to every output: the strip's encoder and the Hue sender alike.
    */
   colorCorrection?: ColorCorrectionConfig | null;
   /**
@@ -186,12 +203,18 @@ function clampFloat(value: unknown, min: number, max: number, fallback: number):
  */
 export const DEFAULT_SOLID_COLOR: Readonly<SolidColorPayload> = { r: 255, g: 255, b: 255, brightness: 1 };
 
+/** Solid's White tab. `solid_kelvin_range` in `config.rs`. */
+export const SOLID_KELVIN_RANGE = { min: 2000, max: 6500 } as const;
+
 export function normalizeSolidColorPayload(input?: Partial<SolidColorPayload>): SolidColorPayload {
   return {
     r: clampInt(input?.r, 0, 255, DEFAULT_SOLID_COLOR.r),
     g: clampInt(input?.g, 0, 255, DEFAULT_SOLID_COLOR.g),
     b: clampInt(input?.b, 0, 255, DEFAULT_SOLID_COLOR.b),
     brightness: clampFloat(input?.brightness, 0, 1, DEFAULT_SOLID_COLOR.brightness),
+    ...(input?.kelvin != null
+      ? { kelvin: clampInt(input.kelvin, SOLID_KELVIN_RANGE.min, SOLID_KELVIN_RANGE.max, SOLID_KELVIN_RANGE.max) }
+      : {}),
   };
 }
 
@@ -220,23 +243,64 @@ export function normalizeAmbilightPayload(input?: Partial<AmbilightPayload> | nu
 }
 
 const EFFECT_ID_VALUES: ReadonlySet<string> = new Set(Object.values(EFFECT_IDS));
+const PALETTE_ID_VALUES: ReadonlySet<string> = new Set(Object.values(PALETTE_IDS));
+const DIRECTION_VALUES: ReadonlySet<string> = new Set(Object.values(EFFECT_DIRECTIONS));
 
-/** Clamped into range; an unknown id is the default effect, as Rust reads it. */
-export function normalizeEffectPayload(input?: Partial<EffectPayload> | null): EffectPayload {
-  const id =
-    typeof input?.id === "string" && EFFECT_ID_VALUES.has(input.id) ? (input.id as EffectId) : DEFAULT_EFFECT.id;
-  const color = input?.color
-    ? {
-        r: clampInt(input.color.r, 0, 255, 255),
-        g: clampInt(input.color.g, 0, 255, 255),
-        b: clampInt(input.color.b, 0, 255, 255),
-      }
+/** The three v1 ids, read as what they became; `config.rs` maps them the same way. */
+const V1_EFFECTS: Readonly<Record<string, { id: EffectId; palette: PaletteId }>> = {
+  rainbow: { id: EFFECT_IDS.WAVE, palette: PALETTE_IDS.RAINBOW },
+  cycle: { id: EFFECT_IDS.CYCLE, palette: PALETTE_IDS.RAINBOW },
+  breathe: { id: EFFECT_IDS.BREATHE, palette: PALETTE_IDS.CUSTOM },
+};
+
+/** v1's breath colour, and what a v1 breath without one had. */
+const V1_BREATHE_COLOR: Readonly<EffectColor> = { r: 255, g: 176, b: 32 };
+
+function normalizeEffectColor(value: unknown): EffectColor | undefined {
+  if (value === null || typeof value !== "object") return undefined;
+  const { r, g, b } = value as Partial<EffectColor>;
+  return { r: clampInt(r, 0, 255, 255), g: clampInt(g, 0, 255, 255), b: clampInt(b, 0, 255, 255) };
+}
+
+type EffectPayloadInput = Partial<Omit<EffectPayload, "id">> & { id?: string; color?: EffectColor | null };
+
+/**
+ * Clamped into range; unknown ids and fields fall back one by one, as Rust reads them. A v1
+ * payload (`rainbow` / `cycle` / `breathe` + `color`) reads as its v2 equivalent.
+ */
+export function normalizeEffectPayload(input?: EffectPayloadInput | null): EffectPayload {
+  const v1 = typeof input?.id === "string" ? V1_EFFECTS[input.id] : undefined;
+  const id: EffectId =
+    v1?.id ??
+    (typeof input?.id === "string" && EFFECT_ID_VALUES.has(input.id) ? (input.id as EffectId) : DEFAULT_EFFECT.id);
+  const palette =
+    typeof input?.palette === "string" && PALETTE_ID_VALUES.has(input.palette)
+      ? (input.palette as PaletteId)
+      : v1?.palette;
+  const [minColors, maxColors] = EFFECT_RANGES.colors;
+  let colors = Array.isArray(input?.colors)
+    ? input.colors.map(normalizeEffectColor).filter((c): c is EffectColor => c !== undefined).slice(0, maxColors)
     : undefined;
+  if (input?.id === "breathe" && !colors?.length) {
+    colors = [normalizeEffectColor(input.color) ?? { ...V1_BREATHE_COLOR }];
+  }
+  const direction =
+    typeof input?.direction === "string" && DIRECTION_VALUES.has(input.direction)
+      ? (input.direction as EffectDirection)
+      : undefined;
+  const [minMinutes, maxMinutes] = EFFECT_RANGES.durationMinutes;
   return {
     id,
     speed: clampFloat(input?.speed, 0, 1, DEFAULT_EFFECT.speed),
     brightness: clampFloat(input?.brightness, 0, 1, DEFAULT_EFFECT.brightness),
-    ...(color ? { color } : {}),
+    ...(palette ? { palette } : {}),
+    ...(colors && colors.length >= minColors ? { colors } : {}),
+    ...(direction ? { direction } : {}),
+    ...(input?.size != null ? { size: clampFloat(input.size, 0, 1, EFFECT_DEFAULTS.size) } : {}),
+    ...(input?.intensity != null ? { intensity: clampFloat(input.intensity, 0, 1, EFFECT_DEFAULTS.intensity) } : {}),
+    ...(input?.durationMinutes != null
+      ? { durationMinutes: clampInt(input.durationMinutes, minMinutes, maxMinutes, EFFECT_DEFAULTS.durationMinutes) }
+      : {}),
   };
 }
 

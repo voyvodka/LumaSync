@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_EFFECT, EFFECT_IDS, type EffectPayload } from "@/shared/contracts/mode";
+import { EFFECT_IDS } from "@/shared/contracts/effects";
+import { DEFAULT_EFFECT, type EffectPayload } from "@/shared/contracts/mode";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),

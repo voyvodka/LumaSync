@@ -2,11 +2,12 @@
 //! the normalisation every request goes through before the transition reads it.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::commands::hue_intensity::{HueIntensityPreset, LightingSmoothingPreset};
 use crate::commands::led_calibration::LedCalibrationConfig;
 use crate::commands::led_output::{
-    ColorCorrectionConfig, FirmwareProfile, LedChipType, LedColorOrder,
+    kelvin_to_rgb_multipliers, ColorCorrectionConfig, FirmwareProfile, LedChipType, LedColorOrder,
 };
 use crate::commands::status::CommandStatus;
 use crate::commands::wled_sink::WledSinkConfig;
@@ -27,28 +28,28 @@ pub enum LightingModeKind {
     Effect,
 }
 
-/// `EFFECT_IDS` in `src/shared/contracts/mode.ts`. An id this build does not
-/// know reads as `Rainbow`.
-#[derive(Clone, Copy, Default, Serialize, PartialEq, Eq, Debug)]
-#[serde(rename_all = "lowercase")]
-pub enum EffectId {
-    #[default]
-    Rainbow,
-    Breathe,
-    Cycle,
-}
-
-/// Reads a lowercase tag, falling back to the default for any other string.
+/// Reads a tag, falling back to the default for any other string.
 /// `#[serde(other)]` would do it only on the last variant.
 macro_rules! lenient_enum {
     ($ty:ty { $($tag:literal => $variant:expr),+ $(,)? }) => {
+        impl $ty {
+            /// The tags this build reads; `Serialize` must spell every variant the same way,
+            /// which `effect_tests.rs` checks variant by variant.
+            #[allow(dead_code)]
+            pub(crate) const TAGS: &'static [(&'static str, $ty)] = &[$(($tag, $variant)),+];
+
+            pub(crate) fn from_tag(tag: &str) -> Option<Self> {
+                match tag {
+                    $($tag => Some($variant),)+
+                    _ => None,
+                }
+            }
+        }
+
         impl<'de> Deserialize<'de> for $ty {
             fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
                 let tag = String::deserialize(deserializer)?;
-                Ok(match tag.as_str() {
-                    $($tag => $variant,)+
-                    _ => <$ty>::default(),
-                })
+                Ok(<$ty>::from_tag(&tag).unwrap_or_default())
             }
         }
     };
@@ -61,51 +62,271 @@ lenient_enum!(LightingModeKind {
     "effect" => LightingModeKind::Effect,
 });
 
+/// `EFFECT_IDS` in `src/shared/contracts/effects.ts`; each one's parameters and
+/// default palette are in `effectCatalogue.json`. An id this build does not
+/// know reads as `Wave`.
+#[derive(Clone, Copy, Default, Serialize, PartialEq, Eq, Hash, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum EffectId {
+    #[default]
+    Wave,
+    Cycle,
+    Breathe,
+    Candle,
+    Fireplace,
+    Drift,
+    Gradient,
+    Ocean,
+    Aurora,
+    Twinkle,
+    Comet,
+    Scanner,
+    Chase,
+    Plasma,
+    Sunrise,
+    NaturalLight,
+}
+
 lenient_enum!(EffectId {
-    "rainbow" => EffectId::Rainbow,
-    "breathe" => EffectId::Breathe,
+    "wave" => EffectId::Wave,
     "cycle" => EffectId::Cycle,
+    "breathe" => EffectId::Breathe,
+    "candle" => EffectId::Candle,
+    "fireplace" => EffectId::Fireplace,
+    "drift" => EffectId::Drift,
+    "gradient" => EffectId::Gradient,
+    "ocean" => EffectId::Ocean,
+    "aurora" => EffectId::Aurora,
+    "twinkle" => EffectId::Twinkle,
+    "comet" => EffectId::Comet,
+    "scanner" => EffectId::Scanner,
+    "chase" => EffectId::Chase,
+    "plasma" => EffectId::Plasma,
+    "sunrise" => EffectId::Sunrise,
+    "naturalLight" => EffectId::NaturalLight,
 });
 
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Debug)]
+/// `PALETTE_IDS` in `effects.ts`. `Custom` plays the payload's own `colors`.
+#[derive(Clone, Copy, Default, Serialize, PartialEq, Eq, Hash, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum PaletteId {
+    #[default]
+    Rainbow,
+    Sunset,
+    Ocean,
+    Forest,
+    Lava,
+    Aurora,
+    Pastel,
+    Warm,
+    Ice,
+    Party,
+    Fire,
+    Custom,
+}
+
+lenient_enum!(PaletteId {
+    "rainbow" => PaletteId::Rainbow,
+    "sunset" => PaletteId::Sunset,
+    "ocean" => PaletteId::Ocean,
+    "forest" => PaletteId::Forest,
+    "lava" => PaletteId::Lava,
+    "aurora" => PaletteId::Aurora,
+    "pastel" => PaletteId::Pastel,
+    "warm" => PaletteId::Warm,
+    "ice" => PaletteId::Ice,
+    "party" => PaletteId::Party,
+    "fire" => PaletteId::Fire,
+    "custom" => PaletteId::Custom,
+});
+
+/// `EFFECT_DIRECTIONS` in `effects.ts`: where a field effect travels, in room terms.
+#[derive(Clone, Copy, Default, Serialize, PartialEq, Eq, Hash, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum EffectDirection {
+    #[default]
+    LeftToRight,
+    RightToLeft,
+    BottomToTop,
+    TopToBottom,
+    Outward,
+    Around,
+}
+
+lenient_enum!(EffectDirection {
+    "leftToRight" => EffectDirection::LeftToRight,
+    "rightToLeft" => EffectDirection::RightToLeft,
+    "bottomToTop" => EffectDirection::BottomToTop,
+    "topToBottom" => EffectDirection::TopToBottom,
+    "outward" => EffectDirection::Outward,
+    "around" => EffectDirection::Around,
+});
+
+#[derive(Clone, Copy, Serialize, PartialEq, Eq, Debug)]
 pub struct EffectColor {
     pub r: u8,
     pub g: u8,
     pub b: u8,
 }
 
-/// `EffectPayload` in `src/shared/contracts/mode.ts`.
-#[derive(Clone, Deserialize, Serialize, PartialEq, Debug)]
-#[serde(rename_all = "camelCase")]
+/// `EffectPayload` in `src/shared/contracts/mode.ts`. Read through
+/// `EffectPayloadWire`, so every field fails soft on its own — a value out of
+/// range is clamped, an unknown tag is dropped — and a v1 payload reads as what
+/// it became. The retune path deserialises the same way, so it is normalised too.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[serde(rename_all = "camelCase", from = "EffectPayloadWire")]
 pub struct EffectPayload {
-    #[serde(default)]
     pub id: EffectId,
     /// 0..1, mapped per effect onto a period on a log scale: a breath and a
-    /// rainbow lap do not share a sensible range in hertz.
-    #[serde(default = "default_effect_speed")]
+    /// wave lap do not share a sensible range in hertz.
     pub speed: f32,
-    #[serde(default = "default_effect_brightness")]
     pub brightness: f32,
-    /// The breath's colour; the rainbow and the cycle ignore it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub color: Option<EffectColor>,
-}
-
-fn default_effect_speed() -> f32 {
-    DEFAULT_EFFECT.speed
-}
-
-fn default_effect_brightness() -> f32 {
-    DEFAULT_EFFECT.brightness
+    /// Absent ⇒ the effect's default palette.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub palette: Option<PaletteId>,
+    /// 1..3 colours for `PaletteId::Custom`; kept while a built-in plays.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub colors: Option<Vec<EffectColor>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub direction: Option<EffectDirection>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub intensity: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_minutes: Option<u16>,
 }
 
 /// `DEFAULT_EFFECT` in `src/shared/contracts/mode.ts`.
 pub(crate) const DEFAULT_EFFECT: EffectPayload = EffectPayload {
-    id: EffectId::Rainbow,
+    id: EffectId::Wave,
     speed: 0.5,
     brightness: 1.0,
-    color: None,
+    palette: None,
+    colors: None,
+    direction: None,
+    size: None,
+    intensity: None,
+    duration_minutes: None,
 };
+
+pub(crate) const EFFECT_MAX_COLORS: usize = 3;
+pub(crate) const EFFECT_DURATION_MINUTES: (u16, u16) = (1, 120);
+
+/// v1's breath colour, and what a v1 breath without one had.
+const V1_BREATHE_COLOR: EffectColor = EffectColor {
+    r: 255,
+    g: 176,
+    b: 32,
+};
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EffectPayloadWire {
+    #[serde(default)]
+    id: Option<Value>,
+    #[serde(default)]
+    speed: Option<Value>,
+    #[serde(default)]
+    brightness: Option<Value>,
+    #[serde(default)]
+    palette: Option<Value>,
+    #[serde(default)]
+    colors: Option<Value>,
+    /// v1's single breath colour.
+    #[serde(default)]
+    color: Option<Value>,
+    #[serde(default)]
+    direction: Option<Value>,
+    #[serde(default)]
+    size: Option<Value>,
+    #[serde(default)]
+    intensity: Option<Value>,
+    #[serde(default)]
+    duration_minutes: Option<Value>,
+}
+
+fn wire_unit(value: Option<&Value>) -> Option<f32> {
+    let n = value?.as_f64()? as f32;
+    n.is_finite().then(|| n.clamp(0.0, 1.0))
+}
+
+fn wire_channel(value: Option<&Value>) -> u8 {
+    value
+        .and_then(Value::as_f64)
+        .filter(|n| n.is_finite())
+        .map_or(255, |n| n.clamp(0.0, 255.0).floor() as u8)
+}
+
+fn wire_color(value: &Value) -> Option<EffectColor> {
+    let object = value.as_object()?;
+    Some(EffectColor {
+        r: wire_channel(object.get("r")),
+        g: wire_channel(object.get("g")),
+        b: wire_channel(object.get("b")),
+    })
+}
+
+fn wire_tag(value: Option<&Value>) -> Option<&str> {
+    value.and_then(Value::as_str)
+}
+
+impl From<EffectPayloadWire> for EffectPayload {
+    fn from(wire: EffectPayloadWire) -> Self {
+        let tag = wire_tag(wire.id.as_ref());
+        let (id, v1_palette) = match tag {
+            Some("rainbow") => (EffectId::Wave, Some(PaletteId::Rainbow)),
+            Some("breathe") => (EffectId::Breathe, Some(PaletteId::Custom)),
+            Some(tag) => (EffectId::from_tag(tag).unwrap_or_default(), None),
+            None => (EffectId::default(), None),
+        };
+        let v1_palette = match tag {
+            Some("cycle") => Some(PaletteId::Rainbow),
+            _ => v1_palette,
+        };
+        let mut colors: Option<Vec<EffectColor>> = wire
+            .colors
+            .as_ref()
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(wire_color)
+                    .take(EFFECT_MAX_COLORS)
+                    .collect::<Vec<_>>()
+            })
+            .filter(|colors| !colors.is_empty());
+        if tag == Some("breathe") && colors.is_none() {
+            colors = Some(vec![wire
+                .color
+                .as_ref()
+                .and_then(wire_color)
+                .unwrap_or(V1_BREATHE_COLOR)]);
+        }
+        let (min_minutes, max_minutes) = EFFECT_DURATION_MINUTES;
+        EffectPayload {
+            id,
+            speed: wire_unit(wire.speed.as_ref()).unwrap_or(DEFAULT_EFFECT.speed),
+            brightness: wire_unit(wire.brightness.as_ref()).unwrap_or(DEFAULT_EFFECT.brightness),
+            palette: wire_tag(wire.palette.as_ref())
+                .and_then(PaletteId::from_tag)
+                .or(v1_palette),
+            colors,
+            direction: wire_tag(wire.direction.as_ref()).and_then(EffectDirection::from_tag),
+            size: wire_unit(wire.size.as_ref()),
+            intensity: wire_unit(wire.intensity.as_ref()),
+            duration_minutes: wire
+                .duration_minutes
+                .as_ref()
+                .and_then(Value::as_f64)
+                .filter(|n| n.is_finite())
+                .map(|n| {
+                    n.clamp(f64::from(min_minutes), f64::from(max_minutes))
+                        .floor() as u16
+                }),
+        }
+    }
+}
 
 #[derive(Clone, Deserialize, Serialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -114,6 +335,43 @@ pub struct SolidColorPayload {
     pub g: u8,
     pub b: u8,
     pub brightness: f32,
+    /// Solid's White tab: present ⇒ `r/g/b` are derived from it
+    /// (`SolidColorPayload::resolved`). It stacks with the colour correction's
+    /// own white point, deliberately: one is a choice, the other calibration.
+    #[serde(
+        default,
+        deserialize_with = "lenient_kelvin",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub kelvin: Option<u16>,
+}
+
+/// `SOLID_KELVIN_RANGE` in `src/shared/contracts/mode.ts`.
+pub(crate) const SOLID_KELVIN_RANGE: (u16, u16) = (2000, 6500);
+
+/// A kelvin that is not a number is no kelvin; one out of range is clamped.
+fn lenient_kelvin<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<u16>, D::Error> {
+    let value = Option::<Value>::deserialize(deserializer)?;
+    let (min, max) = SOLID_KELVIN_RANGE;
+    Ok(value
+        .as_ref()
+        .and_then(Value::as_f64)
+        .filter(|n| n.is_finite())
+        .map(|n| n.clamp(f64::from(min), f64::from(max)).round() as u16))
+}
+
+impl SolidColorPayload {
+    /// The colour a White choice shows: the temperature's own RGB at full scale.
+    pub(crate) fn resolved(mut self) -> Self {
+        if let Some(kelvin) = self.kelvin {
+            let [r, g, b] = kelvin_to_rgb_multipliers(kelvin);
+            let byte = |m: f32| (m * 255.0).round().clamp(0.0, 255.0) as u8;
+            (self.r, self.g, self.b) = (byte(r), byte(g), byte(b));
+        }
+        self
+    }
 }
 
 /// `DEFAULT_SOLID_COLOR` in `src/shared/contracts/mode.ts`: what Solid shows
@@ -123,6 +381,7 @@ pub(crate) const DEFAULT_SOLID: SolidColorPayload = SolidColorPayload {
     g: 255,
     b: 255,
     brightness: 1.0,
+    kelvin: None,
 };
 
 /// Tunables for `LightingModeKind::Ambilight` — brightness plus the
@@ -187,9 +446,9 @@ pub struct LightingModeConfig {
     /// When absent, the worker falls back to single-zone sampling.
     #[serde(default)]
     pub led_calibration: Option<LedCalibrationConfig>,
-    /// Per-channel color correction applied in the LED encoder.
-    /// Absent ⇒ backend uses `ColorCorrectionConfig::default()` (gamma 2.2 / 6500 K / sat 1.0).
-    /// Applies to USB output only — Hue sink is not affected.
+    /// Per-channel color correction. Absent ⇒ `ColorCorrectionConfig::default()`
+    /// (gamma 2.2 / 6500 K / sat 1.0). Applied to every output: the strip's
+    /// encoder and the Hue sender alike.
     #[serde(default)]
     pub color_correction: Option<ColorCorrectionConfig>,
     /// Firmware encoding profile. Absent ⇒ `FirmwareProfile::default()` (LumaSyncV1).
@@ -292,10 +551,6 @@ pub(super) fn wled_frame_advisory(
     })
 }
 
-fn clamp_u8(value: Option<u8>, fallback: u8) -> u8 {
-    value.unwrap_or(fallback)
-}
-
 fn clamp_brightness(value: Option<f32>, fallback: f32) -> f32 {
     value.unwrap_or(fallback).clamp(0.0, 1.0)
 }
@@ -347,12 +602,13 @@ pub(super) fn normalize_mode_config(config: LightingModeConfig) -> LightingModeC
             let solid = config.solid.unwrap_or(DEFAULT_SOLID);
             LightingModeConfig {
                 kind: LightingModeKind::Solid,
-                solid: Some(SolidColorPayload {
-                    r: clamp_u8(Some(solid.r), 255),
-                    g: clamp_u8(Some(solid.g), 255),
-                    b: clamp_u8(Some(solid.b), 255),
-                    brightness: clamp_brightness(Some(solid.brightness), 1.0),
-                }),
+                solid: Some(
+                    SolidColorPayload {
+                        brightness: clamp_brightness(Some(solid.brightness), 1.0),
+                        ..solid
+                    }
+                    .resolved(),
+                ),
                 ambilight: None,
                 effect: None,
                 targets,
@@ -371,12 +627,7 @@ pub(super) fn normalize_mode_config(config: LightingModeConfig) -> LightingModeC
                 kind: LightingModeKind::Effect,
                 solid: None,
                 ambilight: None,
-                effect: Some(EffectPayload {
-                    id: effect.id,
-                    speed: clamp_unit(effect.speed, DEFAULT_EFFECT.speed),
-                    brightness: clamp_unit(effect.brightness, DEFAULT_EFFECT.brightness),
-                    color: effect.color,
-                }),
+                effect: Some(normalize_effect(effect)),
                 targets,
                 // An effect captures nothing: no display to follow.
                 display_id: None,
@@ -389,6 +640,27 @@ pub(super) fn normalize_mode_config(config: LightingModeConfig) -> LightingModeC
                 room_geometry: config.room_geometry,
             }
         }
+    }
+}
+
+/// Deserialising already clamps (`EffectPayloadWire`); this holds for a payload
+/// built in Rust too, which both `set_lighting_mode` and the retune path see.
+pub(crate) fn normalize_effect(effect: EffectPayload) -> EffectPayload {
+    let (min_minutes, max_minutes) = EFFECT_DURATION_MINUTES;
+    let colors = effect.colors.map(|mut colors| {
+        colors.truncate(EFFECT_MAX_COLORS);
+        colors
+    });
+    EffectPayload {
+        speed: clamp_unit(effect.speed, DEFAULT_EFFECT.speed),
+        brightness: clamp_unit(effect.brightness, DEFAULT_EFFECT.brightness),
+        colors: colors.filter(|colors| !colors.is_empty()),
+        size: effect.size.map(|v| clamp_unit(v, 0.5)),
+        intensity: effect.intensity.map(|v| clamp_unit(v, 0.5)),
+        duration_minutes: effect
+            .duration_minutes
+            .map(|m| m.clamp(min_minutes, max_minutes)),
+        ..effect
     }
 }
 

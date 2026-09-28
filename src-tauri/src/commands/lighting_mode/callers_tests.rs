@@ -62,6 +62,7 @@ fn solid(r: u8) -> LightingModeConfig {
             g: 20,
             b: 30,
             brightness: 1.0,
+            kelvin: None,
         }),
         ..LightingModeConfig::default()
     }
@@ -744,7 +745,7 @@ fn an_effect_is_saved_and_the_tray_brings_the_same_one_back() {
         id: super::config::EffectId::Breathe,
         speed: 0.8,
         brightness: 0.6,
-        color: None,
+        ..super::config::DEFAULT_EFFECT
     };
     running(
         &rig,

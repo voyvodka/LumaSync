@@ -37,9 +37,9 @@ const DEFAULT_BREATHE_COLOR: EffectColor = EffectColor {
 /// on a log scale, so each step of the slider feels like the same change.
 fn period_range(id: EffectId) -> (f32, f32) {
     match id {
-        EffectId::Rainbow => (40.0, 3.0),
         EffectId::Breathe => (12.0, 1.5),
         EffectId::Cycle => (90.0, 4.0),
+        _ => (40.0, 3.0),
     }
 }
 
@@ -122,9 +122,12 @@ pub(crate) fn render_effect(
 ) -> Vec<[u8; 3]> {
     let mut pixels = Vec::with_capacity(w * h);
     match effect.id {
-        EffectId::Rainbow => render_rainbow(&mut pixels, w, h, phase),
         EffectId::Breathe => {
-            let color = effect.color.unwrap_or(DEFAULT_BREATHE_COLOR);
+            let color = effect
+                .colors
+                .as_ref()
+                .and_then(|colors| colors.first().copied())
+                .unwrap_or(DEFAULT_BREATHE_COLOR);
             // Eased in and out: a cosine, lifted so the bottom is the floor.
             let wave = 0.5 - 0.5 * (std::f32::consts::TAU * phase).cos();
             let level = BREATHE_FLOOR + (1.0 - BREATHE_FLOOR) * wave;
@@ -132,6 +135,7 @@ pub(crate) fn render_effect(
             pixels.resize(w * h, [scale(color.r), scale(color.g), scale(color.b)]);
         }
         EffectId::Cycle => pixels.resize(w * h, hsv_to_rgb(phase, 1.0, 1.0)),
+        _ => render_rainbow(&mut pixels, w, h, phase),
     }
     pixels
 }

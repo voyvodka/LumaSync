@@ -1,0 +1,144 @@
+{
+  "palettes": {
+    "rainbow": { "wrap": true, "stops": ["#ff0000", "#ffff00", "#00ff00", "#00ffff", "#0000ff", "#ff00ff"] },
+    "sunset": { "wrap": false, "stops": ["#2b1055", "#7b2869", "#d9455f", "#f7813b", "#ffc857"] },
+    "ocean": { "wrap": false, "stops": ["#001f3f", "#0057a8", "#0096c7", "#48cae4", "#b8f0ff"] },
+    "forest": { "wrap": false, "stops": ["#0b3d0b", "#1b5e20", "#2e7d32", "#7cb342", "#c0ca33"] },
+    "lava": { "wrap": false, "stops": ["#1a0000", "#8b0000", "#ff2a00", "#ff8c00", "#ffd000"] },
+    "aurora": { "wrap": false, "stops": ["#00c9a7", "#00e676", "#1de9b6", "#3d5afe", "#7c4dff"] },
+    "pastel": { "wrap": true, "stops": ["#ffb3ba", "#ffdfba", "#ffffba", "#baffc9", "#bae1ff", "#e0bbff"] },
+    "warm": { "wrap": false, "stops": ["#ff7a1a", "#ff9a3c", "#ffb866", "#ffd199"] },
+    "ice": { "wrap": false, "stops": ["#0a2a66", "#1e6fd9", "#4fc3f7", "#b2ebf2", "#ffffff"] },
+    "party": { "wrap": true, "stops": ["#ff0080", "#7928ca", "#0070f3", "#00dfd8", "#ffb800"] },
+    "fire": { "wrap": false, "stops": ["#000000", "#5c0a00", "#c21f00", "#ff6a00", "#ffc233", "#fff2c2"] }
+  },
+  "effects": {
+    "wave": {
+      "family": "field",
+      "params": ["speed", "size", "direction"],
+      "colorSource": "palette",
+      "defaultPalette": "rainbow",
+      "sparse": "native"
+    },
+    "cycle": {
+      "family": "wholeRoom",
+      "params": ["speed"],
+      "colorSource": "palette",
+      "defaultPalette": "rainbow",
+      "sparse": "native"
+    },
+    "breathe": {
+      "family": "wholeRoom",
+      "params": ["speed"],
+      "colorSource": "palette",
+      "defaultPalette": "custom",
+      "defaultColors": ["#ffb020"],
+      "sparse": "native"
+    },
+    "candle": {
+      "family": "stochastic",
+      "params": ["speed", "intensity"],
+      "colorSource": "palette",
+      "defaultPalette": "custom",
+      "defaultColors": ["#ff9329"],
+      "sparse": "native"
+    },
+    "fireplace": {
+      "family": "stochastic",
+      "params": ["speed", "intensity", "size"],
+      "colorSource": "palette",
+      "defaultPalette": "fire",
+      "sparse": "native"
+    },
+    "drift": {
+      "family": "stochastic",
+      "params": ["speed"],
+      "colorSource": "palette",
+      "defaultPalette": "sunset",
+      "sparse": "native"
+    },
+    "gradient": {
+      "family": "field",
+      "params": ["size", "direction"],
+      "colorSource": "palette",
+      "defaultPalette": "sunset",
+      "sparse": "native"
+    },
+    "ocean": {
+      "family": "field",
+      "params": ["speed", "size"],
+      "colorSource": "palette",
+      "defaultPalette": "ocean",
+      "sparse": "native"
+    },
+    "aurora": {
+      "family": "field",
+      "params": ["speed", "intensity"],
+      "colorSource": "palette",
+      "defaultPalette": "aurora",
+      "sparse": "drift"
+    },
+    "twinkle": {
+      "family": "stochastic",
+      "params": ["speed", "intensity"],
+      "colorSource": "palette",
+      "defaultPalette": "ice",
+      "sparse": "pulse"
+    },
+    "comet": {
+      "family": "travelling",
+      "params": ["speed", "size"],
+      "colorSource": "palette",
+      "defaultPalette": "rainbow",
+      "sparse": "hop"
+    },
+    "scanner": {
+      "family": "travelling",
+      "params": ["speed", "size"],
+      "colorSource": "palette",
+      "defaultPalette": "custom",
+      "defaultColors": ["#ff1a1a"],
+      "sparse": "hop"
+    },
+    "chase": {
+      "family": "travelling",
+      "params": ["speed", "size"],
+      "colorSource": "palette",
+      "defaultPalette": "party",
+      "sparse": "hop"
+    },
+    "plasma": {
+      "family": "field",
+      "params": ["speed", "size"],
+      "colorSource": "palette",
+      "defaultPalette": "party",
+      "sparse": "drift"
+    },
+    "sunrise": {
+      "family": "timed",
+      "params": ["durationMinutes"],
+      "colorSource": "none",
+      "defaultPalette": "sunset",
+      "sparse": "native"
+    },
+    "naturalLight": {
+      "family": "timed",
+      "params": [],
+      "colorSource": "none",
+      "defaultPalette": "warm",
+      "sparse": "native"
+    }
+  },
+  "defaults": {
+    "speed": 0.5,
+    "brightness": 1,
+    "size": 0.5,
+    "intensity": 0.5,
+    "direction": "leftToRight",
+    "durationMinutes": 20
+  },
+  "ranges": {
+    "durationMinutes": [1, 120],
+    "colors": [1, 3]
+  }
+}

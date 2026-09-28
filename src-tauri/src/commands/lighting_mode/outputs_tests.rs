@@ -55,6 +55,7 @@ fn solid(r: u8) -> LightingModeConfig {
             g: 20,
             b: 30,
             brightness: 1.0,
+            kelvin: None,
         }),
         ..LightingModeConfig::default()
     }
@@ -1550,6 +1551,7 @@ fn solid_tuning(r: u8) -> LightingTuning {
             g: 0,
             b: 0,
             brightness: 1.0,
+            kelvin: None,
         }),
         ambilight: None,
     }
