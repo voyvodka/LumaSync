@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ShellState } from "@/shared/contracts/shell";
-import { saveShellState } from "../windowShellState";
+import { loadShellState, saveShellState } from "../windowShellState";
 import { backend, makePersistedState, setupPersistedState } from "./support/windowTestHarness";
 
 const harness = await vi.hoisted(() => import("./support/windowTestHarness"));
@@ -139,3 +139,38 @@ describe("Scenario 10 — the write queue under load and failure", () => {
   });
 });
 
+// At launch every screen reads the state for itself: one round trip serves the reads that overlap.
+describe("loadShellState shares a read in flight", () => {
+  const reads = () =>
+    invokeSpy.mock.calls.filter(([command]) => command === "get_shell_state").length;
+  let invokeSpy: { mock: { calls: unknown[][] } };
+  beforeEach(() => {
+    setupPersistedState(makePersistedState({ lastSection: "lights" }));
+    backend.useMacrotaskLatency(true);
+    invokeSpy = vi.spyOn(backend, "invoke");
+  });
+
+  it("answers overlapping loads from one read, each with its own copy", async () => {
+    const [a, b, c] = await Promise.all([loadShellState(), loadShellState(), loadShellState()]);
+    expect(reads()).toBe(1);
+    expect(a).toEqual(b);
+    a.lastSection = "devices";
+    expect(c.lastSection).toBe("lights");
+  });
+
+  it("reads again once the shared read has landed", async () => {
+    await loadShellState();
+    await loadShellState();
+    expect(reads()).toBe(2);
+  });
+
+  // A load asked for after this window writes must not be answered by a read begun before it.
+  it("does not hand a load after a write the read that began before it", async () => {
+    const before = loadShellState();
+    const write = saveShellState({ lastSection: "devices" });
+    const after = loadShellState();
+    await Promise.all([before, write]);
+    expect(reads()).toBe(2);
+    await after;
+  });
+});
