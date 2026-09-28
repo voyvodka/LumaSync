@@ -714,6 +714,51 @@ describe("DevicesPage — the rail lists the devices", () => {
     expect(pages[1]).toBeVisible();
   });
 
+  // LED Setup is a strip's layout, opened over its page: the strip is the one named, the page stays
+  // mounted under it, and back finds the rail on that strip.
+  it("LED Setup opens over the page on the strip asked for, and back lands on it", async () => {
+    const second = { ...SERIAL_STRIP, id: "strip-3", enabled: false, transport: { kind: "serial", portName: "COM4" } };
+    await withStrips([SERIAL_STRIP, second]);
+    const renderLedSetup = vi.fn<NonNullable<React.ComponentProps<typeof DevicesPage>["renderLedSetup"]>>(() => (
+      <p data-testid="led-setup-editor" />
+    ));
+    const view = await renderSettled({ ledSetup: { stripId: "strip-3" }, renderLedSetup });
+
+    expect(screen.getByTestId("led-setup-editor")).toBeInTheDocument();
+    expect(renderLedSetup).toHaveBeenLastCalledWith({
+      strip: expect.objectContaining({ id: "strip-3" }),
+      name: "device:page.rail.usbStrip 2",
+      primary: false,
+      port: "COM4",
+    });
+    expect(screen.getByRole("navigation", { name: "device:page.rail.label", hidden: true })).not.toBeVisible();
+
+    view.rerender(<DevicesPage onStopHueOutput={stopHueOutputMock} ledSetup={null} renderLedSetup={renderLedSetup} />);
+    expect(screen.queryByTestId("led-setup-editor")).toBeNull();
+    expect(screen.getAllByTestId("device-entry-strip")[1]).toHaveAttribute("aria-current", "page");
+  });
+
+  // Not the "no strip yet" of a first layout: that would lay out another strip with this draft.
+  it("a strip forgotten while LED Setup is open on it closes LED Setup", async () => {
+    await withStrips([SERIAL_STRIP]);
+    const renderLedSetup = vi.fn<NonNullable<React.ComponentProps<typeof DevicesPage>["renderLedSetup"]>>(() => null);
+    const onLedSetupStripGone = vi.fn<() => void>();
+    await renderSettled({ ledSetup: { stripId: "gone" }, renderLedSetup, onLedSetupStripGone });
+
+    expect(onLedSetupStripGone).toHaveBeenCalled();
+    expect(renderLedSetup).not.toHaveBeenCalled();
+  });
+
+  it("with no strip named, LED Setup lays out the strip the lighting reads", async () => {
+    await withStrips([SERIAL_STRIP]);
+    const renderLedSetup = vi.fn<NonNullable<React.ComponentProps<typeof DevicesPage>["renderLedSetup"]>>(() => null);
+    await renderSettled({ ledSetup: { stripId: null }, renderLedSetup });
+
+    expect(renderLedSetup).toHaveBeenLastCalledWith(
+      expect.objectContaining({ strip: expect.objectContaining({ id: SERIAL_STRIP.id }), primary: true }),
+    );
+  });
+
   // Plugged in but not added: a faint row to add it, not a device.
   it("offers a supported port no strip is bound to, and never an unsupported one", async () => {
     const selectPort = vi.fn<(portName: string | null) => void>();

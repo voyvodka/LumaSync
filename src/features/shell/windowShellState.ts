@@ -49,7 +49,28 @@ function readSnapshot(saved: Partial<ShellState>): ShellState {
   }
 }
 
-export async function loadShellState(): Promise<ShellState> {
+/**
+ * One read shared by the loads that start while it is in flight: at launch every screen reads the
+ * state for itself, and each read is a round trip and a migration pass. A write this window starts
+ * ends the sharing, so a load asked for after it never gets an answer read before it. Each caller
+ * gets its own copy, so one mutating what it was handed cannot change another's.
+ */
+let sharedRead: Promise<ShellState> | null = null;
+let sharedReadEpoch = 0;
+let writeEpoch = 0;
+
+export function loadShellState(): Promise<ShellState> {
+  if (sharedRead === null || sharedReadEpoch !== writeEpoch) {
+    const read = readShellState().finally(() => {
+      if (sharedRead === read) sharedRead = null;
+    });
+    sharedRead = read;
+    sharedReadEpoch = writeEpoch;
+  }
+  return sharedRead.then((state) => structuredClone(state));
+}
+
+async function readShellState(): Promise<ShellState> {
   for (let attempt = 1; ; attempt++) {
     const { state: saved, revision } = await getShellState();
     if (!saved) return { ...DEFAULT_SHELL_STATE };
@@ -150,6 +171,7 @@ function notifyShellStateSaved(saved: Partial<ShellState>): void {
  * window's writes in the order they were issued, since two invokes in flight
  * are not ordered with each other. An `undefined` value deletes the key. */
 export async function saveShellState(state: Partial<ShellState>): Promise<void> {
+  writeEpoch += 1;
   const write = shellWriteQueue.then(async () => {
     try {
       await patchShellState(toShellStatePatch(state, WRITER_ID));
@@ -183,6 +205,7 @@ const UPDATE_WRITE_ATTEMPTS = 5;
 export async function updateShellState(
   update: (current: ShellState) => Partial<ShellState> | null,
 ): Promise<ShellState> {
+  writeEpoch += 1;
   const write = shellWriteQueue.then(async () => {
     for (let attempt = 1; ; attempt++) {
       const { state: saved, revision } = await getShellState();

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { IconChevronDown, IconClose } from "@/shared/ui/icons";
 
 import { NOTICE_SEVERITY_LABEL, type NoticeAction } from "./noticeModel";
+import styles from "./Notices.module.css";
 import type { QueuedNotice } from "./useShellNoticeQueue";
 
 export interface NoticeRowToggle {
@@ -36,7 +37,8 @@ function ActionLink({ action, secondary = false }: { action: NoticeAction; secon
   return (
     <button
       type="button"
-      className={secondary ? "lm-notice-action is-secondary" : "lm-notice-action"}
+      className={secondary ? `${styles.action} ${styles.secondary}` : styles.action}
+      data-secondary={secondary || undefined}
       onClick={action.onClick}
       disabled={action.pending}
       aria-busy={action.pending || undefined}
@@ -44,8 +46,8 @@ function ActionLink({ action, secondary = false }: { action: NoticeAction; secon
     >
       {action.label}
       {action.navigates && (
-        <span className="lm-notice-arrow" aria-hidden="true">
-          →
+        <span className={styles.arrow} aria-hidden="true" data-arrow>
+          ›
         </span>
       )}
     </button>
@@ -75,16 +77,22 @@ export function NoticeRow({
 
   return (
     <div
-      className={`lm-notice is-${notice.severity}${wrapped ? " is-wrapped" : ""}`}
+      className={[styles.notice, styles[notice.severity], wrapped && styles.wrapped].filter(Boolean).join(" ")}
       data-testid={notice.testId}
       data-notice-id={notice.id}
+      data-wrapped={wrapped || undefined}
       data-kind={notice.kind}
       {...notice.data}
     >
-      <span className="lm-notice-dot" aria-hidden="true" />
-      <p ref={messageRef} className="lm-notice-message" title={overflowing && !wrapped ? notice.message : undefined}>
+      <span className={styles.dot} aria-hidden="true" />
+      <p
+        ref={messageRef}
+        className={styles.message}
+        title={overflowing && !wrapped ? notice.message : undefined}
+        data-notice-message
+      >
         <span className="sr-only">{t(NOTICE_SEVERITY_LABEL[notice.severity])}: </span>
-        {notice.step && <span className="lm-notice-step">{notice.step}</span>}
+        {notice.step && <span className={styles.step}>{notice.step}</span>}
         {notice.message}
       </p>
       {notice.action && <ActionLink action={notice.action} />}
@@ -93,7 +101,7 @@ export function NoticeRow({
         (notice.dismissLabel && labelDismiss ? (
           <button
             type="button"
-            className="lm-notice-action is-secondary"
+            className={`${styles.action} ${styles.secondary}`}
             onClick={() => onDismiss(entry)}
             data-testid="notice-dismiss"
           >
@@ -102,7 +110,7 @@ export function NoticeRow({
         ) : (
           <button
             type="button"
-            className="lm-notice-icon-btn"
+            className={styles.iconButton}
             onClick={() => onDismiss(entry)}
             aria-label={notice.dismissLabel ?? t("shell:notices.dismiss")}
             title={notice.dismissLabel ?? t("shell:notices.dismiss")}
@@ -114,7 +122,7 @@ export function NoticeRow({
       {toggle && (
         <button
           type="button"
-          className={`lm-notice-icon-btn lm-notice-toggle${toggle.expanded ? " is-expanded" : ""}`}
+          className={toggle.expanded ? `${styles.iconButton} ${styles.expanded}` : styles.iconButton}
           aria-expanded={toggle.expanded}
           aria-controls={toggle.controls}
           aria-label={toggleLabel}
@@ -123,7 +131,7 @@ export function NoticeRow({
           data-testid="notice-toggle"
         >
           {toggle.count > 0 && !toggle.expanded ? (
-            <span className="lm-notice-count">{t("shell:notices.moreBadge", { count: toggle.count })}</span>
+            <span className={styles.count}>{t("shell:notices.moreBadge", { count: toggle.count })}</span>
           ) : (
             <IconChevronDown />
           )}

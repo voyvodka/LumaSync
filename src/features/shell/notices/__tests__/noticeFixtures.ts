@@ -18,6 +18,7 @@ export const keyT = ((key: string, options?: Record<string, unknown>) => {
 export const QUIET_INPUT: ShellNoticeInput = {
   uiMode: "compact",
   activeSection: SECTION_IDS.LIGHTS,
+  ledSetupOpen: false,
   availability: "ready",
   hueProbeGaveUp: false,
   hueProbeChecking: false,

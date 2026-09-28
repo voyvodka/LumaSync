@@ -136,3 +136,25 @@
 .lm-compact-mbtn[aria-checked="true"] .tn {
   color: var(--lm-amber);
 }
+
+/* Forced colours: the mode strip and scene tiles collapse to system colours, and selection does not
+   rest on colour alone — Highlight for the active one, CanvasText borders for the rest. */
+@media (forced-colors: active) {
+  .lm-compact-mbtn,
+  .lm-compact-scene-tile {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+    forced-color-adjust: none;
+  }
+  .lm-compact-mbtn[aria-checked="true"] {
+    color: Highlight;
+    border-color: Highlight;
+  }
+  .lm-compact-mbtn:focus-visible,
+  .lm-compact-scene-tile:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+    box-shadow: none;
+  }
+}

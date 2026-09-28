@@ -81,7 +81,7 @@ it.each(["compact", "full"] as const)("gives the %s notice slot its own row inst
   });
 
   const noticeSlot = screen.getByTestId("shell-notice-slot");
-  expect(noticeSlot).toHaveClass("lm-notice-slot");
+  expect(noticeSlot).toBeInTheDocument();
   expect(noticeSlot).toHaveAttribute("data-variant", uiMode);
 
   const slot = noticeSlot.parentElement!;

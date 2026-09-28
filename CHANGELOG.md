@@ -83,6 +83,22 @@ https://keepachangelog.com/en/1.1.0/
   small box with a chevron on the right, beside Identify, that opens the list of orders. A connect
   that fails at once still shows "Connecting…" for a moment, and the reason under the strip stays
   in place through the retry instead of blinking.
+- The window's frame is quieter: the tabs are in sentence case with one amber line that slides to the
+  open one, and the arrow keys move between them. The bar at the bottom names each output in a
+  word; pressing one that needs something says what, beside it, with a link to Devices. The
+  keyboard hints and the version left the bar: Settings → Help lists the shortcuts and About shows
+  the version.
+- The error screen says what happened in a line, with Restart as the one thing to do. "Report"
+  opens a new GitHub issue in your browser with the version, your system and the error filled in;
+  nothing is sent until you submit it. The log folder and a copy of the error are beside it, and
+  the full error is behind "Details".
+- LED Setup is no longer a tab: the tabs are Lights, Devices, Room and Settings. A strip's "Edit ›"
+  opens LED Setup over its page, on that strip, with "‹ <strip name>" to go back; before, it always
+  laid out the first strip, whichever one it came from. On a strip that is not the one lighting now,
+  Test is off, since it would light the other strip. With more than one display, a strip's Layout
+  row names the screen its layout is drawn on. In LED Setup, the rings where LED #1 can go and the
+  stand's "+" show only while the pointer is near the screen, and no longer blink as the display
+  list opens and closes over them.
 - Devices → adding a strip: a controller you plug in appears in the list at once; "Add" connects
   it, opens its page and flashes it to ask whether it lit. "Add a strip" lists the controllers
   plugged in and takes a WLED device by its address, asking the device how many LEDs it has. While

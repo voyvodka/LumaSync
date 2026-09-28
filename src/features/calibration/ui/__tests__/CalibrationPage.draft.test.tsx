@@ -258,6 +258,21 @@ describe("CalibrationPage — a failed save", () => {
     consoleError.mockRestore();
   });
 
+  // Forgotten while its layout was open: the save must not land on another strip, nor pass as done.
+  it("says so when the strip being laid out is no longer saved", async () => {
+    const user = userEvent.setup();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const page = await renderPage({ initialConfig: SAVED, stripId: "gone" });
+    await user.click(increaseTop()[0]);
+
+    await user.click(screen.getByRole("button", { name: "calibration:overlay.save" }));
+
+    expect(await screen.findByText("calibration:overlay.errors.saveFailed")).toBeInTheDocument();
+    expect(page.onSaved).not.toHaveBeenCalled();
+    expect(saveMock).not.toHaveBeenCalledWith(expect.objectContaining({ ledStrips: expect.anything() }));
+    consoleError.mockRestore();
+  });
+
   it("drops the failure once Revert puts the saved layout back", async () => {
     const user = userEvent.setup();
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});

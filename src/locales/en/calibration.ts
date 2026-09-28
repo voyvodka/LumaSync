@@ -21,6 +21,8 @@ export default {
     },
   },
   setup: {
+    testOtherStrip: "Test lights the strip that is on now, not this one.",
+    back: "Back to {{name}}",
     displayLabel: "Captured screen",
     displayMain: "Main display",
     displayN: "Display {{n}}",

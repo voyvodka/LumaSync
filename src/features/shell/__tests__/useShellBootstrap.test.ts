@@ -5,9 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const loadShellStateMock = vi.fn();
 const readRegistryMock = vi.fn<() => Promise<LocalOutputsSnapshot | null>>();
 
+const savedListeners = vi.hoisted(() => new Set<(saved: Record<string, unknown>) => void>());
 vi.mock("../windowLifecycle", () => ({
   initWindowLifecycle: vi.fn(() => Promise.resolve()),
   loadShellState: () => loadShellStateMock(),
+  onShellStateSaved: (listener: (saved: Record<string, unknown>) => void) => {
+    savedListeners.add(listener);
+    return () => savedListeners.delete(listener);
+  },
 }));
 vi.mock("../useTrayIntegration", () => ({ pushTrayLabels: vi.fn() }));
 vi.mock("@/features/platform/platformApi", () => ({ showNotification: vi.fn() }));
@@ -184,5 +189,20 @@ describe("useShellBootstrap", () => {
     await waitFor(() => expect(result.current.bootstrapDone).toBe(true));
     expect(bag.restoreLighting).toHaveBeenCalledTimes(1);
     expect(loadShellStateMock).toHaveBeenCalledTimes(1);
+  });
+
+  // The lighting reads the primary strip's layout: a strip forgotten, or the primary laid out from
+  // its own page, moves it, and the mode gate must not keep the one read at boot.
+  it("follows the primary strip's layout when the strips are saved", async () => {
+    const bag = sink();
+    const { result } = renderHook(() => useShellBootstrap(bag));
+    await waitFor(() => expect(result.current.bootstrapDone).toBe(true));
+    vi.mocked(bag.setSavedCalibration).mockClear();
+
+    for (const listener of savedListeners) listener({ lastSection: "devices" });
+    expect(bag.setSavedCalibration).not.toHaveBeenCalled();
+
+    for (const listener of savedListeners) listener({ ledStrips: [] });
+    expect(bag.setSavedCalibration).toHaveBeenCalledWith(undefined);
   });
 });

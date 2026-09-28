@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 // Which sections a shell change re-renders. Every section is a counting stub;
 // the layout, its panels and the four stores are real, so a count that moves
 // is a render the stores or the memo boundaries let through.
@@ -48,15 +49,20 @@ vi.mock("@/features/device/ui/DevicesPage", () => ({
   DevicesPage: ({
     categoryRequest,
     hueActive,
+    ledSetup,
+    renderLedSetup,
   }: {
     categoryRequest: { category: string } | null;
     hueActive?: boolean;
+    ledSetup?: { stripId: string | null } | null;
+    renderLedSetup?: (target: { strip: null; name: string; primary: boolean; port: null }) => ReactNode;
   }) => {
     count("devices");
     return (
       <>
         <p data-testid="devices-category">{categoryRequest?.category ?? ""}</p>
         <p data-testid="devices-hue-active">{String(hueActive)}</p>
+        {ledSetup ? renderLedSetup?.({ strip: null, name: "Strip", primary: true, port: null }) : null}
       </>
     );
   },
@@ -68,6 +74,9 @@ vi.mock("@/features/room-map/ui/RoomMapEditor", () => ({
     return <p data-testid="room-map" />;
   },
 }));
+
+// It reads the displays through IPC; the render counts here are about the shell's stores.
+vi.mock("@/features/calibration/ui/useCapturedDisplayName", () => ({ useCapturedDisplayName: () => null }));
 
 vi.mock("@/features/calibration/ui/CalibrationPage", () => ({
   CalibrationPage: () => {
@@ -94,14 +103,12 @@ const TESTID: Record<Exclude<SectionId, "lights">, string> = {
   [SECTION_IDS.SYSTEM]: "system-checking",
   [SECTION_IDS.DEVICES]: "devices-category",
   [SECTION_IDS.ROOM_MAP]: "room-map",
-  [SECTION_IDS.LED_SETUP]: "calibration",
 };
 
 const NAME: Record<Exclude<SectionId, "lights">, string> = {
   [SECTION_IDS.SYSTEM]: "system",
   [SECTION_IDS.DEVICES]: "devices",
   [SECTION_IDS.ROOM_MAP]: "roomMap",
-  [SECTION_IDS.LED_SETUP]: "calibration",
 };
 
 async function renderFull(activeSection: SectionId) {
@@ -144,7 +151,7 @@ describe("SettingsLayout render boundaries", () => {
     expect(renders.lights).toBe(before + 1);
   });
 
-  it.each([SECTION_IDS.SYSTEM, SECTION_IDS.DEVICES, SECTION_IDS.ROOM_MAP, SECTION_IDS.LED_SETUP] as const)(
+  it.each([SECTION_IDS.SYSTEM, SECTION_IDS.DEVICES, SECTION_IDS.ROOM_MAP] as const)(
     "does not re-render %s for a runtime revision it does not show",
     async (section) => {
       const shell = await renderFull(section);
@@ -156,6 +163,20 @@ describe("SettingsLayout render boundaries", () => {
       expect(renders[NAME[section]]).toBe(before);
     },
   );
+
+  it("does not re-render LED Setup, open over Devices, for a runtime revision", async () => {
+    const shell = renderWithShellStores(<SettingsLayout />, {
+      navigation: { uiMode: "full", activeSection: SECTION_IDS.DEVICES, ledSetup: { stripId: null } },
+      lighting: { localSink: { transport: "serial", id: "/dev/cu.test" } },
+    });
+    await screen.findByTestId("calibration");
+    const before = renders.calibration;
+
+    shell.setLighting({ lightingMode: { kind: "solid" }, isModeTransitioning: true });
+    shell.setLighting({ isModeTransitioning: false });
+
+    expect(renders.calibration).toBe(before);
+  });
 
   it.each([SECTION_IDS.LIGHTS, SECTION_IDS.SYSTEM] as const)(
     "does not re-render %s for a download's progress",

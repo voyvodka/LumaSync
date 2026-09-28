@@ -18,13 +18,15 @@ interface AsyncToggleProps {
   faces: { idle: ReactNode; on: ReactNode; updating?: ReactNode; starting: ReactNode; stopping: ReactNode };
   onToggle: () => void;
   className?: string;
+  /** Why it is off, on hover, when that is not plain from the page. */
+  title?: string;
 }
 
 /**
  * An on/off action that takes a while, like a test pattern starting on a Hue bridge. Idle,
  * running and waiting faces share one fixed button and crossfade; the fill eases in with "on".
  */
-export function AsyncToggle({ on, waiting, busy, disabled, label, updating = false, faces, onToggle, className }: AsyncToggleProps) {
+export function AsyncToggle({ on, waiting, busy, disabled, label, updating = false, faces, onToggle, className, title }: AsyncToggleProps) {
   // Fixed when the wait begins: as "on" arrives, "Starting…" fades out as it was instead of
   // turning into "Stopping…" on its way.
   const waitRef = useRef<"starting" | "stopping">("starting");
@@ -36,6 +38,7 @@ export function AsyncToggle({ on, waiting, busy, disabled, label, updating = fal
       aria-disabled={busy || undefined}
       aria-busy={waiting || undefined}
       aria-label={label}
+      title={title}
       onClick={onToggle}
       className={cx(styles.toggle, on && styles.on, waiting && styles.waiting, className)}
     >

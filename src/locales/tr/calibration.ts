@@ -24,6 +24,8 @@ const calibration: Catalogue<typeof enCalibration> = {
     },
   },
   setup: {
+    testOtherStrip: "Test şu an açık olan şeridi yakar, bunu değil.",
+    back: "{{name}} sayfasına dön",
     displayLabel: "Yakalanan ekran",
     displayMain: "Ana ekran",
     displayN: "Ekran {{n}}",

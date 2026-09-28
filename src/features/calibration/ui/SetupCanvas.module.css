@@ -53,9 +53,16 @@
   :global([data-active~="bottom"]) .edge[data-edge="bottom"] .dot,
   :global([data-active~="left"]) .edge[data-edge="left"] .dot { transform: scale(1.2); }
 
-  /* Where LED #1 can go: shown while the pointer is over the stage, gone at rest. */
-  .ring { cursor: pointer; opacity: 0; transition: opacity var(--lm-dur-base) var(--lm-ease-out); }
-  :global([data-pointer]) .ring { opacity: 1; }
+  /* Where LED #1 can go: shown while the pointer is near the screen, gone at rest, and not a target
+     while hidden. A short wait before showing and a longer one before hiding, so a pointer passing
+     through does not blink them. */
+  .ring {
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--lm-dur-slow) var(--lm-ease-out) 0.25s;
+  }
+  :global([data-pointer]) .ring { opacity: 1; pointer-events: auto; transition-delay: 0.06s; }
   .ringMark { fill: color-mix(in srgb, var(--lm-bg) 80%, transparent); stroke: var(--lm-ink-faint); stroke-width: 1.2; transition: stroke var(--lm-dur-quick); }
   .ring.isEnd .ringMark { stroke: color-mix(in srgb, var(--lm-amber) 55%, transparent); stroke-dasharray: 2 2; }
   .ring:hover .ringMark { stroke: var(--lm-amber); }
@@ -104,6 +111,7 @@
   :global(:root[data-reduced-motion]) .ripple,
   :global(:root[data-reduced-motion]) .leaving { animation: none; }
   :global(:root[data-reduced-motion]) .ripple { display: none; }
+  :global(:root[data-reduced-motion]) .ring { transition: none; }
 
   @media (forced-colors: active) {
     .flowLine, .head, .firstRing { stroke: Highlight; }

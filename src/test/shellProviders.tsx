@@ -97,6 +97,8 @@ export function renderWithShellStores(
   const navigationActions: NavigationActions = {
     goToSection: vi.fn(async () => {}),
     switchUIMode: vi.fn(async () => {}),
+    openLedSetup: vi.fn<NavigationActions["openLedSetup"]>(async () => {}),
+    closeLedSetup: vi.fn<NavigationActions["closeLedSetup"]>(),
     ...options.navigationActions,
   };
   const updaterActions: UpdaterActions = {

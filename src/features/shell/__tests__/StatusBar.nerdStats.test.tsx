@@ -39,9 +39,9 @@ import { StatusBar, type StatusItem } from "../StatusBar";
 import type * as telemetryApiModule from "@/features/telemetry/telemetryApi";
 
 const ITEMS: StatusItem[] = [
-  { label: "CAP", state: "OK", kind: "ok", nerdStat: true },
-  { label: "USB", state: "OFF", kind: "off" },
-  { label: "HUE", state: "IDLE", kind: "idle" },
+  { id: "cap", label: "Capture", state: "OK", kind: "ok", nerdStat: true },
+  { id: "usb", label: "USB", state: "OFF", kind: "off" },
+  { id: "hue", label: "Hue", state: "IDLE", kind: "idle" },
 ];
 
 const SNAPSHOT: FullTelemetrySnapshot = {
@@ -121,7 +121,7 @@ describe("StatusBar — stats for nerds", () => {
     await advance(1_500);
 
     const value = () => screen.getByTestId("status-fps-value").parentElement!;
-    expect(value()).toHaveClass("is-ok");
+    expect(value()).toHaveAttribute("data-kind", "ok");
     expect(screen.queryByText("shell:fpsHud.lowFps")).toBeNull();
 
     getFullTelemetrySnapshotMock.mockResolvedValue({
@@ -130,7 +130,7 @@ describe("StatusBar — stats for nerds", () => {
     });
     await advance(1_500);
 
-    expect(value()).toHaveClass("is-low");
+    expect(value()).toHaveAttribute("data-kind", "low");
     expect(screen.getByText("shell:fpsHud.lowFps")).toBeInTheDocument();
   });
 

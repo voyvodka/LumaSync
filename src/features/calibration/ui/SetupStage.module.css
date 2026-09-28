@@ -54,14 +54,16 @@
   .ghost:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
   /* A 24 px mark with a 32 px hit area. */
   .ghost::after { content: ""; position: absolute; inset: -4px; border-radius: inherit; }
-  /* Adding a stand is rare: it waits until the pointer is over the stage, or a key reaches it. */
-  .addStand { opacity: 0; }
+  /* Adding a stand is rare: it waits until the pointer is near the screen, or a key reaches it, and
+     comes and goes as LED #1's rings do. */
+  .addStand { opacity: 0; pointer-events: none; transition-delay: 0s, 0s, 0s, 0.25s; }
   .stage[data-pointer] .addStand,
-  .addStand:focus-visible { opacity: 1; }
+  .addStand:focus-visible { opacity: 1; pointer-events: auto; transition-delay: 0s, 0s, 0s, 0.06s; }
 
   @keyframes halo-in { from { opacity: 0; } }
 
   :global(:root[data-reduced-motion]) .halo { animation: none; }
+  :global(:root[data-reduced-motion]) .addStand { transition: none; }
 
   @media (forced-colors: active) {
     .halo { display: none; }

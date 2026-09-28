@@ -50,7 +50,6 @@ describe("notice slot (read-only, presence-conditional)", () => {
   const SECTIONS_TO_CHECK: SectionId[] = [
     SECTION_IDS.LIGHTS,
     SECTION_IDS.DEVICES,
-    SECTION_IDS.LED_SETUP,
   ];
 
   for (const section of SECTIONS_TO_CHECK) {

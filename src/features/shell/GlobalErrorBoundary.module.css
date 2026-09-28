@@ -1,0 +1,99 @@
+@layer components {
+  /* The whole window, quiet: no card, the words and the one thing to do in the middle. */
+  .root {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: grid;
+    place-items: center;
+    padding: 24px 16px;
+    overflow-y: auto;
+    background: var(--lm-bg);
+    color: var(--lm-ink);
+    animation: arrive var(--lm-dur-slow) var(--lm-ease-out);
+  }
+  .panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: min(420px, 100%);
+    text-align: center;
+  }
+  .title { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  .body { margin: 0 0 10px; font-size: 13px; line-height: 1.5; color: var(--lm-ink-dim); }
+
+  .restart {
+    min-width: 140px;
+    height: 34px;
+    padding: 0 18px;
+    border: 1px solid color-mix(in srgb, var(--lm-amber) 55%, transparent);
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--lm-amber);
+    transition: background var(--lm-dur-quick), border-color var(--lm-dur-quick);
+  }
+  .restart:hover { border-color: var(--lm-amber); background: color-mix(in srgb, var(--lm-amber) 9%, transparent); }
+
+  .links { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px; margin-top: 4px; }
+  .link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 0 8px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    color: var(--lm-ink-dim);
+    text-decoration: none;
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .link:hover { color: var(--lm-ink); background: var(--lm-panel); }
+  .dot { color: var(--lm-ink-faint); }
+
+  .detailsToggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 32px;
+    margin-top: 6px;
+    padding: 0 8px;
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--lm-ink-faint);
+    transition: color var(--lm-dur-quick);
+  }
+  .detailsToggle:hover { color: var(--lm-ink-dim); }
+  .chevron { width: 12px; height: 12px; transition: transform var(--lm-dur-base) var(--lm-ease-out); }
+  .detailsToggle[aria-expanded="true"] .chevron { transform: rotate(90deg); }
+
+  .details {
+    width: 100%;
+    max-height: 220px;
+    margin: 0;
+    padding: 10px 12px;
+    overflow: auto;
+    border: 1px solid var(--lm-line);
+    border-radius: 8px;
+    background: var(--lm-panel);
+    font: 11px/1.55 var(--lm-mono);
+    color: var(--lm-ink-faint);
+    text-align: left;
+    white-space: pre-wrap;
+    word-break: break-word;
+    animation: arrive var(--lm-dur-base) var(--lm-ease-out);
+  }
+
+  :is(.restart, .link, .detailsToggle):focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+
+  @keyframes arrive { from { opacity: 0; transform: translateY(4px); } }
+  :global(:root[data-reduced-motion]) :is(.root, .details) { animation: none; }
+  :global(:root[data-reduced-motion]) :is(.restart, .link, .detailsToggle, .chevron) { transition: none; }
+
+  @media (forced-colors: active) {
+    .root { background: Canvas; color: CanvasText; }
+    .restart { border-color: ButtonText; color: ButtonText; }
+    .details { border-color: CanvasText; color: CanvasText; }
+    :is(.restart, .link, .detailsToggle):focus-visible { outline: 2px solid Highlight; outline-offset: 2px; box-shadow: none; }
+  }
+}

@@ -2,9 +2,11 @@ import { memo } from "react";
 
 import { useLightingActions, useLightingControlState, type LightingControlState } from "@/features/mode/state/lightingControl";
 import { syncStripLedCount } from "@/features/device/model/usbStripRoster";
-import { useLeaveGuardRegistrar, useNavigationActions } from "@/features/shell/navigationStore";
-import { SECTION_IDS } from "@/shared/contracts/shell";
+import type { LocalSink } from "@/features/device/localSink";
+import type { LedSetupTarget } from "@/features/device/ui/DevicesPage";
+import { useLeaveGuardRegistrar } from "@/features/shell/navigationStore";
 import { preloadableComponent } from "@/shared/lib/preloadableComponent";
+import { normalizeLedCalibrationConfig } from "../model/contracts";
 import { readLedSetupSource } from "../state/ledSetupSource";
 
 // Split out: it outweighs the rest of the shell, so the compact window never parses it. See
@@ -22,26 +24,50 @@ export function preloadCalibrationPanel(): void {
 }
 
 const selectCalibration = (state: LightingControlState) => state.calibration;
-const selectSerialPort = (state: LightingControlState) =>
-  state.localSink?.transport === "serial" ? state.localSink.id || null : null;
+const selectLocalSink = (state: LightingControlState) => state.localSink;
 
-/** LED Setup as a shell section: the saved layout in, a saved one out to the lighting store. */
-export const CalibrationPanel = memo(function CalibrationPanel() {
+/** Whether Test on this strip would light it: the output connected now is this strip, or none is and
+ *  the test shows only on the screen. */
+function testLightsIt(strip: LedSetupTarget["strip"], sink: LocalSink | null): boolean {
+  if (sink === null || strip === null) return true;
+  const transport = strip.transport;
+  if (sink.transport === "serial") return transport?.kind === "serial" && transport.portName === sink.id;
+  return transport?.kind === "wled" && transport.sink.ip === sink.id;
+}
+
+interface CalibrationPanelProps {
+  /** The strip laid out, as Devices knows it. */
+  target: LedSetupTarget;
+  /** Back to the strip's page, through the leave guard. */
+  onBack: () => void;
+}
+
+/**
+ * LED Setup on one strip, over Devices. The primary strip's layout is the one the lighting reads, so
+ * only a save of it reaches the lighting store; Test lights the output connected now, so it is off on
+ * a strip that is not that one.
+ */
+export const CalibrationPanel = memo(function CalibrationPanel({ target, onBack }: CalibrationPanelProps) {
   const calibration = useLightingControlState(selectCalibration);
-  const serialPort = useLightingControlState(selectSerialPort);
+  const localSink = useLightingControlState(selectLocalSink);
   const { saveCalibration } = useLightingActions();
-  const { goToSection } = useNavigationActions();
   const registerLeaveGuard = useLeaveGuardRegistrar();
+  const stripId = target.strip?.id;
   return (
     <CalibrationPage.Component
-      initialConfig={calibration}
+      // Another strip is another draft, not an edit of this one.
+      key={stripId ?? "first-strip"}
+      stripId={stripId}
+      back={{ label: target.name, onBack }}
+      testable={testLightsIt(target.strip, localSink)}
+      initialConfig={target.primary ? calibration : normalizeLedCalibrationConfig(target.strip?.layout)}
       registerLeaveGuard={registerLeaveGuard}
-      onNavigateBack={() => {
-        void goToSection(SECTION_IDS.LIGHTS);
-      }}
+      onNavigateBack={onBack}
       onSaved={(cfg) => {
-        saveCalibration(cfg);
-        void syncStripLedCount(cfg.totalLeds, serialPort).catch((error) => {
+        if (target.primary) saveCalibration(cfg);
+        // With no port to find it by, the room map falls back to its only strip — the primary's.
+        if (!target.primary && target.port === null) return;
+        void syncStripLedCount(cfg.totalLeds, target.port).catch((error) => {
           console.error("[LumaSync] Room map strip LED count could not follow the saved layout:", error);
         });
       }}

@@ -7,12 +7,13 @@ export default {
   },
   errorBoundary: {
     title: "Something went wrong",
-    body: "We've logged the error. View logs, restart the app, or copy the details for support.",
-    showLogs: "Show logs",
+    body: "The error was saved to the log.",
     restart: "Restart",
+    report: "Report",
+    showLogs: "Open log folder",
     copyError: "Copy error",
-    showDetails: "Show details",
-    hideDetails: "Hide details",
+    copied: "Copied",
+    details: "Details",
   },
   fpsHud: {
     title: "FPS",
@@ -22,27 +23,25 @@ export default {
     ariaLabel: "Rendering performance: {{fps}} frames per second, {{latency}} millisecond latency",
   },
   statusBar: {
-    kbdMode: "mode",
-    kbdSettings: "settings",
-    // Chip values: short and uppercase, none longer than STREAMING.
+    capture: "Capture",
     state: {
-      ok: "OK",
-      off: "OFF",
-      idle: "IDLE",
-      streaming: "STREAMING",
-      retrying: "RETRYING",
-      failed: "FAILED",
-      waiting: "WAITING",
-      leftOut: "LEFT OUT",
+      ok: "Ready",
+      off: "Off",
+      idle: "Idle",
+      streaming: "Streaming",
+      retrying: "Retrying",
+      failed: "Failed",
+      waiting: "Waiting",
+      leftOut: "Left out",
     },
-    reconnect: {
-      usbAriaLabel: "Open Devices → USB",
-      hueAriaLabel: "Open Devices → Hue",
-    },
-    // Nothing was ever set up here: not an outage, so no reconnect glyph.
-    setUp: {
-      localAriaLabel: "Set up a USB strip or WLED — opens Devices",
-      hueAriaLabel: "Set up a Hue bridge — opens Devices",
+    // What a chip that needs something says when it is pressed.
+    hint: {
+      localOff: "The strip is not connected.",
+      localNone: "No strip or WLED device added yet.",
+      hueUnreachable: "The Hue Bridge does not answer.",
+      hueNone: "No Hue Bridge paired yet.",
+      hueFailed: "The Hue stream stopped.",
+      hueLeftOut: "Hue was left out of this mode.",
     },
   },
   titleBar: {

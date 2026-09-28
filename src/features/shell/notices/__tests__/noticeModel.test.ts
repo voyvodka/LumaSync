@@ -6,17 +6,24 @@ import { currentNoticeView, isShownByView, NOTICE_VIEW } from "../noticeModel";
 
 describe("currentNoticeView", () => {
   it("names Devices → Hue only while full mode shows it", () => {
-    const hue = { uiMode: "full", activeSection: SECTION_IDS.DEVICES, visibleDeviceCategory: "hue" } as const;
+    const hue = { uiMode: "full", activeSection: SECTION_IDS.DEVICES, ledSetup: null, visibleDeviceCategory: "hue" } as const;
     expect(currentNoticeView(hue)).toBe(NOTICE_VIEW.DEVICES_HUE);
     expect(currentNoticeView({ ...hue, visibleDeviceCategory: "strips" })).toBeNull();
     expect(currentNoticeView({ ...hue, visibleDeviceCategory: null })).toBeNull();
     expect(currentNoticeView({ ...hue, activeSection: SECTION_IDS.LIGHTS })).toBeNull();
   });
 
+  // LED Setup covers the page: a Hue notice must not wait for a page no one can see.
+  it("names nothing while LED Setup covers Devices", () => {
+    expect(
+      currentNoticeView({ uiMode: "full", activeSection: SECTION_IDS.DEVICES, ledSetup: { stripId: null }, visibleDeviceCategory: "hue" }),
+    ).toBeNull();
+  });
+
   // Compact has no Devices page, so nothing it shows may be hidden for one.
   it("names nothing in compact, whatever the store still holds", () => {
     expect(
-      currentNoticeView({ uiMode: "compact", activeSection: SECTION_IDS.DEVICES, visibleDeviceCategory: "hue" }),
+      currentNoticeView({ uiMode: "compact", activeSection: SECTION_IDS.DEVICES, ledSetup: null, visibleDeviceCategory: "hue" }),
     ).toBeNull();
   });
 });

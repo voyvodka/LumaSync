@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -15,7 +15,7 @@ import { HuePage } from "@/features/hue/ui/HuePage";
 import { useTransientFlag } from "@/shared/lib/useTransientFlag";
 import { useSessionState } from "@/shared/lib/useSessionState";
 import { Rail } from "@/shared/ui/Rail/Rail";
-import { stripsOf } from "@/features/strips/model/stripSelectors";
+import { primaryStrip, stripsOf } from "@/features/strips/model/stripSelectors";
 import type { LedStrip } from "@/shared/contracts/strips";
 import type { DeviceCategory, DeviceCategoryRequest } from "../model/deviceCategories";
 import {
@@ -36,6 +36,18 @@ import styles from "./DevicesPage.module.css";
 /** How long an added strip is waited for before the page stops expecting it. */
 const ARRIVAL_WAIT_MS = 5000;
 
+/** The strip LED Setup lays out, as Devices knows it. */
+export interface LedSetupTarget {
+  /** `null` with no strip saved yet: the first layout makes one. */
+  strip: LedStrip | null;
+  /** Its name on the rail, for the way back. */
+  name: string;
+  /** The strip a layout with no strip named applies to — the one the lighting reads. */
+  primary: boolean;
+  /** Its serial port, when it has one. */
+  port: string | null;
+}
+
 export interface DevicesPageProps {
   /**
    * Deep-link the user from the "Paired strips" sub-card
@@ -43,8 +55,16 @@ export interface DevicesPageProps {
    * count live. Inert when omitted.
    */
   onNavigateToRoomMap?: () => void;
-  /** Opens LED Setup, where a strip's layout is drawn. */
-  onNavigateToLedSetup?: () => void;
+  /** Opens LED Setup on strip `stripId`, where its layout is drawn. */
+  onNavigateToLedSetup?: (stripId: string) => void;
+  /** The captured display, named when there is more than one; each strip's Layout row shows it. */
+  capturedDisplay?: string | null;
+  /** LED Setup, open over the page on a strip; `null` while it is not. */
+  ledSetup?: { stripId: string | null } | null;
+  /** Draws LED Setup for the strip it is open on. Handed in: Devices knows the strip, not the editor. */
+  renderLedSetup?: (target: LedSetupTarget) => ReactNode;
+  /** The strip LED Setup was open on is no longer saved: it closes, its draft has nowhere to go. */
+  onLedSetupStripGone?: () => void;
   /** Forwarded to the Hue page; see `HuePageProps.onStopHue`. */
   onStopHueOutput: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
   /** Opens a category from outside, e.g. a notice's "Devices" action for Hue. */
@@ -58,6 +78,10 @@ export interface DevicesPageProps {
 export function DevicesPage({
   onNavigateToRoomMap,
   onNavigateToLedSetup,
+  ledSetup = null,
+  renderLedSetup,
+  onLedSetupStripGone,
+  capturedDisplay = null,
   onStopHueOutput,
   categoryRequest = null,
   onVisibleCategoryChange,
@@ -71,11 +95,8 @@ export function DevicesPage({
   const device = useDeviceConnection();
 
   const { selectedAreaId } = hue;
-  const { connectedPort, refreshPorts } = device;
-  // The port watcher keeps the list in step from here on; what is plugged in already needs a scan.
-  useEffect(() => {
-    void refreshPorts();
-  }, [refreshPorts]);
+  // The controller scans what is plugged in as it starts, and the port watcher keeps the list in step.
+  const { connectedPort } = device;
   const wled = useActiveWledSink();
   const { activeWledIp } = wled;
 
@@ -287,8 +308,42 @@ export function DevicesPage({
   const otherPorts = device.ports.filter((port) => !port.isSupported);
   const showsHue = activeEntry?.kind === "hue" || activeEntry?.kind === "bridge";
 
+  // With no strip named, the strip a layout with no strip named applies to; none before the first.
+  const editedStrip =
+    ledSetup === null || strips === null
+      ? null
+      : ledSetup.stripId === null
+        ? (primaryStrip(strips) ?? null)
+        : (strips.find((strip) => strip.id === ledSetup.stripId) ?? null);
+  // Forgotten while open: not the "no strip yet" of a first layout, which would lay out another one.
+  const editedGone = ledSetup !== null && ledSetup.stripId !== null && strips !== null && editedStrip === null;
+  useEffect(() => {
+    if (editedGone) onLedSetupStripGone?.();
+  }, [editedGone, onLedSetupStripGone]);
+  const editedEntry = entries?.find((entry) => entry.kind === "strip" && entry.strip.id === editedStrip?.id);
+  // Back from LED Setup lands on the strip it laid out.
+  const editedEntryId = editedEntry?.id ?? null;
+  const [returnedTo, setReturnedTo] = useState<string | null>(null);
+  if (editedEntryId !== null && editedEntryId !== returnedTo) {
+    setReturnedTo(editedEntryId);
+    setStoredEntry(editedEntryId);
+  } else if (ledSetup === null && returnedTo !== null) {
+    setReturnedTo(null);
+  }
+  const editor =
+    ledSetup !== null && strips !== null && renderLedSetup && !editedGone
+      ? renderLedSetup({
+          strip: editedStrip,
+          name: editedEntry?.kind === "strip" ? stripName(editedEntry, t) : t("settings:nav.sections.devices"),
+          primary: editedStrip === null || editedStrip.id === primaryStrip(strips)?.id,
+          port: editedStrip?.transport?.kind === "serial" ? editedStrip.transport.portName : null,
+        })
+      : null;
+
   return (
-    <div className={styles.page}>
+    <>
+    {editor !== null ? <div className={styles.editor}>{editor}</div> : null}
+    <div className={styles.page} hidden={editor !== null}>
       {entries === null || activeId === null ? (
         // The strips are read from the saved state; the rail keeps its place empty until they are known.
         <nav className={styles.railPlaceholder} aria-label={t("device:page.rail.label")} />
@@ -317,7 +372,8 @@ export function DevicesPage({
                   strip={{ ...entry.strip, transport }}
                   name={name}
                   device={device}
-                  onNavigateToLedSetup={onNavigateToLedSetup}
+                  onNavigateToLedSetup={onNavigateToLedSetup && (() => onNavigateToLedSetup(entry.strip.id))}
+                  capturedDisplay={capturedDisplay}
                   onNavigateToRoomMap={onNavigateToRoomMap}
                   autoFlash={flashFor === entry.strip.id}
                   onAutoFlashDone={clearFlash}
@@ -332,7 +388,8 @@ export function DevicesPage({
                   strip={{ ...entry.strip, transport }}
                   name={name}
                   wled={wled}
-                  onNavigateToLedSetup={onNavigateToLedSetup}
+                  onNavigateToLedSetup={onNavigateToLedSetup && (() => onNavigateToLedSetup(entry.strip.id))}
+                  capturedDisplay={capturedDisplay}
                   onNavigateToRoomMap={onNavigateToRoomMap}
                   autoFlash={flashFor === entry.strip.id}
                   onAutoFlashDone={clearFlash}
@@ -401,5 +458,6 @@ export function DevicesPage({
         />
       </div>
     </div>
+    </>
   );
 }

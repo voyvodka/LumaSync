@@ -58,8 +58,9 @@ export interface StatusItemsInput {
   onOpenDevices: (category: DeviceCategory) => void;
 }
 
-/** Status items for the bottom StatusBar, in mockup order (CAP / USB / HUE).
- *  Every chip pairs colour with a text state — never colour alone. */
+/** Status items for the bottom StatusBar: capture (stats for nerds), the local output and Hue. Every
+ *  chip pairs its colour with a word; one that is about something to deal with says what, in one
+ *  sentence, and offers Devices. */
 export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusItem[] {
   const {
     ambilightActive,
@@ -76,20 +77,36 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
   const localConnected = localSink !== null;
   const hueWaiting = hueHeldOut === "waiting";
   const hueLeftOut = hueHeldOut === "leftOut";
+  const devices = t("settings:nav.sections.devices");
+
+  // The chip names the transport that is bound, and USB when nothing is. It reconnects nothing
+  // itself: what it offers is the page where that is done.
+  const localHint = localEverConfigured ? t("shell:statusBar.hint.localOff") : t("shell:statusBar.hint.localNone");
+
+  // Retrying and waiting already mean the app is on it: they offer nothing. A failed stream or a
+  // left-out Hue offer Devices even with the bridge reachable: the bridge page is where either is dealt with.
+  const hueHint = hueReconnecting || hueStreaming || hueWaiting
+    ? null
+    : hueLeftOut
+      ? t("shell:statusBar.hint.hueLeftOut")
+      : hueFailed
+        ? t("shell:statusBar.hint.hueFailed")
+        : hueReachable
+          ? null
+          : hueConfigured
+            ? t("shell:statusBar.hint.hueUnreachable")
+            : t("shell:statusBar.hint.hueNone");
 
   return [
     {
-      label: "CAP",
+      id: "cap",
+      label: t("shell:statusBar.capture"),
       state: ambilightActive ? t("shell:statusBar.state.ok") : "—",
       kind: ambilightActive ? "ok" : "idle",
       nerdStat: true,
     },
     {
-      // The chip names the transport that is actually bound, and "USB" when
-      // nothing is. Only then does it offer a link (a WLED chip is a bound,
-      // connected sink), so the deep link opens the USB category: the label
-      // on screen, and the path a first-run user takes. The link only opens
-      // Devices, and says so — it reconnects nothing itself.
+      id: localSink?.transport === "wled" ? "wled" : "usb",
       label: localSink?.transport === "wled" ? "WLED" : "USB",
       state: localConnected
         ? t("shell:statusBar.state.ok")
@@ -97,16 +114,11 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
           ? t("shell:statusBar.state.off")
           : "—",
       kind: localConnected ? "ok" : localEverConfigured ? "off" : "idle",
-      onReconnect: localConnected ? undefined : () => onOpenDevices("strips"),
-      reconnectAriaLabel: localEverConfigured
-        ? t("shell:statusBar.reconnect.usbAriaLabel")
-        : t("shell:statusBar.setUp.localAriaLabel"),
-      linkKind: localEverConfigured ? "reconnect" : "setUp",
+      attention: localConnected ? undefined : { hint: localHint, action: devices, onAction: () => onOpenDevices("strips") },
     },
     {
-      label: "HUE",
-      // RETRYING rather than RECONNECTING: the compact bar has no room for a
-      // value longer than STREAMING.
+      id: "hue",
+      label: "Hue",
       state: hueReconnecting
         ? t("shell:statusBar.state.retrying")
         : hueStreaming
@@ -122,9 +134,8 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
                   : hueConfigured
                     ? t("shell:statusBar.state.idle")
                     : "—",
-      // Amber, not green, while retrying or waiting; no reconnect button, because
-      // the app is already doing exactly that. Left out is amber too: the lights
-      // run on the other outputs, and the notice beside it is a warning.
+      // Amber, not green, while retrying or waiting; left out is amber too: the lights run on the
+      // other outputs, and the notice beside it is a warning.
       kind: hueReconnecting || hueStreaming || hueWaiting || hueLeftOut
         ? "active"
         : hueFailed
@@ -132,16 +143,7 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
           : hueReachable
             ? "ok"
             : "idle",
-      // A failed stream or a left-out Hue links to Devices even with the bridge
-      // reachable: the bridge card is where either is dealt with.
-      onReconnect:
-        hueReconnecting || hueStreaming || hueWaiting || (hueReachable && !hueFailed && !hueLeftOut)
-          ? undefined
-          : () => onOpenDevices("hue"),
-      reconnectAriaLabel: hueConfigured
-        ? t("shell:statusBar.reconnect.hueAriaLabel")
-        : t("shell:statusBar.setUp.hueAriaLabel"),
-      linkKind: hueConfigured ? "reconnect" : "setUp",
+      attention: hueHint === null ? undefined : { hint: hueHint, action: devices, onAction: () => onOpenDevices("hue") },
     },
   ];
 }

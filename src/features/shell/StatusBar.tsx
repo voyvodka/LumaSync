@@ -1,47 +1,20 @@
 /**
- * StatusBar — fixed-bottom chrome row that sits below the content slot.
+ * StatusBar — the fixed bottom row: each output in a word beside a dot, and with stats for nerds on,
+ * capture and the frame rate. A chip about something to deal with is a button: pressed, it says
+ * what in one sentence beside it and offers the page where it is dealt with, instead of taking the
+ * window there. Keyboard shortcuts live in Settings → Help and the version in About.
  *
- * Mirrors the title bar at the top: full width, dark amber language, always
- * visible regardless of UI mode. Shows pill indicators for the runtime
- * subsystems (CAP / USB / HUE / FPS) and — in full mode only — the keyboard
- * hint cluster and version pill on the right.
- *
- * Compact mode hides the keyboard hints + version (no room in a 320px tray
- * panel) and uses a slightly tighter font + padding, matching mockup
- * `10-compact.html`.
- *
- * Keyboard hint badges are derived from `KEYBIND_REGISTRY` so every label
- * shown here is backed by a matching handler in `useGlobalKeybinds`. Edit
- * that registry instead of hand-patching `⌥1` / `Alt+1` strings.
- *
- * The FPS pill is the runtime-performance HUD. It polls
- * `get_runtime_telemetry` through `useRuntimeTelemetry` and renders a dot +
- * value whose color says whether the output keeps up (see `FpsPill`). While
- * Ambilight is inactive the pill shows "FPS —" as a neutral placeholder.
- *
- * The FPS pill and every item marked `nerdStat` (CAP) render only with
- * Settings → Appearance "Show stats for nerds" on. Off, the pill is not mounted,
- * so its poll does not exist — hiding it would have kept the IPC running.
- *
- * A `StatusItem` that needs attention may carry a link via `onReconnect`: a
- * small icon button after the value text that deep-links into the DEVICES
- * section. ↻ for an output that was set up and is down, + for one never set
- * up. The builder decides when a chip has one; the button is
- * keyboard-focusable, names where it goes, and sits inside the same chip so
- * the state never leaves the user on a dead-end pill.
+ * Deliberately not a live region: the FPS pill ticks at 1 Hz, and what needs saying about a chip
+ * going down is said by the notice queue.
  */
 
-import { useMemo, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { APP_VERSION } from "@/shared/constants/app";
-import {
-  KEYBIND_ACTIONS,
-  getKeybindDefinition,
-  resolveKeybindPlatform,
-} from "@/shared/contracts/shell";
+import { Popover } from "@/shared/ui/Popover/Popover";
 import { useRuntimeTelemetry, type PipelineHealth } from "../telemetry/hooks/useRuntimeTelemetry";
 import { usePreference } from "../persistence/preferences";
+import styles from "./StatusBar.module.css";
 
 export const STATUS_BAR_HEIGHT_FULL_PX = 24;
 export const STATUS_BAR_HEIGHT_COMPACT_PX = 22;
@@ -52,26 +25,25 @@ export function statusBarHeightPx(uiMode: "full" | "compact"): number {
 
 export type StatusKind = "ok" | "active" | "idle" | "off" | "error";
 
+export interface StatusAttention {
+  /** What is wrong, or not set up yet, in one sentence. */
+  hint: string;
+  /** Where it is dealt with, e.g. "Devices". */
+  action: string;
+  onAction: () => void;
+}
+
 export interface StatusItem {
-  /** Short uppercase label, e.g. "CAP", "USB", "HUE". */
+  /** Names the chip in its test id; the label is translated, so it cannot. */
+  id: "cap" | "usb" | "wled" | "hue";
+  /** Short name, e.g. "USB", "Hue". */
   label: string;
-  /** Short uppercase value, e.g. "OK", "STREAMING", "—". */
+  /** One word, e.g. "Ready", "Streaming". */
   state: string;
-  /** Drives the dot + value color. */
+  /** Drives the dot and the word's colour. */
   kind: StatusKind;
-  /**
-   * When present, an inline icon button is rendered next to the state text,
-   * wired to a section deep-link (DEVICES). Ignored on an `ok` chip, so a
-   * healthy chip never sprouts a stray link.
-   */
-  onReconnect?: () => void;
-  /**
-   * Localized aria-label for the link button — where it goes, not "reconnect",
-   * since it only opens Devices. Required when `onReconnect` is set.
-   */
-  reconnectAriaLabel?: string;
-  /** ↻ for an output that is down, + for one never set up. Defaults to ↻. */
-  linkKind?: "reconnect" | "setUp";
+  /** Something to deal with: the chip opens it. Ignored on an `ok` chip. */
+  attention?: StatusAttention;
   /** Shown only with "Show stats for nerds" on. */
   nerdStat?: boolean;
 }
@@ -80,143 +52,95 @@ interface StatusBarProps {
   items: StatusItem[];
   uiMode: "full" | "compact";
   /**
-   * Whether lighting is currently active (mode is not OFF). Drives the
-   * FPS pill telemetry poll: when `false`, the hook holds its inactive
-   * placeholder and issues no IPC calls — there are no frames flowing,
-   * so there is nothing meaningful to surface. Defaults to `true` for
-   * tests / consumers that have not yet wired the signal.
+   * Whether lighting is on. With it off the FPS pill holds its placeholder and polls nothing.
+   * Defaults to `true` for consumers that have not wired the signal.
    */
   lightingActive?: boolean;
-  /** Something to act on, before the hints: an update that is ready. Owns its own subscription. */
+  /** Something to act on at the end of the row: an update that is ready. Owns its own subscription. */
   trailing?: ReactNode;
 }
 
-/** Fixed FPS thresholds — the user explicitly rejected a per-user preference. */
-
 export function StatusBar({ items, uiMode, lightingActive = true, trailing }: StatusBarProps) {
-  const { t } = useTranslation();
   const isCompact = uiMode === "compact";
-  const platform = useMemo(() => resolveKeybindPlatform(), []);
   const showNerdStats = usePreference("showNerdStats");
   const shownItems = showNerdStats ? items : items.filter((item) => item.nerdStat !== true);
 
-  // Mode badge renders the digit as a "1-3" span so the hint stays compact.
-  // Pull the modifier portion (⌥ / Alt) from the MODE_OFF definition — all
-  // three mode shortcuts share the same modifier by design.
-  const modeDefinition = getKeybindDefinition(KEYBIND_ACTIONS.MODE_OFF, platform);
-  const modeModifierBadges = modeDefinition.badge.slice(0, 1);
-  const modeDigitsBadge = "1-3";
-  const settingsDefinition = getKeybindDefinition(KEYBIND_ACTIONS.OPEN_SETTINGS, platform);
-
-  // From the shared namespace so the labels stay in sync with the handlers in
-  // `useGlobalKeybinds`; three shortcuts collapse into one accessible summary.
-  const modeGroupAriaLabel = [
-    t("shell:keybind.modeOff"),
-    t("shell:keybind.modeAmbilight"),
-    t("shell:keybind.modeSolid"),
-  ].join(", ");
-
   return (
-    // Deliberately not a live region: the FPS pill ticks at 1 Hz, and what
-    // needs saying about a chip going down is said by the notice queue.
     <div
-      className={`lm-statusbar${isCompact ? " is-compact" : ""}`}
+      className={isCompact ? `${styles.bar} ${styles.compact}` : styles.bar}
       style={{ height: `${statusBarHeightPx(uiMode)}px` }}
       data-testid="status-bar"
       data-nerd-stats={showNerdStats ? "on" : "off"}
     >
       {shownItems.map((item) => (
-        <StatusPill key={item.label} item={item} />
+        <StatusChip key={item.label} item={item} />
       ))}
       {showNerdStats && <FpsPill isCompact={isCompact} enabled={lightingActive} />}
-      <div className="lm-statusbar-spacer" />
+      <div className={styles.spacer} />
       {trailing}
-      {!isCompact && (
-        <>
-          <KbdHint
-            keys={[...modeModifierBadges, modeDigitsBadge]}
-            label={t("shell:statusBar.kbdMode")}
-            ariaLabel={modeGroupAriaLabel}
-          />
-          <KbdHint
-            keys={settingsDefinition.badge}
-            label={t("shell:statusBar.kbdSettings")}
-            ariaLabel={t("shell:keybind.openSettings")}
-          />
-          <span className="lm-statusbar-version">v{APP_VERSION}</span>
-        </>
-      )}
     </div>
   );
 }
 
-function StatusPill({ item }: { item: StatusItem }) {
-  // Healthy chips never grow a link — that would imply something is wrong
-  // when nothing is.
-  const showReconnect = typeof item.onReconnect === "function" && item.kind !== "ok";
-
+function StatusChip({ item }: { item: StatusItem }) {
+  const [open, setOpen] = useState(false);
+  const anchorRef = useRef<HTMLButtonElement | null>(null);
+  const testId = `status-chip-${item.id.toUpperCase()}`;
+  const face = (
+    <>
+      <span aria-hidden className={`${styles.dot} ${styles[item.kind]}`} />
+      <span className={styles.label}>{item.label}</span>
+      <span className={`${styles.value} ${styles[item.kind]}`} data-kind={item.kind}>
+        {item.state}
+      </span>
+    </>
+  );
+  // A healthy chip opens nothing: that would say something is wrong when nothing is.
+  const attention = item.kind === "ok" ? undefined : item.attention;
+  if (!attention) {
+    return (
+      <div className={styles.chip} data-testid={testId}>
+        {face}
+      </div>
+    );
+  }
   return (
-    <div className="lm-statusbar-pair" data-testid={`status-chip-${item.label}`}>
-      <span className="lm-statusbar-label">{item.label}</span>
-      <span className={`lm-statusbar-value is-${item.kind}`}>
-        <span aria-hidden>●</span> {item.state}
-        {showReconnect && (
+    <>
+      <button
+        ref={anchorRef}
+        type="button"
+        className={`${styles.chip} ${styles.button}`}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        onClick={() => setOpen((was) => !was)}
+        data-testid={testId}
+      >
+        {face}
+      </button>
+      <Popover
+        open={open}
+        onClose={() => setOpen(false)}
+        anchorRef={anchorRef}
+        side="above"
+        width={220}
+        label={`${item.label} ${item.state}`}
+        role="dialog"
+      >
+        <div className={styles.attention}>
+          <p>{attention.hint}</p>
           <button
             type="button"
-            className="lm-statusbar-reconnect"
-            onClick={item.onReconnect}
-            aria-label={item.reconnectAriaLabel ?? ""}
-            title={item.reconnectAriaLabel}
-            data-link-kind={item.linkKind ?? "reconnect"}
+            className={styles.action}
+            onClick={() => {
+              setOpen(false);
+              attention.onAction();
+            }}
           >
-            {item.linkKind === "setUp" ? <SetUpIcon /> : <ReconnectIcon />}
+            {attention.action} ›
           </button>
-        )}
-      </span>
-    </div>
-  );
-}
-
-/**
- * Tiny circular-arrow glyph rendered next to an offline chip's value. Pure
- * SVG — no external icon library — so the StatusBar stays self-contained
- * and matches the rest of the chrome (TitleBar / DevicesPage follow the
- * same inline-SVG pattern).
- */
-function ReconnectIcon() {
-  return (
-    <svg
-      viewBox="0 0 12 12"
-      width="10"
-      height="10"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M9.5 5.2A4 4 0 1 0 10 7" />
-      <path d="M9.7 2.4v2.8h-2.8" />
-    </svg>
-  );
-}
-
-/** A plus, for an output nobody has set up yet: an offer, not an outage. */
-function SetUpIcon() {
-  return (
-    <svg
-      viewBox="0 0 12 12"
-      width="10"
-      height="10"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <path d="M6 2.5v7M2.5 6h7" />
-    </svg>
+        </div>
+      </Popover>
+    </>
   );
 }
 
@@ -228,7 +152,7 @@ function SetUpIcon() {
  *
  * The colour says whether the output keeps up, not how high the number is: capture counts distinct
  * frames and aims at 20–30 fps, so fixed 45/25 thresholds read a Hue session, or a still screen,
- * as failing. `ok` → `is-ok` (green); `strained` → `is-active` (amber); `behind` → `is-low` (red)
+ * as failing. `ok` is green, `strained` amber, `behind` red
  * plus the "Low FPS" words, so the state is never expressed by colour alone (a11y).
  *
  * Compact mode renders only the numeric FPS value (space budget inside the
@@ -287,37 +211,16 @@ function FpsPill({ isCompact, enabled }: FpsPillProps) {
     : t("shell:fpsHud.inactive");
 
   return (
-    <div className="lm-statusbar-pair" aria-label={ariaLabel} data-testid="status-fps">
-      <span className="lm-statusbar-label">{label}</span>
-      <span className={`lm-statusbar-value is-${kind}`}>
-        <span aria-hidden>●</span>
-        <span className="lm-statusbar-fps" data-testid="status-fps-value">
+    <div className={styles.chip} aria-label={ariaLabel} data-testid="status-fps">
+      <span aria-hidden className={`${styles.dot} ${styles[kind]}`} />
+      <span className={styles.label}>{label}</span>
+      <span className={`${styles.value} ${styles[kind]}`} data-kind={kind}>
+        <span className={styles.fps} data-testid="status-fps-value">
           {fpsDisplay}
         </span>
-        {lowFpsLabel ? <span className="lm-statusbar-lowfps">{lowFpsLabel}</span> : null}
-        {latencySuffix ? <span className="lm-statusbar-latency">{latencySuffix}</span> : null}
+        {lowFpsLabel ? <span className={styles.lowFps}>{lowFpsLabel}</span> : null}
+        {latencySuffix ? <span className={styles.latency}>{latencySuffix}</span> : null}
       </span>
-    </div>
-  );
-}
-
-interface KbdHintProps {
-  keys: string[];
-  label: string;
-  ariaLabel: string;
-}
-
-function KbdHint({ keys, label, ariaLabel }: KbdHintProps) {
-  return (
-    <div
-      className="lm-statusbar-kbd"
-      role="group"
-      aria-label={ariaLabel}
-    >
-      {keys.map((k) => (
-        <kbd key={k}>{k}</kbd>
-      ))}
-      <span aria-hidden>{label}</span>
     </div>
   );
 }

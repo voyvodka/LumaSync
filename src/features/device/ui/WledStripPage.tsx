@@ -30,6 +30,8 @@ export interface WledStripPageProps {
   name: string;
   wled: Pick<ActiveWledSink, "activeWledIp" | "restoreOutcome" | "markConnected" | "forget">;
   onNavigateToLedSetup?: () => void;
+  /** The captured display, named when there is more than one; for the Layout row. */
+  capturedDisplay?: string | null;
   onNavigateToRoomMap?: () => void;
   autoFlash?: boolean;
   onAutoFlashDone?: () => void;
@@ -47,6 +49,7 @@ export function WledStripPage({
   name,
   wled,
   onNavigateToLedSetup,
+  capturedDisplay = null,
   onNavigateToRoomMap,
   autoFlash = false,
   onAutoFlashDone,
@@ -198,7 +201,12 @@ export function WledStripPage({
         </Reveal>
 
         <Reveal open>
-          <StripLayoutRow strip={strip} primary={!connectPrimary && state !== "unlit"} onOpen={onNavigateToLedSetup} />
+          <StripLayoutRow
+            strip={strip}
+            primary={!connectPrimary && state !== "unlit"}
+            display={capturedDisplay}
+            onOpen={onNavigateToLedSetup}
+          />
         </Reveal>
 
         <Reveal open>

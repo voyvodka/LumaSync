@@ -36,6 +36,8 @@ import {
 export interface ShellNoticeInput {
   uiMode: UIMode;
   activeSection: SectionId;
+  /** LED Setup is open over Devices. */
+  ledSetupOpen: boolean;
   availability: OutputAvailability;
   hueProbeGaveUp: boolean;
   hueProbeChecking: boolean;
@@ -476,7 +478,7 @@ export function buildShellNotices(
   const ledSetupNext = input.ledSetupNext;
   if (
     ledSetupNext !== null &&
-    input.activeSection !== SECTION_IDS.LED_SETUP &&
+    !input.ledSetupOpen &&
     !calibrationShown &&
     !(step === ONBOARDING_STEPS.LED_SETUP && !onboardingHidden)
   ) {

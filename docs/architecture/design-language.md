@@ -81,6 +81,15 @@ rebuilding LED Setup; apply it to every new screen:
   thing they act on, and what they act on lights while the rest steps back. A value's controls open
   on the value itself, not on a wider area around it: opened from an edge, a count's controls
   covered the very LED the pointer was there to pick, and hidden controls must not catch the pointer.
+  What waits for the pointer waits near the thing it acts on, not anywhere on a large stage: LED
+  Setup's rings once answered the whole stage, which runs up under the display picker, so its list
+  opening and closing over them blinked them on and off. They come with a short wait and go with a
+  longer one, so a pointer passing through does not blink them either.
+- **Whatever answers a click shows the pointer.** `base.css` gives it to every control and role, so a
+  component does not set it; it sets only a cursor that says more (grab, resize, not-allowed). LED
+  Setup's counts once set a text cursor because a click turns them into a field — the field shows
+  that itself, and until then they read as not clickable. A click on a backdrop or a canvas's empty
+  ground is not a control and keeps the arrow.
 - **A value that opens a list looks like one at rest.** A quiet box with a chevron that turns while
   the list is open, as LED Setup's display. The strip's colour order first showed as bare "RGB"
   beside its label, and read as plain text: nothing said it could be changed. In a row of settings
@@ -207,12 +216,17 @@ same function. The boundary reaches Tauri only through `platform/platformApi.ts`
 module is what threw, so no bridge it uses may pull feature code in.
 
 **No false affordances.** A global shortcut is declared once in `KEYBIND_REGISTRY`
-(`shared/contracts/shell.ts`); `useGlobalKeybinds` handles it and `StatusBar` and `ModeStrip` draw
+(`shared/contracts/shell.ts`); `useGlobalKeybinds` handles it and `ModeStrip` and Settings → Help draw
 their badges from the same entry, so a badge cannot outlive its handler — before that hook the badges
 were decorative. Matching is on `event.code`, because on a Turkish layout `Alt+1` produces `¡` in
 `event.key`, and editable targets swallow the key so a rename field is not a mode switch. The
-room-map editor's shortcut list is its own. The same rule hides the error boundary's "Show logs"
-until the command behind it has answered.
+room-map editor's shortcut list is its own.
+
+**The error screen says what happened in a line and offers one thing to do.** Restart is its one
+amber; Report opens a prefilled issue in the browser with the version, the OS and the error cut
+short (nothing is sent — the user reads and submits it, or closes the tab), and the log folder and
+a copy of the error sit beside it as quiet links, with the raw stack behind "Details". It was a
+card of four buttons and a paragraph naming each of them.
 
 ## Gotchas
 

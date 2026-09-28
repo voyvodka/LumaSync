@@ -50,7 +50,7 @@ beforeEach(() => {
 });
 
 describe("App navigation", () => {
-  it("routes a calibration refusal to LED Setup", async () => {
+  it("routes a calibration refusal to LED Setup, over Devices", async () => {
     render(<App />);
     await bootDone();
     nextApplyRuns({}, "OUTPUTS_CALIBRATION_REQUIRED");
@@ -59,7 +59,26 @@ describe("App navigation", () => {
       screen.getByText("set-ambilight").click();
     });
 
-    await waitFor(() => expect(screen.getByTestId("active-section")).toHaveTextContent("led-setup"));
+    await waitFor(() => expect(screen.getByTestId("led-setup")).toHaveTextContent("primary"));
+    expect(screen.getByTestId("active-section")).toHaveTextContent("devices");
+    // From compact too: the page it needs is in the full window.
+    await waitFor(() => expect(screen.getByTestId("ui-mode")).toHaveTextContent("full"));
+  });
+
+  it("opens LED Setup on the strip asked for, and back lands on Devices", async () => {
+    const user = userEvent.setup();
+    loadShellStateMock.mockResolvedValue({ uiMode: "full", ledCalibration: CALIBRATION });
+    render(<App />);
+    await bootDone();
+
+    await user.click(screen.getByText("open-led-setup"));
+    expect(screen.getByTestId("led-setup")).toHaveTextContent("strip-1");
+    expect(screen.getByTestId("active-section")).toHaveTextContent("devices");
+    expect(saveShellStateMock).toHaveBeenCalledWith(expect.objectContaining({ lastSection: "devices" }));
+
+    await user.click(screen.getByText("close-led-setup"));
+    expect(screen.getByTestId("led-setup")).toHaveTextContent("closed");
+    expect(screen.getByTestId("active-section")).toHaveTextContent("devices");
   });
 
   it("opens the saved section at boot and persists a tab change", async () => {
@@ -119,13 +138,14 @@ describe("App navigation", () => {
   // page unmounted and only its own Cancel ever asked.
   it("asks the open screen's leave guard before a tab change or the compact switch", async () => {
     const user = userEvent.setup();
-    loadShellStateMock.mockResolvedValue({ lastSection: "led-setup", uiMode: "full", ledCalibration: CALIBRATION });
+    loadShellStateMock.mockResolvedValue({ uiMode: "full", ledCalibration: CALIBRATION });
     render(<App />);
-    await waitFor(() => expect(screen.getByTestId("active-section")).toHaveTextContent("led-setup"));
+    await bootDone();
+    await user.click(screen.getByText("open-led-setup"));
 
     await user.click(screen.getByText("hold-leave"));
-    await user.click(screen.getByTestId("section-tab-devices"));
-    expect(screen.getByTestId("active-section")).toHaveTextContent("led-setup");
+    await user.click(screen.getByTestId("section-tab-lights"));
+    expect(screen.getByTestId("led-setup")).toHaveTextContent("strip-1");
 
     await user.click(screen.getByTestId("ui-mode-toggle"));
     // Longer than the fade-out, after which an unguarded switch would resize.
@@ -136,25 +156,47 @@ describe("App navigation", () => {
     // The user agreed to leave: the last move asked for goes ahead.
     await act(async () => env.heldLeave?.());
     await waitFor(() => expect(screen.getByTestId("ui-mode")).toHaveTextContent("compact"));
+    // Compact has no LED Setup: it was left, and full mode does not bring it back.
+    expect(screen.getByTestId("led-setup")).toHaveTextContent("closed");
+  });
+
+  // LED Setup is a step inside Devices: the Devices tab itself leaves it, and asks first.
+  it("asks before the Devices tab leaves LED Setup for the Devices page", async () => {
+    const user = userEvent.setup();
+    loadShellStateMock.mockResolvedValue({ uiMode: "full", ledCalibration: CALIBRATION });
+    render(<App />);
+    await bootDone();
+    await user.click(screen.getByText("open-led-setup"));
+
+    await user.click(screen.getByText("hold-leave"));
+    await user.click(screen.getByTestId("section-tab-devices"));
+    expect(env.heldLeave).not.toBeNull();
+    expect(screen.getByTestId("led-setup")).toHaveTextContent("strip-1");
+
+    await act(async () => env.heldLeave?.());
+    await waitFor(() => expect(screen.getByTestId("led-setup")).toHaveTextContent("closed"));
+    expect(screen.getByTestId("active-section")).toHaveTextContent("devices");
   });
 
   it("does not ask when the tab is the one already open", async () => {
     const user = userEvent.setup();
-    loadShellStateMock.mockResolvedValue({ lastSection: "led-setup", uiMode: "full", ledCalibration: CALIBRATION });
+    loadShellStateMock.mockResolvedValue({ uiMode: "full", ledCalibration: CALIBRATION });
     render(<App />);
-    await waitFor(() => expect(screen.getByTestId("active-section")).toHaveTextContent("led-setup"));
+    await bootDone();
+    await user.click(screen.getByTestId("section-tab-devices"));
 
     await user.click(screen.getByText("hold-leave"));
-    await user.click(screen.getByTestId("section-tab-led-setup"));
+    await user.click(screen.getByTestId("section-tab-devices"));
 
     expect(env.heldLeave).toBeNull();
   });
 
   it("holds the settings shortcut behind the leave guard too", async () => {
     const user = userEvent.setup();
-    loadShellStateMock.mockResolvedValue({ lastSection: "led-setup", uiMode: "full", ledCalibration: CALIBRATION });
+    loadShellStateMock.mockResolvedValue({ uiMode: "full", ledCalibration: CALIBRATION });
     render(<App />);
-    await waitFor(() => expect(screen.getByTestId("active-section")).toHaveTextContent("led-setup"));
+    await bootDone();
+    await user.click(screen.getByText("open-led-setup"));
 
     await user.click(screen.getByText("hold-leave"));
     for (const modifier of [{ metaKey: true }, { ctrlKey: true }]) {
@@ -166,9 +208,9 @@ describe("App navigation", () => {
     }
 
     expect(env.heldLeave).not.toBeNull();
-    expect(screen.getByTestId("active-section")).toHaveTextContent("led-setup");
+    expect(screen.getByTestId("led-setup")).toHaveTextContent("strip-1");
     await act(async () => env.heldLeave?.());
     await waitFor(() => expect(screen.getByTestId("active-section")).toHaveTextContent("system"));
+    expect(screen.getByTestId("led-setup")).toHaveTextContent("closed");
   });
 });
-

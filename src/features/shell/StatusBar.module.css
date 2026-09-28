@@ -1,0 +1,82 @@
+@layer components {
+  .bar {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 12px;
+    background-color: var(--lm-bg);
+    border-top: 1px solid var(--lm-line);
+    font-size: 11.5px;
+    color: var(--lm-ink-faint);
+    user-select: none;
+  }
+  .compact { gap: 8px; padding: 0 8px; font-size: 11px; }
+  .spacer { flex: 1; }
+
+  /* An output in a word beside a dot. */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 20px;
+    padding: 0 4px;
+    border-radius: 6px;
+    white-space: nowrap;
+  }
+  .label { color: var(--lm-ink-dim); }
+  .value { display: inline-flex; align-items: center; gap: 4px; color: var(--lm-ink-faint); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--lm-ink-faint); }
+
+  .ok { color: var(--lm-green); }
+  .active { color: var(--lm-amber); }
+  .idle { color: var(--lm-ink-dim); }
+  .off { color: var(--lm-ink-faint); }
+  :is(.error, .low) { color: var(--lm-red); }
+  .dot.ok { background: var(--lm-green); }
+  .dot.active { background: var(--lm-amber); }
+  .dot.idle { background: var(--lm-ink-dim); }
+  .dot.off { background: transparent; box-shadow: inset 0 0 0 1.2px var(--lm-ink-faint); }
+  .dot:is(.error, .low) { background: var(--lm-red); }
+
+  /* A chip about something to deal with opens its sentence beside it. The glyph stays inside a
+     22 px bar; the hit area reaches the 32 px floor over the body's bottom padding. */
+  .button { position: relative; transition: background var(--lm-dur-quick); }
+  .button::after { content: ""; position: absolute; inset: -6px -2px; }
+  .button:hover,
+  .button[aria-expanded="true"] { background: var(--lm-panel); }
+  .button:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+
+  .attention { display: grid; gap: 8px; padding: 4px 4px 2px; font-size: 12.5px; line-height: 1.45; color: var(--lm-ink); }
+  .attention p { margin: 0; }
+  .action {
+    justify-self: start;
+    min-height: 32px;
+    padding: 0 10px;
+    margin-left: -6px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    color: var(--lm-amber);
+    transition: background var(--lm-dur-quick);
+  }
+  .action:hover { background: color-mix(in srgb, var(--lm-amber) 9%, transparent); }
+  .action:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+
+  /* Reserved boxes for the two 1 Hz readings, so the latency does not slide as FPS loses a digit. */
+  .fps { display: inline-block; min-width: 3ch; text-align: right; font-variant-numeric: tabular-nums; }
+  .latency { display: inline-block; min-width: 7ch; text-align: right; font-variant-numeric: tabular-nums; }
+  .lowFps { font-weight: 500; }
+
+  :global(:root[data-reduced-motion]) .button { transition: none; }
+
+  @media (forced-colors: active) {
+    .bar { border-top-color: CanvasText; }
+    :is(.label, .value, .ok, .active, .idle, .off, .error, .low) { color: CanvasText; forced-color-adjust: none; }
+    .dot { background: CanvasText; }
+    .button:focus-visible { outline: 2px solid Highlight; outline-offset: 1px; box-shadow: none; }
+  }
+}

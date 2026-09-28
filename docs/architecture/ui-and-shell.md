@@ -32,7 +32,8 @@ after the other. Inside the main window, the three full-only sections that outwe
 the shell — `CalibrationPage` (through `calibration/ui/CalibrationPanel`), `DevicesPage`,
 `RoomMapEditor` — are split out through `preloadableComponent` (`src/shared/lib/`). Compact mode
 never renders them, so it never fetches them; full mode warms all three on idle after it paints, so
-a tab switch rarely meets the blank `SectionPlaceholder`. LED Setup's warm-up also reads the
+a tab switch rarely meets the blank `SectionPlaceholder`. LED Setup opens inside Devices, so it is
+warmed with Devices; its warm-up also reads the
 displays it opens on, so even a first visit draws the real monitor rather than filling in. `LightsSection` and `SettingsPage` stay in the `App`
 chunk: Lights is the page full mode opens on, and neither is big enough to be worth a first-paint
 wait. Locale catalogues load per language (`LOCALE_LOADERS` in `i18n.ts`); a switch fetches the
@@ -82,7 +83,7 @@ and kept beside their styles, a feature sheet out of `src/styles/` into modules,
 feature uses promoted to `shared/ui`, motion on the tokens. A feature has no `index.ts` barrel: callers import
 the module that owns the symbol, so a grep lands on it, and `verify:window-grants`, which follows
 imports, does not see a whole feature's commands behind one import. `stylesheetSanity.test.ts` holds both halves: no plain
-`.css` outside `src/styles/` (bar `fonts.css` and `GlobalErrorBoundary.css`), and every
+`.css` outside `src/styles/` (bar `fonts.css`), and every
 `*.module.css` wholly inside `@layer components`.
 
 **Stylesheet layers.** `src/styles.css` is an ordered import list over `src/styles/`: tokens and
@@ -102,9 +103,8 @@ counter-rule needed. The cost is the reverse case. A container rule that sizes i
 sit in such containers declare their default size as `width`/`height` attributes, which any
 stylesheet rule overrides. Within a layer, source order still decides equal-specificity ties,
 which is why the import list is kept in cascade order. `stylesheetSanity.test.ts` fails on a
-feature file imported without a layer. `GlobalErrorBoundary.css` stays unlayered: it is loaded by its
-component rather than through this list, and unlayered it cannot lose to a components-layer rule
-on the `lm-settings-group` card it sits on, whatever order the bundler emits.
+feature file imported without a layer. The error screen is a module like any other: it no longer
+sits on a shared card whose rules it had to outrank.
 
 **Selection state is styled from ARIA where the element carries it.** A tab's selected look is
 `[aria-selected="true"]`, a toggle button's `[aria-pressed="true"]`, a radio's or a switch's `[aria-checked="true"]`, the
@@ -467,8 +467,24 @@ waits while Hue runs on the paired bridge, since this page could not stop that s
 **Devices has no Displays page.** A display is the capture source, not something connected, and
 most machines have one. The captured display is chosen in one place, LED Setup's top bar, where the
 layout is drawn on its shape; a second picker in Devices raised "which one counts?" and showed one
-row on most machines. When strips carry their own display, the strip page names it as a property of
-the strip ("Built-in · 60 LED · 4 kenar"), not as a page of its own.
+row on most machines. A strip's Layout row names it in its value ("Built-in · 60 LEDs · 4 edges")
+when there is more than one display to tell apart; with one it would only be noise.
+
+**LED Setup is a strip's layout, not a tab.** The tabs are Lights · Devices · Room · Settings. A
+strip's settings were spread over tabs — hardware in Devices, layout and screen in LED Setup — and
+"Edit ›" on a strip jumped to another tab that always edited the primary strip, whichever strip it
+came from. LED Setup now opens over Devices on the strip it was asked for (`navigationStore`'s
+`ledSetup`), full width as its canvas needs, with "‹ <strip>" back to that strip's page; the page
+stays mounted under it, and any other way to a section leaves it, through its leave guard. Every
+other way in — the calibration lock, the "set up next" notice, onboarding's step, a mode press that
+needs a layout — opens it on the strip a layout with no strip named applies to. It saves to the
+strip by id (`withLayoutOf`); only the primary strip's save reaches the lighting store, since that
+is the layout Rust reads, and the mode gate follows the primary's layout on every strips save, so a
+strip forgotten moves it. Test lights the output connected now, so it is off, with a hover saying
+why, on any strip that is not that output — it would light the other strip with this layout. A
+strip forgotten while its layout is open closes LED Setup rather than letting the draft fall onto
+another strip, and the compact switch leaves it too, so full mode does not bring it back. A stored `lastSection: "led-setup"` reads as
+Devices. A Hue-only user has no strip and so no LED Setup, where the tab used to open on nothing.
 
 ## Capabilities
 
@@ -581,7 +597,9 @@ agree.
   on it, while an unplug that ended a USB-only mode leaves it Off after the replug — the lights
   coming back on by themselves after the user saw them stop would be the surprise.
 - **Unplugging the strip that was the only target ends the mode, the way Off does.** `useUsbTargetReconciler.ts` used to act on an unplug only when another target stayed selected, so a USB-only mode — or a `[usb, hue]` restore running on USB alone while it waited for a busy bridge (#441) — got no notice, a worker still capturing for a port that was gone, and the mode still shown running; the busy notice kept saying "running on USB only". Now the reconciler calls the orchestrator's `endLightingOnUsbUnplug`, which sends the empty set with `origin: "usbUnplug"`: session-only (`lastOutputTargets` is never written, nor the persisted mode), the worker stopped whatever the active set says, then Off with the selection kept. The empty set also cancels a pending rejoin the way any output change does, and the left-out reason is cleared with it. The "continuing on the other outputs" notice for an unplug beside another target is raised only while a mode runs; with the mode Off it named nothing that continued. The reconciler raises its own notice, `shell:notices.messages.usbDisconnectedLightingOff`, only once the mode has actually ended — with the mode already Off, or a stop that failed (which raises the stop-failed toast instead), there is nothing to report. `normalizeOutputTargets([])` keeps an explicit empty set, which is what lets the delta path see "nothing left".
-- **The HUE chip says when Hue is out of the running mode, and says it for longer than the toast.** A bridge that is merely held by another session answers the reachability probe, so while the #441 busy notice said Hue was not running the chip read OK. The runtime snapshot carries the left-out reason (`hueHeldOutReason`), and the main window raises the notice from it: raised and retry-cleared together, but not dismissed by the notice's 8 s timer — the reason holds until Hue joins, or the user makes a mode or output choice. `resolveHueHeldOut` in `statusItems.ts` turns it into WAITING (the busy wait, or the Off-resume wait, amber, no reconnect button) or LEFT OUT (any other reason while a mode runs, with the Devices deep-link). It yields to a live Hue session, so a stop that timed out and left Hue listed active still reads STREAMING beside its stop-failed toast. Every chip value now comes from `shell:statusBar.state.*`; the labels (CAP, USB, WLED, HUE) stay as they are.
+- **The HUE chip says when Hue is out of the running mode, and says it for longer than the toast.** A bridge that is merely held by another session answers the reachability probe, so while the #441 busy notice said Hue was not running the chip read OK. The runtime snapshot carries the left-out reason (`hueHeldOutReason`), and the main window raises the notice from it: raised and retry-cleared together, but not dismissed by the notice's 8 s timer — the reason holds until Hue joins, or the user makes a mode or output choice. `resolveHueHeldOut` in `statusItems.ts` turns it into Waiting (the busy wait, or the Off-resume wait, amber, nothing to open) or Left out (any other reason while a mode runs, opening its sentence and Devices). It yields to a live Hue session, so a stop that timed out and left Hue listed active still reads Streaming beside its stop-failed toast. Every chip value comes from `shell:statusBar.state.*`.
+
+**The shell is quiet like the pages.** The tabs are sentence case with one amber mark under the open tab, as wide as its word but never narrower than 36 px so a short word does not get a stub, that slides to the next, a WAI-ARIA tablist with one tab stop where the arrows move focus and Enter opens, so an arrow never leaves a page, and its unsaved work, on the way past it. The status bar is each output in a word beside a dot. A chip about something to deal with is a button: pressed, it says what in one sentence beside it (a `Popover`) and offers Devices, instead of taking the window there. The key hints and the version left the bar — Settings → Help lists the shortcuts and About the version — and so did the uppercase mono, which stays only in the wordmark. The title bar, the status bar and the notices each have their module; `shell.css` and `notices.css` are gone.
 - **Removing Hue from a running mode lets the worker go of Hue before the stream stops, and Off stops the worker before Hue whatever the targets.** A stop under a worker still holding its handle on the Hue sender waited out 3 s, reported `HUE_STOP_TIMEOUT_PARTIAL`, and ran the #425 light restore with the sender alive; on the HTTP fallback the next frame painted the restored lights again. The transaction's phase 3 ("Hue down, after the worker has let go") owns this now, and the reasoning is in `hue.md`. Since the worker follows the Hue runtime's live output slot it lets go at its next frame on its own, so the sender's exit no longer depends on this order; the order stays anyway.
 - **The Devices Hue page stops Hue through the transaction, never with a bare stream stop.** Stop retrying (reconnecting) and Retry stop (partial stop) used to call `stop_hue_stream` straight from the bridge card (now `HuePage`), under whatever mode was running — the #445 hole with a different button. They now call `release_hue_output` with the card's trigger source: with the mode Off it is a plain stop; otherwise Hue leaves the running mode first, and a mode that ran on Hue alone ends the way Off does, with the selection kept and nothing saved. It stops Hue even when `hue` is not in the active set or the selection — after a partial stop, or for a stream the card started beside a USB-only mode — and the orchestrator makes it single-flight, so a double press joins the release in flight.
 - **A toast's dismissal timer does not belong in the effect that raises it.** The USB-unplug branch in `useUsbTargetReconciler.ts` rewrites `selectedOutputTargets` in the same commit that shows its toast, and that array is a dependency of the effect it lives in. The effect therefore tore itself down and cleared the timeout it had just scheduled, so the toast stayed on screen until something unrelated re-rendered it away. The timer now sits in its own effect keyed on the flag it clears — the shape any auto-dismissing surface should copy.

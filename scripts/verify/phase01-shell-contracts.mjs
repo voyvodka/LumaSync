@@ -55,9 +55,9 @@ const REQUIRED_TRAY_IDS = [
 // ---------------------------------------------------------------------------
 // Required sidebar section ID values (main nav)
 // ---------------------------------------------------------------------------
+// LED Setup left the tabs: it is a strip's layout, opened inside Devices.
 const REQUIRED_SECTION_IDS = [
   "lights",
-  "led-setup",
   "devices",
   "system",
   "room-map",
@@ -204,13 +204,23 @@ for (const id of REQUIRED_TRAY_IDS) {
   );
 }
 
-// Check section IDs
+// Check section IDs: exactly these, so a tab added back (LED Setup's, say) is a decision, not a drift.
 console.log("\n[ Sidebar section IDs ]");
+const sectionBlock = source.match(/export const SECTION_IDS\s*=\s*\{([^}]+)\}/s);
+const declaredSectionIds = sectionBlock ? [...sectionBlock[1].matchAll(/:\s*"([^"]+)"/g)].map((m) => m[1]) : [];
+check(sectionBlock !== null, "SECTION_IDS found", "SECTION_IDS object not found");
 for (const id of REQUIRED_SECTION_IDS) {
   check(
-    source.includes(`"${id}"`),
+    declaredSectionIds.includes(id),
     `section id "${id}" defined`,
     `MISSING section id "${id}"`
+  );
+}
+for (const id of declaredSectionIds) {
+  check(
+    REQUIRED_SECTION_IDS.includes(id),
+    `section id "${id}" is one of the tabs`,
+    `UNEXPECTED section id "${id}" — a new tab must be added here on purpose`
   );
 }
 
@@ -259,7 +269,6 @@ if (orderMatch) {
   const orderBlock = orderMatch[1];
   const ID_TO_CONST = {
     "lights": "LIGHTS",
-    "led-setup": "LED_SETUP",
     "devices": "DEVICES",
     "system": "SYSTEM",
     "room-map": "ROOM_MAP",

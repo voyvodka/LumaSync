@@ -13,11 +13,13 @@ interface StripLayoutRowProps {
   strip: LedStrip;
   /** The page's amber when nothing before it asks for one. */
   primary: boolean;
+  /** The captured display, named when there is more than one: the screen this layout is drawn on. */
+  display?: string | null;
   onOpen?: () => void;
 }
 
 /** How many LEDs the strip has and along how many edges; drawn in LED Setup. */
-export function StripLayoutRow({ strip, primary, onOpen }: StripLayoutRowProps) {
+export function StripLayoutRow({ strip, primary, display = null, onOpen }: StripLayoutRowProps) {
   const { t } = useTranslation();
   const needsLayout = strip.layout === undefined;
   return (
@@ -26,7 +28,9 @@ export function StripLayoutRow({ strip, primary, onOpen }: StripLayoutRowProps) 
       value={
         needsLayout
           ? t("device:strip.layoutNone")
-          : t("device:strip.layoutValue", { count: strip.layout?.totalLeds ?? 0, edges: edgesOf(strip) })
+          : [display, t("device:strip.layoutValue", { count: strip.layout?.totalLeds ?? 0, edges: edgesOf(strip) })]
+              .filter(Boolean)
+              .join(" · ")
       }
       testId="strip-layout"
       control={

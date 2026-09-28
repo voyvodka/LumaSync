@@ -18,7 +18,7 @@ import { showNotification } from "@/features/platform/platformApi";
 import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/shell";
 
 import { pushTrayLabels } from "./useTrayIntegration";
-import { initWindowLifecycle, loadShellState } from "./windowLifecycle";
+import { initWindowLifecycle, loadShellState, onShellStateSaved } from "./windowLifecycle";
 import { primaryStripOf } from "@/features/strips/model/stripSelectors";
 
 /**
@@ -106,7 +106,7 @@ export function useShellBootstrap(sink: ShellBootstrapSink): ShellBootstrapState
           // Legacy IDs from persisted state before navigation restructure
           general: SECTION_IDS.LIGHTS,
           control: SECTION_IDS.LIGHTS,
-          calibration: SECTION_IDS.LED_SETUP,
+          calibration: SECTION_IDS.DEVICES,
           device: SECTION_IDS.DEVICES,
           settings: SECTION_IDS.SYSTEM,
           "startup-tray": SECTION_IDS.SYSTEM,
@@ -115,7 +115,8 @@ export function useShellBootstrap(sink: ShellBootstrapSink): ShellBootstrapState
           telemetry: SECTION_IDS.SYSTEM,
           // Current IDs (map to themselves)
           lights: SECTION_IDS.LIGHTS,
-          "led-setup": SECTION_IDS.LED_SETUP,
+          // LED Setup is a strip's layout, opened inside Devices, since it left the tabs.
+          "led-setup": SECTION_IDS.DEVICES,
           devices: SECTION_IDS.DEVICES,
           system: SECTION_IDS.SYSTEM,
           "room-map": SECTION_IDS.ROOM_MAP,
@@ -181,6 +182,19 @@ export function useShellBootstrap(sink: ShellBootstrapSink): ShellBootstrapState
 
     void bootstrap();
   }, []);
+
+  // The layout the lighting reads is the primary strip's. A strip forgotten, or the primary laid out
+  // from its own page, moves it; the mode gate follows instead of keeping the one read at boot.
+  const sinkRef = useRef(sink);
+  sinkRef.current = sink;
+  useEffect(
+    () =>
+      onShellStateSaved((saved) => {
+        if (!("ledStrips" in saved)) return;
+        sinkRef.current.setSavedCalibration(normalizeLedCalibrationConfig(primaryStripOf(saved)?.layout));
+      }),
+    [],
+  );
 
   return { bootstrapDone, lightingRestored };
 }

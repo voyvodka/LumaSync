@@ -46,7 +46,10 @@ function connectOnce(portName: string, chipType: LedChipType | undefined): Promi
 }
 
 export function useDeviceConnection({ ownsReconnects = false }: UseDeviceConnectionOptions = {}): UseDeviceConnectionResult {
-  const [initialLastSuccessfulPort, setInitialLastSuccessfulPort] = useState<string | undefined>(undefined);
+  // `null` until the store answers. The controller waits for it: built before, it was torn down and
+  // built again once the port arrived, and every mount scanned the ports and read the registry twice.
+  const [initialStore, setInitialStore] = useState<{ lastSuccessfulPort: string | undefined } | null>(null);
+  const initialLastSuccessfulPort = initialStore?.lastSuccessfulPort;
 
   useEffect(() => {
     let cancelled = false;
@@ -55,7 +58,7 @@ export function useDeviceConnection({ ownsReconnects = false }: UseDeviceConnect
       try {
         const stored = await shellStore.load();
         if (!cancelled) {
-          setInitialLastSuccessfulPort(savedSerialPort(stored));
+          setInitialStore({ lastSuccessfulPort: savedSerialPort(stored) });
         }
       } catch (err) {
         // Persistence load failure shouldn't block the controller from
@@ -63,7 +66,7 @@ export function useDeviceConnection({ ownsReconnects = false }: UseDeviceConnect
         // session. Silent-catch ban: log the error explicitly.
         console.error("[LumaSync] shellStore.load() in useDeviceConnection failed:", err);
         if (!cancelled) {
-          setInitialLastSuccessfulPort(undefined);
+          setInitialStore({ lastSuccessfulPort: undefined });
         }
       }
     };
@@ -86,6 +89,7 @@ export function useDeviceConnection({ ownsReconnects = false }: UseDeviceConnect
   );
 
   useEffect(() => {
+    if (initialStore === null) return undefined;
     const controller = createDeviceConnectionController({
       listSerialPorts,
       // Wrap connectSerialPort to inject the persisted chip type.
@@ -134,7 +138,7 @@ export function useDeviceConnection({ ownsReconnects = false }: UseDeviceConnect
       controller.dispose();
       if (controllerRef.current === controller) controllerRef.current = null;
     };
-  }, [initialLastSuccessfulPort, ownsReconnects]);
+  }, [initialStore, initialLastSuccessfulPort, ownsReconnects]);
 
   const refreshPorts = useCallback(async () => {
     await controllerRef.current?.refreshPorts();
