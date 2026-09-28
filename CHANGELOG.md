@@ -66,6 +66,9 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- The window opens on your saved layout, guide state and Hue settings from its first frame, rather
+  than drawing defaults for a moment. Launching into the full window also no longer rewrites
+  settings that did not change on the way to the first frame.
 - The notice strip no longer repeats the Hue status while the app waits at launch for a bridge an
   earlier session still holds; the Hue chip at the bottom already says "Waiting". The notice still
   appears if it gives up.

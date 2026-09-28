@@ -6,10 +6,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  backend,
   makePersistedState,
   readStartHiddenMock,
   setFocusMock,
   setPositionMock,
+  setSizeMock,
   setupPersistedState,
   showMock,
   unminimizeMock,
@@ -116,5 +118,32 @@ describe("a page reload of the same window", () => {
     expect(setFocusMock).not.toHaveBeenCalled();
     expect(setPositionMock).not.toHaveBeenCalled();
     expect(info).toHaveBeenCalledWith(reloaded.STARTUP_READY_MARKER);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A launch reads the state once, and rewrites none of it
+// ---------------------------------------------------------------------------
+
+describe("a launch into full mode", () => {
+  // Bootstrap had already read the state; reading it again at each step and saving back the mode
+  // and centre it was restored from cost round trips and disk syncs before the first frame.
+  it("grows to full from the state it is given, reading and writing nothing before it shows", async () => {
+    const state = makePersistedState({ uiMode: "full", windowCenterX: 960, windowCenterY: 540 });
+    setupPersistedState(state);
+    readStartHiddenMock.mockResolvedValue(false);
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const invoke = vi.spyOn(backend, "invoke");
+
+    vi.resetModules();
+    await (await import("../windowLifecycle")).initWindowLifecycle({ state });
+
+    const shownAt = showMock.mock.invocationCallOrder[0];
+    const readsBeforeShow = invoke.mock.calls.filter(
+      ([command], i) => command === "get_shell_state" && invoke.mock.invocationCallOrder[i] < shownAt,
+    );
+    expect(readsBeforeShow).toHaveLength(0);
+    expect(backend.patches()).toHaveLength(0);
+    expect(setSizeMock).toHaveBeenCalled();
   });
 });

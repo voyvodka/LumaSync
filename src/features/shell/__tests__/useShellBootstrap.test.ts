@@ -79,6 +79,28 @@ describe("useShellBootstrap", () => {
     readRegistryMock.mockResolvedValue(registry("strip"));
   });
 
+  // The window shows once `initWindowLifecycle` resolves; what its first frame draws must already
+  // be the stored values, not defaults that settle a moment later.
+  it("sets the stored layout, onboarding and Hue facts before the window is shown", async () => {
+    const { initWindowLifecycle } = await import("../windowLifecycle");
+    const bag = sink();
+    let setBeforeShow: unknown[] = [];
+    vi.mocked(initWindowLifecycle).mockImplementationOnce(() => {
+      setBeforeShow = [
+        vi.mocked(bag.setSavedCalibration).mock.calls.length,
+        vi.mocked(bag.setHasCompletedOnboarding).mock.calls.length,
+        vi.mocked(bag.setOnboardingBootFacts).mock.calls.length,
+        vi.mocked(bag.setHueStartConfig).mock.calls.length,
+      ];
+      return Promise.resolve();
+    });
+
+    renderHook(() => useShellBootstrap(bag));
+
+    await waitFor(() => expect(initWindowLifecycle).toHaveBeenCalled());
+    expect(setBeforeShow).toEqual([1, 1, 1, 1]);
+  });
+
   it("asks for the restore once, with the saved mode", async () => {
     const bag = sink();
 
