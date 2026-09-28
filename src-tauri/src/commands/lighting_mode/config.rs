@@ -195,6 +195,11 @@ pub struct EffectPayload {
     pub intensity: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_minutes: Option<u16>,
+    /// When a sunrise began, in Unix milliseconds: stamped by `normalize_effect`
+    /// and saved with the mode, so a relaunch carries the sunrise on instead of
+    /// starting it again. Every other effect carries none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at_ms: Option<u64>,
 }
 
 /// `DEFAULT_EFFECT` in `src/shared/contracts/mode.ts`.
@@ -208,6 +213,7 @@ pub(crate) const DEFAULT_EFFECT: EffectPayload = EffectPayload {
     size: None,
     intensity: None,
     duration_minutes: None,
+    started_at_ms: None,
 };
 
 pub(crate) const EFFECT_MAX_COLORS: usize = 3;
@@ -244,6 +250,8 @@ struct EffectPayloadWire {
     intensity: Option<Value>,
     #[serde(default)]
     duration_minutes: Option<Value>,
+    #[serde(default)]
+    started_at_ms: Option<Value>,
 }
 
 fn wire_unit(value: Option<&Value>) -> Option<f32> {
@@ -324,6 +332,12 @@ impl From<EffectPayloadWire> for EffectPayload {
                     n.clamp(f64::from(min_minutes), f64::from(max_minutes))
                         .floor() as u16
                 }),
+            started_at_ms: wire
+                .started_at_ms
+                .as_ref()
+                .and_then(Value::as_f64)
+                .filter(|n| n.is_finite() && *n > 0.0)
+                .map(|n| n as u64),
         }
     }
 }
@@ -660,8 +674,16 @@ pub(crate) fn normalize_effect(effect: EffectPayload) -> EffectPayload {
         duration_minutes: effect
             .duration_minutes
             .map(|m| m.clamp(min_minutes, max_minutes)),
+        started_at_ms: (effect.id == EffectId::Sunrise)
+            .then(|| effect.started_at_ms.unwrap_or_else(unix_ms_now)),
         ..effect
     }
+}
+
+pub(crate) fn unix_ms_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as u64)
 }
 
 /// A non-finite value is the default, not a clamp to an end.

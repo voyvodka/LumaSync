@@ -19,8 +19,8 @@ pub(crate) struct EffectClock {
     /// Loops run at the effect's speed, accumulated so a speed change never
     /// jumps; the fraction is the loop's phase.
     pub loops: f64,
-    /// Real seconds since this effect began (sunrise).
-    pub seconds: f64,
+    /// Now, in Unix milliseconds: a sunrise counts from its saved start.
+    pub unix_ms: u64,
     /// Local time of day in hours, 0..24 (natural light).
     pub day_hours: f32,
 }
@@ -226,7 +226,11 @@ impl Frame<'_> {
                         .unwrap_or(CATALOGUE.defaults.duration_minutes)
                         .max(1),
                 );
-                let progress = (self.clock.seconds / (minutes * 60.0)).clamp(0.0, 1.0) as f32;
+                let elapsed_ms = self
+                    .effect
+                    .started_at_ms
+                    .map_or(0, |start| self.clock.unix_ms.saturating_sub(start));
+                let progress = (elapsed_ms as f64 / (minutes * 60_000.0)).clamp(0.0, 1.0) as f32;
                 scaled(SUNRISE.at(progress), 0.04 + 0.96 * progress.powf(1.2))
             }
             EffectId::NaturalLight => {

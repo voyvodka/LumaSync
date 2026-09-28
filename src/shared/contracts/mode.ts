@@ -98,6 +98,8 @@ export interface EffectPayload {
   size?: number | null;
   intensity?: number | null;
   durationMinutes?: number | null;
+  /** When a sunrise began (Unix ms), stamped by Rust and saved, so a relaunch carries it on. */
+  startedAtMs?: number | null;
 }
 
 export const DEFAULT_EFFECT: Readonly<EffectPayload> = {
@@ -300,6 +302,9 @@ export function normalizeEffectPayload(input?: EffectPayloadInput | null): Effec
     ...(input?.intensity != null ? { intensity: clampFloat(input.intensity, 0, 1, EFFECT_DEFAULTS.intensity) } : {}),
     ...(input?.durationMinutes != null
       ? { durationMinutes: clampInt(input.durationMinutes, minMinutes, maxMinutes, EFFECT_DEFAULTS.durationMinutes) }
+      : {}),
+    ...(id === EFFECT_IDS.SUNRISE && typeof input?.startedAtMs === "number" && input.startedAtMs > 0
+      ? { startedAtMs: input.startedAtMs }
       : {}),
   };
 }

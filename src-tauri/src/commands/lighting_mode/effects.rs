@@ -16,7 +16,7 @@ use crate::commands::hue::frame::HueAreaChannel;
 use crate::commands::led_calibration::{LedSegmentCounts, LedSequenceItem};
 use crate::models::room_map::RoomGeometry;
 
-use super::config::{EffectId, EffectPayload};
+use super::config::{unix_ms_now, EffectId, EffectPayload};
 use super::effect_source::EffectLiveSlot;
 use catalogue::palette_for;
 use emitters::{hue_emitters, screen_in_room, strip_emitters, Bounds, Emitter};
@@ -33,8 +33,6 @@ pub(crate) use palette::{bytes_from_linear as bytes_from_linear_test, Palette as
 #[derive(Debug, Default)]
 pub(crate) struct EffectClockState {
     loops: f64,
-    seconds: f64,
-    id: Option<EffectId>,
 }
 
 pub(crate) type EffectClockSlot = Arc<Mutex<EffectClockState>>;
@@ -106,6 +104,7 @@ pub(crate) struct EffectStage {
     day_hours: f32,
     day_read: Option<Instant>,
     palette: Option<(EffectPayload, Palette)>,
+    wall_anchor: Option<(Instant, u64)>,
 }
 
 /// What one step drew, sRGB bytes in each output's own order.
@@ -123,6 +122,7 @@ impl EffectStage {
             day_hours: 12.0,
             day_read: None,
             palette: None,
+            wall_anchor: None,
         }
     }
 
@@ -158,17 +158,21 @@ impl EffectStage {
             .clock
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if state.id != Some(effect.id) {
-            state.id = Some(effect.id);
-            state.seconds = 0.0;
-        }
         state.loops += dt * f64::from(loops_per_sec(effect.id, effect.speed));
-        state.seconds += dt;
+        let loops = state.loops;
+        drop(state);
         EffectClock {
-            loops: state.loops,
-            seconds: state.seconds,
+            loops,
+            unix_ms: self.unix_ms_at(now),
             day_hours: self.day_hours,
         }
+    }
+
+    /// Wall time at the monotonic `now`, from one anchor taken at the first
+    /// step, so steps driven by a test clock move it the same way.
+    fn unix_ms_at(&mut self, now: Instant) -> u64 {
+        let (at, unix) = *self.wall_anchor.get_or_insert_with(|| (now, unix_ms_now()));
+        unix + now.saturating_duration_since(at).as_millis() as u64
     }
 
     fn palette(&mut self, effect: &EffectPayload) -> &Palette {

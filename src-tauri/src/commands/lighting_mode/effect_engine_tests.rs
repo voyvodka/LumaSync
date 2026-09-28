@@ -7,7 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use super::config::{
-    EffectColor, EffectDirection, EffectId, EffectPayload, PaletteId, DEFAULT_EFFECT,
+    normalize_effect, unix_ms_now, EffectColor, EffectDirection, EffectId, EffectPayload,
+    PaletteId, DEFAULT_EFFECT,
 };
 use super::effects::{
     bytes_from_linear_test as bytes_from_linear, loops_per_sec, palette_for_test as palette_for,
@@ -211,15 +212,51 @@ fn a_breath_goes_from_a_dim_floor_to_its_full_colour() {
 #[test]
 fn a_sunrise_grows_from_dim_red_to_warm_white_over_its_minutes() {
     let channel = [hue_channel(0, 0.0, 0.9, None)];
-    let (mut stage, _, _) = stage(EffectPayload {
+    let (mut stage, _, _) = stage(normalize_effect(EffectPayload {
         duration_minutes: Some(1),
         ..effect(EffectId::Sunrise)
-    });
+    }));
     let frames = run_hue(&mut stage, &channel, Instant::now(), 65.0);
     let [r0, g0, _] = frames[1][0];
     assert!(r0 < 90 && g0 < 30, "starts bright: {:?}", frames[1][0]);
     let [r, g, b] = frames[frames.len() - 1][0];
     assert!(r > 240 && g > 200 && b > 150, "ends dim: {r} {g} {b}");
+}
+
+/// A relaunch reads the saved start: a sunrise half over stays half over.
+#[test]
+fn a_sunrise_carries_on_from_its_saved_start() {
+    let channel = [hue_channel(0, 0.0, 0.9, None)];
+    let sunrise = |started_at_ms| {
+        normalize_effect(EffectPayload {
+            duration_minutes: Some(60),
+            started_at_ms,
+            ..effect(EffectId::Sunrise)
+        })
+    };
+    let (mut resumed, _, _) = stage(sunrise(Some(unix_ms_now() - 30 * 60_000)));
+    let (mut fresh, _, _) = stage(sunrise(None));
+    let now = Instant::now();
+    let half = run_hue(&mut resumed, &channel, now, 0.0)[0][0];
+    let start = run_hue(&mut fresh, &channel, now, 0.0)[0][0];
+    assert!(luma(half) > luma(start) + 60.0, "{half:?} vs {start:?}");
+}
+
+/// The start is stamped once, kept through a retune, and dropped by any other effect.
+#[test]
+fn only_a_sunrise_is_stamped_with_its_start() {
+    let stamped = normalize_effect(effect(EffectId::Sunrise));
+    let at = stamped.started_at_ms.expect("stamped");
+    let retuned = normalize_effect(EffectPayload {
+        duration_minutes: Some(30),
+        ..stamped
+    });
+    assert_eq!(retuned.started_at_ms, Some(at));
+    let other = normalize_effect(EffectPayload {
+        started_at_ms: Some(at),
+        ..effect(EffectId::Wave)
+    });
+    assert_eq!(other.started_at_ms, None);
 }
 
 #[test]
