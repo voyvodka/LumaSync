@@ -342,13 +342,13 @@ impl AmbilightFramePipeline {
             self.hue_channels.as_deref(),
             geometry.as_ref(),
         );
-        self.strip.set_target(&drawn.strip);
+        self.strip.set_target(drawn.strip);
         if self
             .hue_channels
             .as_deref()
             .is_some_and(|channels| channels.len() == drawn.hue.len() && !channels.is_empty())
         {
-            self.hue.set_target(&drawn.hue);
+            self.hue.set_target(drawn.hue);
         }
         Instant::now()
     }

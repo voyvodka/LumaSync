@@ -12,6 +12,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 const stored: { state: Partial<ShellState> } = { state: {} };
+const savedListeners: ((saved: Partial<ShellState>) => void)[] = [];
 const update = vi.fn(async (fn: (s: ShellState) => ShellState) => {
   stored.state = fn(stored.state as ShellState);
   return stored.state;
@@ -20,7 +21,10 @@ vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: async () => stored.state,
     update: (fn: (s: ShellState) => ShellState) => update(fn),
-    onSaved: () => () => undefined,
+    onSaved: (listener: (saved: Partial<ShellState>) => void) => {
+      savedListeners.push(listener);
+      return () => undefined;
+    },
   },
 }));
 
@@ -31,6 +35,7 @@ const warm: ColorCorrectionConfig = { ...DEFAULT_COLOR_CORRECTION, kelvin: 5200 
 describe("StripColorRow", () => {
   beforeEach(() => {
     stored.state = {};
+    savedListeners.length = 0;
     update.mockClear();
   });
 
@@ -70,6 +75,35 @@ describe("StripColorRow", () => {
     });
     expect(stored.state.colorCorrection).toEqual(DEFAULT_COLOR_CORRECTION);
     expect(screen.getByTestId("strip-color-reset")).toBeDisabled();
+    vi.useRealTimers();
+  });
+
+  it("still saves an edit made just before the page is left", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    stored.state = { colorCorrection: warm };
+    const view = render(<StripColorRow />);
+    await waitFor(() => expect(screen.getByTestId("strip-color-edit")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("strip-color-edit"));
+    fireEvent.change(screen.getByTestId("strip-color-saturation"), { target: { value: "1.25" } });
+    view.unmount();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(stored.state.colorCorrection?.saturation).toBe(1.25);
+    vi.useRealTimers();
+  });
+
+  it("does not put the slider back when an older write's echo arrives", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    stored.state = { colorCorrection: warm };
+    render(<StripColorRow />);
+    await waitFor(() => expect(screen.getByTestId("strip-color-edit")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("strip-color-edit"));
+    fireEvent.change(screen.getByTestId("strip-color-saturation"), { target: { value: "1.5" } });
+    act(() => {
+      for (const listener of savedListeners) listener({ colorCorrection: warm });
+    });
+    expect(screen.getByTestId("strip-color-saturation")).toHaveValue("1.5");
     vi.useRealTimers();
   });
 });

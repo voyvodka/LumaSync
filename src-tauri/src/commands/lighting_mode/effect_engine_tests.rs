@@ -92,6 +92,7 @@ fn run_hue(
                     None,
                 )
                 .hue
+                .to_vec()
         })
         .collect()
 }
@@ -298,7 +299,10 @@ fn a_strip_without_a_room_map_shows_the_whole_palette() {
         size: Some(1.0),
         ..effect(EffectId::Gradient)
     });
-    let drawn = stage.draw(Instant::now(), &seq, &counts, None, None).strip;
+    let drawn = stage
+        .draw(Instant::now(), &seq, &counts, None, None)
+        .strip
+        .to_vec();
     assert_eq!(drawn.len(), 120);
     let distinct: HashSet<[u8; 3]> = drawn.iter().copied().collect();
     assert!(distinct.len() > 20, "{} colours", distinct.len());
@@ -385,4 +389,54 @@ fn effect_budget_report() {
             );
         }
     }
+}
+
+/// The wire reader's limits are the catalogue's, which the sliders read.
+#[test]
+fn the_payload_limits_are_the_catalogues() {
+    use super::config::{EFFECT_DURATION_MINUTES, EFFECT_MAX_COLORS};
+    assert_eq!(EFFECT_DURATION_MINUTES, CATALOGUE.ranges.duration_minutes);
+    assert_eq!(EFFECT_MAX_COLORS, CATALOGUE.ranges.colors.1);
+    assert_eq!(
+        CATALOGUE.defaults.size, 0.5,
+        "normalize_effect's size fallback"
+    );
+    assert_eq!(
+        CATALOGUE.defaults.intensity, 0.5,
+        "normalize_effect's intensity fallback"
+    );
+}
+
+/// A light the bridge or the room map placed at NaN draws dark rather than
+/// taking the worker down.
+#[test]
+fn a_light_at_nan_draws_without_panicking() {
+    let channels = [
+        hue_channel(0, f32::NAN, 0.9, Some(f32::NAN)),
+        hue_channel(1, 0.5, 0.9, None),
+    ];
+    for &(_, id) in EffectId::TAGS {
+        let (mut stage, _, _) = stage(effect(id));
+        let frames = run_hue(&mut stage, &channels, Instant::now(), 0.2);
+        assert_eq!(frames[0].len(), 2, "{id:?}");
+    }
+}
+
+/// Adding a variant fails to compile here until it is given a tag.
+#[test]
+fn every_direction_has_a_tag() {
+    fn listed(direction: EffectDirection) -> bool {
+        match direction {
+            EffectDirection::LeftToRight
+            | EffectDirection::RightToLeft
+            | EffectDirection::BottomToTop
+            | EffectDirection::TopToBottom
+            | EffectDirection::Outward
+            | EffectDirection::Around => EffectDirection::TAGS.iter().any(|(_, d)| *d == direction),
+        }
+    }
+    for &(_, direction) in EffectDirection::TAGS {
+        assert!(listed(direction));
+    }
+    assert_eq!(EffectDirection::TAGS.len(), 6);
 }

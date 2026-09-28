@@ -40,6 +40,9 @@ export function CompactSolidSection({
   const lastKelvin = useRef(incoming.kelvin ?? DEFAULT_WHITE_KELVIN);
   if (incoming.kelvin != null) lastKelvin.current = incoming.kelvin;
   const white = incoming.kelvin != null;
+  // Colour reopens on the colour it had; a solid first seen as White has only its white.
+  const lastColor = useRef({ r: incoming.r, g: incoming.g, b: incoming.b });
+  if (!white) lastColor.current = { r: incoming.r, g: incoming.g, b: incoming.b };
 
   const handleBrightnessCommit = useCallback(
     (nextUnit: number) => {
@@ -76,7 +79,7 @@ export function CompactSolidSection({
           onChange={(tone) =>
             tone === "white"
               ? handleKelvin(lastKelvin.current)
-              : onCommit({ r: incoming.r, g: incoming.g, b: incoming.b, brightness: incoming.brightness })
+              : onCommit({ ...lastColor.current, brightness: incoming.brightness })
           }
         />
       </div>

@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tauri::{AppHandle, Listener, Manager, Runtime, State};
 
+use super::config::normalize_effect;
 use super::hue_driver::{hue_driver_for, HueAreaVerdict, HueDriver};
 use super::snapshot::{
     parse_targets, publish_running, BootHueRetryState, HueLeftOutReason, LightingPhase,
@@ -1900,11 +1901,25 @@ pub(crate) async fn apply_outputs_with<R: Runtime>(
         .outputs
         .record_arrival(&request, running_kind, persisted.as_ref());
     match (&request.mode, request.origin) {
-        (Some(mode), _) => state.tuning.store(
-            mode.solid.as_ref(),
-            mode.ambilight.as_ref(),
-            mode.effect.as_ref(),
-        ),
+        (Some(mode), _) => {
+            // Stamped here, not only when applied, so what is saved carries it.
+            let effect = mode.effect.clone().map(normalize_effect);
+            state.tuning.store(
+                mode.solid.as_ref(),
+                mode.ambilight.as_ref(),
+                effect.as_ref(),
+            );
+            if request.origin.is_choice()
+                && mode.kind == LightingModeKind::Effect
+                && running_kind != LightingModeKind::Effect
+            {
+                let saved = persisted
+                    .as_ref()
+                    .and_then(PersistedShellState::lighting_mode)
+                    .and_then(|saved| saved.effect);
+                state.tuning.restart_sunrise(saved.as_ref());
+            }
+        }
         (None, LightingOrigin::Boot) => {
             if let Some(mode) = persisted
                 .as_ref()

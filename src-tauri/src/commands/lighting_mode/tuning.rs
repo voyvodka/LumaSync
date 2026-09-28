@@ -13,7 +13,7 @@ use log::warn;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime};
 
-use super::config::normalize_effect;
+use super::config::{normalize_effect, unix_ms_now, EffectId};
 use super::effect_source::{effect_ambilight, EffectLiveSlot};
 use super::live::{retune_ambilight_live, AmbilightLiveSettings};
 use super::snapshot::SnapshotSink;
@@ -223,6 +223,42 @@ impl TuningCell {
         inner.stored.generation += 1;
     }
 
+    /// The user chose Effect while another kind ran: a stored sunrise starts
+    /// over now instead of resuming at the brightness it had reached. A launch
+    /// restore, a return from away and a settings refresh do not come here.
+    /// `saved` is the saved mode's effect, which `payload_for` falls back to
+    /// when nothing was stored this session.
+    pub(crate) fn restart_sunrise(&self, saved: Option<&EffectPayload>) {
+        let mut inner = self.lock();
+        if inner.stored.effect.is_none() {
+            inner.stored.effect = saved.cloned();
+        }
+        if let Some(effect) = inner
+            .stored
+            .effect
+            .as_mut()
+            .filter(|effect| effect.id == EffectId::Sunrise)
+        {
+            effect.started_at_ms = Some(unix_ms_now());
+            inner.stored.generation += 1;
+        }
+    }
+
+    /// A retune that names a sunrise without its start (a sender that built the
+    /// payload afresh) keeps the one that runs rather than starting over.
+    pub(crate) fn inherit_sunrise_start(&self, effect: &mut EffectPayload) {
+        if effect.id != EffectId::Sunrise || effect.started_at_ms.is_some() {
+            return;
+        }
+        effect.started_at_ms = self
+            .lock()
+            .stored
+            .effect
+            .as_ref()
+            .filter(|stored| stored.id == EffectId::Sunrise)
+            .and_then(|stored| stored.started_at_ms);
+    }
+
     /// A saved setting the running mode reads changed, so the next transaction
     /// re-applies even when its request names nothing new.
     pub(crate) fn mark_stale(&self) {
@@ -382,8 +418,12 @@ pub async fn retune_lighting<R: Runtime>(
     app: AppHandle<R>,
     tuning: LightingTuning,
 ) -> Result<RetuneLightingResult, String> {
-    let tuning = tuning.normalized();
     let state = app.state::<LightingRuntimeState>();
+    let mut tuning = tuning;
+    if let Some(effect) = tuning.effect.as_mut() {
+        state.tuning.inherit_sunrise_start(effect);
+    }
+    let tuning = tuning.normalized();
     let outcome = state.tuning.retune(tuning.clone()).await;
     let status = match outcome {
         RetuneOutcome::Applied => {

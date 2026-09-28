@@ -1829,3 +1829,72 @@ fn frame_budget_report() {
         LedChipType::Sk6812Rgbw,
     );
 }
+
+/// An effect step next to the strip and six Hue channels allocates nothing once
+/// warm: the payload is copied and the palette rebuilt only on a retune, and
+/// every output buffer keeps its capacity.
+#[test]
+fn a_steady_effect_step_allocates_nothing() {
+    use super::effects::{EffectClockSlot, EffectDraw};
+
+    let led_calibration = strip_164();
+    let channels: Vec<HueAreaChannel> = (0..6)
+        .map(|i| HueAreaChannel {
+            channel_id: i,
+            light_ids: vec![format!("light-{i}")],
+            screen_region: HueScreenRegion::Center,
+            position_x: -0.9 + 0.36 * f32::from(i),
+            position_y: 0.6,
+            position_z: Some(0.2),
+        })
+        .collect();
+    for id in [
+        super::config::EffectId::Wave,
+        super::config::EffectId::Candle,
+        super::config::EffectId::Comet,
+    ] {
+        let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
+            led_sequence: build_led_sequence(&led_calibration),
+            led_counts: led_calibration.counts.clone(),
+            sample_window: SYNTHETIC_SAMPLE_WINDOW,
+            scene_enabled: false,
+            strip_topology: strip_topology_for(Some(&led_calibration)),
+            hue_channels: Some(channels.clone()),
+            room_geometry: RoomGeometryLive::new(None),
+            black_border_detection: false,
+            color_correction: ColorCorrectionConfig::default(),
+            effect: Some(EffectDraw {
+                live: Arc::new(Mutex::new(super::EffectPayload {
+                    id,
+                    colors: Some(vec![super::config::EffectColor {
+                        r: 255,
+                        g: 120,
+                        b: 10,
+                    }]),
+                    ..super::config::DEFAULT_EFFECT
+                })),
+                clock: EffectClockSlot::default(),
+            }),
+        });
+        let tick = CapturedFrame::new(1, 1, vec![[0, 0, 0]]);
+        let settings = FrameSettings {
+            black_border_detection: false,
+            alpha_ceiling: 1.0,
+            saturation: 1.0,
+        };
+        let start = Instant::now();
+        let mut step = |n: u64| {
+            let now = start + Duration::from_millis(n * 16);
+            let sampled = pipeline.sample_strip(&tick);
+            pipeline.analyze(&tick, sampled, settings, now);
+            pipeline.advance(now);
+        };
+        for n in 0..8 {
+            step(n);
+        }
+        for n in 8..24 {
+            let (allocs, _) = alloc_count::measure(|| step(n));
+            assert_eq!(allocs, 0, "{id:?} step {n} made {allocs} allocations");
+        }
+    }
+}

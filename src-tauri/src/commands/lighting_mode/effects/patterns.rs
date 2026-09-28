@@ -9,7 +9,7 @@ use std::sync::LazyLock;
 use super::catalogue::CATALOGUE;
 use super::emitters::{Bounds, Emitter};
 use super::noise::{fbm1, fbm2, hash01};
-use super::palette::{linear_from_bytes, Linear, Palette};
+use super::palette::{bytes_from_linear, linear_from_bytes, Linear, Palette};
 use crate::commands::led_output::kelvin_to_rgb_multipliers;
 use crate::commands::lighting_mode::config::{EffectDirection, EffectId, EffectPayload};
 
@@ -102,9 +102,11 @@ impl Frame<'_> {
         self.clock.loops.rem_euclid(1.0) as f32
     }
 
-    /// The colour of every light in `set` (one output's lights), linear.
-    pub(crate) fn render(&self, set: &[Emitter]) -> Vec<Linear> {
-        set.iter().map(|e| self.at(e, set.len())).collect()
+    /// Every light in `set` (one output's lights) as sRGB bytes, into `out`,
+    /// which keeps its capacity from step to step.
+    pub(crate) fn render_into(&self, set: &[Emitter], out: &mut Vec<[u8; 3]>) {
+        out.clear();
+        out.extend(set.iter().map(|e| bytes_from_linear(self.at(e, set.len()))));
     }
 
     fn at(&self, e: &Emitter, set_len: usize) -> Linear {

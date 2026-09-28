@@ -36,6 +36,9 @@ export function SolidColorPanel({
   const lastKelvin = useRef(incoming.kelvin ?? DEFAULT_WHITE_KELVIN);
   if (draft.kelvin != null) lastKelvin.current = draft.kelvin;
   const tone = draft.kelvin != null ? "white" : "colour";
+  // Colour reopens on the colour it had; a solid first seen as White has only its white.
+  const lastColor = useRef({ r: draft.r, g: draft.g, b: draft.b });
+  if (tone === "colour") lastColor.current = { r: draft.r, g: draft.g, b: draft.b };
 
   const hexColor = rgbToHex(draft);
   const brightnessPercent = Math.round(draft.brightness * 100);
@@ -51,7 +54,7 @@ export function SolidColorPanel({
         tone={tone}
         disabled={disabled}
         onChange={(next) =>
-          next === "white" ? setKelvin(lastKelvin.current) : setColor({ r: draft.r, g: draft.g, b: draft.b })
+          next === "white" ? setKelvin(lastKelvin.current) : setColor(lastColor.current)
         }
       />
 

@@ -54,7 +54,20 @@ describe("SolidColorPanel — Colour and White", () => {
     vi.useRealTimers();
   });
 
-  it("Colour drops the temperature and keeps the white it showed", () => {
+  it("Colour brings back the colour it had before White", () => {
+    const { onCommit, view } = renderWith({ r: 250, g: 20, b: 140, brightness: 1 });
+    fireEvent.click(screen.getByTestId("solid-tone-white"));
+    vi.runAllTimers();
+    view.rerender(
+      <SolidColorPanel incoming={{ ...kelvinToRgb(4000), brightness: 1, kelvin: 4000 }} disabled={false} onCommit={onCommit} />,
+    );
+    fireEvent.click(screen.getByTestId("solid-tone-colour"));
+    vi.runAllTimers();
+    expect(onCommit).toHaveBeenLastCalledWith({ r: 250, g: 20, b: 140, brightness: 1 });
+    vi.useRealTimers();
+  });
+
+  it("Colour on a solid first seen as White keeps the white it showed", () => {
     const { onCommit } = renderWith({ r: 255, g: 177, b: 110, brightness: 1, kelvin: 3000 });
     fireEvent.click(screen.getByTestId("solid-tone-colour"));
     vi.runAllTimers();

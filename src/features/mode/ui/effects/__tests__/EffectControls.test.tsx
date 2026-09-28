@@ -69,6 +69,13 @@ describe("EffectControls — full", () => {
     expect(screen.getByTestId("palette-edit")).toBeEnabled();
   });
 
+  // Said as words too, not only drawn: a title never reaches a keyboard or a screen reader.
+  it("marks the effects that are best on a strip", () => {
+    renderFull();
+    expect(screen.getByTestId("effect-comet")).toHaveTextContent("lights:effect.bestOnStripShort");
+    expect(screen.getByTestId("effect-candle")).not.toHaveTextContent("lights:effect.bestOnStripShort");
+  });
+
   it("changing the direction sends it", () => {
     const { onChange } = renderFull();
     fireEvent.click(screen.getByTestId("effect-direction-around"));

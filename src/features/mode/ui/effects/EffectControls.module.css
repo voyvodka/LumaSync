@@ -26,26 +26,31 @@
     padding: 3px;
     margin: -3px;
   }
+  /* A 32px target around a 20px swatch; the ring is drawn on the swatch, set off from it by a
+     gap of panel, so the pick reads by shape as well as by colour. */
   .palette {
     flex-shrink: 0;
-    width: 26px;
-    height: 26px;
-    padding: 3px;
+    width: 32px;
+    height: 32px;
+    padding: 6px;
     border: 0;
     border-radius: 50%;
     background: transparent;
-    box-shadow: 0 0 0 1px var(--lm-line-2);
-    transition: box-shadow var(--lm-dur-quick);
   }
-  .palette:hover { box-shadow: 0 0 0 1px var(--lm-ink-faint); }
-  .palette[aria-checked="true"] { box-shadow: 0 0 0 1.5px var(--lm-amber); }
-  .palette:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .palette:focus-visible { outline: none; }
+  .palette:focus-visible .paletteDot { box-shadow: var(--lm-focus-ring); }
   .palette:disabled { opacity: 0.4; }
   .paletteDot {
     display: block;
     width: 100%;
     height: 100%;
     border-radius: 50%;
+    box-shadow: 0 0 0 1px var(--lm-line-2);
+    transition: box-shadow var(--lm-dur-quick);
+  }
+  .palette:hover .paletteDot { box-shadow: 0 0 0 1px var(--lm-ink-faint); }
+  .palette[aria-checked="true"] .paletteDot {
+    box-shadow: 0 0 0 2px var(--lm-bg), 0 0 0 3.5px var(--lm-amber);
   }
 
   /* Keeps its place when hidden, so the strip never shifts when "Your colours" is picked. */
@@ -53,10 +58,10 @@
     flex-shrink: 0;
     display: grid;
     place-items: center;
-    width: 26px;
-    height: 26px;
+    width: 32px;
+    height: 32px;
     border: 0;
-    border-radius: 7px;
+    border-radius: 8px;
     background: transparent;
     color: var(--lm-ink-dim);
     opacity: 0;
@@ -72,8 +77,8 @@
   .chips { display: flex; align-items: center; gap: 8px; }
   .chipWrap { position: relative; }
   .chip {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     border: 0;
     border-radius: 50%;
     box-shadow: 0 0 0 1px var(--lm-line-2);
@@ -95,10 +100,12 @@
     box-shadow: 0 0 0 1px var(--lm-line-2);
   }
   .chipRemove:hover { color: var(--lm-ink); }
+  /* The mark stays small; what takes the press is 32px around it. */
+  .chipRemove::after { content: ""; position: absolute; inset: -8px; }
   .chipRemove svg { width: 8px; height: 8px; }
   .chipAdd {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     border: 1px dashed var(--lm-line-2);
     border-radius: 50%;
     background: transparent;
@@ -142,6 +149,22 @@
     background-color: var(--lm-bg);
     border-bottom: 1px solid var(--lm-line);
   }
+  /* Effects that turn simpler on a few lamps: a small strip mark in the corner, said to a
+     screen reader as words. */
+  .stripMark {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    background: var(--lm-bg);
+    color: var(--lm-ink-dim);
+  }
+  .stripMark svg { width: 11px; height: 11px; }
+  .pickRow .stripMark { position: static; margin-left: auto; background: transparent; }
   .tileName {
     padding: 6px 9px 7px;
     overflow: hidden;
@@ -200,7 +223,7 @@
      keeps straight dividers and a short last row leaves panel, not a grey block. */
   .params {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     overflow: hidden;
     border: 1px solid var(--lm-line);
     border-radius: 10px;
@@ -235,8 +258,8 @@
   .directions { display: flex; gap: 4px; }
   .directionItem {
     flex: 1;
-    min-width: 24px;
-    height: 24px;
+    min-width: 32px;
+    height: 32px;
     border: 1px solid var(--lm-line);
     border-radius: 6px;
     background: transparent;
@@ -253,17 +276,25 @@
     .tileSwatch { height: 26px; }
   }
 
-  :global(:root[data-reduced-motion]) .palette,
+  :global(:root[data-reduced-motion]) .paletteDot,
   :global(:root[data-reduced-motion]) .edit,
   :global(:root[data-reduced-motion]) .tile,
   :global(:root[data-reduced-motion]) .picker,
   :global(:root[data-reduced-motion]) .chevron,
   :global(:root[data-reduced-motion]) .directionItem { transition: none; }
 
+  /* Forced colours drop box-shadow: the pick and the focus both become outlines. */
   @media (forced-colors: active) {
     .palette[aria-checked="true"],
     .tile[aria-checked="true"],
     .chip[aria-pressed="true"],
     .directionItem[aria-checked="true"] { outline: 2px solid Highlight; }
+    .palette:focus-visible,
+    .edit:focus-visible,
+    .chip:focus-visible,
+    .chipAdd:focus-visible,
+    .tile:focus-visible,
+    .picker:focus-visible,
+    .directionItem:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
   }
 }

@@ -103,6 +103,19 @@ describe("lighting mode contracts", () => {
     });
   });
 
+  // Rust stamps a sunrise's start and keeps it; no other effect carries one.
+  it("keeps a sunrise's start and nothing else's", () => {
+    expect(normalizeEffectPayload({ id: "sunrise", startedAtMs: 1_700_000_000_000 }).startedAtMs).toBe(1_700_000_000_000);
+    expect(normalizeEffectPayload({ id: "wave", startedAtMs: 1_700_000_000_000 })).not.toHaveProperty("startedAtMs");
+    expect(normalizeEffectPayload({ id: "sunrise", startedAtMs: Infinity })).not.toHaveProperty("startedAtMs");
+  });
+
+  // Mirrors `lenient_kelvin`: not a number is no kelvin; the rest rounds.
+  it("reads a white's temperature the way Rust does", () => {
+    expect(normalizeSolidColorPayload({ r: 1, g: 2, b: 3, brightness: 1, kelvin: "warm" as never })).not.toHaveProperty("kelvin");
+    expect(normalizeSolidColorPayload({ r: 1, g: 2, b: 3, brightness: 1, kelvin: 2700.6 }).kelvin).toBe(2701);
+  });
+
   it("keeps a white solid's temperature in range", () => {
     expect(normalizeSolidColorPayload({ r: 1, g: 2, b: 3, brightness: 1, kelvin: 99999 }).kelvin).toBe(6500);
     expect(normalizeSolidColorPayload({ r: 1, g: 2, b: 3, brightness: 1 })).not.toHaveProperty("kelvin");

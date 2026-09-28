@@ -20,7 +20,7 @@ use super::config::{unix_ms_now, EffectId, EffectPayload};
 use super::effect_source::EffectLiveSlot;
 use catalogue::palette_for;
 use emitters::{hue_emitters, screen_in_room, strip_emitters, Bounds, Emitter};
-use palette::{bytes_from_linear, Palette};
+use palette::Palette;
 use patterns::{EffectClock, Frame};
 
 #[cfg(test)]
@@ -97,32 +97,47 @@ struct Lights {
 }
 
 /// The pipeline's effect stage: advances the clock and colours every light.
+/// A steady step allocates nothing: the payload is copied only when a retune
+/// changed it, the palette only then rebuilt, and both outputs are drawn into
+/// buffers that keep their capacity.
 pub(crate) struct EffectStage {
     draw: EffectDraw,
     lights: Option<Lights>,
     last_step: Option<Instant>,
     day_hours: f32,
     day_read: Option<Instant>,
-    palette: Option<(EffectPayload, Palette)>,
+    effect: EffectPayload,
+    palette: Palette,
     wall_anchor: Option<(Instant, u64)>,
+    strip_out: Vec<[u8; 3]>,
+    hue_out: Vec<[u8; 3]>,
 }
 
 /// What one step drew, sRGB bytes in each output's own order.
-pub(crate) struct Drawn {
-    pub strip: Vec<[u8; 3]>,
-    pub hue: Vec<[u8; 3]>,
+pub(crate) struct Drawn<'a> {
+    pub strip: &'a [[u8; 3]],
+    pub hue: &'a [[u8; 3]],
 }
 
 impl EffectStage {
     pub(crate) fn new(draw: EffectDraw) -> Self {
+        let effect = draw
+            .live
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        let palette = palette_for(&effect);
         Self {
             draw,
             lights: None,
             last_step: None,
             day_hours: 12.0,
             day_read: None,
-            palette: None,
+            effect,
+            palette,
             wall_anchor: None,
+            strip_out: Vec::new(),
+            hue_out: Vec::new(),
         }
     }
 
@@ -131,15 +146,27 @@ impl EffectStage {
         self.lights = None;
     }
 
-    fn payload(&self) -> EffectPayload {
-        self.draw
+    /// Takes a retune's payload, copying it only when it changed.
+    fn follow_retune(&mut self) {
+        let live = self
+            .draw
             .live
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if *live == self.effect {
+            return;
+        }
+        let repaint = live.id != self.effect.id
+            || live.palette != self.effect.palette
+            || live.colors != self.effect.colors;
+        self.effect.clone_from(&live);
+        drop(live);
+        if repaint {
+            self.palette = palette_for(&self.effect);
+        }
     }
 
-    fn advance_clock(&mut self, effect: &EffectPayload, now: Instant) -> EffectClock {
+    fn advance_clock(&mut self, now: Instant) -> EffectClock {
         let dt = self
             .last_step
             .map_or(Duration::ZERO, |at| now.saturating_duration_since(at))
@@ -158,7 +185,7 @@ impl EffectStage {
             .clock
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        state.loops += dt * f64::from(loops_per_sec(effect.id, effect.speed));
+        state.loops += dt * f64::from(loops_per_sec(self.effect.id, self.effect.speed));
         let loops = state.loops;
         drop(state);
         EffectClock {
@@ -175,16 +202,6 @@ impl EffectStage {
         unix + now.saturating_duration_since(at).as_millis() as u64
     }
 
-    fn palette(&mut self, effect: &EffectPayload) -> &Palette {
-        let stale = self.palette.as_ref().is_none_or(|(seen, _)| {
-            seen.id != effect.id || seen.palette != effect.palette || seen.colors != effect.colors
-        });
-        if stale {
-            self.palette = Some((effect.clone(), palette_for(effect)));
-        }
-        &self.palette.as_ref().expect("set above").1
-    }
-
     /// One step at `now`: the strip's LEDs in strip order, and Hue's channels
     /// in `hue_channels` order.
     pub(crate) fn draw(
@@ -194,9 +211,9 @@ impl EffectStage {
         counts: &LedSegmentCounts,
         hue_channels: Option<&[HueAreaChannel]>,
         geometry: Option<&RoomGeometry>,
-    ) -> Drawn {
-        let effect = self.payload();
-        let clock = self.advance_clock(&effect, now);
+    ) -> Drawn<'_> {
+        self.follow_retune();
+        let clock = self.advance_clock(now);
         if self.lights.is_none() {
             let screen = screen_in_room(geometry);
             let strip = strip_emitters(sequence, counts, &screen);
@@ -206,24 +223,18 @@ impl EffectStage {
             let bounds = Bounds::over(strip.iter().chain(hue.iter()), screen);
             self.lights = Some(Lights { strip, hue, bounds });
         }
-        let palette = self.palette(&effect).clone();
         let lights = self.lights.as_ref().expect("set above");
         let frame = Frame {
-            effect: &effect,
-            palette: &palette,
+            effect: &self.effect,
+            palette: &self.palette,
             clock,
             bounds: &lights.bounds,
         };
-        let encode = |set: &[Emitter]| {
-            frame
-                .render(set)
-                .into_iter()
-                .map(bytes_from_linear)
-                .collect()
-        };
+        frame.render_into(&lights.strip, &mut self.strip_out);
+        frame.render_into(&lights.hue, &mut self.hue_out);
         Drawn {
-            strip: encode(&lights.strip),
-            hue: encode(&lights.hue),
+            strip: &self.strip_out,
+            hue: &self.hue_out,
         }
     }
 }

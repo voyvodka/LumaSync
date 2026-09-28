@@ -43,11 +43,23 @@ pub(crate) struct EffectDefaults {
     pub duration_minutes: u16,
 }
 
+/// Read by the frontend's sliders; here only pinned against the wire reader's
+/// limits (`effect_engine_tests.rs`).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) struct EffectRanges {
+    pub duration_minutes: (u16, u16),
+    pub colors: (usize, usize),
+}
+
 #[derive(Deserialize)]
 pub(crate) struct Catalogue {
     pub palettes: HashMap<String, PaletteSpec>,
     pub effects: HashMap<String, EffectSpec>,
     pub defaults: EffectDefaults,
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub ranges: EffectRanges,
 }
 
 pub(crate) static CATALOGUE: LazyLock<Catalogue> = LazyLock::new(|| {

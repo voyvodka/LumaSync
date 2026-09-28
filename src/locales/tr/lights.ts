@@ -47,6 +47,7 @@ const lights: Catalogue<typeof enLights> = {
     addColor: "Renk ekle",
     removeColor: "Bu rengi kaldır",
     bestOnStrip: "En iyisi şeritte — birkaç lambada daha sade hareket eder",
+    bestOnStripShort: "En iyisi şeritte",
     direction: "Yön",
     duration: "Süre",
     durationValue: "{{count}} dk",

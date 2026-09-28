@@ -214,8 +214,9 @@ export function normalizeSolidColorPayload(input?: Partial<SolidColorPayload>): 
     g: clampInt(input?.g, 0, 255, DEFAULT_SOLID_COLOR.g),
     b: clampInt(input?.b, 0, 255, DEFAULT_SOLID_COLOR.b),
     brightness: clampFloat(input?.brightness, 0, 1, DEFAULT_SOLID_COLOR.brightness),
-    ...(input?.kelvin != null
-      ? { kelvin: clampInt(input.kelvin, SOLID_KELVIN_RANGE.min, SOLID_KELVIN_RANGE.max, SOLID_KELVIN_RANGE.max) }
+    // Rust drops a kelvin that is not a number and rounds the rest; so does this.
+    ...(typeof input?.kelvin === "number" && Number.isFinite(input.kelvin)
+      ? { kelvin: Math.max(SOLID_KELVIN_RANGE.min, Math.min(SOLID_KELVIN_RANGE.max, Math.round(input.kelvin))) }
       : {}),
   };
 }
@@ -303,7 +304,7 @@ export function normalizeEffectPayload(input?: EffectPayloadInput | null): Effec
     ...(input?.durationMinutes != null
       ? { durationMinutes: clampInt(input.durationMinutes, minMinutes, maxMinutes, EFFECT_DEFAULTS.durationMinutes) }
       : {}),
-    ...(id === EFFECT_IDS.SUNRISE && typeof input?.startedAtMs === "number" && input.startedAtMs > 0
+    ...(id === EFFECT_IDS.SUNRISE && typeof input?.startedAtMs === "number" && Number.isFinite(input.startedAtMs) && input.startedAtMs > 0
       ? { startedAtMs: input.startedAtMs }
       : {}),
   };

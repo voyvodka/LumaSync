@@ -326,7 +326,13 @@ export function ControlPopupApp() {
           // settings. Solid carries the colour on screen.
           const result = await applyOutputs({
             mode: modeKind(next).config({
-              solid: { r: draft.r, g: draft.g, b: draft.b, brightness: draft.brightness },
+              solid: {
+                r: draft.r,
+                g: draft.g,
+                b: draft.b,
+                brightness: draft.brightness,
+                ...(draft.kelvin != null ? { kelvin: draft.kelvin } : {}),
+              },
             }),
             origin: LIGHTING_ORIGIN.POPUP,
           });
@@ -350,7 +356,7 @@ export function ControlPopupApp() {
         }
       })();
     },
-    [adopt, retunes, runner, t, draft.r, draft.g, draft.b, draft.brightness],
+    [adopt, retunes, runner, t, draft.r, draft.g, draft.b, draft.brightness, draft.kelvin],
   );
 
   // ── Auto-start ───────────────────────────────────────────────────────────

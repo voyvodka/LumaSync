@@ -41,6 +41,21 @@ export function StripColorRow() {
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const popoverId = useId();
   const persistTimer = useRef<number | null>(null);
+  const pending = useRef<ColorCorrectionConfig | null>(null);
+  // Writes not yet answered: the echo of an older one must not put the slider back.
+  const inFlight = useRef(0);
+
+  const save = useCallback((next: ColorCorrectionConfig) => {
+    inFlight.current += 1;
+    shellStore
+      .update((current) => withColorCorrection(current, next))
+      .catch((error: unknown) => {
+        console.error("[LumaSync] saving the colour correction failed:", error);
+      })
+      .finally(() => {
+        inFlight.current -= 1;
+      });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,27 +69,35 @@ export function StripColorRow() {
         if (!cancelled) setConfig({ ...DEFAULT_COLOR_CORRECTION });
       });
     const stop = shellStore.onSaved((saved) => {
-      if ("colorCorrection" in saved && persistTimer.current === null) {
+      if ("colorCorrection" in saved && persistTimer.current === null && inFlight.current === 0) {
         setConfig(saved.colorCorrection ?? { ...DEFAULT_COLOR_CORRECTION });
       }
     });
     return () => {
       cancelled = true;
       stop();
-      if (persistTimer.current !== null) window.clearTimeout(persistTimer.current);
+      // Leaving the page inside the debounce still saves the last value.
+      if (persistTimer.current !== null) {
+        window.clearTimeout(persistTimer.current);
+        persistTimer.current = null;
+        if (pending.current) save(pending.current);
+      }
     };
-  }, []);
+  }, [save]);
 
-  const commit = useCallback((next: ColorCorrectionConfig) => {
-    setConfig(next);
-    if (persistTimer.current !== null) window.clearTimeout(persistTimer.current);
-    persistTimer.current = window.setTimeout(() => {
-      persistTimer.current = null;
-      shellStore.update((current) => withColorCorrection(current, next)).catch((error: unknown) => {
-        console.error("[LumaSync] saving the colour correction failed:", error);
-      });
-    }, PERSIST_DEBOUNCE_MS);
-  }, []);
+  const commit = useCallback(
+    (next: ColorCorrectionConfig) => {
+      setConfig(next);
+      pending.current = next;
+      if (persistTimer.current !== null) window.clearTimeout(persistTimer.current);
+      persistTimer.current = window.setTimeout(() => {
+        persistTimer.current = null;
+        pending.current = null;
+        save(next);
+      }, PERSIST_DEBOUNCE_MS);
+    },
+    [save],
+  );
 
   const summary =
     config === null

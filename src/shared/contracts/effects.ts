@@ -1,6 +1,6 @@
 /**
  * The effect catalogue: which effects exist, what each one uses, and the built-in palettes.
- * `effectCatalogue.json` is the one source; Rust reads the same file (`effect_catalogue.rs`),
+ * `effectCatalogue.json` is the one source; Rust reads the same file (`lighting_mode/effects/catalogue.rs`),
  * so an effect's parameters and a palette's stops cannot drift between the two sides.
  */
 
