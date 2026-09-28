@@ -12,7 +12,13 @@
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { resolveNotificationsPreference, resolveUiZoom, SHELL_EVENTS } from "@/shared/contracts/shell";
+import {
+  resolveNotificationsPreference,
+  resolveUiZoom,
+  SHELL_EVENTS,
+  type ShellState,
+} from "@/shared/contracts/shell";
+import { markStartup } from "@/shared/lib/startupTiming";
 import { readStartHidden } from "./launchApi";
 import { applyModeMinSize, noteFramedUiZoom, resizeToMode } from "./windowAnimator";
 import { persistWindowState, restoreWindowState, schedulePersistWindowState } from "./windowGeometry";
@@ -136,6 +142,8 @@ export async function initCloseToTrayHint(
  */
 export async function initWindowLifecycle(opts?: {
   onFirstCloseToTray?: TrayHintCallback;
+  /** The state the caller already read, so the launch does not read it again. */
+  state?: ShellState;
 }): Promise<void> {
   if (!lifecycleInitPromise) {
     lifecycleInitPromise = (async () => {
@@ -149,15 +157,16 @@ export async function initWindowLifecycle(opts?: {
         await applyModeMinSize(win, uiMode ?? "compact", undefined, zoom);
         noteFramedUiZoom(zoom);
       } else {
-        const { uiMode, uiZoom } = await loadShellState();
+        const state = opts?.state ?? (await loadShellState());
+        const { uiMode, uiZoom } = state;
         const zoom = resolveUiZoom(uiZoom) / 100;
         // Compact's floor from frame 0; `resizeToMode` raises it on a toggle to full.
         await applyModeMinSize(win, "compact", undefined, zoom);
-        await restoreWindowState();
+        await restoreWindowState(state);
         // Grow to the persisted mode (and interface size) around the restored centre, via
         // the same path a manual toggle takes. Still hidden, so nothing of this is visible.
         if ((uiMode ?? "compact") !== "compact" || zoom !== 1) {
-          await resizeToMode(uiMode ?? "compact", { animate: false });
+          await resizeToMode(uiMode ?? "compact", { animate: false, state, persist: false });
         }
         // Geometry is restored either way, so the first tray click opens the
         // window where it was left.
@@ -165,6 +174,7 @@ export async function initWindowLifecycle(opts?: {
           console.info("[LumaSync] [startup] launched with --tray; staying in the tray");
         } else {
           await win.show();
+          markStartup("window shown");
           // `show()` alone can reveal the window *behind* the active app on a cold
           // launch (notably macOS), leaving the user to click the dock icon.
           try {

@@ -296,9 +296,9 @@ async function ensureCurrentWindowOnScreen(win: ReturnType<typeof getCurrentWind
  * rect into the nearest monitor so a saved center on a now-disconnected
  * display is recovered to the closest visible screen.
  */
-export async function restoreWindowState(): Promise<void> {
+export async function restoreWindowState(saved?: ShellState): Promise<void> {
   const win = getCurrentWindow();
-  const state = await loadShellState();
+  const state = saved ?? (await loadShellState());
 
   if (state.windowCenterX !== null && state.windowCenterY !== null) {
     const currentSize = await win.outerSize();

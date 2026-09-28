@@ -15,6 +15,7 @@ import {
   type OnboardingBootFacts,
 } from "@/features/onboarding/state/onboardingState";
 import { showNotification } from "@/features/platform/platformApi";
+import { markStartup } from "@/shared/lib/startupTiming";
 import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/shell";
 
 import { pushTrayLabels } from "./useTrayIntegration";
@@ -70,36 +71,12 @@ export function useShellBootstrap(sink: ShellBootstrapSink): ShellBootstrapState
       try {
         // Before the window is sized and shown, or it appears at full size
         // still rendering the compact layout.
+        markStartup("shell mounted");
         const state = await loadShellState();
         sink.setUIMode(state.uiMode ?? "compact");
 
-        // Restore window geometry immediately — before any heavy async work —
-        // so the window settles into its saved position without a visible jump.
-        await initWindowLifecycle({
-          // Tell the user the app is still running in the tray the first
-          // time they close the window. `trayHintShown` in shellStore keeps it to
-          // once per install; a denied permission is logged, never blocking.
-          onFirstCloseToTray: () => {
-            void (async () => {
-              try {
-                const result = await showNotification({
-                  title: t("tray:hint.title"),
-                  body: t("tray:hint.body"),
-                  kind: "info",
-                });
-                if (result.status !== "shown") {
-                  console.info(
-                    "[LumaSync] tray hint notification not delivered:",
-                    result.code,
-                    result.message ?? "",
-                  );
-                }
-              } catch (err) {
-                console.warn("[LumaSync] tray hint notification invoke failed:", err);
-              }
-            })();
-          },
-        });
+        // What the first frame shows comes from the stored state, set before the window is shown:
+        // set after, the first frames drew the defaults and then settled.
 
         // Map old section IDs to new ones for backward compatibility
         const sectionMap: Record<string, SectionId> = {
@@ -136,6 +113,39 @@ export function useShellBootstrap(sink: ShellBootstrapSink): ShellBootstrapState
         // the banner mounts once for upgraders too — no destructive migration.
         sink.setHasCompletedOnboarding(state.hasCompletedOnboarding === true);
 
+        const hueStartConfig = toHueStartConfig(state);
+        sink.setOnboardingBootFacts(onboardingBootFacts(state, hueStartConfig !== null));
+        sink.setHueStartConfig(hueStartConfig);
+
+        // Restore window geometry immediately — before any heavy async work —
+        // so the window settles into its saved position without a visible jump.
+        await initWindowLifecycle({
+          state,
+          // Tell the user the app is still running in the tray the first
+          // time they close the window. `trayHintShown` in shellStore keeps it to
+          // once per install; a denied permission is logged, never blocking.
+          onFirstCloseToTray: () => {
+            void (async () => {
+              try {
+                const result = await showNotification({
+                  title: t("tray:hint.title"),
+                  body: t("tray:hint.body"),
+                  kind: "info",
+                });
+                if (result.status !== "shown") {
+                  console.info(
+                    "[LumaSync] tray hint notification not delivered:",
+                    result.code,
+                    result.message ?? "",
+                  );
+                }
+              } catch (err) {
+                console.warn("[LumaSync] tray hint notification invoke failed:", err);
+              }
+            })();
+          },
+        });
+
         // H3 — the restore must NOT strip "usb" from the persisted targets; cold
         // launch races auto-reconnect. See docs/architecture/ui-and-shell.md.
         // Rust keeps it selected and runs without it while no strip is there;
@@ -147,10 +157,6 @@ export function useShellBootstrap(sink: ShellBootstrapSink): ShellBootstrapState
           serialConnected: connectedSerialPort(outputs) !== null,
           localConnected: anyLocalConnected(outputs),
         });
-
-        const hueStartConfig = toHueStartConfig(state);
-        sink.setOnboardingBootFacts(onboardingBootFacts(state, hueStartConfig !== null));
-        sink.setHueStartConfig(hueStartConfig);
 
         // Deliberately no `validateHueCredentials` here — setting `hueStartConfig`
         // re-arms the reachability poll, and doing both probed the bridge twice.
@@ -172,6 +178,7 @@ export function useShellBootstrap(sink: ShellBootstrapSink): ShellBootstrapState
 
         // Mark bootstrap complete — the hot-plug reconciler may now run
         setBootstrapDone(true);
+        markStartup("bootstrap done");
       } catch (err) {
         console.warn("[LumaSync] Shell lifecycle bootstrap error:", err);
         // Still mark bootstrap complete so UI is not permanently blocked
