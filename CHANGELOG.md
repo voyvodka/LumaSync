@@ -94,7 +94,8 @@ https://keepachangelog.com/en/1.1.0/
   serial ports LumaSync will not open under a folded "Other ports". Devices plugged in or found
   slide into the list, and slide out when they go.
 - Devices → a WLED strip has the same kind of page: its state in a word with Connect or Flash, the
-  LED count the device reports, its layout, and Forget behind "…", asked beside it. The old USB
+  LED count the device reports, its layout, and Forget behind "…", asked beside it. A device
+  forgotten while it lights goes dark at once instead of holding its last frame for a few seconds. The old USB
   Strips and WLED panes, with their cards, are gone.
 - Settings is split into pages — General, Appearance, Updates, Help and About — listed on the
   left. Each row shows just its name and control; an explanation, where one helps, is behind the

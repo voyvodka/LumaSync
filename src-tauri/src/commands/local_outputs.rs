@@ -597,25 +597,50 @@ pub(crate) async fn let_go<R: tauri::Runtime>(
         }
     }
 
+    // The black frame and the session drop block on the port (a dead session retries, a stuck writer
+    // is waited out): off the async runtime, as every other blank is.
+    let ended = before.mode.clone();
     match left {
         Left::Serial(port) => {
             // Moving onto another strip already painted it black through its session. With nothing
             // left, no apply reached `set_active_port`, so the runtime still names this port: that
             // stale record is what tells the blank below to run.
-            if drove && lighting.holds_port(port) {
-                if let Err(reason) =
-                    super::lighting_mode::transition::blank_serial_port(app, port, &before.mode)
-                {
-                    log::warn!("[let-go] {port} kept its last frame: {reason}");
+            let blank = drove && lighting.holds_port(port);
+            let port = port.clone();
+            let handle = app.clone();
+            let released = tauri::async_runtime::spawn_blocking(move || {
+                if blank {
+                    if let Err(reason) =
+                        super::lighting_mode::transition::blank_serial_port(&handle, &port, &ended)
+                    {
+                        log::warn!("[let-go] {port} kept its last frame: {reason}");
+                    }
                 }
-            }
-            // A connect of the same port meanwhile owns the cached writer now.
-            if !registry.connected_serial_ports().iter().any(|p| p == port) {
-                lighting.forget_serial_session(port);
+                // A connect of the same port meanwhile owns the cached writer now.
+                let registry = handle.state::<LocalOutputRegistry>();
+                if !registry.connected_serial_ports().contains(&port) {
+                    handle
+                        .state::<LightingRuntimeState>()
+                        .forget_serial_session(&port);
+                }
+            })
+            .await;
+            if let Err(error) = released {
+                log::warn!("[let-go] releasing the port did not run: {error}");
             }
         }
         Left::Wled(config) => {
             if drove {
+                let config = *config;
+                let handle = app.clone();
+                let blanked = tauri::async_runtime::spawn_blocking(move || {
+                    super::lighting_mode::transition::blank_wled(&handle, config, &ended)
+                })
+                .await
+                .unwrap_or_else(|error| Err(error.to_string()));
+                if let Err(reason) = blanked {
+                    log::warn!("[let-go] WLED {} kept its last frame: {reason}", config.ip);
+                }
                 power_off_left_wled(app, config.ip).await;
             }
         }

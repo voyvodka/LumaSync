@@ -921,6 +921,16 @@ pub(crate) fn blank_serial_port<R: Runtime>(
     blank_plan(app, UsbOutputPlan::Serial(port.to_string()), ended).black_frame
 }
 
+/// Paints a WLED device black with the layout of the mode that last drove it, before it is switched
+/// off: switched off alone, a device still in realtime mode shows its last frame until that times out.
+pub(crate) fn blank_wled<R: Runtime>(
+    app: &AppHandle<R>,
+    config: crate::commands::wled_sink::WledSinkConfig,
+    ended: &LightingModeConfig,
+) -> Result<(), String> {
+    blank_plan(app, UsbOutputPlan::Wled(config), ended).black_frame
+}
+
 fn blank_plan<R: Runtime>(
     app: &AppHandle<R>,
     plan: UsbOutputPlan,

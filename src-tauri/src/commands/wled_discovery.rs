@@ -22,7 +22,9 @@
 //!                                 unspecified, multicast, or broadcast).
 //!   WLED_INVALID_LED_COUNT     -- led_count == 0 supplied to connect_wled_sink.
 //!   WLED_FORGET_OK             -- Device forgotten: not driven, not bound, not saved.
-//!   WLED_FORGET_FAILED         -- The lighting could not let go of it; nothing changed.
+//!   WLED_FORGET_FAILED         -- Not forgotten. If the lighting would not let go, nothing
+//!                                 changed; if only the save failed, it is already let go
+//!                                 and still saved, and Forget again finishes it.
 use std::io::Read;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
