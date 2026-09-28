@@ -173,7 +173,8 @@ export async function initWindowLifecycle(opts?: {
             // Some platforms throw if the window isn't minimized — ignore.
           }
           try {
-            await win.setFocus();
+            // A dev build hands focus back to the app the developer was using (`macos_window.rs`).
+            if (!import.meta.env.DEV) await win.setFocus();
           } catch {
             // Focus is cosmetic and must never reject this promise: bootstrap awaits
             // it before calibration, targets and Hue, so a throw here would surface
