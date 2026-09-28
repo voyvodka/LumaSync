@@ -3,18 +3,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_COLOR_CORRECTION, type WledUdpSinkConfig } from "@/shared/contracts/device";
 import { DEFAULT_SHELL_STATE, type ShellState } from "@/shared/contracts/shell";
 import type { LedStrip } from "@/shared/contracts/strips";
-import {
-  withColorCorrection,
-  withHardwareOf,
-  withSerialTransport,
-  withStripHardware,
-  withStripLayout,
-  withStripName,
-  withWledSink,
-  withWledTransport,
-  withoutStrip,
-  withoutWledDevice,
-} from "../stripWrites";
+import { withColorCorrection, withHardwareOf, withLayoutOf, withoutStrip, withoutWledDevice, withSerialTransport, withStripHardware, withStripLayout, withStripName, withWledSink, withWledTransport } from "../stripWrites";
 
 const SINK: WledUdpSinkConfig = { ip: "10.0.0.5", port: 4048, ledCount: 60, protocol: "ddp" };
 const LAYOUT = { totalLeds: 60 } as never;
@@ -173,6 +162,22 @@ describe("withHardwareOf", () => {
   it("writes nothing for an id no strip has", () => {
     expect(withHardwareOf(state({ ledStrips: [strip("a")] }), "zzz", { chipType: "sk6812-rgbw" })).toBeNull();
     expect(withHardwareOf(state(), "a", { chipType: "sk6812-rgbw" })).toBeNull();
+  });
+});
+
+describe("withLayoutOf", () => {
+  const layout = { totalLeds: 30 } as unknown as Parameters<typeof withLayoutOf>[2];
+
+  // LED Setup opened from a strip's own page lays out that strip, not the primary one.
+  it("lays out the strip it is given and leaves the primary as it was", () => {
+    const current = state({ ledStrips: [strip("a"), strip("b")] });
+    const patch = withLayoutOf(current, "b", layout);
+    expect(patch?.ledStrips?.[0]).toEqual(strip("a"));
+    expect(patch?.ledStrips?.[1]).toEqual({ ...strip("b"), layout });
+  });
+
+  it("writes nothing for a strip forgotten meanwhile", () => {
+    expect(withLayoutOf(state({ ledStrips: [strip("a")] }), "gone", layout)).toBeNull();
   });
 });
 

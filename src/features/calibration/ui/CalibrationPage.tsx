@@ -27,6 +27,12 @@ const OPENING_MS = 1000;
 const CARD_EXIT_MS = 400;
 
 interface CalibrationPageProps {
+  /** The strip being laid out; with none, the strip a layout with no strip named applies to. */
+  stripId?: string;
+  /** Opened from a strip's page: its name, leading back to it. */
+  back?: { label: string; onBack: () => void };
+  /** Test lights the strip that is driven: off for a strip laid out while another one is. */
+  testable?: boolean;
   initialConfig?: LedCalibrationConfig;
   onNavigateBack: () => void;
   onSaved: (config: LedCalibrationConfig) => void;
@@ -49,13 +55,16 @@ const VALIDATION_MESSAGE_KEYS = {
 } as const satisfies Record<CalibrationValidationCode, string>;
 
 export function CalibrationPage({
+  stripId,
+  back,
+  testable = true,
   initialConfig,
   onNavigateBack,
   onSaved,
   registerLeaveGuard,
 }: CalibrationPageProps) {
   const { t } = useTranslation();
-  const session = useCalibrationSession({ initialConfig, onNavigateBack, onSaved, registerLeaveGuard });
+  const session = useCalibrationSession({ stripId, initialConfig, onNavigateBack, onSaved, registerLeaveGuard });
   const {
     config,
     isDirty,
@@ -143,6 +152,7 @@ export function CalibrationPage({
   return (
     <div className={styles.page} data-opening={opening || undefined}>
       <SetupTopBar
+        back={back}
         displays={displayTarget.displays}
         selectedDisplayId={displayTarget.selectedDisplayId}
         switching={isSwitching}
@@ -199,7 +209,8 @@ export function CalibrationPage({
           testing={testPattern.isEnabled}
           testBusy={isSwitching}
           testToggling={isTogglingTestPattern}
-          testDisabled={displayTarget.displays.length === 0}
+          testDisabled={!testable || displayTarget.displays.length === 0}
+          testHint={testable ? undefined : t("calibration:setup.testOtherStrip")}
           testUpdating={testLayoutStale && draftTestable}
           dirty={isDirty}
           canSave={canSave}

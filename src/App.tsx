@@ -105,6 +105,7 @@ import {
 } from "./shared/contracts/shell";
 
 const selectActiveSection = (state: NavigationState) => state.activeSection;
+const selectLedSetupOpen = (state: NavigationState) => state.ledSetup !== null;
 const selectNoticeView = (state: NavigationState) => currentNoticeView(state);
 const selectUpdaterStatus = (snapshot: UpdaterSnapshot) => snapshot.state.status;
 const selectUpdateCheckFailedNotice = (snapshot: UpdaterSnapshot) => snapshot.checkFailedNotice;
@@ -130,6 +131,7 @@ function Shell() {
   } = useUIMode();
   const [navigation] = useState(createNavigationStore);
   const activeSection = useStoreSelector(navigation, selectActiveSection);
+  const ledSetupOpen = useStoreSelector(navigation, selectLedSetupOpen);
   const noticeView = useStoreSelector(navigation, selectNoticeView);
   const { setActiveSection } = navigation;
   useLayoutEffect(() => {
@@ -179,13 +181,11 @@ function Shell() {
     useHueSolidColorNotice();
   const { notice: previewOpenNotice, report: reportPreviewOpenFailure } = usePreviewOpenNotice();
 
+  // Set once the handlers below exist: the orchestrator is built before them.
+  const openLedSetupRef = useRef<(stripId: string | null) => Promise<void>>(() => Promise.resolve());
   const handleOpenCalibration = useCallback(() => {
-    // Through the leave guard like every other move: a mode press that needs a
-    // layout must not unmount another screen's unsaved work either.
-    if (navigation.get().activeSection !== SECTION_IDS.LED_SETUP) {
-      navigation.requestLeave(() => setActiveSection(SECTION_IDS.LED_SETUP));
-    }
-  }, [navigation, setActiveSection]);
+    if (navigation.get().ledSetup === null) void openLedSetupRef.current(null);
+  }, [navigation]);
 
   const mode = useLightingModeOrchestrator({
     onRequireCalibration: handleOpenCalibration,
@@ -305,7 +305,9 @@ function Shell() {
   const handleSectionChange = useCallback((sectionId: SectionId, deviceCategory?: DeviceCategory) => {
     // The update prompt owns the window; a move from anywhere waits until it closes.
     if (updateModalShownRef.current) return Promise.resolve();
-    if (sectionId === navigation.get().activeSection) return runSectionChange(sectionId, deviceCategory);
+    const current = navigation.get();
+    // The same section with LED Setup open still leaves LED Setup, and its unsaved draft asks first.
+    if (sectionId === current.activeSection && current.ledSetup === null) return runSectionChange(sectionId, deviceCategory);
     let pending: Promise<void> = Promise.resolve();
     navigation.requestLeave(() => {
       pending = runSectionChange(sectionId, deviceCategory);
@@ -313,12 +315,37 @@ function Shell() {
     return pending;
   }, [navigation, runSectionChange]);
 
+  // LED Setup is a step inside Devices: a strip's layout, opened over its page.
+  const handleOpenLedSetup = useCallback((stripId: string | null) => {
+    if (updateModalShownRef.current) return Promise.resolve();
+    const run = async () => {
+      navigation.openLedSetup(stripId);
+      await switchUIMode("full");
+      try {
+        await saveShellState({ lastSection: SECTION_IDS.DEVICES });
+      } catch (err) {
+        console.error("[LumaSync] saveShellState(lastSection) failed:", err);
+      }
+    };
+    let pending: Promise<void> = Promise.resolve();
+    navigation.requestLeave(() => {
+      pending = run();
+    });
+    return pending;
+  }, [navigation, switchUIMode]);
+  openLedSetupRef.current = handleOpenLedSetup;
+  const handleCloseLedSetup = useCallback(() => {
+    navigation.requestLeave(() => navigation.closeLedSetup());
+  }, [navigation]);
+
   // Compact never shows the full-only screens, so going there is a leave too.
   const guardedSwitchUIMode = useCallback((nextMode: UIMode): Promise<void> => {
     if (updateModalShownRef.current) return Promise.resolve();
     if (nextMode !== "compact") return switchUIMode(nextMode);
     let pending: Promise<void> = Promise.resolve();
     navigation.requestLeave(() => {
+      // Compact has no LED Setup: leaving for it closes it, so full mode does not reopen it later.
+      navigation.closeLedSetup();
       pending = switchUIMode(nextMode);
     });
     return pending;
@@ -329,7 +356,7 @@ function Shell() {
     ready: bootstrapDone,
     connected: isConnected,
     hasCalibration: savedCalibration !== undefined,
-    onLedSetup: activeSection === SECTION_IDS.LED_SETUP,
+    onLedSetup: ledSetupOpen,
   });
 
   const modeGuard = canEnableLedMode(savedCalibration, selectedOutputTargets, localSink !== null);
@@ -365,6 +392,8 @@ function Shell() {
   };
   const navigationActions = {
     goToSection: handleSectionChange,
+    openLedSetup: handleOpenLedSetup,
+    closeLedSetup: handleCloseLedSetup,
     switchUIMode: guardedSwitchUIMode,
   };
 
@@ -460,7 +489,7 @@ function Shell() {
   noticeHandlersRef.current = {
     openCaptureSettings: () => void openScreenCaptureSettings(),
     openDevices: (category) => void handleSectionChange(SECTION_IDS.DEVICES, category),
-    openLedSetup: () => void handleSectionChange(SECTION_IDS.LED_SETUP),
+    openLedSetup: () => void handleOpenLedSetup(null),
     openLights: () => void handleSectionChange(SECTION_IDS.LIGHTS),
     retryHueProbe: hueProbe.retry,
     retryHueStop: () => void mode.stopHueOutput(HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL),
@@ -493,6 +522,7 @@ function Shell() {
         {
           uiMode: currentMode,
           activeSection,
+          ledSetupOpen,
           availability,
           hueProbeGaveUp: hueProbe.gaveUp,
           hueProbeChecking: hueProbe.probing,
@@ -528,6 +558,7 @@ function Shell() {
     [
       currentMode,
       activeSection,
+      ledSetupOpen,
       availability,
       hueProbe.gaveUp,
       hueProbe.probing,

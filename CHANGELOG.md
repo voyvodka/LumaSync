@@ -83,6 +83,13 @@ https://keepachangelog.com/en/1.1.0/
   small box with a chevron on the right, beside Identify, that opens the list of orders. A connect
   that fails at once still shows "Connecting…" for a moment, and the reason under the strip stays
   in place through the retry instead of blinking.
+- LED Setup is no longer a tab: the tabs are Lights, Devices, Room and Settings. A strip's "Edit ›"
+  opens LED Setup over its page, on that strip, with "‹ <strip name>" to go back; before, it always
+  laid out the first strip, whichever one it came from. On a strip that is not the one lighting now,
+  Test is off, since it would light the other strip. With more than one display, a strip's Layout
+  row names the screen its layout is drawn on. In LED Setup, the rings where LED #1 can go and the
+  stand's "+" show only while the pointer is near the screen, and no longer blink as the display
+  list opens and closes over them.
 - Devices → adding a strip: a controller you plug in appears in the list at once; "Add" connects
   it, opens its page and flashes it to ask whether it lit. "Add a strip" lists the controllers
   plugged in and takes a WLED device by its address, asking the device how many LEDs it has. While

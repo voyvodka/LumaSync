@@ -9,6 +9,8 @@ import { DisplayMenu } from "./DisplayMenu";
 import styles from "./SetupTopBar.module.css";
 
 interface SetupTopBarProps {
+  /** Opened from a strip's page: its name, leading back to it. */
+  back?: { label: string; onBack: () => void };
   displays: DisplayInfo[];
   selectedDisplayId: string | null | undefined;
   switching: boolean;
@@ -21,6 +23,7 @@ interface SetupTopBarProps {
 
 /** The captured display on the left; where a test goes, Preview and help on the right. */
 export function SetupTopBar({
+  back,
   displays,
   selectedDisplayId,
   switching,
@@ -37,6 +40,23 @@ export function SetupTopBar({
   const shownTarget = lastTargetRef.current;
   return (
     <div className={styles.bar}>
+      {back ? (
+        <>
+          <button
+            type="button"
+            onClick={back.onBack}
+            aria-label={t("calibration:setup.back", { name: back.label })}
+            className={`${styles.button} ${styles.back}`}
+            data-testid="led-setup-back"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14.5 6 8.5 12l6 6" />
+            </svg>
+            {back.label}
+          </button>
+          <span className={styles.divider} aria-hidden />
+        </>
+      ) : null}
       <DisplayMenu displays={displays} selectedId={selectedDisplayId} busy={switching} onSelect={onSelectDisplay} />
       <span className={styles.spacer} />
       {status.mounted && (

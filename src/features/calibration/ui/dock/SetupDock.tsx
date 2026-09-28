@@ -22,6 +22,8 @@ interface SetupDockProps {
   /** The test itself is starting or stopping (not merely the display switching). */
   testToggling: boolean;
   testDisabled: boolean;
+  /** Why Test is off, when it is off for this strip rather than for the moment. */
+  testHint?: string;
   /** The running test is restarting with an edit. */
   testUpdating: boolean;
   dirty: boolean;
@@ -72,6 +74,7 @@ export function SetupDock(props: SetupDockProps) {
         waiting={props.testToggling}
         busy={props.testBusy}
         disabled={props.testDisabled}
+        title={props.testHint}
         updating={props.testUpdating}
         label={testing ? t("calibration:setup.stop") : t("calibration:setup.test")}
         faces={{

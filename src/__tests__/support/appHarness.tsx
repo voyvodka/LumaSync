@@ -15,7 +15,7 @@ import {
   useLightingControlState,
   type LightingControlActions,
 } from "@/features/mode/state/lightingControl";
-import { useLeaveGuardRegistrar, useNavigationState } from "@/features/shell/navigationStore";
+import { useLeaveGuardRegistrar, useNavigationActions, useNavigationState } from "@/features/shell/navigationStore";
 import { useHueShellStatus } from "@/features/hue/state/hueShellStatus";
 import { useSetupGuideActions, type SetupGuideActions } from "@/features/onboarding/state/setupGuideControl";
 import { runtimeStatus } from "@/features/hue/__tests__/fakeHueHealth";
@@ -248,6 +248,8 @@ function LayoutProbe() {
   const activeSection = useNavigationState((state) => state.activeSection);
   const uiMode = useNavigationState((state) => state.uiMode);
   const deviceCategory = useNavigationState((state) => state.deviceCategoryRequest?.category ?? "");
+  const ledSetup = useNavigationState((state) => (state.ledSetup === null ? "closed" : (state.ledSetup.stripId ?? "primary")));
+  const navigationActions = useNavigationActions();
   const registerLeaveGuard = useLeaveGuardRegistrar();
   env.lastLightingActions = actions;
   env.setupGuide = useSetupGuideActions();
@@ -257,6 +259,14 @@ function LayoutProbe() {
       <p data-testid="active-section">{activeSection}</p>
       <p data-testid="ui-mode">{uiMode}</p>
       <p data-testid="device-category">{deviceCategory}</p>
+      <p data-testid="led-setup">{ledSetup}</p>
+      {/* A strip's Layout row. */}
+      <button type="button" onClick={() => void navigationActions.openLedSetup("strip-1")}>
+        open-led-setup
+      </button>
+      <button type="button" onClick={() => navigationActions.closeLedSetup()}>
+        close-led-setup
+      </button>
       <p data-testid="hue-shown-state">
         {hueReconnecting ? "reconnecting" : hueStreaming ? "streaming" : "none"}
       </p>

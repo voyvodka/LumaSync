@@ -83,6 +83,16 @@ export function withStripLayout(state: ShellState, layout: LedCalibrationConfig)
   return { ledStrips: strips };
 }
 
+/** The same, on strip `stripId`; `null` when no strip has that id, so a strip forgotten meanwhile
+ *  is not replaced by writing its layout onto another. */
+export function withLayoutOf(state: ShellState, stripId: string, layout: LedCalibrationConfig): StripsPatch | null {
+  const strips = [...stripsOf(state)];
+  const index = strips.findIndex((strip) => strip.id === stripId);
+  if (index === -1) return null;
+  strips[index] = { ...strips[index]!, layout };
+  return { ledStrips: strips };
+}
+
 /**
  * One correction plan still drives the strip and Hue alike, so the global key is written; the
  * target strip gets the same copy. Never creates a strip: a Hue-only install has none.

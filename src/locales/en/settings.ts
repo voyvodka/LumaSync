@@ -64,7 +64,6 @@ export default {
     switchToFull: "Full settings",
     sections: {
       lights: "Lights",
-      "led-setup": "LED Setup",
       devices: "Devices",
       system: "Settings",
       "room-map": "Room",

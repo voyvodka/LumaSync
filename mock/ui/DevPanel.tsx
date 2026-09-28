@@ -589,7 +589,7 @@ export function DevPanel({ onReloadApp }: PanelProps) {
             <Ctl label="lastSection" keywords="lastSection boot screen" reach="reload" query={q}>
               <Pick
                 value={world.shellState.lastSection ?? "lights"}
-                options={["lights", "led-setup", "devices", "room-map", "system"] as const}
+                options={["lights", "devices", "room-map", "system"] as const}
                 onChange={(v) =>
                   mutate((w) => {
                     w.shellState = { ...w.shellState, lastSection: v };

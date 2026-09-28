@@ -1,7 +1,7 @@
 import { browser } from "@wdio/globals";
 import { mkdirSync, writeFileSync } from "node:fs";
 
-import { SECTION_ORDER } from "../../src/shared/contracts/shell";
+import { SECTION_IDS, SECTION_ORDER } from "../../src/shared/contracts/shell";
 import type { SectionId } from "../../src/shared/contracts/shell";
 import {
   assertNoOpenDialog,
@@ -32,9 +32,12 @@ const targets: SectionId[] =
   requested === undefined
     ? [...SECTION_ORDER]
     : SECTION_ORDER.filter((section) => section === requested);
+// Not a tab: LED Setup opens from a strip's Layout row in Devices.
+const LED_SETUP = "led-setup";
+const capturesLedSetup = requested === undefined || requested === LED_SETUP;
 
 interface SectionReport {
-  section: SectionId;
+  section: SectionId | typeof LED_SETUP;
   screenshot: string;
   structure: unknown;
   consoleErrors: unknown;
@@ -162,6 +165,38 @@ describe("ui audit", () => {
       await assertNoOpenDialog(`ui audit: ${section}`);
     }
 
+    await switchUiMode("compact");
+  });
+
+  it("captures LED Setup, opened from the first strip's Layout row", async function () {
+    if (!capturesLedSetup) this.skip();
+    await switchUiMode("full");
+    await clickTestId(`section-tab-${SECTION_IDS.DEVICES}`);
+    await browser.waitUntil(async () => exists(`[data-testid="section-panel-${SECTION_IDS.DEVICES}"]`), {
+      timeout: 15_000,
+      interval: 100,
+      timeoutMsg: "Devices never mounted its panel",
+    });
+    await browser.pause(800);
+    if (!(await exists('[data-testid="strip-layout-open"]'))) {
+      console.log("[audit] led-setup skipped: no strip to lay out");
+      await switchUiMode("compact");
+      return;
+    }
+    await clickTestId("strip-layout-open");
+    await browser.pause(1200);
+
+    const screenshot = `${OUT}/full-${LED_SETUP}.png`;
+    await browser.saveScreenshot(screenshot);
+    report.sections.push({
+      section: LED_SETUP,
+      screenshot,
+      structure: await structure(`[data-testid="section-panel-${SECTION_IDS.DEVICES}"]`),
+      consoleErrors: await drainConsole(),
+    });
+    console.log(`[audit] ${LED_SETUP} -> ${screenshot}`);
+    await assertNoOpenDialog(`ui audit: ${LED_SETUP}`);
+    await clickTestId("led-setup-back");
     await switchUiMode("compact");
   });
 

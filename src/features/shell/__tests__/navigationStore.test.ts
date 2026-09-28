@@ -11,7 +11,31 @@ describe("createNavigationStore", () => {
       activeSection: SECTION_IDS.LIGHTS,
       deviceCategoryRequest: null,
       visibleDeviceCategory: null,
+      ledSetup: null,
     });
+  });
+
+  it("opens LED Setup over Devices on a strip, in one write", () => {
+    const store = createNavigationStore();
+    const seen: unknown[] = [];
+    store.subscribe(() => seen.push(store.get()));
+    store.openLedSetup("strip-2");
+    expect(seen).toHaveLength(1);
+    expect(store.get()).toMatchObject({ activeSection: SECTION_IDS.DEVICES, ledSetup: { stripId: "strip-2" } });
+  });
+
+  // It is a step inside Devices, not a place to come back to.
+  it("any other way to a section leaves LED Setup", () => {
+    const store = createNavigationStore();
+    store.openLedSetup(null);
+    store.setActiveSection(SECTION_IDS.DEVICES);
+    expect(store.get().ledSetup).toBeNull();
+    store.openLedSetup(null);
+    store.openSection(SECTION_IDS.LIGHTS);
+    expect(store.get().ledSetup).toBeNull();
+    store.openLedSetup("strip-1");
+    store.closeLedSetup();
+    expect(store.get()).toMatchObject({ activeSection: SECTION_IDS.DEVICES, ledSetup: null });
   });
 
   it("keeps the Devices page's reported category apart from a notice's request", () => {

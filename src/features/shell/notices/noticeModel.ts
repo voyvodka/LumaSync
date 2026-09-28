@@ -81,13 +81,15 @@ export type NoticeView = (typeof NOTICE_VIEW)[keyof typeof NOTICE_VIEW];
 export interface NoticeViewInput {
   uiMode: UIMode;
   activeSection: SectionId;
+  /** LED Setup covers the Devices page while it is open. */
+  ledSetup: { stripId: string | null } | null;
   /** The category the mounted Devices page shows, or `null` when it is not mounted. */
   visibleDeviceCategory: DeviceCategory | null;
 }
 
 /** The screen on view, if it is one a notice can defer to. Compact has none. */
-export function currentNoticeView({ uiMode, activeSection, visibleDeviceCategory }: NoticeViewInput): NoticeView | null {
-  if (uiMode !== "full" || activeSection !== SECTION_IDS.DEVICES) return null;
+export function currentNoticeView({ uiMode, activeSection, ledSetup, visibleDeviceCategory }: NoticeViewInput): NoticeView | null {
+  if (uiMode !== "full" || activeSection !== SECTION_IDS.DEVICES || ledSetup !== null) return null;
   return visibleDeviceCategory === "hue" ? NOTICE_VIEW.DEVICES_HUE : null;
 }
 

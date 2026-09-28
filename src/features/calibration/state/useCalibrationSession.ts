@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 
 import { shellStore } from "@/features/persistence/shellStore";
-import { withStripLayout } from "@/features/strips/model/stripWrites";
+import { withLayoutOf, withStripLayout } from "@/features/strips/model/stripWrites";
 import { focusCurrentWindow } from "@/features/shell/windowApi";
 import type { LeaveGuard } from "@/features/shell/navigationStore";
 import {
@@ -86,7 +86,7 @@ import {
   type TestPatternSnapshot,
 } from "./testPatternFlow";
 import { createDisplayTargetState, type DisplayTargetSnapshot, type DisplayTargetState } from "./displayTargetState";
-import { peekLedSetupSource, readLedSetupSource, type LedSetupSource } from "./ledSetupSource";
+import { editedStripFacts, peekLedSetupSource, readLedSetupSource, type LedSetupSource } from "./ledSetupSource";
 import type { DisplayId, DisplayInfo, OverlayPreviewPayload } from "@/shared/contracts/display";
 import { LED_CHIP_TYPE, type LedChipType } from "@/shared/contracts/device";
 import { parseCommandError } from "@/shared/contracts/status";
@@ -172,6 +172,8 @@ function isTestableLayout(config: LedCalibrationConfig): boolean {
 }
 
 export interface CalibrationSessionOptions {
+  /** The strip being laid out; with none, the strip a layout with no strip named applies to. */
+  stripId?: string;
   initialConfig?: LedCalibrationConfig;
   onNavigateBack: () => void;
   onSaved: (config: LedCalibrationConfig) => void;
@@ -182,6 +184,7 @@ export interface CalibrationSessionOptions {
 /** LED Setup's editing session: the editor draft, the display target and its
  * overlay, the test pattern, and the save/close flow. `CalibrationPage` renders it. */
 export function useCalibrationSession({
+  stripId,
   initialConfig,
   onNavigateBack,
   onSaved,
@@ -189,6 +192,7 @@ export function useCalibrationSession({
 }: CalibrationSessionOptions) {
   // The last read this session, when there is one, so the page opens on it rather than filling in.
   const [cached] = useState(peekLedSetupSource);
+  const cachedFacts = cached ? editedStripFacts(cached, stripId) : null;
   const displayTargetRef = useRef(
     createDisplayTargetState({ openDisplayOverlay, closeDisplayOverlay }),
   );
@@ -200,7 +204,7 @@ export function useCalibrationSession({
   const [editorState, setEditorState] = useState<CalibrationEditorState>(() => {
     const opened = createCalibrationEditorState(initialConfig ?? resetToManual());
     return cached
-      ? withReportedTotal(opened, reportedStripTotal(cached.wledLedCount), selectedIn(cached, displayTarget))
+      ? withReportedTotal(opened, reportedStripTotal(cachedFacts?.wledLedCount), selectedIn(cached, displayTarget))
       : opened;
   });
   const hasSavedLayout = initialConfig !== undefined && sumSegmentCounts(initialConfig.counts) > 0;
@@ -212,12 +216,12 @@ export function useCalibrationSession({
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [layoutUi, setLayoutUi] = useState<LayoutUi>(() => layoutUiFrom(editorState.current));
   const [knownTotal, setKnownTotal] = useState<number | null>(() =>
-    cached ? reportedStripTotal(cached.wledLedCount) : null,
+    cachedFacts ? reportedStripTotal(cachedFacts.wledLedCount) : null,
   );
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<CalibrationNotice | null>(null);
   const [chipType, setChipType] = useState<LedChipType>(() =>
-    cached?.chipType === LED_CHIP_TYPE.SK6812_RGBW ? LED_CHIP_TYPE.SK6812_RGBW : LED_CHIP_TYPE.WS2812B_GRB,
+    cachedFacts?.chipType === LED_CHIP_TYPE.SK6812_RGBW ? LED_CHIP_TYPE.SK6812_RGBW : LED_CHIP_TYPE.WS2812B_GRB,
   );
 
   const flowRef = useRef(createDefaultTestPatternFlow(initialConfig));
@@ -233,10 +237,11 @@ export function useCalibrationSession({
     readLedSetupSource()
       .then((source) => {
         if (cancelled) return;
-        if (source.chipType === LED_CHIP_TYPE.SK6812_RGBW) setChipType(LED_CHIP_TYPE.SK6812_RGBW);
+        const facts = editedStripFacts(source, stripId);
+        if (facts.chipType === LED_CHIP_TYPE.SK6812_RGBW) setChipType(LED_CHIP_TYPE.SK6812_RGBW);
         const selected = selectSaved(displayTargetRef.current, source);
         setDisplayTarget(selected);
-        const reported = reportedStripTotal(source.wledLedCount);
+        const reported = reportedStripTotal(facts.wledLedCount);
         setKnownTotal(reported);
         setEditorState((prev) => withReportedTotal(prev, reported, selectedIn(source, selected)));
         setLoaded(true);
@@ -249,7 +254,7 @@ export function useCalibrationSession({
         setLoaded(true);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [stripId]);
 
   // Links and "Özel" are derived from counts whenever the baseline moves under
   // the page (autofill, discard, a reload) — never on an ordinary edit, which
@@ -588,7 +593,14 @@ export function useCalibrationSession({
     setValidationErrors(null);
     const savedState = saveEditorCalibration(editorState);
     try {
-      await shellStore.update((current) => withStripLayout(current, savedState.current));
+      let gone = false;
+      await shellStore.update((current) => {
+        if (stripId === undefined) return withStripLayout(current, savedState.current);
+        const patch = withLayoutOf(current, stripId, savedState.current);
+        gone = patch === null;
+        return patch;
+      });
+      if (gone) throw new Error("the strip being laid out is no longer saved");
     } catch (error) {
       // The draft stays as it was, so Retry saves exactly what failed.
       console.error("[LumaSync] LED Setup could not save the layout:", error);
@@ -607,7 +619,7 @@ export function useCalibrationSession({
     setLastSavedAt(Date.now());
     dirtyRef.current = false;
     setIsSaving(false);
-  }, [editorState, onSaved]);
+  }, [editorState, onSaved, stripId]);
 
   /** "İptal": back to the last saved layout, staying on the page. */
   const handleRevert = useCallback(() => {

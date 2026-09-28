@@ -32,7 +32,8 @@ after the other. Inside the main window, the three full-only sections that outwe
 the shell — `CalibrationPage` (through `calibration/ui/CalibrationPanel`), `DevicesPage`,
 `RoomMapEditor` — are split out through `preloadableComponent` (`src/shared/lib/`). Compact mode
 never renders them, so it never fetches them; full mode warms all three on idle after it paints, so
-a tab switch rarely meets the blank `SectionPlaceholder`. LED Setup's warm-up also reads the
+a tab switch rarely meets the blank `SectionPlaceholder`. LED Setup opens inside Devices, so it is
+warmed with Devices; its warm-up also reads the
 displays it opens on, so even a first visit draws the real monitor rather than filling in. `LightsSection` and `SettingsPage` stay in the `App`
 chunk: Lights is the page full mode opens on, and neither is big enough to be worth a first-paint
 wait. Locale catalogues load per language (`LOCALE_LOADERS` in `i18n.ts`); a switch fetches the
@@ -467,8 +468,24 @@ waits while Hue runs on the paired bridge, since this page could not stop that s
 **Devices has no Displays page.** A display is the capture source, not something connected, and
 most machines have one. The captured display is chosen in one place, LED Setup's top bar, where the
 layout is drawn on its shape; a second picker in Devices raised "which one counts?" and showed one
-row on most machines. When strips carry their own display, the strip page names it as a property of
-the strip ("Built-in · 60 LED · 4 kenar"), not as a page of its own.
+row on most machines. A strip's Layout row names it in its value ("Built-in · 60 LEDs · 4 edges")
+when there is more than one display to tell apart; with one it would only be noise.
+
+**LED Setup is a strip's layout, not a tab.** The tabs are Lights · Devices · Room · Settings. A
+strip's settings were spread over tabs — hardware in Devices, layout and screen in LED Setup — and
+"Edit ›" on a strip jumped to another tab that always edited the primary strip, whichever strip it
+came from. LED Setup now opens over Devices on the strip it was asked for (`navigationStore`'s
+`ledSetup`), full width as its canvas needs, with "‹ <strip>" back to that strip's page; the page
+stays mounted under it, and any other way to a section leaves it, through its leave guard. Every
+other way in — the calibration lock, the "set up next" notice, onboarding's step, a mode press that
+needs a layout — opens it on the strip a layout with no strip named applies to. It saves to the
+strip by id (`withLayoutOf`); only the primary strip's save reaches the lighting store, since that
+is the layout Rust reads, and the mode gate follows the primary's layout on every strips save, so a
+strip forgotten moves it. Test lights the output connected now, so it is off, with a hover saying
+why, on any strip that is not that output — it would light the other strip with this layout. A
+strip forgotten while its layout is open closes LED Setup rather than letting the draft fall onto
+another strip, and the compact switch leaves it too, so full mode does not bring it back. A stored `lastSection: "led-setup"` reads as
+Devices. A Hue-only user has no strip and so no LED Setup, where the tab used to open on nothing.
 
 ## Capabilities
 

@@ -132,7 +132,6 @@ export type TrayEventName = (typeof TRAY_EVENTS)[keyof typeof TRAY_EVENTS];
 /** Main navigation section identifiers */
 export const SECTION_IDS = {
   LIGHTS: "lights",
-  LED_SETUP: "led-setup",
   DEVICES: "devices",
   SYSTEM: "system",
   ROOM_MAP: "room-map",
@@ -143,7 +142,6 @@ export type SectionId = (typeof SECTION_IDS)[keyof typeof SECTION_IDS];
 /** Ordered list of main navigation sections */
 export const SECTION_ORDER: SectionId[] = [
   SECTION_IDS.LIGHTS,
-  SECTION_IDS.LED_SETUP,
   SECTION_IDS.DEVICES,
   SECTION_IDS.ROOM_MAP,
   SECTION_IDS.SYSTEM,

@@ -67,7 +67,6 @@ const settings: Catalogue<typeof enSettings> = {
     switchToFull: "Tam ayarlar",
     sections: {
       lights: "Işıklar",
-      "led-setup": "LED Kurulumu",
       devices: "Cihazlar",
       system: "Ayarlar",
       "room-map": "Oda",

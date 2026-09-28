@@ -312,7 +312,7 @@ describe("buildShellNotices", () => {
       expect(build({ ...input, uiMode: "compact" }).map((n) => n.id)).toEqual([id]);
       expect(build({ ...input, uiMode: "compact", activeSection: SECTION_IDS.DEVICES }).map((n) => n.id)).toEqual([id]);
       expect(build({ ...input, uiMode: "full", activeSection: SECTION_IDS.LIGHTS }).map((n) => n.id)).toEqual([id]);
-      for (const section of [SECTION_IDS.DEVICES, SECTION_IDS.LED_SETUP, SECTION_IDS.SYSTEM]) {
+      for (const section of [SECTION_IDS.DEVICES, SECTION_IDS.SYSTEM]) {
         expect(build({ ...input, uiMode: "full", activeSection: section })).toEqual([]);
       }
     });
@@ -513,7 +513,7 @@ describe("buildShellNotices", () => {
     });
 
     it("is gone on LED Setup itself", () => {
-      expect(build({ ...next, activeSection: SECTION_IDS.LED_SETUP })).toEqual([]);
+      expect(build({ ...next, activeSection: SECTION_IDS.DEVICES, ledSetupOpen: true })).toEqual([]);
     });
 
     it("gives way to the onboarding step and the calibration notice, which say the same", () => {

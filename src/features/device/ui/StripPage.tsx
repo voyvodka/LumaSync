@@ -48,6 +48,8 @@ export interface StripPageProps {
   name: string;
   device: UseDeviceConnectionResult;
   onNavigateToLedSetup?: () => void;
+  /** The captured display, named when there is more than one; for the Layout row. */
+  capturedDisplay?: string | null;
   onNavigateToRoomMap?: () => void;
   /** The strip was just added: flash it and ask as soon as it is connected. */
   autoFlash?: boolean;
@@ -65,6 +67,7 @@ export function StripPage({
   name,
   device,
   onNavigateToLedSetup,
+  capturedDisplay = null,
   onNavigateToRoomMap,
   autoFlash = false,
   onAutoFlashDone,
@@ -306,7 +309,7 @@ export function StripPage({
         </Reveal>
 
         <Reveal open>
-          <StripLayoutRow strip={strip} primary={!actionPrimary} onOpen={onNavigateToLedSetup} />
+          <StripLayoutRow strip={strip} primary={!actionPrimary} display={capturedDisplay} onOpen={onNavigateToLedSetup} />
         </Reveal>
 
         <Reveal open>

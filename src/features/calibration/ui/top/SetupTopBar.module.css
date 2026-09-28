@@ -21,6 +21,9 @@
   .button:disabled { opacity: 0.35; cursor: not-allowed; }
   .button:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
   .icon { width: 32px; padding: 0; justify-content: center; }
+  /* The strip this layout is for, and the way back to its page. */
+  .back { padding-left: 6px; gap: 4px; color: var(--lm-ink); }
+  .divider { width: 1px; height: 16px; margin: 0 6px; background: var(--lm-line-2); }
 
   /* Where a running test goes; a still dot, not a pulse — nothing here moves on its own. */
   .status {

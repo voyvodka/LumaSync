@@ -18,6 +18,7 @@ import {
 import {
   useNavigationActions,
   useNavigationState,
+  useLedSetupCloser,
   useVisibleDeviceCategoryReporter,
   type NavigationState,
 } from "../shell/navigationStore";
@@ -26,6 +27,8 @@ import { useHueShellStatus, useHueShellStatusReader, type HueShellStatus } from 
 import { useSetupGuideActions } from "../onboarding/state/setupGuideControl";
 import { CompactLayout } from "./sections/compact/CompactLayout";
 import { CalibrationPanel, preloadCalibrationPanel } from "../calibration/ui/CalibrationPanel";
+import type { LedSetupTarget } from "@/features/device/ui/DevicesPage";
+import { useCapturedDisplayName } from "../calibration/ui/useCapturedDisplayName";
 import type { RoomMapEditorProps } from "@/features/room-map/ui/RoomMapEditor";
 
 // The full-only sections that each outweigh the rest of the shell are split out,
@@ -103,21 +106,33 @@ const LightsPanel = memo(function LightsPanel() {
 });
 
 const selectDeviceCategoryRequest = (state: NavigationState) => state.deviceCategoryRequest;
+const selectLedSetup = (state: NavigationState) => state.ledSetup;
 const selectHueActive = (status: HueShellStatus) => status.configured && status.streaming;
 
 const DevicesPanel = memo(function DevicesPanel() {
   const categoryRequest = useNavigationState(selectDeviceCategoryRequest);
   const hueActive = useHueShellStatus(selectHueActive);
   const reportVisibleCategory = useVisibleDeviceCategoryReporter();
-  const { goToSection } = useNavigationActions();
+  const { goToSection, openLedSetup, closeLedSetup } = useNavigationActions();
   const { stopHueOutput } = useLightingActions();
   const openRoomMap = useCallback(() => void goToSection(SECTION_IDS.ROOM_MAP), [goToSection]);
-  const openLedSetup = useCallback(() => void goToSection(SECTION_IDS.LED_SETUP), [goToSection]);
+  const ledSetup = useNavigationState(selectLedSetup);
+  const closeLedSetupNow = useLedSetupCloser();
+  const capturedDisplay = useCapturedDisplayName();
+  const openStripLayout = useCallback((stripId: string) => void openLedSetup(stripId), [openLedSetup]);
+  const renderLedSetup = useCallback(
+    (target: LedSetupTarget) => <CalibrationPanel target={target} onBack={closeLedSetup} />,
+    [closeLedSetup],
+  );
   return (
     <div className="h-full overflow-hidden">
       <DevicesPage.Component
         onNavigateToRoomMap={openRoomMap}
-        onNavigateToLedSetup={openLedSetup}
+        onNavigateToLedSetup={openStripLayout}
+        ledSetup={ledSetup}
+        renderLedSetup={renderLedSetup}
+        onLedSetupStripGone={closeLedSetupNow}
+        capturedDisplay={capturedDisplay}
         onStopHueOutput={stopHueOutput}
         categoryRequest={categoryRequest}
         onVisibleCategoryChange={reportVisibleCategory}
@@ -212,13 +227,13 @@ export const SECTION_REGISTRY = {
   [SECTION_IDS.LIGHTS]: {
     render: () => <LightsPanel />,
   },
-  [SECTION_IDS.LED_SETUP]: {
-    render: () => <CalibrationPanel key="calibration-page" />,
-    preload: preloadCalibrationPanel,
-  },
   [SECTION_IDS.DEVICES]: {
     render: () => <DevicesPanel />,
-    preload: DevicesPage.preload,
+    // LED Setup opens over Devices: its chunk and first reads are warmed with it.
+    preload: () => {
+      DevicesPage.preload();
+      preloadCalibrationPanel();
+    },
   },
   [SECTION_IDS.SYSTEM]: {
     render: () => <SystemPanel />,

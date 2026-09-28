@@ -16,6 +16,11 @@ export interface NavigationState {
    * rail owns the choice; this copy lets the shell tell which screen is up.
    */
   visibleDeviceCategory: DeviceCategory | null;
+  /**
+   * LED Setup, open over Devices on a strip; `null` while it is not. A `null` strip is the one a
+   * layout with no strip named applies to — the driven strip, or the first one to be made.
+   */
+  ledSetup: { stripId: string | null } | null;
 }
 
 /**
@@ -29,6 +34,9 @@ export interface NavigationStore extends Store<NavigationState> {
   setActiveSection: (sectionId: SectionId) => void;
   /** Section and category in one write, so no render sees one without the other. */
   openSection: (sectionId: SectionId, deviceCategory?: DeviceCategory) => void;
+  /** Devices with LED Setup open on `stripId`, in one write. */
+  openLedSetup: (stripId: string | null) => void;
+  closeLedSetup: () => void;
   setUIMode: (uiMode: UIMode) => void;
   setVisibleDeviceCategory: (category: DeviceCategory | null) => void;
   /** One guard at a time — the mounted screen with unsaved work. `null` clears it. */
@@ -43,6 +51,7 @@ export function createNavigationStore(): NavigationStore {
     activeSection: SECTION_IDS.LIGHTS,
     deviceCategoryRequest: null,
     visibleDeviceCategory: null,
+    ledSetup: null,
   });
   // Not state: nothing renders from it, and a render must not be able to see
   // a guard half-registered.
@@ -56,13 +65,25 @@ export function createNavigationStore(): NavigationStore {
   };
   return {
     ...store,
-    setActiveSection: (activeSection) => patch({ activeSection }),
+    // Any other way to a section leaves LED Setup: it is a step inside Devices, not a place to return to.
+    setActiveSection: (activeSection) => patch({ activeSection, ledSetup: null }),
     openSection: (activeSection, deviceCategory) =>
       patch({
         activeSection,
+        ledSetup: null,
         deviceCategoryRequest:
           deviceCategory === undefined ? null : { category: deviceCategory, nonce: Date.now() },
       }),
+    openLedSetup: (stripId) => {
+      const open = store.get().ledSetup;
+      patch({
+        activeSection: SECTION_IDS.DEVICES,
+        deviceCategoryRequest: null,
+        // The same strip keeps its object, so nothing downstream sees a change.
+        ledSetup: open?.stripId === stripId ? open : { stripId },
+      });
+    },
+    closeLedSetup: () => patch({ ledSetup: null }),
     setUIMode: (uiMode) => patch({ uiMode }),
     setVisibleDeviceCategory: (visibleDeviceCategory) => patch({ visibleDeviceCategory }),
     setLeaveGuard: (guard) => {
@@ -81,6 +102,10 @@ export interface NavigationActions {
    * since compact never shows `activeSection`, and persists the choice.
    */
   goToSection: (sectionId: SectionId, deviceCategory?: DeviceCategory) => Promise<void>;
+  /** LED Setup on a strip, over Devices; `null` for the strip a layout with no strip named applies to. */
+  openLedSetup: (stripId: string | null) => Promise<void>;
+  /** Back from LED Setup to the strip's page, through its leave guard. */
+  closeLedSetup: () => void;
   switchUIMode: (uiMode: UIMode) => Promise<void>;
 }
 
@@ -122,6 +147,11 @@ export function useNavigationState<S>(
 /** For the Devices page to report its rail. Identity-stable. */
 export function useVisibleDeviceCategoryReporter(): NavigationStore["setVisibleDeviceCategory"] {
   return useNavigation().store.setVisibleDeviceCategory;
+}
+
+/** Closes LED Setup without asking: for when what it edits is gone. Identity-stable. */
+export function useLedSetupCloser(): NavigationStore["closeLedSetup"] {
+  return useNavigation().store.closeLedSetup;
 }
 
 /** For a screen holding unsaved work to register its guard. Identity-stable. */
