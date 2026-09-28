@@ -15,6 +15,7 @@ import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import type { LedStrip, StripHardware } from "@/shared/contracts/strips";
 import { shellStore } from "@/features/persistence/shellStore";
 import { withoutStrip } from "@/features/strips/model/stripWrites";
+import { useHeldFlag, useHeldValue } from "@/shared/lib/useHeldFlag";
 import { Menu } from "@/shared/ui/Menu/Menu";
 import { PageSwap } from "@/shared/ui/PageSwap/PageSwap";
 import { Reveal } from "@/shared/ui/Reveal/Reveal";
@@ -92,7 +93,7 @@ export function StripPage({
     plugged?.manufacturer || usbId
       ? [plugged?.manufacturer, usbId && `USB ${usbId}`, port].filter(Boolean).join(" · ")
       : undefined;
-  const connecting = device.isConnecting && device.selectedPort === port;
+  const connecting = useHeldFlag(device.isConnecting && device.selectedPort === port);
   const connected = entry?.connected === true;
   const state = serialStripState({
     connecting,
@@ -194,7 +195,8 @@ export function StripPage({
     entry.status.code !== SERIAL_OUTPUT_STATUS.DISCONNECTED &&
     entry.status.code !== SERIAL_CONNECT_STATUS.OK;
   const userFailed = !connected && connectFailedOn(device, port);
-  const failure = connecting ? null : userFailed ? device.statusCard : entryFailed ? entry.status : null;
+  // Held through a retry: the note stays where it is rather than closing and reopening on the same words.
+  const failure = useHeldValue(userFailed ? device.statusCard : entryFailed ? entry.status : null, connecting);
 
   // The controller keeps one result for whichever port was checked; this page shows it only for the
   // port it checked, so a strip moved to another controller does not show the old one's pass.

@@ -575,7 +575,7 @@ export function normalizeWledProtocol(value: unknown): WledProtocol {
  * user can re-trim their virtual strip before frames go out.
  */
 export interface WledUdpSinkConfig {
-  /** WLED instance IP (IPv4 or IPv6 textual form). */
+  /** WLED instance IPv4 address. */
   ip: string;
   /** UDP port. Default {@link WLED_DEFAULT_DDP_PORT} for `ddp`,
    * {@link WLED_DEFAULT_REALTIME_PORT} for `drgb`. */

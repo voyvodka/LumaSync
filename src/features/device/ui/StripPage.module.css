@@ -119,9 +119,9 @@
   .help li::marker { color: var(--lm-ink-faint); }
   .help li + li { margin-top: 2px; }
 
-  /* A value that opens its own list: drawn as a choice at rest — a quiet box and a chevron — so it
+  /* A choice from a list: a quiet box and a chevron, on the right with the row's other choices, so it
      does not read as plain text. The chevron turns while the list is open, as LED Setup's display. */
-  .valueButton {
+  .choice {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -130,15 +130,14 @@
     border: 1px solid var(--lm-line-2);
     border-radius: 8px;
     background: var(--lm-panel);
-    font-family: var(--lm-mono);
-    font-size: 12px;
+    font-size: 12.5px;
     color: var(--lm-ink);
     transition: border-color var(--lm-dur-quick) linear, background-color var(--lm-dur-quick) linear;
   }
-  .valueButton:hover:not(:disabled),
-  .valueButton[aria-expanded="true"] { border-color: var(--lm-ink-faint); background: var(--lm-panel-2); }
-  .valueButton:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
-  .valueButton:disabled { cursor: default; color: var(--lm-ink-dim); }
+  .choice:hover:not(:disabled),
+  .choice[aria-expanded="true"] { border-color: var(--lm-ink-faint); background: var(--lm-panel-2); }
+  .choice:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .choice:disabled { cursor: default; color: var(--lm-ink-dim); }
   .chevron {
     flex: none;
     width: 12px;
@@ -189,7 +188,7 @@
   @media (forced-colors: active) {
     .nameInput,
     .input,
-    .valueButton { border-color: ButtonText; }
+    .choice { border-color: ButtonText; }
     /* The swatches are the only thing tying an answer to a colour on screen, so keep them
        painted; the button text still names the colour. */
     .swatch { forced-color-adjust: none; }

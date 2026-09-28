@@ -18,7 +18,7 @@ describe("strip page tap targets", () => {
   it.each([
     ["rename", "width"],
     ["rename", "height"],
-    ["valueButton", "height"],
+    ["choice", "height"],
     ["input", "height"],
   ] as const)(".%s %s is at least 32 px", (selector, property) => {
     expect(px(selector, property)).toBeGreaterThanOrEqual(32);

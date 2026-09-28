@@ -19,7 +19,7 @@ export default {
     title: "When you press Off, Hue lights",
     turnOff: "Turn off",
     restore: "Go back",
-    description: "“Go back” leaves them as they were before lighting started. Quitting LumaSync always does that.",
+    description: "“Go back” puts them back as they were before lighting started. Quitting LumaSync always does that.",
   },
   pair: {
     linkButtonHint: "Press the button on top of your Hue bridge. LumaSync keeps checking for it, so there is nothing else to click.",

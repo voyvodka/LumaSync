@@ -33,11 +33,10 @@ export function wledStatusKey(code: string): TranslationKey | null {
 }
 
 const IPV4 = /^(\d{1,3}\.){3}\d{1,3}$/;
-const IPV6 = /^[0-9a-fA-F:]+$/;
 
-/** Permissive: a dotted IPv4 or an IPv6 text form; Rust has the last word. */
+/** A dotted IPv4: Rust takes nothing else, and has the last word on which ones. */
 export function wledAddressError(value: string): TranslationKey | null {
   const trimmed = value.trim();
   if (!trimmed) return "device:page.wled.ipRequired";
-  return IPV4.test(trimmed) || IPV6.test(trimmed) ? null : "device:page.wled.invalidIp";
+  return IPV4.test(trimmed) ? null : "device:page.wled.invalidIp";
 }

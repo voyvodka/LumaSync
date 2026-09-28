@@ -248,6 +248,28 @@ describe("StripPage — the strip's state and its one action", () => {
     expect(within(tip).getByTestId("strip-fault-code")).toHaveTextContent(SERIAL_CONNECT_STATUS.IO_ERROR);
   });
 
+  it("a retry that fails at once still reads Connecting for a moment, and the note stays put", async () => {
+    registry("released");
+    const failed = device({
+      selectedPort: PORT,
+      statusCard: { variant: "error", code: SERIAL_CONNECT_STATUS.IO_ERROR, message: "busy" },
+    });
+    const view = await renderPage({ device: failed });
+    const rerender = (next: UseDeviceConnectionResult) =>
+      view.rerender(
+        <StripPage isActive strip={strip()} name="USB strip" device={next} onNavigateToLedSetup={() => {}} onNavigateToRoomMap={() => {}} />,
+      );
+
+    rerender(device({ selectedPort: PORT, isConnecting: true }));
+    expect(screen.getByTestId("strip-connect-error")).toBeInTheDocument();
+    rerender(failed);
+    expect(screen.getByTestId("strip-state")).toHaveTextContent("device:strip.state.connecting");
+    expect(screen.getByTestId("strip-connect-error")).toBeInTheDocument();
+
+    await waitFor(() => expect(screen.getByTestId("strip-state")).toHaveTextContent("device:strip.state.disconnected"));
+    expect(screen.getByTestId("strip-connect-error")).toBeInTheDocument();
+  });
+
   // At launch nobody pressed anything: the reason comes from what Rust recorded for the port.
   it("a port held elsewhere at rest says why, with the code behind ⓘ", async () => {
     registry("busy");

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { WLED_STATUS, type WledCommandStatus, type WledDeviceInfo } from "@/shared/contracts/device";
 import type { LedStrip, StripTransport } from "@/shared/contracts/strips";
+import { useHeldFlag, useHeldValue } from "@/shared/lib/useHeldFlag";
 import { Menu } from "@/shared/ui/Menu/Menu";
 import { PageSwap } from "@/shared/ui/PageSwap/PageSwap";
 import { Reveal } from "@/shared/ui/Reveal/Reveal";
@@ -60,7 +61,8 @@ export function WledStripPage({
   const restore = wled.restoreOutcome;
   const restoring = restore.kind === "restoring" && restore.sink.ip === ip;
   const bound = wled.activeWledIp === ip;
-  const state = wledStripState({ connecting: connector.connecting === ip || restoring, bound, unlit });
+  const connecting = useHeldFlag(connector.connecting === ip || restoring);
+  const state = wledStripState({ connecting, bound, unlit });
   const view = STRIP_STATE_VIEW[state];
 
   const [failure, setFailure] = useState<WledCommandStatus | null>(null);
@@ -68,7 +70,7 @@ export function WledStripPage({
   const [forgetFailed, setForgetFailed] = useState<WledCommandStatus | null>(null);
   // A failed launch reconnect is said once, until this page tries again.
   const restoreFailed = restore.kind === "failed" && restore.sink.ip === ip && !bound && failure === null;
-  const shownFailure = failure ?? (restoreFailed && restore.kind === "failed" ? restore.status : null);
+  const shownFailure = useHeldValue(failure ?? (restoreFailed && restore.kind === "failed" ? restore.status : null), connecting);
 
   const [check, setCheck] = useState<{ status: WledCommandStatus; at: number } | null>(null);
   const [checking, setChecking] = useState(false);
@@ -86,10 +88,10 @@ export function WledStripPage({
   };
   const checkPassed = check?.status.code === WLED_STATUS.TEST_LIVE_CONFIRMED;
 
+  // The last failure stays up through the retry and is replaced by its answer, so the note does not blink.
   const connect = async () => {
-    setFailure(null);
     const status = await connector.connect(ip, wled.markConnected);
-    if (status.code !== WLED_STATUS.CONNECT_OK) setFailure(status);
+    setFailure(status.code === WLED_STATUS.CONNECT_OK ? null : status);
   };
 
   const forget = async () => {

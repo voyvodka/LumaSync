@@ -83,7 +83,9 @@ rebuilding LED Setup; apply it to every new screen:
   covered the very LED the pointer was there to pick, and hidden controls must not catch the pointer.
 - **A value that opens a list looks like one at rest.** A quiet box with a chevron that turns while
   the list is open, as LED Setup's display. The strip's colour order first showed as bare "RGB"
-  beside its label, and read as plain text: nothing said it could be changed.
+  beside its label, and read as plain text: nothing said it could be changed. In a row of settings
+  the box sits on the right with the other choices; left beside the label it read as out of place
+  next to the firmware and chip rows' segmented choices.
 - **Light and fast.** Static canvas, one delegated listener, memoised geometry, hover through CSS on
   a data attribute rather than a render; performance is a requirement, not a polish step. No
   `filter`, `backdrop-filter` or `will-change` held at rest on a window-sized surface: each is

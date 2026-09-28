@@ -63,13 +63,6 @@ export function WledCodedNote({ status, prefix, testId }: { status: CodedFailure
   );
 }
 
-/** The user's own connect that failed, from the controller's card. */
-export function ConnectErrorNote({ device }: { device: UseDeviceConnectionResult }) {
-  const card = device.statusCard;
-  if (card === null) return null;
-  return <CodedNote failure={{ code: card.code, message: card.message, details: card.details }} testId="strip-connect-error" />;
-}
-
 /** What to check when a strip did not light, most likely first. */
 export function UnlitHelp() {
   const { t } = useTranslation();

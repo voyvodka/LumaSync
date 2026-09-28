@@ -22,7 +22,7 @@ const hue: Catalogue<typeof enHue> = {
     title: "Kapalı'ya bastığında Hue ışıkları",
     turnOff: "Kapansın",
     restore: "Eski hâline dönsün",
-    description: "“Eski hâline dönsün” seçilirse ışıklar aydınlatma başlamadan önceki gibi kalır. LumaSync'ten çıktığında her zaman böyle olur.",
+    description: "“Eski hâline dönsün” ışıkları aydınlatma başlamadan önceki hâline getirir. LumaSync'ten çıkınca her zaman böyle olur.",
   },
   pair: {
     linkButtonHint: "Hue Bridge'in üstündeki butona bas. LumaSync bunu kendisi kontrol ediyor, başka bir yere tıklaman gerekmiyor.",

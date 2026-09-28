@@ -80,14 +80,16 @@ https://keepachangelog.com/en/1.1.0/
   lit; "No" lists what to check, most likely first. The strip can be renamed from the pencil beside
   its name, and the rows below set its layout (in LED Setup), firmware, LED chip and colour order,
   and run a health check. Disconnect and "Open in room map" are behind "…". The colour order is a
-  small box with a chevron that opens the list of orders.
+  small box with a chevron on the right, beside Identify, that opens the list of orders. A connect
+  that fails at once still shows "Connecting…" for a moment, and the reason under the strip stays
+  in place through the retry instead of blinking.
 - Devices → adding a strip: a controller you plug in appears in the list at once; "Add" connects
   it, opens its page and flashes it to ask whether it lit. "Add a strip" lists the controllers
   plugged in and takes a WLED device by its address, asking the device how many LEDs it has. While
   one strip is driven at a time, the page says which strip moves before you add another.
-- Devices → why a strip is not lighting is said in one short line under its state — "Port read or
-  write failed" — with what to do, the system's own message and the error code behind its ⓘ, also
-  for a strip that failed at launch. A USB strip can be forgotten from its "…", asked beside it;
+- Devices → why a strip is not lighting is said in one short line under its state — "The port
+  could not be opened" — with what to do, the system's own message and the error code behind its
+  ⓘ, also for a strip that failed at launch. A USB strip can be forgotten from its "…", asked beside it;
   if it is still in use and cannot be let go of, nothing is forgotten. "Add a strip" names the
   serial ports LumaSync will not open under a folded "Other ports". Devices plugged in or found
   slide into the list, and slide out when they go.

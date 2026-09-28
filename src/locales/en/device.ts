@@ -59,11 +59,11 @@ export default {
       ledCount: "LEDs",
     },
     hint: {
-      firmware: "The protocol your controller's firmware speaks. LumaSync v1 answers a handshake; Adalight works with Prismatik, Hyperion and most DIY sketches.",
-      chip: "SK6812 RGBW strips have a separate white LED; WS2812B and WS2811 have three colours.",
+      firmware: "The protocol your controller's firmware speaks. LumaSync v1 answers a handshake and reports its version; Adalight is the one Prismatik, Hyperion and most DIY sketches use.",
+      chip: "Pick SK6812 RGBW only for a strip with a separate white LED. WS2812B, WS2811 and other three-colour strips use WS2812B.",
       colorOrder: "Fixes a strip whose colours come out swapped, such as red showing as green. Identify finds it for you.",
-      health: "Checks that the port is there, is supported, opens, and that the firmware answers.",
-      wledHealth: "Sends one test frame and asks the device whether it is showing it, and that its LED count and live-data port match.",
+      health: "Checks that the port is there, is supported and opens, then that the firmware answers. Only LumaSync v1 answers, so with Adalight the last step fails.",
+      wledHealth: "Checks that the device's LED count matches, sends one test frame and asks the device whether it is showing it.",
     },
     layoutValue: "{{count}} LEDs · {{edges}} edges",
     layoutNone: "Not set up",
@@ -120,7 +120,7 @@ export default {
       usb: "USB",
       usbNone: "Plug a controller in; it shows here.",
       wled: "WLED",
-      wledHint: "The address WLED shows under Config → WiFi Setup, such as 192.168.1.42. LumaSync asks the device how many LEDs it has.",
+      wledHint: "The address in WLED's Info panel, such as 192.168.1.42. LumaSync asks the device how many LEDs it has.",
       addNamed: "Add {{name}}",
       replaces: "{{name}} moves here, with its layout and settings: one strip is driven at a time for now.",
       otherPorts: "Other ports",
@@ -159,7 +159,7 @@ export default {
       },
       SERIAL_HEALTH_HANDSHAKE_TIMEOUT: {
         label: "No handshake response",
-        hint: "No reply within 2 s. If using non-LumaSync firmware, switch to the Adalight profile under Strip settings.",
+        hint: "No reply within 2 s. If using non-LumaSync firmware, pick Adalight in the Firmware row.",
       },
       SERIAL_HEALTH_VERSION_MISMATCH: {
         label: "Protocol version mismatch",
@@ -167,11 +167,11 @@ export default {
       },
       SERIAL_HEALTH_FIRMWARE_MISMATCH: {
         label: "Firmware profile mismatch",
-        hint: "Device advertised a different profile than selected. Change the firmware profile under Strip settings.",
+        hint: "The controller reports a different profile than the one chosen. Pick the one it reports in the Firmware row.",
       },
       SERIAL_HEALTH_PROTOCOL_ERROR: {
         label: "Protocol error",
-        hint: "Unexpected bytes in handshake frame. Check cable integrity or try a different USB cable.",
+        hint: "The controller answered with something unexpected: a noisy cable, or firmware that speaks an older or different protocol. Try another USB cable, or check the Firmware row.",
       },
       SERIAL_HEALTH_WORKER_PANIC: {
         label: "Health check stopped unexpectedly",
@@ -215,10 +215,10 @@ export default {
       },
       CONNECT_TIMEOUT: {
         label: "Opening the port timed out",
-        hint: "The device did not answer in time. Reconnect the cable and try again.",
+        hint: "The system did not finish opening the port in time. Reconnect the cable and try again.",
       },
       CONNECT_IO_ERROR: {
-        label: "Port read or write failed",
+        label: "The port could not be opened",
         hint: "Another app may be using the port. Close it, reconnect the cable, and try again.",
       },
       CONNECT_REPLUG_REQUIRED: {
@@ -246,7 +246,7 @@ export default {
     wled: {
       manualIp: "WLED IP",
       manualIpPlaceholder: "192.168.1.42",
-      invalidIp: "Enter a valid IPv4 or IPv6 address.",
+      invalidIp: "Enter an IPv4 address, such as 192.168.1.42.",
       ipRequired: "Enter your WLED device's IP address to discover it.",
       forgetConfirm: {
         body: "LumaSync stops sending to {{ip}} and no longer connects to it at launch. Lighting keeps running on your other outputs, or stops if this was the only one.",
@@ -263,7 +263,7 @@ export default {
         bridgeUnreachable: "WLED device is not reachable.",
         protocolMismatch: "This address answered, but not as a WLED device. Check that the IP belongs to your WLED controller.",
         ledCountMismatch: "Device reports a different LED count than expected.",
-        invalidIp: "Not a valid IPv4 address — check the WLED IP and try again.",
+        invalidIp: "This address cannot be used: enter the device's own IPv4 address, not a loopback, multicast or broadcast one.",
         invalidLedCount: "WLED device reports an invalid LED count (0).",
         clientBuildFailed: "Could not start the local HTTP client.",
         connectOk: "Connected. LumaSync now sends this device's lights.",
@@ -274,7 +274,7 @@ export default {
         sinkNotStarted: "Connect the device before testing it.",
         workerFailed: "LumaSync could not finish the request. Try again.",
         forgetOk: "Device forgotten. Discover it again to use it.",
-        forgetFailed: "The device was not forgotten. Nothing was changed.",
+        forgetFailed: "The device could not be forgotten. Try Forget again.",
       },
     },
   },

@@ -2,6 +2,7 @@ import { useId, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { WLED_STATUS, type WledCommandStatus, type WledDeviceInfo } from "@/shared/contracts/device";
+import { useHeldFlag, useHeldValue } from "@/shared/lib/useHeldFlag";
 import { Reveal } from "@/shared/ui/Reveal/Reveal";
 import { RowButton, RowNote, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
 import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
@@ -12,7 +13,7 @@ import { connectAsUser } from "../state/connectAsUser";
 import { useWledConnect, type WledConnectDeps } from "../state/useWledConnect";
 import type { DevicePort } from "../types";
 import type { UseDeviceConnectionResult } from "../useDeviceConnection";
-import { ConnectErrorNote, WledCodedNote, connectFailedOn } from "./StripNotes";
+import { CodedNote, WledCodedNote, connectFailedOn } from "./StripNotes";
 import styles from "./StripPage.module.css";
 
 /** What was just added, so the page it became can open and ask whether it lit. */
@@ -68,8 +69,8 @@ interface FoundPortRowProps {
 export function FoundPortRow({ port, device, label, primary, note, onAdded }: FoundPortRowProps) {
   const { t } = useTranslation();
   const name = port.product ?? shortPortName(port.portName);
-  const adding = device.isConnecting && device.selectedPort === port.portName;
-  const failed = connectFailedOn(device, port.portName);
+  const adding = useHeldFlag(device.isConnecting && device.selectedPort === port.portName);
+  const failure = useHeldValue(connectFailedOn(device, port.portName) ? device.statusCard : null, adding);
 
   const add = async () => {
     if (await connectAsUser(device, port.portName)) onAdded({ kind: "serial", portName: port.portName });
@@ -92,7 +93,9 @@ export function FoundPortRow({ port, device, label, primary, note, onAdded }: Fo
       }
     >
       <Reveal open={note !== undefined && note !== null}>{note}</Reveal>
-      <Reveal open={failed}>{failed ? <ConnectErrorNote device={device} /> : null}</Reveal>
+      <Reveal open={failure !== null}>
+        {failure ? <CodedNote failure={failure} testId="strip-connect-error" /> : null}
+      </Reveal>
     </SettingRow>
   );
 }
@@ -113,17 +116,22 @@ export function WledAddressRow({ onBound, onAdded, primary, deps }: WledAddressR
   const [invalid, setInvalid] = useState<ReturnType<typeof wledAddressError>>(null);
   const [failure, setFailure] = useState<WledCommandStatus | null>(null);
   const wled = useWledConnect(deps);
-  const adding = wled.connecting !== null;
+  const adding = useHeldFlag(wled.connecting !== null);
+  const shownFailure = useHeldValue(failure, adding);
 
   const add = async () => {
     const error = wledAddressError(address);
     setInvalid(error);
-    setFailure(null);
-    if (error) return;
+    if (error) {
+      setFailure(null);
+      return;
+    }
     const ip = address.trim();
     const status = await wled.connect(ip, onBound);
-    if (status.code === WLED_STATUS.CONNECT_OK) onAdded({ kind: "wled", ip });
-    else setFailure(status);
+    if (status.code === WLED_STATUS.CONNECT_OK) {
+      setFailure(null);
+      onAdded({ kind: "wled", ip });
+    } else setFailure(status);
   };
 
   return (
@@ -172,8 +180,8 @@ export function WledAddressRow({ onBound, onAdded, primary, deps }: WledAddressR
           </RowNote>
         ) : null}
       </Reveal>
-      <Reveal open={failure !== null}>
-        {failure ? <WledCodedNote status={failure} testId="wled-address-failed" /> : null}
+      <Reveal open={shownFailure !== null}>
+        {shownFailure ? <WledCodedNote status={shownFailure} testId="wled-address-failed" /> : null}
       </Reveal>
     </SettingRow>
   );

@@ -59,11 +59,11 @@ const device: Catalogue<typeof enDevice> = {
       ledCount: "LED sayısı",
     },
     hint: {
-      firmware: "Denetleyicinin yazılımının konuştuğu protokol. LumaSync v1 el sıkışmaya yanıt verir; Adalight, Prismatik, Hyperion ve çoğu hazır Arduino çiziminde çalışır.",
-      chip: "SK6812 RGBW şeritlerde ayrı bir beyaz LED vardır; WS2812B ve WS2811 üç renklidir.",
+      firmware: "Denetleyicinin yazılımının konuştuğu protokol. LumaSync v1 el sıkışmaya yanıt verir ve sürümünü bildirir; Adalight ise Prismatik, Hyperion ve çoğu hazır Arduino çiziminin kullandığı protokoldür.",
+      chip: "SK6812 RGBW'yi yalnızca ayrı bir beyaz LED'i olan şerit için seç. WS2812B, WS2811 ve diğer üç renkli şeritler WS2812B kullanır.",
       colorOrder: "Renkleri yer değiştiren bir şeridi düzeltir; örneğin kırmızı yeşil görünüyorsa. Tanımla bunu senin için bulur.",
-      health: "Portun var olduğunu, desteklendiğini, açıldığını ve yazılımın yanıt verdiğini kontrol eder.",
-      wledHealth: "Tek bir test karesi gönderir ve cihaza onu gösterip göstermediğini, LED sayısının ve canlı veri portunun uyup uymadığını sorar.",
+      health: "Portun var olduğunu, desteklendiğini ve açıldığını, ardından yazılımın yanıt verdiğini kontrol eder. Yalnızca LumaSync v1 yanıt verir; Adalight'ta son adım başarısız olur.",
+      wledHealth: "Cihazın LED sayısının uyduğunu kontrol eder, tek bir test karesi gönderir ve cihaza onu gösterip göstermediğini sorar.",
     },
     layoutValue: "{{count}} LED · {{edges}} kenar",
     layoutNone: "Kurulmadı",
@@ -120,7 +120,7 @@ const device: Catalogue<typeof enDevice> = {
       usb: "USB",
       usbNone: "Bir denetleyici tak; burada görünür.",
       wled: "WLED",
-      wledHint: "WLED'in Config → WiFi Setup altında gösterdiği adres, örneğin 192.168.1.42. LumaSync cihaza kaç LED'i olduğunu sorar.",
+      wledHint: "WLED'in Info panelinde görünen adres, örneğin 192.168.1.42. LumaSync cihaza kaç LED'i olduğunu sorar.",
       addNamed: "{{name}} ekle",
       replaces: "{{name}} düzeni ve ayarlarıyla buraya geçer: şimdilik bir seferde tek şerit sürülür.",
       otherPorts: "Diğer portlar",
@@ -158,7 +158,7 @@ const device: Catalogue<typeof enDevice> = {
       },
       SERIAL_HEALTH_HANDSHAKE_TIMEOUT: {
         label: "El sıkışması yanıtsız",
-        hint: "2 s içinde yanıt gelmedi. LumaSync dışı bir firmware kullanıyorsan Şerit ayarları'ndan Adalight profiline geç.",
+        hint: "2 s içinde yanıt gelmedi. LumaSync dışı bir firmware kullanıyorsan Yazılım satırında Adalight'ı seç.",
       },
       SERIAL_HEALTH_VERSION_MISMATCH: {
         label: "Protokol sürümü uyumsuz",
@@ -166,11 +166,11 @@ const device: Catalogue<typeof enDevice> = {
       },
       SERIAL_HEALTH_FIRMWARE_MISMATCH: {
         label: "Firmware profili uyumsuz",
-        hint: "Cihaz seçilenden farklı bir profil bildirdi. Şerit ayarları'ndan firmware profilini değiştir.",
+        hint: "Denetleyici seçilenden farklı bir profil bildiriyor. Yazılım satırında onun bildirdiğini seç.",
       },
       SERIAL_HEALTH_PROTOCOL_ERROR: {
         label: "Protokol hatası",
-        hint: "El sıkışma çerçevesinde beklenmedik byte'lar var. Kablonun sağlam olduğunu kontrol et veya başka bir USB kablosu dene.",
+        hint: "Denetleyici beklenmedik bir yanıt verdi: parazitli bir kablo ya da eski veya farklı bir protokol konuşan bir yazılım. Başka bir USB kablosu dene ya da Yazılım satırına bak.",
       },
       SERIAL_HEALTH_WORKER_PANIC: {
         label: "Sağlık kontrolü beklenmedik şekilde durdu",
@@ -214,10 +214,10 @@ const device: Catalogue<typeof enDevice> = {
       },
       CONNECT_TIMEOUT: {
         label: "Port açılırken zaman aşımı",
-        hint: "Cihaz zamanında yanıt vermedi. Kabloyu yeniden tak ve tekrar dene.",
+        hint: "Sistem portu zamanında açamadı. Kabloyu yeniden tak ve tekrar dene.",
       },
       CONNECT_IO_ERROR: {
-        label: "Port okuma veya yazma hatası",
+        label: "Port açılamadı",
         hint: "Portu başka bir uygulama kullanıyor olabilir. Onu kapat, kabloyu yeniden tak ve tekrar dene.",
       },
       CONNECT_REPLUG_REQUIRED: {
@@ -245,7 +245,7 @@ const device: Catalogue<typeof enDevice> = {
     wled: {
       manualIp: "WLED IP",
       manualIpPlaceholder: "192.168.1.42",
-      invalidIp: "Geçerli bir IPv4 veya IPv6 adresi gir.",
+      invalidIp: "192.168.1.42 gibi bir IPv4 adresi gir.",
       ipRequired: "Cihazı bulmak için WLED cihazının IP adresini gir.",
       forgetConfirm: {
         body: "LumaSync {{ip}} adresine göndermeyi bırakır ve açılışta artık ona bağlanmaz. Aydınlatma diğer çıkışlarında sürer; tek çıkış buysa durur.",
@@ -262,7 +262,7 @@ const device: Catalogue<typeof enDevice> = {
         bridgeUnreachable: "WLED cihazına erişilemiyor.",
         protocolMismatch: "Bu adres yanıt verdi ama bir WLED cihazı gibi değil. IP'nin WLED denetleyicine ait olduğunu kontrol et.",
         ledCountMismatch: "Cihaz farklı bir LED sayısı bildiriyor.",
-        invalidIp: "Geçerli bir IPv4 adresi değil — WLED IP'sini kontrol et.",
+        invalidIp: "Bu adres kullanılamaz: loopback, multicast ya da broadcast değil, cihazın kendi IPv4 adresini gir.",
         invalidLedCount: "WLED cihazı geçersiz LED sayısı bildiriyor (0).",
         clientBuildFailed: "Yerel HTTP istemcisi başlatılamadı.",
         connectOk: "Bağlandı. LumaSync artık bu cihazın ışıklarını gönderiyor.",
@@ -273,7 +273,7 @@ const device: Catalogue<typeof enDevice> = {
         sinkNotStarted: "Test etmeden önce cihaza bağlan.",
         workerFailed: "LumaSync isteği tamamlayamadı. Tekrar dene.",
         forgetOk: "Cihaz unutuldu. Kullanmak için yeniden tara.",
-        forgetFailed: "Cihaz unutulamadı. Hiçbir şey değişmedi.",
+        forgetFailed: "Cihaz unutulamadı. Unut'u tekrar dene.",
       },
     },
   },

@@ -231,36 +231,36 @@ export function ColorOrderRow({ stripId, order, canIdentify, onChange, identifyD
       label={t("device:strip.row.colorOrder")}
       hint={t("device:strip.hint.colorOrder")}
       testId="strip-color-order"
-      value={
-        <button
-          ref={valueRef}
-          type="button"
-          className={styles.valueButton}
-          aria-expanded={picking}
-          aria-controls={picking ? listId : undefined}
-          aria-label={t("lights:led.colorOrder.currentAria", { order: code(order) })}
-          disabled={flowOpen}
-          onClick={() => setPicking((open) => !open)}
-          data-testid="strip-color-order-value"
-        >
-          {code(order)}
-          <svg aria-hidden viewBox="0 0 12 12" className={styles.chevron} data-open={picking || undefined}>
-            <path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-      }
       control={
-        // Identify lights the strip: with none connected it is not offered rather than greyed.
-        !canIdentify && !flowOpen ? null : (
-        <RowButton
-          ref={identifyRef}
-          aria-expanded={flowOpen}
-          onClick={flowOpen ? (state.step === "verify" ? identify.keep : identify.cancel) : identify.begin}
-          data-testid="strip-color-order-identify"
-        >
-          {t("device:strip.action.identify")}
-        </RowButton>
-        )
+        <>
+          {/* Identify lights the strip: with none connected it is not offered rather than greyed. */}
+          {!canIdentify && !flowOpen ? null : (
+            <RowButton
+              ref={identifyRef}
+              aria-expanded={flowOpen}
+              onClick={flowOpen ? (state.step === "verify" ? identify.keep : identify.cancel) : identify.begin}
+              data-testid="strip-color-order-identify"
+            >
+              {t("device:strip.action.identify")}
+            </RowButton>
+          )}
+          <button
+            ref={valueRef}
+            type="button"
+            className={styles.choice}
+            aria-expanded={picking}
+            aria-controls={picking ? listId : undefined}
+            aria-label={t("lights:led.colorOrder.currentAria", { order: code(order) })}
+            disabled={flowOpen}
+            onClick={() => setPicking((open) => !open)}
+            data-testid="strip-color-order-value"
+          >
+            {code(order)}
+            <svg aria-hidden viewBox="0 0 12 12" className={styles.chevron} data-open={picking || undefined}>
+              <path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </>
       }
     >
       <PickerList
