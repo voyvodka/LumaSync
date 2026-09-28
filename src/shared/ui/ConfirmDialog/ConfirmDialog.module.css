@@ -1,0 +1,42 @@
+@layer components {
+  /* Quiet like a popover, only centred: the same weight of text and the same row buttons. */
+  .card {
+    width: 100%;
+    max-width: 340px;
+    padding: 16px;
+    border: 1px solid var(--lm-line-2);
+    border-radius: 12px;
+    background: var(--lm-panel);
+    box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+    animation: rise var(--lm-dur-base) var(--lm-ease-out);
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(4px); } }
+
+  .title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--lm-ink);
+  }
+  .body {
+    margin: 6px 0 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--lm-ink-dim);
+  }
+  .extra { margin-top: 10px; }
+  .actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 14px; }
+  .danger { color: var(--lm-red); }
+  .danger:hover:not(:disabled),
+  .danger:focus-visible {
+    border-color: color-mix(in srgb, var(--lm-red) 55%, transparent);
+    color: var(--lm-red);
+  }
+
+  :global(:root[data-reduced-motion]) .card { animation: none; }
+
+  @media (forced-colors: active) {
+    .card { border-color: CanvasText; }
+    .danger { border-color: ButtonText; }
+  }
+}

@@ -5,9 +5,9 @@
  * a command, the DevPanel, a scenario switch — announces without having to remember to.
  */
 import {
+  DEVICE_ERROR_CODES,
   DEVICE_EVENTS,
   SERIAL_CONNECT_STATUS,
-  SERIAL_OUTPUT_STATUS,
   type LocalOutputStatus,
   type LocalOutputsSnapshot,
 } from "../src/shared/contracts/device";
@@ -32,17 +32,23 @@ export function localOutputsSnapshot(): LocalOutputsSnapshot {
   const port = serial.ports.find((p) => p.name === serial.connectedPort);
   const device = wled.devices.find((d) => d.host === wled.connectedHost);
   const outputs: LocalOutputStatus[] = [];
+  const idle = serial.idleEntry;
+  if (idle && idle.portName !== port?.name) {
+    outputs.push({
+      kind: "serial",
+      portName: idle.portName,
+      connected: false,
+      status: status(idle.code, idle.code === DEVICE_ERROR_CODES.PORT_NOT_FOUND ? "The serial port went away." : "Not connected."),
+      firmware: null,
+      updatedAtUnixMs: Date.now(),
+    });
+  }
   if (port !== undefined) {
-    // A WLED device bound after the strip evicted it, as Rust's registry does: the entry stays,
-    // no longer connected.
-    const evicted = device !== undefined;
     outputs.push({
       kind: "serial",
       portName: port.name,
-      connected: !evicted,
-      status: evicted
-        ? status(SERIAL_OUTPUT_STATUS.DISCONNECTED, "Another output took the strip's place.")
-        : status(SERIAL_CONNECT_STATUS.OK, "Connected"),
+      connected: true,
+      status: status(SERIAL_CONNECT_STATUS.OK, "Connected"),
       firmware: null,
       updatedAtUnixMs: Date.now(),
     });
@@ -50,13 +56,16 @@ export function localOutputsSnapshot(): LocalOutputsSnapshot {
   if (device !== undefined) {
     outputs.push({ kind: "wled", ip: device.host, ledCount: device.ledCount, connected: true });
   }
-  // Rust's rule under eviction: a bound WLED device, else the connected strip.
-  const driven =
-    device !== undefined
-      ? ({ kind: "wled", ip: device.host } as const)
-      : port !== undefined
-        ? ({ kind: "serial", portName: port.name } as const)
-        : null;
+  // Rust's rule: the earliest connected output.
+  const wledDriven = device !== undefined && (port === undefined || serial.connectedFirst === "wled");
+  const driven = wledDriven
+    ? ({ kind: "wled", ip: device.host } as const)
+    : port !== undefined
+      ? ({ kind: "serial", portName: port.name } as const)
+      : null;
+  outputs.sort((a, b) =>
+    a.kind === "serial" && b.kind === "serial" ? a.portName.localeCompare(b.portName) : a.kind === "serial" ? -1 : 1,
+  );
   return { revision, outputs, driven };
 }
 

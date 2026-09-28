@@ -31,6 +31,34 @@ describe("localOutputs store", () => {
     expect(outputs.store.get().snapshot?.driven).toEqual({ kind: "wled", ip: "10.0.0.5" });
   });
 
+  // The reconciler drops "usb" on an unplug only; a later change that loses nothing keeps the answer.
+  it("remembers how the last output went until another one goes", () => {
+    const outputs = createLocalOutputs({ read: async () => snap(0), listen: async () => () => {} });
+    const serial = (revision: number, connected: boolean, code: "CONNECT_OK" | "PORT_NOT_FOUND" | "DISCONNECTED") => ({
+      revision,
+      outputs: [
+        {
+          kind: "serial" as const,
+          portName: "COM3",
+          connected,
+          status: { code, message: code, details: null },
+          firmware: null,
+          updatedAtUnixMs: 0,
+        },
+      ],
+      driven: null,
+    });
+
+    outputs.ingest(serial(1, true, "CONNECT_OK"));
+    expect(outputs.store.get().lastLoss).toBeNull();
+    outputs.ingest(serial(2, false, "PORT_NOT_FOUND"));
+    expect(outputs.store.get().lastLoss).toBe("unplugged");
+    outputs.ingest(snap(3, "10.0.0.5"));
+    expect(outputs.store.get().lastLoss).toBe("unplugged");
+    outputs.ingest(snap(4));
+    expect(outputs.store.get().lastLoss).toBe("released");
+  });
+
   it("takes the first snapshot whatever its revision", () => {
     const outputs = createLocalOutputs({ read: async () => snap(0), listen: async () => () => {} });
     expect(outputs.ingest(snap(0))).toBe(true);

@@ -620,15 +620,6 @@ fn version_window_warning(pong: &HandshakePongResponse) -> Option<String> {
     })
 }
 
-/// Return the most recently recorded serial connection status — the last attempt's, as before the
-/// registry kept one entry per port.
-#[tauri::command]
-pub fn get_serial_connection_status(
-    registry: tauri::State<'_, LocalOutputRegistry>,
-) -> Result<SerialConnectionStatus, String> {
-    registry.serial_status_checked()
-}
-
 /// Run a multi-step health check on `port_name`.
 ///
 /// Steps:
@@ -986,7 +977,6 @@ pub struct SerialPortsChangedEvent {
     pub appeared: Vec<String>,
     /// Supported ports gone for `MISSES_BEFORE_LOST` polls in a row.
     pub lost: Vec<String>,
-    pub connection: SerialConnectionStatus,
 }
 
 pub const SERIAL_WATCH_INTERVAL: Duration = Duration::from_millis(1_500);
@@ -1012,7 +1002,7 @@ pub struct SerialWatch {
 }
 
 impl SerialWatch {
-    /// One poll over a listing taken at `listed_at`. The connected port is checked on every poll,
+    /// One poll over a listing taken at `listed_at`. Every connected port is checked on every poll,
     /// so a connect that finished after its port vanished is still caught; a connect that finished
     /// after the listing is never cleared by it.
     pub fn poll(
@@ -1026,7 +1016,7 @@ impl SerialWatch {
             .filter(|port| port.is_supported)
             .map(|port| port.name.clone())
             .collect();
-        let connected = registry.connected_serial_port();
+        let connected = registry.connected_serial_ports();
 
         let Some(present) = self.present.as_mut() else {
             self.present = Some(now);
@@ -1057,7 +1047,7 @@ impl SerialWatch {
         let appeared: Vec<String> = now.difference(present).cloned().collect();
         present.extend(appeared.iter().cloned());
 
-        // Every lost port's writer is dropped, connected or not — a port WLED evicted may still hold
+        // Every lost port's writer is dropped, connected or not — a port let go of may still hold
         // its cached exclusive handle — unless a connect landed after the listing.
         let mut forget: Vec<String> = lost
             .iter()
@@ -1069,8 +1059,8 @@ impl SerialWatch {
             cleared = registry.serial_lost(port, listed_at).or(cleared);
         }
         // `>=`, not `lost`: a connect that finished after the listing skips the clear once, and the
-        // port stays in `watched` while it is the connected one, so the next poll tries again.
-        if let Some(port) = connected.filter(|port| {
+        // port stays in `watched` while it is a connected one, so the next poll tries again.
+        for port in connected.into_iter().filter(|port| {
             !lost.contains(port)
                 && self
                     .misses
@@ -1091,7 +1081,6 @@ impl SerialWatch {
                 ports,
                 appeared,
                 lost,
-                connection: registry.serial_status(),
             }),
             forget,
             registry: cleared,
@@ -1130,12 +1119,15 @@ pub(crate) fn serial_watch_tick<R: tauri::Runtime>(
         listed_at,
         &app.state::<LocalOutputRegistry>(),
     );
+    // The registry first: a reader that sees a port go learns from it whether the strip was lost.
+    if let Some(snapshot) = outcome.registry {
+        local_outputs::announce(app, snapshot);
+    }
     if let Some(event) = outcome.event {
         log::info!(
-            "[serial-watch] appeared={:?} lost={:?} connected={:?}",
+            "[serial-watch] appeared={:?} lost={:?}",
             event.appeared,
-            event.lost,
-            event.connection.port_name
+            event.lost
         );
         if let Err(error) = app.emit_to(
             crate::MAIN_WINDOW_LABEL,
@@ -1145,13 +1137,29 @@ pub(crate) fn serial_watch_tick<R: tauri::Runtime>(
             log::warn!("[serial-watch] could not announce the change: {error}");
         }
     }
-    if let Some(snapshot) = outcome.registry {
-        local_outputs::announce(app, snapshot);
+    follow_lost_ports(app, &outcome.forget);
+}
+
+/// Drops the lost ports' cached writers. When the running mode wrote to one of them and another
+/// output remains, it moves onto that one; with nothing left, the main window's unplug handling
+/// trims or ends the mode.
+pub(crate) fn follow_lost_ports<R: tauri::Runtime>(app: &tauri::AppHandle<R>, lost: &[String]) {
+    use tauri::Manager;
+    let Some(lighting) = app.try_state::<super::lighting_mode::LightingRuntimeState>() else {
+        return;
+    };
+    let moves = lost.iter().any(|port| lighting.drives_serial(port))
+        && app.state::<LocalOutputRegistry>().driven().is_some();
+    for port in lost {
+        lighting.forget_serial_session(port);
     }
-    if let Some(lighting) = app.try_state::<super::lighting_mode::LightingRuntimeState>() {
-        for port in &outcome.forget {
-            lighting.forget_serial_session(port);
-        }
+    if moves {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(error) = super::lighting_mode::outputs::refresh_running_with(&app).await {
+                log::warn!("[serial-watch] the mode did not move onto what remains: {error}");
+            }
+        });
     }
 }
 
@@ -1226,11 +1234,13 @@ mod tests {
         let second = watch.poll(Vec::new(), 30, &state);
         let event = second.event.expect("the loss is announced");
         assert_eq!(event.lost, vec!["COM3".to_string()]);
-        assert!(!event.connection.connected);
-        assert_eq!(event.connection.status.code, "PORT_NOT_FOUND");
         assert_eq!(second.forget, vec!["COM3".to_string()]);
         assert!(!is_connected(&state));
-        assert!(second.registry.is_some());
+        let snapshot = second.registry.expect("the registry is announced");
+        let entry =
+            serde_json::to_value(&snapshot).expect("snapshot serialises")["outputs"][0].clone();
+        assert_eq!(entry["connected"], false);
+        assert_eq!(entry["status"]["code"], "PORT_NOT_FOUND");
 
         let back = watch.poll(vec![supported("COM3")], 40, &state);
         assert_eq!(
@@ -1270,10 +1280,11 @@ mod tests {
         assert_eq!(next.forget, vec!["COM3".to_string()]);
         let event = next.event.expect("the clear is announced");
         assert!(event.lost.is_empty());
-        assert!(!event.connection.connected);
+        assert!(next.registry.is_some());
+        assert!(!is_connected(&state));
     }
 
-    // A port WLED evicted is no longer connected, yet its cached writer may still hold it.
+    // A port let go of is no longer connected, yet its cached writer may still hold it.
     #[test]
     fn a_lost_port_that_was_not_connected_still_has_its_writer_dropped() {
         let mut watch = super::SerialWatch::default();

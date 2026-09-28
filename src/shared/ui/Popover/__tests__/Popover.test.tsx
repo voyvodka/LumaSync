@@ -48,4 +48,37 @@ describe("Popover", () => {
     expect(screen.queryByRole("listbox", { hidden: true })).toBeNull();
     vi.useRealTimers();
   });
+
+  // A list opened below a control near the window's foot would run off it: it opens above instead,
+  // and below again where it fits.
+  it.each([
+    { anchorTop: 560, placed: /above/ },
+    { anchorTop: 100, placed: /below/ },
+  ])("opens below unless it would run off the window (anchor at $anchorTop)", ({ anchorTop, placed }) => {
+    const height = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(200);
+    vi.stubGlobal("innerHeight", 620);
+    const anchor = createRef<HTMLButtonElement>();
+    render(
+      <>
+        <button ref={anchor} type="button">anchor</button>
+        <Popover open onClose={() => {}} anchorRef={anchor} side="below" role="listbox" label="places">
+          <span>inside</span>
+        </Popover>
+      </>,
+    );
+    vi.spyOn(anchor.current!, "getBoundingClientRect").mockReturnValue(
+      { top: anchorTop, bottom: anchorTop + 30, left: 100, right: 160, width: 60, height: 30, x: 100, y: anchorTop } as DOMRect,
+    );
+    // Placement is measured on open; reopen with the anchor where the test put it.
+    height.mockClear();
+    const view = render(
+      <Popover open onClose={() => {}} anchorRef={anchor} side="below" role="dialog" label="again">
+        <span>again</span>
+      </Popover>,
+    );
+    expect(screen.getByRole("dialog").className).toMatch(placed);
+    view.unmount();
+    height.mockRestore();
+    vi.unstubAllGlobals();
+  });
 });

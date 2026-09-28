@@ -91,7 +91,7 @@ export function createHealthCheck(
             },
       }));
 
-      // Lets FirmwareProfilePicker read the advertised profile without
+      // Lets the strip page's firmware row read the advertised profile without
       // mounting its own controller (and running its own health check).
       firmwareProfileEventsBus?.emit({
         advertisedFirmwareProfile: result.advertisedFirmwareProfile ?? undefined,

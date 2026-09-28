@@ -1,8 +1,8 @@
-import { DEVICE_ERROR_CODES, DEVICE_OPERATION, SERIAL_CONNECT_STATUS } from "@/shared/contracts/device";
+import { DEVICE_ERROR_CODES, DEVICE_OPERATION, DEVICE_STATUS, SERIAL_CONNECT_STATUS } from "@/shared/contracts/device";
 import type { ConnectionEventBus, ConnectionRejectionCode } from "../connectionEvents";
 import { applySuccessfulConnection } from "./connectionOutcomes";
 import type { ConnectionStore } from "./connectionStore";
-import { toConnectionCard } from "./connectionStateHelpers";
+import { nextStatusForReadyState, toConnectionCard } from "./connectionStateHelpers";
 import type { DeviceConnectionControllerDeps } from "./connectionTypes";
 
 /** `boot` is the launch's one attempt; `replug` is the serial watcher seeing the saved port return. */
@@ -17,6 +17,7 @@ export function createAutoReconnectOnInit(
   store: ConnectionStore,
   deps: DeviceConnectionControllerDeps,
   connectionEventsBus: ConnectionEventBus | null,
+  sync: () => Promise<void>,
 ): AutoReconnectOnInit {
   /**
    * Bug 10A — auto-reconnect on app launch when the persisted port is
@@ -25,6 +26,14 @@ export function createAutoReconnectOnInit(
    * the port is gone or the connect rejects so the user lands on a clean
    * manual-pair screen instead of an error toast.
    */
+  // `beginOperation` said Connecting; a refusal nobody asked for leaves the status the ports give.
+  const giveUp = (token: number) => {
+    store.finishOperation(token);
+    store.setState((prev) =>
+      prev.status === DEVICE_STATUS.CONNECTING ? { ...prev, status: nextStatusForReadyState(prev.ports) } : prev,
+    );
+  };
+
   const tryAutoReconnect = async (targetPort: string, origin: ReconnectOrigin = "boot"): Promise<string | null> => {
     if (store.isDisposed()) return null;
     // Don't fight an active operation (manual connect, recovery, health
@@ -45,7 +54,7 @@ export function createAutoReconnectOnInit(
 
       if (connection.connected && connection.portName) {
         store.finishOperation(token);
-        await applySuccessfulConnection(store, deps, connectionEventsBus, {
+        await applySuccessfulConnection(store, deps, connectionEventsBus, sync, {
           connectedPortName: connection.portName,
           statusCard: toConnectionCard(connection),
         });
@@ -57,7 +66,7 @@ export function createAutoReconnectOnInit(
       // didn't ask for this attempt and a noisy toast on every cold
       // launch would be worse than a silent fall-through to manual
       // pair. We do log so production debugging stays possible.
-      store.finishOperation(token);
+      giveUp(token);
       const rejectionCode = connection.status?.code ?? "UNKNOWN";
       console.warn(
         `[LumaSync] auto-reconnect (${origin}) rejected:`,
@@ -87,15 +96,14 @@ export function createAutoReconnectOnInit(
         });
       }
       // The one refusal the user can act on — typically after a crash or force-quit mid-stream — so
-      // it is shown, and the emit lets every sibling mount read it from Rust.
+      // it is shown; the other mounts read it from the port's registry entry.
       if (rejectionCode === SERIAL_CONNECT_STATUS.REPLUG_REQUIRED) {
         store.setState((prev) => ({ ...prev, statusCard: toConnectionCard(connection) }));
-        connectionEventsBus?.emit({ portName: targetPort, connected: false });
       }
       return rejectionCode;
     } catch (err) {
       if (!store.isCurrentToken(token) || store.isDisposed()) return null;
-      store.finishOperation(token);
+      giveUp(token);
       console.error(`[LumaSync] auto-reconnect (${origin}) threw:`, err);
       return null;
     }

@@ -114,7 +114,7 @@ describe("HuePage — Forget", () => {
     expect(dialog).toHaveTextContent("hue:page.forgetConfirm.body");
     await user.click(screen.getByRole("button", { name: "hue:page.cancel" }));
 
-    expect(screen.queryByTestId("hue-forget-confirm")).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId("hue-forget-confirm")).toBeNull());
     expect(forgetBridge).not.toHaveBeenCalled();
     expect(selectBridge).not.toHaveBeenCalled();
   });
@@ -166,7 +166,7 @@ describe("HuePage — Forget", () => {
     await forget(user);
 
     await waitFor(() => expect(selectBridge).toHaveBeenCalledWith(null));
-    expect(screen.queryByTestId("hue-forget-confirm")).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId("hue-forget-confirm")).toBeNull());
     expect(forgetBridge).not.toHaveBeenCalled();
   });
 

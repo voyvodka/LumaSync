@@ -11,6 +11,7 @@ import {
 } from "@/shared/contracts/roomMap";
 import {
   HUE_AREA_CHANNELS_STATUS,
+  HUE_IDENTIFY_SIGNAL_MS,
   HUE_IDENTIFY_STATUS,
   HUE_RUNTIME_STATUS,
   type HueChannelPlacementOverride,
@@ -29,16 +30,30 @@ import {
   differingChannelIds,
   sameSnapshot,
   snapshotAfterPush,
+  toSyncSnapshot,
   type HueSyncState,
 } from "@/features/hue/model/hueSyncState";
 import type { TranslationKey } from "@/features/i18n/catalogue";
 import { parseSkippedChannelIds } from "@/features/hue/model/hueWritebackResult";
-import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { Menu } from "@/shared/ui/Menu/Menu";
 import { Reveal } from "@/shared/ui/Reveal/Reveal";
 import { RowButton, RowNote, rowStyles, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
 import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
 import styles from "./HuePage.module.css";
+
+/** What taking the bridge's arrangement leaves: each channel placed where the bridge has it, then
+ *  held inside its room-map zone. */
+function takeBridgeArrangement(
+  bridgeChannels: readonly HueAreaChannelInfo[],
+  placements: readonly HueChannelPlacement[],
+  zones: readonly HueZone[],
+): { adopted: HueChannelPlacement[]; resolved: HueChannelPlacement[] } {
+  const adopted = bridgeChannels.map((ch) =>
+    adoptBridgePlacement(resolveChannelPlacement(ch, [...placements], zones), ch, zones),
+  );
+  const resolved = bridgeChannels.map((ch) => resolveChannelPlacement(ch, adopted, zones));
+  return { adopted, resolved };
+}
 
 interface Props {
   channels: HueAreaChannelInfo[];
@@ -179,7 +194,6 @@ export function HueChannels({
 
   const [isSaving, setIsSaving] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
-  const [pendingConfirm, setPendingConfirm] = useState<"save" | "pull" | null>(null);
   const [identifyingIndex, setIdentifyingIndex] = useState<number | null>(null);
   const [actionResult, setActionResult] = useState<BridgeActionResult | null>(null);
   const resultTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -308,17 +322,9 @@ export function HueChannels({
         showResult({ kind: "pullFailed" });
         return;
       }
-      const zonesNow = zonesRef.current;
-      const adopted = read.channels.map((ch) =>
-        adoptBridgePlacement(
-          resolveChannelPlacement(ch, placementsRef.current, zonesNow),
-          ch,
-          zonesNow,
-        ),
-      );
-      // What the room map will resolve these to, which is where a zone that
-      // cannot reach the bridge's position shows.
-      const resolved = read.channels.map((ch) => resolveChannelPlacement(ch, adopted, zonesNow));
+      // `resolved` is what the room map will make of it, which is where a zone that cannot reach the
+      // bridge's position shows.
+      const { adopted, resolved } = takeBridgeArrangement(read.channels, placementsRef.current, zonesRef.current);
       const snapshot = bridgeSnapshot(read.channels);
       setChannelPlacements(resolved);
       onPositionChange?.(adopted);
@@ -349,11 +355,17 @@ export function HueChannels({
       if (!onIdentify) return;
       setIdentifyingIndex(channelIndex);
       showResult(null);
+      const started = Date.now();
       try {
         const status = await onIdentify(lightIds);
         if (status.code !== HUE_IDENTIFY_STATUS.OK) {
           console.warn(`[LumaSync] Hue identify: ${status.code}${status.details ? ` — ${status.details}` : ""}`);
           showResult({ kind: "identifyFailed", code: status.code }, DETAIL_DISMISS_MS);
+        } else {
+          // The bridge answers at once; the light blinks for seconds after. The button says so
+          // for as long, or it flicked back to "Identify" before the light had started.
+          const left = HUE_IDENTIFY_SIGNAL_MS - (Date.now() - started);
+          if (left > 0) await new Promise((resolve) => setTimeout(resolve, left));
         }
       } finally {
         setIdentifyingIndex(null);
@@ -361,13 +373,6 @@ export function HueChannels({
     },
     [onIdentify, showResult],
   );
-
-  const confirmPending = useCallback(() => {
-    const action = pendingConfirm;
-    setPendingConfirm(null);
-    if (action === "save") void runSave();
-    else if (action === "pull") void runPull();
-  }, [pendingConfirm, runSave, runPull]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -389,6 +394,15 @@ export function HueChannels({
   if (!loading && channels.length === 0 && emptyState === null) return null;
 
   const syncState = deriveHueSyncState(channelPlacements, bridgeArrangement);
+  // Different only because a zone holds channels inside it: taking the bridge's arrangement again
+  // would change nothing, so the note says why instead of offering a send that is not the point.
+  const heldByZone =
+    syncState === HUE_SYNC_STATE.LOCAL_AHEAD &&
+    bridgeRead !== undefined &&
+    differingChannelIds(
+      channelPlacements,
+      toSyncSnapshot(takeBridgeArrangement(channels, channelPlacements, zones).resolved),
+    ).length === 0;
   // Gated on the runtime, not just on streaming: a solid-colour session also holds a channel list
   // with our placements applied.
   const bridgeBusy = isStreaming || isStale;
@@ -435,14 +449,30 @@ export function HueChannels({
                         label: t("hue:channelMap.pullFromBridge"),
                         disabled: bridgeBusy || actionBusy,
                         describedBy: busyNote ? busyNoteId : undefined,
-                        onSelect: () => setPendingConfirm("pull"),
+                        onSelect: () => void runPull(),
+                        confirm: {
+                          title: t("hue:channelMap.pullConfirmTitle"),
+                          text: t("hue:channelMap.pullConfirm"),
+                          confirmLabel: t("hue:channelMap.pullFromBridge"),
+                          cancelLabel: t("hue:page.cancel"),
+                          testId: "hue-channel-map-confirm",
+                          confirmTestId: "hue-channel-map-confirm-yes",
+                        },
                       },
                       {
                         id: "save",
                         label: t("hue:channelMap.saveToBridgeMenu"),
                         disabled: bridgeBusy || actionBusy,
                         describedBy: busyNote ? busyNoteId : undefined,
-                        onSelect: () => setPendingConfirm("save"),
+                        onSelect: () => void runSave(),
+                        confirm: {
+                          title: t("hue:channelMap.saveConfirmTitle"),
+                          text: t("hue:channelMap.saveConfirm", { ip: bridgeIp }),
+                          confirmLabel: t("hue:channelMap.saveToBridge"),
+                          cancelLabel: t("hue:page.cancel"),
+                          testId: "hue-channel-map-confirm",
+                          confirmTestId: "hue-channel-map-confirm-yes",
+                        },
                       },
                     ]}
                   />
@@ -459,7 +489,9 @@ export function HueChannels({
               <RowNote tone="status">{t("hue:channelMap.state.staleBody")}</RowNote>
             </Reveal>
             <Reveal open={hasSaveAction && syncState === HUE_SYNC_STATE.LOCAL_AHEAD && !actionBusy}>
-              <RowNote tone="status">{t("hue:channelMap.sync.localAhead")}</RowNote>
+              <RowNote tone="status" testId="hue-channels-sync-note">
+                {t(heldByZone ? "hue:channelMap.sync.heldByZone" : "hue:channelMap.sync.localAhead")}
+              </RowNote>
             </Reveal>
             <Reveal open={busyNote !== null}>
               {busyNote ? (
@@ -541,23 +573,6 @@ export function HueChannels({
         })}
       </div>
 
-      {pendingConfirm !== null && (
-        <ConfirmDialog
-          title={pendingConfirm === "save" ? t("hue:channelMap.saveConfirmTitle") : t("hue:channelMap.pullConfirmTitle")}
-          body={
-            pendingConfirm === "save"
-              ? t("hue:channelMap.saveConfirm", { ip: bridgeIp })
-              : t("hue:channelMap.pullConfirm")
-          }
-          confirmLabel={
-            pendingConfirm === "save" ? t("hue:channelMap.saveToBridge") : t("hue:channelMap.pullFromBridge")
-          }
-          cancelLabel={t("hue:page.cancel")}
-          onConfirm={confirmPending}
-          onCancel={() => setPendingConfirm(null)}
-          testId="hue-channel-map-confirm"
-        />
-      )}
     </section>
   );
 

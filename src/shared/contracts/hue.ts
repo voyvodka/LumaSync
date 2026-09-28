@@ -457,6 +457,10 @@ export interface HueLightNamesResponse {
 }
 
 /** `identify_hue_lights` codes; a refused key borrows the runtime's re-pair code. */
+/** How long an identified light toggles on and off (`HUE_IDENTIFY_SIGNAL_MS` in `hue/lights.rs`);
+ *  the button says it is blinking for as long, rather than for the instant the request takes. */
+export const HUE_IDENTIFY_SIGNAL_MS = 4000;
+
 export const HUE_IDENTIFY_STATUS = {
   OK: "HUE_IDENTIFY_OK",
   PARTIAL: "HUE_IDENTIFY_PARTIAL",

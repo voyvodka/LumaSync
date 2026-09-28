@@ -1,5 +1,5 @@
 import type { TranslationKey } from "@/features/i18n/catalogue";
-import type { HealthCheckView, SerialHealthStepCode } from "@/shared/contracts/device";
+import { SERIAL_OUTPUT_STATUS, type HealthCheckView, type SerialHealthStepCode } from "@/shared/contracts/device";
 
 const HEALTH_STEP_ORDER = ["PORT_VISIBLE", "PORT_SUPPORTED", "CONNECT_AND_VERIFY"] as const;
 
@@ -108,6 +108,14 @@ const HEALTH_CODE_COPY: Partial<Record<SerialHealthStepCode, HealthCodeCopy>> = 
     labelKey: "device:healthCheck.serialHealthCodes.CONNECT_REPLUG_REQUIRED.label",
     hintKey: "device:healthCheck.serialHealthCodes.CONNECT_REPLUG_REQUIRED.hint",
     showDetails: true,
+  },
+};
+
+/** Entry states that are not connect outcomes, so they stay out of the health-step copy. */
+const OUTPUT_STATUS_COPY: Record<typeof SERIAL_OUTPUT_STATUS.DISCONNECTED, { labelKey: TranslationKey; hintKey: TranslationKey }> = {
+  DISCONNECTED: {
+    labelKey: "device:outputStatus.DISCONNECTED.label",
+    hintKey: "device:outputStatus.DISCONNECTED.hint",
   },
 };
 
@@ -254,6 +262,11 @@ export function buildDeviceStatusCard(input: DeviceStatusCardInput): DeviceStatu
       bodyKey: "device:status.missingBody",
       ...statusCardDetails(input.statusCard),
     };
+  }
+
+  if (input.statusCard?.code === SERIAL_OUTPUT_STATUS.DISCONNECTED && input.connectedPort === null) {
+    const copy = OUTPUT_STATUS_COPY.DISCONNECTED;
+    return { variant: "info", code: input.statusCard.code, titleKey: copy.labelKey, bodyKey: copy.hintKey };
   }
 
   if (input.statusCard?.variant === "error") {

@@ -1,0 +1,43 @@
+@layer components {
+  .state {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-right: 4px;
+    font-size: 12.5px;
+    white-space: nowrap;
+    color: var(--lm-ink-dim);
+  }
+  .state[data-tone="error"] { color: var(--lm-red); }
+
+  .dot {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border: 1px solid var(--lm-ink-faint);
+    border-radius: 50%;
+  }
+  .live { border-color: transparent; background: var(--lm-green); }
+  .ready { border-color: var(--lm-green); }
+  .warn { border-color: transparent; background: var(--lm-amber); }
+  .error { border-color: transparent; background: var(--lm-red); }
+  .idle { border-color: var(--lm-ink-faint); }
+  /* Waiting on the device: an open ring turning, for as long as the wait lasts. */
+  .busy {
+    width: 9px;
+    height: 9px;
+    border: 1.5px solid color-mix(in srgb, var(--lm-amber) 30%, transparent);
+    border-top-color: var(--lm-amber);
+    animation: turn 1s linear infinite;
+  }
+  @keyframes turn { to { transform: rotate(360deg); } }
+
+  :global(:root[data-reduced-motion]) .busy { animation: none; }
+
+  @media (forced-colors: active) {
+    .dot { border-color: CanvasText; }
+    .live,
+    .warn,
+    .error { background: CanvasText; }
+  }
+}

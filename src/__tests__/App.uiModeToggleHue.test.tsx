@@ -72,6 +72,7 @@ vi.mock("../features/device/useDeviceConnection", () => ({
     isConnected: false,
     connectedPort: null,
     ports: [],
+    refreshPorts: async () => {},
   }),
 }));
 
@@ -154,6 +155,7 @@ beforeEach(() => {
     const hue = hueIpc(command);
     if (hue !== undefined) return Promise.resolve(hue);
     if (command === "list_displays") return Promise.resolve([]);
+    if (command === "get_local_outputs") return Promise.resolve({ revision: 1, outputs: [], driven: null });
     return Promise.resolve({ connected: false, status: ok("OK"), ports: [] });
   });
 });

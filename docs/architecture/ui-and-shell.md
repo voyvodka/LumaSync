@@ -114,8 +114,8 @@ stylesheet reads, so the two cannot disagree. Where the element has no such attr
 selection: a step tracker's current step and the status bar's tone scale.
 
 **Controls come from `src/shared/ui/`, looks stay with their surface.** `Button`/`IconButton`,
-`Toggle` (a `role="switch"`), `Segmented` (a radio group), `RangeRow`, `ConfirmDialog`, `Callout`,
-`EmptyState` and `StatusPill` own the behaviour and the accessibility contract — one tab stop per
+`Toggle` (a `role="switch"`), `Segmented` (a radio group), `RangeRow`, `ConfirmPopover`, `ConfirmDialog`, `StateWord` (a device's state in a word with its dot), `Callout`,
+`EmptyState` own the behaviour and the accessibility contract — one tab stop per
 radio group with arrow keys, Home and End (`useRadioGroup`), a name on every icon-only button, a
 focus trap in every dialog — while each call site keeps the class that draws it. That split is what
 let the three mode strips (`features/mode/ui/ModeStrip.tsx`) and the pattern picker gain arrow keys
@@ -336,27 +336,30 @@ and the close-to-tray hint. `scripts/verify/launch-smoke.mjs` reads the constant
 hardcoding it, so renaming the string is safe — but separating the constant from the call, or
 removing either, breaks CI rather than silently passing.
 
-**Devices → USB has one add path.** The page reads top to bottom as Controller (status, the
-supported ports, each with one Connect) → Strip settings (firmware profile, chip type, colour
-order) → Paired strips. There used to be two half-paths: "Pair as strip" only connected, and
-"+ Add LED strip" only wrote a room-map placement and never connected. Now a connect the user asks
-for also makes sure the strip is in the roster (`device/usbStripRoster.ts`): nothing is written if a
-placement already names the port, and a new one takes its LED count from the saved LED layout (60
-before there is one). A placement drawn before strips carried a port is adopted rather than
-duplicated, but only when that is unambiguous — it is the one unlinked placement, and no other port
-(the one connected, or last connected, before this connect) was driving it; otherwise a second
+**Devices → USB has one add path.** A controller plugged in and not a strip yet is a faint row in
+the rail and a row on "Add a strip"; its Add connects it, and a strip's own Connect does the same
+(`device/state/connectAsUser.ts`). There used to be two half-paths: "Pair as strip" only connected,
+and "+ Add LED strip" only wrote a room-map placement and never connected. Now a connect the user
+asks for also makes sure the strip is in the roster (`device/model/usbStripRoster.ts`): nothing is
+written if a placement already names the port, and a new one takes its LED count from the saved LED
+layout (60 before there is one). A placement drawn before strips carried a port is adopted rather
+than duplicated, but only when that is unambiguous — it is the one unlinked placement, and no other
+port (the one connected, or last connected, before this connect) was driving it; otherwise a second
 controller would relabel the first one's strip. The write goes through `shellStore.update`, a
 revision-guarded replace, because a plain save of `roomMap` would revert Hue channels or zones written
 between its read and its write. The boot auto-reconnect never writes, so an existing setup gains no
-strip it did not ask for; when it reconnects a strip the roster lacks, Paired strips says so and
-offers "Add connected strip", which runs the same function. While a Connect is between landing and
-its roster write, that offer is held back rather than flashed.
+strip it did not ask for; a strip connected that way and missing from the roster offers "Add to
+room map" behind its "…", which runs the same function. A roster write that fails is said on the
+strip's page, and the next connect tries again. What was just added opens as the strip it became and asks whether it lit: one
+flash of the test pattern and a question beside the button, because a connect that works says
+nothing about the ground and data wiring a strip also needs. Until several strips are driven at
+once, adding one moves the strip that is driven now — its layout and settings come along — and the
+page says so before Add is pressed.
 The placement changes no light: output and capture never read `roomMap.usbStrips` — it is the
 roster and the room map's drawing — so the room map stays off the first-run path. A strip linked to
 a port does not make the map "non-empty" (`room-map/model/roomTemplate.ts`), so a USB user's first
 visit still opens on the template picker, and applying a template keeps every port-linked strip —
-the first takes the template's strip placement — along with the Hue channels and zones. Ports that fail the VID/PID allowlist are listed only under a collapsed "Other
-serial ports", with no action.
+the first takes the template's strip placement — along with the Hue channels and zones. Ports that fail the VID/PID allowlist are named under a folded "Other ports" on "Add a strip", with no action: they explain an empty list without inviting a click.
 
 **The first connect points at LED Setup; it does not open it.** It used to switch the window to LED
 Setup, so the chip type and colour order on the page the user connected from went unseen. It now
@@ -564,11 +567,17 @@ agree.
 - **An unplug reaches the reconciler through the serial port watcher.** Nothing noticed one before:
   the controller's port list was read at boot and on Rescan only, and Rust's status was written only
   by a connect, so a strip pulled while Solid ran went unnoticed until the next write failed. Rust
-  now polls the inventory (`device-output.md`, "The serial port watcher") and emits
-  `device://serial-ports-changed`; every controller applies `lost` directly (not through a refresh,
-  whose missing-port path started auto-recovery in every mount), and the App mount — the only one
-  with `reconnectOnReplug` — brings the saved port back when it reappears. From there the ordinary
-  paths take over: the reconciler's false→true transition adds `usb` back and starts a running mode
+  now polls the inventory (`device-output.md`, "The serial port watcher"), marks the lost strip's
+  registry entry `PORT_NOT_FOUND` and announces the registry, then emits
+  `device://serial-ports-changed`. Every controller takes the loss from the registry
+  (`registryFollower.ts`) and only the port list from the watcher's event (not through a refresh,
+  whose missing-port path started auto-recovery in every mount); the App mount — the only one with
+  `reconnectOnReplug` — brings the saved port back when it reappears. The reconciler reads the
+  registry too: `usb` goes out of the targets only when the last local output goes *and* the store's
+  `lastLoss` says `unplugged` — another output taking the strip's place, or a device let go of, is
+  not an unplug — and comes back only when a strip connects, never a WLED device (one restored at
+  launch binds after the reconciler is armed, and counting it would save `usb` on every launch).
+  From there the ordinary paths take over: the rising edge adds `usb` back and starts a running mode
   on it, while an unplug that ended a USB-only mode leaves it Off after the replug — the lights
   coming back on by themselves after the user saw them stop would be the surprise.
 - **Unplugging the strip that was the only target ends the mode, the way Off does.** `useUsbTargetReconciler.ts` used to act on an unplug only when another target stayed selected, so a USB-only mode — or a `[usb, hue]` restore running on USB alone while it waited for a busy bridge (#441) — got no notice, a worker still capturing for a port that was gone, and the mode still shown running; the busy notice kept saying "running on USB only". Now the reconciler calls the orchestrator's `endLightingOnUsbUnplug`, which sends the empty set with `origin: "usbUnplug"`: session-only (`lastOutputTargets` is never written, nor the persisted mode), the worker stopped whatever the active set says, then Off with the selection kept. The empty set also cancels a pending rejoin the way any output change does, and the left-out reason is cleared with it. The "continuing on the other outputs" notice for an unplug beside another target is raised only while a mode runs; with the mode Off it named nothing that continued. The reconciler raises its own notice, `shell:notices.messages.usbDisconnectedLightingOff`, only once the mode has actually ended — with the mode already Off, or a stop that failed (which raises the stop-failed toast instead), there is nothing to report. `normalizeOutputTargets([])` keeps an explicit empty set, which is what lets the delta path see "nothing left".

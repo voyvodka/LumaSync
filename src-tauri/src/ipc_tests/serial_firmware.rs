@@ -98,7 +98,7 @@ fn app(device: Arc<Nano>) -> App<MockRuntime> {
     mock_app_with_serial_ports(
         tauri::generate_handler![
             crate::commands::device_connection::connect_serial_port,
-            crate::commands::device_connection::get_serial_connection_status
+            crate::commands::local_outputs::get_local_outputs
         ],
         SerialPortAccess::from_io(device),
     )
@@ -113,15 +113,14 @@ fn connect(device: Arc<Nano>) -> (Value, Value) {
         json!({ "portName": PORT, "chipType": null }),
     )
     .expect("connect_serial_port must resolve, never reject");
-    let status =
-        invoke(&webview, "get_serial_connection_status", json!({})).expect("status must resolve");
-    (response, status)
+    let outputs = invoke(&webview, "get_local_outputs", json!({})).expect("outputs must resolve");
+    (response, outputs["outputs"][0].clone())
 }
 
 #[test]
 fn an_answering_firmware_is_reported_on_connect() {
     let device = Nano::replying(pong(0x0104, 0x11));
-    let (response, status) = connect(Arc::clone(&device));
+    let (response, entry) = connect(Arc::clone(&device));
 
     assert_eq!(status_code(&response), "CONNECT_OK");
     assert_eq!(response["connected"], json!(true));
@@ -136,8 +135,8 @@ fn an_answering_firmware_is_reported_on_connect() {
     );
     assert_eq!(response["status"]["details"], Value::Null);
     assert_eq!(
-        status["firmware"], response["firmware"],
-        "the status read agrees"
+        entry["firmware"], response["firmware"],
+        "the registry entry agrees"
     );
 
     // One open: the PING goes out on the settled handle, not a reopened one.
@@ -148,14 +147,14 @@ fn an_answering_firmware_is_reported_on_connect() {
 #[test]
 fn a_silent_device_connects_exactly_as_before() {
     let device = Nano::replying(Vec::new());
-    let (response, status) = connect(Arc::clone(&device));
+    let (response, entry) = connect(Arc::clone(&device));
 
     assert_eq!(status_code(&response), "CONNECT_OK");
     assert_eq!(response["connected"], json!(true));
     assert_eq!(response["portName"], json!(PORT));
     assert!(response.get("firmware").is_none(), "got: {response}");
     assert_eq!(response["status"]["details"], Value::Null);
-    assert!(status.get("firmware").is_none(), "got: {status}");
+    assert_eq!(entry.get("firmware"), Some(&Value::Null), "got: {entry}");
 }
 
 #[test]

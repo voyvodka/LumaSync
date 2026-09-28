@@ -4,7 +4,7 @@
  * Before this file the mock answered `start_led_test_pattern` with a
  * constant `previewOnly: true`, no matter what the world's serial/WLED/Hue
  * state was. The colour-order "Identify" flow
- * (`src/features/settings/sections/control/useColorOrderIdentify.ts`) reads
+ * (`src/features/device/state/useColorOrderIdentify.ts`) reads
  * `previewOnly` to decide whether the probe actually reached a strip — a
  * constant `true` meant the flow's live path (`PATTERN_STARTED`) could never
  * be exercised in the mock, only its `notSending` failure branch.

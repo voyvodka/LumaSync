@@ -518,6 +518,11 @@ mod tests {
             2_000 * MS,
         );
         coordinator.hold_until_exit(2_000 * MS, &*log.action());
+        // The cleanup thread may win the claim and still be inside `exit` when this returns.
+        let deadline = Instant::now() + 1_000 * MS;
+        while log.exits().is_empty() && Instant::now() < deadline {
+            std::thread::sleep(5 * MS);
+        }
 
         assert!(
             started.elapsed() >= 200 * MS,

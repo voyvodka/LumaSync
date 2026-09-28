@@ -54,6 +54,12 @@ fn push_trace(trace: &mut Option<&mut Vec<&'static str>>, step: &'static str) {
     }
 }
 
+/// What was running before this apply: the mode, and the output it wrote to.
+pub(super) struct Outgoing {
+    pub(super) mode: LightingModeConfig,
+    pub(super) plan: Option<UsbOutputPlan>,
+}
+
 /// Records the newly active serial port, releasing the previous port's
 /// cached session first if it differs. Same-port overwrites (a mode
 /// restart on the port already in use) are left untouched — that is the
@@ -62,9 +68,39 @@ fn push_trace(trace: &mut Option<&mut Vec<&'static str>>, step: &'static str) {
 /// *switch* should release a handle, so an abandoned port can be opened by
 /// another app (e.g. the Arduino IDE) instead of staying locked until
 /// LumaSync quits.
-pub(super) fn set_active_port(owner: &mut LightingRuntimeOwner, new_port: String) {
+///
+/// A released port the outgoing mode was lighting is painted black first,
+/// through the session still cached: after the release a black frame would
+/// reopen the port, and the reopen resets the board. The outgoing mode is
+/// passed in because the Ambilight branch has already replaced the owner's
+/// by now, and a black frame sized for the new strip is the wrong length.
+/// The write runs under the runtime lock, bounded by the serial write timeout;
+/// its duration is logged so a slow controller shows up in the log.
+pub(super) fn set_active_port(
+    owner: &mut LightingRuntimeOwner,
+    new_port: String,
+    outgoing: &Outgoing,
+) {
     if owner.active_port.as_deref() != Some(new_port.as_str()) {
         if let Some(old_port) = owner.active_port.take() {
+            if outgoing.plan.as_ref() == Some(&UsbOutputPlan::Serial(old_port.clone())) {
+                let started = std::time::Instant::now();
+                let output = SolidUsbOutput::for_mode(
+                    &owner.output_bridge,
+                    UsbOutputPlan::Serial(old_port.clone()),
+                    &outgoing.mode,
+                );
+                match output.blank() {
+                    Ok(()) => info!(
+                        "[set_active_port] {old_port} blanked on release in {}ms led_count={}",
+                        started.elapsed().as_millis(),
+                        output.led_count
+                    ),
+                    Err(reason) => {
+                        warn!("[set_active_port] {old_port} kept its last frame: {reason}")
+                    }
+                }
+            }
             owner.output_bridge.disconnect_session(&old_port);
         }
     }
@@ -284,9 +320,12 @@ fn apply_mode_change_inner(
     // it is written into that cell below instead — adding it here would restart per drag commit.
     // color_order does NOT either: the worker re-reads it from `ambilight_live` every frame, and a
     // restart would re-open capture for what is a byte shuffle.
+    // The output the next worker would write to; a retune keeps the running one only when it matches.
+    let next_usb_plan = usb_plan.clone().filter(|_| needs_usb);
     if normalized_next.kind == LightingModeKind::Ambilight
         && owner.active_mode.kind == LightingModeKind::Ambilight
         && owner.worker.is_some()
+        && next_usb_plan == owner.active_usb_plan
         && normalized_next.targets == owner.active_mode.targets
         && normalized_next.display_id == owner.active_mode.display_id
         && normalized_next.led_calibration == owner.active_mode.led_calibration
@@ -337,6 +376,10 @@ fn apply_mode_change_inner(
         }
     }
 
+    let outgoing = Outgoing {
+        mode: owner.active_mode.clone(),
+        plan: owner.active_usb_plan.take(),
+    };
     stop_previous(owner, &mut trace);
 
     match normalized_next.kind {
@@ -416,8 +459,9 @@ fn apply_mode_change_inner(
                 );
 
                 if let UsbOutputPlan::Serial(port_name) = &plan {
-                    set_active_port(owner, port_name.clone());
+                    set_active_port(owner, port_name.clone(), &outgoing);
                 }
+                owner.active_usb_plan = Some(plan);
             }
 
             // Hue solid output (if hue target requested and context available)
@@ -586,7 +630,7 @@ fn apply_mode_change_inner(
 
             match start_ambilight_worker(
                 owner.output_bridge.clone(),
-                usb_plan_for_worker,
+                usb_plan_for_worker.clone(),
                 normalized_next.led_calibration.clone(),
                 Arc::clone(&live_settings),
                 frame_source,
@@ -607,9 +651,10 @@ fn apply_mode_change_inner(
                     owner.active_mode = normalized_next;
                     owner.preview.active_test_pattern = test_pattern;
                     owner.preview.pattern_live = pattern_live;
-                    if let Some(p) = serial_port {
-                        set_active_port(owner, p.to_string());
+                    if let Some(UsbOutputPlan::Serial(port)) = &usb_plan_for_worker {
+                        set_active_port(owner, port.clone(), &outgoing);
                     }
+                    owner.active_usb_plan = usb_plan_for_worker;
                     make_result(
                         owner.active_mode.clone(),
                         command_status(
@@ -874,6 +919,16 @@ pub(crate) fn blank_serial_port<R: Runtime>(
     ended: &LightingModeConfig,
 ) -> Result<(), String> {
     blank_plan(app, UsbOutputPlan::Serial(port.to_string()), ended).black_frame
+}
+
+/// Paints a WLED device black with the layout of the mode that last drove it, before it is switched
+/// off: switched off alone, a device still in realtime mode shows its last frame until that times out.
+pub(crate) fn blank_wled<R: Runtime>(
+    app: &AppHandle<R>,
+    config: crate::commands::wled_sink::WledSinkConfig,
+    ended: &LightingModeConfig,
+) -> Result<(), String> {
+    blank_plan(app, UsbOutputPlan::Wled(config), ended).black_frame
 }
 
 fn blank_plan<R: Runtime>(

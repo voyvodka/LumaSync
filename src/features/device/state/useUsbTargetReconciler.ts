@@ -4,14 +4,24 @@ import { normalizeOutputTargets } from "@/shared/contracts/mode";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 
 import { connectionEvents } from "../connectionEvents";
+import type { LocalLoss } from "../model/localOutputs";
 
 /** How long either USB-unplugged toast stays up. */
 const USB_DISCONNECT_NOTICE_MS = 5_000;
 /** The boot-time unsupported-port toast carries more to read, so it stays up longer. */
 const USB_UNSUPPORTED_NOTICE_MS = 6_000;
 
-export interface UsbTargetReconcilerInput {
-  isConnected: boolean;
+/** What the registry says of the local outputs, as the reconciler compares it between renders. */
+export interface LocalOutputFacts {
+  /** A USB strip is connected: pairing one is the "use USB" intent. */
+  serialConnected: boolean;
+  /** A strip or a WLED device is connected: when none is, the "usb" target has nothing left. */
+  localConnected: boolean;
+}
+
+export interface UsbTargetReconcilerInput extends LocalOutputFacts {
+  /** How the last local output went; only an unplug takes "usb" out of this session's targets. */
+  lastLoss: LocalLoss | null;
   bootstrapDone: boolean;
   selectedOutputTargets: HueRuntimeTarget[];
   /** A mode runs, so an unplug has something to continue. */
@@ -35,8 +45,8 @@ export interface UsbTargetReconciler {
   usbUnsupportedNotice: boolean;
   /** Which fallback the unsupported notice reports: Hue took over, or nothing is selected. */
   usbUnsupportedHueFallback: boolean;
-  /** Bootstrap arms the edge detector from the live USB snapshot. */
-  armUsbConnected: (connected: boolean) => void;
+  /** Bootstrap arms the edge detector from the registry. */
+  armUsbConnected: (facts: LocalOutputFacts) => void;
 }
 
 /**
@@ -45,7 +55,9 @@ export interface UsbTargetReconciler {
  * unsupported/missing-port rejection.
  */
 export function useUsbTargetReconciler({
-  isConnected,
+  serialConnected,
+  localConnected,
+  lastLoss,
   bootstrapDone,
   selectedOutputTargets,
   lightingRunning,
@@ -56,7 +68,7 @@ export function useUsbTargetReconciler({
   onLastTargetUnplugged,
 }: UsbTargetReconcilerInput): UsbTargetReconciler {
   // Hot-plug detection ref — null until bootstrap arms it.
-  const prevUsbConnectedRef = useRef<boolean | null>(null);
+  const prevUsbConnectedRef = useRef<LocalOutputFacts | null>(null);
   const [usbDisconnectNotice, setUsbDisconnectNotice] = useState<"continuing" | "lightingOff" | null>(null);
   // Bug 10D — surfaces a one-time non-blocking notice when boot-time
   // auto-reconnect rejects with PORT_UNSUPPORTED / PORT_NOT_FOUND, so
@@ -64,8 +76,8 @@ export function useUsbTargetReconciler({
   const [usbUnsupportedNotice, setUsbUnsupportedNotice] = useState(false);
   const [usbUnsupportedHueFallback, setUsbUnsupportedHueFallback] = useState(true);
 
-  const armUsbConnected = useCallback((connected: boolean) => {
-    prevUsbConnectedRef.current = connected;
+  const armUsbConnected = useCallback((facts: LocalOutputFacts) => {
+    prevUsbConnectedRef.current = facts;
   }, []);
 
   // Hot-plug detection. Gated on `bootstrapDone` because `prevUsbConnectedRef`
@@ -73,9 +85,11 @@ export function useUsbTargetReconciler({
   useEffect(() => {
     if (!bootstrapDone) return; // Skip until bootstrap sets ref and flag
 
-    const wasConnected = prevUsbConnectedRef.current;
+    const was = prevUsbConnectedRef.current;
 
-    if (wasConnected === false && isConnected) {
+    // The rising edge is a strip's alone: a WLED device restored at boot finishes after arming, and
+    // counting it would write "usb" into the saved choice on every launch.
+    if (was !== null && !was.serialConnected && serialConnected) {
       // Pairing is itself the "I want USB output" intent: it is saved, and a
       // running mode starts on the strip. See docs/architecture/ui-and-shell.md.
       if (!selectedOutputTargets.includes("usb")) {
@@ -83,7 +97,8 @@ export function useUsbTargetReconciler({
       }
     }
 
-    if (wasConnected === true && !isConnected) {
+    // Another output taking the strip's place, or a device let go of, is not an unplug.
+    if (was !== null && was.localConnected && !localConnected && lastLoss === "unplugged") {
       // USB just unplugged: drop it from the targets for this session.
       if (selectedOutputTargets.includes("usb")) {
         const nextTargets = selectedOutputTargets.filter((t) => t !== "usb");
@@ -106,9 +121,11 @@ export function useUsbTargetReconciler({
       }
     }
 
-    prevUsbConnectedRef.current = isConnected;
+    prevUsbConnectedRef.current = { serialConnected, localConnected };
   }, [
-    isConnected,
+    serialConnected,
+    localConnected,
+    lastLoss,
     selectedOutputTargets,
     lightingRunning,
     onSelectTargets,

@@ -74,6 +74,29 @@ https://keepachangelog.com/en/1.1.0/
   so when it would replace the bridge you have. The area's channels are rows too: each light by
   name with Identify, and whether the bridge holds the same arrangement; taking the bridge's
   arrangement or saving yours to it is behind the channels' "…".
+- Devices → a USB strip is a page of quiet rows too. The controller row says where the strip stands
+  in one word — Connected, Not connected, Reconnecting…, Busy, Didn't light — with the one thing to
+  do beside it. "Flash" lights the strip white for a moment and asks beside the button whether it
+  lit; "No" lists what to check, most likely first. The strip can be renamed from the pencil beside
+  its name, and the rows below set its layout (in LED Setup), firmware, LED chip and colour order,
+  and run a health check. Disconnect and "Open in room map" are behind "…". The colour order is a
+  small box with a chevron on the right, beside Identify, that opens the list of orders. A connect
+  that fails at once still shows "Connecting…" for a moment, and the reason under the strip stays
+  in place through the retry instead of blinking.
+- Devices → adding a strip: a controller you plug in appears in the list at once; "Add" connects
+  it, opens its page and flashes it to ask whether it lit. "Add a strip" lists the controllers
+  plugged in and takes a WLED device by its address, asking the device how many LEDs it has. While
+  one strip is driven at a time, the page says which strip moves before you add another.
+- Devices → why a strip is not lighting is said in one short line under its state — "The port
+  could not be opened" — with what to do, the system's own message and the error code behind its
+  ⓘ, also for a strip that failed at launch. A USB strip can be forgotten from its "…", asked beside it;
+  if it is still in use and cannot be let go of, nothing is forgotten. "Add a strip" names the
+  serial ports LumaSync will not open under a folded "Other ports". Devices plugged in or found
+  slide into the list, and slide out when they go.
+- Devices → a WLED strip has the same kind of page: its state in a word with Connect or Flash, the
+  LED count the device reports, its layout, and Forget behind "…", asked beside it. A device
+  forgotten while it lights goes dark at once instead of holding its last frame for a few seconds. The old USB
+  Strips and WLED panes, with their cards, are gone.
 - Settings is split into pages — General, Appearance, Updates, Help and About — listed on the
   left. Each row shows just its name and control; an explanation, where one helps, is behind the
   ⓘ beside the name.
@@ -265,6 +288,27 @@ https://keepachangelog.com/en/1.1.0/
   name the one that is actually lit; they named the strip while the WLED device was lighting.
 - A second attempt to connect a strip that is already connected (two reconnects at once, at
   launch) no longer marks the working strip as disconnected.
+- A failed connect on one USB port no longer shows the strip on another port as disconnected while
+  it keeps lighting.
+- After a WLED device takes a USB strip's place, the strip reads "Disconnected" instead of still
+  showing connected.
+- The Lights screen, the Devices page and the room map now agree on which strip is connected; each
+  used to ask on its own and could disagree after a pairing, an unplug or a replacement.
+- At launch the saved strip is reconnected once, not twice at the same moment from two screens; the
+  second attempt could fail on the busy port and leave a working strip marked as failed.
+- Connecting a WLED device while a USB strip lights a mode moves the mode onto the device and turns
+  the strip off; the strip used to keep its last colour while the mode went on writing to it.
+  Connecting a strip while a WLED device lights a mode moves it back and switches the device off,
+  instead of leaving it on its own effect.
+- Disconnecting the output a running mode uses, with another one still connected, moves the mode onto
+  that one instead of ending it.
+- Hue: taking or saving the channel arrangement, and forgetting the bridge, ask beside the "…" they
+  were picked from instead of in a dialog over the page. After taking the bridge's arrangement, a
+  channel its room-map zone keeps inside is named as the reason it differs, instead of a suggestion
+  to send yours back.
+- Turkish: the Hue Bridge is called "Hue Bridge" throughout, not "köprü".
+- Hue: Identify blinks the light on and off for a few seconds where the light supports it, instead of
+  one faint breath that was easy to miss, and the button says it is blinking for as long.
 - Stats for nerds: the frame-rate chip in the status bar no longer turns red with "Low FPS" while
   everything is fine — with Hue alone, which runs at 20 fps, or on a still screen, where fewer
   frames change. Its colour now shows whether the output keeps up.

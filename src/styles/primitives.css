@@ -1,12 +1,11 @@
 /* ─────────────────────────────────────────────────────────────────────
    Shared control primitives — the classes `src/shared/ui/` renders.
    First in the components layer, so a feature sheet can still adjust a
-   primitive inside its own surface (`.lm-color-order-answer`, say).
+   primitive inside its own surface.
    ───────────────────────────────────────────────────────────────────── */
 
-/* Button — small and medium, both mono caps like a device card's footer
-   action (`size="card"`, `.lm-dcard-act` in devices.css): one case for every
-   button on a page. */
+/* Button — small and medium, both mono caps: one case for every button on a
+   page. */
 .lm-btn {
   all: unset;
   box-sizing: border-box;

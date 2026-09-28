@@ -72,8 +72,7 @@ use commands::calibration::{
     OverlayState,
 };
 use commands::device_connection::{
-    connect_serial_port, get_serial_connection_status, list_serial_ports, run_serial_health_check,
-    SerialPortAccess,
+    connect_serial_port, list_serial_ports, run_serial_health_check, SerialPortAccess,
 };
 use commands::hue::commands::{
     get_hue_area_channels, get_hue_stream_status, restart_hue_stream, set_hue_solid_color,
@@ -905,7 +904,6 @@ pub fn run() {
             update_tray_labels,
             list_serial_ports,
             connect_serial_port,
-            get_serial_connection_status,
             run_serial_health_check,
             discover_hue_bridges,
             verify_hue_bridge_ip,

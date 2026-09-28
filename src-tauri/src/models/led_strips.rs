@@ -37,6 +37,8 @@ impl StripHardware {
 #[derive(Clone, Debug, PartialEq)]
 pub struct LedStrip {
     pub id: String,
+    /// The user's name for it; `None` until renamed, and the UI names it after its device.
+    pub name: Option<String>,
     pub enabled: bool,
     pub transport: Option<StripTransport>,
     pub hardware: StripHardware,
@@ -105,6 +107,7 @@ pub fn strips_from_legacy(state: &Map<String, Value>) -> Vec<LedStrip> {
     };
     let mut strips = vec![LedStrip {
         id,
+        name: None,
         enabled: true,
         transport,
         hardware,
@@ -114,6 +117,7 @@ pub fn strips_from_legacy(state: &Map<String, Value>) -> Vec<LedStrip> {
     if let (Some(_), Some(sink)) = (serial, wled) {
         strips.push(LedStrip {
             id: second_id.to_owned(),
+            name: None,
             enabled: false,
             transport: Some(StripTransport::Wled { sink }),
             hardware: StripHardware::default(),
@@ -148,6 +152,12 @@ pub fn strips_from_stored(stored: &Value) -> Vec<LedStrip> {
             let hardware_field = |key: &str| hardware.and_then(|map| present(map, key)).cloned();
             Some(LedStrip {
                 id,
+                // Kept as written: only a blank or non-string value reads as no name.
+                name: row
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .filter(|name| !name.trim().is_empty())
+                    .map(str::to_owned),
                 enabled: row.get("enabled").and_then(Value::as_bool).unwrap_or(true),
                 transport: row.get("transport").and_then(transport_from_stored),
                 hardware: StripHardware {
@@ -245,6 +255,9 @@ fn describes_something(row: &Value) -> bool {
 pub fn strip_json(strip: &LedStrip) -> Value {
     let mut out = Map::new();
     out.insert("id".into(), Value::from(strip.id.clone()));
+    if let Some(name) = &strip.name {
+        out.insert("name".into(), Value::from(name.clone()));
+    }
     out.insert("enabled".into(), Value::from(strip.enabled));
     out.insert(
         "transport".into(),

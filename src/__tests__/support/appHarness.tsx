@@ -19,7 +19,12 @@ import { useLeaveGuardRegistrar, useNavigationState } from "@/features/shell/nav
 import { useHueShellStatus } from "@/features/hue/state/hueShellStatus";
 import { useSetupGuideActions, type SetupGuideActions } from "@/features/onboarding/state/setupGuideControl";
 import { runtimeStatus } from "@/features/hue/__tests__/fakeHueHealth";
-import { DEVICE_COMMANDS, type DrivenOutputRef } from "@/shared/contracts/device";
+import {
+  DEVICE_COMMANDS,
+  type DrivenOutputRef,
+  type LocalOutputsSnapshot,
+  type SerialCommandStatusCode,
+} from "@/shared/contracts/device";
 import type {
   ApplyOutputsOutcome,
   ApplyOutputsRequest,
@@ -38,6 +43,8 @@ export const env = {
   activeWledIp: null as string | null,
   /** The registry's `driven`; unset follows `installInvokeDispatch`'s serial flag. */
   driven: undefined as DrivenOutputRef | null | undefined,
+  /** What the strip's registry entry says once it is not connected. */
+  stripLossCode: "PORT_NOT_FOUND" as SerialCommandStatusCode,
   // Idle unless a test opens the update prompt on purpose.
   updaterState: { status: "idle" } as { status: string; update?: unknown; progress?: number },
   checkFailedNotice: null as { message: string } | null,
@@ -359,18 +366,7 @@ export function installInvokeDispatch(serialConnected: boolean): void {
         });
       // A fresh revision per read: the registry store keeps the newest it has seen, across tests.
       case DEVICE_COMMANDS.GET_LOCAL_OUTPUTS:
-        localOutputsRevision += 1;
-        return Promise.resolve({
-          revision: localOutputsRevision,
-          outputs: [],
-          // What Rust drives, as the test says; never a rule worked out here.
-          driven:
-            env.driven !== undefined
-              ? env.driven
-              : serialConnected
-                ? { kind: "serial", portName: "/dev/cu.usbserial-test" }
-                : null,
-        });
+        return Promise.resolve(localOutputsSnapshot(serialConnected));
       default:
         return Promise.resolve({ connected: serialConnected });
     }
@@ -378,6 +374,40 @@ export function installInvokeDispatch(serialConnected: boolean): void {
 }
 
 let localOutputsRevision = 0;
+
+const TEST_PORT = "/dev/cu.usbserial-test";
+
+/** The registry as `env` says it now: the strip, then any WLED device. */
+function localOutputsSnapshot(serialConnected: boolean): LocalOutputsSnapshot {
+  localOutputsRevision += 1;
+  const connected = env.isConnected && serialConnected;
+  const outputs: LocalOutputsSnapshot["outputs"] = [
+    {
+      kind: "serial",
+      portName: TEST_PORT,
+      connected,
+      status: { code: connected ? "CONNECT_OK" : env.stripLossCode, message: "m", details: null },
+      firmware: null,
+      updatedAtUnixMs: 0,
+    },
+  ];
+  if (env.activeWledIp) outputs.push({ kind: "wled", ip: env.activeWledIp, ledCount: 60, connected: true });
+  return {
+    revision: localOutputsRevision,
+    outputs,
+    // What Rust drives, as the test says; never a rule worked out here.
+    driven: env.driven !== undefined ? env.driven : connected ? { kind: "serial", portName: TEST_PORT } : null,
+  };
+}
+
+/**
+ * Reads the registry again, as Rust's event after a change would bring it. Imported late: the mock
+ * factories import this module, and a static import of the store would wait on them.
+ */
+export async function syncLocalOutputs(): Promise<void> {
+  const { localOutputs } = await import("@/features/device/state/localOutputsStore");
+  await localOutputs.refresh();
+}
 
 /** A fresh revision every time, whatever `overrides` carries over. */
 export function snapshot(overrides: Partial<LightingRuntimeSnapshot> = {}): LightingRuntimeSnapshot {
@@ -484,6 +514,7 @@ export function resetAppHarness(): void {
   env.isConnected = true;
   env.activeWledIp = null;
   env.driven = undefined;
+  env.stripLossCode = "PORT_NOT_FOUND";
   env.updaterState = { status: "idle" };
   env.checkFailedNotice = null;
   env.rerenderUpdater = null;

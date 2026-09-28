@@ -303,3 +303,30 @@ describe("the idle card", () => {
     expect(buildDeviceStatusCard({ ...base, ports: [{ isSupported: true }] }).code).toBe("IDLE");
   });
 });
+
+// A strip let go of, or replaced by another output, has not failed.
+describe("a strip that stopped being driven", () => {
+  it("reads Disconnected as information, in the user's language", () => {
+    const card = buildDeviceStatusCard({
+      status: "ready",
+      statusCard: { variant: "info", code: "DISCONNECTED", message: "Disconnected." },
+      connectedPort: null,
+    });
+    expect(card).toMatchObject({
+      variant: "info",
+      code: "DISCONNECTED",
+      titleKey: "device:outputStatus.DISCONNECTED.label",
+      bodyKey: "device:outputStatus.DISCONNECTED.hint",
+    });
+    expect(card.details).toBeUndefined();
+  });
+
+  it("gives way once a strip is connected again", () => {
+    const card = buildDeviceStatusCard({
+      status: "connected",
+      statusCard: { variant: "info", code: "DISCONNECTED", message: "m" },
+      connectedPort: "COM3",
+    });
+    expect(card.code).not.toBe("DISCONNECTED");
+  });
+});

@@ -8,6 +8,7 @@ import { PageSwap } from "@/shared/ui/PageSwap/PageSwap";
 import { Reveal } from "@/shared/ui/Reveal/Reveal";
 import { RowButton, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
 import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
+import { StateWord } from "@/shared/ui/StateWord/StateWord";
 
 import type { HueActionId, HueActionSpec, HueNote, HueTone } from "./hueStateView";
 import styles from "./HuePage.module.css";
@@ -53,9 +54,9 @@ export function HueBridgeRow({
       controlFills
       control={
         <PageSwap id={stateKey} way="fade" className={styles.swap}>
-          <HueStateWord tone={tone} live={false}>
+          <StateWord tone={tone} live={false}>
             {word}
-          </HueStateWord>
+          </StateWord>
           {secondary.map((action) => (
             <HueActionButton key={action.id} action={action} />
           ))}
@@ -68,6 +69,7 @@ export function HueBridgeRow({
               label: action.label,
               onSelect: action.onClick,
               danger: action.danger,
+              confirm: action.confirm,
               disabled: action.disabled || action.busy,
             }))}
           />
@@ -81,24 +83,6 @@ export function HueBridgeRow({
       <Reveal open={note !== null}>{note ? <HueNoteLine note={note} /> : null}</Reveal>
       {children}
     </SettingRow>
-  );
-}
-
-/** The state in a word, with a dot that says the same in colour. Read out when it changes, unless
- *  the caller reads it out itself (`live={false}`). */
-export function HueStateWord({ tone, live = true, children }: { tone: HueTone; live?: boolean; children: ReactNode }) {
-  return (
-    <span
-      className={styles.state}
-      role={live ? "status" : undefined}
-      aria-live={live ? "polite" : undefined}
-      aria-hidden={live ? undefined : true}
-      data-tone={tone}
-      data-testid={live ? "hue-state" : undefined}
-    >
-      <span className={cx(styles.dot, styles[tone])} aria-hidden="true" />
-      {children}
-    </span>
   );
 }
 

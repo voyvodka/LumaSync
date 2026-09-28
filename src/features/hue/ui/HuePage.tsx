@@ -16,9 +16,9 @@ import { buildHueRuntimeStatusCard } from "@/features/hue/model/hueRuntimeStatus
 import type { HueBridgeSummary } from "@/features/hue/hueOnboardingApi";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
 import { HueChannels } from "@/features/hue/ui/HueChannels";
-import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { cx } from "@/shared/ui/cx";
 import { Reveal } from "@/shared/ui/Reveal/Reveal";
+import { RevealList } from "@/shared/ui/Reveal/RevealList";
 import { RowButton, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
 
 import { HueAddressRow } from "./HueAddressRow";
@@ -99,36 +99,30 @@ export function HuePage({
   const view = state ? HUE_STATE_VIEW[state] : null;
   const areaChoice = useHueAreaChoice(hue, view?.area === "change");
 
-  const [forgetOpen, setForgetOpen] = useState(false);
   const [isForgetting, setIsForgetting] = useState(false);
   const [forgetResult, setForgetResult] = useState<HueForgetStatus | null>(null);
   const { forgetBridge, selectBridge } = hue;
   // A bridge with no key has nothing saved to forget: letting go of the selection is the whole of
   // it, and asking first would overstate it.
-  const requestForget = useCallback(() => {
+  const forget = useCallback(async () => {
     setForgetResult(null);
     if (credentials === null) {
       selectBridge(null);
       return;
     }
-    setForgetOpen(true);
-  }, [credentials, selectBridge]);
-  // The note is about the bridge that was forgotten; a bridge selected since (a new pairing, a
-  // scan with one result) is another story.
-  const selectedAfterForget = forgetResult?.code !== HUE_FORGET_STATUS.FAILED && selectedBridgeId !== null;
-  useEffect(() => {
-    if (selectedAfterForget) setForgetResult(null);
-  }, [selectedAfterForget]);
-  const confirmForget = useCallback(async () => {
-    setForgetOpen(false);
     setIsForgetting(true);
     try {
       setForgetResult(await forgetBridge());
     } finally {
       setIsForgetting(false);
     }
-  }, [forgetBridge]);
-
+  }, [credentials, selectBridge, forgetBridge]);
+  // The note is about the bridge that was forgotten; a bridge selected since (a new pairing, a
+  // scan with one result) is another story.
+  const selectedAfterForget = forgetResult?.code !== HUE_FORGET_STATUS.FAILED && selectedBridgeId !== null;
+  useEffect(() => {
+    if (selectedAfterForget) setForgetResult(null);
+  }, [selectedAfterForget]);
   const ctx: HueContext = {
     t,
     hue,
@@ -146,7 +140,18 @@ export function HuePage({
     },
     onStopHue,
     areaChoice,
-    requestForget,
+    forget: () => void forget(),
+    forgetConfirm:
+      credentials === null
+        ? undefined
+        : {
+            title: t("hue:page.forgetConfirm.title"),
+            text: t("hue:page.forgetConfirm.body"),
+            confirmLabel: t("hue:page.forgetConfirm.confirm"),
+            cancelLabel: t("hue:page.cancel"),
+            testId: "hue-forget-confirm",
+            confirmTestId: "hue-forget-confirm-yes",
+          },
     isForgetting,
   };
 
@@ -274,22 +279,6 @@ export function HuePage({
         {body}
       </div>
 
-      {forgetOpen ? (
-        <ConfirmDialog
-          title={t("hue:page.forgetConfirm.title")}
-          body={t("hue:page.forgetConfirm.body")}
-          confirmLabel={t("hue:page.forgetConfirm.confirm")}
-          cancelLabel={t("hue:page.cancel")}
-          tone="danger"
-          enterCancels
-          onConfirm={() => {
-            void confirmForget();
-          }}
-          onCancel={() => setForgetOpen(false)}
-          testId="hue-forget-confirm"
-          confirmTestId="hue-forget-confirm-yes"
-        />
-      ) : null}
     </section>
   );
 }
@@ -364,10 +353,10 @@ function NoBridgeRows({ hue, forgetResult }: NoBridgeRowsProps) {
           </Reveal>
         </HueBridgeRow>
       </Reveal>
-      {bridges.map((bridge) => {
-        const name = sameName(bridge) ? bridge.ip : bridgeDisplayName(bridge.name);
-        return (
-          <Reveal key={bridge.id} open appear>
+      <RevealList items={bridges} keyOf={(bridge) => bridge.id}>
+        {(bridge) => {
+          const name = sameName(bridge) ? bridge.ip : bridgeDisplayName(bridge.name);
+          return (
             <SettingRow
               label={name}
               value={bridge.ip}
@@ -384,9 +373,9 @@ function NoBridgeRows({ hue, forgetResult }: NoBridgeRowsProps) {
                 </RowButton>
               }
             />
-          </Reveal>
-        );
-      })}
+          );
+        }}
+      </RevealList>
       <Reveal open>
         <HueAddressRow hue={hue} hint={t("hue:manualIp.description")} />
       </Reveal>

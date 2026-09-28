@@ -54,7 +54,9 @@ import {
   ROOM_MAP_BACKGROUND_MAX_MB,
 } from "@/shared/contracts/roomMap";
 import type React from "react";
-import { useUsbConnectionStatus } from "@/features/device/useUsbConnectionStatus";
+import { connectedSerialPort } from "@/features/device/model/localOutputs";
+import { useLocalOutputs } from "@/features/device/state/localOutputsStore";
+import { shallowEqual } from "@/shared/lib/store";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
 import { roomAwareStatus } from "../model/roomAware";
@@ -182,9 +184,11 @@ export function RoomMapEditor({
     handleArrowPan,
   } = useRoomMapViewport(config.dimensions);
 
-  // Same `connectionEvents` bus the Lights and Devices flows use, so a pair or
-  // disconnect anywhere in the app re-syncs the editor without a reload.
-  const usb = useUsbConnectionStatus();
+  // The registry every other screen reads, so a pair or an unplug anywhere reaches the editor.
+  const usb = useLocalOutputs(
+    ({ snapshot }) => ({ ready: snapshot !== null, connectedPort: connectedSerialPort(snapshot) }),
+    shallowEqual,
+  );
 
   const {
     handleAddTv,
@@ -225,9 +229,9 @@ export function RoomMapEditor({
       : hueReachable
         ? "connected"
         : "disconnected";
-  // Deep-links to Devices: `disconnect_serial_port` exists but no window may call it until the
-  // frontend reads the local-output registry. Kept as a callback so a real disconnect can replace
-  // it without touching consumers.
+  // Deep-links to Devices: no window may call `disconnect_serial_port` until the Devices page
+  // carries a strip's Disconnect. Kept as a callback so a real disconnect can replace it without
+  // touching consumers.
   const handleManageUsb = useCallback(() => {
     onNavigateToDevices?.();
   }, [onNavigateToDevices]);

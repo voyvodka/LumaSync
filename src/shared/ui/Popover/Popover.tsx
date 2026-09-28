@@ -9,7 +9,7 @@ interface PopoverProps {
   open: boolean;
   onClose: () => void;
   anchorRef: RefObject<HTMLElement | null>;
-  /** Opens above the anchor (the dock sits at the bottom) or below it. */
+  /** Opens above the anchor (the dock sits at the bottom) or below it, when it fits there. */
   side?: "above" | "below";
   /** A fixed width, or `"fit"`: as wide as its content, never narrower than the anchor. */
   width?: number | "fit";
@@ -27,7 +27,13 @@ interface PopoverProps {
  */
 export function Popover({ open, onClose, anchorRef, side = "above", width = 240, id, label, role, children }: PopoverProps) {
   const ref = useRef<HTMLDivElement | null>(null);
-  const [pos, setPos] = useState<{ left: number; top: number; arrow: number; width: number } | null>(null);
+  const [pos, setPos] = useState<{
+    left: number;
+    top: number;
+    arrow: number;
+    width: number;
+    side: "above" | "below";
+  } | null>(null);
   const [mounted, setMounted] = useState(open);
   const [closing, setClosing] = useState(false);
 
@@ -64,8 +70,12 @@ export function Popover({ open, onClose, anchorRef, side = "above", width = 240,
     const w =
       width === "fit" ? Math.min(Math.max(ref.current.offsetWidth, a.width), window.innerWidth - 16) : width;
     const left = Math.max(8, Math.min(a.left + a.width / 2 - w / 2, window.innerWidth - w - 8));
-    const top = side === "above" ? Math.max(8, a.top - h - 10) : a.bottom + 10;
-    setPos({ left, top, arrow: a.left + a.width / 2 - left, width: w });
+    // The asked side unless the popover would run off the window there and fits on the other.
+    const fitsAbove = a.top - h - 10 >= 8;
+    const fitsBelow = a.bottom + 10 + h <= window.innerHeight - 8;
+    const placed = side === "below" ? (!fitsBelow && fitsAbove ? "above" : "below") : !fitsAbove && fitsBelow ? "below" : "above";
+    const top = placed === "above" ? Math.max(8, a.top - h - 10) : a.bottom + 10;
+    setPos({ left, top, arrow: a.left + a.width / 2 - left, width: w, side: placed });
   }, [open, anchorRef, side, width]);
 
   useEffect(() => {
@@ -94,6 +104,7 @@ export function Popover({ open, onClose, anchorRef, side = "above", width = 240,
       ref={ref}
       id={id}
       role={role}
+      aria-modal={role === "dialog" ? false : undefined}
       aria-label={label}
       aria-hidden={closing || undefined}
       // The notch points at the anchor and the popover grows out of it (and settles back into it).
@@ -105,7 +116,7 @@ export function Popover({ open, onClose, anchorRef, side = "above", width = 240,
           "--arrow-x": `${pos?.arrow ?? 0}px`,
         } as CSSProperties
       }
-      className={cx(styles.pop, styles[side], closing && styles.closing)}
+      className={cx(styles.pop, styles[pos?.side ?? side], closing && styles.closing)}
       onAnimationEnd={(event) => {
         if (closing && event.target === event.currentTarget) {
           setMounted(false);

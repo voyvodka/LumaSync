@@ -65,6 +65,7 @@ fn owner_with_fake_sender() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
         active_mode: LightingModeConfig::default(),
         active_port: None,
+        active_usb_plan: None,
         worker: None,
         ambilight_live: None,
         room_geometry_live: None,
@@ -111,6 +112,7 @@ fn owner_that_fails_after_first_frame() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
         active_mode: LightingModeConfig::default(),
         active_port: None,
+        active_usb_plan: None,
         worker: None,
         ambilight_live: None,
         room_geometry_live: None,
@@ -1739,6 +1741,7 @@ fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
     let owner = LightingRuntimeOwner {
         active_mode: LightingModeConfig::default(),
         active_port: None,
+        active_usb_plan: None,
         worker: None,
         ambilight_live: None,
         room_geometry_live: None,

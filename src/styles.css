@@ -27,12 +27,8 @@
 @import "./styles/notices.css" layer(components);
 @import "./styles/compact-controls.css" layer(components);
 @import "./styles/settings.css" layer(components);
-@import "./styles/devices.css" layer(components);
 @import "./styles/lights.css" layer(components);
 @import "./styles/hue-channel-map.css" layer(components);
 @import "./styles/room-map.css" layer(components);
-@import "./styles/paired-strips.css" layer(components);
 @import "./styles/room-map-menu.css" layer(components);
-@import "./styles/strip-settings.css" layer(components);
 @import "./styles/preview.css" layer(components);
-@import "./styles/led-color-order.css" layer(components);

@@ -54,16 +54,27 @@ function editTarget(
   return { strips, index };
 }
 
+function patchHardware(strip: LedStrip, patch: Partial<StripHardware>): LedStrip {
+  const hardware: StripHardware = { ...strip.hardware };
+  for (const [key, value] of Object.entries(patch) as [keyof StripHardware, unknown][]) {
+    if (value === undefined) delete hardware[key];
+    else (hardware as Record<string, unknown>)[key] = value;
+  }
+  return { ...strip, hardware };
+}
+
 /** Sets the given hardware fields on the target strip; `undefined` clears one. */
 export function withStripHardware(state: ShellState, patch: Partial<StripHardware>): StripsPatch {
-  const { strips } = editTarget(state, (strip) => {
-    const hardware: StripHardware = { ...strip.hardware };
-    for (const [key, value] of Object.entries(patch) as [keyof StripHardware, unknown][]) {
-      if (value === undefined) delete hardware[key];
-      else (hardware as Record<string, unknown>)[key] = value;
-    }
-    return { ...strip, hardware };
-  });
+  const { strips } = editTarget(state, (strip) => patchHardware(strip, patch));
+  return { ledStrips: strips };
+}
+
+/** The same, on strip `stripId`; `null` when no strip has that id, as a rename. */
+export function withHardwareOf(state: ShellState, stripId: string, patch: Partial<StripHardware>): StripsPatch | null {
+  const strips = [...stripsOf(state)];
+  const index = strips.findIndex((strip) => strip.id === stripId);
+  if (index === -1) return null;
+  strips[index] = patchHardware(strips[index]!, patch);
   return { ledStrips: strips };
 }
 
@@ -89,7 +100,7 @@ export function withColorCorrection(
 
 /**
  * The target strip is now driven through `transport`. One local sink is bound at a time, so any
- * other strip holding the other kind is dropped — its boot path would evict this one — as saving
+ * other strip holding the other kind is dropped — its boot path would connect it beside this one — as saving
  * one key used to delete the other.
  */
 function withTransport(state: ShellState, transport: StripTransport, portName?: string): StripsPatch {
@@ -138,4 +149,36 @@ export function withoutWledDevice(state: ShellState, ip: string): StripsPatch | 
     if (kept.layout !== undefined || Object.values(kept.hardware).some((value) => value != null)) next.push(kept);
   });
   return { ledStrips: next };
+}
+
+/** Longest name a strip keeps, in characters as the user sees them. */
+export const STRIP_NAME_MAX = 40;
+
+/**
+ * The strip `stripId` renamed; a blank name clears it, back to the name of its device. `null` when
+ * no strip has that id — a rename never lands on another strip or creates one.
+ */
+export function withStripName(state: ShellState, stripId: string, name: string): StripsPatch | null {
+  const strips = [...stripsOf(state)];
+  const index = strips.findIndex((strip) => strip.id === stripId);
+  if (index === -1) return null;
+  // By code point, so an emoji at the cut is not split in half.
+  const trimmed = Array.from(name.trim()).slice(0, STRIP_NAME_MAX).join("").trim();
+  const { name: _previous, ...rest } = strips[index]!;
+  strips[index] = trimmed === "" ? rest : { ...rest, name: trimmed };
+  return { ledStrips: strips };
+}
+
+/**
+ * Strip `stripId` forgotten: its layout, hardware and name go with it, and nothing reconnects it at
+ * launch. `null` when no strip has that id. The room map's drawing is left alone.
+ */
+export function withoutStrip(state: ShellState, stripId: string): StripsPatch | null {
+  const strips = stripsOf(state);
+  if (!strips.some((strip) => strip.id === stripId)) return null;
+  const rest = strips.filter((strip) => strip.id !== stripId);
+  // Readers here and in Rust take the first enabled strip as the primary; with none enabled the
+  // next write with no strip named would land on whichever came first.
+  if (rest.length > 0 && !rest.some((strip) => strip.enabled)) rest[0] = { ...rest[0]!, enabled: true };
+  return { ledStrips: rest };
 }

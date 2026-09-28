@@ -3,7 +3,7 @@ import { StrictMode, createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const loadShellStateMock = vi.fn();
-const getSerialConnectionStatusMock = vi.fn<typeof deviceConnectionApiModule.getSerialConnectionStatus>();
+const readRegistryMock = vi.fn<() => Promise<LocalOutputsSnapshot | null>>();
 
 vi.mock("../windowLifecycle", () => ({
   initWindowLifecycle: vi.fn(() => Promise.resolve()),
@@ -11,23 +11,32 @@ vi.mock("../windowLifecycle", () => ({
 }));
 vi.mock("../useTrayIntegration", () => ({ pushTrayLabels: vi.fn() }));
 vi.mock("@/features/platform/platformApi", () => ({ showNotification: vi.fn() }));
-vi.mock("@/features/device/deviceConnectionApi", () => ({
-  getSerialConnectionStatus: () => getSerialConnectionStatusMock(),
+vi.mock("@/features/device/state/localOutputsStore", () => ({
+  localOutputs: { refresh: () => readRegistryMock() },
 }));
 
 import { pushTrayLabels } from "../useTrayIntegration";
 import { useShellBootstrap, type ShellBootstrapSink } from "../useShellBootstrap";
-import type * as deviceConnectionApiModule from "@/features/device/deviceConnectionApi";
-import type { SerialConnectionStatus } from "@/shared/contracts/device";
+import type { LocalOutputsSnapshot } from "@/shared/contracts/device";
 
-function connectionStatus(connected: boolean): SerialConnectionStatus {
-  return {
-    portName: connected ? "COM3" : null,
-    connected,
-    status: connected
-      ? { code: "CONNECT_OK", message: "Connected", details: null }
-      : { code: "NOT_CONNECTED", message: "Not connected", details: null },
+function registry(connected: "strip" | "wled" | "nothing"): LocalOutputsSnapshot {
+  const strip = {
+    kind: "serial",
+    portName: "COM3",
+    connected: connected === "strip",
+    status: { code: connected === "strip" ? "CONNECT_OK" : "DISCONNECTED", message: "m", details: null },
+    firmware: null,
     updatedAtUnixMs: 0,
+  } as const;
+  return {
+    revision: 1,
+    outputs: connected === "wled" ? [strip, { kind: "wled", ip: "192.168.1.42", ledCount: 60, connected: true }] : [strip],
+    driven:
+      connected === "strip"
+        ? { kind: "serial", portName: "COM3" }
+        : connected === "wled"
+          ? { kind: "wled", ip: "192.168.1.42" }
+          : null,
   };
 }
 
@@ -62,7 +71,7 @@ describe("useShellBootstrap", () => {
       lightingMode: { kind: "ambilight", ambilight: { brightness: 0.6 } },
       lastOutputTargets: ["usb", "hue"],
     });
-    getSerialConnectionStatusMock.mockResolvedValue(connectionStatus(true));
+    readRegistryMock.mockResolvedValue(registry("strip"));
   });
 
   it("asks for the restore once, with the saved mode", async () => {
@@ -124,17 +133,37 @@ describe("useShellBootstrap", () => {
     expect(bag.setOnboardingBootFacts).toHaveBeenCalledWith({ outputRemembered: true, hasRunLighting: true });
   });
 
-  it("arms the USB edge detector from the live status before the restore", async () => {
-    getSerialConnectionStatusMock.mockResolvedValue(connectionStatus(false));
+  it("arms the USB edge detector from the registry before the restore", async () => {
+    readRegistryMock.mockResolvedValue(registry("nothing"));
     const bag = sink();
 
     renderHook(() => useShellBootstrap(bag));
 
     await waitFor(() => expect(bag.restoreLighting).toHaveBeenCalled());
-    expect(bag.armUsbConnected).toHaveBeenCalledWith(false);
+    expect(bag.armUsbConnected).toHaveBeenCalledWith({ serialConnected: false, localConnected: false });
     expect(
       (bag.armUsbConnected as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],
     ).toBeLessThan((bag.restoreLighting as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]);
+  });
+
+  it("arms a WLED device that took the strip's place as a local output, not a strip", async () => {
+    readRegistryMock.mockResolvedValue(registry("wled"));
+    const bag = sink();
+
+    renderHook(() => useShellBootstrap(bag));
+
+    await waitFor(() => expect(bag.armUsbConnected).toHaveBeenCalled());
+    expect(bag.armUsbConnected).toHaveBeenCalledWith({ serialConnected: false, localConnected: true });
+  });
+
+  it("arms as nothing connected when the registry could not be read", async () => {
+    readRegistryMock.mockResolvedValue(null);
+    const bag = sink();
+
+    renderHook(() => useShellBootstrap(bag));
+
+    await waitFor(() => expect(bag.armUsbConnected).toHaveBeenCalled());
+    expect(bag.armUsbConnected).toHaveBeenCalledWith({ serialConnected: false, localConnected: false });
   });
 
   it("still reports done when the restore throws, so the UI is not blocked", async () => {

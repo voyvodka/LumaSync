@@ -3,6 +3,7 @@ import {
   type HealthCheckResult,
   type LedChipType,
   type SerialConnectionStatus,
+  type SerialDisconnectResult,
   type SerialPortListResponse,
 } from "@/shared/contracts/device";
 import { invokeCommand } from "@/shared/ipcApi";
@@ -33,9 +34,9 @@ export async function connectSerialPort(
   });
 }
 
-/** Read the last-known serial connection status without touching the port. */
-export async function getSerialConnectionStatus(): Promise<SerialConnectionStatus> {
-  return invokeCommand(DEVICE_COMMANDS.GET_CONNECTION_STATUS);
+/** Let go of a connected strip: a mode lighting it paints it black first. Never throws; check `status.code`. */
+export async function disconnectSerialPort(portName: string): Promise<SerialDisconnectResult> {
+  return invokeCommand(DEVICE_COMMANDS.DISCONNECT_SERIAL_PORT, { portName });
 }
 
 /** Run the handshake-and-back health check on the named port. Never throws; check `steps`/`pass`. */

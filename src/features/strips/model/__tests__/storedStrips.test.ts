@@ -8,10 +8,11 @@ const cases = fixture.cases as unknown as { name: string; stored: unknown; strip
 
 /** The fields both sides read; what Rust compares against the fixture. */
 function known(strip: LedStrip) {
-  const { id, enabled, transport, hardware, layout, colorCorrection } = strip;
+  const { id, name, enabled, transport, hardware, layout, colorCorrection } = strip;
   const hw = hardware as Record<string, unknown>;
   return {
     id,
+    ...(name !== undefined ? { name } : {}),
     enabled,
     transport:
       transport?.kind === "serial"
@@ -39,13 +40,13 @@ describe("readStoredStrips", () => {
       {
         id: "s1",
         enabled: true,
-        name: "desk",
+        label: "desk",
         transport: { kind: "serial", portName: "COM3", serialNumber: "A1" },
         hardware: { chipType: "sk6812-rgbw", provenance: { chipType: "device" } },
       },
     ]);
     expect(strip).toMatchObject({
-      name: "desk",
+      label: "desk",
       transport: { serialNumber: "A1" },
       hardware: { provenance: { chipType: "device" } },
     });

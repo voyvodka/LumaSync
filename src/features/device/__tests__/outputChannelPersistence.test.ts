@@ -24,8 +24,8 @@ function storeWith(state: ShellState): { update: ShellStateUpdater; current: () 
 }
 
 // One sink per output channel. If both records survived, both boot paths would
-// fire and the serial auto-reconnect — 2 s slower — would evict the WLED sink
-// the user just watched come online.
+// fire and connect both, the strip beside the WLED device the user just watched
+// come online.
 describe("output-channel persistence is mutually exclusive", () => {
   it("drops the serial strip's transport when WLED takes the channel, keeping its layout", async () => {
     const store = storeWith({

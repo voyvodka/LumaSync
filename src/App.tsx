@@ -62,9 +62,9 @@ import { HUE_RUNTIME_TRIGGER_SOURCE } from "./shared/contracts/hue";
 import { useLedSetupPrompt } from "./features/calibration/state/useLedSetupPrompt";
 import { useDeviceConnection } from "./features/device/useDeviceConnection";
 import { useActiveWledSink, useWledSinkRestore } from "./features/device/useWledSink";
-import { localSinkOf, sameDriven } from "./features/device/model/localOutputs";
+import { anyLocalConnected, connectedSerialPort, localSinkOf, sameDriven } from "./features/device/model/localOutputs";
 import { useLocalOutputs } from "./features/device/state/localOutputsStore";
-import { useUsbTargetReconciler } from "./features/device/state/useUsbTargetReconciler";
+import { useUsbTargetReconciler, type LocalOutputFacts } from "./features/device/state/useUsbTargetReconciler";
 import {
   canEnableLedMode,
   MODE_GUARD_REASONS,
@@ -96,7 +96,7 @@ import {
   NavigationProvider,
   type NavigationState,
 } from "./features/shell/navigationStore";
-import { useStoreSelector } from "./shared/lib/store";
+import { shallowEqual, useStoreSelector } from "./shared/lib/store";
 import {
   KEYBIND_ACTIONS,
   SECTION_IDS,
@@ -141,8 +141,8 @@ function Shell() {
   // useEffect with `[]` deps) can read the latest paired-bridge state
   // without re-subscribing on every state mutation.
   const hueStartConfigRef = useRef<HueStartConfig | null>(null);
-  // The one mount that brings the strip back on a replug; Devices' mount only follows.
-  const { isConnected, ports, lastSuccessfulPort } = useDeviceConnection({ reconnectOnReplug: true });
+  // The one mount that brings the strip back, at launch and on a replug; Devices' mount only follows.
+  const { isConnected, ports, lastSuccessfulPort } = useDeviceConnection({ ownsReconnects: true });
   // Boot restore of the persisted WLED sink. Mounted here, not in the picker:
   // the sink must be bound before a lighting mode starts.
   useWledSinkRestore();
@@ -154,6 +154,14 @@ function Shell() {
   // Which output Rust drives, as the registry names it. Memoised because the lighting store compares
   // by identity: a fresh object per render would re-render every section that reads it.
   const driven = useLocalOutputs((state) => state.snapshot?.driven ?? null, sameDriven);
+  const localFacts = useLocalOutputs(
+    ({ snapshot, lastLoss }) => ({
+      serialConnected: connectedSerialPort(snapshot) !== null,
+      localConnected: anyLocalConnected(snapshot),
+      lastLoss,
+    }),
+    shallowEqual,
+  );
   const localSink = useMemo(
     () => localSinkOf(driven, ports),
     [driven, ports],
@@ -225,7 +233,7 @@ function Shell() {
   // The USB reconciler needs `bootstrapDone`, so it cannot be declared above
   // the boot sequence; arming reaches it through a ref rather than moving the
   // boot effect below every other effect.
-  const armUsbConnectedRef = useRef<((connected: boolean) => void) | null>(null);
+  const armUsbConnectedRef = useRef<((facts: LocalOutputFacts) => void) | null>(null);
   const { bootstrapDone, lightingRestored } = useShellBootstrap({
     t,
     setUIMode: setCurrentMode,
@@ -234,7 +242,7 @@ function Shell() {
     setHasCompletedOnboarding,
     setOnboardingBootFacts,
     setHueStartConfig,
-    armUsbConnected: (connected) => armUsbConnectedRef.current?.(connected),
+    armUsbConnected: (facts) => armUsbConnectedRef.current?.(facts),
     restoreLighting: mode.restoreAtBoot,
   });
 
@@ -246,7 +254,7 @@ function Shell() {
     armUsbConnected,
   } =
     useUsbTargetReconciler({
-      isConnected,
+      ...localFacts,
       // It writes a selection from the one it reads, which the restore sets.
       bootstrapDone: bootstrapDone && lightingRestored,
       selectedOutputTargets,

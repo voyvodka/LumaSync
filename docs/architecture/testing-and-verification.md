@@ -301,9 +301,9 @@ Four things about it are not obvious and each cost a cycle:
   models that. Before trusting a contradiction seen only in the mock, check what the Rust command returns.
 
 **A world edit is not always visible to the app, and the panel says which is which.** Every control
-carries a `[live]` / `[revisit]` / `[reload]` badge. The serial connection is the sharp case:
-nothing polls `get_serial_connection_status` after boot — the controller re-reads it only when a
-sibling publishes on the process-wide `connectionEvents` bus — so editing `connectedPort` alone
-leaves the UI insisting the cable is still in. `mock/hotplug.ts` publishes on the same bus the real
-pair path uses, which is what makes unplug, boot-time port rejection and WLED binding reach the app
-at all.
+carries a `[live]` / `[revisit]` / `[reload]` badge. The serial connection is the sharp case: the
+app hears of a cable only through Rust's announcements — the local-output registry, then the serial
+port watcher — so a world edit that sends neither leaves the UI insisting the cable is still in.
+`mock/localOutputs.ts` announces the registry whenever the world changes it, and `mock/hotplug.ts`
+adds the watcher's event in Rust's order, which is what makes unplug, boot-time port rejection and
+WLED binding reach the app at all.

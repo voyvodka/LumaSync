@@ -9,6 +9,7 @@ vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => loadMock(),
     save: vi.fn<typeof shellStoreType.save>(),
+    update: vi.fn<typeof shellStoreType.update>().mockResolvedValue({} as Awaited<ReturnType<typeof shellStoreType.update>>),
   },
 }));
 
@@ -55,5 +56,23 @@ describe("useActiveWledSink", () => {
       outputs.ingest({ revision: 2, outputs: [], driven: null });
     });
     expect(result.current.activeWledIp).toBeNull();
+  });
+
+  // One output at a time, as the user sees it, while Rust could drive several.
+  it("lets the strips go once the user's WLED device is connected and saved", async () => {
+    loadMock.mockResolvedValue({} as Awaited<ReturnType<typeof shellStoreType.load>>);
+    const { outputs } = registry(wledBound);
+    const releaseOthers = vi.fn<(kept: { kind: "wled"; ip: string } | { kind: "serial"; portName: string }) => Promise<void>>()
+      .mockResolvedValue();
+    const updateShellState = vi.fn<NonNullable<Parameters<typeof useActiveWledSink>[0]>["updateShellState"] & {}>()
+      .mockResolvedValue({} as Awaited<ReturnType<typeof shellStoreType.update>>);
+
+    const { result } = renderHook(() => useActiveWledSink({ localOutputs: outputs, releaseOthers, updateShellState }));
+    await act(async () => {
+      await result.current.markConnected({ ip: "192.168.1.42", mac: null, ledCount: 60, name: null, version: null });
+    });
+
+    expect(releaseOthers).toHaveBeenCalledWith({ kind: "wled", ip: "192.168.1.42" });
+    expect(updateShellState.mock.invocationCallOrder[0]).toBeLessThan(releaseOthers.mock.invocationCallOrder[0]!);
   });
 });

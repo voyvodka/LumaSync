@@ -14,6 +14,7 @@ use super::outputs;
 use super::preview::PreviewRuntime;
 use super::snapshot::LightingSnapshotCell;
 use super::tuning::TuningCell;
+use super::usb_output::UsbOutputPlan;
 use crate::commands::ambilight_capture::{
     create_live_frame_source_at, AmbilightCaptureError, AmbilightFrameSource,
 };
@@ -81,6 +82,10 @@ pub(crate) struct LightingRuntimeOwner {
     /// `stop_previous`, which deliberately leaves the cached serial handle
     /// open — reopening the port toggles DTR and resets the MCU.
     pub(super) active_port: Option<String>,
+    /// The output the running mode writes the "usb" channel to, `None` when it writes none. The
+    /// Ambilight fast path compares against it: a retune must not keep a worker on an output that is
+    /// no longer the driven one.
+    pub(super) active_usb_plan: Option<UsbOutputPlan>,
     pub(super) worker: Option<LightingWorkerRuntime>,
     /// Shared settings for the currently running ambilight worker.
     /// Updated in-place when only ambilight settings change, avoiding worker restart.
@@ -103,6 +108,7 @@ impl Default for LightingRuntimeOwner {
         Self {
             active_mode: LightingModeConfig::default(),
             active_port: None,
+            active_usb_plan: None,
             worker: None,
             ambilight_live: None,
             room_geometry_live: None,
@@ -173,6 +179,32 @@ impl LightingRuntimeState {
     /// Drops `port_name`'s cached serial writer, for a strip that was unplugged: the next write
     /// opens the port afresh instead of failing on a dead handle. The bridge is cloned under the
     /// runtime lock and the drop — which may wait for the writer to exit — runs after it.
+    /// The running mode writes the "usb" channel to this serial port.
+    pub fn drives_serial(&self, port_name: &str) -> bool {
+        matches!(
+            &self.runtime.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).active_usb_plan,
+            Some(UsbOutputPlan::Serial(port)) if port == port_name
+        )
+    }
+
+    /// The running mode writes the "usb" channel to the WLED device at `ip`.
+    pub fn drives_wled(&self, ip: std::net::Ipv4Addr) -> bool {
+        matches!(
+            &self.runtime.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).active_usb_plan,
+            Some(UsbOutputPlan::Wled(config)) if config.ip == ip
+        )
+    }
+
+    /// `port_name` is the port whose cached writer the runtime holds as its active one.
+    pub fn holds_port(&self, port_name: &str) -> bool {
+        self.runtime
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .active_port
+            .as_deref()
+            == Some(port_name)
+    }
+
     pub fn forget_serial_session(&self, port_name: &str) {
         let bridge = self
             .runtime

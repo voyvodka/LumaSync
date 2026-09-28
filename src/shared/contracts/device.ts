@@ -7,7 +7,6 @@ import type { CommandStatusOf } from "./status";
 export const DEVICE_COMMANDS = {
   LIST_PORTS: "list_serial_ports",
   CONNECT_PORT: "connect_serial_port",
-  GET_CONNECTION_STATUS: "get_serial_connection_status",
   RUN_HEALTH_CHECK: "run_serial_health_check",
   GET_RUNTIME_TELEMETRY: "get_runtime_telemetry",
   GET_RUNTIME_TELEMETRY_HISTORY: "get_runtime_telemetry_history",
@@ -96,9 +95,6 @@ export type SerialPortListStatusCode =
 export const SERIAL_CONNECT_STATUS = {
   OK: "CONNECT_OK",
   FAILED: "CONNECT_FAILED",
-  /** No connect has been attempted yet — the value `SerialConnectionStatus`
-   * carries from first launch until the first `connect_serial_port`. */
-  IDLE: "NOT_CONNECTED",
   INVALID_INPUT: "CONNECT_INVALID_INPUT",
   /** Typically a udev/dialout permission gap on Linux, not a user denial. */
   PERMISSION_DENIED: "CONNECT_PERMISSION_DENIED",
@@ -112,9 +108,10 @@ export const SERIAL_CONNECT_STATUS = {
 export type SerialConnectStatusCode =
   (typeof SERIAL_CONNECT_STATUS)[keyof typeof SERIAL_CONNECT_STATUS];
 
-/** What a serial port's registry entry says once it stops driving without failing: the user let
- * go of it, or another output took its place (one local output at a time). Not a connect outcome,
- * so it is kept out of {@link SERIAL_CONNECT_STATUS}, which the health steps share. */
+/** What a serial port's registry entry says once it stops being connected without failing: the
+ * user let go of it (or connected another output, which lets it go), or the app is shutting down.
+ * Not a connect outcome, so it is kept out of {@link SERIAL_CONNECT_STATUS}, which the health steps
+ * share. */
 export const SERIAL_OUTPUT_STATUS = {
   DISCONNECTED: "DISCONNECTED",
 } as const;
@@ -129,15 +126,6 @@ export const SERIAL_DISCONNECT_STATUS = {
 
 export type SerialDisconnectStatusCode =
   (typeof SERIAL_DISCONNECT_STATUS)[keyof typeof SERIAL_DISCONNECT_STATUS];
-
-/** Thrown by `get_serial_connection_status` as `Err(String)`, formatted
- * `"CODE: detail"`. A `catch` sees these; a `switch (status.code)` never will. */
-export const SERIAL_COMMAND_ERRORS = {
-  STATUS_READ_FAILED: "STATUS_READ_FAILED",
-} as const;
-
-export type SerialCommandErrorCode =
-  (typeof SERIAL_COMMAND_ERRORS)[keyof typeof SERIAL_COMMAND_ERRORS];
 
 /** Exactly what `device_connection.rs` puts on `SerialPortListResponse.status`
  * and `SerialConnectionStatus.status`. `UNKNOWN` is out — it is minted by
@@ -439,9 +427,10 @@ export interface SerialPortListResponse {
 }
 
 /**
- * Current serial connection state. `portName` is the port that was opened and
+ * `connect_serial_port`'s answer. `portName` is the port that was opened and
  * is `null` whenever `connected` is false; a refused or failed attempt's name
- * appears only in `status.details`, as `port="..."`.
+ * appears only in `status.details`, as `port="..."`. What stays connected is
+ * the registry's to say ({@link LocalOutputsSnapshot}).
  */
 export interface SerialConnectionStatus {
   portName: string | null;
@@ -507,8 +496,6 @@ export interface SerialPortsChangedEvent {
   ports: SerialPortDescriptor[];
   appeared: string[];
   lost: string[];
-  /** The connection after the watcher's write: an unplugged port reads not connected. */
-  connection: SerialConnectionStatus;
 }
 
 /** One step of `run_serial_health_check`. */
@@ -588,7 +575,7 @@ export function normalizeWledProtocol(value: unknown): WledProtocol {
  * user can re-trim their virtual strip before frames go out.
  */
 export interface WledUdpSinkConfig {
-  /** WLED instance IP (IPv4 or IPv6 textual form). */
+  /** WLED instance IPv4 address. */
   ip: string;
   /** UDP port. Default {@link WLED_DEFAULT_DDP_PORT} for `ddp`,
    * {@link WLED_DEFAULT_REALTIME_PORT} for `drgb`. */

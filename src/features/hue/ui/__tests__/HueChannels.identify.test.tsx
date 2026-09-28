@@ -2,12 +2,12 @@
 // They now carry the Hue app's names, and an Identify button blinks the
 // channel's lights — never while a stream owns them, and the page says why.
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { HueAreaChannelInfo } from "@/features/hue/hueOnboardingApi";
-import { HUE_AREA_CHANNELS_STATUS, type HueIdentifyStatus } from "@/shared/contracts/hue";
+import { HUE_AREA_CHANNELS_STATUS, HUE_IDENTIFY_SIGNAL_MS, type HueIdentifyStatus } from "@/shared/contracts/hue";
 import { HueChannels } from "../HueChannels";
 
 vi.mock("react-i18next", () => ({
@@ -71,16 +71,31 @@ describe("HueChannels — light names and Identify", () => {
     expect(row(4)).not.toHaveTextContent("light-e");
   });
 
-  it("blinks the row's lights through onIdentify", async () => {
-    const onIdentify = vi.fn(async () => status("HUE_IDENTIFY_OK"));
-    const user = userEvent.setup();
-    renderPanel({ onIdentify });
+  // The bridge answers at once and the light blinks for seconds after: the label flicked back to
+  // "Identify" before anything could be seen.
+  it("blinks the row's lights, and says it is blinking for as long as they do", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const onIdentify = vi.fn(async () => status("HUE_IDENTIFY_OK"));
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderPanel({ onIdentify });
 
-    await user.click(screen.getByTestId("hue-chmap-identify-3"));
+      await user.click(screen.getByTestId("hue-chmap-identify-3"));
 
-    expect(onIdentify).toHaveBeenCalledWith(["light-b", "light-c", "light-d"]);
-    await waitFor(() => expect(screen.getByTestId("hue-chmap-identify-3")).toBeEnabled());
-    expect(screen.queryByText(/hue:channelMap\.identify(Failed|Partial|Blocked)/)).toBeNull();
+      expect(onIdentify).toHaveBeenCalledWith(["light-b", "light-c", "light-d"]);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(HUE_IDENTIFY_SIGNAL_MS - 500);
+      });
+      expect(screen.getByTestId("hue-chmap-identify-3")).toHaveAttribute("aria-busy", "true");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await waitFor(() => expect(screen.getByTestId("hue-chmap-identify-3")).toBeEnabled());
+      expect(screen.getByTestId("hue-chmap-identify-3")).not.toHaveAttribute("aria-busy");
+      expect(screen.queryByText(/hue:channelMap\.identify(Failed|Partial|Blocked)/)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("is off while Hue streams, with the reason on the page", () => {

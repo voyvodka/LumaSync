@@ -83,7 +83,6 @@ export function createPortDiscovery(
         status: prev.isReconnecting ? DEVICE_STATUS.RECONNECTING : nextStatusForReadyState(mappedPorts),
         ports: mappedPorts,
         selectedPort: selectionResult.selectedPort,
-        connectedPort: connectedPortMissing ? null : prev.connectedPort,
         isScanning: false,
         statusCard: selectionResult.missingSelection
           ? {

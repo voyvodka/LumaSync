@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { FIRMWARE_PIXEL_LAYOUT, FIRMWARE_PROFILE } from "@/shared/contracts/device";
+import { withRegistry } from "./support/fakeRegistry";
 import type { HealthCheckResult, SerialPortListResponse } from "../deviceConnectionApi";
 import type { FirmwareProfileEventBus } from "../firmwareProfileEvents";
 import { createDeviceConnectionController } from "../state/deviceConnectionController";
@@ -53,7 +54,7 @@ function healthResult(pass: boolean): HealthCheckResult {
 describe("health check flow", () => {
   it("returns deterministic 3-step pass result", async () => {
     const runSerialHealthCheck = vi.fn<Required<DeviceConnectionControllerDeps>["runSerialHealthCheck"]>().mockResolvedValue(healthResult(true));
-    const controller = createDeviceConnectionController({
+    const controller = createDeviceConnectionController(withRegistry({
       listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(
         listResponse([
           {
@@ -66,15 +67,9 @@ describe("health check flow", () => {
         ]),
       ),
       connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>(),
-      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
-        connected: false,
-        portName: null,
-        updatedAtUnixMs: 0,
-        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
-      }),
       persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       runSerialHealthCheck,
-    });
+    }));
 
     await controller.initialize();
     await controller.runHealthCheck();
@@ -91,7 +86,7 @@ describe("health check flow", () => {
   });
 
   it("returns fail summary with step-level outcomes", async () => {
-    const controller = createDeviceConnectionController({
+    const controller = createDeviceConnectionController(withRegistry({
       listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(
         listResponse([
           {
@@ -104,15 +99,9 @@ describe("health check flow", () => {
         ]),
       ),
       connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>(),
-      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
-        connected: false,
-        portName: null,
-        updatedAtUnixMs: 0,
-        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
-      }),
       persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       runSerialHealthCheck: vi.fn<Required<DeviceConnectionControllerDeps>["runSerialHealthCheck"]>().mockResolvedValue(healthResult(false)),
-    });
+    }));
 
     await controller.initialize();
     await controller.runHealthCheck();
@@ -131,7 +120,7 @@ describe("health check flow", () => {
     const runSerialHealthCheck = vi.fn<Required<DeviceConnectionControllerDeps>["runSerialHealthCheck"]>().mockImplementation(() => pendingHealthResult);
 
     const connectSerialPort = vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>();
-    const controller = createDeviceConnectionController({
+    const controller = createDeviceConnectionController(withRegistry({
       listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(
         listResponse([
           {
@@ -144,15 +133,9 @@ describe("health check flow", () => {
         ]),
       ),
       connectSerialPort,
-      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
-        connected: false,
-        portName: null,
-        updatedAtUnixMs: 0,
-        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
-      }),
       persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       runSerialHealthCheck,
-    });
+    }));
 
     await controller.initialize();
     const pendingHealth = controller.runHealthCheck();
@@ -168,7 +151,7 @@ describe("health check flow", () => {
   it("broadcasts the advertised firmware profile on the firmwareProfileEvents bus", async () => {
     const emit = vi.fn();
     const firmwareProfileEvents: FirmwareProfileEventBus = { emit, subscribe: vi.fn() };
-    const controller = createDeviceConnectionController({
+    const controller = createDeviceConnectionController(withRegistry({
       listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(
         listResponse([
           {
@@ -181,12 +164,6 @@ describe("health check flow", () => {
         ]),
       ),
       connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>(),
-      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
-        connected: false,
-        portName: null,
-        updatedAtUnixMs: 0,
-        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
-      }),
       persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       runSerialHealthCheck: vi.fn<Required<DeviceConnectionControllerDeps>["runSerialHealthCheck"]>().mockResolvedValue({
         ...healthResult(true),
@@ -199,7 +176,7 @@ describe("health check flow", () => {
         },
       }),
       firmwareProfileEvents,
-    });
+    }));
 
     await controller.initialize();
     await controller.runHealthCheck();
@@ -213,7 +190,7 @@ describe("health check flow", () => {
   it("broadcasts undefined when the handshake step didn't complete", async () => {
     const emit = vi.fn();
     const firmwareProfileEvents: FirmwareProfileEventBus = { emit, subscribe: vi.fn() };
-    const controller = createDeviceConnectionController({
+    const controller = createDeviceConnectionController(withRegistry({
       listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(
         listResponse([
           {
@@ -226,16 +203,10 @@ describe("health check flow", () => {
         ]),
       ),
       connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>(),
-      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
-        connected: false,
-        portName: null,
-        updatedAtUnixMs: 0,
-        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
-      }),
       persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       runSerialHealthCheck: vi.fn<Required<DeviceConnectionControllerDeps>["runSerialHealthCheck"]>().mockResolvedValue(healthResult(false)),
       firmwareProfileEvents,
-    });
+    }));
 
     await controller.initialize();
     await controller.runHealthCheck();
@@ -249,7 +220,7 @@ describe("health check flow", () => {
   it("does not emit when the health check throws", async () => {
     const emit = vi.fn();
     const firmwareProfileEvents: FirmwareProfileEventBus = { emit, subscribe: vi.fn() };
-    const controller = createDeviceConnectionController({
+    const controller = createDeviceConnectionController(withRegistry({
       listSerialPorts: vi.fn<DeviceConnectionControllerDeps["listSerialPorts"]>().mockResolvedValue(
         listResponse([
           {
@@ -262,16 +233,10 @@ describe("health check flow", () => {
         ]),
       ),
       connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>(),
-      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
-        connected: false,
-        portName: null,
-        updatedAtUnixMs: 0,
-        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
-      }),
       persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       runSerialHealthCheck: vi.fn<Required<DeviceConnectionControllerDeps>["runSerialHealthCheck"]>().mockRejectedValue(new Error("IPC dropped")),
       firmwareProfileEvents,
-    });
+    }));
 
     await controller.initialize();
     await controller.runHealthCheck();

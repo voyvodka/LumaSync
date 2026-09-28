@@ -81,6 +81,11 @@ rebuilding LED Setup; apply it to every new screen:
   thing they act on, and what they act on lights while the rest steps back. A value's controls open
   on the value itself, not on a wider area around it: opened from an edge, a count's controls
   covered the very LED the pointer was there to pick, and hidden controls must not catch the pointer.
+- **A value that opens a list looks like one at rest.** A quiet box with a chevron that turns while
+  the list is open, as LED Setup's display. The strip's colour order first showed as bare "RGB"
+  beside its label, and read as plain text: nothing said it could be changed. In a row of settings
+  the box sits on the right with the other choices; left beside the label it read as out of place
+  next to the firmware and chip rows' segmented choices.
 - **Light and fast.** Static canvas, one delegated listener, memoised geometry, hover through CSS on
   a data attribute rather than a render; performance is a requirement, not a polish step. No
   `filter`, `backdrop-filter` or `will-change` held at rest on a window-sized surface: each is
@@ -89,7 +94,14 @@ rebuilding LED Setup; apply it to every new screen:
 - **Something that opens does not push.** A question or a list that appears from a control floats
   over the page (`Popover`) rather than opening a panel that moves the rows below it; the beta
   channel's confirmation started inline and moved to a popover for that reason. Pressing the
-  control that opened it closes it again.
+  control that opened it closes it again. A yes/no a control asks is a `ConfirmPopover` beside it —
+  from a "…" item, `Menu`'s `confirm` puts it beside "…" — with sentence-case row buttons, the answer
+  amber (red for a letting-go, which starts on Cancel). The centred `ConfirmDialog` is only for a
+  question nothing on screen asked, such as leaving LED Setup with an unsaved layout: the Hue
+  channel pull asked through it, with the old uppercase mono buttons, and read as another app's
+  dialog over the page. A popover opens on the side it asks for unless it would run off the window
+  there and fits on the other: a colour-order list opened below a row near the foot of the window
+  was cut off by it.
 - **Before building, show options.** Two or three directions with a sketch each, a recommendation,
   then build; iterate on the running app with hot reload.
 
@@ -121,7 +133,9 @@ before writing a transition by hand: `StateSwap`, `PageSwap`, `SpinSwap`, `Popov
   from above, a list grows out of the control that opened it (its notch is the scale origin).
 - **What arrives with motion leaves with it.** Something that eases in and is then unmounted at
   once has no exit; keep it mounted for its exit (`Popover`'s closing state) or leave it mounted and
-  transition it both ways.
+  transition it both ways. A row that leaves a list (a port unplugged, a bridge paired) is the same
+  case: `RevealList` and the rail keep it where it stood, closing, until it has gone
+  (`Reveal/useLeavingItems.ts`); mapped straight from the array it vanished in one frame.
 - A persistent state is a static cue (a soft halo, a filled dot), not a pulse. Timing comes from the
   motion tokens in `tokens.css` (`--lm-ease-out`, `--lm-ease-leave`, `--lm-ease-land`,
   `--lm-dur-quick/base/slow`, `--lm-dur-follow`), not raw values; direction goes in class names, not

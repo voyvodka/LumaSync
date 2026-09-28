@@ -4,6 +4,7 @@ import { DEVICE_STATUS } from "@/shared/contracts/device";
 import type { SerialConnectionStatus, SerialPortListResponse } from "../../deviceConnectionApi";
 import { createConnectionLifecycle } from "../connectionLifecycle";
 import { createConnectionStore } from "../connectionStore";
+import { fakeRegistry } from "../../__tests__/support/fakeRegistry";
 import { DEFAULT_STATE } from "../connectionStateHelpers";
 import type { DeviceConnectionControllerDeps } from "../connectionTypes";
 
@@ -11,7 +12,7 @@ function baseDeps(overrides: Partial<DeviceConnectionControllerDeps> = {}): Devi
   return {
     listSerialPorts: vi.fn<() => Promise<SerialPortListResponse>>(),
     connectSerialPort: vi.fn<() => Promise<SerialConnectionStatus>>(),
-    getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>(),
+    localOutputs: fakeRegistry().outputs,
     persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>().mockResolvedValue(undefined),
     ...overrides,
   };
@@ -28,7 +29,7 @@ describe("createConnectionLifecycle", () => {
         message: "Previously selected port is no longer visible.",
       },
     });
-    const lifecycle = createConnectionLifecycle(store, deps, null, { cancelRecovery: vi.fn() });
+    const lifecycle = createConnectionLifecycle(store, deps, null, { cancelRecovery: vi.fn(), sync: async () => {} });
 
     lifecycle.selectPort("COM5");
 
@@ -44,7 +45,7 @@ describe("createConnectionLifecycle", () => {
       ...DEFAULT_STATE,
       statusCard: { variant: "error", code: "CONNECT_FAILED", message: "Could not connect." },
     });
-    const lifecycle = createConnectionLifecycle(store, deps, null, { cancelRecovery: vi.fn() });
+    const lifecycle = createConnectionLifecycle(store, deps, null, { cancelRecovery: vi.fn(), sync: async () => {} });
 
     lifecycle.selectPort("COM5");
 
@@ -59,7 +60,7 @@ describe("createConnectionLifecycle", () => {
       selectedPort: "COM3",
       isHealthChecking: true,
     });
-    const lifecycle = createConnectionLifecycle(store, deps, null, { cancelRecovery: vi.fn() });
+    const lifecycle = createConnectionLifecycle(store, deps, null, { cancelRecovery: vi.fn(), sync: async () => {} });
 
     await lifecycle.connectSelectedPort();
 

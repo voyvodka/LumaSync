@@ -7,7 +7,6 @@ const APP_COMMANDS: &[&str] = &[
     "update_tray_labels",
     "list_serial_ports",
     "connect_serial_port",
-    "get_serial_connection_status",
     "run_serial_health_check",
     "discover_hue_bridges",
     "verify_hue_bridge_ip",

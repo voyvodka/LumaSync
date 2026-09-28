@@ -320,6 +320,29 @@ describe("taking the bridge's arrangement", () => {
     expect(byId(0).zoneRelativePosition!.z).toBe(-1);
   });
 
+  // The maintainer pulled and still read "the bridge has a different arrangement — send yours":
+  // the only difference was the zone holding the channels, which a send would not fix.
+  it("says a zone holds the channels, not that the bridge differs, once the pull settles", async () => {
+    const user = userEvent.setup();
+    await renderLoaded({
+      initialPlacements: boundPlacements(),
+      zones: [{ ...ZONE, centerZ: 0.2, scaleZ: 0.5 }],
+    });
+
+    await confirmAction(user, "pull");
+    await screen.findByText(/hue:channelMap\.pulledClamped/);
+
+    const note = await screen.findByTestId("hue-channels-sync-note");
+    expect(note).toHaveTextContent("hue:channelMap.sync.heldByZone");
+  });
+
+  it("still offers to save when the arrangement really differs from the bridge", async () => {
+    await renderLoaded({ initialPlacements: boundPlacements() });
+
+    const note = await screen.findByTestId("hue-channels-sync-note");
+    expect(note).toHaveTextContent("hue:channelMap.sync.localAhead");
+  });
+
   it("adopts a fresh read, not the list it already held", async () => {
     const user = userEvent.setup();
     await renderLoaded({ initialPlacements: boundPlacements() });
@@ -469,18 +492,17 @@ describe("saving to the bridge", () => {
 });
 
 describe("confirmation", () => {
-  it("asks in the app's own dialog, and Escape sends nothing", async () => {
+  it("asks in the app's own question, and Escape sends nothing", async () => {
     const user = userEvent.setup();
     await renderLoaded({ initialPlacements: boundPlacements() });
 
     await user.click(bridgeAction("save"));
-    const dialog = await screen.findByRole("dialog");
-    expect(dialog.getAttribute("aria-modal")).toBe("true");
-    expect(dialog.textContent).toContain("hue:channelMap.saveConfirmTitle");
+    const question = await screen.findByTestId("hue-channel-map-confirm");
+    expect(question.textContent).toContain("hue:channelMap.saveConfirmTitle");
 
     await user.keyboard("{Escape}");
 
-    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId("hue-channel-map-confirm")).toBeNull());
     expect(invokeMock).not.toHaveBeenCalledWith("update_hue_channel_positions", expect.anything());
     expect(window.confirm).not.toHaveBeenCalled();
   });
@@ -490,10 +512,10 @@ describe("confirmation", () => {
     await renderLoaded({ initialPlacements: boundPlacements() });
 
     await user.click(bridgeAction("pull"));
-    const dialog = await screen.findByRole("dialog");
-    await user.click(dialog.querySelectorAll("button")[0]!);
+    const question = await screen.findByTestId("hue-channel-map-confirm");
+    await user.click(question.querySelectorAll("button")[0]!);
 
-    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId("hue-channel-map-confirm")).toBeNull());
     expect(byId(0).z).toBe(0.5);
   });
 });

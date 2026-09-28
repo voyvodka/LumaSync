@@ -55,6 +55,7 @@
       "strips": [
         {
           "id": "s1",
+          "name": "desk",
           "enabled": false,
           "transport": {
             "kind": "serial",
@@ -196,6 +197,54 @@
       "strips": [
         {
           "id": "f",
+          "enabled": true,
+          "transport": null,
+          "hardware": {}
+        }
+      ]
+    },
+    {
+      "name": "a name that is not a non-blank string reads as none; one that is stays as written",
+      "stored": [
+        {
+          "id": "a",
+          "name": 5
+        },
+        {
+          "id": "b",
+          "name": "   "
+        },
+        {
+          "id": "c",
+          "name": null
+        },
+        {
+          "id": "d",
+          "name": " Desk "
+        }
+      ],
+      "strips": [
+        {
+          "id": "a",
+          "enabled": true,
+          "transport": null,
+          "hardware": {}
+        },
+        {
+          "id": "b",
+          "enabled": true,
+          "transport": null,
+          "hardware": {}
+        },
+        {
+          "id": "c",
+          "enabled": true,
+          "transport": null,
+          "hardware": {}
+        },
+        {
+          "id": "d",
+          "name": " Desk ",
           "enabled": true,
           "transport": null,
           "hardware": {}

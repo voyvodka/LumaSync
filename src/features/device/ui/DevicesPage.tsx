@@ -8,18 +8,11 @@ import {
   type HueRuntimeTriggerSource,
 } from "@/shared/contracts/hue";
 import { DEFAULT_ROOM_MAP, hueChannelsForArea, mergeHueChannels } from "@/shared/contracts/roomMap";
-import type {
-  HueChannelPlacement,
-  HueZone,
-  RoomMapConfig,
-  UsbStripPlacement,
-} from "@/shared/contracts/roomMap";
+import type { HueChannelPlacement, HueZone, RoomMapConfig } from "@/shared/contracts/roomMap";
 import { shellStore } from "@/features/persistence/shellStore";
 import { useHueOnboarding } from "@/features/hue/useHueOnboarding";
 import { HuePage } from "@/features/hue/ui/HuePage";
-import { UsbStripsCategory } from "@/features/settings/sections/device/UsbStripsCategory";
-import { WledCategory } from "@/features/settings/sections/device/WledCategory";
-import { useTransientFlag } from "@/features/settings/sections/device/useTransientFlag";
+import { useTransientFlag } from "@/shared/lib/useTransientFlag";
 import { useSessionState } from "@/shared/lib/useSessionState";
 import { Rail } from "@/shared/ui/Rail/Rail";
 import { stripsOf } from "@/features/strips/model/stripSelectors";
@@ -31,10 +24,17 @@ import {
   entryForCategory,
   type DeviceRailEntry,
 } from "../model/deviceRail";
-import { railItem } from "./deviceRailRows";
+import { railItem, stripName } from "./deviceRailRows";
+import { AddStripPage, FoundPortPage } from "./AddStripPage";
+import type { AddedOutput } from "./AddStripRows";
+import { StripPage } from "./StripPage";
+import { WledStripPage } from "./WledStripPage";
 import { useDeviceConnection } from "../useDeviceConnection";
 import { useActiveWledSink } from "../useWledSink";
 import styles from "./DevicesPage.module.css";
+
+/** How long an added strip is waited for before the page stops expecting it. */
+const ARRIVAL_WAIT_MS = 5000;
 
 export interface DevicesPageProps {
   /**
@@ -43,6 +43,8 @@ export interface DevicesPageProps {
    * count live. Inert when omitted.
    */
   onNavigateToRoomMap?: () => void;
+  /** Opens LED Setup, where a strip's layout is drawn. */
+  onNavigateToLedSetup?: () => void;
   /** Forwarded to the Hue page; see `HuePageProps.onStopHue`. */
   onStopHueOutput: (triggerSource: HueRuntimeTriggerSource) => Promise<void>;
   /** Opens a category from outside, e.g. a notice's "Devices" action for Hue. */
@@ -55,6 +57,7 @@ export interface DevicesPageProps {
 
 export function DevicesPage({
   onNavigateToRoomMap,
+  onNavigateToLedSetup,
   onStopHueOutput,
   categoryRequest = null,
   onVisibleCategoryChange,
@@ -68,8 +71,13 @@ export function DevicesPage({
   const device = useDeviceConnection();
 
   const { selectedAreaId } = hue;
-  const { connectedPort } = device;
-  const { activeWledIp } = useActiveWledSink();
+  const { connectedPort, refreshPorts } = device;
+  // The port watcher keeps the list in step from here on; what is plugged in already needs a scan.
+  useEffect(() => {
+    void refreshPorts();
+  }, [refreshPorts]);
+  const wled = useActiveWledSink();
+  const { activeWledIp } = wled;
 
   // -------------------------------------------------------------------------
   // Channel placement persistence (D-05a)
@@ -78,11 +86,7 @@ export function DevicesPage({
   const [channelPlacements, setChannelPlacements] = useState<HueChannelPlacement[]>([]);
   const [syncedPositions, setSyncedPositions] = useState<HueChannelPlacementOverride[] | undefined>();
   const [hueZones, setHueZones] = useState<HueZone[]>([]);
-  const [pairedStrips, setPairedStrips] = useState<UsbStripPlacement[]>([]);
   const [hueOffBehavior, setHueOffBehavior] = useState<HueOffBehavior | null>(null);
-  // One flag per save path. A USB write failure must not light the banner
-  // inside the Hue channel-map panel, nor re-arm its dismissal timer.
-  const usbPersistError = useTransientFlag();
   const hueChannelPersistError = useTransientFlag();
 
   // Load placements from shellStore on mount and when selectedAreaId changes
@@ -98,7 +102,6 @@ export function DevicesPage({
           selectedAreaId ? state.hueBridgeSyncedPositions?.[selectedAreaId] : undefined,
         );
         setHueZones(state.roomMap?.zones ?? []);
-        setPairedStrips(state.roomMap?.usbStrips ?? []);
         setHueOffBehavior(resolveHueOffBehavior(state.hueOffBehavior));
       })
       .catch((error: unknown) => {
@@ -173,7 +176,19 @@ export function DevicesPage({
         null);
   const activeCategory: DeviceCategory = activeEntry ? categoryOfEntry(activeEntry) : "strips";
   const activeId = activeEntry?.id ?? null;
+  // What was just added opens as the strip it became, and asks whether it lit. The strip appears
+  // once the save lands, a render or two after the connect answers. A save that never lands must not
+  // leave it waiting: a later connect of the same port would jump the page and flash unasked.
+  const [arriving, setArriving] = useState<AddedOutput | null>(null);
+  const [flashFor, setFlashFor] = useState<string | null>(null);
+  const clearFlash = useCallback(() => setFlashFor(null), []);
+  useEffect(() => {
+    if (arriving === null) return;
+    const timer = setTimeout(() => setArriving(null), ARRIVAL_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [arriving]);
   const selectEntry = (id: string) => {
+    setArriving(null);
     setStoredEntry(id);
     const entry = entries?.find((candidate) => candidate.id === id);
     if (entry?.kind === "port") device.selectPort(entry.port.portName);
@@ -193,24 +208,6 @@ export function DevicesPage({
     const main = mainScrollRef.current;
     if (main) main.scrollTop = 0;
   }, [activeId]);
-  // The room-map editor authors strips on its own surface; re-hydrating here
-  // catches those edits without coupling the two stores.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: connectedPort is the trigger that re-reads strips paired elsewhere
-  useEffect(() => {
-    if (activeCategory !== "strips") return;
-    let cancelled = false;
-    shellStore
-      .load()
-      .then((state) => {
-        if (cancelled) return;
-        setPairedStrips(state.roomMap?.usbStrips ?? []);
-      })
-      .catch((error: unknown) => {
-        console.error("[LumaSync] Devices: re-reading paired USB strips failed:", error);
-      });
-    return () => { cancelled = true; };
-  }, [activeCategory, connectedPort]);
-
   const handlePositionChange = useCallback(async (updated: HueChannelPlacement[]) => {
     // Stamped here rather than in the panel: the panel is handed one area's
     // channels and has no reason to know which, but the merge cannot tell two
@@ -267,12 +264,28 @@ export function DevicesPage({
     [selectedAreaId],
   );
 
-  // Until each row has a page of its own (D2, D3), a row shows the pane it belongs to.
-  const kind = activeEntry?.kind ?? null;
-  const transport = activeEntry?.kind === "strip" ? (activeEntry.strip.transport?.kind ?? null) : null;
-  const showsUsb = kind === "port" || kind === "add" || (kind === "strip" && transport !== "wled");
-  const showsHue = kind === "hue" || kind === "bridge";
-  const showsWled = kind === "add" || (kind === "strip" && transport === "wled");
+  if (arriving !== null && entries !== null) {
+    const landed = entries.find(
+      (entry) =>
+        entry.kind === "strip" &&
+        (arriving.kind === "serial"
+          ? entry.strip.transport?.kind === "serial" && entry.strip.transport.portName === arriving.portName
+          : entry.strip.transport?.kind === "wled" && entry.strip.transport.sink.ip === arriving.ip),
+    );
+    if (landed?.kind === "strip") {
+      setArriving(null);
+      setStoredEntry(landed.id);
+      setFlashFor(landed.strip.id);
+    }
+  }
+
+  // Adding moves the strip that is driven now: one strip at a time until several can run.
+  const driven = strips?.find((strip) => strip.enabled && strip.transport !== null) ?? null;
+  const drivenEntry = entries?.find((entry) => entry.kind === "strip" && entry.strip === driven);
+  const replaces = drivenEntry?.kind === "strip" ? stripName(drivenEntry, t) : null;
+  const foundPorts = entries?.flatMap((entry) => (entry.kind === "port" ? [entry.port] : [])) ?? [];
+  const otherPorts = device.ports.filter((port) => !port.isSupported);
+  const showsHue = activeEntry?.kind === "hue" || activeEntry?.kind === "bridge";
 
   return (
     <div className={styles.page}>
@@ -288,21 +301,88 @@ export function DevicesPage({
         />
       )}
 
-      {/* Every pane stays mounted and hides via `hidden`, so switching the
-          rail never remounts a pane or replays its effects. */}
+      {/* Every page stays mounted and hides via `hidden`, so switching the
+          rail never remounts a page or replays its effects. */}
       <div className={styles.main} ref={mainScrollRef}>
-        <UsbStripsCategory
-          isActive={showsUsb}
-          device={device}
-          pairedStrips={pairedStrips}
-          setPairedStrips={setPairedStrips}
-          persistError={usbPersistError.active}
-          flagPersistError={usbPersistError.raise}
-          clearPersistError={usbPersistError.clear}
-          onNavigateToRoomMap={onNavigateToRoomMap}
-        />
-
-        <WledCategory isActive={showsWled} />
+        {entries?.map((entry) => {
+          const isActive = entry.id === activeId;
+          if (entry.kind === "strip") {
+            const transport = entry.strip.transport;
+            const name = stripName(entry, t);
+            if (transport?.kind === "serial") {
+              return (
+                <StripPage
+                  key={entry.id}
+                  isActive={isActive}
+                  strip={{ ...entry.strip, transport }}
+                  name={name}
+                  device={device}
+                  onNavigateToLedSetup={onNavigateToLedSetup}
+                  onNavigateToRoomMap={onNavigateToRoomMap}
+                  autoFlash={flashFor === entry.strip.id}
+                  onAutoFlashDone={clearFlash}
+                />
+              );
+            }
+            if (transport?.kind === "wled") {
+              return (
+                <WledStripPage
+                  key={entry.id}
+                  isActive={isActive}
+                  strip={{ ...entry.strip, transport }}
+                  name={name}
+                  wled={wled}
+                  onNavigateToLedSetup={onNavigateToLedSetup}
+                  onNavigateToRoomMap={onNavigateToRoomMap}
+                  autoFlash={flashFor === entry.strip.id}
+                  onAutoFlashDone={clearFlash}
+                />
+              );
+            }
+            // A strip whose controller was forgotten keeps its layout; giving it one is adding.
+            return (
+              <AddStripPage
+                key={entry.id}
+                isActive={isActive}
+                title={name}
+                ports={foundPorts}
+                otherPorts={otherPorts}
+                device={device}
+                onWledBound={wled.markConnected}
+                replaces={null}
+                onAdded={setArriving}
+              />
+            );
+          }
+          if (entry.kind === "port") {
+            return (
+              <FoundPortPage
+                key={entry.id}
+                isActive={isActive}
+                port={entry.port}
+                device={device}
+                replaces={replaces}
+                onAdded={setArriving}
+              />
+            );
+          }
+          if (entry.kind === "add") {
+            return (
+              <AddStripPage
+                key={entry.id}
+                isActive={isActive}
+                title={t("device:strip.add.title")}
+                ports={foundPorts}
+                otherPorts={otherPorts}
+                device={device}
+                onWledBound={wled.markConnected}
+                replaces={replaces}
+                onAdded={setArriving}
+              />
+            );
+          }
+          return null;
+        })}
 
         <HuePage
           isActive={showsHue}

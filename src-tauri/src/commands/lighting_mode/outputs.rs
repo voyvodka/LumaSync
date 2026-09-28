@@ -2114,6 +2114,14 @@ fn wled_power_off_for<R: Runtime>(app: &AppHandle<R>) -> Arc<WledPowerOff> {
     Arc::new(power_off_wled)
 }
 
+/// Switches off a WLED device the "usb" channel stopped driving: a black frame alone lasts only
+/// until the device leaves realtime mode and goes back to its own effect.
+pub(crate) async fn power_off_left_wled<R: Runtime>(app: &AppHandle<R>, ip: std::net::Ipv4Addr) {
+    let power_off = wled_power_off_for(app);
+    let result = blocking(app, move |_| Ok(power_off(ip))).await;
+    log_wled_power_off(ip, result);
+}
+
 fn log_wled_power_off(
     ip: std::net::Ipv4Addr,
     result: Result<Result<(), WledPowerOffError>, String>,

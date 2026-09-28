@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 
+import { ConfirmPopover } from "../ConfirmPopover/ConfirmPopover";
 import { cx } from "../cx";
 import { Popover } from "../Popover/Popover";
 import styles from "./Menu.module.css";
@@ -13,6 +14,17 @@ export interface MenuItem {
   disabled?: boolean;
   /** The id of the line that says why it is off. */
   describedBy?: string;
+  /** Asks first, beside "…", and runs `onSelect` only on yes. */
+  confirm?: MenuConfirm;
+}
+
+export interface MenuConfirm {
+  title?: string;
+  text: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  testId?: string;
+  confirmTestId?: string;
 }
 
 interface MenuProps {
@@ -30,6 +42,11 @@ interface MenuProps {
  */
 export function Menu({ label, items, testId }: MenuProps) {
   const [open, setOpen] = useState(false);
+  // The item whose question is up, beside the same "…": the list closes, the question takes its place.
+  const [asking, setAsking] = useState<MenuItem | null>(null);
+  // Kept once answered, so the question settles out with its own words rather than vanishing.
+  const [asked, setAsked] = useState<MenuItem | null>(null);
+  if (asking !== null && asking !== asked) setAsked(asking);
   const ref = useRef<HTMLButtonElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const id = useId();
@@ -47,7 +64,10 @@ export function Menu({ label, items, testId }: MenuProps) {
         aria-label={label}
         aria-expanded={open}
         aria-controls={open ? id : undefined}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          setAsking(null);
+          setOpen((v) => !v);
+        }}
         className={styles.trigger}
         data-testid={testId}
       >
@@ -69,7 +89,8 @@ export function Menu({ label, items, testId }: MenuProps) {
               onClick={() => {
                 setOpen(false);
                 ref.current?.focus();
-                item.onSelect();
+                if (item.confirm) setAsking(item);
+                else item.onSelect();
               }}
             >
               {item.label}
@@ -77,6 +98,25 @@ export function Menu({ label, items, testId }: MenuProps) {
           ))}
         </div>
       </Popover>
+      {asked?.confirm ? (
+        <ConfirmPopover
+          open={asking !== null}
+          anchorRef={ref}
+          label={asked.label}
+          title={asked.confirm.title}
+          text={asked.confirm.text}
+          confirmLabel={asked.confirm.confirmLabel}
+          cancelLabel={asked.confirm.cancelLabel}
+          danger={asked.danger}
+          onConfirm={() => {
+            setAsking(null);
+            asked.onSelect();
+          }}
+          onCancel={() => setAsking(null)}
+          testId={asked.confirm.testId}
+          confirmTestId={asked.confirm.confirmTestId}
+        />
+      ) : null}
     </>
   );
 }

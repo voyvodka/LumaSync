@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { HealthCheckResult, SerialPortListResponse } from "../deviceConnectionApi";
+import { withRegistry } from "./support/fakeRegistry";
 import { createDeviceConnectionController } from "../state/deviceConnectionController";
 import type { DeviceConnectionControllerDeps } from "@/features/device/state/connectionTypes";
 
@@ -83,22 +84,16 @@ describe("recovery flow", () => {
         status: { code: "CONNECT_OK", message: "Recovered", details: null },
       });
 
-    const controller = createDeviceConnectionController({
+    const controller = createDeviceConnectionController(withRegistry({
       listSerialPorts,
       connectSerialPort,
-      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
-        connected: false,
-        portName: null,
-        updatedAtUnixMs: 0,
-        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
-      }),
       persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       runSerialHealthCheck: vi.fn<Required<DeviceConnectionControllerDeps>["runSerialHealthCheck"]>().mockResolvedValue(createHealthPass()),
       refreshMinIntervalMs: 0,
       recoveryFastDelayMs: 10,
       recoveryRetryDelayMs: 20,
       recoveryMaxAttempts: 3,
-    });
+    }));
 
     await controller.initialize();
     await controller.connectSelectedPort();
@@ -143,7 +138,7 @@ describe("recovery flow", () => {
       )
       .mockResolvedValueOnce(listResponse([]));
 
-    const controller = createDeviceConnectionController({
+    const controller = createDeviceConnectionController(withRegistry({
       listSerialPorts,
       connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>().mockResolvedValue({
         connected: true,
@@ -151,19 +146,13 @@ describe("recovery flow", () => {
         updatedAtUnixMs: Date.now(),
         status: { code: "CONNECT_OK", message: "Connected", details: null },
       }),
-      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
-        connected: false,
-        portName: null,
-        updatedAtUnixMs: 0,
-        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
-      }),
       persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       runSerialHealthCheck: vi.fn<Required<DeviceConnectionControllerDeps>["runSerialHealthCheck"]>().mockResolvedValue(createHealthPass()),
       refreshMinIntervalMs: 0,
       recoveryFastDelayMs: 10,
       recoveryRetryDelayMs: 20,
       recoveryMaxAttempts: 3,
-    });
+    }));
 
     await controller.initialize();
     await controller.connectSelectedPort();
@@ -197,7 +186,7 @@ describe("recovery flow", () => {
       )
       .mockResolvedValueOnce(listResponse([]));
 
-    const controller = createDeviceConnectionController({
+    const controller = createDeviceConnectionController(withRegistry({
       listSerialPorts,
       connectSerialPort: vi.fn<DeviceConnectionControllerDeps["connectSerialPort"]>().mockResolvedValue({
         connected: true,
@@ -205,19 +194,13 @@ describe("recovery flow", () => {
         updatedAtUnixMs: Date.now(),
         status: { code: "CONNECT_OK", message: "Connected", details: null },
       }),
-      getSerialConnectionStatus: vi.fn<DeviceConnectionControllerDeps["getSerialConnectionStatus"]>().mockResolvedValue({
-        connected: false,
-        portName: null,
-        updatedAtUnixMs: 0,
-        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
-      }),
       persistLastSuccessfulPort: vi.fn<DeviceConnectionControllerDeps["persistLastSuccessfulPort"]>(),
       runSerialHealthCheck,
       refreshMinIntervalMs: 0,
       recoveryFastDelayMs: 100,
       recoveryRetryDelayMs: 100,
       recoveryMaxAttempts: 2,
-    });
+    }));
 
     await controller.initialize();
     await controller.connectSelectedPort();

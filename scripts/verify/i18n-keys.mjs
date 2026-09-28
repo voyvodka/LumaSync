@@ -21,7 +21,6 @@ const CONTRACTS_DIR = resolve(ROOT, "src/shared/contracts");
 // note(), but orphan accounting under it is unreliable until the list catches up.
 // phase01-shell-contracts.mjs reads this array literal, so it stays a flat list.
 const KNOWN_DYNAMIC_PREFIXES = [
-  "device:healthCheck.steps.labels",
   "hue:runtime.codes",
   "hue:runtime.states",
   "hue:runtime.triggerSource",
@@ -45,7 +44,6 @@ const KNOWN_DYNAMIC_PREFIXES = [
 // A source is "<file> <NAME>" (a const object/array or a string-literal type),
 // "<file> <CONST>.<MEMBER>" (one const member), or "<file> <Interface>.<field>".
 const DYNAMIC_PREFIX_DOMAINS = {
-  "device:healthCheck.steps.labels": { sources: ["device.ts DEVICE_HEALTH_STEPS"] },
   "hue:runtime.codes": {
     sources: ["hue.ts HUE_RUNTIME_STATUS"],
     // An absent wire field interpolates as "undefined"; so for the next two.

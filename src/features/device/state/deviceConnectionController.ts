@@ -5,7 +5,7 @@ import { createConnectionLifecycle } from "./connectionLifecycle";
 import { createHealthCheck } from "./healthCheck";
 import { createAutoRecovery } from "./autoRecovery";
 import { createAutoReconnectOnInit } from "./autoReconnectOnInit";
-import { createSiblingSync } from "./siblingSync";
+import { createRegistryFollower } from "./registryFollower";
 import { createSerialWatchFollower } from "./serialWatch";
 import type { DeviceConnectionController, DeviceConnectionControllerDeps } from "./connectionTypes";
 
@@ -48,11 +48,15 @@ export function createDeviceConnectionController(
     }),
   );
 
+  const follower = createRegistryFollower(store, deps.localOutputs);
+  const sync = follower.sync;
+
   const autoRecovery = createAutoRecovery(
     store,
     connectDeps,
     { recoveryFastDelayMs, recoveryRetryDelayMs, recoveryMaxAttempts },
     connectionEventsBus,
+    sync,
   );
 
   const portDiscovery = createPortDiscovery(
@@ -64,20 +68,22 @@ export function createDeviceConnectionController(
 
   const lifecycle = createConnectionLifecycle(store, connectDeps, connectionEventsBus, {
     cancelRecovery: autoRecovery.cancelRecovery,
+    sync,
   });
 
   const healthCheck = createHealthCheck(store, deps, firmwareProfileEventsBus);
-  const autoReconnect = createAutoReconnectOnInit(store, connectDeps, connectionEventsBus);
-  const siblingSync = createSiblingSync(store, deps, connectionEventsBus);
+  const autoReconnect = createAutoReconnectOnInit(store, connectDeps, connectionEventsBus, sync);
   const serialWatch = createSerialWatchFollower(store, deps, autoReconnect, {
     replugDelayMs: deps.replugDelayMs ?? 500,
     replugRetryMs: deps.replugRetryMs ?? 2_000,
   });
 
   const initialize = async () => {
+    if (store.isDisposed()) return;
+    follower.start();
     await portDiscovery.runInitialScan();
 
-    await siblingSync.hydrateFromRustStatus();
+    await sync();
 
     // Bug 10A — one attempt to bring a remembered port back. Must run after the
     // initial scan, or the visibility check consults a stale ports list.
@@ -95,14 +101,13 @@ export function createDeviceConnectionController(
     // section left mid-scan): `dispose()` already ran its unsubscribe, so a
     // listener added now would never be removed.
     if (store.isDisposed()) return;
-    siblingSync.subscribeToSiblings();
     serialWatch.subscribe();
   };
 
   const dispose = () => {
     store.dispose();
     autoRecovery.clearRecoveryTimer();
-    siblingSync.unsubscribe();
+    follower.stop();
     serialWatch.unsubscribe();
   };
 

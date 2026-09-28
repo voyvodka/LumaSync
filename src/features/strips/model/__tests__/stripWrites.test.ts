@@ -5,11 +5,14 @@ import { DEFAULT_SHELL_STATE, type ShellState } from "@/shared/contracts/shell";
 import type { LedStrip } from "@/shared/contracts/strips";
 import {
   withColorCorrection,
+  withHardwareOf,
   withSerialTransport,
   withStripHardware,
   withStripLayout,
+  withStripName,
   withWledSink,
   withWledTransport,
+  withoutStrip,
   withoutWledDevice,
 } from "../stripWrites";
 
@@ -124,3 +127,78 @@ describe("withoutWledDevice", () => {
     expect(withoutWledDevice(current, "10.0.0.6")).toBeNull();
   });
 });
+
+describe("withStripName", () => {
+  it("names the strip it is given, trimmed, and leaves the others", () => {
+    const patch = withStripName(state({ ledStrips: [strip("a"), strip("b")] }), "b", "  Desk  ");
+    expect(patch?.ledStrips).toEqual([strip("a"), strip("b", { name: "Desk" })]);
+  });
+
+  it("clears the name on a blank one, back to the device's name", () => {
+    const patch = withStripName(state({ ledStrips: [strip("a", { name: "Desk" })] }), "a", "   ");
+    expect(patch?.ledStrips).toEqual([strip("a")]);
+  });
+
+  // A rename must never land on the primary strip or create one.
+  it("writes nothing for an id no strip has", () => {
+    expect(withStripName(state({ ledStrips: [strip("a")] }), "zzz", "Desk")).toBeNull();
+    expect(withStripName(state(), "a", "Desk")).toBeNull();
+  });
+
+  it("caps a long name by characters, never splitting an emoji", () => {
+    const long = `${"a".repeat(39)}🎛️🎛️`;
+    const name = withStripName(state({ ledStrips: [strip("a")] }), "a", long)?.ledStrips?.[0]?.name;
+    expect(Array.from(name ?? "")).toHaveLength(40);
+    expect(name?.endsWith("🎛")).toBe(true);
+  });
+
+  it("keeps a name through a change of transport: it belongs to the run of LEDs", () => {
+    const renamed = { ...state({ ledStrips: [strip("a", { name: "Desk" })] }) };
+    expect(withSerialTransport(renamed, "COM3").ledStrips?.[0]?.name).toBe("Desk");
+  });
+});
+
+describe("withHardwareOf", () => {
+  it("sets the fields on the strip it is given and leaves the others, even the primary", () => {
+    const current = state({ ledStrips: [strip("a", { hardware: { chipType: "ws2812b-grb" } }), strip("b")] });
+    const patch = withHardwareOf(current, "b", { chipType: "sk6812-rgbw" });
+    expect(patch?.ledStrips).toEqual([strip("a", { hardware: { chipType: "ws2812b-grb" } }), strip("b", { hardware: { chipType: "sk6812-rgbw" } })]);
+  });
+
+  it("clears a field given as undefined", () => {
+    const current = state({ ledStrips: [strip("a", { hardware: { colorOrder: "grb", chipType: "ws2812b-grb" } })] });
+    expect(withHardwareOf(current, "a", { colorOrder: undefined })?.ledStrips?.[0]?.hardware).toEqual({ chipType: "ws2812b-grb" });
+  });
+
+  it("writes nothing for an id no strip has", () => {
+    expect(withHardwareOf(state({ ledStrips: [strip("a")] }), "zzz", { chipType: "sk6812-rgbw" })).toBeNull();
+    expect(withHardwareOf(state(), "a", { chipType: "sk6812-rgbw" })).toBeNull();
+  });
+});
+
+describe("withoutStrip", () => {
+  it("drops the strip it is given and keeps the others as they were", () => {
+    const current = state({ ledStrips: [strip("a", { name: "Desk" }), strip("b")] });
+    expect(withoutStrip(current, "a")?.ledStrips).toEqual([strip("b")]);
+  });
+
+  it("writes nothing for an id no strip has", () => {
+    expect(withoutStrip(state({ ledStrips: [strip("a")] }), "zzz")).toBeNull();
+  });
+
+  // The primary is the first enabled strip, here and in Rust: forgetting it must leave one.
+  it("forgetting the primary makes the next strip the primary", () => {
+    const current = state({ ledStrips: [strip("a"), strip("b", { enabled: false }), strip("c", { enabled: false })] });
+    const next = withoutStrip(current, "a")?.ledStrips;
+    expect(next?.map((each) => [each.id, each.enabled])).toEqual([
+      ["b", true],
+      ["c", false],
+    ]);
+  });
+
+  it("leaves the primary alone when another strip is forgotten", () => {
+    const current = state({ ledStrips: [strip("a"), strip("b", { enabled: false })] });
+    expect(withoutStrip(current, "b")?.ledStrips).toEqual([strip("a")]);
+  });
+});
+

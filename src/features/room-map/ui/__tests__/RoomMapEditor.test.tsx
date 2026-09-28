@@ -44,8 +44,9 @@ vi.mock("@/features/persistence/shellStore", () => ({
   },
 }));
 
-vi.mock("@/features/device/useUsbConnectionStatus", () => ({
-  useUsbConnectionStatus: () => ({ ready: false }),
+vi.mock("@/features/device/state/localOutputsStore", () => ({
+  // Not read yet: the strips' chips read "unknown".
+  useLocalOutputs: <S,>(select: (state: { snapshot: null; lastLoss: null }) => S) => select({ snapshot: null, lastLoss: null }),
 }));
 
 // Mutable so a test can start the editor in its loading state and flip it.

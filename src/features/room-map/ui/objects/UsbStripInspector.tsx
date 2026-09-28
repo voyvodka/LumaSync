@@ -7,7 +7,7 @@ import { TYPE_DOT_COLOR } from "../../model/zoneColor";
 /**
  * Connection status the inspector renders next to the LED count.
  * `unknown` ⇒ no port snapshot has loaded yet (initial mount race).
- * `connected` / `disconnected` come from `useUsbConnectionStatus`.
+ * `connected` / `disconnected` come from the local-output registry.
  */
 export type UsbStripConnectionStatus = "connected" | "disconnected" | "unknown";
 

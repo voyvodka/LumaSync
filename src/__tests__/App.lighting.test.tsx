@@ -21,6 +21,7 @@ import {
   resetAppHarness,
   retuneLightingMock,
   saveShellStateMock,
+  syncLocalOutputs,
   telemetryPolls,
 } from "./support/appHarness";
 
@@ -228,12 +229,13 @@ describe("App lighting", () => {
       loadShellStateMock.mockResolvedValue({ lastSection: "general", ...PAIRED, lastOutputTargets: ["hue"] });
       nextApplyRuns({ selectedTargets: ["hue"] });
 
-      const { rerender } = render(<App />);
+      render(<App />);
       await waitFor(() => expect(screen.getByTestId("output-targets")).toHaveTextContent("hue"));
 
       env.isConnected = true;
+      installInvokeDispatch(true);
       await act(async () => {
-        rerender(<App />);
+        await syncLocalOutputs();
       });
 
       await waitFor(() =>
@@ -255,12 +257,12 @@ describe("App lighting", () => {
         selectedTargets: ["usb", "hue"],
       });
 
-      const { rerender } = render(<App />);
+      render(<App />);
       await waitFor(() => expect(screen.getByTestId("output-targets")).toHaveTextContent("usb,hue"));
 
       env.isConnected = false;
       await act(async () => {
-        rerender(<App />);
+        await syncLocalOutputs();
       });
 
       await waitFor(() => expect(choices()).toContainEqual({ targets: ["hue"], origin: "usbUnplug" }));
@@ -273,7 +275,7 @@ describe("App lighting", () => {
         activeTargets: ["usb"],
         selectedTargets: ["usb"],
       });
-      const { rerender } = render(<App />);
+      render(<App />);
       await waitFor(() => expect(screen.getByTestId("active-mode")).toHaveTextContent("solid"));
       nextApplyRuns({ mode: { kind: "off" }, active: false, activeTargets: [] }, "OUTPUTS_APPLIED", {
         modeEnded: true,
@@ -281,7 +283,7 @@ describe("App lighting", () => {
 
       env.isConnected = false;
       await act(async () => {
-        rerender(<App />);
+        await syncLocalOutputs();
       });
 
       await waitFor(() => expect(choices()).toContainEqual({ targets: [], origin: "usbUnplug" }));

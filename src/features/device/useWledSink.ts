@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   WLED_DEFAULT_DDP_PORT,
   WLED_STATUS,
+  type DrivenOutputRef,
   type WledCommandStatus,
   type WledDeviceInfo,
   type WledUdpSinkConfig,
@@ -15,6 +16,7 @@ import { shellStore } from "../persistence/shellStore";
 import { connectWledSink, discoverWledDevices, forgetWledDevice } from "./wledApi";
 import { wledOutput } from "./model/localOutputs";
 import { localOutputs as defaultLocalOutputs, type LocalOutputs } from "./state/localOutputsStore";
+import { releaseOthersInApp } from "./state/releaseOthers";
 import { useStoreSelector } from "@/shared/lib/store";
 import {
   wledSinkEvents as defaultWledSinkEvents,
@@ -82,6 +84,8 @@ export interface UseActiveWledSinkDeps {
   wledSinkEvents?: WledSinkEventBus;
   localOutputs?: LocalOutputs;
   forgetDevice?: typeof forgetWledDevice;
+  /** The one-output-at-a-time switch, after the user's own connect. */
+  releaseOthers?: (kept: DrivenOutputRef) => Promise<void>;
   loadShellState?: () => Promise<ShellState>;
   updateShellState?: ShellStateUpdater;
 }
@@ -97,6 +101,7 @@ export function useActiveWledSink(
   const bus = deps.wledSinkEvents ?? defaultWledSinkEvents;
   const outputs = deps.localOutputs ?? defaultLocalOutputs;
   const forgetDevice = deps.forgetDevice ?? forgetWledDevice;
+  const releaseOthers = deps.releaseOthers ?? releaseOthersInApp;
   const loadShellState = deps.loadShellState ?? loadShell;
   const updateShellState = deps.updateShellState ?? updateShell;
 
@@ -140,12 +145,14 @@ export function useActiveWledSink(
           protocol: previous?.ip === device.ip ? previous.protocol : "ddp",
         }));
         setSavedSink(sink);
+        // Once saved: a launch would bind this device, so the strip it replaces goes now too.
+        await releaseOthers({ kind: "wled", ip: device.ip });
       } catch (err) {
         console.error("[LumaSync] persisting the connected WLED sink failed:", err);
       }
       await refresh();
     },
-    [updateShellState, refresh],
+    [updateShellState, releaseOthers, refresh],
   );
 
   const forget = useCallback(
