@@ -6,7 +6,7 @@ import { clamp } from "@/shared/lib/math";
 import { hueChannelObjectId } from "../model/objectId";
 import { resolveHueChannelWorld } from "../model/hueChannelPosition";
 import { hueChannelDotText, hueChannelName } from "../model/hueChannelLabel";
-import { cx } from "@/shared/ui/cx";
+import { cx } from "@/shared/lib/cx";
 
 interface HueChannelOverlayProps {
   channels: HueChannelPlacement[];

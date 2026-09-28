@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { cx } from "../cx";
+import { cx } from "@/shared/lib/cx";
 import styles from "./Reveal.module.css";
 
 interface RevealProps {

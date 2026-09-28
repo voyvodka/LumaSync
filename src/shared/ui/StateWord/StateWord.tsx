@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { cx } from "@/shared/ui/cx";
+import { cx } from "@/shared/lib/cx";
 
 import styles from "./StateWord.module.css";
 

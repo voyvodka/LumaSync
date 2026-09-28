@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { RangeRow } from "@/shared/ui/RangeRow";
+import { RangeRow } from "@/shared/ui/RangeRow/RangeRow";
 
 import type { ImageLayer } from "@/shared/contracts/roomMap";
 import { Header } from "./InspectorPrimitives";

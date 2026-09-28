@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useThrottledCommit } from "@/shared/lib/useThrottledCommit";
-import { RangeRow } from "@/shared/ui/RangeRow";
+import { RangeRow } from "@/shared/ui/RangeRow/RangeRow";
 
 const BRIGHTNESS_COMMIT_MIN_INTERVAL_MS = 50;
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { prefersReducedMotion } from "@/shared/lib/motion";
-import { cx } from "@/shared/ui/cx";
+import { cx } from "@/shared/lib/cx";
 import { IconCheck } from "@/shared/ui/icons";
 import styles from "./NumberField.module.css";
 

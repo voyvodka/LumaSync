@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, type RefObject } from "react";
 
-import { cx } from "../cx";
+import { cx } from "@/shared/lib/cx";
 import { Popover } from "../Popover/Popover";
 import { RowButton } from "../SettingRow/SettingRow";
 import styles from "./ConfirmPopover.module.css";

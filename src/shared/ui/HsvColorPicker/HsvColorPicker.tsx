@@ -1,60 +1,12 @@
 /**
- * HsvColorPicker
+ * An HSV picker in place of `<input type="color">`, with the same value/onChange shape: a hue ring,
+ * a saturation/value square, a hex field and the last eight colours (`localStorage`,
+ * `lm-recent-colors`). Both handles are sliders driven by the arrow keys (Shift for bigger steps).
  *
- * SVG-native HSV color picker that replaces the browser's
- * `<input type="color">`:
- *
- *   - Outer ring: hue (0..360°) — drag the handle around to pick the
- *     base hue.
- *   - Inner saturation/value square: drag the handle inside to pick
- *     S and V at the chosen hue.
- *   - Hex text field: bidirectional sync with the picker; the `#` is a
- *     static prefix and the input itself only ever holds up to six
- *     uppercase hex digits (see `sanitizeHexInput`).
- *   - Recent colors strip: persists the last 8 distinct hex values to
- *     `localStorage` under `lm-recent-colors`.
- *
- * The picker is fully keyboard-driven:
- *   - Arrow keys on the hue ring step the hue by ±5° (±15° with Shift).
- *   - Arrow keys inside the square step S/V by ±0.04 (±0.12 with Shift).
- *   - Tab order: hue → square → hex input → recent swatches.
- *
- * A11y:
- *   - Both handles are `role="slider"` with `aria-valuemin/max/now` and
- *     a localized `aria-label`.
- *   - The hex input is a normal text input (announces type-to-edit) and
- *     carries `aria-invalid` whenever the draft is not yet six digits,
- *     so the "this will not commit" state is not colour-only.
- *   - Tap target floor: ≥ 32 px on every interactive surface.
- *   - Reduced-motion: no animations are used; only static SVG transforms.
- *   - Forced-colors: handles fall back to `CanvasText` outlines so the
- *     picker stays usable in Windows High Contrast.
- *
- * Props are intentionally identical (modulo type) to the native `<input
- * type="color">` we are replacing — the migration is drop-in:
- *   `<input type="color" value={hex} onChange={(e) => setColor(e.target.value)} />`
- *   becomes
- *   `<HsvColorPicker value={hex} onChange={setColor} />`.
- *
- * Performance: the SVG is static; only the two handle transforms +
- * hex input value re-render on input. Drag is handled with pointer
- * events + `setPointerCapture` so an off-canvas drag still tracks
- * smoothly, the same pattern the room-map dots use.
- *
- * Drag-throttled `onChange`:
- * Pointer-move events fire at 60–240 Hz on modern displays, so an
- * unthrottled drag was firing the parent `onChange` (and therefore the
- * lighting IPC call when wired to compact Solid mode)
- * 50–200 times per second. The local HSV state still updates
- * synchronously so the handles track the cursor smoothly, but the
- * `onChange` callback is rate-limited to one fire per
- * `DRAG_COMMIT_MIN_INTERVAL_MS` while a pointer drag is active. The
- * pending commit is always flushed on pointer up so the released
- * position is committed exactly once. Single-tap / keyboard / hex
- * input / recent-color paths fire `onChange` immediately because they
- * are inherently low-frequency. The throttle interval matches the
- * Hue bridge floor (50 ms / 20 Hz) and the brightness slider in
- * `useSolidColorDraft` and `SelfContainedBrightnessRow`.
+ * A pointer drag fires at 60–240 Hz and each `onChange` can be a lighting IPC call, so while a drag
+ * runs `onChange` is held to one per `DRAG_COMMIT_MIN_INTERVAL_MS` — the Hue floor, as the
+ * brightness sliders use — and the released position is flushed once on pointer up. The handles
+ * still follow the pointer every frame; taps, keys and the hex field commit at once.
  */
 import {
   useCallback,
@@ -67,8 +19,8 @@ import {
 import { useTranslation } from "react-i18next";
 import { clamp } from "@/shared/lib/math";
 import { parseHex, rgbToHex, type Rgb } from "@/shared/lib/color";
-import { SectionLabel } from "@/shared/ui/SectionLabel";
-import { cx } from "@/shared/ui/cx";
+import { SectionLabel } from "./SectionLabel";
+import { cx } from "@/shared/lib/cx";
 
 // ---------------------------------------------------------------------------
 // Color math

@@ -1,5 +1,5 @@
 import { gapRightCount, type LedRef, type StripShape } from "../../model/startPoint";
-import { cx } from "@/shared/ui/cx";
+import { cx } from "@/shared/lib/cx";
 import styles from "./PlaceGlyph.module.css";
 
 /** Where LED #1 sits on the screen, 0..1 each way; the bottom leaves the stand gap like the canvas does. */

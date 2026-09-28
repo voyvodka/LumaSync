@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { createPortal } from "react-dom";
 
 import { prefersReducedMotion } from "@/shared/lib/motion";
-import { cx } from "../cx";
+import { cx } from "@/shared/lib/cx";
 import styles from "./Popover.module.css";
 
 interface PopoverProps {

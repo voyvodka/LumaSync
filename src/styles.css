@@ -1,3 +1,7 @@
+/* Declared before Tailwind's own list so `primitives` lands between base and components: the shared
+   controls' modules sit there, under every feature rule that adjusts them. docs/architecture/
+   ui-and-shell.md, "Stylesheet layers". */
+@layer theme, base, primitives, components, utilities;
 @import "tailwindcss" source(none);
 @source "../index.html";
 @source "./**/*.{ts,tsx}";
@@ -14,14 +18,13 @@
    ───────────────────────────────────────────────────────────────────── */
 @import "./fonts.css";
 
-/* Layer order is theme < base < components < utilities, so a utility beats
+/* Layer order is theme < base < primitives < components < utilities, so a utility beats
    every lm-* rule whatever the selector's specificity. Within a layer, later
    wins: keep this list in cascade order. docs/architecture/ui-and-shell.md,
    "Stylesheet layers". */
 @import "./styles/theme.css";
 @import "./styles/tokens.css" layer(base);
 @import "./styles/base.css" layer(base);
-@import "./styles/primitives.css" layer(components);
 @import "./styles/compact.css" layer(components);
 @import "./styles/compact-controls.css" layer(components);
 @import "./styles/settings.css" layer(components);

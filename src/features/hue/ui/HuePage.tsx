@@ -16,7 +16,7 @@ import { buildHueRuntimeStatusCard } from "@/features/hue/model/hueRuntimeStatus
 import type { HueBridgeSummary } from "@/features/hue/hueOnboardingApi";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
 import { HueChannels } from "@/features/hue/ui/HueChannels";
-import { cx } from "@/shared/ui/cx";
+import { cx } from "@/shared/lib/cx";
 import { Reveal } from "@/shared/ui/Reveal/Reveal";
 import { RevealList } from "@/shared/ui/Reveal/RevealList";
 import { RowButton, SettingRow } from "@/shared/ui/SettingRow/SettingRow";

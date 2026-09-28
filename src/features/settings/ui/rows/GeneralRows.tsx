@@ -4,8 +4,8 @@ import { useTranslation } from "react-i18next";
 import { changeLanguage, I18N_LANGUAGE_NAMES, I18N_SUPPORTED_LANGUAGES, type I18nLanguage } from "@/features/i18n/i18n";
 import { shellStore } from "@/features/persistence/shellStore";
 import { getStartupEnabled, setStartup } from "@/features/tray/trayController";
-import { Toggle } from "@/shared/ui/Toggle";
-import { cx } from "@/shared/ui/cx";
+import { Toggle, togglePillClass } from "@/shared/ui/Toggle/Toggle";
+import { cx } from "@/shared/lib/cx";
 import { RowNote, rowStyles, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
 
 type StartupError = "read" | "write";
@@ -82,7 +82,7 @@ export function LaunchAtLoginRow() {
       label={label}
       control={
         enabled === null ? (
-          <span className={cx("lm-toggle", rowStyles.placeholder)} aria-hidden="true" />
+          <span className={cx(togglePillClass, rowStyles.placeholder)} aria-hidden="true" />
         ) : (
           <Toggle
             checked={enabled}

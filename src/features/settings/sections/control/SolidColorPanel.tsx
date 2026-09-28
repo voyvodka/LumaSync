@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { parseHex, rgbToHex } from "@/shared/lib/color";
-import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
+import { HsvColorPicker } from "@/shared/ui/HsvColorPicker/HsvColorPicker";
 import { useSolidColorDraft } from "./useSolidColorDraft";
 
 interface SolidColorPanelProps {

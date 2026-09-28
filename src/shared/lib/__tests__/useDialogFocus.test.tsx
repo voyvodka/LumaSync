@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { useDialogFocus } from "../useDialogFocus";
+import { useDialogFocus } from "@/shared/lib/useDialogFocus";
 
 function Dialog({ open, onClose }: { open: boolean; onClose?: () => void }) {
   const { containerRef, handleKeyDown } = useDialogFocus(open, { onClose });

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { cx } from "../cx";
-import { Segmented } from "../Segmented";
+import { cx } from "@/shared/lib/cx";
+import { Segmented } from "../Segmented/Segmented";
 import styles from "./ChoiceStrip.module.css";
 
 /** A few named values side by side, with one fill that travels to the chosen one. */

@@ -15,7 +15,7 @@ import styles from "./CalibrationPage.module.css";
 import { SetupDock } from "./dock/SetupDock";
 import { SetupStage } from "./SetupStage";
 import { usePresence } from "@/shared/lib/usePresence";
-import { Callout } from "@/shared/ui/Callout";
+import { Callout } from "@/shared/ui/Callout/Callout";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog/ConfirmDialog";
 
 /**

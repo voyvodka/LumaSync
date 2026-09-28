@@ -4,7 +4,7 @@ import { canDeleteObjectKind } from "../model/objectCapability";
 
 import { IconLockClosed, IconLockOpen } from "@/shared/ui/icons";
 import type { ObjectRowEntry } from "../model/objectList";
-import { cx } from "@/shared/ui/cx";
+import { cx } from "@/shared/lib/cx";
 
 export function ObjectRow({
   entry,

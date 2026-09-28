@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { IconButton } from "@/shared/ui/Button";
+import { IconButton } from "@/shared/ui/IconButton/IconButton";
 
 import { IconGear, IconUndo, IconRedo, IconInfoAlt } from "@/shared/ui/icons";
 import type { RoomAwareStatus } from "../model/roomAware";

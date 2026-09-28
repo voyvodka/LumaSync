@@ -90,12 +90,18 @@ imports, does not see a whole feature's commands behind one import. `stylesheetS
 the element rules go into Tailwind's `base` layer, every `lm-*` feature file into `components`.
 A CSS Module wraps its whole file in `@layer components { … }` itself, since its component, not
 the list, loads it; its class names are scoped, so its place in the source order cannot tie with
-another sheet's.
+another sheet's. The exception is a shared control whose element a caller also classes — the
+room-map toolbar puts its own 28 px row on an `IconButton`, the Lights signal note its padding on a
+`Callout`. Two classes on one element do tie, and the winner would be whichever sheet happened to
+load last, so `IconButton`, `Toggle` and `Callout` sit in a `primitives` layer declared between
+`base` and `components` at the top of `styles.css`, ahead of Tailwind's own list: every feature
+rule outranks them whatever the load order. Declared anywhere later, the layer would append after
+`utilities` and outrank everything instead; `stylesheetSanity.test.ts` pins the order.
 `theme.css` maps the colour tokens and `--lm-mono` into `@theme inline`, so a utility names the
 token — `text-ink`, `bg-panel-2`, `ring-amber/60`, `font-mono` — and still compiles to
 `var(--lm-*)`; `verify:design-tokens` rejects the old arbitrary `[var(--lm-*)]` form where a named
 utility exists.
-Layer order is theme < base < components < utilities and it is decided before specificity, so a
+Layer order is theme < base < primitives < components < utilities and it is decided before specificity, so a
 utility on an element beats any `lm-*` rule that sets the same property — `.lm-x .lm-y:hover`
 included. That is the point: a utility is the local override, with no `.lm-x.hidden`-style
 counter-rule needed. The cost is the reverse case. A container rule that sizes its children
@@ -113,10 +119,10 @@ stylesheet reads, so the two cannot disagree. Where the element has no such attr
 `is-on`; `is-sel` and `is-selected` are gone. `is-active` survives only for things that are not
 selection: a step tracker's current step and the status bar's tone scale.
 
-**Controls come from `src/shared/ui/`, looks stay with their surface.** `Button`/`IconButton`,
-`Toggle` (a `role="switch"`), `Segmented` (a radio group), `RangeRow`, `ConfirmPopover`, `ConfirmDialog`, `StateWord` (a device's state in a word with its dot), `Callout`,
-`EmptyState` own the behaviour and the accessibility contract — one tab stop per
-radio group with arrow keys, Home and End (`useRadioGroup`), a name on every icon-only button, a
+**Controls come from `src/shared/ui/`, looks stay with their surface.** `IconButton`,
+`Toggle` (a `role="switch"`), `Segmented` (a radio group), `RangeRow`, `ConfirmPopover`, `ConfirmDialog`, `StateWord` (a device's state in a word with its dot) and `Callout`
+own the behaviour and the accessibility contract — one tab stop per
+radio group with arrow keys, Home and End (`shared/lib/useRadioGroup`), a name on every icon-only button, a
 focus trap in every dialog — while each call site keeps the class that draws it. That split is what
 let the three mode strips (`features/mode/ui/ModeStrip.tsx`) and the pattern picker gain arrow keys
 without a pixel moving. A slider that commits while it moves goes through `useThrottledCommit`

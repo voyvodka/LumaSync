@@ -15,12 +15,13 @@ const stylesCss = readStylesheet();
 const titleBarSource = src("features/shell/TitleBar.tsx");
 const updateModalSource = src("features/updater/UpdateModal.tsx");
 const updateModalCss = src("features/updater/UpdateModal.module.css");
+const confirmDialogCss = src("shared/ui/ConfirmDialog/ConfirmDialog.module.css");
 
 describe("modal scrim layering", () => {
   it("keeps both scrims below the title bar", () => {
     for (const [css, selector] of [
       [updateModalCss, ".scrim"],
-      [stylesCss, ".lm-modal-scrim"],
+      [confirmDialogCss, ".scrim"],
     ] as const) {
       const block = css.slice(css.indexOf(`${selector} {`));
       const inset = /inset:\s*([^;]+);/.exec(block.slice(0, block.indexOf("}")))?.[1];

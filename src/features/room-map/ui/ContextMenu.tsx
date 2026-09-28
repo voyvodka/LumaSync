@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { cx } from "@/shared/ui/cx";
+import { cx } from "@/shared/lib/cx";
 
 export interface ContextMenuAction {
   label: string;

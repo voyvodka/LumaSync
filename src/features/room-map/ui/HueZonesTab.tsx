@@ -9,7 +9,7 @@ import { getZoneColor } from "../model/zoneColor";
 import { deriveHueAreaState } from "../model/hueAreaState";
 import { hueChannelName } from "../model/hueChannelLabel";
 import { HUE_AREA_CHANNELS_STATUS } from "@/shared/contracts/hue";
-import { cx } from "@/shared/ui/cx";
+import { cx } from "@/shared/lib/cx";
 
 interface HueZonesTabProps {
   hueZones: HueZone[];

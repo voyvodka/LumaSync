@@ -16,7 +16,7 @@ type SectionLabelOwnProps<T extends ElementType> = {
 type SectionLabelProps<T extends ElementType> = SectionLabelOwnProps<T> &
   Omit<ComponentPropsWithoutRef<T>, keyof SectionLabelOwnProps<T>>;
 
-/** Repeated uppercase micro-label markup used across settings/room-map panels. */
+/** The picker's uppercase micro-labels. */
 export function SectionLabel<T extends ElementType = "span">({
   as,
   tone,
