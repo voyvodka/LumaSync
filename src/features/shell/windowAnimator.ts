@@ -148,13 +148,16 @@ async function animateWindowRect(
  * and only grows to the zoomed floor, so its viewport never drops below the
  * width its layouts are built for. `zoom` and `fromZoom` are passed on a size
  * change, whose save may not have landed yet.
+ *
+ * The launch passes the state it already read and `persist: false`: the mode it grows to is the
+ * saved one, so a save would only rewrite what is on disk, twice, on the way to the first frame.
  */
 export async function resizeToMode(
   mode: UIMode,
-  opts?: { animate?: boolean; zoom?: number; fromZoom?: number },
+  opts?: { animate?: boolean; zoom?: number; fromZoom?: number; state?: ShellState; persist?: boolean },
 ): Promise<void> {
   const win = getCurrentWindow();
-  const currentState = await loadShellState();
+  const currentState = opts?.state ?? (await loadShellState());
   const currentMode: UIMode = currentState.uiMode ?? "compact";
   const zoom = opts?.zoom ?? resolveUiZoom(currentState.uiZoom) / 100;
   const fromZoom = opts?.fromZoom ?? zoom;
@@ -259,6 +262,7 @@ export async function resizeToMode(
   await applyModeMinSize(win, mode, workArea, zoom);
   framedZoom = zoom;
 
+  if (opts?.persist === false) return;
   await saveShellState(partialUpdate);
   await persistWindowState({ captureSize: false });
 }

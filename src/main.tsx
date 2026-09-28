@@ -11,6 +11,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./styles.css";
 import { Providers } from "./app/providers";
 import { followSavedLanguage, resolveInitialLanguage } from "./features/i18n/languagePolicy";
+import { markStartup } from "./shared/lib/startupTiming";
 import { initI18n } from "./features/i18n/i18n";
 import { shellStore } from "./features/persistence/shellStore";
 import { followMotionPreference } from "./features/shell/motionPreference";
@@ -190,6 +191,7 @@ function renderRoot(Root: ComponentType) {
 }
 
 async function bootstrap() {
+  markStartup("frontend running");
   // One read serves the language and the preferences, before the first render: reduced motion
   // applied after it would let the first transitions run.
   const state = shellStore.load();
@@ -200,12 +202,15 @@ async function bootstrap() {
 
   // 2. Initialise i18next with resolved language
   await initI18n(language);
+  markStartup("language ready");
   // The popup is hidden and reused, never rebuilt, so it would keep the
   // language it was created in; the main window switches itself.
   if (windowKind === WINDOW_KIND.POPUP) followSavedLanguage();
 
   // 3. Mount React once this window's root module is in
-  renderRoot(await windowRoot);
+  const root = await windowRoot;
+  markStartup("root module in");
+  renderRoot(root);
 }
 
 bootstrap().catch((err) => {

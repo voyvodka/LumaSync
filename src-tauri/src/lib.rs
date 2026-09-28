@@ -46,6 +46,7 @@ mod macos_window;
 
 // Lights off while the user is away, and back when they return.
 mod away;
+mod startup_timing;
 
 // Single source for every Tauri event name — see its module doc.
 mod events;
@@ -467,6 +468,7 @@ fn app_context<R: Runtime>() -> tauri::Context<R> {
 // ---------------------------------------------------------------------------
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    startup_timing::begin();
     #[cfg(all(target_os = "macos", debug_assertions, not(feature = "e2e")))]
     macos_window::note_front_app_before_launch();
 
@@ -601,6 +603,7 @@ pub fn run() {
         .setup(|app| {
             // First thing after the log plugin has installed the logger.
             panic_log::install();
+            startup_timing::mark("setup begins");
 
             // Before the banner below, which reads the update channel from it.
             app.manage(ShellStateStore::for_app(app.handle()));
@@ -834,6 +837,7 @@ pub fn run() {
                 });
             }
 
+            startup_timing::mark("setup done");
             Ok(())
         })
         // Close interception (main window only — overlay windows must close freely).
@@ -847,6 +851,13 @@ pub fn run() {
         // window vanishes (or the quit starts as `window-close`) and the
         // process dies via the .run() callback's RunEvent::Exit branch; the
         // coordinator takes whichever trigger arrives first.
+        .on_page_load(|webview, payload| {
+            if webview.label() == MAIN_WINDOW_LABEL
+                && payload.event() == tauri::webview::PageLoadEvent::Finished
+            {
+                startup_timing::mark_page_loaded();
+            }
+        })
         .on_window_event(|window, event| {
             let label = window.label();
             // Main shell: red-X / Cmd+W hides to tray, or quits by the setting.
