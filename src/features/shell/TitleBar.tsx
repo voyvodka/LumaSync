@@ -176,6 +176,10 @@ const STEP_BY_KEY: Record<string, 1 | -1> = { ArrowRight: 1, ArrowLeft: -1 };
  * so an arrow does not leave a page (and ask about its unsaved work) on the way past it. One amber
  * mark under the open tab slides to the next.
  */
+/** `.tab`'s side padding in the module, and the mark's floor. */
+const TAB_PADDING = 11;
+const MARK_MIN_WIDTH = 36;
+
 function SectionTabs({
   active,
   onChange,
@@ -199,8 +203,10 @@ function SectionTabs({
     const place = () => {
       const tab = list.querySelector<HTMLElement>('[aria-selected="true"]');
       if (!tab) return;
-      mark.style.width = `${tab.offsetWidth - 22}px`;
-      mark.style.transform = `translateX(${tab.offsetLeft + 11}px)`;
+      // As wide as the word, but never a stub under a short one ("Oda").
+      const width = Math.max(tab.offsetWidth - TAB_PADDING * 2, MARK_MIN_WIDTH);
+      mark.style.width = `${width}px`;
+      mark.style.transform = `translateX(${tab.offsetLeft + (tab.offsetWidth - width) / 2}px)`;
     };
     place();
     const frame = requestAnimationFrame(() => {
