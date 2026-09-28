@@ -205,10 +205,10 @@ does; the lights come back on the unlock, usually seconds after.
 
 **Effects** run through the transaction like any mode: `payload_for` takes the newest effect from
 the retune store, then the saved one, and stamps the room geometry as for Ambilight, since an
-effect is drawn in screen space; `persist_mode` saves `lightingMode.effect` beside the other
+effect places its lights by the room map; `persist_mode` saves `lightingMode.effect` beside the other
 payloads, so the tray's Effect item, which sends the kind alone, brings back the last effect. A
-retune carries `LightingTuning.effect` into the running effect's cell. How an effect is drawn is in
-`capture-and-pipeline.md` ("Effects are drawn frames too").
+retune carries `LightingTuning.effect` into the running effect's cell, normalised the way a start
+is. How an effect is drawn is in `capture-and-pipeline.md` ("Effects are drawn at each light").
 
 **The intent follows what ran.** A choice the backend did not run is not retried by the next
 transaction: the intent's kind settles back to what runs. A target left out of the running mode

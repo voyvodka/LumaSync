@@ -7,7 +7,6 @@ use super::config::{
     normalize_mode_config, EffectColor, EffectDirection, EffectId, PaletteId, DEFAULT_EFFECT,
     DEFAULT_SOLID,
 };
-use super::effect_source::{loops_per_sec, render_effect};
 use super::{EffectPayload, LightingModeConfig, LightingModeKind, SolidColorPayload};
 
 #[test]
@@ -180,49 +179,4 @@ fn a_white_solid_takes_its_colour_from_the_temperature() {
 fn a_mode_without_an_effect_serialises_without_the_key() {
     let value = serde_json::to_value(LightingModeConfig::default()).unwrap();
     assert!(value.get("effect").is_none(), "{value}");
-}
-
-#[test]
-fn a_faster_speed_is_a_shorter_loop_for_every_effect() {
-    for id in [EffectId::Wave, EffectId::Breathe, EffectId::Cycle] {
-        let rates: Vec<f32> = [0.0, 0.25, 0.5, 0.75, 1.0]
-            .iter()
-            .map(|speed| loops_per_sec(id, *speed))
-            .collect();
-        assert!(
-            rates.windows(2).all(|pair| pair[0] < pair[1]),
-            "{id:?}: {rates:?}"
-        );
-    }
-}
-
-/// The bottom of a breath is dim, not dark: dark reads as "off".
-#[test]
-fn a_breath_goes_from_a_dim_floor_to_its_full_colour() {
-    let effect = EffectPayload {
-        id: EffectId::Breathe,
-        speed: 0.5,
-        brightness: 1.0,
-        colors: Some(vec![EffectColor {
-            r: 200,
-            g: 100,
-            b: 0,
-        }]),
-        ..DEFAULT_EFFECT
-    };
-    let low = render_effect(&effect, 0.0, 4, 2)[0];
-    let high = render_effect(&effect, 0.5, 4, 2)[0];
-    assert_eq!(high, [200, 100, 0]);
-    assert!(low[0] > 0 && low[0] < 40, "{low:?}");
-}
-
-#[test]
-fn the_cycle_moves_through_hues_over_its_loop() {
-    let effect = EffectPayload {
-        id: EffectId::Cycle,
-        ..DEFAULT_EFFECT
-    };
-    let start = render_effect(&effect, 0.0, 2, 2)[0];
-    let third = render_effect(&effect, 1.0 / 3.0, 2, 2)[0];
-    assert_ne!(start, third);
 }

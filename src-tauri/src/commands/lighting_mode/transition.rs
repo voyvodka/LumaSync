@@ -14,6 +14,7 @@ use super::config::{
 };
 use super::config_check;
 use super::effect_source::effect_ambilight;
+use super::effects::EffectDraw;
 use super::hydrate::{hydrate_mode_payload, read_persisted_shell_state};
 use super::live::{retune_ambilight_live, AmbilightLiveSettings, RoomGeometryLive};
 use super::pacing::{capture_interval_for, SerialSendBudget};
@@ -629,11 +630,7 @@ fn apply_mode_change_inner(
                     display_id: normalized_next.display_id.clone(),
                     led_calibration: normalized_next.led_calibration.clone(),
                     test_pattern: test_pattern.clone(),
-                    pattern_phase: Some(Arc::clone(if effect_live.is_some() {
-                        &owner.effect_phase
-                    } else {
-                        &owner.preview.pattern_phase
-                    })),
+                    pattern_phase: Some(Arc::clone(&owner.preview.pattern_phase)),
                     pattern_live: pattern_live.clone(),
                     frame_interval: capture_interval,
                     effect: effect_live.clone(),
@@ -704,10 +701,15 @@ fn apply_mode_change_inner(
                 chip,
                 preview_ctx,
                 Arc::clone(&room_geometry_live),
-                if effect_live.is_some() {
-                    WorkerPacing::drawn(capture_interval)
-                } else {
-                    WorkerPacing::live(capture_interval)
+                match &effect_live {
+                    Some(live) => WorkerPacing::drawn(
+                        capture_interval,
+                        EffectDraw {
+                            live: Arc::clone(live),
+                            clock: Arc::clone(&owner.effect_clock),
+                        },
+                    ),
+                    None => WorkerPacing::live(capture_interval),
                 },
             ) {
                 Ok(worker) => {

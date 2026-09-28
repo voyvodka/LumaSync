@@ -19,6 +19,7 @@ use std::sync::atomic::AtomicUsize;
 mod config;
 pub(crate) mod config_check;
 mod effect_source;
+mod effects;
 mod frame_pipeline;
 pub mod hue_driver;
 mod hydrate;
@@ -88,6 +89,9 @@ mod transition_tests;
 
 #[cfg(test)]
 mod effect_tests;
+
+#[cfg(test)]
+mod effect_engine_tests;
 
 #[cfg(test)]
 mod lighting_mode_tests;

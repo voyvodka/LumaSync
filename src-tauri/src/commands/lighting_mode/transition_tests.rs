@@ -77,7 +77,7 @@ impl AmbilightFrameSource for FakeFrameSource {
 fn owner_with_fake_sender() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
         effect_live: None,
-        effect_phase: Default::default(),
+        effect_clock: Default::default(),
         active_mode: LightingModeConfig::default(),
         active_port: None,
         active_usb_plan: None,
@@ -104,7 +104,7 @@ fn owner_with_fake_sender() -> LightingRuntimeOwner {
 fn owner_with_unavailable_capture() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
         effect_live: None,
-        effect_phase: Default::default(),
+        effect_clock: Default::default(),
         active_mode: LightingModeConfig::default(),
         active_port: None,
         active_usb_plan: None,
@@ -197,7 +197,7 @@ fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
     let recorder: Arc<FakeLedSender> = Arc::new(FakeLedSender::default());
     let owner = LightingRuntimeOwner {
         effect_live: None,
-        effect_phase: Default::default(),
+        effect_clock: Default::default(),
         active_mode: LightingModeConfig::default(),
         active_port: None,
         active_usb_plan: None,
@@ -550,7 +550,7 @@ fn set_ambilight_stops_previous_then_starts_new_runtime() {
     let mut owner = owner_with_fake_sender();
     owner = LightingRuntimeOwner {
         effect_live: None,
-        effect_phase: Default::default(),
+        effect_clock: Default::default(),
         active_mode: ambilight_mode(),
         active_port: Some("COM1".to_string()),
         active_usb_plan: None,
@@ -949,7 +949,7 @@ fn owner_with_recording_sender_for_ambilight() -> (LightingRuntimeOwner, Arc<Fak
     let recorder: Arc<FakeLedSender> = Arc::new(FakeLedSender::default());
     let owner = LightingRuntimeOwner {
         effect_live: None,
-        effect_phase: Default::default(),
+        effect_clock: Default::default(),
         active_mode: LightingModeConfig::default(),
         active_port: None,
         active_usb_plan: None,
@@ -1051,7 +1051,7 @@ fn owner_with_red_frame() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
     let recorder: Arc<FakeLedSender> = Arc::new(FakeLedSender::default());
     let owner = LightingRuntimeOwner {
         effect_live: None,
-        effect_phase: Default::default(),
+        effect_clock: Default::default(),
         active_mode: LightingModeConfig::default(),
         active_port: None,
         active_usb_plan: None,

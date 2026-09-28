@@ -1,0 +1,351 @@
+//! The effect engine: each light coloured where it is, through a palette, on a
+//! clock that survives a rebuild. The first test is the v1 defect — a rainbow
+//! averaged to grey on two Hue lamps — held as a regression.
+
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+use super::config::{
+    EffectColor, EffectDirection, EffectId, EffectPayload, PaletteId, DEFAULT_EFFECT,
+};
+use super::effects::{
+    bytes_from_linear_test as bytes_from_linear, loops_per_sec, palette_for_test as palette_for,
+    EffectClockSlot, EffectDraw, EffectStage, PaletteTest as Palette, CATALOGUE, CATALOGUE_JSON,
+};
+use crate::commands::hue::frame::{HueAreaChannel, HueScreenRegion};
+use crate::commands::led_calibration::{
+    build_led_sequence, LedCalibrationConfig, LedSegmentCounts, LedSequenceItem,
+};
+
+fn hue_channel(channel_id: u8, x: f32, y: f32, z: Option<f32>) -> HueAreaChannel {
+    HueAreaChannel {
+        channel_id,
+        light_ids: vec![format!("light-{channel_id}")],
+        screen_region: HueScreenRegion::Center,
+        position_x: x,
+        position_y: y,
+        position_z: z,
+    }
+}
+
+fn strip(total: u16) -> (Vec<LedSequenceItem>, LedSegmentCounts) {
+    let top = total / 3;
+    let bottom = total / 3;
+    let side = (total - top - bottom) / 2;
+    let counts = LedSegmentCounts {
+        top,
+        right: side,
+        bottom,
+        left: total - top - bottom - side,
+    };
+    let config = LedCalibrationConfig {
+        template_id: None,
+        counts: counts.clone(),
+        bottom_missing: 0,
+        corner_ownership: "horizontal".to_string(),
+        visual_preset: "subtle".to_string(),
+        start_anchor: "bottom-start".to_string(),
+        start_local_index: None,
+        direction: "cw".to_string(),
+        total_leds: total,
+    };
+    (build_led_sequence(&config), counts)
+}
+
+fn stage(effect: EffectPayload) -> (EffectStage, Arc<Mutex<EffectPayload>>, EffectClockSlot) {
+    let live = Arc::new(Mutex::new(effect));
+    let clock = EffectClockSlot::default();
+    let stage = EffectStage::new(EffectDraw {
+        live: Arc::clone(&live),
+        clock: Arc::clone(&clock),
+    });
+    (stage, live, clock)
+}
+
+fn effect(id: EffectId) -> EffectPayload {
+    EffectPayload {
+        id,
+        ..DEFAULT_EFFECT
+    }
+}
+
+/// Runs `stage` from `start` for `seconds`, one 40 ms step at a time, and
+/// returns every step's Hue colours.
+fn run_hue(
+    stage: &mut EffectStage,
+    channels: &[HueAreaChannel],
+    start: Instant,
+    seconds: f32,
+) -> Vec<Vec<[u8; 3]>> {
+    let (seq, counts) = strip(0);
+    let steps = (seconds / 0.04) as u32;
+    (0..=steps)
+        .map(|i| {
+            stage
+                .draw(
+                    start + Duration::from_millis(u64::from(i) * 40),
+                    &seq,
+                    &counts,
+                    Some(channels),
+                    None,
+                )
+                .hue
+        })
+        .collect()
+}
+
+fn chroma([r, g, b]: [u8; 3]) -> u8 {
+    r.max(g).max(b) - r.min(g).min(b)
+}
+
+fn luma([r, g, b]: [u8; 3]) -> f32 {
+    0.2126 * f32::from(r) + 0.7152 * f32::from(g) + 0.0722 * f32::from(b)
+}
+
+#[test]
+fn a_wave_gives_two_hue_lamps_two_vivid_colours() {
+    let channels = [
+        hue_channel(0, -0.8, 0.9, None),
+        hue_channel(1, 0.8, 0.9, None),
+    ];
+    let (mut stage, _, _) = stage(effect(EffectId::Wave));
+    for frame in run_hue(&mut stage, &channels, Instant::now(), 3.0) {
+        for rgb in &frame {
+            assert!(chroma(*rgb) > 150, "washed out: {frame:?}");
+        }
+        assert_ne!(frame[0], frame[1], "the two lamps show one colour");
+    }
+}
+
+#[test]
+fn a_cycle_moves_the_whole_room_through_the_palette_together() {
+    let channels = [
+        hue_channel(0, -0.8, 0.9, None),
+        hue_channel(1, 0.0, -0.5, Some(0.8)),
+        hue_channel(2, 0.8, 0.9, None),
+    ];
+    let (mut stage, _, _) = stage(EffectPayload {
+        speed: 1.0,
+        ..effect(EffectId::Cycle)
+    });
+    let frames = run_hue(&mut stage, &channels, Instant::now(), 2.0);
+    for frame in &frames {
+        assert!(frame.iter().all(|rgb| rgb == &frame[0]), "{frame:?}");
+    }
+    assert_ne!(frames[0][0], frames[frames.len() - 1][0]);
+}
+
+#[test]
+fn candles_flicker_on_their_own_and_never_go_out() {
+    let channels = [
+        hue_channel(0, -0.5, 0.9, None),
+        hue_channel(1, 0.5, 0.9, None),
+    ];
+    let (mut stage, _, _) = stage(effect(EffectId::Candle));
+    let frames = run_hue(&mut stage, &channels, Instant::now(), 4.0);
+    let apart = frames.iter().filter(|f| f[0] != f[1]).count();
+    assert!(apart > frames.len() / 2, "the two candles flicker in step");
+    let levels: Vec<f32> = frames.iter().map(|f| luma(f[0])).collect();
+    let (low, high) = levels
+        .iter()
+        .fold((f32::MAX, 0.0f32), |(lo, hi), &l| (lo.min(l), hi.max(l)));
+    assert!(high - low > 10.0, "no flicker: {low}..{high}");
+    assert!(low > 20.0, "went out: {low}");
+    assert!(frames.iter().all(|f| f[0][0] >= f[0][2]), "not warm");
+}
+
+/// On three lamps a comet hops from lamp to lamp; one must always be lit, or
+/// the room goes dark between hops.
+#[test]
+fn a_comet_on_a_few_lamps_always_lights_one() {
+    let channels = [
+        hue_channel(0, -0.8, 0.9, Some(0.0)),
+        hue_channel(1, 0.0, 0.9, Some(0.8)),
+        hue_channel(2, 0.8, 0.9, Some(0.0)),
+    ];
+    let (mut stage, _, _) = stage(EffectPayload {
+        size: Some(0.0),
+        ..effect(EffectId::Comet)
+    });
+    for frame in run_hue(&mut stage, &channels, Instant::now(), 20.0) {
+        // The brightest channel, not luma: a lit blue lamp is lit.
+        assert!(
+            frame.iter().any(|rgb| rgb.iter().max() > Some(&40)),
+            "{frame:?}"
+        );
+    }
+}
+
+#[test]
+fn a_breath_goes_from_a_dim_floor_to_its_full_colour() {
+    let channel = [hue_channel(0, 0.0, 0.9, None)];
+    let (mut stage, _, _) = stage(EffectPayload {
+        speed: 1.0,
+        palette: Some(PaletteId::Custom),
+        colors: Some(vec![EffectColor {
+            r: 200,
+            g: 100,
+            b: 0,
+        }]),
+        ..effect(EffectId::Breathe)
+    });
+    let levels: Vec<[u8; 3]> = run_hue(&mut stage, &channel, Instant::now(), 1.5)
+        .into_iter()
+        .map(|f| f[0])
+        .collect();
+    let brightest = levels
+        .iter()
+        .copied()
+        .max_by(|a, b| luma(*a).total_cmp(&luma(*b)));
+    let dimmest = levels
+        .iter()
+        .copied()
+        .min_by(|a, b| luma(*a).total_cmp(&luma(*b)));
+    let [r, g, _] = brightest.unwrap();
+    assert!(r >= 195 && (95..=105).contains(&g), "{brightest:?}");
+    let [r, _, _] = dimmest.unwrap();
+    assert!(r > 5 && r < 60, "{dimmest:?}");
+}
+
+#[test]
+fn a_sunrise_grows_from_dim_red_to_warm_white_over_its_minutes() {
+    let channel = [hue_channel(0, 0.0, 0.9, None)];
+    let (mut stage, _, _) = stage(EffectPayload {
+        duration_minutes: Some(1),
+        ..effect(EffectId::Sunrise)
+    });
+    let frames = run_hue(&mut stage, &channel, Instant::now(), 65.0);
+    let [r0, g0, _] = frames[1][0];
+    assert!(r0 < 90 && g0 < 30, "starts bright: {:?}", frames[1][0]);
+    let [r, g, b] = frames[frames.len() - 1][0];
+    assert!(r > 240 && g > 200 && b > 150, "ends dim: {r} {g} {b}");
+}
+
+#[test]
+fn a_faster_speed_is_a_shorter_loop_for_every_effect() {
+    let timed = [EffectId::Sunrise, EffectId::NaturalLight];
+    for &(tag, id) in EffectId::TAGS.iter().filter(|(_, id)| !timed.contains(id)) {
+        let rates: Vec<f32> = [0.0, 0.25, 0.5, 0.75, 1.0]
+            .iter()
+            .map(|speed| loops_per_sec(id, *speed))
+            .collect();
+        assert!(rates.windows(2).all(|p| p[0] < p[1]), "{tag}: {rates:?}");
+    }
+}
+
+/// A new worker for the same effect (a layout change, an output joining)
+/// carries on from the owner's clock instead of starting over.
+#[test]
+fn a_rebuilt_worker_carries_the_effect_on() {
+    let channel = [hue_channel(0, 0.0, 0.9, None)];
+    let (mut first, live, clock) = stage(effect(EffectId::Cycle));
+    let start = Instant::now();
+    run_hue(&mut first, &channel, start, 5.0);
+    let mut second = EffectStage::new(EffectDraw { live, clock });
+    let (seq, counts) = strip(0);
+    let resumed = second.draw(start, &seq, &counts, Some(&channel), None).hue[0];
+    let fresh = stage(effect(EffectId::Cycle))
+        .0
+        .draw(start, &seq, &counts, Some(&channel), None)
+        .hue[0];
+    assert_ne!(resumed, fresh);
+}
+
+/// A strip with no room map still gets the whole wave across it.
+#[test]
+fn a_strip_without_a_room_map_shows_the_whole_palette() {
+    let (seq, counts) = strip(120);
+    let (mut stage, _, _) = stage(EffectPayload {
+        direction: Some(EffectDirection::LeftToRight),
+        size: Some(1.0),
+        ..effect(EffectId::Gradient)
+    });
+    let drawn = stage.draw(Instant::now(), &seq, &counts, None, None).strip;
+    assert_eq!(drawn.len(), 120);
+    let distinct: HashSet<[u8; 3]> = drawn.iter().copied().collect();
+    assert!(distinct.len() > 20, "{} colours", distinct.len());
+}
+
+#[test]
+fn every_effect_and_palette_has_a_catalogue_entry_and_nothing_else_does() {
+    let json: serde_json::Value = serde_json::from_str(CATALOGUE_JSON).unwrap();
+    let keys = |section: &str| -> HashSet<String> {
+        json[section].as_object().unwrap().keys().cloned().collect()
+    };
+    let effects: HashSet<String> = EffectId::TAGS
+        .iter()
+        .map(|(t, _)| (*t).to_string())
+        .collect();
+    assert_eq!(keys("effects"), effects);
+    let palettes: HashSet<String> = PaletteId::TAGS
+        .iter()
+        .filter(|(_, id)| *id != PaletteId::Custom)
+        .map(|(t, _)| (*t).to_string())
+        .collect();
+    assert_eq!(keys("palettes"), palettes);
+    for spec in CATALOGUE.effects.values() {
+        assert!(
+            PaletteId::from_tag(&spec.default_palette).is_some(),
+            "{}",
+            spec.default_palette
+        );
+    }
+    for &(_, id) in EffectId::TAGS {
+        palette_for(&effect(id));
+    }
+}
+
+/// OKLab keeps a blend between two saturated stops saturated; an RGB blend of
+/// red and blue passes through a dull purple.
+#[test]
+fn a_palette_blend_stays_vivid_between_its_stops() {
+    let palette = Palette::from_bytes(&[[255, 0, 0], [0, 0, 255]], false);
+    let middle = bytes_from_linear(palette.at(0.5));
+    assert!(chroma(middle) > 150, "{middle:?}");
+    let wrap = Palette::from_bytes(&[[255, 0, 0], [0, 255, 0], [0, 0, 255]], true);
+    assert_eq!(
+        bytes_from_linear(wrap.at(0.0)),
+        bytes_from_linear(wrap.at(1.0))
+    );
+    let open = Palette::from_bytes(&[[255, 0, 0], [0, 0, 255]], false);
+    let (end, start) = (
+        bytes_from_linear(open.cyclic(0.999)),
+        bytes_from_linear(open.cyclic(0.0)),
+    );
+    assert!(
+        end.iter().zip(start).all(|(a, b)| a.abs_diff(b) <= 8),
+        "a jump: {end:?} → {start:?}"
+    );
+}
+
+// Release numbers for the per-light engine, beside `frame_budget_report`:
+//   cargo test --release --lib effect_budget_report -- --ignored --nocapture
+#[test]
+#[ignore = "timing report; run by hand in release"]
+fn effect_budget_report() {
+    let channels: Vec<HueAreaChannel> = (0..6)
+        .map(|i| hue_channel(i, -0.9 + 0.36 * f32::from(i), 0.6, Some(0.2)))
+        .collect();
+    for leds in [164u16, 300] {
+        let (seq, counts) = strip(leds);
+        for &(tag, id) in EffectId::TAGS {
+            let (mut stage, _, _) = stage(effect(id));
+            let start = Instant::now();
+            let mut samples: Vec<f64> = (0..600)
+                .map(|i| {
+                    let at = start + Duration::from_millis(i * 16);
+                    let t = Instant::now();
+                    std::hint::black_box(stage.draw(at, &seq, &counts, Some(&channels), None));
+                    t.elapsed().as_secs_f64() * 1e6
+                })
+                .collect();
+            samples.sort_by(f64::total_cmp);
+            println!(
+                "{leds} LEDs + 6 Hue · {tag:<13} median {:>6.1} µs  p95 {:>6.1} µs",
+                samples[samples.len() / 2],
+                samples[samples.len() * 95 / 100]
+            );
+        }
+    }
+}

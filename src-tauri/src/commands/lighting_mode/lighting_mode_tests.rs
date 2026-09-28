@@ -64,7 +64,7 @@ impl AmbilightFrameSource for FakeFrameSource {
 fn owner_with_fake_sender() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
         effect_live: None,
-        effect_phase: Default::default(),
+        effect_clock: Default::default(),
         active_mode: LightingModeConfig::default(),
         active_port: None,
         active_usb_plan: None,
@@ -113,7 +113,7 @@ impl AmbilightFrameSource for FailsAfterFirstFrameSource {
 fn owner_that_fails_after_first_frame() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
         effect_live: None,
-        effect_phase: Default::default(),
+        effect_clock: Default::default(),
         active_mode: LightingModeConfig::default(),
         active_port: None,
         active_usb_plan: None,
@@ -1750,7 +1750,7 @@ fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
     let recorder: Arc<FakeLedSender> = Arc::new(FakeLedSender::default());
     let owner = LightingRuntimeOwner {
         effect_live: None,
-        effect_phase: Default::default(),
+        effect_clock: Default::default(),
         active_mode: LightingModeConfig::default(),
         active_port: None,
         active_usb_plan: None,

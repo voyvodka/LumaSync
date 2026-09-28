@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 
 use log::{info, warn};
 
+use super::effects::EffectDraw;
 use super::frame_pipeline::{
     strip_topology_for, AmbilightFramePipeline, FramePipelineConfig, FrameSettings,
 };
@@ -53,9 +54,11 @@ pub(super) struct WorkerPacing {
     /// What capture was asked for; a pull source is polled at this rate.
     pub capture_interval: Duration,
     pub clock: SmoothingClock,
-    /// The source draws its frames (an effect): sampled and paced like a test
-    /// pattern, though the preview reports it live.
+    /// The source draws its frames (an effect): paced like a test pattern,
+    /// though the preview reports it live.
     pub synthetic: bool,
+    /// An effect, drawn per light by the pipeline instead of sampled.
+    pub effect: Option<EffectDraw>,
 }
 
 impl WorkerPacing {
@@ -64,12 +67,14 @@ impl WorkerPacing {
             capture_interval,
             clock: Arc::new(Instant::now),
             synthetic: false,
+            effect: None,
         }
     }
 
-    pub(super) fn drawn(capture_interval: Duration) -> Self {
+    pub(super) fn drawn(capture_interval: Duration, effect: EffectDraw) -> Self {
         Self {
             synthetic: true,
+            effect: Some(effect),
             ..Self::live(capture_interval)
         }
     }
@@ -295,6 +300,7 @@ pub(super) fn start_ambilight_worker(
         Arc::new(Mutex::new(frame_source));
     let worker_source = Arc::clone(&frame_source_arc);
     let seeded_at = (pacing.clock)();
+    let effect_draw = pacing.effect.clone();
 
     let handle = thread::spawn(move || {
         ACTIVE_AMBILIGHT_WORKERS.fetch_add(1, Ordering::SeqCst);
@@ -335,6 +341,7 @@ pub(super) fn start_ambilight_worker(
             room_geometry,
             black_border_detection: live_settings.read_black_border_detection(),
             color_correction,
+            effect: effect_draw,
         });
         pipeline.seed_strip(&initial_sampled, seeded_at);
         info!(

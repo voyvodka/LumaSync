@@ -50,20 +50,43 @@ first, and Wayland is not viable), several Hue areas on one bridge (closed), sev
 drop order (`lighting_mode/runtime.rs`) — the last reference to a capture source is dropped on the
 command thread, never the worker, or a rapid mode switch crashes macOS — must hold for every source.
 
-**Effects are drawn frames too, and a mode of their own.** The Effect mode (`effect_source.rs`)
-renders each frame in screen space — a rainbow around the centre, a breath of one colour, a cycle
-through the hues — and hands it to the Ambilight worker as if captured, so the strip's layout and
-Hue's room placement sample it exactly as they sample the screen. Nothing is captured, so no
-screen-recording permission is asked for and none of the capture notices can fire. The worker is
-told it is drawn (`WorkerPacing::drawn`), so it is paced at the output rate and sampled like a test
-pattern, while the preview still reports it live. Its frame is small — 192 across — because an
-effect changes slowly over the frame and the sampler reads fractions of it. The phase accumulates
-(`phase += dt × rate`) and survives a worker rebuild in `effect_phase`, and the payload is re-read
-every frame from `effect_live`, so a change of effect, speed or brightness retunes the running
-worker instead of rebuilding it. It is its own `LightingModeKind` rather than an Ambilight source,
+**Effects are drawn at each light, not on a screen, and are a mode of their own.** The first effects
+drew a screen-space frame and let the strip and Hue sample it. On Hue that failed visibly: each
+channel averages a box 30% of the frame wide, a rainbow drawn around the centre averaged to grey, and
+a two-channel area showed two slow blobs. So the Effect mode's engine (`lighting_mode/effects/`)
+colours every light where it is. The pipeline's effect stage replaces the analysis for an effect —
+no sampling, no scene stage, no border crop — and writes the strip's and Hue's smoothing targets
+straight from what it drew; `sample_strip` returns nothing for the tick frame the effect's source
+(`effect_source.rs`) hands the worker so its pacing and loop run unchanged.
+
+- *Lights.* Every strip LED and Hue channel is an emitter in the room map's cube (`[-1, 1]`, y the
+  depth with +1 the TV wall): strip LEDs on the screen's rectangle — the room map's TV anchor when
+  there is one, a virtual screen on the TV wall when not — and Hue channels where the room map or
+  the bridge puts them. Each has an order `u` along its output (Hue: its rank around the screen,
+  evenly spaced, so a travelling effect hops lamp to lamp without a dark gap) and a seed. Extents
+  are taken over all of them, so a wave crosses the strip and the room's lamps as one field. Nothing
+  derives a sampling region from a light's distance to a surface.
+- *Patterns and palettes.* A pattern (`patterns.rs`) gives each light a palette position and a
+  perceptual level; the level is applied in linear light. Palettes blend in OKLCh — lightness and
+  chroma move evenly and the hue takes the short way — because a straight OKLab line between distant
+  hues cuts through grey. A palette that does not wrap plays there and back under a moving pattern,
+  so nothing jumps from the last stop to the first. Effects and palettes are listed once, in
+  `src/shared/contracts/effectCatalogue.json`, which the frontend imports and Rust reads.
+- *Time.* Loops accumulate (`loops += dt × rate(speed)`), so a speed change never jumps; sunrise
+  counts real seconds and natural light reads the local time. The clock lives on the runtime owner
+  (`effect_clock`), so a worker rebuild carries the effect on; the payload is re-read every step, so
+  a retune changes it in place. Stochastic patterns use seeded smooth noise per light.
+- *Smoothing.* Hue gets its own short smoothing under an effect (τ ≈ 200 ms) because the bridge does
+  not blend between 50 ms updates; the strip gets none, the patterns being continuous.
+- *Cost.* `effect_budget_report` (ignored; run in release) measured 3–19 µs median per step for 164
+  or 300 LEDs plus six Hue channels, inside the 40–74 µs of the Ambilight path.
+
+Nothing is captured, so no screen-recording permission is asked for and none of the capture notices
+can fire; the worker is told it is drawn (`WorkerPacing::drawn`) and paced at the output rate, while
+the preview still reports it live. It is its own `LightingModeKind` rather than an Ambilight source,
 or the capture preflight, the retune fast path and the tray check would all have taken an effect for
-Ambilight. An unknown kind or effect id reads as Off and the rainbow, so a mode saved by a newer
-build still reads.
+Ambilight. The payload reads one field at a time: an unknown kind is Off, an unknown effect the wave,
+an unknown palette or direction the effect's default, so a mode saved by a newer build still reads.
 
 **Test patterns are synthetic frames, not a window that capture then sees.** The LED test renders
 its pattern straight into a `CapturedFrame` (`test_pattern.rs`, `SyntheticFrameSource`) with capture

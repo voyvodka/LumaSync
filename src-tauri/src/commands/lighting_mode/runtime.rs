@@ -10,6 +10,7 @@ use log::info;
 
 use super::config::LightingModeConfig;
 use super::effect_source::{create_effect_frame_source, EffectLiveSlot};
+use super::effects::EffectClockSlot;
 use super::live::{AmbilightLiveSettings, RoomGeometryLive};
 use super::outputs;
 use super::preview::PreviewRuntime;
@@ -98,9 +99,9 @@ pub(crate) struct LightingRuntimeOwner {
     pub(super) room_geometry_live: Option<Arc<RoomGeometryLive>>,
     /// The running effect's payload cell, which its source re-reads per frame.
     pub(super) effect_live: Option<EffectLiveSlot>,
-    /// Where the effect's loop has got to, kept across a worker rebuild so a
-    /// change of layout or output does not restart the animation.
-    pub(super) effect_phase: Arc<AtomicU32>,
+    /// Where the effect has got to, kept across a worker rebuild so a change of
+    /// layout or output does not restart the animation.
+    pub(super) effect_clock: EffectClockSlot,
     pub(super) output_bridge: LedOutputBridge,
     pub(super) frame_source_factory: Arc<AmbilightFrameSourceFactory>,
     /// v1.6 LED Preview — synthetic test request + shared enrichment gate.
@@ -122,12 +123,12 @@ impl Default for LightingRuntimeOwner {
             ambilight_live: None,
             room_geometry_live: None,
             effect_live: None,
-            effect_phase: Arc::default(),
+            effect_clock: EffectClockSlot::default(),
             output_bridge: LedOutputBridge::default(),
             preview: Default::default(),
             frame_source_factory: Arc::new(|req: AmbilightCaptureRequest| {
-                if let (Some(live), Some(phase)) = (req.effect, req.pattern_phase.clone()) {
-                    Ok(create_effect_frame_source(live, phase))
+                if req.effect.is_some() {
+                    Ok(create_effect_frame_source())
                 } else if let Some(test) = req.test_pattern {
                     Ok(create_synthetic_frame_source(
                         test,

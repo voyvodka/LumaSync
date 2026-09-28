@@ -542,6 +542,7 @@ fn scripted_clock(served: &Arc<AtomicU32>) -> WorkerPacing {
     let served = Arc::clone(served);
     WorkerPacing {
         synthetic: false,
+        effect: None,
         capture_interval: Duration::from_millis(70),
         clock: Arc::new(move || base + FRAME_GAP * served.load(Ordering::SeqCst)),
     }
@@ -722,6 +723,7 @@ impl PipelineRun {
             room_geometry,
             black_border_detection: live_settings.read_black_border_detection(),
             color_correction: color_correction(),
+            effect: None,
         });
         Self {
             pipeline,
@@ -1107,6 +1109,7 @@ fn first_outputs(
         room_geometry: RoomGeometryLive::new(None),
         black_border_detection,
         color_correction: ColorCorrectionConfig::default(),
+        effect: None,
     });
     let now = Instant::now();
     let sampled = pipeline.sample_strip(frame);
@@ -1293,6 +1296,7 @@ fn live_saturation_reaches_hue() {
             room_geometry: RoomGeometryLive::new(None),
             black_border_detection: false,
             color_correction: color_correction(),
+            effect: None,
         });
         let now = Instant::now();
         let sampled = pipeline.sample_strip(&frame);
