@@ -13,6 +13,8 @@ use tauri::{AppHandle, Manager, Runtime};
 
 use crate::commands::lighting_mode::outputs::{prepare_away, AwayEdge};
 
+// Linux reports none of these yet.
+#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Reason {
     Locked,
@@ -308,6 +310,9 @@ mod platform {
     /// Not yet heard on Linux: logind's PrepareForSleep and session Lock
     /// signals are the way in. The lights stay as they are.
     pub fn watch<R: Runtime>(_app: &AppHandle<R>) {
+        // Nothing calls `note` here yet; naming it keeps the away path
+        // compiled and linted on Linux rather than dead code.
+        let _ = super::note::<R>;
         log::info!("[away] lock and sleep are not watched on this platform");
     }
 }
