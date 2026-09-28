@@ -34,6 +34,8 @@ export interface StatusAttention {
 }
 
 export interface StatusItem {
+  /** Names the chip in its test id; the label is translated, so it cannot. */
+  id: "cap" | "usb" | "wled" | "hue";
   /** Short name, e.g. "USB", "Hue". */
   label: string;
   /** One word, e.g. "Ready", "Streaming". */
@@ -83,7 +85,7 @@ export function StatusBar({ items, uiMode, lightingActive = true, trailing }: St
 function StatusChip({ item }: { item: StatusItem }) {
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement | null>(null);
-  const testId = `status-chip-${item.label.toUpperCase()}`;
+  const testId = `status-chip-${item.id.toUpperCase()}`;
   const face = (
     <>
       <span aria-hidden className={`${styles.dot} ${styles[item.kind]}`} />

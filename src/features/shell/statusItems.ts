@@ -99,12 +99,14 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
 
   return [
     {
+      id: "cap",
       label: t("shell:statusBar.capture"),
       state: ambilightActive ? t("shell:statusBar.state.ok") : "—",
       kind: ambilightActive ? "ok" : "idle",
       nerdStat: true,
     },
     {
+      id: localSink?.transport === "wled" ? "wled" : "usb",
       label: localSink?.transport === "wled" ? "WLED" : "USB",
       state: localConnected
         ? t("shell:statusBar.state.ok")
@@ -115,6 +117,7 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
       attention: localConnected ? undefined : { hint: localHint, action: devices, onAction: () => onOpenDevices("strips") },
     },
     {
+      id: "hue",
       label: "Hue",
       state: hueReconnecting
         ? t("shell:statusBar.state.retrying")

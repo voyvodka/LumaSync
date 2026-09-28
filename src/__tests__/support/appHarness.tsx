@@ -219,12 +219,12 @@ export const mockRuntimeHealthEvents = {
 // isolation boundary. The stub still renders each chip's value, which App
 // derives and which is under test here; the telemetry-polling FPS pill is not.
 export const mockStatusBar = {
-  StatusBar: ({ items }: { items: Array<{ label: string; state: string }> }) => {
+  StatusBar: ({ items }: { items: Array<{ id: string; state: string }> }) => {
     env.statusBarRenders += 1;
     return (
       <ul>
         {items.map((item) => (
-          <li key={item.label} data-testid={`status-chip-${item.label.toUpperCase()}`}>
+          <li key={item.id} data-testid={`status-chip-${item.id.toUpperCase()}`}>
             {item.state}
           </li>
         ))}

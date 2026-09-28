@@ -39,9 +39,9 @@ import { StatusBar, type StatusItem } from "../StatusBar";
 import type * as telemetryApiModule from "@/features/telemetry/telemetryApi";
 
 const ITEMS: StatusItem[] = [
-  { label: "CAP", state: "OK", kind: "ok", nerdStat: true },
-  { label: "USB", state: "OFF", kind: "off" },
-  { label: "HUE", state: "IDLE", kind: "idle" },
+  { id: "cap", label: "Capture", state: "OK", kind: "ok", nerdStat: true },
+  { id: "usb", label: "USB", state: "OFF", kind: "off" },
+  { id: "hue", label: "Hue", state: "IDLE", kind: "idle" },
 ];
 
 const SNAPSHOT: FullTelemetrySnapshot = {

@@ -21,7 +21,7 @@ describe("StatusBar", () => {
   // The whole bar was `aria-live`, so a screen reader heard the FPS pill every
   // second. Chip changes worth hearing arrive through the notice queue.
   it("is not a live region", () => {
-    render(<StatusBar uiMode="compact" items={[{ label: "USB", state: "Off", kind: "off", attention: attention() }]} />);
+    render(<StatusBar uiMode="compact" items={[{ id: "usb", label: "USB", state: "Off", kind: "off", attention: attention() }]} />);
 
     const bar = screen.getByTestId("status-bar");
     expect(bar).not.toHaveAttribute("aria-live");
@@ -32,7 +32,7 @@ describe("StatusBar", () => {
   // Pressed, a chip says what is wrong beside it and offers the page, instead of taking the window there.
   it("opens its sentence beside it, and the action goes to the page", async () => {
     const onAction = vi.fn<() => void>();
-    render(<StatusBar uiMode="full" items={[{ label: "USB", state: "Off", kind: "off", attention: attention(onAction) }]} />);
+    render(<StatusBar uiMode="full" items={[{ id: "usb", label: "USB", state: "Off", kind: "off", attention: attention(onAction) }]} />);
 
     const chip = screen.getByTestId("status-chip-USB");
     expect(chip).toHaveAttribute("aria-expanded", "false");
@@ -47,17 +47,23 @@ describe("StatusBar", () => {
   // A left-out Hue is amber, yet still opens its sentence; a healthy chip opens nothing.
   it("keeps a chip's sentence on every state but ok", () => {
     const { rerender } = render(
-      <StatusBar uiMode="full" items={[{ label: "Hue", state: "Left out", kind: "active", attention: attention() }]} />,
+      <StatusBar uiMode="full" items={[{ id: "hue", label: "Hue", state: "Left out", kind: "active", attention: attention() }]} />,
     );
     expect(screen.getByTestId("status-chip-HUE").tagName).toBe("BUTTON");
 
-    rerender(<StatusBar uiMode="full" items={[{ label: "Hue", state: "Ready", kind: "ok", attention: attention() }]} />);
+    rerender(<StatusBar uiMode="full" items={[{ id: "hue", label: "Hue", state: "Ready", kind: "ok", attention: attention() }]} />);
     expect(screen.getByTestId("status-chip-HUE").tagName).not.toBe("BUTTON");
+  });
+
+  // The label is translated ("Yakalama"), so a test id taken from it would change with the language.
+  it("names a chip's test id by its id, not its label", () => {
+    render(<StatusBar uiMode="full" items={[{ id: "usb", label: "Yakalama", state: "Off", kind: "off" }]} />);
+    expect(screen.getByTestId("status-chip-USB")).toBeInTheDocument();
   });
 
   // Shortcuts are listed in Settings → Help and the version in About.
   it("carries no key hints and no version", () => {
-    render(<StatusBar uiMode="full" items={[{ label: "USB", state: "Ready", kind: "ok" }]} />);
+    render(<StatusBar uiMode="full" items={[{ id: "usb", label: "USB", state: "Ready", kind: "ok" }]} />);
     expect(screen.queryByRole("group")).toBeNull();
     expect(screen.getByTestId("status-bar").textContent).not.toMatch(/^v\d|\bv\d/);
   });
