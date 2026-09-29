@@ -14,6 +14,11 @@ import { readStoredScenes } from "../model/sceneLibrary";
 const SCENES_UNREADABLE = "SCENES_UNREADABLE";
 
 const store = createStore<StoredScene[]>(readStoredScenes(undefined));
+/**
+ * The scene the running light last came from — picked, or saved just now — for this session: the
+ * one a change to the light can be written back into. Not stored; a relaunch starts without one.
+ */
+const origin = createStore<string | null>(null);
 let hydrated = false;
 /** An edit made before the boot read landed wins over it. */
 let editedBeforeLoad = false;
@@ -60,6 +65,14 @@ export function getScenes(): StoredScene[] {
   return store.get();
 }
 
+export function useSceneOrigin(): string | null {
+  return useStoreSelector(origin, (id) => id);
+}
+
+export function setSceneOrigin(id: string | null): void {
+  origin.set(id);
+}
+
 /**
  * Shown at once, then written on the stored list; `null` from `edit` writes nothing. A failed write
  * puts the stored list back, since a scene that was never saved would be gone next launch. `edit`
@@ -98,5 +111,6 @@ export function __resetScenesForTests(scenes?: StoredScene[]): void {
   editedBeforeLoad = false;
   pending = 0;
   lastStored = scenes ?? null;
+  origin.set(null);
   store.set(scenes ?? readStoredScenes(undefined));
 }

@@ -33,6 +33,7 @@ export default {
     unknown: "Unknown scene",
     whiteName: "White {{kelvin}} K",
     save: "Save as scene",
+    update: "Update {{name}} to this light",
     saveFirst: "Save as scene",
     saved: "Already saved",
     full: "{{max}} scenes is the most",

@@ -5,7 +5,7 @@ import { setPreference, usePreference } from "@/features/persistence/preferences
 import type { LightingModeConfig } from "@/shared/contracts/mode";
 import { SCENE_LIMITS } from "@/shared/contracts/scenes";
 import { IconButton } from "@/shared/ui/IconButton/IconButton";
-import { IconPlus, IconSliders } from "@/shared/ui/icons";
+import { IconPlus, IconRefresh, IconSliders } from "@/shared/ui/icons";
 import { Popover } from "@/shared/ui/Popover/Popover";
 
 import {
@@ -17,8 +17,9 @@ import {
   sceneSwatch,
   toModeConfig,
   withScene,
+  withSceneLook,
 } from "../model/sceneLibrary";
-import { editScenes, useScenes } from "../state/scenesStore";
+import { editScenes, setSceneOrigin, useSceneOrigin, useScenes } from "../state/scenesStore";
 import { SceneLibrary } from "./SceneLibrary";
 import { ScenesRow } from "./ScenesRow";
 import styles from "./ScenesRow.module.css";
@@ -43,6 +44,14 @@ export function Scenes({ mode, disabled, busy = false, onApply }: ScenesProps) {
 
   const activeId = scenes.find((scene) => sceneMatches(scene, mode, smoothing))?.id;
   const look = sceneFromMode(mode, smoothing);
+  // The scene the light came from, changed since: offered for writing the change back into. Only
+  // within its own kind — turning Film into a colour would be a new scene, not an edit of Film.
+  const originId = useSceneOrigin();
+  const origin = scenes.find((scene) => scene.id === originId);
+  const edited =
+    origin && look && isSceneAvailable(origin) && origin.kind === look.kind && origin.id !== activeId
+      ? origin
+      : undefined;
   const full = scenes.length >= SCENE_LIMITS.maxScenes;
   const saveTitle = full
     ? t("lights:scenes.full", { max: SCENE_LIMITS.maxScenes })
@@ -58,13 +67,23 @@ export function Scenes({ mode, disabled, busy = false, onApply }: ScenesProps) {
     // Rust reads Ambilight's smoothing from the preference when it builds the payload, so it lands first.
     const preset = sceneSmoothing(scene);
     if (preset && preset !== smoothing) await setPreference("lightingIntensityPreset", preset);
+    setSceneOrigin(scene.id);
     onApply(config);
+  };
+
+  const update = () => {
+    if (!edited || !look) return;
+    const id = edited.id;
+    void editScenes((list) => withSceneLook(list, id, look)).catch((error: unknown) => {
+      console.error("[LumaSync] updating the scene failed:", error);
+    });
   };
 
   const save = () => {
     if (!look) return;
     // Outside the edit: it runs twice, on this window's list and on the stored one.
     const scene = { id: crypto.randomUUID(), ...look };
+    setSceneOrigin(scene.id);
     void editScenes((list) => withScene(list, scene)).catch((error: unknown) => {
       console.error("[LumaSync] saving the scene failed:", error);
     });
@@ -78,6 +97,7 @@ export function Scenes({ mode, disabled, busy = false, onApply }: ScenesProps) {
         name: sceneName(scene, t),
         swatch: sceneSwatch(scene),
         active: scene.id === activeId,
+        edited: scene.id === edited?.id,
         unavailable: !isSceneAvailable(scene),
       }))}
       onPick={(id) =>
@@ -96,6 +116,16 @@ export function Scenes({ mode, disabled, busy = false, onApply }: ScenesProps) {
       }
       trailing={
         <>
+          {edited ? (
+            <IconButton
+              className={`${styles.action} ${styles.update}`}
+              label={t("lights:scenes.update", { name: sceneName(edited, t) })}
+              icon={<IconRefresh />}
+              disabled={disabled}
+              onClick={update}
+              data-testid="scene-update"
+            />
+          ) : null}
           <IconButton
             className={styles.action}
             label={t("lights:scenes.save")}

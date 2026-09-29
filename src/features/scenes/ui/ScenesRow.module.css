@@ -43,6 +43,10 @@
   .chip:hover:not(:disabled) { color: var(--lm-ink); box-shadow: inset 0 0 0 1px var(--lm-ink-faint); }
   .chip[aria-checked="true"] { color: var(--lm-ink); background: var(--lm-panel-2); box-shadow: inset 0 0 0 1px var(--lm-ink-faint); }
   .chip:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  /* The scene being edited: the light came from it and has changed since. */
+  .chip[data-edited] { color: var(--lm-ink); outline: 1px dashed var(--lm-ink-faint); outline-offset: -1px; box-shadow: none; }
+  .update { animation: update-in var(--lm-dur-base) var(--lm-ease-out); }
+  @keyframes update-in { from { opacity: 0; transform: scale(0.8); } }
   .chip:disabled { cursor: not-allowed; opacity: 0.45; }
   /* The empty list's one chip: saving the running light is how the first scene is made. */
   .ghost { max-width: none; padding: 0 12px; box-shadow: none; outline: 1px dashed var(--lm-line-2); outline-offset: -1px; }
@@ -76,6 +80,7 @@
 
   :global(:root[data-reduced-motion]) .chip,
   :global(:root[data-reduced-motion]) .action { transition: none; }
+  :global(:root[data-reduced-motion]) .update { animation: none; }
   :global(:root[data-reduced-motion]) .list[data-placed] .chip[aria-checked="true"] .swatch,
   :global(:root[data-reduced-motion]) .chip[data-arrived] { animation: none; }
 

@@ -13,6 +13,8 @@ export interface SceneChip {
   /** A CSS background: the scene's own light. */
   swatch: string;
   active: boolean;
+  /** The scene the running light came from, changed since: it can be updated to it. */
+  edited?: boolean;
   /** A scene this build cannot play (saved by a newer one). */
   unavailable?: boolean;
 }
@@ -68,6 +70,7 @@ export function ScenesRow({ scenes, disabled = false, onPick, trailing, placehol
               title={scene.unavailable ? t("lights:scenes.unavailable") : scene.name}
               onClick={() => onPick(scene.id)}
               data-arrived={arrived.has(scene.id) || undefined}
+              data-edited={scene.edited || undefined}
               data-flip-id={scene.id}
               onAnimationEnd={(event) => {
                 if (event.target === event.currentTarget) settled(scene.id);

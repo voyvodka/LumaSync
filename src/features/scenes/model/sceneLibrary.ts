@@ -292,6 +292,15 @@ export function withScene(scenes: readonly StoredScene[], scene: StoredScene): S
   return scenes.length >= SCENE_LIMITS.maxScenes ? [...scenes] : [...scenes, scene];
 }
 
+/** The scene given a new look — kind and payload — keeping its id, name and where it came from. */
+export function withSceneLook(scenes: readonly StoredScene[], id: string, look: SceneLook): StoredScene[] {
+  return scenes.map((scene) => {
+    if (scene.id !== id) return scene;
+    const { solid: _s, ambilight: _a, effect: _e, ...kept } = scene;
+    return { ...kept, ...look };
+  });
+}
+
 export function withoutScene(scenes: readonly StoredScene[], id: string): StoredScene[] {
   return scenes.filter((scene) => scene.id !== id);
 }

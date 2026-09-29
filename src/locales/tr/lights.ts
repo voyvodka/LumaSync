@@ -36,6 +36,7 @@ const lights: Catalogue<typeof enLights> = {
     unknown: "Bilinmeyen sahne",
     whiteName: "Beyaz {{kelvin}} K",
     save: "Sahne olarak kaydet",
+    update: "{{name}} sahnesini bu ışıkla güncelle",
     saveFirst: "Sahne olarak kaydet",
     saved: "Zaten kayıtlı",
     full: "En fazla {{max}} sahne olabilir",

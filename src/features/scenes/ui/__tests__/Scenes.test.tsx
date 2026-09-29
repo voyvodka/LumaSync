@@ -193,6 +193,42 @@ describe("Scenes", () => {
   });
 });
 
+describe("updating a scene to the light", () => {
+  const blue = (brightness: number): LightingModeConfig => ({ kind: "solid", solid: { r: 0, g: 0, b: 255, brightness } });
+
+  it("offers to write a change back into the scene the light came from, and only that one", async () => {
+    seed([mine("a", "Blue"), mine("b", "Other")]);
+    const onApply = vi.fn<Apply>();
+    const view = render(<Scenes mode={OFF} disabled={false} onApply={onApply} />);
+    expect(screen.queryByTestId("scene-update")).not.toBeInTheDocument();
+    await act(async () => fireEvent.click(screen.getByRole("radio", { name: "Blue" })));
+    view.rerender(<Scenes mode={blue(1)} disabled={false} onApply={onApply} />);
+    // Still the scene: nothing to update.
+    expect(screen.queryByTestId("scene-update")).not.toBeInTheDocument();
+
+    view.rerender(<Scenes mode={blue(0.4)} disabled={false} onApply={onApply} />);
+    const update = screen.getByTestId("scene-update");
+    expect(update).toHaveAccessibleName("lights:scenes.update(Blue)");
+    expect(screen.getByRole("radio", { name: "Blue" })).toHaveAttribute("data-edited");
+    await act(async () => fireEvent.click(update));
+    expect(getScenes().find((s) => s.id === "a")).toMatchObject({ name: "Blue", solid: { brightness: 0.4 } });
+    expect(getScenes().find((s) => s.id === "b")).toEqual(mine("b", "Other"));
+    // The scene is the light again.
+    expect(screen.queryByTestId("scene-update")).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Blue" })).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("does not offer it once the light has moved to another kind", async () => {
+    seed([mine("a", "Blue")]);
+    const view = render(<Scenes mode={OFF} disabled={false} onApply={vi.fn<Apply>()} />);
+    await act(async () => fireEvent.click(screen.getByRole("radio", { name: "Blue" })));
+    view.rerender(
+      <Scenes mode={{ kind: "ambilight", ambilight: { brightness: 1 } }} disabled={false} onApply={vi.fn<Apply>()} />,
+    );
+    expect(screen.queryByTestId("scene-update")).not.toBeInTheDocument();
+  });
+});
+
 describe("the scene library", () => {
   it("adds a suggested scene at once: it travels up to the list rather than growing in there", async () => {
     seed([]);
