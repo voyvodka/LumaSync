@@ -9,7 +9,6 @@ export default {
       solid: "Solid",
       effect: "Effect",
     },
-    colorModelRgb: "RGB",
     solidColor: "Solid color",
     brightness: "Brightness",
   },
@@ -22,10 +21,6 @@ export default {
     },
   },
   compact: {
-    sections: {
-      mode: "Mode",
-      scene: "Scene",
-    },
     scenes: {
       movie: "Movie",
       game: "Game",

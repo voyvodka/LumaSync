@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { SECTION_IDS, SECTION_ORDER, type SectionId, type UIMode } from "@/shared/contracts/shell";
 import { preloadableComponent } from "@/shared/lib/preloadableComponent";
 import { shallowEqual } from "@/shared/lib/store";
-import { LightsSection } from "./sections/LightsSection";
+import { LightsPage } from "@/features/lights/ui/LightsPage";
 import { SettingsPage } from "./ui/SettingsPage";
 import { buildDiagnostics } from "./ui/diagnostics";
 import { detectOsName } from "./ui/helpLinks";
@@ -25,7 +25,7 @@ import {
 import { useUpdaterActions, useUpdaterState, type UpdaterSnapshot } from "../updater/UpdaterProvider";
 import { useHueShellStatus, useHueShellStatusReader, type HueShellStatus } from "../hue/state/hueShellStatus";
 import { useSetupGuideActions } from "../onboarding/state/setupGuideControl";
-import { CompactLayout } from "./sections/compact/CompactLayout";
+import { LightsCompact } from "@/features/lights/ui/LightsCompact";
 import { CalibrationPanel, preloadCalibrationPanel } from "../calibration/ui/CalibrationPanel";
 import type { LedSetupTarget } from "@/features/device/ui/DevicesPage";
 import { useCapturedDisplayName } from "../calibration/ui/useCapturedDisplayName";
@@ -82,7 +82,7 @@ const LightsPanel = memo(function LightsPanel() {
   const openDevices = useCallback(() => void goToSection(SECTION_IDS.DEVICES), [goToSection]);
   return (
     <div className="h-full overflow-hidden">
-      <LightsSection
+      <LightsPage
         mode={lighting.lightingMode}
         outputTargets={lighting.outputTargets}
         localOutputConnected={lighting.localSink !== null}
@@ -254,7 +254,7 @@ export const SettingsLayout = memo(function SettingsLayout() {
 
   // ── Compact mode ──────────────────────────────────────────────────────
   if (uiMode === "compact") {
-    return <CompactLayout />;
+    return <LightsCompact />;
   }
 
   // ── Full mode ─────────────────────────────────────────────────────────

@@ -24,8 +24,8 @@ vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: { load: () => Promise.resolve({}), save: () => Promise.resolve() },
 }));
 
-vi.mock("../sections/LightsSection", () => ({
-  LightsSection: ({ mode, hueStreaming }: { mode: LightingModeConfig; hueStreaming: boolean }) => {
+vi.mock("@/features/lights/ui/LightsPage", () => ({
+  LightsPage: ({ mode, hueStreaming }: { mode: LightingModeConfig; hueStreaming: boolean }) => {
     count("lights");
     return (
       <>

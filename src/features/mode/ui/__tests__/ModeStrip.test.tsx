@@ -56,9 +56,9 @@ describe("ModeStrip", () => {
     const { container, unmount } = render(
       <ModeStrip variant="full" value={LIGHTING_MODE_KIND.OFF} onSelect={() => {}} />,
     );
-    expect(container.querySelectorAll(".kb")).toHaveLength(4);
+    expect(container.querySelectorAll('[data-part="keybind"]')).toHaveLength(4);
     unmount();
     const compact = render(<ModeStrip variant="compact" value={LIGHTING_MODE_KIND.OFF} onSelect={() => {}} />);
-    expect(compact.container.querySelectorAll(".kb")).toHaveLength(0);
+    expect(compact.container.querySelectorAll('[data-part="keybind"]')).toHaveLength(0);
   });
 });

@@ -1,14 +1,7 @@
 @layer components {
-  /* The Effect mode's controls. The chrome is amber and grey; only the swatches carry light
-     colours, since they are the lights. Nothing here moves on its own. */
-  .effect {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    min-width: 0;
-    container-type: inline-size;
-    container-name: effect;
-  }
+  /* The Effect mode's controls, on the shared stage. The chrome is amber and grey; only the
+     swatches carry light colours, since they are the lights. Nothing here moves on its own. */
+  .effect { min-width: 0; }
 
   /* ── Palettes ─────────────────────────────────────────────────────────── */
   .paletteRow {
@@ -218,43 +211,6 @@
   }
   .chevron[data-open] { transform: rotate(180deg); }
 
-  /* ── Parameters ───────────────────────────────────────────────────────── */
-  /* Each cell draws its right and bottom line and the frame clips the outer ones, so any wrap
-     keeps straight dividers and a short last row leaves panel, not a grey block. */
-  .params {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    overflow: hidden;
-    border: 1px solid var(--lm-line);
-    border-radius: 10px;
-    background: var(--lm-panel);
-  }
-  .params > :global(.lm-psl),
-  .params > .direction {
-    border-right: 0;
-    box-shadow: 1px 0 0 var(--lm-line), 0 1px 0 var(--lm-line);
-  }
-  .params[data-compact] {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    overflow: visible;
-  }
-  .direction {
-    display: flex;
-    flex-direction: column;
-    gap: 7px;
-    padding: 10px 14px 12px;
-  }
-  .directionLabel {
-    font: 9.5px var(--lm-mono);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--lm-ink-faint);
-  }
   .directions { display: flex; gap: 4px; }
   .directionItem {
     flex: 1;
@@ -271,7 +227,7 @@
   .directionItem[aria-checked="true"] { color: var(--lm-amber); border-color: var(--lm-amber); }
   .directionItem:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
 
-  @container effect (max-width: 420px) {
+  @container stage (max-width: 420px) {
     .gallery { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 6px; }
     .tileSwatch { height: 26px; }
   }

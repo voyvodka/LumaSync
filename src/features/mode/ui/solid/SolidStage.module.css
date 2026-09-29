@@ -1,0 +1,30 @@
+@layer components {
+  .tone { align-self: flex-start; min-width: 176px; }
+  .colour { display: flex; justify-content: flex-start; }
+
+  .swatch {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 40px;
+    padding: 0 12px 0 6px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--lm-bg);
+    color: var(--lm-ink);
+    transition: background var(--lm-dur-quick);
+  }
+  .swatch:hover:not(:disabled),
+  .swatch[aria-expanded="true"] { background: var(--lm-panel-2); }
+  .swatch:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .swatch:disabled { cursor: not-allowed; opacity: 0.45; }
+  .chip { width: 28px; height: 28px; border-radius: 7px; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 12%); }
+  .hex { font-size: 12.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .popover { padding: 10px; }
+
+  :global(:root[data-reduced-motion]) .swatch { transition: none; }
+
+  @media (forced-colors: active) {
+    .swatch:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+  }
+}

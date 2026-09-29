@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { LightingModeKind } from "@/shared/contracts/mode";
@@ -10,69 +10,20 @@ import {
 import { Segmented, type SegmentedOption } from "@/shared/ui/Segmented/Segmented";
 
 import { MODE_KIND_ORDER, modeKind } from "../model/modeKinds";
+import styles from "./ModeStrip.module.css";
 
 export type ModeStripVariant = "full" | "compact" | "popup";
-
-interface ModeStripVariantView {
-  group: string;
-  item: string;
-  content: (kind: LightingModeKind, text: { label: string; subtitle?: string }) => ReactNode;
-  testId?: (kind: LightingModeKind) => string;
-}
 
 /** Badge text comes from `KEYBIND_REGISTRY`, the same table `useGlobalKeybinds` reads. */
 function ModeKeybindBadge({ action }: { action: KeybindAction }) {
   const platform = useMemo(() => resolveKeybindPlatform(), []);
   const definition = useMemo(() => getKeybindDefinition(action, platform), [action, platform]);
-  return <span className="kb">{definition.badge.join("")}</span>;
+  return (
+    <span className={styles.badge} data-part="keybind">
+      {definition.badge.join("")}
+    </span>
+  );
 }
-
-const VARIANTS = {
-  full: {
-    group: "lm-mstrip",
-    item: "lm-mbtn",
-    content: (kind, { label, subtitle }) => {
-      const { Icon, labelLang, keybind } = modeKind(kind);
-      return (
-        <>
-          <span className="ico"><Icon /></span>
-          <span className="tx">
-            <span className="tn" lang={labelLang}>{label}</span>
-            {subtitle !== undefined && <span className="ts">{subtitle}</span>}
-          </span>
-          <ModeKeybindBadge action={keybind} />
-        </>
-      );
-    },
-  },
-  compact: {
-    group: "lm-compact-mode-strip",
-    item: "lm-compact-mbtn",
-    content: (kind, { label }) => {
-      const { Icon, labelLang } = modeKind(kind);
-      return (
-        <>
-          <span className="ico"><Icon /></span>
-          <span className="tn" lang={labelLang}>{label}</span>
-        </>
-      );
-    },
-    testId: (kind) => `mode-button-${kind}`,
-  },
-  popup: {
-    group: "lm-control-mode-strip",
-    item: "lm-control-mbtn",
-    content: (kind, { label }) => {
-      const { PopupIcon, labelLang } = modeKind(kind);
-      return (
-        <>
-          <span aria-hidden="true"><PopupIcon /></span>
-          <span lang={labelLang}>{label}</span>
-        </>
-      );
-    },
-  },
-} satisfies Record<ModeStripVariant, ModeStripVariantView>;
 
 interface ModeStripProps {
   variant: ModeStripVariant;
@@ -80,33 +31,93 @@ interface ModeStripProps {
   value: LightingModeKind | null;
   onSelect: (kind: LightingModeKind) => void;
   isDisabled?: (kind: LightingModeKind) => boolean;
-  /** The full strip's second line per tile. */
+  /** What each mode is set to, under its name where the strip has room. */
   subtitles?: Partial<Record<LightingModeKind, string>>;
 }
 
-/** Off / Ambilight / Solid as one radio group, in each of the three windows' looks. */
+/**
+ * The modes as one radio group. Lights and the compact window share one strip that sheds its
+ * second line and shortcut as it narrows; one amber mark slides to the chosen mode. The popup keeps
+ * its own buttons.
+ */
 export function ModeStrip({ variant, value, onSelect, isDisabled, subtitles }: ModeStripProps) {
   const { t } = useTranslation();
-  const view: ModeStripVariantView = VARIANTS[variant];
+  // The mark lands in place first and travels only after that, so opening a page moves nothing.
+  const [placed, setPlaced] = useState(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setPlaced(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  if (variant === "popup") {
+    return (
+      <Segmented
+        options={MODE_KIND_ORDER.map((kind) => {
+          const { PopupIcon, labelLang, labelKey } = modeKind(kind);
+          return {
+            value: kind,
+            label: (
+              <>
+                <span aria-hidden="true">
+                  <PopupIcon />
+                </span>
+                <span lang={labelLang}>{t(labelKey)}</span>
+              </>
+            ),
+            disabled: isDisabled?.(kind),
+          };
+        })}
+        value={value}
+        onChange={onSelect}
+        ariaLabel={t("common:mode.title")}
+        className="lm-control-mode-strip"
+        itemClassName="lm-control-mbtn"
+      />
+    );
+  }
+
+  const index = value === null ? -1 : MODE_KIND_ORDER.indexOf(value);
   const options = MODE_KIND_ORDER.map((kind): SegmentedOption<LightingModeKind> => {
-    const descriptor = modeKind(kind);
-    const label = t(variant === "full" ? descriptor.titleKey : descriptor.labelKey);
+    const { Icon, labelLang, keybind, labelKey } = modeKind(kind);
+    const subtitle = variant === "full" ? subtitles?.[kind] : undefined;
+    const content: ReactNode = (
+      <>
+        <span className={styles.icon} aria-hidden>
+          <Icon />
+        </span>
+        <span className={styles.text}>
+          <span className={styles.name} lang={labelLang}>
+            {t(labelKey)}
+          </span>
+          {subtitle !== undefined && <span className={styles.sub}>{subtitle}</span>}
+        </span>
+        {variant === "full" && <ModeKeybindBadge action={keybind} />}
+      </>
+    );
     return {
       value: kind,
-      label: view.content(kind, { label, subtitle: subtitles?.[kind] }),
+      label: content,
       disabled: isDisabled?.(kind),
-      testId: view.testId?.(kind),
+      testId: `mode-button-${kind}`,
     };
   });
 
   return (
-    <Segmented
-      options={options}
-      value={value}
-      onChange={onSelect}
-      ariaLabel={t("common:mode.title")}
-      className={view.group}
-      itemClassName={view.item}
-    />
+    <div
+      className={styles.strip}
+      data-variant={variant}
+      data-placed={placed || undefined}
+      style={{ "--n": MODE_KIND_ORDER.length, "--i": Math.max(index, 0) } as CSSProperties}
+    >
+      <span className={styles.mark} aria-hidden data-none={index < 0 || undefined} />
+      <Segmented
+        options={options}
+        value={value}
+        onChange={onSelect}
+        ariaLabel={t("common:mode.title")}
+        className={styles.group}
+        itemClassName={styles.tile}
+      />
+    </div>
   );
 }

@@ -41,7 +41,7 @@ import {
   type LedTestPatternResult,
   type TestPatternSpeed,
 } from "@/shared/contracts/preview";
-import { useSolidColorDraft } from "@/features/settings/sections/control/useSolidColorDraft";
+import { useSolidColorDraft } from "@/features/mode/ui/solid/useSolidColorDraft";
 import { closeLedTwinOverlay, hideLedControlPopup } from "../previewApi";
 import { usePreviewStatusSync } from "../state/usePreviewStatusSync";
 import {
@@ -51,6 +51,9 @@ import {
 } from "../state/useTestPatternRunner";
 import { isPickerPatternKind, PatternPicker, type PickerPatternKind } from "./PatternPicker";
 import { PopupEffectRow } from "./PopupEffectRow";
+import { DEFAULT_WHITE_KELVIN, KelvinSlider } from "@/features/mode/ui/solid/SolidWhite";
+import { RangeRow } from "@/shared/ui/RangeRow/RangeRow";
+import { StageChoice } from "@/shared/ui/Stage/Stage";
 
 /** The outputs a pattern-tile test lights: the ones the user last saved. A copy
  * held here goes stale because the webview outlives every hide, so it is
@@ -277,7 +280,9 @@ export function ControlPopupApp() {
     [isSolid, patternKind, retunes, runner, speed, testEngaged],
   );
 
-  const { draft, setColor, setBrightness } = useSolidColorDraft({
+  // White reopens at the temperature it last had.
+  const lastKelvinRef = useRef(mode?.solid?.kelvin ?? DEFAULT_WHITE_KELVIN);
+  const { draft, setColor, setKelvin, setBrightness } = useSolidColorDraft({
     incoming: incomingSolid,
     onCommit: handleSolidCommit,
   });
@@ -452,6 +457,7 @@ export function ControlPopupApp() {
       : null;
 
   const hexColor = rgbToHex(draft);
+  if (draft.kelvin != null) lastKelvinRef.current = draft.kelvin;
   const brightnessPct = Math.round(draft.brightness * 100);
 
   return (
@@ -480,18 +486,29 @@ export function ControlPopupApp() {
           />
         </div>
 
-        {/* Colour editor — drives Solid mode, or the running solid/chase test */}
+        {/* Colour editor — drives Solid mode, or the running solid/chase test. White is Solid's
+            own: a test pattern takes a colour. */}
         {showBrightness && (
-          <div>
-            <div className="lm-control-section-title flex items-center justify-between">
-              <span>{showColorPicker ? t("common:mode.solidColor") : t("common:mode.brightness")}</span>
-              <span className="font-mono text-[10px] text-ink-dim">
-                {showColorPicker ? `${hexColor.toUpperCase()} · ` : ""}
-                <span className="lm-control-readout-num">{brightnessPct}%</span>
-              </span>
-            </div>
-            <div className="flex flex-col items-center gap-3">
-              {showColorPicker && (
+          <div className="flex flex-col gap-3" data-testid="popup-colour">
+            {isSolid && !testEngaged ? (
+              <StageChoice
+                ariaLabel={t("lights:solid.tone")}
+                value={draft.kelvin != null ? "white" : "colour"}
+                onChange={(tone) =>
+                  tone === "white"
+                    ? setKelvin(lastKelvinRef.current)
+                    : setColor({ r: draft.r, g: draft.g, b: draft.b })
+                }
+                options={[
+                  { value: "colour", label: t("lights:solid.colour"), testId: "solid-tone-colour" },
+                  { value: "white", label: t("lights:solid.white"), testId: "solid-tone-white" },
+                ]}
+              />
+            ) : null}
+            {isSolid && !testEngaged && draft.kelvin != null ? (
+              <KelvinSlider kelvin={draft.kelvin} onChange={setKelvin} />
+            ) : showColorPicker ? (
+              <div className="flex justify-center">
                 <HsvColorPicker
                   value={hexColor}
                   onChange={(hex) => {
@@ -501,25 +518,19 @@ export function ControlPopupApp() {
                   ariaLabel={t("common:mode.solidColor")}
                   compact
                 />
-              )}
-              <label className="w-full">
-                <span className="sr-only">{t("common:mode.brightness")}</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={1}
-                  value={brightnessPct}
-                  aria-label={t("common:mode.brightness")}
-                  className="h-2 w-full cursor-pointer appearance-none rounded-full"
-                  style={{
-                    accentColor: "var(--lm-amber)",
-                    background: `linear-gradient(to right, var(--lm-amber) 0%, var(--lm-amber) ${brightnessPct}%, var(--lm-line-2) ${brightnessPct}%, var(--lm-line-2) 100%)`,
-                  }}
-                  onChange={(e) => setBrightness(Number.parseInt(e.currentTarget.value, 10) / 100)}
-                />
-              </label>
-            </div>
+              </div>
+            ) : null}
+            <RangeRow
+              variant="stage"
+              label={t("common:mode.brightness")}
+              valueLabel={`${brightnessPct}%`}
+              min={0}
+              max={100}
+              step={1}
+              value={brightnessPct}
+              onChange={(v) => setBrightness(v / 100)}
+              testId="popup-brightness"
+            />
           </div>
         )}
 

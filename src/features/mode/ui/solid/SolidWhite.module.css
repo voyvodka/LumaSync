@@ -1,0 +1,39 @@
+@layer components {
+  /* The temperature slider in the stage's look; its track is the light's own whites. */
+  .kelvin { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .label { font-size: 12.5px; color: var(--lm-ink-dim); }
+  .value {
+    min-width: 7ch;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--lm-ink);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .track {
+    width: 100%;
+    height: 24px;
+    margin: 0;
+    background: transparent;
+    appearance: none;
+    cursor: pointer;
+  }
+  .track::-webkit-slider-runnable-track { height: 8px; border-radius: 999px; background: var(--track); }
+  .track::-webkit-slider-thumb {
+    width: 16px;
+    height: 16px;
+    margin-top: -4px;
+    border-radius: 50%;
+    background: var(--lm-ink);
+    box-shadow: 0 0 0 3px var(--lm-bg);
+    appearance: none;
+  }
+  .track:focus-visible { outline: none; }
+  .track:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--lm-bg), var(--lm-focus-ring); }
+  .track:disabled { cursor: not-allowed; opacity: 0.45; }
+
+  @media (forced-colors: active) {
+    .track:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+  }
+}

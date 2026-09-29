@@ -1,0 +1,98 @@
+@layer components {
+  /* The modes as equal tiles on one quiet track. The chosen one is marked by a single amber-lit
+     plate that slides between tiles; the tiles themselves never move. */
+  .strip {
+    position: relative;
+    container: mstrip / inline-size;
+    padding: 3px;
+    border-radius: 12px;
+    background: var(--lm-panel);
+  }
+  .group {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+    gap: 0;
+  }
+  .mark {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: calc((100% - 6px) / var(--n));
+    border-radius: 9px;
+    background: var(--lm-panel-2);
+    box-shadow: inset 0 0 0 1px var(--lm-amber);
+    transform: translateX(calc(var(--i) * 100%));
+  }
+  .strip[data-placed] .mark { transition: transform var(--lm-dur-slow) var(--lm-ease-out), opacity var(--lm-dur-quick); }
+  .mark[data-none] { opacity: 0; }
+
+  .tile {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    min-height: 52px;
+    padding: 8px 12px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    text-align: left;
+    transition: color var(--lm-dur-quick);
+  }
+  .tile:hover:not(:disabled) { color: var(--lm-ink); }
+  .tile[aria-checked="true"] { color: var(--lm-ink); }
+  .tile:focus-visible { outline: none; box-shadow: var(--lm-focus-ring-inset); }
+  .tile:disabled { cursor: not-allowed; opacity: 0.4; }
+
+  .icon {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    color: var(--lm-ink-faint);
+    transition: color var(--lm-dur-quick);
+  }
+  .icon :global(svg) { width: 16px; height: 16px; }
+  .tile[aria-checked="true"] .icon { color: var(--lm-amber); }
+  .text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .name { overflow: hidden; font-size: 13px; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; }
+  .sub {
+    overflow: hidden;
+    font-size: 11.5px;
+    color: var(--lm-ink-faint);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+  }
+  .badge {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 10.5px;
+    color: var(--lm-ink-faint);
+  }
+
+  /* Narrower: the shortcut goes first, then the second line; at compact widths the icon sits over
+     the name. */
+  @container mstrip (max-width: 640px) { .badge { display: none; } }
+  @container mstrip (max-width: 520px) { .sub { display: none; } }
+  @container mstrip (max-width: 420px) {
+    .tile { flex-direction: column; justify-content: center; gap: 4px; min-height: 58px; padding: 8px 4px; text-align: center; }
+    .text { align-items: center; }
+    .name { font-size: 11.5px; }
+  }
+
+  :global(:root[data-reduced-motion]) .mark,
+  :global(:root[data-reduced-motion]) .tile,
+  :global(:root[data-reduced-motion]) .icon { transition: none; }
+
+  @media (forced-colors: active) {
+    .mark { box-shadow: none; outline: 2px solid Highlight; outline-offset: -2px; }
+    .tile:focus-visible { outline: 2px solid Highlight; outline-offset: -2px; }
+  }
+}

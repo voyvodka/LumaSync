@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { EffectPayload } from "@/shared/contracts/mode";
+import { Stage } from "@/shared/ui/Stage/Stage";
 import { takesPalette, withEffect, withPalette } from "../../model/effectEdits";
 import { EffectGallery, EffectPicker } from "./EffectGallery";
 import { EffectParams } from "./EffectParams";
@@ -42,7 +43,7 @@ export function EffectControls({
   const compact = variant === "compact";
 
   return (
-    <section className={styles.effect} data-variant={variant} data-testid="effect-controls">
+    <Stage dense={compact} className={styles.effect} testId="effect-controls">
       {compact ? (
         <EffectPicker effect={draft} disabled={disabled} onPick={(id) => commit(withEffect(draft, id))} />
       ) : null}
@@ -70,6 +71,6 @@ export function EffectControls({
           dragging.current = false;
         }}
       />
-    </section>
+    </Stage>
   );
 }

@@ -174,12 +174,9 @@
 }
 
 .lm-control-section-title {
-  font-family: var(--lm-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--lm-ink-faint);
-  margin-bottom: 6px;
+  font-size: 12.5px;
+  color: var(--lm-ink-dim);
+  margin-bottom: 8px;
 }
 
 /* Reserved box for the live brightness readout: it is the right-hand item of a

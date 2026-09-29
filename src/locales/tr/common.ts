@@ -12,7 +12,6 @@ const common: Catalogue<typeof enCommon> = {
       solid: "Sabit",
       effect: "Efekt",
     },
-    colorModelRgb: "RGB",
     solidColor: "Sabit renk",
     brightness: "Parlaklık",
   },
@@ -25,10 +24,6 @@ const common: Catalogue<typeof enCommon> = {
     },
   },
   compact: {
-    sections: {
-      mode: "Mod",
-      scene: "Sahne",
-    },
     scenes: {
       movie: "Film",
       game: "Oyun",

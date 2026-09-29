@@ -4,20 +4,10 @@ import type { TFunction } from "i18next";
 import { i18next } from "@/features/i18n/i18n";
 import { modeKind } from "@/features/mode/model/modeKinds";
 import { LIGHTING_MODE_KIND, type LightingModeKind } from "@/shared/contracts/mode";
-import {
-  openLedControlPopup,
-  openLedTwinOverlay,
-  showLedControlPopup,
-} from "@/features/preview/previewApi";
-import {
-  controlPopupOpenFailure,
-  twinOverlayOpenFailure,
-  type PreviewOpenFailure,
-} from "@/features/preview/previewOpenFailure";
+import { openLedPreview } from "@/features/preview/openLedPreview";
+import type { PreviewOpenFailure } from "@/features/preview/previewOpenFailure";
 import { listenTrayShowLedPreview } from "@/features/tray/trayController";
 import { updateTrayLabels } from "@/features/tray/trayApi";
-
-import { loadShellState, saveShellState } from "./windowLifecycle";
 
 /** An output as the tray names it: the `usb` target is WLED when a panel drives it. */
 export type TrayOutput = "usb" | "wled" | "hue";
@@ -116,25 +106,9 @@ export function useTrayIntegration({ onPreviewOpenFailed, status, lockedModes }:
     let unlisten: (() => void) | null = null;
     void listenTrayShowLedPreview(() => {
       void (async () => {
-        // One toast per click: the first failure is the one to act on.
-        let reported = false;
-        const report = (failure: PreviewOpenFailure | null) => {
-          if (!failure || reported) return;
-          reported = true;
-          previewOpenFailedRef.current?.(failure);
-        };
         try {
-          const opened = await openLedControlPopup();
-          const popupFailure =
-            controlPopupOpenFailure(opened) ?? controlPopupOpenFailure(await showLedControlPopup());
-          report(popupFailure);
-          if (popupFailure === null) await saveShellState({ ledPreviewPopupVisible: true });
-          const state = await loadShellState();
-          if (state.ledTwinEnabledTest) {
-            report(twinOverlayOpenFailure(
-              await openLedTwinOverlay({ scope: "test", displayId: state.selectedDisplayId || undefined }),
-            ));
-          }
+          const failure = await openLedPreview();
+          if (failure) previewOpenFailedRef.current?.(failure);
         } catch (err) {
           console.error("[LumaSync] tray show-led-preview handler failed:", err);
         }

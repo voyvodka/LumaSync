@@ -10,6 +10,7 @@ import {
 import type { EffectPayload } from "@/shared/contracts/mode";
 import { RangeRow } from "@/shared/ui/RangeRow/RangeRow";
 import { Segmented } from "@/shared/ui/Segmented/Segmented";
+import { StageGrid, StageRow } from "@/shared/ui/Stage/Stage";
 import { paramValue, usesParam } from "../../model/effectEdits";
 import styles from "./EffectControls.module.css";
 
@@ -67,7 +68,7 @@ export function EffectParams({
 }: EffectParamsProps) {
   const { t } = useTranslation();
   const id = effect.id;
-  const variant = compact ? "compact" : "profile";
+  const variant = "stage";
   const drag = { onDragStart, onDragEnd };
   const sizeKey = (SIZE_LABEL as Partial<Record<EffectId, (typeof SIZE_LABEL)[keyof typeof SIZE_LABEL]>>)[id];
   const intensityKey = (
@@ -77,7 +78,8 @@ export function EffectParams({
   const minutes = paramValue(effect, "durationMinutes");
 
   return (
-    <div className={styles.params} data-compact={compact || undefined}>
+    <>
+    <StageGrid>
       {usesParam(id, "speed") ? (
         <RangeRow
           variant={variant}
@@ -152,9 +154,9 @@ export function EffectParams({
         testId="effect-brightness"
         {...drag}
       />
+    </StageGrid>
       {!compact && usesParam(id, "direction") ? (
-        <div className={styles.direction}>
-          <span className={styles.directionLabel}>{t("lights:effect.direction")}</span>
+        <StageRow label={t("lights:effect.direction")}>
           <Segmented
             className={styles.directions}
             itemClassName={styles.directionItem}
@@ -170,8 +172,8 @@ export function EffectParams({
               testId: `effect-direction-${direction}`,
             }))}
           />
-        </div>
+        </StageRow>
       ) : null}
-    </div>
+    </>
   );
 }

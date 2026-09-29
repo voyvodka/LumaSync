@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { EffectPayload } from "@/shared/contracts/mode";
+import { RangeRow } from "@/shared/ui/RangeRow/RangeRow";
 
 interface PopupEffectRowProps {
   effect: EffectPayload;
@@ -20,36 +21,22 @@ export function PopupEffectRow({ effect, onBrightness }: PopupEffectRowProps) {
 
   return (
     <div data-testid="popup-effect">
-      <div className="lm-control-section-title flex items-center justify-between">
-        <span>{t(`lights:effect.names.${effect.id}`)}</span>
-        <span className="font-mono text-[10px] text-ink-dim">
-          <span className="lm-control-readout-num">{percent}%</span>
-        </span>
-      </div>
-      <label className="block w-full">
-        <span className="sr-only">{t("common:mode.brightness")}</span>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          step={1}
-          value={percent}
-          aria-label={t("common:mode.brightness")}
-          className="h-2 w-full cursor-pointer appearance-none rounded-full"
-          style={{
-            accentColor: "var(--lm-amber)",
-            background: `linear-gradient(to right, var(--lm-amber) 0%, var(--lm-amber) ${percent}%, var(--lm-line-2) ${percent}%, var(--lm-line-2) 100%)`,
-          }}
-          onPointerDown={() => setDragging(true)}
-          onPointerUp={() => setDragging(false)}
-          onBlur={() => setDragging(false)}
-          onChange={(e) => {
-            const next = Number.parseInt(e.currentTarget.value, 10);
-            setPercent(next);
-            onBrightness(next / 100);
-          }}
-        />
-      </label>
+      <RangeRow
+        variant="stage"
+        label={t(`lights:effect.names.${effect.id}`)}
+        ariaLabel={t("common:mode.brightness")}
+        valueLabel={`${percent}%`}
+        min={0}
+        max={100}
+        step={1}
+        value={percent}
+        onDragStart={() => setDragging(true)}
+        onDragEnd={() => setDragging(false)}
+        onChange={(next) => {
+          setPercent(next);
+          onBrightness(next / 100);
+        }}
+      />
     </div>
   );
 }

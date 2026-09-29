@@ -22,7 +22,14 @@ import {
   resolveUpdateChannel,
   type ShellState,
 } from "@/shared/contracts/shell";
+import { DEFAULT_LIGHTING_SMOOTHING_PRESET, type LightingSmoothingPreset } from "@/shared/contracts/lighting";
 import { createStore, useStoreSelector } from "@/shared/lib/store";
+
+function resolveSmoothingPreset(stored: unknown): LightingSmoothingPreset {
+  return stored === "subtle" || stored === "moderate" || stored === "intense"
+    ? stored
+    : DEFAULT_LIGHTING_SMOOTHING_PRESET;
+}
 
 const PREFERENCES = {
   showNerdStats: (stored: unknown): boolean => stored === true,
@@ -33,13 +40,14 @@ const PREFERENCES = {
   notifications: resolveNotificationsPreference,
   launchLights: resolveLaunchLights,
   awayLights: resolveAwayLights,
+  lightingIntensityPreset: resolveSmoothingPreset,
 } satisfies { [K in keyof ShellState]?: (stored: unknown) => NonNullable<ShellState[K]> };
 
 export type PreferenceKey = keyof typeof PREFERENCES;
 
 /**
  * Rust reads these off disk to decide something (the update feed, the webview zoom, what the close
- * button does, notifications, the launch restore, the lights while away). A failed save reverts them: showing a choice
+ * button does, notifications, the launch restore, the lights while away, Ambilight's smoothing). A failed save reverts them: showing a choice
  * Rust never saw would say one thing while the app did another.
  */
 const READ_BY_RUST: ReadonlySet<PreferenceKey> = new Set<PreferenceKey>([
@@ -49,6 +57,7 @@ const READ_BY_RUST: ReadonlySet<PreferenceKey> = new Set<PreferenceKey>([
   "notifications",
   "launchLights",
   "awayLights",
+  "lightingIntensityPreset",
 ]);
 export type PreferenceValue<K extends PreferenceKey> = ReturnType<(typeof PREFERENCES)[K]>;
 type Preferences = { [K in PreferenceKey]: PreferenceValue<K> };

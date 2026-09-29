@@ -2,14 +2,6 @@ import type { Catalogue } from "@/features/i18n/catalogue";
 import type enLights from "@/locales/en/lights";
 
 const lights: Catalogue<typeof enLights> = {
-  slab: {
-    modeText: "Aydınlatma",
-    modeAccent: "Modu",
-    modeSettingsText: "Mod",
-    modeSettingsAccent: "ayarları",
-    scenesText: "Sahne",
-    scenesAccent: "ön ayarları",
-  },
   mode: {
     off: {
       title: "Kapalı",
@@ -29,6 +21,13 @@ const lights: Catalogue<typeof enLights> = {
       title: "Efekt",
       subtitle: "{{name}} · %{{brightness}}",
     },
+  },
+  stage: {
+    off: "Işıklar kapalı. Yakmak için bir mod ya da sahne seç.",
+  },
+  scenes: {
+    title: "Sahneler",
+    unavailable: "Daha yeni bir LumaSync ile kaydedildi — kullanmak için güncelle",
   },
   solid: {
     tone: "Renk ya da beyaz",
@@ -119,8 +118,6 @@ const lights: Catalogue<typeof enLights> = {
       brightness: "Parlaklık",
       saturation: "Doygunluk",
       blackBorder: "Siyah kenar",
-      blackBorderAuto: "oto",
-      blackBorderOff: "kapalı",
     },
     smoothing: {
       title: "Işık yanıtlama hızı",
@@ -132,6 +129,7 @@ const lights: Catalogue<typeof enLights> = {
   dock: {
     outputs: "Çıkışlar",
     addAria: "Çıkış ekle",
+    preview: "LED önizlemesi",
     addHueZoneTooltip: "Yeni bir Hue bölgesi ekle",
     addDisabledTooltip: "Bölge eklemek için bir Hue Bridge eşle",
     rows: {

@@ -1,12 +1,4 @@
 export default {
-  slab: {
-    modeText: "Lighting",
-    modeAccent: "Mode",
-    modeSettingsText: "Mode",
-    modeSettingsAccent: "settings",
-    scenesText: "Scene",
-    scenesAccent: "presets",
-  },
   mode: {
     off: {
       title: "Off",
@@ -26,6 +18,13 @@ export default {
       title: "Effect",
       subtitle: "{{name}} · {{brightness}}%",
     },
+  },
+  stage: {
+    off: "The lights are off. Pick a mode or a scene to light them.",
+  },
+  scenes: {
+    title: "Scenes",
+    unavailable: "Saved by a newer LumaSync — update to use it",
   },
   solid: {
     tone: "Solid colour or white",
@@ -116,8 +115,6 @@ export default {
       brightness: "Brightness",
       saturation: "Saturation",
       blackBorder: "Black border",
-      blackBorderAuto: "auto",
-      blackBorderOff: "off",
     },
     smoothing: {
       title: "Lighting responsiveness",
@@ -129,6 +126,7 @@ export default {
   dock: {
     outputs: "Outputs",
     addAria: "Add output",
+    preview: "LED preview",
     addHueZoneTooltip: "Add a new Hue zone",
     addDisabledTooltip: "Pair a Hue bridge to add zones",
     rows: {

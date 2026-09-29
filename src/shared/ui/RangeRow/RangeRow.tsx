@@ -1,8 +1,9 @@
 import { useId, type CSSProperties, type ReactNode } from "react";
 
 import { cx } from "@/shared/lib/cx";
+import styles from "./RangeRow.module.css";
 
-export type RangeRowVariant = "profile" | "compact" | "dock";
+export type RangeRowVariant = "stage" | "dock";
 
 interface RangeRowProps {
   /** `profile` is the Lights page's signal rows, `compact` the tray window's, `dock` the room-map inspector's. */
@@ -81,39 +82,19 @@ export function RangeRow({
     />
   );
 
-  if (variant === "profile") {
+  if (variant === "stage") {
     return (
-      <div className={cx("lm-psl", className)}>
-        <div className="row">
-          <span>{label}</span>
-          <b>{valueLabel}</b>
+      <div className={cx(styles.stage, className)}>
+        <div className={styles.head}>
+          <span className={styles.label}>{label}</span>
+          <span className={styles.value}>{valueLabel}</span>
         </div>
-        <div className="tr">
-          <div className="tr-track">
-            <span className="tr-fill" style={{ width: `${percent}%` }} />
-          </div>
-          {input({})}
-        </div>
-      </div>
-    );
-  }
-
-  if (variant === "compact") {
-    return (
-      <div className={cx("lm-compact-slider-row", className)}>
-        <div className="srow">
-          <span>{label}</span>
-          <b>{valueLabel}</b>
-        </div>
-        {/* `--lm-fill` drives the track gradient, so the amber grows with the thumb. */}
-        {input({
-          className: "lm-compact-slider",
-          style: { ["--lm-fill" as string]: `${percent}%` } as CSSProperties,
-        })}
+        {/* `--fill` drives the track, so the amber grows with the thumb. */}
+        {input({ className: styles.slider, style: { ["--fill" as string]: `${percent}%` } as CSSProperties })}
         {note && (
-          <div className="lm-compact-brightness-note" role="note">
+          <p className={styles.note} role="note">
             {note}
-          </div>
+          </p>
         )}
       </div>
     );

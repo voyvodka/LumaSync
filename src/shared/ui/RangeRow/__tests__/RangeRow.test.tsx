@@ -6,13 +6,13 @@ import { useThrottledCommit } from "@/shared/lib/useThrottledCommit";
 
 import { RangeRow } from "../RangeRow";
 
-/** The compact brightness row's wiring: local value, throttled commit, flush on release. */
+/** A brightness row's wiring: local value, throttled commit, flush on release. */
 function ThrottledRow({ onCommit }: { onCommit: (value: number) => void }) {
   const [value, setValue] = useState(50);
   const throttle = useThrottledCommit(onCommit, 50);
   return (
     <RangeRow
-      variant="compact"
+      variant="stage"
       label="Brightness"
       valueLabel={`${value}%`}
       min={0}
@@ -63,10 +63,10 @@ describe("RangeRow", () => {
     expect(onCommit).toHaveBeenCalledTimes(2);
   });
 
-  it("draws the profile fill from the value's place in the range, not the raw number", () => {
-    const { container } = render(
+  it("draws the fill from the value's place in the range, not the raw number", () => {
+    render(
       <RangeRow
-        variant="profile"
+        variant="stage"
         label="Saturation"
         valueLabel="125%"
         min={50}
@@ -76,7 +76,7 @@ describe("RangeRow", () => {
         onChange={() => {}}
       />,
     );
-    expect(container.querySelector<HTMLElement>(".tr-fill")?.style.width).toBe("50%");
+    expect(screen.getByRole("slider").style.getPropertyValue("--fill")).toBe("50%");
   });
 
   it("ties the dock label to its slider", () => {

@@ -96,9 +96,8 @@
 
   /* The colour popover: two sliders a line, short enough to open on either side of a row low
      in the window; the reset takes the last cell. */
-  .correction { display: grid; grid-template-columns: 1fr 1fr; padding: 4px 0; }
-  .correction > :global(.lm-psl) { border-right: 0; padding: 8px 14px 10px; }
-  .correctionFoot { display: flex; align-items: center; justify-content: flex-end; padding: 8px 12px; }
+  .correction { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; padding: 14px 16px 10px; }
+  .correctionFoot { display: flex; align-items: center; justify-content: flex-end; }
 
   /* Rust's own words under a note: an OS error, a VID/PID. */
   .detail { color: var(--lm-ink-faint); overflow-wrap: anywhere; }
