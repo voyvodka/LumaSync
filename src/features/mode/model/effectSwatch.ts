@@ -49,8 +49,10 @@ export function paletteSwatch(palette: PaletteId, effect: EffectPayload): string
 }
 
 /**
- * A still picture of an effect in its palette: the shape it moves in, drawn once. The gallery
- * shows these at rest; nothing on it animates.
+ * A still picture of an effect in its palette: the shape it moves in, drawn once. The shape is the
+ * effect's own and the palette only colours it — two effects in one palette never look alike, and
+ * a palette never makes an effect look like another. The gallery shows these at rest; nothing on it
+ * animates.
  */
 export function effectSwatch(id: EffectId, stops: readonly string[]): string {
   const spec = EFFECT_CATALOGUE[id];
@@ -59,17 +61,31 @@ export function effectSwatch(id: EffectId, stops: readonly string[]): string {
   const last = colours[colours.length - 1] ?? first;
   const middle = colours[Math.floor(colours.length / 2)] ?? first;
   switch (id) {
+    case "wave":
+      // The palette twice across: a travelling wave, not one sweep.
+      return `linear-gradient(90deg, ${[...colours, ...colours].join(", ")})`;
+    case "gradient":
+      return linear(colours);
     case "cycle":
-      return `linear-gradient(90deg, ${first}, ${middle})`;
+      // The whole room one colour at a time: blocks, not a blend.
+      return `linear-gradient(90deg, ${first} 0 33%, ${middle} 33% 66%, ${last} 66% 100%)`;
     case "breathe":
       return `radial-gradient(circle at 50% 65%, ${middle} 0%, ${first} 38%, transparent 78%)`;
     case "candle":
       return `radial-gradient(ellipse 14% 62% at 50% 88%, ${middle} 0%, ${first} 55%, transparent 100%), radial-gradient(ellipse 40% 90% at 50% 100%, ${first}, transparent 70%)`;
     case "fireplace":
+      // Flames rising from a hot bed: tongues over a vertical ramp.
+      return `radial-gradient(ellipse 18% 70% at 25% 100%, ${last}, transparent 80%), radial-gradient(ellipse 16% 90% at 62% 100%, ${middle}, transparent 80%), ${linear(colours, 0)}`;
     case "sunrise":
       return linear(colours, 0);
+    case "ocean":
+      // Swells: tilted bands under a glint.
+      return `radial-gradient(ellipse 45% 35% at 30% 30%, ${last}, transparent 70%), repeating-linear-gradient(170deg, ${first} 0 18%, ${middle} 30%, ${first} 42%)`;
     case "drift":
       return `radial-gradient(circle at 25% 35%, ${first}, transparent 55%), radial-gradient(circle at 75% 65%, ${last}, transparent 60%), ${middle}`;
+    case "plasma":
+      // Interfering waves: a swirl rather than a line.
+      return `conic-gradient(from 200deg at 38% 55%, ${[...colours, first].join(", ")})`;
     case "twinkle":
       return `radial-gradient(circle at 20% 30%, ${first} 0 3px, transparent 4px), radial-gradient(circle at 65% 55%, ${middle} 0 3px, transparent 4px), radial-gradient(circle at 85% 25%, ${last} 0 2px, transparent 3px), radial-gradient(circle at 40% 75%, ${last} 0 2px, transparent 3px), transparent`;
     case "comet":
@@ -80,7 +96,7 @@ export function effectSwatch(id: EffectId, stops: readonly string[]): string {
       return `repeating-linear-gradient(90deg, ${first} 0 12%, transparent 12% 24%, ${last} 24% 36%, transparent 36% 48%)`;
     case "aurora":
       return `linear-gradient(180deg, transparent 5%, ${first} 45%, ${last} 70%, transparent 95%)`;
-    default:
+    case "naturalLight":
       return linear(colours);
   }
 }
