@@ -91,7 +91,7 @@ export const LightsCompact = memo(function LightsCompact() {
         lastLit={lastLit}
         onSelect={pickMode}
       />
-      <Scenes dense mode={mode} disabled={nonOffLocked} busy={isModeTransitioning} onApply={change} />
+      <Scenes mode={mode} disabled={nonOffLocked} busy={isModeTransitioning} onApply={change} />
       <ModeStage
         dense
         mode={mode}

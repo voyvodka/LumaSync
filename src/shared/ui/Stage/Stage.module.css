@@ -17,8 +17,12 @@
   }
   @container stage (min-width: 560px) {
     .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    /* A fixed-size control (the colour picker) keeps its width; the rest takes the room beside it. */
-    .grid[data-lead] { grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 36px; }
+  }
+  /* A fixed-size control (the colour picker) keeps its width and the rest takes the room beside
+     it, from a narrower stage than two equal columns need: at the full window's floor the picker's
+     brightness would otherwise fall below the fold. */
+  @container stage (min-width: 440px) {
+    .grid[data-lead] { grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 32px; }
   }
   .grid[data-lead] > :first-child { justify-self: center; }
 

@@ -30,11 +30,10 @@ interface ScenesProps {
   /** A choice is in flight: a press waits for it, and nothing dims meanwhile. */
   busy?: boolean;
   onApply: (next: LightingModeConfig) => void;
-  dense?: boolean;
 }
 
 /** The user's scenes under the mode strip, with saving the running light and the library beside them. */
-export function Scenes({ mode, disabled, busy = false, onApply, dense = false }: ScenesProps) {
+export function Scenes({ mode, disabled, busy = false, onApply }: ScenesProps) {
   const { t } = useTranslation();
   const scenes = useScenes();
   const smoothing = usePreference("lightingIntensityPreset");
@@ -73,7 +72,6 @@ export function Scenes({ mode, disabled, busy = false, onApply, dense = false }:
 
   return (
     <ScenesRow
-      dense={dense}
       disabled={disabled}
       scenes={scenes.map((scene) => ({
         id: scene.id,

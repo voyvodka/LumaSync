@@ -550,7 +550,7 @@ describe("LightsPage — output availability gate", () => {
   // What is missing, and the way to fix it, is said by the shell notice queue
   // (buildShellNotices); a second copy here said it twice in full mode.
   it("keeps the last lit stage while off, out of reach, and turns that mode back on by kind", async () => {
-    const onModeChange = vi.fn();
+    const onModeChange = vi.fn<(next: LightingModeConfig) => void>();
     await renderWithOutputs({ onModeChange, localOutputConnected: true });
 
     const dormant = screen.getByTestId("off-stage");

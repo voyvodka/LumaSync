@@ -1,13 +1,33 @@
 @layer components {
-  /* The scenes: chips that wrap, each its colour and its name. */
-  .row { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
-  .list { display: flex; flex: 1; flex-wrap: wrap; gap: 6px; min-width: 0; }
+  /* The scenes: one line of chips, each its colour and its name. One line in every width, so a
+     scene added or deleted never moves the stage under it; what does not fit scrolls sideways. */
+  .row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  /* The padding gives the focus ring and a landing chip room the scroll box would clip; the margin
+     takes it back so the chips still line up with the strip above. */
+  .list {
+    display: flex;
+    flex: 1;
+    gap: 6px;
+    min-width: 0;
+    margin: -4px;
+    padding: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .list::-webkit-scrollbar { display: none; }
+  /* An edge fades only where there is more past it. */
+  .list[data-more="end"] { mask-image: linear-gradient(to right, black calc(100% - 28px), transparent); }
+  .list[data-more="start"] { mask-image: linear-gradient(to left, black calc(100% - 28px), transparent); }
+  .list[data-more="both"] {
+    mask-image: linear-gradient(to right, transparent, black 28px, black calc(100% - 28px), transparent);
+  }
   /* Outlined at rest so the row does not read as another panel band; the chosen scene fills. The
      amber stays with the mode strip's mark: one accent at rest. */
   .chip {
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    flex-shrink: 0;
     max-width: 180px;
     height: 32px;
     padding: 0 12px 0 5px;
@@ -49,17 +69,6 @@
   .action:hover:not(:disabled), .action[data-open] { color: var(--lm-ink); background: var(--lm-panel-2); }
   .action:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
   .action:disabled { cursor: default; opacity: 0.35; }
-
-  /* Compact: one line that scrolls sideways; its right edge fades so the next chip reads as more. */
-  .row[data-dense] .list {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    padding-right: 16px;
-    mask-image: linear-gradient(to right, black calc(100% - 20px), transparent);
-  }
-  .row[data-dense] .list::-webkit-scrollbar { display: none; }
-  .row[data-dense] .chip { flex-shrink: 0; }
 
   @keyframes land { from { transform: scale(0.7); } }
   .chip[data-arrived] { animation: arrive var(--lm-dur-slow) var(--lm-ease-land); }

@@ -80,4 +80,23 @@ describe("StageSwap", () => {
     view.unmount();
     expect(() => act(() => vi.advanceTimersByTime(400))).not.toThrow();
   });
+
+  it("leaves what is marked as about the moment out of the leaving copy", () => {
+    vi.useFakeTimers();
+    const view = render(
+      <StageSwap stageKey="solid" order={2}>
+        <div>
+          <p>solid</p>
+          <span data-ghost-skip>pill</span>
+        </div>
+      </StageSwap>,
+    );
+    view.rerender(
+      <StageSwap stageKey="effect" order={3}>
+        <p>effect</p>
+      </StageSwap>,
+    );
+    const ghost = view.container.querySelector("[inert]");
+    expect(ghost?.textContent).toBe("solid");
+  });
 });

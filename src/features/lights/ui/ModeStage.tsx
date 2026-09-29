@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next";
 
+import { usePresence } from "@/shared/lib/usePresence";
+
 import { AmbilightStage } from "@/features/mode/ui/ambilight/AmbilightStage";
 import { EffectControls } from "@/features/mode/ui/effects/EffectControls";
 import { SolidStage } from "@/features/mode/ui/solid/SolidStage";
@@ -49,6 +51,8 @@ export function ModeStage({
   const { t } = useTranslation();
   const off = mode.kind === LIGHTING_MODE_KIND.OFF;
   const kind: LitModeKind = mode.kind === LIGHTING_MODE_KIND.OFF ? lastLit : mode.kind;
+  // The "lights are off" pill settles in and, when they come back on, fades out with the dimming.
+  const pill = usePresence(off, 200);
   const locks = { disabled, brightnessLocked, brightnessTitle };
 
   const stage = (() => {
@@ -90,10 +94,15 @@ export function ModeStage({
         <div className={styles.stage} inert={off || undefined}>
           {stage}
         </div>
-        {off ? (
-          <div className={styles.dormant}>
+        {pill.mounted ? (
+          <div
+            className={styles.dormant}
+            data-leaving={pill.leaving || undefined}
+            data-ghost-skip
+            inert={pill.leaving || undefined}
+          >
             <span>{t("lights:stage.dormant")}</span>
-            {onTurnOn ? (
+            {onTurnOn || pill.leaving ? (
               <button type="button" className={styles.turnOn} onClick={onTurnOn} data-testid="stage-turn-on">
                 {t("lights:stage.turnOn")}
               </button>

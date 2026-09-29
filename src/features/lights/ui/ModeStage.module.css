@@ -4,10 +4,11 @@
   /* Off: the last lit mode's stage stays where it was, faded and out of reach. */
   .holder[data-dormant] .stage { opacity: 0.32; }
 
-  /* One quiet pill over it: the state, and the way back. */
+  /* One quiet pill over it: the state, and the way back. Near the top of a tall stage (Effect), so
+     it is on screen without scrolling; in the middle of a short one. */
   .dormant {
     position: absolute;
-    top: 50%;
+    top: min(50%, 88px);
     left: 50%;
     display: flex;
     align-items: center;
@@ -35,7 +36,9 @@
   }
   .turnOn:hover { background: var(--lm-panel); }
   .turnOn:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .dormant[data-leaving] { animation: leave var(--lm-dur-quick) var(--lm-ease-leave) forwards; }
   @keyframes settle { from { opacity: 0; transform: translate(-50%, calc(-50% + 4px)); } }
+  @keyframes leave { to { opacity: 0; transform: translate(-50%, calc(-50% - 4px)); } }
 
   :global(:root[data-reduced-motion]) .stage { transition: none; }
   :global(:root[data-reduced-motion]) .dormant { animation: none; }
