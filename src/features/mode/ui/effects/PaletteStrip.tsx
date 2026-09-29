@@ -7,6 +7,7 @@ import { HsvColorPicker } from "@/shared/ui/HsvColorPicker/HsvColorPicker";
 import { IconClose } from "@/shared/ui/icons";
 import { Popover } from "@/shared/ui/Popover/Popover";
 import { Segmented } from "@/shared/ui/Segmented/Segmented";
+import { useSideScroll } from "@/shared/lib/useSideScroll";
 import { colorToHex, customColorsOf, hexToColor, paletteOf, paletteSwatch } from "../../model/effectSwatch";
 import styles from "./EffectControls.module.css";
 
@@ -29,19 +30,15 @@ export function PaletteStrip({ effect, disabled = false, onPick }: PaletteStripP
   const custom = current === PALETTE_IDS.CUSTOM;
   const rowRef = useRef<HTMLDivElement | null>(null);
 
-  // Where the strip scrolls sideways (compact), the chosen palette is brought into view.
+  // The swatches are one line that scrolls sideways; `Segmented` draws the list, so it is found in the row.
+  const listRef = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => {
-    const list = rowRef.current?.querySelector<HTMLElement>('[role="radiogroup"]');
-    const chosen = list?.querySelector<HTMLElement>(`[data-testid="palette-${current}"]`);
-    if (!list || !chosen || list.scrollWidth <= list.clientWidth) return;
-    const left = chosen.offsetLeft - list.offsetLeft;
-    if (left < list.scrollLeft || left + chosen.offsetWidth > list.scrollLeft + list.clientWidth) {
-      list.scrollLeft = left - (list.clientWidth - chosen.offsetWidth) / 2;
-    }
-  }, [current]);
+    listRef.current = rowRef.current?.querySelector<HTMLElement>('[role="radiogroup"]') ?? null;
+  }, []);
+  const more = useSideScroll(listRef, PALETTE_ORDER.join(), `[data-testid="palette-${current}"]`);
 
   return (
-    <div ref={rowRef} className={styles.paletteRow}>
+    <div ref={rowRef} className={styles.paletteRow} data-more={more}>
       <Segmented
         className={styles.palettes}
         itemClassName={styles.palette}

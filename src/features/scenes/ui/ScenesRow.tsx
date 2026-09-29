@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { prefersReducedMotion } from "@/shared/lib/motion";
 import { useFlip } from "@/shared/lib/useFlip";
+import { useSideScroll } from "@/shared/lib/useSideScroll";
 
 import styles from "./ScenesRow.module.css";
 import { useArrivals } from "./useArrivals";
@@ -42,7 +42,8 @@ export function ScenesRow({ scenes, disabled = false, onPick, trailing, placehol
   const listRef = useRef<HTMLDivElement | null>(null);
   const ids = scenes.map((scene) => scene.id);
   useFlip(listRef, ids);
-  const more = useSideScroll(listRef, ids.join("\n"), scenes.find((scene) => scene.active)?.id);
+  const activeId = scenes.find((scene) => scene.active)?.id;
+  const more = useSideScroll(listRef, ids.join("\n"), activeId ? `[data-flip-id="${activeId}"]` : undefined);
   return (
     <div className={styles.row}>
       {scenes.length === 0 && placeholder ? (
@@ -82,53 +83,4 @@ export function ScenesRow({ scenes, disabled = false, onPick, trailing, placehol
       {trailing ? <div className={styles.trailing}>{trailing}</div> : null}
     </div>
   );
-}
-
-type More = "start" | "end" | "both" | undefined;
-
-/**
- * The one-line list's scrolling: which edges have more past them (they fade), a vertical wheel
- * turned into a sideways scroll while the list overflows, and the chosen chip brought into view.
- */
-function useSideScroll(listRef: RefObject<HTMLElement | null>, key: string, activeId: string | undefined): More {
-  const [more, setMore] = useState<More>(undefined);
-  useEffect(() => {
-    const list = listRef.current;
-    // No chips: the placeholder stands in, and nothing scrolls. A new set of chips measures afresh.
-    if (!list || key === "") return;
-    const measure = () => {
-      const start = list.scrollLeft > 1;
-      const end = list.scrollLeft + list.clientWidth < list.scrollWidth - 1;
-      setMore(start && end ? "both" : start ? "start" : end ? "end" : undefined);
-    };
-    const onWheel = (event: WheelEvent) => {
-      if (list.scrollWidth <= list.clientWidth || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-      event.preventDefault();
-      list.scrollLeft += event.deltaY;
-    };
-    measure();
-    list.addEventListener("scroll", measure, { passive: true });
-    list.addEventListener("wheel", onWheel, { passive: false });
-    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
-    resize?.observe(list);
-    return () => {
-      list.removeEventListener("scroll", measure);
-      list.removeEventListener("wheel", onWheel);
-      resize?.disconnect();
-    };
-  }, [listRef, key]);
-
-  useEffect(() => {
-    const list = listRef.current;
-    const chip = activeId ? list?.querySelector<HTMLElement>(`[data-flip-id="${CSS.escape(activeId)}"]`) : null;
-    if (!list || !chip || list.scrollWidth <= list.clientWidth) return;
-    const left = chip.offsetLeft - list.offsetLeft;
-    if (left >= list.scrollLeft && left + chip.offsetWidth <= list.scrollLeft + list.clientWidth) return;
-    list.scrollTo?.({
-      left: left - (list.clientWidth - chip.offsetWidth) / 2,
-      behavior: prefersReducedMotion() ? "auto" : "smooth",
-    });
-  }, [listRef, activeId]);
-
-  return more;
 }

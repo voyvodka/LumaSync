@@ -10,26 +10,26 @@
     gap: 6px;
     min-width: 0;
   }
-  /* Wraps rather than scrolls: twelve swatches, none of them hidden off the edge. */
+  /* One line that scrolls sideways in every width: wrapped, the last swatch or two sat alone on a
+     second line, and in the compact window the controls would outgrow its height. An edge fades
+     only where there is more past it; the fade is longer than the scenes' because the swatches are
+     small and a whole one can end at the edge. The padding keeps the chosen ring and the focus ring
+     inside the scroll box; the margin takes it back. */
   .palettes {
     display: flex;
-    flex-wrap: wrap;
     gap: 6px;
     min-width: 0;
-    padding: 3px;
     margin: -3px;
-  }
-  /* Compact: one line that scrolls sideways, so the window's everyday controls fit its height; the
-     right edge fades so the next swatch reads as more. */
-  .effect[data-dense] .palettes {
-    flex-wrap: nowrap;
+    padding: 3px;
     overflow-x: auto;
     scrollbar-width: none;
-    padding-right: 16px;
-    /* Longer than the scenes' fade: the swatches are small, and a whole one can end at the edge. */
-    mask-image: linear-gradient(to right, black calc(100% - 44px), transparent);
   }
-  .effect[data-dense] .palettes::-webkit-scrollbar { display: none; }
+  .paletteRow[data-more="end"] .palettes { mask-image: linear-gradient(to right, black calc(100% - 44px), transparent); }
+  .paletteRow[data-more="start"] .palettes { mask-image: linear-gradient(to left, black calc(100% - 44px), transparent); }
+  .paletteRow[data-more="both"] .palettes {
+    mask-image: linear-gradient(to right, transparent, black 44px, black calc(100% - 44px), transparent);
+  }
+  .palettes::-webkit-scrollbar { display: none; }
   /* A 32px target around a 20px swatch; the ring is drawn on the swatch, set off from it by a
      gap of panel, so the pick reads by shape as well as by colour. */
   .palette {
@@ -155,19 +155,19 @@
   }
   /* Effects that turn simpler on a few lamps: a small strip mark in the corner, said to a
      screen reader as words. */
+  /* Beside the name, not over the picture: a dark box on the swatch read as a glitch in it. */
   .stripMark {
     position: absolute;
-    top: 5px;
-    right: 5px;
+    right: 8px;
+    bottom: 8px;
     display: grid;
     place-items: center;
-    width: 16px;
-    height: 16px;
-    border-radius: 4px;
-    background: var(--lm-bg);
-    color: var(--lm-ink-dim);
+    width: 14px;
+    height: 14px;
+    color: var(--lm-ink-faint);
   }
-  .stripMark svg { width: 11px; height: 11px; }
+  .stripMark svg { width: 12px; height: 12px; }
+  .tile:has(.stripMark) .tileName { padding-right: 26px; }
   .pickRow .stripMark { position: static; margin-left: auto; background: transparent; }
   .tileName {
     padding: 6px 9px 7px;

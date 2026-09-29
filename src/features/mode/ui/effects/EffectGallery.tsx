@@ -13,7 +13,7 @@ import styles from "./EffectControls.module.css";
 function StripMark() {
   const { t } = useTranslation();
   return (
-    <span className={styles.stripMark} data-testid="strip-mark">
+    <span className={styles.stripMark} title={t("lights:effect.bestOnStrip")} data-testid="strip-mark">
       <svg aria-hidden viewBox="0 0 12 12">
         <path d="M1.5 6h9" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
         <circle cx="3" cy="6" r="1.2" fill="currentColor" />
