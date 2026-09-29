@@ -2,7 +2,6 @@ export default {
   mode: {
     off: {
       title: "Off",
-      subtitle: "Lights off",
     },
     ambilight: {
       title: "Ambilight",
@@ -19,7 +18,13 @@ export default {
     },
   },
   stage: {
-    off: "The lights are off. Pick a mode or a scene to light them.",
+    dormant: "The lights are off",
+    turnOn: "Turn on",
+  },
+  power: {
+    label: "Lights",
+    turnOn: "Turn on {{mode}}",
+    turnOff: "Turn the lights off",
   },
   scenes: {
     title: "Scenes",

@@ -14,22 +14,18 @@ export function Stage({
   className,
   testId,
   dense = false,
-  quiet = false,
 }: {
   children: ReactNode;
   className?: string;
   testId?: string;
   /** The compact window's stage: less edge, less gap. */
   dense?: boolean;
-  /** Nothing to set (Off): no surface, one centred line. */
-  quiet?: boolean;
 }) {
   return (
     <section
       className={cx(styles.stage, className)}
       data-testid={testId}
       data-dense={dense || undefined}
-      data-quiet={quiet || undefined}
     >
       {children}
     </section>
@@ -73,10 +69,6 @@ export function StageRow({
   );
 }
 
-/** A quiet line in the stage: what a mode is doing when it has nothing to set. */
-export function StageNote({ children }: { children: ReactNode }) {
-  return <p className={styles.note}>{children}</p>;
-}
 
 /** A choice of a few named values in the stage's look (`Segmented` underneath). */
 export function StageChoice<T extends string>({

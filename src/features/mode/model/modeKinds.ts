@@ -39,6 +39,11 @@ export const MODE_KIND_ORDER = [
   LIGHTING_MODE_KIND.EFFECT,
 ] as const satisfies readonly LightingModeKind[];
 
+/** The modes the strip offers beside the power button: every one that lights something. */
+export const LIT_MODE_ORDER = MODE_KIND_ORDER.filter(
+  (kind): kind is Exclude<(typeof MODE_KIND_ORDER)[number], "off"> => kind !== LIGHTING_MODE_KIND.OFF,
+);
+
 /** A new lighting mode kind fails to compile here until every strip can draw it. */
 export const MODE_KINDS = {
   [LIGHTING_MODE_KIND.OFF]: {

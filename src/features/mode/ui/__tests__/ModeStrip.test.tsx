@@ -7,12 +7,44 @@ import { LIGHTING_MODE_KIND } from "@/shared/contracts/mode";
 import { ModeStrip } from "../ModeStrip";
 
 describe("ModeStrip", () => {
-  it.each(["full", "compact", "popup"] as const)("is a radio group in the %s look", (variant) => {
+  it.each(["full", "compact"] as const)("is a power switch and a radio group of the lit modes in the %s look", (variant) => {
     render(<ModeStrip variant={variant} value={LIGHTING_MODE_KIND.AMBILIGHT} onSelect={() => {}} />);
+    expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "true");
+    const radios = screen.getAllByRole("radio");
+    expect(radios).toHaveLength(3);
+    expect(radios.map((r) => r.getAttribute("aria-checked"))).toEqual(["true", "false", "false"]);
+    expect(radios.map((r) => r.tabIndex)).toEqual([0, -1, -1]);
+  });
+
+  it("keeps Off among the popup's radios", () => {
+    render(<ModeStrip variant="popup" value={LIGHTING_MODE_KIND.AMBILIGHT} onSelect={() => {}} />);
     const radios = screen.getAllByRole("radio");
     expect(radios).toHaveLength(4);
     expect(radios.map((r) => r.getAttribute("aria-checked"))).toEqual(["false", "true", "false", "false"]);
-    expect(radios.map((r) => r.tabIndex)).toEqual([-1, 0, -1, -1]);
+  });
+
+  it("turns the lights off from a lit mode, and back on in the last lit one", async () => {
+    const onSelect = vi.fn<(kind: string) => void>();
+    const view = render(<ModeStrip variant="full" value={LIGHTING_MODE_KIND.SOLID} lastLit="solid" onSelect={onSelect} />);
+    await userEvent.click(screen.getByRole("switch"));
+    expect(onSelect).toHaveBeenLastCalledWith(LIGHTING_MODE_KIND.OFF);
+
+    view.rerender(<ModeStrip variant="full" value={LIGHTING_MODE_KIND.OFF} lastLit="effect" onSelect={onSelect} />);
+    const power = screen.getByRole("switch");
+    expect(power).toHaveAttribute("aria-checked", "false");
+    // Off checks no mode; the grey mark rests on the one the button brings back.
+    expect(screen.getAllByRole("radio").every((r) => r.getAttribute("aria-checked") === "false")).toBe(true);
+    expect(view.container.querySelector("[data-off]")).not.toBeNull();
+    await userEvent.click(power);
+    expect(onSelect).toHaveBeenLastCalledWith(LIGHTING_MODE_KIND.EFFECT);
+  });
+
+  it("locks the power button only when what it would do is locked", () => {
+    const isDisabled = (kind: string) => kind !== LIGHTING_MODE_KIND.OFF;
+    const view = render(<ModeStrip variant="full" value={LIGHTING_MODE_KIND.AMBILIGHT} isDisabled={isDisabled} onSelect={() => {}} />);
+    expect(screen.getByRole("switch")).toBeEnabled();
+    view.rerender(<ModeStrip variant="full" value={LIGHTING_MODE_KIND.OFF} isDisabled={isDisabled} onSelect={() => {}} />);
+    expect(screen.getByRole("switch")).toBeDisabled();
   });
 
   it("walks the popup strip with the arrow keys — the popup had radios but no arrows", async () => {
@@ -40,23 +72,24 @@ describe("ModeStrip", () => {
     render(
       <ModeStrip
         variant="compact"
-        value={LIGHTING_MODE_KIND.OFF}
-        isDisabled={(kind) => kind === LIGHTING_MODE_KIND.AMBILIGHT}
+        value={LIGHTING_MODE_KIND.AMBILIGHT}
+        isDisabled={(kind) => kind === LIGHTING_MODE_KIND.SOLID}
         onSelect={onSelect}
       />,
     );
-    screen.getByTestId("mode-button-off").focus();
+    screen.getByTestId("mode-button-ambilight").focus();
     await userEvent.keyboard("{ArrowRight}");
-    expect(screen.getByTestId("mode-button-solid")).toHaveFocus();
-    expect(screen.getByTestId("mode-button-ambilight")).toBeDisabled();
-    expect(onSelect).toHaveBeenCalledWith(LIGHTING_MODE_KIND.SOLID);
+    expect(screen.getByTestId("mode-button-effect")).toHaveFocus();
+    expect(screen.getByTestId("mode-button-solid")).toBeDisabled();
+    expect(onSelect).toHaveBeenCalledWith(LIGHTING_MODE_KIND.EFFECT);
   });
 
   it("renders the registry keybind badge on the full strip only", () => {
     const { container, unmount } = render(
       <ModeStrip variant="full" value={LIGHTING_MODE_KIND.OFF} onSelect={() => {}} />,
     );
-    expect(container.querySelectorAll('[data-part="keybind"]')).toHaveLength(4);
+    // The lit modes' ⌥2–⌥4; Off's ⌥1 is the power button's.
+    expect(container.querySelectorAll('[data-part="keybind"]')).toHaveLength(3);
     unmount();
     const compact = render(<ModeStrip variant="compact" value={LIGHTING_MODE_KIND.OFF} onSelect={() => {}} />);
     expect(compact.container.querySelectorAll('[data-part="keybind"]')).toHaveLength(0);

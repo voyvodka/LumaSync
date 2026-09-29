@@ -10,6 +10,7 @@ import {
 } from "@/features/mode/state/lightingControl";
 import { MODE_GUARD_REASONS } from "@/features/mode/state/modeGuard";
 import { ModeStrip } from "@/features/mode/ui/ModeStrip";
+import { usePreference } from "@/features/persistence/preferences";
 import { Scenes } from "@/features/scenes/ui/Scenes";
 import {
   DEFAULT_SOLID_COLOR,
@@ -50,6 +51,7 @@ export const LightsCompact = memo(function LightsCompact() {
     useLightingControlState(selectCompactLighting, shallowEqual);
   const { changeMode } = useLightingActions();
   const { brightnessLocked, brightnessTitle } = useLightsModel();
+  const lastLit = usePreference("lastLitKind");
 
   // Without this gate the worker starts with nowhere to send frames. A bridge still being checked
   // blocks activation too, but is not reported as missing.
@@ -86,6 +88,7 @@ export const LightsCompact = memo(function LightsCompact() {
         value={mode.kind}
         isDisabled={(kind) => kind !== LIGHTING_MODE_KIND.OFF && nonOffLocked}
         busy={isModeTransitioning}
+        lastLit={lastLit}
         onSelect={pickMode}
       />
       <Scenes dense mode={mode} disabled={nonOffLocked} busy={isModeTransitioning} onApply={change} />
@@ -96,6 +99,8 @@ export const LightsCompact = memo(function LightsCompact() {
         brightnessLocked={brightnessLocked}
         brightnessTitle={brightnessTitle}
         onModeChange={change}
+        lastLit={lastLit}
+        onTurnOn={nonOffLocked || isModeTransitioning ? undefined : () => change({ kind: lastLit })}
       />
     </div>
   );

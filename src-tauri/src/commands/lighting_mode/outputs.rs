@@ -685,7 +685,10 @@ fn payload_for(
 }
 
 /// Writes `lightingMode`: the kind and both payloads. The selection is
-/// `lastOutputTargets`, saved on arrival, so no copy of it goes here.
+/// `lastOutputTargets`, saved on arrival, so no copy of it goes here. A lit
+/// kind is also `lastLitKind`, in the same write: an Off leaves it, so Lights'
+/// power button (and a later tray "turn on") knows what to bring back after a
+/// relaunch that found the lights off.
 fn persist_mode<R: Runtime>(app: &AppHandle<R>, kind: &LightingModeKind, stored: &StoredTuning) {
     let mut mode = shell_state::persisted(app)
         .and_then(|state| state.lighting_mode_object())
@@ -724,6 +727,11 @@ fn persist_mode<R: Runtime>(app: &AppHandle<R>, kind: &LightingModeKind, stored:
     }
     let mut set = Map::new();
     set.insert("lightingMode".to_string(), Value::Object(mode));
+    if *kind != LightingModeKind::Off {
+        if let Ok(lit) = serde_json::to_value(kind) {
+            set.insert("lastLitKind".to_string(), lit);
+        }
+    }
     if let Err(error) = shell_state::patch_from_rust(app, set) {
         warn!("[outputs] could not save lightingMode: {error}");
     }

@@ -1,13 +1,16 @@
 @layer components {
-  /* The modes as equal tiles on one quiet track. The chosen one is marked by a single amber-lit
-     plate that slides between tiles; the tiles themselves never move. */
+  /* A power button, then the modes as equal tiles on one quiet track. The chosen one is marked by
+     a single amber-lit plate that slides between tiles; the tiles themselves never move. */
   .strip {
     position: relative;
     container: mstrip / inline-size;
+    display: flex;
+    gap: 3px;
     padding: 3px;
     border-radius: 14px;
     background: var(--lm-panel);
   }
+  .track { position: relative; flex: 1; min-width: 0; }
   .group {
     position: relative;
     display: grid;
@@ -16,17 +19,45 @@
   }
   .mark {
     position: absolute;
-    top: 3px;
-    bottom: 3px;
-    left: 3px;
-    width: calc((100% - 6px) / var(--n));
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: calc(100% / var(--n));
     border-radius: 11px;
     background: var(--lm-panel-2);
     box-shadow: inset 0 0 0 1px var(--lm-amber);
     transform: translateX(calc(var(--i) * 100%));
   }
-  .strip[data-placed] .mark { transition: transform var(--lm-dur-slow) var(--lm-ease-out), opacity var(--lm-dur-quick); }
+  .strip[data-placed] .mark {
+    transition:
+      transform var(--lm-dur-slow) var(--lm-ease-out),
+      opacity var(--lm-dur-quick),
+      box-shadow var(--lm-dur-base),
+      background var(--lm-dur-base);
+  }
   .mark[data-none] { opacity: 0; }
+  /* Off: the mark rests, grey, on what the power button would bring back. */
+  .strip[data-off] .mark { background: transparent; box-shadow: inset 0 0 0 1px var(--lm-line-2); }
+
+  /* Round and grey at rest; the one control that is about on or off, not which light. */
+  .power {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 52px;
+    border: 0;
+    border-radius: 11px;
+    background: transparent;
+    color: var(--lm-ink);
+    transition: color var(--lm-dur-base), background var(--lm-dur-quick);
+  }
+  .power :global(svg) { width: 18px; height: 18px; }
+  .power:hover:not(:disabled) { background: var(--lm-panel-2); }
+  .strip[data-off] .power { color: var(--lm-ink-faint); }
+  .strip[data-off] .power:hover:not(:disabled) { color: var(--lm-ink); }
+  .power:focus-visible { outline: none; box-shadow: var(--lm-focus-ring-inset); }
+  .power:disabled { cursor: not-allowed; opacity: 0.4; }
+  .strip[data-busy] .power:not(:disabled) { cursor: progress; }
 
   .tile {
     position: relative;
@@ -83,17 +114,20 @@
   @container mstrip (max-width: 640px) { .badge { display: none; } }
   @container mstrip (max-width: 600px) { .sub { display: none; } }
   @container mstrip (max-width: 420px) {
+    .power { width: 44px; }
     .tile { flex-direction: column; justify-content: center; gap: 4px; min-height: 58px; padding: 8px 4px; text-align: center; }
     .text { align-items: center; }
     .name { font-size: 11.5px; }
   }
 
   :global(:root[data-reduced-motion]) .mark,
+  :global(:root[data-reduced-motion]) .power,
   :global(:root[data-reduced-motion]) .tile,
   :global(:root[data-reduced-motion]) .icon { transition: none; }
 
   @media (forced-colors: active) {
     .mark { box-shadow: none; outline: 2px solid Highlight; outline-offset: -2px; }
-    .tile:focus-visible { outline: 2px solid Highlight; outline-offset: -2px; }
+    .tile:focus-visible, .power:focus-visible { outline: 2px solid Highlight; outline-offset: -2px; }
+    .strip[data-off] .mark { outline-color: GrayText; }
   }
 }

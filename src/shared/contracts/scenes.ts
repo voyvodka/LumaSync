@@ -4,7 +4,7 @@
  * `apply_outputs` with the scene's mode.
  */
 
-import type { AmbilightPayload, EffectPayload, LightingModeKind, SolidColorPayload } from "./mode";
+import type { AmbilightPayload, EffectPayload, LitModeKind, SolidColorPayload } from "./mode";
 
 /** The suggested library's scenes; also the `lights:scenes.suggested.*` name keys. */
 export const SUGGESTED_SCENE_IDS = {
@@ -28,7 +28,7 @@ export const SUGGESTED_SCENE_IDS = {
 export type SuggestedSceneId = (typeof SUGGESTED_SCENE_IDS)[keyof typeof SUGGESTED_SCENE_IDS];
 
 /** A scene is a running look; Off is not one. */
-export type SceneKind = Exclude<LightingModeKind, "off">;
+export type SceneKind = LitModeKind;
 
 /**
  * One entry of `ShellState.scenes`, flat like `LightingModeConfig`: only the payload of its `kind`

@@ -5,7 +5,6 @@ const lights: Catalogue<typeof enLights> = {
   mode: {
     off: {
       title: "Kapalı",
-      subtitle: "Işıklar kapalı",
     },
     ambilight: {
       title: "Ambilight",
@@ -22,7 +21,13 @@ const lights: Catalogue<typeof enLights> = {
     },
   },
   stage: {
-    off: "Işıklar kapalı. Yakmak için bir mod ya da sahne seç.",
+    dormant: "Işıklar kapalı",
+    turnOn: "Aç",
+  },
+  power: {
+    label: "Işıklar",
+    turnOn: "Aç: {{mode}}",
+    turnOff: "Işıkları kapat",
   },
   scenes: {
     title: "Sahneler",

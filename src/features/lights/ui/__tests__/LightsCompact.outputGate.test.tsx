@@ -55,7 +55,8 @@ describe("LightsCompact output gate", () => {
     // Still nowhere confirmed to send frames, so the gate holds.
     expect(screen.getByTestId("mode-button-ambilight")).toBeDisabled();
     expect(screen.getByTestId("mode-button-solid")).toBeDisabled();
-    expect(screen.getByTestId("mode-button-off")).toBeEnabled();
+    // The lights are off: the power button would turn one of them on, which the gate holds too.
+    expect(screen.getByTestId("mode-button-off")).toBeDisabled();
   });
 
   it("holds the gate once the probe says the bridge did not answer", async () => {

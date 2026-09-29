@@ -22,9 +22,6 @@
   }
   .grid[data-lead] > :first-child { justify-self: center; }
 
-  /* A stage with nothing to set: no surface, the line centred where the controls would be. */
-  .stage[data-quiet] { align-items: center; padding: 32px 0; background: transparent; text-align: center; }
-  .stage[data-quiet][data-dense] { padding: 24px 0; }
   .row {
     display: flex;
     align-items: center;
@@ -49,7 +46,6 @@
   }
   .rowControl { display: flex; flex-shrink: 0; align-items: center; margin-left: auto; }
   .rowValue + .rowControl { margin-left: 8px; }
-  .note { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--lm-ink-faint); }
 
   /* Compact: the stage is the window's width, so it spends less of it on its edges. */
   .stage[data-dense] { gap: 14px; padding: 14px 14px 16px; }

@@ -10,9 +10,10 @@ import {
   normalizeAmbilightPayload,
   normalizeEffectPayload,
   type LightingModeConfig,
+  type LitModeKind,
 } from "@/shared/contracts/mode";
-import { Stage, StageNote } from "@/shared/ui/Stage/Stage";
 import { StageSwap } from "./StageSwap";
+import styles from "./ModeStage.module.css";
 
 interface ModeStageProps {
   mode: LightingModeConfig;
@@ -23,9 +24,17 @@ interface ModeStageProps {
   brightnessTitle?: string;
   linkNote?: string | null;
   onModeChange: (next: LightingModeConfig) => void;
+  /** The mode shown, dimmed, while the lights are off: what the power button brings back. */
+  lastLit: LitModeKind;
+  /** "Turn on" on the dimmed stage; absent where turning on is locked. */
+  onTurnOn?: () => void;
 }
 
-/** The running mode's stage, passed on to the next one when the mode changes. */
+/**
+ * The running mode's stage, passed on to the next one when the mode changes. While the lights are
+ * off it stays: the last lit mode's stage, dimmed and out of reach, with a way to turn them on — so
+ * turning the lights off and on moves nothing on the page.
+ */
 export function ModeStage({
   mode,
   dense = false,
@@ -34,9 +43,12 @@ export function ModeStage({
   brightnessTitle,
   linkNote = null,
   onModeChange,
+  lastLit,
+  onTurnOn,
 }: ModeStageProps) {
   const { t } = useTranslation();
-  const kind = mode.kind;
+  const off = mode.kind === LIGHTING_MODE_KIND.OFF;
+  const kind: LitModeKind = mode.kind === LIGHTING_MODE_KIND.OFF ? lastLit : mode.kind;
   const locks = { disabled, brightnessLocked, brightnessTitle };
 
   const stage = (() => {
@@ -60,7 +72,7 @@ export function ModeStage({
             onCommit={(solid) => onModeChange({ kind: LIGHTING_MODE_KIND.SOLID, solid })}
           />
         );
-      case LIGHTING_MODE_KIND.EFFECT:
+      default:
         return (
           <EffectControls
             {...locks}
@@ -69,18 +81,26 @@ export function ModeStage({
             onChange={(effect) => onModeChange({ kind: LIGHTING_MODE_KIND.EFFECT, effect })}
           />
         );
-      default:
-        return (
-          <Stage dense={dense} quiet testId="off-stage">
-            <StageNote>{t("lights:stage.off")}</StageNote>
-          </Stage>
-        );
     }
   })();
 
   return (
     <StageSwap stageKey={kind} order={MODE_KIND_ORDER.indexOf(kind)}>
-      {stage}
+      <div className={styles.holder} data-dormant={off || undefined} data-testid={off ? "off-stage" : undefined}>
+        <div className={styles.stage} inert={off || undefined}>
+          {stage}
+        </div>
+        {off ? (
+          <div className={styles.dormant}>
+            <span>{t("lights:stage.dormant")}</span>
+            {onTurnOn ? (
+              <button type="button" className={styles.turnOn} onClick={onTurnOn} data-testid="stage-turn-on">
+                {t("lights:stage.turnOn")}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
     </StageSwap>
   );
 }

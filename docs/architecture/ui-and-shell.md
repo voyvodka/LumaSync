@@ -130,6 +130,20 @@ without a pixel moving. A slider that commits while it moves goes through `useTh
 the value the user let go on. A new control that needs one of these behaviours uses the primitive;
 a feature that is touched for another reason migrates its hand-rolled copy then.
 
+**Off is a power button, not a fourth mode.** On Lights and in the compact window the strip is a
+power switch followed by the modes that light something. Off as an equal tile made it read as a
+setting like the others, and choosing it swapped the whole stage for one line of text, so every
+toggle moved the page. Now the stage stays while the lights are off — the last lit mode's, dimmed
+and inert, with "Turn on" over it — and the grey mark rests on the mode the switch brings back,
+which Rust saves as `lastLitKind` with every lit choice (an Off leaves it), so it survives a
+relaunch. Turning on sends the kind alone, and Rust applies that mode's saved settings: the ones
+the dimmed stage shows. The popup keeps Off among its buttons; ⌥1 is still Off.
+
+**A choice in flight holds presses; it does not dim.** Starting Ambilight's capture takes a few
+hundred milliseconds, and the strip and scenes used to go to 40 % for it and come back, which read
+as the app stalling. While a transaction runs they ignore presses (`busy`, with `aria-busy`), and
+only a real lock — no output, the calibration — shows as disabled.
+
 **A closed set of kinds is a table, not a scattered `switch`.** Sections (`SECTION_REGISTRY` in
 `SettingsLayout.tsx`), Devices rail rows (`RAIL_ROWS` in `device/ui/deviceRailRows.ts`), lighting mode kinds
 (`MODE_KINDS` in `features/mode/model/modeKinds.ts`), output targets (`OUTPUT_TARGETS` in the mode

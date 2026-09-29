@@ -39,6 +39,14 @@ export const LIGHTING_MODE_KIND = {
 
 export type LightingModeKind = (typeof LIGHTING_MODE_KIND)[keyof typeof LIGHTING_MODE_KIND];
 
+/** A mode that lights something: every kind but Off. */
+export type LitModeKind = Exclude<LightingModeKind, "off">;
+
+/** `ShellState.lastLitKind` as stored; absent or unknown is Ambilight, the mode a fresh install is for. */
+export function resolveLitModeKind(stored: unknown): LitModeKind {
+  return stored === LIGHTING_MODE_KIND.SOLID || stored === LIGHTING_MODE_KIND.EFFECT ? stored : LIGHTING_MODE_KIND.AMBILIGHT;
+}
+
 export interface SolidColorPayload {
   r: number;
   g: number;

@@ -89,6 +89,10 @@ https://keepachangelog.com/en/1.1.0/
   wide window, and the outputs sit in a column on the right with an entry to the LED preview.
   Sliders are easier to catch (a 32 px target), and the compact window fits an effect's palettes
   on one line that scrolls sideways. The five fixed colour tiles are replaced by scenes.
+- Off is a power button beside the modes instead of a mode of its own. With the lights off the
+  last mode's settings stay on the page, dimmed, with "Turn on"; the power button and "Turn on"
+  bring that mode back, after a relaunch too. The mode buttons and scenes no longer grey out for a
+  moment while a mode starts.
 - Colour correction moved from Lights to Devices: each strip's page has a Colour row that opens
   gamma, white point and saturation. It is still one setting for every output, strips and Hue
   alike, until each strip has its own.

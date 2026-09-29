@@ -303,6 +303,20 @@ fn off_stops_the_worker_and_clears_the_outputs() {
     assert_eq!(rig.saved("lightingMode").unwrap()["kind"], json!("off"));
 }
 
+/// The power button turns the lights back on in the last lit kind, which an Off
+/// must not overwrite.
+#[test]
+fn a_lit_choice_saves_its_kind_and_an_off_keeps_it() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(1), &[Usb]);
+    assert_eq!(rig.saved("lastLitKind"), Some(json!("solid")));
+
+    apply(&rig, user(Some(off()), None));
+
+    assert_eq!(rig.saved("lightingMode").unwrap()["kind"], json!("off"));
+    assert_eq!(rig.saved("lastLitKind"), Some(json!("solid")));
+}
+
 /// The worker holds a handle on the Hue sender; the stream stops second.
 #[test]
 fn off_stops_the_worker_before_the_hue_stream() {

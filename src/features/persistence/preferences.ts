@@ -1,7 +1,7 @@
 /**
- * View preferences kept in `ShellState`: one store for all of them, read once per window and kept
- * in step with every window's writes, so a change applies everywhere with no restart. Adding one is
- * a row in `PREFERENCES`.
+ * View preferences kept in `ShellState` — and `lastLitKind`, which Rust writes and the windows only
+ * read: one store for all of them, read once per window and kept in step with every window's
+ * writes, so a change applies everywhere with no restart. Adding one is a row in `PREFERENCES`.
  *
  * Each is a flat top-level key: a save replaces a top-level key whole, so two windows writing
  * different parts of one nested object would overwrite each other. Absent or unrecognised reads
@@ -23,6 +23,7 @@ import {
   type ShellState,
 } from "@/shared/contracts/shell";
 import { DEFAULT_LIGHTING_SMOOTHING_PRESET, type LightingSmoothingPreset } from "@/shared/contracts/lighting";
+import { resolveLitModeKind } from "@/shared/contracts/mode";
 import { createStore, useStoreSelector } from "@/shared/lib/store";
 
 function resolveSmoothingPreset(stored: unknown): LightingSmoothingPreset {
@@ -41,6 +42,8 @@ const PREFERENCES = {
   launchLights: resolveLaunchLights,
   awayLights: resolveAwayLights,
   lightingIntensityPreset: resolveSmoothingPreset,
+  // Read only: Rust writes it with every lit choice.
+  lastLitKind: resolveLitModeKind,
 } satisfies { [K in keyof ShellState]?: (stored: unknown) => NonNullable<ShellState[K]> };
 
 export type PreferenceKey = keyof typeof PREFERENCES;

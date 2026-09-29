@@ -1,7 +1,7 @@
 import type { ColorCorrectionConfig } from "./device";
 import type { DisplayId } from "./display";
 import type { LedTestPattern } from "./preview";
-import type { LightingModeConfig, LightingModeKind } from "./mode";
+import type { LightingModeConfig, LightingModeKind, LitModeKind } from "./mode";
 import type {
   HueBridgeSummary,
   HueChannelPlacementOverride,
@@ -254,6 +254,12 @@ export interface ShellState {
    * Additive, no schema bump.
    */
   scenes?: StoredScene[];
+  /**
+   * The last mode that lit something, which Lights' power button turns back on. Written by Rust
+   * (`persist_mode`) with every lit choice, from any window or the tray; an Off leaves it. Absent
+   * or unknown reads as Ambilight. Additive, no schema bump.
+   */
+  lastLitKind?: LitModeKind;
   /**
    * Last selected runtime output target set.
    * Defaults to USB-first when absent.

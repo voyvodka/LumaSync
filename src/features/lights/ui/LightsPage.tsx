@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { LocalSink } from "@/features/device/localSink";
 import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
 import { MODE_KINDS } from "@/features/mode/model/modeKinds";
+import { usePreference } from "@/features/persistence/preferences";
 import { outputAvailability } from "@/features/mode/model/outputAvailability";
 import { MODE_GUARD_REASONS, type ModeGuardReason } from "@/features/mode/state/modeGuard";
 import { ModeStrip } from "@/features/mode/ui/ModeStrip";
@@ -84,6 +85,7 @@ export function LightsPage({
 }: LightsPageProps) {
   const { t } = useTranslation();
   const { brightnessLocked, brightnessTitle, tvAnchor } = useLightsModel();
+  const lastLit = usePreference("lastLitKind");
   // Why the mode buttons are dim — calibration, no output, still checking — is said by the shell
   // notice queue, not here (docs/architecture/ui-and-shell.md).
   const calibrationLocked = modeLockReason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED;
@@ -135,8 +137,8 @@ export function LightsPage({
             // be switched off otherwise.
             isDisabled={(k) => k !== LIGHTING_MODE_KIND.OFF && nonOffLocked}
             busy={isModeTransitioning}
+            lastLit={lastLit}
             subtitles={{
-              [LIGHTING_MODE_KIND.OFF]: t("lights:mode.off.subtitle"),
               [LIGHTING_MODE_KIND.AMBILIGHT]: t("lights:mode.ambilight.subtitle", {
                 brightness: brightnessPct(ambilight.brightness),
               }),
@@ -162,6 +164,9 @@ export function LightsPage({
             brightnessTitle={brightnessTitle}
             linkNote={linkNote}
             onModeChange={onModeChange}
+            lastLit={lastLit}
+            // Kind only: Rust brings back that mode's saved settings, the ones the dimmed stage shows.
+            onTurnOn={nonOffLocked || isModeTransitioning ? undefined : () => onModeChange({ kind: lastLit })}
           />
         </div>
       </div>

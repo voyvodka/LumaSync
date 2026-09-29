@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { LightingModeKind } from "@/shared/contracts/mode";
+import { LIGHTING_MODE_KIND, type LightingModeKind, type LitModeKind } from "@/shared/contracts/mode";
 import {
   getKeybindDefinition,
   resolveKeybindPlatform,
   type KeybindAction,
 } from "@/shared/contracts/shell";
+import { IconPower } from "@/shared/ui/icons";
 import { Segmented, type SegmentedOption } from "@/shared/ui/Segmented/Segmented";
 
-import { MODE_KIND_ORDER, modeKind } from "../model/modeKinds";
+import { LIT_MODE_ORDER, MODE_KIND_ORDER, modeKind } from "../model/modeKinds";
 import styles from "./ModeStrip.module.css";
 
 export type ModeStripVariant = "full" | "compact" | "popup";
@@ -22,6 +23,15 @@ function ModeKeybindBadge({ action }: { action: KeybindAction }) {
     <span className={styles.badge} data-part="keybind">
       {definition.badge.join("")}
     </span>
+  );
+}
+
+/** Off's ⌥1, said in the power button's tooltip where the tiles show theirs as badges. */
+function usePowerShortcut(): string {
+  const platform = useMemo(() => resolveKeybindPlatform(), []);
+  return useMemo(
+    () => getKeybindDefinition(modeKind(LIGHTING_MODE_KIND.OFF).keybind, platform).badge.join(""),
+    [platform],
   );
 }
 
@@ -38,14 +48,25 @@ interface ModeStripProps {
   busy?: boolean;
   /** What each mode is set to, under its name where the strip has room. */
   subtitles?: Partial<Record<LightingModeKind, string>>;
+  /** What the power button turns back on while the lights are off. Lights and compact only. */
+  lastLit?: LitModeKind;
 }
 
 /**
- * The modes as one radio group. Lights and the compact window share one strip that sheds its
- * second line and shortcut as it narrows; one amber mark slides to the chosen mode. The popup keeps
- * its own buttons.
+ * The modes. Lights and the compact window share one strip: a power button, then the modes that
+ * light something as one radio group, shedding their second line and shortcut as it narrows; one
+ * amber mark slides to the chosen mode. While the lights are off the mark stays on the mode the
+ * power button would bring back, grey. The popup keeps its own buttons, Off among them.
  */
-export function ModeStrip({ variant, value, onSelect, isDisabled, busy = false, subtitles }: ModeStripProps) {
+export function ModeStrip({
+  variant,
+  value,
+  onSelect,
+  isDisabled,
+  busy = false,
+  subtitles,
+  lastLit = LIGHTING_MODE_KIND.AMBILIGHT,
+}: ModeStripProps) {
   const { t } = useTranslation();
   // The mark lands in place first and travels only after that, so opening a page moves nothing.
   const [placed, setPlaced] = useState(false);
@@ -85,8 +106,10 @@ export function ModeStrip({ variant, value, onSelect, isDisabled, busy = false, 
     );
   }
 
-  const index = value === null ? -1 : MODE_KIND_ORDER.indexOf(value);
-  const options = MODE_KIND_ORDER.map((kind): SegmentedOption<LightingModeKind> => {
+  const off = value === LIGHTING_MODE_KIND.OFF;
+  const shownKind = off ? lastLit : value;
+  const index = shownKind === null ? -1 : LIT_MODE_ORDER.indexOf(shownKind);
+  const options = LIT_MODE_ORDER.map((kind): SegmentedOption<LightingModeKind> => {
     const { Icon, labelLang, keybind, labelKey } = modeKind(kind);
     const subtitle = variant === "full" ? subtitles?.[kind] : undefined;
     const content: ReactNode = (
@@ -111,24 +134,49 @@ export function ModeStrip({ variant, value, onSelect, isDisabled, busy = false, 
     };
   });
 
+  // Off turns the lights off; pressed while off, it brings back the mode the grey mark sits on.
+  const powerTarget = off ? lastLit : LIGHTING_MODE_KIND.OFF;
+  const powerLabel = off
+    ? t("lights:power.turnOn", { mode: t(modeKind(lastLit).labelKey) })
+    : t("lights:power.turnOff");
+  const powerShortcut = usePowerShortcut();
+
   return (
     <div
       className={styles.strip}
       data-variant={variant}
       data-placed={placed || undefined}
+      data-off={off || undefined}
       data-busy={busy || undefined}
       aria-busy={busy || undefined}
-      style={{ "--n": MODE_KIND_ORDER.length, "--i": Math.max(index, 0) } as CSSProperties}
     >
-      <span className={styles.mark} aria-hidden data-none={index < 0 || undefined} />
-      <Segmented
-        options={options}
-        value={value}
-        onChange={select}
-        ariaLabel={t("common:mode.title")}
-        className={styles.group}
-        itemClassName={styles.tile}
-      />
+      <button
+        type="button"
+        role="switch"
+        aria-checked={!off}
+        aria-label={t("lights:power.label")}
+        title={variant === "full" ? `${powerLabel} (${powerShortcut})` : powerLabel}
+        className={styles.power}
+        disabled={isDisabled?.(powerTarget)}
+        onClick={() => select(powerTarget)}
+        data-testid="mode-button-off"
+      >
+        <IconPower />
+      </button>
+      <div
+        className={styles.track}
+        style={{ "--n": LIT_MODE_ORDER.length, "--i": Math.max(index, 0) } as CSSProperties}
+      >
+        <span className={styles.mark} aria-hidden data-none={index < 0 || undefined} />
+        <Segmented
+          options={options}
+          value={off ? null : value}
+          onChange={select}
+          ariaLabel={t("common:mode.title")}
+          className={styles.group}
+          itemClassName={styles.tile}
+        />
+      </div>
     </div>
   );
 }

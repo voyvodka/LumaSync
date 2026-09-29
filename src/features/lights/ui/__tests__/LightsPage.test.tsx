@@ -77,7 +77,6 @@ vi.mock("react-i18next", () => ({
         "common:mode.options.ambilight": "Ambilight",
         "common:mode.options.solid": "Solid",
         "common:mode.options.effect": "Effect",
-        "lights:mode.off.subtitle": "Lights off",
         "lights:mode.ambilight.title": "Ambilight",
         "lights:mode.ambilight.subtitle": "Screen · {{brightness}}%",
         "lights:mode.solid.title": "Solid",
@@ -330,7 +329,8 @@ describe("LightsPage", () => {
       />,
     );
 
-    const off = screen.getByRole("radio", { name: /Off/ });
+    // Running: the power button turns the lights off, whatever else is locked.
+    const off = screen.getByTestId("mode-button-off");
     expect(off).toBeEnabled();
     await user.click(off);
     expect(onModeChange).toHaveBeenCalledWith(expect.objectContaining({ kind: "off" }));
@@ -549,14 +549,32 @@ describe("LightsPage — output availability gate", () => {
 
   // What is missing, and the way to fix it, is said by the shell notice queue
   // (buildShellNotices); a second copy here said it twice in full mode.
+  it("keeps the last lit stage while off, out of reach, and turns that mode back on by kind", async () => {
+    const onModeChange = vi.fn();
+    await renderWithOutputs({ onModeChange, localOutputConnected: true });
+
+    const dormant = screen.getByTestId("off-stage");
+    expect(dormant.querySelector("[inert]")).not.toBeNull();
+    expect(screen.getByTestId("ambilight-stage")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("stage-turn-on"));
+    // Kind alone: Rust brings back the settings the dimmed stage shows.
+    expect(onModeChange).toHaveBeenCalledWith({ kind: "ambilight" });
+  });
+
+  it("offers no way on from the dimmed stage while nothing can light", async () => {
+    await renderWithOutputs();
+    expect(screen.getByTestId("off-stage")).toBeInTheDocument();
+    expect(screen.queryByTestId("stage-turn-on")).not.toBeInTheDocument();
+  });
+
   it("disables the non-Off modes when nothing is connected, without an inline banner", async () => {
     const onModeChange = vi.fn();
     await renderWithOutputs({ onModeChange });
 
     expect(screen.getByRole("radio", { name: /Ambilight/ })).toBeDisabled();
     expect(screen.getByRole("radio", { name: /Solid/ })).toBeDisabled();
-    // Off parks the outputs — always safe, never gated on having one.
-    expect(screen.getByRole("radio", { name: /Off/ })).toBeEnabled();
+    // Already off, the power button would turn the last mode on — which has nowhere to go either.
+    expect(screen.getByTestId("mode-button-off")).toBeDisabled();
 
     expect(screen.queryByText("shell:notices.messages.outputNone")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "shell:notices.actions.devices" })).not.toBeInTheDocument();
@@ -592,7 +610,7 @@ describe("LightsPage — output availability gate", () => {
     expect(screen.queryByTestId("output-checking")).not.toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /Ambilight/ })).toBeDisabled();
     expect(screen.getByRole("radio", { name: /Solid/ })).toBeDisabled();
-    expect(screen.getByRole("radio", { name: /Off/ })).toBeEnabled();
+    expect(screen.getByTestId("mode-button-off")).toBeDisabled();
   });
 
   it("enables the non-Off modes once a reachable bridge is the only output", async () => {
