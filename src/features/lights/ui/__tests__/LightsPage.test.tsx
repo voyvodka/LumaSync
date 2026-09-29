@@ -9,6 +9,8 @@ import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 import type { ShellState } from "@/shared/contracts/shell";
 import type { LocalSink } from "@/features/device/localSink";
 import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
+import { readStoredScenes } from "@/features/scenes/model/sceneLibrary";
+import { __resetScenesForTests } from "@/features/scenes/state/scenesStore";
 import { __resetRuntimeHealthForTests } from "@/features/telemetry/runtimeHealthSource";
 import { NO_RUNTIME_HEALTH_ISSUES, type RuntimeHealth } from "@/shared/contracts/telemetry";
 import { LightsPage } from "../LightsPage";
@@ -38,6 +40,8 @@ vi.mock("@/features/telemetry/runtimeHealthEventsApi", () => ({
 beforeEach(() => {
   healthListeners.length = 0;
   __resetRuntimeHealthForTests();
+  // The seeded scenes, already read: a first read landing after a test would re-render outside act.
+  __resetScenesForTests(readStoredScenes(undefined));
 });
 
 function pushHealth(health: Partial<RuntimeHealth>) {
@@ -75,7 +79,7 @@ vi.mock("react-i18next", () => ({
         "common:mode.options.effect": "Effect",
         "lights:mode.off.subtitle": "Lights off",
         "lights:mode.ambilight.title": "Ambilight",
-        "lights:mode.ambilight.subtitleFallback": "Live screen capture",
+        "lights:mode.ambilight.subtitle": "Screen · {{brightness}}%",
         "lights:mode.solid.title": "Solid",
         "lights:signal.linkBudget.constrained":
           "USB link limit — at 115,200 baud this strip carries about {{fps}} fps.",
@@ -92,11 +96,12 @@ vi.mock("react-i18next", () => ({
         "lights:dock.addHueZoneTooltip": "Add a Hue zone",
         "lights:dock.addDisabledTooltip": "Finish Hue setup first",
         "roomMap:hueZones.defaultName": "Zone {{N}}",
-        "common:compact.scenes.movie": "Movie",
-        "common:compact.scenes.game": "Game",
-        "common:compact.scenes.music": "Music",
-        "common:compact.scenes.chill": "Chill",
-        "common:compact.scenes.read": "Read",
+        "lights:scenes.suggested.movie": "Movie",
+        "lights:scenes.suggested.game": "Game",
+        "lights:scenes.suggested.warmEvening": "Warm evening",
+        "lights:scenes.suggested.reading": "Reading",
+        "lights:scenes.suggested.fireplace": "Fireplace",
+        "lights:scenes.suggested.aurora": "Aurora",
         "common:mode.brightness": "Brightness",
         "common:mode.solidColor": "Solid color",
         "common:ui.colorPicker.hexLabel": "HEX",
@@ -561,7 +566,7 @@ describe("LightsPage — output availability gate", () => {
   it("blocks the scenes too — a scene starts a mode", async () => {
     await renderWithOutputs();
 
-    for (const label of ["Movie", "Game", "Music", "Chill", "Read"]) {
+    for (const label of ["Movie", "Game", "Warm evening", "Reading", "Fireplace", "Aurora"]) {
       expect(screen.getByRole("radio", { name: label })).toBeDisabled();
     }
   });

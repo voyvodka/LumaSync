@@ -44,9 +44,13 @@ export function EffectControls({
 
   return (
     <Stage dense={compact} className={styles.effect} testId="effect-controls">
+      {/* The choice of effect first: palettes come and go with the effect, and would otherwise move
+          the gallery under the pointer. */}
       {compact ? (
         <EffectPicker effect={draft} disabled={disabled} onPick={(id) => commit(withEffect(draft, id))} />
-      ) : null}
+      ) : (
+        <EffectGallery effect={draft} disabled={disabled} onPick={(id) => commit(withEffect(draft, id))} />
+      )}
       {takesPalette(draft.id) ? (
         <PaletteStrip
           effect={draft}
@@ -54,9 +58,6 @@ export function EffectControls({
           onPick={(palette, colors) => commit(withPalette(draft, palette, colors))}
         />
       ) : null}
-      {compact ? null : (
-        <EffectGallery effect={draft} disabled={disabled} onPick={(id) => commit(withEffect(draft, id))} />
-      )}
       <EffectParams
         effect={draft}
         compact={compact}

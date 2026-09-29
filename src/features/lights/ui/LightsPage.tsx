@@ -7,7 +7,7 @@ import { outputAvailability } from "@/features/mode/model/outputAvailability";
 import { MODE_GUARD_REASONS, type ModeGuardReason } from "@/features/mode/state/modeGuard";
 import { ModeStrip } from "@/features/mode/ui/ModeStrip";
 import { roomAwareStatus } from "@/features/room-map/model/roomAware";
-import { LegacyScenesRow } from "@/features/scenes/ui/LegacyScenesRow";
+import { Scenes } from "@/features/scenes/ui/Scenes";
 import { useRuntimeHealth } from "@/features/telemetry/runtimeHealthSource";
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
@@ -135,10 +135,9 @@ export function LightsPage({
             isDisabled={(k) => (k === LIGHTING_MODE_KIND.OFF ? isModeTransitioning : nonOffLocked)}
             subtitles={{
               [LIGHTING_MODE_KIND.OFF]: t("lights:mode.off.subtitle"),
-              [LIGHTING_MODE_KIND.AMBILIGHT]:
-                typeof totalLeds === "number" && totalLeds > 0
-                  ? t("lights:mode.ambilight.subtitle", { count: totalLeds })
-                  : t("lights:mode.ambilight.subtitleFallback"),
+              [LIGHTING_MODE_KIND.AMBILIGHT]: t("lights:mode.ambilight.subtitle", {
+                brightness: brightnessPct(ambilight.brightness),
+              }),
               [LIGHTING_MODE_KIND.SOLID]:
                 solid.kelvin != null
                   ? t("lights:mode.solid.subtitleWhite", { kelvin: solid.kelvin, brightness: brightnessPct(solid.brightness) })
@@ -153,7 +152,7 @@ export function LightsPage({
             }}
             onSelect={(next) => onModeChange(MODE_KINDS[next].config({ solid: { ...solid }, ambilight, effect }))}
           />
-          <LegacyScenesRow mode={normalized} disabled={nonOffLocked} onModeChange={onModeChange} />
+          <Scenes mode={normalized} disabled={nonOffLocked} onApply={onModeChange} />
           <ModeStage
             mode={normalized}
             disabled={calibrationLocked}

@@ -77,31 +77,31 @@ export function AmbilightStage({
             testId="ambilight-saturation"
           />
         )}
-      </StageGrid>
-      <StageRow label={t("lights:signal.smoothing.title")}>
-        <StageChoice
-          ariaLabel={t("lights:signal.smoothing.title")}
-          value={smoothing}
-          disabled={disabled}
-          onChange={(next) => void setPreference("lightingIntensityPreset", next)}
-          options={SMOOTHING_ORDER.map((preset) => ({
-            value: preset,
-            label: t(SMOOTHING_LABEL[preset]),
-            testId: `smoothing-${preset}`,
-          }))}
-        />
-      </StageRow>
-      {dense ? null : (
-        <StageRow label={t("lights:signal.profile.blackBorder")}>
-          <Toggle
-            checked={blackBorder}
+        <StageRow label={t("lights:signal.smoothing.title")}>
+          <StageChoice
+            ariaLabel={t("lights:signal.smoothing.title")}
+            value={smoothing}
             disabled={disabled}
-            label={t("lights:signal.profile.blackBorder")}
-            onChange={(next) => onChange({ ...ambilight, blackBorderDetection: next })}
-            data-testid="ambilight-black-border"
+            onChange={(next) => void setPreference("lightingIntensityPreset", next)}
+            options={SMOOTHING_ORDER.map((preset) => ({
+              value: preset,
+              label: t(SMOOTHING_LABEL[preset]),
+              testId: `smoothing-${preset}`,
+            }))}
           />
         </StageRow>
-      )}
+        {dense ? null : (
+          <StageRow label={t("lights:signal.profile.blackBorder")}>
+            <Toggle
+              checked={blackBorder}
+              disabled={disabled}
+              label={t("lights:signal.profile.blackBorder")}
+              onChange={(next) => onChange({ ...ambilight, blackBorderDetection: next })}
+              data-testid="ambilight-black-border"
+            />
+          </StageRow>
+        )}
+      </StageGrid>
       {/* role="status", never "alert": the ceiling is derived once at worker start, a steady fact. */}
       {linkNote ? <Callout tone="warning">{linkNote}</Callout> : null}
     </Stage>

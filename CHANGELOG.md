@@ -20,6 +20,12 @@ https://keepachangelog.com/en/1.1.0/
   preview popup and on ⌥4 (Alt+4). A build from before effects starts with the lights off if the
   last mode was an effect.
 - Solid has a White tab: a colour temperature from 2000 to 6500 K.
+- Scenes: a row under the mode buttons, on Lights and in the compact window, where one press
+  plays a whole look — Ambilight with its brightness, saturation and response, a colour or white,
+  or an effect with its palette and settings. It starts with six suggestions (Movie, Game, Warm
+  evening, Reading, Fireplace, Aurora); "+" saves the light that is running as a new scene, and
+  the scenes button beside it adds more from a library of fifteen, renames, reorders and deletes
+  them. Up to 24 scenes. A sunrise scene starts over each time you choose it.
 - The lights go off when the computer locks, sleeps or turns its display off, and the mode that
   ran comes back when you return — after the unlock, if waking up shows the lock screen. Settings →
   General → "Lights off when away" turns this off. macOS and Windows.
@@ -77,6 +83,12 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Lights and the compact window are rebuilt around one stage: the mode buttons on top, the scenes
+  under them, and the running mode's settings below, passing to the next mode's from the side you
+  moved to. Every mode's settings share one quieter look, the page keeps a readable width in a
+  wide window, and the outputs sit in a column on the right with an entry to the LED preview.
+  Sliders are easier to catch (a 32 px target), and the compact window fits an effect's palettes
+  on one line that scrolls sideways. The five fixed colour tiles are replaced by scenes.
 - Colour correction moved from Lights to Devices: each strip's page has a Colour row that opens
   gamma, white point and saturation. It is still one setting for every output, strips and Hue
   alike, until each strip has its own.

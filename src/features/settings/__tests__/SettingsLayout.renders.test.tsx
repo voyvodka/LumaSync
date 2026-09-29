@@ -21,7 +21,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("@/features/persistence/shellStore", () => ({
-  shellStore: { load: () => Promise.resolve({}), save: () => Promise.resolve() },
+  shellStore: { load: () => Promise.resolve({}), save: () => Promise.resolve(), onSaved: () => () => {} },
 }));
 
 vi.mock("@/features/lights/ui/LightsPage", () => ({

@@ -1,7 +1,9 @@
 @layer components {
-  /* The scenes: chips that wrap, each its colour and its name; the chosen one is ringed. */
+  /* The scenes: chips that wrap, each its colour and its name. */
   .row { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
   .list { display: flex; flex: 1; flex-wrap: wrap; gap: 6px; min-width: 0; }
+  /* Outlined at rest so the row does not read as another panel band; the chosen scene fills. The
+     amber stays with the mode strip's mark: one accent at rest. */
   .chip {
     display: inline-flex;
     align-items: center;
@@ -11,16 +13,20 @@
     padding: 0 12px 0 5px;
     border: 0;
     border-radius: 999px;
-    background: var(--lm-panel);
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--lm-line-2);
     color: var(--lm-ink-dim);
     font-size: 12.5px;
     font-weight: 500;
     transition: background var(--lm-dur-quick), color var(--lm-dur-quick), box-shadow var(--lm-dur-quick);
   }
-  .chip:hover:not(:disabled) { color: var(--lm-ink); background: var(--lm-panel-2); }
-  .chip[aria-checked="true"] { color: var(--lm-ink); box-shadow: inset 0 0 0 1px var(--lm-amber); }
+  .chip:hover:not(:disabled) { color: var(--lm-ink); box-shadow: inset 0 0 0 1px var(--lm-ink-faint); }
+  .chip[aria-checked="true"] { color: var(--lm-ink); background: var(--lm-panel-2); box-shadow: inset 0 0 0 1px var(--lm-ink-faint); }
   .chip:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
   .chip:disabled { cursor: not-allowed; opacity: 0.45; }
+  /* The empty list's one chip: saving the running light is how the first scene is made. */
+  .ghost { padding: 0 12px; box-shadow: none; outline: 1px dashed var(--lm-line-2); outline-offset: -1px; }
+  .ghost:hover:not(:disabled) { box-shadow: none; outline-color: var(--lm-ink-faint); }
   .swatch {
     flex-shrink: 0;
     width: 22px;
@@ -30,7 +36,19 @@
   }
   .list[data-placed] .chip[aria-checked="true"] .swatch { animation: land var(--lm-dur-base) var(--lm-ease-land); }
   .name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  .trailing { display: flex; flex-shrink: 0; gap: 6px; }
+  .trailing { display: flex; flex-shrink: 0; gap: 2px; }
+  .action {
+    display: inline-grid;
+    place-items: center;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .action:hover:not(:disabled), .action[data-open] { color: var(--lm-ink); background: var(--lm-panel-2); }
+  .action:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .action:disabled { cursor: default; opacity: 0.35; }
 
   /* Compact: one line that scrolls sideways; its right edge fades so the next chip reads as more. */
   .row[data-dense] .list {
@@ -45,11 +63,12 @@
 
   @keyframes land { from { transform: scale(0.7); } }
 
-  :global(:root[data-reduced-motion]) .chip { transition: none; }
+  :global(:root[data-reduced-motion]) .chip,
+  :global(:root[data-reduced-motion]) .action { transition: none; }
   :global(:root[data-reduced-motion]) .list[data-placed] .chip[aria-checked="true"] .swatch { animation: none; }
 
   @media (forced-colors: active) {
     .chip[aria-checked="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
-    .chip:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+    .chip:focus-visible, .action:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
   }
 }

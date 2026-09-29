@@ -14,6 +14,7 @@ import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 import { OUTPUT_TARGETS } from "@/shared/contracts/mode";
 import { Callout } from "@/shared/ui/Callout/Callout";
 import { IconButton } from "@/shared/ui/IconButton/IconButton";
+import { IconPlus } from "@/shared/ui/icons";
 import { Toggle } from "@/shared/ui/Toggle/Toggle";
 import styles from "./OutputsRail.module.css";
 
@@ -140,7 +141,7 @@ export function OutputsRail({
         {/* Only opens Devices: it used to write an empty Hue zone at the room's origin. */}
         <IconButton
           label={t("lights:dock.addAria")}
-          icon={<span aria-hidden className={styles.plus}>+</span>}
+          icon={<IconPlus />}
           onClick={onAddOutput}
           data-testid="lights-add-output"
         />

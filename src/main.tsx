@@ -210,6 +210,11 @@ async function bootstrap() {
   // 3. Mount React once this window's root module is in
   const root = await windowRoot;
   markStartup("root module in");
+  // The scenes row opens on the stored list, not the seeded one sliding to it.
+  if (windowKind === WINDOW_KIND.MAIN) {
+    const { hydrateScenes } = await import("./features/scenes/state/scenesStore");
+    await state.then(hydrateScenes, () => hydrateScenes());
+  }
   renderRoot(root);
 }
 

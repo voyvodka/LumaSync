@@ -10,7 +10,7 @@ import {
 } from "@/features/mode/state/lightingControl";
 import { MODE_GUARD_REASONS } from "@/features/mode/state/modeGuard";
 import { ModeStrip } from "@/features/mode/ui/ModeStrip";
-import { LegacyScenesRow } from "@/features/scenes/ui/LegacyScenesRow";
+import { Scenes } from "@/features/scenes/ui/Scenes";
 import {
   DEFAULT_SOLID_COLOR,
   LIGHTING_MODE_KIND,
@@ -86,7 +86,7 @@ export const LightsCompact = memo(function LightsCompact() {
         isDisabled={(kind) => (kind === LIGHTING_MODE_KIND.OFF ? isModeTransitioning : nonOffLocked)}
         onSelect={pickMode}
       />
-      <LegacyScenesRow dense mode={mode} disabled={nonOffLocked} onModeChange={change} />
+      <Scenes dense mode={mode} disabled={nonOffLocked} onApply={change} />
       <ModeStage
         dense
         mode={mode}

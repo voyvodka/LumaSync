@@ -21,10 +21,12 @@ interface ScenesRowProps {
   trailing?: ReactNode;
   /** The compact window: one line that scrolls sideways instead of wrapping. */
   dense?: boolean;
+  /** Shown in the list's place while it is empty. */
+  placeholder?: ReactNode;
 }
 
 /** The user's scenes as a row of chips under the mode strip; one press is the whole look. */
-export function ScenesRow({ scenes, disabled = false, onPick, trailing, dense = false }: ScenesRowProps) {
+export function ScenesRow({ scenes, disabled = false, onPick, trailing, dense = false, placeholder }: ScenesRowProps) {
   const { t } = useTranslation();
   // A pick lands with a small scale-in; the one already chosen when the page opens does not.
   const [placed, setPlaced] = useState(false);
@@ -34,29 +36,33 @@ export function ScenesRow({ scenes, disabled = false, onPick, trailing, dense = 
   }, []);
   return (
     <div className={styles.row} data-dense={dense || undefined}>
-      <div
-        className={styles.list}
-        role="radiogroup"
-        aria-label={t("lights:scenes.title")}
-        data-placed={placed || undefined}
-      >
-        {scenes.map((scene) => (
-          <button
-            key={scene.id}
-            type="button"
-            role="radio"
-            aria-checked={scene.active}
-            className={styles.chip}
-            disabled={disabled || scene.unavailable}
-            title={scene.unavailable ? t("lights:scenes.unavailable") : scene.name}
-            onClick={() => onPick(scene.id)}
-            data-testid={`scene-${scene.id}`}
-          >
-            <span className={styles.swatch} style={{ background: scene.swatch }} aria-hidden />
-            <span className={styles.name}>{scene.name}</span>
-          </button>
-        ))}
-      </div>
+      {scenes.length === 0 && placeholder ? (
+        <div className={styles.list}>{placeholder}</div>
+      ) : (
+        <div
+          className={styles.list}
+          role="radiogroup"
+          aria-label={t("lights:scenes.title")}
+          data-placed={placed || undefined}
+        >
+          {scenes.map((scene) => (
+            <button
+              key={scene.id}
+              type="button"
+              role="radio"
+              aria-checked={scene.active}
+              className={styles.chip}
+              disabled={disabled || scene.unavailable}
+              title={scene.unavailable ? t("lights:scenes.unavailable") : scene.name}
+              onClick={() => onPick(scene.id)}
+              data-testid={`scene-${scene.id}`}
+            >
+              <span className={styles.swatch} style={{ background: scene.swatch }} aria-hidden />
+              <span className={styles.name}>{scene.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {trailing ? <div className={styles.trailing}>{trailing}</div> : null}
     </div>
   );

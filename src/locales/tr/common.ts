@@ -23,15 +23,6 @@ const common: Catalogue<typeof enCommon> = {
       ok: "Tamam",
     },
   },
-  compact: {
-    scenes: {
-      movie: "Film",
-      game: "Oyun",
-      music: "Müzik",
-      chill: "Sakin",
-      read: "Okuma",
-    },
-  },
   ui: {
     colorPicker: {
       rootAriaLabel: "Renk seçici",

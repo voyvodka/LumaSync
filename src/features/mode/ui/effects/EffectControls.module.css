@@ -19,6 +19,17 @@
     padding: 3px;
     margin: -3px;
   }
+  /* Compact: one line that scrolls sideways, so the window's everyday controls fit its height; the
+     right edge fades so the next swatch reads as more. */
+  .effect[data-dense] .palettes {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-right: 16px;
+    /* Longer than the scenes' fade: the swatches are small, and a whole one can end at the edge. */
+    mask-image: linear-gradient(to right, black calc(100% - 44px), transparent);
+  }
+  .effect[data-dense] .palettes::-webkit-scrollbar { display: none; }
   /* A 32px target around a 20px swatch; the ring is drawn on the swatch, set off from it by a
      gap of panel, so the pick reads by shape as well as by colour. */
   .palette {
@@ -217,7 +228,7 @@
     min-width: 32px;
     height: 32px;
     border: 1px solid var(--lm-line);
-    border-radius: 6px;
+    border-radius: 9px;
     background: transparent;
     color: var(--lm-ink-dim);
     font-size: 12px;

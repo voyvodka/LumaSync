@@ -13,6 +13,7 @@ import type {
   HueRuntimeTarget,
 } from "./hue";
 import type { RoomMapConfig } from "./roomMap";
+import type { StoredScene } from "./scenes";
 import type { LedStrip } from "./strips";
 
 /**
@@ -247,6 +248,12 @@ export interface ShellState {
    * Absent until user explicitly changes mode settings.
    */
   lightingMode?: LightingModeConfig;
+  /**
+   * The user's scenes, in the order shown. Frontend-only: Rust carries it without reading. Kept out
+   * of `DEFAULT_SHELL_STATE` — absent reads as the seeded list, `[]` as every scene deleted.
+   * Additive, no schema bump.
+   */
+  scenes?: StoredScene[];
   /**
    * Last selected runtime output target set.
    * Defaults to USB-first when absent.

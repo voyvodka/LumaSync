@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { EFFECT_RANGES, PALETTE_IDS, PALETTE_ORDER, type PaletteId } from "@/shared/contracts/effects";
@@ -27,9 +27,21 @@ export function PaletteStrip({ effect, disabled = false, onPick }: PaletteStripP
   const editRef = useRef<HTMLButtonElement | null>(null);
   const editorId = useId();
   const custom = current === PALETTE_IDS.CUSTOM;
+  const rowRef = useRef<HTMLDivElement | null>(null);
+
+  // Where the strip scrolls sideways (compact), the chosen palette is brought into view.
+  useLayoutEffect(() => {
+    const list = rowRef.current?.querySelector<HTMLElement>('[role="radiogroup"]');
+    const chosen = list?.querySelector<HTMLElement>(`[data-testid="palette-${current}"]`);
+    if (!list || !chosen || list.scrollWidth <= list.clientWidth) return;
+    const left = chosen.offsetLeft - list.offsetLeft;
+    if (left < list.scrollLeft || left + chosen.offsetWidth > list.scrollLeft + list.clientWidth) {
+      list.scrollLeft = left - (list.clientWidth - chosen.offsetWidth) / 2;
+    }
+  }, [current]);
 
   return (
-    <div className={styles.paletteRow}>
+    <div ref={rowRef} className={styles.paletteRow}>
       <Segmented
         className={styles.palettes}
         itemClassName={styles.palette}

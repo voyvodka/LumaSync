@@ -16,6 +16,7 @@ vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => Promise.resolve({}),
     save: () => Promise.resolve(),
+    onSaved: () => () => {},
   },
 }));
 

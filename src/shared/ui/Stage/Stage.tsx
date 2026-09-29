@@ -14,22 +14,43 @@ export function Stage({
   className,
   testId,
   dense = false,
+  quiet = false,
 }: {
   children: ReactNode;
   className?: string;
   testId?: string;
   /** The compact window's stage: less edge, less gap. */
   dense?: boolean;
+  /** Nothing to set (Off): no surface, one centred line. */
+  quiet?: boolean;
 }) {
   return (
-    <section className={cx(styles.stage, className)} data-testid={testId} data-dense={dense || undefined}>
+    <section
+      className={cx(styles.stage, className)}
+      data-testid={testId}
+      data-dense={dense || undefined}
+      data-quiet={quiet || undefined}
+    >
       {children}
     </section>
   );
 }
 
-export function StageGrid({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cx(styles.grid, className)}>{children}</div>;
+export function StageGrid({
+  children,
+  className,
+  lead = false,
+}: {
+  children: ReactNode;
+  className?: string;
+  /** The first cell is a fixed-size control: it keeps its width and the second takes the rest. */
+  lead?: boolean;
+}) {
+  return (
+    <div className={cx(styles.grid, className)} data-lead={lead || undefined}>
+      {children}
+    </div>
+  );
 }
 
 export function StageRow({

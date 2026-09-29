@@ -60,7 +60,7 @@ export function SolidStage({
           { value: "white", label: t("lights:solid.white"), testId: "solid-tone-white" },
         ]}
       />
-      <StageGrid>
+      <StageGrid lead={tone === "colour" && !dense}>
         {tone === "white" ? (
           <KelvinSlider kelvin={draft.kelvin ?? lastKelvin.current} disabled={disabled} onChange={setKelvin} />
         ) : dense ? (

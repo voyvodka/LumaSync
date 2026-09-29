@@ -20,15 +20,6 @@ export default {
       ok: "Done",
     },
   },
-  compact: {
-    scenes: {
-      movie: "Movie",
-      game: "Game",
-      music: "Music",
-      chill: "Chill",
-      read: "Read",
-    },
-  },
   ui: {
     colorPicker: {
       rootAriaLabel: "Color picker",

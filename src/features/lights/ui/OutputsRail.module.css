@@ -5,13 +5,12 @@
     flex-direction: column;
     gap: 10px;
     min-height: 0;
-    padding: 20px 16px 16px;
+    padding: 22px 16px 16px;
     overflow-y: auto;
     border-left: 1px solid var(--lm-line);
   }
   .head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .title { margin: 0; font-size: 13px; font-weight: 500; color: var(--lm-ink); }
-  .plus { font-size: 16px; line-height: 1; }
   .list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
   .row {
     display: flex;

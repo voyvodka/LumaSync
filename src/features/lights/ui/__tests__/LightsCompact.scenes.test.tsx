@@ -1,10 +1,10 @@
-// The compact scene tiles showed the active scene only through an `is-on`
-// class, where the Lights page's tiles already said it with aria-pressed.
+// The compact window shows the same scenes as Lights: the running look is the checked chip, and a
+// press applies the whole scene, Solid carrying the saved targets like every Solid choice there.
 
-import { act, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { SCENE_PRESETS } from "@/features/mode/model/scenePresets";
+import { __resetScenesForTests } from "@/features/scenes/state/scenesStore";
 import type { LightingModeConfig } from "@/shared/contracts/mode";
 import { SECTION_IDS } from "@/shared/contracts/shell";
 import { SettingsLayout } from "@/features/settings/SettingsLayout";
@@ -19,35 +19,54 @@ vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => Promise.resolve({}),
     save: () => Promise.resolve(),
+    onSaved: () => () => {},
   },
 }));
 
-const [movie, other] = SCENE_PRESETS;
+const WARM_EVENING = "lights:scenes.suggested.warmEvening";
 
 async function renderCompact(lightingMode: LightingModeConfig) {
+  const changeMode = vi.fn<(next: LightingModeConfig) => void>();
   await act(async () => {
     renderWithShellStores(<SettingsLayout />, {
       hue: { configured: true, reachable: true, probeVerdict: "reachable" },
       navigation: { uiMode: "compact", activeSection: SECTION_IDS.LIGHTS },
       lighting: { lightingMode, outputTargets: ["hue"], localSink: null, bootstrapDone: true },
+      lightingActions: { changeMode },
     });
   });
+  return changeMode;
 }
 
+// Unmounted first: a reset under a mounted row would re-render it outside act.
+afterEach(() => {
+  cleanup();
+  __resetScenesForTests();
+});
+
 describe("LightsCompact scenes", () => {
-  it("press the tile whose colour is the running solid colour, and only it", async () => {
-    await renderCompact({
-      kind: "solid",
-      solid: { r: movie!.r, g: movie!.g, b: movie!.b, brightness: 0.5 },
-    });
-    expect(screen.getByRole("radio", { name: movie!.labelKey })).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByRole("radio", { name: other!.labelKey })).toHaveAttribute("aria-checked", "false");
+  it("checks the scene whose look is running, and only it", async () => {
+    await renderCompact({ kind: "solid", solid: { r: 255, g: 180, b: 107, brightness: 0.55, kelvin: 2700 } });
+    expect(screen.getByRole("radio", { name: WARM_EVENING })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "lights:scenes.suggested.reading" })).toHaveAttribute("aria-checked", "false");
   });
 
-  it("press none while the lights are off", async () => {
+  it("checks none while the lights are off", async () => {
     await renderCompact({ kind: "off" });
-    for (const preset of SCENE_PRESETS) {
-      expect(screen.getByRole("radio", { name: preset.labelKey })).toHaveAttribute("aria-checked", "false");
+    for (const chip of screen.getAllByRole("radio", { name: /lights:scenes\.suggested/ })) {
+      expect(chip).toHaveAttribute("aria-checked", "false");
     }
+  });
+
+  it("applies a Solid scene with the saved targets", async () => {
+    const changeMode = await renderCompact({ kind: "off" });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("radio", { name: WARM_EVENING }));
+    });
+    expect(changeMode).toHaveBeenCalledWith({
+      kind: "solid",
+      solid: expect.objectContaining({ kelvin: 2700, brightness: 0.55 }),
+      targets: ["hue"],
+    });
   });
 });

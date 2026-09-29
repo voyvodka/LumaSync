@@ -1,6 +1,6 @@
 @layer components {
   .tone { align-self: flex-start; min-width: 176px; }
-  .colour { display: flex; justify-content: flex-start; }
+  .colour { display: flex; justify-content: center; }
 
   .swatch {
     display: flex;

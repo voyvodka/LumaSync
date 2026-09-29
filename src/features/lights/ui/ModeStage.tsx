@@ -71,7 +71,7 @@ export function ModeStage({
         );
       default:
         return (
-          <Stage dense={dense} testId="off-stage">
+          <Stage dense={dense} quiet testId="off-stage">
             <StageNote>{t("lights:stage.off")}</StageNote>
           </Stage>
         );
