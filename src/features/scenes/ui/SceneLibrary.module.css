@@ -11,15 +11,53 @@
   .empty { margin: 2px 6px 4px; color: var(--lm-ink-faint); font-size: 12.5px; }
   .list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
   .row {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 10px;
-    min-height: 36px;
+    gap: 8px;
+    height: 36px;
     padding: 0 2px 0 6px;
     border-radius: 8px;
+    background: var(--lm-panel-2);
+    transition: background var(--lm-dur-quick);
   }
   .row:hover, .row:focus-within { background: var(--lm-panel); }
   .row[data-unavailable] .name { color: var(--lm-ink-faint); }
+
+  /* Sorting: the held row follows the pointer above the rest, which step aside to make its room. */
+  .list[data-dragging] { cursor: grabbing; user-select: none; }
+  .list[data-dragging] .row { transition: transform var(--lm-dur-base) var(--lm-ease-out); }
+  .list[data-dragging] .row[data-dragged] {
+    z-index: 1;
+    background: var(--lm-panel);
+    box-shadow: 0 8px 20px rgb(0 0 0 / 45%), inset 0 0 0 1px var(--lm-line-2);
+    transition: none;
+  }
+  .handle {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 18px;
+    height: 32px;
+    margin-right: -2px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--lm-ink-faint);
+    cursor: grab;
+    touch-action: none;
+    transition: color var(--lm-dur-quick);
+  }
+  .row:hover .handle, .handle:focus-visible { color: var(--lm-ink-dim); }
+  .handle:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+
+  /* A row that arrives grows into its place; one that goes folds away before the list closes up. */
+  .row[data-entering] { animation: enter var(--lm-dur-base) var(--lm-ease-out); }
+  .row[data-leaving] { overflow: hidden; pointer-events: none; animation: leave 0.2s var(--lm-ease-leave) forwards; }
+  @keyframes enter { from { height: 0; opacity: 0; transform: scale(0.96); } }
+  @keyframes leave { to { height: 0; opacity: 0; } }
+
   .swatch {
     flex-shrink: 0;
     width: 18px;
@@ -27,6 +65,8 @@
     border-radius: 50%;
     box-shadow: inset 0 0 0 1px rgb(255 255 255 / 10%);
   }
+  .row[data-entering] .swatch { animation: land var(--lm-dur-slow) var(--lm-ease-land) var(--lm-dur-follow) backwards; }
+  @keyframes land { from { transform: scale(0.4); } }
   .name {
     flex: 1;
     min-width: 0;
@@ -55,6 +95,7 @@
   /* Present but faint at rest, so showing them on hover shifts nothing. */
   .actions { display: flex; flex-shrink: 0; opacity: 0; transition: opacity var(--lm-dur-quick); }
   .row:hover .actions, .row:focus-within .actions, .actions[data-armed] { opacity: 1; }
+  .list[data-dragging] .actions { opacity: 0; }
   .action {
     display: inline-grid;
     place-items: center;
@@ -62,24 +103,30 @@
     border-radius: 7px;
     background: transparent;
     color: var(--lm-ink-dim);
-    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick), box-shadow var(--lm-dur-base);
   }
   .action:hover:not(:disabled) { color: var(--lm-ink); background: var(--lm-panel-2); }
   .action:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
-  .action:disabled, .action[aria-disabled="true"] { cursor: default; opacity: 0.35; }
-  .action[aria-disabled="true"]:hover { background: transparent; color: var(--lm-ink-dim); }
+  .action:disabled { cursor: default; opacity: 0.35; }
   /* Armed: a check in a red ring, so the second press reads by shape as well as colour. */
-  .action[data-danger] { color: var(--lm-red); box-shadow: inset 0 0 0 1px var(--lm-red); }
+  .action[data-danger], .action[data-danger]:hover:not(:disabled) { color: var(--lm-red); box-shadow: inset 0 0 0 1px var(--lm-red); }
+  .action :global(svg) { display: block; }
   .note { color: var(--lm-ink-faint); }
 
   /* Touch has no hover: the actions stay. */
   @media (hover: none) { .actions { opacity: 1; } }
 
-  :global(:root[data-reduced-motion]) .actions { transition: none; }
+  :global(:root[data-reduced-motion]) .row,
+  :global(:root[data-reduced-motion]) .actions,
+  :global(:root[data-reduced-motion]) .action,
+  :global(:root[data-reduced-motion]) .handle { transition: none; }
+  :global(:root[data-reduced-motion]) .row[data-entering],
+  :global(:root[data-reduced-motion]) .row[data-entering] .swatch { animation: none; }
 
   @media (forced-colors: active) {
-    .action:focus-visible, .input:focus-visible { outline: 2px solid Highlight; outline-offset: 1px; }
+    .action:focus-visible, .input:focus-visible, .handle:focus-visible { outline: 2px solid Highlight; outline-offset: 1px; }
     .actions { opacity: 1; }
     .action[data-danger] { outline: 2px solid Mark; outline-offset: -2px; }
+    .list[data-dragging] .row[data-dragged] { outline: 2px solid Highlight; }
   }
 }

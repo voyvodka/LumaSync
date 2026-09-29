@@ -1,7 +1,10 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useFlip } from "@/shared/lib/useFlip";
+
 import styles from "./ScenesRow.module.css";
+import { useArrivals } from "./useArrivals";
 
 export interface SceneChip {
   id: string;
@@ -34,12 +37,18 @@ export function ScenesRow({ scenes, disabled = false, onPick, trailing, dense = 
     const frame = requestAnimationFrame(() => setPlaced(true));
     return () => cancelAnimationFrame(frame);
   }, []);
+  // A chip just saved or added grows in.
+  const { arrived, settled } = useArrivals(scenes.map((scene) => scene.id));
+  // Reordered in the library behind the popover: the chips slide to their new places.
+  const listRef = useRef<HTMLDivElement | null>(null);
+  useFlip(listRef, scenes.map((scene) => scene.id));
   return (
     <div className={styles.row} data-dense={dense || undefined}>
       {scenes.length === 0 && placeholder ? (
         <div className={styles.list}>{placeholder}</div>
       ) : (
         <div
+          ref={listRef}
           className={styles.list}
           role="radiogroup"
           aria-label={t("lights:scenes.title")}
@@ -55,6 +64,11 @@ export function ScenesRow({ scenes, disabled = false, onPick, trailing, dense = 
               disabled={disabled || scene.unavailable}
               title={scene.unavailable ? t("lights:scenes.unavailable") : scene.name}
               onClick={() => onPick(scene.id)}
+              data-arrived={arrived.has(scene.id) || undefined}
+              data-flip-id={scene.id}
+              onAnimationEnd={(event) => {
+                if (event.target === event.currentTarget) settled(scene.id);
+              }}
               data-testid={`scene-${scene.id}`}
             >
               <span className={styles.swatch} style={{ background: scene.swatch }} aria-hidden />

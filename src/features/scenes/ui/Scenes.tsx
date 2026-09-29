@@ -121,7 +121,7 @@ export function Scenes({ mode, disabled, onApply, dense = false }: ScenesProps) 
             onClose={() => setLibraryOpen(false)}
             anchorRef={libraryRef}
             side="below"
-            width={300}
+            width={256}
             id={libraryId}
             label={t("lights:scenes.manage")}
             role="dialog"

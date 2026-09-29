@@ -17,7 +17,7 @@ import {
   suggestedScene,
   toModeConfig,
   withScene,
-  withSceneMoved,
+  withSceneMovedTo,
   withSceneName,
   withoutScene,
 } from "../sceneLibrary";
@@ -159,10 +159,12 @@ describe("sceneName", () => {
 describe("list edits", () => {
   const list = [scene("a"), scene("b"), scene("c")];
 
-  it("moves a scene one place and stops at the edges", () => {
-    expect(withSceneMoved(list, "b", -1).map((s) => s.id)).toEqual(["b", "a", "c"]);
-    expect(withSceneMoved(list, "a", -1).map((s) => s.id)).toEqual(["a", "b", "c"]);
-    expect(withSceneMoved(list, "c", 1).map((s) => s.id)).toEqual(["a", "b", "c"]);
+  it("moves a scene to a place, the others closing up, and stops at the edges", () => {
+    expect(withSceneMovedTo(list, "a", 2).map((s) => s.id)).toEqual(["b", "c", "a"]);
+    expect(withSceneMovedTo(list, "c", 0).map((s) => s.id)).toEqual(["c", "a", "b"]);
+    expect(withSceneMovedTo(list, "b", -3).map((s) => s.id)).toEqual(["b", "a", "c"]);
+    expect(withSceneMovedTo(list, "b", 9).map((s) => s.id)).toEqual(["a", "c", "b"]);
+    expect(withSceneMovedTo(list, "zz", 0).map((s) => s.id)).toEqual(["a", "b", "c"]);
   });
 
   it("stops adding at the limit", () => {

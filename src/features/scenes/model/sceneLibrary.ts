@@ -291,13 +291,13 @@ export function withoutScene(scenes: readonly StoredScene[], id: string): Stored
   return scenes.filter((scene) => scene.id !== id);
 }
 
-/** Moved one place towards the start (`-1`) or the end (`1`); at an edge it stays. */
-export function withSceneMoved(scenes: readonly StoredScene[], id: string, delta: -1 | 1): StoredScene[] {
+/** Moved to `to`, the others closing up behind it; a place past either end is the end. */
+export function withSceneMovedTo(scenes: readonly StoredScene[], id: string, to: number): StoredScene[] {
   const next = [...scenes];
   const from = next.findIndex((scene) => scene.id === id);
-  const to = from + delta;
-  if (from === -1 || to < 0 || to >= next.length) return next;
-  [next[from], next[to]] = [next[to]!, next[from]!];
+  if (from === -1) return next;
+  const [scene] = next.splice(from, 1);
+  next.splice(Math.max(0, Math.min(next.length, to)), 0, scene!);
   return next;
 }
 

@@ -62,10 +62,13 @@
   .row[data-dense] .chip { flex-shrink: 0; }
 
   @keyframes land { from { transform: scale(0.7); } }
+  .chip[data-arrived] { animation: arrive var(--lm-dur-slow) var(--lm-ease-land); }
+  @keyframes arrive { from { opacity: 0; transform: scale(0.6); } }
 
   :global(:root[data-reduced-motion]) .chip,
   :global(:root[data-reduced-motion]) .action { transition: none; }
-  :global(:root[data-reduced-motion]) .list[data-placed] .chip[aria-checked="true"] .swatch { animation: none; }
+  :global(:root[data-reduced-motion]) .list[data-placed] .chip[aria-checked="true"] .swatch,
+  :global(:root[data-reduced-motion]) .chip[data-arrived] { animation: none; }
 
   @media (forced-colors: active) {
     .chip[aria-checked="true"] { outline: 2px solid Highlight; outline-offset: -2px; }

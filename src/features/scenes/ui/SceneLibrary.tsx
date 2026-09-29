@@ -1,10 +1,20 @@
-import { useEffect, useId, useRef, useState, type RefObject } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
+} from "react";
 import { useTranslation } from "react-i18next";
 
+import { prefersReducedMotion } from "@/shared/lib/motion";
+import { useFlip } from "@/shared/lib/useFlip";
 import { SCENE_LIMITS, type StoredScene, type SuggestedSceneId } from "@/shared/contracts/scenes";
 import { IconButton } from "@/shared/ui/IconButton/IconButton";
-import { IconCheck, IconChevronDown, IconChevronUp, IconPencil, IconPlus, IconTrash } from "@/shared/ui/icons";
+import { IconCheck, IconDragHandle, IconPencil, IconPlus, IconTrash } from "@/shared/ui/icons";
 import { RowNote } from "@/shared/ui/SettingRow/SettingRow";
+import { SpinSwap } from "@/shared/ui/SpinSwap/SpinSwap";
 
 import {
   SUGGESTED_SCENE_ORDER,
@@ -13,15 +23,22 @@ import {
   sceneSwatch,
   suggestedScene,
   withScene,
-  withSceneMoved,
+  withSceneMovedTo,
   withSceneName,
   withoutScene,
 } from "../model/sceneLibrary";
 import { editScenes } from "../state/scenesStore";
 import styles from "./SceneLibrary.module.css";
+import { useArrivals } from "./useArrivals";
 
 /** How long a delete waits for its second press: the webview does not always blur a clicked button. */
 const ARMED_MS = 3000;
+/** A row's collapse; the edit lands when it ends, or after this where no animationend comes. */
+const LEAVE_FALLBACK_MS = 260;
+/** Movement before a press on a row becomes a drag, so a click stays a click. */
+const DRAG_SLOP_PX = 4;
+/** A row's height where layout gives none (the test DOM). */
+const ROW_FALLBACK_PX = 36;
 
 interface SceneLibraryProps {
   scenes: readonly StoredScene[];
@@ -30,15 +47,30 @@ interface SceneLibraryProps {
   onClose: () => void;
 }
 
+interface Drag {
+  id: string;
+  from: number;
+  to: number;
+  dy: number;
+}
+
 /**
- * The library popover: the user's scenes to rename, reorder and delete, then the suggested ones not
- * yet in the list to add. A row's actions show on hover or focus; nothing moves when they do. It is
- * portalled after the page, so it takes focus when it opens and closes when focus leaves it.
+ * The library popover: the user's scenes to reorder by dragging, rename and delete, then the
+ * suggested ones not yet in the list to add. A row that arrives grows in, one that goes folds away.
+ * It is portalled after the page, so it takes focus when it opens and closes when focus leaves it.
  */
 export function SceneLibrary({ scenes, anchorRef, onClose }: SceneLibraryProps) {
   const { t } = useTranslation();
   const [failed, setFailed] = useState(false);
+  const [leaving, setLeaving] = useState<ReadonlySet<string>>(new Set());
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const [announce, setAnnounce] = useState("");
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const pointer = useRef<(Drag & { startY: number; startScroll: number; height: number; moving: boolean }) | null>(null);
+  const { arrived: entering, settled } = useArrivals(scenes.map((scene) => scene.id));
+  // A keyboard move slides the rows; a dropped drag is already in place, so nothing moves.
+  const listRef = useRef<HTMLUListElement | null>(null);
+  useFlip(listRef, scenes.map((scene) => scene.id));
   const inList = new Set(scenes.map((scene) => scene.suggestedId).filter(Boolean));
   const suggestions = SUGGESTED_SCENE_ORDER.filter((id) => !inList.has(id));
   const full = scenes.length >= SCENE_LIMITS.maxScenes;
@@ -62,9 +94,89 @@ export function SceneLibrary({ scenes, anchorRef, onClose }: SceneLibraryProps) 
     });
     refocus(focusAfter);
   };
+
+  /** Folds the row away, then makes the edit that takes it out. */
+  const leave = (key: string, change: (list: readonly StoredScene[]) => StoredScene[]) => {
+    if (leaving.has(key)) return;
+    const done = () => {
+      setLeaving((keys) => {
+        const next = new Set(keys);
+        next.delete(key);
+        return next;
+      });
+      edit(change);
+    };
+    if (prefersReducedMotion()) {
+      done();
+      return;
+    }
+    setLeaving((keys) => new Set(keys).add(key));
+    leaveEnds.current.set(key, done);
+    setTimeout(() => finishLeave(key), LEAVE_FALLBACK_MS);
+  };
+  const leaveEnds = useRef(new Map<string, () => void>());
+  const finishLeave = (key: string) => {
+    const done = leaveEnds.current.get(key);
+    leaveEnds.current.delete(key);
+    done?.();
+  };
+
   const add = (suggestedId: SuggestedSceneId) => {
     const scene = suggestedScene(suggestedId, crypto.randomUUID());
-    edit((list) => withScene(list, scene));
+    leave(`suggested-${suggestedId}`, (list) => withScene(list, scene));
+  };
+
+  const moveTo = (id: string, to: number, focusAfter?: string) => {
+    const name = sceneName(scenes.find((scene) => scene.id === id)!, t);
+    setAnnounce(t("lights:scenes.movedTo", { name, position: to + 1, count: scenes.length }));
+    edit((list) => withSceneMovedTo(list, id, to), focusAfter);
+  };
+
+  const onRowPointerDown = (event: ReactPointerEvent<HTMLLIElement>, id: string, index: number) => {
+    if (event.button !== 0 || (event.target as HTMLElement).closest("button:not([data-handle]), input")) return;
+    const row = event.currentTarget;
+    row.setPointerCapture?.(event.pointerId);
+    pointer.current = {
+      id,
+      from: index,
+      to: index,
+      dy: 0,
+      startY: event.clientY,
+      startScroll: rootRef.current?.scrollTop ?? 0,
+      height: row.getBoundingClientRect().height || ROW_FALLBACK_PX,
+      moving: false,
+    };
+  };
+  const onRowPointerMove = (event: ReactPointerEvent<HTMLLIElement>) => {
+    const p = pointer.current;
+    const root = rootRef.current;
+    if (!p || !root) return;
+    // Near an edge of a list taller than the popover, it scrolls under the row being dragged.
+    const box = root.getBoundingClientRect();
+    if (p.moving && event.clientY < box.top + 24) root.scrollTop -= 8;
+    else if (p.moving && event.clientY > box.bottom - 24) root.scrollTop += 8;
+    const dy = event.clientY - p.startY + (root.scrollTop - p.startScroll);
+    if (!p.moving && Math.abs(dy) < DRAG_SLOP_PX) return;
+    p.moving = true;
+    p.dy = dy;
+    p.to = Math.max(0, Math.min(scenes.length - 1, p.from + Math.round(dy / p.height)));
+    setDrag({ id: p.id, from: p.from, to: p.to, dy });
+  };
+  const onRowPointerUp = () => {
+    const p = pointer.current;
+    pointer.current = null;
+    // One render: the new order and no offsets, so the dropped row stays where it was let go.
+    if (p?.moving && p.to !== p.from) moveTo(p.id, p.to);
+    setDrag(null);
+  };
+
+  const offsetOf = (id: string, index: number): number | undefined => {
+    if (!drag) return undefined;
+    if (id === drag.id) return drag.dy;
+    const height = pointer.current?.height ?? ROW_FALLBACK_PX;
+    if (drag.from < drag.to && index > drag.from && index <= drag.to) return -height;
+    if (drag.from > drag.to && index >= drag.to && index < drag.from) return height;
+    return 0;
   };
 
   return (
@@ -85,21 +197,25 @@ export function SceneLibrary({ scenes, anchorRef, onClose }: SceneLibraryProps) 
       {scenes.length === 0 ? (
         <p className={styles.empty}>{t("lights:scenes.empty")}</p>
       ) : (
-        <ul className={styles.list} data-testid="scene-library-yours">
+        <ul ref={listRef} className={styles.list} data-dragging={drag ? true : undefined} data-testid="scene-library-yours">
           {scenes.map((scene, index) => (
             <SceneEntry
               key={scene.id}
               scene={scene}
-              first={index === 0}
-              last={index === scenes.length - 1}
+              entering={entering.has(scene.id)}
+              leaving={leaving.has(scene.id)}
+              offset={offsetOf(scene.id, index)}
+              dragged={drag?.id === scene.id}
+              onPointerDown={(event) => onRowPointerDown(event, scene.id, index)}
+              onPointerMove={onRowPointerMove}
+              onPointerUp={onRowPointerUp}
+              onAnimationDone={() => (leaving.has(scene.id) ? finishLeave(scene.id) : settled(scene.id))}
+              onKeyMove={(delta) => {
+                const to = index + delta;
+                if (to >= 0 && to < scenes.length) moveTo(scene.id, to, `scene-handle-${scene.id}`);
+              }}
               onRename={(name) => edit((list) => withSceneName(list, scene.id, name), `scene-rename-${scene.id}`)}
-              onMove={(delta) =>
-                edit(
-                  (list) => withSceneMoved(list, scene.id, delta),
-                  `scene-${delta < 0 ? "up" : "down"}-${scene.id}`,
-                )
-              }
-              onRemove={() => edit((list) => withoutScene(list, scene.id))}
+              onRemove={() => leave(scene.id, (list) => withoutScene(list, scene.id))}
             />
           ))}
         </ul>
@@ -116,8 +232,16 @@ export function SceneLibrary({ scenes, anchorRef, onClose }: SceneLibraryProps) 
             {suggestions.map((suggestedId) => {
               const preview = suggestedScene(suggestedId, suggestedId);
               const name = sceneName(preview, t);
+              const key = `suggested-${suggestedId}`;
               return (
-                <li key={suggestedId} className={styles.row}>
+                <li
+                  key={suggestedId}
+                  className={styles.row}
+                  data-leaving={leaving.has(key) || undefined}
+                  onAnimationEnd={(event) => {
+                    if (event.target === event.currentTarget && leaving.has(key)) finishLeave(key);
+                  }}
+                >
                   <span className={styles.swatch} style={{ background: sceneSwatch(preview) }} aria-hidden />
                   <span className={styles.name}>{name}</span>
                   <IconButton
@@ -139,25 +263,50 @@ export function SceneLibrary({ scenes, anchorRef, onClose }: SceneLibraryProps) 
           {t("lights:scenes.saveFailed")}
         </RowNote>
       ) : null}
+      <span className="sr-only" aria-live="polite">
+        {announce}
+      </span>
     </div>
   );
 }
 
 interface SceneEntryProps {
   scene: StoredScene;
-  first: boolean;
-  last: boolean;
+  entering: boolean;
+  leaving: boolean;
+  /** Where a drag has put it, in px from its place; `undefined` when nothing is dragged. */
+  offset: number | undefined;
+  dragged: boolean;
+  onPointerDown: (event: ReactPointerEvent<HTMLLIElement>) => void;
+  onPointerMove: (event: ReactPointerEvent<HTMLLIElement>) => void;
+  onPointerUp: () => void;
+  /** Its own entrance or exit ended. */
+  onAnimationDone: () => void;
+  onKeyMove: (delta: -1 | 1) => void;
   onRename: (name: string) => void;
-  onMove: (delta: -1 | 1) => void;
   onRemove: () => void;
 }
 
-/** One of the user's scenes: its name renamed in place, moved a place, or deleted on a second press. */
-function SceneEntry({ scene, first, last, onRename, onMove, onRemove }: SceneEntryProps) {
+/** One of the user's scenes: dragged by its handle or its body, renamed in place, deleted on a second press. */
+function SceneEntry({
+  scene,
+  entering,
+  leaving,
+  offset,
+  dragged,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onAnimationDone,
+  onKeyMove,
+  onRename,
+  onRemove,
+}: SceneEntryProps) {
   const { t } = useTranslation();
   const name = sceneName(scene, t);
   const available = isSceneAvailable(scene);
   const noteId = useId();
+  const hintId = useId();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [armed, setArmed] = useState(false);
@@ -191,7 +340,41 @@ function SceneEntry({ scene, first, last, onRename, onMove, onRemove }: SceneEnt
   };
 
   return (
-    <li className={styles.row} data-unavailable={!available || undefined} data-testid={`scene-entry-${scene.id}`}>
+    <li
+      className={styles.row}
+      data-unavailable={!available || undefined}
+      data-entering={entering || undefined}
+      data-leaving={leaving || undefined}
+      data-dragged={dragged || undefined}
+      data-flip-id={scene.id}
+      style={offset === undefined ? undefined : { transform: `translateY(${offset}px)` }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onAnimationEnd={(event) => {
+        if (event.target === event.currentTarget) onAnimationDone();
+      }}
+      data-testid={`scene-entry-${scene.id}`}
+    >
+      <button
+        type="button"
+        className={styles.handle}
+        data-handle
+        aria-label={t("lights:scenes.reorder", { name })}
+        aria-describedby={hintId}
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+          event.preventDefault();
+          onKeyMove(event.key === "ArrowUp" ? -1 : 1);
+        }}
+        data-testid={`scene-handle-${scene.id}`}
+      >
+        <IconDragHandle />
+      </button>
+      <span id={hintId} className="sr-only">
+        {t("lights:scenes.reorderHint")}
+      </span>
       <span className={styles.swatch} style={{ background: sceneSwatch(scene) }} aria-hidden />
       {editing ? (
         <input
@@ -237,31 +420,16 @@ function SceneEntry({ scene, first, last, onRename, onMove, onRemove }: SceneEnt
           onClick={open}
           data-testid={`scene-rename-${scene.id}`}
         />
-        {/* aria-disabled, not disabled: a move to the edge keeps focus on the button it pressed. */}
-        <IconButton
-          className={styles.action}
-          label={t("lights:scenes.moveUp", { name })}
-          icon={<IconChevronUp />}
-          aria-disabled={first || undefined}
-          onClick={() => {
-            if (!first) onMove(-1);
-          }}
-          data-testid={`scene-up-${scene.id}`}
-        />
-        <IconButton
-          className={styles.action}
-          label={t("lights:scenes.moveDown", { name })}
-          icon={<IconChevronDown />}
-          aria-disabled={last || undefined}
-          onClick={() => {
-            if (!last) onMove(1);
-          }}
-          data-testid={`scene-down-${scene.id}`}
-        />
         <IconButton
           className={styles.action}
           label={armed ? t("lights:scenes.removeConfirm", { name }) : t("lights:scenes.remove", { name })}
-          icon={armed ? <IconCheck /> : <IconTrash />}
+          icon={
+            <SpinSwap
+              value={armed ? "armed" : "rest"}
+              turn={(value) => (value === "armed" ? "cw" : "ccw")}
+              render={(value) => (value === "armed" ? <IconCheck /> : <IconTrash />)}
+            />
+          }
           aria-describedby={available ? undefined : noteId}
           data-danger={armed || undefined}
           onClick={() => (armed ? onRemove() : setArmed(true))}

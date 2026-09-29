@@ -72,6 +72,12 @@ function renderScenes(mode: LightingModeConfig, onApply = vi.fn<Apply>(), disabl
   return onApply;
 }
 
+/** A row's fold has had its time (the test DOM runs no animation), and a frame after it. */
+async function settle() {
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
 async function openLibrary() {
   await act(async () => fireEvent.click(screen.getByTestId("scene-library-open")));
   return screen.getByRole("dialog");
@@ -178,39 +184,78 @@ describe("Scenes", () => {
 });
 
 describe("the scene library", () => {
-  it("adds a suggested scene that is not in the list yet", async () => {
+  it("adds a suggested scene once its row has folded away, and the new one grows in", async () => {
     seed([]);
     renderScenes(OFF);
     const library = await openLibrary();
     await act(async () => fireEvent.click(within(library).getByTestId("scene-add-fireplace")));
+    // The suggestion folds first; the list changes when it has gone.
+    expect(getScenes()).toEqual([]);
+    await act(settle);
     expect(getScenes()).toEqual([expect.objectContaining({ suggestedId: "fireplace", kind: "effect" })]);
     expect(within(library).queryByTestId("scene-add-fireplace")).not.toBeInTheDocument();
+    const id = getScenes()[0]!.id;
+    expect(within(library).getByTestId(`scene-entry-${id}`)).toHaveAttribute("data-entering");
+    expect(screen.getByTestId(`scene-${id}`)).toHaveAttribute("data-arrived");
   });
 
-  it("moves a scene a place", async () => {
+  it("opens with nothing arriving: the list already there does not grow in", async () => {
+    seed([mine("a", "One")]);
+    renderScenes(OFF);
+    const library = await openLibrary();
+    expect(within(library).getByTestId("scene-entry-a")).not.toHaveAttribute("data-entering");
+    expect(screen.getByTestId("scene-a")).not.toHaveAttribute("data-arrived");
+  });
+
+  it("sorts by dragging a row: the others step aside, and the drop is the new order", async () => {
+    seed([mine("a", "One"), mine("b", "Two"), mine("c", "Three")]);
+    renderScenes(OFF);
+    const library = await openLibrary();
+    const row = within(library).getByTestId("scene-entry-a");
+    fireEvent.pointerDown(row, { button: 0, clientY: 10, pointerId: 1 });
+    fireEvent.pointerMove(row, { clientY: 12, pointerId: 1 });
+    // Under the slop a press is still a press.
+    expect(row).not.toHaveAttribute("data-dragged");
+    fireEvent.pointerMove(row, { clientY: 10 + 36 * 2, pointerId: 1 });
+    expect(row).toHaveAttribute("data-dragged");
+    expect(row.style.transform).toBe("translateY(72px)");
+    expect(within(library).getByTestId("scene-entry-b").style.transform).toBe("translateY(-36px)");
+    await act(async () => fireEvent.pointerUp(row, { pointerId: 1 }));
+    expect(getScenes().map((s) => s.id)).toEqual(["b", "c", "a"]);
+    expect(within(library).getByTestId("scene-entry-a").style.transform).toBe("");
+  });
+
+  it("leaves the order alone when a drag ends where it began, or starts on a button", async () => {
     seed([mine("a", "One"), mine("b", "Two")]);
     renderScenes(OFF);
     const library = await openLibrary();
-    await act(async () => fireEvent.click(within(library).getByTestId("scene-up-a")));
+    const row = within(library).getByTestId("scene-entry-a");
+    fireEvent.pointerDown(row, { button: 0, clientY: 10, pointerId: 1 });
+    fireEvent.pointerMove(row, { clientY: 20, pointerId: 1 });
+    await act(async () => fireEvent.pointerUp(row, { pointerId: 1 }));
+    fireEvent.pointerDown(within(library).getByTestId("scene-rename-a"), { button: 0, clientY: 10, pointerId: 2 });
+    fireEvent.pointerMove(row, { clientY: 100, pointerId: 2 });
+    await act(async () => fireEvent.pointerUp(row, { pointerId: 2 }));
     expect(getScenes().map((s) => s.id)).toEqual(["a", "b"]);
-    expect(within(library).getByTestId("scene-up-a")).toHaveAttribute("aria-disabled", "true");
-    await act(async () => fireEvent.click(within(library).getByTestId("scene-down-a")));
-    expect(getScenes().map((s) => s.id)).toEqual(["b", "a"]);
+    expect(writes).toHaveLength(0);
   });
 
-  it("takes focus when it opens, and keeps it on the move button that was pressed", async () => {
+  it("moves a scene with the arrow keys on its handle, keeping focus there and saying where it went", async () => {
     seed([mine("a", "One"), mine("b", "Two")]);
     renderScenes(OFF);
     const library = await openLibrary();
     expect(within(library).getByTestId("scene-library")).toHaveFocus();
-    const down = within(library).getByTestId("scene-down-a");
-    down.focus();
+    const handle = within(library).getByTestId("scene-handle-a");
+    handle.focus();
+    await act(async () => fireEvent.keyDown(handle, { key: "ArrowUp" }));
+    expect(getScenes().map((s) => s.id)).toEqual(["a", "b"]);
     await act(async () => {
-      fireEvent.click(down);
+      fireEvent.keyDown(handle, { key: "ArrowDown" });
       await new Promise((resolve) => requestAnimationFrame(resolve));
     });
-    // Now last: still focused, not dropped to the page.
-    expect(within(library).getByTestId("scene-down-a")).toHaveFocus();
+    expect(getScenes().map((s) => s.id)).toEqual(["b", "a"]);
+    expect(within(library).getByTestId("scene-handle-a")).toHaveFocus();
+    expect(within(library).getByText("lights:scenes.movedTo(One)")).toBeInTheDocument();
   });
 
   it("closes and hands focus back when focus leaves it for the page's end", async () => {
@@ -238,7 +283,7 @@ describe("the scene library", () => {
     }
   });
 
-  it("deletes on the second press only", async () => {
+  it("deletes on the second press only, once the row has folded away", async () => {
     seed([mine("a", "One"), mine("b", "Two")]);
     renderScenes(OFF);
     const library = await openLibrary();
@@ -247,6 +292,8 @@ describe("the scene library", () => {
     expect(getScenes()).toHaveLength(2);
     expect(remove).toHaveAccessibleName("lights:scenes.removeConfirm(One)");
     await act(async () => fireEvent.click(remove));
+    expect(within(library).getByTestId("scene-entry-a")).toHaveAttribute("data-leaving");
+    await act(settle);
     expect(getScenes().map((s) => s.id)).toEqual(["b"]);
   });
 
@@ -257,10 +304,8 @@ describe("the scene library", () => {
     const remove = within(library).getByTestId("scene-remove-a");
     remove.focus();
     await act(async () => fireEvent.click(remove));
-    await act(async () => {
-      fireEvent.click(remove);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-    });
+    await act(async () => fireEvent.click(remove));
+    await act(settle);
     expect(getScenes().map((s) => s.id)).toEqual(["b"]);
     expect(within(library).getByTestId("scene-library")).toHaveFocus();
   });
