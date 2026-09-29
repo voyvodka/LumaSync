@@ -1,6 +1,19 @@
 @layer components {
   /* The library: two short lists in the popover; the second scrolls when the first is long. */
-  .library { display: flex; flex-direction: column; max-height: min(420px, 58vh); overflow-y: auto; outline: none; }
+  /* Scrolls edge to edge: it reaches over the popover's padding and gives it back inside, so the
+     scrollbar runs along the popover's border rather than floating in from it. */
+  .library {
+    display: flex;
+    flex-direction: column;
+    max-height: min(420px, 58vh);
+    margin: -8px;
+    padding: 8px;
+    overflow-y: auto;
+    border-radius: 11px;
+    outline: none;
+    scrollbar-width: thin;
+    scrollbar-color: var(--lm-line-2) transparent;
+  }
   .heading {
     margin: 6px 6px 4px;
     color: var(--lm-ink-dim);
@@ -33,6 +46,8 @@
     box-shadow: 0 8px 20px rgb(0 0 0 / 45%), inset 0 0 0 1px var(--lm-line-2);
     transition: none;
   }
+  /* A suggestion has no handle; this holds its place so every swatch lines up. */
+  .handleSpace { flex-shrink: 0; width: 16px; }
   .handle {
     display: grid;
     flex-shrink: 0;

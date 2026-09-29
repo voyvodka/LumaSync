@@ -242,6 +242,7 @@ export function SceneLibrary({ scenes, anchorRef, onClose }: SceneLibraryProps) 
                     if (event.target === event.currentTarget && leaving.has(key)) finishLeave(key);
                   }}
                 >
+                  <span className={styles.handleSpace} aria-hidden />
                   <span className={styles.swatch} style={{ background: sceneSwatch(preview) }} aria-hidden />
                   <span className={styles.name}>{name}</span>
                   <IconButton
