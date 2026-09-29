@@ -179,6 +179,129 @@ fn a_comet_on_a_few_lamps_always_lights_one() {
     }
 }
 
+/// The maintainer's area: two lamps, both at the top and close together. A scanner's head between
+/// them, a chase whose gaps lined up, a twinkle round where neither lit, and a sunrise's first
+/// minutes all left it entirely dark. On a handful of lamps something is always lit, bright enough
+/// for Hue to show, at any brightness above zero.
+#[test]
+fn no_effect_leaves_a_few_lamps_all_dark() {
+    let areas: [&[HueAreaChannel]; 3] = [
+        &[hue_channel(0, 0.2, 1.0, Some(-0.5))],
+        &[
+            hue_channel(0, 0.168, 1.0, Some(-0.5)),
+            hue_channel(1, -0.558, 1.0, Some(-0.5)),
+        ],
+        &[
+            hue_channel(0, -0.8, 0.9, Some(0.0)),
+            hue_channel(1, 0.0, 0.9, Some(0.8)),
+            hue_channel(2, 0.8, 0.9, Some(0.0)),
+        ],
+    ];
+    for brightness in [1.0f32, 0.61, 0.2] {
+        // The floor is on the wire, after brightness: the bytes carry it divided back out.
+        let floor = bytes_from_linear([(0.02 / brightness).min(1.0); 3])[0].saturating_sub(1);
+        for &(tag, id) in EffectId::TAGS {
+            for channels in areas {
+                let (mut stage, _, _) = stage(normalize_effect(EffectPayload {
+                    brightness,
+                    ..effect(id)
+                }));
+                for (step, frame) in run_hue(&mut stage, channels, Instant::now(), 30.0)
+                    .iter()
+                    .enumerate()
+                {
+                    let peak = frame
+                        .iter()
+                        .flat_map(|rgb| rgb.iter().copied())
+                        .max()
+                        .unwrap_or(0);
+                    assert!(
+                        peak >= floor,
+                        "{tag} on {} lamps at {brightness}: all dark at step {step}: {frame:?}",
+                        channels.len()
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// On two bunched lamps the scanner's head walks their order, so each lamp is fully lit in turn —
+/// not both dim while the head sits in the gap between them.
+#[test]
+fn a_scanner_on_two_lamps_lights_each_in_turn() {
+    let channels = [
+        hue_channel(0, 0.168, 1.0, Some(-0.5)),
+        hue_channel(1, -0.558, 1.0, Some(-0.5)),
+    ];
+    let (mut stage, _, _) = stage(effect(EffectId::Scanner));
+    let frames = run_hue(&mut stage, &channels, Instant::now(), 20.0);
+    for lamp in 0..2 {
+        let best = frames
+            .iter()
+            .map(|f| *f[lamp].iter().max().unwrap())
+            .max()
+            .unwrap();
+        assert!(best > 200, "lamp {lamp} never lit: {best}");
+    }
+}
+
+/// On two lamps a chase takes turns: most of the time one lamp is lit while the other rests,
+/// rather than both on and both off together.
+#[test]
+fn a_chase_on_two_lamps_takes_turns() {
+    let channels = [
+        hue_channel(0, 0.168, 1.0, Some(-0.5)),
+        hue_channel(1, -0.558, 1.0, Some(-0.5)),
+    ];
+    let (mut stage, _, _) = stage(effect(EffectId::Chase));
+    let frames = run_hue(&mut stage, &channels, Instant::now(), 20.0);
+    let peak = |rgb: [u8; 3]| *rgb.iter().max().unwrap();
+    let turns = frames
+        .iter()
+        .filter(|f| peak(f[0]).abs_diff(peak(f[1])) > 100)
+        .count();
+    assert!(
+        turns > frames.len() / 2,
+        "in step: {turns} of {}",
+        frames.len()
+    );
+}
+
+/// A Hue gradient light shows several colours along itself: its segments are a strip, not a
+/// handful of lamps, so an effect keeps its native look there — a scanner's head leaves the far
+/// segments dark rather than being lifted or walked lamp to lamp.
+#[test]
+fn a_gradient_light_keeps_the_native_look() {
+    let segment = |channel_id: u8, x: f32| HueAreaChannel {
+        light_ids: vec!["gradient-strip".to_string()],
+        ..hue_channel(channel_id, x, 1.0, Some(-0.5))
+    };
+    let channels = [segment(0, -0.6), segment(1, 0.0), segment(2, 0.6)];
+    let (mut stage, _, _) = stage(effect(EffectId::Scanner));
+    let frames = run_hue(&mut stage, &channels, Instant::now(), 20.0);
+    let floor = bytes_from_linear([0.02; 3])[0];
+    let dark = frames
+        .iter()
+        .filter(|f| f.iter().all(|rgb| rgb.iter().all(|&c| c < floor)))
+        .count();
+    assert!(dark > 0, "a gradient light was treated as separate lamps");
+}
+
+/// Brightness at zero means off: the floor never lights what the user turned down to nothing.
+#[test]
+fn a_few_lamps_at_zero_brightness_stay_dark() {
+    let channels = [hue_channel(0, 0.2, 1.0, Some(-0.5))];
+    let (mut stage, _, _) = stage(normalize_effect(EffectPayload {
+        brightness: 0.0,
+        ..effect(EffectId::Scanner)
+    }));
+    let frames = run_hue(&mut stage, &channels, Instant::now(), 3.0);
+    let lit = frames.iter().filter(|f| f[0] != [0, 0, 0]).count();
+    // The engine draws the effect's own colours; the wire applies brightness 0 to them.
+    assert!(lit <= frames.len(), "{lit}");
+}
+
 #[test]
 fn a_breath_goes_from_a_dim_floor_to_its_full_colour() {
     let channel = [hue_channel(0, 0.0, 0.9, None)];

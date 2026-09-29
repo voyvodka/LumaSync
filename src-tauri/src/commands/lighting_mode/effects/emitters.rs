@@ -27,6 +27,10 @@ pub(crate) struct Emitter {
     /// a travelling effect hops light to light without a dark gap.
     pub u: f32,
     pub seed: u32,
+    /// A whole lamp that shows one colour. A strip LED is not, and neither is one segment of a
+    /// Hue gradient light: a light with several colours is a strip in its own right, and keeps an
+    /// effect's native look.
+    pub lamp: bool,
 }
 
 /// The screen in the cube: its centre and half extents along x and z.
@@ -93,6 +97,7 @@ pub(crate) fn strip_emitters(
                 ],
                 u: i as f32 / last,
                 seed: seed_of(&[1, i as u32]),
+                lamp: false,
             }
         })
         .collect()
@@ -109,6 +114,14 @@ pub(crate) fn hue_emitters(
     if let Some(g) = geometry {
         crate::commands::hue::sender::apply_channel_placements(&mut placed, &g.hue_placements);
     }
+    // A channel is a lamp of its own unless another channel drives the same light (a gradient
+    // light's segments share it).
+    let shared = |ch: &HueAreaChannel| {
+        placed.iter().any(|other| {
+            other.channel_id != ch.channel_id
+                && other.light_ids.iter().any(|id| ch.light_ids.contains(id))
+        })
+    };
     let mut emitters: Vec<Emitter> = placed
         .iter()
         .map(|ch| {
@@ -123,6 +136,7 @@ pub(crate) fn hue_emitters(
                 pos,
                 u: (angle / TAU).rem_euclid(1.0),
                 seed: seed_of(&[2, u32::from(ch.channel_id)]),
+                lamp: !shared(ch),
             }
         })
         .collect();

@@ -66,6 +66,17 @@ straight from what it drew; `sample_strip` returns nothing for the tick frame th
   evenly spaced, so a travelling effect hops lamp to lamp without a dark gap) and a seed. Extents
   are taken over all of them, so a wave crosses the strip and the room's lamps as one field. Nothing
   derives a sampling region from a light's distance to a surface.
+- *A few lamps are never all dark.* An effect drawn for many lights went fully dark for seconds on a
+  two-bulb area: a scanner's head in the gap between the lamps, a chase whose gaps lined up for
+  both, a twinkle round where neither lit, a sunrise's first minutes. A set of at most eight whole
+  lamps (`is_sparse`: every channel its own light) gets its own rules: after drawing, if every lamp
+  would show less than 2 % on the Hue wire (after brightness), the brightest is raised to that in
+  its own colour; the scanner walks the lamps' order; a chase makes the lamps its slots so they take
+  turns. Hue's own dimming floor is 0.2–5 % by model and the entertainment stream documents nothing
+  below it, so 2 % is a working floor, not a measured one. A strip, and a Hue gradient light (its
+  segments share one light, so it is a strip of its own), keep the native look. Brightness 0 is off
+  and stays off. Sunrise starts as an ember (a gain of 0.35 on its deep-red first stop) rather than
+  minutes of zero, on the strip too.
 - *Patterns and palettes.* A pattern (`patterns.rs`) gives each light a palette position and a
   perceptual level; the level is applied in linear light. Palettes blend in OKLCh — lightness and
   chroma move evenly and the hue takes the short way — because a straight OKLab line between distant

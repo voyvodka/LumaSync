@@ -18,7 +18,8 @@ https://keepachangelog.com/en/1.1.0/
   a few Hue lamps each get their own colour. A sunrise carries on where it was after a relaunch.
   Effects need no screen recording and are in the menu bar menu, the compact window, the LED
   preview popup and on ⌥4 (Alt+4). A build from before effects starts with the lights off if the
-  last mode was an effect.
+  last mode was an effect. On a few Hue bulbs an effect always keeps at least one lit, and a
+  sunrise starts as a dim ember instead of minutes of darkness.
 - Solid has a White tab: a colour temperature from 2000 to 6500 K.
 - Scenes: a row under the mode buttons, on Lights and in the compact window, where one press
   plays a whole look — Ambilight with its brightness, saturation and response, a colour or white,

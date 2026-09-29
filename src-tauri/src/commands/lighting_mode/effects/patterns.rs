@@ -28,6 +28,26 @@ pub(crate) struct EffectClock {
 /// The dimmest a breath or a twinkle's rest goes: dark reads as "off".
 const REST_LEVEL: f32 = 0.1;
 
+/// A handful of whole lamps (a Hue area of bulbs), each one colour. An effect drawn for many
+/// lights leaves a few of them dark for seconds at a time — a scanner's head between two lamps, a
+/// chase whose gaps line up — so such a set gets the rules below. A strip, or an area with a
+/// gradient light (several colours in one light), keeps the effect's native look.
+pub(crate) const SPARSE_MAX: usize = 8;
+
+/// Whether `set` is a few whole lamps, which the sparse rules are for.
+fn is_sparse(set: &[Emitter]) -> bool {
+    !set.is_empty() && set.len() <= SPARSE_MAX && set.iter().all(|e| e.lamp)
+}
+
+/// The least the brightest lamp of a small set shows, on the Hue wire (linear, after brightness).
+/// A lamp asked for less reads as off: Hue's own dimming floor is 0.2–5 % by model, and the
+/// entertainment stream documents nothing below it. docs/architecture/capture-and-pipeline.md
+const SPARSE_FLOOR: f32 = 0.02;
+
+/// Sunrise's gain at its first moment, so it starts as a visible ember rather than seconds of
+/// nothing; the palette itself starts at a deep red.
+const SUNRISE_EMBER: f32 = 0.35;
+
 /// Sunrise's own ramp: a dark red that warms through orange to a soft white.
 const SUNRISE_STOPS: [[u8; 3]; 6] = [
     [40, 2, 0],
@@ -106,10 +126,56 @@ impl Frame<'_> {
     /// which keeps its capacity from step to step.
     pub(crate) fn render_into(&self, set: &[Emitter], out: &mut Vec<[u8; 3]>) {
         out.clear();
-        out.extend(set.iter().map(|e| bytes_from_linear(self.at(e, set.len()))));
+        let sparse = is_sparse(set);
+        if !sparse {
+            out.extend(
+                set.iter()
+                    .map(|e| bytes_from_linear(self.at(e, set.len(), false))),
+            );
+            return;
+        }
+        // On the stack: a step allocates nothing.
+        let mut lit = [[0.0; 3]; SPARSE_MAX];
+        for (i, e) in set.iter().enumerate() {
+            lit[i] = self.at(e, set.len(), true);
+        }
+        self.keep_one_lit(&mut lit[..set.len()], set);
+        out.extend(lit[..set.len()].iter().map(|&rgb| bytes_from_linear(rgb)));
     }
 
-    fn at(&self, e: &Emitter, set_len: usize) -> Linear {
+    /// A few lamps are never all dark while the brightness is up: when every lamp would show less
+    /// than Hue can, the brightest is raised to the floor in its own colour — or, if it is black,
+    /// in the palette's colour for its place.
+    fn keep_one_lit(&self, lit: &mut [Linear], set: &[Emitter]) {
+        let brightness = self.effect.brightness;
+        if brightness.is_nan() || brightness <= 0.0 {
+            return;
+        }
+        let peak = |rgb: &Linear| rgb[0].max(rgb[1]).max(rgb[2]);
+        let Some((top, level)) = lit
+            .iter()
+            .map(peak)
+            .enumerate()
+            .max_by(|a, b| a.1.total_cmp(&b.1))
+        else {
+            return;
+        };
+        let floor = (SPARSE_FLOOR / brightness).min(1.0);
+        if level >= floor {
+            return;
+        }
+        let colour = if level > 1e-6 {
+            lit[top]
+        } else {
+            self.palette.at(set[top].u)
+        };
+        let own = peak(&colour);
+        if own > 0.0 {
+            lit[top] = colour.map(|c| c * floor / own);
+        }
+    }
+
+    fn at(&self, e: &Emitter, set_len: usize, sparse: bool) -> Linear {
         let phase = self.phase();
         let loops = self.clock.loops;
         let direction = self.effect.direction.unwrap_or_default();
@@ -203,12 +269,28 @@ impl Frame<'_> {
             }
             EffectId::Scanner => {
                 let head = 1.0 - (2.0 * phase - 1.0).abs();
-                let width = (0.02 + 0.2 * self.size()).max(0.6 / set_len.max(1) as f32);
-                let level = (1.0 - (x - head).abs() / width).max(0.0).powf(1.5);
+                // A few lamps sit wherever the room puts them, often bunched: the head walks
+                // their order instead, from the first to the last, so it reaches every one.
+                let (at, width) = if sparse {
+                    let last = (set_len.max(2) - 1) as f32;
+                    (e.u * set_len as f32 / last, 1.2 / set_len.max(1) as f32)
+                } else {
+                    (
+                        x,
+                        (0.02 + 0.2 * self.size()).max(0.6 / set_len.max(1) as f32),
+                    )
+                };
+                let level = (1.0 - (at - head).abs() / width).max(0.0).powf(1.5);
                 scaled(self.palette.at(0.5), level)
             }
             EffectId::Chase => {
-                let count = (2.0 + ((1.0 - self.size()) * 10.0).round()).min(set_len.max(1) as f32);
+                // On a few lamps the lamps themselves are the slots, so they take turns rather
+                // than going dark together whenever the gaps line up.
+                let count = if sparse {
+                    1.0
+                } else {
+                    (2.0 + ((1.0 - self.size()) * 10.0).round()).min(set_len.max(1) as f32)
+                };
                 let slot = e.u * count - phase * 2.0;
                 let s = slot.rem_euclid(1.0);
                 let on = smoothstep(0.0, 0.08, s) * (1.0 - smoothstep(0.42, 0.5, s));
@@ -233,7 +315,10 @@ impl Frame<'_> {
                     .started_at_ms
                     .map_or(0, |start| self.clock.unix_ms.saturating_sub(start));
                 let progress = (elapsed_ms as f64 / (minutes * 60_000.0)).clamp(0.0, 1.0) as f32;
-                scaled(SUNRISE.at(progress), 0.04 + 0.96 * progress.powf(1.2))
+                // Gain in linear light: the colour already climbs from a deep red, so this only
+                // lifts it, from an ember that shows to full.
+                let gain = SUNRISE_EMBER + (1.0 - SUNRISE_EMBER) * progress.powf(1.5);
+                SUNRISE.at(progress).map(|c| c * gain)
             }
             EffectId::NaturalLight => {
                 let (kelvin, level) = daylight(self.clock.day_hours);
