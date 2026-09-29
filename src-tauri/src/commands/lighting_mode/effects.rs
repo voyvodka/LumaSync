@@ -141,6 +141,12 @@ impl EffectStage {
         }
     }
 
+    /// The least the Hue output shows on the wire before brightness, when it is a few whole lamps.
+    pub(crate) fn hue_wire_floor(&self) -> Option<f32> {
+        let lights = self.lights.as_ref()?;
+        patterns::sparse_wire_floor(&lights.hue, self.effect.brightness)
+    }
+
     /// The room or the Hue channels changed: resolve the lights again.
     pub(crate) fn invalidate(&mut self) {
         self.lights = None;

@@ -1833,6 +1833,75 @@ fn frame_budget_report() {
 /// An effect step next to the strip and six Hue channels allocates nothing once
 /// warm: the payload is copied and the palette rebuilt only on a retune, and
 /// every output buffer keeps its capacity.
+/// What reaches the Hue wire on a two-bulb area, after the engine, the smoother and the correction:
+/// never all below 2 % for any effect at a middling brightness. The engine's floor alone passed
+/// its own test while the wire sat about a fifth short (sRGB out, gamma 2.2 back in), and a floor
+/// that jumped between lamps dipped while the smoother handed over.
+#[test]
+fn a_few_bulbs_never_go_dark_on_the_wire() {
+    use super::effects::{EffectClockSlot, EffectDraw};
+
+    let led_calibration = strip_164();
+    let channels: Vec<HueAreaChannel> = [(0u8, 0.168f32), (1, -0.558)]
+        .into_iter()
+        .map(|(i, x)| HueAreaChannel {
+            channel_id: i,
+            light_ids: vec![format!("light-{i}")],
+            screen_region: HueScreenRegion::Center,
+            position_x: x,
+            position_y: 1.0,
+            position_z: Some(-0.5),
+        })
+        .collect();
+    let brightness = 0.61f32;
+    for &(tag, id) in super::config::EffectId::TAGS {
+        let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
+            led_sequence: build_led_sequence(&led_calibration),
+            led_counts: led_calibration.counts.clone(),
+            sample_window: SYNTHETIC_SAMPLE_WINDOW,
+            scene_enabled: false,
+            strip_topology: strip_topology_for(Some(&led_calibration)),
+            hue_channels: Some(channels.clone()),
+            room_geometry: RoomGeometryLive::new(None),
+            black_border_detection: false,
+            color_correction: ColorCorrectionConfig::default(),
+            effect: Some(EffectDraw {
+                live: Arc::new(Mutex::new(super::config::normalize_effect(
+                    super::EffectPayload {
+                        id,
+                        brightness,
+                        ..super::config::DEFAULT_EFFECT
+                    },
+                ))),
+                clock: EffectClockSlot::default(),
+            }),
+        });
+        let tick = CapturedFrame::new(1, 1, vec![[0, 0, 0]]);
+        let settings = FrameSettings {
+            black_border_detection: false,
+            alpha_ceiling: 1.0,
+            saturation: 1.0,
+        };
+        let start = Instant::now();
+        for n in 0..400u64 {
+            let now = start + Duration::from_millis(n * 40);
+            let sampled = pipeline.sample_strip(&tick);
+            pipeline.analyze(&tick, sampled, settings, now);
+            pipeline.advance(now);
+            // The smoother starts from black: give it two seconds to arrive.
+            if n < 50 {
+                continue;
+            }
+            let colours = pipeline.hue_colors().expect("hue colours");
+            let wire = colours.iter().flatten().fold(0.0f32, |a, &c| a.max(c)) * brightness;
+            assert!(
+                wire >= 0.019,
+                "{tag}: {wire:.4} on the wire at step {n}: {colours:?}"
+            );
+        }
+    }
+}
+
 #[test]
 fn a_steady_effect_step_allocates_nothing() {
     use super::effects::{EffectClockSlot, EffectDraw};

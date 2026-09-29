@@ -9,7 +9,7 @@ use std::sync::LazyLock;
 use super::catalogue::CATALOGUE;
 use super::emitters::{Bounds, Emitter};
 use super::noise::{fbm1, fbm2, hash01};
-use super::palette::{bytes_from_linear, linear_from_bytes, Linear, Palette};
+use super::palette::{bytes_from_linear, linear_from_bytes, srgb_to_linear, Linear, Palette};
 use crate::commands::led_output::kelvin_to_rgb_multipliers;
 use crate::commands::lighting_mode::config::{EffectDirection, EffectId, EffectPayload};
 
@@ -34,19 +34,29 @@ const REST_LEVEL: f32 = 0.1;
 /// gradient light (several colours in one light), keeps the effect's native look.
 pub(crate) const SPARSE_MAX: usize = 8;
 
+/// The least a few whole lamps show on the Hue wire before brightness, or `None` when `set` is not
+/// a few lamps or the brightness is off. The pipeline holds its smoothed, corrected output to it;
+/// the engine's own floor is only the target, and a smoother handing over between two lamps dips
+/// under it.
+pub(crate) fn sparse_wire_floor(set: &[Emitter], brightness: f32) -> Option<f32> {
+    (is_sparse(set) && brightness.is_finite() && brightness > 0.0)
+        .then(|| (SPARSE_FLOOR / brightness).min(1.0))
+}
+
 /// Whether `set` is a few whole lamps, which the sparse rules are for.
 fn is_sparse(set: &[Emitter]) -> bool {
     !set.is_empty() && set.len() <= SPARSE_MAX && set.iter().all(|e| e.lamp)
 }
 
-/// The least the brightest lamp of a small set shows, on the Hue wire (linear, after brightness).
+/// The least the brightest lamp of a few shows on the Hue wire (after brightness, peak channel).
 /// A lamp asked for less reads as off: Hue's own dimming floor is 0.2–5 % by model, and the
 /// entertainment stream documents nothing below it. docs/architecture/capture-and-pipeline.md
 const SPARSE_FLOOR: f32 = 0.02;
 
-/// Sunrise's gain at its first moment, so it starts as a visible ember rather than seconds of
-/// nothing; the palette itself starts at a deep red.
-const SUNRISE_EMBER: f32 = 0.35;
+/// The gamma the output path decodes the engine's bytes with (`correct_precise`, default
+/// correction). The engine encodes with sRGB, and the two part in the dark: a floor set in the
+/// engine's linear light reached the wire about a fifth short.
+const WIRE_GAMMA: f32 = 2.2;
 
 /// Sunrise's own ramp: a dark red that warms through orange to a soft white.
 const SUNRISE_STOPS: [[u8; 3]; 6] = [
@@ -143,35 +153,37 @@ impl Frame<'_> {
         out.extend(lit[..set.len()].iter().map(|&rgb| bytes_from_linear(rgb)));
     }
 
-    /// A few lamps are never all dark while the brightness is up: when every lamp would show less
-    /// than Hue can, the brightest is raised to the floor in its own colour — or, if it is black,
-    /// in the palette's colour for its place.
+    /// A few lamps are never all dark while the brightness is up: when even the brightest would
+    /// show less than Hue can, every lamp is raised by the same factor until it shows the floor —
+    /// the same factor for all, so the frame's shape holds and nothing jumps when another lamp
+    /// becomes the brightest. All black, each lamp takes the palette's colour for its place.
     fn keep_one_lit(&self, lit: &mut [Linear], set: &[Emitter]) {
         let brightness = self.effect.brightness;
         if brightness.is_nan() || brightness <= 0.0 {
             return;
         }
         let peak = |rgb: &Linear| rgb[0].max(rgb[1]).max(rgb[2]);
-        let Some((top, level)) = lit
-            .iter()
-            .map(peak)
-            .enumerate()
-            .max_by(|a, b| a.1.total_cmp(&b.1))
-        else {
-            return;
-        };
-        let floor = (SPARSE_FLOOR / brightness).min(1.0);
+        let level = lit.iter().map(peak).fold(0.0f32, f32::max);
+        // The floor in the engine's light: the byte that decodes to it on the wire, rounded up.
+        let wire = (SPARSE_FLOOR / brightness).min(1.0);
+        let byte = (wire.powf(1.0 / WIRE_GAMMA) * 255.0).ceil().min(255.0);
+        let floor = srgb_to_linear(byte / 255.0);
         if level >= floor {
             return;
         }
-        let colour = if level > 1e-6 {
-            lit[top]
-        } else {
-            self.palette.at(set[top].u)
-        };
-        let own = peak(&colour);
-        if own > 0.0 {
-            lit[top] = colour.map(|c| c * floor / own);
+        if level > 1e-6 {
+            let gain = floor / level;
+            for rgb in lit.iter_mut() {
+                rgb.clone_from(&rgb.map(|c| (c * gain).min(1.0)));
+            }
+            return;
+        }
+        for (i, e) in set.iter().enumerate() {
+            let colour = self.palette.at(e.u);
+            let own = peak(&colour);
+            if own > 0.0 {
+                lit[i] = colour.map(|c| c * floor / own);
+            }
         }
     }
 
@@ -315,10 +327,7 @@ impl Frame<'_> {
                     .started_at_ms
                     .map_or(0, |start| self.clock.unix_ms.saturating_sub(start));
                 let progress = (elapsed_ms as f64 / (minutes * 60_000.0)).clamp(0.0, 1.0) as f32;
-                // Gain in linear light: the colour already climbs from a deep red, so this only
-                // lifts it, from an ember that shows to full.
-                let gain = SUNRISE_EMBER + (1.0 - SUNRISE_EMBER) * progress.powf(1.5);
-                SUNRISE.at(progress).map(|c| c * gain)
+                scaled(SUNRISE.at(progress), 0.04 + 0.96 * progress.powf(1.2))
             }
             EffectId::NaturalLight => {
                 let (kelvin, level) = daylight(self.clock.day_hours);

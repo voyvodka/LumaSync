@@ -376,6 +376,24 @@ impl AmbilightFramePipeline {
                 .iter()
                 .map(|&rgb| plan.correct_precise(rgb)),
         );
+        self.hold_hue_floor();
+    }
+
+    /// An effect on a few bulbs is never all dark on the wire: after smoothing and correction —
+    /// what the bridge will actually get — every lamp is raised by one factor until the brightest
+    /// shows the floor. docs/architecture/capture-and-pipeline.md ("A few lamps are never all dark")
+    fn hold_hue_floor(&mut self) {
+        let Some(floor) = self.effect.as_ref().and_then(EffectStage::hue_wire_floor) else {
+            return;
+        };
+        let level = self.hue_out.iter().flatten().fold(0.0f32, |a, &c| a.max(c));
+        if level <= 1e-6 || level >= floor {
+            return;
+        }
+        let gain = floor / level;
+        for rgb in self.hue_out.iter_mut() {
+            rgb.clone_from(&rgb.map(|c| (c * gain).min(1.0)));
+        }
     }
 
     fn refresh_strip_out(&mut self) {

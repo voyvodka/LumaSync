@@ -69,14 +69,18 @@ straight from what it drew; `sample_strip` returns nothing for the tick frame th
 - *A few lamps are never all dark.* An effect drawn for many lights went fully dark for seconds on a
   two-bulb area: a scanner's head in the gap between the lamps, a chase whose gaps lined up for
   both, a twinkle round where neither lit, a sunrise's first minutes. A set of at most eight whole
-  lamps (`is_sparse`: every channel its own light) gets its own rules: after drawing, if every lamp
-  would show less than 2 % on the Hue wire (after brightness), the brightest is raised to that in
-  its own colour; the scanner walks the lamps' order; a chase makes the lamps its slots so they take
-  turns. Hue's own dimming floor is 0.2–5 % by model and the entertainment stream documents nothing
-  below it, so 2 % is a working floor, not a measured one. A strip, and a Hue gradient light (its
-  segments share one light, so it is a strip of its own), keep the native look. Brightness 0 is off
-  and stays off. Sunrise starts as an ember (a gain of 0.35 on its deep-red first stop) rather than
-  minutes of zero, on the strip too.
+  lamps (`is_sparse`: every channel its own light) gets its own rules. The scanner walks the lamps'
+  order and a chase makes the lamps its slots, so they take turns. The floor itself is held where
+  it counts — on the smoothed, corrected Hue output (`hold_hue_floor`), not only in the engine: a
+  floor set in the engine's light reached the wire about a fifth short (sRGB out, the correction's
+  gamma 2.2 back in), and a smoother handing over between two lamps dipped under it. When even the
+  brightest lamp would show under 2 % on the wire (after brightness), every lamp is raised by one
+  factor, so the frame keeps its shape and nothing jumps when another lamp becomes the brightest;
+  the engine seeds an all-black frame with the palette's colours. Hue's own dimming floor is
+  0.2–5 % by model and the entertainment stream documents nothing below it, so 2 % of the peak
+  channel is a working floor, not a measured one, and a deep colour shows dimmer than a pale one at
+  it. A strip and a Hue gradient light (its segments share one light, so it is a strip of its own)
+  keep the native look, as does an area of nine or more lamps. Brightness 0 is off and stays off.
 - *Patterns and palettes.* A pattern (`patterns.rs`) gives each light a palette position and a
   perceptual level; the level is applied in linear light. Palettes blend in OKLCh — lightness and
   chroma move evenly and the hue takes the short way — because a straight OKLab line between distant

@@ -288,18 +288,23 @@ fn a_gradient_light_keeps_the_native_look() {
     assert!(dark > 0, "a gradient light was treated as separate lamps");
 }
 
-/// Brightness at zero means off: the floor never lights what the user turned down to nothing.
+/// Brightness at zero means off: the floor never lights what the user turned down to nothing. The
+/// same scanner that is lifted at full brightness is left dark whenever its head is away.
 #[test]
 fn a_few_lamps_at_zero_brightness_stay_dark() {
     let channels = [hue_channel(0, 0.2, 1.0, Some(-0.5))];
-    let (mut stage, _, _) = stage(normalize_effect(EffectPayload {
-        brightness: 0.0,
-        ..effect(EffectId::Scanner)
-    }));
-    let frames = run_hue(&mut stage, &channels, Instant::now(), 3.0);
-    let lit = frames.iter().filter(|f| f[0] != [0, 0, 0]).count();
-    // The engine draws the effect's own colours; the wire applies brightness 0 to them.
-    assert!(lit <= frames.len(), "{lit}");
+    let dark_frames = |brightness: f32| {
+        let (mut stage, _, _) = stage(normalize_effect(EffectPayload {
+            brightness,
+            ..effect(EffectId::Breathe)
+        }));
+        run_hue(&mut stage, &channels, Instant::now(), 6.0)
+            .iter()
+            .filter(|f| f[0].iter().all(|&c| c < 20))
+            .count()
+    };
+    assert!(dark_frames(0.0) > 0, "brightness 0 was lifted");
+    assert_eq!(dark_frames(1.0), 0, "brightness 1 went dark");
 }
 
 #[test]
@@ -363,7 +368,8 @@ fn a_sunrise_carries_on_from_its_saved_start() {
     let now = Instant::now();
     let half = run_hue(&mut resumed, &channel, now, 0.0)[0][0];
     let start = run_hue(&mut fresh, &channel, now, 0.0)[0][0];
-    assert!(luma(half) > luma(start) + 60.0, "{half:?} vs {start:?}");
+    // A lone lamp starts lifted to the floor, not black; half over is still far past it.
+    assert!(luma(half) > luma(start) + 40.0, "{half:?} vs {start:?}");
 }
 
 /// The start is stamped once, kept through a retune, and dropped by any other effect.
