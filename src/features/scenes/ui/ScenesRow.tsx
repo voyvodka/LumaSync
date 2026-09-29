@@ -5,7 +5,7 @@ import { useFlip } from "@/shared/lib/useFlip";
 import { useSideScroll } from "@/shared/lib/useSideScroll";
 
 import styles from "./ScenesRow.module.css";
-import { useArrivals } from "./useArrivals";
+import { useArrivals } from "@/shared/lib/useArrivals";
 
 export interface SceneChip {
   id: string;

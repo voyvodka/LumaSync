@@ -90,6 +90,34 @@ describe("EffectControls — full", () => {
   });
 });
 
+describe("EffectControls — a new effect's settings", () => {
+  it("fades in the settings the new effect brings, and keeps the one both share", () => {
+    const view = render(<EffectControls variant="full" effect={{ id: "sunrise", speed: 0.5, brightness: 1 }} onChange={() => {}} />);
+    view.rerender(<EffectControls variant="full" effect={{ id: "plasma", speed: 0.5, brightness: 1 }} onChange={() => {}} />);
+    const cellOf = (testId: string) => screen.getByTestId(testId).closest("[data-flip-id]");
+    expect(cellOf("effect-speed")).toHaveAttribute("data-entering");
+    expect(cellOf("effect-brightness")).not.toHaveAttribute("data-entering");
+    expect(screen.getByTestId("palette-party").closest("[data-flip-id]")).toHaveAttribute("data-entering");
+  });
+
+  it("brings the settings into view once they have their new height, after a pick in the gallery", () => {
+    vi.useFakeTimers();
+    const scrollIntoView = vi.fn<(options?: ScrollIntoViewOptions) => void>();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      render(<EffectControls variant="full" effect={{ id: "sunrise", speed: 0.5, brightness: 1 }} onChange={() => {}} />);
+      fireEvent.click(screen.getByTestId("effect-plasma"));
+      expect(scrollIntoView).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(240);
+      expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: "nearest" }));
+    } finally {
+      Element.prototype.scrollIntoView = original;
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("EffectControls — compact", () => {
   it("picks from a list instead of a gallery, with speed and brightness only", () => {
     render(<EffectControls variant="compact" effect={wave} onChange={() => {}} />);

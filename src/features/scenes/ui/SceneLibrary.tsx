@@ -29,7 +29,7 @@ import {
 } from "../model/sceneLibrary";
 import { editScenes } from "../state/scenesStore";
 import styles from "./SceneLibrary.module.css";
-import { useArrivals } from "./useArrivals";
+import { useArrivals } from "@/shared/lib/useArrivals";
 
 /** How long a delete waits for its second press: the webview does not always blur a clicked button. */
 const ARMED_MS = 3000;

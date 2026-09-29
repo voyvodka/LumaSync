@@ -3,6 +3,13 @@
      swatches carry light colours, since they are the lights. Nothing here moves on its own. */
   .effect { min-width: 0; }
 
+  /* The palettes and the effect's settings as one block, spaced like the stage around it. */
+  .settings { display: flex; flex-direction: column; gap: inherit; min-width: 0; }
+  .setting { min-width: 0; }
+  .setting[data-entering] { animation: setting-in var(--lm-dur-base) var(--lm-ease-out) var(--lm-dur-follow) backwards; }
+  @keyframes setting-in { from { opacity: 0; transform: translateY(4px); } }
+  :global(:root[data-reduced-motion]) .setting[data-entering] { animation: none; }
+
   /* ── Palettes ─────────────────────────────────────────────────────────── */
   .paletteRow {
     display: flex;
