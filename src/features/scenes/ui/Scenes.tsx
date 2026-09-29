@@ -25,14 +25,16 @@ import styles from "./ScenesRow.module.css";
 
 interface ScenesProps {
   mode: LightingModeConfig;
-  /** No output to light, a lock, or a choice in flight: the scenes cannot be played. */
+  /** No output to light, or a lock: the scenes cannot be played. */
   disabled: boolean;
+  /** A choice is in flight: a press waits for it, and nothing dims meanwhile. */
+  busy?: boolean;
   onApply: (next: LightingModeConfig) => void;
   dense?: boolean;
 }
 
 /** The user's scenes under the mode strip, with saving the running light and the library beside them. */
-export function Scenes({ mode, disabled, onApply, dense = false }: ScenesProps) {
+export function Scenes({ mode, disabled, busy = false, onApply, dense = false }: ScenesProps) {
   const { t } = useTranslation();
   const scenes = useScenes();
   const smoothing = usePreference("lightingIntensityPreset");
@@ -50,6 +52,7 @@ export function Scenes({ mode, disabled, onApply, dense = false }: ScenesProps) 
       : t("lights:scenes.save");
 
   const pick = async (id: string) => {
+    if (busy) return;
     const scene = scenes.find((s) => s.id === id);
     const config = scene ? toModeConfig(scene) : null;
     if (!scene || !config) return;

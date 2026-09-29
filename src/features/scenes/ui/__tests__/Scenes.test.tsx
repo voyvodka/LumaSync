@@ -136,6 +136,16 @@ describe("Scenes", () => {
     expect(getPreference("lightingIntensityPreset")).toBe("moderate");
   });
 
+  it("holds a press while a choice is in flight, without dimming the chips", async () => {
+    seed([mine("a", "Blue")]);
+    const onApply = vi.fn<Apply>();
+    render(<Scenes mode={OFF} disabled={false} busy onApply={onApply} />);
+    const chip = screen.getByRole("radio", { name: "Blue" });
+    expect(chip).toBeEnabled();
+    await act(async () => fireEvent.click(chip));
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
   it("does not play a scene this build cannot, nor any while disabled", () => {
     seed([{ id: "f", kind: "music" as never, name: "Future" }, mine("a", "Blue")]);
     renderScenes(OFF, vi.fn<Apply>(), true);

@@ -31,6 +31,11 @@ interface ModeStripProps {
   value: LightingModeKind | null;
   onSelect: (kind: LightingModeKind) => void;
   isDisabled?: (kind: LightingModeKind) => boolean;
+  /**
+   * A choice is in flight: a press is ignored until it lands, but nothing dims. Ambilight takes a
+   * few hundred milliseconds to start capture, and a strip that greyed out for it read as a stall.
+   */
+  busy?: boolean;
   /** What each mode is set to, under its name where the strip has room. */
   subtitles?: Partial<Record<LightingModeKind, string>>;
 }
@@ -40,7 +45,7 @@ interface ModeStripProps {
  * second line and shortcut as it narrows; one amber mark slides to the chosen mode. The popup keeps
  * its own buttons.
  */
-export function ModeStrip({ variant, value, onSelect, isDisabled, subtitles }: ModeStripProps) {
+export function ModeStrip({ variant, value, onSelect, isDisabled, busy = false, subtitles }: ModeStripProps) {
   const { t } = useTranslation();
   // The mark lands in place first and travels only after that, so opening a page moves nothing.
   const [placed, setPlaced] = useState(false);
@@ -48,6 +53,10 @@ export function ModeStrip({ variant, value, onSelect, isDisabled, subtitles }: M
     const frame = requestAnimationFrame(() => setPlaced(true));
     return () => cancelAnimationFrame(frame);
   }, []);
+
+  const select = (kind: LightingModeKind) => {
+    if (!busy) onSelect(kind);
+  };
 
   if (variant === "popup") {
     return (
@@ -68,7 +77,7 @@ export function ModeStrip({ variant, value, onSelect, isDisabled, subtitles }: M
           };
         })}
         value={value}
-        onChange={onSelect}
+        onChange={select}
         ariaLabel={t("common:mode.title")}
         className="lm-control-mode-strip"
         itemClassName="lm-control-mbtn"
@@ -107,13 +116,15 @@ export function ModeStrip({ variant, value, onSelect, isDisabled, subtitles }: M
       className={styles.strip}
       data-variant={variant}
       data-placed={placed || undefined}
+      data-busy={busy || undefined}
+      aria-busy={busy || undefined}
       style={{ "--n": MODE_KIND_ORDER.length, "--i": Math.max(index, 0) } as CSSProperties}
     >
       <span className={styles.mark} aria-hidden data-none={index < 0 || undefined} />
       <Segmented
         options={options}
         value={value}
-        onChange={onSelect}
+        onChange={select}
         ariaLabel={t("common:mode.title")}
         className={styles.group}
         itemClassName={styles.tile}

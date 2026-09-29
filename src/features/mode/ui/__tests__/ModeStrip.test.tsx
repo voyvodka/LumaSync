@@ -61,4 +61,16 @@ describe("ModeStrip", () => {
     const compact = render(<ModeStrip variant="compact" value={LIGHTING_MODE_KIND.OFF} onSelect={() => {}} />);
     expect(compact.container.querySelectorAll('[data-part="keybind"]')).toHaveLength(0);
   });
+
+  it("holds a press while a choice is in flight, without dimming a tile", async () => {
+    const onSelect = vi.fn<(kind: string) => void>();
+    const view = render(<ModeStrip variant="full" value={LIGHTING_MODE_KIND.OFF} busy onSelect={onSelect} />);
+    const ambilight = screen.getByTestId("mode-button-ambilight");
+    expect(ambilight).toBeEnabled();
+    await userEvent.click(ambilight);
+    expect(onSelect).not.toHaveBeenCalled();
+    view.rerender(<ModeStrip variant="full" value={LIGHTING_MODE_KIND.OFF} onSelect={onSelect} />);
+    await userEvent.click(screen.getByTestId("mode-button-ambilight"));
+    expect(onSelect).toHaveBeenCalledWith(LIGHTING_MODE_KIND.AMBILIGHT);
+  });
 });

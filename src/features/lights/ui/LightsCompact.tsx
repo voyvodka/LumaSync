@@ -61,7 +61,8 @@ export const LightsCompact = memo(function LightsCompact() {
     bootstrapDone,
   });
   const calibrationLocked = modeLockReason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED;
-  const nonOffLocked = isModeTransitioning || availability !== "ready" || calibrationLocked;
+  // A choice in flight is not a lock: the strip and scenes ignore presses then, without dimming.
+  const nonOffLocked = availability !== "ready" || calibrationLocked;
   const mode = normalizeLightingModeConfig(lightingMode);
 
   // Solid carries the saved targets; the other kinds apply to whatever is live.
@@ -83,10 +84,11 @@ export const LightsCompact = memo(function LightsCompact() {
       <ModeStrip
         variant="compact"
         value={mode.kind}
-        isDisabled={(kind) => (kind === LIGHTING_MODE_KIND.OFF ? isModeTransitioning : nonOffLocked)}
+        isDisabled={(kind) => kind !== LIGHTING_MODE_KIND.OFF && nonOffLocked}
+        busy={isModeTransitioning}
         onSelect={pickMode}
       />
-      <Scenes dense mode={mode} disabled={nonOffLocked} onApply={change} />
+      <Scenes dense mode={mode} disabled={nonOffLocked} busy={isModeTransitioning} onApply={change} />
       <ModeStage
         dense
         mode={mode}
