@@ -8,9 +8,9 @@ const reduced = vi.hoisted(() => ({ on: false }));
 vi.mock("../motion", () => ({ prefersReducedMotion: () => reduced.on }));
 
 /** Each item stands 40px under the one before it, wherever the DOM has put it. */
-function List({ ids }: { ids: string[] }) {
+function List({ ids, aliases, resize }: { ids: string[]; aliases?: Map<string, string>; resize?: boolean }) {
   const ref = useRef<HTMLUListElement | null>(null);
-  useFlip(ref, ids);
+  useFlip(ref, ids, { aliases, resize });
   return (
     <ul ref={ref}>
       {ids.map((id) => (
@@ -22,10 +22,11 @@ function List({ ids }: { ids: string[] }) {
   );
 }
 
-const animate = vi.fn<(keyframes: Keyframe[], options: KeyframeAnimationOptions) => void>();
+const animate = vi.fn<(keyframes: Keyframe[], options: KeyframeAnimationOptions) => Partial<Animation>>(() => ({}));
 
 function place() {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    if (this.tagName === "UL") return { left: 0, top: 0, height: this.children.length * 40 } as DOMRect;
     const index = [...(this.parentElement?.children ?? [])].indexOf(this);
     return { left: 0, top: index * 40 } as DOMRect;
   });
@@ -57,5 +58,31 @@ describe("useFlip", () => {
     reduced.on = true;
     view.rerender(<List ids={["c", "b", "a"]} />);
     expect(animate).not.toHaveBeenCalled();
+  });
+
+  it("sends an item that changed identity from its old self's place, marked while it travels", () => {
+    place();
+    const view = render(<List ids={["a", "s-x", "b"]} />);
+    view.rerender(<List ids={["a", "x", "b"]} aliases={new Map([["x", "s-x"]])} />);
+    // "x" took "s-x"'s place exactly: nothing to move.
+    expect(animate).not.toHaveBeenCalled();
+    view.rerender(<List ids={["x", "a", "b"]} aliases={new Map([["y", "a"]])} />);
+    expect(animate).toHaveBeenCalledTimes(2);
+
+    animate.mockClear();
+    const travel = render(<List ids={["a", "b", "s-y"]} />);
+    travel.rerender(<List ids={["y", "a", "b"]} aliases={new Map([["y", "s-y"]])} />);
+    const y = travel.container.querySelector('[data-flip-id="y"]')!;
+    expect(animate.mock.contexts).toContain(y);
+    expect(y).toHaveAttribute("data-flip-travelling");
+  });
+
+  it("lets the container's height follow when asked", () => {
+    place();
+    const view = render(<List ids={["a", "b"]} resize />);
+    view.rerender(<List ids={["a"]} resize />);
+    const ul = view.container.querySelector("ul")!;
+    const call = animate.mock.calls[animate.mock.contexts.indexOf(ul)];
+    expect(call?.[0]).toEqual([{ height: "80px" }, { height: "40px" }]);
   });
 });

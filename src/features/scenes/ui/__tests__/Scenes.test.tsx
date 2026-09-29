@@ -184,19 +184,29 @@ describe("Scenes", () => {
 });
 
 describe("the scene library", () => {
-  it("adds a suggested scene once its row has folded away, and the new one grows in", async () => {
+  it("adds a suggested scene at once: it travels up to the list rather than growing in there", async () => {
     seed([]);
     renderScenes(OFF);
     const library = await openLibrary();
     await act(async () => fireEvent.click(within(library).getByTestId("scene-add-fireplace")));
-    // The suggestion folds first; the list changes when it has gone.
-    expect(getScenes()).toEqual([]);
-    await act(settle);
     expect(getScenes()).toEqual([expect.objectContaining({ suggestedId: "fireplace", kind: "effect" })]);
     expect(within(library).queryByTestId("scene-add-fireplace")).not.toBeInTheDocument();
     const id = getScenes()[0]!.id;
-    expect(within(library).getByTestId(`scene-entry-${id}`)).toHaveAttribute("data-entering");
+    expect(within(library).getByTestId(`scene-entry-${id}`)).not.toHaveAttribute("data-entering");
+    // The chip behind the popover has no suggestion to come from: it grows in.
     expect(screen.getByTestId(`scene-${id}`)).toHaveAttribute("data-arrived");
+  });
+
+  it("puts a deleted suggestion back among the suggestions, fading in", async () => {
+    seed([{ id: "s", suggestedId: "movie", kind: "ambilight", ambilight: { brightness: 0.8 } }]);
+    renderScenes(OFF);
+    const library = await openLibrary();
+    expect(within(library).queryByTestId("scene-add-movie")).not.toBeInTheDocument();
+    const remove = within(library).getByTestId("scene-remove-s");
+    await act(async () => fireEvent.click(remove));
+    await act(async () => fireEvent.click(remove));
+    await act(settle);
+    expect(within(library).getByTestId("scene-add-movie").closest("li")).toHaveAttribute("data-entering");
   });
 
   it("opens with nothing arriving: the list already there does not grow in", async () => {

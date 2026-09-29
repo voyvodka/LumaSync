@@ -33,8 +33,8 @@ import { useArrivals } from "./useArrivals";
 
 /** How long a delete waits for its second press: the webview does not always blur a clicked button. */
 const ARMED_MS = 3000;
-/** A row's collapse; the edit lands when it ends, or after this where no animationend comes. */
-const LEAVE_FALLBACK_MS = 260;
+/** A deleted row's fade; the edit lands when it ends, or after this where no animationend comes. */
+const LEAVE_FALLBACK_MS = 200;
 /** Movement before a press on a row becomes a drag, so a click stays a click. */
 const DRAG_SLOP_PX = 4;
 /** A row's height where layout gives none (the test DOM). */
@@ -67,13 +67,20 @@ export function SceneLibrary({ scenes, anchorRef, onClose }: SceneLibraryProps) 
   const [announce, setAnnounce] = useState("");
   const rootRef = useRef<HTMLDivElement | null>(null);
   const pointer = useRef<(Drag & { startY: number; startScroll: number; height: number; moving: boolean }) | null>(null);
-  const { arrived: entering, settled } = useArrivals(scenes.map((scene) => scene.id));
-  // A keyboard move slides the rows; a dropped drag is already in place, so nothing moves.
-  const listRef = useRef<HTMLUListElement | null>(null);
-  useFlip(listRef, scenes.map((scene) => scene.id));
   const inList = new Set(scenes.map((scene) => scene.suggestedId).filter(Boolean));
   const suggestions = SUGGESTED_SCENE_ORDER.filter((id) => !inList.has(id));
   const full = scenes.length >= SCENE_LIMITS.maxScenes;
+  const { arrived: entering, settled } = useArrivals(scenes.map((scene) => scene.id));
+  const { arrived: returning, settled: returned } = useArrivals(suggestions);
+  // Both lists and the heading between them move as one: a suggestion added travels up to its
+  // place in the user's list, the rows under a deleted one close up, and the popover's height
+  // follows. A dropped drag is already in place, so nothing moves then.
+  const travellers = useRef(new Map<string, string>());
+  useFlip(
+    rootRef,
+    [...scenes.map((scene) => scene.id), "suggested-heading", ...suggestions.map((id) => `suggested-${id}`)],
+    { aliases: travellers.current, resize: true },
+  );
 
   useEffect(() => {
     rootRef.current?.focus({ preventScroll: true });
@@ -123,7 +130,8 @@ export function SceneLibrary({ scenes, anchorRef, onClose }: SceneLibraryProps) 
 
   const add = (suggestedId: SuggestedSceneId) => {
     const scene = suggestedScene(suggestedId, crypto.randomUUID());
-    leave(`suggested-${suggestedId}`, (list) => withScene(list, scene));
+    travellers.current.set(scene.id, `suggested-${suggestedId}`);
+    edit((list) => withScene(list, scene));
   };
 
   const moveTo = (id: string, to: number, focusAfter?: string) => {
@@ -197,12 +205,12 @@ export function SceneLibrary({ scenes, anchorRef, onClose }: SceneLibraryProps) 
       {scenes.length === 0 ? (
         <p className={styles.empty}>{t("lights:scenes.empty")}</p>
       ) : (
-        <ul ref={listRef} className={styles.list} data-dragging={drag ? true : undefined} data-testid="scene-library-yours">
+        <ul className={styles.list} data-dragging={drag ? true : undefined} data-testid="scene-library-yours">
           {scenes.map((scene, index) => (
             <SceneEntry
               key={scene.id}
               scene={scene}
-              entering={entering.has(scene.id)}
+              entering={entering.has(scene.id) && !travellers.current.has(scene.id)}
               leaving={leaving.has(scene.id)}
               offset={offsetOf(scene.id, index)}
               dragged={drag?.id === scene.id}
@@ -222,7 +230,9 @@ export function SceneLibrary({ scenes, anchorRef, onClose }: SceneLibraryProps) 
       )}
       {suggestions.length > 0 ? (
         <>
-          <h3 className={styles.heading}>{t("lights:scenes.suggestedTitle")}</h3>
+          <h3 className={styles.heading} data-flip-id="suggested-heading">
+            {t("lights:scenes.suggestedTitle")}
+          </h3>
           {full ? (
             <RowNote tone="status" testId="scene-library-full">
               {t("lights:scenes.full", { max: SCENE_LIMITS.maxScenes })}
@@ -232,14 +242,14 @@ export function SceneLibrary({ scenes, anchorRef, onClose }: SceneLibraryProps) 
             {suggestions.map((suggestedId) => {
               const preview = suggestedScene(suggestedId, suggestedId);
               const name = sceneName(preview, t);
-              const key = `suggested-${suggestedId}`;
               return (
                 <li
                   key={suggestedId}
                   className={styles.row}
-                  data-leaving={leaving.has(key) || undefined}
+                  data-flip-id={`suggested-${suggestedId}`}
+                  data-entering={returning.has(suggestedId) || undefined}
                   onAnimationEnd={(event) => {
-                    if (event.target === event.currentTarget && leaving.has(key)) finishLeave(key);
+                    if (event.target === event.currentTarget) returned(suggestedId);
                   }}
                 >
                   <span className={styles.handleSpace} aria-hidden />

@@ -31,8 +31,13 @@
     height: 36px;
     padding: 0 2px 0 6px;
     border-radius: 8px;
-    background: var(--lm-panel-2);
     transition: background var(--lm-dur-quick);
+  }
+  /* A suggestion on its way up to the user's list passes over the rows it crosses. */
+  .row[data-flip-travelling] {
+    z-index: 1;
+    background: var(--lm-panel);
+    box-shadow: 0 6px 16px rgb(0 0 0 / 40%);
   }
   .row:hover, .row:focus-within { background: var(--lm-panel); }
   .row[data-unavailable] .name { color: var(--lm-ink-faint); }
@@ -67,11 +72,12 @@
   .row:hover .handle, .handle:focus-visible { color: var(--lm-ink-dim); }
   .handle:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
 
-  /* A row that arrives grows into its place; one that goes folds away before the list closes up. */
+  /* A row that arrives fades up in its place; one that goes fades where it stands, and only then do
+     the rows under it close up (useFlip). Neither changes height, so nothing is squeezed. */
   .row[data-entering] { animation: enter var(--lm-dur-base) var(--lm-ease-out); }
-  .row[data-leaving] { overflow: hidden; pointer-events: none; animation: leave 0.2s var(--lm-ease-leave) forwards; }
-  @keyframes enter { from { height: 0; opacity: 0; transform: scale(0.96); } }
-  @keyframes leave { to { height: 0; opacity: 0; } }
+  .row[data-leaving] { pointer-events: none; animation: leave 0.14s var(--lm-ease-leave) forwards; }
+  @keyframes enter { from { opacity: 0; transform: scale(0.96); } }
+  @keyframes leave { to { opacity: 0; transform: scale(0.96); } }
 
   .swatch {
     flex-shrink: 0;
