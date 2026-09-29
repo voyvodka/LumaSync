@@ -18,7 +18,9 @@ categories = ["gui", "multimedia"]
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "lumasync_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# No `staticlib`: it is the iOS entry point, and a desktop build would link the whole graph into a
+# ~650 MB archive nothing reads.
+crate-type = ["cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -112,6 +114,14 @@ e2e = ["dep:tauri-plugin-wdio-webdriver"]
 tauri = { version = "2", features = ["test"] }
 # `test-util` is `tokio::time::pause` for the boot Hue retry's 25 s window.
 tokio = { version = "1.52.3", features = ["rt", "macros", "sync", "time", "test-util"] }
+
+# Debug info is most of a debug build's size. Our code keeps file and line numbers, which is what a
+# backtrace and a panic need; dependencies keep none. docs/architecture/build-and-release.md
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
 
 [profile.release]
 lto = "thin"

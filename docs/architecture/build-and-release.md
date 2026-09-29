@@ -5,7 +5,7 @@ The traps here cost the most time per incident, and one of them shipped a broken
 ## Decisions
 
 **`MACOSX_DEPLOYMENT_TARGET` is pinned to 12.3, in three places on purpose**: workflow-level `env`
-in `ci.yml` and `release.yml`, `force = true` in `src-tauri/.cargo/config.toml`, and
+in `ci.yml` and `release.yml`, `force = true` in the repository's `.cargo/config.toml`, and
 `bundle.macOS.minimumSystemVersion`. `tauri build` exports the minimum system version (10.13 when
 unset) as a real env var, and a non-forced Cargo `[env]` entry loses to any pre-set value — each
 layer covers a build path another misses. Lowering it reintroduces the v1.5.2 launch crash — see
@@ -13,6 +13,35 @@ layer covers a build path another misses. Lowering it reintroduces the v1.5.2 la
 `apple-metal`, whose Swift bridge needs the macOS 26 SDK at compile time; its `#available` guard
 keeps the binary runnable on 12.3. (The step names still say "screencapturekit 8"; the lockfile is
 on 10.x.)
+
+**A debug build keeps line tables for our code and no debug info for dependencies**
+(`[profile.dev]` in `src-tauri/Cargo.toml`). Full debug info was most of `target/debug`: on a clean
+build of `main`, `cargo build` took 4.6 GB and `cargo test --no-run` after it 6.0 GB; with the
+profile it is 2.3 GB and 3.2 GB, and the build took 122 s instead of 223 s. Backtraces and panics
+still name the file and line in our code; step-debugging into a dependency needs `debug = true`
+back for that package, locally.
+
+**What made the directory grow was several builds that could not share their output.** Each of
+these compiled the dependency graph again into the same `target/`:
+
+- **A different deployment target.** The Cargo config lived in `src-tauri/.cargo/`, and Cargo only
+  reads config from the directory it runs in and its parents. Every `--manifest-path` run from the
+  root — `check:rust`, the pre-push clippy, rust-analyzer — ran without `MACOSX_DEPLOYMENT_TARGET`,
+  so each crate whose build script reads it was rebuilt, and rebuilt again by the next `tauri dev`.
+  The config now sits at the root, which both kinds of run read.
+- **Different flags between the checks.** `check:rust` (and the Stop hook through it) ran a bare
+  `cargo check`, while the pre-push clippy ran `--all-targets --all-features`: another feature set,
+  so another copy of every dependency's metadata. `check:rust` now uses the same flags, and clippy
+  reuses what it built: run after it, clippy took 12 s and added 0.2 GB. Set rust-analyzer the same way — `"rust-analyzer.cargo.features": "all"`
+  with the default `check.allTargets` — and leave it on the shared target directory: a separate
+  `rust-analyzer.cargo.targetDir` is a third copy.
+- **`staticlib` in `crate-type`.** It is Tauri's iOS entry point; on the desktop it linked the whole
+  graph into a ~650 MB archive per build that nothing read. `cdylib` stays for a later mobile build.
+
+Two copies remain by design: a check writes metadata only and a build writes code, and the tests'
+dev-dependency features (`tauri/test`, `tokio/test-util`) give them their own build of those crates.
+Stale incremental sessions still pile up in `target/debug/incremental` over weeks; `cargo clean`
+is the remedy, and nothing here needs it more than once after pulling this.
 
 **The Rust toolchain is pinned to an exact version** in `rust-toolchain.toml`, not `stable`. A new
 stable release brings new clippy lints, and CI runs clippy at deny level, so a floating channel turns
