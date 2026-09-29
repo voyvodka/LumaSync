@@ -63,7 +63,9 @@ export function Scenes({ mode, disabled, onApply, dense = false }: ScenesProps) 
     if (!look) return;
     // Outside the edit: it runs twice, on this window's list and on the stored one.
     const scene = { id: crypto.randomUUID(), ...look };
-    void editScenes((list) => withScene(list, scene)).catch(() => {});
+    void editScenes((list) => withScene(list, scene)).catch((error: unknown) => {
+      console.error("[LumaSync] saving the scene failed:", error);
+    });
   };
 
   return (
@@ -124,7 +126,7 @@ export function Scenes({ mode, disabled, onApply, dense = false }: ScenesProps) 
             label={t("lights:scenes.manage")}
             role="dialog"
           >
-            <SceneLibrary scenes={scenes} />
+            <SceneLibrary scenes={scenes} anchorRef={libraryRef} onClose={() => setLibraryOpen(false)} />
           </Popover>
         </>
       }

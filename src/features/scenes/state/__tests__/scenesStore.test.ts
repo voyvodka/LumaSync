@@ -3,17 +3,26 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { StoredScene } from "@/shared/contracts/scenes";
 import type { ShellState } from "@/shared/contracts/shell";
 
-import { withSceneName } from "../../model/sceneLibrary";
+import { withSceneName, withoutScene } from "../../model/sceneLibrary";
 import { __resetScenesForTests, editScenes, getScenes, hydrateScenes } from "../scenesStore";
 
 const listeners: ((saved: Partial<ShellState>) => void)[] = [];
 const load = vi.fn<() => Promise<Partial<ShellState>>>(() => Promise.resolve({}));
-const disk: { state: Partial<ShellState> } = { state: {} };
+const disk: { state: Partial<ShellState>; gate: Promise<void> | null; rejectNext: boolean } = {
+  state: {},
+  gate: null,
+  rejectNext: false,
+};
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => load(),
     update: async (fn: (s: Partial<ShellState>) => Partial<ShellState> | null) => {
+      await disk.gate;
+      if (disk.rejectNext) {
+        disk.rejectNext = false;
+        throw new Error("SHELL_STATE_WRITE_FAILED");
+      }
       const patch = fn(structuredClone(disk.state));
       if (patch) disk.state = { ...disk.state, ...patch };
       return disk.state;
@@ -29,6 +38,8 @@ const blue: StoredScene = { id: "b", kind: "solid", solid: { r: 0, g: 0, b: 255,
 
 afterEach(() => {
   disk.state = {};
+  disk.gate = null;
+  disk.rejectNext = false;
   __resetScenesForTests();
   listeners.length = 0;
   load.mockClear();
@@ -79,5 +90,37 @@ describe("scenesStore", () => {
     await expect(editScenes((list) => [...list, blue])).rejects.toThrow("SCENES_UNREADABLE");
     expect(disk.state.scenes).toBe(newer);
     expect(getScenes().map((s) => s.id)).not.toContain("b");
+  });
+
+  it("shows the newest of two overlapping edits until both land, and the stored list after", async () => {
+    const red: StoredScene = { ...blue, id: "r" };
+    disk.state = { scenes: [blue] };
+    hydrateScenes(disk.state);
+    let open!: () => void;
+    disk.gate = new Promise((resolve) => (open = resolve));
+    const first = editScenes((list) => withSceneName(list, "b", "First"));
+    const second = editScenes((list) => [...list, red]);
+    expect(getScenes().map((s) => [s.id, s.name])).toEqual([["b", "First"], ["r", undefined]]);
+    // The first write's echo arrives while the second is still on its way: nothing goes back.
+    listeners.forEach((l) => l({ scenes: [{ ...blue, name: "First" }] }));
+    expect(getScenes().map((s) => s.id)).toEqual(["b", "r"]);
+    open();
+    await Promise.all([first, second]);
+    expect(getScenes()).toEqual(disk.state.scenes);
+  });
+
+  it("falls back to the stored list, not its own start, when an edit fails after another window wrote", async () => {
+    const theirs: StoredScene = { ...blue, id: "t" };
+    disk.state = { scenes: [blue] };
+    hydrateScenes(disk.state);
+    let open!: () => void;
+    disk.gate = new Promise((resolve) => (open = resolve));
+    disk.rejectNext = true;
+    const edit = editScenes((list) => withoutScene(list, "b"));
+    // Another window's save lands while this edit is on its way; then this edit fails.
+    listeners.forEach((l) => l({ scenes: [blue, theirs] }));
+    open();
+    await expect(edit).rejects.toThrow();
+    expect(getScenes().map((s) => s.id)).toEqual(["b", "t"]);
   });
 });

@@ -1,6 +1,6 @@
 @layer components {
   /* The library: two short lists in the popover; the second scrolls when the first is long. */
-  .library { display: flex; flex-direction: column; max-height: min(420px, 70vh); overflow-y: auto; }
+  .library { display: flex; flex-direction: column; max-height: min(420px, 58vh); overflow-y: auto; outline: none; }
   .heading {
     margin: 6px 6px 4px;
     color: var(--lm-ink-dim);
@@ -40,8 +40,8 @@
   .input {
     flex: 1;
     min-width: 0;
-    height: 26px;
-    padding: 0 6px;
+    height: 32px;
+    padding: 0 8px;
     border: 0;
     border-radius: 6px;
     background: var(--lm-bg);
@@ -66,8 +66,11 @@
   }
   .action:hover:not(:disabled) { color: var(--lm-ink); background: var(--lm-panel-2); }
   .action:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
-  .action:disabled { cursor: not-allowed; opacity: 0.35; }
-  .action[data-danger] { color: var(--lm-red); }
+  .action:disabled, .action[aria-disabled="true"] { cursor: default; opacity: 0.35; }
+  .action[aria-disabled="true"]:hover { background: transparent; color: var(--lm-ink-dim); }
+  /* Armed: a check in a red ring, so the second press reads by shape as well as colour. */
+  .action[data-danger] { color: var(--lm-red); box-shadow: inset 0 0 0 1px var(--lm-red); }
+  .note { color: var(--lm-ink-faint); }
 
   /* Touch has no hover: the actions stay. */
   @media (hover: none) { .actions { opacity: 1; } }
@@ -77,5 +80,6 @@
   @media (forced-colors: active) {
     .action:focus-visible, .input:focus-visible { outline: 2px solid Highlight; outline-offset: 1px; }
     .actions { opacity: 1; }
+    .action[data-danger] { outline: 2px solid Mark; outline-offset: -2px; }
   }
 }

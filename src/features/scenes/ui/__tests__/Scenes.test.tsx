@@ -15,16 +15,25 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-const disk: { state: Partial<ShellState>; failNext: boolean } = { state: {}, failNext: false };
+const disk: { state: Partial<ShellState>; failNext: boolean; saveFails: boolean } = {
+  state: {},
+  failNext: false,
+  saveFails: false,
+};
 const writes: Partial<ShellState>[] = [];
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => Promise.resolve({ ...disk.state }),
-    save: (partial: Partial<ShellState>) => {
-      disk.state = { ...disk.state, ...partial };
-      return Promise.resolve();
-    },
+    // A save lands a moment later, as a real write does: an apply that did not wait would beat it.
+    save: (partial: Partial<ShellState>) =>
+      new Promise<void>((resolve, reject) =>
+        setTimeout(() => {
+          if (disk.saveFails) return reject(new Error("SHELL_STATE_WRITE_FAILED"));
+          disk.state = { ...disk.state, ...partial };
+          resolve();
+        }, 5),
+      ),
     update: (fn: (s: Partial<ShellState>) => Partial<ShellState> | null) => {
       if (disk.failNext) {
         disk.failNext = false;
@@ -71,6 +80,7 @@ async function openLibrary() {
 beforeEach(() => {
   disk.state = {};
   disk.failNext = false;
+  disk.saveFails = false;
   writes.length = 0;
   __resetPreferencesForTests();
   __setPreferenceForTests("lightingIntensityPreset", "moderate");
@@ -94,13 +104,30 @@ describe("Scenes", () => {
     seed([
       { id: "m", kind: "ambilight", name: "Movie", ambilight: { brightness: 0.8, lightingSmoothingPreset: "subtle" } },
     ]);
+    // What Rust reads when it builds the payload is the disk, not this window's store.
     const onApply = vi.fn<Apply>(() => {
-      order.push(`apply:${getPreference("lightingIntensityPreset")}`);
+      order.push(`apply:${String(disk.state.lightingIntensityPreset)}`);
     });
     renderScenes(OFF, onApply);
-    await act(async () => fireEvent.click(screen.getByRole("radio", { name: "Movie" })));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("radio", { name: "Movie" }));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
     expect(order).toEqual(["apply:subtle"]);
-    expect(disk.state.lightingIntensityPreset).toBe("subtle");
+  });
+
+  it("still plays the scene when the smoothing cannot be saved, at the smoothing that stays", async () => {
+    __resetScenesForTests([
+      { id: "m", kind: "ambilight", name: "Movie", ambilight: { brightness: 0.8, lightingSmoothingPreset: "subtle" } },
+    ]);
+    disk.saveFails = true;
+    const onApply = renderScenes(OFF);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("radio", { name: "Movie" }));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(onApply).toHaveBeenCalledWith(expect.objectContaining({ kind: "ambilight" }));
+    expect(getPreference("lightingIntensityPreset")).toBe("moderate");
   });
 
   it("does not play a scene this build cannot, nor any while disabled", () => {
@@ -164,9 +191,51 @@ describe("the scene library", () => {
     seed([mine("a", "One"), mine("b", "Two")]);
     renderScenes(OFF);
     const library = await openLibrary();
-    expect(within(library).getByTestId("scene-up-a")).toBeDisabled();
+    await act(async () => fireEvent.click(within(library).getByTestId("scene-up-a")));
+    expect(getScenes().map((s) => s.id)).toEqual(["a", "b"]);
+    expect(within(library).getByTestId("scene-up-a")).toHaveAttribute("aria-disabled", "true");
     await act(async () => fireEvent.click(within(library).getByTestId("scene-down-a")));
     expect(getScenes().map((s) => s.id)).toEqual(["b", "a"]);
+  });
+
+  it("takes focus when it opens, and keeps it on the move button that was pressed", async () => {
+    seed([mine("a", "One"), mine("b", "Two")]);
+    renderScenes(OFF);
+    const library = await openLibrary();
+    expect(within(library).getByTestId("scene-library")).toHaveFocus();
+    const down = within(library).getByTestId("scene-down-a");
+    down.focus();
+    await act(async () => {
+      fireEvent.click(down);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+    // Now last: still focused, not dropped to the page.
+    expect(within(library).getByTestId("scene-down-a")).toHaveFocus();
+  });
+
+  it("closes and hands focus back when focus leaves it for the page's end", async () => {
+    seed([mine("a", "One")]);
+    renderScenes(OFF);
+    const library = await openLibrary();
+    await act(async () => fireEvent.blur(within(library).getByTestId("scene-library"), { relatedTarget: null }));
+    expect(screen.getByTestId("scene-library-open")).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTestId("scene-library-open")).toHaveFocus();
+  });
+
+  it("disarms a delete on its own after a moment", async () => {
+    vi.useFakeTimers();
+    try {
+      seed([mine("a", "One")]);
+      renderScenes(OFF);
+      await act(async () => fireEvent.click(screen.getByTestId("scene-library-open")));
+      const remove = screen.getByTestId("scene-remove-a");
+      act(() => fireEvent.click(remove));
+      expect(remove).toHaveAccessibleName("lights:scenes.removeConfirm(One)");
+      act(() => vi.advanceTimersByTime(3000));
+      expect(remove).toHaveAccessibleName("lights:scenes.remove(One)");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("deletes on the second press only", async () => {
@@ -179,6 +248,21 @@ describe("the scene library", () => {
     expect(remove).toHaveAccessibleName("lights:scenes.removeConfirm(One)");
     await act(async () => fireEvent.click(remove));
     expect(getScenes().map((s) => s.id)).toEqual(["b"]);
+  });
+
+  it("keeps focus in the library when a delete takes the focused row away", async () => {
+    seed([mine("a", "One"), mine("b", "Two")]);
+    renderScenes(OFF);
+    const library = await openLibrary();
+    const remove = within(library).getByTestId("scene-remove-a");
+    remove.focus();
+    await act(async () => fireEvent.click(remove));
+    await act(async () => {
+      fireEvent.click(remove);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+    expect(getScenes().map((s) => s.id)).toEqual(["b"]);
+    expect(within(library).getByTestId("scene-library")).toHaveFocus();
   });
 
   it("disarms a delete when focus leaves it", async () => {

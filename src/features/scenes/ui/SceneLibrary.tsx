@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
 import { SCENE_LIMITS, type StoredScene, type SuggestedSceneId } from "@/shared/contracts/scenes";
 import { IconButton } from "@/shared/ui/IconButton/IconButton";
-import { IconChevronDown, IconChevronUp, IconPencil, IconPlus, IconTrash } from "@/shared/ui/icons";
+import { IconCheck, IconChevronDown, IconChevronUp, IconPencil, IconPlus, IconTrash } from "@/shared/ui/icons";
 import { RowNote } from "@/shared/ui/SettingRow/SettingRow";
 
 import {
@@ -20,20 +20,47 @@ import {
 import { editScenes } from "../state/scenesStore";
 import styles from "./SceneLibrary.module.css";
 
+/** How long a delete waits for its second press: the webview does not always blur a clicked button. */
+const ARMED_MS = 3000;
+
+interface SceneLibraryProps {
+  scenes: readonly StoredScene[];
+  /** The button that opened it: focus goes back there when focus leaves the library. */
+  anchorRef: RefObject<HTMLElement | null>;
+  onClose: () => void;
+}
+
 /**
  * The library popover: the user's scenes to rename, reorder and delete, then the suggested ones not
- * yet in the list to add. A row's actions show on hover or focus; nothing moves when they do.
+ * yet in the list to add. A row's actions show on hover or focus; nothing moves when they do. It is
+ * portalled after the page, so it takes focus when it opens and closes when focus leaves it.
  */
-export function SceneLibrary({ scenes }: { scenes: readonly StoredScene[] }) {
+export function SceneLibrary({ scenes, anchorRef, onClose }: SceneLibraryProps) {
   const { t } = useTranslation();
   const [failed, setFailed] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const inList = new Set(scenes.map((scene) => scene.suggestedId).filter(Boolean));
   const suggestions = SUGGESTED_SCENE_ORDER.filter((id) => !inList.has(id));
   const full = scenes.length >= SCENE_LIMITS.maxScenes;
 
-  const edit = (change: (list: readonly StoredScene[]) => StoredScene[]) => {
+  useEffect(() => {
+    rootRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  /** After an edit re-renders the list: the control named, else the library itself. */
+  const refocus = (testId?: string) =>
+    requestAnimationFrame(() => {
+      const target = testId ? rootRef.current?.querySelector<HTMLElement>(`[data-testid="${testId}"]`) : null;
+      (target ?? rootRef.current)?.focus({ preventScroll: true });
+    });
+
+  const edit = (change: (list: readonly StoredScene[]) => StoredScene[], focusAfter?: string) => {
     setFailed(false);
-    void editScenes(change).catch(() => setFailed(true));
+    void editScenes(change).catch((error: unknown) => {
+      console.error("[LumaSync] saving the scenes failed:", error);
+      setFailed(true);
+    });
+    refocus(focusAfter);
   };
   const add = (suggestedId: SuggestedSceneId) => {
     const scene = suggestedScene(suggestedId, crypto.randomUUID());
@@ -41,7 +68,19 @@ export function SceneLibrary({ scenes }: { scenes: readonly StoredScene[] }) {
   };
 
   return (
-    <div className={styles.library}>
+    <div
+      ref={rootRef}
+      tabIndex={-1}
+      className={styles.library}
+      onBlur={(event) => {
+        const next = event.relatedTarget as Node | null;
+        if (next && (rootRef.current?.contains(next) || anchorRef.current?.contains(next))) return;
+        // Tabbing past either end leaves the page for the popover's portal: close, and go home.
+        onClose();
+        if (!next) anchorRef.current?.focus();
+      }}
+      data-testid="scene-library"
+    >
       <h3 className={styles.heading}>{t("lights:scenes.yours")}</h3>
       {scenes.length === 0 ? (
         <p className={styles.empty}>{t("lights:scenes.empty")}</p>
@@ -53,8 +92,13 @@ export function SceneLibrary({ scenes }: { scenes: readonly StoredScene[] }) {
               scene={scene}
               first={index === 0}
               last={index === scenes.length - 1}
-              onRename={(name) => edit((list) => withSceneName(list, scene.id, name))}
-              onMove={(delta) => edit((list) => withSceneMoved(list, scene.id, delta))}
+              onRename={(name) => edit((list) => withSceneName(list, scene.id, name), `scene-rename-${scene.id}`)}
+              onMove={(delta) =>
+                edit(
+                  (list) => withSceneMoved(list, scene.id, delta),
+                  `scene-${delta < 0 ? "up" : "down"}-${scene.id}`,
+                )
+              }
               onRemove={() => edit((list) => withoutScene(list, scene.id))}
             />
           ))}
@@ -63,6 +107,11 @@ export function SceneLibrary({ scenes }: { scenes: readonly StoredScene[] }) {
       {suggestions.length > 0 ? (
         <>
           <h3 className={styles.heading}>{t("lights:scenes.suggestedTitle")}</h3>
+          {full ? (
+            <RowNote tone="status" testId="scene-library-full">
+              {t("lights:scenes.full", { max: SCENE_LIMITS.maxScenes })}
+            </RowNote>
+          ) : null}
           <ul className={styles.list} data-testid="scene-library-suggested">
             {suggestions.map((suggestedId) => {
               const preview = suggestedScene(suggestedId, suggestedId);
@@ -74,7 +123,6 @@ export function SceneLibrary({ scenes }: { scenes: readonly StoredScene[] }) {
                   <IconButton
                     className={styles.action}
                     label={t("lights:scenes.add", { name })}
-                    title={full ? t("lights:scenes.full", { max: SCENE_LIMITS.maxScenes }) : undefined}
                     icon={<IconPlus />}
                     disabled={full}
                     onClick={() => add(suggestedId)}
@@ -108,6 +156,8 @@ interface SceneEntryProps {
 function SceneEntry({ scene, first, last, onRename, onMove, onRemove }: SceneEntryProps) {
   const { t } = useTranslation();
   const name = sceneName(scene, t);
+  const available = isSceneAvailable(scene);
+  const noteId = useId();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [armed, setArmed] = useState(false);
@@ -120,6 +170,12 @@ function SceneEntry({ scene, first, last, onRename, onMove, onRemove }: SceneEnt
     if (editing) inputRef.current?.select();
   }, [editing]);
 
+  useEffect(() => {
+    if (!armed) return;
+    const timer = setTimeout(() => setArmed(false), ARMED_MS);
+    return () => clearTimeout(timer);
+  }, [armed]);
+
   const open = () => {
     fieldOpen.current = true;
     setDraft(scene.name ?? "");
@@ -130,12 +186,12 @@ function SceneEntry({ scene, first, last, onRename, onMove, onRemove }: SceneEnt
     fieldOpen.current = false;
     const byKey = document.activeElement === inputRef.current;
     setEditing(false);
-    if (byKey) requestAnimationFrame(() => renameRef.current?.focus());
     if (keep && draft.trim() !== (scene.name ?? "")) onRename(draft);
+    else if (byKey) requestAnimationFrame(() => renameRef.current?.focus());
   };
 
   return (
-    <li className={styles.row} data-unavailable={!isSceneAvailable(scene) || undefined} data-testid={`scene-entry-${scene.id}`}>
+    <li className={styles.row} data-unavailable={!available || undefined} data-testid={`scene-entry-${scene.id}`}>
       <span className={styles.swatch} style={{ background: sceneSwatch(scene) }} aria-hidden />
       {editing ? (
         <input
@@ -162,8 +218,14 @@ function SceneEntry({ scene, first, last, onRename, onMove, onRemove }: SceneEnt
           data-testid={`scene-name-input-${scene.id}`}
         />
       ) : (
-        <span className={styles.name} title={isSceneAvailable(scene) ? undefined : t("lights:scenes.unavailable")}>
+        <span className={styles.name}>
           {name}
+          {available ? null : (
+            <span id={noteId} className={styles.note}>
+              {" · "}
+              {t("lights:scenes.unavailableShort")}
+            </span>
+          )}
         </span>
       )}
       <span className={styles.actions} data-armed={armed || undefined}>
@@ -175,31 +237,41 @@ function SceneEntry({ scene, first, last, onRename, onMove, onRemove }: SceneEnt
           onClick={open}
           data-testid={`scene-rename-${scene.id}`}
         />
+        {/* aria-disabled, not disabled: a move to the edge keeps focus on the button it pressed. */}
         <IconButton
           className={styles.action}
           label={t("lights:scenes.moveUp", { name })}
           icon={<IconChevronUp />}
-          disabled={first}
-          onClick={() => onMove(-1)}
+          aria-disabled={first || undefined}
+          onClick={() => {
+            if (!first) onMove(-1);
+          }}
           data-testid={`scene-up-${scene.id}`}
         />
         <IconButton
           className={styles.action}
           label={t("lights:scenes.moveDown", { name })}
           icon={<IconChevronDown />}
-          disabled={last}
-          onClick={() => onMove(1)}
+          aria-disabled={last || undefined}
+          onClick={() => {
+            if (!last) onMove(1);
+          }}
           data-testid={`scene-down-${scene.id}`}
         />
         <IconButton
           className={styles.action}
           label={armed ? t("lights:scenes.removeConfirm", { name }) : t("lights:scenes.remove", { name })}
-          icon={<IconTrash />}
+          icon={armed ? <IconCheck /> : <IconTrash />}
+          aria-describedby={available ? undefined : noteId}
           data-danger={armed || undefined}
           onClick={() => (armed ? onRemove() : setArmed(true))}
           onBlur={() => setArmed(false)}
+          onMouseLeave={() => setArmed(false)}
           data-testid={`scene-remove-${scene.id}`}
         />
+      </span>
+      <span className="sr-only" aria-live="polite">
+        {armed ? t("lights:scenes.removeConfirm", { name }) : ""}
       </span>
     </li>
   );

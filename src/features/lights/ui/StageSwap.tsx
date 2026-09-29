@@ -51,7 +51,13 @@ export class StageSwap extends Component<StageSwapProps> {
     ghost.className = `${cls("ghost")} ${cls(way)}`;
     ghost.querySelectorAll("[id]").forEach((node) => node.removeAttribute("id"));
     ghost.querySelectorAll("[data-testid]").forEach((node) => node.removeAttribute("data-testid"));
-    ghost.addEventListener("animationend", () => ghost.remove(), { once: true });
+    // Its own leave only: a swatch or spinner animating inside it bubbles an animationend too.
+    const leave = (event: AnimationEvent) => {
+      if (event.target !== ghost) return;
+      ghost.removeEventListener("animationend", leave);
+      ghost.remove();
+    };
+    ghost.addEventListener("animationend", leave);
     box.append(ghost);
     live.classList.remove(cls("next"), cls("prev"));
     // Restart the entrance: a class set again in the same frame does not replay.

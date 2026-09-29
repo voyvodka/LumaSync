@@ -25,7 +25,7 @@
   .chip:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
   .chip:disabled { cursor: not-allowed; opacity: 0.45; }
   /* The empty list's one chip: saving the running light is how the first scene is made. */
-  .ghost { padding: 0 12px; box-shadow: none; outline: 1px dashed var(--lm-line-2); outline-offset: -1px; }
+  .ghost { max-width: none; padding: 0 12px; box-shadow: none; outline: 1px dashed var(--lm-line-2); outline-offset: -1px; }
   .ghost:hover:not(:disabled) { box-shadow: none; outline-color: var(--lm-ink-faint); }
   .swatch {
     flex-shrink: 0;
