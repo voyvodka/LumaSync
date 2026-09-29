@@ -1,5 +1,10 @@
 # Set macOS deployment target to 12.3 — the minimum for ScreenCaptureKit.
 #
+# At the repository root, not in `src-tauri/`: Cargo reads config from the directory it runs in and
+# its parents, so a file in `src-tauri/.cargo/` was skipped by every `--manifest-path` run from the
+# root (`bun run check:rust`, the pre-push clippy, rust-analyzer). Those builds saw another
+# deployment target, and every crate whose build script reads it was rebuilt, back and forth.
+#
 # Why this matters (root cause of the 1.5.2 launch crash, issue #115):
 # The Swift SDK's TBD stub for libswift_Concurrency.dylib carries a
 # `$ld$previous` linker directive. When the binary is linked with a
