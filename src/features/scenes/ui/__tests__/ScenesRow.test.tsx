@@ -34,13 +34,13 @@ describe("ScenesRow", () => {
     expect(screen.getByRole("radiogroup")).not.toHaveAttribute("data-more");
   });
 
-  it("turns a vertical wheel into a sideways scroll while the chips overflow", () => {
+  it("leaves a vertical wheel to the page, even over an overflowing list", () => {
     overflowing();
     render(<ScenesRow scenes={chips} onPick={() => {}} />);
     const list = screen.getByRole("radiogroup");
     const wheel = new WheelEvent("wheel", { deltaY: 60, cancelable: true });
     list.dispatchEvent(wheel);
-    expect(list.scrollLeft).toBe(60);
-    expect(wheel.defaultPrevented).toBe(true);
+    expect(list.scrollLeft).toBe(0);
+    expect(wheel.defaultPrevented).toBe(false);
   });
 });

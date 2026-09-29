@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 
 import type { EffectId } from "@/shared/contracts/effects";
 import type { EffectPayload } from "@/shared/contracts/mode";
-import { prefersReducedMotion } from "@/shared/lib/motion";
 import { useArrivals } from "@/shared/lib/useArrivals";
 import { useFlip } from "@/shared/lib/useFlip";
 import { Stage } from "@/shared/ui/Stage/Stage";
@@ -54,17 +53,7 @@ export function EffectControls({
   useFlip(settingsRef, settingIds, { resize: true });
   const { arrived, settled } = useArrivals(settingIds);
 
-  const pick = (id: EffectId) => {
-    commit(withEffect(draft, id));
-    if (compact) return;
-    // Picked low on the page, the new settings can land below the fold: once the block has its new
-    // height, bring it into view.
-    const reduced = prefersReducedMotion();
-    window.setTimeout(
-      () => settingsRef.current?.scrollIntoView?.({ block: "nearest", behavior: reduced ? "auto" : "smooth" }),
-      reduced ? 0 : 240,
-    );
-  };
+  const pick = (id: EffectId) => commit(withEffect(draft, id));
 
   return (
     <Stage dense={compact} className={styles.effect} testId="effect-controls">

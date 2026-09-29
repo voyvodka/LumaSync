@@ -6,9 +6,10 @@ import { prefersReducedMotion } from "./motion";
 export type SideMore = "start" | "end" | "both" | undefined;
 
 /**
- * A one-line list that scrolls sideways: which edges have more past them (a caller fades those), a
- * vertical wheel turned into a sideways scroll while it overflows, and the chosen item brought into
- * view. `key` changes when the items do; `activeSelector` finds the chosen one inside the list.
+ * A one-line list that scrolls sideways: which edges have more past them (a caller fades those),
+ * and the chosen item brought into view. `key` changes when the items do; `activeSelector` finds
+ * the chosen one inside the list. A vertical wheel is left to the page: turned sideways here, it
+ * caught a page scroll that merely passed over the list.
  */
 export function useSideScroll(
   listRef: RefObject<HTMLElement | null>,
@@ -25,19 +26,12 @@ export function useSideScroll(
       const end = list.scrollLeft + list.clientWidth < list.scrollWidth - 1;
       setMore(start && end ? "both" : start ? "start" : end ? "end" : undefined);
     };
-    const onWheel = (event: WheelEvent) => {
-      if (list.scrollWidth <= list.clientWidth || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-      event.preventDefault();
-      list.scrollLeft += event.deltaY;
-    };
     measure();
     list.addEventListener("scroll", measure, { passive: true });
-    list.addEventListener("wheel", onWheel, { passive: false });
     const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
     resize?.observe(list);
     return () => {
       list.removeEventListener("scroll", measure);
-      list.removeEventListener("wheel", onWheel);
       resize?.disconnect();
     };
   }, [listRef, key]);

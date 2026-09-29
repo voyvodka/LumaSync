@@ -100,7 +100,7 @@ describe("EffectControls — a new effect's settings", () => {
     expect(screen.getByTestId("palette-party").closest("[data-flip-id]")).toHaveAttribute("data-entering");
   });
 
-  it("brings the settings into view once they have their new height, after a pick in the gallery", () => {
+  it("leaves the page where it is after a pick: the settings grow in place, nothing scrolls", () => {
     vi.useFakeTimers();
     const scrollIntoView = vi.fn<(options?: ScrollIntoViewOptions) => void>();
     const original = Element.prototype.scrollIntoView;
@@ -108,9 +108,8 @@ describe("EffectControls — a new effect's settings", () => {
     try {
       render(<EffectControls variant="full" effect={{ id: "sunrise", speed: 0.5, brightness: 1 }} onChange={() => {}} />);
       fireEvent.click(screen.getByTestId("effect-plasma"));
+      vi.advanceTimersByTime(1000);
       expect(scrollIntoView).not.toHaveBeenCalled();
-      vi.advanceTimersByTime(240);
-      expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: "nearest" }));
     } finally {
       Element.prototype.scrollIntoView = original;
       vi.useRealTimers();
