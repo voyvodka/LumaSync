@@ -230,15 +230,20 @@ export function sceneFromMode(mode: LightingModeConfig, smoothing: LightingSmoot
 }
 
 const rgbCss = ({ r, g, b }: { r: number; g: number; b: number }) => `rgb(${r} ${g} ${b})`;
-/**
- * Ambilight follows the screen, so its scenes show one, coloured by how it follows it: a slow,
- * calm response reads warm, a quick one cool.
- */
-const SCREEN_SWATCH = {
-  subtle: "linear-gradient(135deg, rgb(120 40 90), rgb(220 90 50) 55%, rgb(255 180 80))",
-  moderate: "linear-gradient(135deg, rgb(58 96 255), rgb(150 70 230) 50%, rgb(255 140 60))",
-  intense: "linear-gradient(135deg, rgb(30 200 255), rgb(90 80 255) 50%, rgb(240 60 200))",
+/** Light around the screen, by how the scene follows it: a slow, calm response warm, a quick one cool. */
+const SCREEN_GLOW = {
+  subtle: "rgb(255 176 80), rgb(226 92 52), rgb(140 44 96), rgb(255 176 80)",
+  moderate: "rgb(90 120 255), rgb(170 80 230), rgb(255 140 60), rgb(90 120 255)",
+  intense: "rgb(40 210 255), rgb(100 90 255), rgb(240 60 200), rgb(40 210 255)",
 } satisfies Record<LightingSmoothingPreset, string>;
+
+/**
+ * Ambilight follows the screen, so its scenes draw one: a dark screen in the middle with its light
+ * spilling out on every side. Sized in percent, so it reads the same in a chip and a library row.
+ */
+function screenSwatch(preset: LightingSmoothingPreset): string {
+  return `linear-gradient(var(--lm-bg), var(--lm-bg)) 50% 50% / 54% 38% no-repeat, conic-gradient(from 45deg, ${SCREEN_GLOW[preset]})`;
+}
 
 /** A CSS background for the scene's chip: its colour, its effect in its palette, or a screen. */
 export function sceneSwatch(scene: StoredScene): string {
@@ -249,7 +254,7 @@ export function sceneSwatch(scene: StoredScene): string {
       return rgbCss(solid.kelvin != null ? kelvinToRgb(solid.kelvin) : solid);
     }
     case LIGHTING_MODE_KIND.AMBILIGHT:
-      return SCREEN_SWATCH[sceneSmoothing(scene) ?? DEFAULT_LIGHTING_SMOOTHING_PRESET];
+      return screenSwatch(sceneSmoothing(scene) ?? DEFAULT_LIGHTING_SMOOTHING_PRESET);
     case LIGHTING_MODE_KIND.EFFECT: {
       const look = normalizeEffectPayload(scene.effect);
       return effectSwatch(look.id, paletteStops(paletteOf(look), look));
