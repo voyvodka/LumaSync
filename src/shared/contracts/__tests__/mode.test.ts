@@ -18,6 +18,7 @@ import {
   normalizeColorOrder,
   normalizeLightingModeConfig,
   normalizeOutputTargets,
+  resolveLitModeKind,
   normalizeSolidColorPayload,
 } from "../mode";
 
@@ -321,5 +322,16 @@ describe("DEFAULT_SOLID_COLOR", () => {
   it("is what a Solid config with no colour normalises to — the white Rust applies", () => {
     expect(normalizeSolidColorPayload()).toEqual(DEFAULT_SOLID_COLOR);
     expect(DEFAULT_SOLID_COLOR).toEqual({ r: 255, g: 255, b: 255, brightness: 1 });
+  });
+});
+
+describe("resolveLitModeKind", () => {
+  it("reads a lit kind as itself, and anything else — Off, absent, a newer kind — as Ambilight", () => {
+    expect(resolveLitModeKind("solid")).toBe("solid");
+    expect(resolveLitModeKind("effect")).toBe("effect");
+    expect(resolveLitModeKind("ambilight")).toBe("ambilight");
+    for (const other of ["off", undefined, null, "music", 3]) {
+      expect(resolveLitModeKind(other)).toBe("ambilight");
+    }
   });
 });

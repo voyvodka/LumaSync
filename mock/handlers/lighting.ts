@@ -210,6 +210,8 @@ export const lightingRuntimeHandlers = {
 
     if (choice && request.mode) {
       writeShellStateKey("lightingMode", { kind, solid, ambilight, targets: savedTargets() });
+      // As Rust's persist_mode: a lit choice is also the one the power button brings back.
+      if (kind !== "off") writeShellStateKey("lastLitKind", kind);
     }
     return reply(
       outcome.hueLeftOut ? "OUTPUTS_APPLIED_PARTIAL" : "OUTPUTS_APPLIED",
