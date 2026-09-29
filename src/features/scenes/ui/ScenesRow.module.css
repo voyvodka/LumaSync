@@ -45,6 +45,7 @@
   .chip:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
   /* The scene being edited: the light came from it and has changed since. */
   .chip[data-edited] { color: var(--lm-ink); outline: 1px dashed var(--lm-ink-faint); outline-offset: -1px; box-shadow: none; }
+  .chip[data-edited]:focus-visible { box-shadow: var(--lm-focus-ring); }
   .update { animation: update-in var(--lm-dur-base) var(--lm-ease-out); }
   @keyframes update-in { from { opacity: 0; transform: scale(0.8); } }
   .chip:disabled { cursor: not-allowed; opacity: 0.45; }

@@ -257,7 +257,8 @@ export interface ShellState {
   /**
    * The last mode that lit something, which Lights' power button turns back on. Written by Rust
    * (`persist_mode`) with every lit choice, from any window or the tray; an Off leaves it. Absent
-   * or unknown reads as Ambilight. Additive, no schema bump.
+   * or unknown reads as Ambilight — so an install upgraded while off offers Ambilight until its
+   * first lit choice. Additive, no schema bump.
    */
   lastLitKind?: LitModeKind;
   /**

@@ -82,7 +82,7 @@ export const LightsCompact = memo(function LightsCompact() {
   );
 
   return (
-    <div className={styles.compact} data-testid="compact-layout">
+    <div className={styles.compact} data-lights data-testid="compact-layout">
       <ModeStrip
         variant="compact"
         value={mode.kind}

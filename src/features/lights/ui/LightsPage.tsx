@@ -127,7 +127,7 @@ export function LightsPage({
   });
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} data-lights>
       <div className={styles.scroll}>
         <div className={styles.column}>
           <ModeStrip

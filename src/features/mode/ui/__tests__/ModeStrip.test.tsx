@@ -106,4 +106,11 @@ describe("ModeStrip", () => {
     await userEvent.click(screen.getByTestId("mode-button-ambilight"));
     expect(onSelect).toHaveBeenCalledWith(LIGHTING_MODE_KIND.AMBILIGHT);
   });
+
+  it("says ⌥1 only where the power button turns the lights off", () => {
+    const view = render(<ModeStrip variant="full" value={LIGHTING_MODE_KIND.SOLID} onSelect={() => {}} />);
+    expect(screen.getByRole("switch").title).toMatch(/\(.+\)$/);
+    view.rerender(<ModeStrip variant="full" value={LIGHTING_MODE_KIND.OFF} onSelect={() => {}} />);
+    expect(screen.getByRole("switch").title).not.toMatch(/\(.+\)$/);
+  });
 });

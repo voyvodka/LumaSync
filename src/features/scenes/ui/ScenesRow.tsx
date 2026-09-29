@@ -45,7 +45,12 @@ export function ScenesRow({ scenes, disabled = false, onPick, trailing, placehol
   const ids = scenes.map((scene) => scene.id);
   useFlip(listRef, ids);
   const activeId = scenes.find((scene) => scene.active)?.id;
-  const more = useSideScroll(listRef, ids.join("\n"), activeId ? `[data-flip-id="${activeId}"]` : undefined);
+  // Names too: a renamed chip changes width, and the edges' fades are measured afresh.
+  const more = useSideScroll(
+    listRef,
+    scenes.map((scene) => `${scene.id}:${scene.name}`).join("\n"),
+    activeId ? `[data-flip-id="${activeId}"]` : undefined,
+  );
   return (
     <div className={styles.row}>
       {scenes.length === 0 && placeholder ? (

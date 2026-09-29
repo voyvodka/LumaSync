@@ -561,10 +561,17 @@ describe("LightsPage — output availability gate", () => {
     expect(onModeChange).toHaveBeenCalledWith({ kind: "ambilight" });
   });
 
-  it("offers no way on from the dimmed stage while nothing can light", async () => {
+  it("keeps the way on in place but disabled while nothing can light", async () => {
     await renderWithOutputs();
     expect(screen.getByTestId("off-stage")).toBeInTheDocument();
-    expect(screen.queryByTestId("stage-turn-on")).not.toBeInTheDocument();
+    expect(screen.getByTestId("stage-turn-on")).toBeDisabled();
+    expect(screen.getByTestId("stage-turn-on")).toHaveAccessibleName("lights:power.turnOn");
+  });
+
+  it("hands focus to the power switch when the way on is pressed", async () => {
+    await renderWithOutputs({ onModeChange: vi.fn<(next: LightingModeConfig) => void>(), localOutputConnected: true });
+    await userEvent.click(screen.getByTestId("stage-turn-on"));
+    expect(screen.getByTestId("mode-button-off")).toHaveFocus();
   });
 
   it("disables the non-Off modes when nothing is connected, without an inline banner", async () => {

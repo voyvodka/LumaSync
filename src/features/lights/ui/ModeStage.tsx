@@ -5,7 +5,7 @@ import { usePresence } from "@/shared/lib/usePresence";
 import { AmbilightStage } from "@/features/mode/ui/ambilight/AmbilightStage";
 import { EffectControls } from "@/features/mode/ui/effects/EffectControls";
 import { SolidStage } from "@/features/mode/ui/solid/SolidStage";
-import { MODE_KIND_ORDER } from "@/features/mode/model/modeKinds";
+import { MODE_KIND_ORDER, modeKind } from "@/features/mode/model/modeKinds";
 import {
   DEFAULT_SOLID_COLOR,
   LIGHTING_MODE_KIND,
@@ -102,11 +102,25 @@ export function ModeStage({
             inert={pill.leaving || undefined}
           >
             <span>{t("lights:stage.dormant")}</span>
-            {onTurnOn || pill.leaving ? (
-              <button type="button" className={styles.turnOn} onClick={onTurnOn} data-testid="stage-turn-on">
-                {t("lights:stage.turnOn")}
-              </button>
-            ) : null}
+            {/* Always there, disabled while it cannot: a pill that lost its button mid-press read as a
+                stall and changed width under the pointer. */}
+            <button
+              type="button"
+              className={styles.turnOn}
+              disabled={!onTurnOn}
+              aria-label={t("lights:power.turnOn", { mode: t(modeKind(lastLit).labelKey) })}
+              onClick={(event) => {
+                // The pill goes with the dimming: focus moves to the power switch, which now says on.
+                event.currentTarget
+                  .closest("[data-lights]")
+                  ?.querySelector<HTMLElement>("[data-power]")
+                  ?.focus({ preventScroll: true });
+                onTurnOn?.();
+              }}
+              data-testid="stage-turn-on"
+            >
+              {t("lights:stage.turnOn")}
+            </button>
           </div>
         ) : null}
       </div>

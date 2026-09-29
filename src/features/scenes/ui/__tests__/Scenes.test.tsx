@@ -6,7 +6,7 @@ import type { LightingModeConfig } from "@/shared/contracts/mode";
 import type { StoredScene } from "@/shared/contracts/scenes";
 import type { ShellState } from "@/shared/contracts/shell";
 
-import { __resetScenesForTests, getScenes } from "../../state/scenesStore";
+import { __resetScenesForTests, editScenes, getScenes } from "../../state/scenesStore";
 import { Scenes } from "../Scenes";
 
 vi.mock("react-i18next", () => ({
@@ -216,6 +216,28 @@ describe("updating a scene to the light", () => {
     // The scene is the light again.
     expect(screen.queryByTestId("scene-update")).not.toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Blue" })).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("does not offer it after a pick the lights refused: the scene never ran", async () => {
+    seed([mine("a", "Blue")]);
+    const view = render(<Scenes mode={OFF} disabled={false} onApply={vi.fn<Apply>()} />);
+    await act(async () => fireEvent.click(screen.getByRole("radio", { name: "Blue" })));
+    // The choice failed; some other colour runs instead.
+    view.rerender(<Scenes mode={blue(0.2)} disabled={false} onApply={vi.fn<Apply>()} />);
+    expect(screen.queryByTestId("scene-update")).not.toBeInTheDocument();
+  });
+
+  it("stops offering it when the scene it came from is deleted", async () => {
+    seed([mine("a", "Blue")]);
+    const view = render(<Scenes mode={OFF} disabled={false} onApply={vi.fn<Apply>()} />);
+    await act(async () => fireEvent.click(screen.getByRole("radio", { name: "Blue" })));
+    view.rerender(<Scenes mode={blue(1)} disabled={false} onApply={vi.fn<Apply>()} />);
+    view.rerender(<Scenes mode={blue(0.4)} disabled={false} onApply={vi.fn<Apply>()} />);
+    expect(screen.getByTestId("scene-update")).toBeInTheDocument();
+    await act(async () => {
+      await editScenes(() => []);
+    });
+    expect(screen.queryByTestId("scene-update")).not.toBeInTheDocument();
   });
 
   it("does not offer it once the light has moved to another kind", async () => {

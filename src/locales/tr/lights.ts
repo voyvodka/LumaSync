@@ -48,7 +48,7 @@ const lights: Catalogue<typeof enLights> = {
     rename: "Yeniden adlandır: {{name}}",
     reorder: "Sırala: {{name}}",
     reorderHint: "Sürükle ya da yukarı ve aşağı ok tuşlarını kullan",
-    movedTo: "{{name}}: {{count}} sahneden {{position}}.",
+    movedTo: "{{name}}: {{position}}. sıra, {{count}} sahne",
     remove: "Sil: {{name}}",
     removeConfirm: "Silmek için tekrar bas: {{name}}",
     saveFailed: "Sahneler kaydedilemedi",

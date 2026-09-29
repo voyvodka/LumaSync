@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { setPreference, usePreference } from "@/features/persistence/preferences";
@@ -47,6 +47,15 @@ export function Scenes({ mode, disabled, busy = false, onApply }: ScenesProps) {
   // The scene the light came from, changed since: offered for writing the change back into. Only
   // within its own kind — turning Film into a colour would be a new scene, not an edit of Film.
   const originId = useSceneOrigin();
+  // A pick becomes the origin once the light is that scene: a choice the lights refused must not
+  // leave a scene open to being overwritten with whatever runs instead.
+  const [picked, setPicked] = useState<string | null>(null);
+  useEffect(() => {
+    if (picked && picked === activeId) {
+      setSceneOrigin(picked);
+      setPicked(null);
+    }
+  }, [picked, activeId]);
   const origin = scenes.find((scene) => scene.id === originId);
   const edited =
     origin && look && isSceneAvailable(origin) && origin.kind === look.kind && origin.id !== activeId
@@ -67,7 +76,7 @@ export function Scenes({ mode, disabled, busy = false, onApply }: ScenesProps) {
     // Rust reads Ambilight's smoothing from the preference when it builds the payload, so it lands first.
     const preset = sceneSmoothing(scene);
     if (preset && preset !== smoothing) await setPreference("lightingIntensityPreset", preset);
-    setSceneOrigin(scene.id);
+    setPicked(scene.id);
     onApply(config);
   };
 
@@ -116,16 +125,6 @@ export function Scenes({ mode, disabled, busy = false, onApply }: ScenesProps) {
       }
       trailing={
         <>
-          {edited ? (
-            <IconButton
-              className={`${styles.action} ${styles.update}`}
-              label={t("lights:scenes.update", { name: sceneName(edited, t) })}
-              icon={<IconRefresh />}
-              disabled={disabled}
-              onClick={update}
-              data-testid="scene-update"
-            />
-          ) : null}
           <IconButton
             className={styles.action}
             label={t("lights:scenes.save")}
@@ -147,6 +146,16 @@ export function Scenes({ mode, disabled, busy = false, onApply }: ScenesProps) {
             onClick={() => setLibraryOpen((open) => !open)}
             data-testid="scene-library-open"
           />
+          {edited ? (
+            <IconButton
+              className={`${styles.action} ${styles.update}`}
+              label={t("lights:scenes.update", { name: sceneName(edited, t) })}
+              icon={<IconRefresh />}
+              disabled={disabled}
+              onClick={update}
+              data-testid="scene-update"
+            />
+          ) : null}
           <Popover
             open={libraryOpen}
             onClose={() => setLibraryOpen(false)}

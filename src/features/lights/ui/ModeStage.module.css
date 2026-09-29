@@ -34,11 +34,12 @@
     font-weight: 500;
     transition: background var(--lm-dur-quick);
   }
-  .turnOn:hover { background: var(--lm-panel); }
+  .turnOn:hover:not(:disabled) { background: var(--lm-panel); }
+  .turnOn:disabled { cursor: not-allowed; opacity: 0.4; }
   .turnOn:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
   .dormant[data-leaving] { animation: leave var(--lm-dur-quick) var(--lm-ease-leave) forwards; }
   @keyframes settle { from { opacity: 0; transform: translate(-50%, calc(-50% + 4px)); } }
-  @keyframes leave { to { opacity: 0; transform: translate(-50%, calc(-50% - 4px)); } }
+  @keyframes leave { to { opacity: 0; transform: translate(-50%, calc(-50% + 4px)); } }
 
   :global(:root[data-reduced-motion]) .stage { transition: none; }
   :global(:root[data-reduced-motion]) .dormant { animation: none; }

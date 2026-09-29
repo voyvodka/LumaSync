@@ -53,13 +53,14 @@
   }
   /* A suggestion has no handle; this holds its place so every swatch lines up. */
   .handleSpace { flex-shrink: 0; width: 16px; }
+  /* A 32 px target over a narrow glyph: the margins give back the width the row does not have. */
   .handle {
     display: grid;
     flex-shrink: 0;
     place-items: center;
-    width: 18px;
+    width: 32px;
     height: 32px;
-    margin-right: -2px;
+    margin: 0 -9px 0 -7px;
     padding: 0;
     border: 0;
     border-radius: 6px;
@@ -75,7 +76,7 @@
   /* A row that arrives fades up in its place; one that goes fades where it stands, and only then do
      the rows under it close up (useFlip). Neither changes height, so nothing is squeezed. */
   .row[data-entering] { animation: enter var(--lm-dur-base) var(--lm-ease-out); }
-  .row[data-leaving] { pointer-events: none; animation: leave 0.14s var(--lm-ease-leave) forwards; }
+  .row[data-leaving] { pointer-events: none; animation: leave var(--lm-dur-quick) var(--lm-ease-leave) forwards; }
   @keyframes enter { from { opacity: 0; transform: scale(0.96); } }
   @keyframes leave { to { opacity: 0; transform: scale(0.96); } }
 
@@ -138,6 +139,7 @@
   @media (hover: none) { .actions { opacity: 1; } }
 
   :global(:root[data-reduced-motion]) .row,
+  :global(:root[data-reduced-motion]) .list[data-dragging] .row,
   :global(:root[data-reduced-motion]) .actions,
   :global(:root[data-reduced-motion]) .action,
   :global(:root[data-reduced-motion]) .handle { transition: none; }

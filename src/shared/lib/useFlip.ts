@@ -31,6 +31,8 @@ export function useFlip(
   const key = ids.join("\n");
   const shown = useRef<string | null>(null);
   const before = useRef<{ places: Map<string, DOMRect>; height: number } | null>(null);
+  // A render back to the order on screen (one that was thrown away, or undone) drops the old places.
+  if (shown.current === key) before.current = null;
   if (shown.current !== null && shown.current !== key && container.current && !before.current) {
     before.current = {
       places: new Map(

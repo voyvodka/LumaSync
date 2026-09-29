@@ -75,6 +75,7 @@ export function ModeStrip({
     return () => cancelAnimationFrame(frame);
   }, []);
 
+  const powerShortcut = usePowerShortcut();
   const select = (kind: LightingModeKind) => {
     if (!busy) onSelect(kind);
   };
@@ -139,7 +140,6 @@ export function ModeStrip({
   const powerLabel = off
     ? t("lights:power.turnOn", { mode: t(modeKind(lastLit).labelKey) })
     : t("lights:power.turnOff");
-  const powerShortcut = usePowerShortcut();
 
   return (
     <div
@@ -148,15 +148,16 @@ export function ModeStrip({
       data-placed={placed || undefined}
       data-off={off || undefined}
       data-busy={busy || undefined}
-      aria-busy={busy || undefined}
     >
       <button
         type="button"
         role="switch"
         aria-checked={!off}
         aria-label={t("lights:power.label")}
-        title={variant === "full" ? `${powerLabel} (${powerShortcut})` : powerLabel}
+        // ⌥1 is Off: it is said only where the button turns the lights off.
+        title={variant === "full" && !off ? `${powerLabel} (${powerShortcut})` : powerLabel}
         className={styles.power}
+        data-power
         disabled={isDisabled?.(powerTarget)}
         onClick={() => select(powerTarget)}
         data-testid="mode-button-off"
