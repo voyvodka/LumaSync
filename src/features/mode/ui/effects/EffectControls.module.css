@@ -155,14 +155,16 @@
   .tile:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
   .tile:disabled { opacity: 0.45; }
   .tileSwatch {
+    position: relative;
     display: block;
     height: 34px;
     background-color: var(--lm-bg);
     border-bottom: 1px solid var(--lm-line);
   }
-  /* Effects that turn simpler on a few lamps: a small strip mark in the corner, said to a
-     screen reader as words. */
-  /* Beside the name, not over the picture: a dark box on the swatch read as a glitch in it. */
+  .tileSwatchOut { position: absolute; inset: 0; animation: swatch-out var(--lm-dur-slow) linear forwards; }
+  @keyframes swatch-out { to { opacity: 0; } }
+  /* Effects that turn simpler on a few lamps: a small strip mark, said to a screen reader as words.
+     Beside the name, not over the picture: a dark box on the swatch read as a glitch in it. */
   .stripMark {
     position: absolute;
     right: 8px;
@@ -250,6 +252,7 @@
     .tileSwatch { height: 26px; }
   }
 
+  :global(:root[data-reduced-motion]) .tileSwatchOut { display: none; }
   :global(:root[data-reduced-motion]) .paletteDot,
   :global(:root[data-reduced-motion]) .edit,
   :global(:root[data-reduced-motion]) .tile,

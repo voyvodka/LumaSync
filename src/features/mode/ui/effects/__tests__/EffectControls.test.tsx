@@ -117,6 +117,20 @@ describe("EffectControls — a new effect's settings", () => {
   });
 });
 
+describe("EffectControls — a palette change", () => {
+  it("keeps each tile's old picture on top to fade, and lets it go when the fade ends", () => {
+    const wave: EffectPayload = { id: "wave", speed: 0.5, brightness: 1, palette: "rainbow" };
+    const view = render(<EffectControls variant="full" effect={wave} onChange={() => {}} />);
+    const tile = screen.getByTestId("effect-wave");
+    expect(tile.querySelectorAll("span[style]")).toHaveLength(1);
+    view.rerender(<EffectControls variant="full" effect={{ ...wave, palette: "ocean" }} onChange={() => {}} />);
+    const layers = tile.querySelectorAll<HTMLElement>("span[style]");
+    expect(layers).toHaveLength(2);
+    fireEvent.animationEnd(layers[1]!);
+    expect(tile.querySelectorAll("span[style]")).toHaveLength(1);
+  });
+});
+
 describe("EffectControls — compact", () => {
   it("picks from a list instead of a gallery, with speed and brightness only", () => {
     render(<EffectControls variant="compact" effect={wave} onChange={() => {}} />);

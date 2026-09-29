@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { EFFECT_ORDER, type EffectId } from "@/shared/contracts/effects";
 import type { EffectPayload } from "@/shared/contracts/mode";
+import { prefersReducedMotion } from "@/shared/lib/motion";
 import { PickerList } from "@/shared/ui/PickerList/PickerList";
 import { Segmented } from "@/shared/ui/Segmented/Segmented";
 import { bestOnStrip, withEffect } from "../../model/effectEdits";
@@ -21,6 +22,30 @@ function StripMark() {
         <circle cx="9" cy="6" r="1.2" fill="currentColor" />
       </svg>
       <span className="sr-only">{t("lights:effect.bestOnStripShort")}</span>
+    </span>
+  );
+}
+
+/**
+ * A tile's picture, which changes when the palette does: the old one stays on top and fades, since
+ * a gradient cannot transition in CSS. Under reduced motion it just changes.
+ */
+function TileSwatch({ background }: { background: string }) {
+  const [layers, setLayers] = useState({ current: background, previous: null as string | null, n: 0 });
+  if (background !== layers.current) {
+    setLayers({ current: background, previous: prefersReducedMotion() ? null : layers.current, n: layers.n + 1 });
+  }
+  const { previous, n } = layers;
+  return (
+    <span className={styles.tileSwatch} style={{ background: layers.current }}>
+      {previous !== null ? (
+        <span
+          key={n}
+          className={styles.tileSwatchOut}
+          style={{ background: previous }}
+          onAnimationEnd={() => setLayers((now) => (now.n === n ? { ...now, previous: null } : now))}
+        />
+      ) : null}
     </span>
   );
 }
@@ -52,7 +77,7 @@ export function EffectGallery({ effect, disabled = false, onPick }: EffectChoice
         value: id,
         label: (
           <>
-            <span className={styles.tileSwatch} style={{ background: tileBackground(effect, id) }} />
+            <TileSwatch background={tileBackground(effect, id)} />
             <span className={styles.tileName}>{t(`lights:effect.names.${id}`)}</span>
             {bestOnStrip(id) ? <StripMark /> : null}
           </>
