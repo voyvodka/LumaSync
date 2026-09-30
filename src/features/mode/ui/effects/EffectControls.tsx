@@ -20,6 +20,8 @@ interface EffectControlsProps {
   brightnessTitle?: string;
   /** Every change, drags included: the running effect retunes in place. */
   onChange: (next: EffectPayload) => void;
+  /** The gallery as one sideways row, so the settings sit near the top. Full variant only. */
+  galleryRow?: boolean;
 }
 
 /** The Effect mode's controls: which effect, in which colours, and how it moves. */
@@ -30,6 +32,7 @@ export function EffectControls({
   brightnessDisabled = false,
   brightnessTitle,
   onChange,
+  galleryRow = false,
 }: EffectControlsProps) {
   const [draft, setDraft] = useState(effect);
   const dragging = useRef(false);
@@ -62,7 +65,7 @@ export function EffectControls({
       {compact ? (
         <EffectPicker effect={draft} disabled={disabled} onPick={pick} />
       ) : (
-        <EffectGallery effect={draft} disabled={disabled} onPick={pick} />
+        <EffectGallery effect={draft} disabled={disabled} onPick={pick} row={galleryRow} />
       )}
       <div ref={settingsRef} className={styles.settings}>
         {palette ? (

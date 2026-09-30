@@ -2,6 +2,8 @@ import { useTranslation } from "react-i18next";
 
 import { usePresence } from "@/shared/lib/usePresence";
 
+import { useSceneEdit } from "@/features/scenes/state/scenesStore";
+
 import { AmbilightStage } from "@/features/mode/ui/ambilight/AmbilightStage";
 import { EffectControls } from "@/features/mode/ui/effects/EffectControls";
 import { SolidStage } from "@/features/mode/ui/solid/SolidStage";
@@ -53,6 +55,8 @@ export function ModeStage({
   const kind: LitModeKind = mode.kind === LIGHTING_MODE_KIND.OFF ? lastLit : mode.kind;
   // The "lights are off" pill settles in and, when they come back on, fades out with the dimming.
   const pill = usePresence(off, 200);
+  // A scene being made or edited is shaped with its settings, not its choice of effect.
+  const editingScene = useSceneEdit() !== null;
   const locks = { disabled, brightnessLocked, brightnessTitle };
 
   const stage = (() => {
@@ -81,6 +85,7 @@ export function ModeStage({
           <EffectControls
             {...locks}
             variant={dense ? "compact" : "full"}
+            galleryRow={editingScene}
             effect={normalizeEffectPayload(mode.effect)}
             onChange={(effect) => onModeChange({ kind: LIGHTING_MODE_KIND.EFFECT, effect })}
           />

@@ -155,6 +155,9 @@ changed after a scene was chosen — nothing said that the page's controls were 
 the way to change one was never found. A duplicate set of controls in a scene editor was the other
 option; it would have been a second copy of every stage to keep in step. The edit lives in
 `scenesStore` rather than in the row, so leaving the page and coming back finds it still open.
+While it is open the Effect stage folds its gallery into one sideways row: at the full window's
+smallest size the four rows of tiles pushed the palettes and sliders — what an edit shapes — below
+the fold. The compact window already picks from a list and is left as it is.
 
 **A closed set of kinds is a table, not a scattered `switch`.** Sections (`SECTION_REGISTRY` in
 `SettingsLayout.tsx`), Devices rail rows (`RAIL_ROWS` in `device/ui/deviceRailRows.ts`), lighting mode kinds

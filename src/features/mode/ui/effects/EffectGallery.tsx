@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { EFFECT_ORDER, type EffectId } from "@/shared/contracts/effects";
 import type { EffectPayload } from "@/shared/contracts/mode";
 import { prefersReducedMotion } from "@/shared/lib/motion";
+import { useFlip } from "@/shared/lib/useFlip";
+import { useSideScroll } from "@/shared/lib/useSideScroll";
 import { PickerList } from "@/shared/ui/PickerList/PickerList";
 import { Segmented } from "@/shared/ui/Segmented/Segmented";
 import { bestOnStrip, withEffect } from "../../model/effectEdits";
@@ -62,30 +64,40 @@ interface EffectChoiceProps {
   onPick: (id: EffectId) => void;
 }
 
-/** Every effect as a tile, the running one ringed; a still picture each, nothing loops. */
-export function EffectGallery({ effect, disabled = false, onPick }: EffectChoiceProps) {
+/**
+ * Every effect as a tile, the running one ringed; a still picture each, nothing loops. As one row
+ * that scrolls sideways (`row`) it leaves the height to the settings — while a scene is edited,
+ * the palettes and sliders are what is being shaped. The tiles slide between the two layouts.
+ */
+export function EffectGallery({ effect, disabled = false, onPick, row = false }: EffectChoiceProps & { row?: boolean }) {
   const { t } = useTranslation();
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  useFlip(boxRef, [row ? "row" : "grid", ...EFFECT_ORDER], { resize: true });
+  const more = useSideScroll(boxRef, row ? "row" : "", row ? `[data-flip-id="${effect.id}"]` : undefined);
   return (
-    <Segmented
-      className={styles.gallery}
-      itemClassName={styles.tile}
-      ariaLabel={t("lights:effect.label")}
-      value={effect.id}
-      disabled={disabled}
-      onChange={onPick}
-      options={EFFECT_ORDER.map((id) => ({
-        value: id,
-        label: (
-          <>
-            <TileSwatch background={tileBackground(effect, id)} />
-            <span className={styles.tileName}>{t(`lights:effect.names.${id}`)}</span>
-            {bestOnStrip(id) ? <StripMark /> : null}
-          </>
-        ),
-        title: bestOnStrip(id) ? t("lights:effect.bestOnStrip") : undefined,
-        testId: `effect-${id}`,
-      }))}
-    />
+    <div ref={boxRef} className={styles.galleryBox} data-row={row || undefined} data-more={row ? more : undefined}>
+      <Segmented
+        className={styles.gallery}
+        itemClassName={styles.tile}
+        ariaLabel={t("lights:effect.label")}
+        value={effect.id}
+        disabled={disabled}
+        onChange={onPick}
+        options={EFFECT_ORDER.map((id) => ({
+          value: id,
+          label: (
+            <>
+              <TileSwatch background={tileBackground(effect, id)} />
+              <span className={styles.tileName}>{t(`lights:effect.names.${id}`)}</span>
+              {bestOnStrip(id) ? <StripMark /> : null}
+            </>
+          ),
+          title: bestOnStrip(id) ? t("lights:effect.bestOnStrip") : undefined,
+          testId: `effect-${id}`,
+          flipId: id,
+        }))}
+      />
+    </div>
   );
 }
 

@@ -24,6 +24,20 @@ describe("EffectControls — full", () => {
     expect(screen.getByTestId("effect-wave")).toHaveAttribute("aria-checked", "true");
   });
 
+  it("lays the gallery out as one sideways row when asked, and back, every tile keeping its place to slide from", () => {
+    const { rerender } = renderFull();
+    const box = () => screen.getByRole("radiogroup", { name: "lights:effect.label" }).parentElement!;
+    expect(box()).not.toHaveAttribute("data-row");
+    expect(screen.getByTestId("effect-wave")).toHaveAttribute("data-flip-id", "wave");
+
+    rerender(<EffectControls variant="full" effect={wave} onChange={() => {}} galleryRow />);
+    expect(box()).toHaveAttribute("data-row");
+    expect(screen.getByTestId("effect-candle")).toBeInTheDocument();
+
+    rerender(<EffectControls variant="full" effect={wave} onChange={() => {}} />);
+    expect(box()).not.toHaveAttribute("data-row");
+  });
+
   it("picking a tile starts that effect in its own palette, keeping speed and brightness", () => {
     const { onChange } = renderFull({ ...wave, speed: 0.8, palette: "ocean" });
     fireEvent.click(screen.getByTestId("effect-candle"));
