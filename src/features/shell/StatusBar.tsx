@@ -86,11 +86,20 @@ function StatusChip({ item }: { item: StatusItem }) {
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement | null>(null);
   const testId = `status-chip-${item.id.toUpperCase()}`;
+  // A new word ticks in; the one the window opens on stays put. Only a span mounted for a new word
+  // carries the flag, so no existing span starts an animation when it is set.
+  const word = useRef({ state: item.state, changed: false });
+  if (word.current.state !== item.state) word.current = { state: item.state, changed: true };
   const face = (
     <>
       <span aria-hidden className={`${styles.dot} ${styles[item.kind]}`} />
       <span className={styles.label}>{item.label}</span>
-      <span className={`${styles.value} ${styles[item.kind]}`} data-kind={item.kind}>
+      <span
+        key={item.state}
+        className={`${styles.value} ${styles[item.kind]}`}
+        data-kind={item.kind}
+        data-changed={word.current.changed || undefined}
+      >
         {item.state}
       </span>
     </>

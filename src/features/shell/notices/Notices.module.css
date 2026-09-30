@@ -3,6 +3,8 @@
      edges, so it pushes the controls rather than covering them; each notice is a 32 px line: a
      severity mark, one sentence, a text-link action. Severity is a shape as well as a colour, and a
      spoken label, never colour alone. docs/architecture/ui-and-shell.md */
+  /* The strip's Reveal: in flow, never squeezed by the content under it. */
+  .reveal { flex-shrink: 0; }
   .slot {
     /* The horizontal inset matches the content below: compact's 12 px body. */
     --notice-inset: 12px;
@@ -11,13 +13,14 @@
     flex-direction: column;
     border-bottom: 1px solid var(--lm-line);
     background: var(--lm-panel);
-    /* Expanded, the rest scroll here rather than shove the controls off screen. */
-    max-height: 60%;
+    /* Expanded, the rest scroll here rather than shove the controls off screen. Of the window, since
+       the Reveal around it has no height of its own to take a share of. */
+    max-height: 60vh;
     overflow-y: auto;
     overscroll-behavior: contain;
   }
   /* The full pages' 22 px gutter. */
-  .wide { --notice-inset: 22px; max-height: 45%; }
+  .wide { --notice-inset: 22px; max-height: 45vh; }
   .slot:focus-visible { outline: none; box-shadow: var(--lm-focus-ring-inset); }
   .placeholder { min-height: 32px; }
 

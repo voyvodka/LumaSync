@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useMemo } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -48,6 +48,9 @@ function Harness({ input, variant, suppressed = false, holdSpace = false }: Harn
 }
 
 const rows = () => document.querySelectorAll("[data-notice-id]");
+
+/** The strip has closed: its Reveal lets the last content go 400 ms after closing (no transition here). */
+const closed = () => act(() => new Promise((resolve) => setTimeout(resolve, 450)));
 
 /** happy-dom has no layout: pretend every message line is cut. */
 function stubCutLines() {
@@ -187,6 +190,7 @@ describe("ShellNoticeSlot", () => {
     const { rerender } = render(<Harness input={{ usbDisconnected: true }} variant="compact" />);
     expect(screen.getByTestId("notice-dismiss")).toHaveAttribute("aria-label", "shell:notices.dismiss");
     await userEvent.click(screen.getByTestId("notice-dismiss"));
+    await closed();
     expect(screen.queryByTestId("usb-disconnect-notice")).toBeNull();
 
     rerender(<Harness input={{ hueLeftOut: HUE_LEFT_OUT_REASON.BUSY }} variant="compact" />);
@@ -207,6 +211,7 @@ describe("ShellNoticeSlot", () => {
     expect(close).toHaveAttribute("aria-label", "shell:notices.skipSetupGuide");
     expect(close).toHaveAttribute("title", "shell:notices.skipSetupGuide");
     await userEvent.click(close);
+    await closed();
     expect(screen.queryByTestId("onboarding-notice")).toBeNull();
   });
 
@@ -221,7 +226,7 @@ describe("ShellNoticeSlot", () => {
 
   it.each(["compact", "full"] as const)(
     "keeps its height while another notice is still due, instead of collapsing and re-opening (%s)",
-    (variant) => {
+    async (variant) => {
       const { rerender } = render(<Harness input={{ availability: "checking" }} variant={variant} holdSpace />);
       expect(screen.getByTestId("output-checking")).toBeInTheDocument();
 
@@ -229,6 +234,9 @@ describe("ShellNoticeSlot", () => {
       expect(screen.getByTestId("notice-placeholder")).toBeInTheDocument();
 
       rerender(<Harness input={{ availability: "ready" }} variant={variant} holdSpace={false} />);
+      // It closes with its placeholder inside, out of reach, and is gone once closed.
+      expect(screen.getByTestId("shell-notice-slot").closest("[inert]")).not.toBeNull();
+      await closed();
       expect(screen.queryByTestId("shell-notice-slot")).toBeNull();
     },
   );

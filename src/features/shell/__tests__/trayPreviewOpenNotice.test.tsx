@@ -145,6 +145,10 @@ describe("tray Show LED Preview — a refused open is reported", () => {
       document.dispatchEvent(new Event("visibilitychange"));
       await vi.advanceTimersByTimeAsync(PREVIEW_OPEN_NOTICE_MS);
     });
+    // The strip closes with it inside; its Reveal lets it go 400 ms later.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(450);
+    });
     expect(screen.queryByTestId("preview-open-failed-notice")).toBeNull();
   });
 });
