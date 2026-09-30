@@ -47,11 +47,10 @@ pub struct MdnsBridgeCandidate {
 /// Process-wide mDNS daemon + active browser registry.
 pub struct MdnsRegistry {
     daemon: Option<ServiceDaemon>,
-    /// Cached `Receiver` per service type so multiple callers attaching to
-    /// the same service share one browser. The `Arc<Mutex<_>>` lets a
-    /// short-lived snapshot drain events while the underlying browser
-    /// keeps running for follow-up snapshots.
-    browsers: Mutex<HashMap<String, Arc<Mutex<mdns_sd::Receiver<ServiceEvent>>>>>,
+    /// One browser per service type, shared by every caller attaching to it.
+    /// The `Arc<Mutex<_>>` lets a short-lived snapshot drain events while
+    /// the underlying browser keeps running for follow-up snapshots.
+    browsers: Mutex<HashMap<String, Arc<Mutex<BrowserState>>>>,
 }
 
 static GLOBAL: OnceLock<MdnsRegistry> = OnceLock::new();
@@ -100,17 +99,20 @@ impl MdnsRegistry {
 
         if let Some(existing) = guard.get(service_type) {
             return Ok(MdnsBrowseHandle {
-                receiver: Arc::clone(existing),
+                state: Arc::clone(existing),
             });
         }
 
         let receiver = daemon
             .browse(service_type)
             .map_err(|err| MdnsBrowserError::BrowseFailed(format!("{err}")))?;
-        let arc_rx = Arc::new(Mutex::new(receiver));
-        guard.insert(service_type.to_string(), Arc::clone(&arc_rx));
+        let state = Arc::new(Mutex::new(BrowserState {
+            receiver,
+            resolved: ResolvedServices::default(),
+        }));
+        guard.insert(service_type.to_string(), Arc::clone(&state));
         debug!("[mdns] browser started for {service_type}");
-        Ok(MdnsBrowseHandle { receiver: arc_rx })
+        Ok(MdnsBrowseHandle { state })
     }
 }
 
@@ -137,16 +139,51 @@ impl std::fmt::Display for MdnsBrowserError {
     }
 }
 
+/// A browser's event stream and what it has resolved so far.
+struct BrowserState {
+    receiver: mdns_sd::Receiver<ServiceEvent>,
+    resolved: ResolvedServices,
+}
+
+/// The instances a browser has resolved and not seen removed, by full name.
+///
+/// Kept across snapshots: `mdns-sd` sends `ServiceResolved` once per instance
+/// and the browser outlives any one snapshot, so a later snapshot draining
+/// only its own window would miss every device resolved before it — WLED,
+/// which has no cloud list to fall back on, would read as "none found".
+#[derive(Default)]
+pub(crate) struct ResolvedServices {
+    by_name: HashMap<String, ResolvedService>,
+}
+
+impl ResolvedServices {
+    pub(crate) fn apply(&mut self, event: ServiceEvent) {
+        match event {
+            ServiceEvent::ServiceResolved(info) => {
+                self.by_name.insert(info.get_fullname().to_string(), *info);
+            }
+            ServiceEvent::ServiceRemoved(_, fullname) => {
+                self.by_name.remove(&fullname);
+            }
+            _ => {}
+        }
+    }
+
+    pub(crate) fn current(&self) -> Vec<ResolvedService> {
+        self.by_name.values().cloned().collect()
+    }
+}
+
 /// Active browser handle that lets a caller drain advertised services
 /// over a bounded window without owning the registry.
 pub struct MdnsBrowseHandle {
-    receiver: Arc<Mutex<mdns_sd::Receiver<ServiceEvent>>>,
+    state: Arc<Mutex<BrowserState>>,
 }
 
 impl MdnsBrowseHandle {
-    /// Drain `ServiceResolved` events for up to `deadline`. Returns
-    /// every fully-resolved instance the registry observed during the
-    /// window (deduplicated by hostname).
+    /// Drain events for up to `deadline`, then return every instance this
+    /// browser has resolved and not seen removed — during this window or an
+    /// earlier one.
     ///
     /// mdns-sd 0.19 reshaped `ServiceEvent::ServiceResolved` from
     /// `ServiceInfo` to `Box<ResolvedService>`; we unbox into a plain
@@ -154,10 +191,13 @@ impl MdnsBrowseHandle {
     /// type instead of paying the heap-indirection on every accessor.
     pub fn snapshot(&self, deadline: Duration) -> Vec<ResolvedService> {
         let started = Instant::now();
-        let mut found: HashMap<String, ResolvedService> = HashMap::new();
-        let Ok(rx) = self.receiver.lock() else {
+        let Ok(mut state) = self.state.lock() else {
             return Vec::new();
         };
+        let BrowserState {
+            receiver: rx,
+            resolved,
+        } = &mut *state;
 
         loop {
             let remaining = deadline.checked_sub(started.elapsed());
@@ -168,11 +208,7 @@ impl MdnsBrowseHandle {
             // without busy-looping when no events arrive.
             let poll = remaining.min(Duration::from_millis(250));
             match rx.recv_timeout(poll) {
-                Ok(ServiceEvent::ServiceResolved(info)) => {
-                    let key = info.get_hostname().to_string();
-                    found.insert(key, *info);
-                }
-                Ok(_) => continue,
+                Ok(event) => resolved.apply(event),
                 Err(_) => {
                     // recv_timeout returns Timeout most often; any error
                     // (Disconnected, Again) collapses to "no event this poll".
@@ -182,7 +218,7 @@ impl MdnsBrowseHandle {
                 }
             }
         }
-        found.into_values().collect()
+        resolved.current()
     }
 }
 
@@ -577,5 +613,48 @@ mod tests {
             candidate.id, "AABBCCDDEEFF1122",
             "TXT bridgeid must be uppercased to match cloud-discovery dedup key"
         );
+    }
+
+    fn resolved(ty: &str, instance: &str, ip: Ipv4Addr) -> ServiceEvent {
+        ServiceEvent::ServiceResolved(Box::new(make_service_with_type(
+            ty,
+            instance,
+            "device.local.",
+            ip,
+        )))
+    }
+
+    #[test]
+    fn a_browser_keeps_what_it_resolved_across_snapshots_until_it_is_removed() {
+        let mut services = ResolvedServices::default();
+        services.apply(resolved(
+            "_wled._tcp.local.",
+            "Desk",
+            Ipv4Addr::new(10, 0, 0, 2),
+        ));
+        services.apply(resolved(
+            "_wled._tcp.local.",
+            "Shelf",
+            Ipv4Addr::new(10, 0, 0, 3),
+        ));
+        // A later snapshot drains nothing new and still sees both.
+        assert_eq!(services.current().len(), 2);
+        // Seen again (a renewed record): still one entry.
+        services.apply(resolved(
+            "_wled._tcp.local.",
+            "Desk",
+            Ipv4Addr::new(10, 0, 0, 2),
+        ));
+        assert_eq!(services.current().len(), 2);
+        services.apply(ServiceEvent::ServiceRemoved(
+            "_wled._tcp.local.".to_string(),
+            "Desk._wled._tcp.local.".to_string(),
+        ));
+        let left: Vec<String> = services
+            .current()
+            .iter()
+            .map(|s| s.get_fullname().to_string())
+            .collect();
+        assert_eq!(left, vec!["Shelf._wled._tcp.local.".to_string()]);
     }
 }
