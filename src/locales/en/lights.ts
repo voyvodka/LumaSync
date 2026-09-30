@@ -161,7 +161,10 @@ export default {
     profile: {
       brightness: "Brightness",
       saturation: "Saturation",
-      blackBorder: "Black border",
+      blackBorder: "Ignore black bars",
+      blackBorderTipLabel: "About black bars",
+      blackBorderTip:
+        "Finds the black bars above and below a film, or beside an older picture, so the lights follow the edge of the picture instead of going dark with the bars.",
     },
     smoothing: {
       title: "Response",

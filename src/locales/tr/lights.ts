@@ -26,7 +26,7 @@ const lights: Catalogue<typeof enLights> = {
   },
   power: {
     label: "Işıklar",
-    turnOn: "Aç: {{mode}}",
+    turnOn: "{{mode}} ile aç",
     turnOff: "Işıkları kapat",
   },
   scenes: {
@@ -92,8 +92,8 @@ const lights: Catalogue<typeof enLights> = {
     colorN: "{{n}}. renk",
     addColor: "Renk ekle",
     removeColor: "Bu rengi kaldır",
-    bestOnStrip: "En iyisi şeritte — birkaç lambada daha sade hareket eder",
-    bestOnStripShort: "En iyisi şeritte",
+    bestOnStrip: "En iyi şeritte görünür; birkaç lambada daha sade oynar",
+    bestOnStripShort: "En iyi şeritte görünür",
     direction: "Yön",
     duration: "Süre",
     durationValue: "{{count}} dk",
@@ -145,7 +145,7 @@ const lights: Catalogue<typeof enLights> = {
       ice: "Buz",
       party: "Parti",
       fire: "Ateş",
-      custom: "Senin renklerin",
+      custom: "Kendi renklerin",
     },
     directions: {
       leftToRight: "Soldan sağa",
@@ -153,7 +153,7 @@ const lights: Catalogue<typeof enLights> = {
       bottomToTop: "Yukarı",
       topToBottom: "Aşağı",
       outward: "Dışa doğru",
-      around: "Çevresinde",
+      around: "Çevre boyunca",
     },
   },
   signal: {
@@ -164,13 +164,16 @@ const lights: Catalogue<typeof enLights> = {
     profile: {
       brightness: "Parlaklık",
       saturation: "Doygunluk",
-      blackBorder: "Siyah kenar",
+      blackBorder: "Siyah bantları yok say",
+      blackBorderTipLabel: "Siyah bantlar hakkında",
+      blackBorderTip:
+        "Filmlerde üstte ve altta, eski görüntülerde yanlarda kalan siyah bantları algılar; ışıklar bantlarla birlikte kararmak yerine görüntünün kenarını izler.",
     },
     smoothing: {
       title: "Tepki",
       subtle: "Yumuşak",
       moderate: "Dengeli",
-      intense: "Yoğun",
+      intense: "Canlı",
     },
   },
   dock: {
@@ -187,9 +190,9 @@ const lights: Catalogue<typeof enLights> = {
       wledName: "WLED",
       wledSub: "{{count}} LED · <b>UDP</b>",
       hueName: "HUE",
-      hueType: "EĞLENCE",
+      hueType: "EĞLENCE ALANI",
       hueSubStreaming: "Hue Bridge · <b>DTLS {{hz}} Hz</b>",
-      hueSubIdle: "Hue Bridge · <b>bekleme</b>",
+      hueSubIdle: "Hue Bridge · <b>beklemede</b>",
       hueSubReconnecting: "Hue Bridge · <b>yeniden bağlanıyor</b>",
       hueSubFailed: "Hue Bridge · <b>yayın durdu</b>",
       hueSubUnavailable: "Yapılandırılmadı",
@@ -200,10 +203,10 @@ const lights: Catalogue<typeof enLights> = {
   },
   led: {
     colorCorrection: {
-      gammaR: "Gamma Kırmızı",
-      gammaG: "Gamma Yeşil",
-      gammaB: "Gamma Mavi",
-      kelvin: "Beyaz Nokta (K)",
+      gammaR: "Kırmızı gama",
+      gammaG: "Yeşil gama",
+      gammaB: "Mavi gama",
+      kelvin: "Beyaz noktası (K)",
       saturation: "Doygunluk",
       reset: "Varsayılanlara sıfırla",
       kelvinHint: "Düşük = sıcak, yüksek = soğuk",
@@ -232,7 +235,7 @@ const lights: Catalogue<typeof enLights> = {
         apply: "{{order}} olarak kaydet",
         cancel: "Vazgeç",
         verify: "{{order}} kaydedildi. Renkler şimdi doğru görünüyor mu?",
-        verifyHint: "Bir aydınlatma modu açıkken kontrol et: düz kırmızı, kırmızı görünmeli.",
+        verifyHint: "Bir ışık modu açıkken kontrol et: saf kırmızı, kırmızı görünmeli.",
         keep: "Doğru görünüyor",
         undo: "Geri al ({{order}} sırasına dön)",
         retry: "Yeniden dene",

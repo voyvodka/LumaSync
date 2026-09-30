@@ -4,6 +4,7 @@ import { setPreference, usePreference } from "@/features/persistence/preferences
 import type { LightingSmoothingPreset } from "@/shared/contracts/lighting";
 import type { AmbilightPayload } from "@/shared/contracts/mode";
 import { Callout } from "@/shared/ui/Callout/Callout";
+import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
 import { RangeRow } from "@/shared/ui/RangeRow/RangeRow";
 import { Stage, StageChoice, StageGrid, StageRow } from "@/shared/ui/Stage/Stage";
 import { Toggle } from "@/shared/ui/Toggle/Toggle";
@@ -91,7 +92,16 @@ export function AmbilightStage({
           />
         </StageRow>
         {dense ? null : (
-          <StageRow label={t("lights:signal.profile.blackBorder")}>
+          <StageRow
+            label={
+              <>
+                {t("lights:signal.profile.blackBorder")}
+                <InfoTip label={t("lights:signal.profile.blackBorderTipLabel")}>
+                  {t("lights:signal.profile.blackBorderTip")}
+                </InfoTip>
+              </>
+            }
+          >
             <Toggle
               checked={blackBorder}
               disabled={disabled}

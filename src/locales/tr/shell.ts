@@ -31,12 +31,12 @@ const shell: Catalogue<typeof enShell> = {
     state: {
       ok: "Hazır",
       off: "Kapalı",
-      idle: "Boşta",
+      idle: "Beklemede",
       streaming: "Yayında",
-      retrying: "Deniyor",
+      retrying: "Yeniden deniyor",
       failed: "Hata",
       waiting: "Bekliyor",
-      leftOut: "Dışarıda",
+      leftOut: "Dahil değil",
     },
     hint: {
       localOff: "Şerit bağlı değil.",
