@@ -69,7 +69,7 @@ describe("StatusBar", () => {
   });
 
   it("ticks a new state word in, and not the one the window opens on", () => {
-    const item = (state: string, kind: "ok" | "active") => ({ id: "hue", label: "Hue", state, kind });
+    const item = (state: string, kind: "ok" | "active") => ({ id: "hue" as const, label: "Hue", state, kind });
     const { rerender } = render(<StatusBar uiMode="full" items={[item("Ready", "ok")]} />);
     expect(screen.getByText("Ready")).not.toHaveAttribute("data-changed");
     rerender(<StatusBar uiMode="full" items={[item("Streaming", "active")]} />);
