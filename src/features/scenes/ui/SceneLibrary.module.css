@@ -98,21 +98,6 @@
     white-space: nowrap;
     text-overflow: ellipsis;
   }
-  /* Holds the name's line: the row keeps its height while it is edited. */
-  .input {
-    flex: 1;
-    min-width: 0;
-    height: 32px;
-    padding: 0 8px;
-    border: 0;
-    border-radius: 6px;
-    background: var(--lm-bg);
-    box-shadow: inset 0 0 0 1px var(--lm-line-2);
-    color: var(--lm-ink);
-    font: inherit;
-    font-size: 12.5px;
-  }
-  .input:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
 
   /* Present but faint at rest, so showing them on hover shifts nothing. */
   .actions { display: flex; flex-shrink: 0; opacity: 0; transition: opacity var(--lm-dur-quick); }
@@ -147,7 +132,7 @@
   :global(:root[data-reduced-motion]) .row[data-entering] .swatch { animation: none; }
 
   @media (forced-colors: active) {
-    .action:focus-visible, .input:focus-visible, .handle:focus-visible { outline: 2px solid Highlight; outline-offset: 1px; }
+    .action:focus-visible, .handle:focus-visible { outline: 2px solid Highlight; outline-offset: 1px; }
     .actions { opacity: 1; }
     .action[data-danger] { outline: 2px solid Mark; outline-offset: -2px; }
     .list[data-dragging] .row[data-dragged] { outline: 2px solid Highlight; }

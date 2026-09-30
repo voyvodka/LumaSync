@@ -1,7 +1,9 @@
 @layer components {
   /* The scenes: one line of chips, each its colour and its name. One line in every width, so a
      scene added or deleted never moves the stage under it; what does not fit scrolls sideways. */
-  .row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .row { display: flex; align-items: center; gap: 8px; min-width: 0; width: 100%; }
+  /* The row and the edit bar take turns in one box of the row's height. */
+  .slot { height: 32px; min-width: 0; }
   /* The padding gives the focus ring and a landing chip room the scroll box would clip; the margin
      takes it back so the chips still line up with the strip above. */
   .list {
@@ -43,11 +45,6 @@
   .chip:hover:not(:disabled) { color: var(--lm-ink); box-shadow: inset 0 0 0 1px var(--lm-ink-faint); }
   .chip[aria-checked="true"] { color: var(--lm-ink); background: var(--lm-panel-2); box-shadow: inset 0 0 0 1px var(--lm-ink-faint); }
   .chip:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
-  /* The scene being edited: the light came from it and has changed since. */
-  .chip[data-edited] { color: var(--lm-ink); outline: 1px dashed var(--lm-ink-faint); outline-offset: -1px; box-shadow: none; }
-  .chip[data-edited]:focus-visible { box-shadow: var(--lm-focus-ring); }
-  .update { animation: update-in var(--lm-dur-base) var(--lm-ease-out); }
-  @keyframes update-in { from { opacity: 0; transform: scale(0.8); } }
   .chip:disabled { cursor: not-allowed; opacity: 0.45; }
   /* The empty list's one chip: saving the running light is how the first scene is made. */
   .ghost { max-width: none; padding: 0 12px; box-shadow: none; outline: 1px dashed var(--lm-line-2); outline-offset: -1px; }
@@ -81,7 +78,6 @@
 
   :global(:root[data-reduced-motion]) .chip,
   :global(:root[data-reduced-motion]) .action { transition: none; }
-  :global(:root[data-reduced-motion]) .update { animation: none; }
   :global(:root[data-reduced-motion]) .list[data-placed] .chip[aria-checked="true"] .swatch,
   :global(:root[data-reduced-motion]) .chip[data-arrived] { animation: none; }
 

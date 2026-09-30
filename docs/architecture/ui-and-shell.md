@@ -141,8 +141,20 @@ the dimmed stage shows. The popup keeps Off among its buttons; ⌥1 is still Off
 
 **A choice in flight holds presses; it does not dim.** Starting Ambilight's capture takes a few
 hundred milliseconds, and the strip and scenes used to go to 40 % for it and come back, which read
-as the app stalling. While a transaction runs they ignore presses (`busy`, with `aria-busy`), and
-only a real lock — no output, the calibration — shows as disabled.
+as the app stalling. While a transaction runs they ignore presses (`busy`), and only a real lock —
+no output, the calibration — shows as disabled. No `aria-busy` either: on the power switch it hid
+the switch's state from a screen reader for the length of every change.
+
+**A scene is made and edited with the page's own controls, inside an explicit edit.** "+" and a
+scene's Edit in the library turn the scenes row, in place, into a bar with the scene's look, its
+name, Cancel and Save; the mode strip and the stage below it then shape the scene, and the lights
+preview every change. Save writes the look and the name in one edit of the list; Cancel applies
+the light (and Ambilight's smoothing) as it was when the edit opened. The first version saved the
+running light at once with no name, and an update button appeared beside "+" once the light
+changed after a scene was chosen — nothing said that the page's controls were editing a scene, so
+the way to change one was never found. A duplicate set of controls in a scene editor was the other
+option; it would have been a second copy of every stage to keep in step. The edit lives in
+`scenesStore` rather than in the row, so leaving the page and coming back finds it still open.
 
 **A closed set of kinds is a table, not a scattered `switch`.** Sections (`SECTION_REGISTRY` in
 `SettingsLayout.tsx`), Devices rail rows (`RAIL_ROWS` in `device/ui/deviceRailRows.ts`), lighting mode kinds

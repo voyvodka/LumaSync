@@ -25,11 +25,12 @@ https://keepachangelog.com/en/1.1.0/
 - Scenes: a row under the mode buttons, on Lights and in the compact window, where one press
   plays a whole look — Ambilight with its brightness, saturation and response, a colour or white,
   or an effect with its palette and settings. It starts with six suggestions (Movie, Game, Warm
-  evening, Reading, Fireplace, Aurora); "+" saves the light that is running as a new scene, and
-  the scenes button beside it adds more from a library of fifteen, renames, reorders and deletes
-  them. Up to 24 scenes. A sunrise scene starts over each time you choose it. Change the light
-  after choosing a scene and an update button beside "+" writes the change back into it. An
-  Ambilight scene shows as a small screen, warm or cool by how quickly it follows.
+  evening, Reading, Fireplace, Aurora). "+" makes a new scene from the light that is running, and
+  Edit in the scenes button's library opens one: the row becomes a bar with its name, the page's
+  own controls shape it while the lights show every change, and Save keeps it while Cancel puts the
+  light back as it was. The same library adds more from fifteen suggestions, reorders and deletes.
+  Up to 24 scenes. A sunrise scene starts over each time you choose it. An Ambilight scene shows as
+  a small screen, warm or cool by how quickly it follows.
 - The lights go off when the computer locks, sleeps or turns its display off, and the mode that
   ran comes back when you return — after the unlock, if waking up shows the lock screen. Settings →
   General → "Lights off when away" turns this off. macOS and Windows.

@@ -24,7 +24,6 @@ import {
   suggestedScene,
   withScene,
   withSceneMovedTo,
-  withSceneName,
   withoutScene,
 } from "../model/sceneLibrary";
 import { editScenes } from "../state/scenesStore";
@@ -45,6 +44,8 @@ interface SceneLibraryProps {
   /** The button that opened it: focus goes back there when focus leaves the library. */
   anchorRef: RefObject<HTMLElement | null>;
   onClose: () => void;
+  /** Opens the scene for editing with the page's controls; the library closes for it. */
+  onEdit: (id: string) => void;
 }
 
 interface Drag {
@@ -55,11 +56,11 @@ interface Drag {
 }
 
 /**
- * The library popover: the user's scenes to reorder by dragging, rename and delete, then the
+ * The library popover: the user's scenes to reorder by dragging, edit and delete, then the
  * suggested ones not yet in the list to add. A row that arrives grows in, one that goes folds away.
  * It is portalled after the page, so it takes focus when it opens and closes when focus leaves it.
  */
-export function SceneLibrary({ scenes, anchorRef, onClose }: SceneLibraryProps) {
+export function SceneLibrary({ scenes, anchorRef, onClose, onEdit }: SceneLibraryProps) {
   const { t } = useTranslation();
   const [failed, setFailed] = useState(false);
   const [leaving, setLeaving] = useState<ReadonlySet<string>>(new Set());
@@ -222,7 +223,7 @@ export function SceneLibrary({ scenes, anchorRef, onClose }: SceneLibraryProps) 
                 const to = index + delta;
                 if (to >= 0 && to < scenes.length) moveTo(scene.id, to, `scene-handle-${scene.id}`);
               }}
-              onRename={(name) => edit((list) => withSceneName(list, scene.id, name), `scene-rename-${scene.id}`)}
+              onEdit={() => onEdit(scene.id)}
               onRemove={() => leave(scene.id, (list) => withoutScene(list, scene.id))}
             />
           ))}
@@ -294,11 +295,11 @@ interface SceneEntryProps {
   /** Its own entrance or exit ended. */
   onAnimationDone: () => void;
   onKeyMove: (delta: -1 | 1) => void;
-  onRename: (name: string) => void;
+  onEdit: () => void;
   onRemove: () => void;
 }
 
-/** One of the user's scenes: dragged by its handle or its body, renamed in place, deleted on a second press. */
+/** One of the user's scenes: dragged by its handle or its body, opened for editing, deleted on a second press. */
 function SceneEntry({
   scene,
   entering,
@@ -310,7 +311,7 @@ function SceneEntry({
   onPointerUp,
   onAnimationDone,
   onKeyMove,
-  onRename,
+  onEdit,
   onRemove,
 }: SceneEntryProps) {
   const { t } = useTranslation();
@@ -318,37 +319,13 @@ function SceneEntry({
   const available = isSceneAvailable(scene);
   const noteId = useId();
   const hintId = useId();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
   const [armed, setArmed] = useState(false);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const renameRef = useRef<HTMLButtonElement | null>(null);
-  // Enter closes the field and its blur would close it again; Esc closes it keeping nothing.
-  const fieldOpen = useRef(false);
-
-  useEffect(() => {
-    if (editing) inputRef.current?.select();
-  }, [editing]);
 
   useEffect(() => {
     if (!armed) return;
     const timer = setTimeout(() => setArmed(false), ARMED_MS);
     return () => clearTimeout(timer);
   }, [armed]);
-
-  const open = () => {
-    fieldOpen.current = true;
-    setDraft(scene.name ?? "");
-    setEditing(true);
-  };
-  const close = (keep: boolean) => {
-    if (!fieldOpen.current) return;
-    fieldOpen.current = false;
-    const byKey = document.activeElement === inputRef.current;
-    setEditing(false);
-    if (keep && draft.trim() !== (scene.name ?? "")) onRename(draft);
-    else if (byKey) requestAnimationFrame(() => renameRef.current?.focus());
-  };
 
   return (
     <li
@@ -387,49 +364,24 @@ function SceneEntry({
         {t("lights:scenes.reorderHint")}
       </span>
       <span className={styles.swatch} style={{ background: sceneSwatch(scene) }} aria-hidden />
-      {editing ? (
-        <input
-          ref={inputRef}
-          autoFocus
-          className={styles.input}
-          value={draft}
-          placeholder={name}
-          maxLength={SCENE_LIMITS.nameMaxCodePoints * 2}
-          aria-label={t("lights:scenes.rename", { name })}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              close(true);
-            } else if (event.key === "Escape") {
-              // The popover would close on the same key.
-              event.preventDefault();
-              event.stopPropagation();
-              close(false);
-            }
-          }}
-          onBlur={() => close(true)}
-          data-testid={`scene-name-input-${scene.id}`}
-        />
-      ) : (
-        <span className={styles.name}>
-          {name}
-          {available ? null : (
-            <span id={noteId} className={styles.note}>
-              {" · "}
-              {t("lights:scenes.unavailableShort")}
-            </span>
-          )}
-        </span>
-      )}
+      <span className={styles.name}>
+        {name}
+        {available ? null : (
+          <span id={noteId} className={styles.note}>
+            {" · "}
+            {t("lights:scenes.unavailableShort")}
+          </span>
+        )}
+      </span>
       <span className={styles.actions} data-armed={armed || undefined}>
         <IconButton
-          ref={renameRef}
           className={styles.action}
-          label={t("lights:scenes.rename", { name })}
+          label={t("lights:scenes.edit", { name })}
           icon={<IconPencil />}
-          onClick={open}
-          data-testid={`scene-rename-${scene.id}`}
+          disabled={!available}
+          aria-describedby={available ? undefined : noteId}
+          onClick={onEdit}
+          data-testid={`scene-edit-${scene.id}`}
         />
         <IconButton
           className={styles.action}

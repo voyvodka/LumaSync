@@ -5,6 +5,8 @@
  */
 
 import { shellStore } from "@/features/persistence/shellStore";
+import type { LightingSmoothingPreset } from "@/shared/contracts/lighting";
+import type { LightingModeConfig } from "@/shared/contracts/mode";
 import type { ShellState } from "@/shared/contracts/shell";
 import type { StoredScene } from "@/shared/contracts/scenes";
 import { createStore, useStoreSelector } from "@/shared/lib/store";
@@ -15,10 +17,17 @@ const SCENES_UNREADABLE = "SCENES_UNREADABLE";
 
 const store = createStore<StoredScene[]>(readStoredScenes(undefined));
 /**
- * The scene the running light last came from — picked, or saved just now — for this session: the
- * one a change to the light can be written back into. Not stored; a relaunch starts without one.
+ * A scene being made or edited with the page's own controls: `sceneId` is `null` for a new one.
+ * `before` is the light as it was when the edit began, which cancelling puts back. Kept here rather
+ * than in the row so leaving the page and coming back finds the edit still open. Not stored.
  */
-const origin = createStore<string | null>(null);
+export interface SceneEdit {
+  sceneId: string | null;
+  name: string;
+  before: { mode: LightingModeConfig; smoothing: LightingSmoothingPreset };
+}
+
+const editing = createStore<SceneEdit | null>(null);
 let hydrated = false;
 /** An edit made before the boot read landed wins over it. */
 let editedBeforeLoad = false;
@@ -65,12 +74,12 @@ export function getScenes(): StoredScene[] {
   return store.get();
 }
 
-export function useSceneOrigin(): string | null {
-  return useStoreSelector(origin, (id) => id);
+export function useSceneEdit(): SceneEdit | null {
+  return useStoreSelector(editing, (edit) => edit);
 }
 
-export function setSceneOrigin(id: string | null): void {
-  origin.set(id);
+export function setSceneEdit(edit: SceneEdit | null): void {
+  editing.set(edit);
 }
 
 /**
@@ -111,6 +120,6 @@ export function __resetScenesForTests(scenes?: StoredScene[]): void {
   editedBeforeLoad = false;
   pending = 0;
   lastStored = scenes ?? null;
-  origin.set(null);
+  editing.set(null);
   store.set(scenes ?? readStoredScenes(undefined));
 }

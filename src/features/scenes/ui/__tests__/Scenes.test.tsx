@@ -1,8 +1,9 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { __resetPreferencesForTests, __setPreferenceForTests, getPreference } from "@/features/persistence/preferences";
-import type { LightingModeConfig } from "@/shared/contracts/mode";
+import { normalizeEffectPayload, type LightingModeConfig } from "@/shared/contracts/mode";
 import type { StoredScene } from "@/shared/contracts/scenes";
 import type { ShellState } from "@/shared/contracts/shell";
 
@@ -153,101 +154,241 @@ describe("Scenes", () => {
     expect(screen.getByRole("radio", { name: "Blue" })).toBeDisabled();
   });
 
-  it("saves the running light as a new scene, and not twice", async () => {
-    seed([mine("a", "Blue")]);
-    renderScenes(RED);
-    await act(async () => fireEvent.click(screen.getByTestId("scene-save")));
-    const saved = getScenes();
-    expect(saved).toHaveLength(2);
-    expect(saved[1]).toMatchObject({ kind: "solid", solid: { r: 255, g: 0, b: 0, brightness: 0.6 } });
-    expect(disk.state.scenes).toEqual(saved);
-    // It is the running light now: checked, and save has nothing new to keep.
-    expect(screen.getByRole("radio", { name: "#FF0000" })).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByTestId("scene-save")).toBeDisabled();
-  });
-
-  it("cannot save Off, and offers the first save in an empty list's place", async () => {
+  it("cannot make a scene of Off, and offers the first one in an empty list's place", async () => {
     seed([]);
-    renderScenes(OFF);
+    const view = render(<Scenes mode={OFF} disabled={false} onApply={vi.fn<Apply>()} />);
     expect(screen.getByTestId("scene-save")).toBeDisabled();
     expect(screen.getByTestId("scene-save-first")).toBeDisabled();
-  });
-
-  it("puts the list back when the save fails", async () => {
-    seed([mine("a", "Blue")]);
-    renderScenes(RED);
-    disk.failNext = true;
-    await act(async () => fireEvent.click(screen.getByTestId("scene-save")));
-    expect(getScenes().map((s) => s.id)).toEqual(["a"]);
-    expect(screen.queryByRole("radio", { name: "#FF0000" })).not.toBeInTheDocument();
-  });
-
-  it("writes an edit on the list as stored, not on a stale copy", async () => {
-    __resetScenesForTests([mine("a", "Blue")]);
-    // Another write landed on disk after this window last read it.
-    disk.state = { scenes: [mine("a", "Blue"), mine("z", "Other")] };
-    renderScenes(RED);
-    await act(async () => fireEvent.click(screen.getByTestId("scene-save")));
-    expect((disk.state.scenes ?? []).map((s) => s.id).slice(0, 2)).toEqual(["a", "z"]);
-    expect(disk.state.scenes).toHaveLength(3);
+    view.rerender(<Scenes mode={RED} disabled={false} onApply={vi.fn<Apply>()} />);
+    await act(async () => fireEvent.click(screen.getByTestId("scene-save-first")));
+    expect(screen.getByRole("group", { name: "lights:scenes.save" })).toBeInTheDocument();
   });
 });
 
-describe("updating a scene to the light", () => {
+describe("making and editing a scene", () => {
   const blue = (brightness: number): LightingModeConfig => ({ kind: "solid", solid: { r: 0, g: 0, b: 255, brightness } });
+  let setLight: (mode: LightingModeConfig) => void = () => {};
 
-  it("offers to write a change back into the scene the light came from, and only that one", async () => {
-    seed([mine("a", "Blue"), mine("b", "Other")]);
+  /** The page around the row: what the row applies runs, and the page's own controls change the light. */
+  function Page({ initial, onApply, busy = false }: { initial: LightingModeConfig; onApply: Apply; busy?: boolean }) {
+    const [mode, setMode] = useState(initial);
+    setLight = (next) => act(() => setMode(next));
+    return (
+      <Scenes
+        mode={mode}
+        disabled={false}
+        busy={busy}
+        onApply={(next) => {
+          onApply(next);
+          setMode(next);
+        }}
+      />
+    );
+  }
+
+  function renderPage(initial: LightingModeConfig, busy = false) {
     const onApply = vi.fn<Apply>();
-    const view = render(<Scenes mode={OFF} disabled={false} onApply={onApply} />);
-    expect(screen.queryByTestId("scene-update")).not.toBeInTheDocument();
-    await act(async () => fireEvent.click(screen.getByRole("radio", { name: "Blue" })));
-    view.rerender(<Scenes mode={blue(1)} disabled={false} onApply={onApply} />);
-    // Still the scene: nothing to update.
-    expect(screen.queryByTestId("scene-update")).not.toBeInTheDocument();
+    const view = render(<Page initial={initial} onApply={onApply} busy={busy} />);
+    return { onApply, view };
+  }
 
-    view.rerender(<Scenes mode={blue(0.4)} disabled={false} onApply={onApply} />);
-    const update = screen.getByTestId("scene-update");
-    expect(update).toHaveAccessibleName("lights:scenes.update(Blue)");
-    expect(screen.getByRole("radio", { name: "Blue" })).toHaveAttribute("data-edited");
-    await act(async () => fireEvent.click(update));
-    expect(getScenes().find((s) => s.id === "a")).toMatchObject({ name: "Blue", solid: { brightness: 0.4 } });
-    expect(getScenes().find((s) => s.id === "b")).toEqual(mine("b", "Other"));
-    // The scene is the light again.
-    expect(screen.queryByTestId("scene-update")).not.toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "Blue" })).toHaveAttribute("aria-checked", "true");
+  const frame = () => act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+  const bar = () => screen.queryByRole("group", { name: /lights:scenes\.(save|editing)/ });
+
+  async function editFromLibrary(id: string) {
+    const library = await openLibrary();
+    await act(async () => fireEvent.click(within(library).getByTestId(`scene-edit-${id}`)));
+    await frame();
+  }
+
+  it("opens on the row: no edit is open until one is asked for", () => {
+    seed([mine("a", "Blue")]);
+    renderPage(RED);
+    expect(bar()).not.toBeInTheDocument();
+    expect(screen.getByTestId("scene-edit").closest("[inert]")).not.toBeNull();
+    expect(screen.getByRole("radio", { name: "Blue" })).toBeInTheDocument();
   });
 
-  it("does not offer it after a pick the lights refused: the scene never ran", async () => {
+  it("makes a new scene from the running light, changed and named before it is saved", async () => {
     seed([mine("a", "Blue")]);
-    const view = render(<Scenes mode={OFF} disabled={false} onApply={vi.fn<Apply>()} />);
-    await act(async () => fireEvent.click(screen.getByRole("radio", { name: "Blue" })));
-    // The choice failed; some other colour runs instead.
-    view.rerender(<Scenes mode={blue(0.2)} disabled={false} onApply={vi.fn<Apply>()} />);
-    expect(screen.queryByTestId("scene-update")).not.toBeInTheDocument();
+    const { onApply } = renderPage(RED);
+    await act(async () => fireEvent.click(screen.getByTestId("scene-save")));
+    await frame();
+    const name = screen.getByTestId("scene-edit-name");
+    expect(bar()).toHaveAccessibleName("lights:scenes.save");
+    expect(name).toHaveFocus();
+    expect(name).toHaveAttribute("placeholder", "#FF0000");
+    // Nothing is written while it is open.
+    expect(getScenes()).toHaveLength(1);
+
+    setLight(blue(0.4));
+    fireEvent.change(name, { target: { value: "  Evening  " } });
+    await act(async () => fireEvent.click(screen.getByTestId("scene-edit-save")));
+    await frame();
+    const saved = getScenes();
+    expect(saved).toHaveLength(2);
+    expect(saved[1]).toMatchObject({ name: "Evening", kind: "solid", solid: { brightness: 0.4 } });
+    expect(disk.state.scenes).toEqual(saved);
+    expect(bar()).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Evening" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Evening" })).toHaveFocus();
+    expect(onApply).not.toHaveBeenCalled();
   });
 
-  it("stops offering it when the scene it came from is deleted", async () => {
+  it("edits a scene from the library: plays it, and writes the change and the name into it alone", async () => {
+    seed([mine("a", "Blue"), mine("b", "Other")]);
+    const { onApply } = renderPage(RED);
+    await editFromLibrary("a");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(onApply).toHaveBeenLastCalledWith(blue(1));
+    expect(bar()).toHaveAccessibleName("lights:scenes.editing(Blue)");
+    const name = screen.getByTestId("scene-edit-name");
+    expect(name).toHaveValue("Blue");
+    expect(name).toHaveFocus();
+
+    setLight({ kind: "effect", effect: normalizeEffectPayload({ id: "wave", brightness: 0.5 }) });
+    fireEvent.change(name, { target: { value: "Night" } });
+    await act(async () => fireEvent.keyDown(name, { key: "Enter" }));
+    expect(getScenes().map((s) => s.id)).toEqual(["a", "b"]);
+    expect(getScenes()[0]).toMatchObject({ id: "a", name: "Night", kind: "effect", effect: { id: "wave" } });
+    expect(getScenes()[0]).not.toHaveProperty("solid");
+    expect(getScenes()[1]).toEqual(mine("b", "Other"));
+    expect(onApply).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a library scene's own name while the field is left empty", async () => {
+    seed([suggestedSceneLike()]);
+    renderPage(OFF);
+    await editFromLibrary("s");
+    const name = screen.getByTestId("scene-edit-name");
+    expect(name).toHaveValue("");
+    expect(name).toHaveAttribute("placeholder", "lights:scenes.suggested.movie");
+    await act(async () => fireEvent.click(screen.getByTestId("scene-edit-save")));
+    expect(getScenes()[0]).toEqual(expect.objectContaining({ suggestedId: "movie", kind: "ambilight" }));
+    expect(getScenes()[0]).not.toHaveProperty("name");
+  });
+
+  it("puts the light and its smoothing back as they were on Cancel, and keeps the scene as it was", async () => {
+    const movie: StoredScene = {
+      id: "m",
+      kind: "ambilight",
+      name: "Movie",
+      ambilight: { brightness: 0.8, lightingSmoothingPreset: "subtle" },
+    };
+    seed([movie]);
+    const { onApply } = renderPage(RED);
+    await editFromLibrary("m");
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(getPreference("lightingIntensityPreset")).toBe("subtle");
+    setLight(blue(0.3));
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("scene-edit-cancel"));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    await frame();
+    expect(onApply).toHaveBeenLastCalledWith(RED);
+    expect(getPreference("lightingIntensityPreset")).toBe("moderate");
+    expect(getScenes()).toEqual([movie]);
+    expect(bar()).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Movie" })).toHaveFocus();
+  });
+
+  it("applies nothing on Cancel when nothing changed, nor on opening the scene already running", async () => {
     seed([mine("a", "Blue")]);
-    const view = render(<Scenes mode={OFF} disabled={false} onApply={vi.fn<Apply>()} />);
-    await act(async () => fireEvent.click(screen.getByRole("radio", { name: "Blue" })));
-    view.rerender(<Scenes mode={blue(1)} disabled={false} onApply={vi.fn<Apply>()} />);
-    view.rerender(<Scenes mode={blue(0.4)} disabled={false} onApply={vi.fn<Apply>()} />);
-    expect(screen.getByTestId("scene-update")).toBeInTheDocument();
+    const { onApply } = renderPage(blue(1));
+    await editFromLibrary("a");
+    await act(async () => fireEvent.keyDown(screen.getByTestId("scene-edit-name"), { key: "Escape" }));
+    expect(bar()).not.toBeInTheDocument();
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it("has nothing to save while the lights are off, and Enter then saves nothing", async () => {
+    seed([mine("a", "Blue")]);
+    renderPage(RED);
+    await act(async () => fireEvent.click(screen.getByTestId("scene-save")));
+    setLight(OFF);
+    expect(screen.getByTestId("scene-edit-save")).toBeDisabled();
+    await act(async () => fireEvent.keyDown(screen.getByTestId("scene-edit-name"), { key: "Enter" }));
+    expect(getScenes()).toHaveLength(1);
+    expect(bar()).toBeInTheDocument();
+  });
+
+  it("holds Cancel while a choice is in flight", async () => {
+    seed([mine("a", "Blue")]);
+    const { onApply, view } = renderPage(RED);
+    await act(async () => fireEvent.click(screen.getByTestId("scene-save")));
+    setLight(blue(0.3));
+    view.rerender(<Page initial={RED} onApply={onApply} busy />);
+    await act(async () => fireEvent.click(screen.getByTestId("scene-edit-cancel")));
+    expect(bar()).toBeInTheDocument();
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it("closes when the scene it edits is deleted meanwhile", async () => {
+    seed([mine("a", "Blue")]);
+    renderPage(RED);
+    await editFromLibrary("a");
     await act(async () => {
       await editScenes(() => []);
     });
-    expect(screen.queryByTestId("scene-update")).not.toBeInTheDocument();
+    expect(bar()).not.toBeInTheDocument();
   });
 
-  it("does not offer it once the light has moved to another kind", async () => {
+  it("puts the list back when the save fails, and the edit with it, name and all", async () => {
     seed([mine("a", "Blue")]);
-    const view = render(<Scenes mode={OFF} disabled={false} onApply={vi.fn<Apply>()} />);
-    await act(async () => fireEvent.click(screen.getByRole("radio", { name: "Blue" })));
-    view.rerender(
-      <Scenes mode={{ kind: "ambilight", ambilight: { brightness: 1 } }} disabled={false} onApply={vi.fn<Apply>()} />,
-    );
-    expect(screen.queryByTestId("scene-update")).not.toBeInTheDocument();
+    renderPage(RED);
+    await act(async () => fireEvent.click(screen.getByTestId("scene-save")));
+    fireEvent.change(screen.getByTestId("scene-edit-name"), { target: { value: "Evening" } });
+    disk.failNext = true;
+    await act(async () => fireEvent.click(screen.getByTestId("scene-edit-save")));
+    expect(getScenes().map((s) => s.id)).toEqual(["a"]);
+    expect(screen.queryByRole("radio", { name: "Evening" })).not.toBeInTheDocument();
+    expect(bar()).toBeInTheDocument();
+    expect(screen.getByTestId("scene-edit-name")).toHaveValue("Evening");
+    expect(screen.getByTestId("scene-edit-name")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText("lights:scenes.saveFailed")).toBeInTheDocument();
+  });
+
+  it("does not turn the lights back on when Cancel comes after they were turned off", async () => {
+    seed([mine("a", "Blue")]);
+    const { onApply } = renderPage(RED);
+    await act(async () => fireEvent.click(screen.getByTestId("scene-save")));
+    setLight(OFF);
+    await act(async () => fireEvent.click(screen.getByTestId("scene-edit-cancel")));
+    expect(bar()).not.toBeInTheDocument();
+    expect(onApply).not.toHaveBeenCalled();
+    // "+" cannot take focus with the lights off: the library button does.
+    await frame();
+    expect(screen.getByTestId("scene-library-open")).toHaveFocus();
+  });
+
+  it("opens no edit while the scenes are locked", async () => {
+    seed([mine("a", "Blue")]);
+    const onApply = vi.fn<Apply>();
+    render(<Scenes mode={RED} disabled onApply={onApply} />);
+    const library = await openLibrary();
+    await act(async () => fireEvent.click(within(library).getByTestId("scene-edit-a")));
+    expect(bar()).not.toBeInTheDocument();
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it("writes on the list as stored, not on a stale copy", async () => {
+    __resetScenesForTests([mine("a", "Blue")]);
+    // Another write landed on disk after this window last read it.
+    disk.state = { scenes: [mine("a", "Blue"), mine("z", "Other")] };
+    renderPage(RED);
+    await act(async () => fireEvent.click(screen.getByTestId("scene-save")));
+    await act(async () => fireEvent.click(screen.getByTestId("scene-edit-save")));
+    expect((disk.state.scenes ?? []).map((s) => s.id).slice(0, 2)).toEqual(["a", "z"]);
+    expect(disk.state.scenes).toHaveLength(3);
+  });
+
+  it("cannot open a scene this build cannot play", async () => {
+    seed([{ id: "f", kind: "music" as never, name: "Future" }]);
+    renderPage(RED);
+    const library = await openLibrary();
+    expect(within(library).getByTestId("scene-edit-f")).toBeDisabled();
   });
 });
 
@@ -311,7 +452,7 @@ describe("the scene library", () => {
     fireEvent.pointerDown(row, { button: 0, clientY: 10, pointerId: 1 });
     fireEvent.pointerMove(row, { clientY: 20, pointerId: 1 });
     await act(async () => fireEvent.pointerUp(row, { pointerId: 1 }));
-    fireEvent.pointerDown(within(library).getByTestId("scene-rename-a"), { button: 0, clientY: 10, pointerId: 2 });
+    fireEvent.pointerDown(within(library).getByTestId("scene-edit-a"), { button: 0, clientY: 10, pointerId: 2 });
     fireEvent.pointerMove(row, { clientY: 100, pointerId: 2 });
     await act(async () => fireEvent.pointerUp(row, { pointerId: 2 }));
     expect(getScenes().map((s) => s.id)).toEqual(["a", "b"]);
@@ -397,25 +538,6 @@ describe("the scene library", () => {
     act(() => fireEvent.blur(remove));
     await act(async () => fireEvent.click(remove));
     expect(getScenes()).toHaveLength(1);
-  });
-
-  it("renames in place: Enter keeps it, Esc keeps nothing", async () => {
-    seed([suggestedSceneLike()]);
-    renderScenes(OFF);
-    const library = await openLibrary();
-    await act(async () => fireEvent.click(within(library).getByTestId("scene-rename-s")));
-    const input = within(library).getByTestId("scene-name-input-s");
-    fireEvent.change(input, { target: { value: "  Cinema  " } });
-    await act(async () => fireEvent.keyDown(input, { key: "Enter" }));
-    expect(getScenes()[0]!.name).toBe("Cinema");
-
-    await act(async () => fireEvent.click(within(library).getByTestId("scene-rename-s")));
-    const again = within(library).getByTestId("scene-name-input-s");
-    fireEvent.change(again, { target: { value: "Nope" } });
-    await act(async () => fireEvent.keyDown(again, { key: "Escape" }));
-    expect(getScenes()[0]!.name).toBe("Cinema");
-    // The popover stayed open: the field took the Esc.
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 });
 
