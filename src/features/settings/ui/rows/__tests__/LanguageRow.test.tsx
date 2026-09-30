@@ -14,7 +14,10 @@ vi.mock("@/features/i18n/i18n", () => ({
   I18N_LANGUAGE_NAMES: { en: "English", tr: "Türkçe" },
 }));
 vi.mock("@/features/persistence/shellStore", () => ({ shellStore: { save } }));
-vi.mock("@/features/tray/trayController", () => ({ getStartupEnabled: vi.fn(), setStartup: vi.fn() }));
+vi.mock("@/features/tray/trayController", () => ({
+  getStartupEnabled: vi.fn<() => Promise<boolean>>(),
+  setStartup: vi.fn<(enabled: boolean) => Promise<void>>(),
+}));
 
 import { LanguageRow } from "../GeneralRows";
 
