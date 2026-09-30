@@ -30,6 +30,18 @@ describe("useWledBrowse", () => {
     await act(async () => answer(ok()));
   });
 
+  it("stops searching when it goes inactive mid-browse, and ignores the answer that lands after", async () => {
+    let answer: (found: WledDiscoveryResponse) => void = () => {};
+    const browse = vi.fn<() => Promise<WledDiscoveryResponse>>(() => new Promise((resolve) => (answer = resolve)));
+    const hook = renderHook(({ active }) => useWledBrowse(active, browse), { initialProps: { active: true } });
+    expect(hook.result.current.browsing).toBe(true);
+
+    hook.rerender({ active: false });
+    expect(hook.result.current).toEqual({ browsing: false, devices: [] });
+    await act(async () => answer(ok("10.0.0.5")));
+    expect(hook.result.current).toEqual({ browsing: false, devices: [] });
+  });
+
   it.each([
     ["rejects", () => Promise.reject(new Error("ipc"))],
     [

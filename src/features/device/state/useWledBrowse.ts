@@ -53,6 +53,7 @@ export function useWledBrowse(active: boolean, browse: () => Promise<WledDiscove
     );
     return () => {
       live = false;
+      setState((current) => (current.browsing ? { ...current, browsing: false } : current));
     };
   }, [active, browse]);
 
