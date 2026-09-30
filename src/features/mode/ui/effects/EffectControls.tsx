@@ -53,7 +53,7 @@ export function EffectControls({
   const settingsRef = useRef<HTMLDivElement | null>(null);
   const palette = takesPalette(draft.id);
   const settingIds = [...(palette ? ["palettes"] : []), ...effectSettingIds(draft.id, compact)];
-  useFlip(settingsRef, settingIds, { resize: true });
+  useFlip(settingsRef, settingIds, { resize: true, exits: true });
   const { arrived, settled } = useArrivals(settingIds);
 
   const pick = (id: EffectId) => commit(withEffect(draft, id));

@@ -19,6 +19,11 @@
     text-align: right;
     font-variant-numeric: tabular-nums;
   }
+  /* A name or value set from outside comes in with a small rise; the one it replaced is gone. */
+  .label[data-swapped], .value[data-swapped] { animation: readout-in var(--lm-dur-base) var(--lm-ease-out); }
+  @keyframes readout-in { from { opacity: 0; transform: translateY(3px); } }
+  :global(:root[data-reduced-motion]) .label[data-swapped],
+  :global(:root[data-reduced-motion]) .value[data-swapped] { animation: none; }
   .slider {
     width: 100%;
     height: 32px;

@@ -3,6 +3,8 @@ import { useLayoutEffect, useRef, type RefObject } from "react";
 import { prefersReducedMotion } from "./motion";
 
 const DURATION_MS = 220;
+/** A gone item's fade: shorter than the slide, so it has left before the others settle over it. */
+const EXIT_MS = 160;
 /** `--lm-ease-out`: the Web Animations API takes no custom property. */
 const EASE_OUT = "cubic-bezier(0.2, 0.8, 0.2, 1)";
 
@@ -14,6 +16,11 @@ interface FlipOptions {
   aliases?: ReadonlyMap<string, string>;
   /** The container's own height follows too, rather than jumping to the new one. */
   resize?: boolean;
+  /**
+   * An item that is gone fades out where it stood instead of vanishing: a copy of it — a ghost,
+   * inert and unnamed — over the others as they slide. The container must be positioned.
+   */
+  exits?: boolean;
 }
 
 /**
@@ -26,22 +33,26 @@ interface FlipOptions {
 export function useFlip(
   container: RefObject<HTMLElement | null>,
   ids: readonly string[],
-  { aliases, resize = false }: FlipOptions = {},
+  { aliases, resize = false, exits = false }: FlipOptions = {},
 ): void {
   const key = ids.join("\n");
   const shown = useRef<string | null>(null);
-  const before = useRef<{ places: Map<string, DOMRect>; height: number } | null>(null);
+  const before = useRef<{ places: Map<string, DOMRect>; height: number; copies: Map<string, HTMLElement> } | null>(
+    null,
+  );
   // A render back to the order on screen (one that was thrown away, or undone) drops the old places.
   if (shown.current === key) before.current = null;
   if (shown.current !== null && shown.current !== key && container.current && !before.current) {
+    const nodes = [...container.current.querySelectorAll<HTMLElement>("[data-flip-id]")];
     before.current = {
-      places: new Map(
-        [...container.current.querySelectorAll<HTMLElement>("[data-flip-id]")].map((node) => [
-          node.dataset.flipId!,
-          node.getBoundingClientRect(),
-        ]),
-      ),
+      places: new Map(nodes.map((node) => [node.dataset.flipId!, node.getBoundingClientRect()])),
       height: container.current.getBoundingClientRect().height,
+      // Copied now: by the layout effect React has already taken the gone ones out.
+      copies: new Map(
+        exits && !prefersReducedMotion()
+          ? nodes.map((node) => [node.dataset.flipId!, node.cloneNode(true) as HTMLElement])
+          : [],
+      ),
     };
   }
   useLayoutEffect(() => {
@@ -51,6 +62,34 @@ export function useFlip(
     const root = container.current;
     if (!was || !root || prefersReducedMotion()) return;
     const timing = { duration: DURATION_MS, easing: EASE_OUT };
+    const present = new Set([...root.querySelectorAll<HTMLElement>("[data-flip-id]")].map((node) => node.dataset.flipId!));
+    const box = root.getBoundingClientRect();
+    for (const [id, ghost] of was.copies) {
+      if (present.has(id)) continue;
+      const from = was.places.get(id)!;
+      ghost.removeAttribute("data-flip-id");
+      ghost.removeAttribute("data-entering");
+      // Nothing in it may be found in its place: no ids, no test ids.
+      for (const node of [ghost, ...ghost.querySelectorAll<HTMLElement>("[id], [data-testid]")]) {
+        node.removeAttribute("id");
+        node.removeAttribute("data-testid");
+      }
+      ghost.setAttribute("aria-hidden", "true");
+      ghost.setAttribute("inert", "");
+      Object.assign(ghost.style, {
+        position: "absolute",
+        left: `${from.left - box.left}px`,
+        top: `${from.top - box.top}px`,
+        width: `${from.width}px`,
+        height: `${from.height}px`,
+        margin: "0",
+        pointerEvents: "none",
+      });
+      root.appendChild(ghost);
+      ghost.animate?.([{ opacity: 1 }, { opacity: 0 }], { duration: EXIT_MS, easing: "linear", fill: "forwards" });
+      // A timer, not `onfinish`: a webview that never finishes the fade must still lose the ghost.
+      setTimeout(() => ghost.remove(), EXIT_MS);
+    }
     for (const node of root.querySelectorAll<HTMLElement>("[data-flip-id]")) {
       const id = node.dataset.flipId!;
       const alias = aliases?.get(id);

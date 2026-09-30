@@ -4,7 +4,7 @@
   .effect { min-width: 0; }
 
   /* The palettes and the effect's settings as one block, spaced like the stage around it. */
-  .settings { display: flex; flex-direction: column; gap: inherit; min-width: 0; }
+  .settings { position: relative; display: flex; flex-direction: column; gap: inherit; min-width: 0; }
   .setting { min-width: 0; }
   .setting[data-entering] { animation: setting-in var(--lm-dur-base) var(--lm-ease-out) var(--lm-dur-follow) backwards; }
   @keyframes setting-in { from { opacity: 0; transform: translateY(4px); } }

@@ -8,13 +8,18 @@ const reduced = vi.hoisted(() => ({ on: false }));
 vi.mock("../motion", () => ({ prefersReducedMotion: () => reduced.on }));
 
 /** Each item stands 40px under the one before it, wherever the DOM has put it. */
-function List({ ids, aliases, resize }: { ids: string[]; aliases?: Map<string, string>; resize?: boolean }) {
+function List({
+  ids,
+  aliases,
+  resize,
+  exits,
+}: { ids: string[]; aliases?: Map<string, string>; resize?: boolean; exits?: boolean }) {
   const ref = useRef<HTMLUListElement | null>(null);
-  useFlip(ref, ids, { aliases, resize });
+  useFlip(ref, ids, { aliases, resize, exits });
   return (
     <ul ref={ref}>
       {ids.map((id) => (
-        <li key={id} data-flip-id={id}>
+        <li key={id} data-flip-id={id} data-testid={`item-${id}`}>
           {id}
         </li>
       ))}
@@ -84,5 +89,34 @@ describe("useFlip", () => {
     const ul = view.container.querySelector("ul")!;
     const call = animate.mock.calls[animate.mock.contexts.indexOf(ul)];
     expect(call?.[0]).toEqual([{ height: "80px" }, { height: "40px" }]);
+  });
+
+  it("fades an item that is gone out where it stood, as an unnamed, inert copy that then goes", () => {
+    vi.useFakeTimers();
+    place();
+    const view = render(<List ids={["a", "b", "c"]} exits />);
+    view.rerender(<List ids={["a", "c"]} exits />);
+    const ghost = view.container.querySelector<HTMLElement>("li[aria-hidden='true']")!;
+    expect(ghost.textContent).toBe("b");
+    expect(ghost).toHaveAttribute("inert");
+    expect(ghost).not.toHaveAttribute("data-flip-id");
+    expect(ghost).not.toHaveAttribute("data-testid");
+    expect(ghost.style.position).toBe("absolute");
+    expect(ghost.style.top).toBe("40px");
+    expect(animate).toHaveBeenCalledWith([{ opacity: 1 }, { opacity: 0 }], expect.objectContaining({ fill: "forwards" }));
+    vi.advanceTimersByTime(200);
+    expect(ghost.isConnected).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it("leaves no copy without being asked, nor under reduced motion", () => {
+    place();
+    const view = render(<List ids={["a", "b"]} />);
+    view.rerender(<List ids={["a"]} />);
+    expect(view.container.querySelectorAll("li")).toHaveLength(1);
+    reduced.on = true;
+    const again = render(<List ids={["a", "b"]} exits />);
+    again.rerender(<List ids={["a"]} exits />);
+    expect(again.container.querySelectorAll("li")).toHaveLength(1);
   });
 });

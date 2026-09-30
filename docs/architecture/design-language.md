@@ -130,6 +130,14 @@ before writing a transition by hand: `StateSwap`, `PageSwap`, `SpinSwap`, `Popov
 - **Land, don't slide:** a mark that moves reappears where it now is with a small scale-in and a
   one-shot ripple, rather than travelling across the stage.
 - **Tick:** a number that changes nudges in by ~3 px.
+- **A value set from outside glides; a drag does not.** A stage slider (`RangeRow`) whose value
+  changes under it — another effect's default, a scene applied — eases its thumb and fill there and
+  ticks its readout and a new name in; the value the user is dragging follows the pointer untouched.
+  The glide is React state for its quarter second, not a write to the input: React puts a
+  controlled input back on any render in between, which showed as a one-frame jump to the end.
+- **What leaves, leaves in place:** a row that goes when the rows around it change (an effect's
+  setting it no longer has) fades out where it stood while the others slide over it — `useFlip`'s
+  `exits`, an inert, unnamed copy — instead of vanishing and letting the rest jump.
 - **Morph a change of shape:** when what is drawn changes proportion (LED Setup's monitor on a
   display switch), it eases from the old shape to the new with a transform (FLIP), and what cannot
   morph (an SVG path — WebKit does not animate `d`) steps out and draws again once it has landed.
