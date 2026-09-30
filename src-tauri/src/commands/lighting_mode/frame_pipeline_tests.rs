@@ -1606,10 +1606,9 @@ fn steady_frame_allocations_and_lut_builds_stay_within_budget() {
     );
 }
 
-/// A WLED frame's allocations: the corrected strip, then the datagram list,
-/// the chunk list and one datagram per chunk. 164 LEDs is one datagram in
-/// both protocols.
-const WLED_ALLOCS_PER_FRAME: usize = 4;
+/// A WLED frame's allocations: none. The corrected strip and the datagram are
+/// buffers the sink keeps, and each datagram is sent as it is written.
+const WLED_ALLOCS_PER_FRAME: usize = 0;
 
 #[test]
 fn corrected_wled_sink_frame_allocations_stay_within_budget() {
