@@ -1249,8 +1249,12 @@ console.log("\n[ Lighting transaction — Rust → lightingRuntime.ts parity ]")
     resolve(ROOT, "src/shared/contracts/lightingRuntime.ts"),
     "lightingRuntime"
   );
+  // The transaction is a module directory: every file of it, `mod.rs` first.
+  const outputsDir = resolve(ROOT, "src-tauri/src/commands/lighting_mode/outputs");
   const rustOutputs = stripComments(
-    readOrEmpty(resolve(ROOT, "src-tauri/src/commands/lighting_mode/outputs.rs"), "rust outputs")
+    ["mod.rs", ...readdirSync(outputsDir).filter((f) => f.endsWith(".rs") && f !== "mod.rs").sort()]
+      .map((f) => readOrEmpty(resolve(outputsDir, f), `rust outputs/${f}`))
+      .join("\n")
   );
   const rustTuning = stripComments(
     readOrEmpty(resolve(ROOT, "src-tauri/src/commands/lighting_mode/tuning.rs"), "rust tuning")

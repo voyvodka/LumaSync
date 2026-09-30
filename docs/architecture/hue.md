@@ -414,7 +414,7 @@ right network later.
 **Hue is not retried in the background — except once, at launch, for a busy area.** The rule is that
 a Hue start the bridge refuses is settled on the spot (Off, or USB alone with a notice) and only the
 user or the next launch tries again. The one exception is the launch restore's wait, in the
-lighting transaction (`lighting_mode/outputs.rs`, `origin: "boot"`). After an
+lighting transaction (`lighting_mode/outputs/boot.rs`, `origin: "boot"`). After an
 unclean exit the bridge keeps counting the dead process as the area's streamer for 10–20 s, so a
 relaunch inside that window has its restore refused and used to land on Off for no reason the user
 could see or fix. When the Hue start answered `CONFIG_NOT_READY_GATE_BLOCKED` at boot, Rust
@@ -571,7 +571,7 @@ Sync puts it back as it was, and so do we now (`commands/hue/light_restore.rs`).
     frame the worker sent. After a reconnect or restart the worker drives the new sender. A worker
     whose targets leave Hue out is never handed the slot, so it never samples or sends Hue.
   - **Owned by the Rust transaction, not yet by its callers.** The lighting transaction
-    (`lighting_mode/outputs.rs`, [`lighting-transaction.md`](lighting-transaction.md)) runs every
+    (`lighting_mode/outputs/`, [`lighting-transaction.md`](lighting-transaction.md)) runs every
     ordering above itself: Hue up before the worker, the worker let go before the stream stops, Off
     stopping the worker first whatever its targets, a stream no running mode feeds given back, and
     a test lease leaving an adopted stream to its mode. Until the frontend's callers move to it,
