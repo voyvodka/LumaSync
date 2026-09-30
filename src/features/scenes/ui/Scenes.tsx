@@ -10,12 +10,14 @@ import { Popover } from "@/shared/ui/Popover/Popover";
 import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
 
 import {
+  SUGGESTED_SCENE_ORDER,
   isSceneAvailable,
   sceneFromMode,
   sceneMatches,
   sceneName,
   sceneSmoothing,
   sceneSwatch,
+  suggestedScene,
   toModeConfig,
   withScene,
   withSceneLook,
@@ -145,6 +147,16 @@ export function Scenes({ mode, disabled, busy = false, onApply }: ScenesProps) {
   };
 
   const editing = edit !== null && !orphaned;
+  // Where Reset goes: a library scene's own look, else the scene as saved. A new scene has none.
+  const suggestedId = editedScene?.suggestedId;
+  const resetTo =
+    editedScene && suggestedId && SUGGESTED_SCENE_ORDER.includes(suggestedId)
+      ? suggestedScene(suggestedId, editedScene.id)
+      : editedScene;
+  const reset = () => {
+    if (!resetTo || busy) return;
+    void play(resetTo).catch((error: unknown) => console.error("[LumaSync] resetting the scene failed:", error));
+  };
 
   return (
     <div className={styles.slot}>
@@ -212,6 +224,15 @@ export function Scenes({ mode, disabled, busy = false, onApply }: ScenesProps) {
               swatch={draft ? sceneSwatch(draft) : "var(--lm-panel-2)"}
               canSave={Boolean(look)}
               failed={saveFailed}
+              reset={
+                resetTo
+                  ? {
+                      label: t(resetTo === editedScene ? "lights:scenes.resetSaved" : "lights:scenes.resetSuggested"),
+                      done: sceneMatches(resetTo, mode, smoothing),
+                      onReset: reset,
+                    }
+                  : undefined
+              }
               onName={(name) => edit && setSceneEdit({ ...edit, name })}
               onSave={save}
               onCancel={cancel}

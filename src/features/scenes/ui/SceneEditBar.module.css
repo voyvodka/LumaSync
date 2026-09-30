@@ -36,11 +36,27 @@
   .input[aria-invalid] { box-shadow: inset 0 0 0 1px var(--lm-red); }
   /* Over the shared button's 30 px and padding: a 32 px target, and room for the name at 320 px. */
   .bar .button { flex-shrink: 0; height: 32px; padding: 0 10px; }
+  .reset {
+    display: inline-grid;
+    flex-shrink: 0;
+    place-items: center;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick), opacity var(--lm-dur-quick);
+  }
+  .reset:hover:not(:disabled) { color: var(--lm-ink); background: var(--lm-panel-2); }
+  .reset:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  /* Already there: it steps back rather than going, so the name field keeps its width. */
+  .reset:disabled { cursor: default; opacity: 0.35; }
+
+  :global(:root[data-reduced-motion]) .reset { transition: none; }
 
   @media (forced-colors: active) {
     .input { border: 1px solid CanvasText; }
     .input[aria-invalid] { border-color: Mark; }
     .swatch { outline: 1px solid CanvasText; }
-    .input:focus-visible { outline: 2px solid Highlight; outline-offset: 1px; }
+    .input:focus-visible, .reset:focus-visible { outline: 2px solid Highlight; outline-offset: 1px; }
   }
 }

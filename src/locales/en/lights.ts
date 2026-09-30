@@ -39,6 +39,8 @@ export default {
     cancelEdit: "Cancel",
     saveEdit: "Save",
     saveNeedsLight: "Turn the lights on to save",
+    resetSuggested: "Back to the suggested look",
+    resetSaved: "Back to the saved look",
     savedNamed: "{{name}} saved",
     full: "{{max}} scenes is the most",
     manage: "Manage scenes",

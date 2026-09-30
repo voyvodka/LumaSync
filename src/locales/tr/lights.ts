@@ -42,6 +42,8 @@ const lights: Catalogue<typeof enLights> = {
     cancelEdit: "Vazgeç",
     saveEdit: "Kaydet",
     saveNeedsLight: "Kaydetmek için ışıkları aç",
+    resetSuggested: "Önerilen haline döndür",
+    resetSaved: "Kaydedilmiş haline döndür",
     savedNamed: "{{name}} kaydedildi",
     full: "En fazla {{max}} sahne olabilir",
     manage: "Sahneleri yönet",

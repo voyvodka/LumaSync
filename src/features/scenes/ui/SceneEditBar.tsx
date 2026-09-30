@@ -1,6 +1,8 @@
 import { useTranslation } from "react-i18next";
 
 import { SCENE_LIMITS } from "@/shared/contracts/scenes";
+import { IconButton } from "@/shared/ui/IconButton/IconButton";
+import { IconUndo } from "@/shared/ui/icons";
 import { RowButton } from "@/shared/ui/SettingRow/SettingRow";
 
 import styles from "./SceneEditBar.module.css";
@@ -17,6 +19,8 @@ interface SceneEditBarProps {
   canSave: boolean;
   /** The last save did not land: the bar is back, and says so. */
   failed: boolean;
+  /** Back to where the scene starts from; `done` while the light is already there. None for a new scene. */
+  reset?: { label: string; done: boolean; onReset: () => void };
   onName: (name: string) => void;
   onSave: () => void;
   onCancel: () => void;
@@ -30,6 +34,7 @@ export function SceneEditBar({
   swatch,
   canSave,
   failed,
+  reset,
   onName,
   onSave,
   onCancel,
@@ -60,6 +65,16 @@ export function SceneEditBar({
         }}
         data-testid="scene-edit-name"
       />
+      {reset ? (
+        <IconButton
+          className={styles.reset}
+          label={reset.label}
+          icon={<IconUndo />}
+          disabled={reset.done}
+          onClick={reset.onReset}
+          data-testid="scene-edit-reset"
+        />
+      ) : null}
       <RowButton className={styles.button} onClick={onCancel} data-testid="scene-edit-cancel">
         {t("lights:scenes.cancelEdit")}
       </RowButton>

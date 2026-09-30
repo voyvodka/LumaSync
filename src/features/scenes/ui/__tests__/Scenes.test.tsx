@@ -7,6 +7,7 @@ import { normalizeEffectPayload, type LightingModeConfig } from "@/shared/contra
 import type { StoredScene } from "@/shared/contracts/scenes";
 import type { ShellState } from "@/shared/contracts/shell";
 
+import { suggestedScene, toModeConfig } from "../../model/sceneLibrary";
 import { __resetScenesForTests, editScenes, getScenes } from "../../state/scenesStore";
 import { Scenes } from "../Scenes";
 
@@ -292,6 +293,40 @@ describe("making and editing a scene", () => {
     expect(getScenes()).toEqual([movie]);
     expect(bar()).not.toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Movie" })).toHaveFocus();
+  });
+
+  it("takes a library scene back to its suggested look, once it has moved away from it", async () => {
+    const movie = suggestedScene("movie", "s");
+    seed([{ ...movie, ambilight: { ...movie.ambilight!, brightness: 0.3 } }]);
+    const { onApply } = renderPage(RED);
+    await editFromLibrary("s");
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    const reset = screen.getByRole("button", { name: "lights:scenes.resetSuggested" });
+    expect(reset).toBeEnabled();
+    await act(async () => {
+      fireEvent.click(reset);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(onApply).toHaveBeenLastCalledWith(toModeConfig(movie));
+    expect(reset).toBeDisabled();
+    // Only the light moved: the scene is written on Save, not on Reset.
+    expect(getScenes()[0]!.ambilight!.brightness).toBe(0.3);
+  });
+
+  it("takes one of the user's scenes back to how it was saved; a new scene has nothing to go back to", async () => {
+    seed([mine("a", "Blue")]);
+    const { onApply } = renderPage(RED);
+    await editFromLibrary("a");
+    const reset = screen.getByRole("button", { name: "lights:scenes.resetSaved" });
+    expect(reset).toBeDisabled();
+    setLight(blue(0.4));
+    expect(reset).toBeEnabled();
+    await act(async () => fireEvent.click(reset));
+    expect(onApply).toHaveBeenLastCalledWith(blue(1));
+
+    await act(async () => fireEvent.click(screen.getByTestId("scene-edit-cancel")));
+    await act(async () => fireEvent.click(screen.getByTestId("scene-save")));
+    expect(screen.queryByTestId("scene-edit-reset")).not.toBeInTheDocument();
   });
 
   it("applies nothing on Cancel when nothing changed, nor on opening the scene already running", async () => {
