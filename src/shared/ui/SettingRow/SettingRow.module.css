@@ -83,4 +83,6 @@
     .action,
     .select { border-color: ButtonText; }
   }
+
+  :global(:root[data-reduced-motion]) .action { transition: none; }
 }

@@ -22,4 +22,6 @@
     line-height: 1.45;
     color: var(--lm-ink);
   }
+
+  :global(:root[data-reduced-motion]) .button { transition: none; }
 }

@@ -14,4 +14,6 @@
   }
   .item:hover { color: var(--lm-ink); background: var(--lm-panel); }
   .item:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+
+  :global(:root[data-reduced-motion]) .item { transition: none; }
 }
