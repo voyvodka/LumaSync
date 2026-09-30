@@ -86,6 +86,7 @@ function emptyOutcome(): ApplyOutputsOutcome {
     stopFailed: [],
     droppedTargets: [],
     modeEnded: false,
+    wledAdvisory: null,
   };
 }
 

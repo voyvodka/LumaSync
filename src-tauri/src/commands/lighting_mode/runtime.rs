@@ -22,6 +22,7 @@ use crate::commands::ambilight_capture::{
 };
 use crate::commands::led_calibration::LedCalibrationConfig;
 use crate::commands::led_output::LedOutputBridge;
+use crate::commands::runtime_telemetry::{clear_worker_stopped, SharedRuntimeTelemetry};
 use crate::commands::test_pattern::{
     create_synthetic_frame_source, TestPatternConfig, TestPatternLiveSlot,
 };
@@ -65,6 +66,8 @@ pub(super) struct LightingWorkerRuntime {
     /// thread. This ensures `SCStream::stop_capture` is never called from the
     /// worker thread, preventing a macOS crash on rapid mode switches.
     pub(super) _frame_source: Arc<Mutex<Box<dyn AmbilightFrameSource>>>,
+    /// Where the worker reported a panic, cleared once it is let go.
+    pub(super) telemetry: SharedRuntimeTelemetry,
 }
 
 impl LightingWorkerRuntime {
@@ -78,6 +81,7 @@ impl LightingWorkerRuntime {
                 .or_else(|| panic.downcast_ref::<String>().cloned())
                 .unwrap_or_else(|| "a panic with no message".to_string());
             error!("[stop-worker] the worker had stopped on a panic: {message}");
+            clear_worker_stopped(&self.telemetry);
         }
         let join_ms = t0.elapsed().as_millis();
         info!("[stop-worker] join completed in {join_ms}ms");

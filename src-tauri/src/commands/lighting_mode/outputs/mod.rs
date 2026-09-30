@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tauri::{AppHandle, Listener, Manager, Runtime, State};
 
-use super::config::normalize_effect;
+use super::config::{normalize_effect, WledLiveFrameAdvisory};
 use super::hue_driver::{hue_driver_for, HueAreaVerdict, HueDriver};
 use super::snapshot::{
     parse_targets, publish_running, BootHueRetryState, HueLeftOutReason, LightingPhase,
@@ -147,6 +147,9 @@ pub struct ApplyOutputsOutcome {
     pub stop_failed: Vec<OutputTarget>,
     pub dropped_targets: Vec<OutputTarget>,
     pub mode_ended: bool,
+    /// The bound WLED device and the strip layout disagree on the LED count:
+    /// part of the strip will not follow. Only said by the apply that found it.
+    pub wled_advisory: Option<WledLiveFrameAdvisory>,
 }
 
 /// A choice's answer as the snapshot carries it, so a surface that did not

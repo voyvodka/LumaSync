@@ -253,6 +253,8 @@ pub(super) fn start_ambilight_worker(
         resolve_quality_config(&usb_plan, total_leds, firmware_profile, chip_type);
     let mut quality_state = AmbilightWorkerQualityState::new(quality_config);
     let mut telemetry_window = RuntimeTelemetryWindow::new(Instant::now());
+    telemetry_window.attach(telemetry_snapshot.clone());
+    let telemetry_snapshot_for_stop = telemetry_snapshot.clone();
     // Deliberately gated on `serial_budget`, not `usb_plan` -- a WLED-only
     // session must report `link_max_fps: 0.0` / unconstrained, the same as
     // a Hue-only session (see contract note on `RuntimeTelemetrySnapshot`).
@@ -568,6 +570,7 @@ pub(super) fn start_ambilight_worker(
                             // Every one kept for telemetry; the log keeps the first few and a
                             // sample after, as for capture, so a dead strip does not flood it.
                             send_fail_count += 1;
+                            telemetry_window.record_output_error(&e, Instant::now());
                             if is_logged_failure(send_fail_count) {
                                 warn!(
                                     "[ambilight-worker] strip send failed #{send_fail_count}: {e}"
@@ -673,6 +676,7 @@ pub(super) fn start_ambilight_worker(
     Ok(LightingWorkerRuntime {
         cancel,
         handle,
+        telemetry: telemetry_snapshot_for_stop,
         _frame_source: frame_source_arc,
     })
 }

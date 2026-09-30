@@ -155,6 +155,7 @@ impl<'a, R: Runtime> Transaction<'a, R> {
         .await;
         if let Ok(result) = &result {
             self.outcome.apply_status = Some(result.status.clone());
+            self.outcome.wled_advisory = result.wled_advisory.clone();
         }
         result
     }

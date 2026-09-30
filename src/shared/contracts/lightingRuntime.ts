@@ -7,6 +7,7 @@
  * `snapshot.rs` and `tuning.rs`.
  */
 
+import type { WledLiveFrameAdvisory } from "./device";
 import type { HueRuntimeTarget, HueRuntimeTriggerSource } from "./hue";
 import type { HueLeftOutReason, LightingModeStatusCode } from "./lighting";
 import type { AmbilightPayload, EffectPayload, LightingModeConfig, SolidColorPayload } from "./mode";
@@ -149,6 +150,9 @@ export interface ApplyOutputsOutcome {
   droppedTargets: HueRuntimeTarget[];
   /** The running mode ended rather than a target: nothing was left to run on. */
   modeEnded: boolean;
+  /** The bound WLED device and the strip layout disagree on the LED count; only an apply that
+   *  found it says so. */
+  wledAdvisory: WledLiveFrameAdvisory | null;
 }
 
 /**

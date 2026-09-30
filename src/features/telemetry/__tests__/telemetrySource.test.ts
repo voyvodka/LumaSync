@@ -58,6 +58,9 @@ function makeSnapshot(captureFps = 60): FullTelemetrySnapshot {
       lastCaptureErrorCode: null,
       lastCaptureErrorAtSecs: null,
       captureTargetFps: 30,
+      lastOutputErrorCode: null,
+      lastOutputErrorAtSecs: null,
+      workerStopped: false,
     },
     hue: null,
   };

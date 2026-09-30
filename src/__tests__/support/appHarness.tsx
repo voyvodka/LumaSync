@@ -463,6 +463,7 @@ export function reply(
       stopFailed: [],
       droppedTargets: [],
       modeEnded: false,
+      wledAdvisory: null,
       ...outcome,
     },
   };

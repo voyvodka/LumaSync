@@ -267,6 +267,9 @@ export const deviceHandlers = {
         lastCaptureErrorCode: t.lastCaptureErrorCode,
         lastCaptureErrorAtSecs: t.lastCaptureErrorAtSecs,
         captureTargetFps: t.captureTargetFps,
+        lastOutputErrorCode: t.lastOutputErrorCode,
+        lastOutputErrorAtSecs: t.lastOutputErrorAtSecs,
+        workerStopped: t.workerStopped,
       },
       hue: w.hue.everActive
         ? {

@@ -70,6 +70,9 @@ function usbSnapshot(overrides: Partial<RuntimeTelemetrySnapshot>): RuntimeTelem
     lastCaptureErrorCode: null,
     lastCaptureErrorAtSecs: null,
     captureTargetFps: 0,
+    lastOutputErrorCode: null,
+    lastOutputErrorAtSecs: null,
+    workerStopped: false,
     ...overrides,
   };
 }

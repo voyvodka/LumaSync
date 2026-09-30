@@ -73,6 +73,16 @@ pub struct RuntimeTelemetrySnapshot {
     /// goal: capture counts distinct frames, so a still screen reads well
     /// under it with nothing wrong. **0.0 means no worker has started yet.**
     pub capture_target_fps: f32,
+    /// Code of the worker's most recent failed send to a strip or WLED device
+    /// (`LED_OUTPUT_WRITE_FAILED`, `WLED_SEND_FAILED`, …), sticky for its
+    /// lifetime like the capture failure.
+    pub last_output_error_code: Option<String>,
+    /// Its age in seconds at flush time; the same "now or earlier" reading as
+    /// `last_capture_error_at_secs`.
+    pub last_output_error_at_secs: Option<u64>,
+    /// The worker stopped on a panic while the mode still reads as running.
+    /// Kept here, not only pushed, so a window reloaded after it still knows.
+    pub worker_stopped: bool,
 }
 
 impl Default for RuntimeTelemetrySnapshot {
@@ -87,6 +97,9 @@ impl Default for RuntimeTelemetrySnapshot {
             last_capture_error_code: None,
             last_capture_error_at_secs: None,
             capture_target_fps: 0.0,
+            last_output_error_code: None,
+            last_output_error_at_secs: None,
+            worker_stopped: false,
         }
     }
 }
@@ -121,6 +134,13 @@ pub struct RuntimeHealth {
     pub link_constrained: bool,
     /// 0.0 means "no serial link in play", as in `RuntimeTelemetrySnapshot`.
     pub link_max_fps: f32,
+    /// Code of a send to a strip or WLED device failing *now* (the same age
+    /// rule as capture), `None` once sends go through again.
+    pub output_failure_code: Option<String>,
+    /// The worker stopped on a panic: the lights hold their last frame or go
+    /// dark, while the mode still reads as running. Cleared by the next start
+    /// or stop.
+    pub worker_stopped: bool,
 }
 
 pub type RuntimeHealthSink = Arc<dyn Fn(&RuntimeHealth) + Send + Sync>;
@@ -347,6 +367,8 @@ pub struct RuntimeTelemetryWindow {
     /// Last capture failure, sticky across flushes like the link budget: a
     /// counter reset would erase the only evidence of an ongoing outage.
     last_capture_error: Option<(String, Instant)>,
+    /// Last failed send, sticky like the capture failure.
+    last_output_error: Option<(String, Instant)>,
     capture_target_fps: f32,
     /// Off for a synthetic test pattern: it captures nothing, so its rate
     /// would read as capture in the history.
@@ -355,6 +377,9 @@ pub struct RuntimeTelemetryWindow {
     /// `None` until this worker's first flush, so that flush always publishes
     /// and overwrites whatever the previous worker left behind.
     published_health: Option<RuntimeHealth>,
+    /// The snapshot this window flushes into, held so a panic can be written
+    /// there as it unwinds: `Drop` is handed nothing.
+    snapshot: Option<SharedRuntimeTelemetry>,
 }
 
 impl RuntimeTelemetryWindow {
@@ -372,10 +397,12 @@ impl RuntimeTelemetryWindow {
             link_constrained: false,
             link_max_fps: 0.0,
             last_capture_error: None,
+            last_output_error: None,
             capture_target_fps: 0.0,
             records_history: true,
             health_sink,
             published_health: None,
+            snapshot: None,
         }
     }
 
@@ -394,6 +421,11 @@ impl RuntimeTelemetryWindow {
         } else {
             0.0
         };
+    }
+
+    /// The snapshot a panic is written to; the flushes still name theirs.
+    pub fn attach(&mut self, snapshot: SharedRuntimeTelemetry) {
+        self.snapshot = Some(snapshot);
     }
 
     pub fn skip_history(&mut self) {
@@ -424,6 +456,16 @@ impl RuntimeTelemetryWindow {
         match &mut self.last_capture_error {
             Some((code, at)) if code == reason => *at = now,
             slot => *slot = Some((reason.to_string(), now)),
+        }
+    }
+
+    /// Stamp a failed send, by the code before the error's first `:` (the
+    /// rest is the OS's words and would change every time).
+    pub fn record_output_error(&mut self, error: &str, now: Instant) {
+        let code = error.split_once(':').map_or(error, |(code, _)| code).trim();
+        match &mut self.last_output_error {
+            Some((last, at)) if last == code => *at = now,
+            slot => *slot = Some((code.to_string(), now)),
         }
     }
 
@@ -459,6 +501,19 @@ impl RuntimeTelemetryWindow {
             }
             _ => None,
         };
+        let (last_output_error_code, last_output_error_at_secs) = match &self.last_output_error {
+            Some((code, at)) => (
+                Some(code.clone()),
+                Some(now.saturating_duration_since(*at).as_secs()),
+            ),
+            None => (None, None),
+        };
+        let output_failure_code = match (&last_output_error_code, last_output_error_at_secs) {
+            (Some(code), Some(age)) if age <= CAPTURE_FAILURE_ONGOING_MAX_AGE_SECS => {
+                Some(code.clone())
+            }
+            _ => None,
+        };
         let link_max_fps = round_two_decimals(self.link_max_fps);
         let capture_fps = round_two_decimals(self.capture_count as f32 / elapsed_secs);
         let sample = self.records_history.then(|| CaptureFpsSample {
@@ -479,6 +534,9 @@ impl RuntimeTelemetryWindow {
                 last_capture_error_code,
                 last_capture_error_at_secs,
                 capture_target_fps: self.capture_target_fps,
+                last_output_error_code,
+                last_output_error_at_secs,
+                worker_stopped: false,
             },
             sample,
         )?;
@@ -486,6 +544,8 @@ impl RuntimeTelemetryWindow {
             capture_failure_code,
             link_constrained: self.link_constrained,
             link_max_fps,
+            output_failure_code,
+            worker_stopped: false,
         });
 
         self.started_at = now;
@@ -512,8 +572,25 @@ impl RuntimeTelemetryWindow {
 
 impl Drop for RuntimeTelemetryWindow {
     /// The worker is ending: a stall or a link budget it reported must not
-    /// outlive it on screen.
+    /// outlive it on screen. Ending on a panic is the one thing to report here
+    /// instead — the window is the last of the worker's state to drop, so
+    /// nothing after it overwrites what it says.
     fn drop(&mut self) {
+        if std::thread::panicking() {
+            if let Some(snapshot) = &self.snapshot {
+                let mut store = snapshot
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                store.snapshot.worker_stopped = true;
+            }
+            if let Some(sink) = &self.health_sink {
+                sink(&RuntimeHealth {
+                    worker_stopped: true,
+                    ..RuntimeHealth::default()
+                });
+            }
+            return;
+        }
         let reported_something = self
             .published_health
             .as_ref()
@@ -521,6 +598,20 @@ impl Drop for RuntimeTelemetryWindow {
         if let (true, Some(sink)) = (reported_something, &self.health_sink) {
             sink(&RuntimeHealth::default());
         }
+    }
+}
+
+/// A stopped worker's report is over once it is let go (a mode change or Off):
+/// the snapshot and the pushed health both read "nothing to report" again.
+pub fn clear_worker_stopped(snapshot: &SharedRuntimeTelemetry) {
+    let was = {
+        let mut store = snapshot
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        std::mem::replace(&mut store.snapshot.worker_stopped, false)
+    };
+    if let (true, Some(sink)) = (was, registered_runtime_health_sink()) {
+        sink(&RuntimeHealth::default());
     }
 }
 
@@ -612,6 +703,7 @@ mod tests {
                 capture_failure_code: None,
                 link_constrained: true,
                 link_max_fps: 23.0,
+                ..RuntimeHealth::default()
             }]
         );
     }
@@ -693,7 +785,7 @@ mod tests {
             .expect("health should serialize");
         assert_eq!(
             json,
-            r#"{"captureFailureCode":"AMBILIGHT_CAPTURE_FRAME_UNAVAILABLE","linkConstrained":false,"linkMaxFps":0.0}"#
+            r#"{"captureFailureCode":"AMBILIGHT_CAPTURE_FRAME_UNAVAILABLE","linkConstrained":false,"linkMaxFps":0.0,"outputFailureCode":null,"workerStopped":false}"#
         );
     }
 
@@ -1038,5 +1130,54 @@ mod tests {
         for key in ["epochMs", "fps", "targetFps"] {
             assert!(sample[key].is_number(), "`{key}` missing in {json}");
         }
+    }
+
+    #[test]
+    fn a_failing_send_is_published_by_its_code_while_it_fails_and_cleared_after() {
+        let base = Instant::now();
+        let metrics = shared();
+        let (mut window, published) = recording_window(base);
+        window.record_output_error(
+            "WLED_SEND_FAILED: UDP send_to 10.0.0.2:4048 failed -- os error 65",
+            base,
+        );
+        window
+            .flush_if_due(base + Duration::from_secs(1), &metrics)
+            .expect("flush");
+        {
+            let store = metrics.lock().unwrap();
+            assert_eq!(
+                store.snapshot.last_output_error_code.as_deref(),
+                Some("WLED_SEND_FAILED")
+            );
+        }
+        // Sends go through again: past the ongoing window, the health clears.
+        window
+            .flush_if_due(base + Duration::from_secs(8), &metrics)
+            .expect("flush");
+        let health = published_so_far(&published);
+        assert_eq!(
+            health[0].output_failure_code.as_deref(),
+            Some("WLED_SEND_FAILED")
+        );
+        assert_eq!(health.last().unwrap().output_failure_code, None);
+    }
+
+    #[test]
+    fn a_worker_that_panics_says_so_in_the_snapshot_and_the_health_until_let_go() {
+        let base = Instant::now();
+        let metrics = shared();
+        let (mut window, published) = recording_window(base);
+        window.attach(Arc::clone(&metrics));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            let _window = window;
+            panic!("worker broke");
+        }));
+        assert!(result.is_err());
+        assert!(metrics.lock().unwrap().snapshot.worker_stopped);
+        assert!(published_so_far(&published).last().unwrap().worker_stopped);
+
+        super::clear_worker_stopped(&metrics);
+        assert!(!metrics.lock().unwrap().snapshot.worker_stopped);
     }
 }

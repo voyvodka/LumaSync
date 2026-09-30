@@ -74,6 +74,9 @@ export default {
         generic: "Screen capture stopped delivering frames ({{reason}})",
         genericNoReason: "Screen capture stopped delivering frames",
       },
+      outputFailing: "The light isn't reaching the {{output}} — its frames are failing to send",
+      workerStopped: "The lights stopped updating — choose a mode again to restart them",
+      wledLengthMismatch: "The WLED device has {{panel}} LEDs but the layout has {{frame}} — part of the strip won't follow",
       startFailed: {
         display: "Lighting didn't start — the selected display is gone",
         transient: "Lighting didn't start — switch the mode off and on to retry",

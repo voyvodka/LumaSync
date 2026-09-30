@@ -1488,10 +1488,12 @@ console.log("\n[ Runtime telemetry — Rust → telemetry.ts field parity ]");
 // Same degradation shape as the lighting harvest: a removed Rust field silently
 // stops being checked. Pin the count so the loop cannot quietly narrow.
 const EXPECTED_TELEMETRY_FIELD_COUNTS = {
-  RuntimeTelemetrySnapshot: 9,
+  // + lastOutputErrorCode, lastOutputErrorAtSecs, workerStopped: a failing send and a stopped worker.
+  RuntimeTelemetrySnapshot: 12,
   HueTelemetrySnapshot: 11,
   FullTelemetrySnapshot: 2,
-  RuntimeHealth: 3,
+  // + outputFailureCode, workerStopped.
+  RuntimeHealth: 5,
   CaptureFpsSample: 3,
   RuntimeTelemetryHistory: 1,
 };

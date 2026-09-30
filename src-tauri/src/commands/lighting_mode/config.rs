@@ -524,7 +524,7 @@ pub struct LightingModeCommandResult {
 /// and truncates a long one, so half a lit strip beats none. It exists because
 /// "half my strip is dead" reads as a wiring fault, and the user goes looking
 /// at solder joints long before suspecting a count mismatch.
-#[derive(Clone, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WledLiveFrameAdvisory {
     pub code: String,

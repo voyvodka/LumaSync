@@ -75,6 +75,9 @@ const shell: Catalogue<typeof enShell> = {
         generic: "Ekran yakalama kare göndermeyi bıraktı ({{reason}})",
         genericNoReason: "Ekran yakalama kare göndermeyi bıraktı",
       },
+      outputFailing: "Işık {{output}} çıkışına ulaşmıyor — kareler gönderilemiyor",
+      workerStopped: "Işıklar güncellenmeyi bıraktı — yeniden başlatmak için bir mod seç",
+      wledLengthMismatch: "WLED cihazında {{panel}} LED var ama yerleşimde {{frame}} — şeridin bir kısmı eşlik etmeyecek",
       startFailed: {
         display: "Aydınlatma başlamadı — seçili ekran artık yok",
         transient: "Aydınlatma başlamadı — yeniden denemek için modu kapatıp aç",

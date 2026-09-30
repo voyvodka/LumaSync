@@ -76,6 +76,7 @@ function reply(
       stopFailed: [],
       droppedTargets: [],
       modeEnded: false,
+      wledAdvisory: null,
       ...outcome,
     },
   };
@@ -410,6 +411,33 @@ describe("useLightingModeOrchestrator", () => {
 
       expect(view.result.current.usbLeftOutNotice).toBe(true);
       expect(view.result.current.startFailedNotice).toBeNull();
+    });
+
+    it("says the WLED device and the layout disagree on the LED count, until an apply finds them agreeing", async () => {
+      applyOutputsMock.mockResolvedValue(
+        reply("OUTPUTS_APPLIED", running({ kind: "solid" }), {
+          applyStatus: { code: "SOLID_MODE_APPLIED", message: "", details: null },
+          wledAdvisory: {
+            code: "WLED_LIVE_LED_COUNT_MISMATCH",
+            message: "",
+            frameLedCount: 60,
+            sinkLedCount: 120,
+          },
+        }),
+      );
+      const { view } = mount();
+      await settle(view);
+
+      await act(() => view.result.current.handleLightingModeChange({ kind: "solid" }));
+      expect(view.result.current.wledLengthMismatchNotice).toEqual({ panelLeds: 120, frameLeds: 60 });
+
+      applyOutputsMock.mockResolvedValue(
+        reply("OUTPUTS_APPLIED", running({ kind: "solid" }), {
+          applyStatus: { code: "SOLID_MODE_APPLIED", message: "", details: null },
+        }),
+      );
+      await act(() => view.result.current.handleLightingModeChange({ kind: "effect" }));
+      expect(view.result.current.wledLengthMismatchNotice).toBeNull();
     });
 
     // A strip-only choice with no strip used to be refused without a word.

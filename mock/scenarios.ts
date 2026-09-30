@@ -83,6 +83,9 @@ function base(): MockWorld {
       lastCaptureErrorCode: null,
       lastCaptureErrorAtSecs: null,
       captureTargetFps: 0,
+      lastOutputErrorCode: null,
+      lastOutputErrorAtSecs: null,
+      workerStopped: false,
     },
     persistFails: false,
     forcedCodes: {},
@@ -197,6 +200,9 @@ function furnished(): MockWorld {
     lastCaptureErrorCode: null,
     lastCaptureErrorAtSecs: null,
     captureTargetFps: 30.3,
+    lastOutputErrorCode: null,
+    lastOutputErrorAtSecs: null,
+    workerStopped: false,
   };
   w.shellState = {
     ...w.shellState,

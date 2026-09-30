@@ -45,6 +45,12 @@ export interface ShellNoticeInput {
   /** A `permission`-bucket failure is the lasting condition, every other bucket an event. */
   startFailure: CaptureFailureNotice | null;
   captureStalled: CaptureFailureNotice | null;
+  /** A send to the strip or WLED device is failing now: its code, else `null`. */
+  outputFailing: string | null;
+  /** The lighting worker stopped on a panic while the mode reads as running. */
+  workerStopped: boolean;
+  /** The bound WLED device and the strip layout disagree on the LED count. */
+  wledLengthMismatch: { panelLeds: number; frameLeds: number } | null;
   stopFailedTargets: HueRuntimeTarget[] | null;
   previewOpenFailure: PreviewOpenFailure | null;
   hueLeftOut: HueLeftOutReason | null;
@@ -175,6 +181,8 @@ export function buildShellNotices(
   const permission =
     input.startFailure?.bucket === CAPTURE_FAILURE_BUCKET.PERMISSION ? input.startFailure : null;
   const startFailure = permission === null ? input.startFailure : null;
+  // A stopped worker sends nothing, so it also explains any failing output.
+  const outputFailing = input.workerStopped ? null : input.outputFailing;
   // A start failure means no worker exists, so the two can never co-fire; the
   // start notice wins to keep that invariant obvious if one ever does.
   const stalled = input.startFailure === null ? input.captureStalled : null;
@@ -228,6 +236,47 @@ export function buildShellNotices(
       dismissible: false,
       source: stalled.bucket,
       testId: "capture-stalled-notice",
+    });
+  }
+  if (input.workerStopped) {
+    notices.push({
+      id: SHELL_NOTICE_IDS.WORKER_STOPPED,
+      tier: NOTICE_TIER.ERROR_CONDITION,
+      severity: NOTICE_SEVERITY.ERROR,
+      kind: "condition",
+      message: t("shell:notices.messages.workerStopped"),
+      dismissible: false,
+      source: "worker-stopped",
+      testId: "worker-stopped-notice",
+    });
+  }
+  if (outputFailing) {
+    notices.push({
+      id: SHELL_NOTICE_IDS.OUTPUT_FAILING,
+      tier: NOTICE_TIER.ERROR_CONDITION,
+      severity: NOTICE_SEVERITY.ERROR,
+      kind: "condition",
+      message: t("shell:notices.messages.outputFailing", { output: localOutputLabel }),
+      action: devicesAction("strips"),
+      dismissible: false,
+      source: outputFailing,
+      testId: "output-failing-notice",
+    });
+  }
+  if (input.wledLengthMismatch) {
+    notices.push({
+      id: SHELL_NOTICE_IDS.WLED_LENGTH_MISMATCH,
+      tier: NOTICE_TIER.WARNING,
+      severity: NOTICE_SEVERITY.WARNING,
+      kind: "event",
+      message: t("shell:notices.messages.wledLengthMismatch", {
+        panel: input.wledLengthMismatch.panelLeds,
+        frame: input.wledLengthMismatch.frameLeds,
+      }),
+      action: devicesAction("strips"),
+      dismissible: true,
+      source: input.wledLengthMismatch,
+      testId: "wled-length-mismatch-notice",
     });
   }
   if (startFailure) {

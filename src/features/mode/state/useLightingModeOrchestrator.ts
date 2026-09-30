@@ -92,6 +92,8 @@ export interface LightingModeOrchestrator {
   hueNotStartedNotice: HueLeftOutReason | null;
   /** A choice ran on Hue without the strip it also named, which is not connected. */
   usbLeftOutNotice: boolean;
+  /** The last apply found the bound WLED device's LED count and the layout's apart. */
+  wledLengthMismatchNotice: { panelLeds: number; frameLeds: number } | null;
   /**
    * Why Hue is out of the running mode, for the status chip. Raised with the
    * notice but not dismissed with it: it holds until Hue joins, or the user
@@ -150,6 +152,10 @@ export function useLightingModeOrchestrator({
   const [hueLeftOutNotice, setHueLeftOutNotice] = useState<HueLeftOutReason | null>(null);
   const [hueNotStartedNotice, setHueNotStartedNotice] = useState<HueLeftOutReason | null>(null);
   const [usbLeftOutNotice, setUsbLeftOutNotice] = useState(false);
+  const [wledLengthMismatchNotice, setWledLengthMismatchNotice] = useState<{
+    panelLeds: number;
+    frameLeds: number;
+  } | null>(null);
   const [bootHueRetryNotice, setBootHueRetryNotice] = useState<BootHueRetryState | null>(null);
   const [pendingChoices, setPendingChoices] = useState(0);
   // The kind the newest choice asked for, while it is in flight: a nudge of
@@ -264,6 +270,13 @@ export function useLightingModeOrchestrator({
         setHueNotStartedNotice(result.outcome.hueNotStarted);
       }
       if (usbLeftOut(result) || isOutputsApplied(result)) setUsbLeftOutNotice(usbLeftOut(result));
+      // Only an apply knows it: one that ran says afresh, a reply with no apply leaves it.
+      if (result.outcome.applyStatus !== null) {
+        const advisory = result.outcome.wledAdvisory;
+        setWledLengthMismatchNotice(
+          advisory ? { panelLeds: advisory.sinkLedCount, frameLeds: advisory.frameLedCount } : null,
+        );
+      }
 
       const apply = result.outcome.applyStatus;
       if (apply?.code === LIGHTING_MODE_STATUS.SOLID_MODE_HUE_OUTPUT_SKIPPED) {
@@ -450,6 +463,7 @@ export function useLightingModeOrchestrator({
     hueLeftOutNotice,
     hueNotStartedNotice,
     usbLeftOutNotice,
+    wledLengthMismatchNotice,
     hueHeldOutReason,
     bootHueRetryNotice,
     lastOutcome: snapshot === null ? undefined : snapshot.lastOutcome,
