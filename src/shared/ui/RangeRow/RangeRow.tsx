@@ -10,9 +10,10 @@ export type RangeRowVariant = "stage" | "dock";
 const GLIDE_MS = 240;
 /**
  * How long the user's own value outlives their last move when the value given back has not caught
- * up: a drag commits faster than the lights answer, and what comes back meanwhile is behind it.
+ * up: a drag commits faster than the lights answer, and what comes back meanwhile is behind it. Short
+ * enough that an outside change right after a drag — a scene, another effect — is not held back long.
  */
-const SETTLE_MS = 1200;
+const SETTLE_MS = 700;
 /** How near the default, as a share of the range, a pointer drag lets go into it. */
 const DETENT_SHARE = 0.02;
 
@@ -20,7 +21,7 @@ const DETENT_SHARE = 0.02;
 type ValueText<T> = T | ((value: number) => T);
 
 interface RangeRowProps {
-  /** `profile` is the Lights page's signal rows, `compact` the tray window's, `dock` the room-map inspector's. */
+  /** `stage` is the Lights stages' slider, `dock` the room-map inspector's. */
   variant: RangeRowVariant;
   label: string;
   /** A function is given the value on show, so the readout follows a drag the value has not caught up with. */
@@ -36,7 +37,7 @@ interface RangeRowProps {
   /** Read aloud instead of the raw number, when the number means nothing on its own. */
   ariaValueText?: ValueText<string>;
   title?: string;
-  /** Shown under a `compact` row — why it is locked. */
+  /** Shown under a `stage` row — why it is locked. */
   note?: string;
   className?: string;
   /** Drag bracketing, for a caller that must not take outside updates mid-drag. */
@@ -55,7 +56,7 @@ interface RangeRowProps {
 const resolve = <T,>(text: ValueText<T>, value: number): T =>
   typeof text === "function" ? (text as (value: number) => T)(value) : text;
 
-/** A labelled slider with its readout, in one of the app's three slider looks. */
+/** A labelled slider with its readout, in one of the app's two slider looks. */
 export function RangeRow({
   variant,
   label,
@@ -81,7 +82,9 @@ export function RangeRow({
 
   // The user's own value, held while they set it and until the value given back catches up. What
   // comes back meanwhile is behind the pointer — a drag outruns the lights — and taken as it came it
-  // pulled the thumb back and shook the readout.
+  // pulled the thumb back and shook the readout. The dock's callers answer at once, and its one row
+  // serves every selected object, so it holds nothing.
+  const holds = variant === "stage";
   const [held, setHeld] = useState<number | null>(null);
   const pressed = useRef(false);
   const settle = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -102,28 +105,22 @@ export function RangeRow({
   const frame = useRef(0);
   const [readout, setReadout] = useState(0);
   const named = useRef({ label, renamed: false });
-  if (named.current.label !== label) named.current = { label, renamed: true };
+  if (named.current.label !== label) {
+    named.current = { label, renamed: true };
+    // Another setting in the same row (another effect's): the user's value was not for it.
+    if (held !== null) setHeld(null);
+  }
   const stopGlide = () => {
     cancelAnimationFrame(frame.current);
     displayed.current = target.current;
     setGlide(null);
   };
-  useLayoutEffect(() => {
-    if (held !== null) {
-      // The user's: nothing glides under their hand, and the readout does not come in anew.
-      target.current = value;
-      displayed.current = held;
-      return;
-    }
-    if (target.current === value && displayed.current === value) return;
-    target.current = value;
-    // From wherever the thumb was: an unfinished glide, or the user's value let go.
-    const from = displayed.current;
+  /** Eases the thumb from `from` to `to`; the readout comes in anew. */
+  const glideTo = (from: number, to: number) => {
     cancelAnimationFrame(frame.current);
-    if (from === value) return;
     setReadout((n) => n + 1);
     if (variant !== "stage" || prefersReducedMotion()) {
-      displayed.current = value;
+      displayed.current = to;
       setGlide(null);
       return;
     }
@@ -133,15 +130,34 @@ export function RangeRow({
     // The clock read here, not the frame's timestamp, which some runtimes keep on another clock.
     const tick = () => {
       const t = Math.min(1, (performance.now() - start) / GLIDE_MS);
-      displayed.current = t === 1 ? value : from + (value - from) * (1 - (1 - t) ** 3);
+      displayed.current = t === 1 ? to : from + (to - from) * (1 - (1 - t) ** 3);
       setGlide(t === 1 ? null : displayed.current);
       if (t < 1) frame.current = requestAnimationFrame(tick);
     };
     frame.current = requestAnimationFrame(tick);
+  };
+  // `glideTo` reads refs and setters, and `variant` through it: a new one each render changes nothing.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: glideTo is stable in effect
+  useLayoutEffect(() => {
+    if (held !== null) {
+      // The user's: nothing glides under their hand, and the readout does not come in anew.
+      target.current = value;
+      return;
+    }
+    if (target.current === value && displayed.current === value) return;
+    target.current = value;
+    // From wherever the thumb was: an unfinished glide, or the user's value let go.
+    const from = displayed.current;
+    if (from === value) {
+      cancelAnimationFrame(frame.current);
+      return;
+    }
+    glideTo(from, value);
   }, [value, held, variant]);
   useLayoutEffect(() => () => cancelAnimationFrame(frame.current), []);
 
-  const shown = held ?? glide ?? value;
+  // A glide wins over the hold: the neutral press glides to a value it also holds.
+  const shown = glide ?? held ?? value;
   const share = (v: number) => (max > min ? (v - min) / (max - min) : 0);
   const readoutText = resolve(valueLabel, shown);
   const atNeutral = neutral !== undefined && Math.round(shown) === neutral.value;
@@ -193,8 +209,10 @@ export function RangeRow({
         // Where the thumb is now, for whatever follows: the hold can end in the same render as the
         // value catches up, before its effect has run.
         displayed.current = next;
-        setHeld(next);
-        if (!pressed.current) letGo();
+        if (holds) {
+          setHeld(next);
+          if (!pressed.current) letGo();
+        }
         onChange(next);
       }}
     />
@@ -215,7 +233,16 @@ export function RangeRow({
               data-swapped={readout > 0 || undefined}
               title={neutral.label}
               aria-label={neutral.label}
-              onClick={() => onChange(neutral.value)}
+              onClick={() => {
+                // Held like a move of the user's, so a value still coming back from a drag does not
+                // pull it away; it glides there from wherever the thumb is.
+                const from = displayed.current;
+                displayed.current = neutral.value;
+                setHeld(neutral.value);
+                letGo();
+                glideTo(from, neutral.value);
+                onChange(neutral.value);
+              }}
               data-testid={testId ? `${testId}-neutral` : undefined}
             >
               {readoutText}

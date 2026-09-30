@@ -223,17 +223,26 @@ describe("RangeRow — a neutral value", () => {
   }
 
   it("is marked on the track and the readout takes the value back there, until it is there", async () => {
+    let now = 1000;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
     const onChange = vi.fn<(v: number) => void>();
     const view = render(<Neutral value={130} onChange={onChange} />);
     expect(view.container.querySelector("[style*='--at']")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Back to 100%" }));
     expect(onChange).toHaveBeenCalledWith(100);
+    // It glides there at once, from where the thumb was.
+    now += 120;
+    await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    const mid = Number((screen.getByTestId("row") as HTMLInputElement).value);
+    expect(mid).toBeGreaterThan(100);
+    expect(mid).toBeLessThan(130);
     view.rerender(<Neutral value={100} />);
-    // It glides back first.
-    await act(() => new Promise((resolve) => setTimeout(resolve, 400)));
+    now += 400;
+    await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
     await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
     expect(screen.queryByRole("button", { name: "Back to 100%" })).toBeNull();
     expect(view.container.querySelector("[style*='--at']")).toBeNull();
+    vi.restoreAllMocks();
   });
 
   it("settles a pointer drag near it into it, but lets the arrow keys step off it", () => {
@@ -246,5 +255,81 @@ describe("RangeRow — a neutral value", () => {
     fireEvent.pointerUp(row);
     fireEvent.change(row, { target: { value: "101" } });
     expect(onChange).toHaveBeenLastCalledWith(101);
+  });
+});
+
+describe("RangeRow — the hold's edges", () => {
+  it("glides to the neutral value at once when its readout is pressed right after a drag", async () => {
+    let now = 1000;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    function Lagging({ value }: { value: number }) {
+      return (
+        <RangeRow
+          variant="stage"
+          label="Saturation"
+          valueLabel={(v) => `${Math.round(v)}%`}
+          min={50}
+          max={200}
+          step={1}
+          value={value}
+          neutral={{ value: 100, label: "Back to 100%" }}
+          onChange={() => {}}
+          testId="row"
+        />
+      );
+    }
+    const view = render(<Lagging value={120} />);
+    const row = screen.getByTestId("row");
+    fireEvent.pointerDown(row);
+    fireEvent.change(row, { target: { value: "160" } });
+    fireEvent.pointerUp(row);
+    // The drag's value is still on its way back; the readout is pressed meanwhile.
+    fireEvent.click(screen.getByRole("button", { name: "Back to 100%" }));
+    now += 120;
+    await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    const mid = Number((row as HTMLInputElement).value);
+    expect(mid).toBeLessThan(160);
+    expect(mid).toBeGreaterThan(100);
+    // A late echo of the drag does not pull it away.
+    view.rerender(<Lagging value={160} />);
+    now += 400;
+    await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    expect(row).toHaveValue("100");
+    vi.restoreAllMocks();
+  });
+
+  it("holds nothing in the dock, whose one row serves every selected object", () => {
+    function Dock({ value }: { value: number }) {
+      return (
+        <RangeRow variant="dock" label="Height" valueLabel={(v) => `${v}`} min={0} max={100} step={1} value={value} onChange={() => {}} testId="row" />
+      );
+    }
+    const view = render(<Dock value={20} />);
+    const row = screen.getByTestId("row");
+    fireEvent.pointerDown(row);
+    fireEvent.change(row, { target: { value: "70" } });
+    fireEvent.pointerUp(row);
+    // Another object is selected: its value shows at once.
+    view.rerender(<Dock value={45} />);
+    expect(row).toHaveValue("45");
+  });
+
+  it("lets go of the user's value when the row becomes another setting", async () => {
+    let now = 1000;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    function Swapped({ label, value }: { label: string; value: number }) {
+      return (
+        <RangeRow variant="stage" label={label} valueLabel={(v) => `${Math.round(v)}%`} min={0} max={100} step={1} value={value} onChange={() => {}} testId="row" />
+      );
+    }
+    const view = render(<Swapped label="Width" value={50} />);
+    const row = screen.getByTestId("row");
+    fireEvent.change(row, { target: { value: "90" } });
+    view.rerender(<Swapped label="Scale" value={30} />);
+    // It glides to the new setting's value now, not once a hold on the old one runs out.
+    now += 300;
+    await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    expect(row).toHaveValue("30");
+    vi.restoreAllMocks();
   });
 });
