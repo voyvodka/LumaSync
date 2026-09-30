@@ -40,8 +40,11 @@
   }
   :global(:root[data-reduced-motion]) .moving { transition: none; }
 
+  /* 26 px drawn inside the strip's 2 px padding and border, so the strip is 32 px like the other
+     row controls; the hit area reaches the strip's edge (32 px). */
   .item {
-    height: 24px;
+    position: relative;
+    height: 26px;
     padding: 0 10px;
     border-radius: 6px;
     font-size: 12px;
@@ -49,7 +52,9 @@
     color: var(--lm-ink-dim);
     transition: color var(--lm-dur-base) var(--lm-ease-out);
   }
-  .item:hover:not(:disabled) { color: var(--lm-ink); }
+  .item::after { content: ""; position: absolute; inset: -3px 0; }
+  /* Not the chosen one: its amber would turn white under the pointer. */
+  .item:hover:not(:disabled, [aria-checked="true"]) { color: var(--lm-ink); }
   .item[aria-checked="true"] { color: var(--lm-amber); }
   .item:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
 

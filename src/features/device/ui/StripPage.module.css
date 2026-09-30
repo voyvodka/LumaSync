@@ -52,7 +52,7 @@
 
   .nameInput {
     width: min(320px, 60vw);
-    height: 28px;
+    height: 32px;
     margin-left: -7px;
     padding: 0 6px;
     border: 1px solid var(--lm-line-2);

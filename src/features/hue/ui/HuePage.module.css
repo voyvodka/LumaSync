@@ -46,7 +46,7 @@
 
   .input {
     width: 150px;
-    height: 30px;
+    height: 32px;
     padding: 0 10px;
     border: 1px solid var(--lm-line-2);
     border-radius: 8px;
