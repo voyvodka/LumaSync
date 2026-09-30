@@ -26,14 +26,19 @@
   }
   .grid[data-lead] > :first-child { justify-self: center; }
 
+  /* A name never gives way to its control: where both do not fit on one line, the control goes
+     under the name and takes the line ("Response" read "R…" beside a three-way choice). */
   .row {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 12px;
+    gap: 6px 12px;
     min-width: 0;
     min-height: 32px;
   }
   .rowLabel {
+    flex-shrink: 0;
+    max-width: 100%;
     overflow: hidden;
     font-size: 12.5px;
     color: var(--lm-ink-dim);
@@ -48,7 +53,8 @@
     color: var(--lm-ink);
     font-variant-numeric: tabular-nums;
   }
-  .rowControl { display: flex; flex-shrink: 0; align-items: center; margin-left: auto; }
+  .rowControl { display: flex; flex: 1 0 auto; align-items: center; justify-content: flex-end; margin-left: auto; }
+  .rowControl > .choice { flex: 1; }
   .rowValue + .rowControl { margin-left: 8px; }
 
   /* Compact: the stage is the window's width, so it spends less of it on its edges. */
@@ -67,7 +73,18 @@
     background: var(--lm-bg);
   }
   /* Positioned so the options paint over the fill; a button's offset is then the group's. */
-  .choiceGroup { position: relative; z-index: 1; display: flex; flex: 1; gap: 2px; min-width: 0; }
+  /* Equal columns as wide as the widest label: split by share, the longest ("Yumuşak") overran its
+     third once a shorter neighbour ("Canlı") made the whole narrower. */
+  .choiceGroup {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    flex: 1;
+    grid-auto-columns: 1fr;
+    grid-auto-flow: column;
+    gap: 2px;
+    min-width: 0;
+  }
   .choiceThumb {
     position: absolute;
     top: 2px;
@@ -86,8 +103,7 @@
     transition-delay: 0s, var(--lm-dur-follow);
   }
   .choiceItem {
-    flex: 1;
-    min-width: 0;
+    min-width: max-content;
     height: 28px;
     padding: 0 12px;
     border: 0;
