@@ -43,6 +43,11 @@ export async function discoverWledDevices(
   });
 }
 
+/** Look for WLED devices on the local network. About 2.5 s. Never throws. */
+export async function browseWledDevices(): Promise<WledDiscoveryResponse> {
+  return invokeCommand(DEVICE_COMMANDS.BROWSE_WLED_DEVICES);
+}
+
 /**
  * Bind the persisted active sink to the given WLED device. Idempotent —
  * calling twice with the same args is safe; the bridge does not start

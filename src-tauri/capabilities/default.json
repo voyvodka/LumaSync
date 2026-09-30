@@ -107,6 +107,7 @@
     "allow-assign-channel-to-hue-zone",
     "allow-simulate-hue-fault",
     "allow-discover-wled-devices",
+    "allow-browse-wled-devices",
     "allow-connect-wled-sink",
     "allow-test-wled-bridge",
     "allow-get-local-outputs",

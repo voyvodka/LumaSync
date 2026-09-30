@@ -305,6 +305,60 @@ pub(crate) fn parse_hue_service_info(info: ResolvedService) -> Option<MdnsBridge
 }
 
 // ---------------------------------------------------------------------------
+// WLED-specific helpers
+// ---------------------------------------------------------------------------
+
+/// DNS-SD service type WLED advertises.
+pub const WLED_SERVICE_TYPE: &str = "_wled._tcp.local.";
+
+/// A WLED device seen on the network. WLED's TXT record carries only its MAC;
+/// the LED count and name come from `/json/info`, fetched per address.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MdnsWledCandidate {
+    /// Every IPv4 address the advert gave, lowest first: the caller picks one it may ask.
+    pub addresses: Vec<Ipv4Addr>,
+    /// The advertised instance name, as WLED's own "server description".
+    pub name: String,
+    pub mac: Option<String>,
+}
+
+/// Browse `_wled._tcp.local.` for `deadline` and return what advertised.
+pub fn browse_wled_devices(deadline: Duration) -> Result<Vec<MdnsWledCandidate>, MdnsBrowserError> {
+    let handle = MdnsRegistry::global().browse(WLED_SERVICE_TYPE)?;
+    Ok(handle
+        .snapshot(deadline)
+        .into_iter()
+        .filter_map(parse_wled_service_info)
+        .collect())
+}
+
+pub(crate) fn parse_wled_service_info(info: ResolvedService) -> Option<MdnsWledCandidate> {
+    let mut addresses: Vec<Ipv4Addr> = info.get_addresses_v4().into_iter().collect();
+    if addresses.is_empty() {
+        return None;
+    }
+    addresses.sort();
+    let full = info.get_fullname();
+    let name = full
+        .strip_suffix(".")
+        .unwrap_or(full)
+        .strip_suffix(WLED_SERVICE_TYPE.trim_end_matches('.'))
+        .map(|s| s.trim_end_matches('.').trim())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("WLED")
+        .to_string();
+    let mac = info
+        .get_property("mac")
+        .map(|p| p.val_str().to_string())
+        .filter(|s| !s.is_empty());
+    Some(MdnsWledCandidate {
+        addresses,
+        name,
+        mac,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -628,12 +682,12 @@ mod tests {
     fn a_browser_keeps_what_it_resolved_across_snapshots_until_it_is_removed() {
         let mut services = ResolvedServices::default();
         services.apply(resolved(
-            "_wled._tcp.local.",
+            WLED_SERVICE_TYPE,
             "Desk",
             Ipv4Addr::new(10, 0, 0, 2),
         ));
         services.apply(resolved(
-            "_wled._tcp.local.",
+            WLED_SERVICE_TYPE,
             "Shelf",
             Ipv4Addr::new(10, 0, 0, 3),
         ));
@@ -641,20 +695,42 @@ mod tests {
         assert_eq!(services.current().len(), 2);
         // Seen again (a renewed record): still one entry.
         services.apply(resolved(
-            "_wled._tcp.local.",
+            WLED_SERVICE_TYPE,
             "Desk",
             Ipv4Addr::new(10, 0, 0, 2),
         ));
         assert_eq!(services.current().len(), 2);
         services.apply(ServiceEvent::ServiceRemoved(
-            "_wled._tcp.local.".to_string(),
-            "Desk._wled._tcp.local.".to_string(),
+            WLED_SERVICE_TYPE.to_string(),
+            format!("Desk.{WLED_SERVICE_TYPE}"),
         ));
         let left: Vec<String> = services
             .current()
             .iter()
             .map(|s| s.get_fullname().to_string())
             .collect();
-        assert_eq!(left, vec!["Shelf._wled._tcp.local.".to_string()]);
+        assert_eq!(left, vec![format!("Shelf.{WLED_SERVICE_TYPE}")]);
+    }
+
+    #[test]
+    fn a_wled_advert_gives_its_address_name_and_mac() {
+        let info = ServiceInfo::new(
+            WLED_SERVICE_TYPE,
+            "wled-desk",
+            "wled-desk.local.",
+            IpAddr::V4(Ipv4Addr::new(192, 168, 1, 40)),
+            80,
+            vec![TxtProperty::from(("mac", "a0b1c2d3e4f5"))],
+        )
+        .expect("service info")
+        .as_resolved_service();
+        assert_eq!(
+            parse_wled_service_info(info),
+            Some(MdnsWledCandidate {
+                addresses: vec![Ipv4Addr::new(192, 168, 1, 40)],
+                name: "wled-desk".to_string(),
+                mac: Some("a0b1c2d3e4f5".to_string()),
+            })
+        );
     }
 }

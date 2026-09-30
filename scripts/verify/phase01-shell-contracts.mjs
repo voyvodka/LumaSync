@@ -1770,8 +1770,9 @@ checkWireUnion(
   ),
   // 14 → 16: the two `spawn_blocking` worker-death codes, added when discovery
   // and test moved off the main thread. 16 → 17: connect followed them.
-  // 17 → 19: `forget_wled_device`'s OK and FAILED.
-  19
+  // 17 → 19: `forget_wled_device`'s OK and FAILED. 19 → 23: `browse_wled_devices`'s OK,
+  // UNSUPPORTED, FAILED and worker death.
+  23
 );
 
 const rustHueRuntimeSource = walkRustSourceFiles(resolve(ROOT, "src-tauri/src/commands/hue"))

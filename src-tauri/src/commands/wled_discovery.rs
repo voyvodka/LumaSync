@@ -1,9 +1,8 @@
 //! WLED device discovery and sink connection commands.
 //!
-//! Manual IP path only; there is no mDNS auto-discovery for WLED yet.
-//! `WledDiscoveryResponse.devices` is a `Vec<WledDeviceInfo>` (not `Option<WledDeviceInfo>`)
-//! so the frontend always gets a stable array — empty on failure, `[device]` on success.
-//! That is also the shape an mDNS path would need, where several devices may appear.
+//! A device is added by the address WLED shows, or picked from what `browse_wled_devices` found
+//! over mDNS. `WledDiscoveryResponse.devices` is a `Vec<WledDeviceInfo>` either way: empty on
+//! failure, `[device]` for an address, every device that answered for a browse.
 //!
 //! Status codes:
 //!   WLED_DISCOVERY_OK          -- /json/info responded; device info parsed.
@@ -21,6 +20,10 @@
 //!   WLED_INVALID_IP            -- IP failed SSRF guard (not IPv4, loopback,
 //!                                 unspecified, multicast, or broadcast).
 //!   WLED_INVALID_LED_COUNT     -- led_count == 0 supplied to connect_wled_sink.
+//!   WLED_BROWSE_OK             -- The mDNS browse ran; `devices` may be empty.
+//!   WLED_BROWSE_UNSUPPORTED    -- No mDNS on this machine; the address path still works.
+//!   WLED_BROWSE_FAILED         -- The browse could not start.
+//!   WLED_BROWSE_WORKER_FAILED  -- The browse's worker died.
 //!   WLED_FORGET_OK             -- Device forgotten: not driven, not bound, not saved.
 //!   WLED_FORGET_FAILED         -- Not forgotten. If the lighting would not let go, nothing
 //!                                 changed; if only the save failed, it is already let go
@@ -32,10 +35,12 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
+use super::hue::transport::is_valid_bridge_addr;
 use super::led_sink::LedSink;
 use super::local_outputs::{self, LocalOutputRegistry};
 use super::status::CommandStatus;
 use super::wled_sink::{WledProtocol, WledSinkConfig, WledUdpSink};
+use crate::network::mdns::{self, MdnsBrowserError, MdnsWledCandidate};
 
 const WLED_HTTP_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -71,12 +76,7 @@ pub struct WledDeviceInfo {
     pub version: Option<String>,
 }
 
-/// Response from `discover_wled_devices`.
-///
-/// `devices` is always a stable Vec — empty on failure, `[device]` on a
-/// successful single-IP probe. This shape already matches a future mDNS
-/// path, where multiple devices can appear in one response, so the
-/// frontend array-rendering code needs no change at that migration point.
+/// Response from `discover_wled_devices` and `browse_wled_devices`: `devices` is empty on failure.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WledDiscoveryResponse {
@@ -541,6 +541,102 @@ fn discover_wled_devices_blocking(request: WledDiscoveryRequest) -> WledDiscover
             devices: Vec::new(),
         },
     }
+}
+
+/// How long a browse listens for WLED's mDNS adverts.
+const WLED_BROWSE_FOR: Duration = Duration::from_millis(2500);
+/// At most this many devices are asked at once: anything on the LAN can advertise.
+const WLED_BROWSE_MAX_DEVICES: usize = 32;
+
+/// Looks for WLED devices on the local network and asks each what it is.
+#[tauri::command]
+pub async fn browse_wled_devices() -> WledDiscoveryResponse {
+    tokio::task::spawn_blocking(|| {
+        browse_wled_with(mdns::browse_wled_devices, |ip| {
+            fetch_wled_info(&ip.to_string()).ok()
+        })
+    })
+    .await
+    .unwrap_or_else(|join_error| WledDiscoveryResponse {
+        status: CommandStatus::new(
+            "WLED_BROWSE_WORKER_FAILED",
+            "WLED browse worker terminated unexpectedly.",
+            Some(join_error.to_string()),
+        ),
+        devices: Vec::new(),
+    })
+}
+
+fn browse_wled_with(
+    browse: impl FnOnce(Duration) -> Result<Vec<MdnsWledCandidate>, MdnsBrowserError>,
+    fetch: impl Fn(Ipv4Addr) -> Option<WledInfoResponse> + Sync,
+) -> WledDiscoveryResponse {
+    let candidates = match browse(WLED_BROWSE_FOR) {
+        Ok(candidates) => candidates,
+        Err(MdnsBrowserError::Unsupported) => {
+            return WledDiscoveryResponse {
+                status: CommandStatus::new(
+                    "WLED_BROWSE_UNSUPPORTED",
+                    "mDNS is not available on this machine.",
+                    None,
+                ),
+                devices: Vec::new(),
+            }
+        }
+        Err(error) => {
+            return WledDiscoveryResponse {
+                status: CommandStatus::new(
+                    "WLED_BROWSE_FAILED",
+                    "Looking for WLED devices could not start.",
+                    Some(error.to_string()),
+                ),
+                devices: Vec::new(),
+            }
+        }
+    };
+    WledDiscoveryResponse {
+        status: CommandStatus::ok("WLED_BROWSE_OK", "WLED browse finished."),
+        devices: identify_wled_candidates(candidates, fetch),
+    }
+}
+
+/// Asks each advertised device what it is, all at once, and keeps those that answer as WLED.
+// Only an address on the local network is asked: anything on the LAN can advertise, and naming a
+// public address would have the app fetch from it unasked. The same LAN rule as a Hue bridge's.
+fn identify_wled_candidates(
+    candidates: Vec<MdnsWledCandidate>,
+    fetch: impl Fn(Ipv4Addr) -> Option<WledInfoResponse> + Sync,
+) -> Vec<WledDeviceInfo> {
+    let mut candidates: Vec<(Ipv4Addr, MdnsWledCandidate)> = candidates
+        .into_iter()
+        .filter_map(|candidate| {
+            let ip = candidate
+                .addresses
+                .iter()
+                .copied()
+                .find(|ip| is_valid_bridge_addr(&ip.to_string()))?;
+            Some((ip, candidate))
+        })
+        .collect();
+    candidates.sort_by_key(|(ip, _)| *ip);
+    candidates.dedup_by_key(|(ip, _)| *ip);
+    candidates.truncate(WLED_BROWSE_MAX_DEVICES);
+    let fetch = &fetch;
+    std::thread::scope(|scope| {
+        let asks: Vec<_> = candidates
+            .into_iter()
+            .map(|(ip, candidate)| scope.spawn(move || fetch(ip).map(|info| (ip, candidate, info))))
+            .collect();
+        asks.into_iter()
+            .filter_map(|ask| ask.join().ok().flatten())
+            .map(|(ip, candidate, info)| {
+                let mut device = info_to_device(&ip.to_string(), info);
+                device.name = device.name.or(Some(candidate.name));
+                device.mac = device.mac.or(candidate.mac);
+                device
+            })
+            .collect()
+    })
 }
 
 /// Bind a WLED device to the "usb" output channel, replacing another WLED device. A connected strip
@@ -1324,5 +1420,111 @@ mod probe_tests {
         assert_eq!((misses, verdict), (0, Some(true)));
         // One miss between answers is not a panel turned off.
         assert_eq!(wled_probe_verdict(0, false).1, None);
+    }
+}
+
+#[cfg(test)]
+mod browse_tests {
+    use std::net::Ipv4Addr;
+    use std::sync::Mutex;
+
+    use super::{
+        browse_wled_with, identify_wled_candidates, MdnsBrowserError, MdnsWledCandidate,
+        WledInfoResponse, WledLedsInfo,
+    };
+
+    fn advert(ip: [u8; 4], name: &str) -> MdnsWledCandidate {
+        MdnsWledCandidate {
+            addresses: vec![Ipv4Addr::from(ip)],
+            name: name.to_string(),
+            mac: Some("a0b1c2d3e4f5".to_string()),
+        }
+    }
+
+    fn info(name: &str, count: u16) -> WledInfoResponse {
+        WledInfoResponse {
+            leds: WledLedsInfo { count },
+            mac: String::new(),
+            ver: "0.15.0".to_string(),
+            name: name.to_string(),
+            live: false,
+            udpport: 21324,
+        }
+    }
+
+    #[test]
+    fn only_local_addresses_are_asked_once_each_and_only_what_answers_is_kept() {
+        let asked = Mutex::new(Vec::new());
+        let devices = identify_wled_candidates(
+            vec![
+                advert([192, 168, 1, 40], "desk"),
+                advert([192, 168, 1, 40], "desk again"),
+                advert([8, 8, 8, 8], "public"),
+                advert([127, 0, 0, 1], "loopback"),
+                advert([192, 168, 1, 41], "silent"),
+                advert([169, 254, 3, 3], "shelf"),
+                // A public address listed first does not hide the LAN one.
+                MdnsWledCandidate {
+                    addresses: vec![Ipv4Addr::new(8, 8, 4, 4), Ipv4Addr::new(10, 0, 0, 9)],
+                    name: "two addresses".to_string(),
+                    mac: None,
+                },
+            ],
+            |ip| {
+                asked.lock().unwrap().push(ip);
+                match ip.octets() {
+                    [192, 168, 1, 40] => Some(info("Desk", 60)),
+                    [169, 254, 3, 3] => Some(info("", 30)),
+                    [10, 0, 0, 9] => Some(info("Hall", 90)),
+                    _ => None,
+                }
+            },
+        );
+
+        let mut asked = asked.into_inner().unwrap();
+        asked.sort();
+        assert_eq!(
+            asked,
+            vec![
+                Ipv4Addr::new(10, 0, 0, 9),
+                Ipv4Addr::new(169, 254, 3, 3),
+                Ipv4Addr::new(192, 168, 1, 40),
+                Ipv4Addr::new(192, 168, 1, 41),
+            ]
+        );
+        let found: Vec<_> = devices
+            .iter()
+            .map(|d| (d.ip.as_str(), d.name.as_deref(), d.led_count))
+            .collect();
+        // The advert's name stands in for a device that reports none.
+        assert_eq!(
+            found,
+            vec![
+                ("10.0.0.9", Some("Hall"), 90),
+                ("169.254.3.3", Some("shelf"), 30),
+                ("192.168.1.40", Some("Desk"), 60)
+            ]
+        );
+        assert_eq!(devices[1].mac.as_deref(), Some("a0b1c2d3e4f5"));
+    }
+
+    #[test]
+    fn a_browse_that_cannot_run_says_why_with_nothing_found() {
+        let code = |error: MdnsBrowserError| browse_wled_with(|_| Err(error), |_| None).status.code;
+        assert_eq!(
+            code(MdnsBrowserError::Unsupported),
+            "WLED_BROWSE_UNSUPPORTED"
+        );
+        assert_eq!(code(MdnsBrowserError::Poisoned), "WLED_BROWSE_FAILED");
+        assert_eq!(
+            code(MdnsBrowserError::BrowseFailed("rejected".into())),
+            "WLED_BROWSE_FAILED"
+        );
+        let found = browse_wled_with(
+            |_| Ok(vec![advert([192, 168, 1, 40], "desk")]),
+            |_| Some(info("Desk", 60)),
+        );
+        assert_eq!(found.status.code, "WLED_BROWSE_OK");
+        assert_eq!(found.devices.len(), 1);
     }
 }

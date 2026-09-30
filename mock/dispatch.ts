@@ -32,6 +32,7 @@ export const MIN_FIXTURE_LATENCY_MS = 120;
 const SLOW_COMMANDS: Record<string, number> = {
   discover_hue_bridges: 900,
   discover_wled_devices: 1200,
+  browse_wled_devices: 2500,
   list_serial_ports: 350,
   run_serial_health_check: 800,
   test_wled_bridge: 1500,

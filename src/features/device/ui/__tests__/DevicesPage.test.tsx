@@ -101,6 +101,10 @@ vi.mock("@/features/device/wledApi", () => ({
   discoverWledDevices: vi.fn<typeof wledApiModule.discoverWledDevices>(),
   connectWledSink: vi.fn<typeof wledApiModule.connectWledSink>(),
   testWledBridge: vi.fn<typeof wledApiModule.testWledBridge>(),
+  browseWledDevices: vi.fn<typeof wledApiModule.browseWledDevices>(async () => ({
+    status: { code: "WLED_BROWSE_OK", message: "", details: null },
+    devices: [],
+  })),
 }));
 
 // Stand-in for the real panel: surfaces the two props the persist-banner tests

@@ -39,6 +39,7 @@ const APP_COMMANDS: &[&str] = &[
     "assign_channel_to_hue_zone",
     "simulate_hue_fault",
     "discover_wled_devices",
+    "browse_wled_devices",
     "connect_wled_sink",
     "test_wled_bridge",
     "start_led_test_pattern",

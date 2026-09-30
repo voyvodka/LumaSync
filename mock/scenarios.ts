@@ -168,7 +168,11 @@ function furnished(): MockWorld {
   const w = base();
   w.serial = { ports: PORTS, connectedPort: PORTS[0].name, healthFailsAt: null };
   w.wled = {
-    devices: [{ host: "192.168.1.42", name: "WLED Panel", ledCount: 120, port: 4048, protocol: "ddp" }],
+    devices: [
+      { host: "192.168.1.42", name: "WLED Panel", ledCount: 120, port: 4048, protocol: "ddp" },
+      // Not added: the add page's browse offers it.
+      { host: "192.168.1.57", name: "Shelf", ledCount: 60, port: 4048, protocol: "ddp" },
+    ],
     connectedHost: "192.168.1.42",
     testOutcome: "WLED_TEST_LIVE_CONFIRMED",
   };

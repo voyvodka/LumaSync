@@ -125,7 +125,8 @@ use commands::shell_state::{
 use commands::updater::{check_for_update, download_and_install_update, PendingUpdate};
 use commands::window_visibility::{get_main_window_visibility, MainWindowVisibilityState};
 use commands::wled_discovery::{
-    connect_wled_sink, discover_wled_devices, forget_wled_device, test_wled_bridge,
+    browse_wled_devices, connect_wled_sink, discover_wled_devices, forget_wled_device,
+    test_wled_bridge,
 };
 use events::{SHELL_CLOSE_TO_TRAY_EVENT, TRAY_SHOW_LED_PREVIEW_EVENT};
 
@@ -976,6 +977,7 @@ pub fn run() {
             assign_channel_to_hue_zone,
             simulate_hue_fault, // debug: real fault injection, release: returns error stub
             discover_wled_devices,
+            browse_wled_devices,
             connect_wled_sink,
             test_wled_bridge,
             start_led_test_pattern,

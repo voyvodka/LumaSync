@@ -406,6 +406,7 @@ export function DevicesPage({
                 otherPorts={otherPorts}
                 device={device}
                 onWledBound={wled.markConnected}
+                boundWledIp={activeWledIp}
                 replaces={null}
                 onAdded={setArriving}
               />
@@ -433,6 +434,7 @@ export function DevicesPage({
                 otherPorts={otherPorts}
                 device={device}
                 onWledBound={wled.markConnected}
+                boundWledIp={activeWledIp}
                 replaces={replaces}
                 onAdded={setArriving}
               />

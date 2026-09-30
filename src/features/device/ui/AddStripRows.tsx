@@ -102,6 +102,61 @@ export function FoundPortRow({ port, device, label, primary, note, blocked = fal
   );
 }
 
+interface FoundWledRowProps {
+  found: WledDeviceInfo;
+  onBound: (device: WledDeviceInfo) => Promise<void>;
+  onAdded: (added: AddedOutput) => void;
+  primary: boolean;
+  /** Another add on the page is running: two at once would race for the one driven strip. */
+  blocked?: boolean;
+  onBusyChange?: (busy: boolean) => void;
+  deps?: WledConnectDeps;
+}
+
+/** A WLED device the browse found: Add asks it again what it is and binds it. */
+export function FoundWledRow({ found, onBound, onAdded, primary, blocked = false, onBusyChange, deps }: FoundWledRowProps) {
+  const { t } = useTranslation();
+  const [failure, setFailure] = useState<WledCommandStatus | null>(null);
+  const wled = useWledConnect(deps);
+  const connecting = wled.connecting !== null;
+  const adding = useHeldFlag(connecting);
+  useEffect(() => {
+    onBusyChange?.(connecting);
+  }, [connecting, onBusyChange]);
+  const shownFailure = useHeldValue(failure, adding);
+  const name = found.name || "WLED";
+
+  const add = async () => {
+    const status = await wled.connect(found.ip, onBound);
+    if (status.code === WLED_STATUS.CONNECT_OK) {
+      setFailure(null);
+      onAdded({ kind: "wled", ip: found.ip });
+    } else setFailure(status);
+  };
+
+  return (
+    <SettingRow
+      label={name}
+      value={t("device:strip.add.foundWled", { ip: found.ip, count: found.ledCount })}
+      testId="found-wled"
+      control={
+        <AddButton
+          busy={adding}
+          primary={primary}
+          disabled={blocked}
+          label={t("device:strip.add.addNamed", { name })}
+          onClick={() => void add()}
+          testId="found-wled-add"
+        />
+      }
+    >
+      <Reveal open={shownFailure !== null}>
+        {shownFailure ? <WledCodedNote status={shownFailure} testId="found-wled-failed" /> : null}
+      </Reveal>
+    </SettingRow>
+  );
+}
+
 interface WledAddressRowProps {
   /** Records a bound device: the saved strip, and the switch away from the other outputs. */
   onBound: (device: WledDeviceInfo) => Promise<void>;
