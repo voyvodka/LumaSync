@@ -584,10 +584,16 @@ impl Drop for RuntimeTelemetryWindow {
                 store.snapshot.worker_stopped = true;
             }
             if let Some(sink) = &self.health_sink {
-                sink(&RuntimeHealth {
-                    worker_stopped: true,
-                    ..RuntimeHealth::default()
-                });
+                // A second panic escaping a destructor mid-unwind aborts the whole app.
+                let published = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    sink(&RuntimeHealth {
+                        worker_stopped: true,
+                        ..RuntimeHealth::default()
+                    });
+                }));
+                if published.is_err() {
+                    log::error!("[runtime-health] publishing the stopped worker panicked");
+                }
             }
             return;
         }
@@ -1179,5 +1185,19 @@ mod tests {
 
         super::clear_worker_stopped(&metrics);
         assert!(!metrics.lock().unwrap().snapshot.worker_stopped);
+    }
+
+    #[test]
+    fn a_sink_that_panics_while_a_worker_panics_does_not_abort_the_app() {
+        let metrics = shared();
+        let sink: RuntimeHealthSink = Arc::new(|_: &RuntimeHealth| panic!("emit broke"));
+        let mut window = RuntimeTelemetryWindow::with_health_sink(Instant::now(), Some(sink));
+        window.attach(Arc::clone(&metrics));
+        let worker = thread::spawn(move || {
+            let _window = window;
+            panic!("worker broke");
+        });
+        assert!(worker.join().is_err());
+        assert!(metrics.lock().unwrap().snapshot.worker_stopped);
     }
 }
