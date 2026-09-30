@@ -114,3 +114,23 @@ describe("ModeStrip", () => {
     expect(screen.getByRole("switch").title).not.toMatch(/\(.+\)$/);
   });
 });
+
+describe("ModeStrip — a subtitle", () => {
+  const strip = (solid: { text: string; key: string }) => (
+    <ModeStrip
+      variant="full"
+      value={LIGHTING_MODE_KIND.SOLID}
+      onSelect={() => {}}
+      subtitles={{ [LIGHTING_MODE_KIND.SOLID]: solid }}
+    />
+  );
+
+  it("fades in when its form changes, and not when the page opens or a number moves within it", () => {
+    const view = render(strip({ key: "colour", text: "#FFFFFF · 100%" }));
+    expect(screen.getByText("#FFFFFF · 100%")).not.toHaveAttribute("data-swapped");
+    view.rerender(strip({ key: "colour", text: "#FFFFFF · 60%" }));
+    expect(screen.getByText("#FFFFFF · 60%")).not.toHaveAttribute("data-swapped");
+    view.rerender(strip({ key: "white", text: "4000 K · 60%" }));
+    expect(screen.getByText("4000 K · 60%")).toHaveAttribute("data-swapped");
+  });
+});

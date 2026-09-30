@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { LIGHTING_MODE_KIND, type LightingModeKind, type LitModeKind } from "@/shared/contracts/mode";
@@ -46,8 +46,11 @@ interface ModeStripProps {
    * few hundred milliseconds to start capture, and a strip that greyed out for it read as a stall.
    */
   busy?: boolean;
-  /** What each mode is set to, under its name where the strip has room. */
-  subtitles?: Partial<Record<LightingModeKind, string>>;
+  /**
+   * What each mode is set to, under its name where the strip has room. `key` names its form — Solid's
+   * colour or white, the effect — and a new one fades in; a number moving within it just updates.
+   */
+  subtitles?: Partial<Record<LightingModeKind, { text: string; key: string }>>;
   /** What the power button turns back on while the lights are off. Lights and compact only. */
   lastLit?: LitModeKind;
 }
@@ -76,6 +79,17 @@ export function ModeStrip({
   }, []);
 
   const powerShortcut = usePowerShortcut();
+  // Per mode, the subtitle's form and whether it has changed since the strip opened: only a span
+  // mounted for a new form carries the flag, so opening the page animates nothing.
+  const forms = useRef(new Map<LightingModeKind, { key: string; changed: boolean }>());
+  const subtitleOf = (kind: LightingModeKind) => {
+    const sub = subtitles?.[kind];
+    if (!sub) return undefined;
+    const seen = forms.current.get(kind);
+    if (!seen) forms.current.set(kind, { key: sub.key, changed: false });
+    else if (seen.key !== sub.key) forms.current.set(kind, { key: sub.key, changed: true });
+    return { ...sub, changed: forms.current.get(kind)!.changed };
+  };
   const select = (kind: LightingModeKind) => {
     if (!busy) onSelect(kind);
   };
@@ -112,7 +126,7 @@ export function ModeStrip({
   const index = shownKind === null ? -1 : LIT_MODE_ORDER.indexOf(shownKind);
   const options = LIT_MODE_ORDER.map((kind): SegmentedOption<LightingModeKind> => {
     const { Icon, labelLang, keybind, labelKey } = modeKind(kind);
-    const subtitle = variant === "full" ? subtitles?.[kind] : undefined;
+    const subtitle = variant === "full" ? subtitleOf(kind) : undefined;
     const content: ReactNode = (
       <>
         <span className={styles.icon} aria-hidden>
@@ -122,7 +136,11 @@ export function ModeStrip({
           <span className={styles.name} lang={labelLang}>
             {t(labelKey)}
           </span>
-          {subtitle !== undefined && <span className={styles.sub}>{subtitle}</span>}
+          {subtitle !== undefined && (
+            <span key={subtitle.key} className={styles.sub} data-swapped={subtitle.changed || undefined}>
+              {subtitle.text}
+            </span>
+          )}
         </span>
         {variant === "full" && <ModeKeybindBadge action={keybind} />}
       </>

@@ -112,6 +112,9 @@
   /* Narrower: the shortcut goes first, then the second line; at compact widths the icon sits over
      the name. */
   @container mstrip (max-width: 640px) { .badge { display: none; } }
+  .sub[data-swapped] { animation: sub-in var(--lm-dur-base) var(--lm-ease-out); }
+  @keyframes sub-in { from { opacity: 0; transform: translateY(3px); } }
+  :global(:root[data-reduced-motion]) .sub[data-swapped] { animation: none; }
   @container mstrip (max-width: 600px) { .sub { display: none; } }
   @container mstrip (max-width: 420px) {
     .power { width: 44px; }

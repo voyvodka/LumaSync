@@ -139,20 +139,33 @@ export function LightsPage({
             busy={isModeTransitioning}
             lastLit={lastLit}
             subtitles={{
-              [LIGHTING_MODE_KIND.AMBILIGHT]: t("lights:mode.ambilight.subtitle", {
-                brightness: brightnessPct(ambilight.brightness),
-              }),
+              [LIGHTING_MODE_KIND.AMBILIGHT]: {
+                key: "screen",
+                text: t("lights:mode.ambilight.subtitle", { brightness: brightnessPct(ambilight.brightness) }),
+              },
               [LIGHTING_MODE_KIND.SOLID]:
                 solid.kelvin != null
-                  ? t("lights:mode.solid.subtitleWhite", { kelvin: solid.kelvin, brightness: brightnessPct(solid.brightness) })
-                  : t("lights:mode.solid.subtitle", {
-                      hex: rgbToHex(solid).toUpperCase(),
-                      brightness: brightnessPct(solid.brightness),
-                    }),
-              [LIGHTING_MODE_KIND.EFFECT]: t("lights:mode.effect.subtitle", {
-                name: t(`lights:effect.names.${effect.id}`),
-                brightness: brightnessPct(effect.brightness),
-              }),
+                  ? {
+                      key: "white",
+                      text: t("lights:mode.solid.subtitleWhite", {
+                        kelvin: solid.kelvin,
+                        brightness: brightnessPct(solid.brightness),
+                      }),
+                    }
+                  : {
+                      key: "colour",
+                      text: t("lights:mode.solid.subtitle", {
+                        hex: rgbToHex(solid).toUpperCase(),
+                        brightness: brightnessPct(solid.brightness),
+                      }),
+                    },
+              [LIGHTING_MODE_KIND.EFFECT]: {
+                key: effect.id,
+                text: t("lights:mode.effect.subtitle", {
+                  name: t(`lights:effect.names.${effect.id}`),
+                  brightness: brightnessPct(effect.brightness),
+                }),
+              },
             }}
             onSelect={(next) => onModeChange(MODE_KINDS[next].config({ solid: { ...solid }, ambilight, effect }))}
           />
