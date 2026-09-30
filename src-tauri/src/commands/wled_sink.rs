@@ -330,6 +330,7 @@ pub(crate) fn for_each_ddp_packet<E>(
             DDP_FLAGS_VERSION_1
         };
         packet.clear();
+        packet.reserve(DDP_HEADER_LEN + payload_len);
         packet.extend_from_slice(&[flags, next_ddp_sequence(sequence), DDP_TYPE, DDP_DATA_TYPE]);
         packet.extend_from_slice(&byte_offset.to_be_bytes());
         // Chunking caps this at DDP_MAX_PAYLOAD_BYTES, so the u16 the old
@@ -341,7 +342,8 @@ pub(crate) fn for_each_ddp_packet<E>(
     Ok(())
 }
 
-/// Every DDP datagram of one frame, as owned buffers.
+/// Every DDP datagram of one frame, as owned buffers: what the wire tests read.
+#[cfg(test)]
 pub fn encode_ddp_packets(colors: &[[u8; 3]], sequence: &AtomicU8) -> Vec<Vec<u8>> {
     let mut packets = Vec::new();
     let mut packet = Vec::new();
@@ -389,7 +391,8 @@ pub(crate) fn for_each_realtime_packet(
     Ok(())
 }
 
-/// Every realtime datagram of one frame, as owned buffers.
+/// Every realtime datagram of one frame, as owned buffers: what the wire tests read.
+#[cfg(test)]
 pub fn encode_realtime_packets(colors: &[[u8; 3]]) -> Result<Vec<Vec<u8>>, String> {
     let mut packets = Vec::new();
     let mut packet = Vec::new();

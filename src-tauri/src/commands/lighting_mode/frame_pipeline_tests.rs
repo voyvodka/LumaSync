@@ -1636,8 +1636,8 @@ fn corrected_wled_sink_frame_allocations_stay_within_budget() {
             let (allocs, _) = alloc_count::measure(|| {
                 sink.send_frame(&strip).expect("send");
             });
-            assert!(
-                allocs <= WLED_ALLOCS_PER_FRAME,
+            assert_eq!(
+                allocs, WLED_ALLOCS_PER_FRAME,
                 "{protocol:?} frame {n} made {allocs} allocations; the budget is \
                  {WLED_ALLOCS_PER_FRAME}"
             );
