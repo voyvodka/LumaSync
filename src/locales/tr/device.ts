@@ -42,11 +42,11 @@ const device: Catalogue<typeof enDevice> = {
     state: {
       connecting: "Bağlanıyor…",
       connected: "Bağlı",
-      unlit: "Yanmadı",
+      unlit: "Yanmıyor",
       reconnecting: "Yeniden bağlanıyor…",
       disconnected: "Bağlı değil",
       busy: "Meşgul",
-      replug: "Çıkarıp takın",
+      replug: "Kabloyu çıkarıp tak",
       firmwareMismatch: "Uyumsuz yazılım",
     },
     name: {
