@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import { SOLID_KELVIN_RANGE } from "@/shared/contracts/mode";
 import { kelvinToRgb } from "@/shared/lib/color";
-import styles from "./SolidWhite.module.css";
+import { RangeRow } from "@/shared/ui/RangeRow/RangeRow";
 
 export type SolidTone = "colour" | "white";
 
@@ -31,26 +31,21 @@ export function KelvinSlider({
 }) {
   const { t } = useTranslation();
   const { min, max } = SOLID_KELVIN_RANGE;
+  const say = (k: number) => t("lights:solid.kelvinValue", { kelvin: Math.round(k / KELVIN_STEP) * KELVIN_STEP });
   return (
-    <div className={styles.kelvin}>
-      <div className={styles.head}>
-        <span className={styles.label}>{t("lights:solid.temperature")}</span>
-        <span className={styles.value}>{t("lights:solid.kelvinValue", { kelvin })}</span>
-      </div>
-      <input
-        type="range"
-        className={styles.track}
-        style={{ ["--track" as string]: TRACK }}
-        min={min}
-        max={max}
-        step={KELVIN_STEP}
-        value={kelvin}
-        disabled={disabled}
-        aria-label={t("lights:solid.temperature")}
-        aria-valuetext={t("lights:solid.kelvinValue", { kelvin })}
-        onChange={(e) => onChange(Number.parseInt(e.currentTarget.value, 10))}
-        data-testid="solid-kelvin"
-      />
-    </div>
+    <RangeRow
+      variant="stage"
+      label={t("lights:solid.temperature")}
+      valueLabel={say}
+      ariaValueText={say}
+      min={min}
+      max={max}
+      step={KELVIN_STEP}
+      value={kelvin}
+      disabled={disabled}
+      track={TRACK}
+      onChange={(k) => onChange(Math.round(k))}
+      testId="solid-kelvin"
+    />
   );
 }

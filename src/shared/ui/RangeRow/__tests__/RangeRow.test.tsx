@@ -148,3 +148,103 @@ describe("RangeRow — a value set from outside", () => {
     expect(screen.getByTestId("row")).toHaveValue("70");
   });
 });
+
+describe("RangeRow — a drag the value given back has not caught up with", () => {
+  afterEach(() => vi.useRealTimers());
+
+  /** The value comes back from outside, behind the pointer, the way a lighting retune answers. */
+  function Echoed({ echo, onChange }: { echo: number; onChange: (v: number) => void }) {
+    return (
+      <RangeRow
+        variant="stage"
+        label="Saturation"
+        valueLabel={(v) => `${Math.round(v)}%`}
+        min={0}
+        max={200}
+        step={1}
+        value={echo}
+        onChange={onChange}
+        testId="row"
+      />
+    );
+  }
+
+  it("keeps the thumb and the readout on the user's value while older values come back", () => {
+    const onChange = vi.fn<(v: number) => void>();
+    const view = render(<Echoed echo={100} onChange={onChange} />);
+    const row = screen.getByTestId("row");
+    fireEvent.pointerDown(row);
+    fireEvent.change(row, { target: { value: "140" } });
+    fireEvent.change(row, { target: { value: "180" } });
+    view.rerender(<Echoed echo={120} onChange={onChange} />);
+    expect(row).toHaveValue("180");
+    expect(screen.getByText("180%")).not.toHaveAttribute("data-swapped");
+    fireEvent.pointerUp(row);
+    view.rerender(<Echoed echo={150} onChange={onChange} />);
+    expect(row).toHaveValue("180");
+    // Caught up: the value is its own again, and nothing glided or came in anew on the way.
+    view.rerender(<Echoed echo={180} onChange={onChange} />);
+    expect(row).toHaveValue("180");
+    expect(screen.getByText("180%")).not.toHaveAttribute("data-swapped");
+  });
+
+  it("gives way to the value given back when it never catches up", () => {
+    vi.useFakeTimers();
+    const view = render(<Echoed echo={100} onChange={() => {}} />);
+    const row = screen.getByTestId("row");
+    fireEvent.pointerDown(row);
+    fireEvent.change(row, { target: { value: "180" } });
+    fireEvent.pointerUp(row);
+    // The lights settled elsewhere — clamped, or another window moved it.
+    view.rerender(<Echoed echo={160} onChange={() => {}} />);
+    expect(row).toHaveValue("180");
+    act(() => vi.advanceTimersByTime(1300));
+    act(() => vi.runAllTimers());
+    expect(screen.getByText("160%")).toBeInTheDocument();
+  });
+});
+
+describe("RangeRow — a neutral value", () => {
+  function Neutral({ value, onChange = () => {} }: { value: number; onChange?: (v: number) => void }) {
+    return (
+      <RangeRow
+        variant="stage"
+        label="Saturation"
+        valueLabel={(v) => `${Math.round(v)}%`}
+        min={50}
+        max={200}
+        step={1}
+        value={value}
+        neutral={{ value: 100, label: "Back to 100%" }}
+        onChange={onChange}
+        testId="row"
+      />
+    );
+  }
+
+  it("is marked on the track and the readout takes the value back there, until it is there", async () => {
+    const onChange = vi.fn<(v: number) => void>();
+    const view = render(<Neutral value={130} onChange={onChange} />);
+    expect(view.container.querySelector("[style*='--at']")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Back to 100%" }));
+    expect(onChange).toHaveBeenCalledWith(100);
+    view.rerender(<Neutral value={100} />);
+    // It glides back first.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 400)));
+    await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    expect(screen.queryByRole("button", { name: "Back to 100%" })).toBeNull();
+    expect(view.container.querySelector("[style*='--at']")).toBeNull();
+  });
+
+  it("settles a pointer drag near it into it, but lets the arrow keys step off it", () => {
+    const onChange = vi.fn<(v: number) => void>();
+    render(<Neutral value={120} onChange={onChange} />);
+    const row = screen.getByTestId("row");
+    fireEvent.pointerDown(row);
+    fireEvent.change(row, { target: { value: "102" } });
+    expect(onChange).toHaveBeenLastCalledWith(100);
+    fireEvent.pointerUp(row);
+    fireEvent.change(row, { target: { value: "101" } });
+    expect(onChange).toHaveBeenLastCalledWith(101);
+  });
+});

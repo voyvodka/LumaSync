@@ -130,6 +130,12 @@ before writing a transition by hand: `StateSwap`, `PageSwap`, `SpinSwap`, `Popov
 - **Land, don't slide:** a mark that moves reappears where it now is with a small scale-in and a
   one-shot ripple, rather than travelling across the stage.
 - **Tick:** a number that changes nudges in by ~3 px.
+- **A slider holds the user's value until the value given back catches up.** A drag commits faster
+  than the lights answer (retunes are coalesced), so what comes back meanwhile is behind the pointer;
+  taken as it came, it pulled the thumb back and shook the readout. `RangeRow` keeps the user's
+  value while the pointer is down and until the prop equals it (or ~1.2 s after the last move), and
+  a readout given as a function follows that value rather than the prop. Every stage slider is a
+  `RangeRow` — Solid's temperature included, through its `track` — so this lives in one place.
 - **A value set from outside glides; a drag does not.** A stage slider (`RangeRow`) whose value
   changes under it — another effect's default, a scene applied — eases its thumb and fill there and
   ticks its readout and a new name in; the value the user is dragging follows the pointer untouched.

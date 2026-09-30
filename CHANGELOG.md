@@ -25,7 +25,9 @@ https://keepachangelog.com/en/1.1.0/
   White (and any choice of this kind on the Lights stages, like Ambilight's response) slides its
   mark across and eases the stage to its new height. Changing effect eases its settings too: a
   slider glides to the new effect's value and its name and readout fade in, and a setting the new
-  effect does not have fades out where it was.
+  effect does not have fades out where it was. A fast drag no longer makes a slider's number
+  shake or its thumb jump back, and Saturation marks 100% on its track, settles into it as you
+  pass, and goes back to it when you press its value.
 - Scenes: a row under the mode buttons, on Lights and in the compact window, where one press
   plays a whole look — Ambilight with its brightness, saturation and response, a colour or white,
   or an effect with its palette and settings. It starts with six suggestions (Movie, Game, Warm

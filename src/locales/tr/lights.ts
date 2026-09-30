@@ -163,6 +163,7 @@ const lights: Catalogue<typeof enLights> = {
     profile: {
       brightness: "Parlaklık",
       saturation: "Doygunluk",
+      saturationNeutral: "%100'e döndür",
       blackBorder: "Siyah bantları yok say",
       blackBorderTipLabel: "Siyah bantlar hakkında",
       blackBorderTip:

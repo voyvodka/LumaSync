@@ -123,7 +123,7 @@ export function EffectParams({
               <RangeRow
                 variant={variant}
                 label={t("lights:effect.speed")}
-                valueLabel={`${pct(effect.speed)}%`}
+                valueLabel={(v) => `${Math.round(v)}%`}
                 min={0}
                 max={100}
                 step={1}
@@ -141,7 +141,7 @@ export function EffectParams({
               <RangeRow
                 variant={variant}
                 label={t(sizeKey ?? "lights:effect.size")}
-                valueLabel={`${pct(paramValue(effect, "size"))}%`}
+                valueLabel={(v) => `${Math.round(v)}%`}
                 min={0}
                 max={100}
                 step={1}
@@ -159,7 +159,7 @@ export function EffectParams({
               <RangeRow
                 variant={variant}
                 label={t(intensityKey ?? "lights:effect.intensity")}
-                valueLabel={`${pct(paramValue(effect, "intensity"))}%`}
+                valueLabel={(v) => `${Math.round(v)}%`}
                 min={0}
                 max={100}
                 step={1}
@@ -177,7 +177,7 @@ export function EffectParams({
               <RangeRow
                 variant={variant}
                 label={t("lights:effect.duration")}
-                valueLabel={t("lights:effect.durationValue", { count: minutes })}
+                valueLabel={(v) => t("lights:effect.durationValue", { count: Math.round(v) })}
                 min={minMinutes}
                 max={maxMinutes}
                 step={1}
@@ -194,7 +194,7 @@ export function EffectParams({
           <RangeRow
             variant={variant}
             label={t("lights:effect.brightness")}
-            valueLabel={`${pct(effect.brightness)}%`}
+            valueLabel={(v) => `${Math.round(v)}%`}
             min={0}
             max={100}
             step={1}

@@ -92,7 +92,7 @@ export function SolidStage({
         <RangeRow
           variant="stage"
           label={t("common:mode.brightness")}
-          valueLabel={`${brightness}%`}
+          valueLabel={(v) => `${Math.round(v)}%`}
           min={0}
           max={100}
           step={1}

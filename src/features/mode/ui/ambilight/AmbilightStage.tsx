@@ -54,7 +54,7 @@ export function AmbilightStage({
         <RangeRow
           variant="stage"
           label={t("lights:signal.profile.brightness")}
-          valueLabel={`${brightness}%`}
+          valueLabel={(v) => `${Math.round(v)}%`}
           min={0}
           max={100}
           step={1}
@@ -68,12 +68,13 @@ export function AmbilightStage({
           <RangeRow
             variant="stage"
             label={t("lights:signal.profile.saturation")}
-            valueLabel={`${saturation}%`}
+            valueLabel={(v) => `${Math.round(v)}%`}
             min={50}
             max={200}
             step={1}
             value={saturation}
             disabled={disabled}
+            neutral={{ value: 100, label: t("lights:signal.profile.saturationNeutral") }}
             onChange={(v) => onChange({ ...ambilight, saturation: v / 100 })}
             testId="ambilight-saturation"
           />

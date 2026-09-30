@@ -160,6 +160,7 @@ export default {
     profile: {
       brightness: "Brightness",
       saturation: "Saturation",
+      saturationNeutral: "Back to 100%",
       blackBorder: "Ignore black bars",
       blackBorderTipLabel: "About black bars",
       blackBorderTip:
