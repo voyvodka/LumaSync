@@ -52,11 +52,14 @@ export function StageGrid({
 
 export function StageRow({
   label,
+  info,
   value,
   children,
   className,
 }: {
   label: ReactNode;
+  /** An `InfoTip` beside the name, outside its clipped box so its hit area and ring stay whole. */
+  info?: ReactNode;
   value?: ReactNode;
   children?: ReactNode;
   className?: string;
@@ -64,6 +67,7 @@ export function StageRow({
   return (
     <div className={cx(styles.row, className)}>
       <span className={styles.rowLabel}>{label}</span>
+      {info !== undefined && <span className={styles.rowInfo}>{info}</span>}
       {value !== undefined && <span className={styles.rowValue}>{value}</span>}
       {children !== undefined && <span className={styles.rowControl}>{children}</span>}
     </div>

@@ -45,6 +45,8 @@
     white-space: nowrap;
     text-overflow: ellipsis;
   }
+  /* Its glyph 6 px from the name, on the row's centre line. */
+  .rowInfo { display: inline-flex; flex-shrink: 0; align-items: center; margin-left: -6px; }
   .rowValue {
     margin-left: auto;
     flex-shrink: 0;

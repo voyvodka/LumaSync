@@ -93,13 +93,11 @@ export function AmbilightStage({
         </StageRow>
         {dense ? null : (
           <StageRow
-            label={
-              <>
-                {t("lights:signal.profile.blackBorder")}
-                <InfoTip label={t("lights:signal.profile.blackBorderTipLabel")}>
-                  {t("lights:signal.profile.blackBorderTip")}
-                </InfoTip>
-              </>
+            label={t("lights:signal.profile.blackBorder")}
+            info={
+              <InfoTip label={t("lights:signal.profile.blackBorderTipLabel")}>
+                {t("lights:signal.profile.blackBorderTip")}
+              </InfoTip>
             }
           >
             <Toggle
