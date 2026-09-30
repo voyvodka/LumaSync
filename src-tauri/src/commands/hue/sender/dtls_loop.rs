@@ -47,6 +47,31 @@ pub(super) fn dtls_write_failed_during_stop(
 /// the bridge does not close the session after ~10 s of silence.
 const HUE_DTLS_KEEPALIVE: Duration = Duration::from_secs(2);
 
+/// Why a send loop ended: said by `run`, logged by its caller, so how a stop's
+/// failed write is told from a fault is testable without a log.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum DtlsLoopExit {
+    /// Every sender handle is gone: the stream was let go.
+    Closed,
+    /// A write failed because the stream is being stopped (the stop's
+    /// deactivate PUT ended the bridge session under a frame in flight).
+    WriteFailedDuringStop,
+    /// A write failed on a live session: a fault.
+    WriteFailed,
+}
+
+impl DtlsLoopExit {
+    pub(crate) fn log(&self) {
+        match self {
+            Self::Closed => {}
+            Self::WriteFailedDuringStop => {
+                debug!("DTLS write failed while the stream was being stopped.");
+            }
+            Self::WriteFailed => error!("DTLS write failed, stopping entertainment stream."),
+        }
+    }
+}
+
 /// One DTLS session's send loop, apart from the socket so the frame it picks
 /// is testable. `min_interval` is `HUE_SENDER_MIN_INTERVAL_MS` outside tests.
 pub(crate) struct DtlsSendLoop<'a> {
@@ -60,8 +85,8 @@ pub(crate) struct DtlsSendLoop<'a> {
 }
 
 impl DtlsSendLoop<'_> {
-    /// Returns once every sender handle is gone or a write fails.
-    pub(crate) fn run<W: std::io::Write>(&self, stream: &mut W, rx: &HueFrameRx) {
+    /// Returns once every sender handle is gone or a write fails, saying which.
+    pub(crate) fn run<W: std::io::Write>(&self, stream: &mut W, rx: &HueFrameRx) -> DtlsLoopExit {
         let mut last_sent_at = Instant::now()
             .checked_sub(self.min_interval)
             .unwrap_or_else(Instant::now);
@@ -80,7 +105,9 @@ impl DtlsSendLoop<'_> {
             let waited = match rx.recv_timeout(wait) {
                 Ok(update) => Some(update),
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => None,
-                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    return DtlsLoopExit::Closed;
+                }
             };
 
             let elapsed = Instant::now().saturating_duration_since(last_sent_at);
@@ -103,14 +130,13 @@ impl DtlsSendLoop<'_> {
             let (colors, brightness) = easing.step(Instant::now());
             encode_huestream_frame(self.area_id, self.channels, colors, brightness, &mut frame);
             if stream.write_all(&frame).is_err() {
-                if dtls_write_failed_during_stop(self.deactivate_token, rx) {
-                    // A stop's deactivate PUT ends the bridge session under a
-                    // frame already in flight. Expected, not a fault.
-                    debug!("DTLS write failed while the stream was being stopped.");
+                // A stop's deactivate PUT ends the bridge session under a
+                // frame already in flight. Expected, not a fault.
+                return if dtls_write_failed_during_stop(self.deactivate_token, rx) {
+                    DtlsLoopExit::WriteFailedDuringStop
                 } else {
-                    error!("DTLS write failed, stopping entertainment stream.");
-                }
-                break;
+                    DtlsLoopExit::WriteFailed
+                };
             }
 
             // Increment packet counter for telemetry.
@@ -205,7 +231,8 @@ pub(crate) fn spawn_hue_dtls_sender(
             min_interval: Duration::from_millis(HUE_SENDER_MIN_INTERVAL_MS),
             keepalive: HUE_DTLS_KEEPALIVE,
         }
-        .run(&mut dtls_stream, &rx);
+        .run(&mut dtls_stream, &rx)
+        .log();
 
         // Emit DTLS `close_notify` before dropping the socket so the
         // bridge releases its "active streamer" slot immediately. Without
