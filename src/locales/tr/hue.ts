@@ -121,8 +121,6 @@ const hue: Catalogue<typeof enHue> = {
     },
   },
   runtime: {
-    idleTitle: "Hue beklemede",
-    idleBody: "Son kontrol güncelken mod kontrollerinden başlat.",
     states: {
       Idle: "Beklemede",
       Starting: "Başlatılıyor",
@@ -155,12 +153,6 @@ const hue: Catalogue<typeof enHue> = {
     },
     retry: {
       progress: "Kalan deneme: {{remaining}} | Sonraki deneme: {{nextMs}} ms",
-    },
-    triggerSource: {
-      mode_control: "Mod kontrollerinden başlatıldı",
-      device_surface: "Cihazlar sayfasından başlatıldı",
-      system: "Otomatik kurtarma başlattı",
-      undefined: "Başlatan bilinmiyor",
     },
     checklist: {
       revalidate: "Son kontrol çok eski. Başlatmadan önce yeniden doğrula.",

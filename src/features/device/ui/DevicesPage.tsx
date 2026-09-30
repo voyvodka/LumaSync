@@ -101,7 +101,7 @@ export function DevicesPage({
   const { activeWledIp } = wled;
 
   // -------------------------------------------------------------------------
-  // Channel placement persistence (D-05a)
+  // Channel placement persistence
   // -------------------------------------------------------------------------
 
   const [channelPlacements, setChannelPlacements] = useState<HueChannelPlacement[]>([]);

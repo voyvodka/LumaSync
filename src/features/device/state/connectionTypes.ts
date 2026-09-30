@@ -35,7 +35,6 @@ export interface DeviceConnectionControllerState {
   connectedPort: string | null;
   lastSuccessfulPort?: string;
   statusCard: DeviceStatusCard | null;
-  canConnect: boolean;
   isScanning: boolean;
   isConnecting: boolean;
   isReconnecting: boolean;

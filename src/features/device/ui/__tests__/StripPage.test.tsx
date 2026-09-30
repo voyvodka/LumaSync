@@ -104,7 +104,6 @@ function device(overrides: Partial<UseDeviceConnectionResult> = {}): UseDeviceCo
     selectedPort: null,
     connectedPort: null,
     statusCard: null,
-    canConnect: true,
     isScanning: false,
     isConnecting: false,
     isReconnecting: false,

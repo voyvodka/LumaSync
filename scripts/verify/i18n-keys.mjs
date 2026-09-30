@@ -23,7 +23,6 @@ const CONTRACTS_DIR = resolve(ROOT, "src/shared/contracts");
 const KNOWN_DYNAMIC_PREFIXES = [
   "hue:runtime.codes",
   "hue:runtime.states",
-  "hue:runtime.triggerSource",
   "hue:runtime.writeback.codes",
   "common:hotplug.targetLabel",
   "lights:effect.directions",
@@ -56,10 +55,6 @@ const DYNAMIC_PREFIX_DOMAINS = {
     exempt: ["HUE_CHANNEL_POSITIONS_UPDATED", "HUE_CHANNEL_POSITIONS_FAILED"],
   },
   "hue:runtime.states": { sources: ["hue.ts HUE_RUNTIME_STATES"], extra: ["undefined"] },
-  "hue:runtime.triggerSource": {
-    sources: ["hue.ts HUE_RUNTIME_TRIGGER_SOURCE"],
-    extra: ["undefined"],
-  },
   // HueChannelWritebackStatusCode minus its success member.
   "hue:runtime.writeback.codes": {
     sources: [

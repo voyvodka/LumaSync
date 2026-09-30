@@ -101,7 +101,7 @@ export const TRAY_MENU_IDS = {
   MODE_SOLID: "tray-mode-solid",
   MODE_EFFECT: "tray-mode-effect",
   /**
-   * v1.6 — opens (or focuses) the LED preview surface: the interactive
+   * Opens (or focuses) the LED preview surface: the interactive
    * control popup plus, when enabled, the digital-twin overlay. Lets the
    * user reach the preview/test experience without opening full settings.
    */
@@ -182,7 +182,7 @@ export const SECTION_ORDER: SectionId[] = [
  * and drops the corner shape; restore now computes the corner from the
  * saved center plus the current outer size.
  *
- * v1.6 (LED Preview & Test Experience) adds six OPTIONAL preview fields
+ * The LED preview adds six OPTIONAL fields
  * (`ledPreviewPopupVisible` / `ledPreviewPopupCenterX` /
  * `ledPreviewPopupCenterY` / `ledTwinEnabledTest` /
  * `lastLedTestPattern` / `ledPreviewHintShown`). All are optional with
@@ -457,7 +457,7 @@ export interface ShellState {
    */
   awayLights?: AwayLights;
   // -------------------------------------------------------------------------
-  // v1.6 — LED Preview & Test Experience (all OPTIONAL / additive; no schema
+  // LED preview (all OPTIONAL / additive; no schema
   // bump — absence degrades to the documented default below).
   // -------------------------------------------------------------------------
   /**

@@ -136,7 +136,6 @@ function defaultDeviceConnectionState() {
     isConnecting: false,
     isReconnecting: false,
     isHealthChecking: false,
-    canConnect: false,
     statusCard: null,
     latestHealthCheck: null,
     isConnected: false,

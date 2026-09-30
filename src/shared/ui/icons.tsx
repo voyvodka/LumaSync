@@ -12,61 +12,12 @@ export function IconCheck() {
   );
 }
 
-export function IconInfo() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" className="shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="8" cy="8" r="6" />
-      <path d="M8 5v3.5M8 11v.5" />
-    </svg>
-  );
-}
-
 export function IconInfoAlt() {
   return (
     <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="8" cy="8" r="6.5" />
       <path d="M8 7v4" />
       <circle cx="8" cy="5" r="0.5" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-export function IconWifi() {
-  return (
-    <svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 7.5a12.5 12.5 0 0116 0" />
-      <path d="M5 11a8 8 0 0110 0" />
-      <path d="M8 14.5a4 4 0 014 0" />
-      <circle cx="10" cy="17" r="0.5" fill="currentColor" />
-    </svg>
-  );
-}
-
-export function IconBridge() {
-  return (
-    <svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="5" width="14" height="10" rx="3" />
-      <circle cx="10" cy="10" r="2" />
-      <path d="M10 5v-2M10 17v-2" />
-    </svg>
-  );
-}
-
-export function IconUsb() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="9" width="18" height="10" rx="2" />
-      <path d="M8 9V6a2 2 0 012-2h4a2 2 0 012 2v3" />
-      <circle cx="12" cy="14" r="1.3" fill="currentColor" />
-    </svg>
-  );
-}
-
-export function IconHueBridgeGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 3v18M3 12h18" />
     </svg>
   );
 }
@@ -304,14 +255,6 @@ export function IconTrash() {
   return (
     <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" />
-    </svg>
-  );
-}
-
-export function IconChevronUp() {
-  return (
-    <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M3 7.5 6 4.5 9 7.5" />
     </svg>
   );
 }
