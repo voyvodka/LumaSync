@@ -22,7 +22,6 @@ const lights: Catalogue<typeof enLights> = {
   },
   stage: {
     dormant: "Işıklar kapalı",
-    turnOn: "Aç",
   },
   power: {
     label: "Işıklar",

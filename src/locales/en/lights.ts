@@ -19,7 +19,6 @@ export default {
   },
   stage: {
     dormant: "The lights are off",
-    turnOn: "Turn on",
   },
   power: {
     label: "Lights",

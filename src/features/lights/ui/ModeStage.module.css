@@ -2,50 +2,82 @@
   .holder { position: relative; }
   .stage { transition: opacity var(--lm-dur-base) var(--lm-ease-out); }
   /* Off: the last lit mode's stage stays where it was, faded and out of reach. */
-  .holder[data-dormant] .stage { opacity: 0.32; }
+  .holder[data-dormant] .stage { opacity: 0.4; }
 
-  /* One quiet pill over it: the state, and the way back. Near the top of a tall stage (Effect), so
-     it is on screen without scrolling; in the middle of a short one. */
+  /* One veil over the whole stage, its corners the stage's: nothing half-covers a control. Darkest
+     where the words are and thinner toward the edges, so the settings the lights come back with
+     still show. No blur: a filter over a surface this size costs every frame it is up. */
+  .veil {
+    position: absolute;
+    inset: 0;
+    border-radius: 14px;
+    background: radial-gradient(
+      ellipse 60% 70% at 50% min(50%, 132px),
+      color-mix(in srgb, var(--lm-panel) 96%, transparent) 35%,
+      color-mix(in srgb, var(--lm-panel) 60%, transparent)
+    );
+    animation: veil-in var(--lm-dur-base) var(--lm-ease-out);
+  }
+  /* In the middle of a short stage; near the top of a tall one (Effect), so it needs no scroll. */
   .dormant {
     position: absolute;
-    top: min(50%, 88px);
+    top: min(50%, 132px);
     left: 50%;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 4px;
-    padding: 4px 4px 4px 14px;
-    border-radius: 999px;
-    background: var(--lm-panel-2);
-    box-shadow: 0 0 0 1px var(--lm-line-2), 0 8px 24px rgb(0 0 0 / 40%);
-    color: var(--lm-ink-dim);
-    font-size: 12.5px;
-    white-space: nowrap;
+    gap: 8px;
     transform: translate(-50%, -50%);
-    animation: settle var(--lm-dur-base) var(--lm-ease-out);
+    animation: dormant-in var(--lm-dur-base) var(--lm-ease-out) var(--lm-dur-follow) backwards;
   }
+  .powerMark {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--lm-panel);
+    box-shadow: inset 0 0 0 1px var(--lm-line-2);
+    color: var(--lm-ink-faint);
+  }
+  .powerMark svg { width: 14px; height: 14px; }
+  .dormantText { color: var(--lm-ink-dim); font-size: 13px; font-weight: 500; }
   .turnOn {
-    height: 28px;
-    padding: 0 12px;
-    border: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 14px 0 12px;
+    border: 1px solid color-mix(in srgb, var(--lm-amber) 55%, transparent);
     border-radius: 999px;
-    background: transparent;
+    background: var(--lm-panel);
     color: var(--lm-amber);
     font-size: 12.5px;
     font-weight: 500;
-    transition: background var(--lm-dur-quick);
+    white-space: nowrap;
+    transition: background var(--lm-dur-quick), border-color var(--lm-dur-quick);
   }
-  .turnOn:hover:not(:disabled) { background: var(--lm-panel); }
+  .turnOn svg { width: 14px; height: 14px; }
+  .turnOn:hover:not(:disabled) {
+    border-color: var(--lm-amber);
+    background: color-mix(in srgb, var(--lm-amber) 9%, transparent);
+  }
   .turnOn:disabled { cursor: not-allowed; opacity: 0.4; }
   .turnOn:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
-  .dormant[data-leaving] { animation: leave var(--lm-dur-quick) var(--lm-ease-leave) forwards; }
-  @keyframes settle { from { opacity: 0; transform: translate(-50%, calc(-50% + 4px)); } }
-  @keyframes leave { to { opacity: 0; transform: translate(-50%, calc(-50% + 4px)); } }
 
-  :global(:root[data-reduced-motion]) .stage { transition: none; }
+  .veil[data-leaving] { animation: veil-out var(--lm-dur-quick) var(--lm-ease-leave) forwards; }
+  @keyframes veil-in { from { opacity: 0; } }
+  @keyframes veil-out { to { opacity: 0; } }
+  @keyframes dormant-in { from { opacity: 0; transform: translate(-50%, calc(-50% + 4px)); } }
+
+  :global(:root[data-reduced-motion]) .stage,
+  :global(:root[data-reduced-motion]) .turnOn { transition: none; }
+  :global(:root[data-reduced-motion]) .veil,
   :global(:root[data-reduced-motion]) .dormant { animation: none; }
 
   @media (forced-colors: active) {
-    .dormant { border: 1px solid CanvasText; }
+    .veil { background: Canvas; opacity: 0.9; }
+    .turnOn { border-color: ButtonText; }
     .turnOn:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
   }
 }

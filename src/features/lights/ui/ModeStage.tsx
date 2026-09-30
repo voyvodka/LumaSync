@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { usePresence } from "@/shared/lib/usePresence";
+import { IconPower } from "@/shared/ui/icons";
 
 import { useSceneEdit } from "@/features/scenes/state/scenesStore";
 
@@ -53,11 +54,12 @@ export function ModeStage({
   const { t } = useTranslation();
   const off = mode.kind === LIGHTING_MODE_KIND.OFF;
   const kind: LitModeKind = mode.kind === LIGHTING_MODE_KIND.OFF ? lastLit : mode.kind;
-  // The "lights are off" pill settles in and, when they come back on, fades out with the dimming.
-  const pill = usePresence(off, 200);
+  // The veil over the dimmed stage fades in and, when the lights come back on, out with the dimming.
+  const veil = usePresence(off, 200);
   // A scene being made or edited is shaped with its settings, not its choice of effect.
   const editingScene = useSceneEdit() !== null;
   const locks = { disabled, brightnessLocked, brightnessTitle };
+  const LitIcon = modeKind(lastLit).Icon;
 
   const stage = (() => {
     switch (kind) {
@@ -99,33 +101,38 @@ export function ModeStage({
         <div className={styles.stage} inert={off || undefined}>
           {stage}
         </div>
-        {pill.mounted ? (
+        {veil.mounted ? (
           <div
-            className={styles.dormant}
-            data-leaving={pill.leaving || undefined}
+            className={styles.veil}
+            data-leaving={veil.leaving || undefined}
             data-ghost-skip
-            inert={pill.leaving || undefined}
+            inert={veil.leaving || undefined}
           >
-            <span>{t("lights:stage.dormant")}</span>
-            {/* Always there, disabled while it cannot: a pill that lost its button mid-press read as a
-                stall and changed width under the pointer. */}
-            <button
-              type="button"
-              className={styles.turnOn}
-              disabled={!onTurnOn}
-              aria-label={t("lights:power.turnOn", { mode: t(modeKind(lastLit).labelKey) })}
-              onClick={(event) => {
-                // The pill goes with the dimming: focus moves to the power switch, which now says on.
-                event.currentTarget
-                  .closest("[data-lights]")
-                  ?.querySelector<HTMLElement>("[data-power]")
-                  ?.focus({ preventScroll: true });
-                onTurnOn?.();
-              }}
-              data-testid="stage-turn-on"
-            >
-              {t("lights:stage.turnOn")}
-            </button>
+            <div className={styles.dormant}>
+              <span className={styles.powerMark} aria-hidden>
+                <IconPower />
+              </span>
+              <span className={styles.dormantText}>{t("lights:stage.dormant")}</span>
+              {/* Always there, disabled while it cannot: a button that went away mid-press read as a
+                  stall and moved what was under the pointer. */}
+              <button
+                type="button"
+                className={styles.turnOn}
+                disabled={!onTurnOn}
+                onClick={(event) => {
+                  // The veil goes with the dimming: focus moves to the power switch, which now says on.
+                  event.currentTarget
+                    .closest("[data-lights]")
+                    ?.querySelector<HTMLElement>("[data-power]")
+                    ?.focus({ preventScroll: true });
+                  onTurnOn?.();
+                }}
+                data-testid="stage-turn-on"
+              >
+                <LitIcon />
+                {t("lights:power.turnOn", { mode: t(modeKind(lastLit).labelKey) })}
+              </button>
+            </div>
           </div>
         ) : null}
       </div>

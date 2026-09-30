@@ -134,10 +134,13 @@ a feature that is touched for another reason migrates its hand-rolled copy then.
 power switch followed by the modes that light something. Off as an equal tile made it read as a
 setting like the others, and choosing it swapped the whole stage for one line of text, so every
 toggle moved the page. Now the stage stays while the lights are off — the last lit mode's, dimmed
-and inert, with "Turn on" over it — and the grey mark rests on the mode the switch brings back,
+and inert, under one veil with "Turn on Solid" (the mode it brings back) — and the grey mark rests
+on the mode the switch brings back,
 which Rust saves as `lastLitKind` with every lit choice (an Off leaves it), so it survives a
 relaunch. Turning on sends the kind alone, and Rust applies that mode's saved settings: the ones
-the dimmed stage shows. The popup keeps Off among its buttons; ⌥1 is still Off.
+the dimmed stage shows. The popup keeps Off among its buttons; ⌥1 is still Off. The first version
+floated a small pill over the stage, which sat half over whatever control happened to be there;
+the veil covers the whole card instead, darkest where its words are.
 
 **A choice in flight holds presses; it does not dim.** Starting Ambilight's capture takes a few
 hundred milliseconds, and the strip and scenes used to go to 40 % for it and come back, which read
