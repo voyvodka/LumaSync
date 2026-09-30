@@ -10,8 +10,7 @@ import {
 } from "@/shared/contracts/effects";
 import type { EffectPayload } from "@/shared/contracts/mode";
 import { RangeRow } from "@/shared/ui/RangeRow/RangeRow";
-import { Segmented } from "@/shared/ui/Segmented/Segmented";
-import { StageGrid, StageRow } from "@/shared/ui/Stage/Stage";
+import { StageChoice, StageGrid, StageRow } from "@/shared/ui/Stage/Stage";
 import { paramValue, usesParam } from "../../model/effectEdits";
 import styles from "./EffectControls.module.css";
 
@@ -33,14 +32,26 @@ const INTENSITY_LABEL = {
   twinkle: "lights:effect.intensityFor.twinkle",
 } as const satisfies Partial<Record<EffectId, string>>;
 
-const DIRECTION_GLYPH = {
-  leftToRight: "→",
-  rightToLeft: "←",
-  bottomToTop: "↑",
-  topToBottom: "↓",
-  outward: "⤢",
-  around: "↻",
-} as const satisfies Record<EffectDirection, string>;
+/** One stroke, one size: text arrows came in different sizes by font, and ⤢ read as a dot. */
+function DirectionIcon({ paths, dot = false }: { paths: string[]; dot?: boolean }) {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {paths.map((d) => (
+        <path key={d} d={d} />
+      ))}
+      {dot ? <circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none" /> : null}
+    </svg>
+  );
+}
+
+const DIRECTION_ICON = {
+  leftToRight: <DirectionIcon paths={["M2.5 8h11", "M9.5 4l4 4-4 4"]} />,
+  rightToLeft: <DirectionIcon paths={["M13.5 8h-11", "M6.5 4l-4 4 4 4"]} />,
+  bottomToTop: <DirectionIcon paths={["M8 13.5v-11", "M4 6.5l4-4 4 4"]} />,
+  topToBottom: <DirectionIcon paths={["M8 2.5v11", "M4 9.5l4 4 4-4"]} />,
+  outward: <DirectionIcon dot paths={["M5.5 8H1.5", "M3.5 6 1.5 8l2 2", "M10.5 8h4", "M12.5 6l2 2-2 2"]} />,
+  around: <DirectionIcon paths={["M12.8 9.2A5 5 0 1 1 11.5 4.5", "M11.8 1.8v3h-3"]} />,
+} as const satisfies Record<EffectDirection, ReactNode>;
 
 interface EffectParamsProps {
   effect: EffectPayload;
@@ -211,16 +222,14 @@ export function EffectParams({
         ? cell(
             "direction",
             <StageRow label={t("lights:effect.direction")}>
-              <Segmented
-                className={styles.directions}
-                itemClassName={styles.directionItem}
+              <StageChoice
                 ariaLabel={t("lights:effect.direction")}
                 value={effect.direction ?? EFFECT_DEFAULTS.direction}
                 disabled={disabled}
                 onChange={(direction) => onChange({ ...effect, direction })}
                 options={Object.values(EFFECT_DIRECTIONS).map((direction) => ({
                   value: direction,
-                  label: DIRECTION_GLYPH[direction],
+                  label: DIRECTION_ICON[direction],
                   ariaLabel: t(`lights:effect.directions.${direction}`),
                   title: t(`lights:effect.directions.${direction}`),
                   testId: `effect-direction-${direction}`,

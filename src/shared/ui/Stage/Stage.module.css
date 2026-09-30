@@ -56,7 +56,10 @@
     font-variant-numeric: tabular-nums;
   }
   .rowControl { display: flex; flex: 1 0 auto; align-items: center; justify-content: flex-end; margin-left: auto; }
-  .rowControl > .choice { flex: 1; }
+  /* A choice fills the rest of its line, up to a width past which its options only spread apart. */
+  .rowControl > .choice { flex: 1; max-width: 360px; }
+  /* An option that is an icon (Effect's direction) centres it. */
+  .choiceItem > svg { display: block; margin: auto; }
   .rowValue + .rowControl { margin-left: 8px; }
 
   /* Compact: the stage is the window's width, so it spends less of it on its edges. */
@@ -117,7 +120,8 @@
     white-space: nowrap;
     transition: background var(--lm-dur-quick), color var(--lm-dur-quick);
   }
-  .choiceItem:hover:not(:disabled) { color: var(--lm-ink); }
+  /* Not the chosen one: its amber would turn white under the pointer, which read as unchosen. */
+  .choiceItem:hover:not(:disabled, [aria-checked="true"]) { color: var(--lm-ink); }
   .choiceItem[aria-checked="true"] { background: var(--lm-panel-2); color: var(--lm-amber); }
   .choice[data-thumb] .choiceItem[aria-checked="true"] { background: transparent; }
   .choiceItem:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }

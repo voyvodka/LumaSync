@@ -248,21 +248,6 @@
   }
   .chevron[data-open] { transform: rotate(180deg); }
 
-  .directions { display: flex; gap: 4px; }
-  .directionItem {
-    flex: 1;
-    min-width: 32px;
-    height: 32px;
-    border: 1px solid var(--lm-line);
-    border-radius: 9px;
-    background: transparent;
-    color: var(--lm-ink-dim);
-    font-size: 12px;
-    transition: border-color var(--lm-dur-quick), color var(--lm-dur-quick);
-  }
-  .directionItem:hover { color: var(--lm-ink); border-color: var(--lm-line-2); }
-  .directionItem[aria-checked="true"] { color: var(--lm-amber); border-color: var(--lm-amber); }
-  .directionItem:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
 
   @container stage (max-width: 420px) {
     .gallery { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 6px; }
@@ -274,21 +259,18 @@
   :global(:root[data-reduced-motion]) .edit,
   :global(:root[data-reduced-motion]) .tile,
   :global(:root[data-reduced-motion]) .picker,
-  :global(:root[data-reduced-motion]) .chevron,
-  :global(:root[data-reduced-motion]) .directionItem { transition: none; }
+  :global(:root[data-reduced-motion]) .chevron { transition: none; }
 
   /* Forced colours drop box-shadow: the pick and the focus both become outlines. */
   @media (forced-colors: active) {
     .palette[aria-checked="true"],
     .tile[aria-checked="true"],
-    .chip[aria-pressed="true"],
-    .directionItem[aria-checked="true"] { outline: 2px solid Highlight; }
+    .chip[aria-pressed="true"] { outline: 2px solid Highlight; }
     .palette:focus-visible,
     .edit:focus-visible,
     .chip:focus-visible,
     .chipAdd:focus-visible,
     .tile:focus-visible,
-    .picker:focus-visible,
-    .directionItem:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+    .picker:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
   }
 }

@@ -27,7 +27,8 @@ https://keepachangelog.com/en/1.1.0/
   slider glides to the new effect's value and its name and readout fade in, and a setting the new
   effect does not have fades out where it was. A fast drag no longer makes a slider's number
   shake or its thumb jump back, and Saturation marks 100% on its track, settles into it as you
-  pass, and goes back to it when you press its value.
+  pass, and goes back to it when you press its value. An effect's direction is one choice like the
+  others, its six directions drawn as icons of one size.
 - Scenes: a row under the mode buttons, on Lights and in the compact window, where one press
   plays a whole look — Ambilight with its brightness, saturation and response, a colour or white,
   or an effect with its palette and settings. It starts with six suggestions (Movie, Game, Warm
