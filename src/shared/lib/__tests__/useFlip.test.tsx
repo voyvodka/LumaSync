@@ -119,4 +119,21 @@ describe("useFlip", () => {
     again.rerender(<List ids={["a"]} exits />);
     expect(again.container.querySelectorAll("li")).toHaveLength(1);
   });
+
+  it("copies only what goes, and places its ghost in a scrolled container's content", () => {
+    vi.useFakeTimers();
+    place();
+    const clone = vi.spyOn(HTMLElement.prototype, "cloneNode");
+    const view = render(<List ids={["a", "b", "c"]} exits />);
+    const list = view.container.querySelector("ul")!;
+    Object.defineProperty(list, "scrollTop", { configurable: true, value: 30 });
+    view.rerender(<List ids={["a", "c"]} exits />);
+    expect(clone).toHaveBeenCalledTimes(1);
+    const ghost = view.container.querySelector<HTMLElement>("li[aria-hidden='true']")!;
+    // "b" stood 40 px down on screen, 30 px of content above it scrolled out of view.
+    expect(ghost.style.top).toBe("70px");
+    vi.runAllTimers();
+    vi.useRealTimers();
+  });
 });
+

@@ -18,7 +18,8 @@ interface FlipOptions {
   resize?: boolean;
   /**
    * An item that is gone fades out where it stood instead of vanishing: a copy of it — a ghost,
-   * inert and unnamed — over the others as they slide. The container must be positioned.
+   * inert and unnamed — over the others as they slide. The container must be positioned; the ghost
+   * is its last child for the fade, so a `:last-child` rule on the items sees it meanwhile.
    */
   exits?: boolean;
 }
@@ -30,6 +31,9 @@ interface FlipOptions {
  * then — and each moved item is animated from its offset back to none. An item with no old place
  * is left to its own entrance.
  */
+const aliasSources = (aliases: ReadonlyMap<string, string> | undefined): ReadonlySet<string> =>
+  new Set(aliases ? aliases.values() : []);
+
 export function useFlip(
   container: RefObject<HTMLElement | null>,
   ids: readonly string[],
@@ -47,10 +51,13 @@ export function useFlip(
     before.current = {
       places: new Map(nodes.map((node) => [node.dataset.flipId!, node.getBoundingClientRect()])),
       height: container.current.getBoundingClientRect().height,
-      // Copied now: by the layout effect React has already taken the gone ones out.
+      // Copied now: by the layout effect React has already taken the gone ones out. Only those
+      // going — the ids rendered next are known here — and never an alias's source, which travels.
       copies: new Map(
         exits && !prefersReducedMotion()
-          ? nodes.map((node) => [node.dataset.flipId!, node.cloneNode(true) as HTMLElement])
+          ? nodes
+              .filter((node) => !ids.includes(node.dataset.flipId!) && !aliasSources(aliases).has(node.dataset.flipId!))
+              .map((node) => [node.dataset.flipId!, node.cloneNode(true) as HTMLElement])
           : [],
       ),
     };
@@ -63,7 +70,12 @@ export function useFlip(
     if (!was || !root || prefersReducedMotion()) return;
     const timing = { duration: DURATION_MS, easing: EASE_OUT };
     const present = new Set([...root.querySelectorAll<HTMLElement>("[data-flip-id]")].map((node) => node.dataset.flipId!));
-    const box = root.getBoundingClientRect();
+    // Positions inside the container's padding box, scrolled content included.
+    const rootBox = root.getBoundingClientRect();
+    const box = {
+      left: rootBox.left + root.clientLeft - root.scrollLeft,
+      top: rootBox.top + root.clientTop - root.scrollTop,
+    };
     for (const [id, ghost] of was.copies) {
       if (present.has(id)) continue;
       const from = was.places.get(id)!;

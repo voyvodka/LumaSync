@@ -5,6 +5,8 @@ export interface ChoiceThumb {
   right: number;
   /** It last moved left: the edge on that side leads. */
   toLeft: boolean;
+  /** The value it was measured for. */
+  value: string | null;
 }
 
 /**
@@ -35,7 +37,13 @@ export function useChoiceThumb(
       }
       const left = group.offsetLeft + checked.offsetLeft;
       const right = strip.clientWidth - left - checked.offsetWidth;
-      setThumb((previous) => ({ left, right, toLeft: previous ? left < previous.left : false }));
+      // The direction is the choice's: a remeasure (a resize) keeps the last one.
+      setThumb((previous) => ({
+        left,
+        right,
+        toLeft: previous ? (previous.value === value ? previous.toLeft : left < previous.left) : false,
+        value,
+      }));
     };
     measure();
     // A language switch or a narrower window changes the options' widths under the fill.

@@ -74,7 +74,6 @@ export function StageRow({
   );
 }
 
-
 /** A choice of a few named values in the stage's look (`Segmented` underneath). */
 export function StageChoice<T extends string>({
   options,
