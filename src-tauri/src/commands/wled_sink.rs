@@ -4,7 +4,7 @@
 //!
 //! DDP packet layout (header = 10 bytes, then RGB payload):
 //!  Byte 0:    flags     -- 0x40 (version=1), | 0x01 push, set on the LAST chunk only
-//!  Byte 1:    sequence  -- incrementing u8, wraps at 255
+//!  Byte 1:    sequence  -- 1..=15 in the low four bits, then back to 1; 0 means "unused"
 //!  Byte 2:    type      -- 0x01  (RGBRGB... data)
 //!  Byte 3:    data-type -- 0x01  (8-bit RGB)
 //!  Bytes 4-7: offset    -- big-endian u32, a BYTE offset into the frame
@@ -99,7 +99,7 @@ impl WledUdpSink {
             protocol,
             socket: None,
             endpoint: None,
-            sequence: AtomicU8::new(0),
+            sequence: AtomicU8::new(1),
             length_checked: false,
         }
     }
@@ -273,6 +273,21 @@ impl LedSink for CorrectedWledSink {
 /// The push flag rides the LAST chunk only. Setting it on every chunk -- what
 /// the single-packet encoder did by using a constant 0x41 -- makes WLED latch
 /// each fragment as a complete frame and display partial updates.
+/// The sequence to stamp on the next DDP datagram, advancing the counter. DDP
+/// keeps it in the low four bits, 1–15 with 0 meaning "not used", and WLED
+/// reads `seq & 0xF`: a u8 running on through 16..=255 and 0 read there as
+/// jumps and an "unused" packet, which a receiver skipping out-of-order
+/// datagrams drops.
+fn next_ddp_sequence(counter: &AtomicU8) -> u8 {
+    let into_range = |value: u8| value.wrapping_sub(1) % 15 + 1;
+    let used = counter
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+            Some(into_range(value) % 15 + 1)
+        })
+        .unwrap_or(1);
+    into_range(used)
+}
+
 pub fn encode_ddp_packets(colors: &[[u8; 3]], sequence: &AtomicU8) -> Vec<Vec<u8>> {
     let leds_per_chunk = DDP_MAX_PAYLOAD_BYTES / 3;
     let chunks: Vec<&[[u8; 3]]> = if colors.is_empty() {
@@ -295,7 +310,7 @@ pub fn encode_ddp_packets(colors: &[[u8; 3]], sequence: &AtomicU8) -> Vec<Vec<u8
                 DDP_FLAGS_VERSION_1
             };
             packet.push(flags);
-            packet.push(sequence.fetch_add(1, Ordering::Relaxed));
+            packet.push(next_ddp_sequence(sequence));
             packet.push(DDP_TYPE);
             packet.push(DDP_DATA_TYPE);
             packet.extend_from_slice(&byte_offset.to_be_bytes());
@@ -416,11 +431,30 @@ mod tests {
 
     #[test]
     fn ddp_sequence_increments_per_packet() {
-        let seq = AtomicU8::new(0);
+        let seq = AtomicU8::new(1);
         let p1 = encode_ddp_packets(&[[0, 0, 0]], &seq);
         let p2 = encode_ddp_packets(&[[0, 0, 0]], &seq);
-        assert_eq!(p1[0][1], 0);
-        assert_eq!(p2[0][1], 1);
+        assert_eq!(p1[0][1], 1);
+        assert_eq!(p2[0][1], 2);
+    }
+
+    #[test]
+    fn ddp_sequence_runs_1_to_15_and_never_stamps_unused() {
+        let seq = AtomicU8::new(1);
+        let stamped: Vec<u8> = (0..40)
+            .map(|_| encode_ddp_packets(&[[0, 0, 0]], &seq)[0][1])
+            .collect();
+        assert_eq!(
+            &stamped[..16],
+            &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 1]
+        );
+        assert!(stamped.iter().all(|s| (1..=15).contains(s)), "{stamped:?}");
+        // A counter left anywhere else — a fresh 0, a stray 200 — is brought into range.
+        for start in [0u8, 16, 200, 255] {
+            let seq = AtomicU8::new(start);
+            let first = encode_ddp_packets(&[[0, 0, 0]], &seq)[0][1];
+            assert!((1..=15).contains(&first), "start {start} stamped {first}");
+        }
     }
 
     #[test]
