@@ -360,12 +360,13 @@ describe("Settings telemetry wiring", () => {
 
   // The picker moved from a two-button segmented control to a dropdown so more
   // locales can be added without the row outgrowing its width.
-  it("offers every supported language by endonym in a dropdown", async () => {
+  it("offers every supported language by endonym, side by side", async () => {
     renderWithShellStores(<SettingsLayout />, SYSTEM_SECTION);
 
-    const picker = await screen.findByRole("combobox", { name: "Interface language" });
-    const options = within(picker).getAllByRole("option");
+    const picker = await screen.findByRole("radiogroup", { name: "Interface language" });
+    const options = within(picker).getAllByRole("radio");
     expect(options.map((o) => o.textContent)).toEqual(["English", "Türkçe"]);
+    // By its own name, never a code.
     expect(screen.queryByRole("radio", { name: "EN" })).not.toBeInTheDocument();
   });
 });

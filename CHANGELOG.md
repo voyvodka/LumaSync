@@ -111,6 +111,8 @@ https://keepachangelog.com/en/1.1.0/
   alike, until each strip has its own.
 - The button that switches between the compact and full window is a quiet grey icon that lights
   up on hover, instead of an amber box.
+- Settings → General: the interface language is a two-way choice, English | Türkçe, each by its
+  own name, instead of a list for two.
 - The window opens on your saved layout, guide state and Hue settings from its first frame, rather
   than drawing defaults for a moment. Launching into the full window also no longer rewrites
   settings that did not change on the way to the first frame.
