@@ -27,6 +27,8 @@ use patterns::{EffectClock, Frame};
 pub(crate) use catalogue::{palette_for as palette_for_test, CATALOGUE, CATALOGUE_JSON};
 #[cfg(test)]
 pub(crate) use palette::{bytes_from_linear as bytes_from_linear_test, Palette as PaletteTest};
+#[cfg(test)]
+pub(crate) use patterns::comet_colour_phase;
 
 /// Where an effect has got to, kept on the runtime owner so a worker rebuild —
 /// a layout or output change — carries on instead of starting over.

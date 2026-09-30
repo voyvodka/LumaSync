@@ -25,6 +25,14 @@ pub(crate) struct EffectClock {
     pub day_hours: f32,
 }
 
+/// Where a comet's head is in its palette. Wrapped while still `f64`: the
+/// loop count only grows, and as an `f32` past about 10⁵ loops (a day and a
+/// half at full speed) its steps are coarser than one frame's move, so the
+/// colour stood still and then jumped.
+pub(crate) fn comet_colour_phase(loops: f64) -> f32 {
+    (loops * 0.21).rem_euclid(1.0) as f32
+}
+
 /// The dimmest a breath or a twinkle's rest goes: dark reads as "off".
 const REST_LEVEL: f32 = 0.1;
 
@@ -277,7 +285,10 @@ impl Frame<'_> {
                 } else {
                     0.0
                 };
-                scaled(self.palette.cyclic(loops as f32 * 0.21 + behind), level)
+                scaled(
+                    self.palette.cyclic(comet_colour_phase(loops) + behind),
+                    level,
+                )
             }
             EffectId::Scanner => {
                 let head = 1.0 - (2.0 * phase - 1.0).abs();

@@ -11,8 +11,9 @@ use super::config::{
     PaletteId, DEFAULT_EFFECT,
 };
 use super::effects::{
-    bytes_from_linear_test as bytes_from_linear, loops_per_sec, palette_for_test as palette_for,
-    EffectClockSlot, EffectDraw, EffectStage, PaletteTest as Palette, CATALOGUE, CATALOGUE_JSON,
+    bytes_from_linear_test as bytes_from_linear, comet_colour_phase, loops_per_sec,
+    palette_for_test as palette_for, EffectClockSlot, EffectDraw, EffectStage,
+    PaletteTest as Palette, CATALOGUE, CATALOGUE_JSON,
 };
 use crate::commands::hue::frame::{HueAreaChannel, HueScreenRegion};
 use crate::commands::led_calibration::{
@@ -568,4 +569,20 @@ fn every_direction_has_a_tag() {
         assert!(listed(direction));
     }
     assert_eq!(EffectDirection::TAGS.len(), 6);
+}
+
+#[test]
+fn a_comet_keeps_moving_through_its_palette_after_days_of_running() {
+    // One 40 ms step at full speed, about a day and a half in and a month in.
+    for loops in [1.0e5_f64, 3.0e6] {
+        let step = f64::from(loops_per_sec(EffectId::Comet, 1.0)) * 0.04;
+        let now = comet_colour_phase(loops);
+        let next = comet_colour_phase(loops + step);
+        let moved = (next - now).rem_euclid(1.0);
+        let expected = (step * 0.21) as f32;
+        assert!(
+            (moved - expected).abs() < expected * 0.05,
+            "at {loops} loops a step moved {moved}, expected {expected}"
+        );
+    }
 }
