@@ -34,6 +34,7 @@ export default {
       failed: "Failed",
       waiting: "Waiting",
       leftOut: "Left out",
+      noAnswer: "No answer",
     },
     // What a chip that needs something says when it is pressed.
     hint: {
@@ -43,6 +44,7 @@ export default {
       hueNone: "No Hue Bridge paired yet.",
       hueFailed: "The Hue stream stopped.",
       hueLeftOut: "Hue was left out of this mode.",
+      wledSilent: "The WLED device does not answer — it may be off or off the network.",
     },
   },
   titleBar: {

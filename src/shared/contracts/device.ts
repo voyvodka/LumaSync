@@ -457,6 +457,9 @@ export interface WledOutputStatus {
   ip: string;
   ledCount: number;
   connected: true;
+  /** It answers its `/json/info` probe (every ~10 s; two misses in a row read as `false`). For
+   *  showing only: the output it drives never changes on it. */
+  reachable: boolean;
 }
 
 export type LocalOutputStatus =

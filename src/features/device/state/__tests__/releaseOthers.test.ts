@@ -13,7 +13,7 @@ const strip = (portName: string, connected: boolean) =>
     firmware: null,
     updatedAtUnixMs: 0,
   }) as const;
-const wled = (ip: string) => ({ kind: "wled", ip, ledCount: 60, connected: true }) as const;
+const wled = (ip: string) => ({ kind: "wled", ip, ledCount: 60, connected: true, reachable: true }) as const;
 
 function deps(outputs: LocalOutputsSnapshot["outputs"] | null) {
   return {

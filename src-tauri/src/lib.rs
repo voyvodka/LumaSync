@@ -736,6 +736,8 @@ pub fn run() {
             commands::hue::health::install(app.handle());
             // After the `manage` calls: its first poll reads the serial state and the lighting runtime.
             commands::device_connection::spawn_serial_watch(app.handle().clone());
+            // After the `manage` calls: it reads the local output registry.
+            commands::wled_discovery::spawn_wled_probe(app.handle().clone());
             // After the lighting runtime and `AwayWatch`: a lock heard at once turns the lights off.
             away::watch(app.handle());
 

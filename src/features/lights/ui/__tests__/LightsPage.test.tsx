@@ -406,6 +406,14 @@ describe("LightsPage — the local output row names what is actually bound", () 
     expect(row).not.toHaveAttribute("data-state", "unavailable");
   });
 
+  it("says a bound WLED panel is not answering, and keeps it usable", () => {
+    const { row, text } = renderWithSink({ transport: "wled", id: "192.168.1.42", reachable: false });
+
+    expect(text).toContain("lights:dock.rows.wledSubSilent");
+    expect(row).not.toHaveAttribute("data-state", "unavailable");
+    expect(renderWithSink({ transport: "wled", id: "192.168.1.42" }).text).not.toContain("wledSubSilent");
+  });
+
   it("still names the chip when the bound sink is a serial strip", () => {
     const { text } = renderWithSink({
       transport: "serial",

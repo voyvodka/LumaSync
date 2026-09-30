@@ -37,6 +37,7 @@ const shell: Catalogue<typeof enShell> = {
       failed: "Hata",
       waiting: "Bekliyor",
       leftOut: "Dahil değil",
+      noAnswer: "Yanıt yok",
     },
     hint: {
       localOff: "Şerit bağlı değil.",
@@ -45,6 +46,7 @@ const shell: Catalogue<typeof enShell> = {
       hueNone: "Henüz Hue Bridge eşleşmedi.",
       hueFailed: "Hue yayını durdu.",
       hueLeftOut: "Hue bu modun dışında kaldı.",
+      wledSilent: "WLED cihazı yanıt vermiyor — kapalı ya da ağ dışında olabilir.",
     },
   },
   titleBar: {

@@ -401,7 +401,7 @@ function localOutputsSnapshot(serialConnected: boolean): LocalOutputsSnapshot {
       updatedAtUnixMs: 0,
     },
   ];
-  if (env.activeWledIp) outputs.push({ kind: "wled", ip: env.activeWledIp, ledCount: 60, connected: true });
+  if (env.activeWledIp) outputs.push({ kind: "wled", ip: env.activeWledIp, ledCount: 60, connected: true, reachable: true });
   return {
     revision: localOutputsRevision,
     outputs,

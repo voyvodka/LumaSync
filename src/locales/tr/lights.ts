@@ -190,6 +190,7 @@ const lights: Catalogue<typeof enLights> = {
       usbSubUnavailable: "Şerit bağlı değil",
       wledName: "WLED",
       wledSub: "{{count}} LED · <b>UDP</b>",
+      wledSubSilent: "{{count}} LED · <b>yanıt vermiyor</b>",
       hueName: "HUE",
       hueType: "EĞLENCE ALANI",
       hueSubStreaming: "Hue Bridge · <b>DTLS {{hz}} Hz</b>",

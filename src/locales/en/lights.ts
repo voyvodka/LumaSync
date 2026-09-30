@@ -187,6 +187,7 @@ export default {
       usbSubUnavailable: "No strip connected",
       wledName: "WLED",
       wledSub: "{{count}} LEDs · <b>UDP</b>",
+      wledSubSilent: "{{count}} LEDs · <b>not answering</b>",
       hueName: "HUE",
       hueType: "ENTERTAINMENT",
       hueSubStreaming: "Bridge · <b>DTLS {{hz}} Hz</b>",

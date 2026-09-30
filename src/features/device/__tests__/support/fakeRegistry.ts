@@ -51,7 +51,7 @@ export function fakeRegistry(initial: { connected?: string } = {}): FakeRegistry
     const outputs: LocalOutputsSnapshot["outputs"] = [...serial.values()]
       .sort((a, b) => a.portName.localeCompare(b.portName))
       .map((entry) => ({ kind: "serial" as const, ...entry }));
-    if (wled) outputs.push({ kind: "wled", ip: wled.ip, ledCount: wled.ledCount, connected: true });
+    if (wled) outputs.push({ kind: "wled", ip: wled.ip, ledCount: wled.ledCount, connected: true, reachable: true });
     const first = order.find((key) => (key === "wled" ? wled !== null : serial.get(key.slice(7))?.connected));
     const driven =
       first === undefined

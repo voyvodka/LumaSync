@@ -70,9 +70,15 @@ export function sameDriven(a: DrivenOutputRef | null, b: DrivenOutputRef | null)
  * rule — never worked out here: a copy of the rule is how the two sides once disagreed about which
  * of a strip and a WLED device wins.
  */
-export function localSinkOf(driven: DrivenOutputRef | null, ports: readonly DevicePort[]): LocalSink | null {
+export function localSinkOf(
+  driven: DrivenOutputRef | null,
+  ports: readonly DevicePort[],
+  wledReachable = true,
+): LocalSink | null {
   if (driven === null) return null;
-  if (driven.kind === "wled") return { transport: "wled", id: driven.ip };
+  if (driven.kind === "wled") {
+    return wledReachable ? { transport: "wled", id: driven.ip } : { transport: "wled", id: driven.ip, reachable: false };
+  }
   const product = ports.find((port) => port.portName === driven.portName)?.product;
   return product
     ? { transport: "serial", id: driven.portName, product }

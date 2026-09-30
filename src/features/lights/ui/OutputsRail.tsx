@@ -101,7 +101,13 @@ export function OutputsRail({
       detailLang: wled || localSink?.product ? "en" : undefined,
       sub: localOutputConnected ? (
         <Trans
-          i18nKey={wled ? "lights:dock.rows.wledSub" : "lights:dock.rows.usbSub"}
+          i18nKey={
+            wled
+              ? localSink?.transport === "wled" && localSink.reachable === false
+                ? "lights:dock.rows.wledSubSilent"
+                : "lights:dock.rows.wledSub"
+              : "lights:dock.rows.usbSub"
+          }
           values={{ count: totalLeds ?? 0 }}
           components={{ b: <b /> }}
         />

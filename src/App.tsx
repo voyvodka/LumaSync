@@ -170,9 +170,12 @@ function Shell() {
     }),
     shallowEqual,
   );
+  const wledReachable = useLocalOutputs(
+    (state) => state.snapshot?.outputs.find((output) => output.kind === "wled")?.reachable !== false,
+  );
   const localSink = useMemo(
-    () => localSinkOf(driven, ports),
-    [driven, ports],
+    () => localSinkOf(driven, ports, wledReachable),
+    [driven, ports, wledReachable],
   );
   // Latched: a strip unplugged this session is an outage, not "never set up".
   const [localSinkSeen, setLocalSinkSeen] = useState(false);

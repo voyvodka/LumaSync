@@ -235,6 +235,66 @@ fn parse_ipv4(ip: &str) -> Result<Ipv4Addr, String> {
     Ok(addr)
 }
 
+/// How often the bound WLED device is asked whether it is there. UDP says nothing when a panel
+/// is off, so this is the only way to know; WLED answers HTTP while it takes DDP.
+const WLED_PROBE_EVERY: Duration = Duration::from_secs(10);
+/// Missed probes in a row before it reads as unreachable: one lost answer is not a panel turned off.
+const WLED_MISSES_TO_UNREACHABLE: u32 = 2;
+
+/// One probe's effect: the misses in a row after it, and `Some(reachable)` to report, `None`
+/// while misses are still under the threshold. An answer resets the count and reports reachable.
+pub(crate) fn wled_probe_verdict(misses: u32, answered: bool) -> (u32, Option<bool>) {
+    if answered {
+        return (0, Some(true));
+    }
+    let misses = misses.saturating_add(1);
+    (
+        misses,
+        (misses >= WLED_MISSES_TO_UNREACHABLE).then_some(false),
+    )
+}
+
+/// For the app's life: while a WLED device is bound, probe it and publish a change in whether
+/// it answers. Only the registry's `reachable` moves; what the "usb" channel drives never does.
+pub fn spawn_wled_probe<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
+    use tauri::Manager;
+    tauri::async_runtime::spawn(async move {
+        let mut misses = 0u32;
+        let mut probing: Option<(Ipv4Addr, u64)> = None;
+        loop {
+            tokio::time::sleep(WLED_PROBE_EVERY).await;
+            let registry = app.state::<LocalOutputRegistry>();
+            let Some(target) = registry.wled_probe_target() else {
+                probing = None;
+                continue;
+            };
+            // A new binding starts its own count.
+            if probing != Some(target) {
+                probing = Some(target);
+                misses = 0;
+            }
+            let (ip, generation) = target;
+            let answered =
+                tokio::task::spawn_blocking(move || fetch_wled_info(&ip.to_string()).is_ok())
+                    .await
+                    .unwrap_or(false);
+            let (after, verdict) = wled_probe_verdict(misses, answered);
+            misses = after;
+            let Some(reachable) = verdict else {
+                continue;
+            };
+            if let Some(snapshot) = registry.wled_reachability(ip, generation, reachable) {
+                if reachable {
+                    log::info!("[wled-probe] {ip} answers again");
+                } else {
+                    log::warn!("[wled-probe] {ip} stopped answering");
+                }
+                local_outputs::announce(&app, snapshot);
+            }
+        }
+    });
+}
+
 fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, CommandStatus> {
     // SECURITY: Validate the input IP address to prevent SSRF vulnerabilities.
     // parse_ipv4 rejects loopback, unspecified, multicast, and broadcast in
@@ -1247,5 +1307,22 @@ mod forget_tests {
             .is_some());
         assert_eq!(rig.saved_wled_ip().as_deref(), Some(IP));
         assert_eq!(rig.saved("ledStrips"), None, "nothing was written");
+    }
+}
+
+#[cfg(test)]
+mod probe_tests {
+    use super::wled_probe_verdict;
+
+    #[test]
+    fn two_missed_probes_in_a_row_read_as_unreachable_and_one_answer_as_back() {
+        let (misses, verdict) = wled_probe_verdict(0, false);
+        assert_eq!((misses, verdict), (1, None));
+        let (misses, verdict) = wled_probe_verdict(misses, false);
+        assert_eq!((misses, verdict), (2, Some(false)));
+        let (misses, verdict) = wled_probe_verdict(misses, true);
+        assert_eq!((misses, verdict), (0, Some(true)));
+        // One miss between answers is not a panel turned off.
+        assert_eq!(wled_probe_verdict(0, false).1, None);
     }
 }
