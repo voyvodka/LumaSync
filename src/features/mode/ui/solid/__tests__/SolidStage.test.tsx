@@ -70,3 +70,17 @@ describe("SolidStage — Colour and White", () => {
     vi.useRealTimers();
   });
 });
+
+describe("SolidStage — switching between Colour and White", () => {
+  it("fades the new control in, and nothing arrives when the stage opens", () => {
+    render(<SolidStage solid={{ r: 255, g: 0, b: 0, brightness: 1 }} onCommit={() => {}} />);
+    const panel = () => screen.getByTestId("solid-brightness").closest("[data-flip-id]")!.previousElementSibling!;
+    expect(panel()).not.toHaveAttribute("data-entering");
+
+    fireEvent.click(screen.getByTestId("solid-tone-white"));
+    expect(screen.getByTestId("solid-kelvin")).toBeInTheDocument();
+    expect(panel()).toHaveAttribute("data-entering");
+    fireEvent.animationEnd(panel());
+    expect(panel()).not.toHaveAttribute("data-entering");
+  });
+});

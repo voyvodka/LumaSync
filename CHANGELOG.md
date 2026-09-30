@@ -21,15 +21,17 @@ https://keepachangelog.com/en/1.1.0/
   last mode was an effect. On a few Hue bulbs an effect always keeps at least one lit — a sunrise
   starts there as a dim ember instead of minutes of darkness — while strips and Hue gradient lights
   keep the effect's own look.
-- Solid has a White tab: a colour temperature from 2000 to 6500 K.
+- Solid has a White tab: a colour temperature from 2000 to 6500 K. Switching between Colour and
+  White (and any choice of this kind on the Lights stages, like Ambilight's response) slides its
+  mark across and eases the stage to its new height.
 - Scenes: a row under the mode buttons, on Lights and in the compact window, where one press
   plays a whole look — Ambilight with its brightness, saturation and response, a colour or white,
   or an effect with its palette and settings. It starts with six suggestions (Movie, Game, Warm
   evening, Reading, Fireplace, Aurora). "+" makes a new scene from the light that is running, and
   Edit in the scenes button's library opens one: the row becomes a bar with its name, the page's
   own controls shape it while the lights show every change, and Save keeps it while Cancel puts the
-  light back as it was; meanwhile the effects fold into one row that scrolls sideways, so the
-  palettes and sliders stay in view. The same library adds more from fifteen suggestions, reorders
+  light back as it was, and a reset button takes it back to its suggested (or saved) look; meanwhile
+  the effects fold into one row that scrolls sideways, so the palettes and sliders stay in view. The same library adds more from fifteen suggestions, reorders
   and deletes. Up to 24 scenes. A sunrise scene starts over each time you choose it. An Ambilight
   scene shows as a small screen, warm or cool by how quickly it follows.
 - The lights go off when the computer locks, sleeps or turns its display off, and the mode that

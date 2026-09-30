@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 
 import { cx } from "@/shared/lib/cx";
+import { useChoiceThumb } from "@/shared/lib/useChoiceThumb";
 import { Segmented, type SegmentedOption } from "@/shared/ui/Segmented/Segmented";
 import styles from "./Stage.module.css";
 
@@ -86,15 +87,28 @@ export function StageChoice<T extends string>({
   disabled?: boolean;
   className?: string;
 }) {
+  // One fill travels to the chosen value, as in `ChoiceStrip`: a switch that only recoloured two
+  // buttons read as nothing having happened.
+  const stripRef = useRef<HTMLDivElement>(null);
+  const { thumb, placed } = useChoiceThumb(stripRef, value);
   return (
-    <Segmented
-      options={options}
-      value={value}
-      onChange={onChange}
-      ariaLabel={ariaLabel}
-      disabled={disabled}
-      className={cx(styles.choice, className)}
-      itemClassName={styles.choiceItem}
-    />
+    <div ref={stripRef} className={cx(styles.choice, className)} data-thumb={thumb ? true : undefined}>
+      {thumb && (
+        <span
+          className={cx(styles.choiceThumb, placed && styles.choiceMoving, thumb.toLeft ? styles.choiceToLeft : styles.choiceToRight)}
+          style={{ left: thumb.left, right: thumb.right }}
+          aria-hidden="true"
+        />
+      )}
+      <Segmented
+        options={options}
+        value={value}
+        onChange={onChange}
+        ariaLabel={ariaLabel}
+        disabled={disabled}
+        className={styles.choiceGroup}
+        itemClassName={styles.choiceItem}
+      />
+    </div>
   );
 }

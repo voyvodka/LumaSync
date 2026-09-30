@@ -1,6 +1,12 @@
 @layer components {
   .tone { align-self: flex-start; min-width: 176px; }
   .colour { display: flex; justify-content: center; }
+  /* Its height is animated: clipped while it changes, with room kept for the focus rings. */
+  .body { margin: -12px; padding: 12px; overflow: hidden; }
+  .toneBody { min-width: 0; }
+  .toneBody[data-entering] { animation: tone-in var(--lm-dur-base) var(--lm-ease-out) var(--lm-dur-follow) backwards; }
+  @keyframes tone-in { from { opacity: 0; transform: translateY(4px); } }
+  :global(:root[data-reduced-motion]) .toneBody[data-entering] { animation: none; }
 
   .swatch {
     display: flex;

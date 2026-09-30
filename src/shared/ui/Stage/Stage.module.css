@@ -60,11 +60,30 @@
 
   /* A choice of a few named values, 32px tall, the pick lit amber. */
   .choice {
+    position: relative;
     display: flex;
-    gap: 2px;
     padding: 2px;
     border-radius: 9px;
     background: var(--lm-bg);
+  }
+  /* Positioned so the options paint over the fill; a button's offset is then the group's. */
+  .choiceGroup { position: relative; z-index: 1; display: flex; flex: 1; gap: 2px; min-width: 0; }
+  .choiceThumb {
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    border-radius: 7px;
+    background: var(--lm-panel-2);
+  }
+  /* The leading edge goes first and the other follows, as in `ChoiceStrip`. */
+  .choiceMoving { transition-property: left, right; transition-timing-function: var(--lm-ease-out); }
+  .choiceMoving.choiceToRight {
+    transition-duration: var(--lm-dur-slow), var(--lm-dur-base);
+    transition-delay: var(--lm-dur-follow), 0s;
+  }
+  .choiceMoving.choiceToLeft {
+    transition-duration: var(--lm-dur-base), var(--lm-dur-slow);
+    transition-delay: 0s, var(--lm-dur-follow);
   }
   .choiceItem {
     flex: 1;
@@ -82,13 +101,16 @@
   }
   .choiceItem:hover:not(:disabled) { color: var(--lm-ink); }
   .choiceItem[aria-checked="true"] { background: var(--lm-panel-2); color: var(--lm-amber); }
+  .choice[data-thumb] .choiceItem[aria-checked="true"] { background: transparent; }
   .choiceItem:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
   .choiceItem:disabled { cursor: not-allowed; opacity: 0.45; }
 
-  :global(:root[data-reduced-motion]) .choiceItem { transition: none; }
+  :global(:root[data-reduced-motion]) .choiceItem,
+  :global(:root[data-reduced-motion]) .choiceMoving { transition: none; }
 
   @media (forced-colors: active) {
     .choiceItem[aria-checked="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
+    .choiceThumb { background: Highlight; }
     .choiceItem:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
   }
 }

@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 
 import type { SolidColorPayload } from "@/shared/contracts/mode";
 import { parseHex, rgbToHex } from "@/shared/lib/color";
+import { useArrivals } from "@/shared/lib/useArrivals";
+import { useFlip } from "@/shared/lib/useFlip";
 import { HsvColorPicker } from "@/shared/ui/HsvColorPicker/HsvColorPicker";
 import { Popover } from "@/shared/ui/Popover/Popover";
 import { RangeRow } from "@/shared/ui/RangeRow/RangeRow";
@@ -40,6 +42,12 @@ export function SolidStage({
   const lastColor = useRef({ r: draft.r, g: draft.g, b: draft.b });
   if (tone === "colour") lastColor.current = { r: draft.r, g: draft.g, b: draft.b };
 
+  // Colour and White differ in height: the stage follows to the new one, brightness slides to its
+  // new place and the new control fades in, rather than the page jumping.
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  useFlip(bodyRef, [tone], { resize: true });
+  const { arrived, settled } = useArrivals([tone]);
+
   const hex = rgbToHex(draft);
   const brightness = Math.round(draft.brightness * 100);
   const pickColour = (next: string) => {
@@ -60,16 +68,27 @@ export function SolidStage({
           { value: "white", label: t("lights:solid.white"), testId: "solid-tone-white" },
         ]}
       />
+      <div ref={bodyRef} className={styles.body}>
       <StageGrid lead={tone === "colour" && !dense}>
-        {tone === "white" ? (
-          <KelvinSlider kelvin={draft.kelvin ?? lastKelvin.current} disabled={disabled} onChange={setKelvin} />
-        ) : dense ? (
-          <SwatchPicker hex={hex} disabled={disabled} onChange={pickColour} />
-        ) : (
-          <div className={styles.colour}>
-            <HsvColorPicker value={hex} onChange={pickColour} disabled={disabled} ariaLabel={t("common:mode.solidColor")} />
-          </div>
-        )}
+        <div
+          key={tone}
+          className={styles.toneBody}
+          data-entering={arrived.has(tone) || undefined}
+          onAnimationEnd={(event) => {
+            if (event.target === event.currentTarget) settled(tone);
+          }}
+        >
+          {tone === "white" ? (
+            <KelvinSlider kelvin={draft.kelvin ?? lastKelvin.current} disabled={disabled} onChange={setKelvin} />
+          ) : dense ? (
+            <SwatchPicker hex={hex} disabled={disabled} onChange={pickColour} />
+          ) : (
+            <div className={styles.colour}>
+              <HsvColorPicker value={hex} onChange={pickColour} disabled={disabled} ariaLabel={t("common:mode.solidColor")} />
+            </div>
+          )}
+        </div>
+        <div data-flip-id="brightness">
         <RangeRow
           variant="stage"
           label={t("common:mode.brightness")}
@@ -83,7 +102,9 @@ export function SolidStage({
           onChange={(v) => setBrightness(v / 100)}
           testId="solid-brightness"
         />
+        </div>
       </StageGrid>
+      </div>
     </Stage>
   );
 }
