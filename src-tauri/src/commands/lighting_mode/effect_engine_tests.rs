@@ -11,8 +11,8 @@ use super::config::{
     PaletteId, DEFAULT_EFFECT,
 };
 use super::effects::{
-    bytes_from_linear_test as bytes_from_linear, comet_colour_phase, loops_per_sec,
-    palette_for_test as palette_for, EffectClockSlot, EffectDraw, EffectStage,
+    bytes_from_linear_test as bytes_from_linear, comet_colour_phase, daylight, hex_bytes,
+    loops_per_sec, palette_for_test as palette_for, EffectClockSlot, EffectDraw, EffectStage,
     PaletteTest as Palette, CATALOGUE, CATALOGUE_JSON,
 };
 use crate::commands::hue::frame::{HueAreaChannel, HueScreenRegion};
@@ -585,4 +585,114 @@ fn a_comet_keeps_moving_through_its_palette_after_days_of_running() {
             "at {loops} loops a step moved {moved}, expected {expected}"
         );
     }
+}
+
+#[test]
+fn a_long_pause_moves_the_clock_by_one_capped_step_only() {
+    let (seq, counts) = strip(30);
+    let (mut stage, _, clock) = stage(EffectPayload {
+        speed: 1.0,
+        ..effect(EffectId::Wave)
+    });
+    let start = Instant::now();
+    stage.draw(start, &seq, &counts, None, None);
+    let before = clock.lock().unwrap().loops();
+    // A stalled worker, or a sleep: ten minutes pass between two steps.
+    stage.draw(start + Duration::from_secs(600), &seq, &counts, None, None);
+    let moved = clock.lock().unwrap().loops() - before;
+    let one_step = f64::from(loops_per_sec(EffectId::Wave, 1.0)) * 0.5;
+    assert!(
+        moved > 0.0 && moved <= one_step + 1e-9,
+        "moved {moved} loops"
+    );
+}
+
+#[test]
+fn the_lights_are_resolved_again_only_when_invalidated() {
+    let (seq, counts) = strip(0);
+    let two = [
+        hue_channel(0, -0.5, 0.5, None),
+        hue_channel(1, 0.5, 0.5, None),
+    ];
+    let three = [
+        hue_channel(0, -0.5, 0.5, None),
+        hue_channel(1, 0.0, 0.5, None),
+        hue_channel(2, 0.5, 0.5, None),
+    ];
+    let (mut stage, _, _) = stage(effect(EffectId::Wave));
+    let at = Instant::now();
+    assert_eq!(stage.draw(at, &seq, &counts, Some(&two), None).hue.len(), 2);
+    // Cached: a new channel list is not seen until the pipeline says the room changed.
+    assert_eq!(
+        stage.draw(at, &seq, &counts, Some(&three), None).hue.len(),
+        2
+    );
+    stage.invalidate();
+    assert_eq!(
+        stage.draw(at, &seq, &counts, Some(&three), None).hue.len(),
+        3
+    );
+}
+
+#[test]
+fn every_direction_draws_the_strip_its_own_way() {
+    let (seq, counts) = strip(120);
+    let at = Instant::now();
+    let drawn: Vec<(EffectDirection, Vec<[u8; 3]>)> = [
+        EffectDirection::LeftToRight,
+        EffectDirection::RightToLeft,
+        EffectDirection::BottomToTop,
+        EffectDirection::TopToBottom,
+        EffectDirection::Outward,
+        EffectDirection::Around,
+    ]
+    .into_iter()
+    .map(|direction| {
+        let (mut stage, _, _) = stage(EffectPayload {
+            direction: Some(direction),
+            ..effect(EffectId::Wave)
+        });
+        (
+            direction,
+            stage.draw(at, &seq, &counts, None, None).strip.to_vec(),
+        )
+    })
+    .collect();
+    for (i, (a, first)) in drawn.iter().enumerate() {
+        for (b, second) in &drawn[i + 1..] {
+            assert_ne!(first, second, "{a:?} and {b:?} draw the same strip");
+        }
+    }
+}
+
+#[test]
+fn a_malformed_colour_is_refused_and_an_empty_custom_palette_falls_back() {
+    assert_eq!(hex_bytes("#ff8000"), Some([255, 128, 0]));
+    for bad in ["ff8000", "#ff800", "#ff80000", "#gg8000", "", "#"] {
+        assert_eq!(hex_bytes(bad), None, "{bad:?}");
+    }
+    let empty = palette_for(&EffectPayload {
+        palette: Some(PaletteId::Custom),
+        colors: Some(vec![]),
+        ..effect(EffectId::Wave)
+    });
+    let unset = palette_for(&EffectPayload {
+        palette: Some(PaletteId::Custom),
+        colors: None,
+        ..effect(EffectId::Wave)
+    });
+    for v in [0.0, 0.3, 0.7] {
+        assert_eq!(empty.at(v), unset.at(v));
+    }
+}
+
+#[test]
+fn natural_light_wraps_the_day_and_reads_a_broken_clock_as_noon() {
+    assert_eq!(daylight(0.0), daylight(24.0));
+    assert_eq!(daylight(-1.0), daylight(23.0));
+    assert_eq!(daylight(f32::NAN), daylight(12.0));
+    assert_eq!(daylight(f32::INFINITY), daylight(12.0));
+    let (night_k, night_level) = daylight(2.0);
+    let (noon_k, noon_level) = daylight(12.0);
+    assert!(noon_k > night_k && noon_level > night_level);
 }

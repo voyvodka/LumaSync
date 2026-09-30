@@ -1916,11 +1916,7 @@ fn a_steady_effect_step_allocates_nothing() {
             position_z: Some(0.2),
         })
         .collect();
-    for id in [
-        super::config::EffectId::Wave,
-        super::config::EffectId::Candle,
-        super::config::EffectId::Comet,
-    ] {
+    for &(_, id) in super::config::EffectId::TAGS {
         let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
             led_sequence: build_led_sequence(&led_calibration),
             led_counts: led_calibration.counts.clone(),

@@ -350,7 +350,7 @@ impl Frame<'_> {
     }
 }
 
-fn daylight(hours: f32) -> (f32, f32) {
+pub(crate) fn daylight(hours: f32) -> (f32, f32) {
     let h = if hours.is_finite() {
         hours.rem_euclid(24.0)
     } else {
