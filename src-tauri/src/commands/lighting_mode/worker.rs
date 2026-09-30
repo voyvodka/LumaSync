@@ -115,6 +115,24 @@ impl HueOutputFollower {
     }
 }
 
+/// A running worker in `ACTIVE_AMBILIGHT_WORKERS`, counted out when it drops:
+/// on a normal exit and on a panic alike, so a crashed loop does not leave the
+/// app counting a worker that is gone.
+struct ActiveWorker;
+
+impl ActiveWorker {
+    fn enter() -> Self {
+        ACTIVE_AMBILIGHT_WORKERS.fetch_add(1, Ordering::SeqCst);
+        Self
+    }
+}
+
+impl Drop for ActiveWorker {
+    fn drop(&mut self) {
+        ACTIVE_AMBILIGHT_WORKERS.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
 /// Which of a run of failures reaches the log: the first five, then every
 /// fiftieth, so a failure that repeats every frame is seen without flooding it.
 pub(super) fn is_logged_failure(count: u32) -> bool {
@@ -309,7 +327,7 @@ pub(super) fn start_ambilight_worker(
     let effect_draw = pacing.effect.clone();
 
     let handle = thread::spawn(move || {
-        ACTIVE_AMBILIGHT_WORKERS.fetch_add(1, Ordering::SeqCst);
+        let _active = ActiveWorker::enter();
         let initial_hue = hue_output.as_ref().and_then(|f| f.context.as_ref());
         let has_hue = initial_hue.map(|c| !c.channels.is_empty()).unwrap_or(false);
         info!(
@@ -648,8 +666,6 @@ pub(super) fn start_ambilight_worker(
         if let Some(mut sink) = usb_sink {
             let _ = sink.stop();
         }
-
-        ACTIVE_AMBILIGHT_WORKERS.fetch_sub(1, Ordering::SeqCst);
     });
 
     Ok(LightingWorkerRuntime {

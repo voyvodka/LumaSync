@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use log::info;
+use log::{error, info};
 
 use super::config::LightingModeConfig;
 use super::effect_source::{create_effect_frame_source, EffectLiveSlot};
@@ -71,7 +71,14 @@ impl LightingWorkerRuntime {
     pub(super) fn stop(self) {
         let t0 = std::time::Instant::now();
         self.cancel.store(true, Ordering::Relaxed);
-        let _ = self.handle.join();
+        if let Err(panic) = self.handle.join() {
+            let message = panic
+                .downcast_ref::<&str>()
+                .map(|s| (*s).to_string())
+                .or_else(|| panic.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "a panic with no message".to_string());
+            error!("[stop-worker] the worker had stopped on a panic: {message}");
+        }
         let join_ms = t0.elapsed().as_millis();
         info!("[stop-worker] join completed in {join_ms}ms");
         // `_frame_source` drops here — from the calling (command) thread,

@@ -1967,3 +1967,58 @@ fn a_steady_effect_step_allocates_nothing() {
         }
     }
 }
+
+/// Hands out one frame for the warm-up, then panics inside the worker's loop.
+struct PanickingFrameSource {
+    frame: Arc<CapturedFrame>,
+    served: bool,
+}
+
+impl AmbilightFrameSource for PanickingFrameSource {
+    fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
+        if self.served {
+            panic!("frame source broke mid-run");
+        }
+        self.served = true;
+        Ok(Arc::clone(&self.frame))
+    }
+}
+
+#[test]
+fn a_worker_that_panics_is_counted_out_and_its_stop_returns() {
+    let _guard = WORKER_TEST_GUARD
+        .lock()
+        .unwrap_or_else(|err| err.into_inner());
+    let before = ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst);
+    let frames = scene_frames(FRAME_W, FRAME_H, 1);
+    let live = live_settings();
+    let room = RoomGeometryLive::new(None);
+    let served = Arc::new(AtomicU32::new(0));
+    let runtime = start_ambilight_worker(
+        LedOutputBridge::from_sender(Arc::new(RecordingSender::default())),
+        Some(UsbOutputPlan::Serial(PORT.to_string())),
+        Some(strip_164()),
+        Arc::clone(&live),
+        Box::new(PanickingFrameSource {
+            frame: Arc::clone(&frames[0]),
+            served: false,
+        }),
+        SharedRuntimeTelemetry::default(),
+        None,
+        None,
+        color_correction(),
+        FirmwareProfile::LumaSyncV1,
+        LedChipType::Ws2812bGrb,
+        None,
+        Arc::clone(&room),
+        scripted_clock(&served),
+    )
+    .expect("worker starts");
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst) != before && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst), before);
+    runtime.stop();
+}
