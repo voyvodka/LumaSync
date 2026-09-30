@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { SECTION_IDS, SECTION_ORDER } from "@/shared/contracts/shell";
 
-import { TitleBar } from "../TitleBar";
+import { SECTION_PANEL_ID, TitleBar } from "../TitleBar";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -44,6 +44,10 @@ describe("TitleBar section tabs", () => {
     );
     const tabs = screen.getAllByRole("tab");
     expect(tabs.filter((tab) => tab.tabIndex === 0)).toEqual([screen.getByTestId(`section-tab-${SECTION_IDS.LIGHTS}`)]);
+    // The open tab names the page it controls; the others control nothing on screen.
+    expect(tabs.filter((tab) => tab.hasAttribute("aria-controls")).map((tab) => tab.getAttribute("aria-controls"))).toEqual([
+      SECTION_PANEL_ID,
+    ]);
 
     tabs[0]!.focus();
     fireEvent.keyDown(tabs[0]!, { key: "ArrowRight" });

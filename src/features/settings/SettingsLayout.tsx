@@ -26,6 +26,7 @@ import { useUpdaterActions, useUpdaterState, type UpdaterSnapshot } from "../upd
 import { useHueShellStatus, useHueShellStatusReader, type HueShellStatus } from "../hue/state/hueShellStatus";
 import { useSetupGuideActions } from "../onboarding/state/setupGuideControl";
 import { LightsCompact } from "@/features/lights/ui/LightsCompact";
+import { SECTION_PANEL_ID } from "../shell/TitleBar";
 import { CalibrationPanel, preloadCalibrationPanel } from "../calibration/ui/CalibrationPanel";
 import type { LedSetupTarget } from "@/features/device/ui/DevicesPage";
 import { useCapturedDisplayName } from "../calibration/ui/useCapturedDisplayName";
@@ -261,7 +262,12 @@ export const SettingsLayout = memo(function SettingsLayout() {
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden" data-testid="full-layout" style={{ background: "var(--lm-bg)", color: "var(--lm-ink)" }}>
       {/* Main content */}
-      <main className="min-h-0 min-w-0 flex-1 overflow-hidden" role="main" data-testid={`section-panel-${activeSection}`}>
+      <main
+        id={SECTION_PANEL_ID}
+        className="min-h-0 min-w-0 flex-1 overflow-hidden"
+        role="main"
+        data-testid={`section-panel-${activeSection}`}
+      >
         <Suspense fallback={<SectionPlaceholder />}>
           {sectionEntry(activeSection).render()}
         </Suspense>
