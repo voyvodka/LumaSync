@@ -14,7 +14,7 @@ use crate::commands::led_preview::{
 };
 use crate::commands::test_pattern::{TestPatternConfig, TestPatternLiveSlot};
 
-/// v1.6 LED Preview runtime state carried alongside the lighting worker.
+/// LED preview runtime state carried alongside the lighting worker.
 #[derive(Default)]
 pub(super) struct PreviewRuntime {
     /// Synthetic test-pattern request consumed by the frame-source factory on

@@ -125,7 +125,7 @@ fn close_overlay_window<R: Runtime>(app: &AppHandle<R>, window_label: &str) -> R
 
 /// Build a transparent, click-through, always-on-top overlay window sized and
 /// positioned to fill `target_display`. Extracted from `open_overlay_window`
-/// so the v1.6 LED-twin overlay can reuse the exact window recipe (transparent
+/// so the LED-twin overlay can reuse the exact window recipe (transparent
 /// background, ignore-cursor-events, Windows child-HWND clickthrough
 /// propagation) without duplicating it. `init_script` is injected before any
 /// page script runs — mirror of the calibration overlay's

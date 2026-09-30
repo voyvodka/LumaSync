@@ -279,7 +279,7 @@ fn apply_mode_change_inner(
     // names Hue gets it. See docs/architecture/hue.md.
     let hue_output = hue_output.filter(|_| needs_hue);
     let hue_context = hue_output.as_ref().and_then(|live| live.current());
-    // v1.6 LED Preview — a synthetic test request bypasses the device/Hue
+    // A synthetic test request (the LED preview) bypasses the device/Hue
     // gates so it can run preview-only (twin + edge stream) with no sink.
     let is_test = owner.preview.pending_test_pattern.is_some();
 
@@ -568,7 +568,7 @@ fn apply_mode_change_inner(
                 .then(|| normalized_next.effect.clone().unwrap_or(DEFAULT_EFFECT));
             let effect_live = effect.clone().map(|effect| Arc::new(Mutex::new(effect)));
 
-            // v1.6 LED Preview — consume any pending synthetic-test request.
+            // Consume any pending synthetic-test request from the LED preview.
             let test_pattern = if effect.is_some() {
                 None
             } else {
@@ -658,7 +658,7 @@ fn apply_mode_change_inner(
             let usb_plan_for_worker: Option<UsbOutputPlan> = if needs_usb {
                 match usb_plan.clone() {
                     Some(plan) => Some(plan),
-                    // v1.6 LED Preview: a synthetic test runs preview-only (no
+                    // A synthetic test runs preview-only (no
                     // USB sink) when no device is connected — no gate.
                     None if is_test => None,
                     None => {
@@ -832,12 +832,12 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
 
     let hue_output = Some(hue_output);
 
-    // v1.6 LED Preview — clear any stale synthetic-test request, wire the
+    // The LED preview: clear any stale synthetic-test request, wire the
     // shared gate so a twin opened mid-run starts receiving without a worker
     // restart, and send the edge-signal to every active twin overlay.
     owner.preview.pending_test_pattern = None;
     owner.preview.preview_gate = Some(led_twin_state.preview_active());
-    // v1.6 LED Preview — record whether a synthetic test was running
+    // Record whether a synthetic test was running
     // BEFORE apply_mode_change clears it, so a live mode change that
     // supersedes the test can drop the captured prior mode below.
     let superseded_test = owner.preview.active_test_pattern.is_some();
@@ -861,7 +861,7 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
     // listener cannot deadlock on it.
     drop(owner);
     note_applied_mode(app, &result.mode);
-    // v1.6 LED Preview — a live mode change supersedes any active synthetic
+    // A live mode change supersedes any active synthetic
     // test (apply_mode_change just cleared it). Drop the captured prior mode
     // so a late/racing Stop cannot revive the pre-test mode over the user's
     // new selection.
@@ -904,7 +904,7 @@ pub fn stop_lighting_blocking<R: Runtime>(
             .runtime
             .lock()
             .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
-        // v1.6 LED Preview — capture whether a synthetic test was running
+        // Capture whether a synthetic test was running
         // BEFORE apply_mode_change clears it.
         let superseded_test = owner.preview.active_test_pattern.is_some();
         let result = apply_mode_change(
@@ -922,7 +922,7 @@ pub fn stop_lighting_blocking<R: Runtime>(
     };
     note_applied_mode(app, &result.mode);
     snapshot::publish_running(app, &result.mode);
-    // v1.6 LED Preview — stopping all lighting supersedes any active test;
+    // Stopping all lighting supersedes any active test;
     // drop the captured prior mode so a late Stop cannot revive it. This
     // command is also called from the shutdown path, so resolve the twin
     // state best-effort via the AppHandle rather than a State<'_, _> arg.

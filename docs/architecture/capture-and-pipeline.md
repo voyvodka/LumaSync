@@ -298,8 +298,9 @@ setting, and it is read once when the worker starts.
 Everything the worker computes after capture is one type, `AmbilightFramePipeline` in
 `src-tauri/src/commands/lighting_mode/frame_pipeline.rs`: per frame the black-border cache, strip
 sampling, the scene stage and the smoothing targets; per output step the smoothers and Hue's colour
-pipeline. Time is an argument, never read inside. The worker keeps only the I/O and the timing
-around it — capture, waking, the sends, telemetry, the twin feed. That split is what lets the real
+pipeline. Smoothing time is an argument; the pipeline reads the clock only to stamp when an
+analysis finished, which the worker reports as capture time. The worker keeps only the I/O and the
+timing around it — capture, waking, the sends, telemetry, the twin feed. That split is what lets the real
 code be measured with no display and no hardware, from `lighting_mode/frame_pipeline_tests.rs`.
 
 **Timing, locally.** An `#[ignore]`d report runs the pipeline plus the serial encoder over synthetic

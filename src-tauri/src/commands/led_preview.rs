@@ -1,4 +1,4 @@
-//! LED Preview surfaces (v1.6 — Phase 1).
+//! LED preview surfaces.
 //!
 //! Two webviews make up the preview:
 //!
@@ -14,8 +14,8 @@
 //! (`window.__LUMASYNC_TWIN_DISPLAY_ID__`), mirroring the calibration overlay's
 //! `__LUMASYNC_OVERLAY_PREVIEW__` pattern.
 //!
-//! Phase 1 scope: the windows are created; capture-EXCLUSION (`SCContentFilter`
-//! exclude / `SetWindowDisplayAffinity`) lands in Phase 2.
+//! The windows are not kept out of a live capture (`SCContentFilter` exclude /
+//! `SetWindowDisplayAffinity` are not used).
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -331,7 +331,7 @@ pub fn open_led_twin_overlay<R: Runtime>(
     twin_state: State<'_, LedTwinState>,
     payload: OpenLedTwinOverlayPayload,
 ) -> Result<TwinOverlayResult, String> {
-    // Live-scope twin capture is not yet validated on Linux (Phase 2).
+    // Live-scope twin capture is not validated on Linux.
     if payload.scope == "live" && cfg!(target_os = "linux") {
         return Ok(TwinOverlayResult {
             ok: false,

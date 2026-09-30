@@ -1974,7 +1974,7 @@ fn solid_mode_packet_xor_checksum_is_valid() {
 }
 
 // -----------------------------------------------------------------------
-// v1.6 LED Preview — output-stamp hydration + enrichment gating
+// LED preview — output-stamp hydration + enrichment gating
 // -----------------------------------------------------------------------
 
 const SK6812_SHELL_STATE: &str = r#"{"shell-state":{"selectedChipType":"sk6812-rgbw"}}"#;

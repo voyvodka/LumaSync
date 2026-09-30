@@ -144,12 +144,14 @@ fn log_hue_output(context: Option<&HueActiveOutputContext>) {
         info!("[ambilight-worker] hue output released — no live stream");
         return;
     };
+    // Where the bridge (or the room map) puts each channel. Not where it samples
+    // the screen: that is the pipeline's sample table, which room-aware sampling
+    // moves off this position, so a screen point derived from it here misled.
     for ch in &ctx.channels {
-        let norm_x = (ch.position_x.clamp(-1.0, 1.0) + 1.0) / 2.0;
-        let norm_y = (1.0 - ch.position_y.clamp(-1.0, 1.0)) / 2.0;
-        info!("[ambilight-worker] hue ch#{} bridge_pos=({:.3},{:.3}) z={:?} screen_norm=({:.1}%,{:.1}%) region={:?}",
-            ch.channel_id, ch.position_x, ch.position_y, ch.position_z,
-            norm_x * 100.0, norm_y * 100.0, ch.screen_region);
+        info!(
+            "[ambilight-worker] hue ch#{} bridge_pos=({:.3},{:.3}) z={:?}",
+            ch.channel_id, ch.position_x, ch.position_y, ch.position_z
+        );
     }
 }
 
@@ -383,7 +385,7 @@ pub(super) fn start_ambilight_worker(
         let mut capture_fail_count = 0u32;
         let mut send_fail_count = 0u32;
         let mut last_edge_emit_at: Option<Instant> = None;
-        // v1.6 LED Preview — monotonic frame seq + last per-Hue-channel colours
+        // LED preview: monotonic frame seq + last per-Hue-channel colours
         // for the enriched edge-signal (only stamped while a preview is active).
         let mut edge_seq: u64 = 0;
         let mut last_hue_colors: Option<Vec<[u8; 3]>> = None;

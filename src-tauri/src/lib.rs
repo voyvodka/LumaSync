@@ -908,7 +908,7 @@ pub fn run() {
                 return;
             }
             // LED control popup: mirror the main-window pattern — hide, never
-            // destroy, so a re-show is cheap (v1.6 LED Preview).
+            // destroy, so a re-show is cheap.
             if label == commands::led_preview::LED_CONTROL_POPUP_LABEL {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();

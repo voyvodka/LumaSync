@@ -36,7 +36,7 @@ pub struct AmbilightCaptureRequest {
     /// source; the live worker takes its calibration from
     /// `LightingModeConfig` directly.
     pub led_calibration: Option<LedCalibrationConfig>,
-    /// v1.6 LED Preview — when `Some`, the frame-source factory builds a
+    /// The LED preview's test: when `Some`, the frame-source factory builds a
     /// `SyntheticFrameSource` (test mode) instead of live screen capture.
     pub test_pattern: Option<TestPatternConfig>,
     /// Animation phase carried across the worker rebuild a pattern tweak forces.
@@ -111,7 +111,7 @@ pub(crate) struct LightingRuntimeOwner {
     pub(super) effect_clock: EffectClockSlot,
     pub(super) output_bridge: LedOutputBridge,
     pub(super) frame_source_factory: Arc<AmbilightFrameSourceFactory>,
-    /// v1.6 LED Preview — synthetic test request + shared enrichment gate.
+    /// The LED preview: synthetic test request + shared enrichment gate.
     pub(super) preview: PreviewRuntime,
     /// `LightingRuntimeState::closing`, read under the runtime lock.
     pub(super) closing: Arc<AtomicBool>,

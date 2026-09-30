@@ -545,7 +545,8 @@ fn target_strings<'t>(targets: impl IntoIterator<Item = &'t OutputTarget>) -> Ve
         .collect()
 }
 
-/// The targets a running mode drives. Absent or empty is USB (legacy D-10).
+/// The targets a running mode drives. Absent or empty is USB, as a mode saved before targets
+/// existed was.
 /// `apply_mode_change` refuses an unknown name, so none runs to be dropped here.
 fn running_targets(mode: &LightingModeConfig) -> Vec<OutputTarget> {
     if mode.kind == LightingModeKind::Off {

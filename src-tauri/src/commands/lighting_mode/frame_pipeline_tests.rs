@@ -1829,9 +1829,6 @@ fn frame_budget_report() {
     );
 }
 
-/// An effect step next to the strip and six Hue channels allocates nothing once
-/// warm: the payload is copied and the palette rebuilt only on a retune, and
-/// every output buffer keeps its capacity.
 /// What reaches the Hue wire on a two-bulb area, after the engine, the smoother and the correction:
 /// never all below 2 % for any effect at a middling brightness. The engine's floor alone passed
 /// its own test while the wire sat about a fifth short (sRGB out, gamma 2.2 back in), and a floor
@@ -1901,6 +1898,9 @@ fn a_few_bulbs_never_go_dark_on_the_wire() {
     }
 }
 
+/// An effect step next to the strip and six Hue channels allocates nothing once
+/// warm: the payload is copied and the palette rebuilt only on a retune, and
+/// every output buffer keeps its capacity.
 #[test]
 fn a_steady_effect_step_allocates_nothing() {
     use super::effects::{EffectClockSlot, EffectDraw};

@@ -136,7 +136,7 @@ impl LightingRuntimeSnapshot {
         let mut driven = Vec::new();
         if mode.kind != LightingModeKind::Off {
             let targets = mode.targets.as_deref().unwrap_or_default();
-            // Absent or empty targets mean USB-required (legacy D-10).
+            // Absent or empty targets mean USB: a mode saved before targets existed.
             if targets.is_empty() || targets.iter().any(|t| t == "usb") {
                 driven.push(OutputTarget::Usb);
             }
