@@ -24,7 +24,10 @@
   @keyframes readout-in { from { opacity: 0; transform: translateY(3px); } }
   :global(:root[data-reduced-motion]) .label[data-swapped],
   :global(:root[data-reduced-motion]) .value[data-swapped] { animation: none; }
+  /* Block, not inline: inside its box an inline input sat on a text line, which added a descender's
+     height under it and put the neutral tick's 50% below the track. */
   .slider {
+    display: block;
     width: 100%;
     height: 32px;
     margin: 0;
