@@ -78,6 +78,10 @@ export function useSceneEdit(): SceneEdit | null {
   return useStoreSelector(editing, (edit) => edit);
 }
 
+export function getSceneEdit(): SceneEdit | null {
+  return editing.get();
+}
+
 export function setSceneEdit(edit: SceneEdit | null): void {
   editing.set(edit);
 }

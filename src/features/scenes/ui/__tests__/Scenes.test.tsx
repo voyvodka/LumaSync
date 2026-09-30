@@ -17,10 +17,17 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-const disk: { state: Partial<ShellState>; failNext: boolean; saveFails: boolean } = {
+const disk: {
+  state: Partial<ShellState>;
+  failNext: boolean;
+  saveFails: boolean;
+  /** The next update fails once this resolves: a write still in flight while the user moves on. */
+  slowFailure: Promise<void> | null;
+} = {
   state: {},
   failNext: false,
   saveFails: false,
+  slowFailure: null,
 };
 const writes: Partial<ShellState>[] = [];
 
@@ -40,6 +47,11 @@ vi.mock("@/features/persistence/shellStore", () => ({
       if (disk.failNext) {
         disk.failNext = false;
         return Promise.reject(new Error("SHELL_STATE_WRITE_FAILED"));
+      }
+      if (disk.slowFailure !== null) {
+        const failure = disk.slowFailure;
+        disk.slowFailure = null;
+        return failure.then(() => Promise.reject(new Error("SHELL_STATE_WRITE_FAILED")));
       }
       const patch = fn({ ...disk.state });
       if (patch) {
@@ -89,6 +101,7 @@ beforeEach(() => {
   disk.state = {};
   disk.failNext = false;
   disk.saveFails = false;
+  disk.slowFailure = null;
   writes.length = 0;
   __resetPreferencesForTests();
   __setPreferenceForTests("lightingIntensityPreset", "moderate");
@@ -383,6 +396,47 @@ describe("making and editing a scene", () => {
     expect(screen.getByTestId("scene-edit-name")).toHaveValue("Evening");
     expect(screen.getByTestId("scene-edit-name")).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByText("lights:scenes.saveFailed")).toBeInTheDocument();
+  });
+
+  it("does not take over an edit opened while a failed save was being written", async () => {
+    seed([mine("a", "Blue")]);
+    renderPage(RED);
+    await act(async () => fireEvent.click(screen.getByTestId("scene-save")));
+    fireEvent.change(screen.getByTestId("scene-edit-name"), { target: { value: "First" } });
+    let failWrite: () => void = () => {};
+    disk.slowFailure = new Promise<void>((resolve) => {
+      failWrite = resolve;
+    });
+    await act(async () => fireEvent.click(screen.getByTestId("scene-edit-save")));
+    // A second edit is opened while the first is still being written.
+    await act(async () => fireEvent.click(screen.getByTestId("scene-save")));
+    fireEvent.change(screen.getByTestId("scene-edit-name"), { target: { value: "Second" } });
+    await act(async () => {
+      failWrite();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(screen.getByTestId("scene-edit-name")).toHaveValue("Second");
+    expect(screen.getByText("lights:scenes.saveFailed")).toBeInTheDocument();
+  });
+
+  it("says so when Cancel cannot put the response back", async () => {
+    const movie: StoredScene = {
+      id: "m",
+      kind: "ambilight",
+      name: "Movie",
+      ambilight: { brightness: 0.8, lightingSmoothingPreset: "subtle" },
+    };
+    seed([movie]);
+    const { onApply } = renderPage(RED);
+    await editFromLibrary("m");
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    disk.saveFails = true;
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("scene-edit-cancel"));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(onApply).toHaveBeenLastCalledWith(RED);
+    expect(screen.getByText("lights:scenes.restoreFailed")).toBeInTheDocument();
   });
 
   it("does not turn the lights back on when Cancel comes after they were turned off", async () => {

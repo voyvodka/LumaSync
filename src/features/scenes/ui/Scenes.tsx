@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { setPreference, usePreference } from "@/features/persistence/preferences";
+import { getPreference, setPreference, usePreference } from "@/features/persistence/preferences";
 import type { LightingModeConfig } from "@/shared/contracts/mode";
 import { SCENE_LIMITS, type StoredScene } from "@/shared/contracts/scenes";
 import { IconButton } from "@/shared/ui/IconButton/IconButton";
@@ -23,7 +23,7 @@ import {
   withSceneLook,
   withSceneName,
 } from "../model/sceneLibrary";
-import { editScenes, setSceneEdit, useSceneEdit, useScenes } from "../state/scenesStore";
+import { editScenes, getSceneEdit, setSceneEdit, useSceneEdit, useScenes } from "../state/scenesStore";
 import { SceneEditBar } from "./SceneEditBar";
 import { SceneLibrary } from "./SceneLibrary";
 import { ScenesRow } from "./ScenesRow";
@@ -122,10 +122,12 @@ export function Scenes({ mode, disabled, busy = false, onApply }: ScenesProps) {
       () => say(t("lights:scenes.savedNamed", { name: shownName })),
       (error: unknown) => {
         console.error("[LumaSync] saving the scene failed:", error);
+        say(t("lights:scenes.saveFailed"));
+        // Another edit opened while this one was being written: it is not taken over.
+        if (getSceneEdit() !== null) return;
         // The list went back; the edit comes back with it, so nothing typed or set is lost.
         setSceneEdit(edit);
         setSaveFailed(true);
-        say(t("lights:scenes.saveFailed"));
         focusByTestId("scene-edit-save");
       },
     );
@@ -141,7 +143,12 @@ export function Scenes({ mode, disabled, busy = false, onApply }: ScenesProps) {
     const moved = JSON.stringify(before.mode) !== JSON.stringify(mode) || before.smoothing !== smoothing;
     if (!moved) return;
     void (async () => {
-      if (before.smoothing !== smoothing) await setPreference("lightingIntensityPreset", before.smoothing);
+      if (before.smoothing !== smoothing) {
+        await setPreference("lightingIntensityPreset", before.smoothing);
+        // A write that failed puts the preference back where the edit left it: say so, since the
+        // light comes back without its response.
+        if (getPreference("lightingIntensityPreset") !== before.smoothing) say(t("lights:scenes.restoreFailed"));
+      }
       onApply(before.mode);
     })().catch((error: unknown) => console.error("[LumaSync] putting the light back failed:", error));
   };

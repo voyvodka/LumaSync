@@ -57,6 +57,7 @@ const lights: Catalogue<typeof enLights> = {
     remove: "Sil: {{name}}",
     removeConfirm: "Silmek için tekrar bas: {{name}}",
     saveFailed: "Sahneler kaydedilemedi",
+    restoreFailed: "Işık geri döndü ama tepki ayarı geri alınamadı",
     suggested: {
       movie: "Film",
       game: "Oyun",

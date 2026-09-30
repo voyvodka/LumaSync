@@ -54,6 +54,7 @@ export default {
     remove: "Delete {{name}}",
     removeConfirm: "Press again to delete {{name}}",
     saveFailed: "The scenes could not be saved",
+    restoreFailed: "The light is back, but its response could not be put back",
     suggested: {
       movie: "Movie",
       game: "Game",
