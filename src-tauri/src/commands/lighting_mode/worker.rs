@@ -115,6 +115,12 @@ impl HueOutputFollower {
     }
 }
 
+/// Which of a run of failures reaches the log: the first five, then every
+/// fiftieth, so a failure that repeats every frame is seen without flooding it.
+pub(super) fn is_logged_failure(count: u32) -> bool {
+    count <= 5 || count.is_multiple_of(50)
+}
+
 fn log_hue_output(context: Option<&HueActiveOutputContext>) {
     let Some(ctx) = context else {
         info!("[ambilight-worker] hue output released — no live stream");
@@ -357,6 +363,7 @@ pub(super) fn start_ambilight_worker(
         let has_strip = usb_sink.is_some();
 
         let mut capture_fail_count = 0u32;
+        let mut send_fail_count = 0u32;
         let mut last_edge_emit_at: Option<Instant> = None;
         // v1.6 LED Preview — monotonic frame seq + last per-Hue-channel colours
         // for the enriched edge-signal (only stamped while a preview is active).
@@ -444,7 +451,7 @@ pub(super) fn start_ambilight_worker(
                 match captured {
                     Err(e) => {
                         capture_fail_count += 1;
-                        if capture_fail_count <= 5 || capture_fail_count.is_multiple_of(50) {
+                        if is_logged_failure(capture_fail_count) {
                             warn!("[ambilight-worker] capture failed #{capture_fail_count}: {e}");
                         }
                         // The frame branch owns the only other flush, so without
@@ -537,7 +544,17 @@ pub(super) fn start_ambilight_worker(
                             }
                             send_started.elapsed().as_secs_f32() * 1000.0
                         }
-                        Err(_) => 0.0,
+                        Err(e) => {
+                            // Every one kept for telemetry; the log keeps the first few and a
+                            // sample after, as for capture, so a dead strip does not flood it.
+                            send_fail_count += 1;
+                            if is_logged_failure(send_fail_count) {
+                                warn!(
+                                    "[ambilight-worker] strip send failed #{send_fail_count}: {e}"
+                                );
+                            }
+                            0.0
+                        }
                     }
                 }
                 _ => 0.0,
@@ -640,4 +657,15 @@ pub(super) fn start_ambilight_worker(
         handle,
         _frame_source: frame_source_arc,
     })
+}
+
+#[cfg(test)]
+mod failure_log_tests {
+    use super::is_logged_failure;
+
+    #[test]
+    fn a_repeating_failure_logs_the_first_five_then_every_fiftieth() {
+        let logged: Vec<u32> = (1..=200).filter(|&n| is_logged_failure(n)).collect();
+        assert_eq!(logged, vec![1, 2, 3, 4, 5, 50, 100, 150, 200]);
+    }
 }
