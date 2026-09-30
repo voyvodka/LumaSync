@@ -1,11 +1,4 @@
 @layer components {
-  /* A column like Settings': past ~720 px a row's name and its control drift apart. */
-  .page {
-    width: 100%;
-    max-width: 720px;
-    margin-inline: auto;
-  }
-
   /* The heading and its pencil. The field takes the heading's box, so the rows below never move. */
   .nameLine {
     display: flex;
@@ -35,21 +28,6 @@
   /* What adding changes, under the heading: a consequence, not a caption. */
   .heading + [data-testid="add-strip-replaces"] { margin: -4px 0 8px; }
 
-  .input {
-    width: 150px;
-    height: 32px;
-    padding: 0 10px;
-    border: 1px solid var(--lm-line-2);
-    border-radius: 8px;
-    background: var(--lm-panel);
-    font-size: 12.5px;
-    color: var(--lm-ink);
-  }
-  .input::placeholder { color: var(--lm-ink-faint); }
-  .input:hover { border-color: var(--lm-ink-faint); }
-  .input:focus-visible { outline: none; border-color: var(--lm-amber); box-shadow: var(--lm-focus-ring); }
-  .input[aria-invalid="true"] { border-color: var(--lm-red); }
-
   .nameInput {
     width: min(320px, 60vw);
     height: 32px;
@@ -76,23 +54,6 @@
   .rename:hover { color: var(--lm-ink); background: var(--lm-panel-2); }
   .rename:focus-visible { outline: none; color: var(--lm-ink); box-shadow: var(--lm-focus-ring); }
   .nameLine > [data-testid="strip-name-failed"] { flex-basis: 100%; }
-
-  /* The controller row's right side: the word and its action pass over together when the state
-     changes, right-aligned, tall enough that a focus ring is not clipped. */
-  .swap {
-    --page-height: 36px;
-    --page-inset: 3px;
-    --page-gap: 8px;
-  }
-  .swap > span { justify-content: flex-end; }
-
-  /* Rows come and go with the state (Reveal): the line between two sits on the second, and a
-     closed one draws none. */
-  .rows > [data-reveal] + [data-reveal] {
-    border-top: 1px solid var(--lm-line);
-    transition: border-color var(--lm-dur-base) linear;
-  }
-  .rows > [data-reveal][data-open="false"] { border-top-color: transparent; }
 
   /* The colour popover: two sliders a line, short enough to open on either side of a row low
      in the window; the reset takes the last cell. */
@@ -192,7 +153,6 @@
 
   @media (forced-colors: active) {
     .nameInput,
-    .input,
     .choice { border-color: ButtonText; }
     /* The swatches are the only thing tying an answer to a colour on screen, so keep them
        painted; the button text still names the colour. */

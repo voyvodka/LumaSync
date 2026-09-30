@@ -39,6 +39,7 @@ import { StripFlash } from "./StripFlash";
 import { StripLayoutRow } from "./StripLayoutRow";
 import { StripName } from "./StripName";
 import { CodedNote, UnlitHelp, connectFailedOn } from "./StripNotes";
+import pageStyles from "@/shared/ui/SettingRow/SettingPage.module.css";
 import styles from "./StripPage.module.css";
 
 export interface StripPageProps {
@@ -248,9 +249,9 @@ export function StripPage({
   ];
 
   return (
-    <section className={styles.page} hidden={!isActive} aria-labelledby={headingId} data-testid="strip-page">
+    <section className={pageStyles.page} hidden={!isActive} aria-labelledby={headingId} data-testid="strip-page">
       <StripName stripId={strip.id} name={name} renamed={strip.name !== undefined} headingId={headingId} />
-      <div className={styles.rows}>
+      <div className={pageStyles.rows}>
         <Reveal open>
           <SettingRow
             label={t("device:strip.row.controller")}
@@ -259,7 +260,7 @@ export function StripPage({
             testId="strip-controller"
             controlFills
             control={
-              <PageSwap id={state} way="fade" className={styles.swap}>
+              <PageSwap id={state} way="fade" className={pageStyles.swap}>
                 <StateWord tone={view.tone} live={false}>
                   {t(view.word)}
                 </StateWord>

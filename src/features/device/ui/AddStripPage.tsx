@@ -11,6 +11,7 @@ import { shortPortName } from "../model/deviceRail";
 import type { DevicePort } from "../types";
 import type { UseDeviceConnectionResult } from "../useDeviceConnection";
 import { FoundPortRow, WledAddressRow, type AddedOutput } from "./AddStripRows";
+import pageStyles from "@/shared/ui/SettingRow/SettingPage.module.css";
 import styles from "./StripPage.module.css";
 
 interface AddStripPageProps {
@@ -34,14 +35,14 @@ export function AddStripPage({ isActive, title, ports, otherPorts, device, onWle
   const headingId = useId();
   const [wledAdding, setWledAdding] = useState(false);
   return (
-    <section className={styles.page} hidden={!isActive} aria-labelledby={headingId} data-testid="add-strip-page">
+    <section className={pageStyles.page} hidden={!isActive} aria-labelledby={headingId} data-testid="add-strip-page">
       <h1 id={headingId} className={styles.heading}>
         {title}
       </h1>
       {replaces !== null ? (
         <RowNote tone="status" testId="add-strip-replaces">{t("device:strip.add.replaces", { name: replaces })}</RowNote>
       ) : null}
-      <div className={styles.rows}>
+      <div className={pageStyles.rows}>
         <Reveal open={ports.length === 0}>
           <SettingRow label={t("device:strip.add.usb")} value={t("device:strip.add.usbNone")} testId="add-strip-usb" />
         </Reveal>
@@ -80,11 +81,11 @@ export function FoundPortPage({ isActive, port, device, replaces, onAdded }: Fou
   const { t } = useTranslation();
   const headingId = useId();
   return (
-    <section className={styles.page} hidden={!isActive} aria-labelledby={headingId} data-testid="found-port-page">
+    <section className={pageStyles.page} hidden={!isActive} aria-labelledby={headingId} data-testid="found-port-page">
       <h1 id={headingId} className={styles.heading}>
         {port.product ?? port.portName}
       </h1>
-      <div className={styles.rows}>
+      <div className={pageStyles.rows}>
         <Reveal open>
           <FoundPortRow
             port={port}

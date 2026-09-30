@@ -21,7 +21,7 @@ import { StripColorRow } from "./StripColorRow";
 import { StripLayoutRow } from "./StripLayoutRow";
 import { StripName } from "./StripName";
 import { UnlitHelp, WledCodedNote } from "./StripNotes";
-import styles from "./StripPage.module.css";
+import pageStyles from "@/shared/ui/SettingRow/SettingPage.module.css";
 
 type WledTransport = Extract<StripTransport, { kind: "wled" }>;
 
@@ -141,9 +141,9 @@ export function WledStripPage({
   ];
 
   return (
-    <section className={styles.page} hidden={!isActive} aria-labelledby={headingId} data-testid="wled-strip-page">
+    <section className={pageStyles.page} hidden={!isActive} aria-labelledby={headingId} data-testid="wled-strip-page">
       <StripName stripId={strip.id} name={name} renamed={strip.name !== undefined} headingId={headingId} />
-      <div className={styles.rows}>
+      <div className={pageStyles.rows}>
         <Reveal open>
           <SettingRow
             label={t("device:strip.row.device")}
@@ -152,7 +152,7 @@ export function WledStripPage({
             testId="strip-controller"
             controlFills
             control={
-              <PageSwap id={state} way="fade" className={styles.swap}>
+              <PageSwap id={state} way="fade" className={pageStyles.swap}>
                 <StateWord tone={view.tone} live={false}>
                   {t(view.word)}
                 </StateWord>

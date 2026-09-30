@@ -14,7 +14,7 @@ import { useWledConnect, type WledConnectDeps } from "../state/useWledConnect";
 import type { DevicePort } from "../types";
 import type { UseDeviceConnectionResult } from "../useDeviceConnection";
 import { CodedNote, WledCodedNote, connectFailedOn } from "./StripNotes";
-import styles from "./StripPage.module.css";
+import pageStyles from "@/shared/ui/SettingRow/SettingPage.module.css";
 
 /** What was just added, so the page it became can open and ask whether it lit. */
 export type AddedOutput = { kind: "serial"; portName: string } | { kind: "wled"; ip: string };
@@ -152,7 +152,7 @@ export function WledAddressRow({ onBound, onAdded, primary, blocked = false, onB
       control={
         <>
           <input
-            className={styles.input}
+            className={pageStyles.input}
             value={address}
             onChange={(event) => {
               setAddress(event.target.value);
