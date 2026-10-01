@@ -6,7 +6,7 @@ const device: Catalogue<typeof enDevice> = {
     idleTitle: "Bağlı şerit yok",
     idleBody: "Aşağıdaki denetleyicinde Bağlan'a bas.",
     noPortsTitle: "USB denetleyici bulunamadı",
-    noPortsBody: "LED denetleyicini tak, sonra Yeniden Tara'ya bas.",
+    noPortsBody: "LED denetleyicini tak, sonra Yeniden tara'ya bas.",
     noSupportedTitle: "Desteklenen denetleyici bulunamadı",
     noSupportedBody: "Burada bulunan portlar LED süremez. LumaSync; CH340, CH341, CP2102, CP2104, FTDI FT232R/FT232H, PL2303 yongalı USB denetleyicilerle veya bir Arduino Uno ile çalışır.",
     scanningTitle: "Seri portlar yenileniyor",
@@ -86,7 +86,7 @@ const device: Catalogue<typeof enDevice> = {
       edit: "Düzenle",
       setUp: "Kur",
       check: "Kontrol et",
-      checkAgain: "Yeniden kontrol et",
+      checkAgain: "Tekrar kontrol et",
       checking: "Kontrol ediliyor…",
       identify: "Tanımla",
       more: "{{name}} için diğerleri",
@@ -185,7 +185,7 @@ const device: Catalogue<typeof enDevice> = {
       },
       SERIAL_HEALTH_WORKER_PANIC: {
         label: "Sağlık kontrolü beklenmedik şekilde durdu",
-        hint: "Kontrol tamamlanamadı. Yeniden çalıştır; durmaya devam ederse LumaSync'i yeniden başlat.",
+        hint: "Kontrol tamamlanamadı. Tekrar çalıştır; durmaya devam ederse LumaSync'i yeniden başlat.",
       },
       LIST_PORTS_FAILED: {
         label: "Seri portlar okunamadı",

@@ -137,7 +137,7 @@ const hue: Catalogue<typeof enHue> = {
       HUE_STREAM_RUNNING_DTLS: "Hue yayını aktif.",
       HUE_STREAM_STOPPING: "Hue durduruluyor.",
       HUE_STREAM_STOPPED: "Hue yayını durdu.",
-      TRANSIENT_RETRY_SCHEDULED: "Geçici bir sorun var. Kendiliğinden yeniden denenecek.",
+      TRANSIENT_RETRY_SCHEDULED: "Geçici bir sorun var. Kendiliğinden tekrar denenecek.",
       TRANSIENT_RETRY_EXHAUSTED: "Deneme hakkı bitti. Yeniden bağlanmayı sen başlatmalısın.",
       AUTH_INVALID_CREDENTIALS: "Anahtar geçersiz. Yeniden eşleştirme gerekli.",
       AUTH_INVALID_RE_PAIR_REQUIRED: "Hue Bridge isteği reddetti. Yeniden eşleştirme gerekli.",
