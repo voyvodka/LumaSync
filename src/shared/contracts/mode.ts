@@ -183,7 +183,8 @@ export interface LightingModeCommandResult {
   mode: LightingModeConfig;
   status: CommandStatusOf<LightingModeStatusCode>;
   /** Non-fatal: the stream started but part of the WLED strip will not track.
-   * Rides alongside a success status rather than replacing it. */
+   * Rides alongside a success status rather than replacing it. The UI reads the copy on the
+   * apply's outcome (`ApplyOutputsOutcome.wledAdvisory`); nothing reads this one. */
   wledAdvisory: WledLiveFrameAdvisory | null;
 }
 

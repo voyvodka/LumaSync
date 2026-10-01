@@ -2996,3 +2996,31 @@ mod bridge_wait {
         }
     }
 }
+
+// The frontend tells "no mismatch" (null) from a field that is gone (undefined)
+// only if the key is always sent: the contract verifier skips a field TS lacks.
+#[test]
+fn the_apply_outcome_always_sends_its_wled_advisory_null_or_filled() {
+    let none = serde_json::to_value(super::outputs::ApplyOutputsOutcome::default()).unwrap();
+    assert_eq!(none.get("wledAdvisory"), Some(&serde_json::Value::Null));
+
+    let found = serde_json::to_value(super::outputs::ApplyOutputsOutcome {
+        wled_advisory: Some(super::config::WledLiveFrameAdvisory {
+            code: "WLED_LIVE_LED_COUNT_MISMATCH".to_string(),
+            message: "m".to_string(),
+            frame_led_count: 60,
+            sink_led_count: 120,
+        }),
+        ..Default::default()
+    })
+    .unwrap();
+    assert_eq!(
+        found["wledAdvisory"],
+        json!({
+            "code": "WLED_LIVE_LED_COUNT_MISMATCH",
+            "message": "m",
+            "frameLedCount": 60,
+            "sinkLedCount": 120,
+        })
+    );
+}
