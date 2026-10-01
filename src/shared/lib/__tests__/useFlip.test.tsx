@@ -39,6 +39,7 @@ function place() {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   animate.mockReset();
   reduced.on = false;
@@ -133,7 +134,15 @@ describe("useFlip", () => {
     // "b" stood 40 px down on screen, 30 px of content above it scrolled out of view.
     expect(ghost.style.top).toBe("70px");
     vi.runAllTimers();
-    vi.useRealTimers();
+  });
+
+  it("leaves no ghost of an alias's source: it is the one that travels", () => {
+    place();
+    const clone = vi.spyOn(HTMLElement.prototype, "cloneNode");
+    const view = render(<List ids={["a", "s-x", "b"]} exits />);
+    view.rerender(<List ids={["x", "a", "b"]} aliases={new Map([["x", "s-x"]])} exits />);
+    expect(clone).not.toHaveBeenCalled();
+    expect(view.container.querySelector("li[aria-hidden='true']")).toBeNull();
   });
 });
 
