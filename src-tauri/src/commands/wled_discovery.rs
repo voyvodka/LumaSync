@@ -240,6 +240,8 @@ fn parse_ipv4(ip: &str) -> Result<Ipv4Addr, String> {
 const WLED_PROBE_EVERY: Duration = Duration::from_secs(10);
 /// Missed probes in a row before it reads as unreachable: one lost answer is not a panel turned off.
 const WLED_MISSES_TO_UNREACHABLE: u32 = 2;
+/// Longer than a fetch's: an ESP8266 streaming a long strip can be slow to answer HTTP.
+const WLED_PROBE_TIMEOUT: Duration = Duration::from_secs(4);
 
 /// One probe's effect: the misses in a row after it, and `Some(reachable)` to report, `None`
 /// while misses are still under the threshold. An answer resets the count and reports reachable.
@@ -274,10 +276,9 @@ pub fn spawn_wled_probe<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
                 misses = 0;
             }
             let (ip, generation) = target;
-            let answered =
-                tokio::task::spawn_blocking(move || fetch_wled_info(&ip.to_string()).is_ok())
-                    .await
-                    .unwrap_or(false);
+            let answered = tokio::task::spawn_blocking(move || wled_answers(ip))
+                .await
+                .unwrap_or(false);
             let (after, verdict) = wled_probe_verdict(misses, answered);
             misses = after;
             let Some(reachable) = verdict else {
@@ -293,6 +294,39 @@ pub fn spawn_wled_probe<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
             }
         }
     });
+}
+
+/// Whether the bound device answers HTTP at all.
+fn wled_answers(ip: Ipv4Addr) -> bool {
+    if parse_ipv4(&ip.to_string()).is_err() {
+        return false;
+    }
+    let started = std::time::Instant::now();
+    let answered = probe_answers(&format!("http://{ip}/json/info"), WLED_PROBE_TIMEOUT);
+    if answered {
+        log::debug!(
+            "[wled-probe] {ip} answered in {} ms",
+            started.elapsed().as_millis()
+        );
+    }
+    answered
+}
+
+/// Any status counts, a 503 too: a device too busy to build `/json/info` is still powered.
+/// Only no answer at all is a miss.
+fn probe_answers(url: &str, timeout: Duration) -> bool {
+    let client = match reqwest::blocking::Client::builder()
+        .timeout(timeout)
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+    {
+        Ok(client) => client,
+        Err(error) => {
+            log::warn!("[wled-probe] could not build its HTTP client: {error}");
+            return false;
+        }
+    };
+    client.get(url).send().is_ok()
 }
 
 fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, CommandStatus> {
@@ -1408,7 +1442,49 @@ mod forget_tests {
 
 #[cfg(test)]
 mod probe_tests {
-    use super::wled_probe_verdict;
+    use super::{probe_answers, wled_probe_verdict};
+    use std::io::{Read, Write};
+    use std::time::Duration;
+
+    /// Answers one request on 127.0.0.1 with `reply`.
+    fn answering(reply: &'static str) -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/json/info", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = Vec::new();
+            let mut buf = [0u8; 1024];
+            while !String::from_utf8_lossy(&request).contains("\r\n\r\n") {
+                match stream.read(&mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => request.extend_from_slice(&buf[..n]),
+                }
+            }
+            let _ = stream.write_all(reply.as_bytes());
+        });
+        url
+    }
+
+    #[test]
+    fn a_busy_device_answering_503_is_there_and_a_closed_port_is_not() {
+        let busy = answering(
+            "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        );
+        assert!(probe_answers(&busy, Duration::from_secs(2)));
+
+        let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/json/info", closed.local_addr().unwrap());
+        drop(closed);
+        assert!(!probe_answers(&url, Duration::from_secs(2)));
+    }
+
+    #[test]
+    fn a_device_that_accepts_but_never_answers_is_a_miss() {
+        let silent = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/json/info", silent.local_addr().unwrap());
+        assert!(!probe_answers(&url, Duration::from_millis(300)));
+        drop(silent);
+    }
 
     #[test]
     fn two_missed_probes_in_a_row_read_as_unreachable_and_one_answer_as_back() {
