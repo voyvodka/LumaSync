@@ -462,7 +462,7 @@ impl RuntimeTelemetryWindow {
     /// Stamp a failed send, by the code before the error's first `:` (the
     /// rest is the OS's words and would change every time).
     pub fn record_output_error(&mut self, error: &str, now: Instant) {
-        let code = error.split_once(':').map_or(error, |(code, _)| code).trim();
+        let code = output_failure_code(error);
         match &mut self.last_output_error {
             Some((last, at)) if last == code => *at = now,
             slot => *slot = Some((code.to_string(), now)),
@@ -604,6 +604,21 @@ impl Drop for RuntimeTelemetryWindow {
         if let (true, Some(sink)) = (reported_something, &self.health_sink) {
             sink(&RuntimeHealth::default());
         }
+    }
+}
+
+/// A sink's error reads `CODE: detail`. One that does not is published as the generic write
+/// failure, never as a code made up from its text.
+fn output_failure_code(error: &str) -> &str {
+    let code = error.split_once(':').map_or(error, |(code, _)| code).trim();
+    let coded = !code.is_empty()
+        && code
+            .bytes()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_');
+    if coded {
+        code
+    } else {
+        "LED_OUTPUT_WRITE_FAILED"
     }
 }
 
@@ -1135,6 +1150,19 @@ mod tests {
         let sample = &json["samples"][0];
         for key in ["epochMs", "fps", "targetFps"] {
             assert!(sample[key].is_number(), "`{key}` missing in {json}");
+        }
+    }
+
+    #[test]
+    fn only_a_leading_code_is_taken_as_the_failure_code() {
+        for (error, code) in [
+            ("WLED_SEND_FAILED: os error 65", "WLED_SEND_FAILED"),
+            ("LED_OUTPUT_WRITE_FAILED", "LED_OUTPUT_WRITE_FAILED"),
+            ("Broken pipe (os error 32)", "LED_OUTPUT_WRITE_FAILED"),
+            ("send failed: timed out", "LED_OUTPUT_WRITE_FAILED"),
+            ("", "LED_OUTPUT_WRITE_FAILED"),
+        ] {
+            assert_eq!(super::output_failure_code(error), code, "{error}");
         }
     }
 
