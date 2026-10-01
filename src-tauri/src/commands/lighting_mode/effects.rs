@@ -44,6 +44,10 @@ impl EffectClockState {
     pub(crate) fn loops(&self) -> f64 {
         self.loops
     }
+
+    pub(crate) fn set_loops(&mut self, loops: f64) {
+        self.loops = loops;
+    }
 }
 
 pub(crate) type EffectClockSlot = Arc<Mutex<EffectClockState>>;

@@ -588,6 +588,29 @@ fn a_comet_keeps_moving_through_its_palette_after_days_of_running() {
 }
 
 #[test]
+fn a_comet_a_month_in_draws_the_colours_it_drew_at_the_same_phase_on_day_one() {
+    // 0.21 × 10⁷ is a whole number of palette turns: both clocks sit at the same head and colour.
+    let (seq, counts) = strip(60);
+    let draw_at = |loops: f64| {
+        let (mut stage, _, clock) = stage(effect(EffectId::Comet));
+        clock.lock().unwrap().set_loops(loops);
+        stage
+            .draw(Instant::now(), &seq, &counts, None, None)
+            .strip
+            .to_vec()
+    };
+    let day_one = draw_at(0.4);
+    let a_month_in = draw_at(1.0e7 + 0.4);
+    let off = day_one
+        .iter()
+        .zip(&a_month_in)
+        .flat_map(|(a, b)| (0..3).map(move |c| a[c].abs_diff(b[c])))
+        .max()
+        .unwrap();
+    assert!(off <= 2, "a month in, a colour moved by {off}");
+}
+
+#[test]
 fn a_long_pause_moves_the_clock_by_one_capped_step_only() {
     let (seq, counts) = strip(30);
     let (mut stage, _, clock) = stage(EffectPayload {
