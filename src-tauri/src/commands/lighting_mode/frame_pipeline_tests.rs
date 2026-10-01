@@ -1418,6 +1418,70 @@ const ALLOCS_PER_TICK: usize = 1;
 
 /// Accepts the packet without keeping it, so the timing report's sink costs
 /// only its encode.
+/// Takes the first write, then fails every one after it the way a dead port does.
+struct FailsAfterFirst(AtomicUsize);
+
+impl LedPacketSender for FailsAfterFirst {
+    fn send(&self, _port_name: &str, _packet: &[u8]) -> Result<(), LedOutputError> {
+        if self.0.fetch_add(1, Ordering::SeqCst) == 0 {
+            return Ok(());
+        }
+        Err(LedOutputError {
+            code: "LED_OUTPUT_WRITE_FAILED",
+            details: Some("Broken pipe".to_string()),
+        })
+    }
+
+    fn disconnect_session(&self, _port_name: &str) {}
+}
+
+#[test]
+fn a_strip_that_stops_taking_frames_is_reported_by_its_code() {
+    let _watchdog = Watchdog::arm(
+        "a_strip_that_stops_taking_frames_is_reported_by_its_code",
+        Duration::from_secs(60),
+    );
+    let _guard = WORKER_TEST_GUARD
+        .lock()
+        .unwrap_or_else(|err| err.into_inner());
+    let telemetry = SharedRuntimeTelemetry::default();
+    let runtime = start_ambilight_worker(
+        LedOutputBridge::from_sender(Arc::new(FailsAfterFirst(Default::default()))),
+        Some(UsbOutputPlan::Serial(PORT.to_string())),
+        Some(strip_164()),
+        live_settings(),
+        Box::new(StillScreen {
+            frame: Arc::new(scene_frame(FRAME_W, FRAME_H, 0)),
+            calls: Arc::new(AtomicUsize::new(0)),
+        }),
+        Arc::clone(&telemetry),
+        None,
+        None,
+        color_correction(),
+        FirmwareProfile::LumaSyncV1,
+        LedChipType::Ws2812bGrb,
+        None,
+        RoomGeometryLive::new(None),
+        WorkerPacing::live(Duration::from_millis(2)),
+    )
+    .expect("worker starts");
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let code = loop {
+        let snapshot = read_runtime_telemetry(&telemetry).expect("telemetry");
+        if let Some(code) = snapshot.last_output_error_code {
+            break code;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the failing sends were never reported"
+        );
+        thread::sleep(Duration::from_millis(20));
+    };
+    runtime.stop();
+    assert_eq!(code, "LED_OUTPUT_WRITE_FAILED");
+}
+
 struct NullSender;
 
 impl LedPacketSender for NullSender {
