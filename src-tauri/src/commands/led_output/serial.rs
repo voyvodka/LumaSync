@@ -416,6 +416,8 @@ impl SerialLedPacketSender {
             Err(error) => {
                 let dead = sessions.remove(port_name);
                 drop(sessions);
+                // On the caller, once per failure: it waits (at most `WRITER_EXIT_TIMEOUT`) for
+                // the port to close, so the next send's reopen does not find it still held.
                 drop(dead);
                 Err(error)
             }
