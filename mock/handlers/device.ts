@@ -170,9 +170,8 @@ export const deviceHandlers = {
 
   [DEVICE_COMMANDS.DISCOVER_WLED_DEVICES]: (args) => {
     const { wled } = getWorld();
-    // The device at that address when the world has one; any other address finds them all.
-    const at = wled.devices.filter((d) => d.host === args.request.ip);
-    const devices = at.length > 0 ? at : wled.devices;
+    // As in Rust: the one device at that address, or nothing there.
+    const devices = wled.devices.filter((d) => d.host === args.request.ip);
     return {
       status: status(
         // There is no "empty" code: discovery either answered, timed out, or

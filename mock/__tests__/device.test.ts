@@ -191,6 +191,17 @@ describe("the mode apply's USB and Hue gates fire in the same order apply_mode_c
     expect(result.status.code).not.toBe("DEVICE_NOT_CONNECTED");
   });
 
+  it("looking up a WLED address finds the device there, and nothing at an address no device has", () => {
+    const world = SCENARIOS.empty.build();
+    world.wled.devices = [{ host: "192.168.1.42", name: "WLED Panel", ledCount: 60, port: 4048, protocol: "ddp" }];
+    setWorld(world);
+
+    const found = call(DEVICE_COMMANDS.DISCOVER_WLED_DEVICES, { request: { ip: "192.168.1.42" } });
+    expect(found).toMatchObject({ status: { code: "WLED_DISCOVERY_OK" }, devices: [{ ip: "192.168.1.42" }] });
+    const nothing = call(DEVICE_COMMANDS.DISCOVER_WLED_DEVICES, { request: { ip: "192.168.1.99" } });
+    expect(nothing).toMatchObject({ status: { code: "WLED_DISCOVERY_UNREACHABLE" }, devices: [] });
+  });
+
   it("Off never gates — targets are irrelevant when the mode is being turned off", async () => {
     const world = SCENARIOS.empty.build();
     setWorld(world);
