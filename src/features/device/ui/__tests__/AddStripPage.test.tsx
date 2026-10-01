@@ -142,4 +142,34 @@ describe("AddStripPage", () => {
     fireEvent.change(screen.getByTestId("wled-address-input"), { target: { value: "10.0.0.9" } });
     expect(screen.getByTestId("wled-address-add")).toBeDisabled();
   });
+
+  it("a found row that goes while it is adding lets the other Adds go again", async () => {
+    browse.mockResolvedValue(browsed("10.0.0.5"));
+    const page = (boundWledIp: string | null) => (
+      <AddStripPage
+        isActive
+        title="device:strip.add.title"
+        ports={[port("/dev/cu.a", true, "CH340")]}
+        otherPorts={[]}
+        device={device}
+        onWledBound={async () => {}}
+        boundWledIp={boundWledIp}
+        replaces={null}
+        onAdded={() => {}}
+      />
+    );
+    const view = await act(async () => render(page(null)));
+    fireEvent.click(await screen.findByTestId("found-wled-add"));
+    expect(screen.getByTestId("found-port-add")).toBeDisabled();
+
+    vi.useFakeTimers();
+    try {
+      view.rerender(page("10.0.0.5"));
+      await act(async () => vi.runAllTimers());
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(screen.queryByTestId("found-wled")).toBeNull();
+    expect(screen.getByTestId("found-port-add")).toBeEnabled();
+  });
 });

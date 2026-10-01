@@ -122,6 +122,8 @@ export function FoundWledRow({ found, onBound, onAdded, primary, blocked = false
   const adding = useHeldFlag(connecting);
   useEffect(() => {
     onBusyChange?.(connecting);
+    // A row that goes mid-add must not hold the page's other Adds.
+    return () => onBusyChange?.(false);
   }, [connecting, onBusyChange]);
   const shownFailure = useHeldValue(failure, adding);
   const name = found.name || "WLED";
@@ -181,6 +183,8 @@ export function WledAddressRow({ onBound, onAdded, primary, blocked = false, onB
   const adding = useHeldFlag(connecting);
   useEffect(() => {
     onBusyChange?.(connecting);
+    // A row that goes mid-add must not hold the page's other Adds.
+    return () => onBusyChange?.(false);
   }, [connecting, onBusyChange]);
   const shownFailure = useHeldValue(failure, adding);
 
