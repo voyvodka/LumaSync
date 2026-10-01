@@ -51,8 +51,11 @@ describe("ConfirmPopover", () => {
     fireEvent.click(screen.getByTestId("confirm"));
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(anchor.current).toHaveFocus();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    cancel.focus();
+    fireEvent.click(cancel);
     expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(anchor.current).toHaveFocus();
   });
 
   it("Esc answers no", () => {
