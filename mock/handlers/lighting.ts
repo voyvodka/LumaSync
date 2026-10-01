@@ -1,5 +1,5 @@
 /**
- * The lighting transaction's fixtures: a small version of `outputs.rs` over
+ * The lighting transaction's fixtures: a small version of `outputs/` over
  * the mode apply and stop in `./device.ts` and the Hue fixtures in `./hue.ts`.
  * It keeps the rules a caller can see — Hue up before the mode, Off stops Hue
  * too, a `[usb, hue]` start the Hue gate refuses runs on USB, a choice is

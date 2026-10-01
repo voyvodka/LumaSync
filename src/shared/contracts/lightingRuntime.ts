@@ -3,7 +3,7 @@
  * its outputs toward what the user asked for, and one snapshot says what is
  * running. See docs/architecture/lighting-transaction.md.
  *
- * Rust handoff: `src-tauri/src/commands/lighting_mode/outputs.rs`,
+ * Rust handoff: `src-tauri/src/commands/lighting_mode/outputs/`,
  * `snapshot.rs` and `tuning.rs`.
  */
 
@@ -52,7 +52,7 @@ export const LIGHTING_ORIGIN = {
 
 export type LightingOrigin = (typeof LIGHTING_ORIGIN)[keyof typeof LIGHTING_ORIGIN];
 
-/** `ApplyOutputsResult.status.code`, from `outputs_status` in `outputs.rs`. */
+/** `ApplyOutputsResult.status.code`, from `outputs_status` in `outputs/mod.rs`. */
 export const LIGHTING_OUTPUTS_STATUS = {
   /** Everything asked for is running. */
   OUTPUTS_APPLIED: "OUTPUTS_APPLIED",

@@ -54,7 +54,7 @@ import type { MockWorld } from "../state";
 
 /**
  * The tray's lighting items run the transaction in Rust and never reach a
- * window, so the panel sends what `tray_request` in `outputs.rs` would. Resume
+ * window, so the panel sends what `tray_request` in `outputs/away_tray.rs` would. Resume
  * reads the saved mode, as Rust does before anything has run this session.
  */
 async function runTrayLighting(item: "off" | "resume" | "solid"): Promise<void> {
