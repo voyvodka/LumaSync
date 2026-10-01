@@ -19,6 +19,10 @@ interface RuntimeTelemetrySnapshotDto {
   lastCaptureErrorCode: string | null;
   lastCaptureErrorAtSecs: number | null;
   captureTargetFps: number;
+  /** Absent from a build before output failures were reported. */
+  lastOutputErrorCode?: string | null;
+  lastOutputErrorAtSecs?: number | null;
+  workerStopped?: boolean;
 }
 
 interface HueTelemetrySnapshotDto {
@@ -87,6 +91,15 @@ export function mapRuntimeTelemetrySnapshot(dto: RuntimeTelemetrySnapshotDto): R
         : null,
     // Floors at CAPTURE_TARGET_FPS_ABSENT, like the link budget.
     captureTargetFps: normalizeFps(dto.captureTargetFps),
+    lastOutputErrorCode:
+      typeof dto.lastOutputErrorCode === "string" && dto.lastOutputErrorCode.length > 0
+        ? dto.lastOutputErrorCode
+        : null,
+    lastOutputErrorAtSecs:
+      typeof dto.lastOutputErrorAtSecs === "number" && !Number.isNaN(dto.lastOutputErrorAtSecs)
+        ? Math.max(0, dto.lastOutputErrorAtSecs)
+        : null,
+    workerStopped: dto.workerStopped === true,
   };
 }
 

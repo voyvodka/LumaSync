@@ -168,15 +168,30 @@ export const deviceHandlers = {
     };
   },
 
-  [DEVICE_COMMANDS.DISCOVER_WLED_DEVICES]: () => {
+  [DEVICE_COMMANDS.DISCOVER_WLED_DEVICES]: (args) => {
     const { wled } = getWorld();
+    // As in Rust: the one device at that address, or nothing there.
+    const devices = wled.devices.filter((d) => d.host === args.request.ip);
     return {
       status: status(
         // There is no "empty" code: discovery either answered, timed out, or
         // could not be reached. An empty list under OK is the honest shape.
-        wled.devices.length > 0 ? "WLED_DISCOVERY_OK" : "WLED_DISCOVERY_UNREACHABLE",
-        `${wled.devices.length} device(s)`,
+        devices.length > 0 ? "WLED_DISCOVERY_OK" : "WLED_DISCOVERY_UNREACHABLE",
+        `${devices.length} device(s)`,
       ),
+      devices: devices.map((d) => ({
+        ip: d.host,
+        name: d.name,
+        ledCount: d.ledCount,
+        version: "0.15.0-mock",
+      })),
+    };
+  },
+
+  [DEVICE_COMMANDS.BROWSE_WLED_DEVICES]: () => {
+    const { wled } = getWorld();
+    return {
+      status: status("WLED_BROWSE_OK", `${wled.devices.length} device(s)`),
       devices: wled.devices.map((d) => ({
         ip: d.host,
         name: d.name,
@@ -267,6 +282,9 @@ export const deviceHandlers = {
         lastCaptureErrorCode: t.lastCaptureErrorCode,
         lastCaptureErrorAtSecs: t.lastCaptureErrorAtSecs,
         captureTargetFps: t.captureTargetFps,
+        lastOutputErrorCode: t.lastOutputErrorCode,
+        lastOutputErrorAtSecs: t.lastOutputErrorAtSecs,
+        workerStopped: t.workerStopped,
       },
       hue: w.hue.everActive
         ? {
@@ -382,7 +400,11 @@ export function applyLightingMode(payload: LightingModeConfig): LightingModeComm
     mode: getWorld().lighting.mode,
     wledAdvisory: null,
     status: status(
-      kind === "ambilight" ? "AMBILIGHT_MODE_STARTED" : "SOLID_MODE_APPLIED",
+      kind === "ambilight"
+        ? "AMBILIGHT_MODE_STARTED"
+        : kind === "effect"
+          ? "EFFECT_MODE_STARTED"
+          : "SOLID_MODE_APPLIED",
       "Mode applied",
     ),
   };

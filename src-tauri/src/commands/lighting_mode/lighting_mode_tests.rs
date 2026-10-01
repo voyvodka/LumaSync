@@ -63,6 +63,8 @@ impl AmbilightFrameSource for FakeFrameSource {
 
 fn owner_with_fake_sender() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
+        effect_live: None,
+        effect_clock: Default::default(),
         active_mode: LightingModeConfig::default(),
         active_port: None,
         active_usb_plan: None,
@@ -110,6 +112,8 @@ impl AmbilightFrameSource for FailsAfterFirstFrameSource {
 
 fn owner_that_fails_after_first_frame() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
+        effect_live: None,
+        effect_clock: Default::default(),
         active_mode: LightingModeConfig::default(),
         active_port: None,
         active_usb_plan: None,
@@ -157,6 +161,7 @@ fn wait_for_workers_drained() {
 
 fn ambilight_with_targets(targets: Option<Vec<String>>) -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Ambilight,
         solid: None,
         ambilight: Some(AmbilightPayload {
@@ -176,12 +181,14 @@ fn ambilight_with_targets(targets: Option<Vec<String>>) -> LightingModeConfig {
 
 fn solid_with_targets(targets: Option<Vec<String>>) -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Solid,
         solid: Some(SolidColorPayload {
             r: 255,
             g: 0,
             b: 0,
             brightness: 1.0,
+            kelvin: None,
         }),
         ambilight: None,
         targets,
@@ -307,12 +314,14 @@ fn hue_only_target_returns_hue_not_ready_when_no_hue_output() {
 
 fn solid_hue_only() -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Solid,
         solid: Some(SolidColorPayload {
             r: 200,
             g: 10,
             b: 40,
             brightness: 1.0,
+            kelvin: None,
         }),
         ambilight: None,
         targets: Some(vec!["hue".to_string()]),
@@ -1244,6 +1253,7 @@ fn solid_hue_only_reports_skipped_when_no_lights_resolve() {
 
 fn ambilight_with_payload(payload: AmbilightPayload) -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Ambilight,
         solid: None,
         ambilight: Some(payload),
@@ -1739,6 +1749,8 @@ fn fast_path_explicit_saturation_overrides_running_atomic() {
 fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
     let recorder: Arc<FakeLedSender> = Arc::new(FakeLedSender::default());
     let owner = LightingRuntimeOwner {
+        effect_live: None,
+        effect_clock: Default::default(),
         active_mode: LightingModeConfig::default(),
         active_port: None,
         active_usb_plan: None,
@@ -1794,12 +1806,14 @@ fn calibration_with_total_leds(
 
 fn solid_with_calibration(total_leds: u16) -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Solid,
         solid: Some(SolidColorPayload {
             r: 255,
             g: 0,
             b: 0,
             brightness: 1.0,
+            kelvin: None,
         }),
         ambilight: None,
         targets: Some(vec!["usb".to_string()]),
@@ -1960,7 +1974,7 @@ fn solid_mode_packet_xor_checksum_is_valid() {
 }
 
 // -----------------------------------------------------------------------
-// v1.6 LED Preview — output-stamp hydration + enrichment gating
+// LED preview — output-stamp hydration + enrichment gating
 // -----------------------------------------------------------------------
 
 const SK6812_SHELL_STATE: &str = r#"{"shell-state":{"selectedChipType":"sk6812-rgbw"}}"#;
@@ -2047,6 +2061,7 @@ fn solid_on_sk6812_writes_four_byte_rgbw_pixels() {
         g: 255,
         b: 255,
         brightness: 1.0,
+        kelvin: None,
     });
     let hydrated = hydrated_like_set_lighting_mode(solid, SK6812_SHELL_STATE);
 
@@ -2125,6 +2140,7 @@ fn solid_on_the_default_setup_applies_the_user_gamma() {
             g: 128,
             b: 128,
             brightness: 1.0,
+            kelvin: None,
         });
         solid.color_correction = Some(ColorCorrectionConfig {
             gamma_r: gamma,

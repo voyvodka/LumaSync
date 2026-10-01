@@ -3,13 +3,14 @@
  * its outputs toward what the user asked for, and one snapshot says what is
  * running. See docs/architecture/lighting-transaction.md.
  *
- * Rust handoff: `src-tauri/src/commands/lighting_mode/outputs.rs`,
+ * Rust handoff: `src-tauri/src/commands/lighting_mode/outputs/`,
  * `snapshot.rs` and `tuning.rs`.
  */
 
+import type { WledLiveFrameAdvisory } from "./device";
 import type { HueRuntimeTarget, HueRuntimeTriggerSource } from "./hue";
 import type { HueLeftOutReason, LightingModeStatusCode } from "./lighting";
-import type { AmbilightPayload, LightingModeConfig, SolidColorPayload } from "./mode";
+import type { AmbilightPayload, EffectPayload, LightingModeConfig, SolidColorPayload } from "./mode";
 import type { CommandStatusOf } from "./status";
 
 export const LIGHTING_RUNTIME_COMMANDS = {
@@ -51,7 +52,7 @@ export const LIGHTING_ORIGIN = {
 
 export type LightingOrigin = (typeof LIGHTING_ORIGIN)[keyof typeof LIGHTING_ORIGIN];
 
-/** `ApplyOutputsResult.status.code`, from `outputs_status` in `outputs.rs`. */
+/** `ApplyOutputsResult.status.code`, from `outputs_status` in `outputs/mod.rs`. */
 export const LIGHTING_OUTPUTS_STATUS = {
   /** Everything asked for is running. */
   OUTPUTS_APPLIED: "OUTPUTS_APPLIED",
@@ -149,6 +150,9 @@ export interface ApplyOutputsOutcome {
   droppedTargets: HueRuntimeTarget[];
   /** The running mode ended rather than a target: nothing was left to run on. */
   modeEnded: boolean;
+  /** The bound WLED device and the strip layout disagree on the LED count; only an apply that
+   *  found it says so. */
+  wledAdvisory: WledLiveFrameAdvisory | null;
 }
 
 /**
@@ -173,10 +177,11 @@ export interface ApplyOutputsResult {
   outcome: ApplyOutputsOutcome;
 }
 
-/** A settings nudge within the running kind. Exactly one of the two is read. */
+/** A settings nudge within the running kind. Exactly one of them is read. */
 export interface LightingTuning {
   solid?: SolidColorPayload | null;
   ambilight?: AmbilightPayload | null;
+  effect?: EffectPayload | null;
 }
 
 export interface RetuneLightingResult {

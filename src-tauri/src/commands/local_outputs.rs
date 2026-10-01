@@ -33,6 +33,10 @@ pub struct WledOutputStatus {
     pub ip: String,
     pub led_count: u16,
     pub connected: bool,
+    /// Whether the device answers its `/json/info` probe. For showing only: it
+    /// never moves what the "usb" channel drives (UDP gives no error to go on,
+    /// and dropping the output mid-session on a missed probe would be worse).
+    pub reachable: bool,
 }
 
 /// `LocalOutputStatus` in `src/shared/contracts/device.ts`.
@@ -99,6 +103,10 @@ struct Inner {
     next_connect: u64,
     serial_connected_at: BTreeMap<String, u64>,
     wled_connected_at: u64,
+    /// The bound WLED device answered its last probes (see `wled_reachability`).
+    wled_reachable: bool,
+    /// Moves with every bind, so a probe of an earlier binding cannot mark the current one.
+    wled_generation: u64,
 }
 
 pub struct LocalOutputRegistry {
@@ -115,6 +123,8 @@ impl Default for LocalOutputRegistry {
                 next_connect: 0,
                 serial_connected_at: BTreeMap::new(),
                 wled_connected_at: 0,
+                wled_reachable: true,
+                wled_generation: 0,
             }),
         }
     }
@@ -137,6 +147,7 @@ impl Inner {
                 ip: config.ip.to_string(),
                 led_count: config.led_count,
                 connected: true,
+                reachable: self.wled_reachable,
             }));
         }
         LocalOutputsSnapshot {
@@ -263,6 +274,10 @@ impl LocalOutputRegistry {
             inner.wled_connected_at = inner.stamp();
         }
         inner.wled = Some(config);
+        // Answering until the probe says otherwise: both callers read `/json/info` just before
+        // binding — the add row's discover and the boot restore's probe.
+        inner.wled_reachable = true;
+        inner.wled_generation += 1;
         inner.changed()
     }
 
@@ -279,6 +294,33 @@ impl LocalOutputRegistry {
         }
         inner.wled = Some(config);
         inner.wled_connected_at = connected_at;
+        // Nothing talked to it: what the probe last said still stands.
+        inner.wled_generation += 1;
+        Some(inner.changed())
+    }
+
+    /// The bound WLED device to probe, with the binding it belongs to.
+    pub fn wled_probe_target(&self) -> Option<(std::net::Ipv4Addr, u64)> {
+        let inner = self.lock();
+        inner.wled.map(|config| (config.ip, inner.wled_generation))
+    }
+
+    /// A probe's answer for the device bound as `generation`. A snapshot only when the
+    /// reachability changed for that same binding; a probe that outlived its binding says nothing.
+    pub fn wled_reachability(
+        &self,
+        ip: std::net::Ipv4Addr,
+        generation: u64,
+        reachable: bool,
+    ) -> Option<LocalOutputsSnapshot> {
+        let mut inner = self.lock();
+        let current = inner
+            .wled
+            .is_some_and(|config| config.ip == ip && inner.wled_generation == generation);
+        if !current || inner.wled_reachable == reachable {
+            return None;
+        }
+        inner.wled_reachable = reachable;
         Some(inner.changed())
     }
 

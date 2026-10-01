@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
 import { RowButton, RowNote, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
-import styles from "./HuePage.module.css";
+import pageStyles from "@/shared/ui/SettingRow/SettingPage.module.css";
 
 interface HueAddressRowProps {
   hue: UseHueOnboardingResult;
@@ -25,7 +25,7 @@ export function HueAddressRow({ hue, hint }: HueAddressRowProps) {
       control={
         <>
           <input
-            className={styles.input}
+            className={pageStyles.input}
             value={manualIp}
             onChange={(e) => {
               setManualIp(e.target.value);

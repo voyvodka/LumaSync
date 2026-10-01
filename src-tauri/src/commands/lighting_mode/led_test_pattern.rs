@@ -248,6 +248,7 @@ fn start_led_test_pattern_blocking<R: Runtime>(
         kind: LightingModeKind::Ambilight,
         solid: None,
         ambilight: Some(test_pattern_ambilight(payload.brightness)),
+        effect: None,
         targets: Some(targets),
         display_id: None,
         led_calibration: payload.led_calibration.clone(),

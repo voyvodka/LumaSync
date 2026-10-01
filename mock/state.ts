@@ -158,6 +158,9 @@ export interface MockWorld {
     lastCaptureErrorCode: string | null;
     lastCaptureErrorAtSecs: number | null;
     captureTargetFps: number;
+    lastOutputErrorCode: string | null;
+    lastOutputErrorAtSecs: number | null;
+    workerStopped: boolean;
   };
   /** Every shell-state write fails, reproducing the persist banners. */
   persistFails: boolean;

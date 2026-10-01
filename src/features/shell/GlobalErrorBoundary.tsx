@@ -20,6 +20,8 @@ import { useTranslation } from "react-i18next";
 import { openLogDir } from "@/features/platform/platformApi";
 import { APP_VERSION } from "@/shared/constants/app";
 import { buildIssueReportUrl, detectOsName } from "@/shared/lib/issueReport";
+import { Reveal } from "@/shared/ui/Reveal/Reveal";
+import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
 import { relaunchApp } from "./launchApi";
 
 import styles from "./GlobalErrorBoundary.module.css";
@@ -202,7 +204,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
                 void this.handleCopyError();
               }}
             >
-              {copied ? copy.copied : copy.copyError}
+              <StateSwap fit state={copied ? "copied" : "idle"} faces={{ idle: copy.copyError, copied: copy.copied }} />
             </button>
           </div>
 
@@ -218,12 +220,14 @@ export class GlobalErrorBoundary extends Component<Props, State> {
               <path d="M4.5 3 7.5 6 4.5 9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-          {showDetails && (
-            <pre id="lm-errboundary-details" className={styles.details} aria-label={copy.details}>
-              {error?.stack ?? error?.message ?? "(no error info)"}
-              {errorInfo?.componentStack ? `\n\nComponent stack:${errorInfo.componentStack}` : ""}
-            </pre>
-          )}
+          <Reveal open={showDetails} className={styles.detailsReveal}>
+            {showDetails && (
+              <pre id="lm-errboundary-details" className={styles.details} aria-label={copy.details}>
+                {error?.stack ?? error?.message ?? "(no error info)"}
+                {errorInfo?.componentStack ? `\n\nComponent stack:${errorInfo.componentStack}` : ""}
+              </pre>
+            )}
+          </Reveal>
         </section>
       </div>
     );

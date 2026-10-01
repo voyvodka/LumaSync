@@ -1,0 +1,21 @@
+@layer components {
+  .page {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 240px;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--lm-bg);
+    color: var(--lm-ink);
+  }
+  .scroll { min-width: 0; min-height: 0; overflow-y: auto; }
+  /* Capped and centred: at 1280 the strip and the stage keep a width a hand and an eye can cross. */
+  .column {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 22px 24px 28px;
+  }
+}

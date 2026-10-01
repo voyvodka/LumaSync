@@ -25,10 +25,7 @@
 @import "./styles/theme.css";
 @import "./styles/tokens.css" layer(base);
 @import "./styles/base.css" layer(base);
-@import "./styles/compact.css" layer(components);
-@import "./styles/compact-controls.css" layer(components);
 @import "./styles/settings.css" layer(components);
-@import "./styles/lights.css" layer(components);
 @import "./styles/hue-channel-map.css" layer(components);
 @import "./styles/room-map.css" layer(components);
 @import "./styles/room-map-menu.css" layer(components);

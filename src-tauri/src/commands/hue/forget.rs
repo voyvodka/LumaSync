@@ -176,6 +176,7 @@ mod tests {
                 g: 20,
                 b: 30,
                 brightness: 1.0,
+                kelvin: None,
             }),
             ..LightingModeConfig::default()
         }

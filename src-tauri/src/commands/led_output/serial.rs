@@ -263,7 +263,7 @@ impl Drop for WriterSession {
 fn run_writer(mut port: Box<dyn Write + Send>, shared: &WriterShared, pacing: WriterPacing) {
     let mut packet = Vec::new();
     let mut next_write_at = shared.ready_at;
-    let failure = loop {
+    loop {
         let (seq, drain) = {
             let mut slot = shared.lock();
             loop {
@@ -288,7 +288,7 @@ fn run_writer(mut port: Box<dyn Write + Send>, shared: &WriterShared, pacing: Wr
                 };
             }
             if slot.closing {
-                break None;
+                break;
             }
             std::mem::swap(&mut packet, &mut slot.packet);
             slot.pending = false;
@@ -314,19 +314,22 @@ fn run_writer(mut port: Box<dyn Write + Send>, shared: &WriterShared, pacing: Wr
 
         let mut slot = shared.lock();
         slot.written = seq;
+        // The failure is published with `written`, under one lock: a waiter woken in between
+        // (by another send) would otherwise see its packet written and no failure, and
+        // report a failed write as done.
         if let Err(error) = result {
+            slot.failure = Some(error);
             drop(slot);
-            break Some(error);
+            break;
         }
         drop(slot);
         shared.changed.notify_all();
-    };
+    }
 
     // Closed before `exited` is published, so a reopen right after a
     // disconnect does not find the port still held.
     drop(port);
     let mut slot = shared.lock();
-    slot.failure = failure;
     slot.exited = true;
     drop(slot);
     shared.changed.notify_all();
@@ -413,6 +416,8 @@ impl SerialLedPacketSender {
             Err(error) => {
                 let dead = sessions.remove(port_name);
                 drop(sessions);
+                // On the caller, once per failure: it waits (at most `WRITER_EXIT_TIMEOUT`) for
+                // the port to close, so the next send's reopen does not find it still held.
                 drop(dead);
                 Err(error)
             }

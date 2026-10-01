@@ -1,8 +1,10 @@
 # The lighting transaction
 
 How a lighting choice reaches the hardware: the mode, the outputs it runs on, the Hue stream, and
-the order they move in. Implementation in `src-tauri/src/commands/lighting_mode/` — `outputs.rs`
-(the transaction), `snapshot.rs` (what runs), `tuning.rs` (retunes), `hue_driver.rs` (Hue start and
+the order they move in. Implementation in `src-tauri/src/commands/lighting_mode/` — `outputs/`
+(`mod.rs` the state, readers and commands; `transaction.rs` the transaction itself; `away_tray.rs`
+away edges, settings saves and the tray; `lease.rs` the Hue test lease; `boot.rs` the launch
+restore's waits; `wled_off.rs` a WLED switch-off), `snapshot.rs` (what runs), `tuning.rs` (retunes), `hue_driver.rs` (Hue start and
 stop), `config_check.rs` (what a mode must pass before it starts) — and
 `commands/hue/hue_config.rs` (the Hue start request from saved state). Contract in
 `src/shared/contracts/lightingRuntime.ts`.
@@ -92,7 +94,7 @@ one is stopped rather than left lit. A start that tore the old mode down and the
 the local output's own (a start failure whose details are an `LED_OUTPUT_*` or `WLED_*` code: a dead
 port after a replug, a WLED device that stopped answering) beside another output. Then the mode
 starts again without USB and `usb` drops from the session's selection, as a device-gate refusal
-does; a failure of anything else (capture) still ends the mode (`usb_output_failed`, `outputs.rs`).
+does; a failure of anything else (capture) still ends the mode (`usb_output_failed`, `outputs/mod.rs`).
 It used to end the mode with Hue in it, so a replugged strip turned the user's Hue lights off.
 
 **A refused choice says why.** Every refusal used to reach the main window as a status code it did
@@ -202,6 +204,13 @@ hidden window's `WM_POWERBROADCAST`, the console display-state setting and `WM_W
 Linux does not listen yet (logind's `PrepareForSleep` and session `Lock` are the way in). The
 return does not wait for a strip that is still re-enumerating after wake, as the launch restore
 does; the lights come back on the unlock, usually seconds after.
+
+**Effects** run through the transaction like any mode: `payload_for` takes the newest effect from
+the retune store, then the saved one, and stamps the room geometry as for Ambilight, since an
+effect places its lights by the room map; `persist_mode` saves `lightingMode.effect` beside the other
+payloads, so the tray's Effect item, which sends the kind alone, brings back the last effect. A
+retune carries `LightingTuning.effect` into the running effect's cell, normalised the way a start
+is. How an effect is drawn is in `capture-and-pipeline.md` ("Effects are drawn at each light").
 
 **The intent follows what ran.** A choice the backend did not run is not retried by the next
 transaction: the intent's kind settles back to what runs. A target left out of the running mode

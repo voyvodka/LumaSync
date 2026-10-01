@@ -94,7 +94,7 @@ vi.mock("@tauri-apps/api/window", () => ({
 }));
 
 let syncState: {
-  mode: { kind: string; solid?: { r: number; g: number; b: number; brightness: number } } | null;
+  mode: { kind: string; solid?: { r: number; g: number; b: number; brightness: number; kelvin?: number } } | null;
   active: boolean;
   preview: LedPreviewStatus | null;
 };
@@ -392,6 +392,20 @@ describe("ControlPopupApp mode strip", () => {
     expect(request.mode).toEqual({
       kind: LIGHTING_MODE_KIND.SOLID,
       solid: { r: 1, g: 2, b: 3, brightness: 0.4 },
+    });
+  });
+
+  // A White solid switched back on from the popup stays White, not a colour of the same RGB.
+  it("sends a White solid with its temperature", async () => {
+    syncState.mode = {
+      kind: LIGHTING_MODE_KIND.OFF,
+      solid: { r: 255, g: 206, b: 166, brightness: 0.4, kelvin: 4000 },
+    };
+    const request = await clickMode(/common:mode\.options\.solid/);
+
+    expect(request.mode).toEqual({
+      kind: LIGHTING_MODE_KIND.SOLID,
+      solid: { r: 255, g: 206, b: 166, brightness: 0.4, kelvin: 4000 },
     });
   });
 

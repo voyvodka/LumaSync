@@ -160,7 +160,7 @@ pub struct HealthCheckResult {
     ///
     /// Distinct from `ShellState.firmwareProfile` (user-selected encoder).
     /// The Settings UI compares the two so the dropdown can disable the
-    /// incompatible option (Bug H4 — v1.5).
+    /// incompatible option.
     /// Populated only on a successful handshake.
     pub advertised_firmware_profile: Option<FirmwareProfile>,
     /// The whole accepted PONG, pixel layout included.

@@ -62,6 +62,7 @@ fn solid(r: u8) -> LightingModeConfig {
             g: 20,
             b: 30,
             brightness: 1.0,
+            kelvin: None,
         }),
         ..LightingModeConfig::default()
     }
@@ -276,21 +277,26 @@ fn the_tray_mode_group_checks_what_runs_and_greys_what_the_window_greys() {
             (TrayLighting::Off, false, true),
             (TrayLighting::Ambilight, true, true),
             (TrayLighting::Solid, false, true),
+            (TrayLighting::Effect, false, true),
         ]
     );
 
-    // No layout for a bound strip: the window greys both lit modes, never Off.
-    let locked = [LightingModeKind::Ambilight, LightingModeKind::Solid];
+    // No layout for a bound strip: the window greys every lit mode, never Off.
+    let locked = [
+        LightingModeKind::Ambilight,
+        LightingModeKind::Solid,
+        LightingModeKind::Effect,
+    ];
     let items = tray_mode_items(LightingModeKind::Off, false, &locked);
     assert_eq!(
         items.map(|i| (i.checked, i.enabled)),
-        [(true, true), (false, false), (false, false)]
+        [(true, true), (false, false), (false, false), (false, false)]
     );
 
     let items = tray_mode_items(LightingModeKind::Solid, true, &[]);
     assert!(
         items.iter().all(|i| !i.enabled),
-        "a transaction greys all three"
+        "a transaction greys every item"
     );
     assert!(items[2].checked);
 }
@@ -728,4 +734,138 @@ fn a_saved_calibration_that_does_not_add_up_refuses_the_start_and_keeps_what_run
     );
     assert_eq!(rig.running().kind, LightingModeKind::Solid);
     assert!(!rig.worker_running());
+}
+
+/// An effect chosen in a window is saved with its payload, and the tray's
+/// Effect item — which sends the kind alone — brings back that same effect.
+#[test]
+fn an_effect_is_saved_and_the_tray_brings_the_same_one_back() {
+    let rig = Rig::new(RigSetup::default());
+    let breathe = super::EffectPayload {
+        id: super::config::EffectId::Breathe,
+        speed: 0.8,
+        brightness: 0.6,
+        ..super::config::DEFAULT_EFFECT
+    };
+    running(
+        &rig,
+        LightingModeConfig {
+            kind: LightingModeKind::Effect,
+            effect: Some(breathe.clone()),
+            ..LightingModeConfig::default()
+        },
+        &["usb"],
+    );
+    let saved = rig.saved("lightingMode").expect("the mode was saved");
+    assert_eq!(saved["kind"], json!("effect"));
+    assert_eq!(saved["effect"]["id"], json!("breathe"));
+
+    apply(&rig, tray_request(TrayLighting::Off));
+    let result = apply(&rig, tray_request(TrayLighting::Effect));
+    assert_eq!(result.snapshot.mode.kind, LightingModeKind::Effect);
+    assert_eq!(result.snapshot.mode.effect, Some(breathe));
+}
+
+fn sunrise_started(at: u64) -> LightingModeConfig {
+    LightingModeConfig {
+        kind: LightingModeKind::Effect,
+        effect: Some(super::EffectPayload {
+            id: super::config::EffectId::Sunrise,
+            duration_minutes: Some(30),
+            started_at_ms: Some(at),
+            ..super::config::DEFAULT_EFFECT
+        }),
+        ..LightingModeConfig::default()
+    }
+}
+
+fn running_start(result: &ApplyOutputsResult) -> u64 {
+    result
+        .snapshot
+        .mode
+        .effect
+        .as_ref()
+        .and_then(|effect| effect.started_at_ms)
+        .expect("a stamped sunrise")
+}
+
+/// Off at night, Effect in the morning: the sunrise starts over, not at the
+/// daylight it had reached.
+#[test]
+fn choosing_a_sunrise_again_starts_it_over() {
+    let rig = Rig::new(RigSetup::default());
+    let an_hour_ago = super::config::unix_ms_now() - 3_600_000;
+    running(&rig, sunrise_started(an_hour_ago), &["usb"]);
+    apply(&rig, tray_request(TrayLighting::Off));
+
+    let before = super::config::unix_ms_now();
+    let again = apply(&rig, tray_request(TrayLighting::Effect));
+    assert!(running_start(&again) >= before, "{again:?}");
+    let saved = rig.saved("lightingMode").expect("saved");
+    assert_eq!(saved["effect"]["startedAtMs"], json!(running_start(&again)));
+}
+
+/// A launch restore resumes the sunrise from its saved start.
+#[test]
+fn a_launch_carries_a_sunrise_on_from_its_saved_start() {
+    let rig = Rig::new(RigSetup::default());
+    let an_hour_ago = super::config::unix_ms_now() - 3_600_000;
+    rig.seed(
+        json!({ "lightingMode": serde_json::to_value(sunrise_started(an_hour_ago)).unwrap() }),
+    );
+
+    let boot = apply(&rig, request(LightingOrigin::Boot, None, None));
+    assert_eq!(
+        boot.snapshot.mode.kind,
+        LightingModeKind::Effect,
+        "{boot:?}"
+    );
+    assert_eq!(running_start(&boot), an_hour_ago);
+}
+
+/// A retune that names a sunrise without its start keeps the running one.
+#[test]
+fn a_retune_without_the_start_keeps_the_running_sunrise() {
+    let rig = Rig::new(RigSetup::default());
+    running(
+        &rig,
+        sunrise_started(super::config::unix_ms_now()),
+        &["usb"],
+    );
+    let start = running_start(&apply(&rig, request(LightingOrigin::User, None, None)));
+
+    let mut longer = sunrise_started(0).effect.unwrap();
+    longer.started_at_ms = None;
+    longer.duration_minutes = Some(45);
+    block_on(super::tuning::retune_lighting(
+        rig.handle(),
+        super::tuning::LightingTuning {
+            effect: Some(longer),
+            ..Default::default()
+        },
+    ))
+    .expect("retunes");
+    let tuned = rig.state().tuning.stored().effect.expect("stored");
+    assert_eq!(tuned.started_at_ms, Some(start));
+    assert_eq!(tuned.duration_minutes, Some(45));
+}
+
+/// Nothing stored this session (a launch that restored another mode): the
+/// saved sunrise is what the tray's Effect brings back, and it starts over too.
+#[test]
+fn a_saved_sunrise_the_tray_brings_back_starts_over() {
+    let rig = Rig::new(RigSetup::default());
+    let an_hour_ago = super::config::unix_ms_now() - 3_600_000;
+    let mut saved = serde_json::to_value(sunrise_started(an_hour_ago)).unwrap();
+    saved["kind"] = json!("off");
+    rig.seed(json!({ "lightingMode": saved }));
+
+    let before = super::config::unix_ms_now();
+    let chosen = apply(&rig, tray_request(TrayLighting::Effect));
+    assert_eq!(
+        chosen.snapshot.mode.kind,
+        LightingModeKind::Effect,
+        "{chosen:?}"
+    );
+    assert!(running_start(&chosen) >= before);
 }

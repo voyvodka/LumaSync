@@ -10,9 +10,6 @@ const outerSizeMock = vi.hoisted(() =>
 );
 
 vi.mock("@tauri-apps/api/event", () => ({ listen: listenMock }));
-vi.mock("@tauri-apps/plugin-store", () => ({
-  load: () => Promise.resolve({ get: () => Promise.resolve(null), set: () => Promise.resolve() }),
-}));
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({
     outerSize: () => outerSizeMock(),

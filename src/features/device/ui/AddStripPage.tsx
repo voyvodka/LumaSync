@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { WledDeviceInfo } from "@/shared/contracts/device";
@@ -8,9 +8,11 @@ import { RowButton, RowNote, SettingRow } from "@/shared/ui/SettingRow/SettingRo
 import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
 
 import { shortPortName } from "../model/deviceRail";
+import { useWledBrowse } from "../state/useWledBrowse";
 import type { DevicePort } from "../types";
 import type { UseDeviceConnectionResult } from "../useDeviceConnection";
-import { FoundPortRow, WledAddressRow, type AddedOutput } from "./AddStripRows";
+import { FoundPortRow, FoundWledRow, WledAddressRow, type AddedOutput } from "./AddStripRows";
+import pageStyles from "@/shared/ui/SettingRow/SettingPage.module.css";
 import styles from "./StripPage.module.css";
 
 interface AddStripPageProps {
@@ -23,40 +25,95 @@ interface AddStripPageProps {
   otherPorts: readonly DevicePort[];
   device: UseDeviceConnectionResult;
   onWledBound: (device: WledDeviceInfo) => Promise<void>;
+  /** The WLED device already added: the browse does not offer it again. */
+  boundWledIp: string | null;
   /** The strip adding one moves: one strip is driven at a time for now. */
   replaces: string | null;
   onAdded: (added: AddedOutput) => void;
 }
 
-/** Adding a strip: a controller plugged in, listed as it appears, or a WLED device by address. */
-export function AddStripPage({ isActive, title, ports, otherPorts, device, onWledBound, replaces, onAdded }: AddStripPageProps) {
+/**
+ * Adding a strip: a controller plugged in, listed as it appears, a WLED device found on the network,
+ * or one by address.
+ */
+export function AddStripPage({
+  isActive,
+  title,
+  ports,
+  otherPorts,
+  device,
+  onWledBound,
+  boundWledIp,
+  replaces,
+  onAdded,
+}: AddStripPageProps) {
   const { t } = useTranslation();
   const headingId = useId();
-  const [wledAdding, setWledAdding] = useState(false);
+  const browse = useWledBrowse(isActive);
+  const found = browse.devices.filter((wled) => wled.ip !== boundWledIp);
+  // Which WLED rows are adding, by row: one add at a time across the page.
+  const [wledBusy, setWledBusy] = useState<ReadonlySet<string>>(() => new Set());
+  // One callback per row for good: a row's effect runs again whenever its callback changes.
+  const busyCallbacks = useRef(new Map<string, (busy: boolean) => void>());
+  const busyFor = (key: string) => {
+    let callback = busyCallbacks.current.get(key);
+    if (!callback) {
+      callback = (busy: boolean) =>
+        setWledBusy((current) => {
+          if (current.has(key) === busy) return current;
+          const next = new Set(current);
+          if (busy) next.add(key);
+          else next.delete(key);
+          return next;
+        });
+      busyCallbacks.current.set(key, callback);
+    }
+    return callback;
+  };
+  const wledBlocked = (key: string) => device.isConnecting || [...wledBusy].some((busy) => busy !== key);
   return (
-    <section className={styles.page} hidden={!isActive} aria-labelledby={headingId} data-testid="add-strip-page">
+    <section className={pageStyles.page} hidden={!isActive} aria-labelledby={headingId} data-testid="add-strip-page">
       <h1 id={headingId} className={styles.heading}>
         {title}
       </h1>
       {replaces !== null ? (
         <RowNote tone="status" testId="add-strip-replaces">{t("device:strip.add.replaces", { name: replaces })}</RowNote>
       ) : null}
-      <div className={styles.rows}>
+      <div className={pageStyles.rows}>
         <Reveal open={ports.length === 0}>
           <SettingRow label={t("device:strip.add.usb")} value={t("device:strip.add.usbNone")} testId="add-strip-usb" />
         </Reveal>
         <RevealList items={ports} keyOf={(port) => port.portName}>
           {(port) => (
-            <FoundPortRow port={port} device={device} primary={ports.length === 1} blocked={wledAdding} onAdded={onAdded} />
+            <FoundPortRow port={port} device={device} primary={ports.length === 1} blocked={wledBusy.size > 0} onAdded={onAdded} />
+          )}
+        </RevealList>
+        <Reveal open={browse.browsing && found.length === 0}>
+          <SettingRow
+            label={t("device:strip.add.network")}
+            value={t("device:strip.add.searching")}
+            testId="wled-browse-searching"
+          />
+        </Reveal>
+        <RevealList items={found} keyOf={(wled) => wled.ip}>
+          {(wled) => (
+            <FoundWledRow
+              found={wled}
+              onBound={onWledBound}
+              onAdded={onAdded}
+              primary={ports.length === 0 && found.length === 1}
+              blocked={wledBlocked(wled.ip)}
+              onBusyChange={busyFor(wled.ip)}
+            />
           )}
         </RevealList>
         <Reveal open>
           <WledAddressRow
             onBound={onWledBound}
             onAdded={onAdded}
-            primary={ports.length === 0}
-            blocked={device.isConnecting}
-            onBusyChange={setWledAdding}
+            primary={ports.length === 0 && found.length === 0}
+            blocked={wledBlocked("address")}
+            onBusyChange={busyFor("address")}
           />
         </Reveal>
         <Reveal open={otherPorts.length > 0}>
@@ -80,11 +137,11 @@ export function FoundPortPage({ isActive, port, device, replaces, onAdded }: Fou
   const { t } = useTranslation();
   const headingId = useId();
   return (
-    <section className={styles.page} hidden={!isActive} aria-labelledby={headingId} data-testid="found-port-page">
+    <section className={pageStyles.page} hidden={!isActive} aria-labelledby={headingId} data-testid="found-port-page">
       <h1 id={headingId} className={styles.heading}>
         {port.product ?? port.portName}
       </h1>
-      <div className={styles.rows}>
+      <div className={pageStyles.rows}>
         <Reveal open>
           <FoundPortRow
             port={port}

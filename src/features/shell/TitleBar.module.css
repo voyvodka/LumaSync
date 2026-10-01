@@ -93,7 +93,7 @@
     transition: background-color var(--lm-dur-quick), color var(--lm-dur-quick);
   }
   .ctrl:hover { color: var(--lm-ink); background: rgb(255 255 255 / 6%); }
-  .ctrl.danger:hover { background: var(--lm-red); color: #fff; }
+  .ctrl.danger:hover { background: var(--lm-red); color: var(--lm-on-red); }
   .ctrl:focus-visible { outline: none; box-shadow: var(--lm-focus-ring-inset); }
 
   :global(:root[data-reduced-motion]) :is(.tabs, .toggle, .tab, .indicator, .ctrl) { transition: none; }

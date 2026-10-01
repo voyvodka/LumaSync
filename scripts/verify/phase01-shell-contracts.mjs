@@ -1212,7 +1212,8 @@ const emittedLightingCodes = [
 // the other nine still matched. Bump this deliberately when a code is added.
 // 10 → 11: LIGHTING_MODE_SHUTTING_DOWN, a start refused once the quit began.
 // 12 → 11: LIGHTING_MODE_STATUS_OK went with `get_lighting_mode_status`.
-const EXPECTED_LIGHTING_CODE_COUNT = 11;
+// 11 → 14: EFFECT_MODE_STARTED / _UPDATED / _START_FAILED, the Effect mode's own codes.
+const EXPECTED_LIGHTING_CODE_COUNT = 14;
 check(
   emittedLightingCodes.length === EXPECTED_LIGHTING_CODE_COUNT,
   `harvested exactly ${EXPECTED_LIGHTING_CODE_COUNT} command_status codes from lighting_mode/transition.rs`,
@@ -1248,8 +1249,12 @@ console.log("\n[ Lighting transaction — Rust → lightingRuntime.ts parity ]")
     resolve(ROOT, "src/shared/contracts/lightingRuntime.ts"),
     "lightingRuntime"
   );
+  // The transaction is a module directory: every file of it, `mod.rs` first.
+  const outputsDir = resolve(ROOT, "src-tauri/src/commands/lighting_mode/outputs");
   const rustOutputs = stripComments(
-    readOrEmpty(resolve(ROOT, "src-tauri/src/commands/lighting_mode/outputs.rs"), "rust outputs")
+    ["mod.rs", ...readdirSync(outputsDir).filter((f) => f.endsWith(".rs") && f !== "mod.rs").sort()]
+      .map((f) => readOrEmpty(resolve(outputsDir, f), `rust outputs/${f}`))
+      .join("\n")
   );
   const rustTuning = stripComments(
     readOrEmpty(resolve(ROOT, "src-tauri/src/commands/lighting_mode/tuning.rs"), "rust tuning")
@@ -1264,6 +1269,10 @@ console.log("\n[ Lighting transaction — Rust → lightingRuntime.ts parity ]")
     resolve(ROOT, "src/shared/contracts/hueHealth.ts"),
     "hueHealth"
   );
+  const rustModeConfig = stripComments(
+    readOrEmpty(resolve(ROOT, "src-tauri/src/commands/lighting_mode/config.rs"), "rust mode config")
+  );
+  const effectsSource = readOrEmpty(resolve(ROOT, "src/shared/contracts/effects.ts"), "effects");
   const literalCodes = (source, fn) =>
     [...source.matchAll(new RegExp(`${fn}\\(\\s*"([A-Z][A-Z0-9_]*)"`, "g"))].map((m) => m[1]);
   checkWireUnion(
@@ -1298,6 +1307,9 @@ console.log("\n[ Lighting transaction — Rust → lightingRuntime.ts parity ]")
     [rustSnapshot, "BootHueRetryState", lightingRuntimeSource, "BOOT_HUE_RETRY_STATE"],
     [rustOutputs, "LightingOrigin", lightingRuntimeSource, "LIGHTING_ORIGIN"],
     [rustHueHealth, "HueBridgeVerdict", hueHealthSource, "HUE_BRIDGE_VERDICT"],
+    [rustModeConfig, "EffectId", effectsSource, "EFFECT_IDS"],
+    [rustModeConfig, "PaletteId", effectsSource, "PALETTE_IDS"],
+    [rustModeConfig, "EffectDirection", effectsSource, "EFFECT_DIRECTIONS"],
   ]) {
     const rust = rustEnumValues(rustSource, rustName);
     const ts = tsValues(tsSource, tsName);
@@ -1476,10 +1488,12 @@ console.log("\n[ Runtime telemetry — Rust → telemetry.ts field parity ]");
 // Same degradation shape as the lighting harvest: a removed Rust field silently
 // stops being checked. Pin the count so the loop cannot quietly narrow.
 const EXPECTED_TELEMETRY_FIELD_COUNTS = {
-  RuntimeTelemetrySnapshot: 9,
+  // + lastOutputErrorCode, lastOutputErrorAtSecs, workerStopped: a failing send and a stopped worker.
+  RuntimeTelemetrySnapshot: 12,
   HueTelemetrySnapshot: 11,
   FullTelemetrySnapshot: 2,
-  RuntimeHealth: 3,
+  // + outputFailureCode, workerStopped.
+  RuntimeHealth: 5,
   CaptureFpsSample: 3,
   RuntimeTelemetryHistory: 1,
 };
@@ -1756,8 +1770,9 @@ checkWireUnion(
   ),
   // 14 → 16: the two `spawn_blocking` worker-death codes, added when discovery
   // and test moved off the main thread. 16 → 17: connect followed them.
-  // 17 → 19: `forget_wled_device`'s OK and FAILED.
-  19
+  // 17 → 19: `forget_wled_device`'s OK and FAILED. 19 → 23: `browse_wled_devices`'s OK,
+  // UNSUPPORTED, FAILED and worker death.
+  23
 );
 
 const rustHueRuntimeSource = walkRustSourceFiles(resolve(ROOT, "src-tauri/src/commands/hue"))
@@ -2663,7 +2678,8 @@ const checkedPairs = nullabilityPairs.filter(
 // `SerialDisconnectResult` (`disconnect_serial_port`).
 // 94 → 92: `get_wled_sink_status` went, and with it `WledSinkStatusResponse` and
 // `WledSinkSnapshot`; the registry says which WLED device is bound.
-const EXPECTED_NULLABILITY_PAIR_COUNT = 92;
+// 92 → 94: EffectPayload and EffectColor, the Effect mode's payload.
+const EXPECTED_NULLABILITY_PAIR_COUNT = 94;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

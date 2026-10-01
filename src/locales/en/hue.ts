@@ -118,8 +118,6 @@ export default {
     },
   },
   runtime: {
-    idleTitle: "Runtime is idle",
-    idleBody: "Start from mode controls after readiness is current.",
     states: {
       Idle: "Idle",
       Starting: "Starting",
@@ -152,12 +150,6 @@ export default {
     },
     retry: {
       progress: "Retries left: {{remaining}} | Next attempt: {{nextMs}} ms",
-    },
-    triggerSource: {
-      mode_control: "Triggered from mode controls",
-      device_surface: "Triggered from device surface",
-      system: "Triggered by system recovery",
-      undefined: "Trigger source unavailable",
     },
     checklist: {
       revalidate: "The last check is too old. Revalidate before starting.",

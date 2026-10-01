@@ -39,6 +39,7 @@ import { Menu } from "@/shared/ui/Menu/Menu";
 import { Reveal } from "@/shared/ui/Reveal/Reveal";
 import { RowButton, RowNote, rowStyles, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
 import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
+import pageStyles from "@/shared/ui/SettingRow/SettingPage.module.css";
 import styles from "./HuePage.module.css";
 
 /** What taking the bridge's arrangement leaves: each channel placed where the bridge has it, then
@@ -428,7 +429,7 @@ export function HueChannels({
 
   return (
     <section className={styles.channels} aria-label={t("hue:channelMap.title")} data-testid="hue-channels">
-      <div className={styles.rows}>
+      <div className={pageStyles.rows}>
         <Reveal open>
           <SettingRow
             label={t("hue:row.channels")}

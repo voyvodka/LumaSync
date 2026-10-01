@@ -9,6 +9,30 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Added
 
+- Effects: a fourth lighting mode beside Off, Ambilight and Solid, with sixteen effects — wave,
+  colour cycle, breathe, candle, fireplace, drift, gradient, ocean, aurora, twinkle, comet,
+  scanner, chase, plasma, sunrise and natural light — in eleven palettes or up to three colours of
+  your own, with speed, brightness and, where an effect has them, size, intensity, direction or a
+  sunrise's length. Each light is coloured where it is: strip LEDs around the screen, Hue lights
+  where the room map (or the bridge) puts them, so a wave crosses the strip and the room as one and
+  a few Hue lamps each get their own colour. A sunrise carries on where it was after a relaunch.
+  Effects need no screen recording and are in the menu bar menu, the compact window, the LED
+  preview popup and on ⌥4 (Alt+4). A build from before effects starts with the lights off if the
+  last mode was an effect. On a few Hue bulbs an effect always keeps at least one lit — a sunrise
+  starts there as a dim ember instead of minutes of darkness — while strips and Hue gradient lights
+  keep the effect's own look.
+- Solid has a White tab: a colour temperature from 2000 to 6500 K.
+- Scenes: a row under the mode buttons, on Lights and in the compact window, where one press
+  plays a whole look — Ambilight with its brightness, saturation and response, a colour or white,
+  or an effect with its palette and settings. It starts with six suggestions (Movie, Game, Warm
+  evening, Reading, Fireplace, Aurora); the scenes button's library adds more from fifteen,
+  reorders and deletes them. Up to 24 scenes. "+" makes a new scene from the light that is running
+  and a scene's Edit in the library opens it: the row becomes a bar with its name, the page's own
+  controls shape it while the lights show every change, Save keeps it, Cancel puts the light back
+  as it was, and a reset button returns it to its suggested (or saved) look. While a scene is
+  edited the effects fold into one row that scrolls sideways, so the palettes and sliders stay in
+  view. A sunrise scene starts over each time you choose it. An Ambilight scene shows as a small
+  screen, warm or cool by how quickly it follows.
 - The lights go off when the computer locks, sleeps or turns its display off, and the mode that
   ran comes back when you return — after the unlock, if waking up shows the lock screen. Settings →
   General → "Lights off when away" turns this off. macOS and Windows.
@@ -19,7 +43,6 @@ https://keepachangelog.com/en/1.1.0/
 - Updates: besides the check at launch, LumaSync now checks once a day while it runs, and retries
   a failed check after 1, 5 and 15 minutes instead of waiting for the next launch. An update found
   in the background is offered the next time you open the window.
-
 - USB strips: connecting now asks the controller what it is. A LumaSync controller that answers
   reports its firmware version, the frame format it expects and whether it wants RGB or RGBW
   pixels, and Settings marks a firmware profile or LED chip type that disagrees, without changing
@@ -66,8 +89,30 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Lights and the compact window are rebuilt around one stage: the mode buttons on top, the scenes
+  under them, and the running mode's settings below, passing to the next mode's from the side you
+  moved to. Every mode's settings share one quieter look, the page keeps a readable width in a
+  wide window, and the outputs sit in a column on the right with an entry to the LED preview.
+  Sliders are easier to catch (a 32 px target), and the compact window fits an effect's palettes
+  on one line that scrolls sideways. The five fixed colour tiles are replaced by scenes.
+- Off is a power button beside the modes instead of a mode of its own. With the lights off the
+  last mode's settings stay on the page, dimmed under a veil that says so and offers "Turn on"
+  with that mode's name; the power button and that button bring the mode back, after a relaunch
+  too. The mode buttons and scenes no longer grey out for a moment while a mode starts.
+- The Lights stages move with what you change. Switching between Colour and White, or any choice
+  of that kind such as Ambilight's response, slides its mark across and eases the stage to its new
+  height. Changing effect eases its settings: a slider glides to the new effect's value while its
+  name and readout fade in, and a setting the new effect does not have fades out where it was. A
+  fast drag no longer makes a slider's number shake or its thumb jump back. Saturation marks 100%
+  on its track, settles into it as you pass and returns to it when you press its value, and an
+  effect's six directions are one choice drawn as icons of one size.
+- Colour correction moved from Lights to Devices: each strip's page has a Colour row that opens
+  gamma, white point and saturation. It is still one setting for every output, strips and Hue
+  alike, until each strip has its own.
 - The button that switches between the compact and full window is a quiet grey icon that lights
   up on hover, instead of an amber box.
+- Settings → General: the interface language is a two-way choice, English | Türkçe, each by its
+  own name, instead of a list for two.
 - The window opens on your saved layout, guide state and Hue settings from its first frame, rather
   than drawing defaults for a moment. Launching into the full window also no longer rewrites
   settings that did not change on the way to the first frame.

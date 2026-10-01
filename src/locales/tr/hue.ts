@@ -25,15 +25,15 @@ const hue: Catalogue<typeof enHue> = {
     description: "“Eski hâline dönsün” ışıkları aydınlatma başlamadan önceki hâline getirir. LumaSync'ten çıkınca her zaman böyle olur.",
   },
   pair: {
-    linkButtonHint: "Hue Bridge'in üstündeki butona bas. LumaSync bunu kendisi kontrol ediyor, başka bir yere tıklaman gerekmiyor.",
-    timedOutHint: "Tekrar dene'yi seç, ardından bir dakika içinde Hue Bridge'in üstündeki butona bas.",
+    linkButtonHint: "Hue Bridge'in üstündeki düğmeye bas. LumaSync bunu kendisi kontrol ediyor, başka bir yere tıklaman gerekmiyor.",
+    timedOutHint: "Tekrar dene'yi seç, ardından bir dakika içinde Hue Bridge'in üstündeki düğmeye bas.",
     tryAgain: "Tekrar dene",
-    promptHint: "Eşleştir'i seç, ardından bir dakika içinde Hue Bridge'in üstündeki butona bas. LumaSync basışı kendisi fark eder.",
+    promptHint: "Eşleştir'i seç, ardından bir dakika içinde Hue Bridge'in üstündeki düğmeye bas. LumaSync basışı kendisi fark eder.",
   },
   pairing: {
     errors: {
       LINK_BUTTON_NOT_PRESSED: {
-        description: "Hue Bridge'in üstündeki butona bas ve 30 saniye içinde tekrar dene.",
+        description: "Hue Bridge'in üstündeki düğmeye bas ve 30 saniye içinde tekrar dene.",
       },
       DEVICETYPE_INVALID: {
         description: "Hue Bridge eşleştirme isteğinin biçimini reddetti. Tekrar dene; sürerse bize bildir.",
@@ -51,7 +51,7 @@ const hue: Catalogue<typeof enHue> = {
     },
   },
   credential: {
-    repairHint: "Hue Bridge LumaSync'in anahtarını artık kabul etmiyor. Yeniden eşleştir'i seç, ardından Hue Bridge'in üstündeki butona bas.",
+    repairHint: "Hue Bridge LumaSync'in anahtarını artık kabul etmiyor. Yeniden eşleştir'i seç, ardından Hue Bridge'in üstündeki düğmeye bas.",
   },
   areas: {
     selectLabel: "Eğlence alanı seç",
@@ -75,17 +75,17 @@ const hue: Catalogue<typeof enHue> = {
     identifyPartial: "Işıkların bazısı yanıp sönmedi.",
     identifyFailed: "Işık yanıp sönmedi. Hue Bridge'e ulaşılabildiğini kontrol edip tekrar dene.",
     saveError: "Yerleşim kaydedilemedi — depolama hatası. Tekrar dene.",
-    saveToBridge: "Pozisyonları Hue Bridge'e kaydet",
+    saveToBridge: "Konumları Hue Bridge'e kaydet",
     saveToBridgeMenu: "Hue Bridge'e kaydet (beta)",
     pulling: "Alınıyor…",
     more: "Kanallar için diğer",
-    streamingNote: "Pozisyonları kaydetmek ya da almak, ya da bir ışığı tanımlamak için Hue'yu durdur. Hue Bridge yayın sürerken pozisyonları değiştirmez.",
+    streamingNote: "Konumları kaydetmek ya da almak, ya da bir ışığı tanımlamak için Hue'yu durdur. Hue Bridge yayın sürerken konumları değiştirmez.",
     saving: "Kaydediliyor...",
-    savedToBridge: "Pozisyonlar Hue Bridge'e kaydedildi.",
-    saveToBridgeError: "Pozisyonlar yazılamadı: {{reason}}",
+    savedToBridge: "Konumlar Hue Bridge'e kaydedildi.",
+    saveToBridgeError: "Konumlar yazılamadı: {{reason}}",
     saveToBridgeErrorRetry: "Tekrar dene",
-    saveConfirmTitle: "Pozisyonlar Hue Bridge'e kaydedilsin mi?",
-    saveConfirm: "Hue Bridge üzerindeki kanal pozisyonları güncellenecek. Hue Bridge: {{ip}}. Devam edilsin mi?",
+    saveConfirmTitle: "Konumlar Hue Bridge'e kaydedilsin mi?",
+    saveConfirm: "Hue Bridge üzerindeki kanal konumları güncellenecek. Hue Bridge: {{ip}}. Devam edilsin mi?",
     savedPartial: "Kaydedildi. {{channels}} için Hue Bridge kendi konumunu korudu — gradyan ve gruplu ışıklar buradan konumlandırılamaz.",
     savedPartialUnnamed: "Kaydedildi, ancak Hue Bridge bazı kanallar için kendi konumunu korudu.",
     pullFromBridge: "Hue Bridge'den al",
@@ -121,8 +121,6 @@ const hue: Catalogue<typeof enHue> = {
     },
   },
   runtime: {
-    idleTitle: "Hue beklemede",
-    idleBody: "Son kontrol güncelken mod kontrollerinden başlat.",
     states: {
       Idle: "Beklemede",
       Starting: "Başlatılıyor",
@@ -139,7 +137,7 @@ const hue: Catalogue<typeof enHue> = {
       HUE_STREAM_RUNNING_DTLS: "Hue yayını aktif.",
       HUE_STREAM_STOPPING: "Hue durduruluyor.",
       HUE_STREAM_STOPPED: "Hue yayını durdu.",
-      TRANSIENT_RETRY_SCHEDULED: "Geçici bir sorun var. Kendiliğinden yeniden denenecek.",
+      TRANSIENT_RETRY_SCHEDULED: "Geçici bir sorun var. Kendiliğinden tekrar denenecek.",
       TRANSIENT_RETRY_EXHAUSTED: "Deneme hakkı bitti. Yeniden bağlanmayı sen başlatmalısın.",
       AUTH_INVALID_CREDENTIALS: "Anahtar geçersiz. Yeniden eşleştirme gerekli.",
       AUTH_INVALID_RE_PAIR_REQUIRED: "Hue Bridge isteği reddetti. Yeniden eşleştirme gerekli.",
@@ -155,12 +153,6 @@ const hue: Catalogue<typeof enHue> = {
     },
     retry: {
       progress: "Kalan deneme: {{remaining}} | Sonraki deneme: {{nextMs}} ms",
-    },
-    triggerSource: {
-      mode_control: "Mod kontrollerinden başlatıldı",
-      device_surface: "Cihazlar sayfasından başlatıldı",
-      system: "Otomatik kurtarma başlattı",
-      undefined: "Başlatan bilinmiyor",
     },
     checklist: {
       revalidate: "Son kontrol çok eski. Başlatmadan önce yeniden doğrula.",

@@ -13,10 +13,14 @@ use log::warn;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime};
 
+use super::config::{normalize_effect, unix_ms_now, EffectId};
+use super::effect_source::{effect_ambilight, EffectLiveSlot};
 use super::live::{retune_ambilight_live, AmbilightLiveSettings};
 use super::snapshot::SnapshotSink;
 use super::usb_output::{SolidUsbOutput, UsbOutputPlan};
-use super::{AmbilightPayload, LightingModeKind, LightingRuntimeState, SolidColorPayload};
+use super::{
+    AmbilightPayload, EffectPayload, LightingModeKind, LightingRuntimeState, SolidColorPayload,
+};
 use crate::commands::hue::state_store::{apply_hue_color_with_context, HueOutputLive};
 use crate::commands::led_output::{apply_color_correction_rgb, ColorCorrectionConfig};
 use crate::commands::local_outputs::LocalOutputRegistry;
@@ -33,14 +37,30 @@ pub struct LightingTuning {
     pub solid: Option<SolidColorPayload>,
     #[serde(default)]
     pub ambilight: Option<AmbilightPayload>,
+    #[serde(default)]
+    pub effect: Option<EffectPayload>,
 }
 
 impl LightingTuning {
+    /// What `normalize_mode_config` does for a start, so a retune stores,
+    /// publishes and saves the same values a start would have.
+    fn normalized(self) -> Self {
+        Self {
+            solid: self.solid.map(SolidColorPayload::resolved),
+            ambilight: self.ambilight,
+            effect: self.effect.map(normalize_effect),
+        }
+    }
+
     fn kind(&self) -> Option<LightingModeKind> {
-        match (&self.solid, &self.ambilight) {
-            (Some(_), _) => Some(LightingModeKind::Solid),
-            (None, Some(_)) => Some(LightingModeKind::Ambilight),
-            (None, None) => None,
+        if self.solid.is_some() {
+            Some(LightingModeKind::Solid)
+        } else if self.ambilight.is_some() {
+            Some(LightingModeKind::Ambilight)
+        } else if self.effect.is_some() {
+            Some(LightingModeKind::Effect)
+        } else {
+            None
         }
     }
 }
@@ -64,6 +84,11 @@ fn retune_status(code: &str, message: &str) -> CommandStatus {
 /// What a retune can reach right now.
 pub(crate) enum Accepting {
     Ambilight(Arc<AmbilightLiveSettings>),
+    /// The effect's payload cell, and the worker's brightness it runs under.
+    Effect {
+        slot: EffectLiveSlot,
+        live: Arc<AmbilightLiveSettings>,
+    },
     Solid {
         usb: Option<SolidUsbOutput>,
         hue: Option<Arc<HueOutputLive>>,
@@ -77,7 +102,13 @@ impl Accepting {
         &self,
         solid: Option<&SolidColorPayload>,
         ambilight: Option<&AmbilightPayload>,
+        effect: Option<&EffectPayload>,
     ) -> bool {
+        if let (Accepting::Effect { slot, live }, Some(effect)) = (self, effect) {
+            retune_ambilight_live(live, &effect_ambilight(effect));
+            *slot.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = effect.clone();
+            return true;
+        }
         match (self, solid, ambilight) {
             (Accepting::Ambilight(live), _, Some(cfg)) => {
                 retune_ambilight_live(live, cfg);
@@ -120,6 +151,7 @@ impl Accepting {
 pub(crate) struct StoredTuning {
     pub(crate) solid: Option<SolidColorPayload>,
     pub(crate) ambilight: Option<AmbilightPayload>,
+    pub(crate) effect: Option<EffectPayload>,
     pub(crate) generation: u64,
 }
 
@@ -173,8 +205,9 @@ impl TuningCell {
         &self,
         solid: Option<&SolidColorPayload>,
         ambilight: Option<&AmbilightPayload>,
+        effect: Option<&EffectPayload>,
     ) {
-        if solid.is_none() && ambilight.is_none() {
+        if solid.is_none() && ambilight.is_none() && effect.is_none() {
             return;
         }
         let mut inner = self.lock();
@@ -184,7 +217,46 @@ impl TuningCell {
         if let Some(ambilight) = ambilight {
             inner.stored.ambilight = Some(ambilight.clone());
         }
+        if let Some(effect) = effect {
+            inner.stored.effect = Some(effect.clone());
+        }
         inner.stored.generation += 1;
+    }
+
+    /// The user chose Effect while another kind ran: a stored sunrise starts
+    /// over now instead of resuming at the brightness it had reached. A launch
+    /// restore, a return from away and a settings refresh do not come here.
+    /// `saved` is the saved mode's effect, which `payload_for` falls back to
+    /// when nothing was stored this session.
+    pub(crate) fn restart_sunrise(&self, saved: Option<&EffectPayload>) {
+        let mut inner = self.lock();
+        if inner.stored.effect.is_none() {
+            inner.stored.effect = saved.cloned();
+        }
+        if let Some(effect) = inner
+            .stored
+            .effect
+            .as_mut()
+            .filter(|effect| effect.id == EffectId::Sunrise)
+        {
+            effect.started_at_ms = Some(unix_ms_now());
+            inner.stored.generation += 1;
+        }
+    }
+
+    /// A retune that names a sunrise without its start (a sender that built the
+    /// payload afresh) keeps the one that runs rather than starting over.
+    pub(crate) fn inherit_sunrise_start(&self, effect: &mut EffectPayload) {
+        if effect.id != EffectId::Sunrise || effect.started_at_ms.is_some() {
+            return;
+        }
+        effect.started_at_ms = self
+            .lock()
+            .stored
+            .effect
+            .as_ref()
+            .filter(|stored| stored.id == EffectId::Sunrise)
+            .and_then(|stored| stored.started_at_ms);
     }
 
     /// A saved setting the running mode reads changed, so the next transaction
@@ -238,7 +310,11 @@ impl TuningCell {
         if let Some((accepting, stored)) = replay {
             let _ = tauri::async_runtime::spawn_blocking(move || {
                 let _turn = turn;
-                accepting.apply(stored.solid.as_ref(), stored.ambilight.as_ref());
+                accepting.apply(
+                    stored.solid.as_ref(),
+                    stored.ambilight.as_ref(),
+                    stored.effect.as_ref(),
+                );
             })
             .await;
         }
@@ -253,6 +329,7 @@ impl TuningCell {
             let mut inner = self.lock();
             match kind {
                 LightingModeKind::Solid => inner.stored.solid = tuning.solid.clone(),
+                LightingModeKind::Effect => inner.stored.effect = tuning.effect.clone(),
                 _ => inner.stored.ambilight = tuning.ambilight.clone(),
             }
             inner.stored.generation += 1;
@@ -261,7 +338,11 @@ impl TuningCell {
         if let Some(accepting) = accepting {
             let applied = tauri::async_runtime::spawn_blocking(move || {
                 let _turn = turn;
-                accepting.apply(tuning.solid.as_ref(), tuning.ambilight.as_ref())
+                accepting.apply(
+                    tuning.solid.as_ref(),
+                    tuning.ambilight.as_ref(),
+                    tuning.effect.as_ref(),
+                )
             })
             .await
             .unwrap_or(false);
@@ -304,6 +385,13 @@ pub(crate) fn accepting_for_running<R: Runtime>(
     match owner.active_mode.kind {
         LightingModeKind::Off => None,
         LightingModeKind::Ambilight => owner.ambilight_live.clone().map(Accepting::Ambilight),
+        LightingModeKind::Effect => match (&owner.effect_live, &owner.ambilight_live) {
+            (Some(slot), Some(live)) => Some(Accepting::Effect {
+                slot: Arc::clone(slot),
+                live: Arc::clone(live),
+            }),
+            _ => None,
+        },
         LightingModeKind::Solid => {
             let targets = owner.active_mode.targets.clone().unwrap_or_default();
             let needs_usb = targets.is_empty() || targets.iter().any(|t| t == "usb");
@@ -331,6 +419,11 @@ pub async fn retune_lighting<R: Runtime>(
     tuning: LightingTuning,
 ) -> Result<RetuneLightingResult, String> {
     let state = app.state::<LightingRuntimeState>();
+    let mut tuning = tuning;
+    if let Some(effect) = tuning.effect.as_mut() {
+        state.tuning.inherit_sunrise_start(effect);
+    }
+    let tuning = tuning.normalized();
     let outcome = state.tuning.retune(tuning.clone()).await;
     let status = match outcome {
         RetuneOutcome::Applied => {
@@ -341,6 +434,9 @@ pub async fn retune_lighting<R: Runtime>(
                 }
                 if tuning.ambilight.is_some() && snapshot.mode.kind == LightingModeKind::Ambilight {
                     snapshot.mode.ambilight = tuning.ambilight.clone();
+                }
+                if tuning.effect.is_some() && snapshot.mode.kind == LightingModeKind::Effect {
+                    snapshot.mode.effect = tuning.effect.clone();
                 }
             });
             schedule_persist(&app);

@@ -5,6 +5,16 @@ import type { DisplayId } from "@/shared/contracts/display";
 import type { LedCalibrationConfig } from "@/shared/contracts/calibration";
 import type { RoomGeometry } from "@/shared/contracts/roomMap";
 import {
+  EFFECT_DEFAULTS,
+  EFFECT_DIRECTIONS,
+  EFFECT_IDS,
+  EFFECT_RANGES,
+  PALETTE_IDS,
+  type EffectDirection,
+  type EffectId,
+  type PaletteId,
+} from "@/shared/contracts/effects";
+import {
   DEFAULT_COLOR_CORRECTION,
   FIRMWARE_PROFILE,
   GAMMA_RANGE,
@@ -23,15 +33,27 @@ export const LIGHTING_MODE_KIND = {
   OFF: "off",
   AMBILIGHT: "ambilight",
   SOLID: "solid",
+  /** A drawn animation, run by the Ambilight worker from a synthetic source instead of capture. */
+  EFFECT: "effect",
 } as const;
 
 export type LightingModeKind = (typeof LIGHTING_MODE_KIND)[keyof typeof LIGHTING_MODE_KIND];
+
+/** A mode that lights something: every kind but Off. */
+export type LitModeKind = Exclude<LightingModeKind, "off">;
+
+/** `ShellState.lastLitKind` as stored; absent or unknown is Ambilight, the mode a fresh install is for. */
+export function resolveLitModeKind(stored: unknown): LitModeKind {
+  return stored === LIGHTING_MODE_KIND.SOLID || stored === LIGHTING_MODE_KIND.EFFECT ? stored : LIGHTING_MODE_KIND.AMBILIGHT;
+}
 
 export interface SolidColorPayload {
   r: number;
   g: number;
   b: number;
   brightness: number;
+  /** Solid's White tab: a colour temperature, 2000–6500 K. Present ⇒ Rust derives r/g/b from it. */
+  kelvin?: number | null;
 }
 
 export interface AmbilightPayload {
@@ -61,10 +83,44 @@ export interface AmbilightPayload {
   hueIntensityPreset?: HueIntensityPreset | null;
 }
 
+export interface EffectColor {
+  r: number;
+  g: number;
+  b: number;
+}
+
+/**
+ * Flat optional fields rather than a tagged union: Rust reads `lightingMode` at launch, and one
+ * unknown shape in a union would fail the whole read; each field here fails soft on its own.
+ */
+export interface EffectPayload {
+  id: EffectId;
+  /** 0..1, mapped per effect onto a loop period on a log scale; not hertz: a breath and a wave lap differ. */
+  speed: number;
+  brightness: number;
+  /** Absent ⇒ the effect's `defaultPalette`; `custom` plays `colors`. */
+  palette?: PaletteId | null;
+  /** 1..3 colours for the `custom` palette; kept while a built-in plays, so switching back restores them. */
+  colors?: EffectColor[] | null;
+  direction?: EffectDirection | null;
+  size?: number | null;
+  intensity?: number | null;
+  durationMinutes?: number | null;
+  /** When a sunrise began (Unix ms), stamped by Rust and saved, so a relaunch carries it on. */
+  startedAtMs?: number | null;
+}
+
+export const DEFAULT_EFFECT: Readonly<EffectPayload> = {
+  id: EFFECT_IDS.WAVE,
+  speed: EFFECT_DEFAULTS.speed,
+  brightness: EFFECT_DEFAULTS.brightness,
+};
+
 export interface LightingModeConfig {
   kind: LightingModeKind;
   solid?: SolidColorPayload | null;
   ambilight?: AmbilightPayload | null;
+  effect?: EffectPayload | null;
   targets?: HueRuntimeTarget[] | null;
   /**
    * Display the ambilight worker should sample from.
@@ -77,7 +133,7 @@ export interface LightingModeConfig {
   /**
    * Per-channel color correction. Absent ⇒ backend uses
    * ColorCorrectionConfig defaults (gamma 2.2 / 6500 K / saturation 1.0).
-   * Applied to USB output only — Hue sink is not affected.
+   * Applied to every output: the strip's encoder and the Hue sender alike.
    */
   colorCorrection?: ColorCorrectionConfig | null;
   /**
@@ -127,14 +183,16 @@ export interface LightingModeCommandResult {
   mode: LightingModeConfig;
   status: CommandStatusOf<LightingModeStatusCode>;
   /** Non-fatal: the stream started but part of the WLED strip will not track.
-   * Rides alongside a success status rather than replacing it. */
+   * Rides alongside a success status rather than replacing it. The UI reads the copy on the
+   * apply's outcome (`ApplyOutputsOutcome.wledAdvisory`); nothing reads this one. */
   wledAdvisory: WledLiveFrameAdvisory | null;
 }
 
+const LIGHTING_MODE_KIND_VALUES: ReadonlySet<unknown> = new Set(Object.values(LIGHTING_MODE_KIND));
+
+/** Derived from the table, so a new kind cannot be read as Off by a forgotten check. */
 export function isLightingModeKind(value: unknown): value is LightingModeKind {
-  return value === LIGHTING_MODE_KIND.OFF
-    || value === LIGHTING_MODE_KIND.AMBILIGHT
-    || value === LIGHTING_MODE_KIND.SOLID;
+  return LIGHTING_MODE_KIND_VALUES.has(value);
 }
 
 function toFiniteNumber(value: unknown, fallback: number): number {
@@ -156,12 +214,19 @@ function clampFloat(value: unknown, min: number, max: number, fallback: number):
  */
 export const DEFAULT_SOLID_COLOR: Readonly<SolidColorPayload> = { r: 255, g: 255, b: 255, brightness: 1 };
 
+/** Solid's White tab. `solid_kelvin_range` in `config.rs`. */
+export const SOLID_KELVIN_RANGE = { min: 2000, max: 6500 } as const;
+
 export function normalizeSolidColorPayload(input?: Partial<SolidColorPayload>): SolidColorPayload {
   return {
     r: clampInt(input?.r, 0, 255, DEFAULT_SOLID_COLOR.r),
     g: clampInt(input?.g, 0, 255, DEFAULT_SOLID_COLOR.g),
     b: clampInt(input?.b, 0, 255, DEFAULT_SOLID_COLOR.b),
     brightness: clampFloat(input?.brightness, 0, 1, DEFAULT_SOLID_COLOR.brightness),
+    // Rust drops a kelvin that is not a number and rounds the rest; so does this.
+    ...(typeof input?.kelvin === "number" && Number.isFinite(input.kelvin)
+      ? { kelvin: Math.max(SOLID_KELVIN_RANGE.min, Math.min(SOLID_KELVIN_RANGE.max, Math.round(input.kelvin))) }
+      : {}),
   };
 }
 
@@ -186,6 +251,71 @@ export function normalizeAmbilightPayload(input?: Partial<AmbilightPayload> | nu
     smoothingAlpha: clampFloat(input?.smoothingAlpha, 0.05, 1, 0.35),
     saturation: clampFloat(input?.saturation, 0.5, 2, 1),
     lightingSmoothingPreset: preset,
+  };
+}
+
+const EFFECT_ID_VALUES: ReadonlySet<string> = new Set(Object.values(EFFECT_IDS));
+const PALETTE_ID_VALUES: ReadonlySet<string> = new Set(Object.values(PALETTE_IDS));
+const DIRECTION_VALUES: ReadonlySet<string> = new Set(Object.values(EFFECT_DIRECTIONS));
+
+/** The three v1 ids, read as what they became; `config.rs` maps them the same way. */
+const V1_EFFECTS: Readonly<Record<string, { id: EffectId; palette: PaletteId }>> = {
+  rainbow: { id: EFFECT_IDS.WAVE, palette: PALETTE_IDS.RAINBOW },
+  cycle: { id: EFFECT_IDS.CYCLE, palette: PALETTE_IDS.RAINBOW },
+  breathe: { id: EFFECT_IDS.BREATHE, palette: PALETTE_IDS.CUSTOM },
+};
+
+/** v1's breath colour, and what a v1 breath without one had. */
+const V1_BREATHE_COLOR: Readonly<EffectColor> = { r: 255, g: 176, b: 32 };
+
+function normalizeEffectColor(value: unknown): EffectColor | undefined {
+  if (value === null || typeof value !== "object") return undefined;
+  const { r, g, b } = value as Partial<EffectColor>;
+  return { r: clampInt(r, 0, 255, 255), g: clampInt(g, 0, 255, 255), b: clampInt(b, 0, 255, 255) };
+}
+
+type EffectPayloadInput = Partial<Omit<EffectPayload, "id">> & { id?: string; color?: EffectColor | null };
+
+/**
+ * Clamped into range; unknown ids and fields fall back one by one, as Rust reads them. A v1
+ * payload (`rainbow` / `cycle` / `breathe` + `color`) reads as its v2 equivalent.
+ */
+export function normalizeEffectPayload(input?: EffectPayloadInput | null): EffectPayload {
+  const v1 = typeof input?.id === "string" ? V1_EFFECTS[input.id] : undefined;
+  const id: EffectId =
+    v1?.id ??
+    (typeof input?.id === "string" && EFFECT_ID_VALUES.has(input.id) ? (input.id as EffectId) : DEFAULT_EFFECT.id);
+  const palette =
+    typeof input?.palette === "string" && PALETTE_ID_VALUES.has(input.palette)
+      ? (input.palette as PaletteId)
+      : v1?.palette;
+  const [minColors, maxColors] = EFFECT_RANGES.colors;
+  let colors = Array.isArray(input?.colors)
+    ? input.colors.map(normalizeEffectColor).filter((c): c is EffectColor => c !== undefined).slice(0, maxColors)
+    : undefined;
+  if (input?.id === "breathe" && !colors?.length) {
+    colors = [normalizeEffectColor(input.color) ?? { ...V1_BREATHE_COLOR }];
+  }
+  const direction =
+    typeof input?.direction === "string" && DIRECTION_VALUES.has(input.direction)
+      ? (input.direction as EffectDirection)
+      : undefined;
+  const [minMinutes, maxMinutes] = EFFECT_RANGES.durationMinutes;
+  return {
+    id,
+    speed: clampFloat(input?.speed, 0, 1, DEFAULT_EFFECT.speed),
+    brightness: clampFloat(input?.brightness, 0, 1, DEFAULT_EFFECT.brightness),
+    ...(palette ? { palette } : {}),
+    ...(colors && colors.length >= minColors ? { colors } : {}),
+    ...(direction ? { direction } : {}),
+    ...(input?.size != null ? { size: clampFloat(input.size, 0, 1, EFFECT_DEFAULTS.size) } : {}),
+    ...(input?.intensity != null ? { intensity: clampFloat(input.intensity, 0, 1, EFFECT_DEFAULTS.intensity) } : {}),
+    ...(input?.durationMinutes != null
+      ? { durationMinutes: clampInt(input.durationMinutes, minMinutes, maxMinutes, EFFECT_DEFAULTS.durationMinutes) }
+      : {}),
+    ...(id === EFFECT_IDS.SUNRISE && typeof input?.startedAtMs === "number" && Number.isFinite(input.startedAtMs) && input.startedAtMs > 0
+      ? { startedAtMs: input.startedAtMs }
+      : {}),
   };
 }
 
@@ -236,6 +366,7 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
   const kind = isLightingModeKind(input?.kind) ? input.kind : LIGHTING_MODE_KIND.OFF;
   const normalizedSolid = input?.solid ? normalizeSolidColorPayload(input.solid) : undefined;
   const normalizedAmbilight = input?.ambilight ? normalizeAmbilightPayload(input.ambilight) : undefined;
+  const normalizedEffect = input?.effect ? normalizeEffectPayload(input.effect) : undefined;
   const normalizedDisplayId = normalizeDisplayId(input?.displayId);
   const normalizedColorCorrection = normalizeColorCorrection(input?.colorCorrection);
   const normalizedFirmwareProfile = normalizeFirmwareProfile(input?.firmwareProfile);
@@ -247,8 +378,23 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
       kind,
       solid: normalizedSolid ?? normalizeSolidColorPayload(),
       ambilight: normalizedAmbilight,
+      effect: normalizedEffect,
       targets: input?.targets,
       displayId: normalizedDisplayId,
+      colorCorrection: normalizedColorCorrection,
+      firmwareProfile: normalizedFirmwareProfile,
+      chipType: normalizedChipType,
+      colorOrder: normalizedColorOrder,
+    };
+  }
+
+  if (kind === LIGHTING_MODE_KIND.EFFECT) {
+    return {
+      kind,
+      effect: normalizedEffect ?? normalizeEffectPayload(),
+      solid: normalizedSolid,
+      ambilight: normalizedAmbilight,
+      targets: input?.targets,
       colorCorrection: normalizedColorCorrection,
       firmwareProfile: normalizedFirmwareProfile,
       chipType: normalizedChipType,
@@ -261,6 +407,7 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
       kind,
       ambilight: normalizedAmbilight ?? normalizeAmbilightPayload(),
       solid: normalizedSolid,
+      effect: normalizedEffect,
       targets: input?.targets,
       displayId: normalizedDisplayId,
       colorCorrection: normalizedColorCorrection,
@@ -274,6 +421,7 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
     kind: LIGHTING_MODE_KIND.OFF,
     solid: normalizedSolid,
     ambilight: normalizedAmbilight,
+    effect: normalizedEffect,
     targets: input?.targets,
     displayId: normalizedDisplayId,
     colorCorrection: normalizedColorCorrection,

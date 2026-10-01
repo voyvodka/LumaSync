@@ -20,6 +20,7 @@ fn normalize_mode_config_passthrough_color_correction_and_firmware_profile() {
     let profile = FirmwareProfile::Adalight;
 
     let input = LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Ambilight,
         solid: None,
         ambilight: Some(AmbilightPayload {
@@ -53,6 +54,7 @@ fn normalize_mode_config_passthrough_color_correction_and_firmware_profile() {
 #[test]
 fn normalize_mode_config_absent_fields_stay_none() {
     let input = LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Ambilight,
         solid: None,
         ambilight: Some(AmbilightPayload {
@@ -86,6 +88,7 @@ fn fast_path_guard_triggers_restart_on_color_correction_change() {
     // Verify that changing color_correction bypasses the live-update fast path
     // (forces a worker restart instead of in-place atomic update).
     let base = LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Ambilight,
         solid: None,
         ambilight: Some(AmbilightPayload {

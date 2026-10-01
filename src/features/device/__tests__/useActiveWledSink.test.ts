@@ -23,7 +23,7 @@ function registry(snapshot: LocalOutputsSnapshot) {
 
 const wledBound: LocalOutputsSnapshot = {
   revision: 1,
-  outputs: [{ kind: "wled", ip: "192.168.1.42", ledCount: 60, connected: true }],
+  outputs: [{ kind: "wled", ip: "192.168.1.42", ledCount: 60, connected: true, reachable: true }],
   driven: { kind: "wled", ip: "192.168.1.42" },
 };
 

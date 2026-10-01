@@ -27,6 +27,7 @@ import { HueBridgeRow, HueNoteLine } from "./HueBridgeRow";
 import { HueOffBehaviorRow } from "./HueOffBehaviorRow";
 import { HUE_ACTIONS, HUE_STATE_VIEW, resolveActions, type HueContext, type HueTone } from "./hueStateView";
 import { useHueAreaChoice } from "./useHueAreaChoice";
+import pageStyles from "@/shared/ui/SettingRow/SettingPage.module.css";
 import styles from "./HuePage.module.css";
 
 export interface HuePageProps {
@@ -176,7 +177,7 @@ export function HuePage({
   let body: ReactNode;
   if (showsFound) {
     body = (
-      <div className={styles.rows}>
+      <div className={pageStyles.rows}>
         <FoundBridgeRows
         bridge={foundBridge}
         replaces={credentials !== null && selectedBridge ? bridgeDisplayName(selectedBridge.name) : null}
@@ -190,7 +191,7 @@ export function HuePage({
     );
   } else if (!selectedBridgeId) {
     body = (
-      <div className={styles.rows}>
+      <div className={pageStyles.rows}>
         <NoBridgeRows hue={hue} forgetResult={forgetResult} />
       </div>
     );
@@ -200,7 +201,7 @@ export function HuePage({
     const showsArea = view.area === "change" || (view.area === "show" && selectedArea !== null);
     body = (
       <>
-        <div className={styles.rows}>
+        <div className={pageStyles.rows}>
           <Reveal open>
             <HueBridgeRow
               stateKey={state ?? "none"}
@@ -271,7 +272,7 @@ export function HuePage({
   }
 
   return (
-    <section className={styles.page} hidden={!isActive} aria-labelledby={headingId} data-testid="hue-page">
+    <section className={pageStyles.page} hidden={!isActive} aria-labelledby={headingId} data-testid="hue-page">
       <div key={bodyKey} className={cx(bodyMoved && styles.arrive)}>
         <h1 id={headingId} className={styles.title}>
           {title}

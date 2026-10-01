@@ -76,6 +76,7 @@ function reply(
       stopFailed: [],
       droppedTargets: [],
       modeEnded: false,
+      wledAdvisory: null,
       ...outcome,
     },
   };
@@ -140,6 +141,18 @@ describe("useLightingModeOrchestrator", () => {
 
       expect(view.result.current.lightingMode.kind).toBe("off");
       expect(view.result.current.lightingMode.solid).toEqual({ r: 9, g: 8, b: 7, brightness: 0.5 });
+    });
+
+    it("keeps the last effect through another mode, so choosing Effect again brings it back", async () => {
+      const breathe = { id: "breathe", speed: 0.2, brightness: 0.6 } as const;
+      const { view } = mount();
+      await settle(view);
+
+      publish(running({ kind: "effect", effect: breathe }));
+      publish(running({ kind: "ambilight", ambilight: { brightness: 1 } }));
+
+      expect(view.result.current.lightingMode.kind).toBe("ambilight");
+      expect(view.result.current.lightingMode.effect).toEqual(breathe);
     });
   });
 
@@ -227,12 +240,17 @@ describe("useLightingModeOrchestrator", () => {
 
       await act(() =>
         view.result.current.restoreAtBoot({
-          lightingMode: { kind: "off", ambilight: { brightness: 0.3 } },
+          lightingMode: {
+            kind: "off",
+            ambilight: { brightness: 0.3 },
+            effect: { id: "cycle", speed: 0.1, brightness: 1 },
+          },
         }),
       );
 
       expect(applyOutputsMock).toHaveBeenCalledWith({ origin: "boot" });
       expect(view.result.current.lightingMode.ambilight).toEqual({ brightness: 0.3 });
+      expect(view.result.current.lightingMode.effect).toEqual({ id: "cycle", speed: 0.1, brightness: 1 });
     });
   });
 
@@ -393,6 +411,39 @@ describe("useLightingModeOrchestrator", () => {
 
       expect(view.result.current.usbLeftOutNotice).toBe(true);
       expect(view.result.current.startFailedNotice).toBeNull();
+    });
+
+    it("says the WLED device and the layout disagree on the LED count, until an apply finds them agreeing", async () => {
+      applyOutputsMock.mockResolvedValue(
+        reply("OUTPUTS_APPLIED", running({ kind: "solid" }), {
+          applyStatus: { code: "SOLID_MODE_APPLIED", message: "", details: null },
+          wledAdvisory: {
+            code: "WLED_LIVE_LED_COUNT_MISMATCH",
+            message: "",
+            frameLedCount: 60,
+            sinkLedCount: 120,
+          },
+        }),
+      );
+      const { view } = mount();
+      await settle(view);
+
+      await act(() => view.result.current.handleLightingModeChange({ kind: "solid" }));
+      expect(view.result.current.wledLengthMismatchNotice).toEqual({ panelLeds: 120, frameLeds: 60 });
+      // The same mismatch again is the same occurrence: a dismissed notice stays dismissed.
+      const raised = view.result.current.wledLengthMismatchNotice;
+      const applies = applyOutputsMock.mock.calls.length;
+      await act(() => view.result.current.handleLightingModeChange({ kind: "off" }));
+      expect(applyOutputsMock.mock.calls.length).toBe(applies + 1);
+      expect(view.result.current.wledLengthMismatchNotice).toBe(raised);
+
+      applyOutputsMock.mockResolvedValue(
+        reply("OUTPUTS_APPLIED", running({ kind: "solid" }), {
+          applyStatus: { code: "SOLID_MODE_APPLIED", message: "", details: null },
+        }),
+      );
+      await act(() => view.result.current.handleLightingModeChange({ kind: "effect" }));
+      expect(view.result.current.wledLengthMismatchNotice).toBeNull();
     });
 
     // A strip-only choice with no strip used to be refused without a word.

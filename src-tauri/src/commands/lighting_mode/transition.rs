@@ -10,9 +10,11 @@ use tauri::{AppHandle, Manager, Runtime};
 
 use super::config::{
     frame_led_count_for, normalize_mode_config, wled_frame_advisory, LightingModeCommandResult,
-    LightingModeConfig, LightingModeKind, DEFAULT_SOLID,
+    LightingModeConfig, LightingModeKind, DEFAULT_EFFECT, DEFAULT_SOLID,
 };
 use super::config_check;
+use super::effect_source::effect_ambilight;
+use super::effects::EffectDraw;
 use super::hydrate::{hydrate_mode_payload, read_persisted_shell_state};
 use super::live::{retune_ambilight_live, AmbilightLiveSettings, RoomGeometryLive};
 use super::pacing::{capture_interval_for, SerialSendBudget};
@@ -107,6 +109,37 @@ pub(super) fn set_active_port(
     owner.active_port = Some(new_port);
 }
 
+/// A worker kind's start, as a literal per kind so the contract verifier finds each code.
+fn worker_started(kind: LightingModeKind) -> CommandStatus {
+    match kind {
+        LightingModeKind::Effect => command_status(
+            "EFFECT_MODE_STARTED",
+            "Effect runtime started with frame output pipeline.",
+            None,
+        ),
+        _ => command_status(
+            "AMBILIGHT_MODE_STARTED",
+            "Ambilight runtime started with frame output pipeline.",
+            None,
+        ),
+    }
+}
+
+fn worker_start_failed(kind: LightingModeKind, details: Option<String>) -> CommandStatus {
+    match kind {
+        LightingModeKind::Effect => command_status(
+            "EFFECT_MODE_START_FAILED",
+            "Effect runtime could not start.",
+            details,
+        ),
+        _ => command_status(
+            "AMBILIGHT_MODE_START_FAILED",
+            "Ambilight runtime could not start.",
+            details,
+        ),
+    }
+}
+
 pub(super) fn stop_previous(
     owner: &mut LightingRuntimeOwner,
     trace: &mut Option<&mut Vec<&'static str>>,
@@ -115,6 +148,7 @@ pub(super) fn stop_previous(
     let t0 = std::time::Instant::now();
     owner.ambilight_live = None;
     owner.room_geometry_live = None;
+    owner.effect_live = None;
     let had_worker = owner.worker.is_some();
     if let Some(worker) = owner.worker.take() {
         worker.stop();
@@ -245,7 +279,7 @@ fn apply_mode_change_inner(
     // names Hue gets it. See docs/architecture/hue.md.
     let hue_output = hue_output.filter(|_| needs_hue);
     let hue_context = hue_output.as_ref().and_then(|live| live.current());
-    // v1.6 LED Preview — a synthetic test request bypasses the device/Hue
+    // A synthetic test request (the LED preview) bypasses the device/Hue
     // gates so it can run preview-only (twin + edge stream) with no sink.
     let is_test = owner.preview.pending_test_pattern.is_some();
 
@@ -322,8 +356,12 @@ fn apply_mode_change_inner(
     // restart would re-open capture for what is a byte shuffle.
     // The output the next worker would write to; a retune keeps the running one only when it matches.
     let next_usb_plan = usb_plan.clone().filter(|_| needs_usb);
-    if normalized_next.kind == LightingModeKind::Ambilight
-        && owner.active_mode.kind == LightingModeKind::Ambilight
+    let worker_kind = matches!(
+        normalized_next.kind,
+        LightingModeKind::Ambilight | LightingModeKind::Effect
+    );
+    if worker_kind
+        && normalized_next.kind == owner.active_mode.kind
         && owner.worker.is_some()
         && next_usb_plan == owner.active_usb_plan
         && normalized_next.targets == owner.active_mode.targets
@@ -335,12 +373,19 @@ fn apply_mode_change_inner(
         && preview_retune
     {
         if let Some(live) = &owner.ambilight_live {
-            let cfg = normalized_next
-                .ambilight
-                .as_ref()
-                .cloned()
-                .unwrap_or_default();
+            let effect = normalized_next.effect.clone();
+            let cfg = match &effect {
+                Some(effect) => effect_ambilight(effect),
+                None => normalized_next
+                    .ambilight
+                    .as_ref()
+                    .cloned()
+                    .unwrap_or_default(),
+            };
             retune_ambilight_live(live, &cfg);
+            if let (Some(effect), Some(slot)) = (effect, owner.effect_live.as_ref()) {
+                *slot.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = effect;
+            }
             // Unconditional: the atomic is the worker's only copy, so it must
             // follow every apply, including one that returns to the default.
             live.store_color_order(normalized_next.color_order.unwrap_or_default());
@@ -365,14 +410,20 @@ fn apply_mode_change_inner(
                 }
                 owner.preview.active_test_pattern = Some(next);
             }
-            return make_result(
-                owner.active_mode.clone(),
+            let status = if owner.active_mode.kind == LightingModeKind::Effect {
+                command_status(
+                    "EFFECT_MODE_UPDATED",
+                    "Effect settings updated in running worker.",
+                    None,
+                )
+            } else {
                 command_status(
                     "AMBILIGHT_MODE_UPDATED",
                     "Ambilight settings updated in running worker.",
                     None,
-                ),
-            );
+                )
+            };
+            return make_result(owner.active_mode.clone(), status);
         }
     }
 
@@ -509,17 +560,29 @@ fn apply_mode_change_inner(
             };
             make_result(owner.active_mode.clone(), status)
         }
-        LightingModeKind::Ambilight => {
+        LightingModeKind::Ambilight | LightingModeKind::Effect => {
             push_trace(&mut trace, "start_ambilight");
+            let worker_kind = normalized_next.kind;
+            // An effect draws its frames; nothing is captured.
+            let effect = (normalized_next.kind == LightingModeKind::Effect)
+                .then(|| normalized_next.effect.clone().unwrap_or(DEFAULT_EFFECT));
+            let effect_live = effect.clone().map(|effect| Arc::new(Mutex::new(effect)));
 
-            // v1.6 LED Preview — consume any pending synthetic-test request.
-            let test_pattern = owner.preview.pending_test_pattern.take();
+            // Consume any pending synthetic-test request from the LED preview.
+            let test_pattern = if effect.is_some() {
+                None
+            } else {
+                owner.preview.pending_test_pattern.take()
+            };
 
-            let ambilight_cfg = normalized_next
-                .ambilight
-                .as_ref()
-                .cloned()
-                .unwrap_or_default();
+            let ambilight_cfg = match &effect {
+                Some(effect) => effect_ambilight(effect),
+                None => normalized_next
+                    .ambilight
+                    .as_ref()
+                    .cloned()
+                    .unwrap_or_default(),
+            };
             let live_settings = AmbilightLiveSettings::new(
                 ambilight_cfg.brightness,
                 ambilight_cfg.black_border_detection,
@@ -570,6 +633,7 @@ fn apply_mode_change_inner(
                     pattern_phase: Some(Arc::clone(&owner.preview.pattern_phase)),
                     pattern_live: pattern_live.clone(),
                     frame_interval: capture_interval,
+                    effect: effect_live.clone(),
                 };
                 match (owner.frame_source_factory)(req) {
                     Ok(source) => {
@@ -584,11 +648,7 @@ fn apply_mode_change_inner(
                         owner.active_mode = LightingModeConfig::default();
                         return make_result(
                             owner.active_mode.clone(),
-                            command_status(
-                                "AMBILIGHT_MODE_START_FAILED",
-                                "Ambilight runtime could not start.",
-                                Some(reason.as_reason()),
-                            ),
+                            worker_start_failed(worker_kind, Some(reason.as_reason())),
                         );
                     }
                 }
@@ -598,16 +658,15 @@ fn apply_mode_change_inner(
             let usb_plan_for_worker: Option<UsbOutputPlan> = if needs_usb {
                 match usb_plan.clone() {
                     Some(plan) => Some(plan),
-                    // v1.6 LED Preview: a synthetic test runs preview-only (no
+                    // A synthetic test runs preview-only (no
                     // USB sink) when no device is connected — no gate.
                     None if is_test => None,
                     None => {
                         owner.active_mode = LightingModeConfig::default();
                         return make_result(
                             owner.active_mode.clone(),
-                            command_status(
-                                "AMBILIGHT_MODE_START_FAILED",
-                                "Ambilight runtime could not start.",
+                            worker_start_failed(
+                                worker_kind,
                                 Some("LED_OUTPUT_PORT_UNAVAILABLE".to_string()),
                             ),
                         );
@@ -642,12 +701,22 @@ fn apply_mode_change_inner(
                 chip,
                 preview_ctx,
                 Arc::clone(&room_geometry_live),
-                WorkerPacing::live(capture_interval),
+                match &effect_live {
+                    Some(live) => WorkerPacing::drawn(
+                        capture_interval,
+                        EffectDraw {
+                            live: Arc::clone(live),
+                            clock: Arc::clone(&owner.effect_clock),
+                        },
+                    ),
+                    None => WorkerPacing::live(capture_interval),
+                },
             ) {
                 Ok(worker) => {
                     owner.worker = Some(worker);
                     owner.ambilight_live = Some(live_settings);
                     owner.room_geometry_live = Some(room_geometry_live);
+                    owner.effect_live = effect_live;
                     owner.active_mode = normalized_next;
                     owner.preview.active_test_pattern = test_pattern;
                     owner.preview.pattern_live = pattern_live;
@@ -655,24 +724,13 @@ fn apply_mode_change_inner(
                         set_active_port(owner, port.clone(), &outgoing);
                     }
                     owner.active_usb_plan = usb_plan_for_worker;
-                    make_result(
-                        owner.active_mode.clone(),
-                        command_status(
-                            "AMBILIGHT_MODE_STARTED",
-                            "Ambilight runtime started with frame output pipeline.",
-                            None,
-                        ),
-                    )
+                    make_result(owner.active_mode.clone(), worker_started(worker_kind))
                 }
                 Err(reason) => {
                     owner.active_mode = LightingModeConfig::default();
                     make_result(
                         owner.active_mode.clone(),
-                        command_status(
-                            "AMBILIGHT_MODE_START_FAILED",
-                            "Ambilight runtime could not start.",
-                            Some(reason),
-                        ),
+                        worker_start_failed(worker_kind, Some(reason)),
                     )
                 }
             }
@@ -774,12 +832,12 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
 
     let hue_output = Some(hue_output);
 
-    // v1.6 LED Preview — clear any stale synthetic-test request, wire the
+    // The LED preview: clear any stale synthetic-test request, wire the
     // shared gate so a twin opened mid-run starts receiving without a worker
     // restart, and send the edge-signal to every active twin overlay.
     owner.preview.pending_test_pattern = None;
     owner.preview.preview_gate = Some(led_twin_state.preview_active());
-    // v1.6 LED Preview — record whether a synthetic test was running
+    // Record whether a synthetic test was running
     // BEFORE apply_mode_change clears it, so a live mode change that
     // supersedes the test can drop the captured prior mode below.
     let superseded_test = owner.preview.active_test_pattern.is_some();
@@ -803,7 +861,7 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
     // listener cannot deadlock on it.
     drop(owner);
     note_applied_mode(app, &result.mode);
-    // v1.6 LED Preview — a live mode change supersedes any active synthetic
+    // A live mode change supersedes any active synthetic
     // test (apply_mode_change just cleared it). Drop the captured prior mode
     // so a late/racing Stop cannot revive the pre-test mode over the user's
     // new selection.
@@ -846,7 +904,7 @@ pub fn stop_lighting_blocking<R: Runtime>(
             .runtime
             .lock()
             .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
-        // v1.6 LED Preview — capture whether a synthetic test was running
+        // Capture whether a synthetic test was running
         // BEFORE apply_mode_change clears it.
         let superseded_test = owner.preview.active_test_pattern.is_some();
         let result = apply_mode_change(
@@ -864,7 +922,7 @@ pub fn stop_lighting_blocking<R: Runtime>(
     };
     note_applied_mode(app, &result.mode);
     snapshot::publish_running(app, &result.mode);
-    // v1.6 LED Preview — stopping all lighting supersedes any active test;
+    // Stopping all lighting supersedes any active test;
     // drop the captured prior mode so a late Stop cannot revive it. This
     // command is also called from the shutdown path, so resolve the twin
     // state best-effort via the AppHandle rather than a State<'_, _> arg.

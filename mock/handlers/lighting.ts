@@ -1,5 +1,5 @@
 /**
- * The lighting transaction's fixtures: a small version of `outputs.rs` over
+ * The lighting transaction's fixtures: a small version of `outputs/` over
  * the mode apply and stop in `./device.ts` and the Hue fixtures in `./hue.ts`.
  * It keeps the rules a caller can see — Hue up before the mode, Off stops Hue
  * too, a `[usb, hue]` start the Hue gate refuses runs on USB, a choice is
@@ -86,6 +86,7 @@ function emptyOutcome(): ApplyOutputsOutcome {
     stopFailed: [],
     droppedTargets: [],
     modeEnded: false,
+    wledAdvisory: null,
   };
 }
 
@@ -210,6 +211,8 @@ export const lightingRuntimeHandlers = {
 
     if (choice && request.mode) {
       writeShellStateKey("lightingMode", { kind, solid, ambilight, targets: savedTargets() });
+      // As Rust's persist_mode: a lit choice is also the one the power button brings back.
+      if (kind !== "off") patchShellStateAsRust({ lastLitKind: kind });
     }
     return reply(
       outcome.hueLeftOut ? "OUTPUTS_APPLIED_PARTIAL" : "OUTPUTS_APPLIED",
@@ -221,7 +224,13 @@ export const lightingRuntimeHandlers = {
 
   [LIGHTING_RUNTIME_COMMANDS.RETUNE_LIGHTING]: (args) => {
     const mode = getWorld().lighting.mode;
-    const kind = args.tuning.solid ? "solid" : args.tuning.ambilight ? "ambilight" : null;
+    const kind = args.tuning.solid
+      ? "solid"
+      : args.tuning.ambilight
+        ? "ambilight"
+        : args.tuning.effect
+          ? "effect"
+          : null;
     if (kind === null || mode.kind !== kind) {
       return { status: status("RETUNE_NOT_RUNNING", "Nothing of that kind is running") };
     }
@@ -230,6 +239,7 @@ export const lightingRuntimeHandlers = {
         ...w.lighting.mode,
         solid: args.tuning.solid ?? w.lighting.mode.solid,
         ambilight: args.tuning.ambilight ?? w.lighting.mode.ambilight,
+        effect: args.tuning.effect ?? w.lighting.mode.effect,
       };
     });
     publish();

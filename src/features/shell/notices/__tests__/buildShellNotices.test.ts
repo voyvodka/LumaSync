@@ -590,4 +590,28 @@ describe("buildShellNotices", () => {
       expect(build({ updateChecking: true })).toEqual([]);
     });
   });
+
+  describe("a lit mode whose output is not getting the light", () => {
+    it("says a failing send while it fails, naming the output, with the way to Devices", () => {
+      const [notice] = build({ outputFailing: "WLED_SEND_FAILED", localTransport: "wled" });
+      expect(notice?.id).toBe(SHELL_NOTICE_IDS.OUTPUT_FAILING);
+      expect(notice?.tier).toBe(NOTICE_TIER.ERROR_CONDITION);
+      expect(notice?.dismissible).toBe(false);
+      expect(notice?.action?.label).toBe("shell:notices.actions.devices");
+    });
+
+    it("says a stopped worker, and leaves out the failing send it explains", () => {
+      const notices = build({ workerStopped: true, outputFailing: "LED_OUTPUT_WRITE_FAILED" });
+      expect(notices.map((n) => n.id)).toContain(SHELL_NOTICE_IDS.WORKER_STOPPED);
+      expect(notices.map((n) => n.id)).not.toContain(SHELL_NOTICE_IDS.OUTPUT_FAILING);
+    });
+
+    it("warns once about a WLED device and a layout that disagree on the LED count", () => {
+      const [notice] = build({ wledLengthMismatch: { panelLeds: 120, frameLeds: 60 } });
+      expect(notice?.id).toBe(SHELL_NOTICE_IDS.WLED_LENGTH_MISMATCH);
+      expect(notice?.severity).toBe(NOTICE_SEVERITY.WARNING);
+      expect(notice?.dismissible).toBe(true);
+    });
+  });
 });
+

@@ -66,6 +66,22 @@ describe("buildStatusItems", () => {
     });
   });
 
+  it("says a bound WLED device that stopped answering has no answer, and offers the devices page", () => {
+    const onOpenDevices = vi.fn<(section: string) => void>();
+    const localSink = { transport: "wled", id: "192.168.1.42", reachable: false } satisfies LocalSink;
+    const silent = { ...healthy, localSink, onOpenDevices };
+    const chip = byLabel(silent, "WLED");
+    expect(chip).toMatchObject({ state: "shell:statusBar.state.noAnswer", kind: "error" });
+    expect(chip.attention?.hint).toBe("shell:statusBar.hint.wledSilent");
+    chip.attention?.onAction?.();
+    expect(onOpenDevices).toHaveBeenCalledWith("strips");
+    expect(byLabel({ ...healthy, localSink: { transport: "wled", id: "192.168.1.42" } }, "WLED")).toMatchObject({
+      state: S.ok,
+      kind: "ok",
+      attention: undefined,
+    });
+  });
+
   it("walks the Hue chip down streaming → reachable → configured → never set up", () => {
     expect(byLabel(healthy, "Hue")).toMatchObject({ state: S.streaming, kind: "active" });
     expect(byLabel({ ...healthy, hueStreaming: false }, "Hue")).toMatchObject({

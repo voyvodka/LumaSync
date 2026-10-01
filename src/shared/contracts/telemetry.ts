@@ -53,6 +53,13 @@ export interface RuntimeTelemetrySnapshot {
    * nothing wrong. {@link CAPTURE_TARGET_FPS_ABSENT} before any worker ran.
    */
   captureTargetFps: number;
+  /** Code of the worker's last failed send to a strip or WLED device (`LED_OUTPUT_WRITE_FAILED`,
+   *  `WLED_SEND_FAILED`, …), sticky for its lifetime like the capture failure. */
+  lastOutputErrorCode: string | null;
+  /** Its age in seconds, read as {@link lastCaptureErrorAtSecs} is. */
+  lastOutputErrorAtSecs: number | null;
+  /** The worker stopped on a panic while the mode still reads as running. */
+  workerStopped: boolean;
 }
 
 /** Sentinel for `captureTargetFps`: no worker has started yet. */
@@ -92,13 +99,27 @@ export interface RuntimeHealth {
   linkConstrained: boolean;
   /** {@link LINK_MAX_FPS_ABSENT} when no serial link is in play. */
   linkMaxFps: number;
+  /** Code of a send to a strip or WLED device failing *now* (the capture rule), else `null`. */
+  outputFailureCode: string | null;
+  /** The worker stopped on a panic: the lights hold or go dark while the mode reads as running.
+   *  Cleared by the next start or stop. */
+  workerStopped: boolean;
 }
 
 export const NO_RUNTIME_HEALTH_ISSUES: RuntimeHealth = {
   captureFailureCode: null,
   linkConstrained: false,
   linkMaxFps: LINK_MAX_FPS_ABSENT,
+  outputFailureCode: null,
+  workerStopped: false,
 };
+
+/** Whether a send to a strip or WLED device is failing *now*. */
+export function isOutputFailingNow(snapshot: RuntimeTelemetrySnapshot): boolean {
+  if (snapshot.lastOutputErrorCode === null) return false;
+  const age = snapshot.lastOutputErrorAtSecs;
+  return age !== null && age <= CAPTURE_FAILURE_ONGOING_MAX_AGE_SECS;
+}
 
 /** The same verdict Rust publishes, derived from a polled snapshot. */
 export function runtimeHealthFromSnapshot(snapshot: RuntimeTelemetrySnapshot): RuntimeHealth {
@@ -106,6 +127,8 @@ export function runtimeHealthFromSnapshot(snapshot: RuntimeTelemetrySnapshot): R
     captureFailureCode: isCaptureFailingNow(snapshot) ? snapshot.lastCaptureErrorCode : null,
     linkConstrained: snapshot.linkConstrained,
     linkMaxFps: snapshot.linkMaxFps,
+    outputFailureCode: isOutputFailingNow(snapshot) ? snapshot.lastOutputErrorCode : null,
+    workerStopped: snapshot.workerStopped,
   };
 }
 

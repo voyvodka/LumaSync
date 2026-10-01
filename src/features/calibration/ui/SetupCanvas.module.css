@@ -102,6 +102,7 @@
     to { transform: scale(2.6); opacity: 0; }
   }
 
+  :global(:root[data-reduced-motion]) .trackBack,
   :global(:root[data-reduced-motion]) .stand,
   :global(:root[data-reduced-motion]) .flowLine,
   :global(:root[data-reduced-motion]) .head,

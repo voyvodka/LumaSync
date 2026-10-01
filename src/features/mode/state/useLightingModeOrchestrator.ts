@@ -21,9 +21,11 @@ import {
 import {
   LIGHTING_MODE_KIND,
   normalizeAmbilightPayload,
+  normalizeEffectPayload,
   normalizeOutputTargets,
   normalizeSolidColorPayload,
   type AmbilightPayload,
+  type EffectPayload,
   type LightingModeConfig,
   type SolidColorPayload,
 } from "@/shared/contracts/mode";
@@ -90,6 +92,8 @@ export interface LightingModeOrchestrator {
   hueNotStartedNotice: HueLeftOutReason | null;
   /** A choice ran on Hue without the strip it also named, which is not connected. */
   usbLeftOutNotice: boolean;
+  /** The last apply found the bound WLED device's LED count and the layout's apart. */
+  wledLengthMismatchNotice: { panelLeds: number; frameLeds: number } | null;
   /**
    * Why Hue is out of the running mode, for the status chip. Raised with the
    * notice but not dismissed with it: it holds until Hue joins, or the user
@@ -123,6 +127,7 @@ function choiceOf(mode: LightingModeConfig): LightingModeConfig {
     kind: mode.kind,
     ...(mode.solid ? { solid: mode.solid } : {}),
     ...(mode.ambilight ? { ambilight: mode.ambilight } : {}),
+    ...(mode.effect ? { effect: mode.effect } : {}),
   };
 }
 
@@ -147,6 +152,10 @@ export function useLightingModeOrchestrator({
   const [hueLeftOutNotice, setHueLeftOutNotice] = useState<HueLeftOutReason | null>(null);
   const [hueNotStartedNotice, setHueNotStartedNotice] = useState<HueLeftOutReason | null>(null);
   const [usbLeftOutNotice, setUsbLeftOutNotice] = useState(false);
+  const [wledLengthMismatchNotice, setWledLengthMismatchNotice] = useState<{
+    panelLeds: number;
+    frameLeds: number;
+  } | null>(null);
   const [bootHueRetryNotice, setBootHueRetryNotice] = useState<BootHueRetryState | null>(null);
   const [pendingChoices, setPendingChoices] = useState(0);
   // The kind the newest choice asked for, while it is in flight: a nudge of
@@ -156,15 +165,21 @@ export function useLightingModeOrchestrator({
 
   // The snapshot says what runs; Off carries no payload. The last colour and
   // Ambilight settings seen are kept so the controls show them while Off.
-  const rememberedRef = useRef<{ solid?: SolidColorPayload; ambilight?: AmbilightPayload }>({});
+  const rememberedRef = useRef<{
+    solid?: SolidColorPayload;
+    ambilight?: AmbilightPayload;
+    effect?: EffectPayload;
+  }>({});
   const running = snapshot?.mode ?? OFF;
   const lightingMode = useMemo<LightingModeConfig>(() => {
     if (running.solid) rememberedRef.current.solid = running.solid;
     if (running.ambilight) rememberedRef.current.ambilight = running.ambilight;
+    if (running.effect) rememberedRef.current.effect = running.effect;
     return {
       ...running,
       solid: running.solid ?? rememberedRef.current.solid,
       ambilight: running.ambilight ?? rememberedRef.current.ambilight,
+      effect: running.effect ?? rememberedRef.current.effect,
     };
   }, [running]);
   const lightingModeRef = useRef(lightingMode);
@@ -255,6 +270,18 @@ export function useLightingModeOrchestrator({
         setHueNotStartedNotice(result.outcome.hueNotStarted);
       }
       if (usbLeftOut(result) || isOutputsApplied(result)) setUsbLeftOutNotice(usbLeftOut(result));
+      // Only an apply knows it: one that ran says afresh, a reply with no apply leaves it.
+      if (result.outcome.applyStatus !== null) {
+        const advisory = result.outcome.wledAdvisory;
+        // The notice's identity is its occurrence: the same mismatch again keeps it, so a × holds.
+        setWledLengthMismatchNotice((current) =>
+          advisory === null
+            ? null
+            : current?.panelLeds === advisory.sinkLedCount && current.frameLeds === advisory.frameLedCount
+              ? current
+              : { panelLeds: advisory.sinkLedCount, frameLeds: advisory.frameLedCount },
+        );
+      }
 
       const apply = result.outcome.applyStatus;
       if (apply?.code === LIGHTING_MODE_STATUS.SOLID_MODE_HUE_OUTPUT_SKIPPED) {
@@ -333,6 +360,8 @@ export function useLightingModeOrchestrator({
           retunes.push({ solid: normalizeSolidColorPayload(next.solid) });
         } else if (next.kind === LIGHTING_MODE_KIND.AMBILIGHT && next.ambilight) {
           retunes.push({ ambilight: normalizeAmbilightPayload(next.ambilight) });
+        } else if (next.kind === LIGHTING_MODE_KIND.EFFECT && next.effect) {
+          retunes.push({ effect: normalizeEffectPayload(next.effect) });
         }
         return;
       }
@@ -420,6 +449,7 @@ export function useLightingModeOrchestrator({
       // Off carries no payload in the snapshot; the saved mode has both.
       if (saved.lightingMode?.solid) rememberedRef.current.solid = saved.lightingMode.solid;
       if (saved.lightingMode?.ambilight) rememberedRef.current.ambilight = saved.lightingMode.ambilight;
+      if (saved.lightingMode?.effect) rememberedRef.current.effect = saved.lightingMode.effect;
       await send({ origin: LIGHTING_ORIGIN.BOOT }, { boot: true });
     },
     [send],
@@ -438,6 +468,7 @@ export function useLightingModeOrchestrator({
     hueLeftOutNotice,
     hueNotStartedNotice,
     usbLeftOutNotice,
+    wledLengthMismatchNotice,
     hueHeldOutReason,
     bootHueRetryNotice,
     lastOutcome: snapshot === null ? undefined : snapshot.lastOutcome,

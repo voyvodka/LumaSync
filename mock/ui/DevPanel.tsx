@@ -54,7 +54,7 @@ import type { MockWorld } from "../state";
 
 /**
  * The tray's lighting items run the transaction in Rust and never reach a
- * window, so the panel sends what `tray_request` in `outputs.rs` would. Resume
+ * window, so the panel sends what `tray_request` in `outputs/away_tray.rs` would. Resume
  * reads the saved mode, as Rust does before anything has run this session.
  */
 async function runTrayLighting(item: "off" | "resume" | "solid"): Promise<void> {
@@ -1100,15 +1100,15 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                 onChange={(v) => {
                   mutate((w) => {
                     if (v === "healthy") {
-                      w.telemetry = { captureFps: 29.6, sendFps: 29.4, queueHealth: "healthy", frameLatencyMs: 4.2, linkConstrained: false, linkMaxFps: 74, lastCaptureErrorCode: null, lastCaptureErrorAtSecs: null, captureTargetFps: 30.3 };
+                      w.telemetry = { captureFps: 29.6, sendFps: 29.4, queueHealth: "healthy", frameLatencyMs: 4.2, linkConstrained: false, linkMaxFps: 74, lastCaptureErrorCode: null, lastCaptureErrorAtSecs: null, captureTargetFps: 30.3, lastOutputErrorCode: null, lastOutputErrorAtSecs: null, workerStopped: false };
                     } else if (v === "degraded") {
                       // Materially degrading, which the contract is explicit is
                       // not the same as merely being at capacity.
-                      w.telemetry = { captureFps: 29.6, sendFps: 26.0, queueHealth: "warning", frameLatencyMs: 22.5, linkConstrained: true, linkMaxFps: 26, lastCaptureErrorCode: null, lastCaptureErrorAtSecs: null, captureTargetFps: 30.3 };
+                      w.telemetry = { captureFps: 29.6, sendFps: 26.0, queueHealth: "warning", frameLatencyMs: 22.5, linkConstrained: true, linkMaxFps: 26, lastCaptureErrorCode: null, lastCaptureErrorAtSecs: null, captureTargetFps: 30.3, lastOutputErrorCode: null, lastOutputErrorAtSecs: null, workerStopped: false };
                     } else if (v === "stalled") {
-                      w.telemetry = { captureFps: 0, sendFps: 0, queueHealth: "critical", frameLatencyMs: 0, linkConstrained: false, linkMaxFps: 0, lastCaptureErrorCode: "AMBILIGHT_CAPTURE_PERMISSION_DENIED", lastCaptureErrorAtSecs: 2, captureTargetFps: 30.3 };
+                      w.telemetry = { captureFps: 0, sendFps: 0, queueHealth: "critical", frameLatencyMs: 0, linkConstrained: false, linkMaxFps: 0, lastCaptureErrorCode: "AMBILIGHT_CAPTURE_PERMISSION_DENIED", lastCaptureErrorAtSecs: 2, captureTargetFps: 30.3, lastOutputErrorCode: null, lastOutputErrorAtSecs: null, workerStopped: false };
                     } else if (v === "zero") {
-                      w.telemetry = { captureFps: 0, sendFps: 0, queueHealth: "healthy", frameLatencyMs: 0, linkConstrained: false, linkMaxFps: 0, lastCaptureErrorCode: null, lastCaptureErrorAtSecs: null, captureTargetFps: 30.3 };
+                      w.telemetry = { captureFps: 0, sendFps: 0, queueHealth: "healthy", frameLatencyMs: 0, linkConstrained: false, linkMaxFps: 0, lastCaptureErrorCode: null, lastCaptureErrorAtSecs: null, captureTargetFps: 30.3, lastOutputErrorCode: null, lastOutputErrorAtSecs: null, workerStopped: false };
                     }
                   });
                   // The stall notice and the link note follow the push, not the poll.

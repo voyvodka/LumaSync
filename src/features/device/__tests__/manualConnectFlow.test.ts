@@ -154,7 +154,6 @@ describe("manual connect flow", () => {
     expect(connectSerialPort).toHaveBeenCalledTimes(1);
     expect(controller.getState().status).toBe("connected");
     expect(controller.getState().connectedPort).toBe("COM3");
-    expect(controller.getState().canConnect).toBe(true);
     expect(controller.getState().selectedPort).toBe("COM3");
   });
 

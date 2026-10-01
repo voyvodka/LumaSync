@@ -20,4 +20,10 @@ export type LocalSink =
       /** USB product string the OS reported for the port, when it reported one. */
       product?: string;
     }
-  | { transport: "wled"; /** LAN address — the only identity the persisted sink config keeps. */ id: string };
+  | {
+      transport: "wled";
+      /** LAN address — the only identity the persisted sink config keeps. */
+      id: string;
+      /** `false` while the device does not answer its probe; absent reads as answering. */
+      reachable?: boolean;
+    };

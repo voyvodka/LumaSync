@@ -17,6 +17,8 @@ import { useTrayFailureNotification } from "./features/shell/useTrayFailureNotif
 import { useShellBootstrap } from "./features/shell/useShellBootstrap";
 import { openScreenCaptureSettings } from "./features/mode/captureApi";
 import { useCaptureStallNotice } from "./features/telemetry/hooks/useCaptureStallNotice";
+import { useRuntimeHealth } from "./features/telemetry/runtimeHealthSource";
+import type { RuntimeHealth } from "./shared/contracts/telemetry";
 import { useHueSolidColorNotice } from "./features/mode/state/useHueSolidColorNotice";
 import { useHueTargetAutoAdd } from "./features/mode/state/useHueTargetAutoAdd";
 import { usePreviewOpenNotice } from "./features/preview/state/usePreviewOpenNotice";
@@ -108,6 +110,10 @@ const selectActiveSection = (state: NavigationState) => state.activeSection;
 const selectLedSetupOpen = (state: NavigationState) => state.ledSetup !== null;
 const selectNoticeView = (state: NavigationState) => currentNoticeView(state);
 const selectUpdaterStatus = (snapshot: UpdaterSnapshot) => snapshot.state.status;
+const selectOutputHealth = (health: RuntimeHealth) => ({
+  outputFailureCode: health.outputFailureCode,
+  workerStopped: health.workerStopped,
+});
 const selectUpdateCheckFailedNotice = (snapshot: UpdaterSnapshot) => snapshot.checkFailedNotice;
 const selectUpdateModalShown = (snapshot: UpdaterSnapshot) =>
   snapshot.isModalOpen && isUpdateModalStatus(snapshot.state);
@@ -164,9 +170,12 @@ function Shell() {
     }),
     shallowEqual,
   );
+  const wledReachable = useLocalOutputs(
+    (state) => state.snapshot?.outputs.find((output) => output.kind === "wled")?.reachable !== false,
+  );
   const localSink = useMemo(
-    () => localSinkOf(driven, ports),
-    [driven, ports],
+    () => localSinkOf(driven, ports, wledReachable),
+    [driven, ports, wledReachable],
   );
   // Latched: a strip unplugged this session is an outage, not "never set up".
   const [localSinkSeen, setLocalSinkSeen] = useState(false);
@@ -364,6 +373,8 @@ function Shell() {
   const captureStalledNotice = useCaptureStallNotice(
     lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT,
   );
+  // Sends failing and a stopped worker hold for any lit mode; both clear on the next start or stop.
+  const outputHealth = useRuntimeHealth(selectOutputHealth, shallowEqual);
 
   // What the mode controls read, published to the sections through the
   // lighting store. Each section selects its own slice of it.
@@ -530,6 +541,9 @@ function Shell() {
           calibrationRequired: bootstrapDone && modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED,
           startFailure: mode.startFailedNotice,
           captureStalled: captureStalledNotice,
+          outputFailing: outputHealth.outputFailureCode,
+          workerStopped: outputHealth.workerStopped,
+          wledLengthMismatch: mode.wledLengthMismatchNotice,
           stopFailedTargets: mode.stopFailedNotice,
           previewOpenFailure: previewOpenNotice,
           hueLeftOut: mode.hueLeftOutNotice,
@@ -566,6 +580,8 @@ function Shell() {
       modeGuard.reason,
       mode.startFailedNotice,
       captureStalledNotice,
+      outputHealth,
+      mode.wledLengthMismatchNotice,
       mode.stopFailedNotice,
       previewOpenNotice,
       mode.hueLeftOutNotice,

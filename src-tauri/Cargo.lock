@@ -2996,6 +2996,7 @@ name = "lumasync"
 version = "1.5.5-rc.6"
 dependencies = [
  "block2",
+ "chrono",
  "keyring",
  "log",
  "mdns-sd",

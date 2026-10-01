@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 
 use log::{info, warn};
 
+use super::effects::EffectDraw;
 use super::frame_pipeline::{
     strip_topology_for, AmbilightFramePipeline, FramePipelineConfig, FrameSettings,
 };
@@ -53,6 +54,11 @@ pub(super) struct WorkerPacing {
     /// What capture was asked for; a pull source is polled at this rate.
     pub capture_interval: Duration,
     pub clock: SmoothingClock,
+    /// The source draws its frames (an effect): paced like a test pattern,
+    /// though the preview reports it live.
+    pub synthetic: bool,
+    /// An effect, drawn per light by the pipeline instead of sampled.
+    pub effect: Option<EffectDraw>,
 }
 
 impl WorkerPacing {
@@ -60,6 +66,16 @@ impl WorkerPacing {
         Self {
             capture_interval,
             clock: Arc::new(Instant::now),
+            synthetic: false,
+            effect: None,
+        }
+    }
+
+    pub(super) fn drawn(capture_interval: Duration, effect: EffectDraw) -> Self {
+        Self {
+            synthetic: true,
+            effect: Some(effect),
+            ..Self::live(capture_interval)
         }
     }
 }
@@ -99,17 +115,43 @@ impl HueOutputFollower {
     }
 }
 
+/// A running worker in `ACTIVE_AMBILIGHT_WORKERS`, counted out when it drops:
+/// on a normal exit and on a panic alike, so a crashed loop does not leave the
+/// app counting a worker that is gone.
+struct ActiveWorker;
+
+impl ActiveWorker {
+    fn enter() -> Self {
+        ACTIVE_AMBILIGHT_WORKERS.fetch_add(1, Ordering::SeqCst);
+        Self
+    }
+}
+
+impl Drop for ActiveWorker {
+    fn drop(&mut self) {
+        ACTIVE_AMBILIGHT_WORKERS.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+/// Which of a run of failures reaches the log: the first five, then every
+/// fiftieth, so a failure that repeats every frame is seen without flooding it.
+pub(super) fn is_logged_failure(count: u32) -> bool {
+    count <= 5 || count.is_multiple_of(50)
+}
+
 fn log_hue_output(context: Option<&HueActiveOutputContext>) {
     let Some(ctx) = context else {
         info!("[ambilight-worker] hue output released — no live stream");
         return;
     };
+    // Where the bridge (or the room map) puts each channel. Not where it samples
+    // the screen: that is the pipeline's sample table, which room-aware sampling
+    // moves off this position, so a screen point derived from it here misled.
     for ch in &ctx.channels {
-        let norm_x = (ch.position_x.clamp(-1.0, 1.0) + 1.0) / 2.0;
-        let norm_y = (1.0 - ch.position_y.clamp(-1.0, 1.0)) / 2.0;
-        info!("[ambilight-worker] hue ch#{} bridge_pos=({:.3},{:.3}) z={:?} screen_norm=({:.1}%,{:.1}%) region={:?}",
-            ch.channel_id, ch.position_x, ch.position_y, ch.position_z,
-            norm_x * 100.0, norm_y * 100.0, ch.screen_region);
+        info!(
+            "[ambilight-worker] hue ch#{} bridge_pos=({:.3},{:.3}) z={:?}",
+            ch.channel_id, ch.position_x, ch.position_y, ch.position_z
+        );
     }
 }
 
@@ -211,6 +253,8 @@ pub(super) fn start_ambilight_worker(
         resolve_quality_config(&usb_plan, total_leds, firmware_profile, chip_type);
     let mut quality_state = AmbilightWorkerQualityState::new(quality_config);
     let mut telemetry_window = RuntimeTelemetryWindow::new(Instant::now());
+    telemetry_window.attach(telemetry_snapshot.clone());
+    let telemetry_snapshot_for_stop = telemetry_snapshot.clone();
     // Deliberately gated on `serial_budget`, not `usb_plan` -- a WLED-only
     // session must report `link_max_fps: 0.0` / unconstrained, the same as
     // a Hue-only session (see contract note on `RuntimeTelemetrySnapshot`).
@@ -221,7 +265,7 @@ pub(super) fn start_ambilight_worker(
     AMBILIGHT_CAPTURE_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
     // A synthetic test paints exact per-LED blocks; the live 0.05 box is wider
     // than the whole comet, so it averaged in unlit screen and dimmed the head.
-    let synthetic = preview.as_ref().is_some_and(|ctx| ctx.source == "test");
+    let synthetic = pacing.synthetic || preview.as_ref().is_some_and(|ctx| ctx.source == "test");
     telemetry_window.set_capture_interval(pacing.capture_interval);
     if synthetic {
         telemetry_window.skip_history();
@@ -284,9 +328,10 @@ pub(super) fn start_ambilight_worker(
         Arc::new(Mutex::new(frame_source));
     let worker_source = Arc::clone(&frame_source_arc);
     let seeded_at = (pacing.clock)();
+    let effect_draw = pacing.effect.clone();
 
     let handle = thread::spawn(move || {
-        ACTIVE_AMBILIGHT_WORKERS.fetch_add(1, Ordering::SeqCst);
+        let _active = ActiveWorker::enter();
         let initial_hue = hue_output.as_ref().and_then(|f| f.context.as_ref());
         let has_hue = initial_hue.map(|c| !c.channels.is_empty()).unwrap_or(false);
         info!(
@@ -324,6 +369,7 @@ pub(super) fn start_ambilight_worker(
             room_geometry,
             black_border_detection: live_settings.read_black_border_detection(),
             color_correction,
+            effect: effect_draw,
         });
         pipeline.seed_strip(&initial_sampled, seeded_at);
         info!(
@@ -339,8 +385,9 @@ pub(super) fn start_ambilight_worker(
         let has_strip = usb_sink.is_some();
 
         let mut capture_fail_count = 0u32;
+        let mut send_fail_count = 0u32;
         let mut last_edge_emit_at: Option<Instant> = None;
-        // v1.6 LED Preview — monotonic frame seq + last per-Hue-channel colours
+        // LED preview: monotonic frame seq + last per-Hue-channel colours
         // for the enriched edge-signal (only stamped while a preview is active).
         let mut edge_seq: u64 = 0;
         let mut last_hue_colors: Option<Vec<[u8; 3]>> = None;
@@ -426,7 +473,7 @@ pub(super) fn start_ambilight_worker(
                 match captured {
                     Err(e) => {
                         capture_fail_count += 1;
-                        if capture_fail_count <= 5 || capture_fail_count.is_multiple_of(50) {
+                        if is_logged_failure(capture_fail_count) {
                             warn!("[ambilight-worker] capture failed #{capture_fail_count}: {e}");
                         }
                         // The frame branch owns the only other flush, so without
@@ -519,7 +566,18 @@ pub(super) fn start_ambilight_worker(
                             }
                             send_started.elapsed().as_secs_f32() * 1000.0
                         }
-                        Err(_) => 0.0,
+                        Err(e) => {
+                            // Every one kept for telemetry; the log keeps the first few and a
+                            // sample after, as for capture, so a dead strip does not flood it.
+                            send_fail_count += 1;
+                            telemetry_window.record_output_error(&e, Instant::now());
+                            if is_logged_failure(send_fail_count) {
+                                warn!(
+                                    "[ambilight-worker] strip send failed #{send_fail_count}: {e}"
+                                );
+                            }
+                            0.0
+                        }
                     }
                 }
                 _ => 0.0,
@@ -613,13 +671,23 @@ pub(super) fn start_ambilight_worker(
         if let Some(mut sink) = usb_sink {
             let _ = sink.stop();
         }
-
-        ACTIVE_AMBILIGHT_WORKERS.fetch_sub(1, Ordering::SeqCst);
     });
 
     Ok(LightingWorkerRuntime {
         cancel,
         handle,
+        telemetry: telemetry_snapshot_for_stop,
         _frame_source: frame_source_arc,
     })
+}
+
+#[cfg(test)]
+mod failure_log_tests {
+    use super::is_logged_failure;
+
+    #[test]
+    fn a_repeating_failure_logs_the_first_five_then_every_fiftieth() {
+        let logged: Vec<u32> = (1..=200).filter(|&n| is_logged_failure(n)).collect();
+        assert_eq!(logged, vec![1, 2, 3, 4, 5, 50, 100, 150, 200]);
+    }
 }

@@ -35,7 +35,7 @@ function registry(connected: "strip" | "wled" | "nothing"): LocalOutputsSnapshot
   } as const;
   return {
     revision: 1,
-    outputs: connected === "wled" ? [strip, { kind: "wled", ip: "192.168.1.42", ledCount: 60, connected: true }] : [strip],
+    outputs: connected === "wled" ? [strip, { kind: "wled", ip: "192.168.1.42", ledCount: 60, connected: true, reachable: true }] : [strip],
     driven:
       connected === "strip"
         ? { kind: "serial", portName: "COM3" }

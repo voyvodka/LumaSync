@@ -54,7 +54,7 @@ export function localOutputsSnapshot(): LocalOutputsSnapshot {
     });
   }
   if (device !== undefined) {
-    outputs.push({ kind: "wled", ip: device.host, ledCount: device.ledCount, connected: true });
+    outputs.push({ kind: "wled", ip: device.host, ledCount: device.ledCount, connected: true, reachable: true });
   }
   // Rust's rule: the earliest connected output.
   const wledDriven = device !== undefined && (port === undefined || serial.connectedFirst === "wled");

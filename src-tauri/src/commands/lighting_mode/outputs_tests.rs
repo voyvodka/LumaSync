@@ -55,6 +55,7 @@ fn solid(r: u8) -> LightingModeConfig {
             g: 20,
             b: 30,
             brightness: 1.0,
+            kelvin: None,
         }),
         ..LightingModeConfig::default()
     }
@@ -300,6 +301,20 @@ fn off_stops_the_worker_and_clears_the_outputs() {
     assert!(result.snapshot.active_targets.is_empty());
     assert_eq!(result.snapshot.phase, LightingPhase::Idle);
     assert_eq!(rig.saved("lightingMode").unwrap()["kind"], json!("off"));
+}
+
+/// The power button turns the lights back on in the last lit kind, which an Off
+/// must not overwrite.
+#[test]
+fn a_lit_choice_saves_its_kind_and_an_off_keeps_it() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(1), &[Usb]);
+    assert_eq!(rig.saved("lastLitKind"), Some(json!("solid")));
+
+    apply(&rig, user(Some(off()), None));
+
+    assert_eq!(rig.saved("lightingMode").unwrap()["kind"], json!("off"));
+    assert_eq!(rig.saved("lastLitKind"), Some(json!("solid")));
 }
 
 /// The worker holds a handle on the Hue sender; the stream stops second.
@@ -1201,6 +1216,64 @@ fn an_ambilight_start_whose_usb_write_fails_runs_on_hue_alone() {
 }
 
 #[test]
+fn an_effect_start_whose_usb_write_fails_runs_on_hue_alone() {
+    let rig = Rig::new(RigSetup::default());
+    rig.fail_usb_writes(1);
+    let effect = LightingModeConfig {
+        kind: LightingModeKind::Effect,
+        effect: Some(super::config::DEFAULT_EFFECT),
+        ..LightingModeConfig::default()
+    };
+
+    let result = apply(&rig, user(Some(effect), Some(&[Usb, Hue])));
+
+    assert_eq!(
+        result.snapshot.mode.kind,
+        LightingModeKind::Effect,
+        "{:?}",
+        events(&rig)
+    );
+    assert_eq!(result.snapshot.active_targets, vec![Hue]);
+    assert_eq!(result.outcome.dropped_targets, vec![Usb]);
+}
+
+/// An effect is placed in the room the way the screen is: Hue lights sample
+/// the drawn frame where the room map puts them.
+#[test]
+fn an_effect_carries_the_room_map_to_hue() {
+    let rig = Rig::new(RigSetup {
+        state: json!({
+            "roomMap": {
+                "dimensions": { "widthMeters": 4, "depthMeters": 5, "heightMeters": 2.5 },
+                "tvAnchor": { "x": 1, "y": 0, "width": 1.2, "height": 0.1 },
+                "hueChannels": [{
+                    "channelIndex": 0, "channelId": 4, "entertainmentAreaId": "area-1",
+                    "x": 0.5, "y": 1, "z": 0.3
+                }],
+                "zones": []
+            }
+        }),
+        ..RigSetup::default()
+    });
+    let effect = LightingModeConfig {
+        kind: LightingModeKind::Effect,
+        effect: Some(super::config::DEFAULT_EFFECT),
+        ..LightingModeConfig::default()
+    };
+
+    apply(&rig, user(Some(effect), Some(&[Usb, Hue])));
+
+    let running = rig.running();
+    assert_eq!(running.kind, LightingModeKind::Effect, "{:?}", events(&rig));
+    let placements = running
+        .room_geometry
+        .expect("the room map reached the effect")
+        .hue_placements;
+    assert_eq!(placements.len(), 1);
+    assert_eq!(placements[0].channel_id, 4);
+}
+
+#[test]
 fn a_usb_only_start_whose_write_keeps_failing_still_fails() {
     let rig = Rig::new(RigSetup::default());
     rig.fail_usb_writes(2);
@@ -1475,6 +1548,7 @@ fn an_unplug_behind_a_queued_start_still_drops_usb() {
 
 fn ambilight_tuning(brightness: f32) -> LightingTuning {
     LightingTuning {
+        effect: None,
         solid: None,
         ambilight: Some(AmbilightPayload {
             brightness,
@@ -1485,11 +1559,13 @@ fn ambilight_tuning(brightness: f32) -> LightingTuning {
 
 fn solid_tuning(r: u8) -> LightingTuning {
     LightingTuning {
+        effect: None,
         solid: Some(SolidColorPayload {
             r,
             g: 0,
             b: 0,
             brightness: 1.0,
+            kelvin: None,
         }),
         ambilight: None,
     }
@@ -2919,4 +2995,32 @@ mod bridge_wait {
             assert_eq!(result.outcome.hue_left_out, left_out, "{script}");
         }
     }
+}
+
+// The frontend tells "no mismatch" (null) from a field that is gone (undefined)
+// only if the key is always sent: the contract verifier skips a field TS lacks.
+#[test]
+fn the_apply_outcome_always_sends_its_wled_advisory_null_or_filled() {
+    let none = serde_json::to_value(super::outputs::ApplyOutputsOutcome::default()).unwrap();
+    assert_eq!(none.get("wledAdvisory"), Some(&serde_json::Value::Null));
+
+    let found = serde_json::to_value(super::outputs::ApplyOutputsOutcome {
+        wled_advisory: Some(super::config::WledLiveFrameAdvisory {
+            code: "WLED_LIVE_LED_COUNT_MISMATCH".to_string(),
+            message: "m".to_string(),
+            frame_led_count: 60,
+            sink_led_count: 120,
+        }),
+        ..Default::default()
+    })
+    .unwrap();
+    assert_eq!(
+        found["wledAdvisory"],
+        json!({
+            "code": "WLED_LIVE_LED_COUNT_MISMATCH",
+            "message": "m",
+            "frameLedCount": 60,
+            "sinkLedCount": 120,
+        })
+    );
 }
