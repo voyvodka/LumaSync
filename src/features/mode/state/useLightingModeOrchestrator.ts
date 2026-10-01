@@ -273,8 +273,13 @@ export function useLightingModeOrchestrator({
       // Only an apply knows it: one that ran says afresh, a reply with no apply leaves it.
       if (result.outcome.applyStatus !== null) {
         const advisory = result.outcome.wledAdvisory;
-        setWledLengthMismatchNotice(
-          advisory ? { panelLeds: advisory.sinkLedCount, frameLeds: advisory.frameLedCount } : null,
+        // The notice's identity is its occurrence: the same mismatch again keeps it, so a × holds.
+        setWledLengthMismatchNotice((current) =>
+          advisory === null
+            ? null
+            : current?.panelLeds === advisory.sinkLedCount && current.frameLeds === advisory.frameLedCount
+              ? current
+              : { panelLeds: advisory.sinkLedCount, frameLeds: advisory.frameLedCount },
         );
       }
 

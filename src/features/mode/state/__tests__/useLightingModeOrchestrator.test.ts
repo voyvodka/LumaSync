@@ -430,6 +430,12 @@ describe("useLightingModeOrchestrator", () => {
 
       await act(() => view.result.current.handleLightingModeChange({ kind: "solid" }));
       expect(view.result.current.wledLengthMismatchNotice).toEqual({ panelLeds: 120, frameLeds: 60 });
+      // The same mismatch again is the same occurrence: a dismissed notice stays dismissed.
+      const raised = view.result.current.wledLengthMismatchNotice;
+      const applies = applyOutputsMock.mock.calls.length;
+      await act(() => view.result.current.handleLightingModeChange({ kind: "off" }));
+      expect(applyOutputsMock.mock.calls.length).toBe(applies + 1);
+      expect(view.result.current.wledLengthMismatchNotice).toBe(raised);
 
       applyOutputsMock.mockResolvedValue(
         reply("OUTPUTS_APPLIED", running({ kind: "solid" }), {
