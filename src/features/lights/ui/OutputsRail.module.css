@@ -42,8 +42,7 @@
     text-overflow: ellipsis;
   }
   .name em { font-style: normal; font-weight: 400; color: var(--lm-ink-faint); }
-  /* Two lines before an ellipsis: the rail is 240 px, and a state word cut in half
-     ("checking…") reads as broken. */
+  /* Two lines: at 240 px a state word cut mid-way reads as broken. */
   .sub {
     display: -webkit-box;
     overflow: hidden;

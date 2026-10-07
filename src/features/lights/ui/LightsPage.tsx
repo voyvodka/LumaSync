@@ -126,6 +126,9 @@ export function LightsPage({
     verdict: hueProbeVerdict,
   });
 
+  // The stage shown is the last lit mode's while the lights are off.
+  const wideStage = (kind === LIGHTING_MODE_KIND.OFF ? lastLit : kind) === LIGHTING_MODE_KIND.EFFECT;
+
   return (
     <div className={styles.page} data-lights>
       <div className={styles.scroll}>
@@ -173,7 +176,7 @@ export function LightsPage({
             onSelect={(next) => onModeChange(MODE_KINDS[next].config({ solid: { ...solid }, ambilight, effect }))}
           />
           <Scenes mode={normalized} disabled={nonOffLocked} busy={isModeTransitioning} onApply={onModeChange} />
-          <div data-wide={(kind === LIGHTING_MODE_KIND.OFF ? lastLit : kind) === LIGHTING_MODE_KIND.EFFECT || undefined}>
+          <div data-wide={wideStage || undefined}>
             <ModeStage
               mode={normalized}
               disabled={calibrationLocked}
