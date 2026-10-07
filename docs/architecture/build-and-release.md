@@ -55,9 +55,10 @@ one and never deletes the old one. Dependabot's Tauri minor bump took the tree f
 (`scripts/dev/prune-rust-target.mjs`) removes each unit no build has read for seven days, judged by
 the access time of its files, and skips a profile while a build holds Cargo's lock. On that tree it
 removed 2.9 GB, and dev, check, clippy, test and e2e builds afterwards compiled no dependency.
-`--dry-run` shows what would go. It relies on access times, so it refuses to empty a profile
-outright — on a `noatime` volume every unit looks unread. Run it from a scheduled job, or by hand
-when the disk fills; `cargo clean` remains the blunt alternative.
+`--dry-run` shows what would go. It relies on access times, so it does nothing where no file shows
+a read after its write (a `noatime` volume) or where every unit looks unread (a long break), and it
+needs `lsof` to see a running build, so it is for macOS and Linux. Run it from a scheduled job, or
+by hand when the disk fills; `cargo clean` remains the blunt alternative.
 
 **The Rust toolchain is pinned to an exact version** in `rust-toolchain.toml`, not `stable`. A new
 stable release brings new clippy lints, and CI runs clippy at deny level, so a floating channel turns

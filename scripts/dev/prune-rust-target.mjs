@@ -9,6 +9,7 @@
 // A unit is `.fingerprint/<name>-<hash>` plus every `deps/` and `build/` entry carrying that hash.
 // "Read" is the newest atime among its files. APFS and Linux relatime refresh atime on a read once it
 // is a day old, so the cut-off is accurate to a day; a unit removed by mistake costs only a rebuild.
+// macOS and Linux only: the running-build check needs lsof.
 //
 //   node scripts/dev/prune-rust-target.mjs [--days 7] [--dry-run] [--target <dir>] [--force]
 import { execFileSync } from "node:child_process";
@@ -20,8 +21,16 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
 const option = (name, fallback) => {
+  const inline = args.find((a) => a.startsWith(`${name}=`));
+  if (inline) return inline.slice(name.length + 1);
   const i = args.indexOf(name);
-  return i >= 0 && args[i + 1] ? args[i + 1] : fallback;
+  if (i < 0) return fallback;
+  const value = args[i + 1];
+  if (value === undefined || value.startsWith("--")) {
+    console.error(`prune-rust-target: ${name} needs a value`);
+    process.exit(2);
+  }
+  return value;
 };
 
 const days = Number(option("--days", "7"));
@@ -31,38 +40,56 @@ if (!Number.isFinite(days) || days < 2) {
   process.exit(2);
 }
 const dryRun = flag("--dry-run");
+const force = flag("--force");
 const targetDir = resolve(
   option("--target", process.env.CARGO_TARGET_DIR || join(repoRoot, "src-tauri", "target")),
 );
 const cutoffMs = Date.now() - days * 86_400_000;
 
-const HASH = /-([0-9a-f]{16})(?:\.[^/]*)?$/;
+const HASH = /-([0-9a-f]{16})(?:\.[^/\\]*)?$/;
 const LOCKS = [".cargo-lock", ".cargo-build-lock", ".cargo-artifact-lock"];
+// A file read well after it was written; on a noatime volume no file ever shows this.
+const READ_AFTER_WRITE_MS = 60_000;
 
-/** Newest file atime and total size under `path`, following no symlinks. A directory's own atime
- *  is skipped: listing it (`du`, Spotlight, this script) refreshes it without any build reading it. */
+/** Newest file atime, total size, and whether any file was read after it was written, under
+ *  `path`, following no symlinks. A directory's own atime is skipped: listing it (`du`, Spotlight,
+ *  this script) refreshes it without any build reading it. */
 function scan(path) {
   const st = lstatSync(path);
-  if (!st.isDirectory()) return { atime: st.atimeMs, bytes: st.size };
+  if (!st.isDirectory()) {
+    return {
+      atime: st.atimeMs,
+      bytes: st.size,
+      readAfterWrite: st.atimeMs > st.mtimeMs + READ_AFTER_WRITE_MS,
+    };
+  }
   let atime = 0;
   let bytes = 0;
+  let readAfterWrite = false;
   for (const entry of readdirSync(path)) {
     const sub = scan(join(path, entry));
     atime = Math.max(atime, sub.atime);
     bytes += sub.bytes;
+    readAfterWrite ||= sub.readAfterWrite;
   }
-  return { atime, bytes };
+  return { atime, bytes, readAfterWrite };
 }
 
-/** true / false, or null when lsof is unavailable and the answer is unknown. */
+/** true / false, or null when it cannot be told (no lsof, or lsof failed). */
 function heldOpen(profileDir) {
   const present = LOCKS.map((l) => join(profileDir, l)).filter(existsSync);
   if (present.length === 0) return false;
   try {
-    return execFileSync("lsof", ["-t", ...present], { encoding: "utf8" }).trim() !== "";
+    return (
+      execFileSync("lsof", ["-t", ...present], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      }).trim() !== ""
+    );
   } catch (error) {
-    if (error.code === "ENOENT") return null;
-    return false; // lsof exits 1 when no process has the files open
+    // lsof exits 1 both when nothing holds the files and on an error; only the silent 1 is "free".
+    if (error.status === 1 && !`${error.stdout}${error.stderr}`.trim()) return false;
+    return null;
   }
 }
 
@@ -81,21 +108,49 @@ function profileDirs(root) {
 }
 
 function pruneProfile(profileDir) {
-  const units = new Map(); // hash -> paths
-  const add = (path) => {
-    const hash = path.match(HASH)?.[1];
-    if (!hash) return;
-    if (!units.has(hash)) units.set(hash, []);
-    units.get(hash).push(path);
-  };
+  const units = new Map(); // hash -> { paths, tracked }
   for (const sub of [".fingerprint", "deps", "build", "examples"]) {
     const dir = join(profileDir, sub);
-    if (existsSync(dir)) for (const name of readdirSync(dir)) add(join(dir, name));
+    if (!existsSync(dir)) continue;
+    for (const name of readdirSync(dir)) {
+      const hash = name.match(HASH)?.[1];
+      if (!hash) continue;
+      if (!units.has(hash)) units.set(hash, { paths: [], tracked: false });
+      const unit = units.get(hash);
+      // .fingerprint first, so an interrupted prune leaves Cargo a missing fingerprint — a rebuild.
+      if (sub === ".fingerprint") {
+        unit.tracked = true;
+        unit.paths.unshift(join(dir, name));
+      } else {
+        unit.paths.push(join(dir, name));
+      }
+    }
+  }
+
+  const stale = [];
+  let tracked = 0;
+  let staleUnits = 0;
+  let atimeWorks = false;
+  for (const { paths, tracked: isTracked } of units.values()) {
+    // A hash seen only outside .fingerprint is not a unit Cargo tracks; leave it alone.
+    if (!isTracked) continue;
+    tracked += 1;
+    let atime = 0;
+    let bytes = 0;
+    for (const p of paths) {
+      const s = scan(p);
+      atime = Math.max(atime, s.atime);
+      bytes += s.bytes;
+      atimeWorks ||= s.readAfterWrite;
+    }
+    if (atime < cutoffMs) {
+      staleUnits += 1;
+      stale.push({ paths, bytes });
+    }
   }
 
   // rustc keeps one session per crate directory and drops the rest itself; a directory whose
   // newest session nobody has read since the cut-off belongs to a copy no build makes any more.
-  const stale = [];
   const incremental = join(profileDir, "incremental");
   if (existsSync(incremental)) {
     for (const name of readdirSync(incremental)) {
@@ -105,31 +160,20 @@ function pruneProfile(profileDir) {
     }
   }
 
-  let tracked = 0;
-  let staleUnits = 0;
-  for (const paths of units.values()) {
-    // A hash seen only outside .fingerprint is not a unit Cargo tracks; leave it alone.
-    if (!paths.some((p) => p.includes(`${join(profileDir, ".fingerprint")}/`))) continue;
-    tracked += 1;
-    let atime = 0;
-    let bytes = 0;
-    for (const p of paths) {
-      const s = scan(p);
-      atime = Math.max(atime, s.atime);
-      bytes += s.bytes;
-    }
-    if (atime < cutoffMs) {
-      staleUnits += 1;
-      stale.push({ paths, bytes });
-    }
+  // Without reads moving atime, "unread for a week" means only "built over a week ago", and live
+  // dependencies would go with the dead ones. Everything unread at once is a long break, not a dead
+  // copy; emptying the directory is what `cargo clean` is for.
+  if (!force && tracked > 0 && !atimeWorks) {
+    return { skipped: "no file shows a read after its write, so access times look frozen (noatime?)" };
+  }
+  if (!force && tracked > 0 && staleUnits === tracked) {
+    return { skipped: "every unit looks unread" };
   }
 
-  // Everything unread means a `noatime` volume or a long break, not a dead copy; emptying the
-  // directory would only force a full rebuild, which `cargo clean` does on purpose.
-  if (tracked > 0 && staleUnits === tracked && !flag("--force")) {
-    return { count: 0, freed: 0, skipped: "every unit looks unread (noatime volume?)" };
+  const heldNow = dryRun ? false : heldOpen(profileDir);
+  if (heldNow === true || (heldNow === null && !force)) {
+    return { skipped: "a build started while scanning" };
   }
-
   let freed = 0;
   for (const { paths, bytes } of stale) {
     freed += bytes;
@@ -151,9 +195,9 @@ for (const profileDir of profileDirs(targetDir)) {
     console.log(`prune-rust-target: ${profileDir} is in use by a running build, skipped`);
     continue;
   }
-  if (held === null && !flag("--force")) {
+  if (held === null && !force) {
     console.log(
-      `prune-rust-target: lsof not found, so a running build cannot be ruled out; ${profileDir} skipped (--force to prune anyway)`,
+      `prune-rust-target: cannot tell whether a build is running (lsof missing or failed); ${profileDir} skipped (--force to prune anyway)`,
     );
     continue;
   }
@@ -164,7 +208,7 @@ for (const profileDir of profileDirs(targetDir)) {
   }
   total += freed;
   console.log(
-    `prune-rust-target: ${profileDir}: ${count} entries unread for ${days}+ days, ${gb(freed)} ${dryRun ? "would be freed" : "freed"}`,
+    `prune-rust-target: ${profileDir}: ${count} entries unread for ${days}+ days, about ${gb(freed)} ${dryRun ? "would be freed" : "freed"}`,
   );
 }
-if (dryRun) console.log(`prune-rust-target: dry run, ${gb(total)} in all`);
+if (dryRun) console.log(`prune-rust-target: dry run, about ${gb(total)} in all`);
