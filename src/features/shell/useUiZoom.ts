@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 
 import { followPreference, getPreference, setPreference } from "@/features/persistence/preferences";
 import { resolveKeybindPlatform, UI_ZOOM_STEPS, type UiZoom } from "@/shared/contracts/shell";
@@ -45,7 +45,8 @@ function applyChromeScale(zoom: UiZoom): void {
 
 /** Settings → Interface size in the main window: its frame, and ⌘/Ctrl + − 0. */
 export function useUiZoom({ disabled = false }: { disabled?: boolean } = {}): void {
-  useEffect(() => {
+  // Before the first paint: the boot read has hydrated the size, and the bar must not draw once zoomed.
+  useLayoutEffect(() => {
     applyChromeScale(getPreference("uiZoom"));
     return followPreference("uiZoom", (zoom) => {
       applyChromeScale(zoom);
