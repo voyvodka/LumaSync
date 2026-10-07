@@ -86,7 +86,11 @@ keyring = { version = "4", features = ["apple-native-keyring-store"] }
 # ScopedIpV4/ResolvedService), so review a minor against `network::mdns`.
 mdns-sd = "0.21"
 uuid = { version = "1", features = ["v4"] }
-# Gated behind the `e2e` feature — see [features] below.
+
+# Gated behind the `e2e` feature — see [features] below. Not on Windows: e2e runs
+# only on macOS, and 1.4.0 pins webview2-com 0.38 while Tauri 2.12 hands it 0.39
+# types, so `--all-features` there would not compile.
+[target.'cfg(not(target_os = "windows"))'.dependencies]
 tauri-plugin-wdio-webdriver = { version = "1", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]

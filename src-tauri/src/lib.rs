@@ -505,7 +505,7 @@ pub fn run() {
 
     // 1b. E2E WebDriver server. The env gate matters: the plugin binds 4445 the
     // moment it is registered, and `cargo test --all-features` turns the feature on.
-    #[cfg(feature = "e2e")]
+    #[cfg(all(feature = "e2e", not(target_os = "windows")))]
     if std::env::var(tauri_plugin_wdio_webdriver::PORT_ENV_VAR).is_ok() {
         builder = builder.plugin(tauri_plugin_wdio_webdriver::init());
     }
