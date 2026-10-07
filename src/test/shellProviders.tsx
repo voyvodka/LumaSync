@@ -85,6 +85,7 @@ export function renderWithShellStores(
     isModalOpen: false,
     checkFailedNotice: null,
     upToDateAt: null,
+    checkedAt: null,
     ...options.updater,
   });
   const lightingActions: LightingControlActions = {

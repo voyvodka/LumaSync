@@ -147,6 +147,7 @@ const selectLocalOutputConnected = (state: LightingControlState) => state.localS
 const selectHueSessionActive = (status: HueShellStatus) => status.streaming || status.reconnecting;
 const selectCheckingForUpdates = (snapshot: UpdaterSnapshot) => snapshot.state.status === "checking";
 const selectUpToDateAt = (snapshot: UpdaterSnapshot) => snapshot.upToDateAt;
+const selectCheckedAt = (snapshot: UpdaterSnapshot) => snapshot.checkedAt;
 
 const SystemPanel = memo(function SystemPanel() {
   const { i18n } = useTranslation();
@@ -174,6 +175,7 @@ const SystemPanel = memo(function SystemPanel() {
   }, [readLighting, readHue, i18n]);
   const isCheckingForUpdates = useUpdaterState(selectCheckingForUpdates);
   const upToDateAt = useUpdaterState(selectUpToDateAt);
+  const lastCheckedAt = useUpdaterState(selectCheckedAt);
   const { checkForUpdates, devSetState } = useUpdaterActions();
   const setupGuide = useSetupGuideActions();
   return (
@@ -183,6 +185,7 @@ const SystemPanel = memo(function SystemPanel() {
         onCheckForUpdates={checkForUpdates}
         isCheckingForUpdates={isCheckingForUpdates}
         upToDateAt={upToDateAt}
+        lastCheckedAt={lastCheckedAt}
         devSetUpdaterState={devSetState}
         localOutputConnected={localOutputConnected}
         hueActive={hueActive}

@@ -134,6 +134,7 @@ const DOWNLOADING = (progress: number) => ({
   isModalOpen: true,
   checkFailedNotice: null,
   upToDateAt: null,
+  checkedAt: null,
 });
 
 describe("SettingsLayout render boundaries", () => {

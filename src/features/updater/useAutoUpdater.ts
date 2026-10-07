@@ -78,6 +78,8 @@ export function useAutoUpdater() {
   // An up-to-date answer leaves the state at `idle`, which is also "never
   // checked"; without this a check the user asked for said nothing at all.
   const [upToDateAt, setUpToDateAt] = useState<number | null>(null);
+  // Any check that got an answer, asked for or not: Settings says when the feed was last read.
+  const [checkedAt, setCheckedAt] = useState<number | null>(null);
   const lastStartRef = useRef<number>(0);
   const checkGuardRef = useRef(createLatestOperationGuard());
 
@@ -138,10 +140,12 @@ export function useAutoUpdater() {
         setChannel(response.channel);
 
         if (response.status.code === UPDATER_STATUS.UPDATE_AVAILABLE && response.update) {
+          setCheckedAt(Date.now());
           clearCheckFailed();
           if (trigger === "background") setDismissedStatus("available");
           setState({ status: "available", update: response.update });
         } else if (response.status.code === UPDATER_STATUS.UP_TO_DATE) {
+          setCheckedAt(Date.now());
           clearCheckFailed();
           setState({ status: "idle" });
           if (trigger === "user") setUpToDateAt(Date.now());
@@ -279,6 +283,7 @@ export function useAutoUpdater() {
     checkForUpdatesInBackground,
     checkFailedNotice,
     upToDateAt,
+    checkedAt,
     downloadAndInstall,
     dismiss,
     showUpdate,

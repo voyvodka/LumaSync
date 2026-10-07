@@ -42,7 +42,8 @@ https://keepachangelog.com/en/1.1.0/
   submit the issue yourself, or close the tab.
 - Updates: besides the check at launch, LumaSync now checks once a day while it runs, and retries
   a failed check after 1, 5 and 15 minutes instead of waiting for the next launch. An update found
-  in the background is offered the next time you open the window.
+  in the background is offered the next time you open the window. Settings → Updates says when
+  it last checked.
 - USB strips: connecting now asks the controller what it is. A LumaSync controller that answers
   reports its firmware version, the frame format it expects and whether it wants RGB or RGBW
   pixels, and Settings marks a firmware profile or LED chip type that disagrees, without changing
@@ -78,7 +79,7 @@ https://keepachangelog.com/en/1.1.0/
   the last mode; the mode's settings are kept for the next time you turn it on. "Close button" can
   quit LumaSync instead of keeping it running in the background, and "Notifications" turns its
   system notifications off.
-- Settings → Help lists the keyboard shortcuts, and "Diagnostics" copies the app version, your
+- Settings → Help lists the keyboard shortcuts behind its "Show" button, and "Diagnostics" copies the app version, your
   system, the mode and what is connected, as text to paste into a bug report. It holds no network
   addresses, device ids or keys, and nothing is sent.
 - Hue: the channel list on Devices → Hue Bridges names each channel's lights the way the Hue app

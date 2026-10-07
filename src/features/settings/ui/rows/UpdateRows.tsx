@@ -18,11 +18,26 @@ export const UP_TO_DATE_RESULT_MS = 12_000;
 
 type CheckFace = "idle" | "checking" | "done";
 
+/** The time alone when it was today, the day with it otherwise: the daily check can be yesterday's. */
+export function checkedTime(at: number, language: string, now = Date.now()): string {
+  const sameDay = new Date(at).toDateString() === new Date(now).toDateString();
+  const options: Intl.DateTimeFormatOptions = sameDay
+    ? { hour: "numeric", minute: "2-digit" }
+    : { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" };
+  return new Intl.DateTimeFormat(language, options).format(at);
+}
+
 /**
  * The result of a check lands in the button that asked for it — "Checking…", then "✓ Up to date"
  * for a while — rather than in a line under the row. A newer version opens the update dialog.
  */
-export function UpdateCheckRow({ onCheckForUpdates, isCheckingForUpdates, upToDateAt = null, devSetUpdaterState }: SettingsEnv) {
+export function UpdateCheckRow({
+  onCheckForUpdates,
+  isCheckingForUpdates,
+  upToDateAt = null,
+  lastCheckedAt = null,
+  devSetUpdaterState,
+}: SettingsEnv) {
   const { t, i18n } = useTranslation();
 
   // A result, not a state: it goes once read.
@@ -52,6 +67,8 @@ export function UpdateCheckRow({ onCheckForUpdates, isCheckingForUpdates, upToDa
   return (
     <SettingRow
       label={`v${APP_VERSION}`}
+      // Empty until the launch check answers: a placeholder would slide to the real time.
+      value={lastCheckedAt === null ? undefined : t("updater:lastChecked", { time: checkedTime(lastCheckedAt, i18n.language) })}
       control={
         <>
           {import.meta.env.DEV && devSetUpdaterState && <DevUpdaterMenu onSetState={devSetUpdaterState} />}

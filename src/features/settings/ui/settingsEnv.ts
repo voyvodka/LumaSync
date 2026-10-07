@@ -7,6 +7,8 @@ export interface SettingsEnv {
   isCheckingForUpdates: boolean;
   /** When a check the user asked for last found nothing newer. */
   upToDateAt?: number | null;
+  /** When any update check last got an answer; `null` until the first. */
+  lastCheckedAt?: number | null;
   devSetUpdaterState?: (state: UpdaterState) => void;
   localOutputConnected: boolean;
   /** The app owns a Hue session, which has telemetry of its own. */
