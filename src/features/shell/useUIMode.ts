@@ -53,6 +53,8 @@ export function useUIMode() {
   const [isUITransitioning, setIsUITransitioning] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const inFlightRef = useRef<Promise<void> | null>(null);
+  // An interface-size pass in flight: a mode switch waits for it rather than joining it.
+  const zoomPassRef = useRef<Promise<void> | null>(null);
   const currentModeRef = useRef(currentMode);
   currentModeRef.current = currentMode;
 
@@ -60,6 +62,9 @@ export function useUIMode() {
   // here, and a caller arriving mid-transition awaits the running one instead of
   // starting a second resize animation against it.
   const switchUIMode = useCallback((nextMode: UIMode): Promise<void> => {
+    // A zoom pass never targets a mode, so joining it would drop this one: run after it instead.
+    const zoomPass = zoomPassRef.current;
+    if (zoomPass !== null) return zoomPass.then(() => switchUIModeRef.current(nextMode));
     if (inFlightRef.current !== null) return inFlightRef.current;
     if (nextMode === currentModeRef.current) return Promise.resolve();
 
@@ -95,21 +100,24 @@ export function useUIMode() {
     inFlightRef.current = run;
     return run;
   }, []);
+  const switchUIModeRef = useRef(switchUIMode);
+  switchUIModeRef.current = switchUIMode;
 
   // Settings → Interface size. The webview's zoom reflows the whole page at once, so it is applied
   // while only the backdrop shows, together with the title bar's counter-scale and the frame's
   // refit. A size chosen while a run is going is taken by that run's next pass.
   const pendingZoomRef = useRef<UiZoom | null>(null);
   const zoomRunRef = useRef<Promise<void> | null>(null);
+  // The webview's own zoom, apart from the frame's: a failed refit leaves the two different.
+  const webviewZoomRef = useRef<number | null>(null);
   const applyUiZoom = useCallback((zoom: UiZoom): Promise<void> => {
     pendingZoomRef.current = zoom;
     if (zoomRunRef.current !== null) return zoomRunRef.current;
 
     const rezoom = async (target: UiZoom) => {
-      await windowLifecycleSettled();
       const from = framedUiZoom();
       // The boot read already zoomed and framed the window; hydration arriving after it is not a change.
-      if (target / 100 === from) {
+      if (target / 100 === from && target / 100 === (webviewZoomRef.current ?? from)) {
         applyChromeScale(target);
         return;
       }
@@ -121,6 +129,7 @@ export function useUIMode() {
         const size = pendingZoomRef.current ?? target;
         pendingZoomRef.current = null;
         await getCurrentWebview().setZoom(size / 100);
+        webviewZoomRef.current = size / 100;
         applyChromeScale(size);
         await resizeToMode(currentModeRef.current, { zoom: size / 100, fromZoom: from });
         await waitForFrames(2);
@@ -136,18 +145,20 @@ export function useUIMode() {
 
     const run = (async () => {
       try {
+        // Outside any published pass: a mode switch during boot must not wait on this.
+        await windowLifecycleSettled();
         while (pendingZoomRef.current !== null) {
           // A mode switch in flight sizes the frame first; it read the zoom it framed for.
           while (inFlightRef.current !== null) await inFlightRef.current;
           const target = pendingZoomRef.current;
+          if (target === null) break;
           pendingZoomRef.current = null;
           const pass = rezoom(target);
-          // A mode switch asked for mid-pass joins it, as it would join another mode switch.
-          inFlightRef.current = pass;
+          zoomPassRef.current = pass;
           try {
             await pass;
           } finally {
-            inFlightRef.current = null;
+            zoomPassRef.current = null;
           }
         }
       } finally {

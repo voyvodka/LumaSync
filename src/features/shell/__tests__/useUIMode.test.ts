@@ -114,8 +114,10 @@ describe("useUIMode — interface size", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     framedZoom = 1;
-    setZoomMock.mockClear();
-    zoomResizeMock.mockClear();
+    setZoomMock.mockReset();
+    setZoomMock.mockImplementation(() => Promise.resolve());
+    zoomResizeMock.mockReset();
+    zoomResizeMock.mockImplementation(() => Promise.resolve());
     document.documentElement.style.removeProperty("--lm-chrome-scale");
   });
 
@@ -166,6 +168,64 @@ describe("useUIMode — interface size", () => {
     });
     expect(setZoomMock).not.toHaveBeenCalled();
     expect(document.documentElement.style.getPropertyValue("--lm-chrome-scale")).toBe(String(100 / 110));
+  });
+
+  it("runs a mode switch asked for mid-pass after the pass instead of dropping it", async () => {
+    const { result } = renderHook(() => useUIMode());
+    result.current.contentRef.current = document.createElement("div");
+    let zoom!: Promise<void>;
+    let mode!: Promise<void>;
+    act(() => {
+      zoom = result.current.applyUiZoom(125);
+    });
+    // Into the pass's fade-out, so the switch meets a zoom pass in flight.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    act(() => {
+      mode = result.current.switchUIMode("full");
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+      await zoom;
+      await mode;
+    });
+    expect(setZoomMock).toHaveBeenCalledWith(1.25);
+    expect(result.current.currentMode).toBe("full");
+  });
+
+  it("fades back in and logs when the webview refuses the zoom", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    setZoomMock.mockImplementationOnce(() => Promise.reject(new Error("not allowed")));
+    const { result } = renderHook(() => useUIMode());
+    await act(async () => {
+      const run = result.current.applyUiZoom(125);
+      await vi.advanceTimersByTimeAsync(1500);
+      await run;
+    });
+    expect(result.current.isContentVisible).toBe(true);
+    expect(result.current.isUITransitioning).toBe(false);
+    expect(errorSpy).toHaveBeenCalledWith("[LumaSync] changing the interface size failed:", expect.any(Error));
+    errorSpy.mockRestore();
+  });
+
+  it("zooms back when the frame refit failed and the old size is chosen again", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    zoomResizeMock.mockImplementationOnce(() => Promise.reject(new Error("refit")));
+    const { result } = renderHook(() => useUIMode());
+    await act(async () => {
+      const run = result.current.applyUiZoom(125);
+      await vi.advanceTimersByTimeAsync(1500);
+      await run;
+    });
+    // The frame is still framed at 100 %, the webview at 125 %: 100 is a change for the webview.
+    await act(async () => {
+      const run = result.current.applyUiZoom(100);
+      await vi.advanceTimersByTimeAsync(1500);
+      await run;
+    });
+    expect(setZoomMock.mock.calls.map(([factor]) => factor)).toEqual([1.25, 1]);
+    errorSpy.mockRestore();
   });
 
   it("lands sizes chosen during the fade in one pass, the latest of them", async () => {
