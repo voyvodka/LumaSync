@@ -130,6 +130,9 @@ export function LightsPage({
     <div className={styles.page} data-lights>
       <div className={styles.scroll}>
         <div className={styles.column}>
+          {/* No visible title: the mode strip already says what the page is. The rail's "Outputs"
+              is an h2, so the page needs its h1 for a screen reader's outline. */}
+          <h1 className="sr-only">{t("settings:nav.sections.lights")}</h1>
           <ModeStrip
             variant="full"
             value={kind}
@@ -170,17 +173,19 @@ export function LightsPage({
             onSelect={(next) => onModeChange(MODE_KINDS[next].config({ solid: { ...solid }, ambilight, effect }))}
           />
           <Scenes mode={normalized} disabled={nonOffLocked} busy={isModeTransitioning} onApply={onModeChange} />
-          <ModeStage
-            mode={normalized}
-            disabled={calibrationLocked}
-            brightnessLocked={brightnessLocked}
-            brightnessTitle={brightnessTitle}
-            linkNote={linkNote}
-            onModeChange={onModeChange}
-            lastLit={lastLit}
-            // Kind only: Rust brings back that mode's saved settings, the ones the dimmed stage shows.
-            onTurnOn={nonOffLocked || isModeTransitioning ? undefined : () => onModeChange({ kind: lastLit })}
-          />
+          <div data-wide={(kind === LIGHTING_MODE_KIND.OFF ? lastLit : kind) === LIGHTING_MODE_KIND.EFFECT || undefined}>
+            <ModeStage
+              mode={normalized}
+              disabled={calibrationLocked}
+              brightnessLocked={brightnessLocked}
+              brightnessTitle={brightnessTitle}
+              linkNote={linkNote}
+              onModeChange={onModeChange}
+              lastLit={lastLit}
+              // Kind only: Rust brings back that mode's saved settings, the ones the dimmed stage shows.
+              onTurnOn={nonOffLocked || isModeTransitioning ? undefined : () => onModeChange({ kind: lastLit })}
+            />
+          </div>
         </div>
       </div>
       <OutputsRail

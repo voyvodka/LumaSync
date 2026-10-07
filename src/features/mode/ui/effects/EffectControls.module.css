@@ -4,7 +4,9 @@
   .effect { min-width: 0; }
 
   /* The palettes and the effect's settings as one block, spaced like the stage around it. */
-  .settings { position: relative; display: flex; flex-direction: column; gap: inherit; min-width: 0; }
+  /* At the narrow stage width even when the gallery above grows on a wide window: longer sliders
+     are harder to set, not easier. */
+  .settings { position: relative; display: flex; flex-direction: column; gap: inherit; min-width: 0; max-width: 712px; }
   .setting { min-width: 0; }
   .setting[data-entering] { animation: setting-in var(--lm-dur-base) var(--lm-ease-out) var(--lm-dur-follow) backwards; }
   @keyframes setting-in { from { opacity: 0; transform: translateY(4px); } }

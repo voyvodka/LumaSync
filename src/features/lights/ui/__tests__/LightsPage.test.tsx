@@ -207,6 +207,28 @@ describe("LightsPage", () => {
     expect(screen.queryByText("Bridge · standby")).not.toBeInTheDocument();
   });
 
+  it("names the page for a screen reader and widens only an Effect stage", () => {
+    const page = (mode: LightingModeConfig) => (
+      <LightsPage
+        mode={mode}
+        outputTargets={["usb"]}
+        localOutputConnected={true}
+        localSink={{ transport: "serial", id: "/dev/cu.usbserial-1420" }}
+        hueConfigured={false}
+        hueStreaming={false}
+        modeLockReason={null}
+        onModeChange={vi.fn()}
+        onOutputTargetsChange={vi.fn()}
+      />
+    );
+    const { rerender } = render(page({ kind: "off" }));
+    expect(screen.getByRole("heading", { level: 1, name: "settings:nav.sections.lights" })).toBeInTheDocument();
+    expect(screen.getByTestId("off-stage").closest("[data-wide]")).toBeNull();
+
+    rerender(page({ kind: "effect" }));
+    expect(screen.getByTestId("effect-controls").closest("[data-wide]")).not.toBeNull();
+  });
+
   it("calls onModeChange with ambilight payload when Ambilight is selected", async () => {
     const user = userEvent.setup();
     const onModeChange = vi.fn();
