@@ -43,6 +43,7 @@ const settings: Catalogue<typeof enSettings> = {
       action: "Forum",
     },
     shortcuts: {
+      show: "Göster",
       label: "Klavye kısayolları",
       zoomIn: "Arayüzü büyüt",
       zoomOut: "Arayüzü küçült",

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { SetupGuideRestartResult } from "@/features/onboarding/state/setupGuideControl";
@@ -6,6 +6,7 @@ import { openLogDir } from "@/features/platform/platformApi";
 import { zoomBadges } from "@/features/shell/zoomKeybinds";
 import { APP_VERSION } from "@/shared/constants/app";
 import { IconCheck } from "@/shared/ui/icons";
+import { Popover } from "@/shared/ui/Popover/Popover";
 import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
 import { getKeybindDefinition, KEYBIND_ACTIONS, resolveKeybindPlatform } from "@/shared/contracts/shell";
 import { buildIssueReportUrl, detectOsName, DISCUSSIONS_URL } from "../helpLinks";
@@ -104,21 +105,51 @@ export function ShortcutsRow() {
     { id: "zoom-out", label: t("settings:help.shortcuts.zoomOut"), keys: zoom.out },
     { id: "zoom-reset", label: t("settings:help.shortcuts.zoomReset"), keys: zoom.reset },
   ];
+  // A list, not a setting: it floats over the page when asked for rather than lengthening it.
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const label = t("settings:help.shortcuts.label");
   return (
-    <SettingRow label={t("settings:help.shortcuts.label")} testId="shortcuts">
-      <dl className={styles.shortcuts}>
-        {items.map(({ id, label, keys }) => (
-          <div key={id} className={styles.shortcut}>
-            <dt>{label}</dt>
-            <dd>
-              {keys.map((key) => (
-                <kbd key={key}>{key}</kbd>
+    <SettingRow
+      label={label}
+      testId="shortcuts"
+      control={
+        <>
+          <RowButton
+            ref={buttonRef}
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            aria-controls={open ? "lm-shortcuts" : undefined}
+            data-testid="shortcuts-show"
+          >
+            {t("settings:help.shortcuts.show")}
+          </RowButton>
+          <Popover
+            open={open}
+            onClose={() => setOpen(false)}
+            anchorRef={buttonRef}
+            side="below"
+            width="fit"
+            id="lm-shortcuts"
+            label={label}
+            role="dialog"
+          >
+            <dl className={styles.shortcuts}>
+              {items.map(({ id, label: itemLabel, keys }) => (
+                <div key={id} className={styles.shortcut}>
+                  <dt>{itemLabel}</dt>
+                  <dd>
+                    {keys.map((key) => (
+                      <kbd key={key}>{key}</kbd>
+                    ))}
+                  </dd>
+                </div>
               ))}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </SettingRow>
+            </dl>
+          </Popover>
+        </>
+      }
+    />
   );
 }
 
