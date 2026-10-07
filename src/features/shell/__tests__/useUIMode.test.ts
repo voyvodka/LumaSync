@@ -13,7 +13,7 @@ vi.mock("../windowLifecycle", () => ({
   windowLifecycleSettled: () => Promise.resolve(),
 }));
 const setZoomMock = vi.fn<(factor: number) => Promise<void>>(() => Promise.resolve());
-vi.mock("@tauri-apps/api/webview", () => ({ getCurrentWebview: () => ({ setZoom: setZoomMock }) }));
+vi.mock("../windowApi", () => ({ setCurrentWebviewZoom: (factor: number) => setZoomMock(factor) }));
 
 // Import AFTER the mock so the hook picks up the stubbed resizeToMode.
 import { useUIMode } from "../useUIMode";

@@ -4,11 +4,11 @@
 // The interface size changes through the same three phases.
 
 import { useState, useCallback, useRef } from "react";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { UIMode, UiZoom } from "@/shared/contracts/shell";
 import { framedUiZoom, resizeToMode, windowLifecycleSettled } from "./windowLifecycle";
 import { waitForFrames } from "./frameWait";
 import { applyChromeScale } from "./useUiZoom";
+import { setCurrentWebviewZoom } from "./windowApi";
 
 /** Fade-out / fade-in duration. Kept short so total transition feels snappy. */
 export const UI_MODE_FADE_DURATION_MS = 160;
@@ -128,7 +128,7 @@ export function useUIMode() {
         // Sizes chosen during the fade (⌘+ held) land in this one pass, the latest of them.
         const size = pendingZoomRef.current ?? target;
         pendingZoomRef.current = null;
-        await getCurrentWebview().setZoom(size / 100);
+        await setCurrentWebviewZoom(size / 100);
         webviewZoomRef.current = size / 100;
         applyChromeScale(size);
         await resizeToMode(currentModeRef.current, { zoom: size / 100, fromZoom: from });
