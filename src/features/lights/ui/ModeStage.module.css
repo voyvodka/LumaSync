@@ -1,21 +1,18 @@
 @layer components {
   .holder { position: relative; }
   .stage { transition: opacity var(--lm-dur-base) var(--lm-ease-out); }
-  /* Off: the last lit mode's stage stays where it was, faded and out of reach. */
-  .holder[data-dormant] .stage { opacity: 0.4; }
+  /* Off: the last lit mode's stage stays where it was, faded and out of reach. Faint enough that
+     its labels and values no longer compete with the words on the veil. */
+  .holder[data-dormant] .stage { opacity: 0.2; }
 
-  /* One veil over the whole stage, its corners the stage's: nothing half-covers a control. Darkest
-     where the words are and thinner toward the edges, so the settings the lights come back with
-     still show. No blur: a filter over a surface this size costs every frame it is up. */
+  /* One even veil over the whole stage, its corners the stage's: nothing half-covers a control.
+     The settings the lights come back with still show as shapes, never as words beside "Lights
+     off". No blur: a filter over a surface this size costs every frame it is up. */
   .veil {
     position: absolute;
     inset: 0;
     border-radius: 14px;
-    background: radial-gradient(
-      ellipse 60% 70% at 50% min(50%, 132px),
-      color-mix(in srgb, var(--lm-panel) 96%, transparent) 35%,
-      color-mix(in srgb, var(--lm-panel) 60%, transparent)
-    );
+    background: color-mix(in srgb, var(--lm-panel) 70%, transparent);
     animation: veil-in var(--lm-dur-base) var(--lm-ease-out);
   }
   /* In the middle of a short stage; near the top of a tall one (Effect), so it needs no scroll. */
