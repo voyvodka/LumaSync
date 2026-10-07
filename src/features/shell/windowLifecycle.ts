@@ -38,7 +38,7 @@ export {
   persistWindowState,
   restoreWindowState,
 } from "./windowGeometry";
-export { resizeToMode } from "./windowAnimator";
+export { framedUiZoom, resizeToMode } from "./windowAnimator";
 
 // CI's definition of "the build launches": `scripts/verify/launch-smoke.mjs`
 // greps the app's stdout for this literal, which it reads back out of this file

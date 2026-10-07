@@ -14,14 +14,18 @@ A change that assumes the window is always open is working against this.
 300×420). Compact is a real target, not a responsive afterthought — anything added has to survive
 320 pixels of width.
 
-**Interface size grows the content, never the title bar.** Settings → Interface size is the
-webview's own zoom (`set_zoom` from Rust, at boot and after a `uiZoom` write), and the frame grows
-by the same factor so the layout keeps its design viewport. The zoom grows everything the webview
-draws, but the macOS window buttons the bar lines up with are native and stay put, so at 125 % the
-bar outgrew them. `useUiZoom` sets `--lm-chrome-scale` (100 / size) on `:root`; the bar takes it as
-CSS `zoom`, and `--lm-titlebar-h` multiplies by it, so the content offset and every modal scrim
-follow. The variable changes when the preference does, a few milliseconds before Rust's zoom lands;
-the frame is resizing in that moment anyway, and closing the gap would need an event back from Rust.
+**Interface size grows the content, never the title bar, and changes behind a fade.** Settings →
+Interface size is the webview's own zoom, and the frame grows by the same factor so the layout
+keeps its design viewport. The zoom grows everything the webview draws, but the macOS window
+buttons the bar lines up with are native and stay put, so at 125 % the bar outgrew them: `useUiZoom`
+keeps `--lm-chrome-scale` (100 / size) on `:root`, the bar takes it as CSS `zoom`, and
+`--lm-titlebar-h` multiplies by it, so the content offset and every modal scrim follow. A change
+runs through `useUIMode`'s three phases, like a compact/full switch: the content fades out, the
+main webview is zoomed from the frontend (`setZoom`) with the counter-scale set right after it and
+the frame refitted, then the content fades in. Rust zooms the main webview only at boot, before
+the page loads; after a `uiZoom` write it zooms the control popup alone. When Rust also zoomed the
+main window after the write, and the variable changed on the preference, the bar and the page
+reflowed in sight a few frames apart — the flicker this replaced.
 
 **Font faces are hand-declared, not `@fontsource/*` imports, and `font-display` is `block`.**
 `src/fonts.css`. Every `@fontsource` bundle ships `swap`, and a `@font-face` descriptor can't be

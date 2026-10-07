@@ -487,21 +487,18 @@ const POPUP_HEIGHT: f64 = 460.0;
 const POPUP_MIN_WIDTH: f64 = 300.0;
 const POPUP_MIN_HEIGHT: f64 = 420.0;
 
-/// Settings → Interface size, on the webviews that follow it. The popup's
-/// frame grows with it so its layout keeps its 320×460 viewport; the main
-/// window's frame is sized by its own animator. Off the store's lock, since a
-/// window call there would wait on the main thread while holding it. The
-/// value is read when the task runs, not passed in: tasks from quick changes
-/// (⌘+ held) may run in any order, and whichever runs last applies the latest.
+/// Settings → Interface size, on the control popup: its frame grows with it so
+/// its layout keeps its 320×460 viewport. The main window zooms itself, inside
+/// the content fade that hides the reflow (`useUIMode`); zooming it from here
+/// too reflowed the visible page a moment before or after that. Off the store's
+/// lock, since a window call there would wait on the main thread while holding
+/// it. The value is read when the task runs, not passed in: tasks from quick
+/// changes (⌘+ held) may run in any order, and whichever runs last applies the
+/// latest.
 pub(crate) fn apply_ui_zoom_later<R: Runtime>(app: &AppHandle<R>) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let zoom = shell_state::persisted(&app).map_or(1.0, |state| state.ui_zoom());
-        if let Some(main) = app.get_webview_window(crate::MAIN_WINDOW_LABEL) {
-            if let Err(error) = main.set_zoom(zoom) {
-                log::warn!("[ui-zoom] main webview zoom failed: {error}");
-            }
-        }
         if let Some(popup) = app.get_webview_window(LED_CONTROL_POPUP_LABEL) {
             let resized = popup
                 .set_min_size(Some(LogicalSize::new(

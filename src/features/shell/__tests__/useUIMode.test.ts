@@ -3,9 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock windowLifecycle so the hook doesn't try to talk to Tauri.
 const resizeToModeMock = vi.fn<(mode: "compact" | "full") => Promise<void>>(() => Promise.resolve());
+type ZoomResize = (mode: "compact" | "full", opts: { zoom: number; fromZoom: number }) => Promise<void>;
+const zoomResizeMock = vi.fn<ZoomResize>(() => Promise.resolve());
+let framedZoom = 1;
 vi.mock("../windowLifecycle", () => ({
-  resizeToMode: (mode: "compact" | "full") => resizeToModeMock(mode),
+  resizeToMode: (mode: "compact" | "full", opts?: { zoom: number; fromZoom: number }) =>
+    opts ? zoomResizeMock(mode, opts) : resizeToModeMock(mode),
+  framedUiZoom: () => framedZoom,
+  windowLifecycleSettled: () => Promise.resolve(),
 }));
+const setZoomMock = vi.fn<(factor: number) => Promise<void>>(() => Promise.resolve());
+vi.mock("@tauri-apps/api/webview", () => ({ getCurrentWebview: () => ({ setZoom: setZoomMock }) }));
 
 // Import AFTER the mock so the hook picks up the stubbed resizeToMode.
 import { useUIMode } from "../useUIMode";
@@ -99,6 +107,81 @@ describe("useUIMode — transition orchestration", () => {
     });
 
     expect(resizeToModeMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("useUIMode — interface size", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    framedZoom = 1;
+    setZoomMock.mockClear();
+    zoomResizeMock.mockClear();
+    document.documentElement.style.removeProperty("--lm-chrome-scale");
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("zooms the webview and counter-scales the title bar only while the content is faded out", async () => {
+    const { result } = renderHook(() => useUIMode());
+    // A content element, so the fade waits out its (never-firing) transitionend as in the app.
+    result.current.contentRef.current = document.createElement("div");
+    const scaleAtZoom: string[] = [];
+    setZoomMock.mockImplementation(() => {
+      scaleAtZoom.push(document.documentElement.style.getPropertyValue("--lm-chrome-scale"));
+      return Promise.resolve();
+    });
+
+    let run!: Promise<void>;
+    act(() => {
+      run = result.current.applyUiZoom(125);
+    });
+    // Mid-fade: the content is going out and nothing has been zoomed yet.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(result.current.isContentVisible).toBe(false);
+    expect(setZoomMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+      await run;
+    });
+
+    expect(setZoomMock).toHaveBeenCalledWith(1.25);
+    // The counter-scale follows the zoom, never runs ahead of it.
+    expect(scaleAtZoom).toEqual([""]);
+    expect(document.documentElement.style.getPropertyValue("--lm-chrome-scale")).toBe("0.8");
+    expect(zoomResizeMock).toHaveBeenCalledWith("compact", { zoom: 1.25, fromZoom: 1 });
+    expect(result.current.isContentVisible).toBe(true);
+    expect(result.current.isUITransitioning).toBe(false);
+  });
+
+  it("does not fade for the size the window is already framed at", async () => {
+    framedZoom = 1.1;
+    const { result } = renderHook(() => useUIMode());
+    await act(async () => {
+      await result.current.applyUiZoom(110);
+    });
+    expect(setZoomMock).not.toHaveBeenCalled();
+    expect(document.documentElement.style.getPropertyValue("--lm-chrome-scale")).toBe(String(100 / 110));
+  });
+
+  it("lands sizes chosen during the fade in one pass, the latest of them", async () => {
+    const { result } = renderHook(() => useUIMode());
+    let first!: Promise<void>;
+    act(() => {
+      first = result.current.applyUiZoom(110);
+    });
+    act(() => {
+      void result.current.applyUiZoom(125);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+      await first;
+    });
+    expect(setZoomMock.mock.calls.map(([factor]) => factor)).toEqual([1.25]);
   });
 });
 

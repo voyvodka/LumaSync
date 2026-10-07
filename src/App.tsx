@@ -133,6 +133,7 @@ function Shell() {
     isContentVisible,
     contentRef,
     switchUIMode,
+    applyUiZoom,
     setCurrentMode,
   } = useUIMode();
   const [navigation] = useState(createNavigationStore);
@@ -487,7 +488,7 @@ function Shell() {
   };
   // The update prompt owns the keyboard: ⌥1–3 used to change the mode behind it.
   useGlobalKeybinds(keybindHandlers, { disabled: !isContentVisible || updateModalShown });
-  useUiZoom({ disabled: !isContentVisible || updateModalShown });
+  useUiZoom({ disabled: !isContentVisible || updateModalShown, onZoom: applyUiZoom });
 
   useCapturePermissionRecheck(
     mode.startFailedNotice?.bucket === CAPTURE_FAILURE_BUCKET.PERMISSION,

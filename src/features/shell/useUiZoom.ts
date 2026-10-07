@@ -2,9 +2,6 @@ import { useEffect, useLayoutEffect } from "react";
 
 import { followPreference, getPreference, setPreference } from "@/features/persistence/preferences";
 import { resolveKeybindPlatform, UI_ZOOM_STEPS, type UiZoom } from "@/shared/contracts/shell";
-import { framedUiZoom, resizeToMode } from "./windowAnimator";
-import { windowLifecycleSettled } from "./windowLifecycle";
-import { loadShellState } from "./windowShellState";
 import { zoomActionFor, type ZoomAction } from "./zoomKeybinds";
 
 export function stepUiZoom(current: UiZoom, action: ZoomAction): UiZoom {
@@ -14,45 +11,28 @@ export function stepUiZoom(current: UiZoom, action: ZoomAction): UiZoom {
   return UI_ZOOM_STEPS[Math.min(Math.max(next, 0), UI_ZOOM_STEPS.length - 1)] ?? current;
 }
 
-let resizing: Promise<void> = Promise.resolve();
-
-/**
- * Rust zooms the webview when the size is saved; this grows the main window's frame by the same
- * factor so the layout keeps its design viewport. Serialised: a second key press waits for the
- * first resize rather than reading a frame mid-animation.
- */
-function refitFrame(zoom: UiZoom): void {
-  resizing = resizing.then(async () => {
-    await windowLifecycleSettled();
-    const target = zoom / 100;
-    const from = framedUiZoom();
-    // The boot read already sized the frame; hydration arriving after it is not a change.
-    if (target === from) return;
-    try {
-      const { uiMode } = await loadShellState();
-      await resizeToMode(uiMode ?? "compact", { zoom: target, fromZoom: from });
-    } catch (error) {
-      console.error("[LumaSync] resizing the window for the interface size failed:", error);
-    }
-  });
-}
-
 /** The title bar stays at 100 %: the webview zoom grows it, the macOS window buttons it lines up
  *  with are native and do not grow. `--lm-chrome-scale` undoes the zoom for it and its height. */
-function applyChromeScale(zoom: UiZoom): void {
+export function applyChromeScale(zoom: UiZoom): void {
   document.documentElement.style.setProperty("--lm-chrome-scale", String(100 / zoom));
 }
 
-/** Settings → Interface size in the main window: its frame, and ⌘/Ctrl + − 0. */
-export function useUiZoom({ disabled = false }: { disabled?: boolean } = {}): void {
+/**
+ * Settings → Interface size in the main window: hands a new size to `onZoom` (the mode hook's
+ * sequential transition, which zooms the webview and refits the frame), and ⌘/Ctrl + − 0.
+ */
+export function useUiZoom({
+  disabled = false,
+  onZoom,
+}: {
+  disabled?: boolean;
+  onZoom: (zoom: UiZoom) => void;
+}): void {
   // Before the first paint: the boot read has hydrated the size, and the bar must not draw once zoomed.
   useLayoutEffect(() => {
     applyChromeScale(getPreference("uiZoom"));
-    return followPreference("uiZoom", (zoom) => {
-      applyChromeScale(zoom);
-      refitFrame(zoom);
-    });
-  }, []);
+    return followPreference("uiZoom", onZoom);
+  }, [onZoom]);
 
   useEffect(() => {
     if (disabled) return undefined;
