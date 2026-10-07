@@ -115,7 +115,8 @@
   .sub[data-swapped] { animation: sub-in var(--lm-dur-base) var(--lm-ease-out); }
   @keyframes sub-in { from { opacity: 0; transform: translateY(3px); } }
   :global(:root[data-reduced-motion]) .sub[data-swapped] { animation: none; }
-  @container mstrip (max-width: 600px) { .sub { display: none; } }
+  /* 480, not 600: the full window's 800 floor leaves the strip ~510 px, room enough for the line. */
+  @container mstrip (max-width: 480px) { .sub { display: none; } }
   @container mstrip (max-width: 420px) {
     .power { width: 44px; }
     .tile { flex-direction: column; justify-content: center; gap: 4px; min-height: 58px; padding: 8px 4px; text-align: center; }
