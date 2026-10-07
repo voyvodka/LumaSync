@@ -13,8 +13,9 @@
      because the app is dark-mode-primary.
      ───────────────────────────────────────────────────────────────── */
   /* Mirrors `TITLE_BAR_HEIGHT_PX` — a modal scrim must start below the bar or
-     it swallows the drag region and the window controls. */
-  --lm-titlebar-h: 36px;
+     it swallows the drag region and the window controls. Times the chrome scale,
+     which keeps the bar at 100 % under any interface size (`useUiZoom`). */
+  --lm-titlebar-h: calc(36px * var(--lm-chrome-scale, 1));
   --lm-bg:        #07080a;
   --lm-panel:     #0e1014;
   --lm-panel-2:   #14171d;

@@ -10,7 +10,7 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
-import { TitleBar, TITLE_BAR_HEIGHT_PX } from "./features/shell/TitleBar";
+import { TitleBar } from "./features/shell/TitleBar";
 import { StatusBar, statusBarHeightPx } from "./features/shell/StatusBar";
 import { useTrayIntegration, type TrayOutput } from "./features/shell/useTrayIntegration";
 import { useTrayFailureNotification } from "./features/shell/useTrayFailureNotification";
@@ -663,7 +663,7 @@ function Shell() {
         <div
           className="fixed right-0 left-0 overflow-hidden"
           style={{
-            top: `${TITLE_BAR_HEIGHT_PX}px`,
+            top: "var(--lm-titlebar-h)",
             bottom: `${statusBarHeight}px`,
             background: "var(--lm-bg)",
           }}

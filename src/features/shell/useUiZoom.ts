@@ -37,9 +37,21 @@ function refitFrame(zoom: UiZoom): void {
   });
 }
 
+/** The title bar stays at 100 %: the webview zoom grows it, the macOS window buttons it lines up
+ *  with are native and do not grow. `--lm-chrome-scale` undoes the zoom for it and its height. */
+function applyChromeScale(zoom: UiZoom): void {
+  document.documentElement.style.setProperty("--lm-chrome-scale", String(100 / zoom));
+}
+
 /** Settings → Interface size in the main window: its frame, and ⌘/Ctrl + − 0. */
 export function useUiZoom({ disabled = false }: { disabled?: boolean } = {}): void {
-  useEffect(() => followPreference("uiZoom", refitFrame), []);
+  useEffect(() => {
+    applyChromeScale(getPreference("uiZoom"));
+    return followPreference("uiZoom", (zoom) => {
+      applyChromeScale(zoom);
+      refitFrame(zoom);
+    });
+  }, []);
 
   useEffect(() => {
     if (disabled) return undefined;
