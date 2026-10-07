@@ -5,7 +5,7 @@ const shell: Catalogue<typeof enShell> = {
   keybind: {
     modeOff: "Işıkları kapat",
     modeAmbilight: "Ambilight moduna geç",
-    modeSolid: "Tek renk moduna geç",
+    modeSolid: "Sabit moduna geç",
     modeEffect: "Efekt moduna geç",
     openSettings: "Ayarları aç",
   },
