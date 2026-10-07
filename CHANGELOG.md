@@ -72,7 +72,8 @@ https://keepachangelog.com/en/1.1.0/
 - Settings → Appearance: "Interface size" makes the interface 90%, 100%, 110% or 125% of its
   normal size, in the main window and the control popup; ⌘/Ctrl with + − 0 change it too. The
   compact window grows with it; the full window keeps the size you gave it unless that would be
-  too small.
+  too small. The title bar keeps its size, in line with the window buttons, and the page changes
+  size behind a short fade instead of jumping in place.
 - Settings → General: "Lights on launch" can start LumaSync with the lights off instead of resuming
   the last mode; the mode's settings are kept for the next time you turn it on. "Close button" can
   quit LumaSync instead of keeping it running in the background, and "Notifications" turns its
@@ -92,7 +93,8 @@ https://keepachangelog.com/en/1.1.0/
 - Lights and the compact window are rebuilt around one stage: the mode buttons on top, the scenes
   under them, and the running mode's settings below, passing to the next mode's from the side you
   moved to. Every mode's settings share one quieter look, the page keeps a readable width in a
-  wide window, and the outputs sit in a column on the right with an entry to the LED preview.
+  wide window — where the effect gallery alone grows, into more columns — and the outputs sit in
+  a column on the right with an entry to the LED preview.
   Sliders are easier to catch (a 32 px target), and the compact window fits an effect's palettes
   on one line that scrolls sideways. The five fixed colour tiles are replaced by scenes.
 - Off is a power button beside the modes instead of a mode of its own. With the lights off the
