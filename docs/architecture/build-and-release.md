@@ -38,10 +38,26 @@ these compiled the dependency graph again into the same `target/`:
 - **`staticlib` in `crate-type`.** It is Tauri's iOS entry point; on the desktop it linked the whole
   graph into a ~650 MB archive per build that nothing read. `cdylib` stays for a later mobile build.
 
-Two copies remain by design: a check writes metadata only and a build writes code, and the tests'
-dev-dependency features (`tauri/test`, `tokio/test-util`) give them their own build of those crates.
-Stale incremental sessions still pile up in `target/debug/incremental` over weeks; `cargo clean`
-is the remedy, and nothing here needs it more than once after pulling this.
+**A day's work settles at about 6.6 GB and stays there.** `tauri dev`, `check:rust`, the pre-push
+clippy, `cargo test` and `bun run e2e:build` cannot all share one build of the Tauri stack: the
+tests add their dev-dependency features (`tauri/test`, `tokio/test-util`), the e2e binary adds
+`custom-protocol` and `e2e`, and a check writes metadata where a build writes code. A normal day
+therefore holds three compiled copies of `tauri` and four sets of its metadata. Measured from an
+empty `target/`: 2.4 GB after `tauri dev`, 3.5 after `check:rust`, 3.7 after clippy, 4.7 after
+`cargo test --no-run`, 6.1 after the e2e build. Editing and rebuilding adds nothing: rustc keeps
+one incremental session per crate and mode and deletes the older ones itself, and four rounds of
+edit, dev build, check and test held the tree at 6.6 GB.
+
+**What grows without end is a dependency or toolchain change.** A changed `Cargo.lock` or
+`rust-toolchain.toml` gives each affected crate a new hash; Cargo builds it again beside the old
+one and never deletes the old one. Dependabot's Tauri minor bump took the tree from 6.6 GB to
+9.6 GB, and going back to the old lockfile left both. `bun run prune:rust`
+(`scripts/dev/prune-rust-target.mjs`) removes each unit no build has read for seven days, judged by
+the access time of its files, and skips a profile while a build holds Cargo's lock. On that tree it
+removed 2.9 GB, and dev, check, clippy, test and e2e builds afterwards compiled no dependency.
+`--dry-run` shows what would go. It relies on access times, so it refuses to empty a profile
+outright — on a `noatime` volume every unit looks unread. Run it from a scheduled job, or by hand
+when the disk fills; `cargo clean` remains the blunt alternative.
 
 **The Rust toolchain is pinned to an exact version** in `rust-toolchain.toml`, not `stable`. A new
 stable release brings new clippy lints, and CI runs clippy at deny level, so a floating channel turns
