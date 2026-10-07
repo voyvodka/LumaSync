@@ -10,7 +10,7 @@ import { createLocalOutputs, type LocalOutputsDeps } from "../localOutputsStore"
 
 const snap = (revision: number, ip: string | null = null): LocalOutputsSnapshot => ({
   revision,
-  outputs: ip === null ? [] : [{ kind: "wled", ip, ledCount: 60, connected: true }],
+  outputs: ip === null ? [] : [{ kind: "wled", ip, ledCount: 60, connected: true, reachable: true }],
   driven: ip === null ? null : { kind: "wled", ip },
 });
 

@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 
 use log::info;
 
+use super::effects::{EffectDraw, EffectStage};
 use super::live::RoomGeometryLive;
 use super::sampling::{
     hue_sample_table, sample_screen_position_avg, BlackBorderCache, HueSampleTable,
@@ -25,6 +26,11 @@ use crate::commands::led_calibration::{
 use crate::commands::led_output::{apply_saturation_to_pixel, ColorCorrectionConfig, EncoderPlan};
 
 const SCENE_LOG_EVERY: u32 = 600;
+
+/// Hue's smoothing under an effect, per reference interval: τ ≈ 200 ms. The
+/// bridge does not blend between 50 ms updates, so without it every update is
+/// a visible step; the strip gets none, the patterns being continuous.
+const EFFECT_HUE_ALPHA: f32 = 1.0 / 6.0;
 
 fn saturate(colors: &mut [[u8; 3]], factor: f32) {
     for pixel in colors {
@@ -61,6 +67,8 @@ pub(super) struct FramePipelineConfig {
     pub room_geometry: Arc<RoomGeometryLive>,
     pub black_border_detection: bool,
     pub color_correction: ColorCorrectionConfig,
+    /// An effect drawn per light instead of a frame sampled.
+    pub effect: Option<EffectDraw>,
 }
 
 /// The `AmbilightLiveSettings` values the analysis reads, sampled once per
@@ -97,6 +105,9 @@ pub(super) struct AmbilightFramePipeline {
     strip_out: Vec<[u8; 3]>,
     hue: TimeSmoother,
     hue_out: Vec<HueRgb>,
+    effect: Option<EffectStage>,
+    /// Hue's own smoothing rate, when it differs from the frame's (an effect).
+    hue_alpha: Option<f32>,
 }
 
 impl AmbilightFramePipeline {
@@ -134,6 +145,8 @@ impl AmbilightFramePipeline {
             strip_out: Vec::new(),
             hue: TimeSmoother::default(),
             hue_out: Vec::new(),
+            hue_alpha: config.effect.is_some().then_some(EFFECT_HUE_ALPHA),
+            effect: config.effect.map(EffectStage::new),
         }
     }
 
@@ -147,6 +160,9 @@ impl AmbilightFramePipeline {
             self.hue_table = hue_sample_table(channels, geometry.as_ref());
         }
         self.hue_channels = channels;
+        if let Some(effect) = self.effect.as_mut() {
+            effect.invalidate();
+        }
     }
 
     /// A room-map change moved where the Hue channels sample since the last
@@ -164,6 +180,10 @@ impl AmbilightFramePipeline {
     /// frame source, before `analyze`, so the border cache is refreshed here:
     /// the strip, the scene stage and Hue then crop the frame identically.
     pub(super) fn sample_strip(&mut self, frame: &CapturedFrame) -> Vec<[u8; 3]> {
+        if self.effect.is_some() {
+            // `analyze` draws the effect; the tick frame has nothing to sample.
+            return Vec::new();
+        }
         self.border_cache.update_if_due(frame);
         sample_frame_within_insets(
             frame,
@@ -198,6 +218,9 @@ impl AmbilightFramePipeline {
         settings: FrameSettings,
         now: Instant,
     ) -> Instant {
+        if self.effect.is_some() {
+            return self.draw_effect(now);
+        }
         // The setting is read after capture, so a toggle reaches the strip at
         // the next `sample_strip`. Switching off clears the insets here, which
         // lets Hue and the scene stage drop the crop one frame before the strip.
@@ -300,13 +323,44 @@ impl AmbilightFramePipeline {
         self.hue.set_target(&self.hue_scene_scratch);
     }
 
+    /// The effect's step in place of an analysis: every light coloured where
+    /// it is, nothing sampled, no scene stage (docs/architecture/
+    /// capture-and-pipeline.md, "Effects").
+    fn draw_effect(&mut self, now: Instant) -> Instant {
+        self.step_smoothers(now);
+        self.frame_alpha = 1.0;
+        let (generation, geometry) = self.room_geometry.snapshot();
+        let effect = self.effect.as_mut().expect("checked by the caller");
+        if generation != self.room_generation {
+            self.room_generation = generation;
+            effect.invalidate();
+        }
+        let drawn = effect.draw(
+            now,
+            &self.led_sequence,
+            &self.led_counts,
+            self.hue_channels.as_deref(),
+            geometry.as_ref(),
+        );
+        self.strip.set_target(drawn.strip);
+        if self
+            .hue_channels
+            .as_deref()
+            .is_some_and(|channels| channels.len() == drawn.hue.len() && !channels.is_empty())
+        {
+            self.hue.set_target(drawn.hue);
+        }
+        Instant::now()
+    }
+
     fn step_smoothers(&mut self, now: Instant) {
         let dt = self
             .last_advance
             .map_or(Duration::ZERO, |at| now.saturating_duration_since(at));
         self.last_advance = Some(now);
         self.strip.advance(dt, self.frame_alpha);
-        self.hue.advance(dt, self.frame_alpha);
+        self.hue
+            .advance(dt, self.hue_alpha.unwrap_or(self.frame_alpha));
     }
 
     /// Move both smoothers to `now` — by the time that passed, not by the
@@ -322,6 +376,24 @@ impl AmbilightFramePipeline {
                 .iter()
                 .map(|&rgb| plan.correct_precise(rgb)),
         );
+        self.hold_hue_floor();
+    }
+
+    /// An effect on a few bulbs is never all dark on the wire: after smoothing and correction —
+    /// what the bridge will actually get — every lamp is raised by one factor until the brightest
+    /// shows the floor. docs/architecture/capture-and-pipeline.md ("A few lamps are never all dark")
+    fn hold_hue_floor(&mut self) {
+        let Some(floor) = self.effect.as_ref().and_then(EffectStage::hue_wire_floor) else {
+            return;
+        };
+        let level = self.hue_out.iter().flatten().fold(0.0f32, |a, &c| a.max(c));
+        if level <= 1e-6 || level >= floor {
+            return;
+        }
+        let gain = floor / level;
+        for rgb in self.hue_out.iter_mut() {
+            rgb.clone_from(&rgb.map(|c| (c * gain).min(1.0)));
+        }
     }
 
     fn refresh_strip_out(&mut self) {

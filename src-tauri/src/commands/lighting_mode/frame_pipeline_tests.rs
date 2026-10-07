@@ -541,6 +541,8 @@ fn scripted_clock(served: &Arc<AtomicU32>) -> WorkerPacing {
     let base = Instant::now();
     let served = Arc::clone(served);
     WorkerPacing {
+        synthetic: false,
+        effect: None,
         capture_interval: Duration::from_millis(70),
         clock: Arc::new(move || base + FRAME_GAP * served.load(Ordering::SeqCst)),
     }
@@ -721,6 +723,7 @@ impl PipelineRun {
             room_geometry,
             black_border_detection: live_settings.read_black_border_detection(),
             color_correction: color_correction(),
+            effect: None,
         });
         Self {
             pipeline,
@@ -1106,6 +1109,7 @@ fn first_outputs(
         room_geometry: RoomGeometryLive::new(None),
         black_border_detection,
         color_correction: ColorCorrectionConfig::default(),
+        effect: None,
     });
     let now = Instant::now();
     let sampled = pipeline.sample_strip(frame);
@@ -1292,6 +1296,7 @@ fn live_saturation_reaches_hue() {
             room_geometry: RoomGeometryLive::new(None),
             black_border_detection: false,
             color_correction: color_correction(),
+            effect: None,
         });
         let now = Instant::now();
         let sampled = pipeline.sample_strip(&frame);
@@ -1413,6 +1418,70 @@ const ALLOCS_PER_TICK: usize = 1;
 
 /// Accepts the packet without keeping it, so the timing report's sink costs
 /// only its encode.
+/// Takes the first write, then fails every one after it the way a dead port does.
+struct FailsAfterFirst(AtomicUsize);
+
+impl LedPacketSender for FailsAfterFirst {
+    fn send(&self, _port_name: &str, _packet: &[u8]) -> Result<(), LedOutputError> {
+        if self.0.fetch_add(1, Ordering::SeqCst) == 0 {
+            return Ok(());
+        }
+        Err(LedOutputError {
+            code: "LED_OUTPUT_WRITE_FAILED",
+            details: Some("Broken pipe".to_string()),
+        })
+    }
+
+    fn disconnect_session(&self, _port_name: &str) {}
+}
+
+#[test]
+fn a_strip_that_stops_taking_frames_is_reported_by_its_code() {
+    let _watchdog = Watchdog::arm(
+        "a_strip_that_stops_taking_frames_is_reported_by_its_code",
+        Duration::from_secs(60),
+    );
+    let _guard = WORKER_TEST_GUARD
+        .lock()
+        .unwrap_or_else(|err| err.into_inner());
+    let telemetry = SharedRuntimeTelemetry::default();
+    let runtime = start_ambilight_worker(
+        LedOutputBridge::from_sender(Arc::new(FailsAfterFirst(Default::default()))),
+        Some(UsbOutputPlan::Serial(PORT.to_string())),
+        Some(strip_164()),
+        live_settings(),
+        Box::new(StillScreen {
+            frame: Arc::new(scene_frame(FRAME_W, FRAME_H, 0)),
+            calls: Arc::new(AtomicUsize::new(0)),
+        }),
+        Arc::clone(&telemetry),
+        None,
+        None,
+        color_correction(),
+        FirmwareProfile::LumaSyncV1,
+        LedChipType::Ws2812bGrb,
+        None,
+        RoomGeometryLive::new(None),
+        WorkerPacing::live(Duration::from_millis(2)),
+    )
+    .expect("worker starts");
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let code = loop {
+        let snapshot = read_runtime_telemetry(&telemetry).expect("telemetry");
+        if let Some(code) = snapshot.last_output_error_code {
+            break code;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the failing sends were never reported"
+        );
+        thread::sleep(Duration::from_millis(20));
+    };
+    runtime.stop();
+    assert_eq!(code, "LED_OUTPUT_WRITE_FAILED");
+}
+
 struct NullSender;
 
 impl LedPacketSender for NullSender {
@@ -1601,10 +1670,9 @@ fn steady_frame_allocations_and_lut_builds_stay_within_budget() {
     );
 }
 
-/// A WLED frame's allocations: the corrected strip, then the datagram list,
-/// the chunk list and one datagram per chunk. 164 LEDs is one datagram in
-/// both protocols.
-const WLED_ALLOCS_PER_FRAME: usize = 4;
+/// A WLED frame's allocations: none. The corrected strip and the datagram are
+/// buffers the sink keeps, and each datagram is sent as it is written.
+const WLED_ALLOCS_PER_FRAME: usize = 0;
 
 #[test]
 fn corrected_wled_sink_frame_allocations_stay_within_budget() {
@@ -1632,8 +1700,8 @@ fn corrected_wled_sink_frame_allocations_stay_within_budget() {
             let (allocs, _) = alloc_count::measure(|| {
                 sink.send_frame(&strip).expect("send");
             });
-            assert!(
-                allocs <= WLED_ALLOCS_PER_FRAME,
+            assert_eq!(
+                allocs, WLED_ALLOCS_PER_FRAME,
                 "{protocol:?} frame {n} made {allocs} allocations; the budget is \
                  {WLED_ALLOCS_PER_FRAME}"
             );
@@ -1823,4 +1891,193 @@ fn frame_budget_report() {
         FirmwareProfile::LumaSyncV1,
         LedChipType::Sk6812Rgbw,
     );
+}
+
+/// What reaches the Hue wire on a two-bulb area, after the engine, the smoother and the correction:
+/// never all below 2 % for any effect at a middling brightness. The engine's floor alone passed
+/// its own test while the wire sat about a fifth short (sRGB out, gamma 2.2 back in), and a floor
+/// that jumped between lamps dipped while the smoother handed over.
+#[test]
+fn a_few_bulbs_never_go_dark_on_the_wire() {
+    use super::effects::{EffectClockSlot, EffectDraw};
+
+    let led_calibration = strip_164();
+    let channels: Vec<HueAreaChannel> = [(0u8, 0.168f32), (1, -0.558)]
+        .into_iter()
+        .map(|(i, x)| HueAreaChannel {
+            channel_id: i,
+            light_ids: vec![format!("light-{i}")],
+            screen_region: HueScreenRegion::Center,
+            position_x: x,
+            position_y: 1.0,
+            position_z: Some(-0.5),
+        })
+        .collect();
+    let brightness = 0.61f32;
+    for &(tag, id) in super::config::EffectId::TAGS {
+        let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
+            led_sequence: build_led_sequence(&led_calibration),
+            led_counts: led_calibration.counts.clone(),
+            sample_window: SYNTHETIC_SAMPLE_WINDOW,
+            scene_enabled: false,
+            strip_topology: strip_topology_for(Some(&led_calibration)),
+            hue_channels: Some(channels.clone()),
+            room_geometry: RoomGeometryLive::new(None),
+            black_border_detection: false,
+            color_correction: ColorCorrectionConfig::default(),
+            effect: Some(EffectDraw {
+                live: Arc::new(Mutex::new(super::config::normalize_effect(
+                    super::EffectPayload {
+                        id,
+                        brightness,
+                        ..super::config::DEFAULT_EFFECT
+                    },
+                ))),
+                clock: EffectClockSlot::default(),
+            }),
+        });
+        let tick = CapturedFrame::new(1, 1, vec![[0, 0, 0]]);
+        let settings = FrameSettings {
+            black_border_detection: false,
+            alpha_ceiling: 1.0,
+            saturation: 1.0,
+        };
+        let start = Instant::now();
+        for n in 0..400u64 {
+            let now = start + Duration::from_millis(n * 40);
+            let sampled = pipeline.sample_strip(&tick);
+            pipeline.analyze(&tick, sampled, settings, now);
+            pipeline.advance(now);
+            // The smoother starts from black: give it two seconds to arrive.
+            if n < 50 {
+                continue;
+            }
+            let colours = pipeline.hue_colors().expect("hue colours");
+            let wire = colours.iter().flatten().fold(0.0f32, |a, &c| a.max(c)) * brightness;
+            assert!(
+                wire >= 0.019,
+                "{tag}: {wire:.4} on the wire at step {n}: {colours:?}"
+            );
+        }
+    }
+}
+
+/// An effect step next to the strip and six Hue channels allocates nothing once
+/// warm: the payload is copied and the palette rebuilt only on a retune, and
+/// every output buffer keeps its capacity.
+#[test]
+fn a_steady_effect_step_allocates_nothing() {
+    use super::effects::{EffectClockSlot, EffectDraw};
+
+    let led_calibration = strip_164();
+    let channels: Vec<HueAreaChannel> = (0..6)
+        .map(|i| HueAreaChannel {
+            channel_id: i,
+            light_ids: vec![format!("light-{i}")],
+            screen_region: HueScreenRegion::Center,
+            position_x: -0.9 + 0.36 * f32::from(i),
+            position_y: 0.6,
+            position_z: Some(0.2),
+        })
+        .collect();
+    for &(_, id) in super::config::EffectId::TAGS {
+        let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
+            led_sequence: build_led_sequence(&led_calibration),
+            led_counts: led_calibration.counts.clone(),
+            sample_window: SYNTHETIC_SAMPLE_WINDOW,
+            scene_enabled: false,
+            strip_topology: strip_topology_for(Some(&led_calibration)),
+            hue_channels: Some(channels.clone()),
+            room_geometry: RoomGeometryLive::new(None),
+            black_border_detection: false,
+            color_correction: ColorCorrectionConfig::default(),
+            effect: Some(EffectDraw {
+                live: Arc::new(Mutex::new(super::EffectPayload {
+                    id,
+                    colors: Some(vec![super::config::EffectColor {
+                        r: 255,
+                        g: 120,
+                        b: 10,
+                    }]),
+                    ..super::config::DEFAULT_EFFECT
+                })),
+                clock: EffectClockSlot::default(),
+            }),
+        });
+        let tick = CapturedFrame::new(1, 1, vec![[0, 0, 0]]);
+        let settings = FrameSettings {
+            black_border_detection: false,
+            alpha_ceiling: 1.0,
+            saturation: 1.0,
+        };
+        let start = Instant::now();
+        let mut step = |n: u64| {
+            let now = start + Duration::from_millis(n * 16);
+            let sampled = pipeline.sample_strip(&tick);
+            pipeline.analyze(&tick, sampled, settings, now);
+            pipeline.advance(now);
+        };
+        for n in 0..8 {
+            step(n);
+        }
+        for n in 8..24 {
+            let (allocs, _) = alloc_count::measure(|| step(n));
+            assert_eq!(allocs, 0, "{id:?} step {n} made {allocs} allocations");
+        }
+    }
+}
+
+/// Hands out one frame for the warm-up, then panics inside the worker's loop.
+struct PanickingFrameSource {
+    frame: Arc<CapturedFrame>,
+    served: bool,
+}
+
+impl AmbilightFrameSource for PanickingFrameSource {
+    fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
+        if self.served {
+            panic!("frame source broke mid-run");
+        }
+        self.served = true;
+        Ok(Arc::clone(&self.frame))
+    }
+}
+
+#[test]
+fn a_worker_that_panics_is_counted_out_and_its_stop_returns() {
+    let _guard = WORKER_TEST_GUARD
+        .lock()
+        .unwrap_or_else(|err| err.into_inner());
+    let before = ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst);
+    let frames = scene_frames(FRAME_W, FRAME_H, 1);
+    let live = live_settings();
+    let room = RoomGeometryLive::new(None);
+    let served = Arc::new(AtomicU32::new(0));
+    let runtime = start_ambilight_worker(
+        LedOutputBridge::from_sender(Arc::new(RecordingSender::default())),
+        Some(UsbOutputPlan::Serial(PORT.to_string())),
+        Some(strip_164()),
+        Arc::clone(&live),
+        Box::new(PanickingFrameSource {
+            frame: Arc::clone(&frames[0]),
+            served: false,
+        }),
+        SharedRuntimeTelemetry::default(),
+        None,
+        None,
+        color_correction(),
+        FirmwareProfile::LumaSyncV1,
+        LedChipType::Ws2812bGrb,
+        None,
+        Arc::clone(&room),
+        scripted_clock(&served),
+    )
+    .expect("worker starts");
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst) != before && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst), before);
+    runtime.stop();
 }

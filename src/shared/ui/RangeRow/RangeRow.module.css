@@ -1,0 +1,93 @@
+@layer components {
+  /* The stage slider: its name and value on one line, the track under them. The hit area is
+     32px tall though the track is 4px, so a thumb is easy to catch. */
+  .stage { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-width: 0; }
+  .label {
+    overflow: hidden;
+    font-size: 12.5px;
+    color: var(--lm-ink-dim);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .value {
+    flex-shrink: 0;
+    min-width: 5ch;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--lm-ink);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  /* A name or value set from outside comes in with a small rise; the one it replaced is gone. */
+  .label[data-swapped], .value[data-swapped] { animation: readout-in var(--lm-dur-base) var(--lm-ease-out); }
+  @keyframes readout-in { from { opacity: 0; transform: translateY(3px); } }
+  :global(:root[data-reduced-motion]) .label[data-swapped],
+  :global(:root[data-reduced-motion]) .value[data-swapped] { animation: none; }
+  /* Block, not inline: inside its box an inline input sat on a text line, which added a descender's
+     height under it and put the neutral tick's 50% below the track. */
+  .slider {
+    display: block;
+    width: 100%;
+    height: 32px;
+    margin: 0;
+    background: transparent;
+    appearance: none;
+    cursor: pointer;
+  }
+  .slider:disabled { cursor: not-allowed; opacity: 0.45; }
+  .slider::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 999px;
+    background: linear-gradient(to right, var(--lm-amber) var(--fill), var(--lm-line-2) var(--fill));
+  }
+  .slider::-webkit-slider-thumb {
+    width: 18px;
+    height: 18px;
+    margin-top: -7px;
+    border-radius: 50%;
+    background: var(--lm-ink);
+    box-shadow: 0 0 0 3px var(--lm-bg);
+    appearance: none;
+  }
+  /* A track of its own colours (Solid's whites) instead of the amber fill, a little thicker so
+     they read. */
+  .whites::-webkit-slider-runnable-track { height: 8px; background: var(--track); }
+  .whites::-webkit-slider-thumb { margin-top: -5px; }
+  .trackBox { position: relative; }
+  /* The neutral value's mark, under where the thumb's centre sits at it (the thumb is 18 px). */
+  .tick {
+    position: absolute;
+    top: 50%;
+    left: calc(9px + (100% - 18px) * var(--at));
+    width: 2px;
+    height: 10px;
+    border-radius: 1px;
+    background: var(--lm-ink-faint);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  /* The readout, off the neutral value: a press takes it back. It keeps the readout's look. */
+  .toNeutral {
+    margin: -2px -6px;
+    padding: 2px 6px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    transition: background var(--lm-dur-quick), color var(--lm-dur-quick);
+  }
+  .toNeutral:hover { background: var(--lm-panel-2); color: var(--lm-amber); }
+  .toNeutral:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  :global(:root[data-reduced-motion]) .toNeutral { transition: none; }
+  .slider:focus-visible { outline: none; }
+  .slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--lm-bg), var(--lm-focus-ring); }
+  .note { margin: 2px 0 0; font-size: 11.5px; line-height: 1.4; color: var(--lm-ink-faint); }
+
+  @media (forced-colors: active) {
+    .slider::-webkit-slider-runnable-track { background: CanvasText; }
+    .slider:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+    .tick { background: CanvasText; }
+    .toNeutral:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+  }
+}

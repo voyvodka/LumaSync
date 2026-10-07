@@ -1,11 +1,14 @@
 // useUIMode — compact/full layout mode hook. Sequential transition
 // (fade out → resize → mount + fade in), deliberately not a cross-fade —
 // see docs/architecture/ui-and-shell.md. A call during a transition joins it.
+// The interface size changes through the same three phases.
 
 import { useState, useCallback, useRef } from "react";
-import type { UIMode } from "@/shared/contracts/shell";
-import { resizeToMode } from "./windowLifecycle";
+import type { UIMode, UiZoom } from "@/shared/contracts/shell";
+import { framedUiZoom, resizeToMode, windowLifecycleSettled } from "./windowLifecycle";
 import { waitForFrames } from "./frameWait";
+import { applyChromeScale } from "./useUiZoom";
+import { setCurrentWebviewZoom } from "./windowApi";
 
 /** Fade-out / fade-in duration. Kept short so total transition feels snappy. */
 export const UI_MODE_FADE_DURATION_MS = 160;
@@ -50,6 +53,8 @@ export function useUIMode() {
   const [isUITransitioning, setIsUITransitioning] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const inFlightRef = useRef<Promise<void> | null>(null);
+  // An interface-size pass in flight: a mode switch waits for it rather than joining it.
+  const zoomPassRef = useRef<Promise<void> | null>(null);
   const currentModeRef = useRef(currentMode);
   currentModeRef.current = currentMode;
 
@@ -57,6 +62,9 @@ export function useUIMode() {
   // here, and a caller arriving mid-transition awaits the running one instead of
   // starting a second resize animation against it.
   const switchUIMode = useCallback((nextMode: UIMode): Promise<void> => {
+    // A zoom pass never targets a mode, so joining it would drop this one: run after it instead.
+    const zoomPass = zoomPassRef.current;
+    if (zoomPass !== null) return zoomPass.then(() => switchUIModeRef.current(nextMode));
     if (inFlightRef.current !== null) return inFlightRef.current;
     if (nextMode === currentModeRef.current) return Promise.resolve();
 
@@ -92,6 +100,74 @@ export function useUIMode() {
     inFlightRef.current = run;
     return run;
   }, []);
+  const switchUIModeRef = useRef(switchUIMode);
+  switchUIModeRef.current = switchUIMode;
+
+  // Settings → Interface size. The webview's zoom reflows the whole page at once, so it is applied
+  // while only the backdrop shows, together with the title bar's counter-scale and the frame's
+  // refit. A size chosen while a run is going is taken by that run's next pass.
+  const pendingZoomRef = useRef<UiZoom | null>(null);
+  const zoomRunRef = useRef<Promise<void> | null>(null);
+  // The webview's own zoom, apart from the frame's: a failed refit leaves the two different.
+  const webviewZoomRef = useRef<number | null>(null);
+  const applyUiZoom = useCallback((zoom: UiZoom): Promise<void> => {
+    pendingZoomRef.current = zoom;
+    if (zoomRunRef.current !== null) return zoomRunRef.current;
+
+    const rezoom = async (target: UiZoom) => {
+      const from = framedUiZoom();
+      // The boot read already zoomed and framed the window; hydration arriving after it is not a change.
+      if (target / 100 === from && target / 100 === (webviewZoomRef.current ?? from)) {
+        applyChromeScale(target);
+        return;
+      }
+      setIsUITransitioning(true);
+      try {
+        setIsContentVisible(false);
+        await waitForOpacityTransition(contentRef.current);
+        // Sizes chosen during the fade (⌘+ held) land in this one pass, the latest of them.
+        const size = pendingZoomRef.current ?? target;
+        pendingZoomRef.current = null;
+        await setCurrentWebviewZoom(size / 100);
+        webviewZoomRef.current = size / 100;
+        applyChromeScale(size);
+        await resizeToMode(currentModeRef.current, { zoom: size / 100, fromZoom: from });
+        await waitForFrames(2);
+        setIsContentVisible(true);
+        await waitForOpacityTransition(contentRef.current);
+      } catch (err) {
+        console.error("[LumaSync] changing the interface size failed:", err);
+      } finally {
+        setIsContentVisible(true);
+        setIsUITransitioning(false);
+      }
+    };
+
+    const run = (async () => {
+      try {
+        // Outside any published pass: a mode switch during boot must not wait on this.
+        await windowLifecycleSettled();
+        while (pendingZoomRef.current !== null) {
+          // A mode switch in flight sizes the frame first; it read the zoom it framed for.
+          while (inFlightRef.current !== null) await inFlightRef.current;
+          const target = pendingZoomRef.current;
+          if (target === null) break;
+          pendingZoomRef.current = null;
+          const pass = rezoom(target);
+          zoomPassRef.current = pass;
+          try {
+            await pass;
+          } finally {
+            zoomPassRef.current = null;
+          }
+        }
+      } finally {
+        zoomRunRef.current = null;
+      }
+    })();
+    zoomRunRef.current = run;
+    return run;
+  }, []);
 
   return {
     currentMode,
@@ -99,6 +175,7 @@ export function useUIMode() {
     isUITransitioning,
     contentRef,
     switchUIMode,
+    applyUiZoom,
     setCurrentMode,
   } as const;
 }

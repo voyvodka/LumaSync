@@ -51,4 +51,5 @@ export default {
   checking: "Checking…",
   upToDate: "You're on the latest version · checked {{time}}",
   upToDateShort: "Up to date",
+  lastChecked: "Checked {{time}}",
 };

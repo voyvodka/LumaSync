@@ -21,11 +21,11 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("@/features/persistence/shellStore", () => ({
-  shellStore: { load: () => Promise.resolve({}), save: () => Promise.resolve() },
+  shellStore: { load: () => Promise.resolve({}), save: () => Promise.resolve(), onSaved: () => () => {} },
 }));
 
-vi.mock("../sections/LightsSection", () => ({
-  LightsSection: ({ mode, hueStreaming }: { mode: LightingModeConfig; hueStreaming: boolean }) => {
+vi.mock("@/features/lights/ui/LightsPage", () => ({
+  LightsPage: ({ mode, hueStreaming }: { mode: LightingModeConfig; hueStreaming: boolean }) => {
     count("lights");
     return (
       <>
@@ -87,14 +87,14 @@ vi.mock("@/features/calibration/ui/CalibrationPage", () => ({
 
 // One per CompactLayout render, so it counts the compact layout.
 vi.mock("@/features/mode/ui/ModeStrip", () => ({
-  ModeStrip: ({ isDisabled }: { isDisabled?: (kind: string) => boolean }) => {
+  ModeStrip: ({ isDisabled, busy }: { isDisabled?: (kind: string) => boolean; busy?: boolean }) => {
     count("compactModeStrip");
-    return <button type="button" data-testid="mode-button-off" disabled={isDisabled?.("off")} />;
+    return (
+      <div aria-busy={busy || undefined}>
+        <button type="button" data-testid="mode-button-off" disabled={isDisabled?.("off")} />
+      </div>
+    );
   },
-}));
-
-vi.mock("../sections/control/LightingSmoothingPresetControl", () => ({
-  LightingSmoothingPresetControl: () => null,
 }));
 
 import { SettingsLayout } from "../SettingsLayout";
@@ -134,6 +134,7 @@ const DOWNLOADING = (progress: number) => ({
   isModalOpen: true,
   checkFailedNotice: null,
   upToDateAt: null,
+  checkedAt: null,
 });
 
 describe("SettingsLayout render boundaries", () => {
@@ -305,6 +306,9 @@ describe("SettingsLayout render boundaries", () => {
 
     shell.setLighting({ isModeTransitioning: true });
     expect(renders.compactModeStrip).toBe(before + 1);
-    expect(screen.getByTestId("mode-button-off")).toBeDisabled();
+    // A choice in flight holds presses without greying the strip out.
+    const off = screen.getByTestId("mode-button-off");
+    expect(off).toBeEnabled();
+    expect(off.closest("[aria-busy]")).not.toBeNull();
   });
 });

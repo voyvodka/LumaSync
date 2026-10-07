@@ -32,6 +32,12 @@ export default {
     },
   },
   strip: {
+    color: {
+      default: "Default",
+      summary: "{{kelvin}} K · γ {{gamma}} · ×{{saturation}}",
+      edit: "Adjust",
+      hint: "Gamma per channel, white point and a saturation trim, so this output's colours match the others. For now one setting drives every output — strips and Hue alike — until each strip has its own.",
+    },
     // One word per strip state (`model/stripState.ts`); a closed set.
     state: {
       connecting: "Connecting…",
@@ -54,6 +60,7 @@ export default {
       firmware: "Firmware",
       chip: "LED chip",
       colorOrder: "Colour order",
+      color: "Colour",
       health: "Health check",
       device: "Device",
       ledCount: "LEDs",
@@ -122,6 +129,10 @@ export default {
       wled: "WLED",
       wledHint: "The address in WLED's Info panel, such as 192.168.1.42. LumaSync asks the device how many LEDs it has.",
       addNamed: "Add {{name}}",
+      network: "On the network",
+      searching: "Searching…",
+      foundWled_one: "{{ip}} · 1 LED",
+      foundWled_other: "{{ip}} · {{count}} LEDs",
       replaces: "{{name}} moves here, with its layout and settings: one strip is driven at a time for now.",
       otherPorts: "Other ports",
       otherPortsHint: "Serial ports that are not a supported LED controller, such as Bluetooth or debug ports. LumaSync does not open them.",
@@ -273,6 +284,9 @@ export default {
         testSendFailed: "Could not send the test frame to the device.",
         sinkNotStarted: "Connect the device before testing it.",
         workerFailed: "LumaSync could not finish the request. Try again.",
+        browseOk: "Search finished.",
+        browseUnsupported: "This computer cannot look for devices on the network. Enter the address instead.",
+        browseFailed: "Looking for devices on the network did not start.",
         forgetOk: "Device forgotten. Discover it again to use it.",
         forgetFailed: "The device could not be forgotten. Try Forget again.",
       },

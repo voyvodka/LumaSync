@@ -1,5 +1,8 @@
 @layer components {
   .list { position: relative; display: flex; flex-direction: column; }
+  /* The tint lives inside the scrolled content, so it scrolls with its row. */
+  .scrolls { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+  .scrolls > .option { flex-shrink: 0; }
 
   .mark {
     position: absolute;

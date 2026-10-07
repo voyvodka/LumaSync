@@ -1,6 +1,6 @@
-//! Synthetic test-pattern frame source (v1.6 LED Preview — Phase 1).
+//! Synthetic test-pattern frame source for the LED preview.
 //!
-//! Phase 1 is **TEST MODE with screen capture OFF**. Instead of grabbing real
+//! A test runs with **screen capture off**. Instead of grabbing real
 //! screen pixels, [`SyntheticFrameSource`] renders a procedural SCREEN-SPACE
 //! [`CapturedFrame`] (640 px long axis, display aspect) for each
 //! `capture_frame()` call and hands it to
@@ -17,8 +17,8 @@
 //! worker's existing brightness path (LumaSync v1 header byte + the twin's
 //! post-EWMA scalar) so a synthetic run dims identically to live ambilight.
 //!
-//! Phase 2 (capture-exclusion via `SCContentFilter` exclude /
-//! `SetWindowDisplayAffinity`) is explicitly OUT OF SCOPE here.
+//! Keeping the preview windows out of a live capture (`SCContentFilter`
+//! exclude / `SetWindowDisplayAffinity`) is not built.
 
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};

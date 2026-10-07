@@ -120,7 +120,7 @@ const calibration: Catalogue<typeof enCalibration> = {
       saveFailed: "Düzen kaydedilemedi. Değişikliklerin hâlâ burada.",
     },
     unsavedTitle: "Kaydedilmemiş değişiklik",
-    unsavedDescription: "LED Kurulumu'nda kaydedilmemiş değişikliklerin var. Vazgeçip çıkmak istiyor musun?",
+    unsavedDescription: "LED kurulumunda kaydedilmemiş değişikliklerin var. Vazgeçip çıkmak istiyor musun?",
     keepEditing: "Düzenlemeye devam et",
     discard: "Vazgeç",
   },

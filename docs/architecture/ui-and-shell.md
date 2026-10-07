@@ -14,6 +14,19 @@ A change that assumes the window is always open is working against this.
 300×420). Compact is a real target, not a responsive afterthought — anything added has to survive
 320 pixels of width.
 
+**Interface size grows the content, never the title bar, and changes behind a fade.** Settings →
+Interface size is the webview's own zoom, and the frame grows by the same factor so the layout
+keeps its design viewport. The zoom grows everything the webview draws, but the macOS window
+buttons the bar lines up with are native and stay put, so at 125 % the bar outgrew them: `useUiZoom`
+keeps `--lm-chrome-scale` (100 / size) on `:root`, the bar takes it as CSS `zoom`, and
+`--lm-titlebar-h` multiplies by it, so the content offset and every modal scrim follow. A change
+runs through `useUIMode`'s three phases, like a compact/full switch: the content fades out, the
+main webview is zoomed from the frontend (`setZoom`) with the counter-scale set right after it and
+the frame refitted, then the content fades in. Rust zooms the main webview only at boot, before
+the page loads; after a `uiZoom` write it zooms the control popup alone. When Rust also zoomed the
+main window after the write, and the variable changed on the preference, the bar and the page
+reflowed in sight a few frames apart — the flicker this replaced.
+
 **Font faces are hand-declared, not `@fontsource/*` imports, and `font-display` is `block`.**
 `src/fonts.css`. Every `@fontsource` bundle ships `swap`, and a `@font-face` descriptor can't be
 overridden after the fact — `swap` paints a metrically-unrelated fallback first and reflows when the
@@ -129,6 +142,38 @@ without a pixel moving. A slider that commits while it moves goes through `useTh
 (leading and trailing, flushed on release), so a drag neither floods the lighting runtime nor drops
 the value the user let go on. A new control that needs one of these behaviours uses the primitive;
 a feature that is touched for another reason migrates its hand-rolled copy then.
+
+**Off is a power button, not a fourth mode.** On Lights and in the compact window the strip is a
+power switch followed by the modes that light something. Off as an equal tile made it read as a
+setting like the others, and choosing it swapped the whole stage for one line of text, so every
+toggle moved the page. Now the stage stays while the lights are off — the last lit mode's, dimmed
+and inert, under one veil with "Turn on Solid" (the mode it brings back) — and the grey mark rests
+on the mode the switch brings back,
+which Rust saves as `lastLitKind` with every lit choice (an Off leaves it), so it survives a
+relaunch. Turning on sends the kind alone, and Rust applies that mode's saved settings: the ones
+the dimmed stage shows. The popup keeps Off among its buttons; ⌥1 is still Off. The first version
+floated a small pill over the stage, which sat half over whatever control happened to be there;
+the veil covers the whole card instead, darkest where its words are.
+
+**A choice in flight holds presses; it does not dim.** Starting Ambilight's capture takes a few
+hundred milliseconds, and the strip and scenes used to go to 40 % for it and come back, which read
+as the app stalling. While a transaction runs they ignore presses (`busy`), and only a real lock —
+no output, the calibration — shows as disabled. No `aria-busy` either: on the power switch it hid
+the switch's state from a screen reader for the length of every change.
+
+**A scene is made and edited with the page's own controls, inside an explicit edit.** "+" and a
+scene's Edit in the library turn the scenes row, in place, into a bar with the scene's look, its
+name, Cancel and Save; the mode strip and the stage below it then shape the scene, and the lights
+preview every change. Save writes the look and the name in one edit of the list; Cancel applies
+the light (and Ambilight's smoothing) as it was when the edit opened. The first version saved the
+running light at once with no name, and an update button appeared beside "+" once the light
+changed after a scene was chosen — nothing said that the page's controls were editing a scene, so
+the way to change one was never found. A duplicate set of controls in a scene editor was the other
+option; it would have been a second copy of every stage to keep in step. The edit lives in
+`scenesStore` rather than in the row, so leaving the page and coming back finds it still open.
+While it is open the Effect stage folds its gallery into one sideways row: at the full window's
+smallest size the four rows of tiles pushed the palettes and sliders — what an edit shapes — below
+the fold. The compact window already picks from a list and is left as it is.
 
 **A closed set of kinds is a table, not a scattered `switch`.** Sections (`SECTION_REGISTRY` in
 `SettingsLayout.tsx`), Devices rail rows (`RAIL_ROWS` in `device/ui/deviceRailRows.ts`), lighting mode kinds

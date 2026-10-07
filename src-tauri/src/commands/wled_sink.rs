@@ -4,7 +4,7 @@
 //!
 //! DDP packet layout (header = 10 bytes, then RGB payload):
 //!  Byte 0:    flags     -- 0x40 (version=1), | 0x01 push, set on the LAST chunk only
-//!  Byte 1:    sequence  -- incrementing u8, wraps at 255
+//!  Byte 1:    sequence  -- 1..=15 in the low four bits, then back to 1; 0 means "unused"
 //!  Byte 2:    type      -- 0x01  (RGBRGB... data)
 //!  Byte 3:    data-type -- 0x01  (8-bit RGB)
 //!  Bytes 4-7: offset    -- big-endian u32, a BYTE offset into the frame
@@ -83,6 +83,8 @@ pub struct WledUdpSink {
     socket: Option<UdpSocket>,
     endpoint: Option<SocketAddrV4>,
     sequence: AtomicU8,
+    /// One datagram at a time is written here and sent, so a frame reuses it.
+    packet: Vec<u8>,
     /// One report per `start()`. A mismatch is a property of the pairing, not
     /// of a frame, so logging it per frame would be 20 identical lines a
     /// second and nobody would read any of them.
@@ -99,7 +101,8 @@ impl WledUdpSink {
             protocol,
             socket: None,
             endpoint: None,
-            sequence: AtomicU8::new(0),
+            sequence: AtomicU8::new(1),
+            packet: Vec::new(),
             length_checked: false,
         }
     }
@@ -145,26 +148,33 @@ impl LedSink for WledUdpSink {
 
     fn send_frame(&mut self, colors: &[[u8; 3]]) -> Result<(), String> {
         self.report_length_mismatch(colors.len());
-        let (socket, endpoint) = match (&self.socket, &self.endpoint) {
-            (Some(s), Some(e)) => (s, *e),
+        let Self {
+            socket,
+            endpoint,
+            sequence,
+            packet,
+            protocol,
+            ..
+        } = self;
+        let (socket, endpoint) = match (socket.as_ref(), *endpoint) {
+            (Some(s), Some(e)) => (s, e),
             _ => return Err("WLED_SINK_NOT_STARTED: send_frame called before start()".to_string()),
         };
-        let datagrams = match self.protocol {
-            WledProtocol::Ddp => encode_ddp_packets(colors, &self.sequence),
-            WledProtocol::Drgb => encode_realtime_packets(colors)?,
-        };
-        // Stop at the first failed chunk: pushing the rest adds partial state
-        // and still reports an error, and the next frame lands in 50 ms.
-        let total = datagrams.len();
-        for (index, packet) in datagrams.iter().enumerate() {
-            socket.send_to(packet, endpoint).map_err(|e| {
+        // Each datagram goes as soon as it is written. Stop at the first failed
+        // chunk: pushing the rest adds partial state and still reports an error,
+        // and the next frame lands in 50 ms.
+        let send = |index: usize, total: usize, datagram: &[u8]| {
+            socket.send_to(datagram, endpoint).map(|_| ()).map_err(|e| {
                 format!(
                     "WLED_SEND_FAILED: UDP send_to {endpoint} failed on chunk {}/{total} -- {e}",
                     index + 1
                 )
-            })?;
+            })
+        };
+        match protocol {
+            WledProtocol::Ddp => for_each_ddp_packet(colors, sequence, packet, send),
+            WledProtocol::Drgb => for_each_realtime_packet(colors, packet, send),
         }
-        Ok(())
     }
 
     fn stop(&mut self) -> Result<(), String> {
@@ -227,6 +237,8 @@ pub struct CorrectedWledSink {
     inner: WledUdpSink,
     plan: EncoderPlan,
     brightness: f32,
+    /// The corrected frame, rewritten in place each frame.
+    corrected: Vec<[u8; 3]>,
 }
 
 impl CorrectedWledSink {
@@ -237,6 +249,7 @@ impl CorrectedWledSink {
             inner,
             plan: EncoderPlan::new(&corrections),
             brightness: 1.0,
+            corrected: Vec::new(),
         }
     }
 
@@ -255,11 +268,13 @@ impl LedSink for CorrectedWledSink {
 
     fn send_frame(&mut self, colors: &[[u8; 3]]) -> Result<(), String> {
         let brightness = self.brightness;
-        let corrected: Vec<[u8; 3]> = colors
-            .iter()
-            .map(|&pixel| scale_brightness(self.plan.correct(pixel), brightness))
-            .collect();
-        self.inner.send_frame(&corrected)
+        self.corrected.clear();
+        self.corrected.extend(
+            colors
+                .iter()
+                .map(|&pixel| scale_brightness(self.plan.correct(pixel), brightness)),
+        );
+        self.inner.send_frame(&self.corrected)
     }
 
     fn stop(&mut self) -> Result<(), String> {
@@ -267,57 +282,89 @@ impl LedSink for CorrectedWledSink {
     }
 }
 
-/// Encode one frame as one or more DDP datagrams, chunked so none exceeds a
-/// 1500-byte MTU.
+/// The sequence to stamp on the next DDP datagram, advancing the counter. DDP
+/// keeps it in the low four bits, 1–15 with 0 meaning "not used", and WLED
+/// reads `seq & 0xF`: a u8 running on through 16..=255 and 0 read there as
+/// jumps and an "unused" packet, which a receiver skipping out-of-order
+/// datagrams drops.
+fn next_ddp_sequence(counter: &AtomicU8) -> u8 {
+    let into_range = |value: u8| value.wrapping_sub(1) % 15 + 1;
+    let used = counter
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+            Some(into_range(value) % 15 + 1)
+        })
+        .unwrap_or(1);
+    into_range(used)
+}
+
+fn push_rgb(packet: &mut Vec<u8>, colors: &[[u8; 3]]) {
+    for &[r, g, b] in colors {
+        packet.extend_from_slice(&[r, g, b]);
+    }
+}
+
+/// Writes one frame as DDP datagrams into `packet`, one at a time, handing each
+/// to `emit` with its index and the count — chunked so none exceeds a 1500-byte
+/// MTU. The buffer is reused, so a steady frame allocates nothing.
 ///
 /// The push flag rides the LAST chunk only. Setting it on every chunk -- what
 /// the single-packet encoder did by using a constant 0x41 -- makes WLED latch
 /// each fragment as a complete frame and display partial updates.
-pub fn encode_ddp_packets(colors: &[[u8; 3]], sequence: &AtomicU8) -> Vec<Vec<u8>> {
+pub(crate) fn for_each_ddp_packet<E>(
+    colors: &[[u8; 3]],
+    sequence: &AtomicU8,
+    packet: &mut Vec<u8>,
+    mut emit: impl FnMut(usize, usize, &[u8]) -> Result<(), E>,
+) -> Result<(), E> {
     let leds_per_chunk = DDP_MAX_PAYLOAD_BYTES / 3;
-    let chunks: Vec<&[[u8; 3]]> = if colors.is_empty() {
-        vec![colors]
-    } else {
-        colors.chunks(leds_per_chunk).collect()
-    };
-    let last_index = chunks.len() - 1;
-
-    chunks
-        .iter()
-        .enumerate()
-        .map(|(index, chunk)| {
-            let payload_len = chunk.len() * 3;
-            let byte_offset = (index * leds_per_chunk * 3) as u32;
-            let mut packet = Vec::with_capacity(DDP_HEADER_LEN + payload_len);
-            let flags = if index == last_index {
-                DDP_FLAGS_VERSION_1 | DDP_FLAG_PUSH
-            } else {
-                DDP_FLAGS_VERSION_1
-            };
-            packet.push(flags);
-            packet.push(sequence.fetch_add(1, Ordering::Relaxed));
-            packet.push(DDP_TYPE);
-            packet.push(DDP_DATA_TYPE);
-            packet.extend_from_slice(&byte_offset.to_be_bytes());
-            // Chunking caps this at DDP_MAX_PAYLOAD_BYTES, so the u16 the old
-            // encoder cast blindly can no longer wrap past 21 845 LEDs.
-            packet.extend_from_slice(&(payload_len as u16).to_be_bytes());
-            for &[r, g, b] in chunk.iter() {
-                packet.push(r);
-                packet.push(g);
-                packet.push(b);
-            }
-            packet
-        })
-        .collect()
+    // An empty frame is still one (empty) datagram.
+    let total = colors.len().div_ceil(leds_per_chunk).max(1);
+    for index in 0..total {
+        let start = (index * leds_per_chunk).min(colors.len());
+        let chunk = &colors[start..(start + leds_per_chunk).min(colors.len())];
+        let payload_len = chunk.len() * 3;
+        let byte_offset = (index * leds_per_chunk * 3) as u32;
+        let flags = if index == total - 1 {
+            DDP_FLAGS_VERSION_1 | DDP_FLAG_PUSH
+        } else {
+            DDP_FLAGS_VERSION_1
+        };
+        packet.clear();
+        packet.reserve(DDP_HEADER_LEN + payload_len);
+        packet.extend_from_slice(&[flags, next_ddp_sequence(sequence), DDP_TYPE, DDP_DATA_TYPE]);
+        packet.extend_from_slice(&byte_offset.to_be_bytes());
+        // Chunking caps this at DDP_MAX_PAYLOAD_BYTES, so the u16 the old
+        // encoder cast blindly can no longer wrap past 21 845 LEDs.
+        packet.extend_from_slice(&(payload_len as u16).to_be_bytes());
+        push_rgb(packet, chunk);
+        emit(index, total, packet)?;
+    }
+    Ok(())
 }
 
-/// Encode one frame for WLED's realtime UDP family: a single DRGB datagram
-/// while the frame fits, DNRGB chunks once it does not.
+/// Every DDP datagram of one frame, as owned buffers: what the wire tests read.
+#[cfg(test)]
+pub fn encode_ddp_packets(colors: &[[u8; 3]], sequence: &AtomicU8) -> Vec<Vec<u8>> {
+    let mut packets = Vec::new();
+    let mut packet = Vec::new();
+    let _ = for_each_ddp_packet(colors, sequence, &mut packet, |_, _, datagram| {
+        packets.push(datagram.to_vec());
+        Ok::<(), ()>(())
+    });
+    packets
+}
+
+/// Writes one frame for WLED's realtime UDP family into `packet`, one datagram
+/// at a time, handing each to `emit`: a single DRGB datagram while the frame
+/// fits, DNRGB chunks once it does not.
 ///
 /// DNRGB's bytes 2-3 are a big-endian **LED index**, not the byte offset DDP
 /// uses -- the two are a chunk apart in meaning and trivially swapped.
-pub fn encode_realtime_packets(colors: &[[u8; 3]]) -> Result<Vec<Vec<u8>>, String> {
+pub(crate) fn for_each_realtime_packet(
+    colors: &[[u8; 3]],
+    packet: &mut Vec<u8>,
+    mut emit: impl FnMut(usize, usize, &[u8]) -> Result<(), String>,
+) -> Result<(), String> {
     if colors.len() > DNRGB_MAX_ADDRESSABLE_LEDS {
         return Err(format!(
             "WLED_FRAME_TOO_LONG: {} LEDs exceeds the {DNRGB_MAX_ADDRESSABLE_LEDS}-LED DNRGB address space; use the ddp protocol",
@@ -326,34 +373,34 @@ pub fn encode_realtime_packets(colors: &[[u8; 3]]) -> Result<Vec<Vec<u8>>, Strin
     }
 
     if colors.len() <= DRGB_MAX_LEDS {
-        let mut packet = Vec::with_capacity(2 + colors.len() * 3);
-        packet.push(REALTIME_PROTO_DRGB);
-        packet.push(REALTIME_TIMEOUT_SEC);
-        for &[r, g, b] in colors {
-            packet.push(r);
-            packet.push(g);
-            packet.push(b);
-        }
-        return Ok(vec![packet]);
+        packet.clear();
+        packet.extend_from_slice(&[REALTIME_PROTO_DRGB, REALTIME_TIMEOUT_SEC]);
+        push_rgb(packet, colors);
+        return emit(0, 1, packet);
     }
 
-    Ok(colors
-        .chunks(DNRGB_MAX_LEDS_PER_PACKET)
-        .enumerate()
-        .map(|(index, chunk)| {
-            let start_led = (index * DNRGB_MAX_LEDS_PER_PACKET) as u16;
-            let mut packet = Vec::with_capacity(4 + chunk.len() * 3);
-            packet.push(REALTIME_PROTO_DNRGB);
-            packet.push(REALTIME_TIMEOUT_SEC);
-            packet.extend_from_slice(&start_led.to_be_bytes());
-            for &[r, g, b] in chunk.iter() {
-                packet.push(r);
-                packet.push(g);
-                packet.push(b);
-            }
-            packet
-        })
-        .collect())
+    let total = colors.len().div_ceil(DNRGB_MAX_LEDS_PER_PACKET);
+    for (index, chunk) in colors.chunks(DNRGB_MAX_LEDS_PER_PACKET).enumerate() {
+        let start_led = (index * DNRGB_MAX_LEDS_PER_PACKET) as u16;
+        packet.clear();
+        packet.extend_from_slice(&[REALTIME_PROTO_DNRGB, REALTIME_TIMEOUT_SEC]);
+        packet.extend_from_slice(&start_led.to_be_bytes());
+        push_rgb(packet, chunk);
+        emit(index, total, packet)?;
+    }
+    Ok(())
+}
+
+/// Every realtime datagram of one frame, as owned buffers: what the wire tests read.
+#[cfg(test)]
+pub fn encode_realtime_packets(colors: &[[u8; 3]]) -> Result<Vec<Vec<u8>>, String> {
+    let mut packets = Vec::new();
+    let mut packet = Vec::new();
+    for_each_realtime_packet(colors, &mut packet, |_, _, datagram| {
+        packets.push(datagram.to_vec());
+        Ok(())
+    })?;
+    Ok(packets)
 }
 
 #[cfg(test)]
@@ -416,11 +463,30 @@ mod tests {
 
     #[test]
     fn ddp_sequence_increments_per_packet() {
-        let seq = AtomicU8::new(0);
+        let seq = AtomicU8::new(1);
         let p1 = encode_ddp_packets(&[[0, 0, 0]], &seq);
         let p2 = encode_ddp_packets(&[[0, 0, 0]], &seq);
-        assert_eq!(p1[0][1], 0);
-        assert_eq!(p2[0][1], 1);
+        assert_eq!(p1[0][1], 1);
+        assert_eq!(p2[0][1], 2);
+    }
+
+    #[test]
+    fn ddp_sequence_runs_1_to_15_and_never_stamps_unused() {
+        let seq = AtomicU8::new(1);
+        let stamped: Vec<u8> = (0..40)
+            .map(|_| encode_ddp_packets(&[[0, 0, 0]], &seq)[0][1])
+            .collect();
+        assert_eq!(
+            &stamped[..16],
+            &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 1]
+        );
+        assert!(stamped.iter().all(|s| (1..=15).contains(s)), "{stamped:?}");
+        // A counter left anywhere else — a fresh 0, a stray 200 — is brought into range.
+        for start in [0u8, 16, 200, 255] {
+            let seq = AtomicU8::new(start);
+            let first = encode_ddp_packets(&[[0, 0, 0]], &seq)[0][1];
+            assert!((1..=15).contains(&first), "start {start} stamped {first}");
+        }
     }
 
     #[test]

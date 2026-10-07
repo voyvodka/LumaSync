@@ -81,13 +81,14 @@
     text-align: left;
     white-space: pre-wrap;
     word-break: break-word;
-    animation: arrive var(--lm-dur-base) var(--lm-ease-out);
   }
+  /* Opens by growing to its height (Reveal), so "Details" and what is above it stay put. */
+  .detailsReveal { width: 100%; }
 
   :is(.restart, .link, .detailsToggle):focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
 
   @keyframes arrive { from { opacity: 0; transform: translateY(4px); } }
-  :global(:root[data-reduced-motion]) :is(.root, .details) { animation: none; }
+  :global(:root[data-reduced-motion]) .root { animation: none; }
   :global(:root[data-reduced-motion]) :is(.restart, .link, .detailsToggle, .chevron) { transition: none; }
 
   @media (forced-colors: active) {

@@ -50,6 +50,59 @@ first, and Wayland is not viable), several Hue areas on one bridge (closed), sev
 drop order (`lighting_mode/runtime.rs`) — the last reference to a capture source is dropped on the
 command thread, never the worker, or a rapid mode switch crashes macOS — must hold for every source.
 
+**Effects are drawn at each light, not on a screen, and are a mode of their own.** The first effects
+drew a screen-space frame and let the strip and Hue sample it. On Hue that failed visibly: each
+channel averages a box 30% of the frame wide, a rainbow drawn around the centre averaged to grey, and
+a two-channel area showed two slow blobs. So the Effect mode's engine (`lighting_mode/effects/`)
+colours every light where it is. The pipeline's effect stage replaces the analysis for an effect —
+no sampling, no scene stage, no border crop — and writes the strip's and Hue's smoothing targets
+straight from what it drew; `sample_strip` returns nothing for the tick frame the effect's source
+(`effect_source.rs`) hands the worker so its pacing and loop run unchanged.
+
+- *Lights.* Every strip LED and Hue channel is an emitter in the room map's cube (`[-1, 1]`, y the
+  depth with +1 the TV wall): strip LEDs on the screen's rectangle — the room map's TV anchor when
+  there is one, a virtual screen on the TV wall when not — and Hue channels where the room map or
+  the bridge puts them. Each has an order `u` along its output (Hue: its rank around the screen,
+  evenly spaced, so a travelling effect hops lamp to lamp without a dark gap) and a seed. Extents
+  are taken over all of them, so a wave crosses the strip and the room's lamps as one field. Nothing
+  derives a sampling region from a light's distance to a surface.
+- *A few lamps are never all dark.* An effect drawn for many lights went fully dark for seconds on a
+  two-bulb area: a scanner's head in the gap between the lamps, a chase whose gaps lined up for
+  both, a twinkle round where neither lit, a sunrise's first minutes. A set of at most eight whole
+  lamps (`is_sparse`: every channel its own light) gets its own rules. The scanner walks the lamps'
+  order and a chase makes the lamps its slots, so they take turns. The floor itself is held where
+  it counts — on the smoothed, corrected Hue output (`hold_hue_floor`), not only in the engine: a
+  floor set in the engine's light reached the wire about a fifth short (sRGB out, the correction's
+  gamma 2.2 back in), and a smoother handing over between two lamps dipped under it. When even the
+  brightest lamp would show under 2 % on the wire (after brightness), every lamp is raised by one
+  factor, so the frame keeps its shape and nothing jumps when another lamp becomes the brightest;
+  the engine seeds an all-black frame with the palette's colours. Hue's own dimming floor is
+  0.2–5 % by model and the entertainment stream documents nothing below it, so 2 % of the peak
+  channel is a working floor, not a measured one, and a deep colour shows dimmer than a pale one at
+  it. A strip and a Hue gradient light (its segments share one light, so it is a strip of its own)
+  keep the native look, as does an area of nine or more lamps. Brightness 0 is off and stays off.
+- *Patterns and palettes.* A pattern (`patterns.rs`) gives each light a palette position and a
+  perceptual level; the level is applied in linear light. Palettes blend in OKLCh — lightness and
+  chroma move evenly and the hue takes the short way — because a straight OKLab line between distant
+  hues cuts through grey. A palette that does not wrap plays there and back under a moving pattern,
+  so nothing jumps from the last stop to the first. Effects and palettes are listed once, in
+  `src/shared/contracts/effectCatalogue.json`, which the frontend imports and Rust reads.
+- *Time.* Loops accumulate (`loops += dt × rate(speed)`), so a speed change never jumps; sunrise
+  counts real seconds and natural light reads the local time. The clock lives on the runtime owner
+  (`effect_clock`), so a worker rebuild carries the effect on; the payload is re-read every step, so
+  a retune changes it in place. Stochastic patterns use seeded smooth noise per light.
+- *Smoothing.* Hue gets its own short smoothing under an effect (τ ≈ 200 ms) because the bridge does
+  not blend between 50 ms updates; the strip gets none, the patterns being continuous.
+- *Cost.* `effect_budget_report` (ignored; run in release) measured 3–19 µs median per step for 164
+  or 300 LEDs plus six Hue channels, inside the 40–74 µs of the Ambilight path.
+
+Nothing is captured, so no screen-recording permission is asked for and none of the capture notices
+can fire; the worker is told it is drawn (`WorkerPacing::drawn`) and paced at the output rate, while
+the preview still reports it live. It is its own `LightingModeKind` rather than an Ambilight source,
+or the capture preflight, the retune fast path and the tray check would all have taken an effect for
+Ambilight. The payload reads one field at a time: an unknown kind is Off, an unknown effect the wave,
+an unknown palette or direction the effect's default, so a mode saved by a newer build still reads.
+
 **Test patterns are synthetic frames, not a window that capture then sees.** The LED test renders
 its pattern straight into a `CapturedFrame` (`test_pattern.rs`, `SyntheticFrameSource`) with capture
 off. That gives the strip exact bytes — the scene stage and the black-border crop are bypassed —
@@ -245,8 +298,9 @@ setting, and it is read once when the worker starts.
 Everything the worker computes after capture is one type, `AmbilightFramePipeline` in
 `src-tauri/src/commands/lighting_mode/frame_pipeline.rs`: per frame the black-border cache, strip
 sampling, the scene stage and the smoothing targets; per output step the smoothers and Hue's colour
-pipeline. Time is an argument, never read inside. The worker keeps only the I/O and the timing
-around it — capture, waking, the sends, telemetry, the twin feed. That split is what lets the real
+pipeline. Smoothing time is an argument; the pipeline reads the clock only to stamp when an
+analysis finished, which the worker reports as capture time. The worker keeps only the I/O and the
+timing around it — capture, waking, the sends, telemetry, the twin feed. That split is what lets the real
 code be measured with no display and no hardware, from `lighting_mode/frame_pipeline_tests.rs`.
 
 **Timing, locally.** An `#[ignore]`d report runs the pipeline plus the serial encoder over synthetic

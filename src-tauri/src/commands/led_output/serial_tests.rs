@@ -123,6 +123,8 @@ struct PortScript {
     write_takes: Duration,
     fail_writes: bool,
     fail_flushes: bool,
+    /// How long closing the port takes (a USB driver tearing down).
+    close_takes: Duration,
 }
 
 struct ScriptedPort {
@@ -157,6 +159,7 @@ impl Write for ScriptedPort {
 
 impl Drop for ScriptedPort {
     fn drop(&mut self) {
+        std::thread::sleep(self.script.close_takes);
         self.log.dropped.store(true, Ordering::SeqCst);
     }
 }
@@ -554,4 +557,28 @@ fn bridge_disconnect_session_delegates_to_sender() {
     bridge.disconnect_session("COM5");
 
     assert_eq!(sender.disconnected_ports(), vec!["COM5".to_string()]);
+}
+
+#[test]
+fn a_failed_write_is_reported_even_to_a_waiter_woken_while_the_port_closes() {
+    // The write fails, and closing the port takes a while; a second send lands
+    // in that window and wakes the first caller, which is still waiting.
+    let script = PortScript {
+        fail_writes: true,
+        close_takes: Duration::from_millis(300),
+        ..PortScript::default()
+    };
+    let (sender, _logs) = scripted_sender(script, no_pacing);
+    let sender = Arc::new(sender);
+    let waiter = {
+        let sender = Arc::clone(&sender);
+        std::thread::spawn(move || sender.send_and_wait("COM1", &[1]))
+    };
+    std::thread::sleep(Duration::from_millis(100));
+    let _ = sender.send("COM1", &[2]);
+    let result = waiter.join().expect("waiter thread");
+    assert!(
+        result.is_err(),
+        "a failed write must not read as done: {result:?}"
+    );
 }

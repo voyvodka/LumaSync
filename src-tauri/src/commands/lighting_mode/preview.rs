@@ -14,7 +14,7 @@ use crate::commands::led_preview::{
 };
 use crate::commands::test_pattern::{TestPatternConfig, TestPatternLiveSlot};
 
-/// v1.6 LED Preview runtime state carried alongside the lighting worker.
+/// LED preview runtime state carried alongside the lighting worker.
 #[derive(Default)]
 pub(super) struct PreviewRuntime {
     /// Synthetic test-pattern request consumed by the frame-source factory on
@@ -164,7 +164,11 @@ impl LightingRuntimeState {
         let test_active = active_pattern.is_some();
         let source = if test_active {
             "test"
-        } else if owner.active_mode.kind == LightingModeKind::Ambilight && owner.worker.is_some() {
+        } else if matches!(
+            owner.active_mode.kind,
+            LightingModeKind::Ambilight | LightingModeKind::Effect
+        ) && owner.worker.is_some()
+        {
             "live"
         } else {
             "idle"

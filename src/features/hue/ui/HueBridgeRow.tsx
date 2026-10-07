@@ -1,17 +1,16 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { cx } from "@/shared/lib/cx";
 import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
 import { Menu } from "@/shared/ui/Menu/Menu";
 import { PageSwap } from "@/shared/ui/PageSwap/PageSwap";
 import { Reveal } from "@/shared/ui/Reveal/Reveal";
-import { RowButton, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
+import { RowButton, RowNote, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
 import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
 import { StateWord } from "@/shared/ui/StateWord/StateWord";
 
 import type { HueActionId, HueActionSpec, HueNote, HueTone } from "./hueStateView";
-import styles from "./HuePage.module.css";
+import pageStyles from "@/shared/ui/SettingRow/SettingPage.module.css";
 
 type ResolvedAction = HueActionSpec & { id: HueActionId | string };
 
@@ -53,7 +52,7 @@ export function HueBridgeRow({
       testId="hue-bridge-row"
       controlFills
       control={
-        <PageSwap id={stateKey} way="fade" className={styles.swap}>
+        <PageSwap id={stateKey} way="fade" className={pageStyles.swap}>
           <StateWord tone={tone} live={false}>
             {word}
           </StateWord>
@@ -110,12 +109,7 @@ export function HueActionButton({ action, primary = false }: { action: ResolvedA
 export function HueNoteLine({ note, error = false }: { note: HueNote; error?: boolean }) {
   const { t } = useTranslation();
   return (
-    <p
-      className={cx(styles.note, error && styles.noteError)}
-      role={error ? "alert" : "status"}
-      aria-live={error ? undefined : "polite"}
-      data-testid={note.testId}
-    >
+    <RowNote tone={error ? "error" : "status"} testId={note.testId}>
       {note.lines.join(" ")}
       {note.code ? (
         <>
@@ -127,6 +121,6 @@ export function HueNoteLine({ note, error = false }: { note: HueNote; error?: bo
           </InfoTip>
         </>
       ) : null}
-    </p>
+    </RowNote>
   );
 }

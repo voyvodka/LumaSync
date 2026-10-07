@@ -185,9 +185,9 @@ fn schedule_rect_report<R: Runtime>(
     }
 }
 
-/// R29's other half. The overlay opening is only half the report: the tray's
-/// "Close Overlays" item is the one surface left when an overlay swallows the
-/// desktop, and nothing outside a Windows desktop can prove it still works.
+/// The overlay opening is only half the report: the tray's "Close Overlays"
+/// item is the one surface left when an overlay swallows the desktop, and
+/// nothing outside a Windows desktop can prove it still works.
 /// Runs on the rect thread, which has done its job by the time this is called.
 fn watch_for_rescue<R: Runtime>(app: AppHandle<R>, close_trigger: PathBuf) {
     let deadline = Instant::now() + MAX_WAIT;
@@ -224,7 +224,7 @@ fn watch_for_rescue<R: Runtime>(app: AppHandle<R>, close_trigger: PathBuf) {
 
 /// Counts *visible* non-main windows, not every non-main window: the tray item
 /// hides the LED control popup rather than closing it, and a hidden window
-/// covers nothing. What R29 is about is what is left on the screen.
+/// covers nothing. What matters is what is left on the screen.
 fn report_rescue<R: Runtime>(app: &AppHandle<R>) {
     let still_open = app
         .webview_windows()

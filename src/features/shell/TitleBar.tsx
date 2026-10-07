@@ -55,6 +55,9 @@ interface TitleBarProps {
 
 export const TITLE_BAR_HEIGHT_PX = 36;
 
+/** The page the section tabs switch: the tabs name it as what they control. */
+export const SECTION_PANEL_ID = "lm-section-panel";
+
 export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChange, navLocked = false }: TitleBarProps) {
   const { t } = useTranslation();
   const [platform] = useState<Platform>(detectPlatform);
@@ -256,6 +259,7 @@ function SectionTabs({
           data-tauri-drag-region="false"
           className={styles.tab}
           aria-selected={id === active}
+          aria-controls={id === active ? SECTION_PANEL_ID : undefined}
           tabIndex={id === active ? 0 : -1}
           onClick={() => onChange(id)}
           data-testid={`section-tab-${id}`}
@@ -353,7 +357,7 @@ function LumaIcon() {
 
 function ExpandIcon() {
   return (
-    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M1 6V1h5M15 10v5h-5M1 10v5h5M15 6V1h-5" />
     </svg>
   );
@@ -361,7 +365,7 @@ function ExpandIcon() {
 
 function CollapseIcon() {
   return (
-    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M4 1v4H1M12 15v-4h3M1 12h4v3M15 4h-4V1" />
     </svg>
   );
@@ -369,7 +373,7 @@ function CollapseIcon() {
 
 function MinimizeIcon() {
   return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.2">
+    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden="true">
       <path d="M2 6h8" strokeLinecap="round" />
     </svg>
   );
@@ -377,7 +381,7 @@ function MinimizeIcon() {
 
 function MaximizeIcon() {
   return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.2">
+    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden="true">
       <rect x="2" y="2" width="8" height="8" rx="0.5" />
     </svg>
   );
@@ -385,7 +389,7 @@ function MaximizeIcon() {
 
 function RestoreIcon() {
   return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.2">
+    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden="true">
       <rect x="2" y="3.5" width="6.5" height="6.5" rx="0.5" />
       <path d="M3.5 3.5V2h6.5v6.5H8.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
@@ -394,7 +398,7 @@ function RestoreIcon() {
 
 function CloseIcon() {
   return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
       <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" />
     </svg>
   );

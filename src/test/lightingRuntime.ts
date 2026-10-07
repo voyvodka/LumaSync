@@ -40,6 +40,7 @@ export function outputsResult(
       stopFailed: [],
       droppedTargets: [],
       modeEnded: false,
+      wledAdvisory: null,
       ...outcome,
     },
   };

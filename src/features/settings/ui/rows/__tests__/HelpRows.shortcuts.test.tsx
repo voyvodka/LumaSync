@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("react-i18next", () => ({
@@ -30,6 +30,7 @@ describe("ShortcutsRow", () => {
   it("lists every shortcut with the keys the handlers match on macOS", () => {
     stubPlatform("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)");
     render(<ShortcutsRow />);
+    fireEvent.click(screen.getByTestId("shortcuts-show"));
 
     expect(keysFor("shell:keybind.modeOff")).toEqual(["⌥", "1"]);
     expect(keysFor("shell:keybind.openSettings")).toEqual(["⌘", ","]);
@@ -37,9 +38,26 @@ describe("ShortcutsRow", () => {
     expect(keysFor("settings:help.shortcuts.zoomReset")).toEqual(["⌘", "0"]);
   });
 
+  it("keeps the list out of the page until asked for, and its button closes it", () => {
+    stubPlatform("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)");
+    render(<ShortcutsRow />);
+    const show = screen.getByTestId("shortcuts-show");
+
+    expect(screen.queryByText("shell:keybind.modeOff")).toBeNull();
+    expect(show).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(show);
+    expect(screen.getByText("shell:keybind.modeOff")).toBeInTheDocument();
+    expect(show).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(show);
+    expect(show).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("uses Ctrl and Alt elsewhere", () => {
     stubPlatform("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
     render(<ShortcutsRow />);
+    fireEvent.click(screen.getByTestId("shortcuts-show"));
 
     expect(keysFor("shell:keybind.modeSolid")).toEqual(["Alt", "3"]);
     expect(keysFor("settings:help.shortcuts.zoomOut")).toEqual(["Ctrl", "−"]);

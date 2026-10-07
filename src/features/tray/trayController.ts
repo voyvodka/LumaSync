@@ -41,7 +41,7 @@ export async function getStartupEnabled(): Promise<boolean> {
 // ---------------------------------------------------------------------------
 
 /**
- * v1.6 — listen for the "Show LED Preview" tray action. The Rust tray handler
+ * Listen for the "Show LED Preview" tray action. The Rust tray handler
  * emits `tray:show-led-preview`; the app responds by opening (or focusing) the
  * control popup plus, when enabled, the digital-twin overlay.
  */

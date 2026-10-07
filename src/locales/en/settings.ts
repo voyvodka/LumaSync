@@ -40,6 +40,7 @@ export default {
       action: "Discussions",
     },
     shortcuts: {
+      show: "Show",
       label: "Keyboard shortcuts",
       zoomIn: "Make the interface larger",
       zoomOut: "Make the interface smaller",

@@ -1,0 +1,277 @@
+@layer components {
+  /* The Effect mode's controls, on the shared stage. The chrome is amber and grey; only the
+     swatches carry light colours, since they are the lights. Nothing here moves on its own. */
+  .effect { min-width: 0; }
+
+  /* The palettes and the effect's settings as one block, spaced like the stage around it. */
+  /* The Lights column's width even where the gallery above grows: longer sliders are harder to set. */
+  .settings { position: relative; display: flex; flex-direction: column; gap: inherit; min-width: 0; max-width: var(--lights-col, none); }
+  .setting { min-width: 0; }
+  .setting[data-entering] { animation: setting-in var(--lm-dur-base) var(--lm-ease-out) var(--lm-dur-follow) backwards; }
+  @keyframes setting-in { from { opacity: 0; transform: translateY(4px); } }
+  :global(:root[data-reduced-motion]) .setting[data-entering] { animation: none; }
+
+  /* ── Palettes ─────────────────────────────────────────────────────────── */
+  .paletteRow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  /* One line that scrolls sideways in every width: wrapped, the last swatch or two sat alone on a
+     second line, and in the compact window the controls would outgrow its height. An edge fades
+     only where there is more past it; the fade is longer than the scenes' because the swatches are
+     small and a whole one can end at the edge. The padding keeps the chosen ring and the focus ring
+     inside the scroll box; the margin takes it back. */
+  .palettes {
+    display: flex;
+    gap: 6px;
+    min-width: 0;
+    margin: -3px;
+    padding: 3px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .paletteRow[data-more="end"] .palettes { mask-image: linear-gradient(to right, black calc(100% - 44px), transparent); }
+  .paletteRow[data-more="start"] .palettes { mask-image: linear-gradient(to left, black calc(100% - 44px), transparent); }
+  .paletteRow[data-more="both"] .palettes {
+    mask-image: linear-gradient(to right, transparent, black 44px, black calc(100% - 44px), transparent);
+  }
+  .palettes::-webkit-scrollbar { display: none; }
+  /* A 32px target around a 20px swatch; the ring is drawn on the swatch, set off from it by a
+     gap of panel, so the pick reads by shape as well as by colour. */
+  .palette {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    padding: 6px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+  }
+  .palette:focus-visible { outline: none; }
+  .palette:focus-visible .paletteDot { box-shadow: var(--lm-focus-ring); }
+  .palette:disabled { opacity: 0.4; }
+  .paletteDot {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px var(--lm-line-2);
+    transition: box-shadow var(--lm-dur-quick);
+  }
+  .palette:hover .paletteDot { box-shadow: 0 0 0 1px var(--lm-ink-faint); }
+  .palette[aria-checked="true"] .paletteDot {
+    box-shadow: 0 0 0 2px var(--lm-bg), 0 0 0 3.5px var(--lm-amber);
+  }
+
+  /* Keeps its place when hidden, so the strip never shifts when "Your colours" is picked. */
+  .edit {
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--lm-dur-base) var(--lm-ease-out), background var(--lm-dur-quick), color var(--lm-dur-quick);
+  }
+  .edit[data-shown] { opacity: 1; pointer-events: auto; }
+  .edit:hover, .edit[aria-expanded="true"] { background: var(--lm-panel-2); color: var(--lm-ink); }
+  .edit:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .edit svg { width: 13px; height: 13px; }
+
+  .custom { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
+  .chips { display: flex; align-items: center; gap: 8px; }
+  .chipWrap { position: relative; }
+  .chip {
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px var(--lm-line-2);
+  }
+  .chip[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--lm-panel), 0 0 0 3.5px var(--lm-amber); }
+  .chip:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .chipRemove {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--lm-panel-2);
+    color: var(--lm-ink-dim);
+    box-shadow: 0 0 0 1px var(--lm-line-2);
+  }
+  .chipRemove:hover { color: var(--lm-ink); }
+  /* The mark stays small; what takes the press is 32px around it. */
+  .chipRemove::after { content: ""; position: absolute; inset: -8px; }
+  .chipRemove svg { width: 8px; height: 8px; }
+  .chipAdd {
+    width: 32px;
+    height: 32px;
+    border: 1px dashed var(--lm-line-2);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    font-size: 15px;
+    line-height: 1;
+  }
+  .chipAdd:hover { color: var(--lm-ink); border-color: var(--lm-ink-faint); }
+
+  /* ── Gallery ──────────────────────────────────────────────────────────── */
+  /* As a row it scrolls sideways, fading an edge only where there is more, like the palettes; the
+     padding keeps the rings inside the scroll box and the margin takes it back. */
+  .galleryBox { min-width: 0; }
+  .galleryBox[data-row] {
+    margin: -3px;
+    padding: 3px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .galleryBox[data-row]::-webkit-scrollbar { display: none; }
+  .galleryBox[data-row] .gallery { display: flex; width: max-content; }
+  .galleryBox[data-row] .tile { flex: 0 0 112px; }
+  .galleryBox[data-more="end"] { mask-image: linear-gradient(to right, black calc(100% - 44px), transparent); }
+  .galleryBox[data-more="start"] { mask-image: linear-gradient(to left, black calc(100% - 44px), transparent); }
+  .galleryBox[data-more="both"] {
+    mask-image: linear-gradient(to right, transparent, black 44px, black calc(100% - 44px), transparent);
+  }
+  .gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 8px;
+  }
+  .tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--lm-line);
+    border-radius: 9px;
+    background: var(--lm-panel);
+    color: var(--lm-ink-dim);
+    text-align: left;
+    transition: border-color var(--lm-dur-quick), color var(--lm-dur-quick), box-shadow var(--lm-dur-quick);
+  }
+  .tile:hover { border-color: var(--lm-line-2); color: var(--lm-ink); }
+  .tile[aria-checked="true"] {
+    border-color: var(--lm-amber);
+    box-shadow: 0 0 0 1px var(--lm-amber);
+    color: var(--lm-ink);
+  }
+  .tile:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .tile:disabled { opacity: 0.45; }
+  .tileSwatch {
+    position: relative;
+    display: block;
+    height: 34px;
+    background-color: var(--lm-bg);
+    border-bottom: 1px solid var(--lm-line);
+  }
+  .tileSwatchOut { position: absolute; inset: 0; animation: swatch-out var(--lm-dur-slow) linear forwards; }
+  @keyframes swatch-out { to { opacity: 0; } }
+  /* Effects that turn simpler on a few lamps: a small strip mark, said to a screen reader as words.
+     Beside the name, not over the picture: a dark box on the swatch read as a glitch in it. */
+  .stripMark {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    display: grid;
+    place-items: center;
+    width: 14px;
+    height: 14px;
+    color: var(--lm-ink-faint);
+  }
+  .stripMark svg { width: 12px; height: 12px; }
+  .tile:has(.stripMark) .tileName { padding-right: 26px; }
+  .pickRow .stripMark { position: static; margin-left: auto; background: transparent; }
+  .tileName {
+    padding: 6px 9px 7px;
+    overflow: hidden;
+    font-size: 11.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  /* ── Compact picker ───────────────────────────────────────────────────── */
+  .picker {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+    height: 32px;
+    padding: 0 10px 0 6px;
+    border: 1px solid var(--lm-line);
+    border-radius: 9px;
+    background: var(--lm-panel);
+    color: var(--lm-ink);
+    transition: border-color var(--lm-dur-quick);
+  }
+  .picker:hover, .picker[aria-expanded="true"] { border-color: var(--lm-line-2); }
+  .picker:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .picker:disabled { opacity: 0.45; }
+  .pickerSwatch {
+    flex-shrink: 0;
+    width: 26px;
+    height: 18px;
+    border-radius: 5px;
+    background-color: var(--lm-bg);
+    box-shadow: 0 0 0 1px var(--lm-line);
+  }
+  .pickerName {
+    flex: 1;
+    overflow: hidden;
+    font-size: 12.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    text-align: left;
+  }
+  .pickRow { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .chevron {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    color: var(--lm-ink-faint);
+    transition: transform var(--lm-dur-base) var(--lm-ease-out);
+  }
+  .chevron[data-open] { transform: rotate(180deg); }
+
+
+  @container stage (max-width: 420px) {
+    .gallery { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 6px; }
+    .tileSwatch { height: 26px; }
+  }
+
+  :global(:root[data-reduced-motion]) .tileSwatchOut { display: none; }
+  :global(:root[data-reduced-motion]) .paletteDot,
+  :global(:root[data-reduced-motion]) .edit,
+  :global(:root[data-reduced-motion]) .tile,
+  :global(:root[data-reduced-motion]) .picker,
+  :global(:root[data-reduced-motion]) .chevron { transition: none; }
+
+  /* Forced colours drop box-shadow: the pick and the focus both become outlines. */
+  @media (forced-colors: active) {
+    .palette[aria-checked="true"],
+    .tile[aria-checked="true"],
+    .chip[aria-pressed="true"] { outline: 2px solid Highlight; }
+    .palette:focus-visible,
+    .edit:focus-visible,
+    .chip:focus-visible,
+    .chipAdd:focus-visible,
+    .tile:focus-visible,
+    .picker:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+  }
+}

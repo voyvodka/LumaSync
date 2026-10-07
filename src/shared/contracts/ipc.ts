@@ -145,6 +145,7 @@ export interface CommandMap {
 
   // --- device: WLED (every handler takes one struct named `request`) -------
   discover_wled_devices: Command<{ request: { ip: string } }, WledDiscoveryResponse>;
+  browse_wled_devices: NoArgs<WledDiscoveryResponse>;
   connect_wled_sink: Command<
     { request: { device: WledDeviceInfo; port?: number; protocol?: WledProtocol } },
     WledConnectResponse

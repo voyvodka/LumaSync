@@ -31,7 +31,8 @@ describe("modal scrim layering", () => {
   });
 
   it("pins the scrim offset to the title bar's real height", () => {
-    const declared = /--lm-titlebar-h:\s*(\d+)px/.exec(stylesCss)?.[1];
+    // The bar keeps its height on screen at any interface size, so the offset carries the chrome scale.
+    const declared = /--lm-titlebar-h:\s*calc\((\d+)px \* var\(--lm-chrome-scale, 1\)\)/.exec(stylesCss)?.[1];
     const source = /TITLE_BAR_HEIGHT_PX = (\d+)/.exec(titleBarSource)?.[1];
     expect(declared).toBe(source);
   });

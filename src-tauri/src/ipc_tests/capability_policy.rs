@@ -173,6 +173,7 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     // The dev mock's panel passes it through to Rust from the main window.
     ("simulate_hue_fault", MAIN_ONLY),
     ("discover_wled_devices", MAIN_ONLY),
+    ("browse_wled_devices", MAIN_ONLY),
     ("connect_wled_sink", MAIN_ONLY),
     ("test_wled_bridge", MAIN_ONLY),
     ("forget_wled_device", MAIN_ONLY),

@@ -6,9 +6,11 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use log::info;
+use log::{error, info};
 
 use super::config::LightingModeConfig;
+use super::effect_source::{create_effect_frame_source, EffectLiveSlot};
+use super::effects::EffectClockSlot;
 use super::live::{AmbilightLiveSettings, RoomGeometryLive};
 use super::outputs;
 use super::preview::PreviewRuntime;
@@ -20,6 +22,7 @@ use crate::commands::ambilight_capture::{
 };
 use crate::commands::led_calibration::LedCalibrationConfig;
 use crate::commands::led_output::LedOutputBridge;
+use crate::commands::runtime_telemetry::{clear_worker_stopped, SharedRuntimeTelemetry};
 use crate::commands::test_pattern::{
     create_synthetic_frame_source, TestPatternConfig, TestPatternLiveSlot,
 };
@@ -34,7 +37,7 @@ pub struct AmbilightCaptureRequest {
     /// source; the live worker takes its calibration from
     /// `LightingModeConfig` directly.
     pub led_calibration: Option<LedCalibrationConfig>,
-    /// v1.6 LED Preview — when `Some`, the frame-source factory builds a
+    /// The LED preview's test: when `Some`, the frame-source factory builds a
     /// `SyntheticFrameSource` (test mode) instead of live screen capture.
     pub test_pattern: Option<TestPatternConfig>,
     /// Animation phase carried across the worker rebuild a pattern tweak forces.
@@ -43,6 +46,9 @@ pub struct AmbilightCaptureRequest {
     pub pattern_live: Option<TestPatternLiveSlot>,
     /// Shortest gap the OS is asked to leave between frames: `capture_interval_for`.
     pub frame_interval: Duration,
+    /// The Effect mode's payload cell: when `Some`, the factory draws the
+    /// effect instead of capturing, and the display id is ignored.
+    pub effect: Option<EffectLiveSlot>,
 }
 
 type AmbilightFrameSourceFactory = dyn Fn(AmbilightCaptureRequest) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError>
@@ -60,13 +66,23 @@ pub(super) struct LightingWorkerRuntime {
     /// thread. This ensures `SCStream::stop_capture` is never called from the
     /// worker thread, preventing a macOS crash on rapid mode switches.
     pub(super) _frame_source: Arc<Mutex<Box<dyn AmbilightFrameSource>>>,
+    /// Where the worker reported a panic, cleared once it is let go.
+    pub(super) telemetry: SharedRuntimeTelemetry,
 }
 
 impl LightingWorkerRuntime {
     pub(super) fn stop(self) {
         let t0 = std::time::Instant::now();
         self.cancel.store(true, Ordering::Relaxed);
-        let _ = self.handle.join();
+        if let Err(panic) = self.handle.join() {
+            let message = panic
+                .downcast_ref::<&str>()
+                .map(|s| (*s).to_string())
+                .or_else(|| panic.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "a panic with no message".to_string());
+            error!("[stop-worker] the worker had stopped on a panic: {message}");
+            clear_worker_stopped(&self.telemetry);
+        }
         let join_ms = t0.elapsed().as_millis();
         info!("[stop-worker] join completed in {join_ms}ms");
         // `_frame_source` drops here — from the calling (command) thread,
@@ -92,9 +108,14 @@ pub(crate) struct LightingRuntimeOwner {
     pub(super) ambilight_live: Option<Arc<AmbilightLiveSettings>>,
     /// Room geometry cell of the running ambilight worker; fresh per worker.
     pub(super) room_geometry_live: Option<Arc<RoomGeometryLive>>,
+    /// The running effect's payload cell, which its source re-reads per frame.
+    pub(super) effect_live: Option<EffectLiveSlot>,
+    /// Where the effect has got to, kept across a worker rebuild so a change of
+    /// layout or output does not restart the animation.
+    pub(super) effect_clock: EffectClockSlot,
     pub(super) output_bridge: LedOutputBridge,
     pub(super) frame_source_factory: Arc<AmbilightFrameSourceFactory>,
-    /// v1.6 LED Preview — synthetic test request + shared enrichment gate.
+    /// The LED preview: synthetic test request + shared enrichment gate.
     pub(super) preview: PreviewRuntime,
     /// `LightingRuntimeState::closing`, read under the runtime lock.
     pub(super) closing: Arc<AtomicBool>,
@@ -112,10 +133,14 @@ impl Default for LightingRuntimeOwner {
             worker: None,
             ambilight_live: None,
             room_geometry_live: None,
+            effect_live: None,
+            effect_clock: EffectClockSlot::default(),
             output_bridge: LedOutputBridge::default(),
             preview: Default::default(),
             frame_source_factory: Arc::new(|req: AmbilightCaptureRequest| {
-                if let Some(test) = req.test_pattern {
+                if req.effect.is_some() {
+                    Ok(create_effect_frame_source())
+                } else if let Some(test) = req.test_pattern {
                     Ok(create_synthetic_frame_source(
                         test,
                         req.led_calibration,

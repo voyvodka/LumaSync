@@ -205,6 +205,32 @@ describe("useAutoUpdater", () => {
     expect(result.current.upToDateAt).toBeNull();
   });
 
+  it("records when any check got an answer, the startup one included, but not a failed one", async () => {
+    vi.mocked(checkForUpdate).mockResolvedValue({
+      status: status(UPDATER_STATUS.UP_TO_DATE),
+      channel: "stable",
+      update: null,
+    });
+    const { result } = renderHook(() => useAutoUpdater());
+    expect(result.current.checkedAt).toBeNull();
+
+    await act(async () => {
+      await result.current.checkForUpdatesInBackground();
+    });
+    const first = result.current.checkedAt;
+    expect(first).toEqual(expect.any(Number));
+
+    vi.mocked(checkForUpdate).mockResolvedValue({
+      status: status(UPDATER_STATUS.CHECK_FAILED, "offline"),
+      channel: "stable",
+      update: null,
+    });
+    await act(async () => {
+      await result.current.checkForUpdatesInBackground();
+    });
+    expect(result.current.checkedAt).toBe(first);
+  });
+
   it("transitions to error when the install command rejects", async () => {
     vi.mocked(downloadAndInstallUpdate).mockRejectedValue(new Error("disk full"));
 

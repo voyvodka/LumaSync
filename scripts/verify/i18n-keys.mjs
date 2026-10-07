@@ -23,9 +23,12 @@ const CONTRACTS_DIR = resolve(ROOT, "src/shared/contracts");
 const KNOWN_DYNAMIC_PREFIXES = [
   "hue:runtime.codes",
   "hue:runtime.states",
-  "hue:runtime.triggerSource",
   "hue:runtime.writeback.codes",
   "common:hotplug.targetLabel",
+  "lights:effect.directions",
+  "lights:effect.names",
+  "lights:effect.palettes",
+  "lights:scenes.suggested",
   "preview:pattern",
   "preview:status",
   "preview:test.speed",
@@ -52,10 +55,6 @@ const DYNAMIC_PREFIX_DOMAINS = {
     exempt: ["HUE_CHANNEL_POSITIONS_UPDATED", "HUE_CHANNEL_POSITIONS_FAILED"],
   },
   "hue:runtime.states": { sources: ["hue.ts HUE_RUNTIME_STATES"], extra: ["undefined"] },
-  "hue:runtime.triggerSource": {
-    sources: ["hue.ts HUE_RUNTIME_TRIGGER_SOURCE"],
-    extra: ["undefined"],
-  },
   // HueChannelWritebackStatusCode minus its success member.
   "hue:runtime.writeback.codes": {
     sources: [
@@ -65,6 +64,10 @@ const DYNAMIC_PREFIX_DOMAINS = {
     ],
   },
   "common:hotplug.targetLabel": { sources: ["hue.ts HueRuntimeTarget"] },
+  "lights:effect.directions": { sources: ["effects.ts EFFECT_DIRECTIONS"] },
+  "lights:effect.names": { sources: ["effects.ts EFFECT_IDS"] },
+  "lights:effect.palettes": { sources: ["effects.ts PALETTE_IDS"] },
+  "lights:scenes.suggested": { sources: ["scenes.ts SUGGESTED_SCENE_IDS"] },
   "preview:pattern": { sources: ["preview.ts LED_TEST_PATTERN_KIND"] },
   // The popup's error line: exactly useTestPatternRunner's ERROR_CODES.
   "preview:status": {

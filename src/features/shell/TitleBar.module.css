@@ -2,6 +2,7 @@
   /* No backdrop blur: the content starts below the bar, so there is nothing under it to blur, and a
      window-wide blur redrew on every frame of a resize. */
   .bar {
+    zoom: var(--lm-chrome-scale, 1);
     background-color: var(--lm-bg);
     border-bottom: 1px solid var(--lm-line);
     color: var(--lm-ink);
@@ -93,7 +94,7 @@
     transition: background-color var(--lm-dur-quick), color var(--lm-dur-quick);
   }
   .ctrl:hover { color: var(--lm-ink); background: rgb(255 255 255 / 6%); }
-  .ctrl.danger:hover { background: var(--lm-red); color: #fff; }
+  .ctrl.danger:hover { background: var(--lm-red); color: var(--lm-on-red); }
   .ctrl:focus-visible { outline: none; box-shadow: var(--lm-focus-ring-inset); }
 
   :global(:root[data-reduced-motion]) :is(.tabs, .toggle, .tab, .indicator, .ctrl) { transition: none; }

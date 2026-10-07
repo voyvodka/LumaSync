@@ -7,8 +7,8 @@ export default {
       off: "Off",
       ambilight: "Ambilight",
       solid: "Solid",
+      effect: "Effect",
     },
-    colorModelRgb: "RGB",
     solidColor: "Solid color",
     brightness: "Brightness",
   },
@@ -18,19 +18,6 @@ export default {
       warning: "Warning",
       info: "Note",
       ok: "Done",
-    },
-  },
-  compact: {
-    sections: {
-      mode: "Mode",
-      scene: "Scene",
-    },
-    scenes: {
-      movie: "Movie",
-      game: "Game",
-      music: "Music",
-      chill: "Chill",
-      read: "Read",
     },
   },
   ui: {

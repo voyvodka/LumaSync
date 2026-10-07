@@ -1,7 +1,7 @@
 import type { ColorCorrectionConfig } from "./device";
 import type { DisplayId } from "./display";
 import type { LedTestPattern } from "./preview";
-import type { LightingModeConfig, LightingModeKind } from "./mode";
+import type { LightingModeConfig, LightingModeKind, LitModeKind } from "./mode";
 import type {
   HueBridgeSummary,
   HueChannelPlacementOverride,
@@ -13,6 +13,7 @@ import type {
   HueRuntimeTarget,
 } from "./hue";
 import type { RoomMapConfig } from "./roomMap";
+import type { StoredScene } from "./scenes";
 import type { LedStrip } from "./strips";
 
 /**
@@ -54,10 +55,11 @@ export interface TrayLabels {
   openSettings: string;
   /** The disabled status line under it — the running mode and its outputs. */
   status: string;
-  /** The three mode items, a check group: Rust checks the one that runs. */
+  /** The mode items, a check group: Rust checks the one that runs. */
   lightsOff: string;
   ambilight: string;
   solidColor: string;
+  effect: string;
   /**
    * The modes the main window's own mode buttons have disabled right now — no
    * layout for a bound strip, no output, a choice in flight. The tray greys
@@ -97,8 +99,9 @@ export const TRAY_MENU_IDS = {
   MODE_OFF: "tray-mode-off",
   MODE_AMBILIGHT: "tray-mode-ambilight",
   MODE_SOLID: "tray-mode-solid",
+  MODE_EFFECT: "tray-mode-effect",
   /**
-   * v1.6 — opens (or focuses) the LED preview surface: the interactive
+   * Opens (or focuses) the LED preview surface: the interactive
    * control popup plus, when enabled, the digital-twin overlay. Lets the
    * user reach the preview/test experience without opening full settings.
    */
@@ -179,7 +182,7 @@ export const SECTION_ORDER: SectionId[] = [
  * and drops the corner shape; restore now computes the corner from the
  * saved center plus the current outer size.
  *
- * v1.6 (LED Preview & Test Experience) adds six OPTIONAL preview fields
+ * The LED preview adds six OPTIONAL fields
  * (`ledPreviewPopupVisible` / `ledPreviewPopupCenterX` /
  * `ledPreviewPopupCenterY` / `ledTwinEnabledTest` /
  * `lastLedTestPattern` / `ledPreviewHintShown`). All are optional with
@@ -245,6 +248,19 @@ export interface ShellState {
    * Absent until user explicitly changes mode settings.
    */
   lightingMode?: LightingModeConfig;
+  /**
+   * The user's scenes, in the order shown. Frontend-only: Rust carries it without reading. Kept out
+   * of `DEFAULT_SHELL_STATE` — absent reads as the seeded list, `[]` as every scene deleted.
+   * Additive, no schema bump.
+   */
+  scenes?: StoredScene[];
+  /**
+   * The last mode that lit something, which Lights' power button turns back on. Written by Rust
+   * (`persist_mode`) with every lit choice, from any window or the tray; an Off leaves it. Absent
+   * or unknown reads as Ambilight — so an install upgraded while off offers Ambilight until its
+   * first lit choice. Additive, no schema bump.
+   */
+  lastLitKind?: LitModeKind;
   /**
    * Last selected runtime output target set.
    * Defaults to USB-first when absent.
@@ -441,7 +457,7 @@ export interface ShellState {
    */
   awayLights?: AwayLights;
   // -------------------------------------------------------------------------
-  // v1.6 — LED Preview & Test Experience (all OPTIONAL / additive; no schema
+  // LED preview (all OPTIONAL / additive; no schema
   // bump — absence degrades to the documented default below).
   // -------------------------------------------------------------------------
   /**
@@ -696,6 +712,7 @@ export const KEYBIND_ACTIONS = {
   MODE_OFF: "mode-off",
   MODE_AMBILIGHT: "mode-ambilight",
   MODE_SOLID: "mode-solid",
+  MODE_EFFECT: "mode-effect",
   OPEN_SETTINGS: "open-settings",
 } as const;
 
@@ -735,12 +752,14 @@ export const KEYBIND_REGISTRY: Readonly<
     [KEYBIND_ACTIONS.MODE_OFF]: { modifier: "alt", code: "Digit1", badge: ["⌥", "1"] },
     [KEYBIND_ACTIONS.MODE_AMBILIGHT]: { modifier: "alt", code: "Digit2", badge: ["⌥", "2"] },
     [KEYBIND_ACTIONS.MODE_SOLID]: { modifier: "alt", code: "Digit3", badge: ["⌥", "3"] },
+    [KEYBIND_ACTIONS.MODE_EFFECT]: { modifier: "alt", code: "Digit4", badge: ["⌥", "4"] },
     [KEYBIND_ACTIONS.OPEN_SETTINGS]: { modifier: "meta", code: "Comma", badge: ["⌘", ","] },
   },
   default: {
     [KEYBIND_ACTIONS.MODE_OFF]: { modifier: "alt", code: "Digit1", badge: ["Alt", "1"] },
     [KEYBIND_ACTIONS.MODE_AMBILIGHT]: { modifier: "alt", code: "Digit2", badge: ["Alt", "2"] },
     [KEYBIND_ACTIONS.MODE_SOLID]: { modifier: "alt", code: "Digit3", badge: ["Alt", "3"] },
+    [KEYBIND_ACTIONS.MODE_EFFECT]: { modifier: "alt", code: "Digit4", badge: ["Alt", "4"] },
     [KEYBIND_ACTIONS.OPEN_SETTINGS]: { modifier: "ctrl", code: "Comma", badge: ["Ctrl", ","] },
   },
 } as const;

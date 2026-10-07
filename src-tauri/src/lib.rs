@@ -125,7 +125,8 @@ use commands::shell_state::{
 use commands::updater::{check_for_update, download_and_install_update, PendingUpdate};
 use commands::window_visibility::{get_main_window_visibility, MainWindowVisibilityState};
 use commands::wled_discovery::{
-    connect_wled_sink, discover_wled_devices, forget_wled_device, test_wled_bridge,
+    browse_wled_devices, connect_wled_sink, discover_wled_devices, forget_wled_device,
+    test_wled_bridge,
 };
 use events::{SHELL_CLOSE_TO_TRAY_EVENT, TRAY_SHOW_LED_PREVIEW_EVENT};
 
@@ -141,7 +142,7 @@ struct TrayState<R: Runtime> {
     open_settings: MenuItem<R>,
     status: MenuItem<R>,
     /// In `TrayLighting::ALL` order.
-    modes: [CheckMenuItem<R>; 3],
+    modes: [CheckMenuItem<R>; 4],
     show_led_preview: MenuItem<R>,
     close_overlays: MenuItem<R>,
     quit: MenuItem<R>,
@@ -156,7 +157,7 @@ struct TrayModeView {
     running: LightingModeKind,
     transitioning: bool,
     locked: Vec<LightingModeKind>,
-    shown: Option<[TrayModeItem; 3]>,
+    shown: Option<[TrayModeItem; 4]>,
 }
 
 impl<R: Runtime> TrayState<R> {
@@ -244,11 +245,18 @@ struct TrayLabels {
     lights_off: String,
     ambilight: String,
     solid_color: String,
+    /// Absent from a frontend older than the Effect mode, which pushes three labels.
+    #[serde(default = "default_effect_label")]
+    effect: String,
     /// The modes the main window's own buttons have disabled right now.
     locked_modes: Vec<LightingModeKind>,
     show_led_preview: String,
     close_overlays: String,
     quit: String,
+}
+
+fn default_effect_label() -> String {
+    "Effect".to_string()
 }
 
 // ---------------------------------------------------------------------------
@@ -359,7 +367,12 @@ fn apply_tray_labels<R: Runtime>(
         .status
         .set_text(&labels.status)
         .map_err(|e| e.to_string())?;
-    let mode_labels = [&labels.lights_off, &labels.ambilight, &labels.solid_color];
+    let mode_labels = [
+        &labels.lights_off,
+        &labels.ambilight,
+        &labels.solid_color,
+        &labels.effect,
+    ];
     for (item, label) in tray_state.modes.iter().zip(mode_labels) {
         item.set_text(label).map_err(|e| e.to_string())?;
     }
@@ -403,6 +416,7 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
         check(initial[0], "Lights Off")?,
         check(initial[1], "Ambilight")?,
         check(initial[2], "Solid Color")?,
+        check(initial[3], "Effect")?,
     ];
     let separator_modes = PredefinedMenuItem::separator(app)?;
     let show_led_preview = MenuItem::with_id(
@@ -432,6 +446,7 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
             &modes[0],
             &modes[1],
             &modes[2],
+            &modes[3],
             &separator_modes,
             &show_led_preview,
             &close_overlays,
@@ -722,6 +737,8 @@ pub fn run() {
             commands::hue::health::install(app.handle());
             // After the `manage` calls: its first poll reads the serial state and the lighting runtime.
             commands::device_connection::spawn_serial_watch(app.handle().clone());
+            // After the `manage` calls: it reads the local output registry.
+            commands::wled_discovery::spawn_wled_probe(app.handle().clone());
             // After the lighting runtime and `AwayWatch`: a lock heard at once turns the lights off.
             away::watch(app.handle());
 
@@ -894,7 +911,7 @@ pub fn run() {
                 return;
             }
             // LED control popup: mirror the main-window pattern — hide, never
-            // destroy, so a re-show is cheap (v1.6 LED Preview).
+            // destroy, so a re-show is cheap.
             if label == commands::led_preview::LED_CONTROL_POPUP_LABEL {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
@@ -960,6 +977,7 @@ pub fn run() {
             assign_channel_to_hue_zone,
             simulate_hue_fault, // debug: real fault injection, release: returns error stub
             discover_wled_devices,
+            browse_wled_devices,
             connect_wled_sink,
             test_wled_bridge,
             start_led_test_pattern,

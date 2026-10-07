@@ -15,6 +15,8 @@ export interface UpdaterSnapshot {
   checkFailedNotice: UpdateCheckFailure | null;
   /** When a check the user asked for last found nothing newer; `null` otherwise. */
   upToDateAt: number | null;
+  /** When any check, asked for or not, last got an answer; `null` until the first. */
+  checkedAt: number | null;
 }
 
 type AutoUpdater = ReturnType<typeof useAutoUpdater>;
@@ -43,6 +45,7 @@ export function UpdaterProvider({ children }: { children: ReactNode }) {
     isModalOpen: updater.isModalOpen,
     checkFailedNotice: updater.checkFailedNotice,
     upToDateAt: updater.upToDateAt,
+    checkedAt: updater.checkedAt,
   });
   return (
     <UpdaterStoreProvider

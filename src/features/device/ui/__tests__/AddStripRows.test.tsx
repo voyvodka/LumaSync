@@ -73,7 +73,6 @@ function device(overrides: Partial<UseDeviceConnectionResult> = {}): UseDeviceCo
     connectedPort: "/dev/cu.old",
     lastSuccessfulPort: undefined,
     statusCard: null,
-    canConnect: true,
     isScanning: false,
     isConnecting: false,
     isReconnecting: false,

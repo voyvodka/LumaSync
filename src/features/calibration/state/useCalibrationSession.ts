@@ -647,7 +647,7 @@ export function useCalibrationSession({
     else onNavigateBack();
   }, [onNavigateBack]);
 
-  // v1.6 — launch the LED preview surface (click-through digital-twin
+  // Launch the LED preview surface (click-through digital-twin
   // overlay + interactive control popup) straight from LED Setup. The
   // preview API never throws; the try/catch guards the shellStore write.
   const handleOpenPreview = useCallback(async () => {

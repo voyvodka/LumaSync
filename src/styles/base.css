@@ -87,6 +87,10 @@ body {
   background-color: rgba(113, 113, 122, 0.75);
 }
 
+:root[data-reduced-motion] *::-webkit-scrollbar-thumb {
+  transition: none;
+}
+
 *::-webkit-scrollbar-corner {
   background: transparent;
 }

@@ -3,6 +3,7 @@ export default {
   lightsOff: "Lights Off",
   ambilight: "Ambilight",
   solidColor: "Solid Color",
+  effect: "Effect",
   closeOverlays: "Close Overlays",
   quit: "Quit LumaSync",
   /** The OS notification's title when a tray choice fell short. */

@@ -10,8 +10,8 @@ const common: Catalogue<typeof enCommon> = {
       off: "Kapalı",
       ambilight: "Ambilight",
       solid: "Sabit",
+      effect: "Efekt",
     },
-    colorModelRgb: "RGB",
     solidColor: "Sabit renk",
     brightness: "Parlaklık",
   },
@@ -21,19 +21,6 @@ const common: Catalogue<typeof enCommon> = {
       warning: "Uyarı",
       info: "Bilgi",
       ok: "Tamam",
-    },
-  },
-  compact: {
-    sections: {
-      mode: "Mod",
-      scene: "Sahne",
-    },
-    scenes: {
-      movie: "Film",
-      game: "Oyun",
-      music: "Müzik",
-      chill: "Sakin",
-      read: "Okuma",
     },
   },
   ui: {

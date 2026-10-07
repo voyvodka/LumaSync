@@ -15,6 +15,9 @@ export const DEVICE_COMMANDS = {
    * Manual-IP only; not a LAN scan. Returns `WledDeviceInfo[]` (0 or 1).
    */
   DISCOVER_WLED_DEVICES: "discover_wled_devices",
+  /** Look for WLED devices over mDNS (about 2.5 s) and probe each `/json/info`. Only local-network
+   * addresses are probed. Returns every device that answered as WLED. */
+  BROWSE_WLED_DEVICES: "browse_wled_devices",
   /**
    * Promote a discovered WLED instance to the active sink.
    * Mirrors `connect_serial_port` semantics: idempotent, replaces the
@@ -457,6 +460,9 @@ export interface WledOutputStatus {
   ip: string;
   ledCount: number;
   connected: true;
+  /** It answers its `/json/info` probe (every ~10 s; two misses in a row read as `false`). For
+   *  showing only: the output it drives never changes on it. */
+  reachable: boolean;
 }
 
 export type LocalOutputStatus =
@@ -704,6 +710,14 @@ export const WLED_STATUS = {
   TEST_WORKER_FAILED: "WLED_TEST_WORKER_FAILED",
   /** Same, for `connect_wled_sink`'s worker: no sink was registered. */
   CONNECT_WORKER_FAILED: "WLED_CONNECT_WORKER_FAILED",
+  /** `browse_wled_devices` ran; `devices` holds what answered, and may be empty. */
+  BROWSE_OK: "WLED_BROWSE_OK",
+  /** No mDNS on this machine: devices are added by address. */
+  BROWSE_UNSUPPORTED: "WLED_BROWSE_UNSUPPORTED",
+  /** The mDNS browse could not start. */
+  BROWSE_FAILED: "WLED_BROWSE_FAILED",
+  /** Same as the other worker codes, for the browse. */
+  BROWSE_WORKER_FAILED: "WLED_BROWSE_WORKER_FAILED",
   /** `forget_wled_device`: not driven, not bound, not saved any more. */
   FORGET_OK: "WLED_FORGET_OK",
   /** The lighting could not let go of the device, or the saved device could
@@ -724,7 +738,7 @@ export type WledWireStatusCode = Exclude<
 
 export type WledCommandStatus = CommandStatusOf<WledWireStatusCode>;
 
-/** `discover_wled_devices` — every WLED instance found at (or probed on) the address. */
+/** `discover_wled_devices` (the one device at the address) and `browse_wled_devices` (every one found). */
 export interface WledDiscoveryResponse {
   status: WledCommandStatus;
   devices: WledDeviceInfo[];

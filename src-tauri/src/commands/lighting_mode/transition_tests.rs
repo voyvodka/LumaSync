@@ -76,6 +76,8 @@ impl AmbilightFrameSource for FakeFrameSource {
 
 fn owner_with_fake_sender() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
+        effect_live: None,
+        effect_clock: Default::default(),
         active_mode: LightingModeConfig::default(),
         active_port: None,
         active_usb_plan: None,
@@ -101,6 +103,8 @@ fn owner_with_fake_sender() -> LightingRuntimeOwner {
 
 fn owner_with_unavailable_capture() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
+        effect_live: None,
+        effect_clock: Default::default(),
         active_mode: LightingModeConfig::default(),
         active_port: None,
         active_usb_plan: None,
@@ -122,6 +126,7 @@ fn owner_with_unavailable_capture() -> LightingRuntimeOwner {
 
 fn ambilight_mode() -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Ambilight,
         solid: None,
         ambilight: Some(AmbilightPayload {
@@ -141,12 +146,14 @@ fn ambilight_mode() -> LightingModeConfig {
 
 fn solid_mode() -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Solid,
         solid: Some(SolidColorPayload {
             r: 32,
             g: 64,
             b: 128,
             brightness: 0.6,
+            kelvin: None,
         }),
         ambilight: None,
         targets: None,
@@ -189,6 +196,8 @@ fn shared_runtime_telemetry() -> SharedRuntimeTelemetry {
 fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
     let recorder: Arc<FakeLedSender> = Arc::new(FakeLedSender::default());
     let owner = LightingRuntimeOwner {
+        effect_live: None,
+        effect_clock: Default::default(),
         active_mode: LightingModeConfig::default(),
         active_port: None,
         active_usb_plan: None,
@@ -540,6 +549,8 @@ fn set_ambilight_stops_previous_then_starts_new_runtime() {
     let _guard = acquire_worker_test_guard();
     let mut owner = owner_with_fake_sender();
     owner = LightingRuntimeOwner {
+        effect_live: None,
+        effect_clock: Default::default(),
         active_mode: ambilight_mode(),
         active_port: Some("COM1".to_string()),
         active_usb_plan: None,
@@ -550,6 +561,7 @@ fn set_ambilight_stops_previous_then_starts_new_runtime() {
                 None,
                 AmbilightLiveSettings::new(0.8, false, 0.35, 1.0),
                 (owner.frame_source_factory)(super::runtime::AmbilightCaptureRequest {
+                    effect: None,
                     display_id: None,
                     led_calibration: None,
                     test_pattern: None,
@@ -912,6 +924,7 @@ fn ambilight_calibration_with_total_leds(
 
 fn ambilight_mode_with_calibration(total_leds: u16) -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Ambilight,
         solid: None,
         ambilight: Some(AmbilightPayload {
@@ -935,6 +948,8 @@ fn ambilight_mode_with_calibration(total_leds: u16) -> LightingModeConfig {
 fn owner_with_recording_sender_for_ambilight() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
     let recorder: Arc<FakeLedSender> = Arc::new(FakeLedSender::default());
     let owner = LightingRuntimeOwner {
+        effect_live: None,
+        effect_clock: Default::default(),
         active_mode: LightingModeConfig::default(),
         active_port: None,
         active_usb_plan: None,
@@ -1035,6 +1050,8 @@ fn ambilight_mode_with_30_led_calibration_emits_per_led_usb_packet() {
 fn owner_with_red_frame() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
     let recorder: Arc<FakeLedSender> = Arc::new(FakeLedSender::default());
     let owner = LightingRuntimeOwner {
+        effect_live: None,
+        effect_clock: Default::default(),
         active_mode: LightingModeConfig::default(),
         active_port: None,
         active_usb_plan: None,
@@ -1169,6 +1186,7 @@ fn solid_writes_in_the_requested_color_order() {
             g: 0,
             b: 0,
             brightness: 1.0,
+            kelvin: None,
         }),
         targets: Some(vec!["usb".to_string()]),
         led_calibration: Some(ambilight_calibration_with_total_leds(4)),
@@ -1284,4 +1302,112 @@ fn a_retune_on_the_same_output_still_updates_in_place() {
 
     assert_eq!(result.status.code, "AMBILIGHT_MODE_UPDATED");
     let _ = apply_on(&mut owner, LightingModeConfig::default());
+}
+
+// ---------------------------------------------------------------------------
+// Effect mode
+// ---------------------------------------------------------------------------
+
+fn effect_mode(effect: super::EffectPayload) -> LightingModeConfig {
+    LightingModeConfig {
+        kind: LightingModeKind::Effect,
+        effect: Some(effect),
+        targets: Some(vec!["usb".to_string()]),
+        led_calibration: Some(ambilight_calibration_with_total_leds(8)),
+        ..LightingModeConfig::default()
+    }
+}
+
+fn apply_effect(owner: &mut LightingRuntimeOwner, mode: LightingModeConfig) -> String {
+    apply_mode_change(
+        owner,
+        mode,
+        true,
+        Some("COM-EFFECT"),
+        None,
+        None,
+        Some(SharedRuntimeTelemetry::default()),
+        None,
+        None,
+    )
+    .status
+    .code
+}
+
+/// An effect runs on the Ambilight worker from its drawn frames — no capture,
+/// so no screen permission — and a change of effect or speed reaches the
+/// running worker instead of rebuilding it.
+#[test]
+fn an_effect_drives_the_strip_and_retunes_in_place() {
+    let _guard = acquire_worker_test_guard();
+    let recorder = Arc::new(FakeLedSender::default());
+    let mut owner = LightingRuntimeOwner {
+        output_bridge: LedOutputBridge::from_sender(recorder.clone()),
+        ..LightingRuntimeOwner::default()
+    };
+
+    let rainbow = super::config::DEFAULT_EFFECT;
+    assert_eq!(
+        apply_effect(&mut owner, effect_mode(rainbow.clone())),
+        "EFFECT_MODE_STARTED"
+    );
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while recorder.writes.lock().unwrap().is_empty() {
+        assert!(
+            Instant::now() < deadline,
+            "the effect never reached the strip"
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
+    let live = Arc::clone(
+        owner
+            .ambilight_live
+            .as_ref()
+            .expect("the worker's settings"),
+    );
+
+    let breathe = super::EffectPayload {
+        id: super::config::EffectId::Breathe,
+        speed: 0.9,
+        brightness: 0.4,
+        ..super::config::DEFAULT_EFFECT
+    };
+    assert_eq!(
+        apply_effect(&mut owner, effect_mode(breathe.clone())),
+        "EFFECT_MODE_UPDATED"
+    );
+    assert!(Arc::ptr_eq(&live, owner.ambilight_live.as_ref().unwrap()));
+    assert_eq!(live.read_brightness(), 0.4);
+    let slot = owner.effect_live.as_ref().expect("the effect's cell");
+    assert_eq!(*slot.lock().unwrap(), breathe);
+
+    assert_eq!(
+        apply_effect(&mut owner, LightingModeConfig::default()),
+        "LIGHTING_MODE_STOPPED"
+    );
+    assert!(owner.effect_live.is_none());
+}
+
+/// A worker that never starts names the effect, not Ambilight, and leaves no
+/// effect cell behind for a later start to find.
+#[test]
+fn an_effect_that_cannot_start_reports_its_own_failure() {
+    let _guard = acquire_worker_test_guard();
+    let mut owner = owner_with_unavailable_capture();
+
+    let failed = apply_mode_change(
+        &mut owner,
+        effect_mode(super::config::DEFAULT_EFFECT),
+        true,
+        Some("COM-EFFECT"),
+        None,
+        None,
+        Some(SharedRuntimeTelemetry::default()),
+        None,
+        None,
+    );
+
+    assert_eq!(failed.status.code, "EFFECT_MODE_START_FAILED");
+    assert_eq!(failed.mode.kind, LightingModeKind::Off);
+    assert!(owner.effect_live.is_none());
 }

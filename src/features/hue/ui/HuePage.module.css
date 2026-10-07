@@ -1,11 +1,4 @@
 @layer components {
-  /* A column like Settings': past ~720 px a row's name and its control drift apart. */
-  .page {
-    width: 100%;
-    max-width: 720px;
-    margin-inline: auto;
-  }
-
   .arrive { animation: arrive var(--lm-dur-base) var(--lm-ease-out); }
   @keyframes arrive { from { opacity: 0; transform: translateY(4px); } }
   :global(:root[data-reduced-motion]) .arrive { animation: none; }
@@ -16,48 +9,6 @@
     font-weight: 600;
     color: var(--lm-ink);
   }
-
-  /* The bridge row's right side: the word and its actions pass over together when the state
-     changes, right-aligned, tall enough that a focus ring is not clipped. */
-  .swap {
-    --page-height: 36px;
-    --page-inset: 3px;
-    --page-gap: 8px;
-  }
-  .swap > span { justify-content: flex-end; }
-
-  /* Rows come and go with the state (Reveal): the line between two sits on the second, and a
-     closed one draws none. */
-  .rows > [data-reveal] + [data-reveal] {
-    border-top: 1px solid var(--lm-line);
-    transition: border-color var(--lm-dur-base) linear;
-  }
-  .rows > [data-reveal][data-open="false"] { border-top-color: transparent; }
-
-  .note {
-    margin: 2px 0 0;
-    max-width: 56ch;
-    font-size: 12px;
-    line-height: 1.5;
-    color: var(--lm-ink-dim);
-  }
-
-  .noteError { color: var(--lm-red); }
-
-  .input {
-    width: 150px;
-    height: 30px;
-    padding: 0 10px;
-    border: 1px solid var(--lm-line-2);
-    border-radius: 8px;
-    background: var(--lm-panel);
-    font-size: 12.5px;
-    color: var(--lm-ink);
-  }
-  .input::placeholder { color: var(--lm-ink-faint); }
-  .input:hover { border-color: var(--lm-ink-faint); }
-  .input:focus-visible { outline: none; border-color: var(--lm-amber); box-shadow: var(--lm-focus-ring); }
-  .input[aria-invalid="true"] { border-color: var(--lm-red); }
 
   .optionMeta { margin-left: auto; padding-left: 16px; color: var(--lm-ink-faint); }
 
@@ -76,7 +27,4 @@
   .inlineAction:hover { color: var(--lm-ink); }
   .inlineAction:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
 
-  @media (forced-colors: active) {
-    .input { border-color: ButtonText; }
-  }
 }

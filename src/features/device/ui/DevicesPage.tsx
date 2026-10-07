@@ -101,7 +101,7 @@ export function DevicesPage({
   const { activeWledIp } = wled;
 
   // -------------------------------------------------------------------------
-  // Channel placement persistence (D-05a)
+  // Channel placement persistence
   // -------------------------------------------------------------------------
 
   const [channelPlacements, setChannelPlacements] = useState<HueChannelPlacement[]>([]);
@@ -406,6 +406,7 @@ export function DevicesPage({
                 otherPorts={otherPorts}
                 device={device}
                 onWledBound={wled.markConnected}
+                boundWledIp={activeWledIp}
                 replaces={null}
                 onAdded={setArriving}
               />
@@ -433,6 +434,7 @@ export function DevicesPage({
                 otherPorts={otherPorts}
                 device={device}
                 onWledBound={wled.markConnected}
+                boundWledIp={activeWledIp}
                 replaces={replaces}
                 onAdded={setArriving}
               />

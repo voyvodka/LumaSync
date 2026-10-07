@@ -3,6 +3,7 @@ export default {
     modeOff: "Turn lights off",
     modeAmbilight: "Switch to ambilight mode",
     modeSolid: "Switch to solid color mode",
+    modeEffect: "Switch to effect mode",
     openSettings: "Open settings",
   },
   errorBoundary: {
@@ -33,6 +34,7 @@ export default {
       failed: "Failed",
       waiting: "Waiting",
       leftOut: "Left out",
+      noAnswer: "No answer",
     },
     // What a chip that needs something says when it is pressed.
     hint: {
@@ -42,6 +44,7 @@ export default {
       hueNone: "No Hue Bridge paired yet.",
       hueFailed: "The Hue stream stopped.",
       hueLeftOut: "Hue was left out of this mode.",
+      wledSilent: "The WLED device does not answer — it may be off or off the network.",
     },
   },
   titleBar: {
@@ -73,6 +76,9 @@ export default {
         generic: "Screen capture stopped delivering frames ({{reason}})",
         genericNoReason: "Screen capture stopped delivering frames",
       },
+      outputFailing: "The light isn't reaching the {{output}} — its frames are failing to send",
+      workerStopped: "The lights stopped updating — choose a mode again to restart them",
+      wledLengthMismatch: "The WLED device has {{panel}} LEDs but the layout has {{frame}} — part of the strip won't follow",
       startFailed: {
         display: "Lighting didn't start — the selected display is gone",
         transient: "Lighting didn't start — switch the mode off and on to retry",

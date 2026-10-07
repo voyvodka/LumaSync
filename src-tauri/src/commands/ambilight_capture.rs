@@ -86,6 +86,13 @@ impl CapturedFrame {
             captured_at: Instant::now(),
         }
     }
+
+    /// The same pixels as a new frame: a fresh `seq` and capture time, for a
+    /// source that reuses its buffer instead of allocating one per frame.
+    pub(crate) fn restamp(&mut self) {
+        self.seq = NEXT_FRAME_SEQ.fetch_add(1, Ordering::Relaxed);
+        self.captured_at = Instant::now();
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
