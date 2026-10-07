@@ -42,13 +42,17 @@
     text-overflow: ellipsis;
   }
   .name em { font-style: normal; font-weight: 400; color: var(--lm-ink-faint); }
+  /* Two lines before an ellipsis: the rail is 240 px, and a state word cut in half
+     ("checking…") reads as broken. */
   .sub {
+    display: -webkit-box;
     overflow: hidden;
     margin-top: 2px;
     font-size: 11.5px;
     color: var(--lm-ink-faint);
-    white-space: nowrap;
-    text-overflow: ellipsis;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
   }
   .sub b { font-weight: 500; color: var(--lm-ink-dim); }
   .row[data-state="unavailable"] .name { color: var(--lm-ink-dim); }
