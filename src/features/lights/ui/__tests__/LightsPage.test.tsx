@@ -208,6 +208,7 @@ describe("LightsPage", () => {
   });
 
   it("names the page for a screen reader and widens only an Effect stage", () => {
+    type Props = ComponentProps<typeof LightsPage>;
     const page = (mode: LightingModeConfig) => (
       <LightsPage
         mode={mode}
@@ -217,8 +218,8 @@ describe("LightsPage", () => {
         hueConfigured={false}
         hueStreaming={false}
         modeLockReason={null}
-        onModeChange={vi.fn()}
-        onOutputTargetsChange={vi.fn()}
+        onModeChange={vi.fn<Props["onModeChange"]>()}
+        onOutputTargetsChange={vi.fn<Props["onOutputTargetsChange"]>()}
       />
     );
     const { rerender } = render(page({ kind: "off" }));

@@ -10,7 +10,7 @@ vi.mock("@/features/persistence/shellStore", () => ({
 }));
 vi.mock("../windowLifecycle", () => ({ windowLifecycleSettled: () => Promise.resolve() }));
 vi.mock("../windowShellState", () => ({ loadShellState: () => Promise.resolve({ uiMode: "full" }) }));
-vi.mock("../windowAnimator", () => ({ framedUiZoom: () => 1, resizeToMode: vi.fn(() => Promise.resolve()) }));
+vi.mock("../windowAnimator", () => ({ framedUiZoom: () => 1, resizeToMode: () => Promise.resolve() }));
 
 const chromeScale = () => document.documentElement.style.getPropertyValue("--lm-chrome-scale");
 
