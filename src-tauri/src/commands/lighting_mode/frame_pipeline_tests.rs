@@ -1413,6 +1413,29 @@ static COUNTING_ALLOCATOR: alloc_count::CountingAllocator = alloc_count::Countin
 /// third, queued for the sink, and is now read in place.
 const ALLOCS_PER_FRAME: usize = 2;
 
+/// The twin's feed runs on the capture thread at up to 60 Hz: a frame that
+/// repeats the last one — a still picture — must cost no allocation; a changed
+/// one costs the owned body the channel takes.
+#[test]
+fn an_unchanged_twin_frame_allocates_nothing() {
+    use crate::commands::preview::feed::TwinFeed;
+
+    let feed = TwinFeed::default();
+    feed.subscribe(
+        "led-twin-overlay-1".into(),
+        tauri::ipc::Channel::new(|_| Ok(())),
+    );
+    let leds = vec![[1u8, 2, 3]; 120];
+    let lamps = vec![[4u8, 5, 6]; 4];
+    feed.send(&leds, &lamps);
+    feed.send(&leds, &lamps);
+
+    let (allocs, _) = alloc_count::measure(|| {
+        feed.send(&leds, &lamps);
+    });
+    assert_eq!(allocs, 0, "an unchanged twin frame allocated");
+}
+
 /// An output step with no new frame re-encodes the strip and nothing else.
 const ALLOCS_PER_TICK: usize = 1;
 

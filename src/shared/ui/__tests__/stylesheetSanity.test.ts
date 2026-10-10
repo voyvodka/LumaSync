@@ -54,7 +54,8 @@ describe("stylesheet sanity", () => {
   it("keeps the twin overlay root transparent", () => {
     // The twin is a see-through window over the desktop; any paint here is a
     // full-screen opaque frame.
-    const twin = ruleBody(stylesCss, ".lm-twin-root");
+    const twinCss = readFileSync(join(SRC, "features", "preview", "ui", "LedTwinOverlay.module.css"), "utf8");
+    const twin = ruleBody(twinCss, ".root");
     expect(twin).toMatch(/background:\s*transparent\s*;/);
   });
 

@@ -10,7 +10,7 @@ import {
   PREVIEW_STATUS,
   type LedTestPatternResult,
   type PreviewSessionResult,
-  type PreviewStatusCode,
+  type PreviewSessionStatusCode,
   type StartLedTestPatternPayload,
   type TwinSubscribeResult,
 } from "@/shared/contracts/preview";
@@ -34,7 +34,7 @@ function failedTestResult(error: unknown): LedTestPatternResult {
 }
 
 /** A rejected session command says nothing about the session, so it reads closed with the failure's code. */
-function failedSessionResult(code: PreviewStatusCode, error: unknown): PreviewSessionResult {
+function failedSessionResult(code: PreviewSessionStatusCode, error: unknown): PreviewSessionResult {
   const parsed = parseCommandError(error);
   return {
     session: { state: "closed" },

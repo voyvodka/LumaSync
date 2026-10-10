@@ -52,7 +52,7 @@ import { primaryStripOf } from "../../src/features/strips/model/stripSelectors";
 import { clearStoredWorld, getWorld, mutate, setWorld, subscribe } from "../state";
 import type { MockWorld } from "../state";
 
-/** The synthetic patterns the edge-signal stream can stand in for. */
+/** The synthetic patterns the twin frame stream can stand in for. */
 const STREAM_PATTERN_KINDS = LED_TEST_PATTERN_KIND.filter(
   (kind): kind is Exclude<LedTestPatternKind, "channelProbe"> => kind !== "channelProbe",
 );

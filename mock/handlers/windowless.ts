@@ -31,7 +31,7 @@ import { PREVIEW_COMMANDS, PREVIEW_STATUS } from "../../src/shared/contracts/pre
 import type {
   PreviewSession,
   PreviewSessionResult,
-  PreviewStatusCode,
+  PreviewSessionStatusCode,
 } from "../../src/shared/contracts/preview";
 import { SHELL_COMMANDS } from "../../src/shared/contracts/shell";
 import { attachTwinChannel, mockTwinLayout } from "../events";
@@ -44,7 +44,7 @@ export function resetPreviewSession(): void {
   session = { state: "closed" };
 }
 
-const sessionResult = (code: PreviewStatusCode, message: string): PreviewSessionResult => ({
+const sessionResult = (code: PreviewSessionStatusCode, message: string): PreviewSessionResult => ({
   session,
   status: { code, message, details: null },
 });

@@ -46,28 +46,34 @@ export function useTwinFeed(): TwinFeed {
       setFeed({ layout, frame: held && fits(held, layout) ? held : null });
     };
 
-    listenTwinLayout(adopt)
+    // Listening first: a layout change between the subscribe answer and a
+    // listener registered after it would be missed.
+    void listenTwinLayout(adopt)
       .then((fn) => {
         if (alive) unlisten = fn;
         else fn();
       })
       .catch((error) => {
         console.error("[LumaSync] useTwinFeed layout listen failed:", error);
+      })
+      .then(() =>
+        subscribeTwinFrames((buffer) => {
+          if (!alive) return;
+          const frame = decodeTwinFrame(buffer);
+          if (!frame) return;
+          const layout = layoutRef.current;
+          if (!layout || frame.layoutRevision > layout.layoutRevision) {
+            heldRef.current = frame;
+            return;
+          }
+          if (fits(frame, layout)) setFeed({ layout, frame });
+        }),
+      )
+      .then((result) => {
+        if (!alive) return;
+        if (result.layout) adopt(result.layout);
+        else console.warn(`[LumaSync] the twin got no frames (${result.status.code}): ${result.status.message}`);
       });
-
-    void subscribeTwinFrames((buffer) => {
-      if (!alive) return;
-      const frame = decodeTwinFrame(buffer);
-      if (!frame) return;
-      const layout = layoutRef.current;
-      if (!layout || frame.layoutRevision > layout.layoutRevision) {
-        heldRef.current = frame;
-        return;
-      }
-      if (fits(frame, layout)) setFeed({ layout, frame });
-    }).then((result) => {
-      if (result.layout) adopt(result.layout);
-    });
 
     return () => {
       alive = false;

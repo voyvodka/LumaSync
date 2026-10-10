@@ -128,8 +128,8 @@ fn close_overlay_window<R: Runtime>(app: &AppHandle<R>, window_label: &str) -> R
 /// so the LED-twin overlay can reuse the exact window recipe (transparent
 /// background, ignore-cursor-events, Windows child-HWND clickthrough
 /// propagation) without duplicating it. `init_script` is injected before any
-/// page script runs — mirror of the calibration overlay's
-/// `__LUMASYNC_OVERLAY_PREVIEW__` and the twin's `__LUMASYNC_TWIN_DISPLAY_ID__`.
+/// page script runs — the calibration overlay's `__LUMASYNC_OVERLAY_PREVIEW__`.
+/// `visible: false` builds it hidden, for a caller that must set it up first.
 pub fn build_transparent_overlay<R: Runtime>(
     app: &AppHandle<R>,
     window_label: &str,

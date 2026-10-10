@@ -208,6 +208,14 @@ fn only_the_sessions_twin_subscribes_and_it_gets_the_layout() {
 
     app.state::<crate::commands::preview::PreviewSessionState>()
         .open_for_test("display-1", "led-twin-overlay-1", "led-control-popup-0");
+    // The popup is a preview window too, but not the twin: the frames are the
+    // twin's alone.
+    let from_popup = invoke(&popup(&app), "subscribe_twin_frames", channel.clone());
+    assert!(
+        from_popup.is_err(),
+        "the popup has no grant for the twin's frames"
+    );
+
     let subscribed =
         invoke(&twin, "subscribe_twin_frames", channel).expect("subscribe must resolve");
     assert_camel_case_keys(&subscribed);

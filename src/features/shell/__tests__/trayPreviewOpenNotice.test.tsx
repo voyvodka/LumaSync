@@ -3,7 +3,7 @@
 // faked. A refused open used to leave the user with nothing at all.
 
 import { act, render, screen, waitFor } from "@testing-library/react";
-import { PREVIEW_STATUS, type PreviewSessionResult, type PreviewStatusCode } from "@/shared/contracts/preview";
+import { PREVIEW_STATUS, type PreviewSessionResult, type PreviewSessionStatusCode } from "@/shared/contracts/preview";
 import { useMemo } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -40,7 +40,7 @@ vi.mock("@/features/preview/previewApi", () => ({
   openPreview: () => openPreviewMock(),
 }));
 
-function opened(code: PreviewStatusCode): PreviewSessionResult {
+function opened(code: PreviewSessionStatusCode): PreviewSessionResult {
   const failed = code !== PREVIEW_STATUS.OPENED && code !== PREVIEW_STATUS.ALREADY_OPEN;
   return {
     session: failed ? { state: "closed" } : { state: "live", displayId: "display-2", popupHidden: false },

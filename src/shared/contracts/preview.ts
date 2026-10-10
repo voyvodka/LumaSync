@@ -137,7 +137,7 @@ export type PreviewSession =
  *  LED Setup test is the layout being edited, not the saved one. */
 export interface TwinLayout {
   displayId: DisplayId;
-  /** Grows with every new layout and never resets; a frame names the one it was cut for. */
+  /** Grows with every new layout and never resets; a frame names the one current when it was sent. */
   layoutRevision: number;
   /** `null` with no strip set up: the twin draws no LEDs. */
   leds: LedCalibrationConfig | null;
@@ -147,18 +147,21 @@ export interface TwinLayout {
  *  frames, named by shape so the contracts stay free of the Tauri API. */
 export interface TwinFrameChannel {
   onmessage: (frame: ArrayBuffer) => void;
+  /** How a channel crosses `invoke` (`__CHANNEL__:<id>`); a plain object without it fails in Rust. */
+  toJSON(): string;
 }
 
 /** Result of `subscribe_twin_frames`. */
 export interface TwinSubscribeResult {
   /** `null` when the caller is not the open session's twin. */
   layout: TwinLayout | null;
-  status: CommandStatusOf<PreviewStatusCode>;
+  status: CommandStatusOf<TwinSubscribeStatusCode>;
 }
 
 /**
  * One twin frame on the channel: a little-endian header of four u32 — seq,
- * layout revision, LED count, lamp count — then packed RGB for every strip LED
+ * the layout revision current when it was sent, LED count, lamp count — then
+ * packed RGB for every strip LED
  * and every Hue lamp, as the light looks on a screen. Pinned by
  * `features/preview/__tests__/twinFrame.golden.json`, which Rust reads too.
  */
@@ -178,7 +181,7 @@ export interface SetPreviewPopupHiddenPayload {
 /** Result of every session command. */
 export interface PreviewSessionResult {
   session: PreviewSession;
-  status: CommandStatusOf<PreviewStatusCode>;
+  status: CommandStatusOf<PreviewSessionStatusCode>;
 }
 
 // ---------------------------------------------------------------------------
@@ -232,6 +235,12 @@ export const PREVIEW_STATUS = {
 } as const;
 
 export type PreviewStatusCode = (typeof PREVIEW_STATUS)[keyof typeof PREVIEW_STATUS];
+
+/** What the session commands answer: every preview code but the twin's own. */
+export type PreviewSessionStatusCode = Exclude<PreviewStatusCode, typeof PREVIEW_STATUS.TWIN_SUBSCRIBED>;
+
+/** What `subscribe_twin_frames` answers. */
+export type TwinSubscribeStatusCode = typeof PREVIEW_STATUS.TWIN_SUBSCRIBED | typeof PREVIEW_STATUS.NOT_OPEN;
 
 /** Thrown as `Err("CODE: detail")` before any status object is built, so a
  * `switch` on {@link PREVIEW_STATUS} will never see them. */

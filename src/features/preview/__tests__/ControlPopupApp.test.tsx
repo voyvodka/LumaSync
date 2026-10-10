@@ -6,7 +6,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PREVIEW_STATUS, type PreviewSessionResult, type PreviewStatusCode } from "@/shared/contracts/preview";
+import { PREVIEW_STATUS, type PreviewSessionResult, type PreviewSessionStatusCode } from "@/shared/contracts/preview";
 import type { LightingOutputsStatusCode } from "@/shared/contracts/lightingRuntime";
 import { outputsResult, runtimeSnapshot } from "@/test/lightingRuntime";
 import { LIGHTING_MODE_KIND } from "@/shared/contracts/mode";
@@ -92,7 +92,7 @@ vi.mock("@/features/mode/state/useLightingRuntime", () => ({
 
 const { ControlPopupApp } = await import("../ui/ControlPopupApp");
 
-function sessionReply(code: PreviewStatusCode): PreviewSessionResult {
+function sessionReply(code: PreviewSessionStatusCode): PreviewSessionResult {
   return { session: { state: "closed" }, status: { code, message: "", details: null } };
 }
 

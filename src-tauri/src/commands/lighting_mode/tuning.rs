@@ -440,7 +440,12 @@ pub async fn retune_lighting<R: Runtime>(
                 }
             });
             schedule_persist(&app);
-            crate::commands::preview::feed::refresh(&app);
+            match tuning.solid.as_ref() {
+                Some(solid) => {
+                    crate::commands::preview::feed::refresh_after_solid_retune(&app, solid)
+                }
+                None => crate::commands::preview::feed::refresh(&app),
+            }
             retune_status("RETUNE_APPLIED", "The running lighting mode was retuned.")
         }
         RetuneOutcome::Deferred => {

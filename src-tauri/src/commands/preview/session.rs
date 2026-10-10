@@ -135,6 +135,26 @@ impl PreviewSessionState {
             .and_then(|inner| inner.open.as_ref().map(|open| open.display_id.clone()))
     }
 
+    /// Registers the twin's channel and opens the feed gate, in the same
+    /// critical section that checks the caller is the open session's twin: an
+    /// ending session cannot slip between the check and the gate.
+    pub(super) fn subscribe_twin(
+        &self,
+        label: &str,
+        channel: tauri::ipc::Channel,
+    ) -> Result<bool, String> {
+        let inner = self.lock()?;
+        let ours = inner
+            .open
+            .as_ref()
+            .is_some_and(|open| open.twin_label == label);
+        if ours {
+            self.feed.subscribe(label.to_string(), channel);
+            self.twin_open.store(true, Ordering::SeqCst);
+        }
+        Ok(ours)
+    }
+
     pub(super) fn drop_twin_subscriber(&self) {
         self.twin_open.store(false, Ordering::SeqCst);
         self.feed.clear();

@@ -5,9 +5,9 @@
  * are shared with the backend rather than re-derived here:
  *
  *   - strip order: `buildLedSequence` (calibration/model/indexMapping), the
- *     mirror of `build_led_sequence` in led_calibration.rs. The enriched
- *     `EdgeSignalPayload.leds` buffer is emitted in that order, so the array
- *     position here IS the strip index into `leds`.
+ *     mirror of `build_led_sequence` in led_calibration.rs. A twin frame's
+ *     LEDs come in that order, so the array position here IS the strip index
+ *     into `leds`.
  *   - screen position: `ledScreenPosition`, the mirror of `led_to_screen_pos`,
  *     where the worker centres each LED's sampling window.
  *
@@ -42,8 +42,8 @@ const CORNER_INSET = 0.05;
 
 export interface TwinLedPosition {
   /**
-   * Strip index — `twin LED #N === strip LED #N`. Indexes directly into the
-   * enriched `EdgeSignalPayload.leds` buffer.
+   * Strip index — `twin LED #N === strip LED #N`. Indexes directly into a
+   * twin frame's `leds`.
    */
   index: number;
   /** Which calibrated edge this LED lives on. */

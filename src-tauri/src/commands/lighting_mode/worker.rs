@@ -34,7 +34,7 @@ use crate::commands::led_output::{
     scale_brightness, ColorCorrectionConfig, FirmwareProfile, LedChipType, LedOutputBridge,
     SerialSink,
 };
-use crate::commands::preview::feed::twin_colour;
+use crate::commands::preview::feed::{twin_colour, twin_colour_linear};
 use crate::commands::runtime_telemetry::{RuntimeTelemetryWindow, SharedRuntimeTelemetry};
 use crate::commands::wled_sink::CorrectedWledSink;
 
@@ -386,8 +386,9 @@ pub(super) fn start_ambilight_worker(
         let mut capture_fail_count = 0u32;
         let mut send_fail_count = 0u32;
         let mut last_twin_frame_at: Option<Instant> = None;
-        // The twin's copy of the Hue lamps' colours, kept only while it is fed.
-        let mut last_hue_colors: Option<Vec<[u8; 3]>> = None;
+        // The twin's copy of the Hue lamps' linear colours, kept only while it
+        // is fed — in f32, since a u8 here bands dark scenes once screen-encoded.
+        let mut last_hue_colors: Vec<[f32; 3]> = Vec::new();
         // Reused every twin frame rather than allocated per tick.
         let mut twin_leds: Vec<[u8; 3]> = Vec::new();
         let mut twin_lamps: Vec<[u8; 3]> = Vec::new();
@@ -410,7 +411,7 @@ pub(super) fn start_ambilight_worker(
                 if follower.refresh() {
                     log_hue_output(follower.context.as_ref());
                     if follower.context.is_none() {
-                        last_hue_colors = None;
+                        last_hue_colors.clear();
                     }
                     pipeline.set_hue_channels(
                         follower.context.as_ref().map(|ctx| ctx.channels.clone()),
@@ -611,12 +612,8 @@ pub(super) fn start_ambilight_worker(
                 // Only the twin reads this; allocating it unconditionally
                 // burned a Vec per frame at up to 60 Hz.
                 if enrich_preview {
-                    last_hue_colors = Some(
-                        colors
-                            .iter()
-                            .map(|c| c.map(|v| (v * 255.0).round().clamp(0.0, 255.0) as u8))
-                            .collect(),
-                    );
+                    last_hue_colors.clear();
+                    last_hue_colors.extend_from_slice(colors);
                 }
                 let _ = apply_hue_channels_with_context(
                     context,
@@ -649,13 +646,11 @@ pub(super) fn start_ambilight_worker(
                         twin_colour(scale_brightness(pipeline.correct_rgb(rgb), brightness))
                     }));
                     twin_lamps.clear();
-                    if let Some(colors) = last_hue_colors.as_ref() {
-                        twin_lamps.extend(
-                            colors
-                                .iter()
-                                .map(|&rgb| twin_colour(scale_brightness(rgb, brightness))),
-                        );
-                    }
+                    twin_lamps.extend(
+                        last_hue_colors
+                            .iter()
+                            .map(|&linear| twin_colour_linear(linear.map(|v| v * brightness))),
+                    );
                     sink(&twin_leds, &twin_lamps);
                     last_twin_frame_at = Some(now);
                 }

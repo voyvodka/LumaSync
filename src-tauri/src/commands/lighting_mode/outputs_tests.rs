@@ -1571,6 +1571,41 @@ fn solid_tuning(r: u8) -> LightingTuning {
     }
 }
 
+/// A Solid retune sends its colour straight to the outputs and leaves the
+/// running mode's copy alone, so the twin must be handed the new colour or it
+/// keeps drawing the old one.
+#[test]
+fn a_solid_retune_reaches_the_twin() {
+    use crate::commands::preview::feed::twin_colour;
+    use crate::commands::preview::PreviewSessionState;
+    use tauri::ipc::{Channel, InvokeResponseBody};
+
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(1), &[Usb]);
+    let frames: Arc<Mutex<Vec<Vec<u8>>>> = Arc::default();
+    let sink = Arc::clone(&frames);
+    let session = rig.app.state::<PreviewSessionState>();
+    session.open_for_test("display-1", "led-twin-overlay-1", "led-control-popup-1");
+    session.subscribe_for_test(
+        "led-twin-overlay-1",
+        Channel::new(move |body| {
+            if let InvokeResponseBody::Raw(bytes) = body {
+                sink.lock().unwrap().push(bytes);
+            }
+            Ok(())
+        }),
+    );
+
+    assert_eq!(retune(&rig, solid_tuning(200)), "RETUNE_APPLIED");
+
+    let frames = frames.lock().unwrap();
+    let last = frames.last().expect("the retune sent the twin a frame");
+    let first_led = [last[16], last[17], last[18]];
+    let expected =
+        twin_colour(crate::commands::led_output::EncoderPlan::default().correct([200, 0, 0]));
+    assert_eq!(first_led, expected);
+}
+
 #[test]
 fn a_retune_never_waits_for_a_transition_or_the_runtime_lock() {
     let rig = Rig::new(RigSetup::default());

@@ -8,8 +8,8 @@
 //!
 //! The layout travels apart from the frames (`preview://twin-layout`, and the
 //! subscribe result), with a revision that only ever grows: a frame names the
-//! revision it was cut for, and the twin drops one that does not match what it
-//! draws. The layout is the one the running mode uses, so an edit being tested
+//! revision current when it was sent, and the twin drops one that does not
+//! match what it draws. The layout is the one the running mode uses, so an edit being tested
 //! in LED Setup shows as it runs, not as it was saved.
 //!
 //! A frame is sent only when it differs from the last one, unless something
@@ -22,19 +22,19 @@ use std::sync::{LazyLock, Mutex};
 
 use serde::Serialize;
 use tauri::ipc::{Channel, InvokeResponseBody};
-use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime, State, WebviewWindow};
+use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime, WebviewWindow};
 
 use super::session::{PreviewSessionState, PREVIEW_NOT_OPEN};
 use crate::commands::led_calibration::LedCalibrationConfig;
 use crate::commands::led_output::{scale_brightness, EncoderPlan};
-use crate::commands::lighting_mode::{LightingModeKind, LightingRuntimeState};
+use crate::commands::lighting_mode::{LightingModeKind, LightingRuntimeState, SolidColorPayload};
 use crate::commands::shell_state;
 use crate::commands::status::CommandStatus;
 use crate::events::PREVIEW_TWIN_LAYOUT_EVENT;
 
 const PREVIEW_TWIN_SUBSCRIBED: &str = "PREVIEW_TWIN_SUBSCRIBED";
 
-pub const TWIN_FRAME_HEADER_BYTES: usize = 16;
+const TWIN_FRAME_HEADER_BYTES: usize = 16;
 
 /// Never reset, not even between sessions: a frame left over from an earlier
 /// session must not match a new layout by sharing its number.
@@ -72,14 +72,28 @@ pub fn twin_colour(wire: [u8; 3]) -> [u8; 3] {
     wire.map(|v| SCREEN_ENCODE[v as usize])
 }
 
-pub fn encode_frame(seq: u32, revision: u32, leds: &[[u8; 3]], lamps: &[[u8; 3]]) -> Vec<u8> {
-    let mut bytes = Vec::with_capacity(TWIN_FRAME_HEADER_BYTES + (leds.len() + lamps.len()) * 3);
+/// A linear 0–1 light level (Hue's wire values) as the twin draws it, encoded
+/// from the float: rounding to a byte first leaves the dark end a handful of
+/// steps, which the encode stretches into visible bands.
+pub fn twin_colour_linear(linear: [f32; 3]) -> [u8; 3] {
+    linear.map(|v| (v.clamp(0.0, 1.0).powf(1.0 / 2.2) * 255.0).round() as u8)
+}
+
+fn encode_into(bytes: &mut Vec<u8>, seq: u32, revision: u32, leds: &[[u8; 3]], lamps: &[[u8; 3]]) {
+    bytes.clear();
+    bytes.reserve(TWIN_FRAME_HEADER_BYTES + (leds.len() + lamps.len()) * 3);
     for field in [seq, revision, leds.len() as u32, lamps.len() as u32] {
         bytes.extend_from_slice(&field.to_le_bytes());
     }
     for rgb in leds.iter().chain(lamps) {
         bytes.extend_from_slice(rgb);
     }
+}
+
+#[cfg(test)]
+fn encode_frame(seq: u32, revision: u32, leds: &[[u8; 3]], lamps: &[[u8; 3]]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    encode_into(&mut bytes, seq, revision, leds, lamps);
     bytes
 }
 
@@ -90,6 +104,9 @@ struct FeedInner {
     /// The last frame sent, header included but seq zeroed, for the
     /// unchanged-frame check.
     last: Vec<u8>,
+    /// Where the next frame is encoded before the check, so an unchanged frame
+    /// costs no allocation; it swaps with `last` when one is sent.
+    scratch: Vec<u8>,
     seq: u32,
 }
 
@@ -101,7 +118,7 @@ pub struct TwinFeed {
 }
 
 impl TwinFeed {
-    pub(super) fn subscribe(&self, label: String, channel: Channel) {
+    pub(crate) fn subscribe(&self, label: String, channel: Channel) {
         if let Ok(mut inner) = self.inner.lock() {
             *inner = FeedInner {
                 subscriber: Some((label, channel)),
@@ -119,6 +136,13 @@ impl TwinFeed {
 
     #[cfg(test)]
     pub(super) fn layout_for_test(&self) -> Option<TwinLayout> {
+        self.inner
+            .lock()
+            .ok()
+            .and_then(|inner| inner.layout.clone())
+    }
+
+    pub(super) fn current_layout(&self) -> Option<TwinLayout> {
         self.inner
             .lock()
             .ok()
@@ -160,7 +184,7 @@ impl TwinFeed {
 
     /// Sends the frame unless it repeats the last one. `false` when the channel
     /// is gone, so the caller can drop the subscription.
-    fn send(&self, leds: &[[u8; 3]], lamps: &[[u8; 3]]) -> bool {
+    pub(crate) fn send(&self, leds: &[[u8; 3]], lamps: &[[u8; 3]]) -> bool {
         let Ok(mut inner) = self.inner.lock() else {
             return true;
         };
@@ -171,15 +195,17 @@ impl TwinFeed {
             .layout
             .as_ref()
             .map_or(0, |layout| layout.layout_revision);
-        let unseq = encode_frame(0, revision, leds, lamps);
+        let FeedInner { scratch, last, .. } = &mut *inner;
+        encode_into(scratch, 0, revision, leds, lamps);
         let forced = self.force_next.swap(false, Ordering::SeqCst);
-        if !forced && unseq == inner.last {
+        if !forced && scratch == last {
             return true;
         }
+        std::mem::swap(scratch, last);
         inner.seq = inner.seq.wrapping_add(1);
-        let mut bytes = unseq.clone();
+        // The channel takes the body by value: the one allocation a sent frame costs.
+        let mut bytes = inner.last.clone();
         bytes[..4].copy_from_slice(&inner.seq.to_le_bytes());
-        inner.last = unseq;
         let Some((_, channel)) = inner.subscriber.as_ref() else {
             return true;
         };
@@ -214,11 +240,28 @@ fn static_frame(mode: &crate::commands::lighting_mode::LightingModeConfig) -> [u
     }
 }
 
+/// One refresh at a time, from the view through the layout it stores: callers
+/// on different threads (a subscribe, the transition queue, a retune, the
+/// shutdown stop) would otherwise let an older view land after a newer one and
+/// take the fresher revision. Taken before the lighting lock, never inside it.
+static REFRESH: Mutex<()> = Mutex::new(());
+
 /// After the running mode, its layout or its tuning changed: sends the twin a
 /// new layout if it differs, and asks for a fresh frame — from the worker on
 /// its next tick, or right here when no worker runs. Takes the lighting lock
 /// and then the session's, never the other way round.
 pub fn refresh<R: Runtime>(app: &AppHandle<R>) {
+    refresh_with(app, None);
+}
+
+/// After a Solid retune: the retune sends its colour straight to the outputs
+/// and leaves the running mode's copy as it was, so the twin is handed it.
+pub fn refresh_after_solid_retune<R: Runtime>(app: &AppHandle<R>, solid: &SolidColorPayload) {
+    refresh_with(app, Some(solid));
+}
+
+fn refresh_with<R: Runtime>(app: &AppHandle<R>, retuned_solid: Option<&SolidColorPayload>) {
+    let _one_at_a_time = REFRESH.lock().unwrap_or_else(|e| e.into_inner());
     let Some(session) = app.try_state::<PreviewSessionState>() else {
         return;
     };
@@ -232,7 +275,12 @@ pub fn refresh<R: Runtime>(app: &AppHandle<R>) {
         return;
     };
     let view = runtime.twin_view();
-    let still = view.still.as_ref().map(static_frame);
+    let still = view.still.map(|mut mode| {
+        if let (Some(solid), LightingModeKind::Solid) = (retuned_solid, &mode.kind) {
+            mode.solid = Some(solid.clone());
+        }
+        static_frame(&mode)
+    });
     let leds = view
         .layout
         .filter(|layout| layout.total_leds > 1)
@@ -258,32 +306,35 @@ pub fn refresh<R: Runtime>(app: &AppHandle<R>) {
 
 /// The twin asks for its frames. Only the session's own twin may: any other
 /// window, or a twin from a session already closed, is told nothing is open.
+/// Async, and the refresh off the main thread: it waits on the lighting lock,
+/// which a transition can hold for seconds.
 #[tauri::command]
-pub fn subscribe_twin_frames<R: Runtime>(
+pub async fn subscribe_twin_frames<R: Runtime>(
     app: AppHandle<R>,
     window: WebviewWindow<R>,
-    state: State<'_, PreviewSessionState>,
     on_frame: Channel,
 ) -> Result<TwinSubscribeResult, String> {
-    if state.twin_label().as_deref() != Some(window.label()) {
-        return Ok(TwinSubscribeResult {
-            layout: None,
-            status: CommandStatus::ok(PREVIEW_NOT_OPEN, "No preview twin is open."),
-        });
+    let Some(state) = app.try_state::<PreviewSessionState>() else {
+        return Ok(not_open());
+    };
+    if !state.subscribe_twin(window.label(), on_frame)? {
+        return Ok(not_open());
     }
-    state.feed.subscribe(window.label().to_string(), on_frame);
-    state.twin_open().store(true, Ordering::SeqCst);
-    refresh(&app);
-    let layout = state
-        .feed
-        .inner
-        .lock()
-        .ok()
-        .and_then(|inner| inner.layout.clone());
+    let refresh_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || refresh(&refresh_app))
+        .await
+        .map_err(|error| format!("PREVIEW_SESSION_LOCK_FAILED: the twin refresh died: {error}"))?;
     Ok(TwinSubscribeResult {
-        layout,
+        layout: state.feed.current_layout(),
         status: CommandStatus::ok(PREVIEW_TWIN_SUBSCRIBED, "Twin frames subscribed."),
     })
+}
+
+fn not_open() -> TwinSubscribeResult {
+    TwinSubscribeResult {
+        layout: None,
+        status: CommandStatus::ok(PREVIEW_NOT_OPEN, "No preview twin is open."),
+    }
 }
 
 #[cfg(test)]
@@ -316,6 +367,16 @@ mod tests {
         );
         let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
         assert_eq!(hex, golden.hex);
+    }
+
+    #[test]
+    fn a_dark_hue_lamp_keeps_its_steps() {
+        // Two linear levels a byte apart at the dark end land on different
+        // screen values, and full and none stay full and none.
+        let a = twin_colour_linear([0.001, 0.001, 0.001]);
+        let b = twin_colour_linear([0.003, 0.003, 0.003]);
+        assert_ne!(a, b);
+        assert_eq!(twin_colour_linear([1.0, 0.0, 1.0]), [255, 0, 255]);
     }
 
     #[test]

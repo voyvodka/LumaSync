@@ -181,9 +181,9 @@ export function encodeTwinFrame(seq: number, { leds, lamps }: MockTwinFrame): Ar
 }
 
 /** The twin that subscribed last; frames go to it alone, as in Rust. */
-let twinChannel: TwinFrameChannel | null = null;
+let twinChannel: Pick<TwinFrameChannel, "onmessage"> | null = null;
 
-export function attachTwinChannel(channel: TwinFrameChannel): void {
+export function attachTwinChannel(channel: Pick<TwinFrameChannel, "onmessage">): void {
   twinChannel = channel;
 }
 
