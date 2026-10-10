@@ -540,9 +540,9 @@ Sync puts it back as it was, and so do we now (`commands/hue/light_restore.rs`).
   (`lighting-transaction.md`), and the next entry says which parts the slot now guarantees on its own. `apply_mode_change` hands the worker the
   Hue slot only when `targets` names Hue, and removing
   Hue from `[usb, hue]` re-applies the mode on `[usb]` and awaits it before the stop
-  (`ui-and-shell.md`). Off awaits `stop_lighting` before `stop_hue_stream` whenever a mode is
-  running, whatever its targets. It used to call `stop_lighting` only when `usb` was an active
-  target, so Off from a Hue-only mode sent `stop_hue_stream` alone: the worker kept capturing the
+  (`ui-and-shell.md`). Off stops the worker before the stream whenever a mode is running, whatever
+  its targets. The frontend used to call `stop_lighting` only when `usb` was an active target, so
+  Off from a Hue-only mode sent `stop_hue_stream` alone: the worker kept capturing the
   screen and holding its handle, the stop timed out partial, and on the fallback the worker went on
   driving the lights after the restore, with nothing left to stop it. Off from `[usb, hue]` ran
   the two stops side by side, which held only because the worker's join landed inside the stop's
@@ -570,14 +570,15 @@ Sync puts it back as it was, and so do we now (`commands/hue/light_restore.rs`).
     sender still signals only after its own last write, so the restore still comes after every
     frame the worker sent. After a reconnect or restart the worker drives the new sender. A worker
     whose targets leave Hue out is never handed the slot, so it never samples or sends Hue.
-  - **Owned by the Rust transaction, not yet by its callers.** The lighting transaction
+  - **Owned by the Rust transaction, which every caller goes through.** The lighting transaction
     (`lighting_mode/outputs.rs`, [`lighting-transaction.md`](lighting-transaction.md)) runs every
     ordering above itself: Hue up before the worker, the worker let go before the stream stops, Off
     stopping the worker first whatever its targets, a stream no running mode feeds given back, and
-    a test lease leaving an adopted stream to its mode. Until the frontend's callers move to it,
-    the orderings above are still how the frontend drives the old commands. Off still has to call
-    `stop_lighting` there: Rust does not end a mode because its Hue output ended, so a Hue-only
-    worker would go on capturing the screen with nothing to send.
+    a test lease leaving an adopted stream to its mode. Every surface sends `apply_outputs`;
+    `stop_lighting`, `set_lighting_mode` and `stop_hue_stream` are no longer registered, so no
+    frontend code orders these steps any more. Off still stops the worker explicitly: Rust does
+    not end a mode because its Hue output ended, so a Hue-only worker would go on capturing the
+    screen with nothing to send.
 - **The sender streams the newest frame, never an older one.** The worker hands frames to the
   sender through a newest-wins mailbox (`HueFrameMailbox` in `frame.rs`): a put replaces a frame
   the sender has not taken yet. It replaced a two-slot `sync_channel`, whose `try_send` dropped the
