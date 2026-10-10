@@ -830,7 +830,7 @@ fn window_wrote<R: Runtime>(
     super::lighting_mode::outputs::note_settings_saved(app, keys());
     super::hue::health::note_settings_saved(app, keys());
     if changed.set.contains_key("uiZoom") || changed.remove.iter().any(|key| key == "uiZoom") {
-        super::led_preview::apply_ui_zoom_later(app);
+        super::preview::apply_ui_zoom_later(app);
     }
 }
 

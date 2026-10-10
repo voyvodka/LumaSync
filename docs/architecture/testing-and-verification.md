@@ -162,8 +162,9 @@ A run **shares the installed app's state**. It reads and writes the same `shell-
 isolated profile, and it opens a visible window that cycles through modes and tabs. So: say so
 before running it on a machine someone is using, put back anything a spec seeds, and never assume a
 starting state. A run with real lights attached changes someone's room: before it, snapshot the
-area's lights and restore them afterwards, turn them off on anything unexpected, and never open the
-LED control popup from an unattended run — revealing it starts a pattern on its own (`hue.md`).
+area's lights and restore them afterwards, and turn them off on anything unexpected. A spec that
+opens the LED preview closes it again: the session hides the main window and lays a click-through
+twin over the display (`capture-and-pipeline.md`).
 `shell.e2e.ts` asserted the app "boots into compact mode" long after boot began
 restoring the persisted mode; on a machine last left in full, the first three specs failed — and
 then the suite *repaired itself*, because the section-routing spec ends by switching back to

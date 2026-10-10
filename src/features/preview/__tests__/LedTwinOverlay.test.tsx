@@ -109,7 +109,7 @@ describe("LedTwinOverlay dot memoization", () => {
   });
 
   async function mountWithFirstFrame() {
-    const view = render(<LedTwinOverlay scope="test" />);
+    const view = render(<LedTwinOverlay />);
     // Wait for the async calibration load to place the dots.
     await waitFor(() => {
       expect(view.container.querySelectorAll('[data-testid="dot"]')).toHaveLength(

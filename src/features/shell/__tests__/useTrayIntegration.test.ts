@@ -35,9 +35,7 @@ vi.mock("../windowLifecycle", () => ({
 }));
 
 vi.mock("@/features/preview/previewApi", () => ({
-  openLedControlPopup: () => Promise.resolve(),
-  showLedControlPopup: () => Promise.resolve(),
-  openLedTwinOverlay: () => Promise.resolve(),
+  openPreview: () => Promise.resolve({ session: { state: "closed" }, status: { code: "PREVIEW_OPENED", message: "", details: null } }),
 }));
 
 describe("useTrayIntegration", () => {

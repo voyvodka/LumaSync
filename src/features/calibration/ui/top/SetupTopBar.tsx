@@ -17,11 +17,9 @@ interface SetupTopBarProps {
   onSelectDisplay: (display: DisplayInfo) => void;
   /** Where a running test goes: the strip, or only the on-screen twin. Null while none runs. */
   testTarget: "strip" | "preview" | null;
-  previewDisabled: boolean;
-  onPreview: () => void;
 }
 
-/** The captured display on the left; where a test goes, Preview and help on the right. */
+/** The captured display on the left; where a test goes and help on the right. */
 export function SetupTopBar({
   back,
   displays,
@@ -29,8 +27,6 @@ export function SetupTopBar({
   switching,
   onSelectDisplay,
   testTarget,
-  previewDisabled,
-  onPreview,
 }: SetupTopBarProps) {
   const { t } = useTranslation();
   // Kept while the status fades out, so it leaves saying what it said.
@@ -68,13 +64,6 @@ export function SetupTopBar({
           {shownTarget === "preview" ? t("calibration:overlay.previewOnly") : t("calibration:overlay.outputActive")}
         </span>
       )}
-      <button type="button" disabled={previewDisabled} onClick={onPreview} className={styles.button}>
-        <svg viewBox="0 0 24 24" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="4.5" width="18" height="12" rx="2" />
-          <path d="M9 20h6M12 16.5V20" />
-        </svg>
-        {t("calibration:setup.preview")}
-      </button>
       <Help label={t("calibration:setup.help")}>
         <ul className={styles.help}>
           {HELP.map(({ key, glyph }) => (
@@ -104,15 +93,6 @@ const HELP = [
   },
   { key: "calibration:setup.helpFlow", glyph: <path d="M4 5h11v9m-3-3 3 3 3-3" className={styles.amber} /> },
   { key: "calibration:setup.helpTest", glyph: <path d="M7 5.5v9l7-4.5z" /> },
-  {
-    key: "calibration:setup.helpPreview",
-    glyph: (
-      <>
-        <rect x="3" y="4" width="14" height="9.5" rx="1.5" />
-        <path d="M8 16.5h4" />
-      </>
-    ),
-  },
 ] as const;
 
 /** A short explanation behind a quiet "?" — the page itself shows only values and actions. */

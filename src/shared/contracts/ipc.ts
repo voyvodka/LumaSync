@@ -79,14 +79,11 @@ import type {
 } from "./lightingRuntime";
 import type { NotificationPayload, NotificationResult, PLATFORM_COMMANDS } from "./platform";
 import type {
-  CloseLedTwinOverlayPayload,
-  ControlPopupResult,
-  LedPreviewStatus,
   LedTestPatternResult,
-  OpenLedTwinOverlayPayload,
   PREVIEW_COMMANDS,
+  PreviewSessionResult,
+  SetPreviewPopupHiddenPayload,
   StartLedTestPatternPayload,
-  TwinOverlayResult,
 } from "./preview";
 import type {
   AssignChannelRequest,
@@ -227,13 +224,9 @@ export interface CommandMap {
   // --- preview ------------------------------------------------------------
   start_led_test_pattern: Command<{ payload: StartLedTestPatternPayload }, LedTestPatternResult>;
   stop_led_test_pattern: NoArgs<LedTestPatternResult>;
-  get_led_preview_status: NoArgs<LedPreviewStatus>;
-  open_led_twin_overlay: Command<{ payload: OpenLedTwinOverlayPayload }, TwinOverlayResult>;
-  /** `payload` is required even when empty: Rust's argument is not optional. */
-  close_led_twin_overlay: Command<{ payload: CloseLedTwinOverlayPayload }, TwinOverlayResult>;
-  open_led_control_popup: NoArgs<ControlPopupResult>;
-  show_led_control_popup: NoArgs<ControlPopupResult>;
-  hide_led_control_popup: NoArgs<ControlPopupResult>;
+  open_preview: NoArgs<PreviewSessionResult>;
+  close_preview: NoArgs<PreviewSessionResult>;
+  set_preview_popup_hidden: Command<{ payload: SetPreviewPopupHiddenPayload }, PreviewSessionResult>;
 
   // --- shell --------------------------------------------------------------
   update_tray_labels: Command<{ labels: TrayLabels }, null>;

@@ -14,7 +14,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildEdgeSignalFrame,
-  currentPreviewStatus,
   getEdgeSignalStream,
   startEdgeSignalStream,
   stopEdgeSignalStream,
@@ -125,38 +124,9 @@ describe("the edge-signal stream", () => {
     expect(sequences.every((seq) => seq % 2 === 1)).toBe(true);
   });
 
-  it("reports the preview state from the stream rather than a second switch", () => {
-    expect(currentPreviewStatus()).toMatchObject({ testActive: false, source: "idle" });
-
-    startEdgeSignalStream({ pattern: "gamut", source: "test" });
-    expect(currentPreviewStatus()).toMatchObject({
-      testActive: true,
-      source: "test",
-      activePattern: { kind: "gamut" },
-    });
-
-    // A live stream is running but not a *test*, and conflating the two is how
-    // the preview surfaces would claim a synthetic pattern over real capture.
-    startEdgeSignalStream({ pattern: "gamut", source: "live" });
-    expect(currentPreviewStatus()).toMatchObject({ testActive: false, source: "live" });
-
-    stopEdgeSignalStream();
-    expect(currentPreviewStatus().source).toBe("idle");
-  });
-
-  it("carries an explicit colour for the patterns whose payload declares one", () => {
-    startEdgeSignalStream({ pattern: "solid", source: "test" });
-    expect(currentPreviewStatus().activePattern).toEqual({ kind: "solid", r: 251, g: 191, b: 36 });
-    stopEdgeSignalStream();
-  });
-
   // A probe without its slot does not type-check against LedTestPattern, and a
   // twin painted in the wrong primary would teach the wrong answer.
-  it("carries the probe slot and paints the whole strip in that slot's primary", () => {
-    startEdgeSignalStream({ pattern: "channelProbe", probeSlot: 1, source: "test" });
-    expect(currentPreviewStatus().activePattern).toEqual({ kind: "channelProbe", slot: 1 });
-    stopEdgeSignalStream();
-
+  it("paints the whole strip in the probe slot's primary", () => {
     const frame = buildEdgeSignalFrame("channelProbe", 1, "test", 2);
     expect(frame.leds?.every(([r, g, b]) => r === 0 && g === 0 && b === 255)).toBe(true);
     expect(frame.pattern).toBe("channelProbe");
@@ -164,16 +134,22 @@ describe("the edge-signal stream", () => {
 
   it("restarting replaces the interval rather than stacking a second one", async () => {
     vi.useFakeTimers();
+    const framesIn300Ms = async () => {
+      emitMock.mockClear();
+      await vi.advanceTimersByTimeAsync(300);
+      return emitMock.mock.calls.filter((call) => call[0] === "ambilight://edge-signal").length;
+    };
+    startEdgeSignalStream({ pattern: "solid", source: "live" });
+    const single = await framesIn300Ms();
     startEdgeSignalStream({ pattern: "solid", source: "live" });
     startEdgeSignalStream({ pattern: "solid", source: "live" });
-    emitMock.mockClear();
-
-    await vi.advanceTimersByTimeAsync(300);
+    const restarted = await framesIn300Ms();
     stopEdgeSignalStream();
     vi.useRealTimers();
 
-    // Three ticks at 100 ms. A stacked interval would double this.
-    expect(emitMock).toHaveBeenCalledTimes(3);
+    // A stacked interval would double this.
+    expect(single).toBeGreaterThan(0);
+    expect(restarted).toBe(single);
   });
 
   it("stops emitting once stopped", async () => {

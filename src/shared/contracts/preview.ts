@@ -1,17 +1,15 @@
 /**
- * LED Preview & Test Experience contracts (v1.6).
+ * LED preview contracts.
  *
- * Single source of truth for the whole preview/test surface:
- *
+ * - **Preview session** — one Rust-owned session opens the control popup and
+ *   the click-through twin over the captured display, hides the main window,
+ *   and puts everything back on any way out (`close_preview`, the popup's
+ *   close, the tray). Opening it changes no light.
  * - **Synthetic-injection test patterns** — Rust generates procedural frames
- *   (solid / chase / rainbow / spiral / gamut) and pushes them through the
- *   *existing* ambilight worker, so a test pattern lights real LEDs + Hue
- *   channels exactly like live capture would.
- * - **Two preview webviews** — a click-through "digital twin" overlay
- *   (label prefix `led-twin-overlay-`) and an interactive control popup
- *   (label `led-control-popup`).
- * - **Per-LED color stream** — enriches `ambilight://edge-signal`
- *   (`EdgeSignalPayload` below); owns the status surface.
+ *   and pushes them through the ambilight worker. LED Setup and Devices use
+ *   them; the preview does not.
+ * - **Per-LED colour stream** — `ambilight://edge-signal`
+ *   (`EdgeSignalPayload` below), sent to the twin while it is open.
  */
 
 import type { LedCalibrationConfig } from "./calibration";
@@ -29,18 +27,12 @@ export const PREVIEW_COMMANDS = {
   START_TEST_PATTERN: "start_led_test_pattern",
   /** Stop the active synthetic test pattern and return the worker to idle/live. */
   STOP_TEST_PATTERN: "stop_led_test_pattern",
-  /** Read the current preview/test runtime snapshot (`LedPreviewStatus`). */
-  GET_PREVIEW_STATUS: "get_led_preview_status",
-  /** Open (or focus) the click-through digital-twin overlay window for a display. */
-  OPEN_TWIN_OVERLAY: "open_led_twin_overlay",
-  /** Close the digital-twin overlay window for a display (or all). */
-  CLOSE_TWIN_OVERLAY: "close_led_twin_overlay",
-  /** Create the interactive control popup window (hidden until shown). */
-  OPEN_CONTROL_POPUP: "open_led_control_popup",
-  /** Reveal the control popup near its persisted center. */
-  SHOW_CONTROL_POPUP: "show_led_control_popup",
-  /** Hide the control popup without destroying it (cheap re-show). */
-  HIDE_CONTROL_POPUP: "hide_led_control_popup",
+  /** Open the preview session: popup + twin, main window hidden. Changes no light. */
+  OPEN_PREVIEW: "open_preview",
+  /** End the session from any state; every window it opened goes, the main window comes back. */
+  CLOSE_PREVIEW: "close_preview",
+  /** Hide or show the popup while the session stays open. */
+  SET_POPUP_HIDDEN: "set_preview_popup_hidden",
 } as const;
 
 export type PreviewCommandId = (typeof PREVIEW_COMMANDS)[keyof typeof PREVIEW_COMMANDS];
@@ -127,76 +119,28 @@ export interface LedTestPatternResult {
 }
 
 // ---------------------------------------------------------------------------
-// Twin overlay window
+// Preview session
 // ---------------------------------------------------------------------------
 
-/**
- * Which signal the twin overlay mirrors.
- *
- * - `test` — synthetic test-pattern frames (always available, all platforms).
- * - `live` — live ambilight capture frames. Gated on Linux (see
- *   `TWIN_OVERLAY_UNSUPPORTED_PLATFORM_LIVE`) until the live-twin capture path
- *   is validated there.
- */
-export type TwinScope = "test" | "live";
+/** The session as Rust holds it. Never persisted: nothing starts on its own. */
+export type PreviewSession =
+  | { state: "closed" }
+  | {
+      state: "live";
+      /** Display the twin covers — the one Ambilight captures. */
+      displayId: DisplayId;
+      popupHidden: boolean;
+    };
 
-/** Payload for `open_led_twin_overlay`. */
-export interface OpenLedTwinOverlayPayload {
-  /** Display to overlay. Absent ⇒ backend falls back to the selected/primary display. */
-  displayId?: DisplayId;
-  /** Whether the overlay mirrors synthetic test frames or live capture. */
-  scope: TwinScope;
+/** Payload for `set_preview_popup_hidden`. */
+export interface SetPreviewPopupHiddenPayload {
+  hidden: boolean;
 }
 
-/** Payload for `close_led_twin_overlay`. */
-export interface CloseLedTwinOverlayPayload {
-  /** Display whose overlay should close. Absent ⇒ close every open twin overlay. */
-  displayId?: DisplayId;
-}
-
-/** Result of the twin overlay open/close commands. */
-export interface TwinOverlayResult {
-  ok: boolean;
-  code: TwinOverlayStatusCode;
-  message: string;
-  reason?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Control popup window
-// ---------------------------------------------------------------------------
-
-/** Result of the control popup open/show/hide commands. */
-export interface ControlPopupResult {
-  ok: boolean;
-  code: ControlPopupStatusCode;
-  message: string;
-  /** Whether the popup window is currently visible after this call resolved. */
-  visible: boolean;
-}
-
-// ---------------------------------------------------------------------------
-// Preview runtime snapshot (`get_led_preview_status`)
-// ---------------------------------------------------------------------------
-
-/** Snapshot of the preview/test runtime, returned by `get_led_preview_status`. */
-export interface LedPreviewStatus {
-  /** Whether a synthetic test pattern is currently being injected. */
-  testActive: boolean;
-  /** What the enriched edge-signal stream currently carries. */
-  source: "test" | "live" | "idle";
-  /** Active synthetic pattern when `source === "test"`. */
-  activePattern?: LedTestPattern;
-  /** Displays that currently have a twin overlay window open. */
-  twinDisplays: DisplayId[];
-  /** Whether the interactive control popup is currently visible. */
-  popupVisible: boolean;
-  /**
-   * Whether the live-scope twin overlay is supported on this platform.
-   * `false` on Linux until the live-twin capture path is validated there;
-   * the UI hides / disables the "live" toggle accordingly.
-   */
-  liveTwinSupported: boolean;
+/** Result of every session command. */
+export interface PreviewSessionResult {
+  session: PreviewSession;
+  status: CommandStatusOf<PreviewStatusCode>;
 }
 
 // ---------------------------------------------------------------------------
@@ -227,48 +171,32 @@ export const LED_TEST_STATUS = {
 
 export type LedTestStatusCode = (typeof LED_TEST_STATUS)[keyof typeof LED_TEST_STATUS];
 
-export const TWIN_OVERLAY_STATUS = {
-  /** Overlay window opened (or an already-open one was focused) for the display. */
-  OPENED: "TWIN_OVERLAY_OPENED",
-  /** Overlay window closed for the requested display (or all). */
-  CLOSED: "TWIN_OVERLAY_CLOSED",
-  /** Window creation / show failed at the webview layer. */
-  OPEN_FAILED: "TWIN_OVERLAY_OPEN_FAILED",
-  /** Destroy failed; `reason` lists the labels. A surviving twin is
-   * click-through and undecorated, so the user cannot dismiss it. */
-  CLOSE_FAILED: "TWIN_OVERLAY_CLOSE_FAILED",
-  /** The requested `displayId` did not match any enumerated display. */
-  DISPLAY_NOT_FOUND: "TWIN_OVERLAY_DISPLAY_NOT_FOUND",
-  /**
-   * A `live`-scope overlay was requested on a platform that does not yet
-   * support live-twin capture (Linux). The UI should fall back to `test`
-   * scope or hide the live toggle.
-   */
-  UNSUPPORTED_PLATFORM_LIVE: "TWIN_OVERLAY_UNSUPPORTED_PLATFORM_LIVE",
+export const PREVIEW_STATUS = {
+  /** Popup and twin up, main window hidden if it was visible. */
+  OPENED: "PREVIEW_OPENED",
+  /** A session was already open; its popup is shown and focused. */
+  ALREADY_OPEN: "PREVIEW_ALREADY_OPEN",
+  /** Session ended; every preview window is gone, a stray from an earlier failure too. */
+  CLOSED: "PREVIEW_CLOSED",
+  /** Nothing to close or change: no session is open and no preview window is left. */
+  NOT_OPEN: "PREVIEW_NOT_OPEN",
+  /** The popup was hidden or shown. */
+  POPUP_UPDATED: "PREVIEW_POPUP_UPDATED",
+  /** The displays could not be read, or a window could not be built; whatever
+   * was built is destroyed again. A saved display that is gone is not a failure:
+   * the twin goes where the capture falls back to. */
+  OPEN_FAILED: "PREVIEW_OPEN_FAILED",
+  /** A window survived its destroy; `details` names it. The twin is click-through
+   * and undecorated, so a survivor would sit over the display undismissable. */
+  CLOSE_FAILED: "PREVIEW_CLOSE_FAILED",
 } as const;
 
-export type TwinOverlayStatusCode =
-  (typeof TWIN_OVERLAY_STATUS)[keyof typeof TWIN_OVERLAY_STATUS];
-
-export const CONTROL_POPUP_STATUS = {
-  /** Popup window created (hidden until a subsequent show call). */
-  OPENED: "CONTROL_POPUP_OPENED",
-  /** Popup revealed and focused. */
-  SHOWN: "CONTROL_POPUP_SHOWN",
-  /** Popup hidden without being destroyed (cheap re-show next time). */
-  HIDDEN: "CONTROL_POPUP_HIDDEN",
-  /** Window create / show / hide failed at the webview layer. */
-  FAILED: "CONTROL_POPUP_FAILED",
-} as const;
-
-export type ControlPopupStatusCode =
-  (typeof CONTROL_POPUP_STATUS)[keyof typeof CONTROL_POPUP_STATUS];
+export type PreviewStatusCode = (typeof PREVIEW_STATUS)[keyof typeof PREVIEW_STATUS];
 
 /** Thrown as `Err("CODE: detail")` before any status object is built, so a
- * `switch` on {@link TWIN_OVERLAY_STATUS} will never see them. */
+ * `switch` on {@link PREVIEW_STATUS} will never see them. */
 export const PREVIEW_COMMAND_ERRORS = {
-  TWIN_STATE_LOCK_FAILED: "LED_TWIN_STATE_LOCK_FAILED",
-  TWIN_OVERLAY_SERIALIZE: "TWIN_OVERLAY_SERIALIZE",
+  SESSION_LOCK_FAILED: "PREVIEW_SESSION_LOCK_FAILED",
 } as const;
 
 export type PreviewCommandErrorCode =
@@ -278,38 +206,27 @@ export type PreviewCommandErrorCode =
 // Window labels + event names
 // ---------------------------------------------------------------------------
 
-/**
- * Label prefix for twin overlay webview windows. One window per display;
- * the full label is `${LED_TWIN_OVERLAY_LABEL_PREFIX}${displayId}` so the
- * shell can address / close a single display's overlay without ambiguity.
- */
+/** Label prefix for the twin window. The suffix is a counter, not the display
+ * id: a label is reserved until its destroy completes, so a reopen right after
+ * a close would collide on a fixed one. */
 export const LED_TWIN_OVERLAY_LABEL_PREFIX = "led-twin-overlay-" as const;
 
-/** Fixed label for the single interactive control popup webview window. */
-export const LED_CONTROL_POPUP_LABEL = "led-control-popup" as const;
-
-/**
- * Tauri event channel emitted whenever the preview runtime state changes
- * (test started/stopped, overlay opened/closed, popup shown/hidden). Carries
- * a `LedPreviewStatus` payload so every preview surface can reconcile without
- * polling `get_led_preview_status`.
- */
-export const PREVIEW_STATE_CHANGED_EVENT = "preview://state-changed" as const;
+/** Label prefix for the session's control popup; a counter follows, as for the twin. */
+export const LED_CONTROL_POPUP_LABEL_PREFIX = "led-control-popup-" as const;
 
 /** Tauri event channel carrying the per-LED feed of the LED twin overlay. */
 export const EDGE_SIGNAL_EVENT = "ambilight://edge-signal" as const;
 
 export const PREVIEW_EVENTS = {
-  STATE_CHANGED: PREVIEW_STATE_CHANGED_EVENT,
   EDGE_SIGNAL: EDGE_SIGNAL_EVENT,
 } as const;
 
 export type PreviewEventName = (typeof PREVIEW_EVENTS)[keyof typeof PREVIEW_EVENTS];
 
 /**
- * Per-LED frame the Rust ambilight worker sends to open twin-overlay windows
- * (`lighting_mode/preview.rs`). Sent only while a twin overlay is open, and
- * only to twin windows. This is the exact wire shape; the one listener reads
+ * Per-LED frame the Rust ambilight worker sends to the session's twin
+ * (`lighting_mode/preview.rs`). Sent only while the twin is open, and only to
+ * it. This is the exact wire shape; the one listener reads
  * it as a `Partial`, so a frame without a `leds` buffer is ignored rather than
  * trusted.
  */

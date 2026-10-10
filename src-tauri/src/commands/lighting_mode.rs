@@ -42,7 +42,6 @@ pub use config::{
     LightingModeKind, SolidColorPayload,
 };
 pub use led_test_pattern::{start_led_test_pattern, stop_led_test_pattern};
-pub use preview::get_led_preview_status;
 pub use runtime::LightingRuntimeState;
 pub use transition::stop_lighting_blocking;
 

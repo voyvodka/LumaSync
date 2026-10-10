@@ -42,8 +42,8 @@ import {
 import { dispatch } from "../dispatch";
 import { plugPort, rejectSerialPort, setSerialConnected, setWledBound } from "../hotplug";
 import { ROOM_MAP_PRESETS, ROOM_MAP_PRESET_IDS, type RoomMapPresetId } from "../roomMaps";
-import { PICKER_PATTERN_KINDS } from "../../src/features/preview/ui/PatternPicker";
 import { LIGHTING_ORIGIN, LIGHTING_RUNTIME_COMMANDS } from "../../src/shared/contracts/lightingRuntime";
+import { LED_TEST_PATTERN_KIND, type LedTestPatternKind } from "../../src/shared/contracts/preview";
 import { MOCK_HAS_REAL_IPC } from "../runtime";
 import { FURNISHED_LAYOUT, SCENARIOS, SCENARIO_IDS, type ScenarioId } from "../scenarios";
 import type { LedCalibrationConfig } from "../../src/shared/contracts/calibration";
@@ -51,6 +51,11 @@ import type { LedStrip } from "../../src/shared/contracts/strips";
 import { primaryStripOf } from "../../src/features/strips/model/stripSelectors";
 import { clearStoredWorld, getWorld, mutate, setWorld, subscribe } from "../state";
 import type { MockWorld } from "../state";
+
+/** The synthetic patterns the edge-signal stream can stand in for. */
+const STREAM_PATTERN_KINDS = LED_TEST_PATTERN_KIND.filter(
+  (kind): kind is Exclude<LedTestPatternKind, "channelProbe"> => kind !== "channelProbe",
+);
 
 /**
  * The tray's lighting items run the transaction in Rust and never reach a
@@ -1171,7 +1176,7 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                 <span style={{ color: DIM, fontSize: 10, width: 52 }}>pattern</span>
                 <Pick
                   value={stream.pattern}
-                  options={PICKER_PATTERN_KINDS}
+                  options={STREAM_PATTERN_KINDS}
                   onChange={(v) => startEdgeSignalStream({ pattern: v, source: stream.source })}
                 />
               </Row>

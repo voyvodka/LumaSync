@@ -91,10 +91,7 @@ const shell: Catalogue<typeof enShell> = {
       stopFailed: "{{targets}} durmadı — çıkış hâlâ etkin",
       stopFailedUsb: "{{targets}} durmadı — şeridi durdurmak için modu Kapalı'ya al",
       previewOpenFailed: {
-        overlay: "LED önizlemesi açılmadı — kaplama penceresi açılamadı",
-        display: "LED önizlemesi açılmadı — seçili ekran artık yok",
-        unsupported: "LED önizlemesi açılmadı — canlı kaplama burada henüz desteklenmiyor",
-        popup: "Kontrol penceresi açılmadı",
+        failed: "LED önizlemesi açılmadı — bir önizleme penceresi açılamadı",
       },
       hueLeftOut: {
         unreachable: "Hue Bridge'e ulaşılamıyor — yalnızca {{output}} ile çalışıyor",

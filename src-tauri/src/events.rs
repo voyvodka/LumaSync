@@ -38,10 +38,6 @@ pub const TRAY_SHOW_LED_PREVIEW_EVENT: &str = "tray:show-led-preview";
 /// Re-exported from `commands::hue::health`.
 pub const HUE_HEALTH_CHANGED_EVENT: &str = "hue://health";
 
-/// `PREVIEW_EVENTS.STATE_CHANGED` in `src/shared/contracts/preview.ts`.
-/// Re-exported from `commands::led_preview`.
-pub const PREVIEW_STATE_CHANGED_EVENT: &str = "preview://state-changed";
-
 /// `PREVIEW_EVENTS.EDGE_SIGNAL` in `src/shared/contracts/preview.ts`.
 /// Re-exported from `commands::lighting_mode::preview`.
 pub const EDGE_SIGNAL_EVENT: &str = "ambilight://edge-signal";

@@ -16,8 +16,8 @@ use super::snapshot::OutputTarget::{self, Hue, Usb};
 use super::test_support::{Rig, RigSetup};
 use super::{AmbilightPayload, LightingModeConfig, LightingModeKind, SolidColorPayload};
 use crate::commands::hue::state_store::HueRuntimeStateStore;
-use crate::commands::led_preview::LedTwinState;
 use crate::commands::local_outputs::LocalOutputRegistry;
+use crate::commands::preview::PreviewSessionState;
 use crate::commands::runtime_telemetry::RuntimeTelemetryState;
 use crate::commands::test_pattern::{TestPatternConfig, TestPatternKind, TestPatternSpeed};
 use tauri::Manager;
@@ -626,7 +626,7 @@ fn start_test(rig: &Rig) {
         rig.app.state::<LocalOutputRegistry>().driven().as_ref(),
         rig.app.state::<HueRuntimeStateStore>().inner(),
         rig.app.state::<RuntimeTelemetryState>().inner(),
-        rig.app.state::<LedTwinState>().inner(),
+        rig.app.state::<PreviewSessionState>().inner(),
         Some(TestPatternConfig {
             kind: TestPatternKind::Gamut,
             brightness: 0.5,
@@ -659,6 +659,41 @@ fn a_test_pattern_is_left_alone_by_a_refresh_and_never_shown_as_the_mode() {
     block_on(refresh_running_with(&rig.handle())).unwrap();
     assert_eq!(mode_applies(&rig), 0, "{:?}", rig.log.events());
     assert!(rig.worker_running(), "the refresh stopped the test");
+}
+
+fn test_prior(rig: &Rig) -> Option<LightingModeConfig> {
+    rig.state()
+        .runtime
+        .lock()
+        .unwrap()
+        .preview
+        .test_prior
+        .clone()
+}
+
+/// A user's mode change over a running test drops the mode the test's stop
+/// would restore, inside the lock the change itself holds — so a Stop that
+/// lands after it cannot put the pre-test mode back over the user's choice.
+#[test]
+fn a_mode_change_over_a_test_drops_the_mode_its_stop_would_restore() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5), &["usb"]);
+    start_test(&rig);
+    rig.state().runtime.lock().unwrap().preview.test_prior = Some(solid(5));
+
+    running(&rig, solid(7), &["usb"]);
+    assert_eq!(test_prior(&rig), None);
+}
+
+#[test]
+fn stopping_all_lighting_over_a_test_drops_the_mode_its_stop_would_restore() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5), &["usb"]);
+    start_test(&rig);
+    rig.state().runtime.lock().unwrap().preview.test_prior = Some(solid(5));
+
+    super::transition::stop_lighting_blocking(&rig.handle()).unwrap();
+    assert_eq!(test_prior(&rig), None);
 }
 
 // ---------------------------------------------------------------------------

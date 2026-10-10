@@ -3,7 +3,7 @@
 // faked. A refused open used to leave the user with nothing at all.
 
 import { act, render, screen, waitFor } from "@testing-library/react";
-import { TWIN_OVERLAY_STATUS, type ControlPopupResult } from "@/shared/contracts/preview";
+import { PREVIEW_STATUS, type PreviewSessionResult, type PreviewStatusCode } from "@/shared/contracts/preview";
 import { useMemo } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -35,23 +35,18 @@ vi.mock("@/features/tray/trayApi", () => ({
   updateTrayLabels: () => Promise.resolve(),
 }));
 
-const saveShellStateMock = vi.fn();
-let twinEnabled = false;
-vi.mock("../windowLifecycle", () => ({
-  loadShellState: () => Promise.resolve({ ledTwinEnabledTest: twinEnabled, selectedDisplayId: "display-2" }),
-  saveShellState: (partial: unknown) => saveShellStateMock(partial),
-}));
-
-const openOverlayMock = vi.fn<typeof previewApiModule.openLedTwinOverlay>();
-const openPopupMock = vi.fn<typeof previewApiModule.openLedControlPopup>();
-const showPopupMock = vi.fn<typeof previewApiModule.showLedControlPopup>();
+const openPreviewMock = vi.fn<typeof previewApiModule.openPreview>();
 vi.mock("@/features/preview/previewApi", () => ({
-  openLedTwinOverlay: (...args: Parameters<typeof openOverlayMock>) => openOverlayMock(...args),
-  openLedControlPopup: () => openPopupMock(),
-  showLedControlPopup: () => showPopupMock(),
+  openPreview: () => openPreviewMock(),
 }));
 
-const POPUP_OK: ControlPopupResult = { ok: true, code: "CONTROL_POPUP_SHOWN", message: "", visible: true };
+function opened(code: PreviewStatusCode): PreviewSessionResult {
+  const failed = code !== PREVIEW_STATUS.OPENED && code !== PREVIEW_STATUS.ALREADY_OPEN;
+  return {
+    session: failed ? { state: "closed" } : { state: "live", displayId: "display-2", popupHidden: false },
+    status: { code, message: "", details: failed ? "webview" : null },
+  };
+}
 
 function Harness() {
   const preview = usePreviewOpenNotice();
@@ -81,56 +76,38 @@ function setVisibility(state: DocumentVisibilityState) {
 describe("tray Show LED Preview — a refused open is reported", () => {
   beforeEach(() => {
     showPreview = null;
-    twinEnabled = false;
     setVisibility("visible");
     vi.spyOn(console, "error").mockImplementation(() => {});
-    saveShellStateMock.mockReset().mockResolvedValue(undefined);
-    openOverlayMock.mockReset().mockResolvedValue({ ok: true, code: TWIN_OVERLAY_STATUS.OPENED, message: "" });
-    openPopupMock.mockReset().mockResolvedValue(POPUP_OK);
-    showPopupMock.mockReset().mockResolvedValue(POPUP_OK);
+    openPreviewMock.mockReset().mockResolvedValue(opened(PREVIEW_STATUS.OPENED));
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it("raises a toast when the control popup cannot open", async () => {
-    openPopupMock.mockResolvedValue({ ok: false, code: "CONTROL_POPUP_FAILED", message: "webview", visible: false });
+  it("raises a toast when a preview window cannot open", async () => {
+    openPreviewMock.mockResolvedValue(opened(PREVIEW_STATUS.OPEN_FAILED));
 
     await clickTrayShowPreview();
 
     expect(await screen.findByTestId("preview-open-failed-notice")).toHaveTextContent(
-      "shell:notices.messages.previewOpenFailed.popup",
+      "shell:notices.messages.previewOpenFailed.failed",
     );
-    expect(saveShellStateMock).not.toHaveBeenCalledWith({ ledPreviewPopupVisible: true });
   });
 
-  it("raises a toast when the twin overlay's display is gone", async () => {
-    twinEnabled = true;
-    openOverlayMock.mockResolvedValue({ ok: false, code: "TWIN_OVERLAY_DISPLAY_NOT_FOUND", message: "gone" });
+  it.each([PREVIEW_STATUS.OPENED, PREVIEW_STATUS.ALREADY_OPEN])("stays silent on %s", async (code) => {
+    openPreviewMock.mockResolvedValue(opened(code));
 
     await clickTrayShowPreview();
 
-    expect(await screen.findByTestId("preview-open-failed-notice")).toHaveTextContent(
-      "shell:notices.messages.previewOpenFailed.display",
-    );
-    expect(openOverlayMock).toHaveBeenCalledWith({ scope: "test", displayId: "display-2" });
-  });
-
-  it("stays silent when everything opened", async () => {
-    twinEnabled = true;
-
-    await clickTrayShowPreview();
-
-    await waitFor(() => expect(openOverlayMock).toHaveBeenCalled());
-    expect(saveShellStateMock).toHaveBeenCalledWith({ ledPreviewPopupVisible: true });
+    await waitFor(() => expect(openPreviewMock).toHaveBeenCalled());
     expect(screen.queryByTestId("preview-open-failed-notice")).toBeNull();
   });
 
   it("holds the toast while the main window is hidden, then lets it expire", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     setVisibility("hidden");
-    openPopupMock.mockResolvedValue({ ok: false, code: "CONTROL_POPUP_FAILED", message: "webview", visible: false });
+    openPreviewMock.mockResolvedValue(opened(PREVIEW_STATUS.OPEN_FAILED));
 
     await clickTrayShowPreview();
     await screen.findByTestId("preview-open-failed-notice");

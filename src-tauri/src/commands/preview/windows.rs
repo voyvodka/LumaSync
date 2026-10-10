@@ -1,0 +1,144 @@
+//! The preview's windows. Both load `index.html`; `src/main.tsx` routes by
+//! label. The twin learns its display from an initialization script.
+
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+use tauri::{
+    window::Color, AppHandle, LogicalPosition, LogicalSize, Manager, Position, Runtime, WebviewUrl,
+    WebviewWindow, WebviewWindowBuilder,
+};
+
+use crate::commands::calibration::{build_transparent_overlay, DisplayInfoPayload};
+use crate::commands::shell_state;
+
+/// Mirrors `LED_TWIN_OVERLAY_LABEL_PREFIX` in `src/shared/contracts/preview.ts`.
+/// Both preview labels end in a counter, never reused: a label stays reserved
+/// until its destroy completes (see calibration.rs `OVERLAY_LABEL_COUNTER`), and
+/// a closed window's late `Destroyed` must not be mistaken for the next
+/// session's.
+pub const LED_TWIN_OVERLAY_LABEL_PREFIX: &str = "led-twin-overlay-";
+
+/// Mirrors `LED_CONTROL_POPUP_LABEL_PREFIX` in `src/shared/contracts/preview.ts`.
+pub const LED_CONTROL_POPUP_LABEL_PREFIX: &str = "led-control-popup-";
+
+static LABEL_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+pub(super) fn next_twin_label() -> String {
+    let seq = LABEL_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("{LED_TWIN_OVERLAY_LABEL_PREFIX}{seq}")
+}
+
+pub(super) fn next_popup_label() -> String {
+    let seq = LABEL_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("{LED_CONTROL_POPUP_LABEL_PREFIX}{seq}")
+}
+
+pub fn is_preview_window(label: &str) -> bool {
+    label.starts_with(LED_TWIN_OVERLAY_LABEL_PREFIX)
+        || label.starts_with(LED_CONTROL_POPUP_LABEL_PREFIX)
+}
+
+/// The click-through twin over `display`, raised into full-screen Spaces on
+/// macOS so it stays over a full-screen film or game.
+pub(super) fn build_twin<R: Runtime>(
+    app: &AppHandle<R>,
+    label: &str,
+    display: &DisplayInfoPayload,
+) -> Result<WebviewWindow<R>, String> {
+    let display_id_json = serde_json::to_string(&display.id)
+        .map_err(|error| format!("could not encode the display id: {error}"))?;
+    let init_script = format!("window.__LUMASYNC_TWIN_DISPLAY_ID__ = {display_id_json};");
+    let window = build_transparent_overlay(
+        app,
+        label,
+        WebviewUrl::App(PathBuf::from("index.html")),
+        "LumaSync LED Twin",
+        display,
+        Some(init_script.as_str()),
+    )?;
+    #[cfg(target_os = "macos")]
+    crate::macos_window::elevate_overlay_window(&window);
+    Ok(window)
+}
+
+const POPUP_WIDTH: f64 = 320.0;
+const POPUP_HEIGHT: f64 = 460.0;
+const POPUP_MIN_WIDTH: f64 = 300.0;
+const POPUP_MIN_HEIGHT: f64 = 420.0;
+
+/// The control popup, where the user last left it.
+pub(super) fn build_popup<R: Runtime>(
+    app: &AppHandle<R>,
+    label: &str,
+) -> Result<WebviewWindow<R>, String> {
+    let zoom = shell_state::persisted(app).map_or(1.0, |state| state.ui_zoom());
+    let (width, height) = (POPUP_WIDTH * zoom, POPUP_HEIGHT * zoom);
+    let window =
+        WebviewWindowBuilder::new(app, label, WebviewUrl::App(PathBuf::from("index.html")))
+            .title("LumaSync LED Controls")
+            .inner_size(width, height)
+            .min_inner_size(POPUP_MIN_WIDTH * zoom, POPUP_MIN_HEIGHT * zoom)
+            .decorations(false)
+            .resizable(false)
+            .skip_taskbar(true)
+            .always_on_top(true)
+            .focused(true)
+            .visible(true)
+            // Opaque amber-dark: the popup is a control surface, not an overlay.
+            .background_color(Color(18, 16, 14, 255))
+            .build()
+            .map_err(|error| format!("could not create the control popup: {error}"))?;
+
+    if let Some((cx, cy)) = shell_state::persisted(app).and_then(|state| state.popup_center()) {
+        let _ = window.set_position(Position::Logical(LogicalPosition::new(
+            cx - width / 2.0,
+            cy - height / 2.0,
+        )));
+    } else {
+        let _ = window.center();
+    }
+
+    if zoom != 1.0 {
+        if let Err(error) = window.set_zoom(zoom) {
+            log::warn!("[ui-zoom] control popup zoom failed: {error}");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    crate::macos_window::elevate_overlay_window(&window);
+    Ok(window)
+}
+
+/// Settings → Interface size, on the control popup: its frame grows with it so
+/// its layout keeps its 320×460 viewport. The main window zooms itself, inside
+/// the content fade that hides the reflow (`useUIMode`); zooming it from here
+/// too reflowed the visible page a moment before or after that. Off the store's
+/// lock, since a window call there would wait on the main thread while holding
+/// it. The value is read when the task runs, not passed in: tasks from quick
+/// changes (⌘+ held) may run in any order, and whichever runs last applies the
+/// latest.
+pub fn apply_ui_zoom_later<R: Runtime>(app: &AppHandle<R>) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let zoom = shell_state::persisted(&app).map_or(1.0, |state| state.ui_zoom());
+        let popups = app
+            .webview_windows()
+            .into_iter()
+            .filter(|(label, _)| label.starts_with(LED_CONTROL_POPUP_LABEL_PREFIX));
+        for (_, popup) in popups {
+            let resized = popup
+                .set_min_size(Some(LogicalSize::new(
+                    POPUP_MIN_WIDTH * zoom,
+                    POPUP_MIN_HEIGHT * zoom,
+                )))
+                .and_then(|()| {
+                    popup.set_size(LogicalSize::new(POPUP_WIDTH * zoom, POPUP_HEIGHT * zoom))
+                })
+                .and_then(|()| popup.set_zoom(zoom));
+            if let Err(error) = resized {
+                log::warn!("[ui-zoom] control popup zoom failed: {error}");
+            }
+        }
+    });
+}

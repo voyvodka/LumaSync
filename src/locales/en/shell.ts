@@ -90,10 +90,7 @@ export default {
       stopFailed: "{{targets}} didn't stop — the output is still active",
       stopFailedUsb: "{{targets}} didn't stop — switch the mode Off to stop the strip",
       previewOpenFailed: {
-        overlay: "LED preview didn't open — the overlay window failed",
-        display: "LED preview didn't open — the selected display is gone",
-        unsupported: "LED preview didn't open — the live overlay isn't supported here yet",
-        popup: "The control popup didn't open",
+        failed: "LED preview didn't open — a preview window failed",
       },
       hueLeftOut: {
         unreachable: "Can't reach the Hue bridge — running on {{output}} only",

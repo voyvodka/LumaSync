@@ -20,7 +20,7 @@ import {
 } from "@/shared/contracts/capture";
 import { HUE_SOLID_COLOR_STATUS, type HueRuntimeTarget, type HueSolidColorStatusCode } from "@/shared/contracts/hue";
 import { HUE_LEFT_OUT_REASON, type HueLeftOutReason } from "@/shared/contracts/lighting";
-import { CONTROL_POPUP_STATUS, TWIN_OVERLAY_STATUS } from "@/shared/contracts/preview";
+import { PREVIEW_STATUS } from "@/shared/contracts/preview";
 import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/shell";
 
 import {
@@ -130,10 +130,7 @@ const START_FAILED_MESSAGE: Record<Exclude<CaptureFailureBucket, "permission" | 
 };
 
 const PREVIEW_OPEN_FAILED_MESSAGE: Record<PreviewOpenFailure, TranslationKey> = {
-  [TWIN_OVERLAY_STATUS.OPEN_FAILED]: "shell:notices.messages.previewOpenFailed.overlay",
-  [TWIN_OVERLAY_STATUS.DISPLAY_NOT_FOUND]: "shell:notices.messages.previewOpenFailed.display",
-  [TWIN_OVERLAY_STATUS.UNSUPPORTED_PLATFORM_LIVE]: "shell:notices.messages.previewOpenFailed.unsupported",
-  [CONTROL_POPUP_STATUS.FAILED]: "shell:notices.messages.previewOpenFailed.popup",
+  [PREVIEW_STATUS.OPEN_FAILED]: "shell:notices.messages.previewOpenFailed.failed",
 };
 
 const ONBOARDING_MESSAGE: Record<Exclude<OnboardingStep, "complete">, TranslationKey> = {

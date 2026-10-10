@@ -2364,11 +2364,11 @@ fn the_edge_signal_is_built_and_sent_only_while_a_twin_is_open() {
     use std::time::{Duration, Instant};
     use tauri::{Listener, Manager, WebviewWindowBuilder};
 
-    use crate::commands::led_preview::LedTwinState;
+    use crate::commands::preview::PreviewSessionState;
 
     let _guard = acquire_worker_test_guard();
     let app = tauri::test::mock_app();
-    app.manage(LedTwinState::default());
+    app.manage(PreviewSessionState::default());
     let main = WebviewWindowBuilder::new(&app, crate::MAIN_WINDOW_LABEL, Default::default())
         .build()
         .expect("main webview");
@@ -2397,9 +2397,9 @@ fn the_edge_signal_is_built_and_sent_only_while_a_twin_is_open() {
         real_emitter(payload);
     });
 
-    let twin_state = app.state::<LedTwinState>();
+    let session = app.state::<PreviewSessionState>();
     let mut owner = owner_with_fake_sender();
-    owner.preview.preview_gate = Some(twin_state.preview_active());
+    owner.preview.preview_gate = Some(session.twin_open());
     let mode = LightingModeConfig {
         kind: LightingModeKind::Ambilight,
         ambilight: Some(AmbilightPayload {
@@ -2432,7 +2432,7 @@ fn the_edge_signal_is_built_and_sent_only_while_a_twin_is_open() {
     assert_eq!(main_events.load(Ordering::SeqCst), 0);
     assert!(twin_frames.lock().expect("frames lock").is_empty());
 
-    twin_state.record_twin_for_test("display-1", twin_label);
+    session.open_for_test("display-1", twin_label, "led-control-popup-test");
     let deadline = Instant::now() + Duration::from_secs(5);
     let frame = loop {
         let with_hue = twin_frames
@@ -2464,7 +2464,7 @@ fn the_edge_signal_is_built_and_sent_only_while_a_twin_is_open() {
         "the main window has no edge-signal listener and must receive nothing"
     );
 
-    twin_state.forget_twin_label(twin_label);
+    session.close_for_test();
     // One tick may already be past the gate when the twin closes.
     std::thread::sleep(Duration::from_millis(100));
     let after_close = built.load(Ordering::SeqCst);

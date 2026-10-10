@@ -54,27 +54,11 @@ describe("PREVIEW_COMMANDS — Rust snake_case name regression", () => {
     expect(PREVIEW_COMMANDS.STOP_TEST_PATTERN).toBe("stop_led_test_pattern");
   });
 
-  it("GET_PREVIEW_STATUS maps to get_led_preview_status", () => {
-    expect(PREVIEW_COMMANDS.GET_PREVIEW_STATUS).toBe("get_led_preview_status");
-  });
-
-  it("OPEN_TWIN_OVERLAY maps to open_led_twin_overlay", () => {
-    expect(PREVIEW_COMMANDS.OPEN_TWIN_OVERLAY).toBe("open_led_twin_overlay");
-  });
-
-  it("CLOSE_TWIN_OVERLAY maps to close_led_twin_overlay", () => {
-    expect(PREVIEW_COMMANDS.CLOSE_TWIN_OVERLAY).toBe("close_led_twin_overlay");
-  });
-
-  it("OPEN_CONTROL_POPUP maps to open_led_control_popup", () => {
-    expect(PREVIEW_COMMANDS.OPEN_CONTROL_POPUP).toBe("open_led_control_popup");
-  });
-
-  it("SHOW_CONTROL_POPUP maps to show_led_control_popup", () => {
-    expect(PREVIEW_COMMANDS.SHOW_CONTROL_POPUP).toBe("show_led_control_popup");
-  });
-
-  it("HIDE_CONTROL_POPUP maps to hide_led_control_popup", () => {
-    expect(PREVIEW_COMMANDS.HIDE_CONTROL_POPUP).toBe("hide_led_control_popup");
+  it.each([
+    ["OPEN_PREVIEW", "open_preview"],
+    ["CLOSE_PREVIEW", "close_preview"],
+    ["SET_POPUP_HIDDEN", "set_preview_popup_hidden"],
+  ] as const)("%s maps to %s", (key, name) => {
+    expect(PREVIEW_COMMANDS[key]).toBe(name);
   });
 });

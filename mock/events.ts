@@ -29,7 +29,6 @@ import { emit } from "@tauri-apps/api/event";
 import {
   PREVIEW_EVENTS,
   type EdgeSignalPayload,
-  type LedPreviewStatus,
   type LedTestPatternKind,
 } from "../src/shared/contracts/preview";
 import { UPDATER_EVENTS, type UpdateDownloadProgress } from "../src/shared/contracts/updater";
@@ -228,7 +227,6 @@ export function startEdgeSignalStream(
   stopEdgeSignalStream();
   setStream({ ...options, running: true, frame: 0 });
   timer = setInterval(tick, EDGE_SIGNAL_INTERVAL_MS);
-  void emitPreviewState();
 }
 
 export function stopEdgeSignalStream(): void {
@@ -236,46 +234,10 @@ export function stopEdgeSignalStream(): void {
     clearInterval(timer);
     timer = null;
   }
-  if (stream.running) {
-    setStream({ running: false });
-    void emitPreviewState();
-  }
+  if (stream.running) setStream({ running: false });
 }
 
 // --- One-shot emitters -----------------------------------------------------
-
-/**
- * Derived from the stream rather than stored separately, so the preview status
- * and the frames the app is receiving cannot disagree — which they would if the
- * panel had a second switch for each.
- */
-export function currentPreviewStatus(): LedPreviewStatus {
-  const running = stream.running;
-  return {
-    testActive: running && stream.source === "test",
-    source: running ? stream.source : "idle",
-    activePattern:
-      running && stream.source === "test"
-        ? patternPayload(stream.pattern, stream.probeSlot)
-        : undefined,
-    twinDisplays: [],
-    popupVisible: false,
-    liveTwinSupported: true,
-  };
-}
-
-function patternPayload(
-  kind: LedTestPatternKind,
-  slot: ProbeSlot,
-): NonNullable<LedPreviewStatus["activePattern"]> {
-  if (kind === "solid" || kind === "chase") return { kind, r: 251, g: 191, b: 36 };
-  if (kind === "channelProbe") return { kind, slot };
-  return { kind };
-}
-
-export async function emitPreviewState(): Promise<void> {
-  await emitMockEvent(PREVIEW_EVENTS.STATE_CHANGED, currentPreviewStatus());
-}
 
 /**
  * The worker's push of the stall and link budget. The real one fires when they

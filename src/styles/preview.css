@@ -57,31 +57,6 @@
   forced-color-adjust: none;
 }
 
-.lm-twin-scope {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 3px 10px;
-  border-radius: 9999px;
-  background: rgba(7, 8, 10, 0.62);
-  border: 1px solid var(--lm-line-2);
-  font-family: var(--lm-mono);
-  font-size: 9px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--lm-ink-dim);
-  backdrop-filter: blur(4px);
-}
-
-@media (forced-colors: active) {
-  .lm-twin-scope {
-    background: Canvas;
-    border-color: CanvasText;
-    color: CanvasText;
-  }
-}
-
 /* ── Control popup ───────────────────────────────────────────────────────── */
 .lm-control-root {
   display: flex;

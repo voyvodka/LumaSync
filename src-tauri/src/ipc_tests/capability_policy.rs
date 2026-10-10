@@ -18,7 +18,7 @@ use tauri::{Manager, WebviewWindowBuilder};
 use super::invoke;
 
 const MAIN: &str = "main";
-const POPUP: &str = "led-control-popup";
+const POPUP: &str = "led-control-popup-0";
 const TWIN: &str = "led-twin-overlay-0";
 const CALIBRATION: &str = "calibration-overlay-00000000000000ff-0";
 
@@ -114,20 +114,15 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     ("get_shell_state", BUNDLE_WINDOWS),
     ("patch_shell_state", MAIN_AND_POPUP),
     ("replace_shell_state", MAIN_ONLY),
-    // The popup drives modes and test patterns through the lighting
-    // transaction, which also holds the Hue test lease.
+    // The popup drives modes through the lighting transaction.
     ("apply_outputs", MAIN_AND_POPUP),
     ("retune_lighting", MAIN_AND_POPUP),
     ("get_lighting_runtime", MAIN_AND_POPUP),
-    ("start_led_test_pattern", MAIN_AND_POPUP),
-    ("stop_led_test_pattern", MAIN_AND_POPUP),
-    ("show_notification", MAIN_AND_POPUP),
     // GlobalErrorBoundary's "Show logs", mounted in both.
     ("open_log_dir", MAIN_AND_POPUP),
     // Only the popup's own controls call these.
-    ("get_led_preview_status", POPUP_ONLY),
-    ("close_led_twin_overlay", POPUP_ONLY),
-    ("hide_led_control_popup", POPUP_ONLY),
+    ("close_preview", POPUP_ONLY),
+    ("set_preview_popup_hidden", POPUP_ONLY),
     // The main window only.
     ("update_tray_labels", MAIN_ONLY),
     ("get_launch_context", MAIN_ONLY),
@@ -177,9 +172,12 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     ("connect_wled_sink", MAIN_ONLY),
     ("test_wled_bridge", MAIN_ONLY),
     ("forget_wled_device", MAIN_ONLY),
-    ("open_led_twin_overlay", MAIN_ONLY),
-    ("open_led_control_popup", MAIN_ONLY),
-    ("show_led_control_popup", MAIN_ONLY),
+    // Lights and the tray item open the session; LED Setup and Devices run the
+    // test patterns.
+    ("open_preview", MAIN_ONLY),
+    ("start_led_test_pattern", MAIN_ONLY),
+    ("stop_led_test_pattern", MAIN_ONLY),
+    ("show_notification", MAIN_ONLY),
     ("check_for_update", MAIN_ONLY),
     ("download_and_install_update", MAIN_ONLY),
     // Registered, but nothing in the frontend calls it.

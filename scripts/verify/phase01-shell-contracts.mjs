@@ -1055,18 +1055,8 @@ check(
 );
 
 // ---------------------------------------------------------------------------
-// LED Preview & Test Experience contract (v1.6 — Phase 0, contracts only)
-//
-// Phase 0 lands the TypeScript surface only; the 8 Rust #[tauri::command]
-// handlers arrive in Phase 1. The presence checks below (command strings,
-// status codes, event/window labels, tray id, ShellState fields) are real
-// assertions and pass today. The Rust-parity loop treats the 8 preview
-// commands as a KNOWN-PENDING allowlist: a command not yet registered in
-// `generate_handler!` is surfaced via note() as PENDING (not failed) so
-// Phase 0 stays green, while a command that IS registered passes (and nudges
-// the maintainer to prune the allowlist). When Phase 1 registers all 8,
-// empty PREVIEW_PENDING_RUST_HANDLERS and the loop enforces strict parity
-// exactly like the Hue zone block above.
+// LED preview contract: the test-pattern commands LED Setup and Devices use,
+// and the preview session (popup + twin) that Lights and the tray open.
 // ---------------------------------------------------------------------------
 const PREVIEW_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/preview.ts");
 const previewSource = readOrEmpty(PREVIEW_CONTRACT_FILE, "preview");
@@ -1075,12 +1065,9 @@ console.log("\n[ Preview commands (v1.6) ]");
 const REQUIRED_PREVIEW_COMMANDS = [
   "start_led_test_pattern",
   "stop_led_test_pattern",
-  "get_led_preview_status",
-  "open_led_twin_overlay",
-  "close_led_twin_overlay",
-  "open_led_control_popup",
-  "show_led_control_popup",
-  "hide_led_control_popup",
+  "open_preview",
+  "close_preview",
+  "set_preview_popup_hidden",
 ];
 for (const cmd of REQUIRED_PREVIEW_COMMANDS) {
   check(
@@ -1099,17 +1086,14 @@ const REQUIRED_PREVIEW_STATUS_CODES = [
   "LED_TEST_PATTERN_INVALID_PARAMS",
   "LED_TEST_PATTERN_NO_CALIBRATION",
   "LED_TEST_PATTERN_RUNTIME_ERROR",
-  // Twin overlay window
-  "TWIN_OVERLAY_OPENED",
-  "TWIN_OVERLAY_CLOSED",
-  "TWIN_OVERLAY_OPEN_FAILED",
-  "TWIN_OVERLAY_DISPLAY_NOT_FOUND",
-  "TWIN_OVERLAY_UNSUPPORTED_PLATFORM_LIVE",
-  // Control popup window
-  "CONTROL_POPUP_OPENED",
-  "CONTROL_POPUP_SHOWN",
-  "CONTROL_POPUP_HIDDEN",
-  "CONTROL_POPUP_FAILED",
+  // Preview session
+  "PREVIEW_OPENED",
+  "PREVIEW_ALREADY_OPEN",
+  "PREVIEW_CLOSED",
+  "PREVIEW_NOT_OPEN",
+  "PREVIEW_POPUP_UPDATED",
+  "PREVIEW_OPEN_FAILED",
+  "PREVIEW_CLOSE_FAILED",
 ];
 for (const code of REQUIRED_PREVIEW_STATUS_CODES) {
   check(
@@ -1119,21 +1103,29 @@ for (const code of REQUIRED_PREVIEW_STATUS_CODES) {
   );
 }
 
+// Presence above proves containment only; the session's codes are pinned equal.
+{
+  const rustSession = stripComments(
+    readOrEmpty(resolve(ROOT, "src-tauri/src/commands/preview/session.rs"), "rust preview session")
+  );
+  checkWireUnion(
+    "PreviewStatusCode",
+    [...rustSession.matchAll(/const PREVIEW_[A-Z_]+: &str = "([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]),
+    constMembers(previewSource, "PREVIEW_STATUS"),
+    7
+  );
+}
+
 console.log("\n[ Preview event + window labels (v1.6) ]");
-check(
-  previewSource.includes(`"preview://state-changed"`),
-  "PREVIEW_STATE_CHANGED_EVENT defined",
-  "MISSING PREVIEW_STATE_CHANGED_EVENT in preview.ts"
-);
 check(
   previewSource.includes(`"led-twin-overlay-"`),
   "LED_TWIN_OVERLAY_LABEL_PREFIX defined",
   "MISSING LED_TWIN_OVERLAY_LABEL_PREFIX in preview.ts"
 );
 check(
-  previewSource.includes(`"led-control-popup"`),
-  "LED_CONTROL_POPUP_LABEL defined",
-  "MISSING LED_CONTROL_POPUP_LABEL in preview.ts"
+  previewSource.includes(`"led-control-popup-"`),
+  "LED_CONTROL_POPUP_LABEL_PREFIX defined",
+  "MISSING LED_CONTROL_POPUP_LABEL_PREFIX in preview.ts"
 );
 
 console.log("\n[ Preview tray menu id (v1.6) ]");
@@ -2679,7 +2671,9 @@ const checkedPairs = nullabilityPairs.filter(
 // 94 → 92: `get_wled_sink_status` went, and with it `WledSinkStatusResponse` and
 // `WledSinkSnapshot`; the registry says which WLED device is bound.
 // 92 → 94: EffectPayload and EffectColor, the Effect mode's payload.
-const EXPECTED_NULLABILITY_PAIR_COUNT = 94;
+// 94 → 92: the preview session — `TwinOverlayResult`, `ControlPopupResult` and
+// `LedPreviewStatus` went with their window commands; `PreviewSessionResult` came.
+const EXPECTED_NULLABILITY_PAIR_COUNT = 92;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

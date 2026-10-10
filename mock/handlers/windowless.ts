@@ -17,9 +17,8 @@
  * caller declares, so the state machine really does advance. Nothing appears,
  * which is the documented and unavoidable half.
  *
- * `get_led_preview_status` is the exception and no longer belongs in that
- * group at all — `mock/events.ts` owns the preview state that the edge-signal
- * stream drives, so it can answer for real rather than plausibly.
+ * The preview session is tracked rather than answered with a constant, so
+ * open → hide → close reads back what the caller did.
  */
 
 import { DISPLAY_OVERLAY_COMMANDS, DISPLAY_OVERLAY_STATUS } from "../../src/shared/contracts/display";
@@ -28,33 +27,32 @@ import {
   PLATFORM_COMMANDS,
   type NotificationResult,
 } from "../../src/shared/contracts/platform";
-import { CONTROL_POPUP_STATUS, PREVIEW_COMMANDS } from "../../src/shared/contracts/preview";
-import type { ControlPopupResult, ControlPopupStatusCode } from "../../src/shared/contracts/preview";
+import { PREVIEW_COMMANDS, PREVIEW_STATUS } from "../../src/shared/contracts/preview";
+import type {
+  PreviewSession,
+  PreviewSessionResult,
+  PreviewStatusCode,
+} from "../../src/shared/contracts/preview";
 import { SHELL_COMMANDS } from "../../src/shared/contracts/shell";
-import { currentPreviewStatus } from "../events";
 import { getWorld } from "../state";
 import type { TypedHandlers } from "./types";
 
-/**
- * Tracked so `show`/`hide` answer with the visibility the caller asked for
- * rather than a constant. A popup that reports `visible: false` after a
- * successful show is the kind of fixture that sends someone looking for a
- * bug in the window code.
- */
-let popupVisible = false;
+let session: PreviewSession = { state: "closed" };
 
-export function resetPopupVisibility(): void {
-  popupVisible = false;
+export function resetPreviewSession(): void {
+  session = { state: "closed" };
 }
 
-const popup = (
-  code: ControlPopupStatusCode,
-  message: string,
-  visible: boolean,
-): ControlPopupResult => {
-  popupVisible = visible;
-  return { ok: true, code, message, visible };
-};
+const sessionResult = (code: PreviewStatusCode, message: string): PreviewSessionResult => ({
+  session,
+  status: { code, message, details: null },
+});
+
+/** Where the twin would go: the saved display, else the first one. */
+function previewDisplayId(): string {
+  const world = getWorld();
+  return world.shellState.selectedDisplayId || world.displays[0]?.id || "display-1";
+}
 
 /** `notifications.rs` folds a prompt into `denied`, as the real command does. */
 function notificationResult(): NotificationResult {
@@ -68,15 +66,24 @@ function notificationResult(): NotificationResult {
 }
 
 export const windowlessHandlers = {
-  [PREVIEW_COMMANDS.OPEN_CONTROL_POPUP]: () =>
-    popup(CONTROL_POPUP_STATUS.OPENED, "Popup created (no window in a browser tab)", popupVisible),
-  [PREVIEW_COMMANDS.SHOW_CONTROL_POPUP]: () =>
-    popup(CONTROL_POPUP_STATUS.SHOWN, "Popup shown (no window in a browser tab)", true),
-  [PREVIEW_COMMANDS.HIDE_CONTROL_POPUP]: () =>
-    popup(CONTROL_POPUP_STATUS.HIDDEN, "Popup hidden", false),
-
-  /** Real, not plausible: the stream in `events.ts` is what defines it. */
-  [PREVIEW_COMMANDS.GET_PREVIEW_STATUS]: () => currentPreviewStatus(),
+  [PREVIEW_COMMANDS.OPEN_PREVIEW]: () => {
+    if (session.state === "live") {
+      session = { ...session, popupHidden: false };
+      return sessionResult(PREVIEW_STATUS.ALREADY_OPEN, "The preview is already open.");
+    }
+    session = { state: "live", displayId: previewDisplayId(), popupHidden: false };
+    return sessionResult(PREVIEW_STATUS.OPENED, "Preview opened (no window in a browser tab)");
+  },
+  [PREVIEW_COMMANDS.CLOSE_PREVIEW]: () => {
+    if (session.state === "closed") return sessionResult(PREVIEW_STATUS.NOT_OPEN, "No preview is open.");
+    session = { state: "closed" };
+    return sessionResult(PREVIEW_STATUS.CLOSED, "Preview closed.");
+  },
+  [PREVIEW_COMMANDS.SET_POPUP_HIDDEN]: ({ payload }) => {
+    if (session.state === "closed") return sessionResult(PREVIEW_STATUS.NOT_OPEN, "No preview is open.");
+    session = { ...session, popupHidden: payload.hidden };
+    return sessionResult(PREVIEW_STATUS.POPUP_UPDATED, "Preview controls updated.");
+  },
 
   [DISPLAY_OVERLAY_COMMANDS.OPEN_DISPLAY_OVERLAY]: () => ({
     ok: true,

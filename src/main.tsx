@@ -18,7 +18,7 @@ import { followMotionPreference } from "./features/shell/motionPreference";
 import { GlobalErrorBoundaryWithI18n } from "./features/shell/GlobalErrorBoundary";
 import { TwinErrorBoundary } from "./features/preview/ui/TwinErrorBoundary";
 import {
-  LED_CONTROL_POPUP_LABEL,
+  LED_CONTROL_POPUP_LABEL_PREFIX,
   LED_TWIN_OVERLAY_LABEL_PREFIX,
 } from "./shared/contracts/preview";
 
@@ -115,7 +115,7 @@ function resolveWindowKind(): WindowKind {
     console.error("[LumaSync] could not resolve window label; defaulting to main App:", err);
   }
   if (label.startsWith(LED_TWIN_OVERLAY_LABEL_PREFIX)) return WINDOW_KIND.TWIN;
-  if (label === LED_CONTROL_POPUP_LABEL) return WINDOW_KIND.POPUP;
+  if (label.startsWith(LED_CONTROL_POPUP_LABEL_PREFIX)) return WINDOW_KIND.POPUP;
   return WINDOW_KIND.MAIN;
 }
 
@@ -133,7 +133,7 @@ async function loadWindowRoot(kind: WindowKind): Promise<ComponentType> {
       return function TwinRoot() {
         const displayId = (window as unknown as { __LUMASYNC_TWIN_DISPLAY_ID__?: string })
           .__LUMASYNC_TWIN_DISPLAY_ID__;
-        return <LedTwinOverlay displayId={displayId} scope="test" />;
+        return <LedTwinOverlay displayId={displayId} />;
       };
     }
     case WINDOW_KIND.POPUP: {

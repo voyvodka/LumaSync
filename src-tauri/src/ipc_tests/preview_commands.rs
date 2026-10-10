@@ -1,4 +1,4 @@
-//! LED test pattern over IPC.
+//! LED test patterns and the preview session over IPC.
 //!
 //! #270 shipped because `apply_mode_change`'s return code and
 //! `start_led_test_pattern`'s reading of it were each tested in isolation and
@@ -22,7 +22,9 @@ fn app() -> App<MockRuntime> {
     mock_app(tauri::generate_handler![
         crate::commands::lighting_mode::led_test_pattern::start_led_test_pattern,
         crate::commands::lighting_mode::led_test_pattern::stop_led_test_pattern,
-        crate::commands::lighting_mode::preview::get_led_preview_status
+        crate::commands::preview::session::open_preview,
+        crate::commands::preview::session::close_preview,
+        crate::commands::preview::session::set_preview_popup_hidden
     ])
 }
 
@@ -92,23 +94,95 @@ fn stopping_a_test_that_never_started_still_resolves() {
     assert_camel_case_keys(&response);
 }
 
-/// Asked from the popup: `useLightingModeSync` is its only caller, and the
-/// capabilities grant it nowhere else.
-#[test]
-fn preview_status_reports_an_idle_surface_before_anything_runs() {
-    let app = app();
-    let webview = WebviewWindowBuilder::new(
-        &app,
-        crate::commands::led_preview::LED_CONTROL_POPUP_LABEL,
+fn popup(app: &App<MockRuntime>) -> tauri::WebviewWindow<MockRuntime> {
+    WebviewWindowBuilder::new(
+        app,
+        format!(
+            "{}0",
+            crate::commands::preview::LED_CONTROL_POPUP_LABEL_PREFIX
+        ),
         Default::default(),
     )
     .build()
-    .expect("mock webview should build");
+    .expect("mock webview should build")
+}
 
-    let response =
-        invoke(&webview, "get_led_preview_status", json!({})).expect("status must resolve");
+/// Close is reached from the popup's button, Escape and the tray, none of
+/// which knows whether the session is still open. A popup with no session
+/// behind it is itself a stray, so its close clears it rather than answering
+/// that nothing was open; a hide has nothing to act on.
+#[test]
+fn closing_or_hiding_with_no_session_never_rejects() {
+    let app = app();
+    let webview = popup(&app);
 
-    assert_camel_case_keys(&response);
-    assert_eq!(response["testActive"], json!(false));
-    assert_eq!(response["popupVisible"], json!(false));
+    let hidden = invoke(
+        &webview,
+        "set_preview_popup_hidden",
+        json!({ "payload": { "hidden": true } }),
+    )
+    .expect("hide must resolve");
+    assert_eq!(status_code(&hidden), "PREVIEW_NOT_OPEN");
+    assert_eq!(hidden["session"], json!({ "state": "closed" }));
+
+    let closed = invoke(&webview, "close_preview", json!({})).expect("close must resolve");
+    assert_eq!(status_code(&closed), "PREVIEW_CLOSED");
+    assert_eq!(closed["session"], json!({ "state": "closed" }));
+}
+
+/// A session reports where its twin is, tagged the way the TS union is, and
+/// closing it over IPC ends it.
+#[test]
+fn an_open_session_is_reported_and_closed_over_ipc() {
+    use tauri::Manager;
+
+    let app = app();
+    let webview = popup(&app);
+    app.state::<crate::commands::preview::PreviewSessionState>()
+        .open_for_test("display-1", "led-twin-overlay-1", "led-control-popup-0");
+
+    let hidden = invoke(
+        &webview,
+        "set_preview_popup_hidden",
+        json!({ "payload": { "hidden": true } }),
+    )
+    .expect("hide must resolve");
+    assert_camel_case_keys(&hidden);
+    assert_eq!(status_code(&hidden), "PREVIEW_POPUP_UPDATED");
+    assert_eq!(
+        hidden["session"],
+        json!({ "state": "live", "displayId": "display-1", "popupHidden": true })
+    );
+
+    let closed = invoke(&webview, "close_preview", json!({})).expect("close must resolve");
+    assert_eq!(status_code(&closed), "PREVIEW_CLOSED");
+    assert_eq!(closed["session"], json!({ "state": "closed" }));
+}
+
+/// Lights or the tray asked again while the preview is up: the popup comes
+/// back, nothing is rebuilt, and the answer is a success the caller stays
+/// quiet on.
+#[test]
+fn opening_an_open_session_brings_its_popup_back() {
+    use tauri::Manager;
+
+    let app = app();
+    let main = main_webview(&app);
+    let popup = popup(&app);
+    let session = app.state::<crate::commands::preview::PreviewSessionState>();
+    session.open_for_test("display-1", "led-twin-overlay-1", "led-control-popup-0");
+    invoke(
+        &popup,
+        "set_preview_popup_hidden",
+        json!({ "payload": { "hidden": true } }),
+    )
+    .expect("hide must resolve");
+
+    let reopened = invoke(&main, "open_preview", json!({})).expect("open must resolve");
+
+    assert_eq!(status_code(&reopened), "PREVIEW_ALREADY_OPEN");
+    assert_eq!(
+        reopened["session"],
+        json!({ "state": "live", "displayId": "display-1", "popupHidden": false })
+    );
 }

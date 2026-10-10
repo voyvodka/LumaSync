@@ -1,18 +1,12 @@
-// ControlPopupApp — "no Run press needed" contract: auto-start on reveal, every
-// selection applies immediately, and the footer is the only run control.
+// ControlPopupApp — the preview session's remote: opening it changes no light,
+// the mode strip runs the lighting transaction, Close ends the session and Hide
+// keeps it open.
 
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  CONTROL_POPUP_STATUS,
-  LED_TEST_STATUS,
-  TWIN_OVERLAY_STATUS,
-  type LedPreviewStatus,
-  type LedTestPatternResult,
-  type LedTestStatusCode,
-} from "@/shared/contracts/preview";
+import { PREVIEW_STATUS, type PreviewSessionResult, type PreviewStatusCode } from "@/shared/contracts/preview";
 import type { LightingOutputsStatusCode } from "@/shared/contracts/lightingRuntime";
 import { outputsResult, runtimeSnapshot } from "@/test/lightingRuntime";
 import { LIGHTING_MODE_KIND } from "@/shared/contracts/mode";
@@ -29,29 +23,20 @@ vi.mock("@/shared/ui/HsvColorPicker/HsvColorPicker", () => ({
   ),
 }));
 
-const startLedTestPattern = vi.fn<typeof previewApiModule.startLedTestPattern>();
-const stopLedTestPattern = vi.fn<typeof previewApiModule.stopLedTestPattern>();
-const closeLedTwinOverlay = vi.fn<typeof previewApiModule.closeLedTwinOverlay>();
-const hideLedControlPopup = vi.fn<typeof previewApiModule.hideLedControlPopup>();
+const closePreview = vi.fn<typeof previewApiModule.closePreview>();
+const setPreviewPopupHidden = vi.fn<typeof previewApiModule.setPreviewPopupHidden>();
 
 vi.mock("../previewApi", () => ({
-  startLedTestPattern: (...args: Parameters<typeof startLedTestPattern>) => startLedTestPattern(...args),
-  stopLedTestPattern: (...args: Parameters<typeof stopLedTestPattern>) => stopLedTestPattern(...args),
-  closeLedTwinOverlay: (...args: Parameters<typeof closeLedTwinOverlay>) => closeLedTwinOverlay(...args),
-  hideLedControlPopup: (...args: Parameters<typeof hideLedControlPopup>) => hideLedControlPopup(...args),
+  closePreview: (...args: Parameters<typeof closePreview>) => closePreview(...args),
+  setPreviewPopupHidden: (...args: Parameters<typeof setPreviewPopupHidden>) => setPreviewPopupHidden(...args),
 }));
 
 const applyOutputs = vi.fn<typeof modeApiModule.applyOutputs>();
 const retuneLighting = vi.fn<typeof modeApiModule.retuneLighting>();
-// The runner borrows Hue around every run; Rust owns the lease.
-const acquireHueForTest = vi.fn<typeof modeApiModule.acquireHueForTest>();
-const releaseHueAfterTest = vi.fn<typeof modeApiModule.releaseHueAfterTest>();
 
 vi.mock("@/features/mode/modeApi", () => ({
   applyOutputs: (...args: Parameters<typeof applyOutputs>) => applyOutputs(...args),
   retuneLighting: (...args: Parameters<typeof retuneLighting>) => retuneLighting(...args),
-  acquireHueForTest: (...args: Parameters<typeof acquireHueForTest>) => acquireHueForTest(...args),
-  releaseHueAfterTest: (...args: Parameters<typeof releaseHueAfterTest>) => releaseHueAfterTest(...args),
 }));
 
 /** What `apply_outputs` answers; the code is all the popup reads besides the snapshot. */
@@ -95,12 +80,9 @@ vi.mock("@tauri-apps/api/window", () => ({
 
 let syncState: {
   mode: { kind: string; solid?: { r: number; g: number; b: number; brightness: number; kelvin?: number } } | null;
-  active: boolean;
-  preview: LedPreviewStatus | null;
 };
 const adopt = vi.fn();
 
-// The runtime snapshot every window holds, and the preview status beside it.
 vi.mock("@/features/mode/state/useLightingRuntime", () => ({
   useLightingRuntime: () => ({
     snapshot: syncState.mode ? { revision: 1, mode: syncState.mode } : null,
@@ -108,262 +90,83 @@ vi.mock("@/features/mode/state/useLightingRuntime", () => ({
   }),
 }));
 
-vi.mock("../state/usePreviewStatusSync", () => ({
-  usePreviewStatusSync: () => syncState.preview,
-}));
-
 const { ControlPopupApp } = await import("../ui/ControlPopupApp");
 
-function previewStatus(overrides: Partial<LedPreviewStatus> = {}): LedPreviewStatus {
-  return {
-    testActive: false,
-    source: "idle",
-    twinDisplays: [],
-    popupVisible: true,
-    liveTwinSupported: true,
-    ...overrides,
-  };
-}
-
-function startResult(code: LedTestStatusCode = LED_TEST_STATUS.PATTERN_STARTED): LedTestPatternResult {
-  return { active: true, previewOnly: false, status: { code, message: "", details: null } };
-}
-
-/** Latest payload handed to `start_led_test_pattern`. */
-function lastStart() {
-  const calls = startLedTestPattern.mock.calls;
-  return calls[calls.length - 1][0] as {
-    pattern: { kind: string };
-    brightness: number;
-    speed: string;
-  };
+function sessionReply(code: PreviewStatusCode): PreviewSessionResult {
+  return { session: { state: "closed" }, status: { code, message: "", details: null } };
 }
 
 beforeEach(() => {
   movedHandler = null;
-  storeState = { lastLedTestPattern: { kind: "rainbow" }, lastOutputTargets: ["usb"] };
+  storeState = { lastOutputTargets: ["usb"] };
   storeSave.mockResolvedValue(undefined);
-  startLedTestPattern.mockResolvedValue(startResult());
-  stopLedTestPattern.mockResolvedValue({
-    active: false,
-    previewOnly: false,
-    status: { code: LED_TEST_STATUS.PATTERN_STOPPED, message: "", details: null },
-  });
-  closeLedTwinOverlay.mockResolvedValue({ ok: true, code: TWIN_OVERLAY_STATUS.CLOSED, message: "" });
-  hideLedControlPopup.mockResolvedValue({
-    ok: true,
-    code: CONTROL_POPUP_STATUS.HIDDEN,
-    message: "",
-    visible: false,
-  });
+  closePreview.mockResolvedValue(sessionReply(PREVIEW_STATUS.CLOSED));
+  setPreviewPopupHidden.mockResolvedValue(sessionReply(PREVIEW_STATUS.POPUP_UPDATED));
   applyOutputs.mockResolvedValue(outputsReply());
   retuneLighting.mockResolvedValue({ status: { code: "RETUNE_APPLIED", message: "", details: null } });
-  acquireHueForTest.mockResolvedValue(undefined);
-  releaseHueAfterTest.mockResolvedValue(undefined);
   invokeMock.mockResolvedValue(undefined);
-  syncState = {
-    mode: { kind: LIGHTING_MODE_KIND.OFF },
-    active: false,
-    preview: previewStatus(),
-  };
+  syncState = { mode: { kind: LIGHTING_MODE_KIND.OFF } };
 });
 
 afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("ControlPopupApp auto-start", () => {
-  it("runs the persisted pattern on reveal without any button press", async () => {
+describe("ControlPopupApp opening", () => {
+  it("changes no light by opening", async () => {
     render(<ControlPopupApp />);
+    await screen.findByRole("radio", { name: /common:mode\.options\.off/ });
 
-    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalledTimes(1));
-    expect(lastStart().pattern.kind).toBe("rainbow");
-  });
-
-  it("auto-starts even when the mode strip reads Off", async () => {
-    syncState.mode = { kind: LIGHTING_MODE_KIND.OFF };
-    render(<ControlPopupApp />);
-
-    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalledTimes(1));
-  });
-
-  it("does not re-fire while the popup stays visible", async () => {
-    const { rerender } = render(<ControlPopupApp />);
-    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalledTimes(1));
-
-    syncState = { ...syncState, preview: previewStatus({ testActive: true, source: "test" }) };
-    rerender(<ControlPopupApp />);
-    await waitFor(() => expect(screen.getByText("preview:status.test")).toBeInTheDocument());
-
-    expect(startLedTestPattern).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not retry in a loop when the start fails", async () => {
-    startLedTestPattern.mockResolvedValue({
-      active: false,
-      previewOnly: false,
-      status: { code: LED_TEST_STATUS.PATTERN_NO_CALIBRATION, message: "", details: null },
-    });
-    render(<ControlPopupApp />);
-
-    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      `preview:status.${LED_TEST_STATUS.PATTERN_NO_CALIBRATION}`,
-    );
-    expect(startLedTestPattern).toHaveBeenCalledTimes(1);
+    expect(applyOutputs).not.toHaveBeenCalled();
+    expect(retuneLighting).not.toHaveBeenCalled();
   });
 });
 
-describe("ControlPopupApp immediate apply", () => {
-  it("starts the pattern as soon as a tile is picked", async () => {
+describe("ControlPopupApp close and hide", () => {
+  it("Close ends the session", async () => {
     const user = userEvent.setup();
     render(<ControlPopupApp />);
-    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalledTimes(1));
 
-    await user.click(screen.getByRole("radio", { name: /preview:pattern\.spiral/ }));
+    await user.click(screen.getByRole("button", { name: "preview:control.close" }));
 
-    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalledTimes(2));
-    expect(lastStart().pattern.kind).toBe("spiral");
+    expect(closePreview).toHaveBeenCalledTimes(1);
+    expect(applyOutputs).not.toHaveBeenCalled();
   });
 
-  it("applies a speed change to the running pattern with no restart press", async () => {
+  it("Escape ends the session as Close does", async () => {
+    render(<ControlPopupApp />);
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    await waitFor(() => expect(closePreview).toHaveBeenCalledTimes(1));
+  });
+
+  it("Hide keeps the session and asks only for the popup to go", async () => {
     const user = userEvent.setup();
     render(<ControlPopupApp />);
-    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalledTimes(1));
 
-    await user.click(screen.getByRole("radio", { name: "preview:test.speed.fast" }));
+    await user.click(screen.getByRole("button", { name: "preview:control.hide" }));
 
-    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalledTimes(2));
-    expect(lastStart().speed).toBe("fast");
+    expect(setPreviewPopupHidden).toHaveBeenCalledWith(true);
+    expect(closePreview).not.toHaveBeenCalled();
   });
 
-  it("persists the pattern that started", async () => {
+  // A twin that outlives its close is click-through and undecorated: say so.
+  it("says a window survived the close", async () => {
+    closePreview.mockResolvedValue(sessionReply(PREVIEW_STATUS.CLOSE_FAILED));
+    const user = userEvent.setup();
     render(<ControlPopupApp />);
-    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalledTimes(1));
 
-    await waitFor(() =>
-      expect(storeSave).toHaveBeenCalledWith({ lastLedTestPattern: { kind: "rainbow" } }),
-    );
+    await user.click(screen.getByRole("button", { name: "preview:control.close" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("preview:status.PREVIEW_CLOSE_FAILED");
   });
 });
 
-describe("ControlPopupApp run controls", () => {
-  // The window is undecorated, always-on-top and absent from the taskbar, so
-  // Close must be reachable in EVERY state — including after a mode-strip
-  // click drops `testActive`, which used to leave no exit at all.
-  it("exposes Close as the only run control, in both states", async () => {
-    const { rerender } = render(<ControlPopupApp />);
-    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
-
-    const assertOnlyClose = () => {
-      expect(screen.queryByRole("button", { name: "preview:test.run" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "preview:test.stop" })).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "preview:control.close" })).toBeInTheDocument();
-    };
-
-    assertOnlyClose();
-
-    syncState = { ...syncState, preview: previewStatus({ testActive: true, source: "test" }) };
-    rerender(<ControlPopupApp />);
-    await waitFor(() => expect(screen.getByText("preview:status.test")).toBeInTheDocument());
-    assertOnlyClose();
-  });
-
-  it("keeps starting under the pattern tiles now that Run is gone", async () => {
-    const user = userEvent.setup();
-    render(<ControlPopupApp />);
-    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalledTimes(1));
-
-    await user.click(screen.getByRole("radio", { name: /preview:pattern\.chase/ }));
-
-    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalledTimes(2));
-    expect(lastStart().pattern.kind).toBe("chase");
-  });
-
-  it("Close stops the test, drops the twin and clears the persisted flags", async () => {
-    const user = userEvent.setup();
-    syncState = { ...syncState, preview: previewStatus({ testActive: true, source: "test" }) };
-    render(<ControlPopupApp />);
-    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
-
-    await user.click(screen.getByRole("button", { name: "preview:control.close" }));
-
-    await waitFor(() => expect(stopLedTestPattern).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(closeLedTwinOverlay).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(hideLedControlPopup).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(storeSave).toHaveBeenCalledWith({
-        ledPreviewPopupVisible: false,
-        ledTwinEnabledTest: false,
-      }),
-    );
-  });
-
-  // `stop_led_test_pattern` restores the captured prior mode, and a mode-strip
-  // click already consumed it — so stopping a test that is not running lands
-  // on `LightingModeConfig::default()` (Off) and kills the user's lighting.
-  it("does not touch the lighting when closing with no test engaged", async () => {
-    const user = userEvent.setup();
-    render(<ControlPopupApp />);
-    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
-
-    // Hand the light back to a real mode, which disengages the test.
-    await user.click(screen.getByRole("radio", { name: /common:mode\.options\.ambilight/ }));
-    await waitFor(() => expect(applyOutputs).toHaveBeenCalledTimes(1));
-
-    await user.click(screen.getByRole("button", { name: "preview:control.close" }));
-
-    await waitFor(() => expect(hideLedControlPopup).toHaveBeenCalledTimes(1));
-    expect(stopLedTestPattern).not.toHaveBeenCalled();
-    // The twin still has to go — it is click-through and undismissable alone.
-    expect(closeLedTwinOverlay).toHaveBeenCalledTimes(1);
-  });
-
-  it("the first close teaches how to reopen, not that it kept running", async () => {
-    const user = userEvent.setup();
-    storeState = { ...storeState, ledPreviewHintShown: false };
-    render(<ControlPopupApp />);
-    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
-
-    await user.click(screen.getByRole("button", { name: "preview:control.close" }));
-
-    await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("show_notification", {
-        payload: {
-          title: "preview:title",
-          body: "preview:control.reopenHint",
-          kind: "info",
-        },
-      }),
-    );
-    await waitFor(() => expect(storeSave).toHaveBeenCalledWith({ ledPreviewHintShown: true }));
-  });
-
-  it("a mode-strip click takes the light back from the test", async () => {
-    const user = userEvent.setup();
-    syncState = { ...syncState, preview: previewStatus({ testActive: true, source: "test" }) };
-    render(<ControlPopupApp />);
-    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
-    startLedTestPattern.mockClear();
-
-    await user.click(screen.getByRole("radio", { name: /common:mode\.options\.ambilight/ }));
-
-    await waitFor(() => expect(applyOutputs).toHaveBeenCalledTimes(1));
-    expect(startLedTestPattern).not.toHaveBeenCalled();
-  });
-});
-
-/**
- * The mode strip is a lighting choice like the main window's. It used to call
- * the mode commands directly, which left Hue up on Off, never started Hue for
- * Solid or Ambilight, never saved the choice, and skipped the calibration gate.
- * Rust now owns all four; the popup only has to send the choice as a choice.
- */
 describe("ControlPopupApp mode strip", () => {
   async function clickMode(name: RegExp) {
     const user = userEvent.setup();
     render(<ControlPopupApp />);
-    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
     await user.click(screen.getByRole("radio", { name }));
     await waitFor(() => expect(applyOutputs).toHaveBeenCalledTimes(1));
     return applyOutputs.mock.calls[0][0];
@@ -486,11 +289,6 @@ describe("ControlPopupApp Solid drag", () => {
         }),
     );
     render(<ControlPopupApp />);
-    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
-    // Hand the light to the mode, which disengages the test.
-    fireEvent.click(screen.getByRole("radio", { name: /common:mode\.options\.solid/ }));
-    await waitFor(() => expect(applyOutputs).toHaveBeenCalledTimes(1));
-    applyOutputs.mockClear();
 
     const slider = screen.getByRole("slider", { name: "common:mode.brightness" });
     for (const value of [90, 80, 70, 60, 50, 40, 30, 20]) {

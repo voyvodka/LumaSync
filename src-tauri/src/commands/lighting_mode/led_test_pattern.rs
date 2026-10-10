@@ -23,8 +23,8 @@ use crate::commands::calibration::list_displays;
 use crate::commands::hue::state_store::{snapshot_hue_output_context, HueRuntimeStateStore};
 use crate::commands::led_calibration::LedCalibrationConfig;
 use crate::commands::led_output::LedColorOrder;
-use crate::commands::led_preview::{emit_preview_state_changed, LedTwinState};
 use crate::commands::local_outputs::{DrivenLocal, LocalOutputRegistry};
+use crate::commands::preview::PreviewSessionState;
 use crate::commands::runtime_telemetry::RuntimeTelemetryState;
 use crate::commands::shell_state::{self, PersistedShellState};
 use crate::commands::status::CommandStatus;
@@ -72,7 +72,7 @@ pub(super) fn apply_and_broadcast<R: Runtime>(
     driven: Option<&DrivenLocal>,
     hue_runtime_state: &HueRuntimeStateStore,
     telemetry_state: &RuntimeTelemetryState,
-    twin_state: &LedTwinState,
+    preview_session: &PreviewSessionState,
     test_pattern: Option<TestPatternConfig>,
 ) -> Result<LightingModeCommandResult, String> {
     runtime_state.tuning.close_blocking();
@@ -89,7 +89,7 @@ pub(super) fn apply_and_broadcast<R: Runtime>(
             .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
         let hue_output = Some(hue_runtime_state.output_live());
         owner.preview.pending_test_pattern = test_pattern;
-        owner.preview.preview_gate = Some(twin_state.preview_active());
+        owner.preview.preview_gate = Some(preview_session.twin_open());
         apply_mode_change(
             &mut owner,
             payload,
@@ -179,7 +179,7 @@ fn start_led_test_pattern_blocking<R: Runtime>(
     let runtime_state = app.state::<LightingRuntimeState>();
     let hue_runtime_state = app.state::<HueRuntimeStateStore>();
     let telemetry_state = app.state::<RuntimeTelemetryState>();
-    let led_twin_state = app.state::<LedTwinState>();
+    let preview_session = app.state::<PreviewSessionState>();
     if !payload.brightness.is_finite() || !(0.0..=1.0).contains(&payload.brightness) {
         return Ok(LedTestPatternResult {
             active: false,
@@ -286,25 +286,18 @@ fn start_led_test_pattern_blocking<R: Runtime>(
     // Capture the live mode to restore on stop — but never overwrite a real
     // prior mode with a test mode if we are already previewing.
     {
-        let prior = {
-            let owner = runtime_state
-                .runtime
-                .lock()
-                .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
-            if owner.preview.active_test_pattern.is_some() {
-                None
-            } else {
-                // Fresh run — rewind the animation. A tweak to an already
-                // running pattern keeps its phase instead.
-                owner
-                    .preview
-                    .pattern_phase
-                    .store(0f32.to_bits(), Ordering::Relaxed);
-                Some(owner.active_mode.clone())
-            }
-        };
-        if let Some(prior_mode) = prior {
-            led_twin_state.set_prior_mode(prior_mode);
+        let mut owner = runtime_state
+            .runtime
+            .lock()
+            .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
+        if owner.preview.active_test_pattern.is_none() {
+            // Fresh run — rewind the animation. A tweak to an already
+            // running pattern keeps its phase instead.
+            owner
+                .preview
+                .pattern_phase
+                .store(0f32.to_bits(), Ordering::Relaxed);
+            owner.preview.test_prior = Some(owner.active_mode.clone());
         }
     }
 
@@ -315,11 +308,9 @@ fn start_led_test_pattern_blocking<R: Runtime>(
         driven.as_ref(),
         hue_runtime_state.inner(),
         telemetry_state.inner(),
-        led_twin_state.inner(),
+        preview_session.inner(),
         Some(test_config),
     )?;
-
-    emit_preview_state_changed(app);
 
     let outcome = if is_ambilight_start_ok(&result.status.code) {
         let code = if preview_only {
@@ -403,11 +394,16 @@ fn stop_led_test_pattern_blocking<R: Runtime>(
     let runtime_state = app.state::<LightingRuntimeState>();
     let hue_runtime_state = app.state::<HueRuntimeStateStore>();
     let telemetry_state = app.state::<RuntimeTelemetryState>();
-    let led_twin_state = app.state::<LedTwinState>();
+    let preview_session = app.state::<PreviewSessionState>();
     let driven = app.state::<LocalOutputRegistry>().driven_checked()?;
-    let restore = restore_mode_after_test(led_twin_state.take_prior_mode(), &|| {
-        read_persisted_shell_state(app)
-    });
+    let prior = runtime_state
+        .runtime
+        .lock()
+        .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?
+        .preview
+        .test_prior
+        .take();
+    let restore = restore_mode_after_test(prior, &|| read_persisted_shell_state(app));
     let mut result = apply_and_broadcast(
         app,
         restore,
@@ -415,14 +411,14 @@ fn stop_led_test_pattern_blocking<R: Runtime>(
         driven.as_ref(),
         hue_runtime_state.inner(),
         telemetry_state.inner(),
-        led_twin_state.inner(),
+        preview_session.inner(),
         None,
     )?;
 
     // A gated restore (DEVICE_NOT_CONNECTED / HUE_NOT_READY) returns before
     // `apply_mode_change` tears the previous worker down, so the synthetic
     // pattern would keep running with no way to stop it. Fall back to Off.
-    if runtime_state.preview_snapshot().test_active {
+    if runtime_state.test_pattern_active() {
         warn!(
             "[stop_led_test_pattern] restore gated ({}) — forcing Off so the synthetic worker stops",
             result.status.code
@@ -434,13 +430,11 @@ fn stop_led_test_pattern_blocking<R: Runtime>(
             driven.as_ref(),
             hue_runtime_state.inner(),
             telemetry_state.inner(),
-            led_twin_state.inner(),
+            preview_session.inner(),
             None,
         )?;
     }
 
-    led_twin_state.recompute();
-    emit_preview_state_changed(app);
     Ok(LedTestPatternResult {
         active: result.active,
         preview_only: false,

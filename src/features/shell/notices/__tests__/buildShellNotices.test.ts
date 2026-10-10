@@ -35,7 +35,7 @@ describe("buildShellNotices", () => {
       calibrationRequired: true,
       captureStalled: { bucket: CAPTURE_FAILURE_BUCKET.DISPLAY, reason: "" },
       stopFailedTargets: ["hue"],
-      previewOpenFailure: "CONTROL_POPUP_FAILED",
+      previewOpenFailure: "PREVIEW_OPEN_FAILED",
       hueLeftOut: HUE_LEFT_OUT_REASON.AUTH,
       usbDisconnected: true,
       usbUnsupported: true,

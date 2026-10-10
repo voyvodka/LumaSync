@@ -1,17 +1,15 @@
-//! The LED twin overlay's feed: the preview state a worker carries, the
-//! edge-signal event it emits while a twin is open, and the preview status.
+//! The LED twin's feed: the preview state a worker carries and the
+//! edge-signal event it emits while the preview session's twin is open.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime, State};
+use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime};
 
-use super::config::LightingModeKind;
+use super::config::LightingModeConfig;
 use super::runtime::LightingRuntimeState;
-use crate::commands::led_preview::{
-    build_preview_status, LedPreviewStatus, LedTwinState, PreviewModeSnapshot,
-};
+use crate::commands::preview::PreviewSessionState;
 use crate::commands::test_pattern::{TestPatternConfig, TestPatternLiveSlot};
 
 /// LED preview runtime state carried alongside the lighting worker.
@@ -22,10 +20,14 @@ pub(super) struct PreviewRuntime {
     pub(super) pending_test_pattern: Option<TestPatternConfig>,
     /// The synthetic pattern currently driving the worker (status reporting).
     pub(super) active_test_pattern: Option<TestPatternConfig>,
-    /// Shared `LedTwinState` preview-active flag. Cloned into each LIVE worker
-    /// so a twin overlay opened *after* the worker starts can flip enrichment
-    /// on without a worker restart.
+    /// The session's `twin_open` flag. Cloned into each worker so a twin
+    /// opened *after* the worker starts turns the feed on without a restart.
     pub(super) preview_gate: Option<Arc<AtomicBool>>,
+    /// The mode a running test pattern interrupted, for its stop to restore.
+    /// Written and cleared under the runtime lock: a user's mode change drops
+    /// it in the same critical section that replaces the test, so a stop that
+    /// races it cannot revive the pre-test mode over the user's choice.
+    pub(super) test_prior: Option<LightingModeConfig>,
     /// Animation phase (f32 bits) shared with the running `SyntheticFrameSource`.
     /// Carried across the rebuilds that a calibration or geometry change still
     /// forces, so the animation never restarts from zero.
@@ -71,8 +73,8 @@ impl PreviewEmitContext {
 // Edge signal — per-LED feed for the LED twin overlay
 // ---------------------------------------------------------------------------
 //
-// The twin overlay is the only listener, so the worker builds and emits this
-// only while a twin is open (`LedTwinState::preview_active`).
+// The twin is the only listener, so the worker builds and emits this only
+// while the session's twin is open (`PreviewSessionState::twin_open`).
 
 /// `PREVIEW_EVENTS.EDGE_SIGNAL` in `src/shared/contracts/preview.ts`. Defined
 /// in `crate::events`; re-exported here since this is the emit site.
@@ -102,22 +104,23 @@ pub struct EdgeSignalPayload {
 /// doesn't depend on the Tauri runtime type parameter.
 pub type EdgeSignalEmitter = Arc<dyn Fn(EdgeSignalPayload) + Send + Sync>;
 
-/// Build the edge-signal emitter. Sends to the open twin-overlay windows only
-/// (read from `LedTwinState` each tick, so a twin opened mid-run starts
-/// receiving without a worker restart); the main window has no listener.
+/// Build the edge-signal emitter. Sends to the session's twin only (read each
+/// tick, so a twin opened mid-run starts receiving without a worker restart);
+/// the main window has no listener.
 pub(super) fn build_edge_emitter<R: Runtime>(app: &AppHandle<R>) -> EdgeSignalEmitter {
     let app_handle = app.clone();
     Arc::new(move |payload: EdgeSignalPayload| {
-        let Some(twin_state) = app_handle.try_state::<LedTwinState>() else {
+        let Some(label) = app_handle
+            .try_state::<PreviewSessionState>()
+            .and_then(|session| session.twin_label())
+        else {
             return;
         };
-        for label in twin_state.twin_labels_snapshot() {
-            let _ = app_handle.emit_to(
-                EventTarget::webview_window(label.as_str()),
-                EDGE_SIGNAL_EVENT,
-                payload.clone(),
-            );
-        }
+        let _ = app_handle.emit_to(
+            EventTarget::webview_window(label.as_str()),
+            EDGE_SIGNAL_EVENT,
+            payload,
+        );
     })
 }
 
@@ -152,42 +155,10 @@ pub(super) fn build_preview_emit_context(
 }
 
 impl LightingRuntimeState {
-    /// Snapshot the lighting-side preview status. Recovers from a poisoned
-    /// lock rather than propagating (status reads must not fail).
-    pub fn preview_snapshot(&self) -> PreviewModeSnapshot {
+    /// Whether a synthetic test pattern drives the worker. Recovers from a
+    /// poisoned lock rather than propagating: a stop must still learn it.
+    pub fn test_pattern_active(&self) -> bool {
         let owner = self.runtime.lock().unwrap_or_else(|e| e.into_inner());
-        let active_pattern = owner
-            .preview
-            .active_test_pattern
-            .as_ref()
-            .map(|cfg| cfg.kind.clone());
-        let test_active = active_pattern.is_some();
-        let source = if test_active {
-            "test"
-        } else if matches!(
-            owner.active_mode.kind,
-            LightingModeKind::Ambilight | LightingModeKind::Effect
-        ) && owner.worker.is_some()
-        {
-            "live"
-        } else {
-            "idle"
-        };
-        PreviewModeSnapshot {
-            test_active,
-            source,
-            active_pattern,
-        }
+        owner.preview.active_test_pattern.is_some()
     }
-}
-
-/// Combined snapshot for the LED Preview UI — whether a test pattern or live
-/// ambilight is the current preview source, plus twin-overlay window state.
-#[tauri::command]
-pub fn get_led_preview_status(
-    runtime_state: State<'_, LightingRuntimeState>,
-    led_twin_state: State<'_, LedTwinState>,
-) -> Result<LedPreviewStatus, String> {
-    let snapshot = runtime_state.preview_snapshot();
-    Ok(build_preview_status(snapshot, led_twin_state.inner()))
 }

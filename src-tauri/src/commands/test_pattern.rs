@@ -153,8 +153,8 @@ impl TestPatternKind {
 }
 
 /// Resolved synthetic-pattern request carried from `start_led_test_pattern`
-/// into the frame-source factory and stored on the lighting runtime for
-/// `get_led_preview_status`.
+/// into the frame-source factory and stored on the lighting runtime, where a
+/// refresh and a retune read whether a test is running.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TestPatternConfig {
     pub kind: TestPatternKind,

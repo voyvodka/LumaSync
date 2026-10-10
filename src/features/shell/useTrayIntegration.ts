@@ -99,8 +99,8 @@ export function useTrayIntegration({ onPreviewOpenFailed, status, lockedModes }:
     return () => { i18next.off("languageChanged", handler); };
   }, []);
 
-  // The tray's "Show LED Preview" opens (or focuses) the control popup
-  // and, when enabled, the digital-twin overlay. Registered once.
+  // The tray's "Show LED Preview" opens the preview session, or brings its
+  // popup back. Registered once.
   useEffect(() => {
     let alive = true;
     let unlisten: (() => void) | null = null;

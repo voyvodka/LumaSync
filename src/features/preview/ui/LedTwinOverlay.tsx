@@ -24,7 +24,6 @@ import { shellStore } from "@/features/persistence/shellStore";
 import { normalizeLedCalibrationConfig } from "@/features/calibration/model/contracts";
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import type { LedSegmentKey } from "@/shared/contracts/calibration";
-import type { TwinScope } from "@/shared/contracts/preview";
 import { computeTwinLedPositions, type TwinLedPosition } from "../geometry";
 import {
   EMPTY_PACKED_BUFFER,
@@ -40,8 +39,6 @@ import { primaryStripOf } from "@/features/strips/model/stripSelectors";
 export interface LedTwinOverlayProps {
   /** Display this overlay mirrors. Threaded from the Rust-injected global. */
   displayId?: string;
-  /** Which signal the overlay reflects (synthetic test vs live capture). */
-  scope?: TwinScope;
 }
 
 /** Dim "off" colour shown for an LED when no frame has streamed yet. */
@@ -98,7 +95,7 @@ function edgeGradient(track: EdgeTrack, packed: readonly PackedLedColor[]): stri
   return `linear-gradient(${track.direction}, ${stops.join(", ")})`;
 }
 
-export function LedTwinOverlay({ displayId, scope = "test" }: LedTwinOverlayProps) {
+export function LedTwinOverlay({ displayId }: LedTwinOverlayProps) {
   const { t } = useTranslation();
   const [calibration, setCalibration] = useState<LedCalibrationConfig | null>(null);
   const frame = useLedPreviewFrame(displayId);
@@ -186,10 +183,6 @@ export function LedTwinOverlay({ displayId, scope = "test" }: LedTwinOverlayProp
 
   return (
     <div className="lm-twin-root" aria-hidden="true">
-      <div className="lm-twin-scope">
-        {scope === "live" ? t("preview:twin.scopeLive") : t("preview:twin.scopeTest")}
-      </div>
-
       {/* Edge ribbons (under the dots) */}
       {ribbons.map(({ edge, gradient }) => (
         <div key={`ribbon-${edge}`} className="lm-twin-ribbon" style={ribbonStyle(edge, gradient)} />

@@ -26,8 +26,8 @@ use super::worker::{start_ambilight_worker, WorkerPacing};
 use super::SOLID_OUTPUT_ATTEMPTS;
 use crate::commands::hue::state_store::{apply_hue_color_with_context, HueOutputLive};
 use crate::commands::led_output::apply_color_correction_rgb;
-use crate::commands::led_preview::{emit_preview_state_changed, LedTwinState};
 use crate::commands::local_outputs::{DrivenLocal, LocalOutputRegistry};
+use crate::commands::preview::PreviewSessionState;
 use crate::commands::runtime_telemetry::{RuntimeTelemetryState, SharedRuntimeTelemetry};
 use crate::commands::status::CommandStatus;
 use crate::commands::test_pattern::TestPatternLive;
@@ -777,7 +777,7 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
     let runtime_state = app.state::<LightingRuntimeState>();
     let local_outputs = app.state::<LocalOutputRegistry>();
     let telemetry_state = app.state::<RuntimeTelemetryState>();
-    let led_twin_state = app.state::<LedTwinState>();
+    let preview_session = app.state::<PreviewSessionState>();
     let t_cmd = std::time::Instant::now();
     let incoming_total_leds = payload
         .led_calibration
@@ -832,14 +832,13 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
 
     let hue_output = Some(hue_output);
 
-    // The LED preview: clear any stale synthetic-test request, wire the
-    // shared gate so a twin opened mid-run starts receiving without a worker
-    // restart, and send the edge-signal to every active twin overlay.
+    // The LED preview: clear any stale synthetic-test request, and wire the
+    // session's gate so a twin opened mid-run starts receiving without a
+    // worker restart.
     owner.preview.pending_test_pattern = None;
-    owner.preview.preview_gate = Some(led_twin_state.preview_active());
-    // Record whether a synthetic test was running
-    // BEFORE apply_mode_change clears it, so a live mode change that
-    // supersedes the test can drop the captured prior mode below.
+    owner.preview.preview_gate = Some(preview_session.twin_open());
+    // Read BEFORE apply_mode_change clears it: a live mode change that
+    // supersedes a test drops the mode the test would restore.
     let superseded_test = owner.preview.active_test_pattern.is_some();
     let edge_emitter = Some(build_edge_emitter(app));
     let (device_connected, connected_port, wled_sink) = DrivenLocal::plan_args(driven.as_ref());
@@ -857,21 +856,15 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
         None,
     );
     owner.hue_gate_waived = false;
+    // In the same critical section as the change itself, so a late or racing
+    // Stop cannot revive the pre-test mode over the user's new selection.
+    if superseded_test {
+        owner.preview.test_prior = None;
+    }
     // Release the runtime lock before broadcasting so a re-entrant
     // listener cannot deadlock on it.
     drop(owner);
     note_applied_mode(app, &result.mode);
-    // A live mode change supersedes any active synthetic
-    // test (apply_mode_change just cleared it). Drop the captured prior mode
-    // so a late/racing Stop cannot revive the pre-test mode over the user's
-    // new selection.
-    if superseded_test {
-        let _ = led_twin_state.take_prior_mode();
-    }
-    // The control popup + twin overlays derive `testActive` / `source`
-    // SOLELY from preview://state-changed, so broadcast the refreshed
-    // preview snapshot on every mode change — not just on test start/stop.
-    emit_preview_state_changed(app);
     info!(
         "[set_lighting_mode] completed in {}ms",
         t_cmd.elapsed().as_millis()
@@ -889,9 +882,7 @@ pub(crate) async fn stop_lighting<R: Runtime>(
 }
 
 /// Force the lighting mode to `Off`, stopping any running worker. Used by the
-/// lighting transaction and on the app shutdown path, so it resolves
-/// `LedTwinState` best-effort via the `AppHandle` rather than requiring it as a
-/// managed-state argument. The shutdown path calls it directly, outside the
+/// lighting transaction and on the app shutdown path. The shutdown path calls it directly, outside the
 /// transition queue: quit must never wait behind a queued mode change, and
 /// the runtime lock still serialises it against the one in flight.
 pub fn stop_lighting_blocking<R: Runtime>(
@@ -899,7 +890,7 @@ pub fn stop_lighting_blocking<R: Runtime>(
 ) -> Result<LightingModeCommandResult, String> {
     let runtime_state = app.state::<LightingRuntimeState>();
     runtime_state.tuning.close_blocking();
-    let (result, superseded_test) = {
+    let result = {
         let mut owner = runtime_state
             .runtime
             .lock()
@@ -918,22 +909,15 @@ pub fn stop_lighting_blocking<R: Runtime>(
             None,
             None,
         );
-        (result, superseded_test)
+        // Stopping all lighting supersedes any active test; dropped under the
+        // same lock so a late Stop cannot revive the pre-test mode.
+        if superseded_test {
+            owner.preview.test_prior = None;
+        }
+        result
     };
     note_applied_mode(app, &result.mode);
     snapshot::publish_running(app, &result.mode);
-    // Stopping all lighting supersedes any active test;
-    // drop the captured prior mode so a late Stop cannot revive it. This
-    // command is also called from the shutdown path, so resolve the twin
-    // state best-effort via the AppHandle rather than a State<'_, _> arg.
-    if superseded_test {
-        if let Some(twin_state) = app.try_state::<LedTwinState>() {
-            let _ = twin_state.take_prior_mode();
-        }
-    }
-    // Keep the control popup + twin overlays in sync — they derive
-    // `testActive` / `source` solely from preview://state-changed.
-    emit_preview_state_changed(app);
     Ok(result)
 }
 

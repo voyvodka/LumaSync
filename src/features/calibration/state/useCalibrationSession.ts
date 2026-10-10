@@ -4,16 +4,6 @@ import { shellStore } from "@/features/persistence/shellStore";
 import { withLayoutOf, withStripLayout } from "@/features/strips/model/stripWrites";
 import { focusCurrentWindow } from "@/features/shell/windowApi";
 import type { LeaveGuard } from "@/features/shell/navigationStore";
-import {
-  openLedTwinOverlay,
-  openLedControlPopup,
-  showLedControlPopup,
-} from "@/features/preview/previewApi";
-import {
-  controlPopupOpenFailure,
-  twinOverlayOpenFailure,
-  type PreviewOpenFailure,
-} from "@/features/preview/previewOpenFailure";
 import type {
   LedCalibrationConfig,
   LedDirection,
@@ -228,7 +218,6 @@ export function useCalibrationSession({
   const [testPattern, setTestPattern] = useState<TestPatternSnapshot>(flowRef.current.getSnapshot());
   const [validationErrors, setValidationErrors] = useState<CalibrationValidationError[] | null>(null);
   const [testPatternError, setTestPatternError] = useState<CalibrationNotice | null>(null);
-  const [previewOpenFailure, setPreviewOpenFailure] = useState<PreviewOpenFailure | null>(null);
 
   // Read on every visit: a display plugged in since the last one is a real change. Honour any
   // persisted selection so the capture source survives app restarts.
@@ -647,33 +636,6 @@ export function useCalibrationSession({
     else onNavigateBack();
   }, [onNavigateBack]);
 
-  // Launch the LED preview surface (click-through digital-twin
-  // overlay + interactive control popup) straight from LED Setup. The
-  // preview API never throws; the try/catch guards the shellStore write.
-  const handleOpenPreview = useCallback(async () => {
-    setPreviewOpenFailure(null);
-    try {
-      // Without an explicit id Rust falls back to the primary display, which
-      // strands the overlay on the wrong monitor for a non-primary selection.
-      const overlayFailure = twinOverlayOpenFailure(
-        await openLedTwinOverlay({
-          scope: "test",
-          displayId: displayTargetRef.current.getSnapshot().selectedDisplayId ?? undefined,
-        }),
-      );
-      const popupFailure =
-        controlPopupOpenFailure(await openLedControlPopup())
-        ?? controlPopupOpenFailure(await showLedControlPopup());
-      setPreviewOpenFailure(overlayFailure ?? popupFailure);
-      await shellStore.save({
-        ...(popupFailure === null ? { ledPreviewPopupVisible: true } : {}),
-        ledTwinEnabledTest: true,
-      });
-    } catch (err) {
-      console.error("[LumaSync] open LED preview from setup failed:", err);
-    }
-  }, []);
-
   const overlayBlocked = displayTarget.blocked
     ? overlayBlockedNotice(displayTarget.blockedCode, displayTarget.blockedReason)
     : null;
@@ -699,7 +661,6 @@ export function useCalibrationSession({
     overlayBlocked,
     validationErrors,
     testPatternError,
-    previewOpenFailure,
     handlePreviewToggle,
     handleSelectDisplay,
     handleEdgeToggle,
@@ -718,6 +679,5 @@ export function useCalibrationSession({
     handleRevert,
     handleKeepEditing,
     handleDiscard,
-    handleOpenPreview,
   };
 }

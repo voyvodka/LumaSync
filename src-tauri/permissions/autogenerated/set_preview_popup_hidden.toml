@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-preview-popup-hidden"
+description = "Enables the set_preview_popup_hidden command without any pre-configured scope."
+commands.allow = ["set_preview_popup_hidden"]
+
+[[permission]]
+identifier = "deny-set-preview-popup-hidden"
+description = "Denies the set_preview_popup_hidden command without any pre-configured scope."
+commands.deny = ["set_preview_popup_hidden"]

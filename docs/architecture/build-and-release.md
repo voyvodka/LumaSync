@@ -426,8 +426,8 @@ calls, on the main thread it calls it from — waits 1.5 s for the queued `close
 ```
 
 `overlays` counts **visible** windows other than `main`. Visible, not merely present:
-the tray item *hides* the LED control popup rather than closing it, and a hidden
-window covers nothing. Under `--gate` the run fails unless that count is 0 and
+a window can still be listed while its destroy completes, and a hidden window covers
+nothing. Under `--gate` the run fails unless that count is 0 and
 `main_visible=true`; a timeout waiting for the line means `close_all_overlays` never
 returned, which is a wedged main thread rather than a slow one.
 

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { PREVIEW_OPEN_FAILURE_COPY } from "@/features/preview/previewOpenFailure";
 import type { LeaveGuard } from "@/features/shell/navigationStore";
 import type { LedCalibrationConfig } from "../model/contracts";
 import type { CalibrationNotice } from "../model/calibrationNotices";
@@ -85,7 +84,6 @@ export function CalibrationPage({
     overlayBlocked,
     validationErrors,
     testPatternError,
-    previewOpenFailure,
     loaded,
   } = session;
 
@@ -133,11 +131,6 @@ export function CalibrationPage({
         action={{ label: t("calibration:overlay.retrySave"), onClick: () => void session.handleSave(), pending: isSaving }}
       />
     ),
-    previewOpenFailure && (
-      <Callout key="preview" tone="error" announce={false}>
-        {t(PREVIEW_OPEN_FAILURE_COPY[previewOpenFailure])}
-      </Callout>
-    ),
     ...(validationErrors ?? []).map((error) => (
       <Callout key={`${error.code}:${error.field}`} tone="error" announce={false}>
         {t(VALIDATION_MESSAGE_KEYS[error.code], { field: error.field })}
@@ -158,8 +151,6 @@ export function CalibrationPage({
         switching={isSwitching}
         onSelectDisplay={(d) => void session.handleSelectDisplay(d)}
         testTarget={testPattern.isEnabled ? (testPattern.mode === "preview-only" ? "preview" : "strip") : null}
-        previewDisabled={firstRun}
-        onPreview={() => void session.handleOpenPreview()}
       />
 
       {(notices.length > 0 || (testLayoutStale && !draftTestable)) && (

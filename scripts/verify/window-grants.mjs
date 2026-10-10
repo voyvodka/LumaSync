@@ -58,7 +58,7 @@ const WINDOWS = [
     withheld: {},
   },
   {
-    label: "led-control-popup",
+    label: "led-control-popup-0",
     capability: "preview-popup.json",
     root: "<ControlPopupApp",
     entries: [

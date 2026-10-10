@@ -110,8 +110,8 @@ export const shellHandlers = {
       isPrimary: index === 0,
     })),
 
-  // Flat `code`, no envelope. Three of the result types in this file keep the
-  // code at the top level rather than under `status` — preview and capture —
+  // Flat `code`, no envelope. The capture result types in this file keep the
+  // code at the top level rather than under `status` —
   // and guessing the envelope is how the first version of this file went wrong.
   [CAPTURE_COMMANDS.GET_SCREEN_CAPTURE_PERMISSION]: () => ({
     code: getWorld().capture.permissionGranted
@@ -124,19 +124,6 @@ export const shellHandlers = {
     message: null,
   }),
 
-  // These address separate webview windows. The status codes let the calling
-  // state machine advance and the buttons be exercised; no window appears, and
-  // that gap is real.
-  [PREVIEW_COMMANDS.OPEN_TWIN_OVERLAY]: () => ({
-    ok: true,
-    code: "TWIN_OVERLAY_OPENED" as const,
-    message: "Opened",
-  }),
-  [PREVIEW_COMMANDS.CLOSE_TWIN_OVERLAY]: () => ({
-    ok: true,
-    code: "TWIN_OVERLAY_CLOSED" as const,
-    message: "Closed",
-  }),
   // `previewOnly` derivation mirrors `start_led_test_pattern`'s target
   // resolution (`src-tauri/src/commands/lighting_mode.rs:3040-3046`):
   // empty/absent `targets` defaults to wanting USB, "hue" opts a target in.
