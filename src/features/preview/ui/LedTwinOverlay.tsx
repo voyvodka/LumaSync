@@ -2,90 +2,49 @@
  * LedTwinOverlay — the click-through "digital twin" of the physical strip.
  *
  * Rendered in its own borderless, transparent, click-through webview window
- * that covers exactly one display. `main.tsx` routes to this component when the
- * window label starts with `led-twin-overlay-` and threads the display id
- * (injected by Rust as `window.__LUMASYNC_TWIN_DISPLAY_ID__`).
+ * over the display Ambilight captures. `main.tsx` routes to this component when
+ * the window label starts with `led-twin-overlay-`.
  *
- * Correctness contract: `twin LED #N === physical strip LED #N`. We achieve
- * that by loading the persisted `ledCalibration` and computing perimeter
- * positions through `computeTwinLedPositions`, which REUSES the canonical
- * `buildLedSequence` ordering. The enriched `EdgeSignalPayload.leds` buffer is
- * emitted in that same order, so `leds[N]` is the colour of the dot at
- * `positions[N]`.
+ * Correctness contract: `twin LED #N === physical strip LED #N`. The layout is
+ * the one the running mode uses (`useTwinFeed`), placed through
+ * `computeTwinLedPositions`, which REUSES the canonical `buildLedSequence`
+ * ordering; the frame's `leds` buffer is in that same order, so `leds[N]` is
+ * the colour of the dot at `positions[N]`.
  *
- * Phase 1 is TEST MODE with screen capture OFF — frames are synthetic. The
- * overlay never reads the screen; it only mirrors whatever the worker streams.
+ * Drawn on two canvases: the ribbons under a blur, the dots over them sharp.
  */
 
-import { useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { normalizeLedCalibrationConfig } from "@/features/calibration/model/contracts";
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
-import type { LedSegmentKey } from "@/shared/contracts/calibration";
-import { computeTwinLedPositions, type TwinLedPosition } from "../geometry";
-import {
-  EMPTY_PACKED_BUFFER,
-  packLedBuffer,
-  packLedColor,
-  packedToCss,
-  type PackedLedColor,
-} from "../ledColor";
+import { computeTwinLedPositions } from "../geometry";
+import { EMPTY_PACKED_BUFFER, packLedBuffer, type PackedLedColor } from "../ledColor";
 import { useTwinFeed } from "../state/useTwinFeed";
-import { LedGlowDot } from "./LedGlowDot";
+import { buildEdgeTracks, paintDots, paintRibbons } from "./twinCanvas";
+import styles from "./LedTwinOverlay.module.css";
 
-/** Dim "off" colour shown for an LED when no frame has streamed yet. */
-const OFF_COLOR_PACKED = packLedColor([16, 18, 24]);
-const DOT_SIZE_PX = 18;
-const EDGE_ORDER: LedSegmentKey[] = ["top", "right", "bottom", "left"];
-/** Ribbon depth, and the corner inset the horizontal ribbons give up. */
-const RIBBON_THICKNESS = 0.05;
-
-/**
- * Viewport X → the horizontal ribbon's own 0..1 span. Those ribbons inset by
- * `RIBBON_THICKNESS` each side, so a raw offset drifts inboard of its dot.
- */
-function horizontalOffset(x: number): number {
-  const span = 1 - RIBBON_THICKNESS * 2;
-  return Math.min(1, Math.max(0, (x - RIBBON_THICKNESS) / span));
+interface Viewport {
+  width: number;
+  height: number;
+  scale: number;
 }
 
-/** One edge's LEDs, pre-sorted along the edge and paired with its stop offsets. */
-interface EdgeTrack {
-  edge: LedSegmentKey;
-  direction: "to right" | "to bottom";
-  /** LED buffer index → gradient stop percentage, in along-edge order. */
-  stops: Array<{ index: number; offset: string }>;
+function readViewport(): Viewport {
+  return { width: window.innerWidth, height: window.innerHeight, scale: window.devicePixelRatio || 1 };
 }
 
-/**
- * Split positions into per-edge tracks ONCE per calibration — the sort used to
- * run 4× per frame purely because the colour buffer changed identity.
- */
-function buildEdgeTracks(positions: TwinLedPosition[]): EdgeTrack[] {
-  return EDGE_ORDER.flatMap((edge) => {
-    const onEdge = positions.filter((p) => p.edge === edge);
-    if (onEdge.length === 0) return [];
-    const horizontal = edge === "top" || edge === "bottom";
-    const sorted = [...onEdge].sort((a, b) => (horizontal ? a.x - b.x : a.y - b.y));
-    return [
-      {
-        edge,
-        direction: horizontal ? ("to right" as const) : ("to bottom" as const),
-        stops: sorted.map((p) => ({
-          index: p.index,
-          offset: `${((horizontal ? horizontalOffset(p.x) : p.y) * 100).toFixed(1)}%`,
-        })),
-      },
-    ];
-  });
-}
-
-function edgeGradient(track: EdgeTrack, packed: readonly PackedLedColor[]): string {
-  const stops = track.stops.map(
-    ({ index, offset }) => `${packedToCss(packed[index] ?? OFF_COLOR_PACKED)} ${offset}`,
-  );
-  return `linear-gradient(${track.direction}, ${stops.join(", ")})`;
+/** Sizes the canvas's backing store to the screen's pixels, and its 2D context to CSS pixels. */
+function prepare(canvas: HTMLCanvasElement | null, viewport: Viewport): CanvasRenderingContext2D | null {
+  if (!canvas) return null;
+  const width = Math.round(viewport.width * viewport.scale);
+  const height = Math.round(viewport.height * viewport.scale);
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  ctx?.setTransform(viewport.scale, 0, 0, viewport.scale, 0, 0);
+  return ctx;
 }
 
 export function LedTwinOverlay() {
@@ -95,6 +54,9 @@ export function LedTwinOverlay() {
     () => (layout?.leds ? (normalizeLedCalibrationConfig(layout.leds) ?? null) : null),
     [layout],
   );
+  const [viewport, setViewport] = useState(readViewport);
+  const ribbonsRef = useRef<HTMLCanvasElement>(null);
+  const dotsRef = useRef<HTMLCanvasElement>(null);
 
   // Set the window title from the localized aria label so the overlay is
   // identifiable to AT / window managers even though the visual layer is
@@ -113,73 +75,41 @@ export function LedTwinOverlay() {
     if (root) root.style.background = "transparent";
   }, [t]);
 
-  const positions = useMemo(
-    () => (calibration ? computeTwinLedPositions(calibration) : []),
-    [calibration],
-  );
+  useEffect(() => {
+    const onResize = () => setViewport(readViewport());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
+  const positions = useMemo(() => (calibration ? computeTwinLedPositions(calibration) : []), [calibration]);
   const edgeTracks = useMemo(() => buildEdgeTracks(positions), [positions]);
 
-  // Ref-held so an unchanged frame keeps the SAME array reference and every
-  // memo below bails out. Deterministic in (source, previous), so StrictMode's
-  // double render is a no-op rather than a torn value.
+  // Ref-held so an unchanged frame keeps the SAME array reference and the
+  // paint below does not run. Deterministic in (source, previous), so
+  // StrictMode's double render is a no-op rather than a torn value.
   const packedRef = useRef<readonly PackedLedColor[]>(EMPTY_PACKED_BUFFER);
   packedRef.current = packLedBuffer(frame?.leds, packedRef.current);
   const packedLeds = packedRef.current;
 
-  const ribbons = useMemo(
-    () =>
-      edgeTracks.map((track) => ({
-        edge: track.edge,
-        gradient: edgeGradient(track, packedLeds),
-      })),
-    [edgeTracks, packedLeds],
-  );
-
-  const ribbonStyle = (edge: LedSegmentKey, gradient: string): CSSProperties => {
-    const thickness = `${RIBBON_THICKNESS * 100}%`;
-    // Corner ownership: the vertical (left/right) ribbons run the full height
-    // and OWN the four corners; the horizontal (top/bottom) ribbons inset by
-    // `thickness` on each side so the two never cross — that crossing was what
-    // produced the doubled-brightness corner blobs.
-    switch (edge) {
-      case "top":
-        return { top: 0, left: thickness, right: thickness, height: thickness, background: gradient };
-      case "bottom":
-        return { bottom: 0, left: thickness, right: thickness, height: thickness, background: gradient };
-      case "left":
-        return { top: 0, bottom: 0, left: 0, width: thickness, background: gradient };
-      case "right":
-      default:
-        return { top: 0, bottom: 0, right: 0, width: thickness, background: gradient };
-    }
-  };
+  useEffect(() => {
+    const ribbons = prepare(ribbonsRef.current, viewport);
+    const dots = prepare(dotsRef.current, viewport);
+    if (ribbons) paintRibbons(ribbons, edgeTracks, packedLeds, viewport.width, viewport.height);
+    if (dots) paintDots(dots, positions, packedLeds, viewport.width, viewport.height);
+  }, [viewport, edgeTracks, positions, packedLeds]);
 
   return (
-    <div className="lm-twin-root" aria-hidden="true">
-      {/* Edge ribbons (under the dots) */}
-      {ribbons.map(({ edge, gradient }) => (
-        <div key={`ribbon-${edge}`} className="lm-twin-ribbon" style={ribbonStyle(edge, gradient)} />
-      ))}
+    <div className={styles.root} aria-hidden="true">
+      <canvas ref={ribbonsRef} className={`${styles.layer} ${styles.ribbons}`} data-testid="twin-ribbons" />
+      <canvas ref={dotsRef} className={styles.layer} data-testid="twin-dots" />
 
-      {/* Per-LED glow dots */}
-      {positions.map((p) => (
-        <LedGlowDot
-          key={p.index}
-          x={p.x}
-          y={p.y}
-          color={packedLeds[p.index] ?? OFF_COLOR_PACKED}
-          size={DOT_SIZE_PX}
-        />
-      ))}
-
-      {/* Hue zone markers — sparse, centred along the bottom. */}
+      {/* Hue lamps along the bottom until the room map places them. */}
       {frame && frame.lamps.length > 0 && (
-        <div className="lm-twin-hue-row">
+        <div className={styles.hueRow}>
           {frame.lamps.map((c, i) => (
             <span
               key={`hue-${i}`}
-              className="lm-twin-hue-chip"
+              className={styles.hueChip}
               style={{
                 background: `radial-gradient(circle, rgb(${c[0]}, ${c[1]}, ${c[2]}) 0%, rgba(${c[0]}, ${c[1]}, ${c[2]}, 0.5) 55%, transparent 80%)`,
               }}

@@ -1,61 +1,11 @@
 /* ===========================================================================
    v1.6 — LED Preview & Test Experience
    ---------------------------------------------------------------------------
-   Two surfaces live in dedicated webview windows:
-     - the click-through digital-twin overlay (`.lm-twin-*`)
-     - the interactive control popup (`.lm-control-*`)
-   Both honour the amber Rev 07 tokens, ship a forced-colors fallback, and
-   guard every >120 ms animation behind reduced motion (`data-reduced-motion`). The twin dots
-   deliberately carry NO color transition so they track the live stream 1:1.
+   The interactive control popup (`.lm-control-*`), in its own webview window.
+   It honours the amber Rev 07 tokens, ships a forced-colors fallback, and
+   guards every >120 ms animation behind reduced motion (`data-reduced-motion`).
+   The twin keeps its own module stylesheet beside LedTwinOverlay.
    =========================================================================== */
-
-/* ── Digital-twin overlay ────────────────────────────────────────────────── */
-.lm-twin-root {
-  position: fixed;
-  inset: 0;
-  overflow: hidden;
-  background: transparent;
-  /* Click-through is enforced at the OS window layer in Phase 2; we also drop
-     pointer events defensively so the overlay never steals input today. */
-  pointer-events: none;
-  /* Keep our own color math under Windows High Contrast — the whole point of
-     the overlay is to mirror exact LED colour. */
-  forced-color-adjust: none;
-}
-
-.lm-twin-dot {
-  position: absolute;
-  border-radius: 9999px;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  forced-color-adjust: none;
-  /* NO color/background transition — the dot must snap to each ~10 Hz frame. */
-}
-
-.lm-twin-ribbon {
-  position: absolute;
-  pointer-events: none;
-  forced-color-adjust: none;
-  filter: blur(6px);
-  opacity: 0.55;
-}
-
-.lm-twin-hue-row {
-  position: absolute;
-  left: 50%;
-  bottom: 7%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 10px;
-  pointer-events: none;
-}
-
-.lm-twin-hue-chip {
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  forced-color-adjust: none;
-}
 
 /* ── Control popup ───────────────────────────────────────────────────────── */
 .lm-control-root {

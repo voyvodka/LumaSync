@@ -1,7 +1,7 @@
 /**
- * Packed `0xRRGGBB` LED colour. The edge-signal stream deserialises a fresh
- * `[r, g, b]` triple every frame, so triples defeat `React.memo` by reference;
- * a packed integer compares by value and dots only re-render on real change.
+ * Packed `0xRRGGBB` LED colour. Every frame decodes fresh `[r, g, b]` triples,
+ * which compare by reference; a packed integer compares by value, so an
+ * unchanged frame keeps the same buffer and the twin does not repaint.
  */
 export type PackedLedColor = number;
 

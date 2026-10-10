@@ -1,0 +1,38 @@
+/* The twin is decorative and click-through; it keeps exact LED colour even
+   under forced colours, since mirroring the strip is its whole job. */
+.root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: transparent;
+  pointer-events: none;
+  forced-color-adjust: none;
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* No transition on any colour: the twin must snap to each frame. */
+.ribbons {
+  filter: blur(6px);
+  opacity: 0.55;
+}
+
+.hueRow {
+  position: absolute;
+  left: 50%;
+  bottom: 7%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+}
+
+.hueChip {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+}
