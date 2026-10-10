@@ -299,19 +299,13 @@ pub fn open_preview<R: Runtime>(
     // Before any preview window exists, so none is ever in a frame.
     exclusion::session_opening();
     let twin_label = next_twin_label();
-    match build_twin(&app, &twin_label, &display) {
-        Ok(twin) if exclusion::twin_hidden_now() => {
-            let _ = twin.hide();
-        }
-        Ok(_) => {}
-        Err(reason) => {
-            exclusion::session_ended();
-            return Ok(failure(
-                PREVIEW_OPEN_FAILED,
-                "Could not open the LED twin.",
-                reason,
-            ));
-        }
+    if let Err(reason) = build_twin(&app, &twin_label, &display) {
+        exclusion::session_ended();
+        return Ok(failure(
+            PREVIEW_OPEN_FAILED,
+            "Could not open the LED twin.",
+            reason,
+        ));
     }
     let popup_label = next_popup_label();
     if let Err(reason) = build_popup(&app, &popup_label) {
@@ -335,7 +329,10 @@ pub fn open_preview<R: Runtime>(
         main_hidden_by_session,
     });
     match committed {
-        Ok(session) => Ok(result(session, PREVIEW_OPENED, "Preview opened.")),
+        Ok(session) => {
+            exclusion::session_opened(&app, &twin_label);
+            Ok(result(session, PREVIEW_OPENED, "Preview opened."))
+        }
         Err(error) => {
             let mut failures = Vec::new();
             destroy(&app, &twin_label, &mut failures);

@@ -23,7 +23,10 @@ pub fn supported() -> bool {
     #[cfg(target_os = "macos")]
     return true;
     #[cfg(target_os = "windows")]
-    return windows_build() >= 19041;
+    {
+        static SUPPORTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        return *SUPPORTED.get_or_init(|| windows_build() >= 19041);
+    }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     return false;
 }
@@ -72,9 +75,22 @@ pub(super) fn session_ended() {
     ambilight_capture::set_own_windows_excluded(false);
 }
 
-/// Whether a twin built now should start hidden.
-pub(super) fn twin_hidden_now() -> bool {
-    !supported() && ambilight_capture::capture_active()
+/// Once the session is registered: retry an exclusion that could not find the
+/// app before it had a window, and where nothing can exclude the twin, match
+/// it to the capture as it is now — a start or stop between the build and the
+/// registration found no twin to act on.
+pub(super) fn session_opened<R: Runtime>(app: &AppHandle<R>, twin_label: &str) {
+    ambilight_capture::set_own_windows_excluded(true);
+    if supported() {
+        return;
+    }
+    if let Some(twin) = app.get_webview_window(twin_label) {
+        let _ = if ambilight_capture::capture_active() {
+            twin.hide()
+        } else {
+            twin.show()
+        };
+    }
 }
 
 /// Where nothing can exclude the twin, hide it while Ambilight captures and
@@ -86,7 +102,10 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) {
         return;
     }
     let app = app.clone();
-    ambilight_capture::on_capture_active_changed(Box::new(move |active| {
+    // The posted closure reads the count when it runs rather than the value it
+    // was posted with: a start and a stop on two threads can post out of
+    // order, and the last closure to run must leave the current state.
+    ambilight_capture::on_capture_active_changed(Box::new(move |_| {
         let Some(label) = app
             .try_state::<PreviewSessionState>()
             .and_then(|state| state.twin_label())
@@ -96,11 +115,15 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) {
         let handle = app.clone();
         let posted = app.run_on_main_thread(move || {
             if let Some(twin) = handle.get_webview_window(&label) {
-                let _ = if active { twin.hide() } else { twin.show() };
+                let _ = if ambilight_capture::capture_active() {
+                    twin.hide()
+                } else {
+                    twin.show()
+                };
             }
         });
         if let Err(error) = posted {
-            log::warn!("[preview] twin visibility not updated for capture={active}: {error}");
+            log::warn!("[preview] twin visibility not updated after a capture change: {error}");
         }
     }));
 }

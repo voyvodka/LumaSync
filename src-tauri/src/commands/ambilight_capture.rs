@@ -711,10 +711,14 @@ mod platform {
         let start_failed =
             |_| AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_SESSION_START_FAILED");
 
-        // Held to the end of the start: a preview opening meanwhile must find
-        // this stream registered, or its filter update would miss it.
-        let mut filter_state = FILTER_STATE.lock().unwrap_or_else(|e| e.into_inner());
-        let filter = build_filter(&display, filter_state.exclude_own).map_err(start_failed)?;
+        // Read, not held: a start can take seconds, and the main thread waits
+        // on this lock when a preview opens or closes. A flag that changes
+        // while the stream starts is reconciled when it registers.
+        let exclude_own = FILTER_STATE
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .exclude_own;
+        let (filter, excluding) = build_filter(&display, exclude_own).map_err(start_failed)?;
 
         // Downscale to ~640px max dimension for ambilight color sampling.
         // SCStream performs hardware-accelerated scaling on the GPU — zero extra CPU cost.
@@ -804,11 +808,16 @@ mod platform {
         stream.start_capture().map_err(start_failed)?;
 
         let id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed);
-        filter_state.live = Some(LiveStream {
+        let mut state = FILTER_STATE.lock().unwrap_or_else(|e| e.into_inner());
+        state.live = Some(LiveStream {
             id,
             stream: stream.clone(),
             display,
+            excluding,
         });
+        let wanted = state.exclude_own;
+        reconcile(&mut state, wanted);
+        drop(state);
 
         Ok(Box::new(MacOSLiveFrameSource {
             latest_frame,
@@ -818,8 +827,8 @@ mod platform {
     }
 
     /// The running stream and whether the app's own windows are kept out of
-    /// it. One lock over both: a filter is always built from the current
-    /// flag, and an update never reaches a stream its source has let go of.
+    /// it. An update never reaches a stream its source has let go of: both go
+    /// through this lock.
     struct FilterState {
         exclude_own: bool,
         live: Option<LiveStream>,
@@ -829,6 +838,9 @@ mod platform {
         id: u64,
         stream: SCStream,
         display: SCDisplay,
+        /// What the stream's filter actually does, which can fall short of
+        /// `exclude_own` when the app was not found to exclude.
+        excluding: bool,
     }
 
     static FILTER_STATE: Mutex<FilterState> = Mutex::new(FilterState {
@@ -837,10 +849,15 @@ mod platform {
     });
     static NEXT_STREAM_ID: AtomicU64 = AtomicU64::new(1);
 
-    /// The whole display, or the whole display less this app's windows. The
-    /// app is looked up among off-screen windows too: the main window may be
-    /// hidden and the preview's not built yet when the filter is applied.
-    fn build_filter(display: &SCDisplay, exclude_own: bool) -> Result<SCContentFilter, SCError> {
+    /// The whole display, or the whole display less this app's windows, and
+    /// whether it left the app out. The app is looked up among off-screen
+    /// windows too, since the main window may be hidden; whether a windowless
+    /// moment still lists it is unverified, so the caller retries once the
+    /// twin exists.
+    fn build_filter(
+        display: &SCDisplay,
+        exclude_own: bool,
+    ) -> Result<(SCContentFilter, bool), SCError> {
         if exclude_own {
             let own_pid = std::process::id() as i32;
             let content = SCShareableContent::create()
@@ -851,46 +868,57 @@ mod platform {
                 .into_iter()
                 .find(|app| app.process_id() == own_pid)
             {
-                log::info!("[capture] filter leaves out this app's windows (pid {own_pid})");
-                return SCContentFilter::create()
+                let filter = SCContentFilter::create()
                     .with_display(display)
                     .with_excluding_applications(&[&app], &[])
-                    .build();
+                    .build()?;
+                log::info!("[capture] filter leaves out this app's windows (pid {own_pid})");
+                return Ok((filter, true));
             }
             log::warn!(
                 "[capture] this app is not among the shareable applications; its windows stay in the capture"
             );
         }
-        SCContentFilter::create()
+        let filter = SCContentFilter::create()
             .with_display(display)
             .with_excluding_windows(&[])
-            .build()
+            .build()?;
+        Ok((filter, false))
+    }
+
+    /// Bring the running stream's filter to `wanted`, if it is not there.
+    fn reconcile(state: &mut FilterState, wanted: bool) {
+        let Some(live) = state.live.as_mut() else {
+            return;
+        };
+        if live.excluding == wanted {
+            return;
+        }
+        let applied = build_filter(&live.display, wanted).and_then(|(filter, excluding)| {
+            live.stream.update_content_filter(&filter)?;
+            Ok(excluding)
+        });
+        match applied {
+            Ok(excluding) => {
+                live.excluding = excluding;
+                log::info!("[capture] own-window exclusion={excluding} on the running stream");
+            }
+            Err(error) => {
+                log::warn!("[capture] own-window exclusion={wanted} not applied: {error:?}")
+            }
+        }
     }
 
     /// Applied to the running stream at once, blocking until ScreenCaptureKit
     /// confirms, so a window shown after this returns is never in a frame.
     /// With no stream running nothing is asked of ScreenCaptureKit: listing
     /// the shareable content is what raises the Screen Recording prompt, which
-    /// only a capture start may do.
+    /// only a capture start may do. Calling it again with the same value
+    /// retries a filter that could not leave the app out.
     pub(super) fn set_own_windows_excluded(excluded: bool) {
         let mut state = FILTER_STATE.lock().unwrap_or_else(|e| e.into_inner());
-        if state.exclude_own == excluded {
-            return;
-        }
         state.exclude_own = excluded;
-        let Some(live) = state.live.as_ref() else {
-            return;
-        };
-        let applied = build_filter(&live.display, excluded)
-            .and_then(|filter| live.stream.update_content_filter(&filter));
-        match applied {
-            Ok(()) => log::info!(
-                "[capture] own-window exclusion={excluded} applied to the running stream"
-            ),
-            Err(error) => {
-                log::warn!("[capture] own-window exclusion={excluded} not applied: {error:?}")
-            }
-        }
+        reconcile(&mut state, excluded);
     }
 
     struct MacOSLiveFrameSource {
