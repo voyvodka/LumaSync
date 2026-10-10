@@ -18,7 +18,7 @@ use super::effects::EffectDraw;
 use super::hydrate::{hydrate_mode_payload, read_persisted_shell_state};
 use super::live::{retune_ambilight_live, AmbilightLiveSettings, RoomGeometryLive};
 use super::pacing::{capture_interval_for, SerialSendBudget};
-use super::preview::{build_edge_emitter, build_preview_emit_context, EdgeSignalEmitter};
+use super::preview::{build_preview_emit_context, build_twin_sink, TwinFrameSink};
 use super::runtime::{AmbilightCaptureRequest, LightingRuntimeOwner, LightingRuntimeState};
 use super::snapshot;
 use super::usb_output::{SolidUsbOutput, UsbOutputPlan};
@@ -184,7 +184,7 @@ pub(super) fn apply_mode_change(
     wled_sink: Option<WledSinkConfig>,
     hue_output: Option<Arc<HueOutputLive>>,
     telemetry_snapshot: Option<SharedRuntimeTelemetry>,
-    edge_signal_emitter: Option<EdgeSignalEmitter>,
+    twin_sink: Option<TwinFrameSink>,
     trace: Option<&mut Vec<&'static str>>,
 ) -> LightingModeCommandResult {
     let mut result = apply_mode_change_inner(
@@ -195,7 +195,7 @@ pub(super) fn apply_mode_change(
         wled_sink,
         hue_output,
         telemetry_snapshot,
-        edge_signal_emitter,
+        twin_sink,
         trace,
     );
     result.wled_advisory = wled_frame_advisory(&result.mode, wled_sink.as_ref());
@@ -214,7 +214,7 @@ fn apply_mode_change_inner(
     wled_sink: Option<WledSinkConfig>,
     hue_output: Option<Arc<HueOutputLive>>,
     telemetry_snapshot: Option<SharedRuntimeTelemetry>,
-    edge_signal_emitter: Option<EdgeSignalEmitter>,
+    twin_sink: Option<TwinFrameSink>,
     trace: Option<&mut Vec<&'static str>>,
 ) -> LightingModeCommandResult {
     let normalized_next = normalize_mode_config(next_mode);
@@ -679,12 +679,7 @@ fn apply_mode_change_inner(
             let corrections = normalized_next.color_correction.clone().unwrap_or_default();
             let profile = normalized_next.firmware_profile.unwrap_or_default();
             let chip = normalized_next.chip_type.unwrap_or_default();
-            let preview_ctx = build_preview_emit_context(
-                is_test,
-                test_pattern.as_ref(),
-                owner.preview.preview_gate.clone(),
-                normalized_next.display_id.clone(),
-            );
+            let preview_ctx = build_preview_emit_context(owner.preview.preview_gate.clone());
             let room_geometry_live = RoomGeometryLive::new(normalized_next.room_geometry.clone());
 
             match start_ambilight_worker(
@@ -695,7 +690,7 @@ fn apply_mode_change_inner(
                 frame_source,
                 telemetry_snapshot.unwrap_or_default(),
                 hue_output,
-                edge_signal_emitter,
+                twin_sink,
                 corrections,
                 profile,
                 chip,
@@ -709,7 +704,11 @@ fn apply_mode_change_inner(
                             clock: Arc::clone(&owner.effect_clock),
                         },
                     ),
-                    None => WorkerPacing::live(capture_interval),
+                    // A test pattern paints its frames too.
+                    None => WorkerPacing {
+                        synthetic: is_test,
+                        ..WorkerPacing::live(capture_interval)
+                    },
                 },
             ) {
                 Ok(worker) => {
@@ -840,7 +839,7 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
     // Read BEFORE apply_mode_change clears it: a live mode change that
     // supersedes a test drops the mode the test would restore.
     let superseded_test = owner.preview.active_test_pattern.is_some();
-    let edge_emitter = Some(build_edge_emitter(app));
+    let twin_sink = Some(build_twin_sink(app));
     let (device_connected, connected_port, wled_sink) = DrivenLocal::plan_args(driven.as_ref());
 
     owner.hue_gate_waived = waive_hue_gate;
@@ -852,7 +851,7 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
         wled_sink,
         hue_output,
         Some(telemetry_state.shared_snapshot()),
-        edge_emitter,
+        twin_sink,
         None,
     );
     owner.hue_gate_waived = false;
@@ -1014,7 +1013,10 @@ pub(super) fn note_applied_mode<R: Runtime>(app: &AppHandle<R>, mode: &LightingM
         (probe.0)(mode);
     }
     #[cfg(not(test))]
-    let _ = (app, mode);
+    let _ = mode;
+    // Every apply passes here with the runtime lock released, which is the
+    // order the feed takes its locks in.
+    crate::commands::preview::feed::refresh(app);
 }
 
 /// `Err` prefix when the blocking half of a mode command dies before answering.

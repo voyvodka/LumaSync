@@ -13,7 +13,7 @@ use super::config::{
 use super::hydrate::{
     hydrate_mode_payload, maybe_hydrate_led_calibration, read_persisted_shell_state,
 };
-use super::preview::build_edge_emitter;
+use super::preview::build_twin_sink;
 use super::runtime::LightingRuntimeState;
 use super::snapshot;
 use super::transition::{
@@ -79,7 +79,7 @@ pub(super) fn apply_and_broadcast<R: Runtime>(
     hydrate_mode_payload(&mut payload, &|| read_persisted_shell_state(app));
     let (device_connected, connected_port, wled_sink) = DrivenLocal::plan_args(driven);
 
-    let edge_emitter = Some(build_edge_emitter(app));
+    let twin_sink = Some(build_twin_sink(app));
 
     let starts_a_test = test_pattern.is_some();
     let result = {
@@ -98,7 +98,7 @@ pub(super) fn apply_and_broadcast<R: Runtime>(
             wled_sink,
             hue_output,
             Some(telemetry_state.shared_snapshot()),
-            edge_emitter,
+            twin_sink,
             None,
         )
     };

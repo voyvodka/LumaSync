@@ -1068,6 +1068,7 @@ const REQUIRED_PREVIEW_COMMANDS = [
   "open_preview",
   "close_preview",
   "set_preview_popup_hidden",
+  "subscribe_twin_frames",
 ];
 for (const cmd of REQUIRED_PREVIEW_COMMANDS) {
   check(
@@ -1092,6 +1093,7 @@ const REQUIRED_PREVIEW_STATUS_CODES = [
   "PREVIEW_CLOSED",
   "PREVIEW_NOT_OPEN",
   "PREVIEW_POPUP_UPDATED",
+  "PREVIEW_TWIN_SUBSCRIBED",
   "PREVIEW_OPEN_FAILED",
   "PREVIEW_CLOSE_FAILED",
 ];
@@ -1105,14 +1107,17 @@ for (const code of REQUIRED_PREVIEW_STATUS_CODES) {
 
 // Presence above proves containment only; the session's codes are pinned equal.
 {
-  const rustSession = stripComments(
-    readOrEmpty(resolve(ROOT, "src-tauri/src/commands/preview/session.rs"), "rust preview session")
-  );
+  const rustPreview = ["session.rs", "feed.rs"]
+    .map((file) =>
+      stripComments(readOrEmpty(resolve(ROOT, "src-tauri/src/commands/preview", file), `rust preview ${file}`))
+    )
+    .join("\n");
   checkWireUnion(
     "PreviewStatusCode",
-    [...rustSession.matchAll(/const PREVIEW_[A-Z_]+: &str = "([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]),
+    [...rustPreview.matchAll(/const PREVIEW_[A-Z_]+: &str = "([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]),
     constMembers(previewSource, "PREVIEW_STATUS"),
-    7
+    // 7 → 8: PREVIEW_TWIN_SUBSCRIBED, the twin's frame subscription (feed.rs).
+    8
   );
 }
 
@@ -2673,7 +2678,9 @@ const checkedPairs = nullabilityPairs.filter(
 // 92 → 94: EffectPayload and EffectColor, the Effect mode's payload.
 // 94 → 92: the preview session — `TwinOverlayResult`, `ControlPopupResult` and
 // `LedPreviewStatus` went with their window commands; `PreviewSessionResult` came.
-const EXPECTED_NULLABILITY_PAIR_COUNT = 92;
+// 92 → 93: the twin's channel feed — `EdgeSignalPayload` went with
+// `ambilight://edge-signal`; `TwinLayout` and `TwinSubscribeResult` came.
+const EXPECTED_NULLABILITY_PAIR_COUNT = 93;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

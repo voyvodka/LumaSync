@@ -84,7 +84,7 @@ const WINDOWS = [
     extraGrants: {},
     withheld: {
       patch_shell_state:
-        "reached through the shared shellStore object; LedTwinOverlay only calls shellStore.load()",
+        "reached through the shared shellStore object; the twin only reads the shell state at boot",
       replace_shell_state:
         "reached through loadShellState; the migration write-back runs in the main window first, and a refused one is logged and not fatal",
     },

@@ -34,6 +34,7 @@ import type {
   PreviewStatusCode,
 } from "../../src/shared/contracts/preview";
 import { SHELL_COMMANDS } from "../../src/shared/contracts/shell";
+import { attachTwinChannel, mockTwinLayout } from "../events";
 import { getWorld } from "../state";
 import type { TypedHandlers } from "./types";
 
@@ -78,6 +79,17 @@ export const windowlessHandlers = {
     if (session.state === "closed") return sessionResult(PREVIEW_STATUS.NOT_OPEN, "No preview is open.");
     session = { state: "closed" };
     return sessionResult(PREVIEW_STATUS.CLOSED, "Preview closed.");
+  },
+  /** Real, not plausible: the DevPanel's frame stream feeds this channel. */
+  [PREVIEW_COMMANDS.SUBSCRIBE_TWIN_FRAMES]: ({ onFrame }) => {
+    if (session.state === "closed") {
+      return { layout: null, status: { code: PREVIEW_STATUS.NOT_OPEN, message: "No preview twin is open.", details: null } };
+    }
+    attachTwinChannel(onFrame);
+    return {
+      layout: mockTwinLayout(),
+      status: { code: PREVIEW_STATUS.TWIN_SUBSCRIBED, message: "Twin frames subscribed.", details: null },
+    };
   },
   [PREVIEW_COMMANDS.SET_POPUP_HIDDEN]: ({ payload }) => {
     if (session.state === "closed") return sessionResult(PREVIEW_STATUS.NOT_OPEN, "No preview is open.");

@@ -594,18 +594,19 @@ inside another branch's binary that way.
 
 | Window | App commands |
 |---|---|
-| `main` | 57 of the 62: the 56 its `*Api.ts` bridges reach, and `simulate_hue_fault` for the dev mock's panel, which passes it through to Rust from this window. Not the popup's two below, and not the three in the last row |
+| `main` | 57 of the 63: the 56 its `*Api.ts` bridges reach, and `simulate_hue_fault` for the dev mock's panel, which passes it through to Rust from this window. Not the popup's two or the twin's one below, and not the three in the last row |
 | `led-control-popup` | `get_shell_state`, `patch_shell_state` (its position); `apply_outputs`, `retune_lighting`, `get_lighting_runtime` (its mode strip, its Solid drag, and `useLightingRuntime`); `close_preview` (Close and Escape), `set_preview_popup_hidden` (Hide); `open_log_dir` (`GlobalErrorBoundary`'s "Show logs") |
-| `led-twin-overlay-*` | `get_shell_state` only — it reads the calibration it draws |
+| `led-twin-overlay-*` | `get_shell_state` (the language at boot); `subscribe_twin_frames` (its layout and frames, `useTwinFeed`) |
 | `calibration-overlay-*` | none |
 | no window | `request_notification_permission` — registered, but nothing in the frontend calls it. `set_hue_solid_color` — the last bare Hue command the lighting transaction replaced ([`lighting-transaction.md`](lighting-transaction.md)); `set_lighting_mode`, `stop_lighting`, `get_lighting_mode_status` and `stop_hue_stream` are no longer registered at all. It stays registered and its tests grant it to the test window; a window calling it would skip the transaction's ordering and saving. `get_hue_stream_status` — read by the health monitor in Rust; its test grants it |
 
-`close_preview` and `set_preview_popup_hidden` are the popup's alone; the main window only opens
+`close_preview` and `set_preview_popup_hidden` are the popup's alone, and `subscribe_twin_frames`
+the twin's — Rust also refuses it to any twin but the open session's; the main window only opens
 the session (`open_preview`, from Lights and the tray). Two withholdings are deliberate even though the walk
 reaches them. `replace_shell_state` belongs to the main window: it is the migration write-back,
 which the main window runs at boot before any other window exists, and a refused write-back in
 another window is logged, not fatal. `patch_shell_state` is not granted to the twin, which only
-calls `shellStore.load()`. The overlay and the popup cannot reach pairing, credential migration,
+reads the shell state at boot. The overlay and the popup cannot reach pairing, credential migration,
 the update check or install, or the migration write-back; `capability_policy.rs` names those
 explicitly.
 

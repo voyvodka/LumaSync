@@ -121,19 +121,13 @@ function resolveWindowKind(): WindowKind {
 
 /**
  * Import only this window's root tree.
- *
- * The display id for the twin overlay is read from the Rust-injected
- * `window.__LUMASYNC_TWIN_DISPLAY_ID__` global (mirrors the calibration
- * overlay's `__LUMASYNC_OVERLAY_PREVIEW__`).
  */
 async function loadWindowRoot(kind: WindowKind): Promise<ComponentType> {
   switch (kind) {
     case WINDOW_KIND.TWIN: {
       const { LedTwinOverlay } = await import("./features/preview/ui/LedTwinOverlay");
       return function TwinRoot() {
-        const displayId = (window as unknown as { __LUMASYNC_TWIN_DISPLAY_ID__?: string })
-          .__LUMASYNC_TWIN_DISPLAY_ID__;
-        return <LedTwinOverlay displayId={displayId} />;
+        return <LedTwinOverlay />;
       };
     }
     case WINDOW_KIND.POPUP: {

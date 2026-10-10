@@ -28,16 +28,16 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 
 import { OFFERED_CODES } from "../handlers/codes";
 import {
-  EDGE_SIGNAL_INTERVAL_MS,
+  TWIN_FRAME_INTERVAL_MS,
   SHELL_EVENTS,
   TRAY_EVENTS,
   emitMockEvent,
   emitRuntimeHealth,
   emitUpdateDownload,
-  getEdgeSignalStream,
-  startEdgeSignalStream,
-  stopEdgeSignalStream,
-  subscribeToEdgeSignalStream,
+  getTwinFrameStream,
+  startTwinFrameStream,
+  stopTwinFrameStream,
+  subscribeToTwinFrameStream,
 } from "../events";
 import { dispatch } from "../dispatch";
 import { plugPort, rejectSerialPort, setSerialConnected, setWledBound } from "../hotplug";
@@ -286,7 +286,7 @@ export function DevPanel({ onReloadApp }: PanelProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const world = useSyncExternalStore(subscribe, getWorld);
-  const stream = useSyncExternalStore(subscribeToEdgeSignalStream, getEdgeSignalStream);
+  const stream = useSyncExternalStore(subscribeToTwinFrameStream, getTwinFrameStream);
   // Not derived from the world: a preset is a one-way drop into `shellState`,
   // and the editor writes back over it immediately. Reading the selection back
   // out of the map would make the picker jump to "none" on the first drag.
@@ -296,7 +296,7 @@ export function DevPanel({ onReloadApp }: PanelProps) {
 
   // A stream left running past a reload would keep emitting into a tree that
   // no longer has the listeners it was started for.
-  useEffect(() => stopEdgeSignalStream, []);
+  useEffect(() => stopTwinFrameStream, []);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -1158,18 +1158,18 @@ export function DevPanel({ onReloadApp }: PanelProps) {
               inert no matter which scenario is loaded. */}
           <Section title={`EVENTS${stream.running ? ` · streaming #${stream.frame}` : ""}`} query={q}>
             <Ctl
-              label="Edge signal stream"
-              keywords="ambilight edge-signal event twin preview frame seq pattern live test"
+              label="Twin frame stream"
+              keywords="ambilight twin channel preview frame seq pattern"
               reach="live"
               query={q}
             >
               <Toggle
                 on={stream.running}
-                label={stream.running ? `Emitting at ${1000 / EDGE_SIGNAL_INTERVAL_MS} Hz` : "Stopped"}
+                label={stream.running ? `Emitting at ${1000 / TWIN_FRAME_INTERVAL_MS} Hz` : "Stopped"}
                 onClick={() =>
                   stream.running
-                    ? stopEdgeSignalStream()
-                    : startEdgeSignalStream({ pattern: stream.pattern, source: stream.source })
+                    ? stopTwinFrameStream()
+                    : startTwinFrameStream({ pattern: stream.pattern })
                 }
               />
               <Row>
@@ -1177,15 +1177,7 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                 <Pick
                   value={stream.pattern}
                   options={STREAM_PATTERN_KINDS}
-                  onChange={(v) => startEdgeSignalStream({ pattern: v, source: stream.source })}
-                />
-              </Row>
-              <Row>
-                <span style={{ color: DIM, fontSize: 10, width: 52 }}>source</span>
-                <Pick
-                  value={stream.source}
-                  options={["live", "test"] as const}
-                  onChange={(v) => startEdgeSignalStream({ pattern: stream.pattern, source: v })}
+                  onChange={(v) => startTwinFrameStream({ pattern: v })}
                 />
               </Row>
               <Row>
@@ -1194,9 +1186,8 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                   value={String(stream.dropEveryNthFrame) as "0" | "2" | "3" | "5"}
                   options={["0", "2", "3", "5"] as const}
                   onChange={(v) =>
-                    startEdgeSignalStream({
+                    startTwinFrameStream({
                       pattern: stream.pattern,
-                      source: stream.source,
                       dropEveryNthFrame: Number(v),
                     })
                   }

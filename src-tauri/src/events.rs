@@ -38,9 +38,9 @@ pub const TRAY_SHOW_LED_PREVIEW_EVENT: &str = "tray:show-led-preview";
 /// Re-exported from `commands::hue::health`.
 pub const HUE_HEALTH_CHANGED_EVENT: &str = "hue://health";
 
-/// `PREVIEW_EVENTS.EDGE_SIGNAL` in `src/shared/contracts/preview.ts`.
-/// Re-exported from `commands::lighting_mode::preview`.
-pub const EDGE_SIGNAL_EVENT: &str = "ambilight://edge-signal";
+/// `PREVIEW_EVENTS.TWIN_LAYOUT` in `src/shared/contracts/preview.ts`. Emitted
+/// from `commands::preview::feed` to the session's twin.
+pub const PREVIEW_TWIN_LAYOUT_EVENT: &str = "preview://twin-layout";
 
 /// `TELEMETRY_EVENTS.HEALTH_CHANGED` in `src/shared/contracts/telemetry.ts`.
 /// Re-exported from `commands::runtime_telemetry`.

@@ -17,9 +17,7 @@ use super::frame_pipeline::{
 };
 use super::live::{AmbilightLiveSettings, RoomGeometryLive};
 use super::pacing::{resolve_quality_config, AmbilightWorkerQualityState};
-use super::preview::{
-    EdgeSignalEmitter, EdgeSignalPayload, PreviewEmitContext, EDGE_SIGNAL_PREVIEW_INTERVAL_MS,
-};
+use super::preview::{PreviewEmitContext, TwinFrameSink, TWIN_FRAME_INTERVAL_MS};
 use super::runtime::LightingWorkerRuntime;
 use super::sampling::{LIVE_SAMPLE_WINDOW, SYNTHETIC_SAMPLE_WINDOW};
 use super::usb_output::{ActiveUsbSink, UsbOutputPlan};
@@ -36,6 +34,7 @@ use crate::commands::led_output::{
     scale_brightness, ColorCorrectionConfig, FirmwareProfile, LedChipType, LedOutputBridge,
     SerialSink,
 };
+use crate::commands::preview::feed::twin_colour;
 use crate::commands::runtime_telemetry::{RuntimeTelemetryWindow, SharedRuntimeTelemetry};
 use crate::commands::wled_sink::CorrectedWledSink;
 
@@ -54,8 +53,8 @@ pub(super) struct WorkerPacing {
     /// What capture was asked for; a pull source is polled at this rate.
     pub capture_interval: Duration,
     pub clock: SmoothingClock,
-    /// The source draws its frames (an effect): paced like a test pattern,
-    /// though the preview reports it live.
+    /// The source draws its frames (an effect or a test pattern) rather than
+    /// sampling a screen.
     pub synthetic: bool,
     /// An effect, drawn per light by the pipeline instead of sampled.
     pub effect: Option<EffectDraw>,
@@ -178,7 +177,7 @@ pub(super) fn start_ambilight_worker(
     frame_source: Box<dyn AmbilightFrameSource>,
     telemetry_snapshot: SharedRuntimeTelemetry,
     hue_output: Option<Arc<HueOutputLive>>,
-    edge_signal_emitter: Option<EdgeSignalEmitter>,
+    twin_sink: Option<TwinFrameSink>,
     color_correction: ColorCorrectionConfig,
     firmware_profile: FirmwareProfile,
     chip_type: LedChipType,
@@ -265,7 +264,7 @@ pub(super) fn start_ambilight_worker(
     AMBILIGHT_CAPTURE_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
     // A synthetic test paints exact per-LED blocks; the live 0.05 box is wider
     // than the whole comet, so it averaged in unlit screen and dimmed the head.
-    let synthetic = pacing.synthetic || preview.as_ref().is_some_and(|ctx| ctx.source == "test");
+    let synthetic = pacing.synthetic;
     telemetry_window.set_capture_interval(pacing.capture_interval);
     if synthetic {
         telemetry_window.skip_history();
@@ -386,11 +385,12 @@ pub(super) fn start_ambilight_worker(
 
         let mut capture_fail_count = 0u32;
         let mut send_fail_count = 0u32;
-        let mut last_edge_emit_at: Option<Instant> = None;
-        // LED preview: monotonic frame seq + last per-Hue-channel colours
-        // for the enriched edge-signal (only stamped while a preview is active).
-        let mut edge_seq: u64 = 0;
+        let mut last_twin_frame_at: Option<Instant> = None;
+        // The twin's copy of the Hue lamps' colours, kept only while it is fed.
         let mut last_hue_colors: Option<Vec<[u8; 3]>> = None;
+        // Reused every twin frame rather than allocated per tick.
+        let mut twin_leds: Vec<[u8; 3]> = Vec::new();
+        let mut twin_lamps: Vec<[u8; 3]> = Vec::new();
         // 0 is never a frame's seq, so the first frame on hand — the warm-up
         // one, if nothing newer came — is analysed.
         let mut seen_seq = 0u64;
@@ -608,8 +608,8 @@ pub(super) fn start_ambilight_worker(
                         unsent_frame = false;
                     }
                 }
-                // Only the enriched edge-signal reads this; allocating it
-                // unconditionally burned a Vec per frame at up to 60 Hz.
+                // Only the twin reads this; allocating it unconditionally
+                // burned a Vec per frame at up to 60 Hz.
                 if enrich_preview {
                     last_hue_colors = Some(
                         colors
@@ -633,36 +633,31 @@ pub(super) fn start_ambilight_worker(
             }
             let _ = telemetry_window.flush_if_due(Instant::now(), &telemetry_snapshot);
 
-            // Twin-overlay feed. With no twin open this is skipped whole —
-            // no buffer, no serialisation, no IPC.
-            let twin_feed = edge_signal_emitter
-                .as_ref()
-                .zip(preview.as_ref().filter(|_| enrich_preview));
-            if let Some((emitter, ctx)) = twin_feed {
+            // The twin's feed. With no twin subscribed this is skipped whole.
+            let twin_feed = twin_sink.as_ref().filter(|_| enrich_preview);
+            if let Some(sink) = twin_feed {
                 let now = Instant::now();
-                let due = last_edge_emit_at
-                    .map(|prev| {
-                        now.duration_since(prev)
-                            >= Duration::from_millis(EDGE_SIGNAL_PREVIEW_INTERVAL_MS)
-                    })
-                    .unwrap_or(true);
+                let due = last_twin_frame_at.is_none_or(|prev| {
+                    now.duration_since(prev) >= Duration::from_millis(TWIN_FRAME_INTERVAL_MS)
+                });
                 if due {
-                    let leds: Vec<[u8; 3]> = pipeline
-                        .strip_frame()
-                        .iter()
-                        .map(|&rgb| scale_brightness(pipeline.correct_rgb(rgb), brightness))
-                        .collect();
-                    edge_seq = edge_seq.wrapping_add(1);
-                    emitter(EdgeSignalPayload {
-                        led_count: leds.len(),
-                        leds,
-                        hue_channels: last_hue_colors.clone(),
-                        source: ctx.source,
-                        pattern: ctx.pattern,
-                        seq: edge_seq,
-                        display_id: ctx.display_id.clone(),
-                    });
-                    last_edge_emit_at = Some(now);
+                    // The light the strip makes: the sink's correction, then
+                    // brightness, then encoded for a screen. Hue arrives
+                    // corrected already, so it takes brightness only.
+                    twin_leds.clear();
+                    twin_leds.extend(pipeline.strip_frame().iter().map(|&rgb| {
+                        twin_colour(scale_brightness(pipeline.correct_rgb(rgb), brightness))
+                    }));
+                    twin_lamps.clear();
+                    if let Some(colors) = last_hue_colors.as_ref() {
+                        twin_lamps.extend(
+                            colors
+                                .iter()
+                                .map(|&rgb| twin_colour(scale_brightness(rgb, brightness))),
+                        );
+                    }
+                    sink(&twin_leds, &twin_lamps);
+                    last_twin_frame_at = Some(now);
                 }
             }
         }

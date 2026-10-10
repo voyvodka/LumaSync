@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime, State};
 
 use super::exclusion;
+use super::feed::TwinFeed;
 use super::windows::{
     app_in_front, build_popup, build_twin, float_over_full_screen, is_preview_window,
     next_popup_label, next_twin_label,
@@ -27,7 +28,7 @@ use crate::commands::status::CommandStatus;
 const PREVIEW_OPENED: &str = "PREVIEW_OPENED";
 const PREVIEW_ALREADY_OPEN: &str = "PREVIEW_ALREADY_OPEN";
 const PREVIEW_CLOSED: &str = "PREVIEW_CLOSED";
-const PREVIEW_NOT_OPEN: &str = "PREVIEW_NOT_OPEN";
+pub(super) const PREVIEW_NOT_OPEN: &str = "PREVIEW_NOT_OPEN";
 const PREVIEW_POPUP_UPDATED: &str = "PREVIEW_POPUP_UPDATED";
 const PREVIEW_OPEN_FAILED: &str = "PREVIEW_OPEN_FAILED";
 const PREVIEW_CLOSE_FAILED: &str = "PREVIEW_CLOSE_FAILED";
@@ -87,10 +88,12 @@ struct Inner {
 }
 
 /// Tauri-managed session state. `twin_open` lives outside the mutex so the
-/// worker's per-frame gate reads it without the lock.
+/// worker's per-frame gate reads it without the lock; it means a twin has
+/// subscribed to its frames, not merely that its window exists.
 pub struct PreviewSessionState {
     inner: Mutex<Inner>,
     twin_open: Arc<AtomicBool>,
+    pub(super) feed: TwinFeed,
 }
 
 impl Default for PreviewSessionState {
@@ -98,6 +101,7 @@ impl Default for PreviewSessionState {
         Self {
             inner: Mutex::new(Inner::default()),
             twin_open: Arc::new(AtomicBool::new(false)),
+            feed: TwinFeed::default(),
         }
     }
 }
@@ -109,14 +113,14 @@ impl PreviewSessionState {
             .map_err(|error| format!("PREVIEW_SESSION_LOCK_FAILED: {error}"))
     }
 
-    /// The gate each ambilight worker reads per frame: with it off the worker
-    /// neither builds nor emits `ambilight://edge-signal`.
+    /// The gate each worker reads per frame: with it off the worker builds no
+    /// twin frame at all.
     pub fn twin_open(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.twin_open)
     }
 
-    /// The twin the edge-signal goes to. Best-effort: a poisoned lock sends
-    /// nothing rather than wedging the worker.
+    /// The open session's twin. Best-effort: a poisoned lock answers `None`
+    /// rather than wedging a caller.
     pub fn twin_label(&self) -> Option<String> {
         self.inner
             .lock()
@@ -124,18 +128,29 @@ impl PreviewSessionState {
             .and_then(|inner| inner.open.as_ref().map(|open| open.twin_label.clone()))
     }
 
+    pub(super) fn display_id(&self) -> Option<String> {
+        self.inner
+            .lock()
+            .ok()
+            .and_then(|inner| inner.open.as_ref().map(|open| open.display_id.clone()))
+    }
+
+    pub(super) fn drop_twin_subscriber(&self) {
+        self.twin_open.store(false, Ordering::SeqCst);
+        self.feed.clear();
+    }
+
     fn commit(&self, open: OpenSession) -> Result<PreviewSession, String> {
         let wire = open.wire();
         let mut inner = self.lock()?;
         inner.open = Some(open);
         inner.opening = false;
-        self.twin_open.store(true, Ordering::Relaxed);
         Ok(wire)
     }
 
     fn take(&self) -> Result<Option<OpenSession>, String> {
         let taken = self.lock()?.open.take();
-        self.twin_open.store(false, Ordering::Relaxed);
+        self.drop_twin_subscriber();
         Ok(taken)
     }
 
@@ -151,6 +166,18 @@ impl PreviewSessionState {
             main_hidden_by_session: false,
             return_to: None,
         });
+    }
+
+    /// What `subscribe_twin_frames` does, without the window it needs.
+    #[cfg(test)]
+    pub(crate) fn subscribe_for_test(&self, label: &str, channel: tauri::ipc::Channel) {
+        self.feed.subscribe(label.into(), channel);
+        self.twin_open.store(true, Ordering::SeqCst);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn twin_layout_for_test(&self) -> Option<super::feed::TwinLayout> {
+        self.feed.layout_for_test()
     }
 
     #[cfg(test)]
@@ -534,14 +561,23 @@ mod tests {
         assert!(resolve_display(&[], None).is_none());
     }
 
+    /// The worker builds twin frames only while a twin has subscribed, and an
+    /// ending session takes the subscription with it.
     #[test]
-    fn the_gate_follows_the_session() {
+    fn the_gate_opens_on_subscribe_and_closes_with_the_session() {
         let state = PreviewSessionState::default();
         let gate = state.twin_open();
-        assert!(!gate.load(Ordering::Relaxed));
         state.open_for_test("a", "led-twin-overlay-7", "led-control-popup-7");
-        assert!(gate.load(Ordering::Relaxed));
+        assert!(
+            !gate.load(Ordering::Relaxed),
+            "a window alone feeds nothing"
+        );
         assert_eq!(state.twin_label().as_deref(), Some("led-twin-overlay-7"));
+        state.feed.subscribe(
+            "led-twin-overlay-7".into(),
+            tauri::ipc::Channel::new(|_| Ok(())),
+        );
+        gate.store(true, Ordering::SeqCst);
         state.close_for_test();
         assert!(!gate.load(Ordering::Relaxed));
         assert_eq!(state.twin_label(), None);

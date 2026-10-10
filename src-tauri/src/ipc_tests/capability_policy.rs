@@ -27,6 +27,7 @@ const BUNDLE_WINDOWS: [bool; 4] = [true, true, true, false];
 const MAIN_AND_POPUP: [bool; 4] = [true, true, false, false];
 const MAIN_ONLY: [bool; 4] = [true, false, false, false];
 const POPUP_ONLY: [bool; 4] = [false, true, false, false];
+const TWIN_ONLY: [bool; 4] = [false, false, true, false];
 const NO_WINDOW: [bool; 4] = [false; 4];
 
 const POLICY: &[(&str, [bool; 4])] = &[
@@ -123,6 +124,8 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     // Only the popup's own controls call these.
     ("close_preview", POPUP_ONLY),
     ("set_preview_popup_hidden", POPUP_ONLY),
+    // The twin's one command: its frames.
+    ("subscribe_twin_frames", TWIN_ONLY),
     // The main window only.
     ("update_tray_labels", MAIN_ONLY),
     ("get_launch_context", MAIN_ONLY),
@@ -235,7 +238,7 @@ fn overlays_and_the_popup_cannot_reach_main_window_privileges() {
             );
         }
     }
-    // The twin reads settings and nothing else; the calibration overlay has no IPC.
+    // The twin reads settings and its frames, never writes; the calibration overlay has no IPC.
     for window in [TWIN, CALIBRATION] {
         assert!(authority
             .resolve_access("patch_shell_state", window, window, &Origin::Local)

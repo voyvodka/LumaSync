@@ -17,10 +17,9 @@
  * overlay never reads the screen; it only mirrors whatever the worker streams.
  */
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 
-import { shellStore } from "@/features/persistence/shellStore";
 import { normalizeLedCalibrationConfig } from "@/features/calibration/model/contracts";
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import type { LedSegmentKey } from "@/shared/contracts/calibration";
@@ -32,14 +31,8 @@ import {
   packedToCss,
   type PackedLedColor,
 } from "../ledColor";
-import { useLedPreviewFrame } from "../state/useLedPreviewFrame";
+import { useTwinFeed } from "../state/useTwinFeed";
 import { LedGlowDot } from "./LedGlowDot";
-import { primaryStripOf } from "@/features/strips/model/stripSelectors";
-
-export interface LedTwinOverlayProps {
-  /** Display this overlay mirrors. Threaded from the Rust-injected global. */
-  displayId?: string;
-}
 
 /** Dim "off" colour shown for an LED when no frame has streamed yet. */
 const OFF_COLOR_PACKED = packLedColor([16, 18, 24]);
@@ -95,32 +88,13 @@ function edgeGradient(track: EdgeTrack, packed: readonly PackedLedColor[]): stri
   return `linear-gradient(${track.direction}, ${stops.join(", ")})`;
 }
 
-export function LedTwinOverlay({ displayId }: LedTwinOverlayProps) {
+export function LedTwinOverlay() {
   const { t } = useTranslation();
-  const [calibration, setCalibration] = useState<LedCalibrationConfig | null>(null);
-  const frame = useLedPreviewFrame(displayId);
-
-  // Load persisted calibration so we can size + place the strip. Re-loading is
-  // cheap (Rust answers from memory) and the overlay is a
-  // short-lived window, so a one-shot mount read is sufficient for Phase 1.
-  useEffect(() => {
-    let alive = true;
-    void shellStore
-      .load()
-      .then((state) => {
-        if (!alive) return;
-        const layout = primaryStripOf(state)?.layout;
-        if (layout) {
-          setCalibration(normalizeLedCalibrationConfig(layout) ?? null);
-        }
-      })
-      .catch((error) => {
-        console.error("[LumaSync] LedTwinOverlay calibration load failed:", error);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const { layout, frame } = useTwinFeed();
+  const calibration = useMemo<LedCalibrationConfig | null>(
+    () => (layout?.leds ? (normalizeLedCalibrationConfig(layout.leds) ?? null) : null),
+    [layout],
+  );
 
   // Set the window title from the localized aria label so the overlay is
   // identifiable to AT / window managers even though the visual layer is
@@ -200,9 +174,9 @@ export function LedTwinOverlay({ displayId }: LedTwinOverlayProps) {
       ))}
 
       {/* Hue zone markers — sparse, centred along the bottom. */}
-      {frame && frame.hueChannels.length > 0 && (
+      {frame && frame.lamps.length > 0 && (
         <div className="lm-twin-hue-row">
-          {frame.hueChannels.map((c, i) => (
+          {frame.lamps.map((c, i) => (
             <span
               key={`hue-${i}`}
               className="lm-twin-hue-chip"

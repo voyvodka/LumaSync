@@ -62,11 +62,11 @@ describe("the event bridge", () => {
   });
 
   it("delivers the event/id/payload shape a real listener unwraps", () => {
-    listen("ambilight://edge-signal", 11);
-    emit("ambilight://edge-signal", { seq: 3 });
+    listen("preview://twin-layout", 11);
+    emit("preview://twin-layout", { seq: 3 });
 
     expect(runCallback).toHaveBeenCalledWith(11, {
-      event: "ambilight://edge-signal",
+      event: "preview://twin-layout",
       id: 11,
       payload: { seq: 3 },
     });

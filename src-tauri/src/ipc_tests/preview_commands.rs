@@ -24,7 +24,8 @@ fn app() -> App<MockRuntime> {
         crate::commands::lighting_mode::led_test_pattern::stop_led_test_pattern,
         crate::commands::preview::session::open_preview,
         crate::commands::preview::session::close_preview,
-        crate::commands::preview::session::set_preview_popup_hidden
+        crate::commands::preview::session::set_preview_popup_hidden,
+        crate::commands::preview::feed::subscribe_twin_frames
     ])
 }
 
@@ -185,4 +186,32 @@ fn opening_an_open_session_brings_its_popup_back() {
         reopened["session"],
         json!({ "state": "live", "displayId": "display-1", "popupHidden": false })
     );
+}
+
+/// Only the open session's own twin may take the frames: the popup asking, or
+/// a twin left from an earlier session, is told nothing is open. The twin
+/// gets the layout in the same answer, so it never waits for an event.
+#[test]
+fn only_the_sessions_twin_subscribes_and_it_gets_the_layout() {
+    use tauri::Manager;
+
+    let app = app();
+    let twin = WebviewWindowBuilder::new(&app, "led-twin-overlay-1", Default::default())
+        .build()
+        .expect("mock twin should build");
+    let channel = json!({ "onFrame": "__CHANNEL__:7" });
+
+    let before =
+        invoke(&twin, "subscribe_twin_frames", channel.clone()).expect("subscribe must resolve");
+    assert_eq!(status_code(&before), "PREVIEW_NOT_OPEN");
+    assert_eq!(before["layout"], json!(null));
+
+    app.state::<crate::commands::preview::PreviewSessionState>()
+        .open_for_test("display-1", "led-twin-overlay-1", "led-control-popup-0");
+    let subscribed =
+        invoke(&twin, "subscribe_twin_frames", channel).expect("subscribe must resolve");
+    assert_camel_case_keys(&subscribed);
+    assert_eq!(status_code(&subscribed), "PREVIEW_TWIN_SUBSCRIBED");
+    assert_eq!(subscribed["layout"]["displayId"], json!("display-1"));
+    assert!(subscribed["layout"]["layoutRevision"].as_u64().unwrap() > 0);
 }

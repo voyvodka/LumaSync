@@ -84,6 +84,8 @@ import type {
   PreviewSessionResult,
   SetPreviewPopupHiddenPayload,
   StartLedTestPatternPayload,
+  TwinFrameChannel,
+  TwinSubscribeResult,
 } from "./preview";
 import type {
   AssignChannelRequest,
@@ -227,6 +229,7 @@ export interface CommandMap {
   open_preview: NoArgs<PreviewSessionResult>;
   close_preview: NoArgs<PreviewSessionResult>;
   set_preview_popup_hidden: Command<{ payload: SetPreviewPopupHiddenPayload }, PreviewSessionResult>;
+  subscribe_twin_frames: Command<{ onFrame: TwinFrameChannel }, TwinSubscribeResult>;
 
   // --- shell --------------------------------------------------------------
   update_tray_labels: Command<{ labels: TrayLabels }, null>;

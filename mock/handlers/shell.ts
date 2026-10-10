@@ -326,7 +326,7 @@ export const pluginHandlers: Record<string, Handler> = {
   "plugin:process|restart": () => null,
   // `plugin:event|*` is deliberately absent. Answering `listen` here made the
   // shim resolve before `mockIPC`'s event registry ever saw the call, so every
-  // Tauri event was silently dead — including `ambilight://edge-signal`, which
+  // Tauri event was silently dead — including the twin's old per-LED event, which
   // meant the signal readout showed zeros in *every* scenario and the mock
   // could not tell the bug it was built to reproduce from its own limitation.
   // Leaving them unhandled lets mockIPC own them in the browser and lets

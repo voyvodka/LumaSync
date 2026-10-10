@@ -1,15 +1,13 @@
-//! The LED twin's feed: the preview state a worker carries and the
-//! edge-signal event it emits while the preview session's twin is open.
+//! The LED twin's feed on the worker side: the preview state a worker carries
+//! and the frames it hands the preview session while a twin is subscribed.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 
-use serde::Serialize;
-use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 
 use super::config::LightingModeConfig;
 use super::runtime::LightingRuntimeState;
-use crate::commands::preview::PreviewSessionState;
 use crate::commands::test_pattern::{TestPatternConfig, TestPatternLiveSlot};
 
 /// LED preview runtime state carried alongside the lighting worker.
@@ -37,124 +35,56 @@ pub(super) struct PreviewRuntime {
     pub(super) pattern_live: Option<TestPatternLiveSlot>,
 }
 
-/// Per-worker twin-feed context — decides whether the worker builds and emits
-/// the edge-signal this tick, and what it stamps on it.
+/// Per-worker twin-feed gate: whether the worker builds a twin frame this tick.
 #[derive(Clone)]
 pub struct PreviewEmitContext {
-    pub gate: PreviewGate,
-    /// `"test"` (synthetic) or `"live"` (real capture).
-    pub source: &'static str,
-    /// Active synthetic pattern tag when `source == "test"`.
-    pub pattern: Option<&'static str>,
-    /// Display the frame belongs to (live only; synthetic is display-agnostic).
-    pub display_id: Option<String>,
-}
-
-/// Gate deciding whether the worker emits the edge-signal each tick.
-#[derive(Clone)]
-pub enum PreviewGate {
-    /// Always enrich — the synthetic test pattern is itself the preview.
-    Always,
-    /// Enrich only while the shared flag is set (live twin opened/closed at
-    /// runtime).
-    Shared(Arc<AtomicBool>),
+    gate: Arc<AtomicBool>,
 }
 
 impl PreviewEmitContext {
     pub(super) fn should_enrich(&self) -> bool {
-        match &self.gate {
-            PreviewGate::Always => true,
-            PreviewGate::Shared(flag) => flag.load(Ordering::Relaxed),
-        }
+        self.gate.load(Ordering::Relaxed)
     }
 }
 
-// ---------------------------------------------------------------------------
-// Edge signal — per-LED feed for the LED twin overlay
-// ---------------------------------------------------------------------------
-//
-// The twin is the only listener, so the worker builds and emits this only
-// while the session's twin is open (`PreviewSessionState::twin_open`).
+/// At most one twin frame per display refresh: the twin cannot draw faster.
+pub const TWIN_FRAME_INTERVAL_MS: u64 = 16;
 
-/// `PREVIEW_EVENTS.EDGE_SIGNAL` in `src/shared/contracts/preview.ts`. Defined
-/// in `crate::events`; re-exported here since this is the emit site.
-pub use crate::events::EDGE_SIGNAL_EVENT;
-/// ~30 Hz: at the top pattern speed a slower cadence lets the comet head travel
-/// further per frame than its own tail, leaving visible gaps in the twin.
-pub const EDGE_SIGNAL_PREVIEW_INTERVAL_MS: u64 = 33;
+/// Hands the worker's frame — strip LEDs, then Hue lamps, as the twin draws
+/// them — to the preview session. Without the Tauri runtime type parameter, so
+/// the worker does not depend on it.
+pub type TwinFrameSink = Arc<dyn Fn(&[[u8; 3]], &[[u8; 3]]) + Send + Sync>;
 
-/// Payload for the `ambilight://edge-signal` event — the per-LED strip buffer
-/// the twin overlay mirrors, plus the sparse Hue channel colours.
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EdgeSignalPayload {
-    pub leds: Vec<[u8; 3]>,
-    pub led_count: usize,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub hue_channels: Option<Vec<[u8; 3]>>,
-    pub source: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub pattern: Option<&'static str>,
-    pub seq: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub display_id: Option<String>,
-}
-
-/// Thread-safe emitter the worker hands each twin frame to, so the worker
-/// doesn't depend on the Tauri runtime type parameter.
-pub type EdgeSignalEmitter = Arc<dyn Fn(EdgeSignalPayload) + Send + Sync>;
-
-/// Build the edge-signal emitter. Sends to the session's twin only (read each
-/// tick, so a twin opened mid-run starts receiving without a worker restart);
-/// the main window has no listener.
-pub(super) fn build_edge_emitter<R: Runtime>(app: &AppHandle<R>) -> EdgeSignalEmitter {
+pub(super) fn build_twin_sink<R: Runtime>(app: &AppHandle<R>) -> TwinFrameSink {
     let app_handle = app.clone();
-    Arc::new(move |payload: EdgeSignalPayload| {
-        let Some(label) = app_handle
-            .try_state::<PreviewSessionState>()
-            .and_then(|session| session.twin_label())
-        else {
-            return;
-        };
-        let _ = app_handle.emit_to(
-            EventTarget::webview_window(label.as_str()),
-            EDGE_SIGNAL_EVENT,
-            payload,
-        );
+    Arc::new(move |leds: &[[u8; 3]], lamps: &[[u8; 3]]| {
+        crate::commands::preview::feed::send_frame(&app_handle, leds, lamps);
     })
 }
 
-/// Decide whether — and how — the worker feeds the twin overlay.
+/// `None` without a session gate wired (the worker then builds no twin frame).
 pub(super) fn build_preview_emit_context(
-    is_test: bool,
-    test_pattern: Option<&TestPatternConfig>,
     preview_gate: Option<Arc<AtomicBool>>,
-    display_id: Option<String>,
 ) -> Option<PreviewEmitContext> {
-    if is_test {
-        Some(PreviewEmitContext {
-            // Only twin overlays read the buffer, so a test with no twin open
-            // must not pay for an N-LED Vec + JSON every tick.
-            gate: match preview_gate {
-                Some(flag) => PreviewGate::Shared(flag),
-                None => PreviewGate::Always,
-            },
-            source: "test",
-            pattern: test_pattern.map(|cfg| cfg.kind.tag()),
-            // Synthetic frames are display-agnostic — no per-display filter.
-            display_id: None,
-        })
-    } else {
-        preview_gate.map(|flag| PreviewEmitContext {
-            gate: PreviewGate::Shared(flag),
-            source: "live",
-            pattern: None,
-            display_id,
-        })
-    }
+    preview_gate.map(|gate| PreviewEmitContext { gate })
+}
+
+/// What the twin needs from the running mode: the layout it runs, and the mode
+/// itself when no worker runs to send frames (Solid, Off).
+pub struct TwinModeView {
+    pub layout: Option<crate::commands::led_calibration::LedCalibrationConfig>,
+    pub still: Option<LightingModeConfig>,
 }
 
 impl LightingRuntimeState {
+    pub fn twin_view(&self) -> TwinModeView {
+        let owner = self.runtime.lock().unwrap_or_else(|e| e.into_inner());
+        TwinModeView {
+            layout: owner.active_mode.led_calibration.clone(),
+            still: owner.worker.is_none().then(|| owner.active_mode.clone()),
+        }
+    }
+
     /// Whether a synthetic test pattern drives the worker. Recovers from a
     /// poisoned lock rather than propagating: a stop must still learn it.
     pub fn test_pattern_active(&self) -> bool {

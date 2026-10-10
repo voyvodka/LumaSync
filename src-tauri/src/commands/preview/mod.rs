@@ -5,8 +5,10 @@
 //!   `end_session`.
 //! - `windows` — how the popup and the twin are built.
 //! - `exclusion` — keeping them out of the live capture.
+//! - `feed` — the twin's layout and frames.
 
 pub mod exclusion;
+pub mod feed;
 pub mod session;
 pub mod windows;
 

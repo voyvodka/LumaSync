@@ -377,7 +377,7 @@ A change that genuinely needs another per-frame allocation raises `ALLOCS_PER_FR
 PR and says why. The worker's check of the Hue output slot (`hue.md`, "The worker follows the live
 stream") is one relaxed atomic load per frame; it locks and clones only on the frame after a Hue
 start, reconnect, restart or stop. Outside the guard: the Hue send's `to_vec()` (the sender thread takes an owned
-`Vec`), the twin-overlay feed (`the_edge_signal_is_built_and_sent_only_while_a_twin_is_open`), and
+`Vec`), the twin feed (`the_twin_frame_is_built_and_sent_only_while_a_twin_is_subscribed`; its LED and lamp buffers are reused, but the channel takes an owned body), and
 capture itself.
 
 **Equivalence.** `worker_output_matches_reference_*` drives the real threaded worker, and

@@ -104,6 +104,7 @@ use commands::lighting_mode::{
 use commands::local_outputs::{disconnect_serial_port, get_local_outputs, LocalOutputRegistry};
 use commands::notifications::{request_notification_permission, show_notification};
 use commands::platform::open_log_dir;
+use commands::preview::feed::subscribe_twin_frames;
 use commands::preview::session::{
     close_preview, open_preview, set_preview_popup_hidden, PreviewSessionState,
 };
@@ -957,6 +958,7 @@ pub fn run() {
             open_preview,
             close_preview,
             set_preview_popup_hidden,
+            subscribe_twin_frames,
             check_for_update,
             download_and_install_update,
             get_launch_context,

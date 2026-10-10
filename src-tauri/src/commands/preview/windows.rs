@@ -1,5 +1,5 @@
 //! The preview's windows. Both load `index.html`; `src/main.tsx` routes by
-//! label. The twin learns its display from an initialization script.
+//! label. The twin learns its layout and display when it subscribes.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -52,16 +52,13 @@ pub(super) fn build_twin<R: Runtime>(
     label: &str,
     display: &DisplayInfoPayload,
 ) -> Result<WebviewWindow<R>, String> {
-    let display_id_json = serde_json::to_string(&display.id)
-        .map_err(|error| format!("could not encode the display id: {error}"))?;
-    let init_script = format!("window.__LUMASYNC_TWIN_DISPLAY_ID__ = {display_id_json};");
     let window = build_transparent_overlay(
         app,
         label,
         WebviewUrl::App(PathBuf::from("index.html")),
         "LumaSync LED Twin",
         display,
-        Some(init_script.as_str()),
+        None,
         !SHOW_AFTER_ELEVATING,
     )?;
     #[cfg(target_os = "macos")]

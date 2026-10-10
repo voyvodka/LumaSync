@@ -696,6 +696,44 @@ fn stopping_all_lighting_over_a_test_drops_the_mode_its_stop_would_restore() {
     assert_eq!(test_prior(&rig), None);
 }
 
+/// The twin draws the layout the strip runs, so a layout being tested before
+/// it is saved shows as the strip shows it — not the saved one beside it.
+#[test]
+fn the_twin_draws_the_layout_the_running_mode_uses_not_the_saved_one() {
+    let rig = Rig::new(RigSetup::default());
+    let session = rig.app.state::<PreviewSessionState>();
+    session.open_for_test("display-1", "led-twin-overlay-1", "led-control-popup-1");
+    session.subscribe_for_test("led-twin-overlay-1", tauri::ipc::Channel::new(|_| Ok(())));
+
+    let mut unsaved = super::calibration_for_tests();
+    unsaved["counts"]["top"] = json!(32);
+    unsaved["totalLeds"] = json!(61);
+    let mut mode = ambilight();
+    mode.targets = Some(vec!["usb".to_string()]);
+    mode.led_calibration = Some(serde_json::from_value(unsaved).unwrap());
+    super::led_test_pattern::apply_and_broadcast(
+        &rig.handle(),
+        mode,
+        rig.state().inner(),
+        rig.app.state::<LocalOutputRegistry>().driven().as_ref(),
+        rig.app.state::<HueRuntimeStateStore>().inner(),
+        rig.app.state::<RuntimeTelemetryState>().inner(),
+        session.inner(),
+        Some(TestPatternConfig {
+            kind: TestPatternKind::Gamut,
+            brightness: 0.5,
+            speed: TestPatternSpeed::default(),
+            display_aspect: 16.0 / 9.0,
+        }),
+    )
+    .unwrap();
+
+    let layout = session
+        .twin_layout_for_test()
+        .expect("a subscribed twin has a layout");
+    assert_eq!(layout.leds.map(|leds| leds.total_leds), Some(61));
+}
+
 // ---------------------------------------------------------------------------
 // Coded refusals
 // ---------------------------------------------------------------------------

@@ -2,6 +2,8 @@
  * wrapped in try/catch to degrade a transport rejection to a synthetic coded
  * failure rather than throwing. */
 
+import { Channel } from "@tauri-apps/api/core";
+
 import {
   LED_TEST_STATUS,
   PREVIEW_COMMANDS,
@@ -10,6 +12,7 @@ import {
   type PreviewSessionResult,
   type PreviewStatusCode,
   type StartLedTestPatternPayload,
+  type TwinSubscribeResult,
 } from "@/shared/contracts/preview";
 import { parseCommandError } from "@/shared/contracts/status";
 import { invokeCommand, type CommandInvoker } from "@/shared/ipcApi";
@@ -102,5 +105,24 @@ export async function setPreviewPopupHidden(
   } catch (error) {
     console.error("[LumaSync] set_preview_popup_hidden failed:", error);
     return failedSessionResult(PREVIEW_STATUS.NOT_OPEN, error);
+  }
+}
+
+/** The twin's frames, each handed to `onFrame` as the raw buffer. */
+export async function subscribeTwinFrames(
+  onFrame: (frame: ArrayBuffer) => void,
+  invoker: CommandInvoker = invokeCommand,
+): Promise<TwinSubscribeResult> {
+  const channel = new Channel<ArrayBuffer>();
+  channel.onmessage = onFrame;
+  try {
+    return await invoker(PREVIEW_COMMANDS.SUBSCRIBE_TWIN_FRAMES, { onFrame: channel });
+  } catch (error) {
+    console.error("[LumaSync] subscribe_twin_frames failed:", error);
+    const parsed = parseCommandError(error);
+    return {
+      layout: null,
+      status: { code: PREVIEW_STATUS.NOT_OPEN, message: parsed.message, details: parsed.code ?? null },
+    };
   }
 }

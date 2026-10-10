@@ -1,6 +1,6 @@
 //! The mode state machine end to end: the target gates, Hue sampling and its
 //! live stream, room geometry, the ambilight fast path, Solid's full-strip
-//! frame, output-stamp hydration and the edge-signal feed.
+//! frame, output-stamp hydration and the twin feed.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -2350,51 +2350,42 @@ fn stopping_a_test_re_reads_the_color_order() {
 }
 
 // -----------------------------------------------------------------------
-// Edge-signal — only the twin overlay listens
+// The twin feed — only a subscribed twin receives it
 // -----------------------------------------------------------------------
 
-/// Drives the real worker, twin gate and emitter. With no twin open the
-/// worker must not hand the emitter anything — the payload is only ever
-/// built as its argument — and no window may receive the event. Once a twin
-/// opens, that twin alone receives frames carrying the strip buffer and the
-/// Hue channel colours; the main window never does.
+/// Drives the real worker, twin gate and sink. With no twin subscribed the
+/// worker must not hand the sink anything — the frame is only ever built as
+/// its argument. Once a twin subscribes, its channel receives frames carrying
+/// every strip LED and every Hue lamp; ending the session stops them.
 #[test]
-fn the_edge_signal_is_built_and_sent_only_while_a_twin_is_open() {
+fn the_twin_frame_is_built_and_sent_only_while_a_twin_is_subscribed() {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::{Duration, Instant};
-    use tauri::{Listener, Manager, WebviewWindowBuilder};
+    use tauri::ipc::{Channel, InvokeResponseBody};
+    use tauri::Manager;
 
     use crate::commands::preview::PreviewSessionState;
 
     let _guard = acquire_worker_test_guard();
     let app = tauri::test::mock_app();
     app.manage(PreviewSessionState::default());
-    let main = WebviewWindowBuilder::new(&app, crate::MAIN_WINDOW_LABEL, Default::default())
-        .build()
-        .expect("main webview");
     let twin_label = "led-twin-overlay-test";
-    let twin = WebviewWindowBuilder::new(&app, twin_label, Default::default())
-        .build()
-        .expect("twin webview");
 
-    let main_events = Arc::new(AtomicUsize::new(0));
-    let main_counter = Arc::clone(&main_events);
-    main.listen(super::preview::EDGE_SIGNAL_EVENT, move |_| {
-        main_counter.fetch_add(1, Ordering::SeqCst);
-    });
-    let twin_frames: Arc<Mutex<Vec<serde_json::Value>>> = Arc::default();
-    let twin_sink = Arc::clone(&twin_frames);
-    twin.listen(super::preview::EDGE_SIGNAL_EVENT, move |event| {
-        let frame = serde_json::from_str(event.payload()).expect("payload is JSON");
-        twin_sink.lock().expect("frames lock").push(frame);
+    let frames: Arc<Mutex<Vec<Vec<u8>>>> = Arc::default();
+    let frame_sink = Arc::clone(&frames);
+    let channel = Channel::new(move |body| {
+        if let InvokeResponseBody::Raw(bytes) = body {
+            frame_sink.lock().expect("frames lock").push(bytes);
+        }
+        Ok(())
     });
 
     let built = Arc::new(AtomicUsize::new(0));
     let built_counter = Arc::clone(&built);
-    let real_emitter = super::preview::build_edge_emitter(app.handle());
-    let emitter: super::preview::EdgeSignalEmitter = Arc::new(move |payload| {
+    let real_sink = super::preview::build_twin_sink(app.handle());
+    let sink: super::preview::TwinFrameSink = Arc::new(move |leds, lamps| {
         built_counter.fetch_add(1, Ordering::SeqCst);
-        real_emitter(payload);
+        real_sink(leds, lamps);
     });
 
     let session = app.state::<PreviewSessionState>();
@@ -2418,61 +2409,52 @@ fn the_edge_signal_is_built_and_sent_only_while_a_twin_is_open() {
         None,
         live(hue_context_with_channels(2)),
         Some(shared_telemetry()),
-        Some(emitter),
+        Some(sink),
         None,
     );
     assert_eq!(started.status.code, "AMBILIGHT_MODE_STARTED");
 
+    session.open_for_test("display-1", twin_label, "led-control-popup-test");
     std::thread::sleep(Duration::from_millis(300));
     assert_eq!(
         built.load(Ordering::SeqCst),
         0,
-        "no twin open: the worker must not build an edge-signal payload"
+        "a twin window that has not subscribed must not cost a frame"
     );
-    assert_eq!(main_events.load(Ordering::SeqCst), 0);
-    assert!(twin_frames.lock().expect("frames lock").is_empty());
 
-    session.open_for_test("display-1", twin_label, "led-control-popup-test");
+    session.subscribe_for_test(twin_label, channel);
     let deadline = Instant::now() + Duration::from_secs(5);
     let frame = loop {
-        let with_hue = twin_frames
+        let with_lamps = frames
             .lock()
             .expect("frames lock")
             .iter()
             .rev()
-            .find(|frame| frame.get("hueChannels").is_some())
+            .find(|frame| u32::from_le_bytes(frame[12..16].try_into().unwrap()) > 0)
             .cloned();
-        if let Some(frame) = with_hue {
+        if let Some(frame) = with_lamps {
             break frame;
         }
         assert!(
             Instant::now() < deadline,
-            "an open twin must receive frames carrying hueChannels"
+            "a subscribed twin must receive frames carrying the Hue lamps"
         );
         std::thread::sleep(Duration::from_millis(10));
     };
-    assert_eq!(frame["leds"].as_array().map(Vec::len), Some(12));
-    assert_eq!(frame["ledCount"], 12);
-    assert_eq!(frame["hueChannels"].as_array().map(Vec::len), Some(2));
-    assert_eq!(frame["source"], "live");
-    for dropped in ["top", "bottom", "left", "right"] {
-        assert!(frame.get(dropped).is_none(), "`{dropped}` has no reader");
-    }
-    assert_eq!(
-        main_events.load(Ordering::SeqCst),
-        0,
-        "the main window has no edge-signal listener and must receive nothing"
-    );
+    let field = |at: usize| u32::from_le_bytes(frame[at..at + 4].try_into().unwrap());
+    assert_eq!(field(8), 12, "every strip LED");
+    assert_eq!(field(12), 2, "every Hue lamp");
+    assert_eq!(frame.len(), 16 + (12 + 2) * 3);
 
     session.close_for_test();
-    // One tick may already be past the gate when the twin closes.
+    // One tick may already be past the gate when the session ends.
     std::thread::sleep(Duration::from_millis(100));
     let after_close = built.load(Ordering::SeqCst);
     std::thread::sleep(Duration::from_millis(300));
     assert_eq!(
         built.load(Ordering::SeqCst),
         after_close,
-        "closing the last twin must stop the feed"
+        "ending the session must stop the feed"
     );
 
     let mut cleanup_trace = None;

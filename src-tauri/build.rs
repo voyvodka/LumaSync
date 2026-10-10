@@ -47,6 +47,7 @@ const APP_COMMANDS: &[&str] = &[
     "open_preview",
     "close_preview",
     "set_preview_popup_hidden",
+    "subscribe_twin_frames",
     "check_for_update",
     "download_and_install_update",
     "get_launch_context",

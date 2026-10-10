@@ -134,21 +134,6 @@ pub enum TestPatternKind {
     },
 }
 
-impl TestPatternKind {
-    /// Stable discriminator string, matching the TS `LedTestPatternKind`
-    /// union. Used to stamp `EdgeSignalPayload.pattern`.
-    pub fn tag(&self) -> &'static str {
-        match self {
-            TestPatternKind::Solid { .. } => "solid",
-            TestPatternKind::Chase { .. } => "chase",
-            TestPatternKind::Rainbow => "rainbow",
-            TestPatternKind::Spiral => "spiral",
-            TestPatternKind::Gamut => "gamut",
-            TestPatternKind::ChannelProbe { .. } => "channelProbe",
-        }
-    }
-}
-
 /// Resolved synthetic-pattern request carried from `start_led_test_pattern`
 /// into the frame-source factory and stored on the lighting runtime, where a
 /// refresh and a retune read whether a test is running.
@@ -649,19 +634,6 @@ mod tests {
                 "pixel buffer must equal width*height"
             );
         }
-    }
-
-    #[test]
-    fn kind_tag_matches_contract_strings() {
-        assert_eq!(TestPatternKind::Solid { r: 0, g: 0, b: 0 }.tag(), "solid");
-        assert_eq!(TestPatternKind::Chase { r: 0, g: 0, b: 0 }.tag(), "chase");
-        assert_eq!(TestPatternKind::Rainbow.tag(), "rainbow");
-        assert_eq!(TestPatternKind::Spiral.tag(), "spiral");
-        assert_eq!(TestPatternKind::Gamut.tag(), "gamut");
-        assert_eq!(
-            TestPatternKind::ChannelProbe { slot: 0 }.tag(),
-            "channelProbe"
-        );
     }
 
     #[test]

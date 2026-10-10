@@ -27,9 +27,10 @@
 import { emit } from "@tauri-apps/api/event";
 
 import {
-  PREVIEW_EVENTS,
-  type EdgeSignalPayload,
+  TWIN_FRAME,
   type LedTestPatternKind,
+  type TwinFrameChannel,
+  type TwinLayout,
 } from "../src/shared/contracts/preview";
 import { UPDATER_EVENTS, type UpdateDownloadProgress } from "../src/shared/contracts/updater";
 import {
@@ -41,8 +42,8 @@ import { SHELL_EVENTS, TRAY_EVENTS } from "../src/shared/contracts/shell";
 import { primaryStripOf } from "../src/features/strips/model/stripSelectors";
 import { getWorld } from "./state";
 
-/** ~10 Hz. The real worker feeds an open twin at ~30 Hz; the mock does not need to. */
-export const EDGE_SIGNAL_INTERVAL_MS = 100;
+/** ~10 Hz. The real worker feeds a subscribed twin at up to 60 Hz; the mock does not need to. */
+export const TWIN_FRAME_INTERVAL_MS = 100;
 
 type Rgb = [number, number, number];
 
@@ -139,35 +140,60 @@ function pixelAt(
   }
 }
 
-export function buildEdgeSignalFrame(
-  pattern: LedTestPatternKind,
-  frame: number,
-  source: "test" | "live",
-  slot: ProbeSlot = 0,
-): EdgeSignalPayload {
+export interface MockTwinFrame {
+  leds: Rgb[];
+  lamps: Rgb[];
+}
+
+export function buildTwinFrame(pattern: LedTestPatternKind, frame: number, slot: ProbeSlot = 0): MockTwinFrame {
   const world = getWorld();
   const ledCount = calibratedLedCount();
   return {
     leds: Array.from({ length: ledCount }, (_, i) => pixelAt(pattern, i, ledCount, frame, slot)),
-    ledCount,
-    hueChannels: world.hue.channels.map((_, i) =>
+    lamps: world.hue.channels.map((_, i) =>
       pixelAt(pattern, i, Math.max(world.hue.channels.length, 1), frame, slot),
     ),
-    source,
-    pattern: source === "test" ? pattern : undefined,
-    seq: frame,
-    displayId: world.displays[0]?.id,
   };
+}
+
+/** The mock's twin layout never changes, so one revision covers it. */
+const MOCK_LAYOUT_REVISION = 1;
+
+export function mockTwinLayout(): TwinLayout {
+  const world = getWorld();
+  const layout = primaryStripOf(world.shellState)?.layout;
+  return {
+    displayId: world.displays[0]?.id ?? "display-1",
+    layoutRevision: MOCK_LAYOUT_REVISION,
+    leds: layout ? { ...layout, totalLeds: calibratedLedCount() } : null,
+  };
+}
+
+export function encodeTwinFrame(seq: number, { leds, lamps }: MockTwinFrame): ArrayBuffer {
+  const buffer = new ArrayBuffer(TWIN_FRAME.HEADER_BYTES + (leds.length + lamps.length) * 3);
+  const view = new DataView(buffer);
+  view.setUint32(TWIN_FRAME.SEQ_OFFSET, seq, true);
+  view.setUint32(TWIN_FRAME.REVISION_OFFSET, MOCK_LAYOUT_REVISION, true);
+  view.setUint32(TWIN_FRAME.LED_COUNT_OFFSET, leds.length, true);
+  view.setUint32(TWIN_FRAME.LAMP_COUNT_OFFSET, lamps.length, true);
+  new Uint8Array(buffer, TWIN_FRAME.HEADER_BYTES).set([...leds, ...lamps].flat());
+  return buffer;
+}
+
+/** The twin that subscribed last; frames go to it alone, as in Rust. */
+let twinChannel: TwinFrameChannel | null = null;
+
+export function attachTwinChannel(channel: TwinFrameChannel): void {
+  twinChannel = channel;
 }
 
 // --- The stream ------------------------------------------------------------
 
-export interface EdgeSignalStreamState {
+export interface TwinFrameStreamState {
   running: boolean;
   pattern: LedTestPatternKind;
   /** Wire slot a `channelProbe` stream lights; ignored by every other pattern. */
   probeSlot: ProbeSlot;
-  source: "test" | "live";
   /** Frames emitted since the stream last started. Drives `seq`. */
   frame: number;
   /**
@@ -179,11 +205,10 @@ export interface EdgeSignalStreamState {
   dropEveryNthFrame: number;
 }
 
-let stream: EdgeSignalStreamState = {
+let stream: TwinFrameStreamState = {
   running: false,
   pattern: "rainbow",
   probeSlot: 0,
-  source: "live",
   frame: 0,
   dropEveryNthFrame: 0,
 };
@@ -191,16 +216,16 @@ let stream: EdgeSignalStreamState = {
 let timer: ReturnType<typeof setInterval> | null = null;
 const streamListeners = new Set<() => void>();
 
-export function getEdgeSignalStream(): EdgeSignalStreamState {
+export function getTwinFrameStream(): TwinFrameStreamState {
   return stream;
 }
 
-export function subscribeToEdgeSignalStream(listener: () => void): () => void {
+export function subscribeToTwinFrameStream(listener: () => void): () => void {
   streamListeners.add(listener);
   return () => streamListeners.delete(listener);
 }
 
-function setStream(next: Partial<EdgeSignalStreamState>): void {
+function setStream(next: Partial<TwinFrameStreamState>): void {
   stream = { ...stream, ...next };
   for (const listener of streamListeners) listener();
 }
@@ -213,23 +238,20 @@ function tick(): void {
   setStream({ frame });
   const drop = stream.dropEveryNthFrame;
   if (drop > 1 && frame % drop === 0) return;
-  void emitMockEvent(
-    PREVIEW_EVENTS.EDGE_SIGNAL,
-    buildEdgeSignalFrame(stream.pattern, frame, stream.source, stream.probeSlot),
-  );
+  twinChannel?.onmessage(encodeTwinFrame(frame, buildTwinFrame(stream.pattern, frame, stream.probeSlot)));
 }
 
-export function startEdgeSignalStream(
+export function startTwinFrameStream(
   options?: Partial<
-    Pick<EdgeSignalStreamState, "pattern" | "probeSlot" | "source" | "dropEveryNthFrame">
+    Pick<TwinFrameStreamState, "pattern" | "probeSlot" | "dropEveryNthFrame">
   >,
 ): void {
-  stopEdgeSignalStream();
+  stopTwinFrameStream();
   setStream({ ...options, running: true, frame: 0 });
-  timer = setInterval(tick, EDGE_SIGNAL_INTERVAL_MS);
+  timer = setInterval(tick, TWIN_FRAME_INTERVAL_MS);
 }
 
-export function stopEdgeSignalStream(): void {
+export function stopTwinFrameStream(): void {
   if (timer !== null) {
     clearInterval(timer);
     timer = null;

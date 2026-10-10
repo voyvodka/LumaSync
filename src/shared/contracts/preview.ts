@@ -8,8 +8,9 @@
  * - **Synthetic-injection test patterns** — Rust generates procedural frames
  *   and pushes them through the ambilight worker. LED Setup and Devices use
  *   them; the preview does not.
- * - **Per-LED colour stream** — `ambilight://edge-signal`
- *   (`EdgeSignalPayload` below), sent to the twin while it is open.
+ * - **Twin feed** — the twin subscribes with a `Channel` and receives raw
+ *   frames (`TWIN_FRAME`), each cut for one `TwinLayout` revision; the layout
+ *   follows on `preview://twin-layout` when the running mode's changes.
  */
 
 import type { LedCalibrationConfig } from "./calibration";
@@ -33,6 +34,8 @@ export const PREVIEW_COMMANDS = {
   CLOSE_PREVIEW: "close_preview",
   /** Hide or show the popup while the session stays open. */
   SET_POPUP_HIDDEN: "set_preview_popup_hidden",
+  /** The session's twin takes its frames on a channel; answers the current layout. */
+  SUBSCRIBE_TWIN_FRAMES: "subscribe_twin_frames",
 } as const;
 
 export type PreviewCommandId = (typeof PREVIEW_COMMANDS)[keyof typeof PREVIEW_COMMANDS];
@@ -43,8 +46,7 @@ export type PreviewCommandId = (typeof PREVIEW_COMMANDS)[keyof typeof PREVIEW_CO
 
 /**
  * Ordered list of synthetic test pattern kinds. `LedTestPattern` carries the
- * per-kind payload; this list + `LedTestPatternKind` are the discriminator
- * surface shared with the enriched `EdgeSignalPayload.pattern` field.
+ * per-kind payload; this list + `LedTestPatternKind` are its discriminator.
  */
 export const LED_TEST_PATTERN_KIND = [
   "solid",
@@ -107,9 +109,8 @@ export interface StartLedTestPatternPayload {
 /**
  * Result of `start_led_test_pattern` / `stop_led_test_pattern`.
  *
- * `previewOnly` is `true` when the pattern is rendered into the twin overlay
- * (and the enriched edge-signal stream) but NOT pushed to a physical sink —
- * e.g. no calibration / no connected device — surfaced together with
+ * `previewOnly` is `true` when no physical sink took the frames (no connected
+ * device) — only an open preview twin shows them — surfaced together with
  * `LED_TEST_PATTERN_PREVIEW_ONLY`.
  */
 export interface LedTestPatternResult {
@@ -132,6 +133,43 @@ export type PreviewSession =
       popupHidden: boolean;
     };
 
+/** The layout the twin draws: the one the running mode uses, which during a
+ *  LED Setup test is the layout being edited, not the saved one. */
+export interface TwinLayout {
+  displayId: DisplayId;
+  /** Grows with every new layout and never resets; a frame names the one it was cut for. */
+  layoutRevision: number;
+  /** `null` with no strip set up: the twin draws no LEDs. */
+  leds: LedCalibrationConfig | null;
+}
+
+/** What the twin passes to `subscribe_twin_frames`: a Tauri `Channel` of raw
+ *  frames, named by shape so the contracts stay free of the Tauri API. */
+export interface TwinFrameChannel {
+  onmessage: (frame: ArrayBuffer) => void;
+}
+
+/** Result of `subscribe_twin_frames`. */
+export interface TwinSubscribeResult {
+  /** `null` when the caller is not the open session's twin. */
+  layout: TwinLayout | null;
+  status: CommandStatusOf<PreviewStatusCode>;
+}
+
+/**
+ * One twin frame on the channel: a little-endian header of four u32 — seq,
+ * layout revision, LED count, lamp count — then packed RGB for every strip LED
+ * and every Hue lamp, as the light looks on a screen. Pinned by
+ * `features/preview/__tests__/twinFrame.golden.json`, which Rust reads too.
+ */
+export const TWIN_FRAME = {
+  HEADER_BYTES: 16,
+  SEQ_OFFSET: 0,
+  REVISION_OFFSET: 4,
+  LED_COUNT_OFFSET: 8,
+  LAMP_COUNT_OFFSET: 12,
+} as const;
+
 /** Payload for `set_preview_popup_hidden`. */
 export interface SetPreviewPopupHiddenPayload {
   hidden: boolean;
@@ -151,8 +189,8 @@ export const LED_TEST_STATUS = {
   /** Pattern accepted and now streaming to the configured sink(s). */
   PATTERN_STARTED: "LED_TEST_PATTERN_STARTED",
   /**
-   * Pattern accepted but rendered to the twin overlay / edge-signal stream
-   * only — no physical sink received frames (e.g. no device connected).
+   * Pattern accepted but no physical sink received frames (e.g. no device
+   * connected); only an open preview twin shows it.
    * Pair with `LedTestPatternResult.previewOnly === true`.
    */
   PATTERN_PREVIEW_ONLY: "LED_TEST_PATTERN_PREVIEW_ONLY",
@@ -182,6 +220,8 @@ export const PREVIEW_STATUS = {
   NOT_OPEN: "PREVIEW_NOT_OPEN",
   /** The popup was hidden or shown. */
   POPUP_UPDATED: "PREVIEW_POPUP_UPDATED",
+  /** The twin's channel is registered; the layout comes with the answer. */
+  TWIN_SUBSCRIBED: "PREVIEW_TWIN_SUBSCRIBED",
   /** The displays could not be read, or a window could not be built; whatever
    * was built is destroyed again. A saved display that is gone is not a failure:
    * the twin goes where the capture falls back to. */
@@ -214,35 +254,11 @@ export const LED_TWIN_OVERLAY_LABEL_PREFIX = "led-twin-overlay-" as const;
 /** Label prefix for the session's control popup; a counter follows, as for the twin. */
 export const LED_CONTROL_POPUP_LABEL_PREFIX = "led-control-popup-" as const;
 
-/** Tauri event channel carrying the per-LED feed of the LED twin overlay. */
-export const EDGE_SIGNAL_EVENT = "ambilight://edge-signal" as const;
+/** `TwinLayout`, to the twin, when the running mode's layout changes. */
+export const PREVIEW_TWIN_LAYOUT_EVENT = "preview://twin-layout" as const;
 
 export const PREVIEW_EVENTS = {
-  EDGE_SIGNAL: EDGE_SIGNAL_EVENT,
+  TWIN_LAYOUT: PREVIEW_TWIN_LAYOUT_EVENT,
 } as const;
 
 export type PreviewEventName = (typeof PREVIEW_EVENTS)[keyof typeof PREVIEW_EVENTS];
-
-/**
- * Per-LED frame the Rust ambilight worker sends to the session's twin
- * (`lighting_mode/preview.rs`). Sent only while the twin is open, and only to
- * it. This is the exact wire shape; the one listener reads
- * it as a `Partial`, so a frame without a `leds` buffer is ignored rather than
- * trusted.
- */
-export interface EdgeSignalPayload {
-  /** Full per-LED RGB buffer, ordered along the calibrated strip path. */
-  leds: Array<[number, number, number]>;
-  /** Length of `leds` — the calibrated total LED count for this frame. */
-  ledCount: number;
-  /** Per-Hue-channel RGB for the twin's Hue zone markers. Separate from `leds`
-   * because Hue channels are sparse room positions, not contiguous pixels. */
-  hueChannels?: Array<[number, number, number]>;
-  source: "test" | "live";
-  /** Active synthetic pattern kind when `source === "test"`. */
-  pattern?: LedTestPatternKind;
-  /** Monotonically increasing frame sequence number, for drop detection. */
-  seq: number;
-  /** Display the frame was sampled from, threaded through from the capture path. */
-  displayId?: DisplayId;
-}
