@@ -168,6 +168,43 @@ pub fn elevate_overlay_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R
     }
 }
 
+/// The app in front, when it is not this one.
+pub fn frontmost_other_app() -> Option<i32> {
+    objc2_app_kit::NSWorkspace::sharedWorkspace()
+        .frontmostApplication()
+        .map(|app| app.processIdentifier())
+        .filter(|pid| *pid != std::process::id() as i32)
+}
+
+pub fn activate_app(pid: i32) {
+    if let Some(app) =
+        objc2_app_kit::NSRunningApplication::runningApplicationWithProcessIdentifier(pid)
+    {
+        app.activateWithOptions(objc2_app_kit::NSApplicationActivationOptions::empty());
+    }
+}
+
+/// Shows the window on its own Space without making it key or activating the
+/// app, so the user is not moved to that Space.
+pub fn order_front_without_focus<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
+    let raw = match window.ns_window() {
+        Ok(ptr) if !ptr.is_null() => ptr,
+        Ok(_) => return,
+        Err(err) => {
+            log::warn!("[macos_window] ns_window unavailable for order_front: {err}");
+            return;
+        }
+    };
+    // SAFETY: as in `elevate_overlay_window` — a retained NSWindow, borrowed
+    // for this call only.
+    unsafe {
+        let ns_window: Retained<NSWindow> =
+            Retained::retain(raw as *mut AnyObject as *mut NSWindow)
+                .expect("NSWindow pointer must be non-null");
+        ns_window.orderFront(None);
+    }
+}
+
 #[cfg(all(debug_assertions, not(feature = "e2e")))]
 pub use dev_focus::{hand_focus_back_after_launch, note_front_app_before_launch};
 

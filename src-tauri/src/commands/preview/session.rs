@@ -17,7 +17,8 @@ use tauri::{AppHandle, Manager, Runtime, State};
 
 use super::exclusion;
 use super::windows::{
-    build_popup, build_twin, is_preview_window, next_popup_label, next_twin_label,
+    app_in_front, build_popup, build_twin, float_over_full_screen, is_preview_window,
+    next_popup_label, next_twin_label,
 };
 use crate::commands::calibration::{list_displays, DisplayInfoPayload};
 use crate::commands::shell_state;
@@ -65,6 +66,9 @@ struct OpenSession {
     /// from the tray with the shell already hidden does not conjure it on the
     /// way out.
     main_hidden_by_session: bool,
+    /// The app the user was in when the session opened — a full-screen film,
+    /// say — which gets focus back on close so the user stays where they were.
+    return_to: Option<i32>,
 }
 
 impl OpenSession {
@@ -145,6 +149,7 @@ impl PreviewSessionState {
             popup_label: popup_label.into(),
             popup_hidden: false,
             main_hidden_by_session: false,
+            return_to: None,
         });
     }
 
@@ -204,14 +209,35 @@ fn hide_main<R: Runtime>(app: &AppHandle<R>) -> bool {
     hidden
 }
 
-fn restore_main<R: Runtime>(app: &AppHandle<R>) {
+/// Back where it was. Opened from inside the app, the main window takes focus
+/// again; opened over another app — a full-screen film from the tray — focus
+/// goes back to that app and the main window only reappears on its own Space,
+/// so the user is not pulled away from where they were.
+fn restore_main<R: Runtime>(app: &AppHandle<R>, return_to: Option<i32>) {
     let Some(main) = app.get_webview_window(crate::MAIN_WINDOW_LABEL) else {
         return;
     };
-    let _ = main.show();
-    let _ = main.unminimize();
-    let _ = main.set_focus();
+    match return_to {
+        #[cfg(target_os = "macos")]
+        Some(_) => crate::macos_window::order_front_without_focus(&main),
+        _ => {
+            let _ = main.show();
+            let _ = main.unminimize();
+            let _ = main.set_focus();
+        }
+    }
     crate::commands::window_visibility::refresh(app);
+}
+
+/// Before the app turns back into a Dock app: as the active app, that turn
+/// would pull the user to the main window's Space.
+fn hand_back(return_to: Option<i32>) {
+    #[cfg(target_os = "macos")]
+    if let Some(pid) = return_to {
+        crate::macos_window::activate_app(pid);
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = return_to;
 }
 
 fn reveal_popup<R: Runtime>(app: &AppHandle<R>, label: &str) {
@@ -296,11 +322,21 @@ pub fn open_preview<R: Runtime>(
         ));
     };
 
-    // Before any preview window exists, so none is ever in a frame.
+    // Before any preview window exists, so none is ever in a frame; and the
+    // main window out of the way first, or the popup taking focus pulls macOS
+    // over to the main window's Space instead of the one the user is in.
     exclusion::session_opening();
+    let return_to = app_in_front();
+    let main_hidden_by_session = hide_main(&app);
+    float_over_full_screen(&app, true);
     let twin_label = next_twin_label();
     if let Err(reason) = build_twin(&app, &twin_label, &display) {
         exclusion::session_ended();
+        hand_back(return_to);
+        float_over_full_screen(&app, false);
+        if main_hidden_by_session {
+            restore_main(&app, return_to);
+        }
         return Ok(failure(
             PREVIEW_OPEN_FAILED,
             "Could not open the LED twin.",
@@ -312,6 +348,11 @@ pub fn open_preview<R: Runtime>(
         let mut failures = Vec::new();
         destroy(&app, &twin_label, &mut failures);
         exclusion::session_ended();
+        hand_back(return_to);
+        float_over_full_screen(&app, false);
+        if main_hidden_by_session {
+            restore_main(&app, return_to);
+        }
         failures.insert(0, reason);
         return Ok(failure(
             PREVIEW_OPEN_FAILED,
@@ -320,13 +361,13 @@ pub fn open_preview<R: Runtime>(
         ));
     }
 
-    let main_hidden_by_session = hide_main(&app);
     let committed = state.commit(OpenSession {
         display_id: display.id,
         twin_label: twin_label.clone(),
         popup_label: popup_label.clone(),
         popup_hidden: false,
         main_hidden_by_session,
+        return_to,
     });
     match committed {
         Ok(session) => {
@@ -338,8 +379,10 @@ pub fn open_preview<R: Runtime>(
             destroy(&app, &twin_label, &mut failures);
             destroy(&app, &popup_label, &mut failures);
             exclusion::session_ended();
+            hand_back(return_to);
+            float_over_full_screen(&app, false);
             if main_hidden_by_session {
-                restore_main(&app);
+                restore_main(&app, return_to);
             }
             Err(error)
         }
@@ -354,6 +397,11 @@ pub fn end_session<R: Runtime>(app: &AppHandle<R>) -> Result<PreviewSessionResul
         None => None,
     };
     let (swept, failures) = destroy_preview_windows(app);
+    let return_to = open.as_ref().and_then(|open| open.return_to);
+    hand_back(return_to);
+    if open.is_some() || swept > 0 {
+        float_over_full_screen(app, false);
+    }
     // A window that outlived its destroy stays out of the capture.
     if failures.is_empty() {
         exclusion::session_ended();
@@ -362,7 +410,7 @@ pub fn end_session<R: Runtime>(app: &AppHandle<R>) -> Result<PreviewSessionResul
         .as_ref()
         .is_some_and(|open| open.main_hidden_by_session)
     {
-        restore_main(app);
+        restore_main(app, return_to);
     }
 
     if !failures.is_empty() {

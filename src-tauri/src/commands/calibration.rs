@@ -137,6 +137,7 @@ pub fn build_transparent_overlay<R: Runtime>(
     title: &str,
     target_display: &DisplayInfoPayload,
     init_script: Option<&str>,
+    visible: bool,
 ) -> Result<tauri::WebviewWindow<R>, String> {
     let mut builder = WebviewWindowBuilder::new(app, window_label, url)
         .title(title)
@@ -155,7 +156,7 @@ pub fn build_transparent_overlay<R: Runtime>(
         // the activation chain (WS_EX_NOACTIVATE on Windows).
         // See docs/architecture/ui-and-shell.md.
         .focusable(false)
-        .visible(true);
+        .visible(visible);
     if let Some(script) = init_script {
         builder = builder.initialization_script(script);
     }
@@ -223,6 +224,7 @@ fn open_overlay_window<R: Runtime>(
         "Calibration Overlay",
         target_display,
         Some(preload_script.as_str()),
+        true,
     )?;
 
     let _ = window.eval(

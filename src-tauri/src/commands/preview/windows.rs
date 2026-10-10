@@ -24,6 +24,12 @@ pub const LED_CONTROL_POPUP_LABEL_PREFIX: &str = "led-control-popup-";
 
 static LABEL_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+/// macOS places a window in a Space when it is first shown. Shown before
+/// `elevate_overlay_window` gives it `CanJoinAllSpaces | FullScreenAuxiliary`,
+/// it lands on the desktop, not over the full-screen app the user is in; so
+/// there both preview windows are built hidden and shown once elevated.
+const SHOW_AFTER_ELEVATING: bool = cfg!(target_os = "macos");
+
 pub(super) fn next_twin_label() -> String {
     let seq = LABEL_COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("{LED_TWIN_OVERLAY_LABEL_PREFIX}{seq}")
@@ -56,11 +62,47 @@ pub(super) fn build_twin<R: Runtime>(
         "LumaSync LED Twin",
         display,
         Some(init_script.as_str()),
+        !SHOW_AFTER_ELEVATING,
     )?;
     #[cfg(target_os = "macos")]
     crate::macos_window::elevate_overlay_window(&window);
     super::exclusion::protect(&window);
+    if SHOW_AFTER_ELEVATING {
+        window
+            .show()
+            .map_err(|error| format!("could not show the LED twin: {error}"))?;
+    }
     Ok(window)
+}
+
+/// A regular (Dock) app's windows are not put over another app's full-screen
+/// Space, whatever their collection behaviour, and activating it switches the
+/// user to the Space its main window lives on. While a session is open the app
+/// runs as an accessory, which may float over full-screen apps; its Dock icon
+/// goes for that time and comes back when the session ends.
+pub(super) fn float_over_full_screen<R: Runtime>(app: &AppHandle<R>, float: bool) {
+    #[cfg(target_os = "macos")]
+    {
+        let policy = if float {
+            tauri::ActivationPolicy::Accessory
+        } else {
+            tauri::ActivationPolicy::Regular
+        };
+        if let Err(error) = app.set_activation_policy(policy) {
+            log::warn!("[preview] activation policy not changed (float={float}): {error}");
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, float);
+}
+
+/// The app the user was in when the preview opened, if not this one — on
+/// macOS, where closing hands focus back to it rather than to the main window.
+pub(super) fn app_in_front() -> Option<i32> {
+    #[cfg(target_os = "macos")]
+    return crate::macos_window::frontmost_other_app();
+    #[cfg(not(target_os = "macos"))]
+    None
 }
 
 const POPUP_WIDTH: f64 = 320.0;
@@ -84,8 +126,8 @@ pub(super) fn build_popup<R: Runtime>(
             .resizable(false)
             .skip_taskbar(true)
             .always_on_top(true)
-            .focused(true)
-            .visible(true)
+            .focused(!SHOW_AFTER_ELEVATING)
+            .visible(!SHOW_AFTER_ELEVATING)
             // Opaque amber-dark: the popup is a control surface, not an overlay.
             .background_color(Color(18, 16, 14, 255));
     // Set before the first show, unlike the twin's: the popup is opaque.
@@ -113,6 +155,12 @@ pub(super) fn build_popup<R: Runtime>(
     #[cfg(target_os = "macos")]
     crate::macos_window::elevate_overlay_window(&window);
     super::exclusion::protect(&window);
+    if SHOW_AFTER_ELEVATING {
+        window
+            .show()
+            .and_then(|()| window.set_focus())
+            .map_err(|error| format!("could not show the control popup: {error}"))?;
+    }
     Ok(window)
 }
 
