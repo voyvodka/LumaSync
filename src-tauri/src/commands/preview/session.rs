@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime, State};
 
+use super::exclusion;
 use super::windows::{
     build_popup, build_twin, is_preview_window, next_popup_label, next_twin_label,
 };
@@ -295,18 +296,28 @@ pub fn open_preview<R: Runtime>(
         ));
     };
 
+    // Before any preview window exists, so none is ever in a frame.
+    exclusion::session_opening();
     let twin_label = next_twin_label();
-    if let Err(reason) = build_twin(&app, &twin_label, &display) {
-        return Ok(failure(
-            PREVIEW_OPEN_FAILED,
-            "Could not open the LED twin.",
-            reason,
-        ));
+    match build_twin(&app, &twin_label, &display) {
+        Ok(twin) if exclusion::twin_hidden_now() => {
+            let _ = twin.hide();
+        }
+        Ok(_) => {}
+        Err(reason) => {
+            exclusion::session_ended();
+            return Ok(failure(
+                PREVIEW_OPEN_FAILED,
+                "Could not open the LED twin.",
+                reason,
+            ));
+        }
     }
     let popup_label = next_popup_label();
     if let Err(reason) = build_popup(&app, &popup_label) {
         let mut failures = Vec::new();
         destroy(&app, &twin_label, &mut failures);
+        exclusion::session_ended();
         failures.insert(0, reason);
         return Ok(failure(
             PREVIEW_OPEN_FAILED,
@@ -329,6 +340,7 @@ pub fn open_preview<R: Runtime>(
             let mut failures = Vec::new();
             destroy(&app, &twin_label, &mut failures);
             destroy(&app, &popup_label, &mut failures);
+            exclusion::session_ended();
             if main_hidden_by_session {
                 restore_main(&app);
             }
@@ -345,6 +357,10 @@ pub fn end_session<R: Runtime>(app: &AppHandle<R>) -> Result<PreviewSessionResul
         None => None,
     };
     let (swept, failures) = destroy_preview_windows(app);
+    // A window that outlived its destroy stays out of the capture.
+    if failures.is_empty() {
+        exclusion::session_ended();
+    }
     if open
         .as_ref()
         .is_some_and(|open| open.main_hidden_by_session)

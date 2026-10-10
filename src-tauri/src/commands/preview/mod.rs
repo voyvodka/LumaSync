@@ -4,7 +4,9 @@
 //! - `session` — the state and its commands; every way out goes through
 //!   `end_session`.
 //! - `windows` — how the popup and the twin are built.
+//! - `exclusion` — keeping them out of the live capture.
 
+pub mod exclusion;
 pub mod session;
 pub mod windows;
 

@@ -720,6 +720,7 @@ pub fn run() {
             app.manage(LightingRuntimeState::default());
             app.manage(away::AwayWatch::default());
             app.manage(PreviewSessionState::default());
+            commands::preview::exclusion::install(app.handle());
             app.manage(HueRuntimeStateStore::default());
             app.manage(RuntimeTelemetryState::default());
             app.manage(PendingUpdate::default());

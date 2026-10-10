@@ -16,9 +16,6 @@
 //! intentionally NOT baked into the rendered frame — it flows through the
 //! worker's existing brightness path (LumaSync v1 header byte + the twin's
 //! post-EWMA scalar) so a synthetic run dims identically to live ambilight.
-//!
-//! Keeping the preview windows out of a live capture (`SCContentFilter`
-//! exclude / `SetWindowDisplayAffinity`) is not built.
 
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};

@@ -59,6 +59,7 @@ pub(super) fn build_twin<R: Runtime>(
     )?;
     #[cfg(target_os = "macos")]
     crate::macos_window::elevate_overlay_window(&window);
+    super::exclusion::protect(&window);
     Ok(window)
 }
 
@@ -74,7 +75,7 @@ pub(super) fn build_popup<R: Runtime>(
 ) -> Result<WebviewWindow<R>, String> {
     let zoom = shell_state::persisted(app).map_or(1.0, |state| state.ui_zoom());
     let (width, height) = (POPUP_WIDTH * zoom, POPUP_HEIGHT * zoom);
-    let window =
+    let builder =
         WebviewWindowBuilder::new(app, label, WebviewUrl::App(PathBuf::from("index.html")))
             .title("LumaSync LED Controls")
             .inner_size(width, height)
@@ -86,9 +87,13 @@ pub(super) fn build_popup<R: Runtime>(
             .focused(true)
             .visible(true)
             // Opaque amber-dark: the popup is a control surface, not an overlay.
-            .background_color(Color(18, 16, 14, 255))
-            .build()
-            .map_err(|error| format!("could not create the control popup: {error}"))?;
+            .background_color(Color(18, 16, 14, 255));
+    // Set before the first show, unlike the twin's: the popup is opaque.
+    #[cfg(target_os = "windows")]
+    let builder = builder.content_protected(super::exclusion::supported());
+    let window = builder
+        .build()
+        .map_err(|error| format!("could not create the control popup: {error}"))?;
 
     if let Some((cx, cy)) = shell_state::persisted(app).and_then(|state| state.popup_center()) {
         let _ = window.set_position(Position::Logical(LogicalPosition::new(
@@ -107,6 +112,7 @@ pub(super) fn build_popup<R: Runtime>(
 
     #[cfg(target_os = "macos")]
     crate::macos_window::elevate_overlay_window(&window);
+    super::exclusion::protect(&window);
     Ok(window)
 }
 

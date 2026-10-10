@@ -117,8 +117,8 @@ impl AmbilightCaptureError {
     }
 }
 
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 pub trait AmbilightFrameSource: Send {
@@ -266,6 +266,76 @@ pub fn create_live_frame_source_at(
     interval: Duration,
 ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
     platform::create_live_frame_source(display_id, interval)
+        .map(|source| Box::new(Counted::new(source)) as Box<dyn AmbilightFrameSource>)
+}
+
+// ---------------------------------------------------------------------------
+// The app's own windows and the capture
+// ---------------------------------------------------------------------------
+
+/// Live capture sources running now. Where the preview cannot keep its twin
+/// out of the capture (Linux, Windows before 10 2004), it hides the twin while
+/// this is above zero, or Ambilight would light the strip from the twin.
+static LIVE_SOURCES: AtomicUsize = AtomicUsize::new(0);
+
+type CaptureListener = Box<dyn Fn(bool) + Send + Sync>;
+static CAPTURE_LISTENER: OnceLock<CaptureListener> = OnceLock::new();
+
+pub fn capture_active() -> bool {
+    LIVE_SOURCES.load(Ordering::SeqCst) > 0
+}
+
+/// Called with `true` when the first live source starts and `false` when the
+/// last one stops, on the thread that started or dropped it. Set once.
+pub fn on_capture_active_changed(listener: CaptureListener) {
+    let _ = CAPTURE_LISTENER.set(listener);
+}
+
+fn notify_capture_active(active: bool) {
+    if let Some(listener) = CAPTURE_LISTENER.get() {
+        listener(active);
+    }
+}
+
+struct Counted(Box<dyn AmbilightFrameSource>);
+
+impl Counted {
+    fn new(inner: Box<dyn AmbilightFrameSource>) -> Self {
+        if LIVE_SOURCES.fetch_add(1, Ordering::SeqCst) == 0 {
+            notify_capture_active(true);
+        }
+        Self(inner)
+    }
+}
+
+impl Drop for Counted {
+    fn drop(&mut self) {
+        if LIVE_SOURCES.fetch_sub(1, Ordering::SeqCst) == 1 {
+            notify_capture_active(false);
+        }
+    }
+}
+
+impl AmbilightFrameSource for Counted {
+    fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
+        self.0.capture_frame()
+    }
+
+    fn frame_signal(&self) -> Option<Arc<LatestFrame>> {
+        self.0.frame_signal()
+    }
+}
+
+/// Keep every window of this app out of the live capture, or let them back
+/// in. The preview session turns it on while it is open, so its twin and
+/// popup never light the strip. Only macOS filters by application; Windows
+/// keeps the preview windows out per window (`preview::windows`), and Linux
+/// cannot.
+pub fn set_own_windows_excluded(excluded: bool) {
+    #[cfg(target_os = "macos")]
+    platform::set_own_windows_excluded(excluded);
+    #[cfg(not(target_os = "macos"))]
+    let _ = excluded;
 }
 
 #[cfg(target_os = "windows")]
@@ -527,7 +597,8 @@ mod platform {
 
 #[cfg(target_os = "macos")]
 mod platform {
-    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
     use screencapturekit::cv::CVPixelBufferLockFlags;
@@ -640,11 +711,10 @@ mod platform {
         let start_failed =
             |_| AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_SESSION_START_FAILED");
 
-        let filter = SCContentFilter::create()
-            .with_display(&display)
-            .with_excluding_windows(&[])
-            .build()
-            .map_err(start_failed)?;
+        // Held to the end of the start: a preview opening meanwhile must find
+        // this stream registered, or its filter update would miss it.
+        let mut filter_state = FILTER_STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let filter = build_filter(&display, filter_state.exclude_own).map_err(start_failed)?;
 
         // Downscale to ~640px max dimension for ambilight color sampling.
         // SCStream performs hardware-accelerated scaling on the GPU — zero extra CPU cost.
@@ -733,19 +803,110 @@ mod platform {
 
         stream.start_capture().map_err(start_failed)?;
 
+        let id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed);
+        filter_state.live = Some(LiveStream {
+            id,
+            stream: stream.clone(),
+            display,
+        });
+
         Ok(Box::new(MacOSLiveFrameSource {
             latest_frame,
             stream,
+            id,
         }))
+    }
+
+    /// The running stream and whether the app's own windows are kept out of
+    /// it. One lock over both: a filter is always built from the current
+    /// flag, and an update never reaches a stream its source has let go of.
+    struct FilterState {
+        exclude_own: bool,
+        live: Option<LiveStream>,
+    }
+
+    struct LiveStream {
+        id: u64,
+        stream: SCStream,
+        display: SCDisplay,
+    }
+
+    static FILTER_STATE: Mutex<FilterState> = Mutex::new(FilterState {
+        exclude_own: false,
+        live: None,
+    });
+    static NEXT_STREAM_ID: AtomicU64 = AtomicU64::new(1);
+
+    /// The whole display, or the whole display less this app's windows. The
+    /// app is looked up among off-screen windows too: the main window may be
+    /// hidden and the preview's not built yet when the filter is applied.
+    fn build_filter(display: &SCDisplay, exclude_own: bool) -> Result<SCContentFilter, SCError> {
+        if exclude_own {
+            let own_pid = std::process::id() as i32;
+            let content = SCShareableContent::create()
+                .with_on_screen_windows_only(false)
+                .get()?;
+            if let Some(app) = content
+                .applications()
+                .into_iter()
+                .find(|app| app.process_id() == own_pid)
+            {
+                log::info!("[capture] filter leaves out this app's windows (pid {own_pid})");
+                return SCContentFilter::create()
+                    .with_display(display)
+                    .with_excluding_applications(&[&app], &[])
+                    .build();
+            }
+            log::warn!(
+                "[capture] this app is not among the shareable applications; its windows stay in the capture"
+            );
+        }
+        SCContentFilter::create()
+            .with_display(display)
+            .with_excluding_windows(&[])
+            .build()
+    }
+
+    /// Applied to the running stream at once, blocking until ScreenCaptureKit
+    /// confirms, so a window shown after this returns is never in a frame.
+    /// With no stream running nothing is asked of ScreenCaptureKit: listing
+    /// the shareable content is what raises the Screen Recording prompt, which
+    /// only a capture start may do.
+    pub(super) fn set_own_windows_excluded(excluded: bool) {
+        let mut state = FILTER_STATE.lock().unwrap_or_else(|e| e.into_inner());
+        if state.exclude_own == excluded {
+            return;
+        }
+        state.exclude_own = excluded;
+        let Some(live) = state.live.as_ref() else {
+            return;
+        };
+        let applied = build_filter(&live.display, excluded)
+            .and_then(|filter| live.stream.update_content_filter(&filter));
+        match applied {
+            Ok(()) => log::info!(
+                "[capture] own-window exclusion={excluded} applied to the running stream"
+            ),
+            Err(error) => {
+                log::warn!("[capture] own-window exclusion={excluded} not applied: {error:?}")
+            }
+        }
     }
 
     struct MacOSLiveFrameSource {
         latest_frame: SharedFrame,
         stream: SCStream,
+        id: u64,
     }
 
     impl Drop for MacOSLiveFrameSource {
         fn drop(&mut self) {
+            {
+                let mut state = FILTER_STATE.lock().unwrap_or_else(|e| e.into_inner());
+                if state.live.as_ref().is_some_and(|live| live.id == self.id) {
+                    state.live = None;
+                }
+            }
             // SCStream::Drop only calls sc_stream_release (not sc_stream_stop_capture).
             // Releasing a capturing stream without stopping it first causes a macOS crash.
             //
@@ -1090,6 +1251,30 @@ mod tests {
         downscale_stride, downscaled_dimensions, select_display_index, subsample_rgb,
         DisplayCandidate, MAX_CAPTURE_DIM,
     };
+
+    /// Where the twin cannot be excluded it hides while capture runs, so the
+    /// count must cover a source's whole life and two sources must not end
+    /// it early.
+    #[test]
+    fn capture_is_active_while_any_live_source_lives() {
+        struct Idle;
+        impl super::AmbilightFrameSource for Idle {
+            fn capture_frame(
+                &mut self,
+            ) -> Result<std::sync::Arc<super::CapturedFrame>, super::AmbilightCaptureError>
+            {
+                Err(super::AmbilightCaptureError::FrameUnavailable)
+            }
+        }
+
+        assert!(!super::capture_active());
+        let first = super::Counted::new(Box::new(Idle));
+        let second = super::Counted::new(Box::new(Idle));
+        drop(first);
+        assert!(super::capture_active());
+        drop(second);
+        assert!(!super::capture_active());
+    }
 
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     #[test]

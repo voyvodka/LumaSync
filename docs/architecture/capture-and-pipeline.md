@@ -111,6 +111,28 @@ original concept drew a full-screen animation for capture to sample, which needs
 popup excluded from capture on every platform (`SCContentFilter`, `SetWindowDisplayAffinity`).
 The cost is that a test says nothing about capture or its latency.
 
+**The preview keeps its own windows out of the capture.** The twin is drawn over the very display
+Ambilight samples, so without this the strip would light from its own picture.
+`preview/exclusion.rs` holds the per-platform rule:
+- **macOS.** While a session is open, the capture filter leaves out every window of this app
+  (`set_own_windows_excluded` in `ambilight_capture.rs`). Outside a session the app is captured as
+  before. The filter goes by application, not window, so a window built after the update is
+  covered from its first frame; a per-window filter can only name windows already on screen. The
+  update blocks until ScreenCaptureKit confirms and runs before any preview window is built. It is
+  skipped when no stream runs, because listing the shareable content raises the Screen Recording
+  prompt, which only a capture start may do. A stream that starts later builds its filter from the
+  same flag, under the lock that registers it.
+- **Windows 10 2004 and later.** Each preview window is content-protected
+  (`WDA_EXCLUDEFROMCAPTURE`). Earlier builds treat that flag as `WDA_MONITOR` and show the window
+  black in the capture, so it is never set there (`RtlGetVersion`; `GetVersionEx` reports what the
+  manifest claims).
+- **Linux, and Windows before 2004.** Nothing can exclude a window, so the twin hides while a live
+  capture source exists (`capture_active`, `on_capture_active_changed`). The popup stays in the
+  capture: hiding the only control left would strand the preview.
+
+Unverified on hardware: app-level exclusion covering later windows, and WDA on a transparent
+WebView2 window and its child windows.
+
 **Every sampler crops the same black borders.** `BlackBorderCache` re-detects letterbox and
 pillarbox bars at most every 2.5 s, and the strip, the scene stage and Hue all sample inside those
 insets: `sample_frame_within_insets` maps each LED onto the picture rectangle and keeps its window
