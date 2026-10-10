@@ -329,7 +329,7 @@ shutdown path here ends in `std::process::exit`, including the watchdog's forced
 single-instance plugin's `/tmp/com_lumasync_app_si.sock` is never cleaned up by the plugin itself.
 The next launch's `connect()` succeeds against the stale socket and silently `exit(0)`s against it —
 looking like the app failed to start. The shutdown's exit removes the socket explicitly
-before exiting so a normal quit starts the next launch clean; a killed dev process (`pkill -9`) skips
+before exiting so a normal quit starts the next launch clean; a killed dev process (`kill -9`) skips
 that path entirely, which is why the debug recipe in `AGENTS.md` runs `rm -f` on the socket before
 every restart. Debug builds skip the single-instance plugin altogether for the same reason — the
 common `cargo build`/hot-reload hard-exit would otherwise leak it on every iteration. Release keeps
