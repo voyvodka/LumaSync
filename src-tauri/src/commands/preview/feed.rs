@@ -203,6 +203,13 @@ impl TwinFeed {
         }
         std::mem::swap(scratch, last);
         inner.seq = inner.seq.wrapping_add(1);
+        if inner.seq == 1 {
+            log::info!(
+                "[preview] first twin frame: {} LEDs, {} lamps, layout revision {revision}",
+                leds.len(),
+                lamps.len()
+            );
+        }
         // The channel takes the body by value: the one allocation a sent frame costs.
         let mut bytes = inner.last.clone();
         bytes[..4].copy_from_slice(&inner.seq.to_le_bytes());

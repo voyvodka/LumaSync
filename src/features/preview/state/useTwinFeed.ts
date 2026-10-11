@@ -31,6 +31,16 @@ export function useTwinFeed(): TwinFeed {
   const [feed, setFeed] = useState<TwinFeed>({ layout: null, frame: null });
   const layoutRef = useRef<TwinLayout | null>(null);
   const heldRef = useRef<TwinFrame | null>(null);
+  const drawnRef = useRef(false);
+
+  useEffect(() => {
+    if (feed.frame && !drawnRef.current) {
+      drawnRef.current = true;
+      console.info(
+        `[LumaSync] twin drew its first frame: ${feed.frame.leds.length} LEDs, ${feed.frame.lamps.length} lamps, revision ${feed.frame.layoutRevision}`,
+      );
+    }
+  }, [feed.frame]);
 
   useEffect(() => {
     let alive = true;
