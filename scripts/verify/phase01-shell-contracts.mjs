@@ -2694,7 +2694,8 @@ const checkedPairs = nullabilityPairs.filter(
 // 92 → 93: the twin's channel feed — `EdgeSignalPayload` went with
 // `ambilight://edge-signal`; `TwinLayout` and `TwinSubscribeResult` came.
 // 93 → 94: the latency scene's `LatencyResult`.
-const EXPECTED_NULLABILITY_PAIR_COUNT = 94;
+// 94 → 95: the twin's Hue lamps, `TwinLamp`.
+const EXPECTED_NULLABILITY_PAIR_COUNT = 95;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

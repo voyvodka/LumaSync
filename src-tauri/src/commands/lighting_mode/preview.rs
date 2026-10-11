@@ -91,14 +91,45 @@ pub(super) fn build_preview_emit_context(
 pub struct TwinModeView {
     pub layout: Option<crate::commands::led_calibration::LedCalibrationConfig>,
     pub still: Option<LightingModeConfig>,
+    /// The running mode drives Hue, so the twin has lamps to place.
+    pub drives_hue: bool,
+    pub room_geometry: Option<crate::models::room_map::RoomGeometry>,
+}
+
+/// Where each Hue channel samples the screen, `(0, 0)` top-left, in `channels`
+/// order — the room map's placements over the stream's channels, as the
+/// worker's sample table puts them. `None` without a room map that places them.
+pub fn hue_lamp_screen_points(
+    channels: &[crate::commands::hue::frame::HueAreaChannel],
+    geometry: Option<&crate::models::room_map::RoomGeometry>,
+) -> Option<Vec<(f32, f32)>> {
+    let geometry = geometry?;
+    let mut placed = channels.to_vec();
+    crate::commands::hue::sender::apply_channel_placements(&mut placed, &geometry.hue_placements);
+    let samples = crate::commands::room_affinity::room_aware_hue_samples(geometry, &placed)?;
+    Some(
+        samples
+            .iter()
+            .map(|s| {
+                (
+                    ((s.sample_x + 1.0) / 2.0).clamp(0.0, 1.0),
+                    ((1.0 - s.sample_y) / 2.0).clamp(0.0, 1.0),
+                )
+            })
+            .collect(),
+    )
 }
 
 impl LightingRuntimeState {
     pub fn twin_view(&self) -> TwinModeView {
         let owner = self.runtime.lock().unwrap_or_else(|e| e.into_inner());
+        let targets = owner.active_mode.targets.as_deref().unwrap_or_default();
         TwinModeView {
             layout: owner.active_mode.led_calibration.clone(),
             still: owner.worker.is_none().then(|| owner.active_mode.clone()),
+            drives_hue: owner.active_mode.kind != super::LightingModeKind::Off
+                && targets.iter().any(|t| t == "hue"),
+            room_geometry: owner.active_mode.room_geometry.clone(),
         }
     }
 

@@ -83,20 +83,25 @@ const CALIBRATION: LedCalibrationConfig = {
   totalLeds: 30,
 };
 
-const LAYOUT: TwinLayout = { displayId: "display-1", layoutRevision: 1, leds: CALIBRATION };
+const LAYOUT: TwinLayout = { displayId: "display-1", layoutRevision: 1, leds: CALIBRATION, lamps: [] };
 
 function makeLeds(colour: [number, number, number] = [10, 20, 30]) {
   return Array.from({ length: CALIBRATION.totalLeds }, () => colour);
 }
 
-function makeFrame(leds: Array<[number, number, number]>, seq: number, revision = 1): ArrayBuffer {
-  const buffer = new ArrayBuffer(TWIN_FRAME.HEADER_BYTES + leds.length * 3);
+function makeFrame(
+  leds: Array<[number, number, number]>,
+  seq: number,
+  revision = 1,
+  lamps: Array<[number, number, number]> = [],
+): ArrayBuffer {
+  const buffer = new ArrayBuffer(TWIN_FRAME.HEADER_BYTES + (leds.length + lamps.length) * 3);
   const view = new DataView(buffer);
   view.setUint32(TWIN_FRAME.SEQ_OFFSET, seq, true);
   view.setUint32(TWIN_FRAME.REVISION_OFFSET, revision, true);
   view.setUint32(TWIN_FRAME.LED_COUNT_OFFSET, leds.length, true);
-  view.setUint32(TWIN_FRAME.LAMP_COUNT_OFFSET, 0, true);
-  new Uint8Array(buffer, TWIN_FRAME.HEADER_BYTES).set(leds.flat());
+  view.setUint32(TWIN_FRAME.LAMP_COUNT_OFFSET, lamps.length, true);
+  new Uint8Array(buffer, TWIN_FRAME.HEADER_BYTES).set([...leds, ...lamps].flat());
   return buffer;
 }
 
@@ -166,6 +171,47 @@ describe("LedTwinOverlay", () => {
     });
 
     expect(lastPaint().filter((colour) => colour === "rgba(200, 100, 50, 0.95)")).toHaveLength(1);
+  });
+
+  // Where the room map places a lamp is where the twin draws it.
+  it("draws each Hue lamp where the layout places it", async () => {
+    answeredLayout = {
+      ...LAYOUT,
+      lamps: [
+        { id: 3, x: 0.1, y: 0.4 },
+        { id: 5, x: 0.85, y: 0.6 },
+      ],
+    };
+    const view = render(<LedTwinOverlay />);
+    await waitFor(() => expect(lastPaint()).toHaveLength(CALIBRATION.totalLeds));
+
+    await act(async () => {
+      send(makeFrame(makeLeds(), 1, 1, [[255, 0, 0], [0, 0, 255]]));
+    });
+
+    const lamps = await view.findAllByTestId("twin-lamp");
+    expect(
+      lamps.map((lamp: HTMLElement) => [
+        lamp.style.getPropertyValue("--lamp-x"),
+        lamp.style.getPropertyValue("--lamp-y"),
+      ]),
+    ).toEqual([
+      ["10%", "40%"],
+      ["85%", "60%"],
+    ]);
+  });
+
+  it("draws no lamp from a frame cut for another set of lamps", async () => {
+    answeredLayout = { ...LAYOUT, lamps: [{ id: 3, x: 0.1, y: 0.4 }] };
+    const view = render(<LedTwinOverlay />);
+    await waitFor(() => expect(lastPaint()).toHaveLength(CALIBRATION.totalLeds));
+
+    await act(async () => {
+      send(makeFrame(makeLeds([1, 2, 3]), 1, 1, [[255, 0, 0], [0, 0, 255]]));
+    });
+
+    await waitFor(() => expect(lastPaint()[0]).toBe("rgba(1, 2, 3, 0.95)"));
+    expect(view.queryAllByTestId("twin-lamp")).toHaveLength(0);
   });
 
   it("draws the frame Rust sent while the subscribe was being answered", async () => {

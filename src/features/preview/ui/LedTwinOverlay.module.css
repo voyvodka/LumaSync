@@ -23,18 +23,14 @@
     opacity: 0.55;
   }
 
-  .hueRow {
-    position: absolute;
-    left: 50%;
-    bottom: 7%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 10px;
-  }
-
+  /* Centred on the point the layout gives; a lamp sampling the very edge stays whole on screen. */
   .hueChip {
+    position: absolute;
+    left: clamp(13px, var(--lamp-x), calc(100% - 13px));
+    top: clamp(13px, var(--lamp-y), calc(100% - 13px));
     width: 26px;
     height: 26px;
     border-radius: 6px;
+    transform: translate(-50%, -50%);
   }
 }

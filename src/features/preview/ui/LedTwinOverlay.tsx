@@ -14,7 +14,7 @@
  * Drawn on two canvases: the ribbons under a blur, the dots over them sharp.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 
 import { normalizeLedCalibrationConfig } from "@/features/calibration/model/contracts";
@@ -103,20 +103,23 @@ export function LedTwinOverlay() {
       <canvas ref={ribbonsRef} className={`${styles.layer} ${styles.ribbons}`} data-testid="twin-ribbons" />
       <canvas ref={dotsRef} className={styles.layer} data-testid="twin-dots" />
 
-      {/* Hue lamps along the bottom until the room map places them. */}
-      {frame && frame.lamps.length > 0 && (
-        <div className={styles.hueRow}>
-          {frame.lamps.map((c, i) => (
-            <span
-              key={`hue-${i}`}
-              className={styles.hueChip}
-              style={{
-                background: `radial-gradient(circle, rgb(${c[0]}, ${c[1]}, ${c[2]}) 0%, rgba(${c[0]}, ${c[1]}, ${c[2]}, 0.5) 55%, transparent 80%)`,
-              }}
-            />
-          ))}
-        </div>
-      )}
+      {/* Each Hue lamp where the layout puts it: where it samples the screen, or in a row along the
+          bottom when the room map does not place it. A frame cut for another set of lamps waits. */}
+      {frame &&
+        layout &&
+        frame.lamps.length === layout.lamps.length &&
+        frame.lamps.map((c, i) => (
+          <span
+            key={`hue-${layout.lamps[i]!.id}`}
+            className={styles.hueChip}
+            data-testid="twin-lamp"
+            style={{
+              "--lamp-x": `${layout.lamps[i]!.x * 100}%`,
+              "--lamp-y": `${layout.lamps[i]!.y * 100}%`,
+              background: `radial-gradient(circle, rgb(${c[0]}, ${c[1]}, ${c[2]}) 0%, rgba(${c[0]}, ${c[1]}, ${c[2]}, 0.5) 55%, transparent 80%)`,
+            } as CSSProperties}
+          />
+        ))}
     </div>
   );
 }

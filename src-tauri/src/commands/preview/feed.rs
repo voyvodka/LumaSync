@@ -48,6 +48,48 @@ pub struct TwinLayout {
     pub layout_revision: u32,
     /// `None` when no strip is set up: the twin then draws no LEDs.
     pub leds: Option<LedCalibrationConfig>,
+    /// The Hue lamps in frame order; empty when the mode drives no Hue.
+    pub lamps: Vec<TwinLamp>,
+}
+
+/// `TwinLamp` in `src/shared/contracts/preview.ts`: where the twin draws one
+/// Hue lamp, `(0, 0)` top-left — where it samples the screen when the room map
+/// places it, else in a row along the bottom.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TwinLamp {
+    /// Entertainment channel.
+    pub id: u8,
+    pub x: f32,
+    pub y: f32,
+}
+
+/// The unplaced lamps' row: centred, just above the bottom LEDs.
+const LAMP_ROW_Y: f32 = 0.9;
+const LAMP_ROW_STEP: f32 = 0.035;
+
+fn twin_lamps(
+    channels: &[crate::commands::hue::frame::HueAreaChannel],
+    geometry: Option<&crate::models::room_map::RoomGeometry>,
+) -> Vec<TwinLamp> {
+    let placed =
+        crate::commands::lighting_mode::preview::hue_lamp_screen_points(channels, geometry);
+    let middle = (channels.len().saturating_sub(1)) as f32 / 2.0;
+    channels
+        .iter()
+        .enumerate()
+        .map(|(i, channel)| {
+            let (x, y) = placed
+                .as_ref()
+                .and_then(|points| points.get(i).copied())
+                .unwrap_or((0.5 + (i as f32 - middle) * LAMP_ROW_STEP, LAMP_ROW_Y));
+            TwinLamp {
+                id: channel.channel_id,
+                x,
+                y,
+            }
+        })
+        .collect()
 }
 
 /// `TwinSubscribeResult` in `src/shared/contracts/preview.ts`.
@@ -166,13 +208,13 @@ impl TwinFeed {
         &self,
         display_id: String,
         leds: Option<LedCalibrationConfig>,
+        lamps: Vec<TwinLamp>,
     ) -> Option<(TwinLayout, bool)> {
         let mut inner = self.inner.lock().ok()?;
         inner.subscriber.as_ref()?;
-        let unchanged = inner
-            .layout
-            .as_ref()
-            .is_some_and(|current| current.display_id == display_id && current.leds == leds);
+        let unchanged = inner.layout.as_ref().is_some_and(|current| {
+            current.display_id == display_id && current.leds == leds && current.lamps == lamps
+        });
         if unchanged {
             return inner.layout.clone().map(|layout| (layout, false));
         }
@@ -180,6 +222,7 @@ impl TwinFeed {
             display_id,
             layout_revision: LAYOUT_REVISION.fetch_add(1, Ordering::SeqCst) + 1,
             leds,
+            lamps,
         };
         inner.layout = Some(layout.clone());
         self.force_next.store(true, Ordering::SeqCst);
@@ -297,8 +340,22 @@ fn refresh_with<R: Runtime>(app: &AppHandle<R>, retuned_solid: Option<&SolidColo
         .filter(|layout| layout.total_leds > 1)
         .or_else(|| shell_state::persisted(app).and_then(|state| state.led_calibration()));
     let total = leds.as_ref().map_or(0, |layout| layout.total_leds as usize);
+    // The stream's channels in the order the worker sends their colours.
+    let channels = if view.drives_hue {
+        app.try_state::<crate::commands::hue::state_store::HueRuntimeStateStore>()
+            .and_then(|store| {
+                crate::commands::hue::state_store::snapshot_hue_output_context(store.inner())
+                    .ok()
+                    .flatten()
+            })
+            .map(|context| context.channels)
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let lamps = twin_lamps(&channels, view.room_geometry.as_ref());
 
-    if let Some((layout, changed)) = session.feed.set_layout(display_id, leds) {
+    if let Some((layout, changed)) = session.feed.set_layout(display_id, leds, lamps) {
         if changed {
             if let Some(label) = session.feed.subscriber_label() {
                 let _ = app.emit_to(
@@ -351,6 +408,58 @@ fn not_open() -> TwinSubscribeResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn lamp_channel(channel_id: u8, x: f32, y: f32) -> crate::commands::hue::frame::HueAreaChannel {
+        crate::commands::hue::frame::HueAreaChannel {
+            channel_id,
+            light_ids: vec![format!("light-{channel_id}")],
+            screen_region: crate::commands::hue::frame::HueScreenRegion::Center,
+            position_x: x,
+            position_y: y,
+            position_z: Some(0.0),
+        }
+    }
+
+    /// Without a room map the lamps line up along the bottom, in frame order.
+    #[test]
+    fn unplaced_lamps_line_up_in_frame_order_along_the_bottom() {
+        let lamps = twin_lamps(
+            &[lamp_channel(4, -0.8, 0.9), lamp_channel(1, 0.8, 0.9)],
+            None,
+        );
+        assert_eq!(lamps.iter().map(|l| l.id).collect::<Vec<_>>(), vec![4, 1]);
+        assert!(lamps.iter().all(|l| l.y == LAMP_ROW_Y));
+        assert!(lamps[0].x < 0.5 && lamps[1].x > 0.5);
+    }
+
+    /// With a room map each lamp goes where it samples the screen: a lamp left
+    /// of the TV draws on the left, one right of it on the right.
+    #[test]
+    fn placed_lamps_go_where_they_sample() {
+        let geometry = crate::models::room_map::RoomGeometry {
+            dimensions: crate::models::room_map::RoomDimensions {
+                width_meters: 4.0,
+                depth_meters: 5.0,
+                height_meters: 2.5,
+            },
+            tv: crate::models::room_map::TvAnchorPlacement {
+                x: 1.4,
+                y: 0.0,
+                width: 1.2,
+                height: 0.1,
+                locked: None,
+                mount_height_meters: None,
+            },
+            hue_placements: Vec::new(),
+        };
+        let lamps = twin_lamps(
+            &[lamp_channel(0, -0.9, 0.9), lamp_channel(1, 0.9, 0.9)],
+            Some(&geometry),
+        );
+        assert!(lamps[0].x < 0.3, "{lamps:?}");
+        assert!(lamps[1].x > 0.7, "{lamps:?}");
+        assert!(lamps.iter().all(|l| (0.0..=1.0).contains(&l.y)));
+    }
 
     #[derive(serde::Deserialize)]
     #[serde(rename_all = "camelCase")]
@@ -472,12 +581,12 @@ mod tests {
     #[test]
     fn a_new_layout_takes_a_new_revision_and_the_same_one_does_not() {
         let (feed, _) = feed_with_subscriber();
-        let (first, changed) = feed.set_layout("d".into(), None).unwrap();
+        let (first, changed) = feed.set_layout("d".into(), None, Vec::new()).unwrap();
         assert!(changed);
-        let (again, changed) = feed.set_layout("d".into(), None).unwrap();
+        let (again, changed) = feed.set_layout("d".into(), None, Vec::new()).unwrap();
         assert!(!changed);
         assert_eq!(again.layout_revision, first.layout_revision);
-        let (moved, changed) = feed.set_layout("e".into(), None).unwrap();
+        let (moved, changed) = feed.set_layout("e".into(), None, Vec::new()).unwrap();
         assert!(changed);
         assert!(moved.layout_revision > first.layout_revision);
     }
@@ -485,7 +594,7 @@ mod tests {
     #[test]
     fn nothing_is_kept_without_a_subscriber() {
         let feed = TwinFeed::default();
-        assert!(feed.set_layout("d".into(), None).is_none());
+        assert!(feed.set_layout("d".into(), None, Vec::new()).is_none());
         assert!(feed.send(&[[1, 2, 3]], &[]));
     }
 }

@@ -180,6 +180,17 @@ export interface TwinLayout {
   layoutRevision: number;
   /** `null` with no strip set up: the twin draws no LEDs. */
   leds: LedCalibrationConfig | null;
+  /** The Hue lamps in frame order; empty when the running mode drives no Hue. */
+  lamps: TwinLamp[];
+}
+
+/** Where the twin draws one Hue lamp, `(0, 0)` top-left: where it samples the
+ *  screen when the room map places it, else in a row along the bottom. */
+export interface TwinLamp {
+  /** Entertainment channel. */
+  id: number;
+  x: number;
+  y: number;
 }
 
 /** What the twin passes to `subscribe_twin_frames`: a Tauri `Channel` of raw

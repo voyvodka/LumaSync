@@ -183,7 +183,11 @@ edge's pitches spread end to end, and the bottom counts the stand gap (`bottomMi
 (`StripShape`): its LEDs sit either side of the gap where LED Setup draws them, the right-hand run
 `floor(bottom / 2)` long, so each samples the screen above where it really is. Spreading them over
 the whole edge instead, as the sampler once did, put the LEDs beside the stand under screen several
-pitches away and showed the twin a strip with no gap. A one-LED edge samples its local-0 corner.
+pitches away and showed the twin a strip with no gap. A one-LED edge samples its local-0 corner. The
+twin's Hue lamps follow the same rule: `TwinLayout.lamps` puts each where it samples the screen, from
+the room map's placements over the stream's channels as the worker's sample table reads them
+(`hue_lamp_screen_points`), and lines them up along the bottom only when no room map places them —
+the bridge's own x/y are depth and side, not a place on the screen.
 
 **The macOS screen-recording permission is probed, never inferred.**
 `src-tauri/src/commands/screen_capture_permission.rs` owns two CoreGraphics calls with very

@@ -175,6 +175,12 @@ export function mockTwinLayout(): TwinLayout {
     displayId: world.displays[0]?.id ?? "display-1",
     layoutRevision: MOCK_LAYOUT_REVISION,
     leds: layout ? { ...layout, totalLeds: calibratedLedCount() } : null,
+    // The row Rust draws unplaced lamps in: centred, just above the bottom.
+    lamps: world.hue.channels.map((_, i) => ({
+      id: i,
+      x: 0.5 + (i - (world.hue.channels.length - 1) / 2) * 0.035,
+      y: 0.9,
+    })),
   };
 }
 
