@@ -88,8 +88,23 @@ https://keepachangelog.com/en/1.1.0/
 - WLED: the WLED page keeps showing your saved device after you leave it, with a "Forget device"
   action. Forgetting stops sending to it (lighting carries on with your other outputs, or stops if
   it was the only one) and stops LumaSync reconnecting to it at launch.
+- LED preview, rebuilt: opened from Lights or the menu bar menu, it shows the LEDs and Hue lamps
+  on screen as they really light — the layout the strip runs, its colours as the eye sees them, Hue
+  lamps where the room map places them — and changes no light by opening. Its small remote starts
+  with six test scenes that play full screen while Ambilight captures them: an edge tour (order,
+  direction, corners), a colour spiral, a sunset, drifting colour fields, a letterboxed film for
+  black-bar detection, and a latency test that measures the delay from a captured frame to the
+  lights' output. A scene borrows the lights and gives them back when it stops; choosing a mode
+  anywhere ends it. The remote also holds the modes, brightness and a short effect list, an eye
+  that hides the on-screen LEDs, and Hide and Close. On macOS the preview follows you onto a
+  full-screen app's Space, and closing it leaves you where you are. The preview's windows stay out
+  of the capture (macOS, and Windows 10 2004 or later; elsewhere the on-screen LEDs hide while
+  Ambilight captures).
 
 ### Changed
+
+- LED Setup's Test shows the layout on the strip: LED #1 green, each edge's end LEDs blue, the two
+  beside the stand red, and a white light running the way the strip goes. Edits show at once.
 
 - Lights and the compact window are rebuilt around one stage: the mode buttons on top, the scenes
   under them, and the running mode's settings below, passing to the next mode's from the side you
@@ -350,6 +365,8 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Removed
 
+- The LED preview's synthetic test patterns (chase, rainbow, spiral and gamut) and its old
+  settings; the preview's scenes and LED Setup's Test replace them.
 - Room map: "LED counts from map". LED Setup is the one place that sets how many LEDs each edge
   has, and the strip on the room map follows the total you save there.
 - Devices: the Manual Entry page, which only said manual entry was not available yet. A Hue bridge
@@ -357,6 +374,9 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- LEDs either side of a monitor stand take the colour of the screen above where they sit; they were
+  spread over the whole bottom edge as if there were no gap, and the LED preview showed no gap.
+- Opening and closing the LED preview no longer adds two windows' worth of memory each time.
 - A USB strip that fails to connect no longer switches off a working WLED device the app still
   showed as connected.
 - With a WLED device and a USB strip both set up, the Lights screen, the tray and the status bar
