@@ -309,6 +309,9 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Hue: when the bridge did not answer at launch, the Hue page stayed on "Couldn't start" after
+  the bridge came back and Revalidate passed, with nothing on the page that could start Hue. It
+  now reads Ready with Start again.
 - A USB strip that fails to connect no longer switches off a working WLED device the app still
   showed as connected.
 - With a WLED device and a USB strip both set up, the Lights screen, the tray and the status bar

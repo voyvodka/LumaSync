@@ -12,6 +12,7 @@ import { HUE_ACTIONS, HUE_STATE_VIEW, type HueStateView } from "../hueStateView"
 const STATES = [
   "stopPartial",
   "gateBlocked",
+  "gateCleared",
   "streaming",
   "reconnecting",
   "streamFailed",

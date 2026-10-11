@@ -115,7 +115,7 @@ describe("HuePage — raw codes are a detail in every state that shows one", () 
     },
     {
       name: "gateBlocked",
-      hue: hueState({ runtimeStatus: runtime("Idle", "CONFIG_NOT_READY_GATE_BLOCKED") }),
+      hue: hueState({ canStartHue: false, runtimeStatus: runtime("Idle", "CONFIG_NOT_READY_GATE_BLOCKED") }),
       code: "CONFIG_NOT_READY_GATE_BLOCKED",
     },
   ];

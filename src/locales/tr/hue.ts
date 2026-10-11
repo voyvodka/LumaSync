@@ -166,6 +166,7 @@ const hue: Catalogue<typeof enHue> = {
       revalidate: "Son kontrol çok eski. Başlatmadan önce yeniden doğrula.",
       notConfirmed: "Alanın hazır olduğu doğrulanmadı. Yeniden doğrula, sonra tekrar başlat.",
       bridgeSilent: "Hue başlamaya çalıştığında Hue Bridge yanıt vermedi.",
+      canStartNow: "Hue daha önce başlayamamıştı; şimdi başlayabilir.",
     },
     actions: {
       repair: "Yeniden eşleştir",
