@@ -66,6 +66,9 @@
       radial-gradient(circle at 70% 50%, rgb(42 139 255), transparent 45%),
       rgb(6 6 10);
   }
+  .swatch[data-scene="latency"] {
+    background: linear-gradient(90deg, rgb(0 0 0) 0 50%, rgb(240 240 240) 50%);
+  }
   /* The playing tile's swatch carries a stop square: its press ends the scene. */
   .tile[aria-pressed="true"] .swatch::after {
     content: "";

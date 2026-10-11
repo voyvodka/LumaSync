@@ -24,9 +24,18 @@ export default {
       sunset: "Sunset",
       colorFields: "Colour fields",
       letterbox: "Letterbox",
+      latency: "Latency",
     },
     stop: "Stop {{name}}",
     ownsLights: "Modes are locked while a scene plays.",
+  },
+  latency: {
+    label: "Pipeline delay",
+    about: "About pipeline delay",
+    info: "From the moment a frame is captured to the moment its colours go to the lights' output, as the median of the last flips. The display's and the lights' own delays are not included.",
+    measuring: "Measuring…",
+    unseen: "No flip has reached the lights yet",
+    value: "{{ms}} ms",
   },
   status: {
     PREVIEW_OPEN_FAILED: "The preview could not open.",

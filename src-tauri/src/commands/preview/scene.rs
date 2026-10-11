@@ -12,17 +12,19 @@
 //! happens after both.
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime};
 
 use super::session::{emit_session, PreviewSession, PreviewSessionResult, PreviewSessionState};
 use super::windows::{build_scene, next_scene_label, raise_over_scene};
 use crate::commands::ambilight_capture;
 use crate::commands::calibration::list_displays;
+use crate::commands::lighting_mode::latency::LatencyResult;
 use crate::commands::lighting_mode::preview_scene::{
     set_scene_brightness, start_scene_queued, stop_scene_queued, SceneLighting, SceneRestore,
 };
 use crate::commands::lighting_mode::LightingRuntimeState;
 use crate::commands::status::CommandStatus;
+use crate::events::PREVIEW_LATENCY_EVENT;
 
 const PREVIEW_SCENE_STARTED: &str = "PREVIEW_SCENE_STARTED";
 const PREVIEW_SCENE_STOPPED: &str = "PREVIEW_SCENE_STOPPED";
@@ -44,6 +46,7 @@ pub enum SceneKind {
     Sunset,
     ColorFields,
     Letterbox,
+    Latency,
 }
 
 #[derive(Deserialize)]
@@ -326,6 +329,23 @@ pub async fn set_preview_scene_brightness<R: Runtime>(
             None => not_open(),
         },
     })
+}
+
+/// One latency sample's result, to the popup. From the worker thread.
+pub fn send_latency<R: Runtime>(app: &AppHandle<R>, result: &LatencyResult) {
+    let Some(popup) = app
+        .try_state::<PreviewSessionState>()
+        .and_then(|state| state.popup_label())
+    else {
+        return;
+    };
+    if let Err(error) = app.emit_to(
+        EventTarget::webview_window(popup.as_str()),
+        PREVIEW_LATENCY_EVENT,
+        result,
+    ) {
+        log::warn!("[preview] latency not sent to {popup}: {error}");
+    }
 }
 
 /// A user's mode change ended the scene; the lights are already theirs. Run

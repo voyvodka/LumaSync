@@ -2693,7 +2693,8 @@ const checkedPairs = nullabilityPairs.filter(
 // `LedPreviewStatus` went with their window commands; `PreviewSessionResult` came.
 // 92 → 93: the twin's channel feed — `EdgeSignalPayload` went with
 // `ambilight://edge-signal`; `TwinLayout` and `TwinSubscribeResult` came.
-const EXPECTED_NULLABILITY_PAIR_COUNT = 93;
+// 93 → 94: the latency scene's `LatencyResult`.
+const EXPECTED_NULLABILITY_PAIR_COUNT = 94;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

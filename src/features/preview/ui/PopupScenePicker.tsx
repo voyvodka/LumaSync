@@ -12,6 +12,7 @@ const SCENE_NAMES = {
   sunset: "preview:scenes.names.sunset",
   colorFields: "preview:scenes.names.colorFields",
   letterbox: "preview:scenes.names.letterbox",
+  latency: "preview:scenes.names.latency",
 } as const satisfies Record<SceneKind, TranslationKey>;
 
 interface PopupScenePickerProps {

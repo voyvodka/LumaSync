@@ -27,9 +27,18 @@ const preview: Catalogue<typeof enPreview> = {
       sunset: "Gün batımı",
       colorFields: "Renk alanları",
       letterbox: "Letterbox",
+      latency: "Gecikme",
     },
     stop: "{{name}} sahnesini durdur",
     ownsLights: "Sahne oynarken modlar kilitli.",
+  },
+  latency: {
+    label: "İşlem gecikmesi",
+    about: "İşlem gecikmesi hakkında",
+    info: "Bir karenin yakalandığı andan renklerinin ışık çıkışına verildiği ana kadar geçen süre; son geçişlerin ortancası. Ekranın ve ışıkların kendi gecikmeleri dahil değil.",
+    measuring: "Ölçülüyor…",
+    unseen: "Henüz hiçbir geçiş ışıklara ulaşmadı",
+    value: "{{ms}} ms",
   },
   status: {
     PREVIEW_OPEN_FAILED: "Önizleme açılamadı.",

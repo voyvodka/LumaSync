@@ -7,6 +7,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Runtime};
 
 use super::config::LightingModeConfig;
+use super::latency::LatencySink;
 use super::runtime::LightingRuntimeState;
 use crate::commands::preview::SceneKind;
 use crate::commands::test_pattern::{TestPatternConfig, TestPatternLiveSlot};
@@ -44,6 +45,11 @@ pub(super) struct PreviewRuntime {
     /// rebuilds the worker rather than retuning it, so the history skip it was
     /// started with matches what it captures.
     pub(super) scene_worker: bool,
+    /// Where the latency scene's measurement goes; `Some` only while it plays.
+    pub(super) latency_sink: Option<LatencySink>,
+    /// The running worker measures for the latency scene, so a switch to or
+    /// from it rebuilds the worker rather than retuning it.
+    pub(super) latency_worker: bool,
 }
 
 /// Per-worker twin-feed gate: whether the worker builds a twin frame this tick.

@@ -48,9 +48,11 @@ import {
   stopPreviewScene,
 } from "../previewApi";
 import { createLatestSender } from "../state/latestSender";
+import { useLatencyResult } from "../state/useLatencyResult";
 import { usePreviewSession } from "../state/usePreviewSession";
 import { PopupBrightnessRow } from "./PopupBrightnessRow";
 import { PopupEffectList } from "./PopupEffectList";
+import { PopupLatencyRow } from "./PopupLatencyRow";
 import { PopupScenePicker } from "./PopupScenePicker";
 import styles from "./ControlPopupApp.module.css";
 
@@ -78,6 +80,7 @@ export function ControlPopupApp() {
   const [runError, setRunError] = useState<string | null>(null);
   const [sceneBusy, setSceneBusy] = useState(false);
   const playing = session?.state === "scene" ? session : null;
+  const latency = useLatencyResult(playing?.scene === "latency");
 
   // ── Persist the popup centre so it reopens where the user left it ────────
   useEffect(() => {
@@ -268,6 +271,7 @@ export function ControlPopupApp() {
           </p>
         )}
         <PopupScenePicker playing={playing?.scene ?? null} busy={sceneBusy} onPick={handleScene} />
+        {playing?.scene === "latency" && <PopupLatencyRow result={latency} />}
         {/* The scene owns the lights: the strip shows no mode and takes no press until it stops. */}
         <ModeStrip
           variant="popup"

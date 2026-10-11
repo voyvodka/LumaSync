@@ -610,7 +610,7 @@ mod platform {
 mod platform {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::{Arc, Mutex};
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use screencapturekit::cv::CVPixelBufferLockFlags;
     use screencapturekit::prelude::*;
@@ -622,6 +622,36 @@ mod platform {
     };
 
     type SharedFrame = Arc<LatestFrame>;
+
+    #[repr(C)]
+    struct MachTimebaseInfo {
+        numer: u32,
+        denom: u32,
+    }
+
+    extern "C" {
+        fn mach_absolute_time() -> u64;
+        fn mach_timebase_info(info: *mut MachTimebaseInfo) -> i32;
+    }
+
+    /// How long ago a host-clock time (`mach_absolute_time` ticks, as
+    /// `SCStreamFrameInfo.displayTime` is) was. `None` for a time not in the
+    /// past, or one too far back to be a frame's (a clock the frame does not
+    /// share would read as seconds).
+    fn host_time_age(then: u64) -> Option<Duration> {
+        static TIMEBASE: std::sync::OnceLock<(u64, u64)> = std::sync::OnceLock::new();
+        let &(numer, denom) = TIMEBASE.get_or_init(|| {
+            let mut info = MachTimebaseInfo { numer: 0, denom: 0 };
+            // SAFETY: fills the struct it is given; it cannot fail on macOS.
+            unsafe { mach_timebase_info(&mut info) };
+            (u64::from(info.numer.max(1)), u64::from(info.denom.max(1)))
+        });
+        // SAFETY: reads the host clock.
+        let now = unsafe { mach_absolute_time() };
+        let ticks = now.checked_sub(then)?;
+        let age = Duration::from_nanos(ticks.saturating_mul(numer) / denom);
+        (age < Duration::from_millis(500)).then_some(age)
+    }
 
     /// Resolve the SCDisplay matching the persisted `display_id` hint,
     /// falling back to the primary (main) display on any mismatch.
@@ -765,6 +795,15 @@ mod platform {
                 if of_type != SCStreamOutputType::Screen {
                     return;
                 }
+                // Stamped before the conversion below, which takes a few
+                // milliseconds, and moved back to when the display showed the
+                // frame where ScreenCaptureKit says.
+                let arrived = Instant::now();
+                let captured_at = sample
+                    .display_time()
+                    .and_then(host_time_age)
+                    .and_then(|age| arrived.checked_sub(age))
+                    .unwrap_or(arrived);
 
                 let buffer = match sample.pixel_buffer() {
                     Some(buf) => buf,
@@ -809,7 +848,9 @@ mod platform {
                     }
                 }
 
-                frame_writer.publish(CapturedFrame::new(width, height, pixels_rgb));
+                let mut frame = CapturedFrame::new(width, height, pixels_rgb);
+                frame.captured_at = captured_at;
+                frame_writer.publish(frame);
             },
             SCStreamOutputType::Screen,
         );

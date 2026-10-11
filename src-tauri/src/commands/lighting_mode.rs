@@ -23,6 +23,7 @@ mod effects;
 mod frame_pipeline;
 pub mod hue_driver;
 mod hydrate;
+pub mod latency;
 pub mod led_test_pattern;
 mod live;
 pub mod outputs;

@@ -233,6 +233,13 @@ impl PreviewSessionState {
         })
     }
 
+    pub(super) fn popup_label(&self) -> Option<String> {
+        self.inner
+            .lock()
+            .ok()
+            .and_then(|inner| inner.open.as_ref().map(|open| open.popup_label.clone()))
+    }
+
     pub(super) fn scene_target(&self) -> Result<Option<SceneTarget>, String> {
         let inner = self.lock()?;
         Ok(inner.open.as_ref().map(|open| SceneTarget {

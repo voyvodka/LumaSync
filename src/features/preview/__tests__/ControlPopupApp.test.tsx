@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   PREVIEW_STATUS,
+  type LatencyResult,
   type PreviewSession,
   type PreviewSessionResult,
   type PreviewSessionStatusCode,
@@ -44,12 +45,17 @@ vi.mock("../previewApi", () => ({
 
 /** The popup's `preview://session` handler, so a test can play Rust's event. */
 let sessionHandler: ((session: PreviewSession) => void) | null = null;
+let latencyHandler: ((result: LatencyResult) => void) | null = null;
 let listenFails = false;
 
 vi.mock("../previewEventsApi", () => ({
   listenPreviewSession: (handler: (session: PreviewSession) => void) => {
     if (listenFails) return Promise.reject(new Error("listen refused"));
     sessionHandler = handler;
+    return Promise.resolve(() => {});
+  },
+  listenLatency: (handler: (result: LatencyResult) => void) => {
+    latencyHandler = handler;
     return Promise.resolve(() => {});
   },
 }));
@@ -507,6 +513,36 @@ describe("ControlPopupApp scenes", () => {
     await user.click(screen.getByTestId("popup-scene-spiral"));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("preview:status.PREVIEW_SCENE_NO_OUTPUT");
+  });
+
+  it("says the pipeline delay while the latency scene plays, and nothing before its first sample", async () => {
+    getPreviewSession.mockResolvedValue({ ...SPIRAL, scene: "latency" });
+    render(<ControlPopupApp />);
+
+    const row = await screen.findByTestId("popup-latency");
+    expect(row).toHaveTextContent("preview:latency.measuring");
+    await waitFor(() => expect(latencyHandler).not.toBeNull());
+
+    act(() => latencyHandler?.({ samplesMs: [20, 26, 23], medianMs: 23.4, dropped: 0 }));
+    expect(row).toHaveTextContent("preview:latency.value");
+  });
+
+  // Every flip lost: say so rather than measuring forever.
+  it("says no flip reached the lights when every one was dropped", async () => {
+    getPreviewSession.mockResolvedValue({ ...SPIRAL, scene: "latency" });
+    render(<ControlPopupApp />);
+    const row = await screen.findByTestId("popup-latency");
+    await waitFor(() => expect(latencyHandler).not.toBeNull());
+
+    act(() => latencyHandler?.({ samplesMs: [], medianMs: 0, dropped: 4 }));
+    expect(row).toHaveTextContent("preview:latency.unseen");
+  });
+
+  it("shows no delay outside the latency scene", async () => {
+    getPreviewSession.mockResolvedValue(SPIRAL);
+    render(<ControlPopupApp />);
+    await screen.findByTestId("popup-scene-owns");
+    expect(screen.queryByTestId("popup-latency")).toBeNull();
   });
 
   it("ignores a second press while the first is in flight", async () => {

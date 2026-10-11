@@ -3,11 +3,14 @@
 //! The scene is not the user's mode, so like a test pattern it is never saved
 //! and the runtime snapshot keeps showing the mode it interrupted.
 
+use std::sync::Arc;
+
 use log::warn;
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::config::{LightingModeConfig, LightingModeKind};
 use super::hydrate::{hydrate_mode_payload, read_persisted_shell_state};
+use super::latency::{LatencyResult, LatencySink};
 use super::led_test_pattern::{
     apply_and_broadcast, is_ambilight_start_ok, restore_mode_after_test,
 };
@@ -42,6 +45,14 @@ pub enum SceneRestore {
     /// The interrupted mode could not come back — its output went away — so the
     /// lights are off. The refused apply's status.
     Off(CommandStatus),
+}
+
+/// Each latency sample, to the popup.
+fn latency_sink<R: Runtime>(app: &AppHandle<R>) -> LatencySink {
+    let app = app.clone();
+    Arc::new(move |result: &LatencyResult| {
+        crate::commands::preview::scene::send_latency(&app, result);
+    })
 }
 
 /// The outputs a scene lights: those the user chose that can be driven now, or
@@ -87,6 +98,16 @@ pub fn start_scene_lighting<R: Runtime>(
         ..LightingModeConfig::default()
     };
     hydrate_mode_payload(&mut config, &|| read_persisted_shell_state(app));
+    let measuring = kind == SceneKind::Latency;
+    if measuring {
+        // A flip must reach the output as it is: unsmoothed — a saved preset
+        // would win over the alpha, so it goes too — and the frame uncropped.
+        let ambilight = config.ambilight.get_or_insert_with(Default::default);
+        ambilight.smoothing_alpha = Some(1.0);
+        ambilight.lighting_smoothing_preset = None;
+        ambilight.hue_intensity_preset = None;
+        ambilight.black_border_detection = false;
+    }
     let telemetry_state = app.state::<RuntimeTelemetryState>();
     let preview_session = app.state::<PreviewSessionState>();
     let (device_connected, connected_port, wled_sink) = DrivenLocal::plan_args(driven.as_ref());
@@ -109,6 +130,7 @@ pub fn start_scene_lighting<R: Runtime>(
                 .brightness = brightness;
         }
         owner.preview.scene = Some(kind);
+        owner.preview.latency_sink = measuring.then(|| latency_sink(app));
         owner.preview.pending_test_pattern = None;
         owner.preview.preview_gate = Some(preview_session.twin_open());
         let result = apply_mode_change(
@@ -126,6 +148,7 @@ pub fn start_scene_lighting<R: Runtime>(
             (result, None)
         } else {
             owner.preview.scene = None;
+            owner.preview.latency_sink = None;
             let prior = owner.preview.session_prior.take();
             (result, Some(prior))
         }
@@ -170,6 +193,7 @@ pub fn stop_scene_lighting<R: Runtime>(app: &AppHandle<R>) -> Result<SceneRestor
         if owner.preview.scene.take().is_none() {
             return Ok(SceneRestore::NotRunning);
         }
+        owner.preview.latency_sink = None;
         owner.preview.session_prior.take()
     };
     restore_interrupted(app, prior)

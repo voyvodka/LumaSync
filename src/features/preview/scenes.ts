@@ -193,10 +193,23 @@ const letterbox: SceneRenderer = (ctx, width, height, timeMs) => {
   drawFields(ctx, 0, (height - picture) / 2, width, picture, timeMs);
 };
 
+// ── Latency ─────────────────────────────────────────────────────────────────
+
+/** How long each half of the flip lasts: long enough for every output to send in between. */
+export const LATENCY_FLIP_MS = 500;
+
+/** The whole screen black, then white: each flip is a sample of the pipeline's delay. */
+const latency: SceneRenderer = (ctx, width, height, timeMs) => {
+  const white = Math.floor(timeMs / LATENCY_FLIP_MS) % 2 === 1;
+  ctx.fillStyle = white ? "rgb(255 255 255)" : "rgb(0 0 0)";
+  ctx.fillRect(0, 0, width, height);
+};
+
 export const SCENE_RENDERERS = {
   edgeTour,
   spiral,
   sunset,
   colorFields,
   letterbox,
+  latency,
 } satisfies Record<SceneKind, SceneRenderer>;

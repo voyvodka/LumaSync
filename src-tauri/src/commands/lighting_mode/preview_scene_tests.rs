@@ -239,3 +239,38 @@ fn without_a_scene_its_brightness_changes_nothing() {
     assert!(!set_scene_brightness(&rig.state(), 0.25));
     assert_eq!(rig.running().kind, LightingModeKind::Solid);
 }
+
+/// The latency scene measures on a worker of its own, with nothing between
+/// the flip and the output; a switch back hands the worker its settings back.
+#[test]
+fn the_latency_scene_measures_on_an_unsmoothed_worker_of_its_own() {
+    let rig = Rig::new(RigSetup::default());
+    // A saved preset wins over an alpha in the worker's live settings.
+    rig.seed(json!({
+        "lightingMode": {
+            "kind": "ambilight",
+            "ambilight": { "brightness": 0.8, "lightingSmoothingPreset": "subtle" }
+        }
+    }));
+    running(&rig, solid(5));
+    start(&rig, SceneKind::Spiral);
+
+    start(&rig, SceneKind::Latency);
+    let state = rig.state();
+    {
+        let owner = state.runtime.lock().unwrap();
+        assert!(owner.preview.latency_sink.is_some());
+        assert!(
+            owner.preview.latency_worker,
+            "the switch rebuilt the worker"
+        );
+        let live = owner.ambilight_live.as_ref().expect("a running worker");
+        assert_eq!(live.read_smoothing_alpha(), 1.0, "what the worker reads");
+        assert!(!live.read_black_border_detection());
+    }
+
+    start(&rig, SceneKind::Sunset);
+    let owner = state.runtime.lock().unwrap();
+    assert!(owner.preview.latency_sink.is_none());
+    assert!(!owner.preview.latency_worker);
+}

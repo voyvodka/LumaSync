@@ -125,6 +125,13 @@ export const windowlessHandlers = {
       sceneBrightness: session.state === "scene" ? session.sceneBrightness : 0.8,
     };
     void emitMockEvent(PREVIEW_EVENTS.SESSION, session);
+    // No capture to measure in a tab: a plausible answer, so the row can be seen. Later than the
+    // session event, which is what makes the popup listen for it.
+    if (payload.kind === "latency") {
+      setTimeout(() => {
+        void emitMockEvent(PREVIEW_EVENTS.LATENCY, { samplesMs: [21, 24, 23], medianMs: 23, dropped: 0 });
+      }, 600);
+    }
     return sessionResult(PREVIEW_STATUS.SCENE_STARTED, "Scene started (no window in a browser tab).");
   },
   [PREVIEW_COMMANDS.STOP_SCENE]: () => {

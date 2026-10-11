@@ -138,7 +138,7 @@ export interface LedTestPatternResult {
 // ---------------------------------------------------------------------------
 
 /** The test scenes, in the order the popup offers them. */
-export const SCENE_KINDS = ["edgeTour", "spiral", "sunset", "colorFields", "letterbox"] as const;
+export const SCENE_KINDS = ["edgeTour", "spiral", "sunset", "colorFields", "letterbox", "latency"] as const;
 
 export type SceneKind = (typeof SCENE_KINDS)[number];
 
@@ -221,6 +221,20 @@ export interface SetPreviewTwinHiddenPayload {
 /** Payload for `start_preview_scene`. */
 export interface StartPreviewScenePayload {
   kind: SceneKind;
+}
+
+/**
+ * The latency scene's measurement, after each sample: pipeline delay, from the
+ * moment a frame was captured (on macOS, when the display showed it) to the
+ * moment the output carrying it was sent. The strip's and the display's own
+ * delays are not in it.
+ */
+export interface LatencyResult {
+  /** The newest samples, oldest first, in milliseconds. */
+  samplesMs: number[];
+  medianMs: number;
+  /** Flips that reached no output in time, or were overtaken by the next. */
+  dropped: number;
 }
 
 /** Payload for `set_preview_scene_brightness`; outside 0..1 it is clamped. */
@@ -349,9 +363,13 @@ export const PREVIEW_TWIN_LAYOUT_EVENT = "preview://twin-layout" as const;
  * ended by being shown again. */
 export const PREVIEW_SESSION_EVENT = "preview://session" as const;
 
+/** `LatencyResult`, to the popup, after each sample of the latency scene. */
+export const PREVIEW_LATENCY_EVENT = "preview://latency" as const;
+
 export const PREVIEW_EVENTS = {
   TWIN_LAYOUT: PREVIEW_TWIN_LAYOUT_EVENT,
   SESSION: PREVIEW_SESSION_EVENT,
+  LATENCY: PREVIEW_LATENCY_EVENT,
 } as const;
 
 export type PreviewEventName = (typeof PREVIEW_EVENTS)[keyof typeof PREVIEW_EVENTS];

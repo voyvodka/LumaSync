@@ -46,6 +46,9 @@ pub const PREVIEW_TWIN_LAYOUT_EVENT: &str = "preview://twin-layout";
 /// from `commands::preview::session` to the session's popup.
 pub const PREVIEW_SESSION_EVENT: &str = "preview://session";
 
+/// `LatencyResult`, to the popup, after each sample of the latency scene.
+pub const PREVIEW_LATENCY_EVENT: &str = "preview://latency";
+
 /// `TELEMETRY_EVENTS.HEALTH_CHANGED` in `src/shared/contracts/telemetry.ts`.
 /// Re-exported from `commands::runtime_telemetry`.
 pub const RUNTIME_HEALTH_CHANGED_EVENT: &str = "telemetry://health-changed";

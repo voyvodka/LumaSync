@@ -53,7 +53,7 @@ describe("scene renderers", () => {
     const early = recordingContext();
     const later = recordingContext();
     SCENE_RENDERERS[kind](early.ctx, 1920, 1080, 1000);
-    SCENE_RENDERERS[kind](later.ctx, 1920, 1080, 3000);
+    SCENE_RENDERERS[kind](later.ctx, 1920, 1080, 1600);
     expect(later.calls).not.toEqual(early.calls);
   });
 });

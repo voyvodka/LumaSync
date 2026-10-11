@@ -15,6 +15,7 @@ use super::effects::EffectDraw;
 use super::frame_pipeline::{
     strip_topology_for, AmbilightFramePipeline, FramePipelineConfig, FrameSettings,
 };
+use super::latency::{frame_level, LatencyMeter, LatencySink};
 use super::live::{AmbilightLiveSettings, RoomGeometryLive};
 use super::pacing::{resolve_quality_config, AmbilightWorkerQualityState};
 use super::preview::{PreviewEmitContext, TwinFrameSink, TWIN_FRAME_INTERVAL_MS};
@@ -61,6 +62,9 @@ pub(super) struct WorkerPacing {
     /// A preview scene: the screen is captured as ever, but what it shows is a
     /// test, so it stays out of the runtime history.
     pub preview_scene: bool,
+    /// The latency scene plays: the worker measures each flip's way to the
+    /// output and reports here.
+    pub latency: Option<LatencySink>,
 }
 
 impl WorkerPacing {
@@ -71,6 +75,7 @@ impl WorkerPacing {
             synthetic: false,
             effect: None,
             preview_scene: false,
+            latency: None,
         }
     }
 
@@ -358,8 +363,12 @@ pub(super) fn start_ambilight_worker(
         // Scene-adaptive stage (docs/architecture/capture-and-pipeline.md). Off
         // for synthetic test frames, which must reach the strip exactly as
         // painted, and under LUMASYNC_AMBILIGHT_LEGACY=1 for A/B bisecting.
-        let scene_enabled =
-            !synthetic && std::env::var("LUMASYNC_AMBILIGHT_LEGACY").map_or(true, |v| v != "1");
+        // Off for the latency scene too: its adaptive smoothing would hold a
+        // flip back, and the flip reaching the output is what it measures.
+        let measuring = pacing.latency.is_some();
+        let scene_enabled = !synthetic
+            && !measuring
+            && std::env::var("LUMASYNC_AMBILIGHT_LEGACY").map_or(true, |v| v != "1");
         let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
             led_sequence,
             strip_shape,
@@ -381,7 +390,8 @@ pub(super) fn start_ambilight_worker(
             if scene_enabled { "on" } else { "off" }
         );
         // A test pattern is painted exactly and must reach the lamps that way.
-        let hue_motion = if synthetic {
+        let mut latency_meter = measuring.then(LatencyMeter::default);
+        let hue_motion = if synthetic || measuring {
             HueMotion::Snap
         } else {
             HueMotion::Ease
@@ -490,6 +500,9 @@ pub(super) fn start_ambilight_worker(
                     }
                     Ok((frame, Some(sampled))) => {
                         seen_seq = frame.seq;
+                        if let Some(meter) = latency_meter.as_mut() {
+                            meter.observe_frame(frame_level(&frame), frame.captured_at);
+                        }
                         let settings = read_frame_settings(&live_settings);
                         let analyzed_at =
                             pipeline.analyze(&frame, sampled, settings, (pacing.clock)());
@@ -555,6 +568,7 @@ pub(super) fn start_ambilight_worker(
                         Ok(()) => {
                             telemetry_window.record_send();
                             unsent_frame = false;
+                            report_latency(&mut latency_meter, pacing.latency.as_ref());
                             // LumaSync v1 wire format: 5-byte header
                             // (magic + brightness + count_le) + RGB payload
                             // (3 bytes per LED) + 1-byte XOR. Adalight's
@@ -612,6 +626,7 @@ pub(super) fn start_ambilight_worker(
                     if !has_strip {
                         telemetry_window.record_send();
                         unsent_frame = false;
+                        report_latency(&mut latency_meter, pacing.latency.as_ref());
                     }
                 }
                 // Only the twin reads this; allocating it unconditionally
@@ -674,6 +689,15 @@ pub(super) fn start_ambilight_worker(
         telemetry: telemetry_snapshot_for_stop,
         _frame_source: frame_source_arc,
     })
+}
+
+/// An output just went out: the latency scene's sample ends here, if one began.
+fn report_latency(meter: &mut Option<LatencyMeter>, sink: Option<&LatencySink>) {
+    if let (Some(meter), Some(sink)) = (meter.as_mut(), sink) {
+        if let Some(result) = meter.observe_sent(Instant::now()) {
+            sink(&result);
+        }
+    }
 }
 
 #[cfg(test)]

@@ -115,6 +115,20 @@ the whole pipeline and the user's own settings — black-border crop and scene s
 the twin and the popup kept out (`ui-and-shell.md`). They are kept out of the capture-rate history:
 what they measure is a test, not the user's screen.
 
+**The latency scene measures pipeline delay, and says only that.** The scene flips the whole
+screen between black and white every 500 ms; the worker (`lighting_mode/latency.rs`) takes a frame
+on the far side of a flip as the start of a sample and the first send after it — the strip's
+write, or with no strip the hand-off to the Hue sender, whose own 50 ms pace is not in the number —
+as its end, and reports the median of the last fifteen to the
+popup on `preview://latency`. A flip whose send has not come within 500 ms, or that the next flip
+overtakes, counts as dropped rather than slow. The scene runs with smoothing off — the alpha at 1 and the saved presets cleared, since a preset
+wins over an alpha in the worker's live settings — no black-border crop, no scene-adaptive stage and Hue snapping, because each would hold the flip back and the
+number would measure them instead. On macOS the frame's time is when the display showed it
+(`SCStreamFrameInfo.displayTime`, host clock), so the compositor's hand-off is inside the number;
+elsewhere it is when the frame reached the app, a few milliseconds later. The strip's own response
+and the display's are outside it: those need a camera or a photodiode, so the popup calls the number
+"pipeline delay" and claims nothing about light.
+
 **The preview keeps its own windows out of the capture.** The twin is drawn over the very display
 Ambilight samples, so without this the strip would light from its own picture.
 `preview/exclusion.rs` holds the per-platform rule:

@@ -147,6 +147,7 @@ pub(super) fn stop_previous(
     push_trace(trace, "stop_previous");
     let t0 = std::time::Instant::now();
     owner.preview.scene_worker = false;
+    owner.preview.latency_worker = false;
     owner.ambilight_live = None;
     owner.room_geometry_live = None;
     owner.effect_live = None;
@@ -373,6 +374,7 @@ fn apply_mode_change_inner(
         && normalized_next.chip_type == owner.active_mode.chip_type
         && preview_retune
         && owner.preview.scene.is_some() == owner.preview.scene_worker
+        && owner.preview.latency_sink.is_some() == owner.preview.latency_worker
     {
         if let Some(live) = &owner.ambilight_live {
             let effect = normalized_next.effect.clone();
@@ -710,6 +712,7 @@ fn apply_mode_change_inner(
                     None => WorkerPacing {
                         synthetic: is_test,
                         preview_scene: owner.preview.scene.is_some(),
+                        latency: owner.preview.latency_sink.clone(),
                         ..WorkerPacing::live(capture_interval)
                     },
                 },
@@ -723,6 +726,7 @@ fn apply_mode_change_inner(
                     owner.preview.active_test_pattern = test_pattern;
                     owner.preview.pattern_live = pattern_live;
                     owner.preview.scene_worker = owner.preview.scene.is_some();
+                    owner.preview.latency_worker = owner.preview.latency_sink.is_some();
                     if let Some(UsbOutputPlan::Serial(port)) = &usb_plan_for_worker {
                         set_active_port(owner, port.clone(), &outgoing);
                     }
@@ -848,6 +852,7 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
     let superseded_scene = owner.preview.scene.take().is_some();
     if superseded_scene {
         owner.preview.session_prior = None;
+        owner.preview.latency_sink = None;
     }
     let twin_sink = Some(build_twin_sink(app));
     let (device_connected, connected_port, wled_sink) = DrivenLocal::plan_args(driven.as_ref());
@@ -912,6 +917,7 @@ pub fn stop_lighting_blocking<R: Runtime>(
         let superseded_test = owner.preview.active_test_pattern.is_some();
         let superseded_scene = owner.preview.scene.take().is_some();
         owner.preview.session_prior = None;
+        owner.preview.latency_sink = None;
         let result = apply_mode_change(
             &mut owner,
             LightingModeConfig::default(),
