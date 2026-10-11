@@ -94,6 +94,18 @@ struct OpenSession {
 }
 
 impl OpenSession {
+    #[cfg(any(target_os = "macos", test))]
+    fn shown_labels(&self) -> Vec<String> {
+        let mut labels = Vec::new();
+        if !self.twin_hidden {
+            labels.push(self.twin_label.clone());
+        }
+        if !self.popup_hidden {
+            labels.push(self.popup_label.clone());
+        }
+        labels
+    }
+
     fn wire(&self) -> PreviewSession {
         PreviewSession::Live {
             display_id: self.display_id.clone(),
@@ -231,11 +243,7 @@ impl PreviewSessionState {
             return None;
         }
         open.floating = true;
-        let mut raise = vec![open.twin_label.clone()];
-        if !open.popup_hidden {
-            raise.push(open.popup_label.clone());
-        }
-        Some(raise)
+        Some(open.shown_labels())
     }
 
     fn take(&self) -> Result<Option<OpenSession>, String> {
@@ -876,6 +884,17 @@ mod tests {
         assert_eq!(state.note_front_app(42), None, "already an accessory");
         let open = state.lock().unwrap();
         assert_eq!(open.open.as_ref().and_then(|open| open.return_to), Some(42));
+    }
+
+    #[test]
+    fn a_hidden_twin_stays_hidden_when_the_app_goes_accessory() {
+        let state = PreviewSessionState::default();
+        state.open_for_test("a", "led-twin-overlay-4", "led-control-popup-4");
+        state.lock().unwrap().open.as_mut().unwrap().twin_hidden = true;
+        assert_eq!(
+            state.note_front_app(7),
+            Some(vec!["led-control-popup-4".to_string()])
+        );
     }
 
     #[test]

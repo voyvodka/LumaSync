@@ -73,7 +73,7 @@ pub(super) fn build_twin<R: Runtime>(
 }
 
 /// A regular (Dock) app's windows are not put over another app's full-screen
-/// Space, whatever their collection behaviour, and activating it switches the
+/// Space by their collection behaviour alone, and activating it switches the
 /// user to the Space its main window lives on. While a session is open the app
 /// runs as an accessory, which may float over full-screen apps; its Dock icon
 /// goes for that time and comes back when the session ends. Turning an active

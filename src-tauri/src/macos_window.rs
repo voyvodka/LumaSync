@@ -4,12 +4,12 @@
 
 use std::collections::HashMap;
 use std::ffi::CString;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex, OnceLock};
 
 use objc2::encode::Encode;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject, Bool, Imp, Sel};
-use objc2::{ffi, msg_send, sel};
+use objc2::{ffi, msg_send, sel, ClassType};
 use objc2_app_kit::{NSAnimationContext, NSWindow, NSWindowCollectionBehavior};
 use objc2_foundation::NSRect;
 use tauri::WebviewWindow;
@@ -135,7 +135,8 @@ extern "C-unwind" fn should_zoom(
 /// when another app owns the active fullscreen Space (e.g. a fullscreen game /
 /// video the user is calibrating against). Sets `canJoinAllSpaces |
 /// fullScreenAuxiliary` collection behaviour plus a raised window level, using
-/// the same objc2 NSWindow pattern as `forbid_native_fullscreen`.
+/// the same objc2 NSWindow pattern as `forbid_native_fullscreen`, and lets the
+/// window into another app's full-screen Space (`ALLOWED_IN_OTHER_APPS_FULL_SCREEN`).
 pub fn elevate_overlay_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
     let raw = match window.ns_window() {
         Ok(ptr) => ptr,
@@ -165,6 +166,85 @@ pub fn elevate_overlay_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R
         // overlay + control popup stay visible over fullscreen content.
         let level: objc2_app_kit::NSWindowLevel = 25;
         ns_window.setLevel(level);
+
+        if *ALLOWED_IN_OTHER_APPS_FULL_SCREEN {
+            // The mark is only looked for, never messaged, so it is assigned rather than retained.
+            ffi::objc_setAssociatedObject(
+                &*ns_window as *const NSWindow as *mut AnyObject,
+                joins_full_screen_key(),
+                NSWindow::class() as *const AnyClass as *mut AnyObject,
+                ffi::OBJC_ASSOCIATION_ASSIGN,
+            );
+        }
+    }
+}
+
+type AllowedInFullScreen = extern "C-unwind" fn(&AnyObject, Sel, usize) -> Bool;
+
+static JOINS_FULL_SCREEN: u8 = 0;
+
+fn joins_full_screen_key() -> *const std::ffi::c_void {
+    &JOINS_FULL_SCREEN as *const u8 as *const std::ffi::c_void
+}
+
+/// NSWindow's own answer, for every window not marked by `elevate_overlay_window`.
+static NSWINDOW_ALLOWED_IN_FULL_SCREEN: OnceLock<AllowedInFullScreen> = OnceLock::new();
+
+/// AppKit lets a `fullScreenAuxiliary` window into another app's full-screen
+/// Space only when the private `_allowedInOtherAppsFullScreenSpaceWithCollectionBehavior:`
+/// says so, and it says so only for a non-activating NSPanel: an NSWindow stays
+/// on the Space it was first shown on. tao's TaoWindow answers it here instead —
+/// yes for a marked window, NSWindow's answer for the rest. Turning the window
+/// into a panel by swapping its class is not an option: AppKit removes an
+/// observer registered under the old class in `-[NSWindow dealloc]`, which
+/// throws. Without the query (a later macOS) the windows stay on their Space.
+static ALLOWED_IN_OTHER_APPS_FULL_SCREEN: LazyLock<bool> = LazyLock::new(|| {
+    let sel = sel!(_allowedInOtherAppsFullScreenSpaceWithCollectionBehavior:);
+    let Some(tao) = AnyClass::get(c"TaoWindow") else {
+        log::warn!("[macos_window] no TaoWindow class; preview windows stay on their Space");
+        return false;
+    };
+    // SAFETY: NSWindow's method is read, not changed; the one added to
+    // TaoWindow takes and returns what it does, under its type encoding.
+    unsafe {
+        let method = ffi::class_getInstanceMethod(NSWindow::class(), sel);
+        let Some(original) = (!method.is_null())
+            .then(|| ffi::method_getImplementation(method))
+            .flatten()
+        else {
+            log::warn!("[macos_window] NSWindow no longer answers {sel}; preview windows stay on their Space");
+            return false;
+        };
+        NSWINDOW_ALLOWED_IN_FULL_SCREEN
+            .get_or_init(|| std::mem::transmute::<Imp, AllowedInFullScreen>(original));
+        let imp =
+            std::mem::transmute::<AllowedInFullScreen, Imp>(allowed_in_other_apps_full_screen);
+        let added = ffi::class_addMethod(
+            (tao as *const AnyClass).cast_mut(),
+            sel,
+            imp,
+            ffi::method_getTypeEncoding(method),
+        );
+        if !added.as_bool() {
+            log::warn!("[macos_window] TaoWindow already answers {sel}; preview windows stay on their Space");
+        }
+        added.as_bool()
+    }
+});
+
+extern "C-unwind" fn allowed_in_other_apps_full_screen(
+    this: &AnyObject,
+    cmd: Sel,
+    behavior: usize,
+) -> Bool {
+    // SAFETY: only the presence of the mark is read.
+    let marked = unsafe { !ffi::objc_getAssociatedObject(this, joins_full_screen_key()).is_null() };
+    if marked {
+        return Bool::YES;
+    }
+    match NSWINDOW_ALLOWED_IN_FULL_SCREEN.get() {
+        Some(original) => original(this, cmd, behavior),
+        None => Bool::NO,
     }
 }
 
