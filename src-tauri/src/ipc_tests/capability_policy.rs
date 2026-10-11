@@ -21,16 +21,19 @@ const MAIN: &str = "main";
 const POPUP: &str = "led-control-popup-0";
 const TWIN: &str = "led-twin-overlay-0";
 const CALIBRATION: &str = "calibration-overlay-00000000000000ff-0";
+const SCENE: &str = "led-preview-scene-0";
+const WINDOWS: [&str; 5] = [MAIN, POPUP, TWIN, CALIBRATION, SCENE];
 
-/// Columns are `[main, popup, twin, calibration]`.
-const BUNDLE_WINDOWS: [bool; 4] = [true, true, true, false];
-const MAIN_AND_POPUP: [bool; 4] = [true, true, false, false];
-const MAIN_ONLY: [bool; 4] = [true, false, false, false];
-const POPUP_ONLY: [bool; 4] = [false, true, false, false];
-const TWIN_ONLY: [bool; 4] = [false, false, true, false];
-const NO_WINDOW: [bool; 4] = [false; 4];
+/// Columns are `[main, popup, twin, calibration, scene]`.
+const BUNDLE_WINDOWS: [bool; 5] = [true, true, true, false, true];
+const MAIN_AND_POPUP: [bool; 5] = [true, true, false, false, false];
+const MAIN_ONLY: [bool; 5] = [true, false, false, false, false];
+const POPUP_ONLY: [bool; 5] = [false, true, false, false, false];
+const POPUP_AND_SCENE: [bool; 5] = [false, true, false, false, true];
+const TWIN_ONLY: [bool; 5] = [false, false, true, false, false];
+const NO_WINDOW: [bool; 5] = [false; 5];
 
-const POLICY: &[(&str, [bool; 4])] = &[
+const POLICY: &[(&str, [bool; 5])] = &[
     // Every window with the app bundle loaded
     ("plugin:event|listen", BUNDLE_WINDOWS),
     ("plugin:event|unlisten", BUNDLE_WINDOWS),
@@ -109,7 +112,7 @@ const POLICY: &[(&str, [bool; 4])] = &[
 /// Every app command, with the windows whose frontend invokes it. Derived from
 /// the `*Api.ts` bridges each window's entry mounts — the table in
 /// docs/architecture/ui-and-shell.md says which caller justifies each row.
-const APP_POLICY: &[(&str, [bool; 4])] = &[
+const APP_POLICY: &[(&str, [bool; 5])] = &[
     // Shell state: every bundle window reads it; the twin never writes it, and
     // only the main window runs the migration write-back.
     ("get_shell_state", BUNDLE_WINDOWS),
@@ -123,9 +126,13 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     ("open_log_dir", MAIN_AND_POPUP),
     // Only the popup's own controls call these.
     ("close_preview", POPUP_ONLY),
-    ("get_preview_session", POPUP_ONLY),
     ("set_preview_popup_hidden", POPUP_ONLY),
     ("set_preview_twin_hidden", POPUP_ONLY),
+    ("start_preview_scene", POPUP_ONLY),
+    ("stop_preview_scene", POPUP_ONLY),
+    ("set_preview_scene_brightness", POPUP_ONLY),
+    // The scene draws what the session names.
+    ("get_preview_session", POPUP_AND_SCENE),
     // The twin's one command: its frames.
     ("subscribe_twin_frames", TWIN_ONLY),
     // The main window only.
@@ -231,7 +238,7 @@ fn overlays_and_the_popup_cannot_reach_main_window_privileges() {
                 .is_some(),
             "{command} must stay reachable from the main window"
         );
-        for window in [POPUP, TWIN, CALIBRATION] {
+        for window in [POPUP, TWIN, CALIBRATION, SCENE] {
             assert!(
                 authority
                     .resolve_access(command, window, window, &Origin::Local)
@@ -240,8 +247,8 @@ fn overlays_and_the_popup_cannot_reach_main_window_privileges() {
             );
         }
     }
-    // The twin reads settings and its frames, never writes; the calibration overlay has no IPC.
-    for window in [TWIN, CALIBRATION] {
+    // The twin and the scene read, never write; the calibration overlay has no IPC.
+    for window in [TWIN, CALIBRATION, SCENE] {
         assert!(authority
             .resolve_access("patch_shell_state", window, window, &Origin::Local)
             .is_none());
@@ -270,13 +277,13 @@ fn the_app_policy_names_every_command_in_the_manifest() {
     );
 }
 
-fn assert_policy(policy: &[(&str, [bool; 4])]) {
+fn assert_policy(policy: &[(&str, [bool; 5])]) {
     let mut context = crate::app_context::<MockRuntime>();
     let authority = context.runtime_authority_mut();
 
     let mut mismatches = Vec::new();
     for (command, expected) in policy {
-        for (window, want) in [MAIN, POPUP, TWIN, CALIBRATION].iter().zip(expected) {
+        for (window, want) in WINDOWS.iter().zip(expected) {
             let got = authority
                 .resolve_access(command, window, window, &Origin::Local)
                 .is_some();
@@ -308,7 +315,7 @@ fn no_call_is_reachable_from_a_remote_origin() {
     };
 
     for (command, _) in POLICY.iter().chain(APP_POLICY) {
-        for window in [MAIN, POPUP, TWIN, CALIBRATION] {
+        for window in WINDOWS {
             assert!(
                 authority
                     .resolve_access(command, window, window, &remote)

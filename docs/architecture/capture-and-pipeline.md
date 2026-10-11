@@ -109,7 +109,11 @@ off. That gives the strip exact bytes — the scene stage and the black-border c
 needs no screen-recording permission, and runs the same pipeline rather than a fork of it. The
 original concept drew a full-screen animation for capture to sample, which needs the twin and the
 popup excluded from capture on every platform (`SCContentFilter`, `SetWindowDisplayAffinity`).
-The cost is that a test says nothing about capture or its latency.
+The cost is that a test says nothing about capture or its latency. The LED preview's scenes are that
+original concept, built now that the exclusion exists: a full-screen window capture sees, through
+the whole pipeline and the user's own settings — black-border crop and scene stage included — with
+the twin and the popup kept out (`ui-and-shell.md`). They are kept out of the capture-rate history:
+what they measure is a test, not the user's screen.
 
 **The preview keeps its own windows out of the capture.** The twin is drawn over the very display
 Ambilight samples, so without this the strip would light from its own picture.

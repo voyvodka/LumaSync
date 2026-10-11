@@ -8,6 +8,7 @@ use tauri::{AppHandle, Runtime};
 
 use super::config::LightingModeConfig;
 use super::runtime::LightingRuntimeState;
+use crate::commands::preview::SceneKind;
 use crate::commands::test_pattern::{TestPatternConfig, TestPatternLiveSlot};
 
 /// LED preview runtime state carried alongside the lighting worker.
@@ -33,6 +34,16 @@ pub(super) struct PreviewRuntime {
     /// Pattern + speed of the running synthetic source. Writing it retunes the
     /// test in place; `None` means no synthetic worker is up.
     pub(super) pattern_live: Option<TestPatternLiveSlot>,
+    /// The preview scene Ambilight runs for. Set and cleared with
+    /// `session_prior` under the runtime lock, like `test_prior`: a user's mode
+    /// change clears both in the critical section that replaces the scene.
+    pub(super) scene: Option<SceneKind>,
+    /// The mode the scene interrupted, for its stop to restore.
+    pub(super) session_prior: Option<LightingModeConfig>,
+    /// The running worker was started for a scene. Entering or leaving one
+    /// rebuilds the worker rather than retuning it, so the history skip it was
+    /// started with matches what it captures.
+    pub(super) scene_worker: bool,
 }
 
 /// Per-worker twin-feed gate: whether the worker builds a twin frame this tick.
@@ -83,6 +94,32 @@ impl LightingRuntimeState {
             layout: owner.active_mode.led_calibration.clone(),
             still: owner.worker.is_none().then(|| owner.active_mode.clone()),
         }
+    }
+
+    /// Whether a preview scene owns the lights.
+    pub fn scene_active(&self) -> bool {
+        let owner = self.runtime.lock().unwrap_or_else(|e| e.into_inner());
+        owner.preview.scene.is_some()
+    }
+
+    /// A scene's marker without its lights, for a test of what it refuses.
+    #[cfg(test)]
+    pub(crate) fn mark_scene_for_tests(&self, kind: SceneKind) {
+        self.runtime
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .preview
+            .scene = Some(kind);
+    }
+
+    /// A test pattern's marker without its worker, likewise.
+    #[cfg(test)]
+    pub(crate) fn mark_test_pattern_for_tests(&self, test: TestPatternConfig) {
+        self.runtime
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .preview
+            .active_test_pattern = Some(test);
     }
 
     /// Whether a synthetic test pattern drives the worker. Recovers from a

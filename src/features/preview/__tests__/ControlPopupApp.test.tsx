@@ -1,7 +1,7 @@
 // ControlPopupApp — the preview session's remote: opening it changes no light,
 // the mode strip runs the lighting transaction, brightness and the effect list
 // retune the running mode, the eye hides the twin, Close ends the session and
-// Hide keeps it open.
+// Hide keeps it open. A scene owns the lights while it plays.
 
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -27,12 +27,19 @@ const closePreview = vi.fn<typeof previewApiModule.closePreview>();
 const setPreviewPopupHidden = vi.fn<typeof previewApiModule.setPreviewPopupHidden>();
 const setPreviewTwinHidden = vi.fn<typeof previewApiModule.setPreviewTwinHidden>();
 const getPreviewSession = vi.fn<typeof previewApiModule.getPreviewSession>();
+const startPreviewScene = vi.fn<typeof previewApiModule.startPreviewScene>();
+const stopPreviewScene = vi.fn<typeof previewApiModule.stopPreviewScene>();
+const setPreviewSceneBrightness = vi.fn<typeof previewApiModule.setPreviewSceneBrightness>();
 
 vi.mock("../previewApi", () => ({
   closePreview: (...args: Parameters<typeof closePreview>) => closePreview(...args),
   setPreviewPopupHidden: (...args: Parameters<typeof setPreviewPopupHidden>) => setPreviewPopupHidden(...args),
   setPreviewTwinHidden: (...args: Parameters<typeof setPreviewTwinHidden>) => setPreviewTwinHidden(...args),
   getPreviewSession: (...args: Parameters<typeof getPreviewSession>) => getPreviewSession(...args),
+  startPreviewScene: (...args: Parameters<typeof startPreviewScene>) => startPreviewScene(...args),
+  stopPreviewScene: (...args: Parameters<typeof stopPreviewScene>) => stopPreviewScene(...args),
+  setPreviewSceneBrightness: (...args: Parameters<typeof setPreviewSceneBrightness>) =>
+    setPreviewSceneBrightness(...args),
 }));
 
 /** The popup's `preview://session` handler, so a test can play Rust's event. */
@@ -54,6 +61,8 @@ const LIVE: PreviewSession = {
   twinHidden: false,
   twinHeldForCapture: false,
 };
+
+const SPIRAL: PreviewSession = { ...LIVE, state: "scene", scene: "spiral", sceneBrightness: 0.6 };
 
 const applyOutputs = vi.fn<typeof modeApiModule.applyOutputs>();
 const retuneLighting = vi.fn<typeof modeApiModule.retuneLighting>();
@@ -136,6 +145,9 @@ beforeEach(() => {
   storeSave.mockResolvedValue(undefined);
   closePreview.mockResolvedValue(sessionReply(PREVIEW_STATUS.CLOSED));
   setPreviewPopupHidden.mockResolvedValue(sessionReply(PREVIEW_STATUS.POPUP_UPDATED));
+  startPreviewScene.mockResolvedValue(sessionReply(PREVIEW_STATUS.SCENE_STARTED));
+  stopPreviewScene.mockResolvedValue(sessionReply(PREVIEW_STATUS.SCENE_STOPPED));
+  setPreviewSceneBrightness.mockResolvedValue(sessionReply(PREVIEW_STATUS.SCENE_UPDATED));
   applyOutputs.mockResolvedValue(outputsReply());
   retuneLighting.mockResolvedValue({ status: { code: "RETUNE_APPLIED", message: "", details: null } });
   invokeMock.mockResolvedValue(undefined);
@@ -432,6 +444,84 @@ describe("ControlPopupApp twin switch", () => {
     await act(async () => answer(LIVE));
 
     expect(screen.getByRole("button", { name: "preview:control.twinShow" })).toBeInTheDocument();
+  });
+});
+
+describe("ControlPopupApp scenes", () => {
+  it("plays a scene on press and changes no mode", async () => {
+    const user = userEvent.setup();
+    render(<ControlPopupApp />);
+
+    await user.click(screen.getByTestId("popup-scene-edgeTour"));
+
+    expect(startPreviewScene).toHaveBeenCalledWith("edgeTour");
+    expect(applyOutputs).not.toHaveBeenCalled();
+  });
+
+  it("stops the playing scene on its own press, and plays another in its place", async () => {
+    getPreviewSession.mockResolvedValue(SPIRAL);
+    const user = userEvent.setup();
+    render(<ControlPopupApp />);
+    const spiral = await screen.findByTestId("popup-scene-spiral");
+    expect(spiral).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(spiral);
+    expect(stopPreviewScene).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByTestId("popup-scene-sunset"));
+    expect(startPreviewScene).toHaveBeenCalledWith("sunset");
+  });
+
+  it("holds the mode strip and says why while a scene plays", async () => {
+    syncState.mode = { kind: LIGHTING_MODE_KIND.SOLID, solid: { r: 1, g: 2, b: 3, brightness: 1 } };
+    getPreviewSession.mockResolvedValue(SPIRAL);
+    render(<ControlPopupApp />);
+
+    expect(await screen.findByTestId("popup-scene-owns")).toHaveTextContent("preview:scenes.ownsLights");
+    for (const radio of screen.getAllByRole("radio")) {
+      expect(radio).toBeDisabled();
+      expect(radio).toHaveAttribute("aria-checked", "false");
+    }
+  });
+
+  // The scene's brightness is its own: the user's mode is never retuned for it.
+  it("drags the scene's brightness, not the mode's", async () => {
+    syncState.mode = { kind: LIGHTING_MODE_KIND.AMBILIGHT, ambilight: { brightness: 0.8 } };
+    getPreviewSession.mockResolvedValue(SPIRAL);
+    render(<ControlPopupApp />);
+    await screen.findByTestId("popup-scene-owns");
+
+    expect(screen.getByText("60%")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("slider", { name: "common:mode.brightness" }), { target: { value: "25" } });
+
+    await waitFor(() => expect(setPreviewSceneBrightness).toHaveBeenCalledWith(0.25));
+    expect(retuneLighting).not.toHaveBeenCalled();
+  });
+
+  it("says why a scene did not start", async () => {
+    startPreviewScene.mockResolvedValue(sessionReply(PREVIEW_STATUS.SCENE_NO_OUTPUT));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const user = userEvent.setup();
+    render(<ControlPopupApp />);
+
+    await user.click(screen.getByTestId("popup-scene-spiral"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("preview:status.PREVIEW_SCENE_NO_OUTPUT");
+  });
+
+  it("ignores a second press while the first is in flight", async () => {
+    let answer!: (result: PreviewSessionResult) => void;
+    startPreviewScene.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    const user = userEvent.setup();
+    render(<ControlPopupApp />);
+
+    await user.click(screen.getByTestId("popup-scene-spiral"));
+    await user.click(screen.getByTestId("popup-scene-sunset"));
+    expect(startPreviewScene).toHaveBeenCalledTimes(1);
+
+    await act(async () => answer(sessionReply(PREVIEW_STATUS.SCENE_STARTED)));
+    await user.click(screen.getByTestId("popup-scene-sunset"));
+    expect(startPreviewScene).toHaveBeenCalledTimes(2);
   });
 });
 

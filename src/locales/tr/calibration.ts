@@ -112,6 +112,7 @@ const calibration: Catalogue<typeof enCalibration> = {
       testPatternNoCalibration: "Test çalıştırmadan önce en az bir kenarın LED sayısını gir.",
       testPatternInvalidLayout: "Bu LED düzeni test edilemiyor. Kenar sayılarını kontrol et.",
       testPatternRefused: "Test ışıklarında başlatılamadı.",
+      testPatternSceneActive: "LED önizlemesinde bir sahne oynuyor. Önce onu LED önizlemesinden durdur.",
       testPatternToggleFailed: "Test açılıp kapatılamadı.",
       displaySwitchBlocked: "Test kaplaması o ekrana taşınamadı.",
       displaySwitchFailed: "Test kaplamasını o ekrana taşımak başarısız oldu.",

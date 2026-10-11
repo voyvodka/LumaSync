@@ -84,7 +84,9 @@ import type {
   PreviewSession,
   PreviewSessionResult,
   SetPreviewPopupHiddenPayload,
+  SetPreviewSceneBrightnessPayload,
   SetPreviewTwinHiddenPayload,
+  StartPreviewScenePayload,
   StartLedTestPatternPayload,
   TwinFrameChannel,
   TwinSubscribeResult,
@@ -233,6 +235,9 @@ export interface CommandMap {
   set_preview_popup_hidden: Command<{ payload: SetPreviewPopupHiddenPayload }, PreviewSessionResult>;
   get_preview_session: NoArgs<PreviewSession>;
   set_preview_twin_hidden: Command<{ payload: SetPreviewTwinHiddenPayload }, PreviewSessionResult>;
+  start_preview_scene: Command<{ payload: StartPreviewScenePayload }, PreviewSessionResult>;
+  stop_preview_scene: NoArgs<PreviewSessionResult>;
+  set_preview_scene_brightness: Command<{ payload: SetPreviewSceneBrightnessPayload }, PreviewSessionResult>;
   subscribe_twin_frames: Command<{ onFrame: TwinFrameChannel }, TwinSubscribeResult>;
 
   // --- shell --------------------------------------------------------------

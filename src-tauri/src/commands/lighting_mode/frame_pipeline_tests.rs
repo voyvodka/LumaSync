@@ -543,6 +543,7 @@ fn scripted_clock(served: &Arc<AtomicU32>) -> WorkerPacing {
     WorkerPacing {
         synthetic: false,
         effect: None,
+        preview_scene: false,
         capture_interval: Duration::from_millis(70),
         clock: Arc::new(move || base + FRAME_GAP * served.load(Ordering::SeqCst)),
     }

@@ -370,8 +370,8 @@ impl TuningCell {
 }
 
 /// What a retune may reach in the mode now running, read under the runtime
-/// lock by a transaction that has just committed. A test pattern is retuned
-/// through its own command, never here.
+/// lock by a transaction that has just committed. A test pattern and a preview
+/// scene are retuned through their own commands, never here.
 pub(crate) fn accepting_for_running<R: Runtime>(
     app: &AppHandle<R>,
     hue_output: Arc<HueOutputLive>,
@@ -379,7 +379,7 @@ pub(crate) fn accepting_for_running<R: Runtime>(
     let driven = app.state::<LocalOutputRegistry>().driven();
     let state = app.state::<LightingRuntimeState>();
     let owner = state.runtime.lock().ok()?;
-    if owner.preview.active_test_pattern.is_some() {
+    if owner.preview.active_test_pattern.is_some() || owner.preview.scene.is_some() {
         return None;
     }
     match owner.active_mode.kind {

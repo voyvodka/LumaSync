@@ -38,6 +38,7 @@ const LED_TEST_PATTERN_STOPPED: &str = "LED_TEST_PATTERN_STOPPED";
 const LED_TEST_PATTERN_INVALID_PARAMS: &str = "LED_TEST_PATTERN_INVALID_PARAMS";
 const LED_TEST_PATTERN_NO_CALIBRATION: &str = "LED_TEST_PATTERN_NO_CALIBRATION";
 const LED_TEST_PATTERN_RUNTIME_ERROR: &str = "LED_TEST_PATTERN_RUNTIME_ERROR";
+const LED_TEST_PATTERN_SCENE_ACTIVE: &str = "LED_TEST_PATTERN_SCENE_ACTIVE";
 
 /// Aspect (width / height) of the display the strip surrounds, used to weight
 /// the synthetic frame's perimeter. Prefers the user's selected display so it
@@ -180,6 +181,19 @@ fn start_led_test_pattern_blocking<R: Runtime>(
     let hue_runtime_state = app.state::<HueRuntimeStateStore>();
     let telemetry_state = app.state::<RuntimeTelemetryState>();
     let preview_session = app.state::<PreviewSessionState>();
+    // The scene owns the lights; its stop restores the mode a test would
+    // record as its own prior.
+    if runtime_state.scene_active() {
+        return Ok(LedTestPatternResult {
+            active: false,
+            preview_only: false,
+            status: command_status(
+                LED_TEST_PATTERN_SCENE_ACTIVE,
+                "A preview scene is running; stop it first.",
+                None,
+            ),
+        });
+    }
     if !payload.brightness.is_finite() || !(0.0..=1.0).contains(&payload.brightness) {
         return Ok(LedTestPatternResult {
             active: false,

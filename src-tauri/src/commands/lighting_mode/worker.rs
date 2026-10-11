@@ -58,6 +58,9 @@ pub(super) struct WorkerPacing {
     pub synthetic: bool,
     /// An effect, drawn per light by the pipeline instead of sampled.
     pub effect: Option<EffectDraw>,
+    /// A preview scene: the screen is captured as ever, but what it shows is a
+    /// test, so it stays out of the runtime history.
+    pub preview_scene: bool,
 }
 
 impl WorkerPacing {
@@ -67,6 +70,7 @@ impl WorkerPacing {
             clock: Arc::new(Instant::now),
             synthetic: false,
             effect: None,
+            preview_scene: false,
         }
     }
 
@@ -266,7 +270,7 @@ pub(super) fn start_ambilight_worker(
     // than the whole comet, so it averaged in unlit screen and dimmed the head.
     let synthetic = pacing.synthetic;
     telemetry_window.set_capture_interval(pacing.capture_interval);
-    if synthetic {
+    if synthetic || pacing.preview_scene {
         telemetry_window.skip_history();
     }
     let sample_window = if synthetic {

@@ -20,6 +20,8 @@ export type IdentifyFailure =
   /** The probe rendered to the preview only — no strip received it. */
   | "notSending"
   | "noCalibration"
+  /** An LED preview scene owns the lights. */
+  | "sceneActive"
   | "startFailed"
   | "saveFailed"
   /** The order was saved but the probe could not be confirmed stopped. */
@@ -85,6 +87,8 @@ function probeStartFailure(result: LedTestPatternResult): IdentifyFailure | null
       return "notSending";
     case LED_TEST_STATUS.PATTERN_NO_CALIBRATION:
       return "noCalibration";
+    case LED_TEST_STATUS.PATTERN_SCENE_ACTIVE:
+      return "sceneActive";
     default:
       return "startFailed";
   }

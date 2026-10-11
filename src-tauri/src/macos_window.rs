@@ -248,6 +248,14 @@ extern "C-unwind" fn allowed_in_other_apps_full_screen(
     }
 }
 
+/// The window server's number for the window (`CGWindowID`).
+pub fn window_number<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> Option<u32> {
+    let raw = window.ns_window().ok().filter(|raw| !raw.is_null())?;
+    // SAFETY: Tauri's retained NSWindow pointer, borrowed for this call only.
+    let number = unsafe { (*(raw as *const NSWindow)).windowNumber() };
+    u32::try_from(number).ok().filter(|&number| number > 0)
+}
+
 /// The app in front, when it is not this one.
 pub fn frontmost_other_app() -> Option<i32> {
     objc2_app_kit::NSWorkspace::sharedWorkspace()

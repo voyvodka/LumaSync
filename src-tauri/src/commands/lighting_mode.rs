@@ -28,6 +28,7 @@ mod live;
 pub mod outputs;
 mod pacing;
 pub mod preview;
+pub mod preview_scene;
 mod runtime;
 mod sampling;
 pub(crate) mod smoothing;
@@ -104,6 +105,8 @@ mod live_tests;
 #[cfg(test)]
 mod pacing_tests;
 
+#[cfg(test)]
+mod preview_scene_tests;
 #[cfg(test)]
 mod preview_tests;
 

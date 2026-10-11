@@ -364,6 +364,22 @@ restores the mode from the saved settings — and does nothing while Off.
 starting one publishes nothing: every window keeps showing the mode it interrupted, and the test's
 stop publishes the restored one. The main window used to render the test as Ambilight running.
 
+**A preview scene borrows the lights the same way, and the user's choice ends it.** A scene runs
+Ambilight on the user's saved settings (`lighting_mode/preview_scene.rs`), on the outputs they chose
+that can be driven now — Hue only when its stream is already up, since starting it belongs to the
+transaction. Its marker and the mode it interrupted (`preview.scene`, `preview.session_prior`) are
+set and cleared under the runtime lock, like `test_prior`, and `apply_config_blocking` and
+`stop_lighting_blocking` take both in the critical section of a user's change — before the apply,
+which reads the marker — so a late scene stop cannot put the old mode back over the user's choice.
+While it plays nothing is published or saved: the settings refresh leaves it alone,
+`accepting_for_running` offers retunes nothing, and `persist_running_choice` returns. Its brightness
+has its own command, `set_preview_scene_brightness`, which writes the running worker's live
+settings and nothing else; through `retune_lighting` it would land in the stored tuning and become
+the user's next Ambilight brightness. The stop restores with the settings as saved now, falls to Off
+if that restore is gated, and back at Off paints the strip black and switches a WLED panel off, as a
+user's Off does. Entering or leaving a scene rebuilds the worker rather than retuning it, so the
+history skip it was started with (`WorkerPacing::preview_scene`) matches what it captures.
+
 **Targets are a set, and an unknown one is an error.** The request carries target names; they parse
 into a `BTreeSet<OutputTarget>` (ordered `usb, hue`, deduped by construction), and a name this build
 does not know answers `OUTPUTS_INVALID_REQUEST` with nothing recorded, saved or touched. It used to

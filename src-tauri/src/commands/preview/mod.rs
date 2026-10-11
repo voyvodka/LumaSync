@@ -6,12 +6,15 @@
 //! - `windows` — how the popup and the twin are built.
 //! - `exclusion` — keeping them out of the live capture.
 //! - `feed` — the twin's layout and frames.
+//! - `scene` — the test scenes Ambilight captures, and the lights they borrow.
 
 pub mod exclusion;
 pub mod feed;
+pub mod scene;
 pub mod session;
 pub mod windows;
 
+pub use scene::{scene_superseded, SceneKind};
 pub use session::{end_session, on_session_window_destroyed, PreviewSessionState};
 #[cfg(test)]
 pub use windows::LED_CONTROL_POPUP_LABEL_PREFIX;

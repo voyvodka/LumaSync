@@ -105,6 +105,9 @@ use commands::local_outputs::{disconnect_serial_port, get_local_outputs, LocalOu
 use commands::notifications::{request_notification_permission, show_notification};
 use commands::platform::open_log_dir;
 use commands::preview::feed::subscribe_twin_frames;
+use commands::preview::scene::{
+    set_preview_scene_brightness, start_preview_scene, stop_preview_scene,
+};
 use commands::preview::session::{
     close_preview, get_preview_session, open_preview, set_preview_popup_hidden,
     set_preview_twin_hidden, PreviewSessionState,
@@ -963,6 +966,9 @@ pub fn run() {
             set_preview_popup_hidden,
             set_preview_twin_hidden,
             subscribe_twin_frames,
+            start_preview_scene,
+            stop_preview_scene,
+            set_preview_scene_brightness,
             check_for_update,
             download_and_install_update,
             get_launch_context,

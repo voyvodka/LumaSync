@@ -12,6 +12,7 @@ import {
   type PreviewSession,
   type PreviewSessionResult,
   type PreviewSessionStatusCode,
+  type SceneKind,
   type StartLedTestPatternPayload,
   type TwinSubscribeResult,
 } from "@/shared/contracts/preview";
@@ -129,6 +130,47 @@ export async function setPreviewTwinHidden(
   } catch (error) {
     console.error("[LumaSync] set_preview_twin_hidden failed:", error);
     return failedSessionResult(PREVIEW_STATUS.NOT_OPEN, error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Scenes
+// ---------------------------------------------------------------------------
+
+/** Play `kind`; a playing scene switches in place. */
+export async function startPreviewScene(
+  kind: SceneKind,
+  invoker: CommandInvoker = invokeCommand,
+): Promise<PreviewSessionResult> {
+  try {
+    return await invoker(PREVIEW_COMMANDS.START_SCENE, { payload: { kind } });
+  } catch (error) {
+    console.error("[LumaSync] start_preview_scene failed:", error);
+    return failedSessionResult(PREVIEW_STATUS.SCENE_START_FAILED, error);
+  }
+}
+
+/** Stop the scene; the mode it interrupted comes back. */
+export async function stopPreviewScene(invoker: CommandInvoker = invokeCommand): Promise<PreviewSessionResult> {
+  try {
+    return await invoker(PREVIEW_COMMANDS.STOP_SCENE);
+  } catch (error) {
+    console.error("[LumaSync] stop_preview_scene failed:", error);
+    // The scene may still be playing: RESTORE_FAILED says the lights are not
+    // back, and claims no stop.
+    return failedSessionResult(PREVIEW_STATUS.RESTORE_FAILED, error);
+  }
+}
+
+export async function setPreviewSceneBrightness(
+  brightness: number,
+  invoker: CommandInvoker = invokeCommand,
+): Promise<PreviewSessionResult> {
+  try {
+    return await invoker(PREVIEW_COMMANDS.SET_SCENE_BRIGHTNESS, { payload: { brightness } });
+  } catch (error) {
+    console.error("[LumaSync] set_preview_scene_brightness failed:", error);
+    return failedSessionResult(PREVIEW_STATUS.SCENE_NOT_RUNNING, error);
   }
 }
 

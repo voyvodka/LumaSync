@@ -146,6 +146,7 @@ pub(super) fn stop_previous(
 ) {
     push_trace(trace, "stop_previous");
     let t0 = std::time::Instant::now();
+    owner.preview.scene_worker = false;
     owner.ambilight_live = None;
     owner.room_geometry_live = None;
     owner.effect_live = None;
@@ -371,6 +372,7 @@ fn apply_mode_change_inner(
         && normalized_next.firmware_profile == owner.active_mode.firmware_profile
         && normalized_next.chip_type == owner.active_mode.chip_type
         && preview_retune
+        && owner.preview.scene.is_some() == owner.preview.scene_worker
     {
         if let Some(live) = &owner.ambilight_live {
             let effect = normalized_next.effect.clone();
@@ -707,6 +709,7 @@ fn apply_mode_change_inner(
                     // A test pattern paints its frames too.
                     None => WorkerPacing {
                         synthetic: is_test,
+                        preview_scene: owner.preview.scene.is_some(),
                         ..WorkerPacing::live(capture_interval)
                     },
                 },
@@ -719,6 +722,7 @@ fn apply_mode_change_inner(
                     owner.active_mode = normalized_next;
                     owner.preview.active_test_pattern = test_pattern;
                     owner.preview.pattern_live = pattern_live;
+                    owner.preview.scene_worker = owner.preview.scene.is_some();
                     if let Some(UsbOutputPlan::Serial(port)) = &usb_plan_for_worker {
                         set_active_port(owner, port.clone(), &outgoing);
                     }
@@ -839,6 +843,12 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
     // Read BEFORE apply_mode_change clears it: a live mode change that
     // supersedes a test drops the mode the test would restore.
     let superseded_test = owner.preview.active_test_pattern.is_some();
+    // Before the apply, which reads it: the user's choice ends the scene and
+    // is not undone, so its worker is a plain one.
+    let superseded_scene = owner.preview.scene.take().is_some();
+    if superseded_scene {
+        owner.preview.session_prior = None;
+    }
     let twin_sink = Some(build_twin_sink(app));
     let (device_connected, connected_port, wled_sink) = DrivenLocal::plan_args(driven.as_ref());
 
@@ -864,6 +874,9 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
     // listener cannot deadlock on it.
     drop(owner);
     note_applied_mode(app, &result.mode);
+    if superseded_scene {
+        crate::commands::preview::scene_superseded(app);
+    }
     info!(
         "[set_lighting_mode] completed in {}ms",
         t_cmd.elapsed().as_millis()
@@ -897,6 +910,8 @@ pub fn stop_lighting_blocking<R: Runtime>(
         // Capture whether a synthetic test was running
         // BEFORE apply_mode_change clears it.
         let superseded_test = owner.preview.active_test_pattern.is_some();
+        let superseded_scene = owner.preview.scene.take().is_some();
+        owner.preview.session_prior = None;
         let result = apply_mode_change(
             &mut owner,
             LightingModeConfig::default(),
@@ -913,10 +928,14 @@ pub fn stop_lighting_blocking<R: Runtime>(
         if superseded_test {
             owner.preview.test_prior = None;
         }
-        result
+        (result, superseded_scene)
     };
+    let (result, superseded_scene) = result;
     note_applied_mode(app, &result.mode);
     snapshot::publish_running(app, &result.mode);
+    if superseded_scene {
+        crate::commands::preview::scene_superseded(app);
+    }
     Ok(result)
 }
 

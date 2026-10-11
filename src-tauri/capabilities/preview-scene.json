@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "preview-scene",
+  "description": "v1.6 preview scene: a click-through full-screen window under the twin and the popup that draws the test scene the session names. It reads the session and shell state, listens for the session event, and bridges its console into the log. No window API and no write. Policy: docs/architecture/ui-and-shell.md, \"Capabilities\".",
+  "windows": [
+    "led-preview-scene-*"
+  ],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "log:allow-log",
+    "allow-get-shell-state",
+    "allow-get-preview-session"
+  ]
+}

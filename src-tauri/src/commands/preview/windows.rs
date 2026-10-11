@@ -19,6 +19,9 @@ use crate::commands::shell_state;
 /// session's.
 pub const LED_TWIN_OVERLAY_LABEL_PREFIX: &str = "led-twin-overlay-";
 
+/// Mirrors `LED_PREVIEW_SCENE_LABEL_PREFIX` in `src/shared/contracts/preview.ts`.
+pub const LED_PREVIEW_SCENE_LABEL_PREFIX: &str = "led-preview-scene-";
+
 /// Mirrors `LED_CONTROL_POPUP_LABEL_PREFIX` in `src/shared/contracts/preview.ts`.
 pub const LED_CONTROL_POPUP_LABEL_PREFIX: &str = "led-control-popup-";
 
@@ -40,9 +43,15 @@ pub(super) fn next_popup_label() -> String {
     format!("{LED_CONTROL_POPUP_LABEL_PREFIX}{seq}")
 }
 
+pub(super) fn next_scene_label() -> String {
+    let seq = LABEL_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("{LED_PREVIEW_SCENE_LABEL_PREFIX}{seq}")
+}
+
 pub fn is_preview_window(label: &str) -> bool {
     label.starts_with(LED_TWIN_OVERLAY_LABEL_PREFIX)
         || label.starts_with(LED_CONTROL_POPUP_LABEL_PREFIX)
+        || label.starts_with(LED_PREVIEW_SCENE_LABEL_PREFIX)
 }
 
 /// The click-through twin over `display`, raised into full-screen Spaces on
@@ -70,6 +79,54 @@ pub(super) fn build_twin<R: Runtime>(
             .map_err(|error| format!("could not show the LED twin: {error}"))?;
     }
     Ok(window)
+}
+
+/// The scene over `display`, under the twin and the popup: click-through like
+/// the twin, its page drawing the scene opaque. Never kept out of the capture —
+/// lighting the strip from it is the point. Answers the window number the
+/// capture filter excepts it by (macOS).
+pub(super) fn build_scene<R: Runtime>(
+    app: &AppHandle<R>,
+    label: &str,
+    display: &DisplayInfoPayload,
+) -> Result<(WebviewWindow<R>, Option<u32>), String> {
+    let window = build_transparent_overlay(
+        app,
+        label,
+        WebviewUrl::App(PathBuf::from("index.html")),
+        "LumaSync LED Scene",
+        display,
+        None,
+        !SHOW_AFTER_ELEVATING,
+    )?;
+    #[cfg(target_os = "macos")]
+    crate::macos_window::elevate_overlay_window(&window);
+    if SHOW_AFTER_ELEVATING {
+        window
+            .show()
+            .map_err(|error| format!("could not show the scene: {error}"))?;
+    }
+    #[cfg(target_os = "macos")]
+    let number = crate::macos_window::window_number(&window);
+    #[cfg(not(target_os = "macos"))]
+    let number = None;
+    Ok((window, number))
+}
+
+/// The twin and the popup back over the scene, which shares their level and,
+/// shown last, lies on top of them.
+pub(super) fn raise_over_scene<R: Runtime>(app: &AppHandle<R>, labels: &[String]) {
+    for label in labels {
+        let Some(window) = app.get_webview_window(label) else {
+            continue;
+        };
+        #[cfg(target_os = "macos")]
+        crate::macos_window::order_front_regardless(&window);
+        #[cfg(not(target_os = "macos"))]
+        let _ = window
+            .set_always_on_top(false)
+            .and_then(|()| window.set_always_on_top(true));
+    }
 }
 
 /// A regular (Dock) app's windows are not put over another app's full-screen

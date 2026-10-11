@@ -242,6 +242,7 @@ export default {
         errors: {
           notSending: "The test only reached the preview, not a strip. Connect the strip and try again.",
           noCalibration: "Set up your LEDs in LED Setup first, then try again.",
+          sceneActive: "An LED preview scene is playing. Stop it in the LED preview, then try again.",
           startFailed: "The test could not start. Nothing was changed.",
           saveFailed: "The color order could not be saved. Nothing was changed.",
           stopFailed: "The color order was saved, but the test may still be running. Try again to finish.",

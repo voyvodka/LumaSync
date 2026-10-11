@@ -245,6 +245,7 @@ const lights: Catalogue<typeof enLights> = {
         errors: {
           notSending: "Test bir şeride değil, yalnızca önizlemeye ulaştı. Şeridi bağlayıp tekrar dene.",
           noCalibration: "Önce LED kurulumunda LED'lerini ayarla, sonra tekrar dene.",
+          sceneActive: "LED önizlemesinde bir sahne oynuyor. Onu LED önizlemesinden durdur, sonra tekrar dene.",
           startFailed: "Test başlatılamadı. Hiçbir şey değişmedi.",
           saveFailed: "Renk sırası kaydedilemedi. Hiçbir şey değişmedi.",
           stopFailed: "Renk sırası kaydedildi ama test hâlâ çalışıyor olabilir. Tamamlamak için tekrar dene.",

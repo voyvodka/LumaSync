@@ -109,6 +109,7 @@ export default {
       testPatternNoCalibration: "Set the LED counts for at least one edge before running a test.",
       testPatternInvalidLayout: "This LED layout cannot be tested. Check the edge counts.",
       testPatternRefused: "The test could not start on your lights.",
+      testPatternSceneActive: "An LED preview scene is playing. Stop it in the LED preview first.",
       testPatternToggleFailed: "The test could not be switched on or off.",
       displaySwitchBlocked: "The test overlay could not move to that display.",
       displaySwitchFailed: "Moving the test overlay to that display failed.",

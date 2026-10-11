@@ -768,6 +768,10 @@ fn persist_targets<R: Runtime>(app: &AppHandle<R>, targets: &OutputTargets) {
 /// A retune's settled write: the running choice with its newest payloads.
 pub(crate) fn persist_running_choice<R: Runtime>(app: &AppHandle<R>) {
     let state = app.state::<LightingRuntimeState>();
+    // What runs is a test; saving it would write over the user's settings.
+    if state.scene_active() {
+        return;
+    }
     let intent = state.outputs.intent();
     if intent.kind == LightingModeKind::Off || state.snapshot.read().mode.kind != intent.kind {
         return;
@@ -797,15 +801,15 @@ fn read_running<R: Runtime>(app: &AppHandle<R>) -> Result<LightingModeConfig, St
     Ok(owner.active_mode.clone())
 }
 
-/// A test pattern owns the strip: its own stop restores the mode, re-reading
-/// the saved settings, so a refresh leaves it alone.
-fn test_pattern_active<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {
+/// A test pattern or a preview scene owns the strip: its own stop restores the
+/// mode, re-reading the saved settings, so a refresh leaves it alone.
+fn preview_owns_lights<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {
     let state = app.state::<LightingRuntimeState>();
     let owner = state
         .runtime
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    Ok(owner.preview.active_test_pattern.is_some())
+    Ok(owner.preview.active_test_pattern.is_some() || owner.preview.scene.is_some())
 }
 
 // ---------------------------------------------------------------------------

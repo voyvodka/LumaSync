@@ -1,0 +1,18 @@
+@layer components {
+  /* The scene is a test picture for the capture: exact colour even under
+     forced colours, and nothing to point at — the window is click-through. */
+  .root {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background: rgb(0 0 0);
+    pointer-events: none;
+    forced-color-adjust: none;
+  }
+
+  .canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+}

@@ -19,9 +19,27 @@ const preview: Catalogue<typeof enPreview> = {
   twin: {
     ariaLabel: "LED şerit dijital ikiz kaplaması",
   },
+  scenes: {
+    label: "Test sahneleri",
+    names: {
+      edgeTour: "Kenar turu",
+      spiral: "Spiral",
+      sunset: "Gün batımı",
+      colorFields: "Renk alanları",
+      letterbox: "Letterbox",
+    },
+    stop: "{{name}} sahnesini durdur",
+    ownsLights: "Sahne oynarken modlar kilitli.",
+  },
   status: {
     PREVIEW_OPEN_FAILED: "Önizleme açılamadı.",
     PREVIEW_CLOSE_FAILED: "Bir önizleme penceresi kapatılamadı.",
+    PREVIEW_SCENE_NO_OUTPUT: "Yakacak bir şey yok: bir şerit ya da WLED paneli bağla veya önce Hue'yu başlat.",
+    PREVIEW_SCENE_CAPTURE_DENIED: "Ekran kaydı kapalı, bu yüzden Ambilight sahneyi göremiyor.",
+    PREVIEW_SCENE_START_FAILED: "Sahne başlatılamadı. Işıkların olduğu gibi.",
+    PREVIEW_SCENE_TEST_PATTERN_ACTIVE: "LED Kurulumu'nda ya da Cihazlar'da bir test çalışıyor. Önce onu durdur.",
+    PREVIEW_DISPLAY_NOT_FOUND: "Önizlemenin açık olduğu ekran artık yok.",
+    PREVIEW_RESTORE_FAILED: "Işıkların önceki moduna dönemedi.",
   },
 };
 

@@ -17,6 +17,7 @@ use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime, State};
 
 use super::exclusion;
 use super::feed::TwinFeed;
+use super::scene::SceneKind;
 use super::windows::{
     app_in_front, build_popup, build_twin, float_over_full_screen, is_preview_window,
     next_popup_label, next_twin_label,
@@ -36,7 +37,7 @@ const PREVIEW_OPEN_FAILED: &str = "PREVIEW_OPEN_FAILED";
 const PREVIEW_CLOSE_FAILED: &str = "PREVIEW_CLOSE_FAILED";
 
 /// `PreviewSession` in `src/shared/contracts/preview.ts`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "state", rename_all = "camelCase")]
 pub enum PreviewSession {
     Closed,
@@ -48,6 +49,17 @@ pub enum PreviewSession {
         /// Shown or not by the user, the twin is off screen while Ambilight
         /// captures where nothing can keep it out of the capture.
         twin_held_for_capture: bool,
+    },
+    /// Live, with a scene playing and Ambilight running for it.
+    #[serde(rename_all = "camelCase")]
+    Scene {
+        display_id: String,
+        popup_hidden: bool,
+        twin_hidden: bool,
+        twin_held_for_capture: bool,
+        scene: SceneKind,
+        /// The scene's own brightness, never saved.
+        scene_brightness: f32,
     },
 }
 
@@ -91,6 +103,25 @@ struct OpenSession {
     /// to the next app in line, which pulls the user to that app's Space when
     /// it is full screen.
     floating: bool,
+    /// The scene window, from its build until it is destroyed.
+    scene_label: Option<String>,
+    /// What plays once Ambilight runs for it.
+    scene: Option<PlayingScene>,
+}
+
+#[derive(Clone, Copy)]
+struct PlayingScene {
+    kind: SceneKind,
+    brightness: f32,
+}
+
+/// What `start_preview_scene` needs from the open session.
+pub(super) struct SceneTarget {
+    pub display_id: String,
+    pub scene_label: Option<String>,
+    /// The windows the scene must stay under.
+    pub over_scene: Vec<String>,
+    pub session: PreviewSession,
 }
 
 impl OpenSession {
@@ -107,12 +138,32 @@ impl OpenSession {
     }
 
     fn wire(&self) -> PreviewSession {
-        PreviewSession::Live {
-            display_id: self.display_id.clone(),
-            popup_hidden: self.popup_hidden,
-            twin_hidden: self.twin_hidden,
-            twin_held_for_capture: exclusion::twin_held_for_capture(),
+        let display_id = self.display_id.clone();
+        let twin_held_for_capture = exclusion::twin_held_for_capture();
+        match self.scene {
+            Some(scene) => PreviewSession::Scene {
+                display_id,
+                popup_hidden: self.popup_hidden,
+                twin_hidden: self.twin_hidden,
+                twin_held_for_capture,
+                scene: scene.kind,
+                scene_brightness: scene.brightness,
+            },
+            None => PreviewSession::Live {
+                display_id,
+                popup_hidden: self.popup_hidden,
+                twin_hidden: self.twin_hidden,
+                twin_held_for_capture,
+            },
         }
+    }
+
+    /// The windows that hear `preview://session`: the popup, and the scene
+    /// window, which draws the scene the session names.
+    fn listeners(&self) -> Vec<String> {
+        let mut labels = vec![self.popup_label.clone()];
+        labels.extend(self.scene_label.clone());
+        labels
     }
 }
 
@@ -172,13 +223,82 @@ impl PreviewSessionState {
         })
     }
 
-    /// The popup to tell, and what to tell it.
-    pub(super) fn popup_and_session(&self) -> Option<(String, PreviewSession)> {
+    /// The windows to tell, and what to tell them.
+    pub(super) fn listeners_and_session(&self) -> Option<(Vec<String>, PreviewSession)> {
         self.inner.lock().ok().and_then(|inner| {
             inner
                 .open
                 .as_ref()
-                .map(|open| (open.popup_label.clone(), open.wire()))
+                .map(|open| (open.listeners(), open.wire()))
+        })
+    }
+
+    pub(super) fn scene_target(&self) -> Result<Option<SceneTarget>, String> {
+        let inner = self.lock()?;
+        Ok(inner.open.as_ref().map(|open| SceneTarget {
+            display_id: open.display_id.clone(),
+            scene_label: open.scene_label.clone(),
+            over_scene: vec![open.twin_label.clone(), open.popup_label.clone()],
+            session: open.wire(),
+        }))
+    }
+
+    /// Records the scene window just built. `false` when the session ended
+    /// during the build: the window is the caller's to destroy.
+    pub(super) fn adopt_scene_window(&self, label: &str) -> Result<bool, String> {
+        let mut inner = self.lock()?;
+        let Some(open) = inner.open.as_mut() else {
+            return Ok(false);
+        };
+        open.scene_label = Some(label.to_string());
+        Ok(true)
+    }
+
+    /// `None` when the session ended while Ambilight started.
+    pub(super) fn set_scene(
+        &self,
+        kind: SceneKind,
+        brightness: f32,
+    ) -> Result<Option<PreviewSession>, String> {
+        let mut inner = self.lock()?;
+        let Some(open) = inner.open.as_mut() else {
+            return Ok(None);
+        };
+        open.scene = Some(PlayingScene { kind, brightness });
+        Ok(Some(open.wire()))
+    }
+
+    pub(super) fn set_scene_brightness(
+        &self,
+        brightness: f32,
+    ) -> Result<Option<PreviewSession>, String> {
+        let mut inner = self.lock()?;
+        let Some(scene) = inner.open.as_mut().and_then(|open| open.scene.as_mut()) else {
+            return Ok(None);
+        };
+        scene.brightness = brightness;
+        Ok(inner.open.as_ref().map(OpenSession::wire))
+    }
+
+    /// The scene is over: its window's label, for the caller to destroy, and
+    /// the session as it is now.
+    pub(super) fn clear_scene(&self) -> (Option<String>, PreviewSession) {
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        match inner.open.as_mut() {
+            Some(open) => {
+                open.scene = None;
+                (open.scene_label.take(), open.wire())
+            }
+            None => (None, PreviewSession::Closed),
+        }
+    }
+
+    pub(super) fn is_scene_window(&self, label: &str) -> bool {
+        self.inner.lock().ok().is_some_and(|inner| {
+            inner
+                .open
+                .as_ref()
+                .is_some_and(|open| open.scene_label.as_deref() == Some(label))
         })
     }
 
@@ -267,7 +387,15 @@ impl PreviewSessionState {
             main_hidden_by_session: false,
             return_to: None,
             floating: false,
+            scene_label: None,
+            scene: None,
         });
+    }
+
+    /// A scene as `start_preview_scene` records it, without its window and lights.
+    #[cfg(test)]
+    pub(crate) fn play_scene_for_test(&self, kind: SceneKind, brightness: f32) {
+        let _ = self.set_scene(kind, brightness);
     }
 
     /// What `subscribe_twin_frames` does, without the window it needs.
@@ -377,18 +505,20 @@ fn hand_back(return_to: Option<i32>) {
 pub(super) fn emit_session<R: Runtime>(app: &AppHandle<R>) {
     let handle = app.clone();
     let posted = app.run_on_main_thread(move || {
-        let Some((popup_label, session)) = handle
+        let Some((labels, session)) = handle
             .try_state::<PreviewSessionState>()
-            .and_then(|state| state.popup_and_session())
+            .and_then(|state| state.listeners_and_session())
         else {
             return;
         };
-        if let Err(error) = handle.emit_to(
-            EventTarget::webview_window(popup_label.as_str()),
-            PREVIEW_SESSION_EVENT,
-            &session,
-        ) {
-            log::warn!("[preview] session not sent to {popup_label}: {error}");
+        for label in labels {
+            if let Err(error) = handle.emit_to(
+                EventTarget::webview_window(label.as_str()),
+                PREVIEW_SESSION_EVENT,
+                &session,
+            ) {
+                log::warn!("[preview] session not sent to {label}: {error}");
+            }
         }
     });
     if let Err(error) = posted {
@@ -532,6 +662,8 @@ pub fn open_preview<R: Runtime>(
         main_hidden_by_session,
         return_to,
         floating,
+        scene_label: None,
+        scene: None,
     });
     match committed {
         Ok(session) => {
@@ -560,6 +692,14 @@ pub fn end_session<R: Runtime>(app: &AppHandle<R>) -> Result<PreviewSessionResul
         Some(state) => state.take()?,
         None => None,
     };
+    // Queued behind any mode change in flight, never restored inline: a
+    // transition from here would block the thread a window close runs on.
+    if open
+        .as_ref()
+        .is_some_and(|open| open.scene.is_some() || open.scene_label.is_some())
+    {
+        super::scene::stop_scene_lights_later(app);
+    }
     let (swept, failures) = destroy_preview_windows(app);
     let return_to = open.as_ref().and_then(|open| open.return_to);
     hand_back(return_to);
@@ -723,6 +863,12 @@ pub fn on_session_window_destroyed<R: Runtime>(app: &AppHandle<R>, label: &str) 
     let Some(state) = app.try_state::<PreviewSessionState>() else {
         return;
     };
+    // The scene going away alone — its display unplugged — ends the scene, not
+    // the session.
+    if state.is_scene_window(label) {
+        super::scene::scene_window_lost(app);
+        return;
+    }
     let belongs = state
         .inner
         .lock()

@@ -101,7 +101,8 @@ export function isTestPatternFailure(status: LedTestStatusCode | null): boolean 
   return (
     status === LED_TEST_STATUS.PATTERN_NO_CALIBRATION ||
     status === LED_TEST_STATUS.PATTERN_INVALID_PARAMS ||
-    status === LED_TEST_STATUS.PATTERN_RUNTIME_ERROR
+    status === LED_TEST_STATUS.PATTERN_RUNTIME_ERROR ||
+    status === LED_TEST_STATUS.PATTERN_SCENE_ACTIVE
   );
 }
 

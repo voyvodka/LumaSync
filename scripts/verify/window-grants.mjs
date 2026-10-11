@@ -89,6 +89,23 @@ const WINDOWS = [
         "reached through loadShellState; the migration write-back runs in the main window first, and a refused one is logged and not fatal",
     },
   },
+  {
+    label: "led-preview-scene-0",
+    capability: "preview-scene.json",
+    root: "<SceneApp",
+    entries: [
+      "src/features/preview/ui/SceneApp.tsx",
+      "src/features/preview/ui/TwinErrorBoundary.tsx",
+      ...BOOTSTRAP,
+    ],
+    extraGrants: {},
+    withheld: {
+      patch_shell_state:
+        "reached through the shared shellStore object; the scene only reads the shell state at boot",
+      replace_shell_state:
+        "reached through loadShellState; the migration write-back runs in the main window first, and a refused one is logged and not fatal",
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------

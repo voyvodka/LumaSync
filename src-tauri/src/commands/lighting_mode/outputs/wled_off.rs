@@ -27,6 +27,11 @@ pub(crate) async fn power_off_left_wled<R: Runtime>(app: &AppHandle<R>, ip: std:
     log_wled_power_off(ip, result);
 }
 
+/// `power_off_left_wled` for a caller already off the async runtime.
+pub(crate) fn power_off_left_wled_blocking<R: Runtime>(app: &AppHandle<R>, ip: std::net::Ipv4Addr) {
+    log_wled_power_off(ip, Ok(wled_power_off_for(app)(ip)));
+}
+
 pub(super) fn log_wled_power_off(
     ip: std::net::Ipv4Addr,
     result: Result<Result<(), WledPowerOffError>, String>,

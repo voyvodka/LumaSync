@@ -1071,6 +1071,9 @@ const REQUIRED_PREVIEW_COMMANDS = [
   "set_preview_popup_hidden",
   "set_preview_twin_hidden",
   "subscribe_twin_frames",
+  "start_preview_scene",
+  "stop_preview_scene",
+  "set_preview_scene_brightness",
 ];
 for (const cmd of REQUIRED_PREVIEW_COMMANDS) {
   check(
@@ -1110,7 +1113,7 @@ for (const code of REQUIRED_PREVIEW_STATUS_CODES) {
 
 // Presence above proves containment only; the session's codes are pinned equal.
 {
-  const rustPreview = ["session.rs", "feed.rs"]
+  const rustPreview = ["session.rs", "feed.rs", "scene.rs"]
     .map((file) =>
       stripComments(readOrEmpty(resolve(ROOT, "src-tauri/src/commands/preview", file), `rust preview ${file}`))
     )
@@ -1121,7 +1124,8 @@ for (const code of REQUIRED_PREVIEW_STATUS_CODES) {
     constMembers(previewSource, "PREVIEW_STATUS"),
     // 7 → 8: PREVIEW_TWIN_SUBSCRIBED, the twin's frame subscription (feed.rs).
     // 8 → 9: PREVIEW_TWIN_UPDATED, the popup's twin switch (session.rs).
-    9
+    // 9 → 19: the scene commands' ten codes (scene.rs).
+    19
   );
 }
 
@@ -1135,6 +1139,11 @@ check(
   previewSource.includes(`"led-control-popup-"`),
   "LED_CONTROL_POPUP_LABEL_PREFIX defined",
   "MISSING LED_CONTROL_POPUP_LABEL_PREFIX in preview.ts"
+);
+check(
+  previewSource.includes(`"led-preview-scene-"`),
+  "LED_PREVIEW_SCENE_LABEL_PREFIX defined",
+  "MISSING LED_PREVIEW_SCENE_LABEL_PREFIX in preview.ts"
 );
 
 console.log("\n[ Preview tray menu id (v1.6) ]");

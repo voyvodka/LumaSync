@@ -680,13 +680,13 @@ impl<'a, R: Runtime> Transaction<'a, R> {
 
     /// Re-applies the running mode on what it runs on, so the payload is
     /// stamped from the settings as saved now. A mode that ended, or a test
-    /// pattern that owns the strip, is left alone.
+    /// pattern or preview scene that owns the strip, is left alone.
     async fn reconcile_refresh(
         &mut self,
         intent: &LightingIntent,
         running: &LightingModeConfig,
     ) -> Result<Ending, String> {
-        if running.kind == LightingModeKind::Off || blocking(self.app, test_pattern_active).await? {
+        if running.kind == LightingModeKind::Off || blocking(self.app, preview_owns_lights).await? {
             return Ok(Ending::Applied);
         }
         let mut targets = running_targets(running);

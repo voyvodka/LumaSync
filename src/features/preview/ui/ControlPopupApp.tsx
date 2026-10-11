@@ -31,17 +31,41 @@ import {
   type LightingModeKind,
 } from "@/shared/contracts/mode";
 import { LIGHTING_ORIGIN, type LightingTuning } from "@/shared/contracts/lightingRuntime";
-import { PREVIEW_STATUS } from "@/shared/contracts/preview";
+import {
+  PREVIEW_STATUS,
+  type PreviewSessionStatusCode,
+  type SceneKind,
+} from "@/shared/contracts/preview";
+import type { TranslationKey } from "@/features/i18n/catalogue";
 import { IconButton } from "@/shared/ui/IconButton/IconButton";
 import { IconClose, IconEye, IconEyeOff, IconMinus } from "@/shared/ui/icons";
-import { closePreview, setPreviewPopupHidden, setPreviewTwinHidden } from "../previewApi";
+import {
+  closePreview,
+  setPreviewPopupHidden,
+  setPreviewSceneBrightness,
+  setPreviewTwinHidden,
+  startPreviewScene,
+  stopPreviewScene,
+} from "../previewApi";
+import { createLatestSender } from "../state/latestSender";
 import { usePreviewSession } from "../state/usePreviewSession";
 import { PopupBrightnessRow } from "./PopupBrightnessRow";
 import { PopupEffectList } from "./PopupEffectList";
+import { PopupScenePicker } from "./PopupScenePicker";
 import styles from "./ControlPopupApp.module.css";
 
 /** Trailing window for popup-centre writes so a window drag hits disk once. */
 const PERSIST_CENTER_DEBOUNCE_MS = 400;
+
+/** What a scene start or stop that did not happen says. */
+const SCENE_FAILURES: Partial<Record<PreviewSessionStatusCode, TranslationKey>> = {
+  [PREVIEW_STATUS.SCENE_NO_OUTPUT]: "preview:status.PREVIEW_SCENE_NO_OUTPUT",
+  [PREVIEW_STATUS.SCENE_CAPTURE_DENIED]: "preview:status.PREVIEW_SCENE_CAPTURE_DENIED",
+  [PREVIEW_STATUS.SCENE_START_FAILED]: "preview:status.PREVIEW_SCENE_START_FAILED",
+  [PREVIEW_STATUS.SCENE_TEST_PATTERN_ACTIVE]: "preview:status.PREVIEW_SCENE_TEST_PATTERN_ACTIVE",
+  [PREVIEW_STATUS.DISPLAY_NOT_FOUND]: "preview:status.PREVIEW_DISPLAY_NOT_FOUND",
+  [PREVIEW_STATUS.RESTORE_FAILED]: "preview:status.PREVIEW_RESTORE_FAILED",
+};
 
 export function ControlPopupApp() {
   const { t } = useTranslation();
@@ -50,7 +74,10 @@ export function ControlPopupApp() {
   const lastLit = usePreference("lastLitKind");
   const mode = snapshot?.mode ?? null;
   const retunes = useMemo(() => createRetuneCoalescer((tuning) => retuneLighting(tuning)), []);
+  const sendSceneBrightness = useMemo(() => createLatestSender(setPreviewSceneBrightness), []);
   const [runError, setRunError] = useState<string | null>(null);
+  const [sceneBusy, setSceneBusy] = useState(false);
+  const playing = session?.state === "scene" ? session : null;
 
   // ── Persist the popup centre so it reopens where the user left it ────────
   useEffect(() => {
@@ -157,8 +184,24 @@ export function ControlPopupApp() {
   };
   const pickEffect = (id: EffectId) => retunes.push({ effect: withEffect(effect, id) });
 
+  // ── Scenes: a press plays one; the playing one's press stops it ──────────
+  const handleScene = (scene: SceneKind) => {
+    setRunError(null);
+    setSceneBusy(true);
+    const request = playing?.scene === scene ? stopPreviewScene() : startPreviewScene(scene);
+    void request
+      .then((result) => {
+        const failure = SCENE_FAILURES[result.status.code];
+        if (failure !== undefined) {
+          setRunError(t(failure));
+          console.warn(`[LumaSync] ControlPopupApp scene ${scene}: ${result.status.code}`, result.status.details ?? "");
+        }
+      })
+      .finally(() => setSceneBusy(false));
+  };
+
   // ── Twin, hide and close ─────────────────────────────────────────────────
-  const live = session?.state === "live" ? session : null;
+  const live = session?.state === "live" || session?.state === "scene" ? session : null;
   const twinHidden = live?.twinHidden ?? false;
   // Switched on but off screen: the capture holds it where nothing can keep it out of the frame.
   const twinHeld = !twinHidden && (live?.twinHeldForCapture ?? false);
@@ -224,13 +267,29 @@ export function ControlPopupApp() {
             {t("preview:control.twinHeld")}
           </p>
         )}
-        <ModeStrip variant="popup" value={kind} onSelect={handleModeClick} />
-        <PopupBrightnessRow
-          brightness={kind === LIGHTING_MODE_KIND.OFF ? brightnessOf(lastLit, solid, ambilight, effect) : shownBrightness}
-          disabled={kind === LIGHTING_MODE_KIND.OFF}
-          onChange={retuneBrightness}
+        <PopupScenePicker playing={playing?.scene ?? null} busy={sceneBusy} onPick={handleScene} />
+        {/* The scene owns the lights: the strip shows no mode and takes no press until it stops. */}
+        <ModeStrip
+          variant="popup"
+          value={playing ? null : kind}
+          onSelect={handleModeClick}
+          isDisabled={playing ? () => true : undefined}
         />
-        {kind === LIGHTING_MODE_KIND.EFFECT && <PopupEffectList running={effect.id} onPick={pickEffect} />}
+        {playing && (
+          <p className={styles.held} role="status" data-testid="popup-scene-owns">
+            {t("preview:scenes.ownsLights")}
+          </p>
+        )}
+        {playing ? (
+          <PopupBrightnessRow brightness={playing.sceneBrightness} onChange={sendSceneBrightness} />
+        ) : (
+          <PopupBrightnessRow
+            brightness={kind === LIGHTING_MODE_KIND.OFF ? brightnessOf(lastLit, solid, ambilight, effect) : shownBrightness}
+            disabled={kind === LIGHTING_MODE_KIND.OFF}
+            onChange={retuneBrightness}
+          />
+        )}
+        {!playing && kind === LIGHTING_MODE_KIND.EFFECT && <PopupEffectList running={effect.id} onPick={pickEffect} />}
         {runError && (
           <p className={styles.error} role="alert">
             {runError}

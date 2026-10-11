@@ -27,7 +27,10 @@ fn app() -> App<MockRuntime> {
         crate::commands::preview::session::get_preview_session,
         crate::commands::preview::session::set_preview_popup_hidden,
         crate::commands::preview::session::set_preview_twin_hidden,
-        crate::commands::preview::feed::subscribe_twin_frames
+        crate::commands::preview::feed::subscribe_twin_frames,
+        crate::commands::preview::scene::start_preview_scene,
+        crate::commands::preview::scene::stop_preview_scene,
+        crate::commands::preview::scene::set_preview_scene_brightness
     ])
 }
 
@@ -316,4 +319,130 @@ fn only_the_sessions_twin_subscribes_and_it_gets_the_layout() {
     assert_eq!(status_code(&subscribed), "PREVIEW_TWIN_SUBSCRIBED");
     assert_eq!(subscribed["layout"]["displayId"], json!("display-1"));
     assert!(subscribed["layout"]["layoutRevision"].as_u64().unwrap() > 0);
+}
+
+/// The scene commands are reached from a popup that may outlive its session;
+/// each answers a code, never a rejection.
+#[test]
+fn the_scene_commands_with_no_session_never_reject() {
+    let app = app();
+    let webview = popup(&app);
+
+    let started = invoke(
+        &webview,
+        "start_preview_scene",
+        json!({ "payload": { "kind": "edgeTour" } }),
+    )
+    .expect("start must resolve");
+    assert_eq!(status_code(&started), "PREVIEW_NOT_OPEN");
+
+    let stopped = invoke(&webview, "stop_preview_scene", json!({})).expect("stop must resolve");
+    assert_eq!(status_code(&stopped), "PREVIEW_NOT_OPEN");
+
+    let dimmed = invoke(
+        &webview,
+        "set_preview_scene_brightness",
+        json!({ "payload": { "brightness": 0.5 } }),
+    )
+    .expect("brightness must resolve");
+    assert_eq!(status_code(&dimmed), "PREVIEW_NOT_OPEN");
+}
+
+#[test]
+fn with_no_scene_playing_its_stop_and_brightness_say_so() {
+    use tauri::Manager;
+
+    let app = app();
+    let webview = popup(&app);
+    app.state::<crate::commands::preview::PreviewSessionState>()
+        .open_for_test("display-1", "led-twin-overlay-1", "led-control-popup-0");
+
+    let stopped = invoke(&webview, "stop_preview_scene", json!({})).expect("stop must resolve");
+    assert_eq!(status_code(&stopped), "PREVIEW_SCENE_NOT_RUNNING");
+    assert_eq!(stopped["session"]["state"], json!("live"));
+
+    let dimmed = invoke(
+        &webview,
+        "set_preview_scene_brightness",
+        json!({ "payload": { "brightness": 0.5 } }),
+    )
+    .expect("brightness must resolve");
+    assert_eq!(status_code(&dimmed), "PREVIEW_SCENE_NOT_RUNNING");
+}
+
+/// A scene that plays is reported tagged the way the TS union is.
+#[test]
+fn a_playing_scene_is_reported_with_its_kind_and_brightness() {
+    use tauri::Manager;
+
+    let app = app();
+    let webview = popup(&app);
+    let session = app.state::<crate::commands::preview::PreviewSessionState>();
+    session.open_for_test("display-1", "led-twin-overlay-1", "led-control-popup-0");
+    session.play_scene_for_test(crate::commands::preview::SceneKind::ColorFields, 0.5);
+
+    let read = invoke(&webview, "get_preview_session", json!({})).expect("read must resolve");
+
+    assert_camel_case_keys(&read);
+    assert_eq!(
+        read,
+        json!({
+            "state": "scene",
+            "displayId": "display-1",
+            "popupHidden": false,
+            "twinHidden": false,
+            "twinHeldForCapture": false,
+            "scene": "colorFields",
+            "sceneBrightness": 0.5
+        })
+    );
+}
+
+/// LED Setup and Devices learn a scene owns the lights from a code of their own.
+#[test]
+fn a_test_pattern_during_a_scene_is_refused_with_its_own_code() {
+    use tauri::Manager;
+
+    let app = app();
+    let webview = main_webview(&app);
+    app.state::<crate::commands::lighting_mode::LightingRuntimeState>()
+        .mark_scene_for_tests(crate::commands::preview::SceneKind::Spiral);
+
+    let response = invoke(&webview, "start_led_test_pattern", start(0.5))
+        .expect("start_led_test_pattern must resolve, never reject");
+
+    assert_eq!(status_code(&response), "LED_TEST_PATTERN_SCENE_ACTIVE");
+    assert_eq!(response["active"], json!(false));
+}
+
+/// A test pattern owns the lights: no scene window is built over it.
+#[test]
+fn a_scene_during_a_test_pattern_is_refused_before_any_window() {
+    use tauri::Manager;
+
+    let app = app();
+    let webview = popup(&app);
+    app.state::<crate::commands::preview::PreviewSessionState>()
+        .open_for_test("display-1", "led-twin-overlay-1", "led-control-popup-0");
+    app.state::<crate::commands::lighting_mode::LightingRuntimeState>()
+        .mark_test_pattern_for_tests(crate::commands::test_pattern::TestPatternConfig {
+            kind: crate::commands::test_pattern::TestPatternKind::Gamut,
+            brightness: 0.5,
+            speed: crate::commands::test_pattern::TestPatternSpeed::default(),
+            display_aspect: 16.0 / 9.0,
+        });
+
+    let response = invoke(
+        &webview,
+        "start_preview_scene",
+        json!({ "payload": { "kind": "spiral" } }),
+    )
+    .expect("start must resolve");
+
+    assert_eq!(status_code(&response), "PREVIEW_SCENE_TEST_PATTERN_ACTIVE");
+    assert_eq!(response["session"]["state"], json!("live"));
+    assert!(app
+        .webview_windows()
+        .keys()
+        .all(|label| !label.starts_with("led-preview-scene-")));
 }

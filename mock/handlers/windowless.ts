@@ -68,7 +68,7 @@ function notificationResult(): NotificationResult {
 
 export const windowlessHandlers = {
   [PREVIEW_COMMANDS.OPEN_PREVIEW]: () => {
-    if (session.state === "live") {
+    if (session.state !== "closed") {
       session = { ...session, popupHidden: false };
       void emitMockEvent(PREVIEW_EVENTS.SESSION, session);
       return sessionResult(PREVIEW_STATUS.ALREADY_OPEN, "The preview is already open.");
@@ -110,6 +110,37 @@ export const windowlessHandlers = {
     session = { ...session, twinHidden: payload.hidden };
     void emitMockEvent(PREVIEW_EVENTS.SESSION, session);
     return sessionResult(PREVIEW_STATUS.TWIN_UPDATED, "LED twin updated.");
+  },
+  /** No scene window and no capture: the session says a scene plays, which is what the popup reads. */
+  [PREVIEW_COMMANDS.START_SCENE]: ({ payload }) => {
+    if (session.state === "closed") return sessionResult(PREVIEW_STATUS.NOT_OPEN, "No preview is open.");
+    const { displayId, popupHidden, twinHidden, twinHeldForCapture } = session;
+    session = {
+      state: "scene",
+      displayId,
+      popupHidden,
+      twinHidden,
+      twinHeldForCapture,
+      scene: payload.kind,
+      sceneBrightness: session.state === "scene" ? session.sceneBrightness : 0.8,
+    };
+    void emitMockEvent(PREVIEW_EVENTS.SESSION, session);
+    return sessionResult(PREVIEW_STATUS.SCENE_STARTED, "Scene started (no window in a browser tab).");
+  },
+  [PREVIEW_COMMANDS.STOP_SCENE]: () => {
+    if (session.state === "closed") return sessionResult(PREVIEW_STATUS.NOT_OPEN, "No preview is open.");
+    if (session.state !== "scene") return sessionResult(PREVIEW_STATUS.SCENE_NOT_RUNNING, "No scene plays.");
+    const { displayId, popupHidden, twinHidden, twinHeldForCapture } = session;
+    session = { state: "live", displayId, popupHidden, twinHidden, twinHeldForCapture };
+    void emitMockEvent(PREVIEW_EVENTS.SESSION, session);
+    return sessionResult(PREVIEW_STATUS.SCENE_STOPPED, "Scene stopped.");
+  },
+  [PREVIEW_COMMANDS.SET_SCENE_BRIGHTNESS]: ({ payload }) => {
+    if (session.state === "closed") return sessionResult(PREVIEW_STATUS.NOT_OPEN, "No preview is open.");
+    if (session.state !== "scene") return sessionResult(PREVIEW_STATUS.SCENE_NOT_RUNNING, "No scene plays.");
+    session = { ...session, sceneBrightness: Math.min(1, Math.max(0, payload.brightness)) };
+    void emitMockEvent(PREVIEW_EVENTS.SESSION, session);
+    return sessionResult(PREVIEW_STATUS.SCENE_UPDATED, "Scene brightness changed.");
   },
 
   [DISPLAY_OVERLAY_COMMANDS.OPEN_DISPLAY_OVERLAY]: () => ({

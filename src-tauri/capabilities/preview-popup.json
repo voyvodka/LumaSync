@@ -24,6 +24,9 @@
     "allow-get-preview-session",
     "allow-set-preview-popup-hidden",
     "allow-set-preview-twin-hidden",
+    "allow-start-preview-scene",
+    "allow-stop-preview-scene",
+    "allow-set-preview-scene-brightness",
     "allow-open-log-dir"
   ]
 }

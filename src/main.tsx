@@ -19,6 +19,7 @@ import { GlobalErrorBoundaryWithI18n } from "./features/shell/GlobalErrorBoundar
 import { TwinErrorBoundary } from "./features/preview/ui/TwinErrorBoundary";
 import {
   LED_CONTROL_POPUP_LABEL_PREFIX,
+  LED_PREVIEW_SCENE_LABEL_PREFIX,
   LED_TWIN_OVERLAY_LABEL_PREFIX,
 } from "./shared/contracts/preview";
 
@@ -75,7 +76,8 @@ bridgeConsoleToTauri();
 
 // FE-2 — clear the twin window's background synchronously, before bootstrap
 // runs, so it never flashes the opaque app gradient. See
-// docs/architecture/ui-and-shell.md. Only the twin is touched.
+// docs/architecture/ui-and-shell.md. The scene window, transparent like the
+// twin, is painted black instead: the capture must see black, not the app.
 function neutralizeTwinBackgroundEarly() {
   let label = "";
   try {
@@ -87,15 +89,17 @@ function neutralizeTwinBackgroundEarly() {
     );
     return;
   }
-  if (!label.startsWith(LED_TWIN_OVERLAY_LABEL_PREFIX)) return;
+  const scene = label.startsWith(LED_PREVIEW_SCENE_LABEL_PREFIX);
+  if (!label.startsWith(LED_TWIN_OVERLAY_LABEL_PREFIX) && !scene) return;
 
-  document.documentElement.style.background = "transparent";
+  const background = scene ? "black" : "transparent";
+  document.documentElement.style.background = background;
   // A dark `color-scheme` can hand an unpainted root a dark canvas instead of
   // leaving it clear; the twin has no native controls to theme.
   document.documentElement.style.colorScheme = "normal";
-  if (document.body) document.body.style.background = "transparent";
+  if (document.body) document.body.style.background = background;
   const root = document.getElementById("root");
-  if (root) root.style.background = "transparent";
+  if (root) root.style.background = background;
 }
 
 neutralizeTwinBackgroundEarly();
@@ -104,6 +108,7 @@ const WINDOW_KIND = {
   MAIN: "main",
   POPUP: "popup",
   TWIN: "twin",
+  SCENE: "scene",
 } as const;
 type WindowKind = (typeof WINDOW_KIND)[keyof typeof WINDOW_KIND];
 
@@ -116,6 +121,7 @@ function resolveWindowKind(): WindowKind {
   }
   if (label.startsWith(LED_TWIN_OVERLAY_LABEL_PREFIX)) return WINDOW_KIND.TWIN;
   if (label.startsWith(LED_CONTROL_POPUP_LABEL_PREFIX)) return WINDOW_KIND.POPUP;
+  if (label.startsWith(LED_PREVIEW_SCENE_LABEL_PREFIX)) return WINDOW_KIND.SCENE;
   return WINDOW_KIND.MAIN;
 }
 
@@ -128,6 +134,12 @@ async function loadWindowRoot(kind: WindowKind): Promise<ComponentType> {
       const { LedTwinOverlay } = await import("./features/preview/ui/LedTwinOverlay");
       return function TwinRoot() {
         return <LedTwinOverlay />;
+      };
+    }
+    case WINDOW_KIND.SCENE: {
+      const { SceneApp } = await import("./features/preview/ui/SceneApp");
+      return function SceneRoot() {
+        return <SceneApp />;
       };
     }
     case WINDOW_KIND.POPUP: {
@@ -166,7 +178,7 @@ const windowRoot = loadWindowRoot(windowKind).catch((err: unknown) => {
  */
 function renderRoot(Root: ComponentType) {
   const tree =
-    windowKind === WINDOW_KIND.TWIN ? (
+    windowKind === WINDOW_KIND.TWIN || windowKind === WINDOW_KIND.SCENE ? (
       // TwinErrorBoundary renders nothing on failure — an opaque fallback
       // here would blanket the display. See docs/architecture/ui-and-shell.md.
       <TwinErrorBoundary>

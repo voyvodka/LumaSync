@@ -49,6 +49,7 @@ describe("useColorOrderIdentify", () => {
     ["a start that says preview-only", result(LED_TEST_STATUS.PATTERN_STARTED, true, true), "notSending"],
     ["the strip has no layout", result(LED_TEST_STATUS.PATTERN_NO_CALIBRATION, false), "noCalibration"],
     ["the start failed", result(LED_TEST_STATUS.PATTERN_RUNTIME_ERROR, false), "startFailed"],
+    ["a preview scene owns the lights", result(LED_TEST_STATUS.PATTERN_SCENE_ACTIVE, false), "sceneActive"],
   ])("fails when %s, and stops only a probe that is lit", async (_, started, reason) => {
     const { deps, hook } = setup(async () => started);
     await act(async () => hook.result.current.begin());
