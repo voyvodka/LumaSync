@@ -76,7 +76,9 @@ pub(super) fn build_twin<R: Runtime>(
 /// Space, whatever their collection behaviour, and activating it switches the
 /// user to the Space its main window lives on. While a session is open the app
 /// runs as an accessory, which may float over full-screen apps; its Dock icon
-/// goes for that time and comes back when the session ends.
+/// goes for that time and comes back when the session ends. Turning an active
+/// app into an accessory deactivates it, so a session opened from inside the
+/// app waits until the user is in another one (`watch_front_app`).
 pub(super) fn float_over_full_screen<R: Runtime>(app: &AppHandle<R>, float: bool) {
     #[cfg(target_os = "macos")]
     {
@@ -91,6 +93,41 @@ pub(super) fn float_over_full_screen<R: Runtime>(app: &AppHandle<R>, float: bool
     }
     #[cfg(not(target_os = "macos"))]
     let _ = (app, float);
+}
+
+/// While a session is open, note each app the user goes to (macOS).
+pub fn watch_front_app<R: Runtime>(app: &AppHandle<R>) {
+    #[cfg(target_os = "macos")]
+    {
+        use std::ptr::NonNull;
+
+        use block2::RcBlock;
+        use objc2_app_kit::{NSWorkspace, NSWorkspaceDidActivateApplicationNotification};
+        use objc2_foundation::NSNotification;
+
+        let app = app.clone();
+        let block = RcBlock::new(move |_: NonNull<NSNotification>| {
+            if let Some(pid) = crate::macos_window::frontmost_other_app() {
+                super::session::on_other_app_activated(&app, pid);
+            }
+        });
+        let center = NSWorkspace::sharedWorkspace().notificationCenter();
+        // SAFETY: AppKit's notification-name constant; no object filter and no
+        // queue, so the block runs on the posting thread, NSWorkspace's main
+        // thread. It only clones an `AppHandle`, which is Send.
+        let token = unsafe {
+            center.addObserverForName_object_queue_usingBlock(
+                Some(NSWorkspaceDidActivateApplicationNotification),
+                None,
+                None,
+                &block,
+            )
+        };
+        // Lives as long as the app; nothing ever removes it.
+        std::mem::forget(token);
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
 }
 
 /// The app the user was in when the preview opened, if not this one — on

@@ -205,6 +205,27 @@ pub fn order_front_without_focus<R: tauri::Runtime>(window: &tauri::WebviewWindo
     }
 }
 
+/// Brings the window forward while the app is not active, which `orderFront`
+/// does not.
+pub fn order_front_regardless<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
+    let raw = match window.ns_window() {
+        Ok(ptr) if !ptr.is_null() => ptr,
+        Ok(_) => return,
+        Err(err) => {
+            log::warn!("[macos_window] ns_window unavailable for order_front_regardless: {err}");
+            return;
+        }
+    };
+    // SAFETY: as in `elevate_overlay_window` — a retained NSWindow, borrowed
+    // for this call only.
+    unsafe {
+        let ns_window: Retained<NSWindow> =
+            Retained::retain(raw as *mut AnyObject as *mut NSWindow)
+                .expect("NSWindow pointer must be non-null");
+        ns_window.orderFrontRegardless();
+    }
+}
+
 #[cfg(all(debug_assertions, not(feature = "e2e")))]
 pub use dev_focus::{hand_focus_back_after_launch, note_front_app_before_launch};
 

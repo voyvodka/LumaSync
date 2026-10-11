@@ -722,6 +722,7 @@ pub fn run() {
             app.manage(away::AwayWatch::default());
             app.manage(PreviewSessionState::default());
             commands::preview::exclusion::install(app.handle());
+            commands::preview::watch_front_app(app.handle());
             app.manage(HueRuntimeStateStore::default());
             app.manage(RuntimeTelemetryState::default());
             app.manage(PendingUpdate::default());

@@ -67,9 +67,16 @@ struct OpenSession {
     /// from the tray with the shell already hidden does not conjure it on the
     /// way out.
     main_hidden_by_session: bool,
-    /// The app the user was in when the session opened — a full-screen film,
-    /// say — which gets focus back on close so the user stays where they were.
+    /// The app the user was last in: the one in front when the session opened
+    /// — a full-screen film, say — or one they went to since, on this Space or
+    /// another. It gets focus back on close, so the user stays where they are.
     return_to: Option<i32>,
+    /// Whether the app runs as an accessory yet (`float_over_full_screen`).
+    /// Opened from inside the app it stays a Dock app until the user goes to
+    /// another one: the switch deactivates an active app, and macOS hands focus
+    /// to the next app in line, which pulls the user to that app's Space when
+    /// it is full screen.
+    floating: bool,
 }
 
 impl OpenSession {
@@ -168,6 +175,25 @@ impl PreviewSessionState {
         Ok(wire)
     }
 
+    /// Another app came to the front while the session is open. Answers the
+    /// windows to bring over to its Space when this is what turns the app into
+    /// an accessory.
+    #[cfg(any(target_os = "macos", test))]
+    fn note_front_app(&self, pid: i32) -> Option<Vec<String>> {
+        let mut inner = self.inner.lock().ok()?;
+        let open = inner.open.as_mut()?;
+        open.return_to = Some(pid);
+        if open.floating {
+            return None;
+        }
+        open.floating = true;
+        let mut raise = vec![open.twin_label.clone()];
+        if !open.popup_hidden {
+            raise.push(open.popup_label.clone());
+        }
+        Some(raise)
+    }
+
     fn take(&self) -> Result<Option<OpenSession>, String> {
         let taken = self.lock()?.open.take();
         self.drop_twin_subscriber();
@@ -185,6 +211,7 @@ impl PreviewSessionState {
             popup_hidden: false,
             main_hidden_by_session: false,
             return_to: None,
+            floating: false,
         });
     }
 
@@ -375,7 +402,12 @@ pub fn open_preview<R: Runtime>(
     exclusion::session_opening();
     let return_to = app_in_front();
     let main_hidden_by_session = hide_main(&app);
-    float_over_full_screen(&app, true);
+    // Opened over another app the app is not active, so the switch moves no
+    // one; opened from inside, it waits for `on_other_app_activated`.
+    let floating = return_to.is_some();
+    if floating {
+        float_over_full_screen(&app, true);
+    }
     let twin_label = next_twin_label();
     if let Err(reason) = build_twin(&app, &twin_label, &display) {
         exclusion::session_ended();
@@ -415,6 +447,7 @@ pub fn open_preview<R: Runtime>(
         popup_hidden: false,
         main_hidden_by_session,
         return_to,
+        floating,
     });
     match committed {
         Ok(session) => {
@@ -518,6 +551,34 @@ pub fn set_preview_popup_hidden<R: Runtime>(
         PREVIEW_POPUP_UPDATED,
         "Preview controls updated.",
     ))
+}
+
+/// The user went to another app during the session — clicked it, or moved to
+/// its Space. It becomes the app that gets focus back on close, and a session
+/// opened from inside the app turns into an accessory now, while it is not
+/// active, so its windows can follow onto a full-screen Space.
+#[cfg(target_os = "macos")]
+pub(super) fn on_other_app_activated<R: Runtime>(app: &AppHandle<R>, pid: i32) {
+    let Some(raise) = app
+        .try_state::<PreviewSessionState>()
+        .and_then(|state| state.note_front_app(pid))
+    else {
+        return;
+    };
+    float_over_full_screen(app, true);
+    // Queued behind the policy change, which the event loop applies in order;
+    // windows already up are not moved onto a full-screen Space by it alone.
+    let handle = app.clone();
+    let posted = app.run_on_main_thread(move || {
+        for label in raise {
+            if let Some(window) = handle.get_webview_window(&label) {
+                crate::macos_window::order_front_regardless(&window);
+            }
+        }
+    });
+    if let Err(error) = posted {
+        log::warn!("[preview] preview windows not raised after the app went accessory: {error}");
+    }
 }
 
 /// A popup or twin that goes away on its own — the popup's close, a display
@@ -656,6 +717,37 @@ mod tests {
             .webview_windows()
             .keys()
             .all(|label| !is_preview_window(label)));
+    }
+
+    /// Closing hands focus to the app the user went to last, and only the
+    /// first move away turns an in-app session into an accessory.
+    #[test]
+    fn the_last_app_the_user_went_to_is_the_one_focus_returns_to() {
+        let state = PreviewSessionState::default();
+        assert_eq!(state.note_front_app(41), None, "no session, nothing noted");
+
+        state.open_for_test("a", "led-twin-overlay-3", "led-control-popup-3");
+        assert_eq!(
+            state.note_front_app(41),
+            Some(vec![
+                "led-twin-overlay-3".to_string(),
+                "led-control-popup-3".to_string()
+            ])
+        );
+        assert_eq!(state.note_front_app(42), None, "already an accessory");
+        let open = state.lock().unwrap();
+        assert_eq!(open.open.as_ref().and_then(|open| open.return_to), Some(42));
+    }
+
+    #[test]
+    fn a_hidden_popup_stays_hidden_when_the_app_goes_accessory() {
+        let state = PreviewSessionState::default();
+        state.open_for_test("a", "led-twin-overlay-4", "led-control-popup-4");
+        state.lock().unwrap().open.as_mut().unwrap().popup_hidden = true;
+        assert_eq!(
+            state.note_front_app(7),
+            Some(vec!["led-twin-overlay-4".to_string()])
+        );
     }
 
     #[test]

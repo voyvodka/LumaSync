@@ -15,4 +15,4 @@ pub mod windows;
 pub use session::{end_session, on_session_window_destroyed, PreviewSessionState};
 #[cfg(test)]
 pub use windows::LED_CONTROL_POPUP_LABEL_PREFIX;
-pub use windows::{apply_ui_zoom_later, is_preview_window};
+pub use windows::{apply_ui_zoom_later, is_preview_window, watch_front_app};
