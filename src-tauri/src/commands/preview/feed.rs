@@ -17,7 +17,7 @@
 //! picture would otherwise leave a freshly opened twin blank. Modes with no
 //! worker (Solid, Off) get their one frame here, from the mode itself.
 
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{LazyLock, Mutex};
 
 use serde::Serialize;
@@ -157,9 +157,22 @@ struct FeedInner {
 pub struct TwinFeed {
     inner: Mutex<FeedInner>,
     force_next: AtomicBool,
+    /// The Hue stream generation the layout's lamps were read from. The stream
+    /// reconnects and stops without a mode change, so a frame finds out.
+    lamps_from: AtomicU64,
+    /// A refresh asked for by a frame and not yet run, so a stale layout asks
+    /// once rather than every frame.
+    relayout_pending: AtomicBool,
 }
 
 impl TwinFeed {
+    /// The lamps were read at an older Hue `generation` and no refresh is on
+    /// its way yet. True once per change: the frames in between start none.
+    fn relayout_due(&self, generation: u64) -> bool {
+        generation != self.lamps_from.load(Ordering::SeqCst)
+            && !self.relayout_pending.swap(true, Ordering::SeqCst)
+    }
+
     pub(crate) fn subscribe(&self, label: String, channel: Channel) {
         if let Ok(mut inner) = self.inner.lock() {
             *inner = FeedInner {
@@ -273,10 +286,22 @@ pub fn send_frame<R: Runtime>(app: &AppHandle<R>, leds: &[[u8; 3]], lamps: &[[u8
     let Some(session) = app.try_state::<PreviewSessionState>() else {
         return;
     };
+    if lamps_outdated(app, &session.feed) {
+        // Off the worker: the refresh takes the lighting lock, which a
+        // transition can hold while it waits for this very worker to stop.
+        let app = app.clone();
+        tauri::async_runtime::spawn_blocking(move || refresh(&app));
+    }
     if !session.feed.send(leds, lamps) {
         log::info!("[preview] the twin's channel closed; its feed stops");
         session.drop_twin_subscriber();
     }
+}
+
+/// The Hue stream moved on since the layout read its lamps.
+fn lamps_outdated<R: Runtime>(app: &AppHandle<R>, feed: &TwinFeed) -> bool {
+    app.try_state::<crate::commands::hue::state_store::HueRuntimeStateStore>()
+        .is_some_and(|store| feed.relayout_due(store.output_live().generation()))
 }
 
 /// The frame a mode with no worker shows: Solid's colour on every LED, black
@@ -319,6 +344,7 @@ fn refresh_with<R: Runtime>(app: &AppHandle<R>, retuned_solid: Option<&SolidColo
     let Some(session) = app.try_state::<PreviewSessionState>() else {
         return;
     };
+    session.feed.relayout_pending.store(false, Ordering::SeqCst);
     if !session.twin_open().load(Ordering::Relaxed) {
         return;
     }
@@ -341,6 +367,13 @@ fn refresh_with<R: Runtime>(app: &AppHandle<R>, retuned_solid: Option<&SolidColo
         .or_else(|| shell_state::persisted(app).and_then(|state| state.led_calibration()));
     let total = leds.as_ref().map_or(0, |layout| layout.total_leds as usize);
     // The stream's channels in the order the worker sends their colours.
+    if let Some(store) = app.try_state::<crate::commands::hue::state_store::HueRuntimeStateStore>()
+    {
+        session
+            .feed
+            .lamps_from
+            .store(store.output_live().generation(), Ordering::SeqCst);
+    }
     let channels = if view.drives_hue {
         app.try_state::<crate::commands::hue::state_store::HueRuntimeStateStore>()
             .and_then(|store| {
@@ -354,6 +387,7 @@ fn refresh_with<R: Runtime>(app: &AppHandle<R>, retuned_solid: Option<&SolidColo
         Vec::new()
     };
     let lamps = twin_lamps(&channels, view.room_geometry.as_ref());
+    let lamp_count = lamps.len();
 
     if let Some((layout, changed)) = session.feed.set_layout(display_id, leds, lamps) {
         if changed {
@@ -367,8 +401,9 @@ fn refresh_with<R: Runtime>(app: &AppHandle<R>, retuned_solid: Option<&SolidColo
         }
     }
     session.feed.force_next.store(true, Ordering::SeqCst);
+    // A still mode lights its Hue lamps the colour it lights the strip.
     if let Some(colour) = still {
-        send_frame(app, &vec![colour; total], &[]);
+        send_frame(app, &vec![colour; total], &vec![colour; lamp_count]);
     }
 }
 
@@ -589,6 +624,20 @@ mod tests {
         let (moved, changed) = feed.set_layout("e".into(), None, Vec::new()).unwrap();
         assert!(changed);
         assert!(moved.layout_revision > first.layout_revision);
+    }
+
+    #[test]
+    fn a_hue_stream_change_starts_one_relayout_until_it_lands() {
+        let feed = TwinFeed::default();
+        assert!(!feed.relayout_due(0), "the lamps are current");
+        assert!(feed.relayout_due(1));
+        assert!(!feed.relayout_due(1), "one is already on its way");
+
+        // What the refresh does: clear the flag, then read the lamps.
+        feed.relayout_pending.store(false, Ordering::SeqCst);
+        feed.lamps_from.store(1, Ordering::SeqCst);
+        assert!(!feed.relayout_due(1));
+        assert!(feed.relayout_due(2), "the next change starts another");
     }
 
     #[test]

@@ -158,8 +158,8 @@ pub struct LedTestPatternResult {
     pub status: CommandStatus,
 }
 
-/// Start a synthetic LED test pattern (spiral, chase, etc.) for the LED
-/// Preview feature — resolves available output targets, requires a real
+/// Start a synthetic LED test pattern (LED Setup's guide, a channel probe)
+/// — resolves available output targets, requires a real
 /// strip calibration to size the pattern, and captures the prior live mode
 /// so `stop_led_test_pattern` can restore it.
 #[tauri::command]
@@ -276,7 +276,7 @@ fn start_led_test_pattern_blocking<R: Runtime>(
     // A synthetic test needs a real strip layout to size its frame. Resolve
     // the effective calibration up front: with no usable calibration the
     // worker would silently degrade to a single-LED twin (one dot) while the
-    // chase band is sized for FALLBACK_TOTAL_LEDS — a misleading single-dot
+    // guide is sized for FALLBACK_TOTAL_LEDS — a misleading single-dot
     // preview. Route the user to the calibration flow with a coded status
     // instead. (Never throws — coded status on the Ok result.)
     maybe_hydrate_led_calibration(&mut config, &|| read_persisted_shell_state(app));

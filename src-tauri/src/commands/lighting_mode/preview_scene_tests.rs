@@ -13,6 +13,7 @@ use super::preview_scene::{
 };
 use super::test_support::{Rig, RigSetup};
 use super::{LightingModeConfig, LightingModeKind, SolidColorPayload};
+use crate::commands::hue_intensity::LightingSmoothingPreset;
 use crate::commands::preview::SceneKind;
 
 fn solid(r: u8) -> LightingModeConfig {
@@ -279,15 +280,29 @@ fn the_latency_scene_measures_on_an_unsmoothed_worker_of_its_own() {
 /// preset and the room map come with it, not only the brightness.
 #[test]
 fn a_scene_runs_the_users_ambilight_with_its_preset() {
-    let rig = Rig::new(RigSetup::default());
-    rig.seed(json!({ "lightingIntensityPreset": "subtle" }));
+    let rig = Rig::new(RigSetup {
+        state: json!({
+            "lightingIntensityPreset": "subtle",
+            "roomMap": {
+                "dimensions": { "widthMeters": 4, "depthMeters": 5, "heightMeters": 2.5 },
+                "tvAnchor": { "x": 1, "y": 0, "width": 1.2, "height": 0.1 },
+                "hueChannels": [{
+                    "channelIndex": 0, "channelId": 4, "entertainmentAreaId": "area-1",
+                    "x": 0.5, "y": 1, "z": 0.3
+                }],
+                "zones": []
+            }
+        }),
+        ..RigSetup::default()
+    });
     running(&rig, solid(5));
 
     start(&rig, SceneKind::Spiral);
 
-    let preset = rig
-        .running()
+    let running = rig.running();
+    let preset = running
         .ambilight
         .and_then(|ambilight| ambilight.lighting_smoothing_preset);
-    assert!(preset.is_some(), "the saved preset was dropped");
+    assert_eq!(preset, Some(LightingSmoothingPreset::Subtle));
+    assert!(running.room_geometry.is_some(), "the room map was dropped");
 }

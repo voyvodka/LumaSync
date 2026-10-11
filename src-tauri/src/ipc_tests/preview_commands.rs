@@ -319,6 +319,8 @@ fn only_the_sessions_twin_subscribes_and_it_gets_the_layout() {
     assert_eq!(status_code(&subscribed), "PREVIEW_TWIN_SUBSCRIBED");
     assert_eq!(subscribed["layout"]["displayId"], json!("display-1"));
     assert!(subscribed["layout"]["layoutRevision"].as_u64().unwrap() > 0);
+    // No Hue stream runs here, so no lamps — but the field crosses the boundary.
+    assert_eq!(subscribed["layout"]["lamps"], json!([]));
 }
 
 /// The scene commands are reached from a popup that may outlive its session;

@@ -15,7 +15,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync } from "fs";
-import { resolve, dirname } from "path";
+import { resolve, dirname, relative } from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1156,11 +1156,28 @@ check(
 console.log("\n[ ShellState v1.6 preview additions ]");
 const REQUIRED_V16_STATE_FIELDS = ["ledPreviewPopupCenterX", "ledPreviewPopupCenterY"];
 // Retired with the old preview at 8 → 9; a reader of any of them is a regression.
-for (const field of ["ledPreviewPopupVisible", "ledTwinEnabledTest", "lastLedTestPattern", "ledPreviewHintShown"]) {
+// The migration that deletes them is the one place allowed to name them.
+const RETIRED_PREVIEW_KEYS = ["ledPreviewPopupVisible", "ledTwinEnabledTest", "lastLedTestPattern", "ledPreviewHintShown"];
+const retiredKeyReaders = [
+  ...walkSourceFiles(resolve(ROOT, "src"), /\.tsx?$/).filter(
+    (file) => !file.endsWith("/features/persistence/migrations.ts")
+  ),
+  ...walkRustSourceFiles(resolve(ROOT, "src-tauri/src")),
+].map((file) => [file, stripComments(readFileSync(file, "utf-8"))]);
+for (const field of RETIRED_PREVIEW_KEYS) {
   check(
     !source.includes(field + "?:"),
     `ShellState no longer declares the retired "${field}"`,
     `ShellState still declares "${field}", retired at schema 9`
+  );
+  const snake = field.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+  const readers = retiredKeyReaders
+    .filter(([, text]) => text.includes(field) || text.includes(snake))
+    .map(([file]) => relative(ROOT, file));
+  check(
+    readers.length === 0,
+    `nothing reads the retired "${field}"`,
+    `the retired "${field}" is read again in: ${readers.join(", ")}`
   );
 }
 for (const field of REQUIRED_V16_STATE_FIELDS) {

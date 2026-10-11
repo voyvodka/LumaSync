@@ -108,10 +108,9 @@ impl TestPatternSpeed {
 
 /// Discriminated union of synthetic test patterns (discriminator `kind`).
 ///
-/// Mirrors the TS `LedTestPattern` union exactly: `solid`/`chase` carry an
-/// explicit RGB triple; `rainbow`/`spiral`/`gamut` are fully procedural;
-/// `channelProbe` lights one wire slot (0..=2) across the whole strip;
-/// `guide` is LED Setup's picture of the layout.
+/// Mirrors the TS `LedTestPattern` union exactly: `solid` carries an
+/// explicit RGB triple; `channelProbe` lights one wire slot (0..=2) across
+/// the whole strip; `guide` is LED Setup's picture of the layout.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum TestPatternKind {
