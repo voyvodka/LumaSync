@@ -205,7 +205,7 @@ export function StripPage({
   // port it checked, so a strip moved to another controller does not show the old one's pass.
   const [checkedPort, setCheckedPort] = useState<string | null>(null);
   const health = checkedPort === port ? device.latestHealthCheck : null;
-  const checking = device.isHealthChecking && checkedPort === port;
+  const checking = useHeldFlag(device.isHealthChecking && checkedPort === port);
   const failedStep = health
     ? buildDeviceStatusCard({ status: device.status, statusCard: null, connectedPort: port, latestHealthCheck: health })
         .healthSteps?.find((step) => !step.pass)
@@ -351,7 +351,7 @@ export function StripPage({
               // Nothing to check without a connection: the row keeps its value, not a dead button.
               !connected ? null : (
               <RowButton
-                disabled={device.isHealthChecking}
+                disabled={device.isHealthChecking || checking}
                 aria-busy={checking || undefined}
                 onClick={() => {
                   setCheckedPort(port);

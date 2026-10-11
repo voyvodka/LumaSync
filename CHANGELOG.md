@@ -309,6 +309,9 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Busy labels no longer flash and snap back on fast answers. "Checking…" on Revalidate, health
+  checks, update checks and Hue's row actions now stays readable, and Hue's Channels row keeps its
+  word through Revalidate instead of flipping to "Loading" and back.
 - A USB strip that fails to connect no longer switches off a working WLED device the app still
   showed as connected.
 - With a WLED device and a USB strip both set up, the Lights screen, the tray and the status bar

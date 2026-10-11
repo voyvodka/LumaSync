@@ -10,6 +10,7 @@ import { deriveHueAreaState } from "../model/hueAreaState";
 import { hueChannelName } from "../model/hueChannelLabel";
 import { HUE_AREA_CHANNELS_STATUS } from "@/shared/contracts/hue";
 import { cx } from "@/shared/lib/cx";
+import { useHeldFlag } from "@/shared/lib/useHeldFlag";
 
 interface HueZonesTabProps {
   hueZones: HueZone[];
@@ -54,6 +55,7 @@ export function HueZonesTab(props: HueZonesTabProps) {
     channelsStatus,
   } = props;
   const { t } = useTranslation();
+  const refreshing = useHeldFlag(isRefreshingChannels);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
@@ -201,10 +203,10 @@ export function HueZonesTab(props: HueZonesTabProps) {
             type="button"
             className="lm-room-dock-area-state-cta"
             onClick={onRefreshChannels}
-            disabled={isRefreshingChannels}
+            disabled={refreshing}
             title={t("roomMap:hueZones.areaState.refreshTitle")}
           >
-            {isRefreshingChannels
+            {refreshing
               ? t("roomMap:hueZones.areaState.refreshing")
               : t("roomMap:hueZones.areaState.refresh")}
           </button>

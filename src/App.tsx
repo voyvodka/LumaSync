@@ -57,6 +57,7 @@ import { isUpdateModalStatus } from "./features/updater/updateModalStatus";
 import { outputAvailability } from "./features/mode/model/outputAvailability";
 import { useCapturePermissionRecheck } from "./features/mode/state/useCapturePermissionRecheck";
 import type { DeviceCategory } from "@/features/device/model/deviceCategories";
+import { useHeldFlag } from "@/shared/lib/useHeldFlag";
 import { CAPTURE_FAILURE_BUCKET } from "./shared/contracts/capture";
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "./shared/contracts/hue";
 import { useLedSetupPrompt } from "./features/calibration/state/useLedSetupPrompt";
@@ -219,6 +220,7 @@ function Shell() {
   const hueStreaming = hueSessionActive && !hueReconnecting;
   const hueStreamFailed = isHueStreamFailed(hueRuntimeState);
   const hueProbe = useHueBridgeReachability(hueStartConfig, hueSessionActive);
+  const hueProbeChecking = useHeldFlag(hueProbe.probing);
   const hueReachable = hueProbe.reachable;
   // What the sections show about Hue, through the Hue status store.
   const hueShellStatus: HueShellStatus = {
@@ -525,7 +527,7 @@ function Shell() {
           ledSetupOpen,
           availability,
           hueProbeGaveUp: hueProbe.gaveUp,
-          hueProbeChecking: hueProbe.probing,
+          hueProbeChecking,
           // Before boot the saved calibration is simply unread, not missing.
           calibrationRequired: bootstrapDone && modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED,
           startFailure: mode.startFailedNotice,
@@ -561,7 +563,7 @@ function Shell() {
       ledSetupOpen,
       availability,
       hueProbe.gaveUp,
-      hueProbe.probing,
+      hueProbeChecking,
       bootstrapDone,
       modeGuard.reason,
       mode.startFailedNotice,

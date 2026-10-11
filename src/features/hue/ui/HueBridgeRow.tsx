@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { cx } from "@/shared/lib/cx";
+import { useHeldFlag } from "@/shared/lib/useHeldFlag";
 import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
 import { Menu } from "@/shared/ui/Menu/Menu";
 import { PageSwap } from "@/shared/ui/PageSwap/PageSwap";
@@ -88,7 +89,8 @@ export function HueBridgeRow({
 
 /** A row action. With a busy label it keeps the wider label's width, so nothing beside it moves. */
 export function HueActionButton({ action, primary = false }: { action: ResolvedAction; primary?: boolean }) {
-  const busy = action.busy ?? false;
+  // Held: a check that answers in a few ms flashed its busy label and back.
+  const busy = useHeldFlag(action.busy ?? false);
   return (
     <RowButton
       primary={primary}
