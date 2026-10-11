@@ -324,4 +324,26 @@ fn a_restore_that_cannot_run_turns_the_lights_off() {
     assert!(stopped.is_err(), "the stop reports the failure");
     assert_eq!(scene(&rig), None);
     assert_eq!(rig.running().kind, LightingModeKind::Off);
+    assert!(!rig.state().runtime.lock().unwrap().preview.scene_worker);
+}
+
+/// The strip unplugged mid-scene: the interrupted mode cannot come back on
+/// it, and the scene's worker must not be the one left running.
+#[test]
+fn a_gated_restore_turns_the_lights_off_and_says_so() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+    start(&rig, SceneKind::Spiral);
+    rig.set_serial_connected(false);
+
+    let stopped = stop_scene_lighting(&rig.handle()).expect("the stop answers");
+
+    assert!(
+        matches!(stopped, SceneRestore::Off(_)),
+        "{:?}",
+        rig.running().kind
+    );
+    assert_eq!(rig.running().kind, LightingModeKind::Off);
+    assert!(!rig.state().runtime.lock().unwrap().preview.scene_worker);
+    assert!(!rig.worker_running());
 }
