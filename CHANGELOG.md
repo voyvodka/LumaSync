@@ -309,6 +309,9 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Busy labels no longer flash and snap back on fast answers. "Checking…" on Revalidate, health
+  checks, update checks and Hue's row actions now stays readable, and Hue's Channels row keeps its
+  word through Revalidate instead of flipping to "Loading" and back.
 - Hue: when the bridge did not answer at launch, the Hue page stayed on "Couldn't start" after
   the bridge came back and Revalidate passed, with nothing on the page that could start Hue. It
   now reads Ready with Start again.

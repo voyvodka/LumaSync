@@ -298,7 +298,8 @@ describe("taking the bridge's arrangement", () => {
     await confirmAction(user, "pull");
     await screen.findByText("hue:channelMap.pulled");
 
-    expect(syncLine()).toBe("hue:channelMap.sync.inSyncShort");
+    // "Taking…" is held a moment once shown, so a fast pull still reads as one.
+    await waitFor(() => expect(syncLine()).toBe("hue:channelMap.sync.inSyncShort"));
     expect(snapshots[snapshots.length - 1]).toEqual([
       { channelId: 0, positionX: 0.168, positionY: 1.0, positionZ: -0.524 },
       { channelId: 1, positionX: -0.563, positionY: 1.0, positionZ: -0.641 },
@@ -410,6 +411,39 @@ describe("whether the bridge has this arrangement", () => {
     await waitFor(() => expect(screen.queryByText("hue:channelMap.loading")).toBeNull());
     expect(syncLine()).toBe("hue:channelMap.sync.localAheadShort");
     expect(snapshots).toEqual([]);
+  });
+
+  // Revalidate re-reads the channels; the word flipped to "loading" and back
+  // within a LAN round trip.
+  it("keeps its word through a re-read of a list already shown", async () => {
+    const local = boundPlacements().map((p) => ({ ...p, zOrigin: null }));
+    world.bridge = [
+      { channelId: 0, x: 0.2, y: 0.8, z: 0.9 },
+      { channelId: 1, x: -0.5, y: 0.8, z: -0.9 },
+    ];
+    await renderLoaded({ initialPlacements: local });
+    await waitFor(() => expect(syncLine()).toBe("hue:channelMap.sync.inSyncShort"));
+
+    let answer: () => void = () => {};
+    const base = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation((command: string, args?: Record<string, unknown>) =>
+      command === "get_hue_area_channels"
+        ? new Promise((resolve) => {
+            answer = () => resolve(base(command, args));
+          })
+        : base(command, args),
+    );
+    act(() => {
+      void refresh();
+    });
+    await waitFor(() => expect(invokeMock).toHaveBeenLastCalledWith("get_hue_area_channels", expect.anything()));
+
+    expect(screen.queryByText("hue:channelMap.loading")).toBeNull();
+    expect(syncLine()).toBe("hue:channelMap.sync.inSyncShort");
+    await act(async () => {
+      answer();
+    });
+    expect(syncLine()).toBe("hue:channelMap.sync.inSyncShort");
   });
 
   it("compares height only when both sides carry it", async () => {

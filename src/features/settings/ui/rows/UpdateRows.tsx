@@ -5,6 +5,7 @@ import { setPreference, usePreference } from "@/features/persistence/preferences
 import { DevUpdaterMenu } from "./DevUpdaterMenu";
 import { APP_VERSION } from "@/shared/constants/app";
 import type { UpdateChannel } from "@/shared/contracts/shell";
+import { useHeldFlag } from "@/shared/lib/useHeldFlag";
 import { IconCheck } from "@/shared/ui/icons";
 import { ConfirmPopover } from "@/shared/ui/ConfirmPopover/ConfirmPopover";
 import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
@@ -24,6 +25,8 @@ type CheckFace = "idle" | "checking" | "done";
  */
 export function UpdateCheckRow({ onCheckForUpdates, isCheckingForUpdates, upToDateAt = null, devSetUpdaterState }: SettingsEnv) {
   const { t, i18n } = useTranslation();
+  // A cached or failing check answers in a few ms; held, "Checking" does not flash.
+  const checking = useHeldFlag(isCheckingForUpdates);
 
   // A result, not a state: it goes once read.
   const [expiredAt, setExpiredAt] = useState<number | null>(null);
@@ -32,10 +35,10 @@ export function UpdateCheckRow({ onCheckForUpdates, isCheckingForUpdates, upToDa
     const timerId = window.setTimeout(() => setExpiredAt(upToDateAt), UP_TO_DATE_RESULT_MS);
     return () => window.clearTimeout(timerId);
   }, [upToDateAt]);
-  const shown = upToDateAt !== null && upToDateAt !== expiredAt && !isCheckingForUpdates;
+  const shown = upToDateAt !== null && upToDateAt !== expiredAt && !checking;
   const time = shown ? new Intl.DateTimeFormat(i18n.language, { hour: "2-digit", minute: "2-digit" }).format(upToDateAt) : "";
 
-  const face: CheckFace = isCheckingForUpdates ? "checking" : shown ? "done" : "idle";
+  const face: CheckFace = checking ? "checking" : shown ? "done" : "idle";
   const faces: Record<CheckFace, ReactNode> = {
     idle: t("updater:checkAction"),
     checking: t("updater:checking"),
@@ -57,8 +60,8 @@ export function UpdateCheckRow({ onCheckForUpdates, isCheckingForUpdates, upToDa
           {import.meta.env.DEV && devSetUpdaterState && <DevUpdaterMenu onSetState={devSetUpdaterState} />}
           <RowButton
             onClick={onCheckForUpdates}
-            disabled={isCheckingForUpdates}
-            aria-busy={isCheckingForUpdates}
+            disabled={checking}
+            aria-busy={checking}
             data-testid="update-check"
           >
             <StateSwap state={face} faces={faces} fit />
