@@ -628,7 +628,7 @@ fn start_test(rig: &Rig) {
         rig.app.state::<RuntimeTelemetryState>().inner(),
         rig.app.state::<PreviewSessionState>().inner(),
         Some(TestPatternConfig {
-            kind: TestPatternKind::Gamut,
+            kind: TestPatternKind::Guide,
             brightness: 0.5,
             speed: TestPatternSpeed::default(),
             display_aspect: 16.0 / 9.0,
@@ -720,7 +720,7 @@ fn the_twin_draws_the_layout_the_running_mode_uses_not_the_saved_one() {
         rig.app.state::<RuntimeTelemetryState>().inner(),
         session.inner(),
         Some(TestPatternConfig {
-            kind: TestPatternKind::Gamut,
+            kind: TestPatternKind::Guide,
             brightness: 0.5,
             speed: TestPatternSpeed::default(),
             display_aspect: 16.0 / 9.0,

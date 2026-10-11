@@ -72,7 +72,7 @@ describe("buildTwinFrame", () => {
   });
 
   it("produces different colours at different frames for an animated pattern", () => {
-    expect(buildTwinFrame("rainbow", 1).leds[0]).not.toEqual(buildTwinFrame("rainbow", 30).leds[0]);
+    expect(buildTwinFrame("guide", 5).leds[5]).not.toEqual(buildTwinFrame("guide", 30).leds[5]);
   });
 
   // A twin painted in the wrong primary would teach the wrong answer.
@@ -83,7 +83,7 @@ describe("buildTwinFrame", () => {
   });
 
   it("encodes a frame the twin's own decoder reads back", () => {
-    const frame = buildTwinFrame("gamut", 3);
+    const frame = buildTwinFrame("guide", 3);
     expect(decodeTwinFrame(encodeTwinFrame(9, frame))).toEqual({
       seq: 9,
       layoutRevision: mockTwinLayout().layoutRevision,

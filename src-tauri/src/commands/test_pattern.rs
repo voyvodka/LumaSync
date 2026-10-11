@@ -120,14 +120,6 @@ pub enum TestPatternKind {
         g: u8,
         b: u8,
     },
-    Chase {
-        r: u8,
-        g: u8,
-        b: u8,
-    },
-    Rainbow,
-    Spiral,
-    Gamut,
     /// Full-frame pure red / green / blue by `slot`. `start_led_test_pattern`
     /// pins the identity colour order for it and rejects a slot above 2.
     ChannelProbe {
@@ -310,18 +302,6 @@ impl SyntheticFrameSource {
             TestPatternKind::Solid { r, g, b } => {
                 pixels_rgb.resize(w * h, [r, g, b]);
             }
-            TestPatternKind::Chase { r, g, b } => {
-                render_comet(
-                    &mut pixels_rgb,
-                    w,
-                    h,
-                    &self.sequence,
-                    &self.shape,
-                    self.phase,
-                    self.tail_fraction(),
-                    [r, g, b],
-                );
-            }
             TestPatternKind::Guide => {
                 render_guide(
                     &mut pixels_rgb,
@@ -332,15 +312,6 @@ impl SyntheticFrameSource {
                     self.phase,
                     self.tail_fraction(),
                 );
-            }
-            TestPatternKind::Rainbow => {
-                render_rainbow(&mut pixels_rgb, w, h, self.phase);
-            }
-            TestPatternKind::Spiral => {
-                render_spiral(&mut pixels_rgb, w, h, self.phase);
-            }
-            TestPatternKind::Gamut => {
-                render_gamut(&mut pixels_rgb, w, h);
             }
             TestPatternKind::ChannelProbe { slot } => {
                 pixels_rgb.resize(w * h, channel_probe_color(slot));
@@ -541,10 +512,6 @@ fn render_guide(
 // Pattern renderers
 // ---------------------------------------------------------------------------
 
-/// Angular hue wheel that rotates around the screen centre with time. Sampling
-/// the perimeter therefore cycles through the spectrum *around the ring* and
-/// the whole rainbow appears to rotate — not a linear left→right sweep (which
-/// left the side edges a constant colour and read as a flat horizontal slide).
 /// Out-of-range slots never reach here (the command rejects them); blue is
 /// only the total-function fallback.
 fn channel_probe_color(slot: u8) -> [u8; 3] {
@@ -553,76 +520,6 @@ fn channel_probe_color(slot: u8) -> [u8; 3] {
         1 => [0, 255, 0],
         _ => [0, 0, 255],
     }
-}
-
-fn render_rainbow(pixels: &mut Vec<[u8; 3]>, w: usize, h: usize, phase: f32) {
-    let cx = w as f32 / 2.0;
-    let cy = h as f32 / 2.0;
-    for y in 0..h {
-        let dy = y as f32 - cy;
-        for x in 0..w {
-            let dx = x as f32 - cx;
-            let angle = dy.atan2(dx) / (2.0 * std::f32::consts::PI) + 0.5; // [0,1)
-            let hue = (angle + phase).rem_euclid(1.0);
-            pixels.push(hsv_to_rgb(hue, 1.0, 1.0));
-        }
-    }
-}
-
-/// Rotating spiral: hue from polar angle + radius, advanced by time.
-fn render_spiral(pixels: &mut Vec<[u8; 3]>, w: usize, h: usize, phase: f32) {
-    let cx = (w as f32 - 1.0) / 2.0;
-    let cy = (h as f32 - 1.0) / 2.0;
-    let max_r = (cx * cx + cy * cy).sqrt().max(1.0);
-    for y in 0..h {
-        let dy = y as f32 - cy;
-        for x in 0..w {
-            let dx = x as f32 - cx;
-            let angle = dy.atan2(dx) / (2.0 * std::f32::consts::PI) + 0.5; // [0,1)
-            let radius = (dx * dx + dy * dy).sqrt() / max_r; // [0,1]
-            let hue = (angle + radius * 2.0 - phase).rem_euclid(1.0);
-            pixels.push(hsv_to_rgb(hue, 1.0, 1.0));
-        }
-    }
-}
-
-/// Static colour-gamut wheel: hue from polar angle, saturation from radius.
-fn render_gamut(pixels: &mut Vec<[u8; 3]>, w: usize, h: usize) {
-    let cx = (w as f32 - 1.0) / 2.0;
-    let cy = (h as f32 - 1.0) / 2.0;
-    let max_r = (cx * cx + cy * cy).sqrt().max(1.0);
-    for y in 0..h {
-        let dy = y as f32 - cy;
-        for x in 0..w {
-            let dx = x as f32 - cx;
-            let angle = dy.atan2(dx) / (2.0 * std::f32::consts::PI) + 0.5;
-            let sat = ((dx * dx + dy * dy).sqrt() / max_r).clamp(0.0, 1.0);
-            pixels.push(hsv_to_rgb(angle, sat, 1.0));
-        }
-    }
-}
-
-/// HSV → RGB (all components in `[0, 1]`), returning 8-bit channels.
-fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
-    let h = h.rem_euclid(1.0) * 6.0;
-    let i = h.floor();
-    let f = h - i;
-    let p = v * (1.0 - s);
-    let q = v * (1.0 - s * f);
-    let t = v * (1.0 - s * (1.0 - f));
-    let (r, g, b) = match i as i32 % 6 {
-        0 => (v, t, p),
-        1 => (q, v, p),
-        2 => (p, v, t),
-        3 => (p, q, v),
-        4 => (t, p, v),
-        _ => (v, p, q),
-    };
-    [
-        (r * 255.0).round().clamp(0.0, 255.0) as u8,
-        (g * 255.0).round().clamp(0.0, 255.0) as u8,
-        (b * 255.0).round().clamp(0.0, 255.0) as u8,
-    ]
 }
 
 // ---------------------------------------------------------------------------
@@ -762,10 +659,8 @@ mod tests {
     #[test]
     fn pixel_count_matches_dimensions_for_every_pattern() {
         for kind in [
-            TestPatternKind::Chase { r: 255, g: 0, b: 0 },
-            TestPatternKind::Rainbow,
-            TestPatternKind::Spiral,
-            TestPatternKind::Gamut,
+            TestPatternKind::Guide,
+            TestPatternKind::ChannelProbe { slot: 1 },
         ] {
             let mut src = source(kind, TestPatternSpeed::Fast);
             let frame = src.capture_frame().expect("frame");
@@ -808,9 +703,12 @@ mod tests {
         let solid: TestPatternKind =
             serde_json::from_str(r#"{"kind":"solid","r":1,"g":2,"b":3}"#).expect("solid");
         assert_eq!(solid, TestPatternKind::Solid { r: 1, g: 2, b: 3 });
-        let rainbow: TestPatternKind =
-            serde_json::from_str(r#"{"kind":"rainbow"}"#).expect("rainbow");
-        assert_eq!(rainbow, TestPatternKind::Rainbow);
+        let guide: TestPatternKind = serde_json::from_str(r#"{"kind":"guide"}"#).expect("guide");
+        assert_eq!(guide, TestPatternKind::Guide);
+        assert!(
+            serde_json::from_str::<TestPatternKind>(r#"{"kind":"rainbow"}"#).is_err(),
+            "the preview's old patterns are gone"
+        );
     }
 
     #[test]
@@ -929,14 +827,7 @@ mod tests {
 
     #[test]
     fn comet_lights_a_subset_of_the_perimeter() {
-        let mut src = source(
-            TestPatternKind::Chase {
-                r: 200,
-                g: 200,
-                b: 200,
-            },
-            TestPatternSpeed::Slow,
-        );
+        let mut src = source(TestPatternKind::Guide, TestPatternSpeed::Slow);
         let frame = src.capture_frame().expect("frame");
         let lit = lit_pixels(&frame.pixels_rgb);
         assert!(lit > 0, "comet must light some pixels");
@@ -1055,7 +946,7 @@ mod tests {
             TestPatternSpeed::Fast,
         ] {
             let src = SyntheticFrameSource::new(
-                cfg(TestPatternKind::Chase { r: 255, g: 0, b: 0 }, speed),
+                cfg(TestPatternKind::Guide, speed),
                 Some(lopsided_calibration()),
                 None,
                 None,
@@ -1074,10 +965,7 @@ mod tests {
     #[test]
     fn a_stalled_worker_widens_the_tail() {
         let mut src = SyntheticFrameSource::new(
-            cfg(
-                TestPatternKind::Chase { r: 255, g: 0, b: 0 },
-                TestPatternSpeed::Fast,
-            ),
+            cfg(TestPatternKind::Guide, TestPatternSpeed::Fast),
             Some(lopsided_calibration()),
             None,
             None,
@@ -1094,10 +982,7 @@ mod tests {
         let mut cal = lopsided_calibration();
         cal.total_leds = total_leds;
         let src = SyntheticFrameSource::new(
-            cfg(
-                TestPatternKind::Chase { r: 1, g: 1, b: 1 },
-                TestPatternSpeed::Slow,
-            ),
+            cfg(TestPatternKind::Guide, TestPatternSpeed::Slow),
             Some(cal),
             None,
             None,
@@ -1143,10 +1028,7 @@ mod tests {
                 let mut cal = lopsided_calibration();
                 cal.total_leds = total;
                 SyntheticFrameSource::new(
-                    cfg(
-                        TestPatternKind::Chase { r: 1, g: 1, b: 1 },
-                        TestPatternSpeed::Slow,
-                    ),
+                    cfg(TestPatternKind::Guide, TestPatternSpeed::Slow),
                     Some(cal),
                     None,
                     None,
@@ -1170,7 +1052,7 @@ mod tests {
     fn phase_is_carried_in_from_the_shared_slot() {
         let slot = Arc::new(AtomicU32::new(0.75f32.to_bits()));
         let src = SyntheticFrameSource::new(
-            cfg(TestPatternKind::Rainbow, TestPatternSpeed::Fast),
+            cfg(TestPatternKind::Guide, TestPatternSpeed::Fast),
             Some(lopsided_calibration()),
             Some(Arc::clone(&slot)),
             None,
@@ -1185,7 +1067,7 @@ mod tests {
     fn phase_advances_forward_and_is_published_to_the_slot() {
         let slot = Arc::new(AtomicU32::new(0.5f32.to_bits()));
         let mut src = SyntheticFrameSource::new(
-            cfg(TestPatternKind::Rainbow, TestPatternSpeed::Fast),
+            cfg(TestPatternKind::Guide, TestPatternSpeed::Fast),
             Some(lopsided_calibration()),
             Some(Arc::clone(&slot)),
             None,
@@ -1259,58 +1141,11 @@ mod tests {
     fn a_garbage_slot_value_degrades_to_zero() {
         let slot = Arc::new(AtomicU32::new(f32::NAN.to_bits()));
         let src = SyntheticFrameSource::new(
-            cfg(TestPatternKind::Spiral, TestPatternSpeed::Med),
+            cfg(TestPatternKind::Guide, TestPatternSpeed::Med),
             Some(lopsided_calibration()),
             Some(slot),
             None,
         );
         assert_eq!(src.phase, 0.0);
-    }
-
-    // -------------------------------------------------------------------------
-    // Remaining pattern math
-    // -------------------------------------------------------------------------
-
-    #[test]
-    fn rainbow_produces_non_uniform_pixels_and_animates() {
-        let (w, h) = frame_size_for_aspect(WIDE);
-        let (w, h) = (w as usize, h as usize);
-        let mut frame0: Vec<[u8; 3]> = Vec::new();
-        let mut frame1: Vec<[u8; 3]> = Vec::new();
-        render_rainbow(&mut frame0, w, h, 0.0);
-        render_rainbow(&mut frame1, w, h, 0.3);
-
-        assert_eq!(frame0.len(), w * h);
-        assert_ne!(frame0[0], frame0[w / 2], "hue must vary across the frame");
-        assert_ne!(frame0, frame1, "rainbow must animate with phase");
-    }
-
-    #[test]
-    fn spiral_produces_non_uniform_pixels_radially_and_angularly() {
-        let (w, h) = frame_size_for_aspect(WIDE);
-        let (w, h) = (w as usize, h as usize);
-        let mut pixels: Vec<[u8; 3]> = Vec::new();
-        render_spiral(&mut pixels, w, h, 0.0);
-        assert_eq!(pixels.len(), w * h);
-        let corner = pixels[0];
-        let center = pixels[(h / 2) * w + (w / 2)];
-        assert_ne!(corner, center, "spiral must vary from corner to centre");
-    }
-
-    #[test]
-    fn gamut_is_time_invariant_and_spatially_non_uniform() {
-        let (w, h) = frame_size_for_aspect(WIDE);
-        let (w, h) = (w as usize, h as usize);
-        let mut a: Vec<[u8; 3]> = Vec::new();
-        let mut b: Vec<[u8; 3]> = Vec::new();
-        render_gamut(&mut a, w, h);
-        render_gamut(&mut b, w, h);
-
-        assert_eq!(a, b, "gamut must be time-invariant");
-        let first = a[0];
-        assert!(
-            a.iter().any(|p| p != &first),
-            "gamut colour wheel must have spatial variation"
-        );
     }
 }

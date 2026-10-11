@@ -40,9 +40,6 @@ use crate::commands::led_output::{
 };
 use crate::commands::led_sink::LedSink;
 use crate::commands::runtime_telemetry::{read_runtime_telemetry, SharedRuntimeTelemetry};
-use crate::commands::test_pattern::{
-    create_synthetic_frame_source, TestPatternConfig, TestPatternKind, TestPatternSpeed,
-};
 use crate::models::room_map::{RoomDimensions, RoomGeometry, TvAnchorPlacement};
 
 // ---------------------------------------------------------------------------
@@ -1221,33 +1218,28 @@ fn hue_content_rectangle_is_the_one_the_inline_arithmetic_gave() {
 /// A test pattern is painted on black, so the detector reads its unlit part
 /// as letterbox bars. Cropped, every LED and every Hue channel would sample a
 /// shifted rectangle and the pattern would light the wrong places. The test's
-/// own settings keep detection off; this pins that, and shows on a real chase
-/// frame that it matters.
+/// own settings keep detection off; this pins that, and shows on a mostly
+/// black frame that it matters.
 #[test]
 fn black_border_detection_never_crops_a_test_pattern() {
     let led_calibration = strip_164();
-    let mut source = create_synthetic_frame_source(
-        TestPatternConfig {
-            kind: TestPatternKind::Chase {
-                r: 255,
-                g: 255,
-                b: 255,
-            },
-            brightness: 1.0,
-            speed: TestPatternSpeed::Med,
-            display_aspect: 16.0 / 9.0,
-        },
-        Some(led_calibration.clone()),
-        None,
-        None,
-    );
-    let frame = source.capture_frame().expect("a synthetic frame");
+    // A frame the way a test paints one: black, with light only where a few
+    // LEDs are — here mid-way up both sides, so the top and the bottom read
+    // as bars.
+    let (w, h) = (FRAME_W, FRAME_H);
+    let mut pixels = vec![[0u8, 0, 0]; (w * h) as usize];
+    for y in h / 3..2 * h / 3 {
+        for x in (0..w / 12).chain(w - w / 12..w) {
+            pixels[(y * w + x) as usize] = [255, 255, 255];
+        }
+    }
+    let frame = CapturedFrame::new(w, h, pixels);
 
     let insets = detect_black_borders(&frame, BLACK_BORDER_THRESHOLD);
     assert_ne!(
         insets,
         BlackBorderInsets::default(),
-        "the chase frame must read as bordered, or this test proves nothing"
+        "the frame must read as bordered, or this test proves nothing"
     );
 
     let settings = led_test_pattern::test_pattern_ambilight(1.0);

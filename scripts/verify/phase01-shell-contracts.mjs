@@ -294,9 +294,9 @@ if (orderMatch) {
 // ---------------------------------------------------------------------------
 console.log("\n[ Shell state schema version (strips stored) ]");
 check(
-  /SHELL_STATE_SCHEMA_VERSION\s*=\s*8\b/.test(source),
-  "SHELL_STATE_SCHEMA_VERSION === 8 (strips storage gate)",
-  "SHELL_STATE_SCHEMA_VERSION not bumped to 8 — the 7 → 8 strips step has no trigger"
+  /SHELL_STATE_SCHEMA_VERSION\s*=\s*9\b/.test(source),
+  "SHELL_STATE_SCHEMA_VERSION === 9 (the old preview's keys dropped)",
+  "SHELL_STATE_SCHEMA_VERSION not bumped to 9 — the 8 → 9 step has no trigger"
 );
 for (const retired of ["startupEnabled", "notificationsEnabled", "roomMapBackgroundOpacity"]) {
   check(
@@ -1154,14 +1154,15 @@ check(
 );
 
 console.log("\n[ ShellState v1.6 preview additions ]");
-const REQUIRED_V16_STATE_FIELDS = [
-  "ledPreviewPopupVisible",
-  "ledPreviewPopupCenterX",
-  "ledPreviewPopupCenterY",
-  "ledTwinEnabledTest",
-  "lastLedTestPattern",
-  "ledPreviewHintShown",
-];
+const REQUIRED_V16_STATE_FIELDS = ["ledPreviewPopupCenterX", "ledPreviewPopupCenterY"];
+// Retired with the old preview at 8 → 9; a reader of any of them is a regression.
+for (const field of ["ledPreviewPopupVisible", "ledTwinEnabledTest", "lastLedTestPattern", "ledPreviewHintShown"]) {
+  check(
+    !source.includes(field + "?:"),
+    `ShellState no longer declares the retired "${field}"`,
+    `ShellState still declares "${field}", retired at schema 9`
+  );
+}
 for (const field of REQUIRED_V16_STATE_FIELDS) {
   check(
     source.includes(field + "?:"),

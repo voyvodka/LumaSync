@@ -57,8 +57,8 @@ describe("migrateV7ToV8 — the local output is stored as strips", () => {
     ]);
   });
 
-  it("leaves a v8 state alone", () => {
+  it("derives no strips again for a v8 state", () => {
     const state = { ...makeBaseState({ schemaVersion: 8 }), lastSuccessfulPort: "COM3" } as ShellState;
-    expect(migrateShellState(state)).toBe(state);
+    expect(migrateShellState(state).ledStrips).toBe(state.ledStrips);
   });
 });

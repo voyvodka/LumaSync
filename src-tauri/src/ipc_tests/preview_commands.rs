@@ -37,7 +37,7 @@ fn app() -> App<MockRuntime> {
 fn start(brightness: f64) -> serde_json::Value {
     json!({
         "payload": {
-            "pattern": { "kind": "chase", "r": 255, "g": 255, "b": 255 },
+            "pattern": { "kind": "guide" },
             "brightness": brightness,
             "speed": "med",
             "targets": ["usb"]
@@ -426,7 +426,7 @@ fn a_scene_during_a_test_pattern_is_refused_before_any_window() {
         .open_for_test("display-1", "led-twin-overlay-1", "led-control-popup-0");
     app.state::<crate::commands::lighting_mode::LightingRuntimeState>()
         .mark_test_pattern_for_tests(crate::commands::test_pattern::TestPatternConfig {
-            kind: crate::commands::test_pattern::TestPatternKind::Gamut,
+            kind: crate::commands::test_pattern::TestPatternKind::Guide,
             brightness: 0.5,
             speed: crate::commands::test_pattern::TestPatternSpeed::default(),
             display_aspect: 16.0 / 9.0,

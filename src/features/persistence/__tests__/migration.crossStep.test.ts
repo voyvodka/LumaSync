@@ -52,7 +52,7 @@ describe("migrateShellState — cross-step contract", () => {
     const out = migrateShellState(input);
 
     expect(out.schemaVersion).toBe(SHELL_STATE_SCHEMA_VERSION);
-    expect(SHELL_STATE_SCHEMA_VERSION).toBe(8);
+    expect(SHELL_STATE_SCHEMA_VERSION).toBe(9);
 
     // 1 → 2 fold ran.
     expect(out.roomMap?.zones).toHaveLength(1);

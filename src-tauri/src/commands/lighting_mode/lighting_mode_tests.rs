@@ -1327,8 +1327,8 @@ fn test_config(kind: TestPatternKind, speed: TestPatternSpeed, aspect: f32) -> T
     }
 }
 
-fn red_chase() -> TestPatternKind {
-    TestPatternKind::Chase { r: 255, g: 0, b: 0 }
+fn guide() -> TestPatternKind {
+    TestPatternKind::Guide
 }
 
 /// R15: a colour or speed change during a running test used to tear the
@@ -1339,8 +1339,7 @@ fn a_running_test_retunes_in_place_instead_of_rebuilding() {
     let _guard = acquire_worker_test_guard();
     let mut owner = owner_with_fake_sender();
 
-    owner.preview.pending_test_pattern =
-        Some(test_config(red_chase(), TestPatternSpeed::Slow, 1.78));
+    owner.preview.pending_test_pattern = Some(test_config(guide(), TestPatternSpeed::Slow, 1.78));
     let started = apply_mode_change(
         &mut owner,
         ambilight_with_payload(AmbilightPayload {
@@ -1363,7 +1362,7 @@ fn a_running_test_retunes_in_place_instead_of_rebuilding() {
         .expect("a synthetic worker must publish its live cell");
 
     owner.preview.pending_test_pattern = Some(test_config(
-        TestPatternKind::Spiral,
+        TestPatternKind::Solid { r: 1, g: 2, b: 3 },
         TestPatternSpeed::Fast,
         1.78,
     ));
@@ -1387,12 +1386,12 @@ fn a_running_test_retunes_in_place_instead_of_rebuilding() {
     );
 
     let cell = slot.lock().expect("live cell");
-    assert_eq!(cell.kind, TestPatternKind::Spiral);
+    assert_eq!(cell.kind, TestPatternKind::Solid { r: 1, g: 2, b: 3 });
     assert_eq!(cell.speed, TestPatternSpeed::Fast);
     drop(cell);
     assert_eq!(
         owner.preview.active_test_pattern.as_ref().map(|c| &c.kind),
-        Some(&TestPatternKind::Spiral),
+        Some(&TestPatternKind::Solid { r: 1, g: 2, b: 3 }),
         "the retune must also move the reported active pattern",
     );
 
@@ -1408,8 +1407,7 @@ fn a_display_aspect_change_still_rebuilds_the_source() {
     let _guard = acquire_worker_test_guard();
     let mut owner = owner_with_fake_sender();
 
-    owner.preview.pending_test_pattern =
-        Some(test_config(red_chase(), TestPatternSpeed::Slow, 1.78));
+    owner.preview.pending_test_pattern = Some(test_config(guide(), TestPatternSpeed::Slow, 1.78));
     let payload = ambilight_with_payload(AmbilightPayload {
         brightness: 0.5,
         ..Default::default()
@@ -1427,8 +1425,7 @@ fn a_display_aspect_change_still_rebuilds_the_source() {
     );
     assert_eq!(started.status.code, "AMBILIGHT_MODE_STARTED");
 
-    owner.preview.pending_test_pattern =
-        Some(test_config(red_chase(), TestPatternSpeed::Slow, 1.6));
+    owner.preview.pending_test_pattern = Some(test_config(guide(), TestPatternSpeed::Slow, 1.6));
     let after = apply_mode_change(
         &mut owner,
         payload,
@@ -1472,8 +1469,7 @@ fn starting_a_test_over_live_ambilight_rebuilds() {
     assert_eq!(live.status.code, "AMBILIGHT_MODE_STARTED");
     assert!(owner.preview.pattern_live.is_none());
 
-    owner.preview.pending_test_pattern =
-        Some(test_config(red_chase(), TestPatternSpeed::Slow, 1.78));
+    owner.preview.pending_test_pattern = Some(test_config(guide(), TestPatternSpeed::Slow, 1.78));
     let to_test = apply_mode_change(
         &mut owner,
         payload,
@@ -2329,7 +2325,7 @@ fn a_channel_probe_pins_the_identity_order_over_the_saved_one() {
         Some(LedColorOrder::Rgb)
     );
     assert_eq!(
-        hydrate_test(TestPatternKind::Chase { r: 255, g: 0, b: 0 }),
+        hydrate_test(TestPatternKind::Guide),
         Some(LedColorOrder::Bgr)
     );
 }

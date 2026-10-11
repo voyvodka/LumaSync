@@ -67,6 +67,16 @@ type LegacyChannelRegions = {
   hueChannelRegionOverrides?: Record<string, Record<number, string>>;
 };
 
+/** Retired at schemaVersion 9 with the old LED preview: its popup's visibility,
+ *  the twin's test switch, the last test pattern and the discovery hint. The
+ *  rebuilt preview opens with nothing on and saves only where its popup sat. */
+type RetiredPreviewKeys = {
+  ledPreviewPopupVisible?: boolean;
+  ledTwinEnabledTest?: boolean;
+  lastLedTestPattern?: unknown;
+  ledPreviewHintShown?: boolean;
+};
+
 type LegacyWindowGeometry = {
   windowX?: number | null;
   windowY?: number | null;
@@ -135,6 +145,26 @@ export function migrateShellState(state: ShellState): ShellState {
     next = migrateV7ToV8(next);
   }
 
+  // 8 → 9: drop the old LED preview's keys
+  if ((next.schemaVersion ?? 1) < 9) {
+    next = migrateV8ToV9(next);
+  }
+
+  return next;
+}
+
+// ---------------------------------------------------------------------------
+// 8 → 9 — drop the old LED preview's keys
+// ---------------------------------------------------------------------------
+
+/** Safe to drop: no reader in either language since the preview was rebuilt.
+ *  A v8 build reads each as absent and falls back to its own default. */
+function migrateV8ToV9(state: ShellState): ShellState {
+  const next = { ...state, schemaVersion: 9 } as ShellState & RetiredPreviewKeys;
+  delete next.ledPreviewPopupVisible;
+  delete next.ledTwinEnabledTest;
+  delete next.lastLedTestPattern;
+  delete next.ledPreviewHintShown;
   return next;
 }
 

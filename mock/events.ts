@@ -76,23 +76,6 @@ export async function emitMockEvent(event: string, payload?: unknown): Promise<v
 
 // --- Frame synthesis -------------------------------------------------------
 
-function hsvToRgb(h: number, s: number, v: number): Rgb {
-  const i = Math.floor(h * 6);
-  const f = h * 6 - i;
-  const p = v * (1 - s);
-  const q = v * (1 - f * s);
-  const t = v * (1 - (1 - f) * s);
-  const [r, g, b] = [
-    [v, t, p],
-    [q, v, p],
-    [p, v, t],
-    [p, q, v],
-    [t, p, v],
-    [v, p, q],
-  ][i % 6] as Rgb;
-  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
-}
-
 /**
  * How many LEDs the calibration says the strip has.
  *
@@ -114,26 +97,9 @@ function pixelAt(
   frame: number,
   slot: ProbeSlot,
 ): Rgb {
-  const position = count <= 1 ? 0 : index / (count - 1);
   switch (pattern) {
     case "solid":
       return [251, 191, 36];
-    case "chase": {
-      // A five-LED comet so direction and wrap are both visible; a single lit
-      // pixel reads as a rendering glitch at any real strip length.
-      const head = frame % count;
-      const distance = (index - head + count) % count;
-      const falloff = distance < 5 ? 1 - distance / 5 : 0;
-      return [Math.round(251 * falloff), Math.round(191 * falloff), Math.round(36 * falloff)];
-    }
-    case "rainbow":
-      return hsvToRgb((position + frame / 60) % 1, 1, 1);
-    case "spiral":
-      return hsvToRgb((position * 3 + frame / 30) % 1, 1, 0.5 + 0.5 * Math.sin(frame / 10));
-    case "gamut":
-      // Three flat bands — the case where a gamut-clipping bug is legible,
-      // which a continuous sweep hides.
-      return position < 1 / 3 ? [255, 0, 0] : position < 2 / 3 ? [0, 255, 0] : [0, 0, 255];
     case "channelProbe":
       // The whole strip in one primary, as the real probe renders it.
       return slot === 0 ? [255, 0, 0] : slot === 1 ? [0, 255, 0] : [0, 0, 255];
@@ -222,7 +188,7 @@ export interface TwinFrameStreamState {
 
 let stream: TwinFrameStreamState = {
   running: false,
-  pattern: "rainbow",
+  pattern: "guide",
   probeSlot: 0,
   frame: 0,
   dropEveryNthFrame: 0,
