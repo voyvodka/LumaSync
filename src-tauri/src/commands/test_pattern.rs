@@ -110,7 +110,8 @@ impl TestPatternSpeed {
 ///
 /// Mirrors the TS `LedTestPattern` union exactly: `solid`/`chase` carry an
 /// explicit RGB triple; `rainbow`/`spiral`/`gamut` are fully procedural;
-/// `channelProbe` lights one wire slot (0..=2) across the whole strip.
+/// `channelProbe` lights one wire slot (0..=2) across the whole strip;
+/// `guide` is LED Setup's picture of the layout.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum TestPatternKind {
@@ -132,6 +133,10 @@ pub enum TestPatternKind {
     ChannelProbe {
         slot: u8,
     },
+    /// LED Setup's guide: LED #1 green, each edge's end LEDs blue, the two
+    /// beside the stand gap red, and a white light running in strip order —
+    /// the start, the direction, the corners and the gap at a glance.
+    Guide,
 }
 
 /// Resolved synthetic-pattern request carried from `start_led_test_pattern`
@@ -317,6 +322,17 @@ impl SyntheticFrameSource {
                     [r, g, b],
                 );
             }
+            TestPatternKind::Guide => {
+                render_guide(
+                    &mut pixels_rgb,
+                    w,
+                    h,
+                    &self.sequence,
+                    &self.shape,
+                    self.phase,
+                    self.tail_fraction(),
+                );
+            }
             TestPatternKind::Rainbow => {
                 render_rainbow(&mut pixels_rgb, w, h, self.phase);
             }
@@ -406,8 +422,6 @@ fn render_comet(
         return;
     }
     let tail = tail.clamp(0.001, 0.5);
-    let (wf, hf) = ((w - 1) as f32, (h - 1) as f32);
-    let depth = ((EDGE_THICKNESS * h.min(w) as f32) as usize).max(2);
 
     for item in sequence {
         let behind = (phase - led_arc(item, shape, w as f32, h as f32)).rem_euclid(1.0);
@@ -423,41 +437,102 @@ fn render_comet(
             (rgb[2] as f32 * intensity).round() as u8,
         ];
 
-        let (nx, ny) = led_to_screen_pos(item, shape);
-        let cx = (nx * wf).round() as usize;
-        let cy = (ny * hf).round() as usize;
-        let count = shape.pitches(item.segment).max(2) as f32;
-        let horizontal = matches!(item.segment, LedSegment::Top | LedSegment::Bottom);
-        // Half a pitch either side — the LED owns its own cell and no more.
-        let half = if horizontal {
-            (wf / (count - 1.0) / 2.0).max(1.0) as usize
-        } else {
-            (hf / (count - 1.0) / 2.0).max(1.0) as usize
-        };
+        paint_led(pixels, w, h, item, shape, color);
+    }
+}
 
-        let (x0, x1, y0, y1) = if horizontal {
-            let y0 = if ny < 0.5 { 0 } else { h.saturating_sub(depth) };
-            (
-                cx.saturating_sub(half),
-                (cx + half + 1).min(w),
-                y0,
-                (y0 + depth).min(h),
-            )
-        } else {
-            let x0 = if nx < 0.5 { 0 } else { w.saturating_sub(depth) };
-            (
-                x0,
-                (x0 + depth).min(w),
-                cy.saturating_sub(half),
-                (cy + half + 1).min(h),
-            )
-        };
+/// Fills one LED's cell — half a pitch either side of where it samples, as
+/// deep as the edge band — with `color`, so whatever the sampler averages
+/// there is exactly that.
+fn paint_led(
+    pixels: &mut [[u8; 3]],
+    w: usize,
+    h: usize,
+    item: &LedSequenceItem,
+    shape: &StripShape,
+    color: [u8; 3],
+) {
+    let (wf, hf) = ((w - 1) as f32, (h - 1) as f32);
+    let depth = ((EDGE_THICKNESS * h.min(w) as f32) as usize).max(2);
+    let (nx, ny) = led_to_screen_pos(item, shape);
+    let cx = (nx * wf).round() as usize;
+    let cy = (ny * hf).round() as usize;
+    let count = shape.pitches(item.segment).max(2) as f32;
+    let horizontal = matches!(item.segment, LedSegment::Top | LedSegment::Bottom);
+    // Half a pitch either side — the LED owns its own cell and no more.
+    let half = if horizontal {
+        (wf / (count - 1.0) / 2.0).max(1.0) as usize
+    } else {
+        (hf / (count - 1.0) / 2.0).max(1.0) as usize
+    };
 
-        for row in y0..y1 {
-            let base = row * w;
-            for col in x0..x1 {
-                pixels[base + col] = color;
-            }
+    let (x0, x1, y0, y1) = if horizontal {
+        let y0 = if ny < 0.5 { 0 } else { h.saturating_sub(depth) };
+        (
+            cx.saturating_sub(half),
+            (cx + half + 1).min(w),
+            y0,
+            (y0 + depth).min(h),
+        )
+    } else {
+        let x0 = if nx < 0.5 { 0 } else { w.saturating_sub(depth) };
+        (
+            x0,
+            (x0 + depth).min(w),
+            cy.saturating_sub(half),
+            (cy + half + 1).min(h),
+        )
+    };
+
+    for row in y0..y1 {
+        let base = row * w;
+        for col in x0..x1 {
+            pixels[base + col] = color;
+        }
+    }
+}
+
+const GUIDE_START: [u8; 3] = [0, 255, 0];
+const GUIDE_EDGE_END: [u8; 3] = [0, 80, 255];
+const GUIDE_GAP: [u8; 3] = [255, 0, 0];
+const GUIDE_LIGHT: [u8; 3] = [255, 255, 255];
+
+/// What the guide marks an LED with, if anything: LED #1 first, then the
+/// LEDs beside the stand gap, then each edge's two ends.
+fn guide_mark(strip_index: usize, item: &LedSequenceItem, shape: &StripShape) -> Option<[u8; 3]> {
+    if strip_index == 0 {
+        return Some(GUIDE_START);
+    }
+    let count = item.segment.count(&shape.counts);
+    let gap = item.segment == LedSegment::Bottom && count >= 2 && shape.bottom_missing > 0;
+    let right_run = count / 2;
+    if gap && (item.local_index + 1 == right_run || item.local_index == right_run) {
+        return Some(GUIDE_GAP);
+    }
+    if item.local_index == 0 || item.local_index + 1 == count {
+        return Some(GUIDE_EDGE_END);
+    }
+    None
+}
+
+/// The layout at a glance: the running light shows the direction, the marks
+/// stay put over it.
+fn render_guide(
+    pixels: &mut Vec<[u8; 3]>,
+    w: usize,
+    h: usize,
+    sequence: &[LedSequenceItem],
+    shape: &StripShape,
+    phase: f32,
+    tail: f32,
+) {
+    render_comet(pixels, w, h, sequence, shape, phase, tail, GUIDE_LIGHT);
+    if sequence.is_empty() || w < 2 || h < 2 {
+        return;
+    }
+    for (strip_index, item) in sequence.iter().enumerate() {
+        if let Some(mark) = guide_mark(strip_index, item, shape) {
+            paint_led(pixels, w, h, item, shape, mark);
         }
     }
 }
@@ -601,6 +676,68 @@ mod tests {
             index: 0,
             segment,
             local_index,
+        }
+    }
+
+    /// The guide, sampled the way the worker samples it: LED #1 green, the two
+    /// beside the stand red, each edge's ends blue, the rest dark or lit only
+    /// by the running light.
+    #[test]
+    fn the_guide_marks_the_start_the_gap_and_the_edge_ends_on_the_strip() {
+        let cal = LedCalibrationConfig {
+            counts: LedSegmentCounts {
+                top: 16,
+                right: 14,
+                bottom: 16,
+                left: 14,
+            },
+            bottom_missing: 3,
+            total_leds: 60,
+            start_anchor: "bottom-gap-left".to_string(),
+            ..lopsided_calibration()
+        };
+        let mut src = create_synthetic_frame_source(
+            cfg(TestPatternKind::Guide, TestPatternSpeed::Med),
+            Some(cal.clone()),
+            None,
+            None,
+        );
+        let frame = src.capture_frame().expect("synthetic frame");
+        let sequence = build_led_sequence(&cal);
+        let colors = crate::commands::led_calibration::sample_frame_for_sequence(
+            &frame,
+            &sequence,
+            &StripShape::of(&cal),
+            crate::commands::lighting_mode::SYNTHETIC_SAMPLE_WINDOW,
+        );
+        let at = |segment: LedSegment, local: u16| {
+            let index = sequence
+                .iter()
+                .position(|i| i.segment == segment && i.local_index == local)
+                .expect("an LED there");
+            (index, colors[index])
+        };
+
+        assert_eq!(colors[0], GUIDE_START, "LED #1");
+        assert_eq!(
+            at(LedSegment::Bottom, 8).0,
+            0,
+            "LED #1 is the gap's left side"
+        );
+        assert_eq!(
+            at(LedSegment::Bottom, 7).1,
+            GUIDE_GAP,
+            "the gap's right side"
+        );
+        for (segment, local) in [
+            (LedSegment::Top, 0),
+            (LedSegment::Top, 15),
+            (LedSegment::Right, 0),
+            (LedSegment::Right, 13),
+            (LedSegment::Bottom, 0),
+            (LedSegment::Left, 13),
+        ] {
+            assert_eq!(at(segment, local).1, GUIDE_EDGE_END, "{segment:?} {local}");
         }
     }
 

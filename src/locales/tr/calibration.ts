@@ -32,7 +32,7 @@ const calibration: Catalogue<typeof enCalibration> = {
     help: "Nasıl çalışır?",
     helpNumbers: "Bir kenara gel: − + ile değiştir ya da sayıya tıklayıp yaz",
     helpFlow: "Turuncu çizgi: 1. LED ve ışığın aktığı yön",
-    helpTest: "Test et, sonra şeritte ilk yanan LED'e tıkla",
+    helpTest: "Test: yeşil 1. LED, beyaz şeridin yönünde akar, mavi köşeleri, kırmızı standı gösterir",
     dockLabel: "LED kurulumu",
     test: "Test et",
     starting: "Başlıyor…",

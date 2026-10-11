@@ -127,14 +127,15 @@ export function createDefaultTestPatternFlow(initialConfig?: LedCalibrationConfi
     onConfigChange: (config) => {
       currentConfig = config;
     },
-    // A chase walks the strip in calibrated order, which is the thing LED
-    // Setup exists to verify. `ledCalibration` carries the *unsaved* editor
-    // layout so the test matches what is on screen, not the last save.
+    // The guide: LED #1, the corners and the stand gap marked, and a light
+    // walking the strip in calibrated order — what LED Setup exists to verify.
+    // `ledCalibration` carries the *unsaved* editor layout so the test matches
+    // what is on screen, not the last save.
     startPattern: async () => {
       const targets = await resolveTestTargets();
       await acquireHueForTest(targets);
       const result = await startLedTestPattern({
-        pattern: { kind: "chase", r: 255, g: 255, b: 255 },
+        pattern: { kind: "guide" },
         brightness: TEST_BRIGHTNESS,
         speed: "med",
         targets,

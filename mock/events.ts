@@ -137,6 +137,15 @@ function pixelAt(
     case "channelProbe":
       // The whole strip in one primary, as the real probe renders it.
       return slot === 0 ? [255, 0, 0] : slot === 1 ? [0, 255, 0] : [0, 0, 255];
+    case "guide": {
+      // LED #1 green over a white light walking the strip; the edge and gap
+      // marks need the layout, which this stream does not carry.
+      if (index === 0) return [0, 255, 0];
+      const distance = (index - (frame % count) + count) % count;
+      const falloff = distance < 5 ? 1 - distance / 5 : 0;
+      const level = Math.round(255 * falloff);
+      return [level, level, level];
+    }
   }
 }
 

@@ -69,6 +69,7 @@ export const LED_TEST_PATTERN_KIND = [
   "spiral",
   "gamut",
   "channelProbe",
+  "guide",
 ] as const;
 
 export type LedTestPatternKind = (typeof LED_TEST_PATTERN_KIND)[number];
@@ -85,6 +86,8 @@ export type LedTestPatternKind = (typeof LED_TEST_PATTERN_KIND)[number];
  *   Chip type, firmware profile and colour correction still apply. A slot
  *   above 2 is refused with `LED_TEST_PATTERN_INVALID_PARAMS`. Not offered by
  *   the pattern picker — a probe without a slot is not a probe.
+ * - `guide` is LED Setup's: LED #1 green, each edge's end LEDs blue, the two
+ *   beside the stand gap red, and a white light running in strip order.
  */
 export type LedTestPattern =
   | { kind: "solid"; r: number; g: number; b: number }
@@ -92,7 +95,8 @@ export type LedTestPattern =
   | { kind: "rainbow" }
   | { kind: "spiral" }
   | { kind: "gamut" }
-  | { kind: "channelProbe"; slot: 0 | 1 | 2 };
+  | { kind: "channelProbe"; slot: 0 | 1 | 2 }
+  | { kind: "guide" };
 
 /** Animation cadence for time-varying patterns (chase / rainbow / spiral). */
 export type TestPatternSpeed = "slow" | "med" | "fast";

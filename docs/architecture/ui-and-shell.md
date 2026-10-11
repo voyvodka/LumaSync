@@ -458,7 +458,13 @@ list) stops only where a person can find the place on the strip — corners and 
 sides; any other LED is picked on the canvas. Flipping the direction at a corner keeps LED #1 at that corner, on the edge the strip now
 leaves along, and an open strip is only ever read heading in from an end.
 
-**The canvas is static.** The strip shows the chase; the canvas does not replay it, because
+**Test plays the guide on the strip.** LED #1 green, each edge's two end LEDs blue, the two beside
+the stand gap red, and a white light running in strip order over them (`TestPatternKind::Guide`,
+`test_pattern.rs`) — the start, the direction, the corners and the gap at once, which a bare chase
+showed only as the light went by. It runs on the unsaved layout and restarts with each edit, as the
+chase did. Devices' Flash and colour-order Identify stay on the same synthetic source.
+
+**The canvas is static.** The strip shows the guide; the canvas does not replay it, because
 re-rendering the SVG every frame replaced the element under the pointer between press and release,
 so a click during a test — the one moment it matters — was lost. Picks go through one delegated
 listener, and the LED dots are pointer-only (`aria-hidden`): a few thousand buttons would bury the

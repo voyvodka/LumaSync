@@ -29,7 +29,7 @@ export default {
     help: "How it works",
     helpNumbers: "Point at an edge: − + change it, or click the number and type",
     helpFlow: "The amber line: LED #1 and the way the light runs",
-    helpTest: "Test, then click the LED that lit first on your strip",
+    helpTest: "Test: green is LED #1, white runs the way the strip goes, blue marks the corners, red the stand",
     dockLabel: "LED setup",
     test: "Test",
     starting: "Starting…",
