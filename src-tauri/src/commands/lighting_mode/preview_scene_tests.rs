@@ -274,3 +274,20 @@ fn the_latency_scene_measures_on_an_unsmoothed_worker_of_its_own() {
     assert!(owner.preview.latency_sink.is_none());
     assert!(!owner.preview.latency_worker);
 }
+
+/// A scene runs the user's Ambilight as a choice of it would: the intensity
+/// preset and the room map come with it, not only the brightness.
+#[test]
+fn a_scene_runs_the_users_ambilight_with_its_preset() {
+    let rig = Rig::new(RigSetup::default());
+    rig.seed(json!({ "lightingIntensityPreset": "subtle" }));
+    running(&rig, solid(5));
+
+    start(&rig, SceneKind::Spiral);
+
+    let preset = rig
+        .running()
+        .ambilight
+        .and_then(|ambilight| ambilight.lighting_smoothing_preset);
+    assert!(preset.is_some(), "the saved preset was dropped");
+}

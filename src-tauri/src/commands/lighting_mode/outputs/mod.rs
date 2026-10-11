@@ -646,6 +646,16 @@ fn usb_available<R: Runtime>(app: &AppHandle<R>) -> bool {
     app.state::<LocalOutputRegistry>().driven().is_some()
 }
 
+/// The user's Ambilight on `targets`, as a choice of it would apply it — the
+/// payload a preview scene borrows the lights with.
+pub(crate) fn ambilight_payload_for(
+    targets: &[OutputTarget],
+    stored: &StoredTuning,
+    persisted: Option<&PersistedShellState>,
+) -> LightingModeConfig {
+    payload_for(LightingModeKind::Ambilight, targets, stored, persisted)
+}
+
 /// The mode to apply: the newest payloads, stamped the way the frontend's
 /// hydration stamped them — display, smoothing preset and room geometry. The
 /// calibration and output stamps are filled by `apply_config_blocking`.

@@ -15,7 +15,7 @@ use super::led_test_pattern::{
     apply_and_broadcast, is_ambilight_start_ok, restore_mode_after_test,
 };
 use super::live::retune_ambilight_live;
-use super::outputs::power_off_left_wled_blocking;
+use super::outputs::{ambilight_payload_for, power_off_left_wled_blocking};
 use super::preview::build_twin_sink;
 use super::runtime::LightingRuntimeState;
 use super::snapshot::{OutputTarget, OutputTargets};
@@ -58,14 +58,14 @@ fn latency_sink<R: Runtime>(app: &AppHandle<R>) -> LatencySink {
 /// The outputs a scene lights: those the user chose that can be driven now, or
 /// every one that can when nothing was chosen. Hue only with its stream already
 /// up: starting it belongs to the lighting transaction, as for a test pattern.
-fn scene_targets(chosen: &OutputTargets, usb: bool, hue: bool) -> Vec<String> {
+fn scene_targets(chosen: &OutputTargets, usb: bool, hue: bool) -> Vec<OutputTarget> {
     let wants = |target: OutputTarget| chosen.is_empty() || chosen.contains(&target);
     let mut targets = Vec::new();
     if usb && wants(OutputTarget::Usb) {
-        targets.push(OutputTarget::Usb.as_str().to_string());
+        targets.push(OutputTarget::Usb);
     }
     if hue && wants(OutputTarget::Hue) {
-        targets.push(OutputTarget::Hue.as_str().to_string());
+        targets.push(OutputTarget::Hue);
     }
     targets
 }
@@ -92,11 +92,13 @@ pub fn start_scene_lighting<R: Runtime>(
         return Ok(SceneLighting::NoOutput);
     }
 
-    let mut config = LightingModeConfig {
-        kind: LightingModeKind::Ambilight,
-        targets: Some(targets),
-        ..LightingModeConfig::default()
-    };
+    // The user's Ambilight as a choice of it would run — preset, display and
+    // room map included — with the layout and output stamps filled after.
+    let mut config = ambilight_payload_for(
+        &targets,
+        &runtime_state.tuning.stored(),
+        read_persisted_shell_state(app).as_ref(),
+    );
     hydrate_mode_payload(&mut config, &|| read_persisted_shell_state(app));
     let measuring = kind == SceneKind::Latency;
     if measuring {
@@ -289,11 +291,17 @@ mod tests {
     #[test]
     fn a_scene_lights_the_chosen_outputs_it_can_reach() {
         let usb_only: OutputTargets = [OutputTarget::Usb].into_iter().collect();
-        assert_eq!(scene_targets(&usb_only, true, true), vec!["usb"]);
+        assert_eq!(
+            scene_targets(&usb_only, true, true),
+            vec![OutputTarget::Usb]
+        );
         assert!(scene_targets(&usb_only, false, true).is_empty());
         let none = OutputTargets::new();
-        assert_eq!(scene_targets(&none, true, true), vec!["usb", "hue"]);
-        assert_eq!(scene_targets(&none, false, true), vec!["hue"]);
+        assert_eq!(
+            scene_targets(&none, true, true),
+            vec![OutputTarget::Usb, OutputTarget::Hue]
+        );
+        assert_eq!(scene_targets(&none, false, true), vec![OutputTarget::Hue]);
         assert!(scene_targets(&none, false, false).is_empty());
     }
 }
