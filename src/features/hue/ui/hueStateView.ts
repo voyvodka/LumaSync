@@ -343,6 +343,15 @@ export const HUE_STATE_VIEW = {
     more: ["forget"],
     area: "change",
   },
+  gateCleared: {
+    word: "hue:state.idle",
+    tone: "ready",
+    note: note("hue:runtime.checklist.canStartNow", "hue-gate-cleared", ({ hue }) => hue.runtimeStatus?.code),
+    primary: "startAgain",
+    secondary: [],
+    more: ["validate", "forget"],
+    area: "change",
+  },
   authError: {
     word: "hue:state.authError",
     tone: "error",

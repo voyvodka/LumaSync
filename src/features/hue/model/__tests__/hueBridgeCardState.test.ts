@@ -19,6 +19,7 @@ const BASE: HueBridgeCardStateInput = {
   isPairing: false,
   selectedAreaId: "area-1",
   isReadinessStale: false,
+  readinessPassed: false,
   areaHeldByAnotherApp: false,
 };
 
@@ -296,6 +297,28 @@ describe("deriveHueBridgeCardState", () => {
 
     it("keeps the checklist for a reachable bridge", () => {
       expect(deriveHueBridgeCardState({ ...BASE, runtimeStatus: gate })).toBe("gateBlocked");
+    });
+  });
+
+  // A launch resume that lapsed while the bridge was silent leaves the refusal
+  // as the last status for good; Revalidate passing used to change nothing.
+  describe("a check that passes after a refused start", () => {
+    const gate = runtime({ code: "CONFIG_NOT_READY_GATE_BLOCKED" });
+
+    it("offers the start", () => {
+      expect(deriveHueBridgeCardState({ ...BASE, runtimeStatus: gate, readinessPassed: true })).toBe("gateCleared");
+    });
+
+    it("leaves an unreachable bridge offline", () => {
+      expect(
+        deriveHueBridgeCardState({ ...BASE, runtimeStatus: gate, readinessPassed: true, bridgeUnreachable: true }),
+      ).toBe("offline");
+    });
+
+    it("leaves an area another app holds busy", () => {
+      expect(
+        deriveHueBridgeCardState({ ...BASE, runtimeStatus: gate, readinessPassed: true, areaHeldByAnotherApp: true }),
+      ).toBe("areaBusy");
     });
   });
 

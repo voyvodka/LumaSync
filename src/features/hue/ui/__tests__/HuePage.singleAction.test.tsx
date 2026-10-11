@@ -55,6 +55,17 @@ describe("HuePage — one Validate control", () => {
     expectOneRowValidate("hue-gate-blocked", revalidateArea);
   });
 
+  it("a refused start the bridge has answered since offers the start on the row", () => {
+    const retryRuntimeTarget = vi.fn(async () => {});
+    renderCard(hueState({ runtimeStatus: runtime("Idle", "CONFIG_NOT_READY_GATE_BLOCKED"), retryRuntimeTarget }));
+    expect(screen.getByTestId("hue-gate-cleared")).toHaveTextContent("hue:runtime.checklist.canStartNow");
+    const start = screen.getByRole("button", { name: "hue:page.startAgain" });
+    expect(start.className).toMatch(/primary/);
+    expect(screen.getByTestId("hue-bridge-row")).toContainElement(start);
+    fireEvent.click(start);
+    expect(retryRuntimeTarget).toHaveBeenCalledWith("hue");
+  });
+
   it("the busy label stays on the single control while a check runs", () => {
     renderCard(hueState({ isReadinessStale: true, isCheckingReadiness: true }));
     const busy = screen.getAllByRole("button", { name: "hue:busy.checking" });
@@ -71,7 +82,11 @@ const CARD_STATES: Array<{ name: string; hue: UseHueOnboardingResult }> = [
     hue: hueState({ runtimeStatusReadFailure: { code: "HUE_STREAM_STATUS_UNAVAILABLE", message: "x", details: null } }),
   },
   { name: "stale", hue: hueState({ isReadinessStale: true }) },
-  { name: "gateBlocked", hue: hueState({ runtimeStatus: runtime("Idle", "CONFIG_NOT_READY_GATE_BLOCKED") }) },
+  {
+    name: "gateBlocked",
+    hue: hueState({ canStartHue: false, runtimeStatus: runtime("Idle", "CONFIG_NOT_READY_GATE_BLOCKED") }),
+  },
+  { name: "gateCleared", hue: hueState({ runtimeStatus: runtime("Idle", "CONFIG_NOT_READY_GATE_BLOCKED") }) },
   { name: "stopPartial", hue: hueState({ runtimeStatus: runtime("Failed", "HUE_STOP_TIMEOUT_PARTIAL") }) },
   { name: "streamFailed", hue: hueState({ runtimeStatus: runtime("Failed", "TRANSIENT_RETRY_EXHAUSTED") }) },
   { name: "reconnecting", hue: hueState({ runtimeStatus: runtime("Reconnecting", "TRANSIENT_RETRY_SCHEDULED") }) },

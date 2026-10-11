@@ -94,6 +94,7 @@ export function HuePage({
     isPairing: hue.isPairing,
     selectedAreaId,
     isReadinessStale: hue.isReadinessStale,
+    readinessPassed: hue.canStartHue && !hue.isReadinessStale,
     areaHeldByAnotherApp: isAreaHeldByAnotherApp(selectedArea),
   });
   const view = state ? HUE_STATE_VIEW[state] : null;
