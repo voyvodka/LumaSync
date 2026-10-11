@@ -28,7 +28,7 @@ use crate::commands::hue::state_store::{
     apply_hue_channels_with_context, HueActiveOutputContext, HueOutputLive,
 };
 use crate::commands::led_calibration::{
-    build_led_sequence, sample_frame_for_sequence, LedCalibrationConfig,
+    build_led_sequence, sample_frame_for_sequence, LedCalibrationConfig, StripShape,
 };
 use crate::commands::led_output::{
     scale_brightness, ColorCorrectionConfig, FirmwareProfile, LedChipType, LedOutputBridge,
@@ -219,11 +219,8 @@ pub(super) fn start_ambilight_worker(
     // from edge regions of the captured frame.
     // When led_calibration is absent we fall back to a minimal 1-LED sequence
     // so the legacy single-zone firmware path keeps working unchanged.
-    let (led_sequence, led_counts, total_leds) = if let Some(ref cal) = led_calibration {
-        let seq = build_led_sequence(cal);
-        let counts = cal.counts.clone();
-        let n = cal.total_leds;
-        (seq, counts, n)
+    let (led_sequence, strip_shape, total_leds) = if let Some(ref cal) = led_calibration {
+        (build_led_sequence(cal), StripShape::of(cal), cal.total_leds)
     } else {
         // Fallback: 1 LED centred on screen (backward-compat with v1.3 firmware).
         use crate::commands::led_calibration::LedSegmentCounts as Counts;
@@ -243,7 +240,11 @@ pub(super) fn start_ambilight_worker(
             direction: "cw".to_string(),
             total_leds: 1,
         };
-        (build_led_sequence(&fallback_cal), fallback_cal.counts, 1u16)
+        (
+            build_led_sequence(&fallback_cal),
+            StripShape::of(&fallback_cal),
+            1u16,
+        )
     };
     info!(
         "[start_ambilight_worker] led sequence resolved — total_leds={total_leds} sequence_len={} calibration_present={}",
@@ -280,7 +281,7 @@ pub(super) fn start_ambilight_worker(
     };
     // No border detection for the initial warmup frame — detection runs in the worker loop.
     let initial_sampled =
-        sample_frame_for_sequence(&initial_frame, &led_sequence, &led_counts, sample_window);
+        sample_frame_for_sequence(&initial_frame, &led_sequence, &strip_shape, sample_window);
     telemetry_window.record_capture();
 
     // Built once at worker start; brightness and colour order are synced each
@@ -361,7 +362,7 @@ pub(super) fn start_ambilight_worker(
             !synthetic && std::env::var("LUMASYNC_AMBILIGHT_LEGACY").map_or(true, |v| v != "1");
         let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
             led_sequence,
-            led_counts,
+            strip_shape,
             sample_window,
             scene_enabled,
             strip_topology: strip_topology_for(led_calibration.as_ref()),

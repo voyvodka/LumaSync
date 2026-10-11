@@ -31,7 +31,7 @@ use crate::commands::hue::state_store::{
 use crate::commands::hue_intensity::LightingSmoothingPreset;
 use crate::commands::led_calibration::{
     build_led_sequence, sample_frame_for_sequence, sample_frame_within_insets,
-    LedCalibrationConfig, LedSegment, LedSegmentCounts, LedSequenceItem,
+    LedCalibrationConfig, LedSegment, LedSegmentCounts, LedSequenceItem, StripShape,
 };
 use crate::commands::led_output::{
     apply_saturation_to_pixel, encode_packet_for_output, ColorCorrectionConfig, EncoderPlan,
@@ -287,7 +287,7 @@ fn reference_saturate(colors: &mut [[u8; 3]], saturation: f32) {
 
 struct ReferenceLoop {
     led_sequence: Vec<LedSequenceItem>,
-    led_counts: LedSegmentCounts,
+    strip_shape: StripShape,
     sample_window: f32,
     scene_enabled: bool,
     scene: SceneAnalyzer,
@@ -343,7 +343,7 @@ impl ReferenceLoop {
         let hue_table = hue_sample_table(&hue_channels, initial_geometry.as_ref());
         Self {
             led_sequence: build_led_sequence(led_calibration),
-            led_counts: led_calibration.counts.clone(),
+            strip_shape: StripShape::of(led_calibration),
             sample_window: LIVE_SAMPLE_WINDOW,
             scene_enabled: true,
             scene: SceneAnalyzer::new(),
@@ -382,7 +382,7 @@ impl ReferenceLoop {
         let initial_sampled = sample_frame_for_sequence(
             frame,
             &self.led_sequence,
-            &self.led_counts,
+            &self.strip_shape,
             self.sample_window,
         );
         self.strip_state = initial_sampled.iter().map(|c| c.map(f32::from)).collect();
@@ -405,7 +405,7 @@ impl ReferenceLoop {
         let mut sampled = sample_frame_within_insets(
             raw_frame,
             &self.led_sequence,
-            &self.led_counts,
+            &self.strip_shape,
             self.sample_window,
             self.border_cache.insets(),
         );
@@ -691,7 +691,7 @@ fn worker_output_matches_reference_adalight_ws2812b() {
 struct PipelineRun {
     pipeline: AmbilightFramePipeline,
     led_sequence: Vec<LedSequenceItem>,
-    led_counts: LedSegmentCounts,
+    strip_shape: StripShape,
     sink: SerialSink,
     now: Instant,
 }
@@ -716,7 +716,7 @@ impl PipelineRun {
         let led_sequence = build_led_sequence(led_calibration);
         let pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
             led_sequence: led_sequence.clone(),
-            led_counts: led_calibration.counts.clone(),
+            strip_shape: StripShape::of(led_calibration),
             sample_window: LIVE_SAMPLE_WINDOW,
             scene_enabled: true,
             strip_topology: strip_topology_for(Some(led_calibration)),
@@ -729,7 +729,7 @@ impl PipelineRun {
         Self {
             pipeline,
             led_sequence,
-            led_counts: led_calibration.counts.clone(),
+            strip_shape: StripShape::of(led_calibration),
             sink,
             now: Instant::now(),
         }
@@ -749,7 +749,7 @@ impl PipelineRun {
         let sampled = sample_frame_for_sequence(
             frame,
             &self.led_sequence,
-            &self.led_counts,
+            &self.strip_shape,
             LIVE_SAMPLE_WINDOW,
         );
         self.pipeline.seed_strip(&sampled, self.now);
@@ -1102,7 +1102,7 @@ fn first_outputs(
 ) -> (Vec<[u8; 3]>, Option<Vec<HueRgb>>) {
     let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
         led_sequence: build_led_sequence(led_calibration),
-        led_counts: led_calibration.counts.clone(),
+        strip_shape: StripShape::of(led_calibration),
         sample_window,
         scene_enabled: false,
         strip_topology: strip_topology_for(Some(led_calibration)),
@@ -1268,7 +1268,7 @@ fn black_border_detection_never_crops_a_test_pattern() {
     let painted = sample_frame_for_sequence(
         &frame,
         &build_led_sequence(&led_calibration),
-        &led_calibration.counts,
+        &StripShape::of(&led_calibration),
         SYNTHETIC_SAMPLE_WINDOW,
     );
     assert_eq!(strip, painted, "the strip shows the pattern as painted");
@@ -1289,7 +1289,7 @@ fn live_saturation_reaches_hue() {
         let calibration = strip_164();
         let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
             led_sequence: build_led_sequence(&calibration),
-            led_counts: calibration.counts.clone(),
+            strip_shape: StripShape::of(&calibration),
             sample_window: LIVE_SAMPLE_WINDOW,
             scene_enabled: false,
             strip_topology: strip_topology_for(Some(&calibration)),
@@ -1818,7 +1818,7 @@ fn report_scenario(
             std::hint::black_box(sample_frame_within_insets(
                 frame_at(i),
                 &sequence,
-                &led_calibration.counts,
+                &StripShape::of(led_calibration),
                 LIVE_SAMPLE_WINDOW,
                 &insets,
             ));
@@ -1840,7 +1840,7 @@ fn report_scenario(
     let sampled = sample_frame_for_sequence(
         frame_at(0),
         &sequence,
-        &led_calibration.counts,
+        &StripShape::of(led_calibration),
         LIVE_SAMPLE_WINDOW,
     );
     let topology = strip_topology_for(Some(led_calibration));
@@ -1941,7 +1941,7 @@ fn a_few_bulbs_never_go_dark_on_the_wire() {
     for &(tag, id) in super::config::EffectId::TAGS {
         let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
             led_sequence: build_led_sequence(&led_calibration),
-            led_counts: led_calibration.counts.clone(),
+            strip_shape: StripShape::of(&led_calibration),
             sample_window: SYNTHETIC_SAMPLE_WINDOW,
             scene_enabled: false,
             strip_topology: strip_topology_for(Some(&led_calibration)),
@@ -2007,7 +2007,7 @@ fn a_steady_effect_step_allocates_nothing() {
     for &(_, id) in super::config::EffectId::TAGS {
         let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
             led_sequence: build_led_sequence(&led_calibration),
-            led_counts: led_calibration.counts.clone(),
+            strip_shape: StripShape::of(&led_calibration),
             sample_window: SYNTHETIC_SAMPLE_WINDOW,
             scene_enabled: false,
             strip_topology: strip_topology_for(Some(&led_calibration)),

@@ -21,7 +21,7 @@ use crate::commands::ambilight_capture::CapturedFrame;
 use crate::commands::ambilight_scene::{LightSetState, LightTopology, SceneAnalyzer};
 use crate::commands::hue::frame::{HueAreaChannel, HueRgb};
 use crate::commands::led_calibration::{
-    sample_frame_within_insets, LedCalibrationConfig, LedSegmentCounts, LedSequenceItem,
+    sample_frame_within_insets, LedCalibrationConfig, LedSequenceItem, StripShape,
 };
 use crate::commands::led_output::{apply_saturation_to_pixel, ColorCorrectionConfig, EncoderPlan};
 
@@ -57,7 +57,7 @@ pub(super) fn strip_topology_for(led_calibration: Option<&LedCalibrationConfig>)
 /// room geometry, which arrives live through its cell.
 pub(super) struct FramePipelineConfig {
     pub led_sequence: Vec<LedSequenceItem>,
-    pub led_counts: LedSegmentCounts,
+    pub strip_shape: StripShape,
     pub sample_window: f32,
     pub scene_enabled: bool,
     pub strip_topology: LightTopology,
@@ -82,7 +82,7 @@ pub(super) struct FrameSettings {
 
 pub(super) struct AmbilightFramePipeline {
     led_sequence: Vec<LedSequenceItem>,
-    led_counts: LedSegmentCounts,
+    strip_shape: StripShape,
     sample_window: f32,
     scene_enabled: bool,
     scene: SceneAnalyzer,
@@ -121,7 +121,7 @@ impl AmbilightFramePipeline {
             });
         Self {
             led_sequence: config.led_sequence,
-            led_counts: config.led_counts,
+            strip_shape: config.strip_shape,
             sample_window: config.sample_window,
             scene_enabled: config.scene_enabled,
             scene: SceneAnalyzer::new(),
@@ -188,7 +188,7 @@ impl AmbilightFramePipeline {
         sample_frame_within_insets(
             frame,
             &self.led_sequence,
-            &self.led_counts,
+            &self.strip_shape,
             self.sample_window,
             self.border_cache.insets(),
         )
@@ -338,7 +338,7 @@ impl AmbilightFramePipeline {
         let drawn = effect.draw(
             now,
             &self.led_sequence,
-            &self.led_counts,
+            &self.strip_shape,
             self.hue_channels.as_deref(),
             geometry.as_ref(),
         );

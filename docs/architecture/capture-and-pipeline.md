@@ -164,11 +164,12 @@ was cropped. Three edges are deliberate:
 `src/features/preview/__tests__/ledScreenGeometry.golden.json`, read by `cargo test` through
 `include_str!` and by vitest. Rust is the authority — it decides what the LEDs show — and the
 fixture is regenerated from it by the ignored `write_led_screen_geometry_golden` test. The twin
-overlay draws each dot at its LED's sampling position, pulled in from the viewport edge. Two
-consequences are the sampler's, not the twin's: `bottomMissing` does not move bottom LEDs (they
-spread across the whole bottom edge, while the calibration editor draws the physical gap — so a
-gap wider than the bottom LEDs leaves the middle ones sampling screen that has no LED under it), and
-a one-LED edge samples its local-0 corner.
+overlay draws each dot at its LED's sampling position, pulled in from the viewport edge. Each
+edge's pitches spread end to end, and the bottom counts the stand gap (`bottomMissing`) among them
+(`StripShape`): its LEDs sit either side of the gap where LED Setup draws them, the right-hand run
+`floor(bottom / 2)` long, so each samples the screen above where it really is. Spreading them over
+the whole edge instead, as the sampler once did, put the LEDs beside the stand under screen several
+pitches away and showed the twin a strip with no gap. A one-LED edge samples its local-0 corner.
 
 **The macOS screen-recording permission is probed, never inferred.**
 `src-tauri/src/commands/screen_capture_permission.rs` owns two CoreGraphics calls with very

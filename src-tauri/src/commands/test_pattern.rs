@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use super::ambilight_capture::{AmbilightCaptureError, AmbilightFrameSource, CapturedFrame};
 use super::led_calibration::{
     build_led_sequence, led_to_screen_pos, LedCalibrationConfig, LedSegment, LedSegmentCounts,
-    LedSequenceItem,
+    LedSequenceItem, StripShape,
 };
 
 /// Long axis of the rendered synthetic frame. Mirrors the macOS/Windows
@@ -207,7 +207,7 @@ pub struct SyntheticFrameSource {
     total_leds: u16,
     /// Strip layout, so the comet can paint one exact block per LED.
     sequence: Vec<LedSequenceItem>,
-    counts: LedSegmentCounts,
+    shape: StripShape,
     width: u32,
     height: u32,
     phase: f32,
@@ -233,15 +233,18 @@ impl SyntheticFrameSource {
             .map(|c| c.total_leds)
             .filter(|n| *n > 0)
             .unwrap_or(FALLBACK_TOTAL_LEDS);
-        let (sequence, counts) = match calibration.as_ref() {
-            Some(cal) => (build_led_sequence(cal), cal.counts.clone()),
+        let (sequence, shape) = match calibration.as_ref() {
+            Some(cal) => (build_led_sequence(cal), StripShape::of(cal)),
             None => (
                 Vec::new(),
-                LedSegmentCounts {
-                    top: 0,
-                    right: 0,
-                    bottom: 0,
-                    left: 0,
+                StripShape {
+                    counts: LedSegmentCounts {
+                        top: 0,
+                        right: 0,
+                        bottom: 0,
+                        left: 0,
+                    },
+                    bottom_missing: 0,
                 },
             ),
         };
@@ -257,7 +260,7 @@ impl SyntheticFrameSource {
             speed: config.speed,
             total_leds,
             sequence,
-            counts,
+            shape,
             width,
             height,
             phase,
@@ -308,7 +311,7 @@ impl SyntheticFrameSource {
                     w,
                     h,
                     &self.sequence,
-                    &self.counts,
+                    &self.shape,
                     self.phase,
                     self.tail_fraction(),
                     [r, g, b],
@@ -354,19 +357,20 @@ impl AmbilightFrameSource for SyntheticFrameSource {
 // ---------------------------------------------------------------------------
 
 /// Fraction along its own segment for a strip item, matching `led_to_screen_pos`.
-fn segment_fraction(item: &LedSequenceItem, counts: &LedSegmentCounts) -> f32 {
-    let count = item.segment.count(counts);
-    if item.local_index == 0 || count <= 1 {
+fn segment_fraction(item: &LedSequenceItem, shape: &StripShape) -> f32 {
+    let pitches = shape.pitches(item.segment);
+    let pitch = shape.pitch_of(item);
+    if pitch == 0 || pitches <= 1 {
         0.0
     } else {
-        item.local_index as f32 / (count - 1) as f32
+        pitch as f32 / (pitches - 1) as f32
     }
 }
 
 /// Arc position of an LED, derived from its segment rather than its pixel so a
 /// corner LED cannot be attributed to the neighbouring edge by a distance tie.
-fn led_arc(item: &LedSequenceItem, counts: &LedSegmentCounts, w: f32, h: f32) -> f32 {
-    let frac = segment_fraction(item, counts);
+fn led_arc(item: &LedSequenceItem, shape: &StripShape, w: f32, h: f32) -> f32 {
+    let frac = segment_fraction(item, shape);
     let total = 2.0 * (w + h);
     match item.segment {
         LedSegment::Top => frac * w / total,
@@ -391,7 +395,7 @@ fn render_comet(
     w: usize,
     h: usize,
     sequence: &[LedSequenceItem],
-    counts: &LedSegmentCounts,
+    shape: &StripShape,
     phase: f32,
     tail: f32,
     rgb: [u8; 3],
@@ -406,7 +410,7 @@ fn render_comet(
     let depth = ((EDGE_THICKNESS * h.min(w) as f32) as usize).max(2);
 
     for item in sequence {
-        let behind = (phase - led_arc(item, counts, w as f32, h as f32)).rem_euclid(1.0);
+        let behind = (phase - led_arc(item, shape, w as f32, h as f32)).rem_euclid(1.0);
         if behind >= tail {
             continue;
         }
@@ -419,10 +423,10 @@ fn render_comet(
             (rgb[2] as f32 * intensity).round() as u8,
         ];
 
-        let (nx, ny) = led_to_screen_pos(item, counts);
+        let (nx, ny) = led_to_screen_pos(item, shape);
         let cx = (nx * wf).round() as usize;
         let cy = (ny * hf).round() as usize;
-        let count = item.segment.count(counts).max(2) as f32;
+        let count = shape.pitches(item.segment).max(2) as f32;
         let horizontal = matches!(item.segment, LedSegment::Top | LedSegment::Bottom);
         // Half a pitch either side — the LED owns its own cell and no more.
         let half = if horizontal {
@@ -707,7 +711,7 @@ mod tests {
     /// ~1.8x the speed of the long ones.
     #[test]
     fn perimeter_arc_is_weighted_by_edge_length() {
-        let counts = lopsided_calibration().counts;
+        let counts = StripShape::of(&lopsided_calibration());
         let (w, h) = (16.0_f32, 9.0_f32);
         let perimeter = 2.0 * (w + h);
         let at = |seg, idx| led_arc(&seq_item(seg, idx), &counts, w, h);
@@ -735,7 +739,7 @@ mod tests {
 
     #[test]
     fn perimeter_arc_walks_the_canonical_strip_order() {
-        let counts = lopsided_calibration().counts;
+        let counts = StripShape::of(&lopsided_calibration());
         let (w, h) = (16.0_f32, 9.0_f32);
         // top L→R, right T→B, bottom R→L, left B→T — strictly increasing.
         let stops = [
@@ -772,7 +776,7 @@ mod tests {
             w as usize,
             h as usize,
             &sequence,
-            &cal.counts,
+            &StripShape::of(&cal),
             phase,
             tail,
             [255, 255, 255],
@@ -781,7 +785,7 @@ mod tests {
         crate::commands::led_calibration::sample_frame_for_sequence(
             &frame,
             &sequence,
-            &cal.counts,
+            &StripShape::of(&cal),
             crate::commands::lighting_mode::SYNTHETIC_SAMPLE_WINDOW,
         )
     }
@@ -818,7 +822,7 @@ mod tests {
                 w as usize,
                 h as usize,
                 &sequence,
-                &cal.counts,
+                &StripShape::of(&cal),
                 phase,
                 0.02,
                 [200, 0, 0],
@@ -844,7 +848,7 @@ mod tests {
             .find(|i| i.segment == LedSegment::Top && i.local_index == 30)
             .expect("a mid-top LED");
         let (w, h) = frame_size_for_aspect(WIDE);
-        let phase = led_arc(head, &cal.counts, w as f32, h as f32);
+        let phase = led_arc(head, &StripShape::of(&cal), w as f32, h as f32);
 
         let sampled = sampled_comet(phase, 0.015);
         let head_color = sampled[head.index];
@@ -863,7 +867,7 @@ mod tests {
             .find(|i| i.segment == LedSegment::Top && i.local_index == 30)
             .expect("a mid-top LED");
         let (w, h) = frame_size_for_aspect(WIDE);
-        let phase = led_arc(head, &cal.counts, w as f32, h as f32);
+        let phase = led_arc(head, &StripShape::of(&cal), w as f32, h as f32);
         let sampled = sampled_comet(phase, 0.015);
 
         let at = |offset: i32| {
@@ -889,7 +893,7 @@ mod tests {
                 .iter()
                 .find(|i| i.segment == segment && i.local_index == local)
                 .expect("led");
-            let phase = led_arc(head, &cal.counts, w as f32, h as f32);
+            let phase = led_arc(head, &StripShape::of(&cal), w as f32, h as f32);
             sampled_comet(phase, 0.03)
                 .iter()
                 .filter(|c| c[0] > 0)

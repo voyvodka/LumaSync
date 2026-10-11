@@ -22,18 +22,17 @@
  *   - Bottom edge: local 0 = RIGHT,  p-1 = LEFT   (R → L)
  *   - Left edge:   local 0 = BOTTOM, q-1 = TOP    (B → T)
  *
- * The sampler ignores `bottomMissing` — bottom LEDs spread across the whole
- * bottom edge — so the twin does too. The calibration editor still draws the
- * physical gap: that is a picture of the strip, this is a picture of what each
- * LED shows.
+ * Each edge's LED pitches spread end to end; the bottom counts the stand gap
+ * (`bottomMissing`) among its pitches, so its LEDs sit either side of the gap
+ * where LED Setup draws them — and sample the screen above where they are.
  */
 
 import { buildLedSequence, type LedSequenceItem } from "../calibration/model/indexMapping";
-import type {
-  LedCalibrationConfig,
-  LedSegmentCounts,
-  LedSegmentKey,
-} from "../calibration/model/contracts";
+import type { LedCalibrationConfig, LedSegmentKey } from "../calibration/model/contracts";
+import { gapRightCount } from "../calibration/model/startPoint";
+
+/** What an LED's place depends on: the edge counts and the stand gap. */
+export type StripPlacement = Pick<LedCalibrationConfig, "counts" | "bottomMissing">;
 
 /** How far the dot row sits in from the viewport edge (fraction of W/H). */
 const EDGE_INSET = 0.022;
@@ -60,10 +59,15 @@ export interface TwinLedPosition {
  */
 export function ledScreenPosition(
   item: Pick<LedSequenceItem, "segment" | "localIndex">,
-  counts: LedSegmentCounts,
+  { counts, bottomMissing }: StripPlacement,
 ): { x: number; y: number } {
   const count = counts[item.segment];
-  const frac = item.localIndex === 0 || count <= 1 ? 0 : item.localIndex / (count - 1);
+  // A gap needs an LED on each side; the bottom runs right to left, and the
+  // LEDs past the right-hand run sit beyond it.
+  const gap = item.segment === "bottom" && count >= 2 ? bottomMissing : 0;
+  const pitches = count + gap;
+  const pitch = gap > 0 && item.localIndex >= gapRightCount(count) ? item.localIndex + gap : item.localIndex;
+  const frac = pitch === 0 || pitches <= 1 ? 0 : pitch / (pitches - 1);
   switch (item.segment) {
     case "top":
       return { x: frac, y: 0 };
@@ -92,9 +96,8 @@ function acrossEdge(value: number): number {
  * `result[N]` is the screen position of strip LED #N.
  */
 export function computeTwinLedPositions(config: LedCalibrationConfig): TwinLedPosition[] {
-  const { counts } = config;
   return buildLedSequence(config).map((item, stripIndex) => {
-    const { x, y } = ledScreenPosition(item, counts);
+    const { x, y } = ledScreenPosition(item, config);
     const horizontal = item.segment === "top" || item.segment === "bottom";
     return {
       index: stripIndex,

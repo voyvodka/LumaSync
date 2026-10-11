@@ -8,7 +8,7 @@ use std::f32::consts::TAU;
 
 use super::noise::seed_of;
 use crate::commands::hue::frame::HueAreaChannel;
-use crate::commands::led_calibration::{led_to_screen_pos, LedSegmentCounts, LedSequenceItem};
+use crate::commands::led_calibration::{led_to_screen_pos, LedSequenceItem, StripShape};
 use crate::commands::room_affinity::DEFAULT_TV_MOUNT_HEIGHT_FRACTION;
 use crate::models::room_map::RoomGeometry;
 
@@ -80,7 +80,7 @@ pub(crate) fn screen_in_room(geometry: Option<&RoomGeometry>) -> Screen {
 /// The strip's LEDs around the screen, in strip order.
 pub(crate) fn strip_emitters(
     sequence: &[LedSequenceItem],
-    counts: &LedSegmentCounts,
+    shape: &StripShape,
     screen: &Screen,
 ) -> Vec<Emitter> {
     let last = sequence.len().saturating_sub(1).max(1) as f32;
@@ -88,7 +88,7 @@ pub(crate) fn strip_emitters(
         .iter()
         .enumerate()
         .map(|(i, item)| {
-            let (sx, sy) = led_to_screen_pos(item, counts);
+            let (sx, sy) = led_to_screen_pos(item, shape);
             Emitter {
                 pos: [
                     screen.center[0] + (sx * 2.0 - 1.0) * screen.half_width,

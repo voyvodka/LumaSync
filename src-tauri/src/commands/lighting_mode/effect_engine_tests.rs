@@ -17,7 +17,7 @@ use super::effects::{
 };
 use crate::commands::hue::frame::{HueAreaChannel, HueScreenRegion};
 use crate::commands::led_calibration::{
-    build_led_sequence, LedCalibrationConfig, LedSegmentCounts, LedSequenceItem,
+    build_led_sequence, LedCalibrationConfig, LedSegmentCounts, LedSequenceItem, StripShape,
 };
 
 fn hue_channel(channel_id: u8, x: f32, y: f32, z: Option<f32>) -> HueAreaChannel {
@@ -31,7 +31,7 @@ fn hue_channel(channel_id: u8, x: f32, y: f32, z: Option<f32>) -> HueAreaChannel
     }
 }
 
-fn strip(total: u16) -> (Vec<LedSequenceItem>, LedSegmentCounts) {
+fn strip(total: u16) -> (Vec<LedSequenceItem>, StripShape) {
     let top = total / 3;
     let bottom = total / 3;
     let side = (total - top - bottom) / 2;
@@ -52,7 +52,7 @@ fn strip(total: u16) -> (Vec<LedSequenceItem>, LedSegmentCounts) {
         direction: "cw".to_string(),
         total_leds: total,
     };
-    (build_led_sequence(&config), counts)
+    (build_led_sequence(&config), StripShape::of(&config))
 }
 
 fn stage(effect: EffectPayload) -> (EffectStage, Arc<Mutex<EffectPayload>>, EffectClockSlot) {

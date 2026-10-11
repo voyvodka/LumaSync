@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::commands::hue::frame::HueAreaChannel;
-use crate::commands::led_calibration::{LedSegmentCounts, LedSequenceItem};
+use crate::commands::led_calibration::{LedSequenceItem, StripShape};
 use crate::models::room_map::RoomGeometry;
 
 use super::config::{unix_ms_now, EffectId, EffectPayload};
@@ -229,7 +229,7 @@ impl EffectStage {
         &mut self,
         now: Instant,
         sequence: &[LedSequenceItem],
-        counts: &LedSegmentCounts,
+        shape: &StripShape,
         hue_channels: Option<&[HueAreaChannel]>,
         geometry: Option<&RoomGeometry>,
     ) -> Drawn<'_> {
@@ -237,7 +237,7 @@ impl EffectStage {
         let clock = self.advance_clock(now);
         if self.lights.is_none() {
             let screen = screen_in_room(geometry);
-            let strip = strip_emitters(sequence, counts, &screen);
+            let strip = strip_emitters(sequence, shape, &screen);
             let hue = hue_channels
                 .map(|channels| hue_emitters(channels, geometry, &screen))
                 .unwrap_or_default();
