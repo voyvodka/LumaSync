@@ -8,6 +8,8 @@ use tauri::{
     window::Color, AppHandle, LogicalPosition, LogicalSize, Manager, Position, Runtime, WebviewUrl,
     WebviewWindow, WebviewWindowBuilder,
 };
+#[cfg(target_os = "windows")]
+use tauri::{PhysicalPosition, PhysicalSize};
 
 use crate::commands::calibration::{build_transparent_overlay, DisplayInfoPayload};
 use crate::commands::shell_state;
@@ -90,22 +92,42 @@ pub(super) fn reuse_on_display<R: Runtime>(
     window: &WebviewWindow<R>,
     display: &DisplayInfoPayload,
 ) -> Result<(), String> {
-    let scale = if display.scale_factor.is_finite() && display.scale_factor > 0.0 {
-        display.scale_factor
-    } else {
-        1.0
-    };
-    window
-        .set_position(Position::Logical(LogicalPosition::new(
-            f64::from(display.x) / scale,
-            f64::from(display.y) / scale,
+    // Windows converts a logical position with the scale of the monitor the
+    // window is on *now* — the previous display — so a kept window crossing
+    // to a display of another scale lands off by their ratio. The monitor's
+    // own physical numbers need no conversion. macOS places in points, which
+    // the target's scale gives.
+    #[cfg(target_os = "windows")]
+    let placed = window
+        .set_position(Position::Physical(PhysicalPosition::new(
+            display.x, display.y,
         )))
         .and_then(|()| {
-            window.set_size(LogicalSize::new(
-                f64::from(display.width) / scale,
-                f64::from(display.height) / scale,
+            window.set_size(PhysicalSize::new(
+                display.width.max(1),
+                display.height.max(1),
             ))
-        })
+        });
+    #[cfg(not(target_os = "windows"))]
+    let placed = {
+        let scale = if display.scale_factor.is_finite() && display.scale_factor > 0.0 {
+            display.scale_factor
+        } else {
+            1.0
+        };
+        window
+            .set_position(Position::Logical(LogicalPosition::new(
+                f64::from(display.x) / scale,
+                f64::from(display.y) / scale,
+            )))
+            .and_then(|()| {
+                window.set_size(LogicalSize::new(
+                    f64::from(display.width) / scale,
+                    f64::from(display.height) / scale,
+                ))
+            })
+    };
+    placed
         .and_then(|()| window.reload())
         .and_then(|()| window.show())
         .map_err(|error| format!("could not bring {} back: {error}", window.label()))

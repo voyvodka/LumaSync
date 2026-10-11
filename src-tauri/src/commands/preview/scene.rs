@@ -14,7 +14,9 @@
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime};
 
-use super::session::{emit_session, PreviewSession, PreviewSessionResult, PreviewSessionState};
+use super::session::{
+    emit_session, PreviewSession, PreviewSessionResult, PreviewSessionState, SceneSet,
+};
 use super::windows::{build_scene, next_scene_label, raise_over_scene, reuse_on_display};
 use crate::commands::ambilight_capture;
 use crate::commands::calibration::list_displays;
@@ -119,20 +121,25 @@ async fn except_from_exclusion(window: Option<u32>) {
 /// scene started right after finds no window to reuse and builds its own. The
 /// lights are the caller's — restored by a stop, or already the user's after a
 /// mode change. Blocks on the capture filter.
+/// Hidden for the next scene rather than destroyed, as the twin is kept: a
+/// destroyed webview window is never freed.
+fn park_scene_window<R: Runtime>(app: &AppHandle<R>, state: &PreviewSessionState, label: String) {
+    if let Some(window) = app.get_webview_window(&label) {
+        match window.hide() {
+            Ok(()) => state.set_idle_scene(label),
+            Err(error) => {
+                log::warn!("[preview] scene window {label} not hidden: {error}");
+                let _ = window.destroy();
+            }
+        }
+    }
+}
+
 fn take_down_scene_blocking<R: Runtime>(app: &AppHandle<R>) -> PreviewSession {
     let state = app.state::<PreviewSessionState>();
     let (label, session) = state.clear_scene();
-    // Hidden for the next scene rather than destroyed, as the twin is kept.
     if let Some(label) = label {
-        if let Some(window) = app.get_webview_window(&label) {
-            match window.hide() {
-                Ok(()) => state.set_idle_scene(label),
-                Err(error) => {
-                    log::warn!("[preview] scene window {label} not hidden: {error}");
-                    let _ = window.destroy();
-                }
-            }
-        }
+        park_scene_window(app, &state, label);
     }
     ambilight_capture::set_capture_excepted_window(None);
     emit_session(app);
@@ -205,6 +212,7 @@ pub async fn start_preview_scene<R: Runtime>(
             ));
         };
         let idle = state.take_idle_scene();
+        let reused = idle.clone();
         let over_scene = target.over_scene.clone();
         // The kept window when it is still there; a fresh label otherwise, since
         // a label stays reserved until its destroy completes.
@@ -232,18 +240,19 @@ pub async fn start_preview_scene<R: Runtime>(
         let (label, number) = match built {
             Ok(built) => built,
             Err(reason) => {
+                if let Some(label) = reused {
+                    park_scene_window(&app, &state, label);
+                }
                 return Ok(refusal(
                     target.session,
                     PREVIEW_SCENE_START_FAILED,
                     "The scene window could not be opened.",
                     Some(reason),
-                ))
+                ));
             }
         };
         if !state.adopt_scene_window(&label)? {
-            if let Some(window) = app.get_webview_window(&label) {
-                let _ = window.destroy();
-            }
+            park_scene_window(&app, &state, label);
             return Ok(not_open());
         }
         except_from_exclusion(number).await;
@@ -260,13 +269,21 @@ pub async fn start_preview_scene<R: Runtime>(
     let failed = match outcome {
         SceneLighting::Running { brightness } => {
             return match state.set_scene(payload.kind, brightness)? {
-                Some(session) => {
+                SceneSet::Playing(session) => {
                     emit_session(&app);
                     Ok(answer(session, PREVIEW_SCENE_STARTED, "Scene started."))
                 }
+                SceneSet::Superseded(session) => {
+                    emit_session(&app);
+                    Ok(answer(
+                        session,
+                        PREVIEW_SCENE_NOT_RUNNING,
+                        "A mode change took the lights before the scene started.",
+                    ))
+                }
                 // The session ended while Ambilight started, and found no
                 // scene yet to give the lights back from.
-                None => {
+                SceneSet::Closed => {
                     stop_scene_queued(app.clone()).await?;
                     Ok(not_open())
                 }
@@ -294,9 +311,9 @@ pub async fn start_preview_scene<R: Runtime>(
 pub async fn stop_preview_scene<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<PreviewSessionResult, String> {
-    let restore = stop_scene_queued(app.clone()).await?;
+    let restore = stop_scene_queued(app.clone()).await;
     let session = take_down_scene(&app).await;
-    Ok(match restore {
+    Ok(match restore? {
         SceneRestore::Restored => answer(session, PREVIEW_SCENE_STOPPED, "Scene stopped."),
         SceneRestore::Off(status) => refusal(
             session,

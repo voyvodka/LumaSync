@@ -626,7 +626,6 @@ pub(super) fn start_ambilight_worker(
                     if !has_strip {
                         telemetry_window.record_send();
                         unsent_frame = false;
-                        report_latency(&mut latency_meter, pacing.latency.as_ref());
                     }
                 }
                 // Only the twin reads this; allocating it unconditionally
@@ -641,6 +640,11 @@ pub(super) fn start_ambilight_worker(
                     brightness,
                     hue_motion,
                 );
+                // Ends at the hand-off to the stream, which sends on its own
+                // 50 ms beat; the popup says so.
+                if new_frame && !has_strip {
+                    report_latency(&mut latency_meter, pacing.latency.as_ref());
+                }
                 last_hue_push = Some(now);
             }
 

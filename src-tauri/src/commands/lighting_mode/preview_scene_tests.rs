@@ -306,3 +306,22 @@ fn a_scene_runs_the_users_ambilight_with_its_preset() {
     assert_eq!(preset, Some(LightingSmoothingPreset::Subtle));
     assert!(running.room_geometry.is_some(), "the room map was dropped");
 }
+
+/// A stop that cannot plan the restore still ends the scene's Ambilight: the
+/// marker and prior are gone by then, and nothing else would stop it.
+#[test]
+fn a_restore_that_cannot_run_turns_the_lights_off() {
+    use crate::commands::local_outputs::LocalOutputRegistry;
+    use tauri::Manager;
+
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+    start(&rig, SceneKind::Spiral);
+    rig.app.state::<LocalOutputRegistry>().poison_for_tests();
+
+    let stopped = stop_scene_lighting(&rig.handle());
+
+    assert!(stopped.is_err(), "the stop reports the failure");
+    assert_eq!(scene(&rig), None);
+    assert_eq!(rig.running().kind, LightingModeKind::Off);
+}

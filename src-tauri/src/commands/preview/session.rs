@@ -189,6 +189,15 @@ impl IdleWindows {
     }
 }
 
+/// What `set_scene` found.
+pub(super) enum SceneSet {
+    Playing(PreviewSession),
+    /// A mode change took the lights and the window before the scene was
+    /// recorded; the lights are the user's.
+    Superseded(PreviewSession),
+    Closed,
+}
+
 /// Tauri-managed session state. `twin_open` lives outside the mutex so the
 /// worker's per-frame gate reads it without the lock; it means a twin has
 /// subscribed to its frames, not merely that its window exists.
@@ -277,18 +286,19 @@ impl PreviewSessionState {
         Ok(true)
     }
 
-    /// `None` when the session ended while Ambilight started.
-    pub(super) fn set_scene(
-        &self,
-        kind: SceneKind,
-        brightness: f32,
-    ) -> Result<Option<PreviewSession>, String> {
+    /// The scene's lights are up; record it as playing — unless its window is
+    /// gone, because the session ended or a mode change took the lights in
+    /// between.
+    pub(super) fn set_scene(&self, kind: SceneKind, brightness: f32) -> Result<SceneSet, String> {
         let mut inner = self.lock()?;
         let Some(open) = inner.open.as_mut() else {
-            return Ok(None);
+            return Ok(SceneSet::Closed);
         };
+        if open.scene_label.is_none() {
+            return Ok(SceneSet::Superseded(open.wire()));
+        }
         open.scene = Some(PlayingScene { kind, brightness });
-        Ok(Some(open.wire()))
+        Ok(SceneSet::Playing(open.wire()))
     }
 
     pub(super) fn set_scene_brightness(
@@ -438,6 +448,13 @@ impl PreviewSessionState {
     /// A scene as `start_preview_scene` records it, without its window and lights.
     #[cfg(test)]
     pub(crate) fn play_scene_for_test(&self, kind: SceneKind, brightness: f32) {
+        if let Ok(mut inner) = self.lock() {
+            if let Some(open) = inner.open.as_mut() {
+                open.scene_label.get_or_insert_with(|| {
+                    format!("{}test", super::windows::LED_PREVIEW_SCENE_LABEL_PREFIX)
+                });
+            }
+        }
         let _ = self.set_scene(kind, brightness);
     }
 
@@ -1131,6 +1148,31 @@ mod tests {
             (idle.twin_label.as_str(), idle.popup_label.as_str()),
             ("led-twin-overlay-4", "led-control-popup-4")
         );
+    }
+
+    /// A mode change that takes the lights mid-start takes the scene's window
+    /// too; the start that then records the scene must not claim it plays.
+    #[test]
+    fn a_scene_whose_window_went_is_not_recorded_as_playing() {
+        let state = PreviewSessionState::default();
+        assert!(matches!(
+            state.set_scene(SceneKind::Spiral, 1.0),
+            Ok(SceneSet::Closed)
+        ));
+        state.open_for_test("a", "led-twin-overlay-5", "led-control-popup-5");
+        assert!(state.adopt_scene_window("led-preview-scene-5").unwrap());
+        assert!(matches!(
+            state.set_scene(SceneKind::Spiral, 1.0),
+            Ok(SceneSet::Playing(PreviewSession::Scene { .. }))
+        ));
+
+        let _ = state.clear_scene();
+        let superseded = state.set_scene(SceneKind::Sunset, 1.0);
+
+        assert!(matches!(
+            superseded,
+            Ok(SceneSet::Superseded(PreviewSession::Live { .. }))
+        ));
     }
 
     /// The Windows build pump can deliver a second open mid-build; it must not

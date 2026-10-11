@@ -32,7 +32,7 @@ export default {
   latency: {
     label: "Pipeline delay",
     about: "About pipeline delay",
-    info: "From the moment a frame is captured to the moment its colours go to the lights' output, as the median of the last flips. The display's and the lights' own delays are not included.",
+    info: "From the moment a frame is captured to the moment its colours go to the lights' output, as the median of the last flips. The display's and the lights' own delays are not included, nor Hue's stream, which sends every 50 ms.",
     measuring: "Measuring…",
     unseen: "No flip has reached the lights yet",
     value: "{{ms}} ms",

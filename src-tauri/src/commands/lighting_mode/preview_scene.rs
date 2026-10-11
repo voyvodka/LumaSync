@@ -212,7 +212,31 @@ fn restore_interrupted<R: Runtime>(
     let hue_runtime_state = app.state::<HueRuntimeStateStore>();
     let telemetry_state = app.state::<RuntimeTelemetryState>();
     let preview_session = app.state::<PreviewSessionState>();
-    let driven = app.state::<LocalOutputRegistry>().driven_checked()?;
+    let apply_with = |mode: LightingModeConfig, driven: Option<&DrivenLocal>| {
+        apply_and_broadcast(
+            app,
+            mode,
+            runtime_state.inner(),
+            driven,
+            hue_runtime_state.inner(),
+            telemetry_state.inner(),
+            preview_session.inner(),
+            None,
+        )
+    };
+    // The scene's marker and prior are already gone: a restore that cannot
+    // run must still end the scene's worker, or it lights on with no owner.
+    let give_up = |error: String| {
+        warn!("[preview-scene] restore failed ({error}) — the lights go off");
+        if let Err(off) = apply_with(LightingModeConfig::default(), None) {
+            warn!("[preview-scene] the lights could not go off either: {off}");
+        }
+        error
+    };
+    let driven = app
+        .state::<LocalOutputRegistry>()
+        .driven_checked()
+        .map_err(give_up)?;
     let scene_mode = runtime_state
         .runtime
         .lock()
@@ -220,19 +244,8 @@ fn restore_interrupted<R: Runtime>(
         .active_mode
         .clone();
     let restore = restore_mode_after_test(prior, &|| read_persisted_shell_state(app));
-    let apply = |mode: LightingModeConfig| {
-        apply_and_broadcast(
-            app,
-            mode,
-            runtime_state.inner(),
-            driven.as_ref(),
-            hue_runtime_state.inner(),
-            telemetry_state.inner(),
-            preview_session.inner(),
-            None,
-        )
-    };
-    let restored = apply(restore)?;
+    let apply = |mode: LightingModeConfig| apply_with(mode, driven.as_ref());
+    let restored = apply(restore).map_err(give_up)?;
     // A gated restore (the strip unplugged mid-scene) returns before the
     // scene's worker is torn down, which would leave it running unowned.
     let scene_worker_left = runtime_state

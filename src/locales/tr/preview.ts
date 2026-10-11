@@ -35,7 +35,7 @@ const preview: Catalogue<typeof enPreview> = {
   latency: {
     label: "İşlem gecikmesi",
     about: "İşlem gecikmesi hakkında",
-    info: "Bir karenin yakalandığı andan renklerinin ışık çıkışına verildiği ana kadar geçen süre; son geçişlerin ortancası. Ekranın ve ışıkların kendi gecikmeleri dahil değil.",
+    info: "Bir karenin yakalandığı andan renklerinin ışık çıkışına verildiği ana kadar geçen süre; son geçişlerin ortancası. Ekranın ve ışıkların kendi gecikmeleri ile 50 ms'de bir gönderen Hue akışı dahil değil.",
     measuring: "Ölçülüyor…",
     unseen: "Henüz hiçbir geçiş ışıklara ulaşmadı",
     value: "{{ms}} ms",
