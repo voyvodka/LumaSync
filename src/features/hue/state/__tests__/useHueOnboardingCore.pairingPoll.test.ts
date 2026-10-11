@@ -82,6 +82,7 @@ function cardState(state: ReturnType<typeof useHueOnboardingCore>["state"]) {
     isPairing: state.isPairing,
     selectedAreaId: state.selectedAreaId,
     isReadinessStale: false,
+    readinessPassed: false,
     areaHeldByAnotherApp: false,
   });
 }

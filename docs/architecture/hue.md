@@ -761,6 +761,7 @@ informal (**sen**) throughout.
 | `areaSelect` | Paired / Eşleşti | Paired, no entertainment area chosen. |
 | `areaBusy` | Area in use / Alan kullanımda | Another app streams to the area (`HUE_STREAM_NOT_READY_ACTIVE_STREAMER` in the readiness reasons). |
 | `gateBlocked` | Couldn't start / Başlatılamadı | A start the readiness gate refused for a reachable, free area. |
+| `gateCleared` | Ready / Hazır | A refused start with a readiness check passed since; its one action is Start again. The refusal stays the runtime's last status until the next start or stop, and a launch resume that lapsed never runs again, so without it Revalidate passed and nothing on the page could bring Hue back. |
 | `stale` | Needs a check / Doğrulanmalı | The last readiness check is too old to start on. |
 | `idle` | Ready / Hazır | Paired, area chosen, free, readiness current. |
 | `streaming` | Streaming / Yayında | Our stream runs. |
