@@ -20,7 +20,7 @@ use super::feed::TwinFeed;
 use super::scene::SceneKind;
 use super::windows::{
     app_in_front, build_popup, build_twin, float_over_full_screen, is_preview_window,
-    next_popup_label, next_twin_label,
+    next_popup_label, next_twin_label, reuse_on_display, reuse_popup,
 };
 use crate::commands::calibration::{list_displays, DisplayInfoPayload};
 use crate::commands::shell_state;
@@ -171,6 +171,22 @@ impl OpenSession {
 struct Inner {
     open: Option<OpenSession>,
     opening: bool,
+    /// The last session's twin and popup, hidden for the next one to reuse.
+    idle: Option<IdleWindows>,
+    /// The last scene's window, hidden for the next scene to reuse.
+    idle_scene: Option<String>,
+}
+
+#[derive(Clone)]
+struct IdleWindows {
+    twin_label: String,
+    popup_label: String,
+}
+
+impl IdleWindows {
+    fn holds(&self, label: &str) -> bool {
+        label == self.twin_label || label == self.popup_label
+    }
 }
 
 /// Tauri-managed session state. `twin_open` lives outside the mutex so the
@@ -373,6 +389,26 @@ impl PreviewSessionState {
         Some(open.shown_labels())
     }
 
+    fn take_idle(&self) -> Option<IdleWindows> {
+        self.inner.lock().ok()?.idle.take()
+    }
+
+    pub(super) fn take_idle_scene(&self) -> Option<String> {
+        self.inner.lock().ok()?.idle_scene.take()
+    }
+
+    pub(super) fn set_idle_scene(&self, label: String) {
+        if let Ok(mut inner) = self.inner.lock() {
+            inner.idle_scene = Some(label);
+        }
+    }
+
+    fn set_idle(&self, idle: IdleWindows) {
+        if let Ok(mut inner) = self.inner.lock() {
+            inner.idle = Some(idle);
+        }
+    }
+
     fn take(&self) -> Result<Option<OpenSession>, String> {
         let mut inner = self.lock()?;
         let taken = inner.open.take();
@@ -541,6 +577,36 @@ fn reveal_popup<R: Runtime>(app: &AppHandle<R>, label: &str) {
     }
 }
 
+/// The kept pair back for this session, on `display`. Either one gone or
+/// failing to come back, both are destroyed and a new pair is built.
+fn reuse_idle<R: Runtime>(
+    app: &AppHandle<R>,
+    idle: &IdleWindows,
+    display: &DisplayInfoPayload,
+) -> bool {
+    let twin = app.get_webview_window(&idle.twin_label);
+    let popup = app.get_webview_window(&idle.popup_label);
+    let reused = match (&twin, &popup) {
+        (Some(twin), Some(popup)) => reuse_on_display(twin, display)
+            .and_then(|()| reuse_popup(popup))
+            .map_err(|reason| log::warn!("[preview] kept windows not reused: {reason}"))
+            .is_ok(),
+        _ => false,
+    };
+    if !reused {
+        let mut failures = Vec::new();
+        destroy(app, &idle.twin_label, &mut failures);
+        destroy(app, &idle.popup_label, &mut failures);
+    }
+    reused
+}
+
+/// `true` once the window is off screen.
+fn hide<R: Runtime>(app: &AppHandle<R>, label: &str) -> bool {
+    app.get_webview_window(label)
+        .is_some_and(|window| window.hide().is_ok())
+}
+
 fn destroy<R: Runtime>(app: &AppHandle<R>, label: &str, failures: &mut Vec<String>) {
     if let Some(window) = app.get_webview_window(label) {
         if let Err(error) = window.destroy() {
@@ -549,14 +615,19 @@ fn destroy<R: Runtime>(app: &AppHandle<R>, label: &str, failures: &mut Vec<Strin
     }
 }
 
-/// Every preview window there is, not only the open session's: one stranded by
-/// an earlier failed destroy or open goes too. A surviving twin is
+/// Every preview window there is but the pair kept for the next session: one
+/// stranded by an earlier failed destroy or open goes too. A surviving twin is
 /// click-through and undecorated, so nothing on screen could dismiss it.
-fn destroy_preview_windows<R: Runtime>(app: &AppHandle<R>) -> (usize, Vec<String>) {
+fn destroy_preview_windows<R: Runtime>(
+    app: &AppHandle<R>,
+    kept: Option<&IdleWindows>,
+    idle_scene: Option<&String>,
+) -> (usize, Vec<String>) {
     let labels: Vec<String> = app
         .webview_windows()
         .into_keys()
-        .filter(|label| is_preview_window(label))
+        .filter(|label| is_preview_window(label) && !kept.is_some_and(|kept| kept.holds(label)))
+        .filter(|label| !idle_scene.is_some_and(|scene| scene == label))
         .collect();
     let mut failures = Vec::new();
     for label in &labels {
@@ -628,37 +699,46 @@ pub fn open_preview<R: Runtime>(
     if floating {
         float_over_full_screen(&app, true);
     }
-    let twin_label = next_twin_label();
-    if let Err(reason) = build_twin(&app, &twin_label, &display) {
-        exclusion::session_ended();
-        hand_back(return_to);
-        float_over_full_screen(&app, false);
-        if main_hidden_by_session {
-            restore_main(&app, return_to);
+    let reused = state
+        .take_idle()
+        .filter(|idle| reuse_idle(&app, idle, &display));
+    let (twin_label, popup_label) = match reused {
+        Some(idle) => (idle.twin_label, idle.popup_label),
+        None => {
+            let twin_label = next_twin_label();
+            if let Err(reason) = build_twin(&app, &twin_label, &display) {
+                exclusion::session_ended();
+                hand_back(return_to);
+                float_over_full_screen(&app, false);
+                if main_hidden_by_session {
+                    restore_main(&app, return_to);
+                }
+                return Ok(failure(
+                    PREVIEW_OPEN_FAILED,
+                    "Could not open the LED twin.",
+                    reason,
+                ));
+            }
+            let popup_label = next_popup_label();
+            if let Err(reason) = build_popup(&app, &popup_label) {
+                let mut failures = Vec::new();
+                destroy(&app, &twin_label, &mut failures);
+                exclusion::session_ended();
+                hand_back(return_to);
+                float_over_full_screen(&app, false);
+                if main_hidden_by_session {
+                    restore_main(&app, return_to);
+                }
+                failures.insert(0, reason);
+                return Ok(failure(
+                    PREVIEW_OPEN_FAILED,
+                    "Could not open the preview controls.",
+                    failures.join("; "),
+                ));
+            }
+            (twin_label, popup_label)
         }
-        return Ok(failure(
-            PREVIEW_OPEN_FAILED,
-            "Could not open the LED twin.",
-            reason,
-        ));
-    }
-    let popup_label = next_popup_label();
-    if let Err(reason) = build_popup(&app, &popup_label) {
-        let mut failures = Vec::new();
-        destroy(&app, &twin_label, &mut failures);
-        exclusion::session_ended();
-        hand_back(return_to);
-        float_over_full_screen(&app, false);
-        if main_hidden_by_session {
-            restore_main(&app, return_to);
-        }
-        failures.insert(0, reason);
-        return Ok(failure(
-            PREVIEW_OPEN_FAILED,
-            "Could not open the preview controls.",
-            failures.join("; "),
-        ));
-    }
+    };
 
     let committed = state.commit(OpenSession {
         display_id: display.id,
@@ -707,7 +787,32 @@ pub fn end_session<R: Runtime>(app: &AppHandle<R>) -> Result<PreviewSessionResul
     {
         super::scene::stop_scene_lights_later(app);
     }
-    let (swept, failures) = destroy_preview_windows(app);
+    // The session's twin and popup are hidden for the next one; a pair that
+    // cannot be hidden whole is destroyed with the strays.
+    let state = app.try_state::<PreviewSessionState>();
+    let previously_idle = state.as_ref().and_then(|state| state.take_idle());
+    let kept = open
+        .as_ref()
+        .map(|open| IdleWindows {
+            twin_label: open.twin_label.clone(),
+            popup_label: open.popup_label.clone(),
+        })
+        .or(previously_idle)
+        .filter(|kept| hide(app, &kept.twin_label) && hide(app, &kept.popup_label));
+    let idle_scene = state.as_ref().and_then(|state| {
+        let label = open
+            .as_ref()
+            .and_then(|open| open.scene_label.clone())
+            .or_else(|| state.take_idle_scene())?;
+        hide(app, &label).then_some(label)
+    });
+    let (swept, failures) = destroy_preview_windows(app, kept.as_ref(), idle_scene.as_ref());
+    if let (Some(state), Some(label)) = (state.as_ref(), idle_scene) {
+        state.set_idle_scene(label);
+    }
+    if let (Some(state), Some(kept)) = (state.as_ref(), kept) {
+        state.set_idle(kept);
+    }
     let return_to = open.as_ref().and_then(|open| open.return_to);
     hand_back(return_to);
     if open.is_some() || swept > 0 {
@@ -860,9 +965,9 @@ pub(super) fn on_other_app_activated<R: Runtime>(app: &AppHandle<R>, pid: i32) {
 /// A popup or twin that goes away on its own — the popup's close, a display
 /// unplugged under the twin — ends the session it belonged to, so the other
 /// window is not stranded and the main window comes back. Matched by label,
-/// which is never reused, so a window from an earlier session dying late
-/// cannot end the current one. Skipped while quitting: bringing the main
-/// window back would only flash it.
+/// which no second window gets, so a destroyed window from an earlier session
+/// dying late cannot end the current one. Skipped while quitting: bringing the
+/// main window back would only flash it.
 pub fn on_session_window_destroyed<R: Runtime>(app: &AppHandle<R>, label: &str) {
     if crate::shutdown::in_progress() {
         return;
@@ -999,6 +1104,33 @@ mod tests {
         // looked up afterwards.
         assert_eq!(ended.status.code, PREVIEW_CLOSED);
         assert!(app.get_webview_window(crate::MAIN_WINDOW_LABEL).is_some());
+    }
+
+    /// Closing keeps the session's twin and popup for the next one instead of
+    /// destroying them — a destroyed webview window is never freed — while a
+    /// stray from an earlier failure still goes.
+    #[test]
+    fn ending_keeps_the_sessions_pair_for_the_next_one() {
+        let app = tauri::test::mock_app();
+        app.manage(PreviewSessionState::default());
+        for label in ["led-twin-overlay-4", "led-control-popup-4"] {
+            tauri::WebviewWindowBuilder::new(&app, label, Default::default())
+                .build()
+                .expect("a session window");
+        }
+        let state = app.state::<PreviewSessionState>();
+        state.open_for_test("a", "led-twin-overlay-4", "led-control-popup-4");
+
+        let ended = end_session(app.handle()).unwrap();
+
+        assert_eq!(ended.status.code, PREVIEW_CLOSED);
+        assert!(app.get_webview_window("led-twin-overlay-4").is_some());
+        assert!(app.get_webview_window("led-control-popup-4").is_some());
+        let idle = state.take_idle().expect("the pair is kept");
+        assert_eq!(
+            (idle.twin_label.as_str(), idle.popup_label.as_str()),
+            ("led-twin-overlay-4", "led-control-popup-4")
+        );
     }
 
     /// The Windows build pump can deliver a second open mid-build; it must not

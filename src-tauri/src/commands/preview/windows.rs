@@ -13,10 +13,11 @@ use crate::commands::calibration::{build_transparent_overlay, DisplayInfoPayload
 use crate::commands::shell_state;
 
 /// Mirrors `LED_TWIN_OVERLAY_LABEL_PREFIX` in `src/shared/contracts/preview.ts`.
-/// Both preview labels end in a counter, never reused: a label stays reserved
-/// until its destroy completes (see calibration.rs `OVERLAY_LABEL_COUNTER`), and
-/// a closed window's late `Destroyed` must not be mistaken for the next
-/// session's.
+/// Both preview labels end in a counter, never given to a second window: a
+/// label stays reserved until its destroy completes (see calibration.rs
+/// `OVERLAY_LABEL_COUNTER`), and a destroyed window's late `Destroyed` must not
+/// be mistaken for the next session's. A kept window keeps its label from one
+/// session to the next.
 pub const LED_TWIN_OVERLAY_LABEL_PREFIX: &str = "led-twin-overlay-";
 
 /// Mirrors `LED_PREVIEW_SCENE_LABEL_PREFIX` in `src/shared/contracts/preview.ts`.
@@ -79,6 +80,45 @@ pub(super) fn build_twin<R: Runtime>(
             .map_err(|error| format!("could not show the LED twin: {error}"))?;
     }
     Ok(window)
+}
+
+/// A kept twin or scene window, moved onto `display` and loaded afresh so it
+/// reads the session it now belongs to. Kept rather than rebuilt: a destroyed
+/// webview window stays in memory for the life of the process (tao keeps its
+/// NSWindow on macOS), so a new one per session or scene grew without end.
+pub(super) fn reuse_on_display<R: Runtime>(
+    window: &WebviewWindow<R>,
+    display: &DisplayInfoPayload,
+) -> Result<(), String> {
+    let scale = if display.scale_factor.is_finite() && display.scale_factor > 0.0 {
+        display.scale_factor
+    } else {
+        1.0
+    };
+    window
+        .set_position(Position::Logical(LogicalPosition::new(
+            f64::from(display.x) / scale,
+            f64::from(display.y) / scale,
+        )))
+        .and_then(|()| {
+            window.set_size(LogicalSize::new(
+                f64::from(display.width) / scale,
+                f64::from(display.height) / scale,
+            ))
+        })
+        .and_then(|()| window.reload())
+        .and_then(|()| window.show())
+        .map_err(|error| format!("could not bring {} back: {error}", window.label()))
+}
+
+/// A popup kept from an earlier session, loaded afresh: it reads the new
+/// session on mount.
+pub(super) fn reuse_popup<R: Runtime>(window: &WebviewWindow<R>) -> Result<(), String> {
+    window
+        .reload()
+        .and_then(|()| window.show())
+        .and_then(|()| window.set_focus())
+        .map_err(|error| format!("could not bring the control popup back: {error}"))
 }
 
 /// The scene over `display`, under the twin and the popup: click-through like

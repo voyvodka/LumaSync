@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime};
 
 use super::session::{emit_session, PreviewSession, PreviewSessionResult, PreviewSessionState};
-use super::windows::{build_scene, next_scene_label, raise_over_scene};
+use super::windows::{build_scene, next_scene_label, raise_over_scene, reuse_on_display};
 use crate::commands::ambilight_capture;
 use crate::commands::calibration::list_displays;
 use crate::commands::lighting_mode::latency::LatencyResult;
@@ -120,11 +120,17 @@ async fn except_from_exclusion(window: Option<u32>) {
 /// lights are the caller's — restored by a stop, or already the user's after a
 /// mode change. Blocks on the capture filter.
 fn take_down_scene_blocking<R: Runtime>(app: &AppHandle<R>) -> PreviewSession {
-    let (label, session) = app.state::<PreviewSessionState>().clear_scene();
+    let state = app.state::<PreviewSessionState>();
+    let (label, session) = state.clear_scene();
+    // Hidden for the next scene rather than destroyed, as the twin is kept.
     if let Some(label) = label {
         if let Some(window) = app.get_webview_window(&label) {
-            if let Err(error) = window.destroy() {
-                log::warn!("[preview] scene window {label} not destroyed: {error}");
+            match window.hide() {
+                Ok(()) => state.set_idle_scene(label),
+                Err(error) => {
+                    log::warn!("[preview] scene window {label} not hidden: {error}");
+                    let _ = window.destroy();
+                }
             }
         }
     }
@@ -198,20 +204,33 @@ pub async fn start_preview_scene<R: Runtime>(
                 Some(target.display_id),
             ));
         };
-        let label = next_scene_label();
+        let idle = state.take_idle_scene();
         let over_scene = target.over_scene.clone();
-        let build_label = label.clone();
+        // The kept window when it is still there; a fresh label otherwise, since
+        // a label stays reserved until its destroy completes.
         let built = on_main(&app, move |app| {
-            let built = build_scene(app, &build_label, &display);
+            let built = match idle.and_then(|label| app.get_webview_window(&label)) {
+                Some(window) => reuse_on_display(&window, &display).map(|()| {
+                    #[cfg(target_os = "macos")]
+                    let number = crate::macos_window::window_number(&window);
+                    #[cfg(not(target_os = "macos"))]
+                    let number = None;
+                    (window.label().to_string(), number)
+                }),
+                None => {
+                    let label = next_scene_label();
+                    build_scene(app, &label, &display).map(|(_, number)| (label, number))
+                }
+            };
             if built.is_ok() {
                 raise_over_scene(app, &over_scene);
             }
-            built.map(|(_, number)| number)
+            built
         })
         .await
         .and_then(|built| built);
-        let number = match built {
-            Ok(number) => number,
+        let (label, number) = match built {
+            Ok(built) => built,
             Err(reason) => {
                 return Ok(refusal(
                     target.session,
