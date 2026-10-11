@@ -1067,7 +1067,9 @@ const REQUIRED_PREVIEW_COMMANDS = [
   "stop_led_test_pattern",
   "open_preview",
   "close_preview",
+  "get_preview_session",
   "set_preview_popup_hidden",
+  "set_preview_twin_hidden",
   "subscribe_twin_frames",
 ];
 for (const cmd of REQUIRED_PREVIEW_COMMANDS) {
@@ -1093,6 +1095,7 @@ const REQUIRED_PREVIEW_STATUS_CODES = [
   "PREVIEW_CLOSED",
   "PREVIEW_NOT_OPEN",
   "PREVIEW_POPUP_UPDATED",
+  "PREVIEW_TWIN_UPDATED",
   "PREVIEW_TWIN_SUBSCRIBED",
   "PREVIEW_OPEN_FAILED",
   "PREVIEW_CLOSE_FAILED",
@@ -1117,7 +1120,8 @@ for (const code of REQUIRED_PREVIEW_STATUS_CODES) {
     [...rustPreview.matchAll(/const PREVIEW_[A-Z_]+: &str = "([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]),
     constMembers(previewSource, "PREVIEW_STATUS"),
     // 7 → 8: PREVIEW_TWIN_SUBSCRIBED, the twin's frame subscription (feed.rs).
-    8
+    // 8 → 9: PREVIEW_TWIN_UPDATED, the popup's twin switch (session.rs).
+    9
   );
 }
 

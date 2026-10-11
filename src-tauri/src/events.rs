@@ -42,6 +42,10 @@ pub const HUE_HEALTH_CHANGED_EVENT: &str = "hue://health";
 /// from `commands::preview::feed` to the session's twin.
 pub const PREVIEW_TWIN_LAYOUT_EVENT: &str = "preview://twin-layout";
 
+/// `PREVIEW_EVENTS.SESSION` in `src/shared/contracts/preview.ts`. Emitted
+/// from `commands::preview::session` to the session's popup.
+pub const PREVIEW_SESSION_EVENT: &str = "preview://session";
+
 /// `TELEMETRY_EVENTS.HEALTH_CHANGED` in `src/shared/contracts/telemetry.ts`.
 /// Re-exported from `commands::runtime_telemetry`.
 pub const RUNTIME_HEALTH_CHANGED_EVENT: &str = "telemetry://health-changed";

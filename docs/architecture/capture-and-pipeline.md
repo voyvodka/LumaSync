@@ -128,7 +128,11 @@ Ambilight samples, so without this the strip would light from its own picture.
   manifest claims).
 - **Linux, and Windows before 2004.** Nothing can exclude a window, so the twin hides while a live
   capture source exists (`capture_active`, `on_capture_active_changed`). The popup stays in the
-  capture: hiding the only control left would strand the preview.
+  capture: hiding the only control left would strand the preview. Whether the twin is on screen —
+  the popup's switch and this hold — is decided in one place, `sync_twin_visibility`, on the main
+  thread from the state as it is when it runs: a switch and a capture start on two threads can
+  ask in either order, and the last to run must leave the current state. The popup is told
+  (`twinHeldForCapture`), so a twin switched on but off screen says why.
 
 Unverified on hardware: app-level exclusion covering later windows, and WDA on a transparent
 WebView2 window and its child windows.

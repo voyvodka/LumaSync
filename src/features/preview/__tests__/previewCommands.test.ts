@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { PREVIEW_COMMANDS } from "@/shared/contracts/preview";
 
@@ -9,8 +9,31 @@ describe("PREVIEW_COMMANDS — Rust snake_case name regression", () => {
     ["OPEN_PREVIEW", "open_preview"],
     ["CLOSE_PREVIEW", "close_preview"],
     ["SET_POPUP_HIDDEN", "set_preview_popup_hidden"],
+    ["GET_SESSION", "get_preview_session"],
+    ["SET_TWIN_HIDDEN", "set_preview_twin_hidden"],
     ["SUBSCRIBE_TWIN_FRAMES", "subscribe_twin_frames"],
   ] as const)("%s maps to %s", (key, name) => {
     expect(PREVIEW_COMMANDS[key]).toBe(name);
+  });
+});
+
+describe("preview session bridge", () => {
+  it("answers null when the session read is rejected, never a made-up closed session", async () => {
+    const { getPreviewSession } = await import("../previewApi");
+    const rejecting = (() => Promise.reject(new Error("PREVIEW_SESSION_LOCK_FAILED: poisoned"))) as never;
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    await expect(getPreviewSession(rejecting)).resolves.toBeNull();
+    errors.mockRestore();
+  });
+
+  it("sends the twin switch as a payload", async () => {
+    const { setPreviewTwinHidden } = await import("../previewApi");
+    const calls: unknown[][] = [];
+    const invoker = ((...args: unknown[]) => {
+      calls.push(args);
+      return Promise.resolve({ session: { state: "closed" }, status: { code: "PREVIEW_NOT_OPEN", message: "", details: null } });
+    }) as never;
+    await setPreviewTwinHidden(true, invoker);
+    expect(calls).toEqual([["set_preview_twin_hidden", { payload: { hidden: true } }]]);
   });
 });

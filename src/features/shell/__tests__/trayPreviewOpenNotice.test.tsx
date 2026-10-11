@@ -43,7 +43,7 @@ vi.mock("@/features/preview/previewApi", () => ({
 function opened(code: PreviewSessionStatusCode): PreviewSessionResult {
   const failed = code !== PREVIEW_STATUS.OPENED && code !== PREVIEW_STATUS.ALREADY_OPEN;
   return {
-    session: failed ? { state: "closed" } : { state: "live", displayId: "display-2", popupHidden: false },
+    session: failed ? { state: "closed" } : { state: "live", displayId: "display-2", popupHidden: false, twinHidden: false, twinHeldForCapture: false },
     status: { code, message: "", details: failed ? "webview" : null },
   };
 }

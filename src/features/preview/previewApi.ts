@@ -9,6 +9,7 @@ import {
   PREVIEW_COMMANDS,
   PREVIEW_STATUS,
   type LedTestPatternResult,
+  type PreviewSession,
   type PreviewSessionResult,
   type PreviewSessionStatusCode,
   type StartLedTestPatternPayload,
@@ -104,6 +105,29 @@ export async function setPreviewPopupHidden(
     return await invoker(PREVIEW_COMMANDS.SET_POPUP_HIDDEN, { payload: { hidden } });
   } catch (error) {
     console.error("[LumaSync] set_preview_popup_hidden failed:", error);
+    return failedSessionResult(PREVIEW_STATUS.NOT_OPEN, error);
+  }
+}
+
+/** The session as Rust holds it. A rejected read says nothing about it, so it
+ * answers `null` rather than inventing a closed session. */
+export async function getPreviewSession(invoker: CommandInvoker = invokeCommand): Promise<PreviewSession | null> {
+  try {
+    return await invoker(PREVIEW_COMMANDS.GET_SESSION);
+  } catch (error) {
+    console.error("[LumaSync] get_preview_session failed:", error);
+    return null;
+  }
+}
+
+export async function setPreviewTwinHidden(
+  hidden: boolean,
+  invoker: CommandInvoker = invokeCommand,
+): Promise<PreviewSessionResult> {
+  try {
+    return await invoker(PREVIEW_COMMANDS.SET_TWIN_HIDDEN, { payload: { hidden } });
+  } catch (error) {
+    console.error("[LumaSync] set_preview_twin_hidden failed:", error);
     return failedSessionResult(PREVIEW_STATUS.NOT_OPEN, error);
   }
 }

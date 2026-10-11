@@ -24,7 +24,9 @@ fn app() -> App<MockRuntime> {
         crate::commands::lighting_mode::led_test_pattern::stop_led_test_pattern,
         crate::commands::preview::session::open_preview,
         crate::commands::preview::session::close_preview,
+        crate::commands::preview::session::get_preview_session,
         crate::commands::preview::session::set_preview_popup_hidden,
+        crate::commands::preview::session::set_preview_twin_hidden,
         crate::commands::preview::feed::subscribe_twin_frames
     ])
 }
@@ -152,7 +154,13 @@ fn an_open_session_is_reported_and_closed_over_ipc() {
     assert_eq!(status_code(&hidden), "PREVIEW_POPUP_UPDATED");
     assert_eq!(
         hidden["session"],
-        json!({ "state": "live", "displayId": "display-1", "popupHidden": true })
+        json!({
+            "state": "live",
+            "displayId": "display-1",
+            "popupHidden": true,
+            "twinHidden": false,
+            "twinHeldForCapture": false
+        })
     );
 
     let closed = invoke(&webview, "close_preview", json!({})).expect("close must resolve");
@@ -182,10 +190,96 @@ fn opening_an_open_session_brings_its_popup_back() {
     let reopened = invoke(&main, "open_preview", json!({})).expect("open must resolve");
 
     assert_eq!(status_code(&reopened), "PREVIEW_ALREADY_OPEN");
-    assert_eq!(
-        reopened["session"],
-        json!({ "state": "live", "displayId": "display-1", "popupHidden": false })
-    );
+    assert_eq!(reopened["session"]["popupHidden"], json!(false));
+}
+
+/// The popup reads the session on mount: a bare `PreviewSession`, no status.
+#[test]
+fn the_popup_reads_the_session_as_it_is() {
+    use tauri::Manager;
+
+    let app = app();
+    let webview = popup(&app);
+    let closed = invoke(&webview, "get_preview_session", json!({})).expect("read must resolve");
+    assert_eq!(closed, json!({ "state": "closed" }));
+
+    app.state::<crate::commands::preview::PreviewSessionState>()
+        .open_for_test("display-1", "led-twin-overlay-1", "led-control-popup-0");
+    let live = invoke(&webview, "get_preview_session", json!({})).expect("read must resolve");
+    assert_camel_case_keys(&live);
+    assert_eq!(live["state"], json!("live"));
+    assert_eq!(live["twinHidden"], json!(false));
+}
+
+/// The twin switch: hidden, the worker's gate shuts; shown, it opens again
+/// for a twin that subscribed. A reopen keeps the user's choice.
+#[test]
+fn hiding_the_twin_shuts_its_feed_and_a_reopen_keeps_it_hidden() {
+    use std::sync::atomic::Ordering;
+    use tauri::Manager;
+
+    let app = app();
+    let main = main_webview(&app);
+    let webview = popup(&app);
+    let state = app.state::<crate::commands::preview::PreviewSessionState>();
+
+    let none = invoke(
+        &webview,
+        "set_preview_twin_hidden",
+        json!({ "payload": { "hidden": true } }),
+    )
+    .expect("hide must resolve");
+    assert_eq!(status_code(&none), "PREVIEW_NOT_OPEN");
+
+    state.open_for_test("display-1", "led-twin-overlay-1", "led-control-popup-0");
+    state.subscribe_for_test("led-twin-overlay-1", tauri::ipc::Channel::new(|_| Ok(())));
+    let gate = state.twin_open();
+    assert!(gate.load(Ordering::SeqCst));
+
+    let hidden = invoke(
+        &webview,
+        "set_preview_twin_hidden",
+        json!({ "payload": { "hidden": true } }),
+    )
+    .expect("hide must resolve");
+    assert_camel_case_keys(&hidden);
+    assert_eq!(status_code(&hidden), "PREVIEW_TWIN_UPDATED");
+    assert_eq!(hidden["session"]["twinHidden"], json!(true));
+    assert!(!gate.load(Ordering::SeqCst), "a hidden twin is fed nothing");
+
+    let reopened = invoke(&main, "open_preview", json!({})).expect("open must resolve");
+    assert_eq!(status_code(&reopened), "PREVIEW_ALREADY_OPEN");
+    assert_eq!(reopened["session"]["twinHidden"], json!(true));
+
+    let shown = invoke(
+        &webview,
+        "set_preview_twin_hidden",
+        json!({ "payload": { "hidden": false } }),
+    )
+    .expect("show must resolve");
+    assert_eq!(shown["session"]["twinHidden"], json!(false));
+    assert!(gate.load(Ordering::SeqCst), "shown again, the twin is fed");
+}
+
+/// Shown before the twin subscribed, the gate stays shut: nothing would
+/// take the frames the worker built.
+#[test]
+fn showing_a_twin_that_has_not_subscribed_leaves_the_gate_shut() {
+    use std::sync::atomic::Ordering;
+    use tauri::Manager;
+
+    let app = app();
+    let webview = popup(&app);
+    let state = app.state::<crate::commands::preview::PreviewSessionState>();
+    state.open_for_test("display-1", "led-twin-overlay-1", "led-control-popup-0");
+
+    invoke(
+        &webview,
+        "set_preview_twin_hidden",
+        json!({ "payload": { "hidden": false } }),
+    )
+    .expect("show must resolve");
+    assert!(!state.twin_open().load(Ordering::SeqCst));
 }
 
 /// Only the open session's own twin may take the frames: the popup asking, or

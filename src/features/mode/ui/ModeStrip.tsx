@@ -115,8 +115,8 @@ export function ModeStrip({
         value={value}
         onChange={select}
         ariaLabel={t("common:mode.title")}
-        className="lm-control-mode-strip"
-        itemClassName="lm-control-mbtn"
+        className={styles.popupStrip}
+        itemClassName={styles.popupItem}
       />
     );
   }

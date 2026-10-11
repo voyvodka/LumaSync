@@ -106,7 +106,8 @@ use commands::notifications::{request_notification_permission, show_notification
 use commands::platform::open_log_dir;
 use commands::preview::feed::subscribe_twin_frames;
 use commands::preview::session::{
-    close_preview, open_preview, set_preview_popup_hidden, PreviewSessionState,
+    close_preview, get_preview_session, open_preview, set_preview_popup_hidden,
+    set_preview_twin_hidden, PreviewSessionState,
 };
 use commands::room_map::hue_zone::{
     assign_channel_to_hue_zone, create_hue_zone, delete_hue_zone, update_hue_zone,
@@ -958,7 +959,9 @@ pub fn run() {
             stop_led_test_pattern,
             open_preview,
             close_preview,
+            get_preview_session,
             set_preview_popup_hidden,
+            set_preview_twin_hidden,
             subscribe_twin_frames,
             check_for_update,
             download_and_install_update,

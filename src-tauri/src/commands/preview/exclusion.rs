@@ -12,6 +12,9 @@
 //! - Linux, and Windows before 2004: nothing can exclude a window, so the twin
 //!   is hidden while Ambilight captures. The popup stays: hiding the remote
 //!   would leave nothing to stop the preview with.
+//!
+//! Whether the twin is on screen is decided in one place,
+//! `sync_twin_visibility`: not hidden by the user, and not held for capture.
 
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 
@@ -79,17 +82,42 @@ pub(super) fn session_ended() {
 /// app before it had a window, and where nothing can exclude the twin, match
 /// it to the capture as it is now — a start or stop between the build and the
 /// registration found no twin to act on.
-pub(super) fn session_opened<R: Runtime>(app: &AppHandle<R>, twin_label: &str) {
+pub(super) fn session_opened<R: Runtime>(app: &AppHandle<R>) {
     ambilight_capture::set_own_windows_excluded(true);
-    if supported() {
-        return;
+    if !supported() {
+        sync_twin_visibility(app);
     }
-    if let Some(twin) = app.get_webview_window(twin_label) {
-        let _ = if ambilight_capture::capture_active() {
-            twin.hide()
-        } else {
-            twin.show()
+}
+
+/// The twin is off screen because Ambilight captures and nothing here can
+/// keep it out of the frame.
+pub(super) fn twin_held_for_capture() -> bool {
+    !supported() && ambilight_capture::capture_active()
+}
+
+/// Puts the twin on screen or takes it off, from the session's flag and the
+/// capture as they are when this runs on the main thread — not as they were
+/// when it was asked for. A user's switch and a capture start on two threads
+/// can ask in either order; whichever runs last leaves the current state.
+pub(super) fn sync_twin_visibility<R: Runtime>(app: &AppHandle<R>) {
+    let handle = app.clone();
+    let posted = app.run_on_main_thread(move || {
+        let Some((label, hidden)) = handle
+            .try_state::<PreviewSessionState>()
+            .and_then(|state| state.twin_visibility())
+        else {
+            return;
         };
+        if let Some(twin) = handle.get_webview_window(&label) {
+            let _ = if hidden || twin_held_for_capture() {
+                twin.hide()
+            } else {
+                twin.show()
+            };
+        }
+    });
+    if let Err(error) = posted {
+        log::warn!("[preview] twin visibility not updated: {error}");
     }
 }
 
@@ -102,28 +130,8 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) {
         return;
     }
     let app = app.clone();
-    // The posted closure reads the count when it runs rather than the value it
-    // was posted with: a start and a stop on two threads can post out of
-    // order, and the last closure to run must leave the current state.
     ambilight_capture::on_capture_active_changed(Box::new(move |_| {
-        let Some(label) = app
-            .try_state::<PreviewSessionState>()
-            .and_then(|state| state.twin_label())
-        else {
-            return;
-        };
-        let handle = app.clone();
-        let posted = app.run_on_main_thread(move || {
-            if let Some(twin) = handle.get_webview_window(&label) {
-                let _ = if ambilight_capture::capture_active() {
-                    twin.hide()
-                } else {
-                    twin.show()
-                };
-            }
-        });
-        if let Err(error) = posted {
-            log::warn!("[preview] twin visibility not updated after a capture change: {error}");
-        }
+        sync_twin_visibility(&app);
+        super::session::emit_session(&app);
     }));
 }

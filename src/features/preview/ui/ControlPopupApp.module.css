@@ -1,0 +1,112 @@
+@layer components {
+  .root {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+    background: var(--lm-bg);
+    color: var(--lm-ink);
+    font-family: var(--lm-sans);
+    overflow: hidden;
+  }
+
+  /* The whole bar drags the window; its buttons are the only things in it that do not. */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+    height: 40px;
+    padding: 0 6px 0 14px;
+    border-bottom: 1px solid var(--lm-line);
+  }
+
+  .title {
+    flex: 1;
+    min-width: 0;
+    font-size: 12.5px;
+    color: var(--lm-ink-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .headerButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    cursor: pointer;
+    transition: color var(--lm-dur-quick) var(--lm-ease-out), background-color var(--lm-dur-quick) var(--lm-ease-out);
+  }
+  .headerButton:hover { color: var(--lm-ink); background: var(--lm-panel-2); }
+  /* A transparent outline, not none: forced colours drop the box-shadow ring and paint the outline. */
+  .headerButton:focus-visible { outline: 2px solid transparent; box-shadow: var(--lm-focus-ring); color: var(--lm-ink); }
+  .headerButton svg { width: 14px; height: 14px; }
+
+  .held {
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: var(--lm-ink-dim);
+  }
+
+  .body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 14px 12px;
+  }
+
+  .effects {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+
+  .effect {
+    min-height: 32px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--lm-line-2);
+    background: var(--lm-panel);
+    color: var(--lm-ink-dim);
+    font-size: 11.5px;
+    line-height: 1.25;
+    text-align: center;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+    transition: color var(--lm-dur-quick) var(--lm-ease-out), border-color var(--lm-dur-quick) var(--lm-ease-out);
+  }
+  .effect:hover:not(:disabled) { color: var(--lm-ink); }
+  .effect:focus-visible { outline: 2px solid transparent; box-shadow: var(--lm-focus-ring); }
+  /* Ink and an amber edge: the mode above already carries the one amber fill. */
+  .effect[aria-checked="true"] {
+    color: var(--lm-ink);
+    border-color: rgba(255, 176, 32, 0.5);
+  }
+
+  .error {
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: var(--lm-red);
+  }
+
+  :global(:root[data-reduced-motion]) .headerButton,
+  :global(:root[data-reduced-motion]) .effect {
+    transition: none;
+  }
+
+  @media (forced-colors: active) {
+    .effect { border-color: CanvasText; forced-color-adjust: none; }
+    .effect[aria-checked="true"] { outline: 2px solid Highlight; }
+    .header { border-bottom-color: CanvasText; }
+    .headerButton:focus-visible,
+    .effect:focus-visible { outline-color: Highlight; outline-offset: 2px; }
+  }
+}

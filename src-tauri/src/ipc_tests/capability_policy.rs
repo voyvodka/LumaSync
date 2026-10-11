@@ -123,7 +123,9 @@ const APP_POLICY: &[(&str, [bool; 4])] = &[
     ("open_log_dir", MAIN_AND_POPUP),
     // Only the popup's own controls call these.
     ("close_preview", POPUP_ONLY),
+    ("get_preview_session", POPUP_ONLY),
     ("set_preview_popup_hidden", POPUP_ONLY),
+    ("set_preview_twin_hidden", POPUP_ONLY),
     // The twin's one command: its frames.
     ("subscribe_twin_frames", TWIN_ONLY),
     // The main window only.

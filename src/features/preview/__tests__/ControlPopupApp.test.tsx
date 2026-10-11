@@ -1,12 +1,18 @@
 // ControlPopupApp — the preview session's remote: opening it changes no light,
-// the mode strip runs the lighting transaction, Close ends the session and Hide
-// keeps it open.
+// the mode strip runs the lighting transaction, brightness and the effect list
+// retune the running mode, the eye hides the twin, Close ends the session and
+// Hide keeps it open.
 
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PREVIEW_STATUS, type PreviewSessionResult, type PreviewSessionStatusCode } from "@/shared/contracts/preview";
+import {
+  PREVIEW_STATUS,
+  type PreviewSession,
+  type PreviewSessionResult,
+  type PreviewSessionStatusCode,
+} from "@/shared/contracts/preview";
 import type { LightingOutputsStatusCode } from "@/shared/contracts/lightingRuntime";
 import { outputsResult, runtimeSnapshot } from "@/test/lightingRuntime";
 import { LIGHTING_MODE_KIND } from "@/shared/contracts/mode";
@@ -17,19 +23,37 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("@/shared/ui/HsvColorPicker/HsvColorPicker", () => ({
-  HsvColorPicker: ({ ariaLabel }: { ariaLabel: string }) => (
-    <div data-testid="hsv-picker" aria-label={ariaLabel} />
-  ),
-}));
-
 const closePreview = vi.fn<typeof previewApiModule.closePreview>();
 const setPreviewPopupHidden = vi.fn<typeof previewApiModule.setPreviewPopupHidden>();
+const setPreviewTwinHidden = vi.fn<typeof previewApiModule.setPreviewTwinHidden>();
+const getPreviewSession = vi.fn<typeof previewApiModule.getPreviewSession>();
 
 vi.mock("../previewApi", () => ({
   closePreview: (...args: Parameters<typeof closePreview>) => closePreview(...args),
   setPreviewPopupHidden: (...args: Parameters<typeof setPreviewPopupHidden>) => setPreviewPopupHidden(...args),
+  setPreviewTwinHidden: (...args: Parameters<typeof setPreviewTwinHidden>) => setPreviewTwinHidden(...args),
+  getPreviewSession: (...args: Parameters<typeof getPreviewSession>) => getPreviewSession(...args),
 }));
+
+/** The popup's `preview://session` handler, so a test can play Rust's event. */
+let sessionHandler: ((session: PreviewSession) => void) | null = null;
+let listenFails = false;
+
+vi.mock("../previewEventsApi", () => ({
+  listenPreviewSession: (handler: (session: PreviewSession) => void) => {
+    if (listenFails) return Promise.reject(new Error("listen refused"));
+    sessionHandler = handler;
+    return Promise.resolve(() => {});
+  },
+}));
+
+const LIVE: PreviewSession = {
+  state: "live",
+  displayId: "display-1",
+  popupHidden: false,
+  twinHidden: false,
+  twinHeldForCapture: false,
+};
 
 const applyOutputs = vi.fn<typeof modeApiModule.applyOutputs>();
 const retuneLighting = vi.fn<typeof modeApiModule.retuneLighting>();
@@ -51,6 +75,7 @@ vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => Promise.resolve(storeState),
     save: (...args: Parameters<typeof storeSave>) => storeSave(...args),
+    onSaved: () => () => {},
   },
 }));
 
@@ -79,7 +104,12 @@ vi.mock("@tauri-apps/api/window", () => ({
 }));
 
 let syncState: {
-  mode: { kind: string; solid?: { r: number; g: number; b: number; brightness: number; kelvin?: number } } | null;
+  mode: {
+    kind: string;
+    solid?: { r: number; g: number; b: number; brightness: number; kelvin?: number };
+    ambilight?: { brightness: number };
+    effect?: { id: string; speed: number; brightness: number };
+  } | null;
 };
 const adopt = vi.fn();
 
@@ -98,6 +128,10 @@ function sessionReply(code: PreviewSessionStatusCode): PreviewSessionResult {
 
 beforeEach(() => {
   movedHandler = null;
+  sessionHandler = null;
+  listenFails = false;
+  getPreviewSession.mockResolvedValue(LIVE);
+  setPreviewTwinHidden.mockResolvedValue(sessionReply(PREVIEW_STATUS.TWIN_UPDATED));
   storeState = { lastOutputTargets: ["usb"] };
   storeSave.mockResolvedValue(undefined);
   closePreview.mockResolvedValue(sessionReply(PREVIEW_STATUS.CLOSED));
@@ -187,7 +221,7 @@ describe("ControlPopupApp mode strip", () => {
     expect(request).toEqual({ mode: { kind: LIGHTING_MODE_KIND.AMBILIGHT }, origin: "popup" });
   });
 
-  it("sends Solid with the colour on screen", async () => {
+  it("sends Solid with its saved colour", async () => {
     syncState.mode = { kind: LIGHTING_MODE_KIND.OFF, solid: { r: 1, g: 2, b: 3, brightness: 0.4 } };
     const request = await clickMode(/common:mode\.options\.solid/);
 
@@ -308,6 +342,96 @@ describe("ControlPopupApp Solid drag", () => {
       solid: { r: 10, g: 20, b: 30, brightness: 0.2 },
     });
     expect(applyOutputs).not.toHaveBeenCalled();
+  });
+});
+
+describe("ControlPopupApp brightness and effects", () => {
+  it("retunes the running Ambilight's brightness, keeping its other settings", async () => {
+    syncState.mode = { kind: LIGHTING_MODE_KIND.AMBILIGHT, ambilight: { brightness: 0.8 } };
+    render(<ControlPopupApp />);
+
+    fireEvent.change(screen.getByRole("slider", { name: "common:mode.brightness" }), { target: { value: "30" } });
+
+    await waitFor(() => expect(retuneLighting).toHaveBeenCalledTimes(1));
+    expect(retuneLighting.mock.calls[0][0].ambilight?.brightness).toBe(0.3);
+    expect(applyOutputs).not.toHaveBeenCalled();
+  });
+
+  it("holds the brightness out of reach while the lights are off", () => {
+    render(<ControlPopupApp />);
+    expect(screen.getByRole("slider", { name: "common:mode.brightness" })).toBeDisabled();
+  });
+
+  it("lists effects only while an effect runs, and a pick retunes it in place", async () => {
+    syncState.mode = { kind: LIGHTING_MODE_KIND.EFFECT, effect: { id: "wave", speed: 0.4, brightness: 0.7 } };
+    const user = userEvent.setup();
+    render(<ControlPopupApp />);
+
+    expect(screen.getByRole("radio", { name: "lights:effect.names.wave" })).toHaveAttribute("aria-checked", "true");
+    await user.click(screen.getByRole("radio", { name: "lights:effect.names.candle" }));
+
+    await waitFor(() => expect(retuneLighting).toHaveBeenCalledTimes(1));
+    expect(retuneLighting.mock.calls[0][0].effect).toMatchObject({ id: "candle", speed: 0.4, brightness: 0.7 });
+    expect(applyOutputs).not.toHaveBeenCalled();
+  });
+
+  // The six keep their places, so a pick never moves a chip under the pointer.
+  it("adds an effect chosen on Lights after the six", () => {
+    syncState.mode = { kind: LIGHTING_MODE_KIND.EFFECT, effect: { id: "plasma", speed: 0.5, brightness: 1 } };
+    render(<ControlPopupApp />);
+
+    const names = screen.getAllByRole("radio").map((radio) => radio.textContent);
+    expect(names.slice(-2)).toEqual(["lights:effect.names.twinkle", "lights:effect.names.plasma"]);
+    expect(screen.getByRole("radio", { name: "lights:effect.names.plasma" })).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("shows no effect list outside Effect", () => {
+    render(<ControlPopupApp />);
+    expect(screen.queryByRole("radio", { name: "lights:effect.names.wave" })).toBeNull();
+  });
+});
+
+describe("ControlPopupApp twin switch", () => {
+  it("hides the twin, and follows the session Rust reports", async () => {
+    const user = userEvent.setup();
+    render(<ControlPopupApp />);
+    const eye = await screen.findByRole("button", { name: "preview:control.twinHide" });
+
+    await user.click(eye);
+    expect(setPreviewTwinHidden).toHaveBeenCalledWith(true);
+
+    act(() => sessionHandler?.({ ...LIVE, twinHidden: true }));
+    expect(await screen.findByRole("button", { name: "preview:control.twinShow" })).toBeInTheDocument();
+  });
+
+  // Linux and Windows before 2004: the twin is off screen while Ambilight captures.
+  it("says why a shown twin is not on screen", async () => {
+    getPreviewSession.mockResolvedValue({ ...LIVE, twinHeldForCapture: true });
+    render(<ControlPopupApp />);
+
+    expect(await screen.findByRole("status")).toHaveTextContent("preview:control.twinHeld");
+  });
+
+  it("still reads the session when its listener cannot be set up", async () => {
+    listenFails = true;
+    getPreviewSession.mockResolvedValue({ ...LIVE, twinHidden: true });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    render(<ControlPopupApp />);
+
+    expect(await screen.findByRole("button", { name: "preview:control.twinShow" })).toBeInTheDocument();
+  });
+
+  // An event that lands before the mount read is newer than it.
+  it("keeps an event that arrived before the session read", async () => {
+    let answer!: (session: PreviewSession) => void;
+    getPreviewSession.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    render(<ControlPopupApp />);
+    await waitFor(() => expect(sessionHandler).not.toBeNull());
+
+    act(() => sessionHandler?.({ ...LIVE, twinHidden: true }));
+    await act(async () => answer(LIVE));
+
+    expect(screen.getByRole("button", { name: "preview:control.twinShow" })).toBeInTheDocument();
   });
 });
 

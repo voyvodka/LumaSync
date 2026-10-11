@@ -29,4 +29,3 @@
 @import "./styles/hue-channel-map.css" layer(components);
 @import "./styles/room-map.css" layer(components);
 @import "./styles/room-map-menu.css" layer(components);
-@import "./styles/preview.css" layer(components);

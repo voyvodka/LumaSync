@@ -34,6 +34,10 @@ export const PREVIEW_COMMANDS = {
   CLOSE_PREVIEW: "close_preview",
   /** Hide or show the popup while the session stays open. */
   SET_POPUP_HIDDEN: "set_preview_popup_hidden",
+  /** The session as it is; the popup reads it on mount, then follows `preview://session`. */
+  GET_SESSION: "get_preview_session",
+  /** Hide or show the twin while the session stays open. */
+  SET_TWIN_HIDDEN: "set_preview_twin_hidden",
   /** The session's twin takes its frames on a channel; answers the current layout. */
   SUBSCRIBE_TWIN_FRAMES: "subscribe_twin_frames",
 } as const;
@@ -131,6 +135,11 @@ export type PreviewSession =
       /** Display the twin covers — the one Ambilight captures. */
       displayId: DisplayId;
       popupHidden: boolean;
+      /** The popup's switch. Never saved: every session opens with the twin. */
+      twinHidden: boolean;
+      /** Off screen while Ambilight captures, whatever the switch says, where
+       * nothing can keep the twin out of the capture (Linux, Windows before 2004). */
+      twinHeldForCapture: boolean;
     };
 
 /** The layout the twin draws: the one the running mode uses, which during a
@@ -175,6 +184,11 @@ export const TWIN_FRAME = {
 
 /** Payload for `set_preview_popup_hidden`. */
 export interface SetPreviewPopupHiddenPayload {
+  hidden: boolean;
+}
+
+/** Payload for `set_preview_twin_hidden`. */
+export interface SetPreviewTwinHiddenPayload {
   hidden: boolean;
 }
 
@@ -223,6 +237,8 @@ export const PREVIEW_STATUS = {
   NOT_OPEN: "PREVIEW_NOT_OPEN",
   /** The popup was hidden or shown. */
   POPUP_UPDATED: "PREVIEW_POPUP_UPDATED",
+  /** The twin was hidden or shown; shown, it gets a fresh frame at once. */
+  TWIN_UPDATED: "PREVIEW_TWIN_UPDATED",
   /** The twin's channel is registered; the layout comes with the answer. */
   TWIN_SUBSCRIBED: "PREVIEW_TWIN_SUBSCRIBED",
   /** The displays could not be read, or a window could not be built; whatever
@@ -266,8 +282,14 @@ export const LED_CONTROL_POPUP_LABEL_PREFIX = "led-control-popup-" as const;
 /** `TwinLayout`, to the twin, when the running mode's layout changes. */
 export const PREVIEW_TWIN_LAYOUT_EVENT = "preview://twin-layout" as const;
 
+/** `PreviewSession`, to the popup only, when it changes while the session is
+ * open. The main window gets nothing: it learns the session ended by being
+ * shown again. */
+export const PREVIEW_SESSION_EVENT = "preview://session" as const;
+
 export const PREVIEW_EVENTS = {
   TWIN_LAYOUT: PREVIEW_TWIN_LAYOUT_EVENT,
+  SESSION: PREVIEW_SESSION_EVENT,
 } as const;
 
 export type PreviewEventName = (typeof PREVIEW_EVENTS)[keyof typeof PREVIEW_EVENTS];

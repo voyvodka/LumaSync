@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, Runtime, State};
+use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime, State};
 
 use super::exclusion;
 use super::feed::TwinFeed;
@@ -24,12 +24,14 @@ use super::windows::{
 use crate::commands::calibration::{list_displays, DisplayInfoPayload};
 use crate::commands::shell_state;
 use crate::commands::status::CommandStatus;
+use crate::events::PREVIEW_SESSION_EVENT;
 
 const PREVIEW_OPENED: &str = "PREVIEW_OPENED";
 const PREVIEW_ALREADY_OPEN: &str = "PREVIEW_ALREADY_OPEN";
 const PREVIEW_CLOSED: &str = "PREVIEW_CLOSED";
 pub(super) const PREVIEW_NOT_OPEN: &str = "PREVIEW_NOT_OPEN";
 const PREVIEW_POPUP_UPDATED: &str = "PREVIEW_POPUP_UPDATED";
+const PREVIEW_TWIN_UPDATED: &str = "PREVIEW_TWIN_UPDATED";
 const PREVIEW_OPEN_FAILED: &str = "PREVIEW_OPEN_FAILED";
 const PREVIEW_CLOSE_FAILED: &str = "PREVIEW_CLOSE_FAILED";
 
@@ -42,6 +44,10 @@ pub enum PreviewSession {
     Live {
         display_id: String,
         popup_hidden: bool,
+        twin_hidden: bool,
+        /// Shown or not by the user, the twin is off screen while Ambilight
+        /// captures where nothing can keep it out of the capture.
+        twin_held_for_capture: bool,
     },
 }
 
@@ -58,11 +64,19 @@ pub struct SetPreviewPopupHiddenPayload {
     pub hidden: bool,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetPreviewTwinHiddenPayload {
+    pub hidden: bool,
+}
+
 struct OpenSession {
     display_id: String,
     twin_label: String,
     popup_label: String,
     popup_hidden: bool,
+    /// The user's switch; never saved, so every session opens with the twin.
+    twin_hidden: bool,
     /// Set only when opening hid a visible main window, so a session opened
     /// from the tray with the shell already hidden does not conjure it on the
     /// way out.
@@ -84,6 +98,8 @@ impl OpenSession {
         PreviewSession::Live {
             display_id: self.display_id.clone(),
             popup_hidden: self.popup_hidden,
+            twin_hidden: self.twin_hidden,
+            twin_held_for_capture: exclusion::twin_held_for_capture(),
         }
     }
 }
@@ -126,15 +142,6 @@ impl PreviewSessionState {
         Arc::clone(&self.twin_open)
     }
 
-    /// The open session's twin. Best-effort: a poisoned lock answers `None`
-    /// rather than wedging a caller.
-    pub fn twin_label(&self) -> Option<String> {
-        self.inner
-            .lock()
-            .ok()
-            .and_then(|inner| inner.open.as_ref().map(|open| open.twin_label.clone()))
-    }
-
     pub(super) fn display_id(&self) -> Option<String> {
         self.inner
             .lock()
@@ -142,29 +149,66 @@ impl PreviewSessionState {
             .and_then(|inner| inner.open.as_ref().map(|open| open.display_id.clone()))
     }
 
+    /// The twin's label and whether the user hid it. Best-effort: a poisoned
+    /// lock answers `None` rather than wedging a caller.
+    pub(super) fn twin_visibility(&self) -> Option<(String, bool)> {
+        self.inner.lock().ok().and_then(|inner| {
+            inner
+                .open
+                .as_ref()
+                .map(|open| (open.twin_label.clone(), open.twin_hidden))
+        })
+    }
+
+    /// The popup to tell, and what to tell it.
+    pub(super) fn popup_and_session(&self) -> Option<(String, PreviewSession)> {
+        self.inner.lock().ok().and_then(|inner| {
+            inner
+                .open
+                .as_ref()
+                .map(|open| (open.popup_label.clone(), open.wire()))
+        })
+    }
+
+    // Every write of the gate happens under the session lock, so a show, a
+    // subscribe and a drop cannot interleave into a gate open with no channel
+    // or shut with one.
+
     /// Registers the twin's channel and opens the feed gate, in the same
     /// critical section that checks the caller is the open session's twin: an
-    /// ending session cannot slip between the check and the gate.
+    /// ending session cannot slip between the check and the gate. A twin the
+    /// user hid subscribes with the gate shut.
     pub(super) fn subscribe_twin(
         &self,
         label: &str,
         channel: tauri::ipc::Channel,
     ) -> Result<bool, String> {
         let inner = self.lock()?;
-        let ours = inner
-            .open
-            .as_ref()
-            .is_some_and(|open| open.twin_label == label);
-        if ours {
-            self.feed.subscribe(label.to_string(), channel);
-            self.twin_open.store(true, Ordering::SeqCst);
-        }
-        Ok(ours)
+        let Some(open) = inner.open.as_ref().filter(|open| open.twin_label == label) else {
+            return Ok(false);
+        };
+        self.feed.subscribe(label.to_string(), channel);
+        self.twin_open.store(!open.twin_hidden, Ordering::SeqCst);
+        Ok(true)
     }
 
     pub(super) fn drop_twin_subscriber(&self) {
+        let _inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         self.twin_open.store(false, Ordering::SeqCst);
         self.feed.clear();
+    }
+
+    /// Hidden, the worker builds no twin frame; shown, the gate opens again if
+    /// the twin has subscribed. `None` with no session open.
+    fn set_twin_hidden(&self, hidden: bool) -> Result<Option<PreviewSession>, String> {
+        let mut inner = self.lock()?;
+        let Some(open) = inner.open.as_mut() else {
+            return Ok(None);
+        };
+        open.twin_hidden = hidden;
+        self.twin_open
+            .store(!hidden && self.feed.has_subscriber(), Ordering::SeqCst);
+        Ok(Some(open.wire()))
     }
 
     fn commit(&self, open: OpenSession) -> Result<PreviewSession, String> {
@@ -195,8 +239,10 @@ impl PreviewSessionState {
     }
 
     fn take(&self) -> Result<Option<OpenSession>, String> {
-        let taken = self.lock()?.open.take();
-        self.drop_twin_subscriber();
+        let mut inner = self.lock()?;
+        let taken = inner.open.take();
+        self.twin_open.store(false, Ordering::SeqCst);
+        self.feed.clear();
         Ok(taken)
     }
 
@@ -209,6 +255,7 @@ impl PreviewSessionState {
             twin_label: twin_label.into(),
             popup_label: popup_label.into(),
             popup_hidden: false,
+            twin_hidden: false,
             main_hidden_by_session: false,
             return_to: None,
             floating: false,
@@ -314,6 +361,33 @@ fn hand_back(return_to: Option<i32>) {
     let _ = return_to;
 }
 
+/// To the popup only: the twin learns its layout on its own event, and the
+/// main window learns the session ended by being shown again. Sent from the
+/// main thread with the session as it is then, not as the caller saw it: two
+/// changes on two threads can ask in either order, and the last event the
+/// popup gets must be the current state.
+pub(super) fn emit_session<R: Runtime>(app: &AppHandle<R>) {
+    let handle = app.clone();
+    let posted = app.run_on_main_thread(move || {
+        let Some((popup_label, session)) = handle
+            .try_state::<PreviewSessionState>()
+            .and_then(|state| state.popup_and_session())
+        else {
+            return;
+        };
+        if let Err(error) = handle.emit_to(
+            EventTarget::webview_window(popup_label.as_str()),
+            PREVIEW_SESSION_EVENT,
+            &session,
+        ) {
+            log::warn!("[preview] session not sent to {popup_label}: {error}");
+        }
+    });
+    if let Err(error) = posted {
+        log::warn!("[preview] session event not posted: {error}");
+    }
+}
+
 fn reveal_popup<R: Runtime>(app: &AppHandle<R>, label: &str) {
     if let Some(popup) = app.get_webview_window(label) {
         let _ = popup.unminimize();
@@ -360,6 +434,7 @@ pub fn open_preview<R: Runtime>(
             let (label, session) = (open.popup_label.clone(), open.wire());
             drop(inner);
             reveal_popup(&app, &label);
+            emit_session(&app);
             return Ok(result(
                 session,
                 PREVIEW_ALREADY_OPEN,
@@ -445,13 +520,14 @@ pub fn open_preview<R: Runtime>(
         twin_label: twin_label.clone(),
         popup_label: popup_label.clone(),
         popup_hidden: false,
+        twin_hidden: false,
         main_hidden_by_session,
         return_to,
         floating,
     });
     match committed {
         Ok(session) => {
-            exclusion::session_opened(&app, &twin_label);
+            exclusion::session_opened(&app);
             Ok(result(session, PREVIEW_OPENED, "Preview opened."))
         }
         Err(error) => {
@@ -521,6 +597,50 @@ pub fn close_preview<R: Runtime>(app: AppHandle<R>) -> Result<PreviewSessionResu
     end_session(&app)
 }
 
+/// What the popup reads on mount; `preview://session` brings it each change after.
+#[tauri::command]
+pub fn get_preview_session(
+    state: State<'_, PreviewSessionState>,
+) -> Result<PreviewSession, String> {
+    Ok(state
+        .lock()?
+        .open
+        .as_ref()
+        .map_or(PreviewSession::Closed, OpenSession::wire))
+}
+
+/// Hide or show the twin while the session stays open. Shown again, it is
+/// sent a fresh frame at once rather than the one it last drew. Async for that
+/// refresh, which waits on the lighting lock.
+#[tauri::command]
+pub async fn set_preview_twin_hidden<R: Runtime>(
+    app: AppHandle<R>,
+    payload: SetPreviewTwinHiddenPayload,
+) -> Result<PreviewSessionResult, String> {
+    let updated = match app.try_state::<PreviewSessionState>() {
+        Some(state) => state.set_twin_hidden(payload.hidden)?,
+        None => None,
+    };
+    let Some(session) = updated else {
+        return Ok(result(
+            PreviewSession::Closed,
+            PREVIEW_NOT_OPEN,
+            "No preview is open.",
+        ));
+    };
+    exclusion::sync_twin_visibility(&app);
+    emit_session(&app);
+    if !payload.hidden {
+        let refresh_app = app.clone();
+        tauri::async_runtime::spawn_blocking(move || super::feed::refresh(&refresh_app))
+            .await
+            .map_err(|error| {
+                format!("PREVIEW_SESSION_LOCK_FAILED: the twin refresh died: {error}")
+            })?;
+    }
+    Ok(result(session, PREVIEW_TWIN_UPDATED, "LED twin updated."))
+}
+
 #[tauri::command]
 pub fn set_preview_popup_hidden<R: Runtime>(
     app: AppHandle<R>,
@@ -546,6 +666,7 @@ pub fn set_preview_popup_hidden<R: Runtime>(
     } else {
         reveal_popup(&app, &popup_label);
     }
+    emit_session(&app);
     Ok(result(
         session,
         PREVIEW_POPUP_UPDATED,
@@ -653,7 +774,10 @@ mod tests {
             !gate.load(Ordering::Relaxed),
             "a window alone feeds nothing"
         );
-        assert_eq!(state.twin_label().as_deref(), Some("led-twin-overlay-7"));
+        assert_eq!(
+            state.twin_visibility(),
+            Some(("led-twin-overlay-7".to_string(), false))
+        );
         state.feed.subscribe(
             "led-twin-overlay-7".into(),
             tauri::ipc::Channel::new(|_| Ok(())),
@@ -661,7 +785,22 @@ mod tests {
         gate.store(true, Ordering::SeqCst);
         state.close_for_test();
         assert!(!gate.load(Ordering::Relaxed));
-        assert_eq!(state.twin_label(), None);
+        assert_eq!(state.twin_visibility(), None);
+    }
+
+    /// A twin the user hid that reloads and subscribes again stays unfed.
+    #[test]
+    fn a_hidden_twin_subscribes_with_the_gate_shut() {
+        let state = PreviewSessionState::default();
+        state.open_for_test("a", "led-twin-overlay-5", "led-control-popup-5");
+        state.set_twin_hidden(true).unwrap();
+
+        let ours = state
+            .subscribe_twin("led-twin-overlay-5", tauri::ipc::Channel::new(|_| Ok(())))
+            .unwrap();
+
+        assert!(ours);
+        assert!(!state.twin_open().load(Ordering::SeqCst));
     }
 
     #[test]
@@ -759,10 +898,18 @@ mod tests {
         assert_eq!(
             serde_json::to_value(PreviewSession::Live {
                 display_id: "a".into(),
-                popup_hidden: true
+                popup_hidden: true,
+                twin_hidden: false,
+                twin_held_for_capture: false,
             })
             .unwrap(),
-            serde_json::json!({ "state": "live", "displayId": "a", "popupHidden": true })
+            serde_json::json!({
+                "state": "live",
+                "displayId": "a",
+                "popupHidden": true,
+                "twinHidden": false,
+                "twinHeldForCapture": false
+            })
         );
     }
 }

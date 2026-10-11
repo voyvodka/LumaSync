@@ -81,8 +81,10 @@ import type { NotificationPayload, NotificationResult, PLATFORM_COMMANDS } from 
 import type {
   LedTestPatternResult,
   PREVIEW_COMMANDS,
+  PreviewSession,
   PreviewSessionResult,
   SetPreviewPopupHiddenPayload,
+  SetPreviewTwinHiddenPayload,
   StartLedTestPatternPayload,
   TwinFrameChannel,
   TwinSubscribeResult,
@@ -229,6 +231,8 @@ export interface CommandMap {
   open_preview: NoArgs<PreviewSessionResult>;
   close_preview: NoArgs<PreviewSessionResult>;
   set_preview_popup_hidden: Command<{ payload: SetPreviewPopupHiddenPayload }, PreviewSessionResult>;
+  get_preview_session: NoArgs<PreviewSession>;
+  set_preview_twin_hidden: Command<{ payload: SetPreviewTwinHiddenPayload }, PreviewSessionResult>;
   subscribe_twin_frames: Command<{ onFrame: TwinFrameChannel }, TwinSubscribeResult>;
 
   // --- shell --------------------------------------------------------------

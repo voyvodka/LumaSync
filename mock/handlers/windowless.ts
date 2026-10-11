@@ -27,14 +27,14 @@ import {
   PLATFORM_COMMANDS,
   type NotificationResult,
 } from "../../src/shared/contracts/platform";
-import { PREVIEW_COMMANDS, PREVIEW_STATUS } from "../../src/shared/contracts/preview";
+import { PREVIEW_COMMANDS, PREVIEW_EVENTS, PREVIEW_STATUS } from "../../src/shared/contracts/preview";
 import type {
   PreviewSession,
   PreviewSessionResult,
   PreviewSessionStatusCode,
 } from "../../src/shared/contracts/preview";
 import { SHELL_COMMANDS } from "../../src/shared/contracts/shell";
-import { attachTwinChannel, mockTwinLayout } from "../events";
+import { attachTwinChannel, emitMockEvent, mockTwinLayout } from "../events";
 import { getWorld } from "../state";
 import type { TypedHandlers } from "./types";
 
@@ -70,9 +70,16 @@ export const windowlessHandlers = {
   [PREVIEW_COMMANDS.OPEN_PREVIEW]: () => {
     if (session.state === "live") {
       session = { ...session, popupHidden: false };
+      void emitMockEvent(PREVIEW_EVENTS.SESSION, session);
       return sessionResult(PREVIEW_STATUS.ALREADY_OPEN, "The preview is already open.");
     }
-    session = { state: "live", displayId: previewDisplayId(), popupHidden: false };
+    session = {
+      state: "live",
+      displayId: previewDisplayId(),
+      popupHidden: false,
+      twinHidden: false,
+      twinHeldForCapture: false,
+    };
     return sessionResult(PREVIEW_STATUS.OPENED, "Preview opened (no window in a browser tab)");
   },
   [PREVIEW_COMMANDS.CLOSE_PREVIEW]: () => {
@@ -94,7 +101,15 @@ export const windowlessHandlers = {
   [PREVIEW_COMMANDS.SET_POPUP_HIDDEN]: ({ payload }) => {
     if (session.state === "closed") return sessionResult(PREVIEW_STATUS.NOT_OPEN, "No preview is open.");
     session = { ...session, popupHidden: payload.hidden };
+    void emitMockEvent(PREVIEW_EVENTS.SESSION, session);
     return sessionResult(PREVIEW_STATUS.POPUP_UPDATED, "Preview controls updated.");
+  },
+  [PREVIEW_COMMANDS.GET_SESSION]: () => session,
+  [PREVIEW_COMMANDS.SET_TWIN_HIDDEN]: ({ payload }) => {
+    if (session.state === "closed") return sessionResult(PREVIEW_STATUS.NOT_OPEN, "No preview is open.");
+    session = { ...session, twinHidden: payload.hidden };
+    void emitMockEvent(PREVIEW_EVENTS.SESSION, session);
+    return sessionResult(PREVIEW_STATUS.TWIN_UPDATED, "LED twin updated.");
   },
 
   [DISPLAY_OVERLAY_COMMANDS.OPEN_DISPLAY_OVERLAY]: () => ({

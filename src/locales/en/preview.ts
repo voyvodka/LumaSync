@@ -8,7 +8,9 @@ export default {
     closeHint: "Close the LED preview. Reopen it from Lights or the tray menu.",
     hide: "Hide",
     hideHint: "Hide these controls and keep the preview open. Bring them back from the tray menu.",
-    dragHint: "Drag the header to move this popup.",
+    twinHide: "Hide the on-screen LEDs",
+    twinShow: "Show the on-screen LEDs",
+    twinHeld: "The on-screen LEDs are hidden while Ambilight captures the screen.",
     calibrationRequired: "The LED strip needs a calibration first. Set it up in LED Setup, then pick the mode again.",
   },
   twin: {

@@ -2,7 +2,7 @@ import type { Catalogue } from "@/features/i18n/catalogue";
 import type enPreview from "@/locales/en/preview";
 
 const preview: Catalogue<typeof enPreview> = {
-  title: "LED önizleme",
+  title: "LED önizlemesi",
   tray: {
     show: "LED Önizlemesini Göster",
   },
@@ -11,7 +11,9 @@ const preview: Catalogue<typeof enPreview> = {
     closeHint: "LED önizlemesini kapat. Işıklar'dan ya da tepsi menüsünden yeniden açabilirsin.",
     hide: "Gizle",
     hideHint: "Bu kontrolleri gizle, önizleme açık kalsın. Tepsi menüsünden geri getirebilirsin.",
-    dragHint: "Pencereyi taşımak için başlığı sürükle.",
+    twinHide: "Ekrandaki LED'leri gizle",
+    twinShow: "Ekrandaki LED'leri göster",
+    twinHeld: "Ambilight ekranı yakalarken ekrandaki LED'ler gizli.",
     calibrationRequired: "LED şeridin önce kalibre edilmesi gerekiyor. LED Kurulumu'ndan ayarla, sonra modu yeniden seç.",
   },
   twin: {

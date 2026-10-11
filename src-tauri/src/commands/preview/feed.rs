@@ -149,6 +149,10 @@ impl TwinFeed {
             .and_then(|inner| inner.layout.clone())
     }
 
+    pub(super) fn has_subscriber(&self) -> bool {
+        self.subscriber_label().is_some()
+    }
+
     fn subscriber_label(&self) -> Option<String> {
         self.inner
             .lock()

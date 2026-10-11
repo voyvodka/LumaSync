@@ -3,17 +3,17 @@
 // choice like the main window's: the Rust transaction runs it, on the saved
 // outputs, and saves it. Close ends the session; Hide keeps it open.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { shellStore } from "@/features/persistence/shellStore";
+import { usePreference } from "@/features/persistence/preferences";
 import {
   onCurrentWindowMoved,
   readCurrentWindowLogicalCenter,
   type UnlistenFn,
 } from "@/features/shell/windowApi";
-import { parseHex, rgbToHex } from "@/shared/lib/color";
-import { HsvColorPicker } from "@/shared/ui/HsvColorPicker/HsvColorPicker";
+import { withEffect } from "@/features/mode/model/effectEdits";
 import { modeKind } from "@/features/mode/model/modeKinds";
 import { ModeStrip } from "@/features/mode/ui/ModeStrip";
 import { applyOutputs, retuneLighting } from "@/features/mode/modeApi";
@@ -21,35 +21,33 @@ import { isOutputsApplied, needsCalibration } from "@/features/mode/state/modeAp
 import { choiceFailureMessage } from "@/features/shell/notices/choiceFailureMessage";
 import { createRetuneCoalescer } from "@/features/mode/state/retuneCoalescer";
 import { useLightingRuntime } from "@/features/mode/state/useLightingRuntime";
+import type { EffectId } from "@/shared/contracts/effects";
 import {
   DEFAULT_SOLID_COLOR,
   LIGHTING_MODE_KIND,
+  normalizeAmbilightPayload,
   normalizeEffectPayload,
   normalizeSolidColorPayload,
   type LightingModeKind,
 } from "@/shared/contracts/mode";
-import { LIGHTING_ORIGIN } from "@/shared/contracts/lightingRuntime";
+import { LIGHTING_ORIGIN, type LightingTuning } from "@/shared/contracts/lightingRuntime";
 import { PREVIEW_STATUS } from "@/shared/contracts/preview";
-import { useSolidColorDraft } from "@/features/mode/ui/solid/useSolidColorDraft";
-import { closePreview, setPreviewPopupHidden } from "../previewApi";
-import { PopupEffectRow } from "./PopupEffectRow";
-import { DEFAULT_WHITE_KELVIN, KelvinSlider } from "@/features/mode/ui/solid/SolidWhite";
-import { RangeRow } from "@/shared/ui/RangeRow/RangeRow";
-import { StageChoice } from "@/shared/ui/Stage/Stage";
+import { IconButton } from "@/shared/ui/IconButton/IconButton";
+import { IconClose, IconEye, IconEyeOff, IconMinus } from "@/shared/ui/icons";
+import { closePreview, setPreviewPopupHidden, setPreviewTwinHidden } from "../previewApi";
+import { usePreviewSession } from "../state/usePreviewSession";
+import { PopupBrightnessRow } from "./PopupBrightnessRow";
+import { PopupEffectList } from "./PopupEffectList";
+import styles from "./ControlPopupApp.module.css";
 
 /** Trailing window for popup-centre writes so a window drag hits disk once. */
 const PERSIST_CENTER_DEBOUNCE_MS = 400;
 
-interface SolidDraft {
-  r: number;
-  g: number;
-  b: number;
-  brightness: number;
-}
-
 export function ControlPopupApp() {
   const { t } = useTranslation();
   const { snapshot, adopt } = useLightingRuntime();
+  const session = usePreviewSession();
+  const lastLit = usePreference("lastLitKind");
   const mode = snapshot?.mode ?? null;
   const retunes = useMemo(() => createRetuneCoalescer((tuning) => retuneLighting(tuning)), []);
   const [runError, setRunError] = useState<string | null>(null);
@@ -98,37 +96,11 @@ export function ControlPopupApp() {
   }, []);
 
   const kind = mode?.kind ?? LIGHTING_MODE_KIND.OFF;
-  const isSolid = kind === LIGHTING_MODE_KIND.SOLID;
-  const runningEffect = kind === LIGHTING_MODE_KIND.EFFECT ? normalizeEffectPayload(mode?.effect) : null;
+  const solid = normalizeSolidColorPayload(mode?.solid ?? DEFAULT_SOLID_COLOR);
+  const ambilight = normalizeAmbilightPayload(mode?.ambilight);
+  const effect = normalizeEffectPayload(mode?.effect);
 
-  // ── Solid color draft (shared HSV picker + throttled brightness) ─────────
-  const incomingSolid = useMemo(
-    () => ({
-      r: mode?.solid?.r ?? DEFAULT_SOLID_COLOR.r,
-      g: mode?.solid?.g ?? DEFAULT_SOLID_COLOR.g,
-      b: mode?.solid?.b ?? DEFAULT_SOLID_COLOR.b,
-      brightness: mode?.solid?.brightness ?? DEFAULT_SOLID_COLOR.brightness,
-      kelvin: mode?.solid?.kelvin ?? null,
-    }),
-    [mode?.solid?.r, mode?.solid?.g, mode?.solid?.b, mode?.solid?.brightness, mode?.solid?.kelvin],
-  );
-
-  const handleSolidCommit = useCallback(
-    (next: SolidDraft) => {
-      if (!isSolid) return;
-      retunes.push({ solid: normalizeSolidColorPayload(next) });
-    },
-    [isSolid, retunes],
-  );
-
-  // White reopens at the temperature it last had.
-  const lastKelvinRef = useRef(mode?.solid?.kelvin ?? DEFAULT_WHITE_KELVIN);
-  const { draft, setColor, setKelvin, setBrightness } = useSolidColorDraft({
-    incoming: incomingSolid,
-    onCommit: handleSolidCommit,
-  });
-
-  // ── Mode strip handlers ──────────────────────────────────────────────────
+  // ── Mode strip ───────────────────────────────────────────────────────────
   const handleModeClick = useCallback(
     (next: LightingModeKind) => {
       setRunError(null);
@@ -136,17 +108,10 @@ export function ControlPopupApp() {
         try {
           retunes.reset();
           // The kind alone for Off and Ambilight: Rust keeps the last Ambilight
-          // settings. Solid carries the colour on screen.
+          // settings. Solid carries its saved colour; the colour itself is
+          // chosen on Lights.
           const result = await applyOutputs({
-            mode: modeKind(next).config({
-              solid: {
-                r: draft.r,
-                g: draft.g,
-                b: draft.b,
-                brightness: draft.brightness,
-                ...(draft.kelvin != null ? { kelvin: draft.kelvin } : {}),
-              },
-            }),
+            mode: modeKind(next).config({ solid: mode?.solid ?? DEFAULT_SOLID_COLOR }),
             origin: LIGHTING_ORIGIN.POPUP,
           });
           adopt(result.snapshot);
@@ -169,10 +134,39 @@ export function ControlPopupApp() {
         }
       })();
     },
-    [adopt, retunes, t, draft.r, draft.g, draft.b, draft.brightness, draft.kelvin],
+    [adopt, retunes, t, mode?.solid],
   );
 
-  // ── Close and hide ───────────────────────────────────────────────────────
+  // ── Brightness and the effect list: retunes of the running mode ──────────
+  const shownBrightness =
+    kind === LIGHTING_MODE_KIND.SOLID
+      ? solid.brightness
+      : kind === LIGHTING_MODE_KIND.EFFECT
+        ? effect.brightness
+        : ambilight.brightness;
+  const retuneBrightness = (brightness: number) => {
+    const tuning: LightingTuning | null =
+      kind === LIGHTING_MODE_KIND.SOLID
+        ? { solid: { ...solid, brightness } }
+        : kind === LIGHTING_MODE_KIND.EFFECT
+          ? { effect: { ...effect, brightness } }
+          : kind === LIGHTING_MODE_KIND.AMBILIGHT
+            ? { ambilight: { ...ambilight, brightness } }
+            : null;
+    if (tuning) retunes.push(tuning);
+  };
+  const pickEffect = (id: EffectId) => retunes.push({ effect: withEffect(effect, id) });
+
+  // ── Twin, hide and close ─────────────────────────────────────────────────
+  const live = session?.state === "live" ? session : null;
+  const twinHidden = live?.twinHidden ?? false;
+  // Switched on but off screen: the capture holds it where nothing can keep it out of the frame.
+  const twinHeld = !twinHidden && (live?.twinHeldForCapture ?? false);
+  const twinLabel = twinHidden ? t("preview:control.twinShow") : t("preview:control.twinHide");
+  const handleTwin = () => {
+    void setPreviewTwinHidden(!twinHidden);
+  };
+
   // Close ends the session in Rust, which destroys this window and the twin;
   // only a failure leaves anything here to show.
   const handleClose = useCallback(() => {
@@ -195,104 +189,66 @@ export function ControlPopupApp() {
     return () => window.removeEventListener("keydown", onKey);
   }, [handleClose]);
 
-  const hexColor = rgbToHex(draft);
-  if (draft.kelvin != null) lastKelvinRef.current = draft.kelvin;
-  const brightnessPct = Math.round(draft.brightness * 100);
-
   return (
-    <div className="lm-control-root">
-      {/* Header — draggable region */}
-      <header className="lm-control-header" data-tauri-drag-region>
-        <span className="lm-control-title" data-tauri-drag-region>
+    <div className={styles.root}>
+      <header className={styles.header} data-tauri-drag-region>
+        <span className={styles.title} data-tauri-drag-region>
           {t("preview:title")}
         </span>
+        <IconButton
+          className={styles.headerButton}
+          label={twinLabel}
+          icon={twinHidden || twinHeld ? <IconEyeOff /> : <IconEye />}
+          onClick={handleTwin}
+          data-testid="popup-twin"
+        />
+        <IconButton
+          className={styles.headerButton}
+          label={t("preview:control.hide")}
+          title={t("preview:control.hideHint")}
+          icon={<IconMinus />}
+          onClick={handleHide}
+        />
+        <IconButton
+          className={styles.headerButton}
+          label={t("preview:control.close")}
+          title={t("preview:control.closeHint")}
+          icon={<IconClose />}
+          onClick={handleClose}
+        />
       </header>
 
-      <div className="lm-control-body">
-        <div>
-          <div className="lm-control-section-title">{t("common:mode.title")}</div>
-          <ModeStrip variant="popup" value={kind} onSelect={handleModeClick} />
-        </div>
-
-        {isSolid && (
-          <div className="flex flex-col gap-3" data-testid="popup-colour">
-            <StageChoice
-              ariaLabel={t("lights:solid.tone")}
-              value={draft.kelvin != null ? "white" : "colour"}
-              onChange={(tone) =>
-                tone === "white"
-                  ? setKelvin(lastKelvinRef.current)
-                  : setColor({ r: draft.r, g: draft.g, b: draft.b })
-              }
-              options={[
-                { value: "colour", label: t("lights:solid.colour"), testId: "solid-tone-colour" },
-                { value: "white", label: t("lights:solid.white"), testId: "solid-tone-white" },
-              ]}
-            />
-            {draft.kelvin != null ? (
-              <KelvinSlider kelvin={draft.kelvin} onChange={setKelvin} />
-            ) : (
-              <div className="flex justify-center">
-                <HsvColorPicker
-                  value={hexColor}
-                  onChange={(hex) => {
-                    const rgb = parseHex(hex);
-                    if (rgb) setColor(rgb);
-                  }}
-                  ariaLabel={t("common:mode.solidColor")}
-                  compact
-                />
-              </div>
-            )}
-            <RangeRow
-              variant="stage"
-              label={t("common:mode.brightness")}
-              valueLabel={`${brightnessPct}%`}
-              min={0}
-              max={100}
-              step={1}
-              value={brightnessPct}
-              onChange={(v) => setBrightness(v / 100)}
-              testId="popup-brightness"
-            />
-          </div>
+      <div className={styles.body}>
+        {twinHeld && (
+          <p className={styles.held} role="status" data-testid="popup-twin-held">
+            {t("preview:control.twinHeld")}
+          </p>
         )}
-
-        {runningEffect && (
-          <PopupEffectRow
-            effect={runningEffect}
-            onBrightness={(brightness) => retunes.push({ effect: { ...runningEffect, brightness } })}
-          />
-        )}
-
+        <ModeStrip variant="popup" value={kind} onSelect={handleModeClick} />
+        <PopupBrightnessRow
+          brightness={kind === LIGHTING_MODE_KIND.OFF ? brightnessOf(lastLit, solid, ambilight, effect) : shownBrightness}
+          disabled={kind === LIGHTING_MODE_KIND.OFF}
+          onChange={retuneBrightness}
+        />
+        {kind === LIGHTING_MODE_KIND.EFFECT && <PopupEffectList running={effect.id} onPick={pickEffect} />}
         {runError && (
-          <p className="font-mono text-[10px] leading-snug text-red" role="alert">
+          <p className={styles.error} role="alert">
             {runError}
           </p>
         )}
-
-        <p className="lm-control-drag-hint">{t("preview:control.dragHint")}</p>
       </div>
-
-      <footer className="lm-test-footer is-idle">
-        <span className="lm-test-footer-text" />
-        <button
-          type="button"
-          className="lm-control-close"
-          onClick={handleHide}
-          title={t("preview:control.hideHint")}
-        >
-          {t("preview:control.hide")}
-        </button>
-        <button
-          type="button"
-          className="lm-control-close"
-          onClick={handleClose}
-          title={t("preview:control.closeHint")}
-        >
-          {t("preview:control.close")}
-        </button>
-      </footer>
     </div>
   );
+}
+
+/** While the lights are off the row shows, out of reach, what turning them on brings back. */
+function brightnessOf(
+  kind: LightingModeKind,
+  solid: { brightness: number },
+  ambilight: { brightness: number },
+  effect: { brightness: number },
+): number {
+  if (kind === LIGHTING_MODE_KIND.SOLID) return solid.brightness;
+  if (kind === LIGHTING_MODE_KIND.EFFECT) return effect.brightness;
+  return ambilight.brightness;
 }

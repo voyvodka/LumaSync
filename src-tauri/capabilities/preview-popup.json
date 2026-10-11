@@ -21,7 +21,9 @@
     "allow-retune-lighting",
     "allow-get-lighting-runtime",
     "allow-close-preview",
+    "allow-get-preview-session",
     "allow-set-preview-popup-hidden",
+    "allow-set-preview-twin-hidden",
     "allow-open-log-dir"
   ]
 }
