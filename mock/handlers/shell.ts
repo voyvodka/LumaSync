@@ -55,24 +55,22 @@ export function removeShellStateKeys(keys: readonly string[]): void {
   ensureSeeded();
   const next: Record<string, unknown> = { ...shellStateBacking };
   for (const key of keys) delete next[key];
-  shellStateBacking = next;
-  shellStateRevision += 1;
-  mutate((w) => {
-    w.shellState = next as Partial<ShellState>;
-  });
-  announceShellStateChange({ set: {}, remove: [...keys], revision: shellStateRevision, writerId: "rust" });
+  commitAsRust(next, {}, [...keys]);
 }
 
 /** Sets shell-state keys the way Rust's own writes do, announced like {@link removeShellStateKeys}. */
 export function patchShellStateAsRust(set: Record<string, unknown>): void {
   ensureSeeded();
-  const next: Record<string, unknown> = { ...shellStateBacking, ...set };
+  commitAsRust({ ...shellStateBacking, ...set }, set, []);
+}
+
+function commitAsRust(next: Record<string, unknown>, set: Record<string, unknown>, remove: string[]): void {
   shellStateBacking = next;
   shellStateRevision += 1;
   mutate((w) => {
     w.shellState = next as Partial<ShellState>;
   });
-  announceShellStateChange({ set, remove: [], revision: shellStateRevision, writerId: "rust" });
+  announceShellStateChange({ set, remove, revision: shellStateRevision, writerId: "rust" });
 }
 
 function ensureSeeded(): void {
@@ -250,9 +248,7 @@ export const shellHandlers = {
  * Tauri routes plugin traffic through `invoke` as `plugin:<name>|<method>`.
  * These are not in any `*COMMANDS` map, so they are matched by prefix rather
  * than by the exhaustiveness guard.
- */
-
-/**
+ *
  * `plugin:window|*` and `plugin:webview|*` have well over forty methods between
  * them and the app touches a moving subset, so they are answered by shape
  * rather than enumerated: getters return a plausible value, setters return
@@ -329,6 +325,6 @@ export const pluginHandlers: Record<string, Handler> = {
   // Tauri event was silently dead — including the twin's old per-LED event, which
   // meant the signal readout showed zeros in *every* scenario and the mock
   // could not tell the bug it was built to reproduce from its own limitation.
-  // Leaving them unhandled lets mockIPC own them in the browser and lets
-  // passthrough reach the real subscription under `tauri:mock`.
+  // Leaving them unhandled lets `eventBridge.ts` own them in the browser and
+  // lets passthrough reach the real subscription under `tauri:mock`.
 };
