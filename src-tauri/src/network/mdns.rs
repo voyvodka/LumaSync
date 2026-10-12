@@ -6,10 +6,8 @@
 //! contention and one of the responders silently misses replies.
 //!
 //! The registry below holds one `ServiceDaemon` per process and hands
-//! out `Arc`-shared receivers per service type. Hue's `_hue._tcp.local.`
-//! browser is the first consumer; a WLED browser
-//! (`_wled._tcp.local.`) will plug into the same registry without
-//! spawning a second daemon.
+//! out `Arc`-shared receivers per service type: Hue's `_hue._tcp.local.`
+//! and WLED's `_wled._tcp.local.` browsers share the one daemon.
 //!
 //! Public surface:
 //!
@@ -20,6 +18,8 @@
 //! - [`MdnsBridgeCandidate`] — convenience DTO consumed by Hue
 //!   discovery; matches the `(id, ip, name)` shape the cloud-discovery
 //!   parser already produces so the merge step is trivial.
+//! - [`MdnsWledCandidate`] — what a WLED advert gives before
+//!   `/json/info` is asked for the rest.
 
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
@@ -417,10 +417,6 @@ mod tests {
     fn txt_with_bridgeid(bridge_id: &str) -> Vec<TxtProperty> {
         vec![TxtProperty::from(&("bridgeid", bridge_id))]
     }
-
-    // -----------------------------------------------------------------------
-    // Existing tests (unchanged)
-    // -----------------------------------------------------------------------
 
     #[test]
     fn hue_service_type_matches_dnssd_spec() {
