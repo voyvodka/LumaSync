@@ -4,7 +4,7 @@ import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import { findHueChannel } from "@/shared/contracts/roomMap";
 import { clamp } from "@/shared/lib/math";
 import { hueChannelObjectId } from "../model/objectId";
-import { resolveHueChannelWorld } from "../model/hueChannelPosition";
+import { findBoundZone, resolveHueChannelWorld } from "../model/hueChannelPosition";
 import { hueChannelDotText, hueChannelName } from "../model/hueChannelLabel";
 import { cx } from "@/shared/lib/cx";
 
@@ -112,6 +112,15 @@ function clampWithinZone(
     relX,
     relY,
   };
+}
+
+/** `allHueZones` is canonical, but an embed may pass only the active zone —
+ *  keep resolving through it so a bound channel does not fall back to `ch.x/y`. */
+function withActiveZone(
+  zones: readonly HueZone[],
+  active: HueZone | null | undefined,
+): readonly HueZone[] {
+  return active && !zones.some((z) => z.id === active.id) ? [...zones, active] : zones;
 }
 
 interface DragState {
@@ -236,12 +245,10 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
       // From where the dot is drawn, not `ch.x/y`: for a bound channel those are
       // leftovers a zone move or an assignment never updated, and the drag
       // jumped the dot to them.
-      const active = activeHueZoneRef.current;
-      const zones =
-        active && !allHueZonesRef.current.some((z) => z.id === active.id)
-          ? [...allHueZonesRef.current, active]
-          : allHueZonesRef.current;
-      const start = resolveHueChannelWorld(ch, zones);
+      const start = resolveHueChannelWorld(
+        ch,
+        withActiveZone(allHueZonesRef.current, activeHueZoneRef.current),
+      );
 
       dragRef.current = {
         active: true,
@@ -282,13 +289,10 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
     // docs/architecture/room-map.md. `allHueZones` is canonical; the fallback to
     // `activeHueZone` covers callers that do not pass the full list.
     const ch = findHueChannel(channelsRef.current, dr.channelIndex);
-    let boundZone = ch?.zoneId
-      ? allHueZonesRef.current.find((z) => z.id === ch.zoneId) ?? null
+    const boundZone = ch
+      ? findBoundZone(ch, withActiveZone(allHueZonesRef.current, activeHueZoneRef.current))
       : null;
-    if (!boundZone && ch?.zoneId && activeHueZoneRef.current?.id === ch.zoneId) {
-      boundZone = activeHueZoneRef.current;
-    }
-    if (boundZone && ch) {
+    if (boundZone) {
       const bounded = clampWithinZone(newX, newY, boundZone);
       newX = bounded.worldX;
       newY = bounded.worldY;
@@ -325,12 +329,10 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
       // Write-back is zone-relative for ANY bound channel, not just the active
       // one — the third of the three paths that must agree on the parent zone.
       // `handlePointerMove` already clamped the values into `dragRef`.
-      let boundZone = ch.zoneId
-        ? allHueZonesRef.current.find((z) => z.id === ch.zoneId) ?? null
-        : null;
-      if (!boundZone && ch.zoneId && activeHueZoneRef.current?.id === ch.zoneId) {
-        boundZone = activeHueZoneRef.current;
-      }
+      const boundZone = findBoundZone(
+        ch,
+        withActiveZone(allHueZonesRef.current, activeHueZoneRef.current),
+      );
       if (boundZone && dr.currentRelX !== null && dr.currentRelY !== null) {
         onChangeRef.current({
           ...ch,
@@ -377,12 +379,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
         (z) => !activeHueZone || z.id !== activeHueZone.id,
       );
 
-  // `allHueZones` is canonical, but an embed may pass only the active zone —
-  // keep resolving through it so a bound channel does not fall back to `ch.x/y`.
-  const resolvableZones =
-    activeHueZone && !(allHueZones ?? []).some((z) => z.id === activeHueZone.id)
-      ? [...(allHueZones ?? []), activeHueZone]
-      : allHueZones ?? [];
+  const resolvableZones = withActiveZone(allHueZones ?? [], activeHueZone);
 
   return (
     <>
