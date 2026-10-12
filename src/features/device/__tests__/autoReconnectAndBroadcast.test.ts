@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { SerialPortListResponse } from "../deviceConnectionApi";
 import { fakeRegistry, withRegistry } from "./support/fakeRegistry";
+import { listResponse } from "./support/portList";
 import { createDeviceConnectionController } from "../state/deviceConnectionController";
 import { createConnectionEventBus } from "../connectionEvents";
 import type { DeviceConnectionControllerDeps } from "@/features/device/state/connectionTypes";
@@ -17,13 +18,6 @@ import type { DeviceConnectionControllerDeps } from "@/features/device/state/con
  *       controllers, so the App-level hook (LIGHTS / StatusBar) flips
  *       `isConnected` without a WebView reload. They all follow the registry.
  */
-
-function listResponse(ports: SerialPortListResponse["ports"]): SerialPortListResponse {
-  return {
-    status: { code: "LIST_PORTS_OK", message: "ok", details: null },
-    ports,
-  };
-}
 
 const SUPPORTED_PORT = {
   name: "COM3",

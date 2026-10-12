@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { HealthCheckResult, SerialPortListResponse } from "../deviceConnectionApi";
 import { withRegistry } from "./support/fakeRegistry";
+import { listResponse } from "./support/portList";
 import { createDeviceConnectionController } from "../state/deviceConnectionController";
 import type { DeviceConnectionControllerDeps } from "@/features/device/state/connectionTypes";
 
@@ -11,17 +12,6 @@ import type { DeviceConnectionControllerDeps } from "@/features/device/state/con
 afterEach(() => {
   vi.useRealTimers();
 });
-
-function listResponse(ports: SerialPortListResponse["ports"]): SerialPortListResponse {
-  return {
-    status: {
-      code: "LIST_PORTS_OK",
-      message: "ok",
-      details: null,
-    },
-    ports,
-  };
-}
 
 function createHealthPass(): HealthCheckResult {
   return {
