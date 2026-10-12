@@ -4,6 +4,8 @@ import type { LightingTuning, RetuneLightingResult } from "@/shared/contracts/li
 
 import { createRetuneCoalescer } from "../retuneCoalescer";
 
+type Send = (tuning: LightingTuning) => Promise<RetuneLightingResult>;
+
 const APPLIED: RetuneLightingResult = { status: { code: "RETUNE_APPLIED", message: "", details: null } };
 
 /** A backend whose answers the test releases one at a time. */
@@ -45,7 +47,7 @@ describe("createRetuneCoalescer", () => {
   });
 
   it("does not send a value equal to the last one, whatever its key order", async () => {
-    const send = vi.fn().mockResolvedValue(APPLIED);
+    const send = vi.fn<Send>().mockResolvedValue(APPLIED);
     const retunes = createRetuneCoalescer(send);
 
     retunes.push({ ambilight: { brightness: 0.5, saturation: 1 } });
@@ -70,7 +72,7 @@ describe("createRetuneCoalescer", () => {
   });
 
   it("sends an equal value again after a kind change reset it", async () => {
-    const send = vi.fn().mockResolvedValue(APPLIED);
+    const send = vi.fn<Send>().mockResolvedValue(APPLIED);
     const retunes = createRetuneCoalescer(send);
 
     retunes.push(brightness(0.5));
@@ -84,7 +86,7 @@ describe("createRetuneCoalescer", () => {
 
   it("keeps going after a failed send", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    const send = vi.fn().mockRejectedValueOnce(new Error("lost")).mockResolvedValue(APPLIED);
+    const send = vi.fn<Send>().mockRejectedValueOnce(new Error("lost")).mockResolvedValue(APPLIED);
     const retunes = createRetuneCoalescer(send);
 
     retunes.push(brightness(0.2));
@@ -95,7 +97,7 @@ describe("createRetuneCoalescer", () => {
 
   it("sends a value again after its send failed", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    const send = vi.fn().mockRejectedValueOnce(new Error("lost")).mockResolvedValue(APPLIED);
+    const send = vi.fn<Send>().mockRejectedValueOnce(new Error("lost")).mockResolvedValue(APPLIED);
     const retunes = createRetuneCoalescer(send);
 
     retunes.push(brightness(0.2));
@@ -109,7 +111,7 @@ describe("createRetuneCoalescer", () => {
   // Each window keeps its own coalescer: the popup retuning the light does not reach the main window's.
   describe("against what runs", () => {
     it("still drops a value the snapshot shows running as this window sent it", async () => {
-      const send = vi.fn().mockResolvedValue(APPLIED);
+      const send = vi.fn<Send>().mockResolvedValue(APPLIED);
       const retunes = createRetuneCoalescer(send);
 
       retunes.push(brightness(0.5));
@@ -122,7 +124,7 @@ describe("createRetuneCoalescer", () => {
     });
 
     it("sends a value equal to its last send once another window changed what runs", async () => {
-      const send = vi.fn().mockResolvedValue(APPLIED);
+      const send = vi.fn<Send>().mockResolvedValue(APPLIED);
       const retunes = createRetuneCoalescer(send);
 
       retunes.push(brightness(0.5));
@@ -136,7 +138,7 @@ describe("createRetuneCoalescer", () => {
     });
 
     it("sends it again once nothing runs of that kind", async () => {
-      const send = vi.fn().mockResolvedValue(APPLIED);
+      const send = vi.fn<Send>().mockResolvedValue(APPLIED);
       const retunes = createRetuneCoalescer(send);
 
       retunes.push(brightness(0.5));
