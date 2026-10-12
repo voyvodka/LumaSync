@@ -84,10 +84,7 @@ pub(super) fn apply_and_broadcast<R: Runtime>(
 
     let starts_a_test = test_pattern.is_some();
     let result = {
-        let mut owner = runtime_state
-            .runtime
-            .lock()
-            .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
+        let mut owner = runtime_state.lock_owner()?;
         let hue_output = Some(hue_runtime_state.output_live());
         owner.preview.pending_test_pattern = test_pattern;
         owner.preview.preview_gate = Some(preview_session.twin_open());
@@ -300,10 +297,7 @@ fn start_led_test_pattern_blocking<R: Runtime>(
     // Capture the live mode to restore on stop — but never overwrite a real
     // prior mode with a test mode if we are already previewing.
     {
-        let mut owner = runtime_state
-            .runtime
-            .lock()
-            .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
+        let mut owner = runtime_state.lock_owner()?;
         if owner.preview.active_test_pattern.is_none() {
             // Fresh run — rewind the animation. A tweak to an already
             // running pattern keeps its phase instead.
@@ -410,13 +404,7 @@ fn stop_led_test_pattern_blocking<R: Runtime>(
     let telemetry_state = app.state::<RuntimeTelemetryState>();
     let preview_session = app.state::<PreviewSessionState>();
     let driven = app.state::<LocalOutputRegistry>().driven_checked()?;
-    let prior = runtime_state
-        .runtime
-        .lock()
-        .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?
-        .preview
-        .test_prior
-        .take();
+    let prior = runtime_state.lock_owner()?.preview.test_prior.take();
     let restore = restore_mode_after_test(prior, &|| read_persisted_shell_state(app));
     let mut result = apply_and_broadcast(
         app,

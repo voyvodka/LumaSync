@@ -2,7 +2,7 @@
 //! built from, and the locks a transition takes.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -199,6 +199,13 @@ impl LightingRuntimeState {
 
     pub fn is_closing(&self) -> bool {
         self.closing.load(Ordering::SeqCst)
+    }
+
+    /// The runtime lock for a command, a poisoned one answered as a coded error.
+    pub(super) fn lock_owner(&self) -> Result<MutexGuard<'_, LightingRuntimeOwner>, String> {
+        self.runtime
+            .lock()
+            .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))
     }
 
     /// The running mode writes the "usb" channel to this serial port.

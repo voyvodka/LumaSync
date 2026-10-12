@@ -828,10 +828,7 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
     let driven = local_outputs.driven_checked()?;
 
     let lock_t = std::time::Instant::now();
-    let mut owner = runtime_state
-        .runtime
-        .lock()
-        .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
+    let mut owner = runtime_state.lock_owner()?;
     let lock_ms = lock_t.elapsed().as_millis();
     if lock_ms > 10 {
         info!("[set_lighting_mode] runtime lock waited {lock_ms}ms");
@@ -908,10 +905,7 @@ pub fn stop_lighting_blocking<R: Runtime>(
     let runtime_state = app.state::<LightingRuntimeState>();
     runtime_state.tuning.close_blocking();
     let result = {
-        let mut owner = runtime_state
-            .runtime
-            .lock()
-            .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
+        let mut owner = runtime_state.lock_owner()?;
         // Capture whether a synthetic test was running
         // BEFORE apply_mode_change clears it.
         let superseded_test = owner.preview.active_test_pattern.is_some();

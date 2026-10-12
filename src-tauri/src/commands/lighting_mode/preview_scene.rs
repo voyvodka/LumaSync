@@ -116,10 +116,7 @@ pub fn start_scene_lighting<R: Runtime>(
 
     runtime_state.tuning.close_blocking();
     let (result, failed_prior) = {
-        let mut owner = runtime_state
-            .runtime
-            .lock()
-            .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
+        let mut owner = runtime_state.lock_owner()?;
         // A second scene keeps the first one's prior, which is the user's mode,
         // and the brightness the user gave the scene.
         if owner.preview.scene.is_none() {
@@ -188,10 +185,7 @@ pub async fn stop_scene_queued<R: Runtime>(app: AppHandle<R>) -> Result<SceneRes
 pub fn stop_scene_lighting<R: Runtime>(app: &AppHandle<R>) -> Result<SceneRestore, String> {
     let runtime_state = app.state::<LightingRuntimeState>();
     let prior = {
-        let mut owner = runtime_state
-            .runtime
-            .lock()
-            .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
+        let mut owner = runtime_state.lock_owner()?;
         if owner.preview.scene.take().is_none() {
             return Ok(SceneRestore::NotRunning);
         }
@@ -237,23 +231,13 @@ fn restore_interrupted<R: Runtime>(
         .state::<LocalOutputRegistry>()
         .driven_checked()
         .map_err(give_up)?;
-    let scene_mode = runtime_state
-        .runtime
-        .lock()
-        .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?
-        .active_mode
-        .clone();
+    let scene_mode = runtime_state.lock_owner()?.active_mode.clone();
     let restore = restore_mode_after_test(prior, &|| read_persisted_shell_state(app));
     let apply = |mode: LightingModeConfig| apply_with(mode, driven.as_ref());
     let restored = apply(restore).map_err(give_up)?;
     // A gated restore (the strip unplugged mid-scene) returns before the
     // scene's worker is torn down, which would leave it running unowned.
-    let scene_worker_left = runtime_state
-        .runtime
-        .lock()
-        .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?
-        .preview
-        .scene_worker;
+    let scene_worker_left = runtime_state.lock_owner()?.preview.scene_worker;
     let outcome = if scene_worker_left {
         warn!(
             "[preview-scene] restore gated ({}) — the lights go off",
