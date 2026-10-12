@@ -1,4 +1,5 @@
 import { LED_CALIBRATION_MAX_TOTAL_LEDS } from "@/shared/contracts/calibration";
+import { clamp } from "@/shared/lib/math";
 
 import { sumSegmentCounts, type LedSegmentCounts, type LedSegmentKey } from "./contracts";
 
@@ -111,7 +112,7 @@ export function countOf(draft: LayoutDraft, key: CountKey): number {
 
 export function setCount(draft: LayoutDraft, key: CountKey, value: number, display: DisplayAspect): LayoutDraft {
   const { min, max } = countBounds(draft, key, display);
-  const v = Math.max(min, Math.min(max, Math.floor(value)));
+  const v = clamp(Math.floor(value), min, max);
   const counts = { ...draft.counts };
   let gap = draft.gap;
   if (key === "tb") counts.top = counts.bottom = v;

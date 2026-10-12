@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { prefersReducedMotion } from "@/shared/lib/motion";
 import { cx } from "@/shared/lib/cx";
+import { clamp } from "@/shared/lib/math";
 import { IconCheck } from "@/shared/ui/icons";
 import styles from "./NumberField.module.css";
 
@@ -30,8 +31,6 @@ interface NumberFieldProps {
   onPreview?: (n: number | null) => void;
   className?: string;
 }
-
-const clampTo = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
 /**
  * A number edited where it stands. One box in both states: the number and the field share a slot
@@ -74,7 +73,7 @@ export function NumberField({ value, min, max, unit, labels, describe, suggestio
   const stepBy = (key: string, shift: boolean, from: number): number | null => {
     if (key !== "ArrowUp" && key !== "ArrowDown") return null;
     const by = (key === "ArrowUp" ? 1 : -1) * (shift ? 10 : 1);
-    return clampTo((Number.isFinite(from) ? from : value) + by, min, max);
+    return clamp((Number.isFinite(from) ? from : value) + by, min, max);
   };
   const settle = (commit: boolean, reject = false) => {
     if (settledRef.current) return;
