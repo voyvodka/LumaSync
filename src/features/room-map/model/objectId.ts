@@ -30,10 +30,8 @@ export type RoomObjectRef<K extends RoomObjectKind = RoomObjectKind> = {
   [P in K]: { kind: P } & RoomObjectKeys[P];
 }[K];
 
-export type ParsedObjectId = RoomObjectRef;
-
 /** A malformed `hue-` suffix yields `channelIndex: NaN`, not null — rejecting it would skip branches callers currently enter. */
-export function parseObjectId(objectId: string): ParsedObjectId | null {
+export function parseObjectId(objectId: string): RoomObjectRef | null {
   if (objectId === TV_ANCHOR_OBJECT_ID) return { kind: "tv" };
   if (objectId.startsWith(FURNITURE_PREFIX)) {
     return { kind: "furniture", furnitureId: objectId.slice(FURNITURE_PREFIX.length) };

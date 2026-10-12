@@ -1,4 +1,4 @@
-import type { RoomObjectType } from "./objectList";
+import type { RoomObjectKind } from "./objectId";
 
 export const ZONE_TOKENS = [
   "var(--lm-zone-1)",
@@ -9,7 +9,7 @@ export const ZONE_TOKENS = [
   "var(--lm-zone-6)",
 ];
 
-export const TYPE_DOT_COLOR: Record<RoomObjectType, string> = {
+export const TYPE_DOT_COLOR: Record<RoomObjectKind, string> = {
   tv: "var(--lm-zone-3)", // purple
   furniture: "var(--lm-amber)",
   usb: "var(--lm-zone-6)", // cyan

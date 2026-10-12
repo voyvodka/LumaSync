@@ -6,14 +6,13 @@ import {
   imageLayerObjectId,
   TV_ANCHOR_OBJECT_ID,
   usbStripObjectId,
+  type RoomObjectKind,
 } from "./objectId";
 import { hueChannelName } from "./hueChannelLabel";
 
-export type RoomObjectType = "tv" | "furniture" | "usb" | "hue" | "image";
-
 export interface ObjectRowEntry {
   id: string;
-  type: RoomObjectType;
+  type: RoomObjectKind;
   label: string;
   locked?: boolean;
   zoneId?: string | null;
