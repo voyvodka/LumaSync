@@ -23,7 +23,7 @@ zone identity data and LED test-pattern swatches.
 
 **Chrome is amber in every mode; there is no dynamic accent.** A per-mode accent layer
 (`useAccentTheme`, `--accent-color`) was orphaned by a redesign and removed in #358. Where a surface
-shows the user's live colour — the hero card, Solid swatches — it reads that colour from its own
+shows the user's live colour — the Solid stage and its swatches — it reads that colour from its own
 state (`useSolidColorDraft` carries the drag draft), not from a global variable. Bringing a global
 accent back is a design decision, not a refactor.
 
