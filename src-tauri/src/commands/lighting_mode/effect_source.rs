@@ -28,6 +28,18 @@ pub(crate) fn effect_ambilight(effect: &EffectPayload) -> AmbilightPayload {
     }
 }
 
+/// What the worker runs with: an effect's settings when it draws one, else the
+/// mode's own Ambilight settings.
+pub(crate) fn worker_ambilight(
+    effect: Option<&EffectPayload>,
+    ambilight: Option<&AmbilightPayload>,
+) -> AmbilightPayload {
+    match effect {
+        Some(effect) => effect_ambilight(effect),
+        None => ambilight.cloned().unwrap_or_default(),
+    }
+}
+
 pub(crate) fn create_effect_frame_source() -> Box<dyn AmbilightFrameSource> {
     Box::new(EffectTicker::default())
 }

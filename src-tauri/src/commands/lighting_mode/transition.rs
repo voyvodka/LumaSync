@@ -13,7 +13,7 @@ use super::config::{
     LightingModeConfig, LightingModeKind, DEFAULT_EFFECT, DEFAULT_SOLID,
 };
 use super::config_check;
-use super::effect_source::effect_ambilight;
+use super::effect_source::worker_ambilight;
 use super::effects::EffectDraw;
 use super::hydrate::hydrate_mode_payload;
 use super::live::{retune_ambilight_live, AmbilightLiveSettings, RoomGeometryLive};
@@ -379,14 +379,7 @@ fn apply_mode_change_inner(
     {
         if let Some(live) = &owner.ambilight_live {
             let effect = normalized_next.effect.clone();
-            let cfg = match &effect {
-                Some(effect) => effect_ambilight(effect),
-                None => normalized_next
-                    .ambilight
-                    .as_ref()
-                    .cloned()
-                    .unwrap_or_default(),
-            };
+            let cfg = worker_ambilight(effect.as_ref(), normalized_next.ambilight.as_ref());
             retune_ambilight_live(live, &cfg);
             if let (Some(effect), Some(slot)) = (effect, owner.effect_live.as_ref()) {
                 *slot.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = effect;
@@ -580,14 +573,8 @@ fn apply_mode_change_inner(
                 owner.preview.pending_test_pattern.take()
             };
 
-            let ambilight_cfg = match &effect {
-                Some(effect) => effect_ambilight(effect),
-                None => normalized_next
-                    .ambilight
-                    .as_ref()
-                    .cloned()
-                    .unwrap_or_default(),
-            };
+            let ambilight_cfg =
+                worker_ambilight(effect.as_ref(), normalized_next.ambilight.as_ref());
             let live_settings = AmbilightLiveSettings::new(
                 ambilight_cfg.brightness,
                 ambilight_cfg.black_border_detection,
