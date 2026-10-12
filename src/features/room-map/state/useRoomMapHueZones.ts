@@ -9,6 +9,7 @@ import type {
 } from "@/shared/contracts/roomMap";
 import { isHueZoneApplied, replaceHueChannel } from "@/shared/contracts/roomMap";
 import { findScopedHueChannel } from "../model/hueChannelScope";
+import { zoneToken } from "../model/zoneColor";
 import {
   assignChannelToHueZone,
   createHueZone,
@@ -116,8 +117,6 @@ export function useRoomMapHueZones({
     if (!hueAreaId) return;
     const id = `hue-zone-${crypto.randomUUID()}`;
     const name = t("roomMap:hueZones.defaultName", { N: String(hueZones.length + 1) });
-    const palette = ["--lm-zone-1", "--lm-zone-2", "--lm-zone-3", "--lm-zone-4", "--lm-zone-5", "--lm-zone-6"];
-    const colorVar = `var(${palette[hueZones.length % palette.length]})`;
     const newZone: HueZone = {
       id,
       name,
@@ -129,7 +128,7 @@ export function useRoomMapHueZones({
       scaleY: 0.5,
       scaleZ: 0.5,
       channelIndices: [],
-      borderColor: colorVar,
+      borderColor: zoneToken(hueZones.length),
     };
     apply({ zones: [...config.zones, newZone] });
     selectHueZone(id);

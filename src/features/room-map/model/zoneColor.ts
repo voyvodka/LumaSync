@@ -17,7 +17,12 @@ export const TYPE_DOT_COLOR: Record<RoomObjectType, string> = {
   image: "var(--lm-ink-faint)",
 };
 
+/** The palette colour of the `index`th zone, wrapping round the palette. */
+export function zoneToken(index: number): string {
+  return ZONE_TOKENS[index % ZONE_TOKENS.length] ?? "var(--lm-zone-1)";
+}
+
 export function getZoneColor(zone: { borderColor?: string | null }, index: number): string {
   if (zone.borderColor) return zone.borderColor;
-  return ZONE_TOKENS[index % ZONE_TOKENS.length] ?? "var(--lm-zone-1)";
+  return zoneToken(index);
 }
