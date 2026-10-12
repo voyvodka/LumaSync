@@ -218,8 +218,9 @@ setup), `closeAction` (the main window's `CloseRequested` quits through the shut
 starts Off, only while nothing runs, so a reload keeps lights the user has on), `awayLights`
 (`"keep"` leaves the lights on while the computer is locked, asleep or dark) and
 `lightingIntensityPreset` (Ambilight's smoothing, stamped onto the mode as it is applied). Those revert on a
-failed save (`READ_BY_RUST`), and each has a Rust accessor in `shell_state.rs` whose test uses the
-same inputs as `shellPreferences.test.ts`, so both sides read a stored value alike.
+failed save (`READ_BY_RUST`), and each has a Rust accessor in `shell_state.rs`. For `uiZoom`,
+`closeAction`, `notifications`, `launchLights` and `awayLights` the accessor's test uses the same
+inputs as `shellPreferences.test.ts`, so both sides read a stored value alike.
 
 **The local output is stored as strips (schema 8).** A strip is one run of LEDs behind one
 controller, with its transport, hardware (firmware profile, chip, colour order), layout and colour
