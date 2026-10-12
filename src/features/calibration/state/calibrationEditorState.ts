@@ -161,6 +161,18 @@ export function saveEditorCalibration(state: CalibrationEditorState): Calibratio
   return buildState(state.current, state.current);
 }
 
+/**
+ * A save of `saved` has landed. It becomes the baseline and the draft stays as
+ * it is now, so an edit made while the write was in flight is kept as unsaved.
+ */
+export function rebaseOnSaved(
+  state: CalibrationEditorState,
+  saved: LedCalibrationConfig,
+): CalibrationEditorState {
+  const next = buildState(saved, state.current);
+  return next.isDirty ? { ...next, confirmDiscard: state.confirmDiscard } : next;
+}
+
 export function keepEditing(state: CalibrationEditorState): CalibrationEditorState {
   return {
     ...state,

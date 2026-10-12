@@ -53,6 +53,7 @@ import {
   isSameCalibrationLayout,
   keepEditing,
   loadEditorConfig,
+  rebaseOnSaved,
   saveEditorCalibration,
   discardEditorChanges,
   type CalibrationEditorState,
@@ -497,12 +498,16 @@ export function useCalibrationSession({
     return aspectOf(snapshot.displays.find((candidate) => candidate.id === snapshot.selectedDisplayId));
   }, []);
 
+  /** Lets a save tell whether the page was edited while its write was in flight. */
+  const editCountRef = useRef(0);
+
   /** Every layout or start edit goes through here: model step, then back into the saved shape. */
   const edit = useCallback(
     (step: (draft: ReturnType<typeof draftOf>, start: StartPoint) => { draft?: ReturnType<typeof draftOf>; rule: StartRule }) => {
       const draft = draftOf(editorState.current, layoutUi);
       const result = step(draft, startOf(editorState.current));
       const committed = commitLayout(editorState, layoutUi, result.draft ?? draft, result.rule);
+      editCountRef.current += 1;
       setEditorState(committed.state);
       setLayoutUi(committed.ui);
       setValidationErrors(null);
@@ -577,6 +582,7 @@ export function useCalibrationSession({
     }
     setValidationErrors(null);
     const savedState = saveEditorCalibration(editorState);
+    const editsAtSave = editCountRef.current;
     try {
       let gone = false;
       await shellStore.update((current) => {
@@ -599,10 +605,11 @@ export function useCalibrationSession({
     // The page stays open after a save, and a running test keeps going on the saved layout.
     onSaved(savedState.current);
     setKeepUiFor(calibrationLayoutKey(savedState.baseline));
-    setEditorState(savedState);
+    // Only the baseline moves: an edit made during the write stays on screen, unsaved.
+    setEditorState((prev) => rebaseOnSaved(prev, savedState.current));
     setSavedOnce(true);
     setLastSavedAt(Date.now());
-    dirtyRef.current = false;
+    if (editCountRef.current === editsAtSave) dirtyRef.current = false;
     setIsSaving(false);
   }, [editorState, onSaved, stripId]);
 
