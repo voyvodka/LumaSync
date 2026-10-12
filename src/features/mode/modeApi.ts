@@ -6,6 +6,7 @@ import {
   type HueRuntimeCommandResult,
   type HueRuntimeTarget,
   type HueRuntimeTriggerSource,
+  type StartHueStreamRequest,
 } from "@/shared/contracts/hue";
 import {
   LIGHTING_ORIGIN,
@@ -62,6 +63,18 @@ function mapModeApiError(command: string, error: unknown): ModeApiError {
   };
 }
 
+/** Only the fields the command reads, whatever else the caller's object carries. */
+function hueStreamRequest(payload: StartHuePayload, defaultTrigger: HueRuntimeTriggerSource): StartHueStreamRequest {
+  return {
+    bridgeIp: payload.bridgeIp,
+    username: payload.username,
+    clientKey: payload.clientKey,
+    areaId: payload.areaId,
+    triggerSource: payload.triggerSource ?? defaultTrigger,
+    channelPlacements: payload.channelPlacements,
+  };
+}
+
 /** Start the Hue entertainment stream for the given bridge/area. Throws a `ModeApiError` on failure. */
 export async function startHue(
   payload: StartHuePayload,
@@ -69,14 +82,7 @@ export async function startHue(
 ): Promise<HueRuntimeCommandResult> {
   try {
     return await invoker(HUE_COMMANDS.START_STREAM, {
-      request: {
-        bridgeIp: payload.bridgeIp,
-        username: payload.username,
-        clientKey: payload.clientKey,
-        areaId: payload.areaId,
-        triggerSource: payload.triggerSource ?? HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
-        channelPlacements: payload.channelPlacements,
-      },
+      request: hueStreamRequest(payload, HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL),
     });
   } catch (error) {
     throw mapModeApiError(HUE_COMMANDS.START_STREAM, error);
@@ -90,14 +96,7 @@ export async function restartHue(
 ): Promise<HueRuntimeCommandResult> {
   try {
     return await invoker(HUE_COMMANDS.RESTART_STREAM, {
-      request: {
-        bridgeIp: payload.bridgeIp,
-        username: payload.username,
-        clientKey: payload.clientKey,
-        areaId: payload.areaId,
-        triggerSource: payload.triggerSource ?? HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
-        channelPlacements: payload.channelPlacements,
-      },
+      request: hueStreamRequest(payload, HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE),
     });
   } catch (error) {
     throw mapModeApiError(HUE_COMMANDS.RESTART_STREAM, error);
