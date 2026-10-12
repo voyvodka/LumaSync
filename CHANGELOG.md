@@ -379,6 +379,7 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- macOS: clicking the empty part of the title bar no longer makes the window jump sideways.
 - LEDs either side of a monitor stand take the colour of the screen above where they sit; they were
   spread over the whole bottom edge as if there were no gap, and the LED preview showed no gap.
 - Opening and closing the LED preview no longer adds two windows' worth of memory each time.

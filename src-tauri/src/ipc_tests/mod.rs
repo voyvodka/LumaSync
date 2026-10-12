@@ -21,6 +21,7 @@ mod serial_firmware;
 mod shell_state_commands;
 mod telemetry_commands;
 mod tray_labels;
+mod window_drag_commands;
 mod window_visibility_commands;
 mod wled_commands;
 
