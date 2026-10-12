@@ -210,12 +210,6 @@ pub(crate) fn spawn_hue_dtls_sender(
         .current_cipher()
         .map(|c| c.name().to_string());
 
-    // Spawn the sender thread.
-    let deactivate_client = client;
-    let deactivate_ip = bridge_ip.clone();
-    let deactivate_username = username.clone();
-    let deactivate_area_id = area_id.clone();
-
     let shutdown = new_shutdown_signal();
     let shutdown_inner = Arc::clone(&shutdown);
 
@@ -263,13 +257,7 @@ pub(crate) fn spawn_hue_dtls_sender(
         // Cleanup: deactivate entertainment mode via dedupe-aware token. Whoever
         // wins the token (sender thread / foreground stop / reconnect monitor)
         // performs the single PUT; later callers no-op. See `DeactivateToken`.
-        let _ = deactivate_with_token(
-            &deactivate_token,
-            &deactivate_client,
-            &deactivate_ip,
-            &deactivate_username,
-            &deactivate_area_id,
-        );
+        let _ = deactivate_with_token(&deactivate_token, &client, &bridge_ip, &username, &area_id);
 
         // Drop the DTLS stream explicitly so the underlying UDP socket
         // releases before we signal shutdown — every observer of
