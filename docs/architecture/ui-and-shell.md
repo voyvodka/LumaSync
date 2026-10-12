@@ -556,7 +556,7 @@ the app data directory without a single call site for any of them.
 | Window | Granted |
 |---|---|
 | `main` | event listen/unlisten; the window getters and setters `windowLifecycle.ts`, `windowGeometry.ts`, `windowAnimator.ts` and `windowApi.ts` call, plus `start_dragging`; `log`; autostart enable/disable/is-enabled; `dialog:open`; `fs:read-file` scoped to `$APPDATA/room-map-backgrounds/*`; `opener:open-url` scoped to `https://lumasync.app/*` and the repository's `issues/new*` and `discussions*`; `notification:is-permission-granted`; `process:restart` |
-| `led-control-popup` | event listen/unlisten; `scale_factor`/`outer_position`/`inner_size` for position persistence; `start_dragging`; `log` |
+| `led-control-popup-*` | event listen/unlisten; `scale_factor`/`outer_position`/`inner_size` for position persistence; `start_dragging`; `log` |
 | `led-twin-overlay-*` | event listen/unlisten; `log` — no window API at all |
 | `led-preview-scene-*` | event listen/unlisten; `log` — no window API at all |
 | `calibration-overlay-*` | nothing: a static page fed by an initialization script, no IPC |
@@ -609,8 +609,8 @@ inside another branch's binary that way.
 
 | Window | App commands |
 |---|---|
-| `main` | 58 of the 70: the 57 its `*Api.ts` bridges reach, and `simulate_hue_fault` for the dev mock's panel, which passes it through to Rust from this window. Not the popup's seven or the twin's one below, and not the three in the last row |
-| `led-control-popup` | `get_shell_state`, `patch_shell_state` (its position, the saved modes its stage shows while Off, and the stage's own saved choices); `apply_outputs`, `retune_lighting`, `get_lighting_runtime` (its mode strip, the compact window's `ModeStage`, and `useLightingRuntime`); `close_preview` (Close and Escape), `set_preview_popup_hidden` (Hide), `get_preview_session` and `set_preview_twin_hidden` (the twin switch, `usePreviewSession`); `start_preview_scene`, `stop_preview_scene` and `set_preview_scene_brightness` (the scene tiles, and the brightness row while a scene plays); `open_log_dir` (`GlobalErrorBoundary`'s "Show logs") |
+| `main` | 59 of the 70: the 58 its `*Api.ts` bridges reach, and `simulate_hue_fault` for the dev mock's panel, which passes it through to Rust from this window. Not the popup's seven or the twin's one below, and not the three in the last row |
+| `led-control-popup-*` | `get_shell_state`, `patch_shell_state` (its position, the saved modes its stage shows while Off, and the stage's own saved choices); `apply_outputs`, `retune_lighting`, `get_lighting_runtime` (its mode strip, the compact window's `ModeStage`, and `useLightingRuntime`); `close_preview` (Close and Escape), `set_preview_popup_hidden` (Hide), `get_preview_session` and `set_preview_twin_hidden` (the twin switch, `usePreviewSession`); `start_preview_scene`, `stop_preview_scene` and `set_preview_scene_brightness` (the scene tiles, and the brightness row while a scene plays); `open_log_dir` (`GlobalErrorBoundary`'s "Show logs") |
 | `led-twin-overlay-*` | `get_shell_state` (the language at boot); `subscribe_twin_frames` (its layout and frames, `useTwinFeed`) |
 | `led-preview-scene-*` | `get_shell_state` (the language at boot); `get_preview_session` (the scene the session names, `usePreviewSession`) |
 | `calibration-overlay-*` | none |
