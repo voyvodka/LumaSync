@@ -36,6 +36,7 @@ mod commands {
     pub mod status;
     pub mod test_pattern;
     pub mod updater;
+    pub mod window_drag;
     pub mod window_visibility;
     pub mod wled_discovery;
     pub mod wled_sink;
@@ -127,6 +128,7 @@ use commands::shell_state::{
     get_shell_state, patch_shell_state, replace_shell_state, ShellStateStore,
 };
 use commands::updater::{check_for_update, download_and_install_update, PendingUpdate};
+use commands::window_drag::start_window_drag;
 use commands::window_visibility::{get_main_window_visibility, MainWindowVisibilityState};
 use commands::wled_discovery::{
     browse_wled_devices, connect_wled_sink, discover_wled_devices, forget_wled_device,
@@ -983,6 +985,7 @@ pub fn run() {
             watch_hue_health,
             retry_hue_health,
             get_main_window_visibility,
+            start_window_drag,
             forget_hue_bridge,
             get_hue_light_names,
             identify_hue_lights,

@@ -43,6 +43,13 @@ export const SHELL_COMMANDS = {
   REPLACE_SHELL_STATE: "replace_shell_state",
   /** Whether the main window is on screen, read from the native window. */
   GET_MAIN_WINDOW_VISIBILITY: "get_main_window_visibility",
+  /**
+   * Drag the main window by its title bar (macOS; elsewhere Tauri's own drag). Starts from the
+   * pointer, where `start_dragging` anchors on the last event AppKit saw and made the window jump.
+   * Resolves `null` and never fails: there is no actionable branching — a drag that does not
+   * start leaves the window where it is, and the user presses again.
+   */
+  START_WINDOW_DRAG: "start_window_drag",
 } as const;
 
 export type ShellCommand = (typeof SHELL_COMMANDS)[keyof typeof SHELL_COMMANDS];

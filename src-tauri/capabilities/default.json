@@ -94,6 +94,7 @@
     "allow-get-runtime-telemetry-history",
     "allow-show-notification",
     "allow-open-log-dir",
+    "allow-start-window-drag",
     "allow-get-screen-capture-permission",
     "allow-open-screen-capture-settings",
     "allow-list-displays",

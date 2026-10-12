@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SECTION_IDS, SECTION_ORDER } from "@/shared/contracts/shell";
 
@@ -18,6 +18,66 @@ vi.mock("@tauri-apps/api/window", () => ({
     close: () => Promise.resolve(),
   }),
 }));
+
+const startWindowDrag = vi.fn(() => Promise.resolve(null));
+vi.mock("../windowDragApi", () => ({ startWindowDrag: () => startWindowDrag() }));
+
+describe("TitleBar drag on macOS", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    startWindowDrag.mockClear();
+  });
+
+  /** Mounted as on a Mac; `seen` is what Tauri's drag script, a document listener, receives. */
+  function renderOnMac(platform = "Macintosh") {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(`Mozilla/5.0 (${platform})`);
+    const seen: number[] = [];
+    const listener = (event: MouseEvent) => seen.push(event.detail);
+    document.addEventListener("mousedown", listener);
+    const view = render(
+      <TitleBar uiMode="full" onSwitchUIMode={() => {}} activeSection={SECTION_IDS.LIGHTS} onSectionChange={() => {}} />,
+    );
+    const bar = view.container.querySelector<HTMLElement>("[data-tauri-drag-region]")!;
+    return { bar, seen, done: () => document.removeEventListener("mousedown", listener) };
+  }
+
+  // Tauri's drag anchored on whatever event AppKit saw last, and the window jumped on a click.
+  it("drags from the pointer on a press, and Tauri's script never sees it", () => {
+    const { bar, seen, done } = renderOnMac();
+    fireEvent.mouseDown(bar, { button: 0, detail: 1 });
+    done();
+
+    expect(startWindowDrag).toHaveBeenCalledTimes(1);
+    expect(seen).toEqual([]);
+  });
+
+  it("passes a double-click on to Tauri's script for the zoom", () => {
+    const { bar, seen, done } = renderOnMac();
+    fireEvent.mouseDown(bar, { button: 0, detail: 2 });
+    done();
+
+    expect(startWindowDrag).not.toHaveBeenCalled();
+    expect(seen).toEqual([2]);
+  });
+
+  it("leaves a press on a tab to the tab", () => {
+    const { seen, done } = renderOnMac();
+    fireEvent.mouseDown(screen.getByTestId(`section-tab-${SECTION_IDS.DEVICES}`), { button: 0, detail: 1 });
+    done();
+
+    expect(startWindowDrag).not.toHaveBeenCalled();
+    expect(seen).toEqual([1]);
+  });
+
+  it("leaves Windows and Linux to Tauri's own drag", () => {
+    const { bar, seen, done } = renderOnMac("Windows NT 10.0");
+    fireEvent.mouseDown(bar, { button: 0, detail: 1 });
+    done();
+
+    expect(startWindowDrag).not.toHaveBeenCalled();
+    expect(seen).toEqual([1]);
+  });
+});
 
 describe("TitleBar section tabs", () => {
   // A nameless tablist is announced as just "tab list" — the user hears the

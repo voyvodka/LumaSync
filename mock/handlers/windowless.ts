@@ -179,4 +179,5 @@ export const windowlessHandlers = {
 
   /** Fired during bootstrap on every launch, which is how this was found. */
   [SHELL_COMMANDS.UPDATE_TRAY_LABELS]: () => null,
+  [SHELL_COMMANDS.START_WINDOW_DRAG]: () => null,
 } satisfies TypedHandlers;

@@ -139,6 +139,7 @@ const APP_POLICY: &[(&str, [bool; 5])] = &[
     ("update_tray_labels", MAIN_ONLY),
     ("get_launch_context", MAIN_ONLY),
     ("get_main_window_visibility", MAIN_ONLY),
+    ("start_window_drag", MAIN_ONLY),
     ("list_serial_ports", MAIN_ONLY),
     ("connect_serial_port", MAIN_ONLY),
     ("run_serial_health_check", MAIN_ONLY),

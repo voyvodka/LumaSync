@@ -244,6 +244,7 @@ export interface CommandMap {
   update_tray_labels: Command<{ labels: TrayLabels }, null>;
   get_launch_context: NoArgs<LaunchContext>;
   get_main_window_visibility: NoArgs<MainWindowVisibility>;
+  start_window_drag: NoArgs<null>;
   get_shell_state: NoArgs<ShellStateSnapshot>;
   patch_shell_state: Command<{ patch: ShellStatePatchRequest }, ShellStateWriteResult>;
   replace_shell_state: Command<{ request: ShellStateReplaceRequest }, ShellStateWriteResult>;

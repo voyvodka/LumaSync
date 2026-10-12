@@ -256,6 +256,49 @@ pub fn window_number<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> Opt
     u32::try_from(number).ok().filter(|&number| number > 0)
 }
 
+/// Drags `window` from where the mouse is now, while its button is still down. tao starts a drag
+/// from `NSApp.currentEvent`, read when the `start_dragging` IPC lands — by then often the
+/// mouse-up, or an event of another window, and AppKit anchors the drag on that event's point: the
+/// window jumped sideways on a click. A fresh mouse-down at the pointer anchors where the user is.
+/// Main thread only.
+pub fn drag_from_mouse<R: tauri::Runtime>(window: &tauri::Window<R>) {
+    // SAFETY: a class message with no receiver state.
+    let pressed: usize = unsafe { msg_send![objc2::class!(NSEvent), pressedMouseButtons] };
+    if pressed & 1 == 0 {
+        return;
+    }
+    let Some(raw) = window.ns_window().ok().filter(|raw| !raw.is_null()) else {
+        return;
+    };
+    // SAFETY: Tauri's retained NSWindow pointer, borrowed for this call only; every message is
+    // sent on the main thread, which the caller guarantees.
+    unsafe {
+        let ns_window = &*(raw as *const NSWindow);
+        let location: objc2_foundation::NSPoint =
+            msg_send![ns_window, mouseLocationOutsideOfEventStream];
+        let process_info: *mut AnyObject = msg_send![objc2::class!(NSProcessInfo), processInfo];
+        let uptime: f64 = msg_send![process_info, systemUptime];
+        // NSEventTypeLeftMouseDown; no modifiers, no graphics context.
+        let event: Option<Retained<AnyObject>> = msg_send![
+            objc2::class!(NSEvent),
+            mouseEventWithType: 1usize,
+            location: location,
+            modifierFlags: 0usize,
+            timestamp: uptime,
+            windowNumber: ns_window.windowNumber(),
+            context: std::ptr::null_mut::<AnyObject>(),
+            eventNumber: 0isize,
+            clickCount: 1isize,
+            pressure: 1.0f32
+        ];
+        let Some(event) = event else {
+            log::warn!("[macos_window] no mouse-down to start a window drag from");
+            return;
+        };
+        let _: () = msg_send![ns_window, performWindowDragWithEvent: &*event];
+    }
+}
+
 /// The app in front, when it is not this one.
 pub fn frontmost_other_app() -> Option<i32> {
     objc2_app_kit::NSWorkspace::sharedWorkspace()

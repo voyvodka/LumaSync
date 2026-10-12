@@ -5,10 +5,12 @@
  *   macOS:       [80px traffic-light spacer] [app name] ——— [compact toggle]
  *   Windows/Linux: [icon] [app name]          ——— [compact toggle] [— □ ✕]
  *
- * The whole bar is a `data-tauri-drag-region`, which gives us native window
- * drag AND native double-click zoom/maximize on all platforms without any
- * JS handlers. Interactive elements opt out via
- * `data-tauri-drag-region="false"` so clicks pass through to React.
+ * The whole bar is a `data-tauri-drag-region`: Tauri's injected script drags
+ * the window on a press and zooms/maximizes it on a double-click. Interactive
+ * elements opt out via `data-tauri-drag-region="false"` so clicks pass through
+ * to React. On macOS a single press is taken first and drags through
+ * `start_window_drag` instead — Tauri's drag anchored on a stale event and the
+ * window jumped sideways — so only the double-click reaches Tauri there.
  *
  * macOS keeps native traffic lights (via `titleBarStyle: "Overlay"` +
  * `hiddenTitle: true` in tauri.conf.json). Windows/Linux disable native
@@ -16,7 +18,7 @@
  * component draws custom minimize / maximize-toggle / close buttons.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   closeCurrentWindow,
@@ -25,6 +27,7 @@ import {
   onCurrentWindowResized,
   toggleMaximizeCurrentWindow,
 } from "./windowApi";
+import { startWindowDrag } from "./windowDragApi";
 import { SECTION_ORDER, type SectionId } from "@/shared/contracts/shell";
 import styles from "./TitleBar.module.css";
 
@@ -88,9 +91,22 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
 
   const isMac = platform === "macos";
 
+  // A single press on the region itself, as Tauri's script decides it ("self": the element that
+  // carries the bare attribute). Stopped here, before the script's document listener; a
+  // double-click passes on to it for the zoom.
+  const handleDragPress = (event: MouseEvent<HTMLDivElement>) => {
+    if (!isMac || event.button !== 0 || event.detail !== 1) return;
+    const region = (event.target as HTMLElement).getAttribute?.("data-tauri-drag-region");
+    if (region !== "" && region !== "true") return;
+    event.preventDefault();
+    event.stopPropagation();
+    void startWindowDrag().catch((error) => console.error("[LumaSync] start_window_drag failed:", error));
+  };
+
   return (
     <div
       data-tauri-drag-region
+      onMouseDown={handleDragPress}
       className={`${styles.bar} fixed top-0 right-0 left-0 z-40 flex items-center select-none`}
       style={{
         height: `${TITLE_BAR_HEIGHT_PX}px`,

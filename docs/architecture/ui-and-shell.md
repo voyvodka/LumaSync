@@ -560,7 +560,13 @@ the app data directory without a single call site for any of them.
 | `calibration-overlay-*` | nothing: a static page fed by an initialization script, no IPC |
 
 Some grants have no call site in `src/`, because the caller is a script Tauri or a plugin injects
-into every webview. `internal_toggle_maximize` is `data-tauri-drag-region`'s double-click;
+into every webview. `start_dragging` and `internal_toggle_maximize` are `data-tauri-drag-region`'s
+press and double-click — on macOS the main window's press goes to `start_window_drag` instead:
+tao's `drag_window` starts the drag from `NSApp.currentEvent`, read when the IPC lands, which by
+then can be the mouse-up or another window's event, and the window jumped sideways to anchor on
+that point. `start_window_drag` builds a mouse-down at `mouseLocationOutsideOfEventStream` and
+does nothing once the button is up; `TitleBar` stops the single press before the script's document
+listener sees it, so only the double-click reaches Tauri. The popup's header is still Tauri's drag;
 `internal_toggle_devtools` is the debug-build devtools shortcut; `notification:is-permission-granted`
 is the plugin's `window.Notification` shim, which asks once at load; `opener:open-url` is the
 opener plugin's handler for `<a target="_blank">`, which is how the About link and the Settings →
@@ -601,7 +607,7 @@ inside another branch's binary that way.
 
 | Window | App commands |
 |---|---|
-| `main` | 57 of the 69: the 56 its `*Api.ts` bridges reach, and `simulate_hue_fault` for the dev mock's panel, which passes it through to Rust from this window. Not the popup's seven or the twin's one below, and not the three in the last row |
+| `main` | 58 of the 70: the 57 its `*Api.ts` bridges reach, and `simulate_hue_fault` for the dev mock's panel, which passes it through to Rust from this window. Not the popup's seven or the twin's one below, and not the three in the last row |
 | `led-control-popup` | `get_shell_state`, `patch_shell_state` (its position); `apply_outputs`, `retune_lighting`, `get_lighting_runtime` (its mode strip, its brightness and effect list, and `useLightingRuntime`); `close_preview` (Close and Escape), `set_preview_popup_hidden` (Hide), `get_preview_session` and `set_preview_twin_hidden` (the twin switch, `usePreviewSession`); `start_preview_scene`, `stop_preview_scene` and `set_preview_scene_brightness` (the scene tiles, and the brightness row while a scene plays); `open_log_dir` (`GlobalErrorBoundary`'s "Show logs") |
 | `led-twin-overlay-*` | `get_shell_state` (the language at boot); `subscribe_twin_frames` (its layout and frames, `useTwinFeed`) |
 | `led-preview-scene-*` | `get_shell_state` (the language at boot); `get_preview_session` (the scene the session names, `usePreviewSession`) |
