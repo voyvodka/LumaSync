@@ -830,10 +830,7 @@ where
 /// A poisoned lock still says what runs; the stop that follows reports it.
 fn read_running<R: Runtime>(app: &AppHandle<R>) -> Result<LightingModeConfig, String> {
     let state = app.state::<LightingRuntimeState>();
-    let owner = state
-        .runtime
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let owner = state.lock_owner_recovered();
     Ok(owner.active_mode.clone())
 }
 
@@ -841,10 +838,7 @@ fn read_running<R: Runtime>(app: &AppHandle<R>) -> Result<LightingModeConfig, St
 /// mode, re-reading the saved settings, so a refresh leaves it alone.
 fn preview_owns_lights<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {
     let state = app.state::<LightingRuntimeState>();
-    let owner = state
-        .runtime
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let owner = state.lock_owner_recovered();
     Ok(owner.preview.active_test_pattern.is_some() || owner.preview.scene.is_some())
 }
 

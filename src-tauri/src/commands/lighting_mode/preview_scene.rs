@@ -265,10 +265,7 @@ fn restore_interrupted<R: Runtime>(
 
 /// The scene's brightness, live and never saved. `false` with no scene running.
 pub fn set_scene_brightness(state: &LightingRuntimeState, brightness: f32) -> bool {
-    let mut owner = state
-        .runtime
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut owner = state.lock_owner_recovered();
     if owner.preview.scene.is_none() {
         return false;
     }

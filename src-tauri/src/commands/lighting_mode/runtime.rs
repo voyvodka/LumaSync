@@ -208,10 +208,18 @@ impl LightingRuntimeState {
             .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))
     }
 
+    /// The runtime lock, a poisoned one recovered: for readers that must still
+    /// learn what runs.
+    pub(super) fn lock_owner_recovered(&self) -> MutexGuard<'_, LightingRuntimeOwner> {
+        self.runtime
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     /// The running mode writes the "usb" channel to this serial port.
     pub fn drives_serial(&self, port_name: &str) -> bool {
         matches!(
-            &self.runtime.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).active_usb_plan,
+            &self.lock_owner_recovered().active_usb_plan,
             Some(UsbOutputPlan::Serial(port)) if port == port_name
         )
     }
@@ -219,31 +227,21 @@ impl LightingRuntimeState {
     /// The running mode writes the "usb" channel to the WLED device at `ip`.
     pub fn drives_wled(&self, ip: std::net::Ipv4Addr) -> bool {
         matches!(
-            &self.runtime.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).active_usb_plan,
+            &self.lock_owner_recovered().active_usb_plan,
             Some(UsbOutputPlan::Wled(config)) if config.ip == ip
         )
     }
 
     /// `port_name` is the port whose cached writer the runtime holds as its active one.
     pub fn holds_port(&self, port_name: &str) -> bool {
-        self.runtime
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .active_port
-            .as_deref()
-            == Some(port_name)
+        self.lock_owner_recovered().active_port.as_deref() == Some(port_name)
     }
 
     /// Drops `port_name`'s cached serial writer, for a strip that was unplugged: the next write
     /// opens the port afresh instead of failing on a dead handle. The bridge is cloned under the
     /// runtime lock and the drop — which may wait for the writer to exit — runs after it.
     pub fn forget_serial_session(&self, port_name: &str) {
-        let bridge = self
-            .runtime
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .output_bridge
-            .clone();
+        let bridge = self.lock_owner_recovered().output_bridge.clone();
         bridge.disconnect_session(port_name);
     }
 }
@@ -271,8 +269,6 @@ impl LightingRuntimeState {
 
     /// Holds the runtime lock, as a worker join mid-transition does.
     pub(crate) fn hold_runtime_for_tests(&self) -> std::sync::MutexGuard<'_, LightingRuntimeOwner> {
-        self.runtime
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.lock_owner_recovered()
     }
 }

@@ -986,9 +986,7 @@ fn blank_plan<R: Runtime>(
 ) -> UsbOff {
     let bridge = app
         .state::<LightingRuntimeState>()
-        .runtime
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .lock_owner_recovered()
         .output_bridge
         .clone();
     let output = SolidUsbOutput::for_mode(&bridge, plan.clone(), ended);

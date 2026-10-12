@@ -122,7 +122,7 @@ pub fn hue_lamp_screen_points(
 
 impl LightingRuntimeState {
     pub fn twin_view(&self) -> TwinModeView {
-        let owner = self.runtime.lock().unwrap_or_else(|e| e.into_inner());
+        let owner = self.lock_owner_recovered();
         let targets = owner.active_mode.targets.as_deref().unwrap_or_default();
         TwinModeView {
             layout: owner.active_mode.led_calibration.clone(),
@@ -135,34 +135,26 @@ impl LightingRuntimeState {
 
     /// Whether a preview scene owns the lights.
     pub fn scene_active(&self) -> bool {
-        let owner = self.runtime.lock().unwrap_or_else(|e| e.into_inner());
+        let owner = self.lock_owner_recovered();
         owner.preview.scene.is_some()
     }
 
     /// A scene's marker without its lights, for a test of what it refuses.
     #[cfg(test)]
     pub(crate) fn mark_scene_for_tests(&self, kind: SceneKind) {
-        self.runtime
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .preview
-            .scene = Some(kind);
+        self.lock_owner_recovered().preview.scene = Some(kind);
     }
 
     /// A test pattern's marker without its worker, likewise.
     #[cfg(test)]
     pub(crate) fn mark_test_pattern_for_tests(&self, test: TestPatternConfig) {
-        self.runtime
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .preview
-            .active_test_pattern = Some(test);
+        self.lock_owner_recovered().preview.active_test_pattern = Some(test);
     }
 
     /// Whether a synthetic test pattern drives the worker. Recovers from a
     /// poisoned lock rather than propagating: a stop must still learn it.
     pub fn test_pattern_active(&self) -> bool {
-        let owner = self.runtime.lock().unwrap_or_else(|e| e.into_inner());
+        let owner = self.lock_owner_recovered();
         owner.preview.active_test_pattern.is_some()
     }
 }
