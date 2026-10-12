@@ -519,9 +519,9 @@ impl RestoreRun<'_> {
         true
     }
 
-    /// Our own stream has ended by now, so a busy area is another streamer —
-    /// or a reconnect of ours the stop overtook, which gives it back within
-    /// moments. Waits until `end` for it to come free. Only a read that says
+    /// Our own stream has ended by now — the stop waited for any reconnect it
+    /// overtook to give the area back — so a busy area is another streamer.
+    /// Waits until `end` for it to come free. Only a read that says
     /// "free" lets the writes go: a lost read is asked again, never taken for
     /// free, or one garbled answer would paint under another app's stream.
     fn wait_for_area_free(&mut self, end: Instant) -> Result<(), HueLightRestoreStop> {

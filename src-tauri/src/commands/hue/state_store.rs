@@ -254,6 +254,10 @@ pub(crate) struct HueRuntimeOwner {
     /// dead-end the monitor and strand the runtime in `Reconnecting` with
     /// `active_stream = None` forever. Keying off this flag lets the monitor
     /// still perform the restart in that case.
+    ///
+    /// Two readers besides the claim: the dead-sender probe leaves a death a
+    /// claimed reconnect has already counted alone, and a stop that overtakes
+    /// a reconnect mid-build waits for it to clear before touching the lights.
     pub(crate) reconnect_in_progress: bool,
     pub(crate) last_status: HueRuntimeStatus,
     /// Most recent solid color the user asked for. Persists across reconnects

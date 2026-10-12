@@ -63,7 +63,7 @@ use super::transport::{
 
 /// Maximum time (in seconds) to wait for the sender thread to shut down
 /// before reporting a partial-stop timeout.
-const HUE_STOP_TIMEOUT_SECS: u64 = 3;
+pub(crate) const HUE_STOP_TIMEOUT_SECS: u64 = 3;
 
 /// A stop with a deadline aims every wait at this much before it: a request
 /// timed out on the deadline itself still has to unwind, and the call
@@ -661,7 +661,7 @@ pub(crate) fn stop_hue_runtime(
     //    then initiate cleanup.  Dropping the active_stream (and thus the sender
     //    Arc) closes the mpsc channel, which unblocks the background thread's
     //    recv loop.  DTLS deactivation HTTP call happens AFTER the lock is released.
-    let (maybe_shutdown, dtls_deactivate, light_restore) = {
+    let (maybe_shutdown, dtls_deactivate, light_restore, reconnect_building) = {
         let mut owner = acquire_hue_runtime(runtime);
 
         // Grab the shutdown signal before stop_with_timeout drops active_stream.
@@ -691,12 +691,19 @@ pub(crate) fn stop_hue_runtime(
         // and its lights still show what the session left them.
         let light_restore = owner.light_restore.take();
 
+        // A reconnect between its readiness gate and storing its sender
+        // (`Starting`) has no stream here to wait for, yet its build may have
+        // activated the area. It abandons on seeing this stop and gives the
+        // area back before it clears the flag; see step 3b.
+        let reconnect_building =
+            owner.reconnect_in_progress && owner.state == HueRuntimeState::Starting;
+
         // Perform synchronous cleanup (drop sender, reset state).
         // We pass `timed_out=false` initially; if the wait below times out
         // we will re-lock and update the status.
         let _ = stop_with_timeout(&mut owner, false, trigger.clone());
 
-        (signal, dtls_deactivate, light_restore)
+        (signal, dtls_deactivate, light_restore, reconnect_building)
     }; // lock released -- background thread can now observe the channel close.
 
     // Best-effort, dedupe-aware DTLS deactivation outside the lock to avoid
@@ -753,6 +760,18 @@ pub(crate) fn stop_hue_runtime(
         make_result(&owner)
     };
 
+    // 3b. Wait for an overtaken reconnect to give the area back. Writing the
+    //     lights while it still held the area gave up on the held area, and
+    //     its deactivate then let the bridge switch the lamps on after Off.
+    if reconnect_building
+        && !wait_for_overtaken_reconnect(
+            runtime,
+            remaining(Duration::from_secs(HUE_STOP_TIMEOUT_SECS)),
+        )
+    {
+        warn!("[hue-stop] an overtaken reconnect still held the area at the stop's timeout");
+    }
+
     // 4. Put the lights back — or, for a user's Off, switch them off through
     //    the same writes and watch, so the bridge's own post-stream state
     //    cannot turn them back on. Logged, never fatal: a refusal or an
@@ -778,6 +797,20 @@ pub(crate) fn stop_hue_runtime(
     }
 
     result
+}
+
+/// `false` if the reconnect still runs at `timeout`.
+fn wait_for_overtaken_reconnect(runtime: &Arc<Mutex<HueRuntimeOwner>>, timeout: Duration) -> bool {
+    let until = Instant::now() + timeout;
+    loop {
+        if !acquire_hue_runtime(runtime).reconnect_in_progress {
+            return true;
+        }
+        if Instant::now() >= until {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
 }
 
 /// Stop the current stream (if any) and start a fresh one for the given

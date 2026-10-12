@@ -37,6 +37,7 @@ use super::super::hue_onboarding::{
     ACTIVE_STREAMER_REASON,
 };
 use super::area_cache::HueReadFreshness;
+use super::commands::HUE_STOP_TIMEOUT_SECS;
 use super::frame::HueAreaChannel;
 use super::retry::{next_backoff_ms, register_area_taken_over, register_transient_fault};
 use super::sender::{
@@ -496,6 +497,29 @@ fn restart_refused(
     }
 }
 
+fn a_stop_overtook_the_reconnect(owner: &HueRuntimeOwner) -> bool {
+    owner.user_override_pending
+        || matches!(owner.state, HueRuntimeState::Idle | HueRuntimeState::Failed)
+}
+
+/// A reconnect a stop overtook after its build: nothing will store or stop
+/// its sender, and the build activated the area. Dropping the handle ends the
+/// sender, which deactivates the area itself before it signals. Awaited, so
+/// `reconnect_in_progress` clears only once the area is given back — the
+/// stop waits on that flag before it restores or switches off the lights.
+async fn settle_abandoned_reconnect(spawned: SpawnedHueSender) {
+    let SpawnedHueSender {
+        color_sender,
+        shutdown_signal,
+        ..
+    } = spawned;
+    drop(color_sender);
+    let _ = tokio::task::spawn_blocking(move || {
+        wait_for_shutdown(&shutdown_signal, Duration::from_secs(HUE_STOP_TIMEOUT_SECS))
+    })
+    .await;
+}
+
 /// Internal stream restart logic for the reconnect monitor.
 /// Replicates the core logic of restart_hue_stream but accepts
 /// Arc<Mutex<HueRuntimeOwner>> directly instead of Tauri State<>.
@@ -567,12 +591,11 @@ async fn internal_restart_stream(
         }
     }
 
-    // 3. Set state to Starting.
+    // 3. Set state to Starting. A stop reads `Starting` under a claimed
+    //    reconnect as "may hold the area" and waits for it (`stop_hue_runtime`).
     {
         let mut owner = acquire_hue_runtime(runtime);
-        if owner.user_override_pending
-            || matches!(owner.state, HueRuntimeState::Idle | HueRuntimeState::Failed)
-        {
+        if a_stop_overtook_the_reconnect(&owner) {
             return RestartOutcome::Abandoned;
         }
         owner.state = HueRuntimeState::Starting;
@@ -593,6 +616,12 @@ async fn internal_restart_stream(
         fetch_light_metadata_for_channels(&request.bridge_ip, &request.username, &channels).await,
     );
 
+    // The build activates the area; a stop that landed during the fetches
+    // must not see it activated only to be given back.
+    if a_stop_overtook_the_reconnect(&acquire_hue_runtime(runtime)) {
+        return RestartOutcome::Abandoned;
+    }
+
     // 5. Spawn sender (blocking), wired to the owner's packet counter.
     // A panicked spawn must not be stored as a live context: its shutdown
     // signal would never fire and the next monitor would wait on it forever.
@@ -612,34 +641,37 @@ async fn internal_restart_stream(
     let next_token = uses_dtls.then(|| Arc::clone(&spawned.deactivate_token));
 
     // 6. Store context and spawn new monitor.
-    {
+    let abandoned = {
         let mut owner = acquire_hue_runtime(runtime);
-        if owner.user_override_pending
-            || matches!(owner.state, HueRuntimeState::Idle | HueRuntimeState::Failed)
-        {
-            return RestartOutcome::Abandoned;
-        }
-
-        store_active_stream_context(&mut owner, request, channels, spawned);
-        owner.state = HueRuntimeState::Running;
-        owner.last_status = if uses_dtls {
-            status_with(
-                HueRuntimeState::Running,
-                "HUE_STREAM_RUNNING_DTLS",
-                "Hue entertainment stream active via DTLS (reconnected).",
-                None,
-                HueRuntimeTriggerSource::System,
-            )
+        if a_stop_overtook_the_reconnect(&owner) {
+            Some(spawned)
         } else {
-            status_with(
-                HueRuntimeState::Running,
-                "HUE_STREAM_RUNNING",
-                "Hue stream running (reconnected).",
-                None,
-                HueRuntimeTriggerSource::System,
-            )
-        };
-        flush_pending_solid_color(&mut owner);
+            store_active_stream_context(&mut owner, request, channels, spawned);
+            owner.state = HueRuntimeState::Running;
+            owner.last_status = if uses_dtls {
+                status_with(
+                    HueRuntimeState::Running,
+                    "HUE_STREAM_RUNNING_DTLS",
+                    "Hue entertainment stream active via DTLS (reconnected).",
+                    None,
+                    HueRuntimeTriggerSource::System,
+                )
+            } else {
+                status_with(
+                    HueRuntimeState::Running,
+                    "HUE_STREAM_RUNNING",
+                    "Hue stream running (reconnected).",
+                    None,
+                    HueRuntimeTriggerSource::System,
+                )
+            };
+            flush_pending_solid_color(&mut owner);
+            None
+        }
+    };
+    if let Some(spawned) = abandoned {
+        settle_abandoned_reconnect(spawned).await;
+        return RestartOutcome::Abandoned;
     }
 
     // Spawn new monitor for the new connection.
@@ -1407,5 +1439,149 @@ mod tests {
             );
         }
         assert!(acquire_hue_runtime(&runtime).light_restore.is_none());
+    }
+
+    /// Off while a reconnect is building its sender, the area already
+    /// activated. The stop found no stream to wait for, its switch-off gave up
+    /// on the held area after the watch window, and the abandoned reconnect's
+    /// sender then gave the area back — and the bridge switched the lamps on.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn off_during_a_reconnects_build_still_switches_the_lights_off() {
+        use std::sync::atomic::AtomicBool;
+
+        use super::super::commands::stop_hue_runtime;
+        use super::super::light_restore::{
+            parse_light_state, HueLightRestore, HueLightSnapshot, HueLightsAfterStop,
+        };
+        use super::super::sender::signal_shutdown_complete;
+        use super::super::test_bridge::{light_json, FakeHue};
+
+        let before = light_json(true, 56.92, Some(446), (0.5190, 0.4152));
+        let post_stream = light_json(true, 30.83, Some(367), (0.4583, 0.4099));
+        let hue = FakeHue::start(
+            &[("living-room", &["left", "right"])],
+            &[("left", before.clone()), ("right", before.clone())],
+            |_| Reply::ok(),
+        );
+        hue.after_stop_bridge_sets(
+            Duration::from_millis(300),
+            &[("left", post_stream.clone()), ("right", post_stream)],
+        );
+        let mut request = test_request();
+        request.bridge_ip = hue.bridge.authority.clone();
+        let snapshot = parse_light_state(&before).unwrap();
+
+        let runtime = runtime_reconnecting_without_a_stream();
+        let guard = {
+            let mut owner = acquire_hue_runtime(&runtime);
+            owner.light_restore = Some(HueLightRestore {
+                bridge_ip: request.bridge_ip.clone(),
+                username: request.username.clone(),
+                area_id: request.area_id.clone(),
+                lights: ["left", "right"]
+                    .into_iter()
+                    .map(|light| HueLightSnapshot {
+                        light_id: light.to_string(),
+                        state: snapshot.clone(),
+                    })
+                    .collect(),
+            });
+            assert_eq!(try_claim_reconnect(&mut owner), ReconnectClaim::Proceed);
+            ReconnectInProgressGuard {
+                runtime: Arc::clone(&runtime),
+            }
+        };
+
+        // As the real builder does it: the area is activated before a
+        // handshake that, straight after a drop, can take seconds.
+        let building = Arc::new(AtomicBool::new(false));
+        let build: HueSenderBuild = {
+            let building = Arc::clone(&building);
+            Arc::new(move |request, channels, _metadata, _counter| {
+                let client = blocking_client_for_key(&request.username).expect("client");
+                let area = format!(
+                    "https://{}/clip/v2/resource/entertainment_configuration/{}",
+                    request.bridge_ip, request.area_id
+                );
+                client
+                    .put(&area)
+                    .json(&serde_json::json!({ "action": "start" }))
+                    .send()
+                    .expect("activate");
+                building.store(true, Ordering::SeqCst);
+                std::thread::sleep(Duration::from_millis(2_000));
+
+                let (color_sender, rx) = HueColorSender::with_mailbox(channels.len());
+                let shutdown = new_shutdown_signal();
+                let token = DeactivateToken::new();
+                let (signal, held, req) =
+                    (Arc::clone(&shutdown), Arc::clone(&token), request.clone());
+                std::thread::spawn(move || {
+                    while rx.recv().is_ok() {}
+                    let _ = deactivate_with_token(
+                        &held,
+                        &client,
+                        &req.bridge_ip,
+                        &req.username,
+                        &req.area_id,
+                    );
+                    signal_shutdown_complete(&signal);
+                });
+                SpawnedHueSender {
+                    color_sender,
+                    uses_dtls: true,
+                    shutdown_signal: shutdown,
+                    cipher_name: None,
+                    deactivate_token: token,
+                }
+            })
+        };
+
+        let reconnect = {
+            let (runtime, request) = (Arc::clone(&runtime), request.clone());
+            tokio::spawn(async move {
+                let _guard = guard;
+                internal_restart_stream(
+                    &runtime,
+                    &request,
+                    &ReconnectDeps::assume_ready(build),
+                    None,
+                )
+                .await
+            })
+        };
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !building.load(Ordering::SeqCst) {
+            assert!(
+                Instant::now() < deadline,
+                "the reconnect never began its build"
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        let stop_runtime = Arc::clone(&runtime);
+        let stopped = tokio::task::spawn_blocking(move || {
+            stop_hue_runtime(
+                &stop_runtime,
+                HueRuntimeTriggerSource::ModeControl,
+                None,
+                HueLightsAfterStop::TurnOff,
+            )
+        })
+        .await
+        .unwrap();
+        let outcome = reconnect.await.unwrap();
+        tokio::time::sleep(Duration::from_millis(800)).await;
+
+        assert_eq!(stopped.status.code, "HUE_STREAM_STOPPED");
+        assert!(matches!(outcome, RestartOutcome::Abandoned), "{outcome:?}");
+        for light in ["left", "right"] {
+            assert_eq!(
+                hue.light(light)["on"]["on"],
+                serde_json::json!(false),
+                "{light} was left on: {}",
+                hue.light(light)
+            );
+        }
     }
 }

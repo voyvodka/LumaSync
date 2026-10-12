@@ -505,8 +505,13 @@ Sync puts it back as it was, and so do we now (`commands/hue/light_restore.rs`).
   bridge undid`). `FakeHue::after_stop_bridge_sets` plays the measured bridge in the tests.
 - **Never under another stream.** Before writing, the restore reads the area (`status` /
   `active_streamer`, as readiness does). Our stream is over by then, so an active area is another
-  app — or a reconnect of ours the stop overtook, which gives it back within moments — and the
-  restore waits up to the watch window for it to come free, then leaves the lights alone. Only a
+  app, and the restore waits up to the watch window for it to come free, then leaves the lights
+  alone. A reconnect of ours the stop overtook mid-build (the runtime `Starting` under a claimed
+  reconnect) is not left to that window: its handshake can outlast it, and the deactivate it sends
+  on abandoning let the bridge switch the lamps on after an Off that had given up. The stop waits
+  for it first — the reconnect abandons at its next check, drops its sender and waits for that
+  sender's deactivate before it clears `reconnect_in_progress` — for up to `HUE_STOP_TIMEOUT_SECS`,
+  and a reconnect a stop overtook during its channel fetch abandons before it builds at all. Only a
   read that says the area is free lets the writes go (a 404 counts: nobody streams to an area the
   bridge no longer has). A read that could not be understood — a garbled body, or a first read the
   window cut off because the client took long to come up on a loaded machine — is asked again, never
