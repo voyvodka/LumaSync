@@ -17,7 +17,7 @@ import {
 import type { LightingOutputsStatusCode } from "@/shared/contracts/lightingRuntime";
 import { outputsResult, runtimeSnapshot } from "@/test/lightingRuntime";
 import { LIGHTING_MODE_KIND } from "@/shared/contracts/mode";
-import type * as previewApiModule from "../previewApi";
+import type * as previewApiModule from "../../previewApi";
 import type * as modeApiModule from "@/features/mode/modeApi";
 
 vi.mock("react-i18next", () => ({
@@ -32,7 +32,7 @@ const startPreviewScene = vi.fn<typeof previewApiModule.startPreviewScene>();
 const stopPreviewScene = vi.fn<typeof previewApiModule.stopPreviewScene>();
 const setPreviewSceneBrightness = vi.fn<typeof previewApiModule.setPreviewSceneBrightness>();
 
-vi.mock("../previewApi", () => ({
+vi.mock("../../previewApi", () => ({
   closePreview: (...args: Parameters<typeof closePreview>) => closePreview(...args),
   setPreviewPopupHidden: (...args: Parameters<typeof setPreviewPopupHidden>) => setPreviewPopupHidden(...args),
   setPreviewTwinHidden: (...args: Parameters<typeof setPreviewTwinHidden>) => setPreviewTwinHidden(...args),
@@ -48,7 +48,7 @@ let sessionHandler: ((session: PreviewSession) => void) | null = null;
 let latencyHandler: ((result: LatencyResult) => void) | null = null;
 let listenFails = false;
 
-vi.mock("../previewEventsApi", () => ({
+vi.mock("../../previewEventsApi", () => ({
   listenPreviewSession: (handler: (session: PreviewSession) => void) => {
     if (listenFails) return Promise.reject(new Error("listen refused"));
     sessionHandler = handler;
@@ -144,7 +144,7 @@ vi.mock("@/features/mode/state/useLightingRuntime", () => ({
 }));
 
 const { __resetPreferencesForTests, __setPreferenceForTests } = await import("@/features/persistence/preferences");
-const { ControlPopupApp } = await import("../ui/ControlPopupApp");
+const { ControlPopupApp } = await import("../ControlPopupApp");
 
 function sessionReply(code: PreviewSessionStatusCode): PreviewSessionResult {
   return { session: { state: "closed" }, status: { code, message: "", details: null } };

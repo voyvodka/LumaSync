@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { TwinLedPosition } from "../geometry";
-import { packLedColor } from "../ledColor";
+import type { TwinLedPosition } from "../../geometry";
+import { packLedColor } from "../../ledColor";
 import {
   BAND_PX,
   dotCentre,
@@ -11,7 +11,7 @@ import {
   paintBand,
   paintDots,
   type TwinPaint,
-} from "../ui/twinCanvas";
+} from "../twinCanvas";
 
 interface FakeGradient {
   stops: Array<[number, string]>;

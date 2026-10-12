@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TWIN_FRAME, type TwinLayout } from "@/shared/contracts/preview";
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
-import type * as previewApiModule from "../previewApi";
+import type * as previewApiModule from "../../previewApi";
 
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
 
@@ -31,12 +31,12 @@ const subscribeTwinFrames = vi.fn<typeof previewApiModule.subscribeTwinFrames>((
     status: { code: "PREVIEW_TWIN_SUBSCRIBED", message: "", details: null },
   });
 });
-vi.mock("../previewApi", () => ({
+vi.mock("../../previewApi", () => ({
   subscribeTwinFrames: (...args: Parameters<typeof subscribeTwinFrames>) => subscribeTwinFrames(...args),
 }));
 
 import { listen } from "@tauri-apps/api/event";
-import { LedTwinOverlay } from "../ui/LedTwinOverlay";
+import { LedTwinOverlay } from "../LedTwinOverlay";
 
 type ListenCallback = (event: { payload: TwinLayout }) => void;
 
