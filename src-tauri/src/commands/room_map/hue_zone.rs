@@ -168,25 +168,24 @@ fn zone_center_in_bounds(zone: &HueZone) -> bool {
 }
 
 /// Validate a Hue zone draft: cube bounds + per-axis scale clamps +
-/// non-empty `entertainment_area_id` + `|center| + |scale| <= 1.0`
-/// invariant.
+/// `|center| + |scale| <= 1.0` invariant.
 fn validate_zone_shape(zone: &HueZone) -> Result<(), CommandStatus> {
     if !zone_center_in_bounds(zone) {
-        return Err(CommandStatus {
-            code: STATUS_HUE_ZONE_OUT_OF_BOUNDS.to_string(),
-            message: "Zone center must lie within the [-1, 1] cube.".to_string(),
-            details: None,
-        });
+        return Err(CommandStatus::new(
+            STATUS_HUE_ZONE_OUT_OF_BOUNDS,
+            "Zone center must lie within the [-1, 1] cube.",
+            None,
+        ));
     }
 
     let sx = zone.scale_x;
     let sy = zone.scale_y;
     if !sx.is_finite() || !sy.is_finite() {
-        return Err(CommandStatus {
-            code: STATUS_HUE_ZONE_OVERSIZED.to_string(),
-            message: "Zone scale must be a finite number.".to_string(),
-            details: None,
-        });
+        return Err(CommandStatus::new(
+            STATUS_HUE_ZONE_OVERSIZED,
+            "Zone scale must be a finite number.",
+            None,
+        ));
     }
     if !(HUE_ZONE_SCALE_MIN..=HUE_ZONE_SCALE_MAX).contains(&sx)
         || !(HUE_ZONE_SCALE_MIN..=HUE_ZONE_SCALE_MAX).contains(&sy)
@@ -196,14 +195,14 @@ fn validate_zone_shape(zone: &HueZone) -> Result<(), CommandStatus> {
         } else {
             "y"
         };
-        return Err(CommandStatus {
-            code: STATUS_HUE_ZONE_OVERSIZED.to_string(),
-            message: format!(
+        return Err(CommandStatus::new(
+            STATUS_HUE_ZONE_OVERSIZED,
+            &format!(
                 "Zone `{axis}` scale must be in [{HUE_ZONE_SCALE_MIN:.2}, {HUE_ZONE_SCALE_MAX:.2}]; \
                  zone cannot be larger than the room."
             ),
-            details: None,
-        });
+            None,
+        ));
     }
     // Bug #50/#53 invariant — `|center| + halfScale <= 1.0` so the zone
     // bounds box never overflows the Hue cube.
@@ -214,12 +213,11 @@ fn validate_zone_shape(zone: &HueZone) -> Result<(), CommandStatus> {
     if cx.abs() + half_x > 1.0 + HUE_ZONE_BOUNDS_TOLERANCE
         || cy.abs() + half_y > 1.0 + HUE_ZONE_BOUNDS_TOLERANCE
     {
-        return Err(CommandStatus {
-            code: STATUS_HUE_ZONE_OUT_OF_BOUNDS.to_string(),
-            message: "Zone bounds escape the room cube; shrink the zone or recenter it."
-                .to_string(),
-            details: None,
-        });
+        return Err(CommandStatus::new(
+            STATUS_HUE_ZONE_OUT_OF_BOUNDS,
+            "Zone bounds escape the room cube; shrink the zone or recenter it.",
+            None,
+        ));
     }
     Ok(())
 }
@@ -265,11 +263,11 @@ pub fn create_hue_zone(request: CreateHueZoneRequest) -> HueZoneCommandResult {
 
     if existing_zones.iter().any(|z| z.id == zone.id) {
         return HueZoneCommandResult {
-            status: CommandStatus {
-                code: STATUS_HUE_ZONE_NOT_FOUND.to_string(),
-                message: format!("Zone id `{}` already exists; use update instead.", zone.id),
-                details: None,
-            },
+            status: CommandStatus::new(
+                STATUS_HUE_ZONE_NOT_FOUND,
+                &format!("Zone id `{}` already exists; use update instead.", zone.id),
+                None,
+            ),
             zones: existing_zones,
             channels: Vec::new(),
         };
@@ -277,27 +275,28 @@ pub fn create_hue_zone(request: CreateHueZoneRequest) -> HueZoneCommandResult {
 
     if zone.channel_indices.len() > HUE_AREA_CHANNEL_LIMIT {
         return HueZoneCommandResult {
-            status: CommandStatus {
-                code: STATUS_HUE_ZONE_LIMIT_REACHED.to_string(),
-                message: format!(
+            status: CommandStatus::new(
+                STATUS_HUE_ZONE_LIMIT_REACHED,
+                &format!(
                     "Hue zone references {} channels but bridge area cap is {}.",
                     zone.channel_indices.len(),
                     HUE_AREA_CHANNEL_LIMIT
                 ),
-                details: None,
-            },
+                None,
+            ),
             zones: existing_zones,
             channels: Vec::new(),
         };
     }
 
-    existing_zones.push(zone.clone());
+    let status = CommandStatus::new(
+        STATUS_HUE_ZONE_CREATED,
+        &format!("Zone `{}` created.", zone.name),
+        Some(zone.id.clone()),
+    );
+    existing_zones.push(zone);
     HueZoneCommandResult {
-        status: CommandStatus {
-            code: STATUS_HUE_ZONE_CREATED.to_string(),
-            message: format!("Zone `{}` created.", zone.name),
-            details: Some(zone.id.clone()),
-        },
+        status,
         zones: existing_zones,
         channels: Vec::new(),
     }
@@ -321,11 +320,11 @@ pub fn update_hue_zone(request: UpdateHueZoneRequest) -> HueZoneCommandResult {
 
     let Some(slot) = existing_zones.iter_mut().find(|z| z.id == zone.id) else {
         return HueZoneCommandResult {
-            status: CommandStatus {
-                code: STATUS_HUE_ZONE_NOT_FOUND.to_string(),
-                message: format!("No zone with id `{}` to update.", zone.id),
-                details: None,
-            },
+            status: CommandStatus::new(
+                STATUS_HUE_ZONE_NOT_FOUND,
+                &format!("No zone with id `{}` to update.", zone.id),
+                None,
+            ),
             zones: existing_zones,
             channels: Vec::new(),
         };
@@ -333,27 +332,28 @@ pub fn update_hue_zone(request: UpdateHueZoneRequest) -> HueZoneCommandResult {
 
     if zone.channel_indices.len() > HUE_AREA_CHANNEL_LIMIT {
         return HueZoneCommandResult {
-            status: CommandStatus {
-                code: STATUS_HUE_ZONE_LIMIT_REACHED.to_string(),
-                message: format!(
+            status: CommandStatus::new(
+                STATUS_HUE_ZONE_LIMIT_REACHED,
+                &format!(
                     "Hue zone references {} channels but bridge area cap is {}.",
                     zone.channel_indices.len(),
                     HUE_AREA_CHANNEL_LIMIT
                 ),
-                details: None,
-            },
+                None,
+            ),
             zones: existing_zones,
             channels: Vec::new(),
         };
     }
 
-    *slot = zone.clone();
+    let status = CommandStatus::new(
+        STATUS_HUE_ZONE_UPDATED,
+        &format!("Zone `{}` updated.", zone.name),
+        Some(zone.id.clone()),
+    );
+    *slot = zone;
     HueZoneCommandResult {
-        status: CommandStatus {
-            code: STATUS_HUE_ZONE_UPDATED.to_string(),
-            message: format!("Zone `{}` updated.", zone.name),
-            details: Some(zone.id.clone()),
-        },
+        status,
         zones: existing_zones,
         channels: Vec::new(),
     }
@@ -372,11 +372,11 @@ pub fn delete_hue_zone(request: DeleteHueZoneRequest) -> HueZoneCommandResult {
 
     let Some(target_idx) = existing_zones.iter().position(|z| z.id == zone_id) else {
         return HueZoneCommandResult {
-            status: CommandStatus {
-                code: STATUS_HUE_ZONE_NOT_FOUND.to_string(),
-                message: format!("No zone with id `{zone_id}` to delete."),
-                details: None,
-            },
+            status: CommandStatus::new(
+                STATUS_HUE_ZONE_NOT_FOUND,
+                &format!("No zone with id `{zone_id}` to delete."),
+                None,
+            ),
             zones: existing_zones,
             channels,
         };
@@ -384,7 +384,7 @@ pub fn delete_hue_zone(request: DeleteHueZoneRequest) -> HueZoneCommandResult {
     existing_zones.remove(target_idx);
 
     let mut detached = 0usize;
-    for ch in channels.iter_mut() {
+    for ch in &mut channels {
         if ch.zone_id.as_deref() == Some(zone_id.as_str()) {
             ch.zone_id = None;
             ch.zone_relative_position = None;
@@ -393,11 +393,11 @@ pub fn delete_hue_zone(request: DeleteHueZoneRequest) -> HueZoneCommandResult {
     }
 
     HueZoneCommandResult {
-        status: CommandStatus {
-            code: STATUS_HUE_ZONE_DELETED.to_string(),
-            message: format!("Zone `{zone_id}` deleted; {detached} channel(s) detached."),
-            details: Some(zone_id),
-        },
+        status: CommandStatus::new(
+            STATUS_HUE_ZONE_DELETED,
+            &format!("Zone `{zone_id}` deleted; {detached} channel(s) detached."),
+            Some(zone_id),
+        ),
         zones: existing_zones,
         channels,
     }
@@ -428,43 +428,43 @@ pub fn assign_channel_to_hue_zone(request: AssignChannelRequest) -> HueZoneComma
             ch.zone_id = None;
             ch.zone_relative_position = None;
         }
-        for zone in existing_zones.iter_mut() {
+        for zone in &mut existing_zones {
             zone.channel_indices.retain(|idx| *idx != channel_index);
         }
         return HueZoneCommandResult {
-            status: CommandStatus {
-                code: STATUS_HUE_ZONE_UPDATED.to_string(),
-                message: format!("Channel {channel_index} detached from zone."),
-                details: None,
-            },
+            status: CommandStatus::new(
+                STATUS_HUE_ZONE_UPDATED,
+                &format!("Channel {channel_index} detached from zone."),
+                None,
+            ),
             zones: existing_zones,
             channels,
         };
     };
 
-    let Some(zone) = existing_zones.iter().find(|z| z.id == target_zone_id) else {
+    let Some(zone_idx) = existing_zones.iter().position(|z| z.id == target_zone_id) else {
         return HueZoneCommandResult {
-            status: CommandStatus {
-                code: STATUS_HUE_ZONE_NOT_FOUND.to_string(),
-                message: format!("Target zone `{target_zone_id}` does not exist."),
-                details: None,
-            },
+            status: CommandStatus::new(
+                STATUS_HUE_ZONE_NOT_FOUND,
+                &format!("Target zone `{target_zone_id}` does not exist."),
+                None,
+            ),
             zones: existing_zones,
             channels,
         };
     };
 
-    if zone.entertainment_area_id != entertainment_area_id {
+    let zone_area_id = &existing_zones[zone_idx].entertainment_area_id;
+    if *zone_area_id != entertainment_area_id {
         return HueZoneCommandResult {
-            status: CommandStatus {
-                code: STATUS_HUE_ZONE_CHANNEL_NOT_IN_AREA.to_string(),
-                message: format!(
+            status: CommandStatus::new(
+                STATUS_HUE_ZONE_CHANNEL_NOT_IN_AREA,
+                &format!(
                     "Channel area `{entertainment_area_id}` does not match zone area \
-                     `{}`.",
-                    zone.entertainment_area_id
+                     `{zone_area_id}`."
                 ),
-                details: None,
-            },
+                None,
+            ),
             zones: existing_zones,
             channels,
         };
@@ -472,13 +472,12 @@ pub fn assign_channel_to_hue_zone(request: AssignChannelRequest) -> HueZoneComma
 
     let Some(rel) = zone_relative_position else {
         return HueZoneCommandResult {
-            status: CommandStatus {
-                code: STATUS_HUE_ZONE_OUT_OF_BOUNDS.to_string(),
-                message: "Zone-relative position is required when attaching a channel \
-                          to a Hue zone."
-                    .to_string(),
-                details: None,
-            },
+            status: CommandStatus::new(
+                STATUS_HUE_ZONE_OUT_OF_BOUNDS,
+                "Zone-relative position is required when attaching a channel \
+                 to a Hue zone.",
+                None,
+            ),
             zones: existing_zones,
             channels,
         };
@@ -486,34 +485,29 @@ pub fn assign_channel_to_hue_zone(request: AssignChannelRequest) -> HueZoneComma
     if !is_zone_relative_in_bounds(&rel) {
         let axis = out_of_bounds_axis(&rel);
         return HueZoneCommandResult {
-            status: CommandStatus {
-                code: STATUS_HUE_ZONE_OUT_OF_BOUNDS.to_string(),
-                message: format!("Zone-relative `{axis}` axis is outside [-1, 1]."),
-                details: None,
-            },
+            status: CommandStatus::new(
+                STATUS_HUE_ZONE_OUT_OF_BOUNDS,
+                &format!("Zone-relative `{axis}` axis is outside [-1, 1]."),
+                None,
+            ),
             zones: existing_zones,
             channels,
         };
     }
-    let resolved_relative = rel;
 
     // Capacity check — bridge per-area cap.
-    let zone_idx = existing_zones
-        .iter()
-        .position(|z| z.id == target_zone_id)
-        .expect("zone existence verified above");
     let zone_mut = &mut existing_zones[zone_idx];
     let already_in_zone = zone_mut.channel_indices.contains(&channel_index);
     if !already_in_zone && zone_mut.channel_indices.len() >= HUE_AREA_CHANNEL_LIMIT {
         return HueZoneCommandResult {
-            status: CommandStatus {
-                code: STATUS_HUE_ZONE_LIMIT_REACHED.to_string(),
-                message: format!(
+            status: CommandStatus::new(
+                STATUS_HUE_ZONE_LIMIT_REACHED,
+                &format!(
                     "Zone `{}` already holds {} channels (bridge cap).",
                     zone_mut.id, HUE_AREA_CHANNEL_LIMIT
                 ),
-                details: None,
-            },
+                None,
+            ),
             zones: existing_zones,
             channels,
         };
@@ -534,13 +528,13 @@ pub fn assign_channel_to_hue_zone(request: AssignChannelRequest) -> HueZoneComma
         .find(|c| c.channel_index == channel_index)
     {
         ch.zone_id = Some(target_zone_id.clone());
-        ch.zone_relative_position = Some(resolved_relative.clone());
+        ch.zone_relative_position = Some(rel);
     } else {
         // Frontend may not have a placement yet — synthesise one so the
         // zone reference persists. World coordinates derive from the
         // zone's transform.
         let zone_ref = &existing_zones[zone_idx];
-        let (wx, wy, wz) = world_pos_from_zone_relative(zone_ref, &resolved_relative);
+        let (wx, wy, wz) = world_pos_from_zone_relative(zone_ref, &rel);
         channels.push(HueChannelPlacement {
             channel_index,
             x: wx,
@@ -555,16 +549,16 @@ pub fn assign_channel_to_hue_zone(request: AssignChannelRequest) -> HueZoneComma
             // Synthesised, so nothing has matched it to the bridge yet.
             channel_id: None,
             zone_id: Some(target_zone_id.clone()),
-            zone_relative_position: Some(resolved_relative),
+            zone_relative_position: Some(rel),
         });
     }
 
     HueZoneCommandResult {
-        status: CommandStatus {
-            code: STATUS_HUE_ZONE_UPDATED.to_string(),
-            message: format!("Channel {channel_index} attached to zone `{target_zone_id}`."),
-            details: Some(target_zone_id),
-        },
+        status: CommandStatus::new(
+            STATUS_HUE_ZONE_UPDATED,
+            &format!("Channel {channel_index} attached to zone `{target_zone_id}`."),
+            Some(target_zone_id),
+        ),
         zones: existing_zones,
         channels,
     }
