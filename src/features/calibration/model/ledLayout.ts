@@ -72,8 +72,9 @@ export function keyForEdge(draft: LayoutDraft, edge: LedSegmentKey): CountKey {
   return edge;
 }
 
-function aspectOf(display: DisplayAspect): DisplayAspect {
-  return display.width > 0 && display.height > 0 ? display : { width: 16, height: 9 };
+/** `display`, or 16:9 when it is missing or has no area. */
+export function aspectOf(display: DisplayAspect | undefined): DisplayAspect {
+  return display && display.width > 0 && display.height > 0 ? display : { width: 16, height: 9 };
 }
 
 /** Most LEDs an edge of `display`'s shape can carry (see MAX_LEDS_PER_M). */

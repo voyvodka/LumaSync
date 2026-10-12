@@ -10,6 +10,7 @@ import type {
   LedSegmentKey,
 } from "../model/contracts";
 import {
+  aspectOf,
   distribute,
   draftFromCounts,
   setCount,
@@ -106,11 +107,6 @@ function buildOverlayPreviewPayload(
     })),
   };
 }
-
-const UNKNOWN_DISPLAY: DisplayAspect = { width: 16, height: 9 };
-
-const aspectOf = (display: Pick<DisplayInfo, "width" | "height"> | undefined): DisplayAspect =>
-  display && display.width > 0 && display.height > 0 ? display : UNKNOWN_DISPLAY;
 
 /** A total shared over the edges the layout lights (all four when it lights none), as an autofill patch. */
 function distributedPatch(config: LedCalibrationConfig, ui: LayoutUi, total: number, display: DisplayAspect) {
