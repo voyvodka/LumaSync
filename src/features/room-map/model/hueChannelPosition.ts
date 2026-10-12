@@ -14,6 +14,13 @@ function clampUnit(value: number): number {
   return Math.max(-1, Math.min(1, value));
 }
 
+/** A Hue cube coordinate in [-1, 1] as metres along a room side of `roomSizeM`.
+ *  x: -1 is the left wall, +1 the right. y: +1 is the TV wall (the canvas top),
+ *  -1 the back wall behind the viewer. z: -1 is the floor, +1 the ceiling. */
+export function hueToMetres(hueVal: number, roomSizeM: number): number {
+  return ((hueVal + 1) / 2) * roomSizeM;
+}
+
 /** The zone a channel is bound to, or `null` when it uses absolute placement. */
 export function findBoundZone(
   channel: HueChannelPlacement,

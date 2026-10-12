@@ -4,7 +4,7 @@ import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import { findHueChannel } from "@/shared/contracts/roomMap";
 import { clamp } from "@/shared/lib/math";
 import { hueChannelObjectId } from "../model/objectId";
-import { findBoundZone, resolveHueChannelWorld } from "../model/hueChannelPosition";
+import { findBoundZone, hueToMetres, resolveHueChannelWorld } from "../model/hueChannelPosition";
 import { hueChannelDotText, hueChannelName } from "../model/hueChannelLabel";
 import { cx } from "@/shared/lib/cx";
 
@@ -69,15 +69,6 @@ interface HueChannelOverlayProps {
    * outline is hidden.
    */
   hidePassiveZoneBounds?: boolean;
-}
-
-/**
- * Convert Hue coordinate [-1, 1] to room metres [0, roomSize].
- * Hue x: -1=left edge, +1=right edge
- * Hue y: +1=front/TV wall (canvas TOP), -1=back wall behind the viewer (canvas BOTTOM)
- */
-function hueToMetres(hueVal: number, roomSizeM: number): number {
-  return ((hueVal + 1) / 2) * roomSizeM;
 }
 
 /**

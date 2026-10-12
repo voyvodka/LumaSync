@@ -3,17 +3,12 @@ import { useTranslation } from "react-i18next";
 import { RangeRow } from "@/shared/ui/RangeRow/RangeRow";
 
 import { hueChannelIdLabel, hueChannelName } from "../../model/hueChannelLabel";
+import { hueToMetres } from "../../model/hueChannelPosition";
 
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import { Header } from "./InspectorPrimitives";
 import type { UsbStripConnectionStatus } from "./UsbStripInspector";
 import { TYPE_DOT_COLOR } from "../../model/zoneColor";
-
-/** Slider stays in Hue's [-1, 1]; only the readout is metres, because that is
- *  the unit the rest of the map speaks and `-0.42` names nothing a person owns. */
-function heightMetres(worldZ: number, roomHeightMeters: number): number {
-  return ((worldZ + 1) / 2) * roomHeightMeters;
-}
 
 function heightBandKey(
   worldZ: number,
@@ -79,6 +74,9 @@ export function HueChannelInspector({
   const maxZ = heightRange?.max ?? 1;
   const limitingZone = heightRange?.zone && (minZ > -1 || maxZ < 1) ? heightRange.zone : null;
   const shownZ = Math.min(maxZ, Math.max(minZ, worldZ));
+  /** Slider stays in Hue's [-1, 1]; only the readout is metres, because that is
+   *  the unit the rest of the map speaks and `-0.42` names nothing a person owns. */
+  const heightMetres = (z: number) => hueToMetres(z, roomHeightMeters).toFixed(2);
 
   const commitLabel = () => {
     setLabelDirty(false);
@@ -182,19 +180,19 @@ export function HueChannelInspector({
         // The raw -1..1 is meaningless read aloud; this is the whole reason the
         // control moved off the Devices strip, so do not drop it.
         ariaValueText={t("roomMap:inspector.hueHeightValueText", {
-          metres: heightMetres(shownZ, roomHeightMeters).toFixed(2),
+          metres: heightMetres(shownZ),
           label: t(heightBandKey(shownZ)),
         })}
         valueLabel={t("roomMap:inspector.hueHeightReadout", {
-          metres: heightMetres(shownZ, roomHeightMeters).toFixed(2),
+          metres: heightMetres(shownZ),
         })}
       />
       {limitingZone && (
         <p className="lm-room-dock-field-hint" data-testid="hue-height-zone-limit">
           {t("roomMap:inspector.hueHeightZoneLimit", {
             name: limitingZone.name,
-            min: heightMetres(minZ, roomHeightMeters).toFixed(2),
-            max: heightMetres(maxZ, roomHeightMeters).toFixed(2),
+            min: heightMetres(minZ),
+            max: heightMetres(maxZ),
           })}
         </p>
       )}
