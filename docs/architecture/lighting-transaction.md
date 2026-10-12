@@ -23,7 +23,7 @@ snapshot (`useLightingRuntime.ts`: seeded by `get_lighting_runtime`, kept by
 | Launch | `apply_outputs` `{ origin: "boot" }` — Rust reads the saved mode and outputs itself |
 | LED control popup mode strip | `apply_outputs` `{ mode, origin: "popup" }` |
 | Tray: the Off / Ambilight / Solid / Effect check group | built in Rust (`tray_request`), never through a window; the kind alone, `origin: "tray"` |
-| Test patterns (LED Setup, popup tiles) | `apply_outputs` `{ targets, origin: "leaseHue" }` around each run |
+| Test patterns (LED Setup) | `apply_outputs` `{ targets, origin: "leaseHue" }` around each run |
 | Devices card Stop retrying / Retry stop | `release_hue_output` |
 | Devices → Hue Forget | built in Rust (`forget_hue_bridge`): `release_hue_with`, then a `user` choice of the saved targets without `hue` (`hue.md`, "Forgetting a bridge") |
 | Devices → WLED Forget device | built in Rust (`forget_wled_device`): a `usbUnplug` request without `usb` when that device is the bound local sink |
