@@ -901,8 +901,7 @@
    Migrates `RoomMapToolbar.tsx` off the legacy `bg-zinc-900/80` +
    `border-zinc-800` Tailwind utilities onto amber Rev 07 tokens so the
    editor's chrome reads as one continuous surface with the rest of the
-   app. Mirrors the `.lm-titlebar-tab` shape language (mono caps, amber
-   underline on the active state) for visual continuity.
+   app: mono caps, amber underline on the active state.
    ────────────────────────────────────────────────────────────────── */
 .lm-room-toolbar {
   height: 40px;

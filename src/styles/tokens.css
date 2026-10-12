@@ -34,10 +34,10 @@
   --lm-mono:      "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --lm-sans:      "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
-  /* Room-map zone identity palette. Six perceptually-separated hues used
-     for zone badges (Tailwind .bg-{blue,emerald,purple,amber,rose,cyan}-500
-     in ZoneListPanel.ZONE_COLORS). Mirrored here so JS can read the same
-     hex via CSS custom properties for inline boxShadow rings on Hue dots. */
+  /* Room-map zone identity palette: six perceptually-separated hues, the
+     Tailwind blue/emerald/purple/amber/rose/cyan-500 values. Read from JS as
+     custom properties (`room-map/model/zoneColor.ts`) for zone and object-type
+     colours drawn inline. */
   --lm-zone-1: #3b82f6; /* blue-500   */
   --lm-zone-2: #10b981; /* emerald-500 */
   --lm-zone-3: #a855f7; /* purple-500 */
