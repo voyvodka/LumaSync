@@ -97,13 +97,13 @@ export function OutputsRail({
       name: wled ? t("lights:dock.rows.wledName") : t("lights:dock.rows.usbName"),
       // What is actually bound: WLED's LAN address, or the USB product string the OS reported.
       // Device-supplied, so uppercased by English rules ("SERİAL" under lang="tr" otherwise).
-      detail: wled ? (localSink?.id ?? "") : (localSink?.product ?? t("lights:dock.rows.usbType")),
+      detail: wled ? localSink.id : (localSink?.product ?? t("lights:dock.rows.usbType")),
       detailLang: wled || localSink?.product ? "en" : undefined,
       sub: localOutputConnected ? (
         <Trans
           i18nKey={
             wled
-              ? localSink?.transport === "wled" && localSink.reachable === false
+              ? localSink.reachable === false
                 ? "lights:dock.rows.wledSubSilent"
                 : "lights:dock.rows.wledSub"
               : "lights:dock.rows.usbSub"
