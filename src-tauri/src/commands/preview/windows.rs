@@ -259,9 +259,10 @@ pub(super) fn app_in_front() -> Option<i32> {
 }
 
 const POPUP_WIDTH: f64 = 320.0;
-const POPUP_HEIGHT: f64 = 460.0;
+/// The scene tiles, the modes and the compact window's tallest stage (Effect) without scrolling.
+const POPUP_HEIGHT: f64 = 540.0;
 const POPUP_MIN_WIDTH: f64 = 300.0;
-const POPUP_MIN_HEIGHT: f64 = 420.0;
+const POPUP_MIN_HEIGHT: f64 = 480.0;
 
 /// The control popup, where the user last left it.
 pub(super) fn build_popup<R: Runtime>(
@@ -318,7 +319,7 @@ pub(super) fn build_popup<R: Runtime>(
 }
 
 /// Settings → Interface size, on the control popup: its frame grows with it so
-/// its layout keeps its 320×460 viewport. The main window zooms itself, inside
+/// its layout keeps its 320×540 viewport. The main window zooms itself, inside
 /// the content fade that hides the reflow (`useUIMode`); zooming it from here
 /// too reflowed the visible page a moment before or after that. Off the store's
 /// lock, since a window call there would wait on the main thread while holding

@@ -95,7 +95,8 @@ https://keepachangelog.com/en/1.1.0/
   direction, corners), a colour spiral, a sunset, drifting colour fields, a letterboxed film for
   black-bar detection, and a latency test that measures the delay from a captured frame to the
   lights' output. A scene borrows the lights and gives them back when it stops; choosing a mode
-  anywhere ends it. The remote also holds the modes, brightness and a short effect list, an eye
+  anywhere ends it. The remote also holds the modes with the compact window's settings for each
+  (Solid's colour or white, Ambilight's response, an effect with its palette and speed), an eye
   that hides the on-screen LEDs, and Hide and Close. On macOS the preview follows you onto a
   full-screen app's Space, and closing it leaves you where you are. The preview's windows stay out
   of the capture (macOS, and Windows 10 2004 or later; elsewhere the on-screen LEDs hide while

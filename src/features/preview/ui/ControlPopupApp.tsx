@@ -12,24 +12,24 @@ import {
   readCurrentWindowLogicalCenter,
   type UnlistenFn,
 } from "@/features/shell/windowApi";
-import { withEffect } from "@/features/mode/model/effectEdits";
+import { usePreference } from "@/features/persistence/preferences";
 import { modeKind } from "@/features/mode/model/modeKinds";
+import { ModeStage } from "@/features/mode/ui/ModeStage";
 import { ModeStrip } from "@/features/mode/ui/ModeStrip";
 import { applyOutputs, retuneLighting } from "@/features/mode/modeApi";
 import { isOutputsApplied, needsCalibration } from "@/features/mode/state/modeApplyOutcome";
 import { choiceFailureMessage } from "@/features/shell/notices/choiceFailureMessage";
 import { createRetuneCoalescer } from "@/features/mode/state/retuneCoalescer";
 import { useLightingRuntime } from "@/features/mode/state/useLightingRuntime";
-import type { EffectId } from "@/shared/contracts/effects";
 import {
-  DEFAULT_SOLID_COLOR,
   LIGHTING_MODE_KIND,
   normalizeAmbilightPayload,
   normalizeEffectPayload,
   normalizeSolidColorPayload,
+  type LightingModeConfig,
   type LightingModeKind,
 } from "@/shared/contracts/mode";
-import { LIGHTING_ORIGIN, type LightingTuning } from "@/shared/contracts/lightingRuntime";
+import { LIGHTING_ORIGIN } from "@/shared/contracts/lightingRuntime";
 import {
   PREVIEW_STATUS,
   type PreviewSessionStatusCode,
@@ -48,9 +48,9 @@ import {
 } from "../previewApi";
 import { createLatestSender } from "../state/latestSender";
 import { useLatencyResult } from "../state/useLatencyResult";
+import { usePopupStage } from "../state/usePopupStage";
 import { usePreviewSession } from "../state/usePreviewSession";
 import { PopupBrightnessRow } from "./PopupBrightnessRow";
-import { PopupEffectList } from "./PopupEffectList";
 import { PopupLatencyRow } from "./PopupLatencyRow";
 import { PopupScenePicker } from "./PopupScenePicker";
 import styles from "./ControlPopupApp.module.css";
@@ -124,9 +124,8 @@ export function ControlPopupApp() {
   }, []);
 
   const kind = mode?.kind ?? LIGHTING_MODE_KIND.OFF;
-  const solid = normalizeSolidColorPayload(mode?.solid ?? DEFAULT_SOLID_COLOR);
-  const ambilight = normalizeAmbilightPayload(mode?.ambilight);
-  const effect = normalizeEffectPayload(mode?.effect);
+  const stage = usePopupStage(snapshot);
+  const lastLit = usePreference("lastLitKind");
 
   // ── Mode strip ───────────────────────────────────────────────────────────
   const handleModeClick = useCallback(
@@ -164,21 +163,19 @@ export function ControlPopupApp() {
     [adopt, retunes, t],
   );
 
-  // ── Brightness and the effect list: retunes of the running mode ──────────
-  // One brightness for every mode, Off included: a mode change leaves the row where it is.
-  const shownBrightness = snapshot?.brightness ?? 1;
-  const retuneBrightness = (brightness: number) => {
-    const tuning: LightingTuning | null =
-      kind === LIGHTING_MODE_KIND.SOLID
-        ? { solid: { ...solid, brightness } }
-        : kind === LIGHTING_MODE_KIND.EFFECT
-          ? { effect: { ...effect, brightness } }
-          : kind === LIGHTING_MODE_KIND.AMBILIGHT
-            ? { ambilight: { ...ambilight, brightness } }
-            : null;
-    if (tuning) retunes.push(tuning);
+  // ── The stage: the compact window's settings, retunes of the running mode ─
+  // The stage only edits the mode that runs (dimmed and out of reach under Off), so every change is
+  // a retune, coalesced like a drag on Lights.
+  const handleStageChange = (next: LightingModeConfig) => {
+    if (next.kind !== kind) return;
+    if (next.kind === LIGHTING_MODE_KIND.SOLID && next.solid) {
+      retunes.push({ solid: normalizeSolidColorPayload(next.solid) });
+    } else if (next.kind === LIGHTING_MODE_KIND.AMBILIGHT && next.ambilight) {
+      retunes.push({ ambilight: normalizeAmbilightPayload(next.ambilight) });
+    } else if (next.kind === LIGHTING_MODE_KIND.EFFECT && next.effect) {
+      retunes.push({ effect: normalizeEffectPayload(next.effect) });
+    }
   };
-  const pickEffect = (id: EffectId) => retunes.push({ effect: withEffect(effect, id) });
 
   // ── Scenes: a press plays one; the playing one's press stops it ──────────
   const handleScene = (scene: SceneKind) => {
@@ -267,16 +264,23 @@ export function ControlPopupApp() {
         {playing?.scene === "latency" && <PopupLatencyRow result={latency} />}
         {/* The scene has the lights, so no mode is marked; any press is a choice, and it ends the scene. */}
         <ModeStrip variant="popup" value={playing ? null : kind} onSelect={handleModeClick} />
+        {/* A scene's brightness is its own and never saved; the mode's settings wait until it stops. */}
         {playing ? (
           <PopupBrightnessRow brightness={playing.sceneBrightness} onChange={sendSceneBrightness} />
         ) : (
-          <PopupBrightnessRow
-            brightness={shownBrightness}
-            disabled={kind === LIGHTING_MODE_KIND.OFF}
-            onChange={retuneBrightness}
-          />
+          <div data-lights className={styles.stage}>
+            <ModeStage
+              dense
+              mode={stage.mode}
+              disabled={false}
+              brightnessLocked={stage.brightnessLocked}
+              brightnessTitle={stage.brightnessTitle}
+              onModeChange={handleStageChange}
+              lastLit={lastLit}
+              onTurnOn={() => handleModeClick(lastLit)}
+            />
+          </div>
         )}
-        {!playing && kind === LIGHTING_MODE_KIND.EFFECT && <PopupEffectList running={effect.id} onPick={pickEffect} />}
         {runError && (
           <p className={styles.error} role="alert">
             {runError}

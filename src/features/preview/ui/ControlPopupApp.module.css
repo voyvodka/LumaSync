@@ -63,32 +63,9 @@
     padding: 14px 12px;
   }
 
-  .effects {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 6px;
-  }
-
-  .effect {
-    min-height: 32px;
-    padding: 6px 8px;
-    border-radius: 8px;
-    border: 1px solid var(--lm-line-2);
-    background: var(--lm-panel);
-    color: var(--lm-ink-dim);
-    font-size: 11.5px;
-    line-height: 1.25;
-    text-align: center;
-    overflow-wrap: anywhere;
-    cursor: pointer;
-    transition: color var(--lm-dur-quick) var(--lm-ease-out), border-color var(--lm-dur-quick) var(--lm-ease-out);
-  }
-  .effect:hover:not(:disabled) { color: var(--lm-ink); }
-  .effect:focus-visible { outline: 2px solid transparent; box-shadow: var(--lm-focus-ring); }
-  /* Ink and an amber edge: the mode above already carries the one amber fill. */
-  .effect[aria-checked="true"] {
-    color: var(--lm-ink);
-    border-color: rgba(255, 176, 32, 0.5);
+  /* The compact window's stage, at the popup's width. */
+  .stage {
+    min-width: 0;
   }
 
   .error {
@@ -97,16 +74,12 @@
     color: var(--lm-red);
   }
 
-  :global(:root[data-reduced-motion]) .headerButton,
-  :global(:root[data-reduced-motion]) .effect {
+  :global(:root[data-reduced-motion]) .headerButton {
     transition: none;
   }
 
   @media (forced-colors: active) {
-    .effect { border-color: CanvasText; forced-color-adjust: none; }
-    .effect[aria-checked="true"] { outline: 2px solid Highlight; }
     .header { border-bottom-color: CanvasText; }
-    .headerButton:focus-visible,
-    .effect:focus-visible { outline-color: Highlight; outline-offset: 2px; }
+    .headerButton:focus-visible { outline-color: Highlight; outline-offset: 2px; }
   }
 }

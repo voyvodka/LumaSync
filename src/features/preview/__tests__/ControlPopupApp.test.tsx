@@ -3,7 +3,7 @@
 // retune the running mode, the eye hides the twin, Close ends the session and
 // Hide keeps it open. A scene owns the lights while it plays.
 
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -143,6 +143,7 @@ vi.mock("@/features/mode/state/useLightingRuntime", () => ({
   }),
 }));
 
+const { __resetPreferencesForTests, __setPreferenceForTests } = await import("@/features/persistence/preferences");
 const { ControlPopupApp } = await import("../ui/ControlPopupApp");
 
 function sessionReply(code: PreviewSessionStatusCode): PreviewSessionResult {
@@ -168,8 +169,11 @@ beforeEach(() => {
   syncState = { mode: { kind: LIGHTING_MODE_KIND.OFF } };
 });
 
+// Unmounted first: a reset under a mounted popup re-renders it outside act.
 afterEach(() => {
   vi.clearAllMocks();
+  cleanup();
+  __resetPreferencesForTests();
 });
 
 /** The session read has landed with a scene playing. */
@@ -367,52 +371,57 @@ describe("ControlPopupApp Solid drag", () => {
   });
 });
 
-describe("ControlPopupApp brightness and effects", () => {
-  it("retunes the running Ambilight's brightness, keeping its other settings", async () => {
+describe("ControlPopupApp stage", () => {
+  // The compact window's settings: a change of the running mode is a retune, never a new choice.
+  it("retunes the running Ambilight from its stage, keeping its other settings", async () => {
     syncState.mode = { kind: LIGHTING_MODE_KIND.AMBILIGHT, ambilight: { brightness: 0.8 } };
-    render(<ControlPopupApp />);
+    await renderSettled();
 
-    fireEvent.change(screen.getByRole("slider", { name: "common:mode.brightness" }), { target: { value: "30" } });
+    fireEvent.change(screen.getByRole("slider", { name: "lights:signal.profile.brightness" }), {
+      target: { value: "30" },
+    });
 
     await waitFor(() => expect(retuneLighting).toHaveBeenCalledTimes(1));
     expect(retuneLighting.mock.calls[0][0].ambilight?.brightness).toBe(0.3);
     expect(applyOutputs).not.toHaveBeenCalled();
   });
 
-  // Off carries no payload: the row shows, out of reach, the one brightness every mode runs at.
-  it("holds the shared brightness out of reach while the lights are off", async () => {
-    syncState.brightness = 0.35;
+  it("retunes the running effect, keeping it, from its stage", async () => {
+    syncState.mode = { kind: LIGHTING_MODE_KIND.EFFECT, effect: { id: "candle", speed: 0.4, brightness: 0.7 } };
     await renderSettled();
-    expect(screen.getByRole("slider", { name: "common:mode.brightness" })).toBeDisabled();
-    expect(screen.getByText("35%")).toBeInTheDocument();
-  });
 
-  it("lists effects only while an effect runs, and a pick retunes it in place", async () => {
-    syncState.mode = { kind: LIGHTING_MODE_KIND.EFFECT, effect: { id: "wave", speed: 0.4, brightness: 0.7 } };
-    const user = userEvent.setup();
-    render(<ControlPopupApp />);
+    expect(screen.getByTestId("effect-picker")).toHaveTextContent("lights:effect.names.candle");
+    fireEvent.change(screen.getByTestId("effect-brightness"), { target: { value: "25" } });
 
-    expect(screen.getByRole("radio", { name: "lights:effect.names.wave" })).toHaveAttribute("aria-checked", "true");
-    await user.click(screen.getByRole("radio", { name: "lights:effect.names.candle" }));
-
-    await waitFor(() => expect(retuneLighting).toHaveBeenCalledTimes(1));
-    expect(retuneLighting.mock.calls[0][0].effect).toMatchObject({ id: "candle", speed: 0.4, brightness: 0.7 });
+    await waitFor(() => expect(retuneLighting).toHaveBeenCalled());
+    expect(retuneLighting.mock.lastCall?.[0].effect).toMatchObject({ id: "candle", brightness: 0.25 });
     expect(applyOutputs).not.toHaveBeenCalled();
   });
 
-  // The six keep their places, so a pick never moves a chip under the pointer.
-  it("adds an effect chosen on Lights after the six", async () => {
-    syncState.mode = { kind: LIGHTING_MODE_KIND.EFFECT, effect: { id: "plasma", speed: 0.5, brightness: 1 } };
+  // Off carries no payload: the stage the power button brings back shows, dimmed and out of reach,
+  // what was saved for it, at the one brightness every mode runs at.
+  it("shows the last lit mode's saved settings, dimmed, while the lights are off", async () => {
+    __setPreferenceForTests("lastLitKind", "effect");
+    storeState = { ...storeState, lightingMode: { kind: "off", effect: { id: "candle", speed: 0.4, brightness: 0.9 } } };
+    syncState.brightness = 0.35;
     await renderSettled();
 
-    const names = screen.getAllByRole("radio").map((radio) => radio.textContent);
-    expect(names.slice(-2)).toEqual(["lights:effect.names.twinkle", "lights:effect.names.plasma"]);
-    expect(screen.getByRole("radio", { name: "lights:effect.names.plasma" })).toHaveAttribute("aria-checked", "true");
+    const stage = await screen.findByTestId("off-stage");
+    await waitFor(() => expect(screen.getByTestId("effect-picker")).toHaveTextContent("lights:effect.names.candle"));
+    // The slider glides to a new value; it settles on the shared one, not the one saved with the effect.
+    await waitFor(() => expect(screen.getByTestId("effect-brightness")).toHaveValue("35"));
+    expect(stage.querySelector("[inert]")).not.toBeNull();
   });
 
-  it("shows no effect list outside Effect", async () => {
+  it("turns the lights on from the dimmed stage as the kind alone", async () => {
+    __setPreferenceForTests("lastLitKind", "solid");
+    const user = userEvent.setup();
     await renderSettled();
-    expect(screen.queryByRole("radio", { name: "lights:effect.names.wave" })).toBeNull();
+
+    await user.click(await screen.findByTestId("stage-turn-on"));
+
+    await waitFor(() => expect(applyOutputs).toHaveBeenCalledTimes(1));
+    expect(applyOutputs.mock.calls[0][0]).toEqual({ mode: { kind: LIGHTING_MODE_KIND.SOLID }, origin: "popup" });
   });
 });
 
