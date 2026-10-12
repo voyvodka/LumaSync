@@ -1,12 +1,12 @@
 /**
  * HueChannelOverlay regression tests.
  *
- * Bug-driven coverage for zone authoring:
- *  - Bug #50: dragging the zone center moves the dashed bounds box AND
- *    every channel dot bound to the zone in lockstep (imperative DOM
- *    update during pointermove, single state commit on pointerup).
- *  - Bug #52(a): dragging a zone-bound channel never escapes the zone
- *    bounds — clamp pipeline is `world → zone-relative → world`.
+ * Zone authoring:
+ *  - dragging the zone center moves the dashed bounds box AND every
+ *    channel dot bound to the zone in lockstep (imperative DOM update
+ *    during pointermove, single state commit on pointerup).
+ *  - dragging a zone-bound channel never escapes the zone bounds —
+ *    clamp pipeline is `world → zone-relative → world`.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, cleanup } from "@testing-library/react";

@@ -65,8 +65,8 @@ interface RoomDockPanelProps {
   /**
    * Move a single channel between zones (or detach when target is
    * `null`). Powers the row drag handle, "Unassigned" drop bucket, and the
-   * inline "Move to →" popover. Inert when omitted, so the dock degrades
-   * to the v1.5 read-only flow.
+   * inline "Move to →" popover. Inert when omitted, which leaves zone
+   * membership read-only.
    */
   onAssignChannelToZone?: (channelIndex: number, targetZoneId: string | null) => void;
   /**

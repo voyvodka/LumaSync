@@ -18,7 +18,6 @@ interface RoomMapToolbarProps {
   onRedo?: () => void;
 }
 
-/* Shared button styling — amber Rev 07 tokens, 32px tap floor */
 const TOOLBAR_BTN = "lm-room-toolbar-btn";
 
 export function RoomMapToolbar({

@@ -74,17 +74,15 @@ interface HueChannelOverlayProps {
 /**
  * Project a world-space Hue coordinate into the active zone's bounds.
  *
- * Bug #52(a) — channel drag must never escape the parent zone box.
- * Pipeline:
+ * A channel drag must never escape the parent zone box. Pipeline:
  *   1. Clamp world to `[-1, 1]` (Hue cube, the bridge cap).
  *   2. Invert through the zone transform → relative space.
  *   3. Clamp relative to `[-1, 1]` (zone box).
  *   4. Re-project to world via `center + scale * relative`.
  *
  * Returns both the bounded world tuple and the matching zone-relative
- * coordinates so the drag handler can persist them in one shot. When
- * `scale*` is 0 the zone is degenerate; we fall back to the world-clamped
- * value with `rel = 0` to avoid a divide-by-zero.
+ * coordinates so the drag handler can persist them in one shot. A zero
+ * `scale*` (a degenerate zone) is taken as 1 to avoid a divide-by-zero.
  */
 function clampWithinZone(
   worldX: number,
@@ -466,7 +464,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
               const halfScaleX = Math.abs(activeHueZone.scaleX);
               const halfScaleY = Math.abs(activeHueZone.scaleY);
 
-              // Bugs #50/#52(b) — the bounds box AND every dot bound to this zone
+              // The bounds box AND every dot bound to this zone
               // have to follow the centre. See docs/architecture/room-map.md.
               const overlayRoot = target.parentElement;
               const boundsEl = overlayRoot?.querySelector<HTMLDivElement>(
@@ -497,7 +495,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
                 const dxHue = (dxPx / effectivePpm) / widthRef.current * 2;
                 const dyHue = -(dyPx / effectivePpm) / depthRef.current * 2;
 
-                // Bug #53 / #50 — keep the entire zone box (center ±
+                // Keep the entire zone box (center ±
                 // half-scale) inside the Hue cube while dragging. Without
                 // this, the bounds box visually overflows the room map.
                 const minCx = -1 + halfScaleX;
@@ -520,7 +518,6 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
                 target.dataset.cx = String(newCx);
                 target.dataset.cy = String(newCy);
 
-                // Bug #50 — dashed bounds box follows the center delta.
                 if (boundsEl && boundsStart) {
                   boundsEl.style.left = `${boundsStart.left + deltaLeftPx}px`;
                   boundsEl.style.top = `${boundsStart.top + deltaTopPx}px`;
@@ -600,7 +597,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
         return (
           <div
             key={ch.channelIndex}
-            // Bug #50 — tag bound channels so the zone-center drag
+            // Tag bound channels so the zone-center drag
             // handler can imperatively translate them by the same delta
             // as the dashed bounds box.
             data-zone-channel-id={isInActiveHueZone ? activeHueZone?.id : undefined}

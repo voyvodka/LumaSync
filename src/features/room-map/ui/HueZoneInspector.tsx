@@ -41,7 +41,7 @@
  *
  * The component receives a single `(patch: Partial<HueZone>) => void`
  * callback so the parent (`RoomMapEditor` via `RoomDockPanel`) drives
- * the optimistic-write + Tauri-mirror flow. Bug #51: `centerColor` is
+ * the optimistic-write + Tauri-mirror flow. `centerColor` is
  * never authored from this surface (deprecated optional in the
  * contract).
  */
