@@ -164,6 +164,12 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+/** Rendered once the session read has landed, so no update arrives after the test ends. */
+async function renderSettled() {
+  render(<ControlPopupApp />);
+  await screen.findByRole("button", { name: "preview:control.twinHide" });
+}
+
 describe("ControlPopupApp opening", () => {
   it("changes no light by opening", async () => {
     render(<ControlPopupApp />);
@@ -375,8 +381,8 @@ describe("ControlPopupApp brightness and effects", () => {
     expect(applyOutputs).not.toHaveBeenCalled();
   });
 
-  it("holds the brightness out of reach while the lights are off", () => {
-    render(<ControlPopupApp />);
+  it("holds the brightness out of reach while the lights are off", async () => {
+    await renderSettled();
     expect(screen.getByRole("slider", { name: "common:mode.brightness" })).toBeDisabled();
   });
 
@@ -394,17 +400,17 @@ describe("ControlPopupApp brightness and effects", () => {
   });
 
   // The six keep their places, so a pick never moves a chip under the pointer.
-  it("adds an effect chosen on Lights after the six", () => {
+  it("adds an effect chosen on Lights after the six", async () => {
     syncState.mode = { kind: LIGHTING_MODE_KIND.EFFECT, effect: { id: "plasma", speed: 0.5, brightness: 1 } };
-    render(<ControlPopupApp />);
+    await renderSettled();
 
     const names = screen.getAllByRole("radio").map((radio) => radio.textContent);
     expect(names.slice(-2)).toEqual(["lights:effect.names.twinkle", "lights:effect.names.plasma"]);
     expect(screen.getByRole("radio", { name: "lights:effect.names.plasma" })).toHaveAttribute("aria-checked", "true");
   });
 
-  it("shows no effect list outside Effect", () => {
-    render(<ControlPopupApp />);
+  it("shows no effect list outside Effect", async () => {
+    await renderSettled();
     expect(screen.queryByRole("radio", { name: "lights:effect.names.wave" })).toBeNull();
   });
 });
