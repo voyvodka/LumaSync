@@ -331,7 +331,7 @@ export function HsvColorPicker({
       const dx = e.clientX - (rect.left + rect.width / 2);
       const dy = e.clientY - (rect.top + rect.height / 2);
       let deg = (Math.atan2(dy, dx) * 180) / Math.PI;
-      // Convert math angle → 0..360 with 0° at the top (12 o'clock).
+      // atan2 gives -180..180 with 0° at 3 o'clock, clockwise on screen — the wedges' frame.
       deg = (deg + 360) % 360;
       commitDrag({ ...hsv, h: deg });
     },
@@ -469,7 +469,7 @@ export function HsvColorPicker({
   const huePureRgb = hsvToRgb({ h: hsv.h, s: 1, v: 1 });
   const huePureHex = rgbToHex(huePureRgb);
 
-  // Build hue-ring conic gradient via 12 segments — works in pure SVG
+  // Build hue-ring conic gradient via 24 segments — works in pure SVG
   // without external libs. Each wedge is a `<path>` with the matching
   // fill from the hue at its midpoint angle.
   const wedgeCount = 24;
