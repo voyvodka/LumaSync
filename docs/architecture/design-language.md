@@ -35,8 +35,6 @@ referenced nowhere; it is not a focus or accent colour.
 **What is left of the old palette is small, and it only shrinks.** Slate is gone. Raw Tailwind
 `zinc-*` and palette colours survive in the room-map canvas objects and overlays (`room-map/ui/`). A file touched for another reason moves to the tokens in the
 same change; nothing new starts on the raw palette, and there is no third palette.
-`statusBannerConvention.test.ts` keeps the raw `emerald-900/20` / `rose-900/20` banner idiom out of
-the files it was removed from — it was once re-planted behind a false "kept for tests" comment.
 
 **No component or icon library.** Tailwind 4, the `lm-*` classes and `src/shared/ui/` only. Icons
 are hand-drawn inline SVG in `src/shared/ui/icons.tsx` (`stroke="currentColor"`, `fill="none"`); an
@@ -195,10 +193,10 @@ on the Settings choice or the OS request in every window, set from the boot read
 and forced colours can only be verified by hand on Windows.
 
 **A modal dialog is `role="dialog"` + `aria-modal="true"` + `aria-labelledby`, with
-`useDialogFocus`** (`src/shared/ui/`) trapping focus, closing on Escape through `onClose`, and
+`useDialogFocus`** (`src/shared/lib/`) trapping focus, closing on Escape through `onClose`, and
 returning focus on close — or it is a `ConfirmDialog`, which does all of that. `aria-modal` without
 the trap is worse than neither: assistive technology treats the background as inert while Tab still
-walks into it. A popover that does not block (`HeroColorCard`'s picker, the room-map shortcut list)
+walks into it. A popover that does not block (the shared `Popover` as a `dialog`, the room-map shortcut list)
 says `aria-modal="false"`. A scrim starts at `var(--lm-titlebar-h)`, never `inset: 0`: covering the
 title bar takes the drag region and the window controls with it (`modalScrimLayering.test.ts`).
 
@@ -207,7 +205,7 @@ title bar takes the drag region and the window controls with it (`modalScrimLaye
 ## i18n in components
 
 **Every user-facing string goes through `t()`**, EN and TR in the same change; rich text uses
-`<Trans>` (`UpdateModal`, `LightsSection`), never concatenation, and a count uses i18next plural keys
+`<Trans>` (`OutputsRail`), never concatenation, and a count uses i18next plural keys
 (`key_one` / `key_other` with `{ count }`), never a ternary in code.
 
 **Parity cannot see a hardcoded literal.** An English string written straight into JSX has no key in
