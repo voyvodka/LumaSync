@@ -74,36 +74,6 @@ function bridgeConsoleToTauri() {
 
 bridgeConsoleToTauri();
 
-// FE-2 — clear the twin window's background synchronously, before bootstrap
-// runs, so it never flashes the opaque app gradient. See
-// docs/architecture/ui-and-shell.md. The scene window, transparent like the
-// twin, is painted black instead: the capture must see black, not the app.
-function neutralizeTwinBackgroundEarly() {
-  let label = "";
-  try {
-    label = getCurrentWindow().label;
-  } catch (err) {
-    console.error(
-      "[LumaSync] could not resolve window label for early twin transparency:",
-      err,
-    );
-    return;
-  }
-  const scene = label.startsWith(LED_PREVIEW_SCENE_LABEL_PREFIX);
-  if (!label.startsWith(LED_TWIN_OVERLAY_LABEL_PREFIX) && !scene) return;
-
-  const background = scene ? "black" : "transparent";
-  document.documentElement.style.background = background;
-  // A dark `color-scheme` can hand an unpainted root a dark canvas instead of
-  // leaving it clear; the twin has no native controls to theme.
-  document.documentElement.style.colorScheme = "normal";
-  if (document.body) document.body.style.background = background;
-  const root = document.getElementById("root");
-  if (root) root.style.background = background;
-}
-
-neutralizeTwinBackgroundEarly();
-
 const WINDOW_KIND = {
   MAIN: "main",
   POPUP: "popup",
@@ -124,6 +94,27 @@ function resolveWindowKind(): WindowKind {
   if (label.startsWith(LED_PREVIEW_SCENE_LABEL_PREFIX)) return WINDOW_KIND.SCENE;
   return WINDOW_KIND.MAIN;
 }
+
+const windowKind = resolveWindowKind();
+
+// FE-2 — clear the twin window's background synchronously, before bootstrap
+// runs, so it never flashes the opaque app gradient. See
+// docs/architecture/ui-and-shell.md. The scene window, transparent like the
+// twin, is painted black instead: the capture must see black, not the app.
+function neutralizeTwinBackgroundEarly(kind: WindowKind) {
+  if (kind !== WINDOW_KIND.TWIN && kind !== WINDOW_KIND.SCENE) return;
+
+  const background = kind === WINDOW_KIND.SCENE ? "black" : "transparent";
+  document.documentElement.style.background = background;
+  // A dark `color-scheme` can hand an unpainted root a dark canvas instead of
+  // leaving it clear; the twin has no native controls to theme.
+  document.documentElement.style.colorScheme = "normal";
+  if (document.body) document.body.style.background = background;
+  const root = document.getElementById("root");
+  if (root) root.style.background = background;
+}
+
+neutralizeTwinBackgroundEarly(windowKind);
 
 /**
  * Import only this window's root tree.
@@ -164,7 +155,6 @@ function failedRoot(error: unknown): ComponentType {
   };
 }
 
-const windowKind = resolveWindowKind();
 // Started before the language read, so the chunk and the shell-state IPC run
 // in parallel. Never rejects: see `failedRoot`.
 const windowRoot = loadWindowRoot(windowKind).catch((err: unknown) => {
