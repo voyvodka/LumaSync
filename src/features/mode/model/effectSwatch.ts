@@ -7,12 +7,7 @@ import {
   type PaletteId,
 } from "@/shared/contracts/effects";
 import type { EffectColor, EffectPayload } from "@/shared/contracts/mode";
-
-const hex2 = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
-
-export function colorToHex({ r, g, b }: EffectColor): string {
-  return `#${hex2(r)}${hex2(g)}${hex2(b)}`;
-}
+import { rgbToHex } from "@/shared/lib/color";
 
 export function hexToColor(hex: string): EffectColor {
   const value = hex.replace("#", "");
@@ -34,7 +29,7 @@ export function customColorsOf(effect: EffectPayload): EffectColor[] {
 
 /** A palette's stops as hex, for a swatch; `custom` reads the effect's colours. */
 export function paletteStops(palette: PaletteId, effect: EffectPayload): string[] {
-  if (palette === PALETTE_IDS.CUSTOM) return customColorsOf(effect).map(colorToHex);
+  if (palette === PALETTE_IDS.CUSTOM) return customColorsOf(effect).map(rgbToHex);
   return [...PALETTES[palette as BuiltinPaletteId].stops];
 }
 

@@ -7,8 +7,9 @@ import { HsvColorPicker } from "@/shared/ui/HsvColorPicker/HsvColorPicker";
 import { IconClose } from "@/shared/ui/icons";
 import { Popover } from "@/shared/ui/Popover/Popover";
 import { Segmented } from "@/shared/ui/Segmented/Segmented";
+import { rgbToHex } from "@/shared/lib/color";
 import { useSideScroll } from "@/shared/lib/useSideScroll";
-import { colorToHex, customColorsOf, hexToColor, paletteOf, paletteSwatch } from "../../model/effectSwatch";
+import { customColorsOf, hexToColor, paletteOf, paletteSwatch } from "../../model/effectSwatch";
 import styles from "./EffectControls.module.css";
 
 interface PaletteStripProps {
@@ -109,7 +110,7 @@ function CustomColors({ colors, onChange }: { colors: EffectColor[]; onChange: (
             <button
               type="button"
               className={styles.chip}
-              style={{ background: colorToHex(color) }}
+              style={{ background: rgbToHex(color) }}
               aria-pressed={i === index}
               aria-label={t("lights:effect.colorN", { n: i + 1 })}
               onClick={() => setSelected(i)}
@@ -146,7 +147,7 @@ function CustomColors({ colors, onChange }: { colors: EffectColor[]; onChange: (
       <HsvColorPicker
         compact
         hideRecent
-        value={colorToHex(current)}
+        value={rgbToHex(current)}
         ariaLabel={t("lights:effect.colorN", { n: index + 1 })}
         onChange={(hex) => replace(index, hexToColor(hex))}
       />
