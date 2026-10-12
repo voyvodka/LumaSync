@@ -1,10 +1,31 @@
 import type { LightingTuning, RetuneLightingResult } from "@/shared/contracts/lightingRuntime";
+import {
+  LIGHTING_MODE_KIND,
+  normalizeAmbilightPayload,
+  normalizeEffectPayload,
+  normalizeSolidColorPayload,
+  type LightingModeConfig,
+} from "@/shared/contracts/mode";
 
 export interface RetuneCoalescer {
   /** The newest value of a drag. Sent now, or after the one in flight. */
   push: (tuning: LightingTuning) => void;
   /** A kind change made the last value stale: the next push is sent even if equal. */
   reset: () => void;
+}
+
+/** A change within `next`'s kind as the retune that carries it; `null` when it brings no payload for that kind. */
+export function tuningOf(next: LightingModeConfig): LightingTuning | null {
+  switch (next.kind) {
+    case LIGHTING_MODE_KIND.SOLID:
+      return next.solid ? { solid: normalizeSolidColorPayload(next.solid) } : null;
+    case LIGHTING_MODE_KIND.AMBILIGHT:
+      return next.ambilight ? { ambilight: normalizeAmbilightPayload(next.ambilight) } : null;
+    case LIGHTING_MODE_KIND.EFFECT:
+      return next.effect ? { effect: normalizeEffectPayload(next.effect) } : null;
+    default:
+      return null;
+  }
 }
 
 /** Key-order independent, so two renders building the same payload collapse. */

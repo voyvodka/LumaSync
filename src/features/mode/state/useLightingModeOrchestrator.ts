@@ -20,10 +20,7 @@ import {
 } from "@/shared/contracts/lightingRuntime";
 import {
   LIGHTING_MODE_KIND,
-  normalizeAmbilightPayload,
-  normalizeEffectPayload,
   normalizeOutputTargets,
-  normalizeSolidColorPayload,
   type AmbilightPayload,
   type EffectPayload,
   type LightingModeConfig,
@@ -40,7 +37,7 @@ import {
   usbLeftOut,
   type ChoiceAnswer,
 } from "./modeApplyOutcome";
-import { createRetuneCoalescer } from "./retuneCoalescer";
+import { createRetuneCoalescer, tuningOf } from "./retuneCoalescer";
 import { useLightingRuntime } from "./useLightingRuntime";
 
 /** How long the "stop failed for these targets" toast stays up. */
@@ -360,13 +357,8 @@ export function useLightingModeOrchestrator({
       // A nudge within the running kind never waits for a transition, and a
       // drag commits many of them: they go through the coalescer as retunes.
       if (next.kind === currentKind && next.kind !== LIGHTING_MODE_KIND.OFF) {
-        if (next.kind === LIGHTING_MODE_KIND.SOLID && next.solid) {
-          retunes.push({ solid: normalizeSolidColorPayload(next.solid) });
-        } else if (next.kind === LIGHTING_MODE_KIND.AMBILIGHT && next.ambilight) {
-          retunes.push({ ambilight: normalizeAmbilightPayload(next.ambilight) });
-        } else if (next.kind === LIGHTING_MODE_KIND.EFFECT && next.effect) {
-          retunes.push({ effect: normalizeEffectPayload(next.effect) });
-        }
+        const tuning = tuningOf(next);
+        if (tuning) retunes.push(tuning);
         return;
       }
 

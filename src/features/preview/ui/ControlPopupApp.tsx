@@ -19,16 +19,9 @@ import { ModeStrip } from "@/features/mode/ui/ModeStrip";
 import { applyOutputs, retuneLighting } from "@/features/mode/modeApi";
 import { isOutputsApplied, needsCalibration } from "@/features/mode/state/modeApplyOutcome";
 import { choiceFailureMessage } from "@/features/shell/notices/choiceFailureMessage";
-import { createRetuneCoalescer } from "@/features/mode/state/retuneCoalescer";
+import { createRetuneCoalescer, tuningOf } from "@/features/mode/state/retuneCoalescer";
 import { useLightingRuntime } from "@/features/mode/state/useLightingRuntime";
-import {
-  LIGHTING_MODE_KIND,
-  normalizeAmbilightPayload,
-  normalizeEffectPayload,
-  normalizeSolidColorPayload,
-  type LightingModeConfig,
-  type LightingModeKind,
-} from "@/shared/contracts/mode";
+import { LIGHTING_MODE_KIND, type LightingModeConfig, type LightingModeKind } from "@/shared/contracts/mode";
 import { LIGHTING_ORIGIN } from "@/shared/contracts/lightingRuntime";
 import {
   PREVIEW_STATUS,
@@ -168,13 +161,8 @@ export function ControlPopupApp() {
   // a retune, coalesced like a drag on Lights.
   const handleStageChange = (next: LightingModeConfig) => {
     if (next.kind !== kind) return;
-    if (next.kind === LIGHTING_MODE_KIND.SOLID && next.solid) {
-      retunes.push({ solid: normalizeSolidColorPayload(next.solid) });
-    } else if (next.kind === LIGHTING_MODE_KIND.AMBILIGHT && next.ambilight) {
-      retunes.push({ ambilight: normalizeAmbilightPayload(next.ambilight) });
-    } else if (next.kind === LIGHTING_MODE_KIND.EFFECT && next.effect) {
-      retunes.push({ effect: normalizeEffectPayload(next.effect) });
-    }
+    const tuning = tuningOf(next);
+    if (tuning) retunes.push(tuning);
   };
 
   // ── Scenes: a press plays one; the playing one's press stops it ──────────
