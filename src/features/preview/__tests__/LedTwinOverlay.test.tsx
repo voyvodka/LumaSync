@@ -57,7 +57,7 @@ function fakeContext() {
     fillRect: () => {},
     beginPath: () => {},
     arc: () => {},
-    stroke: () => {},
+    createRadialGradient: () => ({ addColorStop: () => {} }),
     fill(this: { canvas: HTMLCanvasElement; fillStyle: string }) {
       if (this.canvas.dataset.testid === "twin-dots") current?.push(this.fillStyle);
     },
@@ -76,7 +76,7 @@ const CALIBRATION: LedCalibrationConfig = {
 
 const LAYOUT: TwinLayout = { displayId: "display-1", layoutRevision: 1, leds: CALIBRATION, lamps: [] };
 
-function makeLeds(colour: [number, number, number] = [10, 20, 30]) {
+function makeLeds(colour: [number, number, number] = [110, 120, 130]) {
   return Array.from({ length: CALIBRATION.totalLeds }, () => colour);
 }
 
@@ -127,7 +127,7 @@ describe("LedTwinOverlay", () => {
     await act(async () => {
       send(makeFrame(makeLeds(), 1));
     });
-    await waitFor(() => expect(lastPaint()[0]).toBe("rgb(10, 20, 30)"));
+    await waitFor(() => expect(lastPaint()[0]).toBe("rgb(110, 120, 130)"));
     return view;
   }
 
@@ -198,18 +198,18 @@ describe("LedTwinOverlay", () => {
     await waitFor(() => expect(lastPaint()).toHaveLength(CALIBRATION.totalLeds));
 
     await act(async () => {
-      send(makeFrame(makeLeds([1, 2, 3]), 1, 1, [[255, 0, 0], [0, 0, 255]]));
+      send(makeFrame(makeLeds([101, 102, 103]), 1, 1, [[255, 0, 0], [0, 0, 255]]));
     });
 
-    await waitFor(() => expect(lastPaint()[0]).toBe("rgb(1, 2, 3)"));
+    await waitFor(() => expect(lastPaint()[0]).toBe("rgb(101, 102, 103)"));
     expect(view.queryAllByTestId("twin-lamp")).toHaveLength(0);
   });
 
   it("draws the frame Rust sent while the subscribe was being answered", async () => {
-    framesDuringSubscribe = [makeFrame(makeLeds([9, 9, 9]), 1)];
+    framesDuringSubscribe = [makeFrame(makeLeds([109, 109, 109]), 1)];
     render(<LedTwinOverlay />);
 
-    await waitFor(() => expect(lastPaint()[0]).toBe("rgb(9, 9, 9)"));
+    await waitFor(() => expect(lastPaint()[0]).toBe("rgb(109, 109, 109)"));
   });
 
   it("ignores a frame cut for a layout it no longer draws", async () => {
@@ -219,13 +219,13 @@ describe("LedTwinOverlay", () => {
       layoutListener?.({ payload: { ...LAYOUT, layoutRevision: 2 } });
     });
     await act(async () => {
-      send(makeFrame(makeLeds([7, 7, 7]), 5, 1));
+      send(makeFrame(makeLeds([107, 107, 107]), 5, 1));
     });
-    expect(lastPaint()).not.toContain("rgb(7, 7, 7)");
+    expect(lastPaint()).not.toContain("rgb(107, 107, 107)");
 
     await act(async () => {
-      send(makeFrame(makeLeds([7, 7, 7]), 6, 2));
+      send(makeFrame(makeLeds([107, 107, 107]), 6, 2));
     });
-    expect(lastPaint()[0]).toBe("rgb(7, 7, 7)");
+    expect(lastPaint()[0]).toBe("rgb(107, 107, 107)");
   });
 });
