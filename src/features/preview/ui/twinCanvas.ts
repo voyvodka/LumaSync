@@ -8,6 +8,7 @@
 import type { TwinLedPosition } from "../geometry";
 import {
   packLedColor,
+  packedToCss,
   unpackBlue,
   unpackGreen,
   unpackRed,
@@ -93,18 +94,18 @@ export function dotRadius(positions: readonly TwinLedPosition[], width: number, 
 
 const colourAt = (packed: readonly PackedLedColor[], index: number) => packed[index] ?? OFF_COLOR_PACKED;
 
+const brightestChannel = (colour: PackedLedColor) =>
+  Math.max(unpackRed(colour), unpackGreen(colour), unpackBlue(colour));
+
 /** The dot's fill: the LED's own colour, or a dim grey once it is all but dark. Not a per-channel
  * floor: that would grey every saturated colour, a pure red included. */
 export function dotFill(colour: PackedLedColor): string {
-  const r = unpackRed(colour);
-  const g = unpackGreen(colour);
-  const b = unpackBlue(colour);
-  return Math.max(r, g, b) < DARK_BELOW ? DOT_FLOOR : `rgb(${r}, ${g}, ${b})`;
+  return brightestChannel(colour) < DARK_BELOW ? DOT_FLOOR : packedToCss(colour);
 }
 
 /** How strongly an LED glows: its brightest channel, so a dim LED barely does. */
 function glowStrength(colour: PackedLedColor): number {
-  return Math.max(unpackRed(colour), unpackGreen(colour), unpackBlue(colour)) / 255;
+  return brightestChannel(colour) / 255;
 }
 
 /** Each lit LED's glow first, then every dot over them: a glow never covers a neighbour's dot. */
