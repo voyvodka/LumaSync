@@ -47,7 +47,7 @@ the shell — `CalibrationPage` (through `calibration/ui/CalibrationPanel`), `De
 never renders them, so it never fetches them; full mode warms all three on idle after it paints, so
 a tab switch rarely meets the blank `SectionPlaceholder`. LED Setup opens inside Devices, so it is
 warmed with Devices; its warm-up also reads the
-displays it opens on, so even a first visit draws the real monitor rather than filling in. `LightsSection` and `SettingsPage` stay in the `App`
+displays it opens on, so even a first visit draws the real monitor rather than filling in. `LightsPage` and `SettingsPage` stay in the `App`
 chunk: Lights is the page full mode opens on, and neither is big enough to be worth a first-paint
 wait. Locale catalogues load per language (`LOCALE_LOADERS` in `i18n.ts`); a switch fetches the
 other catalogue before `changeLanguage`, so no frame renders raw keys. A TR window does not fetch
@@ -104,8 +104,7 @@ the element rules go into Tailwind's `base` layer, every `lm-*` feature file int
 A CSS Module wraps its whole file in `@layer components { … }` itself, since its component, not
 the list, loads it; its class names are scoped, so its place in the source order cannot tie with
 another sheet's. The exception is a shared control whose element a caller also classes — the
-room-map toolbar puts its own 28 px row on an `IconButton`, the Lights signal note its padding on a
-`Callout`. Two classes on one element do tie, and the winner would be whichever sheet happened to
+room-map toolbar puts its own 28 px row on an `IconButton`. Two classes on one element do tie, and the winner would be whichever sheet happened to
 load last, so `IconButton`, `Toggle` and `Callout` sit in a `primitives` layer declared between
 `base` and `components` at the top of `styles.css`, ahead of Tailwind's own list: every feature
 rule outranks them whatever the load order. Declared anywhere later, the layer would append after
@@ -137,7 +136,7 @@ selection: a step tracker's current step and the status bar's tone scale.
 own the behaviour and the accessibility contract — one tab stop per
 radio group with arrow keys, Home and End (`shared/lib/useRadioGroup`), a name on every icon-only button, a
 focus trap in every dialog — while each call site keeps the class that draws it. That split is what
-let the three mode strips (`features/mode/ui/ModeStrip.tsx`) and the pattern picker gain arrow keys
+let the three mode strips (`features/mode/ui/ModeStrip.tsx`) gain arrow keys
 without a pixel moving. A slider that commits while it moves goes through `useThrottledCommit`
 (leading and trailing, flushed on release), so a drag neither floods the lighting runtime nor drops
 the value the user let go on. A new control that needs one of these behaviours uses the primitive;
