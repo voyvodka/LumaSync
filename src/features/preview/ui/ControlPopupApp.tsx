@@ -191,8 +191,8 @@ export function ControlPopupApp() {
     void setPreviewTwinHidden(!twinHidden);
   };
 
-  // Close ends the session in Rust, which destroys this window and the twin;
-  // only a failure leaves anything here to show.
+  // Close ends the session in Rust, which hides this window and the twin for
+  // the next session; only a failure leaves anything here to show.
   const handleClose = useCallback(() => {
     void closePreview().then((result) => {
       if (result.status.code === PREVIEW_STATUS.CLOSE_FAILED) {

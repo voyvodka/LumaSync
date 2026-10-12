@@ -1,6 +1,6 @@
 /**
  * TwinErrorBoundary — minimal, transparent-fallback boundary for the
- * click-through digital-twin overlay (FE-5 fix).
+ * click-through digital-twin overlay.
  *
  * The twin lives in a borderless, transparent, full-display, click-through
  * webview. The shared `GlobalErrorBoundary` is the right boundary for the
