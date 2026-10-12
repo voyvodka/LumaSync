@@ -297,8 +297,8 @@ testing. `ScreenZone` and `LedZone` will land later as separately prefixed types
 discriminator with `HueZone`; a bare `Zone` is ambiguous across three industry namespaces.
 
 **`RoomMapConfig.zones` is the only zone array anything renders.** The deprecated `hueZones` field
-is a migration *input*, not a second store. Every authoring path — the room-map editor and the
-Lights dock alike — writes `zones`.
+is a migration *input*, not a second store. Zones are authored only in the room-map editor, and it
+writes `zones`.
 
 **Stranded zones are recovered, not dropped.** Through v1.5.4 the Lights dock's "Add Hue zone"
 button wrote into `hueZones` at a point when the one-shot `schemaVersion 1 → 2` fold had already
