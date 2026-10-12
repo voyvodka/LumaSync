@@ -213,7 +213,7 @@ fn open_overlay_window<R: Runtime>(
     target_display: &DisplayInfoPayload,
     preview: Option<&OverlayPreviewPayload>,
 ) -> Result<(), String> {
-    let overlay_url = build_overlay_webview_url()?;
+    let overlay_url = build_overlay_webview_url();
     let preview_json = serialize_overlay_preview_payload(preview)?;
     let preload_script = format!("window.__LUMASYNC_OVERLAY_PREVIEW__ = {preview_json};");
 
@@ -526,8 +526,8 @@ fn serialize_overlay_preview_payload(
         .map_err(|error| format!("OVERLAY_PREVIEW_SERIALIZE_FAILED: {error}"))
 }
 
-fn build_overlay_webview_url() -> Result<WebviewUrl, String> {
-    Ok(WebviewUrl::App(PathBuf::from("calibration-overlay.html")))
+fn build_overlay_webview_url() -> WebviewUrl {
+    WebviewUrl::App(PathBuf::from("calibration-overlay.html"))
 }
 
 /// Result of the window work an overlay open performs, carried back to the
@@ -643,7 +643,7 @@ pub fn list_displays<R: Runtime>(app: AppHandle<R>) -> Result<Vec<DisplayInfoPay
         .primary_monitor()
         .ok()
         .flatten()
-        .and_then(|monitor| monitor.name().map(|name| name.to_string()));
+        .and_then(|monitor| monitor.name().cloned());
 
     let displays = monitors
         .into_iter()
@@ -651,7 +651,7 @@ pub fn list_displays<R: Runtime>(app: AppHandle<R>) -> Result<Vec<DisplayInfoPay
         .map(|(index, monitor)| {
             let name = monitor
                 .name()
-                .map(|value| value.to_string())
+                .cloned()
                 .unwrap_or_else(|| format!("Display {}", index + 1));
             let position = monitor.position();
             let size = monitor.size();
@@ -927,9 +927,7 @@ mod tests {
 
     #[test]
     fn overlay_webview_url_uses_app_surface() {
-        let url = build_overlay_webview_url().expect("app URL should parse");
-
-        match url {
+        match build_overlay_webview_url() {
             WebviewUrl::App(path) => assert_eq!(path.to_string_lossy(), "calibration-overlay.html"),
             _ => panic!("expected app webview URL for overlay surface"),
         }
