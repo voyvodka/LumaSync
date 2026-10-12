@@ -7,11 +7,17 @@ the area note in [`architecture/`](architecture/README.md).
 ## Clean restart
 
 ```bash
-# Kill any running instance, clear the leaked single-instance socket, start fresh
-pkill -9 -f "tauri dev" 2>/dev/null; pkill -9 -f "target/debug/lumasync" 2>/dev/null; sleep 2
+# Stop the instance you started, clear the leaked single-instance socket, start fresh
+kill $(lsof -ti tcp:1420 -sTCP:LISTEN) 2>/dev/null   # dev server's listener (port 1420)
+pgrep -x lumasync                                     # lists the app's PID; kill that PID, or quit the app normally
+sleep 2
 rm -f /tmp/com_lumasync_app_si.sock
 bun run tauri dev > /tmp/lumasync-debug-stdout.log 2>&1 &
+echo $!                                               # keep this PID to stop the dev run later
 ```
+
+Stop only processes you started, by their own PID or port listener. A broad `pkill -f` is not used
+here because it matches every process's full command line, including unrelated ones.
 
 A killed instance leaves the single-instance socket behind, and the next launch hands off to a
 process that no longer exists instead of starting.

@@ -77,7 +77,8 @@ export function WledStripPage({
   const shownFailure = useHeldValue(failure ?? (restoreFailed && restore.kind === "failed" ? restore.status : null), connecting);
 
   const [check, setCheck] = useState<{ status: WledCommandStatus; at: number } | null>(null);
-  const [checking, setChecking] = useState(false);
+  const [checkRunning, setChecking] = useState(false);
+  const checking = useHeldFlag(checkRunning);
   const runCheck = async () => {
     const device: WledDeviceInfo = { ip, ledCount };
     setChecking(true);

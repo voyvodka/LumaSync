@@ -35,6 +35,7 @@ import {
 } from "@/features/hue/model/hueSyncState";
 import type { TranslationKey } from "@/features/i18n/catalogue";
 import { parseSkippedChannelIds } from "@/features/hue/model/hueWritebackResult";
+import { useHeldFlag } from "@/shared/lib/useHeldFlag";
 import { Menu } from "@/shared/ui/Menu/Menu";
 import { Reveal } from "@/shared/ui/Reveal/Reveal";
 import { RowButton, RowNote, rowStyles, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
@@ -195,6 +196,8 @@ export function HueChannels({
 
   const [isSaving, setIsSaving] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
+  const savingShown = useHeldFlag(isSaving);
+  const pullingShown = useHeldFlag(isPulling);
   const [identifyingIndex, setIdentifyingIndex] = useState<number | null>(null);
   const [actionResult, setActionResult] = useState<BridgeActionResult | null>(null);
   const resultTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -379,9 +382,10 @@ export function HueChannels({
   // Render
   // ---------------------------------------------------------------------------
 
-  // A re-read this section asked for keeps the rows, the dialog and the result on screen rather
-  // than blinking to "loading".
-  const loading = isLoading && !isPulling && !isSaving && actionResult === null;
+  // A re-read keeps what is on screen — the rows, the word, the dialog, the result — rather than
+  // blinking to "loading" and back: Revalidate re-reads the channels, and a LAN answer comes in a
+  // few hundred ms. Only a list never read yet says it is loading.
+  const loading = isLoading && channels.length === 0 && channelsStatus == null && !isPulling && !isSaving && actionResult === null;
   // Three different facts arrive as the same empty list, and one "no channels" line for all of
   // them is what made a dropped bridge look like an empty area.
   const emptyState: keyof typeof EMPTY_STATE_KEYS | null =
@@ -418,9 +422,9 @@ export function HueChannels({
     ? t("hue:channelMap.loading")
     : emptyState
       ? t(EMPTY_STATE_KEYS[emptyState].heading)
-      : isSaving
+      : savingShown
         ? t("hue:channelMap.saving")
-        : isPulling
+        : pullingShown
           ? t("hue:channelMap.pulling")
           : hasSaveAction
             ? t(SYNC_WORD[syncState])

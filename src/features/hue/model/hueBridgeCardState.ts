@@ -44,6 +44,7 @@ export function hueStreamFailureReasonKey(code: string | null | undefined): Tran
 export type HueBridgeCardState =
   | "stopPartial"
   | "gateBlocked"
+  | "gateCleared"
   | "streaming"
   | "reconnecting"
   | "streamFailed"
@@ -75,6 +76,8 @@ export interface HueBridgeCardStateInput {
   isPairing: boolean;
   selectedAreaId: string | null;
   isReadinessStale: boolean;
+  /** A readiness check passed within the stale window. */
+  readinessPassed: boolean;
   /** The last readiness check found another session streaming to the area. */
   areaHeldByAnotherApp: boolean;
 }
@@ -96,6 +99,7 @@ export function deriveHueBridgeCardState({
   isPairing,
   selectedAreaId,
   isReadinessStale,
+  readinessPassed,
   areaHeldByAnotherApp,
 }: HueBridgeCardStateInput): HueBridgeCardState | null {
   if (!selectedBridgeId) return null;
@@ -108,7 +112,11 @@ export function deriveHueBridgeCardState({
   // being offline; the checklist offered nothing to do about that.
   if (runtimeStatus?.code === "CONFIG_NOT_READY_GATE_BLOCKED") {
     if (bridgeUnreachable) return "offline";
-    return areaHeldByAnotherApp ? "areaBusy" : "gateBlocked";
+    if (areaHeldByAnotherApp) return "areaBusy";
+    // The refusal stays the last status until the next start or stop, and a
+    // launch resume that lapsed never comes back on its own: a check that
+    // passes since is the way back, so the card offers the start.
+    return readinessPassed ? "gateCleared" : "gateBlocked";
   }
   if (runtimeStatus?.state === "Running") return "streaming";
   const failed = runtimeStatus?.state === HUE_RUNTIME_STATES.FAILED;

@@ -123,6 +123,11 @@ before writing a transition by hand: `StateSwap`, `PageSwap`, `SpinSwap`, `Popov
 
 - **State swap:** both states stay mounted in a fixed-size box and crossfade with a few pixels of
   travel; nothing around them moves (the LED Setup save capsule, "Saved" ⇄ "↶ | Save").
+- **A busy word stays long enough to read.** Once "Checking…", "Refreshing…" or "Taking…" shows, it
+  stays at least 600 ms (`useHeldFlag`), however fast the answer: a LAN call answers in a few
+  hundred ms and the label flashed and came back. A re-read of something already on screen keeps
+  what it shows rather than swapping in a loading word; only what was never read says it is
+  loading (Hue's Channels row flipped to "Loading" on every Revalidate).
 - **Pass, don't blink:** the leaving item keeps moving while it fades (~.2 s), the arriving one
   follows ~40 ms later (~.26–.32 s). They cross in different places, so there is no pile-up and no
   blank moment — a longer gap reads as a flicker (the first-LED name paging with ‹ ›, the direction

@@ -155,6 +155,7 @@ export default {
       revalidate: "The last check is too old. Revalidate before starting.",
       notConfirmed: "The area was not confirmed ready. Revalidate, then start again.",
       bridgeSilent: "The bridge did not answer when Hue tried to start.",
+      canStartNow: "Hue couldn't start before. It can now.",
     },
     actions: {
       repair: "Re-pair",

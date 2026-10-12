@@ -377,6 +377,12 @@ https://keepachangelog.com/en/1.1.0/
 - LEDs either side of a monitor stand take the colour of the screen above where they sit; they were
   spread over the whole bottom edge as if there were no gap, and the LED preview showed no gap.
 - Opening and closing the LED preview no longer adds two windows' worth of memory each time.
+- Busy labels no longer flash and snap back on fast answers. "Checking…" on Revalidate, health
+  checks, update checks and Hue's row actions now stays readable, and Hue's Channels row keeps its
+  word through Revalidate instead of flipping to "Loading" and back.
+- Hue: when the bridge did not answer at launch, the Hue page stayed on "Couldn't start" after
+  the bridge came back and Revalidate passed, with nothing on the page that could start Hue. It
+  now reads Ready with Start again.
 - A USB strip that fails to connect no longer switches off a working WLED device the app still
   showed as connected.
 - With a WLED device and a USB strip both set up, the Lights screen, the tray and the status bar
