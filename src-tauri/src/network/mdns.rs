@@ -279,9 +279,9 @@ pub(crate) fn parse_hue_service_info(info: ResolvedService) -> Option<MdnsBridge
     // TXT record key. Hue v2 bridges advertise `bridgeid=<UPPER_HEX>`.
     let txt_id = info
         .get_property("bridgeid")
-        .and_then(|p| p.val_str().to_string().into())
-        .filter(|s: &String| !s.is_empty());
-    let id = txt_id.map(|s: String| s.to_uppercase()).or_else(|| {
+        .map(|p| p.val_str().to_string())
+        .filter(|s| !s.is_empty());
+    let id = txt_id.map(|s| s.to_uppercase()).or_else(|| {
         // Fallback: derive an id from the instance name, e.g.
         // "Hue Bridge - ABCDEF._hue._tcp.local." → "ABCDEF".
         let full = info.get_fullname();
