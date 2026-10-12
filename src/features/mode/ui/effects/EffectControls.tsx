@@ -85,21 +85,21 @@ export function EffectControls({
           </div>
         ) : null}
         <EffectParams
-        effect={draft}
-        compact={compact}
-        disabled={disabled}
-        brightnessDisabled={brightnessDisabled}
-        brightnessTitle={brightnessTitle}
-        onChange={commit}
-        onDragStart={() => {
-          dragging.current = true;
-        }}
-        onDragEnd={() => {
-          dragging.current = false;
-        }}
-        entering={arrived}
-        onEntered={settled}
-      />
+          effect={draft}
+          compact={compact}
+          disabled={disabled}
+          brightnessDisabled={brightnessDisabled}
+          brightnessTitle={brightnessTitle}
+          onChange={commit}
+          onDragStart={() => {
+            dragging.current = true;
+          }}
+          onDragEnd={() => {
+            dragging.current = false;
+          }}
+          entering={arrived}
+          onEntered={settled}
+        />
       </div>
     </Stage>
   );
