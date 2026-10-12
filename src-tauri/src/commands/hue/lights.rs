@@ -18,7 +18,9 @@ use super::super::status::CommandStatus;
 use super::credential_store::effective_hue_app_key;
 use super::sender::{RequestPacer, HUE_HTTP_FALLBACK_MAX_REQUESTS_PER_SEC};
 use super::state_store::{acquire_hue_runtime, HueRuntimeState, HueRuntimeStateStore};
-use super::transport::{async_client_for_key, is_valid_bridge_addr, read_body, send_error_text};
+use super::transport::{
+    async_client_for_key, is_safe_resource_id, is_valid_bridge_addr, read_body, send_error_text,
+};
 
 /// More ids than any entertainment area holds; a longer list is refused
 /// rather than walked, so the webview cannot queue minutes of bridge writes.
@@ -57,10 +59,6 @@ fn identify_status(code: &str, message: &str, details: Option<String>) -> Comman
         message: message.to_string(),
         details,
     }
-}
-
-fn is_safe_resource_id(id: &str) -> bool {
-    !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
 /// Why the bulk read gave nothing back.

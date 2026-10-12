@@ -39,6 +39,11 @@ pub(crate) use address::{is_valid_bridge_addr, validate_bridge_addr};
 #[cfg(test)]
 mod onboarding_tests;
 
+/// An id from the bridge, spliced into a path.
+pub(crate) fn is_safe_resource_id(id: &str) -> bool {
+    !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
 // ---------------------------------------------------------------------------
 // Clients
 // ---------------------------------------------------------------------------
