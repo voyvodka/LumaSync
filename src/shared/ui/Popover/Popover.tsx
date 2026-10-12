@@ -33,6 +33,8 @@ export function Popover({ open, onClose, anchorRef, side = "above", width = 240,
     arrow: number;
     width: number;
     side: "above" | "below";
+    /** Set only when the content is taller than the room on either side. */
+    maxHeight?: number;
   } | null>(null);
   const [mounted, setMounted] = useState(open);
   const [closing, setClosing] = useState(false);
@@ -70,12 +72,29 @@ export function Popover({ open, onClose, anchorRef, side = "above", width = 240,
     const w =
       width === "fit" ? Math.min(Math.max(ref.current.offsetWidth, a.width), window.innerWidth - 16) : width;
     const left = Math.max(8, Math.min(a.left + a.width / 2 - w / 2, window.innerWidth - w - 8));
-    // The asked side unless the popover would run off the window there and fits on the other.
-    const fitsAbove = a.top - h - 10 >= 8;
-    const fitsBelow = a.bottom + 10 + h <= window.innerHeight - 8;
-    const placed = side === "below" ? (!fitsBelow && fitsAbove ? "above" : "below") : !fitsAbove && fitsBelow ? "below" : "above";
-    const top = placed === "above" ? Math.max(8, a.top - h - 10) : a.bottom + 10;
-    setPos({ left, top, arrow: a.left + a.width / 2 - left, width: w, side: placed });
+    // The asked side unless the popover would run off the window there and fits on the other. When
+    // it fits on neither — a long list in a short window — it takes the roomier side and scrolls.
+    const roomAbove = a.top - 10 - 8;
+    const roomBelow = window.innerHeight - 8 - (a.bottom + 10);
+    const fitsAbove = h <= roomAbove;
+    const fitsBelow = h <= roomBelow;
+    const placed =
+      !fitsAbove && !fitsBelow
+        ? roomAbove > roomBelow
+          ? "above"
+          : "below"
+        : side === "below"
+          ? !fitsBelow && fitsAbove
+            ? "above"
+            : "below"
+          : !fitsAbove && fitsBelow
+            ? "below"
+            : "above";
+    const room = placed === "above" ? roomAbove : roomBelow;
+    const maxHeight = h > room ? Math.max(room, 0) : undefined;
+    const shown = maxHeight ?? h;
+    const top = placed === "above" ? Math.max(8, a.top - shown - 10) : a.bottom + 10;
+    setPos({ left, top, arrow: a.left + a.width / 2 - left, width: w, side: placed, maxHeight });
   }, [open, anchorRef, side, width]);
 
   useEffect(() => {
@@ -113,6 +132,7 @@ export function Popover({ open, onClose, anchorRef, side = "above", width = 240,
           width: pos?.width ?? (width === "fit" ? "max-content" : width),
           left: pos?.left ?? -9999,
           top: pos?.top ?? -9999,
+          maxHeight: pos?.maxHeight,
           "--arrow-x": `${pos?.arrow ?? 0}px`,
         } as CSSProperties
       }
@@ -124,7 +144,8 @@ export function Popover({ open, onClose, anchorRef, side = "above", width = 240,
         }
       }}
     >
-      {children}
+      {/* The scroller is inside, so a capped popover keeps its notch: overflow would clip it. */}
+      <div className={styles.content}>{children}</div>
     </div>,
     document.body,
   );

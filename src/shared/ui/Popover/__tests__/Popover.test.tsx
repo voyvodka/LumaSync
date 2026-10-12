@@ -81,4 +81,30 @@ describe("Popover", () => {
     height.mockRestore();
     vi.unstubAllGlobals();
   });
+
+  // A long list in a short window — the effect list in the preview popup — fits on neither side:
+  // it opens on the roomier one, no taller than the room there, and scrolls inside.
+  it("caps a popover that fits on neither side to the roomier one", () => {
+    const height = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(700);
+    vi.stubGlobal("innerHeight", 540);
+    const anchor = createRef<HTMLButtonElement>();
+    render(<button ref={anchor} type="button">anchor</button>);
+    vi.spyOn(anchor.current!, "getBoundingClientRect").mockReturnValue(
+      { top: 300, bottom: 330, left: 100, right: 160, width: 60, height: 30, x: 100, y: 300 } as DOMRect,
+    );
+    const view = render(
+      <Popover open onClose={() => {}} anchorRef={anchor} side="below" role="dialog" label="long">
+        <span>long</span>
+      </Popover>,
+    );
+
+    const pop = screen.getByRole("dialog");
+    expect(pop.className).toMatch(/above/);
+    // Above the anchor: 300 - 10 of gap - 8 of margin.
+    expect(pop.style.maxHeight).toBe("282px");
+    expect(pop.style.top).toBe("8px");
+    view.unmount();
+    height.mockRestore();
+    vi.unstubAllGlobals();
+  });
 });

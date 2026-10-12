@@ -4,12 +4,20 @@
     z-index: 60;
     display: flex;
     flex-direction: column;
-    gap: 2px;
     padding: 8px;
     border: 1px solid var(--lm-line-2);
     border-radius: 12px;
     background: var(--lm-panel-2);
     box-shadow: 0 16px 40px rgb(0 0 0 / 55%);
+  }
+
+  .content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   /* Rises out of its anchor and settles back into it: the notch points at the anchor and is also
