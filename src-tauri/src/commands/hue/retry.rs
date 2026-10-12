@@ -30,6 +30,14 @@ fn next_backoff_ms(policy: &HueRetryPolicy, attempt_index: u8) -> u64 {
     raw.min(policy.cap_backoff_ms)
 }
 
+/// `Failed` is a stopped stream (docs/architecture/hue.md): dropping the
+/// runtime's handles and publishing `None` to the worker's slot is what ends
+/// the sender, which deactivates the area itself on the way out.
+fn let_go_of_the_stream(owner: &mut HueRuntimeOwner) {
+    owner.set_active_stream(None);
+    owner.persistent_sender = None;
+}
+
 pub(crate) fn register_transient_fault(
     owner: &mut HueRuntimeOwner,
     details: &str,
@@ -52,6 +60,7 @@ pub(crate) fn register_transient_fault(
     if next_attempt_index >= owner.retry_policy.max_attempts {
         owner.reconnect_attempt = owner.retry_policy.max_attempts;
         owner.state = HueRuntimeState::Failed;
+        let_go_of_the_stream(owner);
         owner.last_status = status_with(
             HueRuntimeState::Failed,
             "TRANSIENT_RETRY_EXHAUSTED",
@@ -122,6 +131,7 @@ pub(crate) fn register_auth_invalid(
     trigger_source: HueRuntimeTriggerSource,
 ) -> HueRuntimeCommandResult {
     owner.state = HueRuntimeState::Failed;
+    let_go_of_the_stream(owner);
     owner.last_status = status_with(
         HueRuntimeState::Failed,
         "AUTH_INVALID_CREDENTIALS",
@@ -355,8 +365,10 @@ mod tests {
     use super::*;
 
     use super::super::state_store::test_helpers::{
-        dummy_active_stream_context, strict_gate_missing_readiness, strict_gate_ready,
+        dummy_active_stream_context, observable_active_stream_context,
+        strict_gate_missing_readiness, strict_gate_ready,
     };
+    use super::super::state_store::HuePersistentSender;
 
     #[test]
     fn start_fails_with_config_not_ready_when_strict_gate_is_missing() {
@@ -648,6 +660,91 @@ mod tests {
             result.status.action_hint,
             Some(HueRuntimeActionHint::Repair)
         );
+    }
+
+    fn owner_streaming() -> (
+        HueRuntimeOwner,
+        std::sync::mpsc::Receiver<super::super::frame::HueColorUpdate>,
+    ) {
+        let mut owner = HueRuntimeOwner::default();
+        let _ = start_with_evidence(
+            &mut owner,
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        let (context, rx) = observable_active_stream_context();
+        owner.persistent_sender = Some(HuePersistentSender {
+            area_id: context.area_id.clone(),
+            channels: context.channels.clone(),
+            sender: context.color_sender.clone(),
+        });
+        owner.set_active_stream(Some(context));
+        (owner, rx)
+    }
+
+    fn assert_stream_let_go(
+        owner: &HueRuntimeOwner,
+        rx: &std::sync::mpsc::Receiver<super::super::frame::HueColorUpdate>,
+    ) {
+        assert_eq!(owner.state, HueRuntimeState::Failed);
+        assert!(owner.active_stream.is_none(), "the stream context survived");
+        assert!(
+            owner.persistent_sender.is_none(),
+            "the persistent sender survived"
+        );
+        assert!(
+            owner.output_live.current().is_none(),
+            "the worker's slot still holds the sender"
+        );
+        assert!(rx.recv().is_err(), "a handle kept the sender thread alive");
+    }
+
+    /// A `Failed` runtime is a stopped stream. The health poll reaching it
+    /// used to leave the sender and the worker's slot in place, so the lamps
+    /// went on following the screen under a card that read Stopped.
+    #[test]
+    fn a_poll_that_exhausts_the_budget_lets_go_of_the_live_sender() {
+        let (mut owner, rx) = owner_streaming();
+        let mut transient_fault_gate = strict_gate_ready();
+        transient_fault_gate.readiness_current = false;
+        transient_fault_gate.ready = false;
+
+        for _ in 0..3 {
+            let _ = status_refresh_with_evidence(&mut owner, &transient_fault_gate, None);
+        }
+
+        assert_eq!(owner.last_status.code, "TRANSIENT_RETRY_EXHAUSTED");
+        assert_stream_let_go(&owner, &rx);
+    }
+
+    #[test]
+    fn a_poll_that_reads_a_refused_key_lets_go_of_the_live_sender() {
+        let (mut owner, rx) = owner_streaming();
+        let mut auth_invalid_gate = strict_gate_ready();
+        auth_invalid_gate.auth_invalid_evidence = true;
+
+        let _ = status_refresh_with_evidence(&mut owner, &auth_invalid_gate, None);
+
+        assert_eq!(owner.last_status.code, "AUTH_INVALID_CREDENTIALS");
+        assert_stream_let_go(&owner, &rx);
+    }
+
+    /// A fault the budget still covers keeps the stream: the reconnect's
+    /// first step needs its deactivate parameters, and a readiness blip on a
+    /// live sender must not end it.
+    #[test]
+    fn a_poll_fault_inside_the_budget_keeps_the_live_sender() {
+        let (mut owner, _rx) = owner_streaming();
+        let mut transient_fault_gate = strict_gate_ready();
+        transient_fault_gate.readiness_current = false;
+        transient_fault_gate.ready = false;
+
+        let _ = status_refresh_with_evidence(&mut owner, &transient_fault_gate, None);
+
+        assert_eq!(owner.state, HueRuntimeState::Reconnecting);
+        assert!(owner.active_stream.is_some());
+        assert!(owner.persistent_sender.is_some());
+        assert!(owner.output_live.current().is_some());
     }
 
     #[test]
