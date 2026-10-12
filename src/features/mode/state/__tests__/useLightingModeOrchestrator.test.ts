@@ -313,6 +313,35 @@ describe("useLightingModeOrchestrator", () => {
       expect(applyOutputsMock).not.toHaveBeenCalled();
     });
 
+    it("send nothing when the snapshot only echoes this window's own retune", async () => {
+      const { view } = mount();
+      await settle(view);
+      publish(running({ kind: "solid", solid: { r: 1, g: 2, b: 3, brightness: 1 } }));
+      const red = { kind: "solid" as const, solid: { r: 255, g: 0, b: 0, brightness: 0.5 } };
+
+      await act(() => view.result.current.handleLightingModeChange(red));
+      publish(running(red));
+      await act(() => view.result.current.handleLightingModeChange({ ...red, solid: { ...red.solid } }));
+
+      expect(retuneLightingMock).toHaveBeenCalledTimes(1);
+    });
+
+    // The popup has its own coalescer: its retune reaches this window only as a snapshot.
+    it("send a value again once another window changed what runs", async () => {
+      const { view } = mount();
+      await settle(view);
+      const red = { kind: "solid" as const, solid: { r: 255, g: 0, b: 0, brightness: 0.5 } };
+      publish(running({ kind: "solid", solid: { r: 1, g: 2, b: 3, brightness: 0.5 } }));
+
+      await act(() => view.result.current.handleLightingModeChange(red));
+      publish(running(red));
+      publish(running({ kind: "solid", solid: { r: 0, g: 0, b: 255, brightness: 0.5 } }));
+      await act(() => view.result.current.handleLightingModeChange({ ...red, solid: { ...red.solid } }));
+
+      expect(retuneLightingMock).toHaveBeenCalledTimes(2);
+      expect(retuneLightingMock.mock.calls[1][0]).toEqual({ solid: red.solid });
+    });
+
     it("retune the kind a choice in flight is bringing up, rather than choose it again", async () => {
       let answer!: (value: ApplyOutputsResult) => void;
       applyOutputsMock.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));

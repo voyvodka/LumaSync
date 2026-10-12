@@ -400,6 +400,42 @@ describe("ControlPopupApp Solid drag", () => {
     });
     expect(applyOutputs).not.toHaveBeenCalled();
   });
+
+  // The main window has its own coalescer: its retune reaches the popup only as a snapshot.
+  it("sends a brightness again once the main window moved it away", async () => {
+    syncState = {
+      ...syncState,
+      mode: { kind: LIGHTING_MODE_KIND.SOLID, solid: { r: 10, g: 20, b: 30, brightness: 1 } },
+    };
+    const view = render(<ControlPopupApp />);
+    const commit = async (value: number) => {
+      fireEvent.change(screen.getByRole("slider", { name: "common:mode.brightness" }), {
+        target: { value: String(value) },
+      });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      });
+    };
+
+    await commit(50);
+    await waitFor(() => expect(retuneLighting).toHaveBeenCalledTimes(1));
+    syncState = {
+      ...syncState,
+      mode: { kind: LIGHTING_MODE_KIND.SOLID, solid: { r: 10, g: 20, b: 30, brightness: 0.9 } },
+    };
+    view.rerender(<ControlPopupApp />);
+    // The row holds the user's own value for a moment after a move, so wait for it to take 90.
+    await waitFor(
+      () => expect(screen.getByRole("slider", { name: "common:mode.brightness" })).toHaveProperty("value", "90"),
+      { timeout: 2000 },
+    );
+    await commit(50);
+
+    await waitFor(() => expect(retuneLighting).toHaveBeenCalledTimes(2));
+    expect(retuneLighting.mock.calls[1][0]).toEqual({
+      solid: { r: 10, g: 20, b: 30, brightness: 0.5 },
+    });
+  });
 });
 
 describe("ControlPopupApp stage", () => {

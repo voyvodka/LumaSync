@@ -282,7 +282,12 @@ reachable only through a mock of the backend, and the popup never followed them.
 brightness or colour drag commits at 20 Hz. Each commit goes to `retune_lighting`, which waits for
 no transition, through `retuneCoalescer.ts`: one call in flight, the newest value next, and a value
 equal to the last one sent — compared with sorted keys, since a re-render rebuilds the same payload
-in another key order — is not sent at all. The old path sent each commit, and every settings panel
+in another key order — is not sent at all. Each window keeps its own coalescer, so the popup's
+retune reaches the main window's only as a snapshot: once the snapshot a window holds shows
+something else running, or the last send failed, that value is sent again — otherwise picking a
+colour back after the other window changed it was dropped, and the stage showed it while the strip
+kept the other one. A snapshot only clears the remembered value, never replaces it: a drag's own
+publishes trail its sends, and a stale one taken as what runs would drop the newer value. The old path sent each commit, and every settings panel
 re-dispatched the whole mode on a change; on hardware that was 68 `set_lighting_mode` calls in one
 session, twenty of them in a second. A saved setting the running mode reads (display, preset,
 colour correction, output settings, room map) is now re-applied by Rust once the save settles,

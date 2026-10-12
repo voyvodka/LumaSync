@@ -119,6 +119,9 @@ export function ControlPopupApp() {
 
   const kind = mode?.kind ?? LIGHTING_MODE_KIND.OFF;
   const stage = usePopupStage(snapshot);
+  useEffect(() => {
+    retunes.observe(tuningOf(stage.mode));
+  }, [retunes, stage.mode]);
   const lastLit = usePreference("lastLitKind");
 
   // ── Mode strip ───────────────────────────────────────────────────────────

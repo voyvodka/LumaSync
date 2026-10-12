@@ -92,4 +92,74 @@ describe("createRetuneCoalescer", () => {
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2));
     expect(send.mock.calls[1][0]).toEqual(brightness(0.3));
   });
+
+  it("sends a value again after its send failed", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const send = vi.fn().mockRejectedValueOnce(new Error("lost")).mockResolvedValue(APPLIED);
+    const retunes = createRetuneCoalescer(send);
+
+    retunes.push(brightness(0.2));
+    await vi.waitFor(() => expect(console.error).toHaveBeenCalled());
+    await Promise.resolve();
+    retunes.push(brightness(0.2));
+
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  // Each window keeps its own coalescer: the popup retuning the light does not reach the main window's.
+  describe("against what runs", () => {
+    it("still drops a value the snapshot shows running as this window sent it", async () => {
+      const send = vi.fn().mockResolvedValue(APPLIED);
+      const retunes = createRetuneCoalescer(send);
+
+      retunes.push(brightness(0.5));
+      await Promise.resolve();
+      await Promise.resolve();
+      retunes.observe({ solid: { brightness: 0.5, b: 30, g: 20, r: 10 } });
+      retunes.push(brightness(0.5));
+
+      expect(send).toHaveBeenCalledTimes(1);
+    });
+
+    it("sends a value equal to its last send once another window changed what runs", async () => {
+      const send = vi.fn().mockResolvedValue(APPLIED);
+      const retunes = createRetuneCoalescer(send);
+
+      retunes.push(brightness(0.5));
+      await Promise.resolve();
+      await Promise.resolve();
+      retunes.observe(brightness(0.9));
+      retunes.push(brightness(0.5));
+
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send.mock.calls[1][0]).toEqual(brightness(0.5));
+    });
+
+    it("sends it again once nothing runs of that kind", async () => {
+      const send = vi.fn().mockResolvedValue(APPLIED);
+      const retunes = createRetuneCoalescer(send);
+
+      retunes.push(brightness(0.5));
+      await Promise.resolve();
+      await Promise.resolve();
+      retunes.observe(null);
+      retunes.push(brightness(0.5));
+
+      expect(send).toHaveBeenCalledTimes(2);
+    });
+
+    // A drag's own lagging publishes arrive while a send is in flight; they must not cost its last value.
+    it("keeps the waiting value through a snapshot that lands mid-drag", async () => {
+      const { send, answerNext } = heldBackend();
+      const retunes = createRetuneCoalescer(send);
+
+      retunes.push(brightness(0.2));
+      retunes.push(brightness(0.6));
+      retunes.observe(brightness(0.1));
+      await answerNext();
+
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send.mock.calls[1][0]).toEqual(brightness(0.6));
+    });
+  });
 });

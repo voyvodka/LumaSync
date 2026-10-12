@@ -195,6 +195,9 @@ export function useLightingModeOrchestrator({
   const bootHueRetry = snapshot?.bootHueRetry ?? null;
 
   const retunes = useMemo(() => createRetuneCoalescer((tuning) => retuneLighting(tuning)), []);
+  useEffect(() => {
+    retunes.observe(tuningOf(lightingMode));
+  }, [retunes, lightingMode]);
 
   // The notice follows the held-out reason: raised when it appears or
   // changes, taken down when Hue joins or a choice answers it afresh.
