@@ -149,10 +149,7 @@ pub(crate) fn start_with_evidence(
 ) -> HueRuntimeCommandResult {
     owner.user_override_pending = false;
 
-    if matches!(
-        owner.state,
-        HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
-    ) {
+    if owner.state.is_active() {
         let noop = status_with(
             owner.state.clone(),
             "HUE_START_NOOP_ALREADY_ACTIVE",
@@ -261,12 +258,7 @@ pub(crate) fn status_refresh_with_evidence(
     evidence: &HueRuntimeGateEvidence,
     details: Option<String>,
 ) -> HueRuntimeCommandResult {
-    if owner.user_override_pending
-        || !matches!(
-            owner.state,
-            HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
-        )
-    {
+    if owner.user_override_pending || !owner.state.is_active() {
         return make_result(owner);
     }
 

@@ -573,10 +573,7 @@ fn a_stop_overtook_the_start(runtime: &Arc<Mutex<HueRuntimeOwner>>) -> bool {
 /// starts back; an abandoned start's restore and the quit path have no such
 /// gate.
 fn a_newer_session_began(runtime: &Arc<Mutex<HueRuntimeOwner>>) -> bool {
-    matches!(
-        acquire_hue_runtime(runtime).state,
-        HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
-    )
+    acquire_hue_runtime(runtime).state.is_active()
 }
 
 /// `stop_hue_stream_on` with the lights put back, as the stop tests drive it.
@@ -941,10 +938,7 @@ pub fn set_hue_solid_color(
     let state_for_status = owner.state.clone();
     queue_solid_color(&mut owner, snapshot);
 
-    if matches!(
-        state_for_status,
-        HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
-    ) {
+    if state_for_status.is_active() {
         owner.last_status = status_with(
             state_for_status,
             "HUE_COLOR_QUEUED_PENDING_STREAM",
@@ -999,10 +993,7 @@ pub(crate) async fn refresh_hue_stream_status(
             .active_stream
             .as_ref()
             .map(|stream| (stream.bridge_ip.clone(), stream.area_id.clone()));
-        let params = if matches!(
-            owner.state,
-            HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
-        ) {
+        let params = if owner.state.is_active() {
             owner.active_stream.as_ref().map(|stream| {
                 (
                     stream.bridge_ip.clone(),

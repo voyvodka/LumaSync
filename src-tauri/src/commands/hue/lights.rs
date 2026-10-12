@@ -17,7 +17,7 @@ use super::super::hue_http::{classify_hue_response, HueHttpFault};
 use super::super::status::CommandStatus;
 use super::credential_store::effective_hue_app_key;
 use super::sender::{RequestPacer, HUE_HTTP_FALLBACK_MAX_REQUESTS_PER_SEC};
-use super::state_store::{acquire_hue_runtime, HueRuntimeState, HueRuntimeStateStore};
+use super::state_store::{acquire_hue_runtime, HueRuntimeStateStore};
 use super::transport::{
     async_client_for_key, is_safe_resource_id, is_valid_bridge_addr, read_body, send_error_text,
 };
@@ -263,10 +263,7 @@ fn identify_pacer() -> &'static tokio::sync::Mutex<RequestPacer> {
 /// lost or fights the frames.
 fn lights_are_streamed(store: &HueRuntimeStateStore) -> bool {
     let owner = acquire_hue_runtime(&store.runtime);
-    matches!(
-        owner.state,
-        HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
-    ) || owner.active_stream.is_some()
+    owner.state.is_active() || owner.active_stream.is_some()
 }
 
 enum IdentifyPut {
@@ -535,7 +532,7 @@ pub async fn identify_hue_lights(
 mod tests {
     use serde_json::json;
 
-    use super::super::state_store::acquire_hue_runtime;
+    use super::super::state_store::{acquire_hue_runtime, HueRuntimeState};
     use super::super::test_bridge::{light_json, FakeHue, Reply};
     use super::*;
 

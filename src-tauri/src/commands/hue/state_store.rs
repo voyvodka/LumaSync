@@ -58,6 +58,13 @@ pub enum HueRuntimeState {
     Failed,
 }
 
+impl HueRuntimeState {
+    /// A stream is up, coming up, or being brought back.
+    pub(crate) fn is_active(&self) -> bool {
+        matches!(self, Self::Starting | Self::Running | Self::Reconnecting)
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum HueRuntimeTriggerSource {
@@ -530,10 +537,7 @@ pub(crate) fn status_with(
 
 pub(crate) fn make_result(owner: &HueRuntimeOwner) -> HueRuntimeCommandResult {
     HueRuntimeCommandResult {
-        active: matches!(
-            owner.state,
-            HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
-        ),
+        active: owner.state.is_active(),
         status: owner.last_status.clone(),
         last_solid_color: owner.last_solid_color.clone(),
     }
