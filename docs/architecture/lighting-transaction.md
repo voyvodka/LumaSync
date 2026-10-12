@@ -22,7 +22,7 @@ snapshot (`useLightingRuntime.ts`: seeded by `get_lighting_runtime`, kept by
 | A strip unplugged | `apply_outputs` `{ targets, origin: "usbUnplug" }` — the rest, or `[]` when it was the only one |
 | Launch | `apply_outputs` `{ origin: "boot" }` — Rust reads the saved mode and outputs itself |
 | LED control popup mode strip | `apply_outputs` `{ mode, origin: "popup" }` |
-| Tray: the Off / Ambilight / Solid check group | built in Rust (`tray_request`), never through a window; the kind alone, `origin: "tray"` |
+| Tray: the Off / Ambilight / Solid / Effect check group | built in Rust (`tray_request`), never through a window; the kind alone, `origin: "tray"` |
 | Test patterns (LED Setup, popup tiles) | `apply_outputs` `{ targets, origin: "leaseHue" }` around each run |
 | Devices card Stop retrying / Retry stop | `release_hue_output` |
 | Devices → Hue Forget | built in Rust (`forget_hue_bridge`): `release_hue_with`, then a `user` choice of the saved targets without `hue` (`hue.md`, "Forgetting a bridge") |
@@ -133,8 +133,8 @@ no other origin publishes one. Every later publish carries it along unchanged.
   visible window's notice is enough; a choice that ran says nothing.
 - The popup shows its own refused or failed choice inline, in the same copy.
 
-**The tray's mode group is a check group** (`TrayLighting`, `tray_mode_items`). Off, Ambilight and
-Solid are check items; the check follows the snapshot's running mode, redrawn on every publish
+**The tray's mode group is a check group** (`TrayLighting`, `tray_mode_items`). Off, Ambilight,
+Solid and Effect are check items; the check follows the snapshot's running mode, redrawn on every publish
 (`sync_tray_modes` in `lib.rs`, newest revision wins). A click toggles a check item natively before
 the choice has run, so the group is redrawn at once from what runs; clicking the running mode sends
 nothing, as its button in the window does nothing. The items are greyed while a transaction runs,
