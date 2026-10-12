@@ -254,8 +254,8 @@ pub(crate) fn apply_channel_placements(
 // CLIP v2 `/resource/light/{id}` exposes a `color.gamut_type` field
 // (`"A"`, `"B"`, `"C"`, or `"other"`) that we need before applying the
 // per-bulb gamut triangle clip. The archetype string (e.g.
-// `"hue_go"`, `"sultan_bulb"`) is also surfaced for telemetry and for
-// future bulb-specific dimming curves.
+// `"hue_go"`, `"sultan_bulb"`) is carried for future bulb-specific
+// dimming curves; nothing reads it yet.
 //
 // The fetch helper is `async` (uses the same `reqwest::Client` pool as
 // `fetch_area_channels`) and must run **outside** the streaming hot

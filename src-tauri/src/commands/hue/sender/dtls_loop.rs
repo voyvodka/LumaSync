@@ -156,7 +156,7 @@ impl DtlsSendLoop<'_> {
 ///
 /// Returns the color sender handle, a shutdown signal that fires when the
 /// thread exits, and the DTLS cipher name used during the handshake.
-#[allow(clippy::too_many_arguments)] // bridge ip + username + client_key + area_id + channels + light_metadata + packet_counter + deactivate_token is the minimal DTLS sender contract; collapsing into a struct would cost ergonomic clarity at the call sites in commands.rs / reconnect.rs
+#[allow(clippy::too_many_arguments)] // client + bridge ip + username + client_key + area_id + channels + light_metadata + packet_counter + deactivate_token + abandoned is the minimal DTLS sender contract; collapsing into a struct would cost ergonomic clarity at the call site in builder.rs
 pub(crate) fn spawn_hue_dtls_sender(
     client: Arc<BlockingClient>,
     bridge_ip: String,
