@@ -323,20 +323,20 @@ export function applyLightingMode(payload: LightingModeConfig): LightingModeComm
   const w = getWorld();
 
   // Target derivation mirrors `apply_mode_change_inner`
-  // (`src-tauri/src/commands/lighting_mode.rs:2004-2008`): empty/absent
+  // (`src-tauri/src/commands/lighting_mode/transition.rs`): empty/absent
   // `targets` means USB-required for backward compat; "hue" opts a
-  // mode into the Hue gate below. Order matters — the USB gate (2023-2036)
-  // runs before the Hue gate (2039-2052) in Rust, so it must here too: a
+  // mode into the Hue gate below. Order matters — the USB gate runs before
+  // the Hue gate in Rust, so it must here too: a
   // request needing both with neither available reports DEVICE_NOT_CONNECTED,
   // not HUE_NOT_READY.
   const requestedTargets = targets ?? [];
   const needsUsb = requestedTargets.length === 0 || requestedTargets.includes("usb");
   const needsHue = requestedTargets.includes("hue");
 
-  // USB gate (`lighting_mode.rs:2016-2036`). A registered WLED sink
-  // satisfies it the same way `UsbOutputPlan::Wled` does in Rust, even with
-  // no serial port connected — `usb_available = device_connected ||
-  // usb_plan.is_some()`.
+  // USB gate. A registered WLED sink satisfies it the same way
+  // `UsbOutputPlan::Wled` does in Rust, even with no serial port connected —
+  // `usb_available = usb_plan.is_some()`, and the plan is the WLED sink when
+  // one is bound, else the connected serial port.
   const usbAvailable = w.serial.connectedPort !== null || w.wled.connectedHost !== null;
   if (kind !== "off" && needsUsb && !usbAvailable) {
     return {
@@ -351,12 +351,12 @@ export function applyLightingMode(payload: LightingModeConfig): LightingModeComm
     };
   }
 
-  // Hue gate (`lighting_mode.rs:2039-2052`). `hue_output` there is `Some`
+  // Hue gate. `hue_output` there is `Some`
   // only once `start_hue_stream` has actually spawned a sender —
-  // `snapshot_hue_output_context` (`hue/state_store.rs:451-463`) reads
+  // `snapshot_hue_output_context` (`commands/hue/state_store.rs`) reads
   // `owner.active_stream`, which is set only at start's step 4c and cleared
-  // by every stop/gate-block/abort/reconnect path (`hue/retry.rs:150,187,303`,
-  // `hue/reconnect.rs:167,416`). Never-started, `Idle`/gate-blocked,
+  // by every stop/gate-block/abort/reconnect path (`commands/hue/retry.rs`,
+  // `commands/hue/reconnect.rs`). Never-started, `Idle`/gate-blocked,
   // `Reconnecting` and `Failed` all leave it `None` — only a genuinely
   // `Running` stream leaves it `Some`. `hue.streaming` is the mock's proxy
   // for that same fact (see `hueRuntimeFault` in `./hue.ts`, which is what

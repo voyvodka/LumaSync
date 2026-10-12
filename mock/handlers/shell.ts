@@ -123,12 +123,12 @@ export const shellHandlers = {
   }),
 
   // `previewOnly` derivation mirrors `start_led_test_pattern`'s target
-  // resolution (`src-tauri/src/commands/lighting_mode.rs:3040-3046`):
+  // resolution (`src-tauri/src/commands/lighting_mode/led_test_pattern.rs`):
   // empty/absent `targets` defaults to wanting USB, "hue" opts a target in.
   // A registered WLED sink satisfies the USB channel exactly like a
   // connected serial port does (`UsbOutputPlan::Wled`), and Hue only counts
   // once a stream is actually running with mapped channels —
-  // `snapshot_hue_output_context` (`hue/state_store.rs:451-463`) reads
+  // `snapshot_hue_output_context` (`commands/hue/state_store.rs`) reads
   // `owner.active_stream`, which is `Some` only while genuinely `Running`.
   // `w.hue.streaming` is the mock's proxy for that same fact — see
   // `hueRuntimeFault` in `./hue.ts` and the identical reasoning in
