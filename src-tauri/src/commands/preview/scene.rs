@@ -18,7 +18,9 @@ use super::session::{
     answer, emit_session, not_open, refusal, PreviewSession, PreviewSessionResult,
     PreviewSessionState, SceneSet,
 };
-use super::windows::{build_scene, next_scene_label, raise_over_scene, reuse_on_display};
+use super::windows::{
+    build_scene, next_scene_label, raise_over_scene, reuse_on_display, scene_window_number,
+};
 use crate::commands::ambilight_capture;
 use crate::commands::calibration::list_displays;
 use crate::commands::lighting_mode::latency::LatencyResult;
@@ -192,13 +194,8 @@ pub async fn start_preview_scene<R: Runtime>(
         // a label stays reserved until its destroy completes.
         let built = on_main(&app, move |app| {
             let built = match idle.and_then(|label| app.get_webview_window(&label)) {
-                Some(window) => reuse_on_display(&window, &display).map(|()| {
-                    #[cfg(target_os = "macos")]
-                    let number = crate::macos_window::window_number(&window);
-                    #[cfg(not(target_os = "macos"))]
-                    let number = None;
-                    (window.label().to_string(), number)
-                }),
+                Some(window) => reuse_on_display(&window, &display)
+                    .map(|()| (window.label().to_string(), scene_window_number(&window))),
                 None => {
                     let label = next_scene_label();
                     build_scene(app, &label, &display).map(|(_, number)| (label, number))

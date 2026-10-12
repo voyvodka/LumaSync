@@ -36,19 +36,21 @@ static LABEL_COUNTER: AtomicU64 = AtomicU64::new(0);
 /// there both preview windows are built hidden and shown once elevated.
 const SHOW_AFTER_ELEVATING: bool = cfg!(target_os = "macos");
 
-pub(super) fn next_twin_label() -> String {
+fn next_label(prefix: &str) -> String {
     let seq = LABEL_COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("{LED_TWIN_OVERLAY_LABEL_PREFIX}{seq}")
+    format!("{prefix}{seq}")
+}
+
+pub(super) fn next_twin_label() -> String {
+    next_label(LED_TWIN_OVERLAY_LABEL_PREFIX)
 }
 
 pub(super) fn next_popup_label() -> String {
-    let seq = LABEL_COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("{LED_CONTROL_POPUP_LABEL_PREFIX}{seq}")
+    next_label(LED_CONTROL_POPUP_LABEL_PREFIX)
 }
 
 pub(super) fn next_scene_label() -> String {
-    let seq = LABEL_COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("{LED_PREVIEW_SCENE_LABEL_PREFIX}{seq}")
+    next_label(LED_PREVIEW_SCENE_LABEL_PREFIX)
 }
 
 pub fn is_preview_window(label: &str) -> bool {
@@ -168,11 +170,19 @@ pub(super) fn build_scene<R: Runtime>(
             .show()
             .map_err(|error| format!("could not show the scene: {error}"))?;
     }
-    #[cfg(target_os = "macos")]
-    let number = crate::macos_window::window_number(&window);
-    #[cfg(not(target_os = "macos"))]
-    let number = None;
+    let number = scene_window_number(&window);
     Ok((window, number))
+}
+
+/// The window number the capture filter excepts a scene window by (macOS).
+pub(super) fn scene_window_number<R: Runtime>(window: &WebviewWindow<R>) -> Option<u32> {
+    #[cfg(target_os = "macos")]
+    return crate::macos_window::window_number(window);
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window;
+        None
+    }
 }
 
 /// The twin and the popup back over the scene, which shares their level and,
