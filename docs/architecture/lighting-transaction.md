@@ -252,7 +252,8 @@ own field is what it was chosen with, and `stored()` stamps the shared value ove
 `persist_mode`. What moves it: a choice whose mode carries a payload of its own kind (a scene, a
 stage commit), a retune once it Applies or is Deferred — one of a kind that is not running moves
 nothing — and the boot seed, `PersistedShellState::lighting_brightness`, which reads a file from a
-build that kept one per mode as the last lit mode's. So a mode press sends the kind alone: a payload
+build that kept one per mode as the last lit mode's — `lastLitKind`, else the lit kind the file was
+running, since no released build wrote `lastLitKind`. So a mode press sends the kind alone: a payload
 there would be read as a new choice of brightness, and the copies the popup and the compact window
 held fell back to white at full brightness. `persist_mode` writes the value into every payload on
 disk, those this session never touched too, so a build that keeps one per mode reads the same value

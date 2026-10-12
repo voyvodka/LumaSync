@@ -164,22 +164,34 @@ impl PersistedShellState {
     }
 
     /// The one brightness every mode runs at. A file from a build that kept one
-    /// per mode reads as the last lit mode's (`lastLitKind`, Ambilight when
-    /// absent, as the frontend resolves it); a file with none reads as full.
+    /// per mode reads as the last lit mode's: `lastLitKind`, else the saved
+    /// `lightingMode.kind` when it is lit and has one — no released build wrote
+    /// `lastLitKind`, so an upgraded file's last lit mode is the one it ran —
+    /// else Ambilight's. A file with none reads as full.
     pub fn lighting_brightness(&self) -> f32 {
-        let kind = self
+        let is_lit = |kind: &&str| matches!(*kind, "ambilight" | "solid" | "effect");
+        let mode = self.0.get("lightingMode");
+        let brightness_of = |kind: &str| {
+            mode.and_then(|mode| mode.get(kind))
+                .and_then(|payload| payload.get("brightness"))
+                .and_then(Value::as_f64)
+                .filter(|brightness| brightness.is_finite())
+        };
+        let last_lit = self
             .0
             .get("lastLitKind")
             .and_then(Value::as_str)
-            .filter(|kind| matches!(*kind, "solid" | "effect"))
-            .unwrap_or("ambilight");
-        self.0
-            .get("lightingMode")
-            .and_then(|mode| mode.get(kind))
-            .and_then(|payload| payload.get("brightness"))
-            .and_then(Value::as_f64)
-            .filter(|brightness| brightness.is_finite())
-            .map_or(1.0, |brightness| brightness.clamp(0.0, 1.0) as f32)
+            .filter(is_lit);
+        let brightness = match last_lit {
+            Some(kind) => brightness_of(kind),
+            None => mode
+                .and_then(|mode| mode.get("kind"))
+                .and_then(Value::as_str)
+                .filter(is_lit)
+                .and_then(brightness_of)
+                .or_else(|| brightness_of("ambilight")),
+        };
+        brightness.map_or(1.0, |brightness| brightness.clamp(0.0, 1.0) as f32)
     }
 
     /// `lightingMode` as stored, for a write that changes some fields and
@@ -1357,6 +1369,37 @@ mod tests {
         assert_eq!(read(modes), 0.5, "absent is Ambilight");
         assert_eq!(read(&format!(r#"{modes}, "lastLitKind": "disco""#)), 0.5);
         assert_eq!(read(r#""lastLitKind": "solid""#), 1.0);
+    }
+
+    /// No released build wrote `lastLitKind`, so an upgraded file's last lit
+    /// mode is the one it was running.
+    #[test]
+    fn an_upgraded_file_reads_as_the_running_modes_brightness() {
+        let read = |kind: &str| {
+            persisted(&format!(
+                r#"{{"shell-state": {{ "lightingMode": {{
+                    "kind": "{kind}",
+                    "solid": {{ "r": 1, "g": 2, "b": 3, "brightness": 0.2 }},
+                    "ambilight": {{ "brightness": 0.5 }},
+                    "effect": {{ "id": "wave", "brightness": 0.8 }}
+                }} }} }}"#
+            ))
+            .unwrap()
+            .lighting_brightness()
+        };
+        assert_eq!(read("solid"), 0.2);
+        assert_eq!(read("effect"), 0.8);
+        assert_eq!(read("ambilight"), 0.5);
+        assert_eq!(read("off"), 0.5, "Off has none of its own");
+
+        let solid_without_payload = persisted(
+            r#"{"shell-state": { "lightingMode": {
+                "kind": "solid", "ambilight": { "brightness": 0.5 }
+            } } }"#,
+        )
+        .unwrap()
+        .lighting_brightness();
+        assert_eq!(solid_without_payload, 0.5);
     }
 
     /// Off switching the Hue lights off is the default for every install,
