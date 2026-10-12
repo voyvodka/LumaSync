@@ -52,13 +52,13 @@ export function normalizeHex(value: string): string | null {
 export function kelvinToRgb(kelvin: number): Rgb {
   if (kelvin === 6500) return { r: 255, g: 255, b: 255 };
   const temp = kelvin / 100;
-  const unit = (v: number) => Math.max(0, Math.min(1, v / 255));
+  const unit = (v: number) => clamp(v / 255, 0, 1);
   const r = temp <= 66 ? 1 : unit(329.698727446 * Math.pow(temp - 60, -0.1332047592));
   const g =
     temp <= 66
       ? unit(99.470802586 * Math.log(temp) - 161.119568166)
       : unit(288.122169528 * Math.pow(temp - 60, -0.0755148492));
   const b = temp >= 66 ? 1 : temp <= 19 ? 0 : unit(138.517731223 * Math.log(temp - 10) - 305.04479273);
-  const byte = (m: number) => Math.max(0, Math.min(255, Math.round(m * 255)));
+  const byte = (m: number) => clamp(Math.round(m * 255), 0, 255);
   return { r: byte(r), g: byte(g), b: byte(b) };
 }
