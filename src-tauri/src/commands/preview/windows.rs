@@ -260,9 +260,30 @@ pub(super) fn app_in_front() -> Option<i32> {
 
 const POPUP_WIDTH: f64 = 320.0;
 /// The scene tiles, the modes and the compact window's tallest stage (Effect) without scrolling.
-const POPUP_HEIGHT: f64 = 540.0;
+const POPUP_HEIGHT: f64 = 560.0;
 const POPUP_MIN_WIDTH: f64 = 300.0;
 const POPUP_MIN_HEIGHT: f64 = 480.0;
+/// Kept clear above and below the popup on a screen too short for it.
+const POPUP_SCREEN_MARGIN: f64 = 24.0;
+
+/// The popup's frame at `zoom`: its viewport times the interface size, and never
+/// taller than the screen it opens on (the primary display's work area) — a
+/// small screen at a large size scrolls the popup rather than cut it off.
+fn popup_frame<R: Runtime>(app: &AppHandle<R>, zoom: f64) -> (LogicalSize<f64>, LogicalSize<f64>) {
+    let room = app
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .map(|monitor| f64::from(monitor.work_area().size.height) / monitor.scale_factor())
+        .filter(|room| room.is_finite() && *room > 0.0)
+        .map_or(f64::INFINITY, |room| room - 2.0 * POPUP_SCREEN_MARGIN);
+    let height = (POPUP_HEIGHT * zoom).min(room);
+    let min_height = (POPUP_MIN_HEIGHT * zoom).min(height);
+    (
+        LogicalSize::new(POPUP_WIDTH * zoom, height),
+        LogicalSize::new(POPUP_MIN_WIDTH * zoom, min_height),
+    )
+}
 
 /// The control popup, where the user last left it.
 pub(super) fn build_popup<R: Runtime>(
@@ -270,12 +291,13 @@ pub(super) fn build_popup<R: Runtime>(
     label: &str,
 ) -> Result<WebviewWindow<R>, String> {
     let zoom = shell_state::persisted(app).map_or(1.0, |state| state.ui_zoom());
-    let (width, height) = (POPUP_WIDTH * zoom, POPUP_HEIGHT * zoom);
+    let (frame, min_frame) = popup_frame(app, zoom);
+    let (width, height) = (frame.width, frame.height);
     let builder =
         WebviewWindowBuilder::new(app, label, WebviewUrl::App(PathBuf::from("index.html")))
             .title("LumaSync LED Controls")
             .inner_size(width, height)
-            .min_inner_size(POPUP_MIN_WIDTH * zoom, POPUP_MIN_HEIGHT * zoom)
+            .min_inner_size(min_frame.width, min_frame.height)
             .decorations(false)
             .resizable(false)
             .skip_taskbar(true)
@@ -319,7 +341,7 @@ pub(super) fn build_popup<R: Runtime>(
 }
 
 /// Settings → Interface size, on the control popup: its frame grows with it so
-/// its layout keeps its 320×540 viewport. The main window zooms itself, inside
+/// its layout keeps its 320×560 viewport. The main window zooms itself, inside
 /// the content fade that hides the reflow (`useUIMode`); zooming it from here
 /// too reflowed the visible page a moment before or after that. Off the store's
 /// lock, since a window call there would wait on the main thread while holding
@@ -334,15 +356,11 @@ pub fn apply_ui_zoom_later<R: Runtime>(app: &AppHandle<R>) {
             .webview_windows()
             .into_iter()
             .filter(|(label, _)| label.starts_with(LED_CONTROL_POPUP_LABEL_PREFIX));
+        let (frame, min_frame) = popup_frame(&app, zoom);
         for (_, popup) in popups {
             let resized = popup
-                .set_min_size(Some(LogicalSize::new(
-                    POPUP_MIN_WIDTH * zoom,
-                    POPUP_MIN_HEIGHT * zoom,
-                )))
-                .and_then(|()| {
-                    popup.set_size(LogicalSize::new(POPUP_WIDTH * zoom, POPUP_HEIGHT * zoom))
-                })
+                .set_min_size(Some(min_frame))
+                .and_then(|()| popup.set_size(frame))
                 .and_then(|()| popup.set_zoom(zoom));
             if let Err(error) = resized {
                 log::warn!("[ui-zoom] control popup zoom failed: {error}");
