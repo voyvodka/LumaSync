@@ -909,12 +909,7 @@ pub async fn set_preview_twin_hidden<R: Runtime>(
     exclusion::sync_twin_visibility(&app);
     emit_session(&app);
     if !payload.hidden {
-        let refresh_app = app.clone();
-        tauri::async_runtime::spawn_blocking(move || super::feed::refresh(&refresh_app))
-            .await
-            .map_err(|error| {
-                format!("PREVIEW_SESSION_LOCK_FAILED: the twin refresh died: {error}")
-            })?;
+        super::feed::refresh_awaited(&app).await?;
     }
     Ok(result(session, PREVIEW_TWIN_UPDATED, "LED twin updated."))
 }

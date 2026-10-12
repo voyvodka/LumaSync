@@ -332,6 +332,15 @@ pub fn refresh_after_solid_retune<R: Runtime>(app: &AppHandle<R>, solid: &SolidC
     refresh_with(app, Some(solid));
 }
 
+/// `refresh` for an async command: on a blocking thread, since it waits on
+/// the lighting lock, which a transition can hold for seconds.
+pub(super) async fn refresh_awaited<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || refresh(&app))
+        .await
+        .map_err(|error| format!("PREVIEW_SESSION_LOCK_FAILED: the twin refresh died: {error}"))
+}
+
 fn refresh_with<R: Runtime>(app: &AppHandle<R>, retuned_solid: Option<&SolidColorPayload>) {
     let _one_at_a_time = REFRESH.lock().unwrap_or_else(|e| e.into_inner());
     let Some(session) = app.try_state::<PreviewSessionState>() else {
@@ -409,10 +418,7 @@ pub async fn subscribe_twin_frames<R: Runtime>(
     if !state.subscribe_twin(window.label(), on_frame)? {
         return Ok(not_open());
     }
-    let refresh_app = app.clone();
-    tauri::async_runtime::spawn_blocking(move || refresh(&refresh_app))
-        .await
-        .map_err(|error| format!("PREVIEW_SESSION_LOCK_FAILED: the twin refresh died: {error}"))?;
+    refresh_awaited(&app).await?;
     Ok(TwinSubscribeResult {
         layout: state.feed.current_layout(),
         status: CommandStatus::ok(PREVIEW_TWIN_SUBSCRIBED, "Twin frames subscribed."),
