@@ -126,7 +126,6 @@ pub(super) struct SceneTarget {
 }
 
 impl OpenSession {
-    #[cfg(any(target_os = "macos", test))]
     fn shown_labels(&self) -> Vec<String> {
         let mut labels = Vec::new();
         if !self.twin_hidden {
@@ -271,7 +270,7 @@ impl PreviewSessionState {
         Ok(inner.open.as_ref().map(|open| SceneTarget {
             display_id: open.display_id.clone(),
             scene_label: open.scene_label.clone(),
-            over_scene: vec![open.twin_label.clone(), open.popup_label.clone()],
+            over_scene: open.shown_labels(),
             session: open.wire(),
         }))
     }
@@ -1230,6 +1229,29 @@ mod tests {
             state.note_front_app(7),
             Some(vec!["led-twin-overlay-4".to_string()])
         );
+    }
+
+    /// Ordering a window front on macOS shows it, so the scene raises only
+    /// what the user left on screen.
+    #[test]
+    fn a_scene_raises_only_the_preview_windows_the_user_left_shown() {
+        let state = PreviewSessionState::default();
+        state.open_for_test("a", "led-twin-overlay-6", "led-control-popup-6");
+        let over_scene =
+            |state: &PreviewSessionState| state.scene_target().unwrap().unwrap().over_scene;
+        assert_eq!(
+            over_scene(&state),
+            vec![
+                "led-twin-overlay-6".to_string(),
+                "led-control-popup-6".to_string()
+            ]
+        );
+
+        state.set_twin_hidden(true).unwrap();
+        assert_eq!(over_scene(&state), vec!["led-control-popup-6".to_string()]);
+
+        state.lock().unwrap().open.as_mut().unwrap().popup_hidden = true;
+        assert!(over_scene(&state).is_empty());
     }
 
     #[test]
