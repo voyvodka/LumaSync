@@ -272,18 +272,8 @@ export function ControlPopupApp() {
         )}
         <PopupScenePicker playing={playing?.scene ?? null} busy={sceneBusy} onPick={handleScene} />
         {playing?.scene === "latency" && <PopupLatencyRow result={latency} />}
-        {/* The scene owns the lights: the strip shows no mode and takes no press until it stops. */}
-        <ModeStrip
-          variant="popup"
-          value={playing ? null : kind}
-          onSelect={handleModeClick}
-          isDisabled={playing ? () => true : undefined}
-        />
-        {playing && (
-          <p className={styles.held} role="status" data-testid="popup-scene-owns">
-            {t("preview:scenes.ownsLights")}
-          </p>
-        )}
+        {/* The scene has the lights, so no mode is marked; any press is a choice, and it ends the scene. */}
+        <ModeStrip variant="popup" value={playing ? null : kind} onSelect={handleModeClick} />
         {playing ? (
           <PopupBrightnessRow brightness={playing.sceneBrightness} onChange={sendSceneBrightness} />
         ) : (

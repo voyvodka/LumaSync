@@ -30,7 +30,6 @@ const preview: Catalogue<typeof enPreview> = {
       latency: "Gecikme",
     },
     stop: "{{name}} sahnesini durdur",
-    ownsLights: "Sahne oynarken modlar kilitli.",
   },
   latency: {
     label: "İşlem gecikmesi",

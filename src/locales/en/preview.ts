@@ -27,7 +27,6 @@ export default {
       latency: "Latency",
     },
     stop: "Stop {{name}}",
-    ownsLights: "Modes are locked while a scene plays.",
   },
   latency: {
     label: "Pipeline delay",

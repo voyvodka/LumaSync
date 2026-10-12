@@ -164,6 +164,11 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+/** The session read has landed with a scene playing. */
+async function waitForScene() {
+  await waitFor(() => expect(screen.getByTestId("popup-scene-spiral")).toHaveAttribute("aria-pressed", "true"));
+}
+
 /** Rendered once the session read has landed, so no update arrives after the test ends. */
 async function renderSettled() {
   render(<ControlPopupApp />);
@@ -484,16 +489,22 @@ describe("ControlPopupApp scenes", () => {
     expect(startPreviewScene).toHaveBeenCalledWith("sunset");
   });
 
-  it("holds the mode strip and says why while a scene plays", async () => {
+  // Rust ends the scene when a mode is chosen, so the strip stays in reach.
+  it("keeps the modes in reach while a scene plays, with none marked, and a press is a choice", async () => {
     syncState.mode = { kind: LIGHTING_MODE_KIND.SOLID, solid: { r: 1, g: 2, b: 3, brightness: 1 } };
     getPreviewSession.mockResolvedValue(SPIRAL);
+    const user = userEvent.setup();
     render(<ControlPopupApp />);
+    await waitForScene();
 
-    expect(await screen.findByTestId("popup-scene-owns")).toHaveTextContent("preview:scenes.ownsLights");
     for (const radio of screen.getAllByRole("radio")) {
-      expect(radio).toBeDisabled();
+      expect(radio).toBeEnabled();
       expect(radio).toHaveAttribute("aria-checked", "false");
     }
+    await user.click(screen.getByRole("radio", { name: /common:mode\.options\.solid/ }));
+
+    await waitFor(() => expect(applyOutputs).toHaveBeenCalledTimes(1));
+    expect(applyOutputs.mock.calls[0][0].mode?.kind).toBe(LIGHTING_MODE_KIND.SOLID);
   });
 
   // The scene's brightness is its own: the user's mode is never retuned for it.
@@ -501,7 +512,7 @@ describe("ControlPopupApp scenes", () => {
     syncState.mode = { kind: LIGHTING_MODE_KIND.AMBILIGHT, ambilight: { brightness: 0.8 } };
     getPreviewSession.mockResolvedValue(SPIRAL);
     render(<ControlPopupApp />);
-    await screen.findByTestId("popup-scene-owns");
+    await waitForScene();
 
     expect(screen.getByText("60%")).toBeInTheDocument();
     fireEvent.change(screen.getByRole("slider", { name: "common:mode.brightness" }), { target: { value: "25" } });
@@ -547,7 +558,7 @@ describe("ControlPopupApp scenes", () => {
   it("shows no delay outside the latency scene", async () => {
     getPreviewSession.mockResolvedValue(SPIRAL);
     render(<ControlPopupApp />);
-    await screen.findByTestId("popup-scene-owns");
+    await waitForScene();
     expect(screen.queryByTestId("popup-latency")).toBeNull();
   });
 
