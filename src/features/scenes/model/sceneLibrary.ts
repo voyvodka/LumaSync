@@ -129,10 +129,8 @@ export function toModeConfig(scene: StoredScene): LightingModeConfig | null {
       return { kind: scene.kind, solid: normalizeSolidColorPayload(scene.solid) };
     case LIGHTING_MODE_KIND.AMBILIGHT:
       return { kind: scene.kind, ambilight: ambilightLook(scene.ambilight) };
-    case LIGHTING_MODE_KIND.EFFECT: {
-      const { startedAtMs: _started, ...look } = normalizeEffectPayload(scene.effect);
-      return { kind: scene.kind, effect: look };
-    }
+    case LIGHTING_MODE_KIND.EFFECT:
+      return { kind: scene.kind, effect: effectLook(scene.effect) };
   }
 }
 
@@ -143,6 +141,12 @@ export function toModeConfig(scene: StoredScene): LightingModeConfig | null {
 export function sceneSmoothing(scene: StoredScene): LightingSmoothingPreset | undefined {
   if (scene.kind !== LIGHTING_MODE_KIND.AMBILIGHT) return undefined;
   return normalizeAmbilightPayload(scene.ambilight).lightingSmoothingPreset ?? DEFAULT_LIGHTING_SMOOTHING_PRESET;
+}
+
+/** An effect without its start time, which belongs to a run (a sunrise's), not to the look. */
+function effectLook(input: EffectPayload | null | undefined): EffectPayload {
+  const { startedAtMs: _started, ...look } = normalizeEffectPayload(input);
+  return look;
 }
 
 /** Only what an Ambilight look is: the deprecated fields a normalised payload carries stay out. */
@@ -220,10 +224,8 @@ export function sceneFromMode(mode: LightingModeConfig, smoothing: LightingSmoot
       return { kind: mode.kind, solid: normalizeSolidColorPayload(mode.solid ?? undefined) };
     case LIGHTING_MODE_KIND.AMBILIGHT:
       return { kind: mode.kind, ambilight: ambilightLook(mode.ambilight, smoothing) };
-    case LIGHTING_MODE_KIND.EFFECT: {
-      const { startedAtMs: _started, ...look } = normalizeEffectPayload(mode.effect);
-      return { kind: mode.kind, effect: look };
-    }
+    case LIGHTING_MODE_KIND.EFFECT:
+      return { kind: mode.kind, effect: effectLook(mode.effect) };
     default:
       return null;
   }
