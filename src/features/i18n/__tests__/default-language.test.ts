@@ -1,8 +1,7 @@
 /**
  * default-language.test.ts
  *
- * Automated proof for I18N-02: first-launch default (English) and
- * persisted language override.
+ * First launch defaults to English, and a persisted language overrides it.
  *
  * Tests mock the shell store so they need no Tauri runtime.
  */
@@ -29,7 +28,7 @@ describe("resolveInitialLanguage()", () => {
     vi.clearAllMocks();
   });
 
-  it("Test 1: first-launch — returns 'en' when no language is persisted (I18N-02)", async () => {
+  it("Test 1: first-launch — returns 'en' when no language is persisted", async () => {
     // Arrange: simulate first launch — store has no language key (undefined)
     vi.mocked(shellStore.load).mockResolvedValue({
       schemaVersion: 1,
@@ -66,7 +65,7 @@ describe("resolveInitialLanguage()", () => {
     expect(result).toBe("tr");
   });
 
-  it("Test 3: unknown locale falls back to 'en' (I18N-02 fallback)", async () => {
+  it("Test 3: unknown locale falls back to 'en'", async () => {
     // Arrange: simulate corrupt or unsupported locale in store
     vi.mocked(shellStore.load).mockResolvedValue({
       schemaVersion: 1,

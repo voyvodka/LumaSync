@@ -6,7 +6,7 @@
  *    user switches (see docs/architecture/ui-and-shell.md, "Per-window bundles")
  *  - English as the fallback language
  *  - No automatic language detection (first-launch language is resolved
- *    by `languagePolicy.resolveInitialLanguage()` which honours I18N-02)
+ *    by `languagePolicy.resolveInitialLanguage()`)
  *
  * Usage:
  *   import { initI18n } from './i18n';
@@ -29,7 +29,7 @@ export const I18N_LANGUAGE_NAMES: Record<I18nLanguage, string> = {
   tr: "Türkçe",
 };
 
-/** Default/fallback language — always English per I18N-02 */
+/** Default and fallback language: English, on first launch too (see `languagePolicy`). */
 export const I18N_DEFAULT_LANGUAGE: I18nLanguage = "en";
 
 // One chunk per language. A TR window does not fetch the EN fallback too:

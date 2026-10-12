@@ -97,7 +97,7 @@ function resolveWindowKind(): WindowKind {
 
 const windowKind = resolveWindowKind();
 
-// FE-2 — clear the twin window's background synchronously, before bootstrap
+// Clear the twin window's background synchronously, before bootstrap
 // runs, so it never flashes the opaque app gradient. See
 // docs/architecture/ui-and-shell.md. The scene window, transparent like the
 // twin, is painted black instead: the capture must see black, not the app.
@@ -193,17 +193,13 @@ async function bootstrap() {
   const state = shellStore.load();
   followMotionPreference(state);
 
-  // 1. Resolve language (honours I18N-02: English default on first launch)
   const language = await resolveInitialLanguage(() => state);
-
-  // 2. Initialise i18next with resolved language
   await initI18n(language);
   markStartup("language ready");
   // The popup is hidden and reused, never rebuilt, so it would keep the
   // language it was created in; the main window switches itself.
   if (windowKind === WINDOW_KIND.POPUP) followSavedLanguage();
 
-  // 3. Mount React once this window's root module is in
   const root = await windowRoot;
   markStartup("root module in");
   // The scenes row opens on the stored list, not the seeded one sliding to it.
