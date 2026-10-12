@@ -89,8 +89,6 @@ export function LightsPage({
   // Why the mode buttons are dim — calibration, no output, still checking — is said by the shell
   // notice queue, not here (docs/architecture/ui-and-shell.md).
   const calibrationLocked = modeLockReason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED;
-  // A choice in flight is not a lock: the strip and scenes ignore presses then, without dimming.
-  const selectorLocked = calibrationLocked;
   // Without a reachable sink an activated mode starts a worker with nowhere to send frames; a
   // bridge still being checked is not one yet either, but it is not "missing".
   const availability = outputAvailability({
@@ -100,7 +98,8 @@ export function LightsPage({
     hueProbeVerdict,
     bootstrapDone,
   });
-  const nonOffLocked = selectorLocked || availability !== "ready";
+  // A choice in flight is not a lock: the strip and scenes ignore presses then, without dimming.
+  const nonOffLocked = calibrationLocked || availability !== "ready";
   const normalized = normalizeLightingModeConfig(mode);
   const kind = normalized.kind;
   const solid = normalized.solid ?? DEFAULT_SOLID_COLOR;
