@@ -148,6 +148,15 @@ pub struct LedTestPatternResult {
     pub status: CommandStatus,
 }
 
+/// A test refused before anything was applied.
+fn not_started(code: &str, message: &str, details: Option<String>) -> LedTestPatternResult {
+    LedTestPatternResult {
+        active: false,
+        preview_only: false,
+        status: command_status(code, message, details),
+    }
+}
+
 /// Start a synthetic LED test pattern (LED Setup's guide, a channel probe)
 /// — resolves available output targets, requires a real
 /// strip calibration to size the pattern, and captures the prior live mode
@@ -174,48 +183,32 @@ fn start_led_test_pattern_blocking<R: Runtime>(
     // The scene owns the lights; its stop restores the mode a test would
     // record as its own prior.
     if runtime_state.scene_active() {
-        return Ok(LedTestPatternResult {
-            active: false,
-            preview_only: false,
-            status: command_status(
-                LED_TEST_PATTERN_SCENE_ACTIVE,
-                "A preview scene is running; stop it first.",
-                None,
-            ),
-        });
+        return Ok(not_started(
+            LED_TEST_PATTERN_SCENE_ACTIVE,
+            "A preview scene is running; stop it first.",
+            None,
+        ));
     }
     if !payload.brightness.is_finite() || !(0.0..=1.0).contains(&payload.brightness) {
-        return Ok(LedTestPatternResult {
-            active: false,
-            preview_only: false,
-            status: command_status(
-                LED_TEST_PATTERN_INVALID_PARAMS,
-                "Test pattern brightness must be within 0..1.",
-                None,
-            ),
-        });
+        return Ok(not_started(
+            LED_TEST_PATTERN_INVALID_PARAMS,
+            "Test pattern brightness must be within 0..1.",
+            None,
+        ));
     }
     if let Some(Err(reason)) = payload.led_calibration.as_ref().map(|c| c.validate()) {
-        return Ok(LedTestPatternResult {
-            active: false,
-            preview_only: false,
-            status: command_status(
-                LED_TEST_PATTERN_INVALID_PARAMS,
-                "The LED layout for the test is not valid.",
-                Some(reason),
-            ),
-        });
+        return Ok(not_started(
+            LED_TEST_PATTERN_INVALID_PARAMS,
+            "The LED layout for the test is not valid.",
+            Some(reason),
+        ));
     }
     if matches!(payload.pattern, TestPatternKind::ChannelProbe { slot } if slot > 2) {
-        return Ok(LedTestPatternResult {
-            active: false,
-            preview_only: false,
-            status: command_status(
-                LED_TEST_PATTERN_INVALID_PARAMS,
-                "Channel probe slot must be 0, 1 or 2.",
-                None,
-            ),
-        });
+        return Ok(not_started(
+            LED_TEST_PATTERN_INVALID_PARAMS,
+            "Channel probe slot must be 0, 1 or 2.",
+            None,
+        ));
     }
 
     let test_config = TestPatternConfig {
@@ -276,15 +269,11 @@ fn start_led_test_pattern_blocking<R: Runtime>(
         .map(|cal| cal.total_leds)
         .unwrap_or(0);
     if effective_total_leds <= 1 {
-        return Ok(LedTestPatternResult {
-            active: false,
-            preview_only: false,
-            status: command_status(
-                LED_TEST_PATTERN_NO_CALIBRATION,
-                "No LED calibration is available to size the test pattern.",
-                None,
-            ),
-        });
+        return Ok(not_started(
+            LED_TEST_PATTERN_NO_CALIBRATION,
+            "No LED calibration is available to size the test pattern.",
+            None,
+        ));
     }
 
     // Capture the live mode to restore on stop — but never overwrite a real
