@@ -284,13 +284,12 @@ fails, which is worse than no check. Learning at tag time that a version drifted
 expensive moment to learn it: the work is already merged.
 
 `release.yml` re-runs only part of `check:all`: the Rust checks on all three platforms, and on Linux
-`verify:shell-contracts`, `typecheck:e2e` and `check:i18n`. `check:i18n` is the
-orphaned-translation-key ratchet, and a tag push runs no CI, so this is the only place it can catch
-one before publication. Biome lint, `typecheck:mock`, `verify:event-names`,
+`verify:shell-contracts`, `verify:window-grants`, `typecheck:e2e` and `check:i18n`. `check:i18n` is
+the orphaned-translation-key ratchet, and a tag push runs no CI, so this is the only place it can
+catch one before publication. Its Linux-only steps test `runner.os`, never a runner image name, so
+they survive the next image move. Biome lint, `typecheck:mock`, `verify:event-names`,
 `verify:mock-not-shipped`, `verify:design-tokens` and `verify:untyped-mocks` are not re-run at tag
-time. **Nor, in practice, is `verify:window-grants`**: its release step is conditioned on
-`ubuntu-24.04`, which left the release matrix when Linux moved to 22.04, so it is skipped on every
-tag. It still gates every PR through `check:all`.
+time.
 
 **`CHANGELOG.md` is a reader-facing release note, not an audit log** — the commit history is the
 audit log. Keep a Changelog 1.1.0 headings, plus a house `### Internal` for changes only a
