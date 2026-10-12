@@ -11,8 +11,8 @@
  *
  * **One emit path, both runtimes.** `emit()` from `@tauri-apps/api/event` goes
  * out as `invoke("plugin:event|emit")`, and that command is deliberately absent
- * from `pluginHandlers` — so in the browser `mockIPC`'s own event registry
- * answers it, and under `tauri:mock` it reaches Rust, which broadcasts back to
+ * from `pluginHandlers` — so in the browser `eventBridge.ts` answers it, and
+ * under `tauri:mock` it reaches Rust, which broadcasts back to
  * the webview. Neither branch is special-cased here; if the capability set ever
  * stops allowing `event:allow-emit`, the failure surfaces through
  * `reportEmitFailure` rather than as silence.
@@ -62,7 +62,7 @@ export { SHELL_EVENTS, TRAY_EVENTS };
 
 function reportEmitFailure(event: string, err: unknown): void {
   console.error(
-    `[LumaSync][mock] emitting "${event}" failed: ${String(err)}. In the browser this means mockIPC was installed without \`shouldMockEvents\`; under \`tauri:mock\` it usually means the capability set does not grant \`event:allow-emit\`.`,
+    `[LumaSync][mock] emitting "${event}" failed: ${String(err)}. In the browser this means \`eventBridge.ts\` did not answer the event plugin; under \`tauri:mock\` it usually means the capability set does not grant \`event:allow-emit\`.`,
   );
 }
 
