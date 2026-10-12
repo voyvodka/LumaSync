@@ -671,6 +671,17 @@ fn destroy_preview_windows<R: Runtime>(
     (labels.len(), failures)
 }
 
+/// For an open that failed after `session_opening`: the capture, the activation
+/// policy and the main window go back to how the open found them.
+fn undo_open<R: Runtime>(app: &AppHandle<R>, return_to: Option<i32>, main_hidden: bool) {
+    exclusion::session_ended();
+    hand_back(return_to);
+    float_over_full_screen(app, false);
+    if main_hidden {
+        restore_main(app, return_to);
+    }
+}
+
 /// Open the session: the twin over the captured display, the popup, and the
 /// main window out of the way. Already open ⇒ the popup comes back.
 #[tauri::command]
@@ -742,12 +753,7 @@ pub fn open_preview<R: Runtime>(
         None => {
             let twin_label = next_twin_label();
             if let Err(reason) = build_twin(&app, &twin_label, &display) {
-                exclusion::session_ended();
-                hand_back(return_to);
-                float_over_full_screen(&app, false);
-                if main_hidden_by_session {
-                    restore_main(&app, return_to);
-                }
+                undo_open(&app, return_to, main_hidden_by_session);
                 return Ok(failure(
                     PREVIEW_OPEN_FAILED,
                     "Could not open the LED twin.",
@@ -758,12 +764,7 @@ pub fn open_preview<R: Runtime>(
             if let Err(reason) = build_popup(&app, &popup_label) {
                 let mut failures = Vec::new();
                 destroy(&app, &twin_label, &mut failures);
-                exclusion::session_ended();
-                hand_back(return_to);
-                float_over_full_screen(&app, false);
-                if main_hidden_by_session {
-                    restore_main(&app, return_to);
-                }
+                undo_open(&app, return_to, main_hidden_by_session);
                 failures.insert(0, reason);
                 return Ok(failure(
                     PREVIEW_OPEN_FAILED,
@@ -796,12 +797,7 @@ pub fn open_preview<R: Runtime>(
             let mut failures = Vec::new();
             destroy(&app, &twin_label, &mut failures);
             destroy(&app, &popup_label, &mut failures);
-            exclusion::session_ended();
-            hand_back(return_to);
-            float_over_full_screen(&app, false);
-            if main_hidden_by_session {
-                restore_main(&app, return_to);
-            }
+            undo_open(&app, return_to, main_hidden_by_session);
             Err(error)
         }
     }
