@@ -69,6 +69,7 @@ interface EffectParamsProps {
 }
 
 const pct = (v: number) => Math.round(v * 100);
+const percentLabel = (v: number) => `${Math.round(v)}%`;
 
 /**
  * The settings an effect shows, in order, as the ids its cells carry: what changes when the effect
@@ -102,7 +103,6 @@ export function EffectParams({
 }: EffectParamsProps) {
   const { t } = useTranslation();
   const id = effect.id;
-  const variant = "stage";
   const drag = { onDragStart, onDragEnd };
   const sizeKey = (SIZE_LABEL as Partial<Record<EffectId, (typeof SIZE_LABEL)[keyof typeof SIZE_LABEL]>>)[id];
   const intensityKey = (
@@ -124,69 +124,61 @@ export function EffectParams({
       {node}
     </div>
   );
+  const percentCell = (
+    key: string,
+    label: string,
+    value: number,
+    change: (fraction: number) => EffectPayload,
+    testId: string,
+    lock: { disabled: boolean; title?: string } = { disabled },
+  ) =>
+    cell(
+      key,
+      <RangeRow
+        variant="stage"
+        label={label}
+        valueLabel={percentLabel}
+        min={0}
+        max={100}
+        step={1}
+        value={pct(value)}
+        disabled={lock.disabled}
+        title={lock.title}
+        onChange={(v) => onChange(change(v / 100))}
+        testId={testId}
+        {...drag}
+      />,
+    );
 
   return (
     <>
       <StageGrid>
         {usesParam(id, "speed")
-          ? cell(
-              "speed",
-              <RangeRow
-                variant={variant}
-                label={t("lights:effect.speed")}
-                valueLabel={(v) => `${Math.round(v)}%`}
-                min={0}
-                max={100}
-                step={1}
-                value={pct(effect.speed)}
-                disabled={disabled}
-                onChange={(v) => onChange({ ...effect, speed: v / 100 })}
-                testId="effect-speed"
-                {...drag}
-              />,
-            )
+          ? percentCell("speed", t("lights:effect.speed"), effect.speed, (speed) => ({ ...effect, speed }), "effect-speed")
           : null}
         {!compact && usesParam(id, "size")
-          ? cell(
+          ? percentCell(
               "size",
-              <RangeRow
-                variant={variant}
-                label={t(sizeKey ?? "lights:effect.size")}
-                valueLabel={(v) => `${Math.round(v)}%`}
-                min={0}
-                max={100}
-                step={1}
-                value={pct(paramValue(effect, "size"))}
-                disabled={disabled}
-                onChange={(v) => onChange({ ...effect, size: v / 100 })}
-                testId="effect-size"
-                {...drag}
-              />,
+              t(sizeKey ?? "lights:effect.size"),
+              paramValue(effect, "size"),
+              (size) => ({ ...effect, size }),
+              "effect-size",
             )
           : null}
         {!compact && usesParam(id, "intensity")
-          ? cell(
+          ? percentCell(
               "intensity",
-              <RangeRow
-                variant={variant}
-                label={t(intensityKey ?? "lights:effect.intensity")}
-                valueLabel={(v) => `${Math.round(v)}%`}
-                min={0}
-                max={100}
-                step={1}
-                value={pct(paramValue(effect, "intensity"))}
-                disabled={disabled}
-                onChange={(v) => onChange({ ...effect, intensity: v / 100 })}
-                testId="effect-intensity"
-                {...drag}
-              />,
+              t(intensityKey ?? "lights:effect.intensity"),
+              paramValue(effect, "intensity"),
+              (intensity) => ({ ...effect, intensity }),
+              "effect-intensity",
             )
           : null}
         {usesParam(id, "durationMinutes")
           ? cell(
               "durationMinutes",
               <RangeRow
-                variant={variant}
+                variant="stage"
                 label={t("lights:effect.duration")}
                 valueLabel={(v) => t("lights:effect.durationValue", { count: Math.round(v) })}
                 min={minMinutes}
@@ -200,22 +192,13 @@ export function EffectParams({
               />,
             )
           : null}
-        {cell(
+        {percentCell(
           "brightness",
-          <RangeRow
-            variant={variant}
-            label={t("lights:effect.brightness")}
-            valueLabel={(v) => `${Math.round(v)}%`}
-            min={0}
-            max={100}
-            step={1}
-            value={pct(effect.brightness)}
-            disabled={disabled || brightnessDisabled}
-            title={brightnessTitle}
-            onChange={(v) => onChange({ ...effect, brightness: v / 100 })}
-            testId="effect-brightness"
-            {...drag}
-          />,
+          t("lights:effect.brightness"),
+          effect.brightness,
+          (brightness) => ({ ...effect, brightness }),
+          "effect-brightness",
+          { disabled: disabled || brightnessDisabled, title: brightnessTitle },
         )}
       </StageGrid>
       {!compact && usesParam(id, "direction")
