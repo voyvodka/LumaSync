@@ -380,6 +380,29 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Stopping an LED test pattern (LED Setup's Test, Devices → Flash) or a preview scene brings the
+  lights back with the colour and brightness as saved now, not as they were before your last change,
+  and brightness and colour drags work again straight away instead of doing nothing until the next
+  mode change. A test's stop that arrives after you picked another mode no longer turns the lights
+  off, and the preview twin no longer goes back to an old Solid colour when it is shown again.
+- After updating from an earlier release, Solid and Effect start at the brightness they were saved
+  with, not Ambilight's, and that brightness is no longer replaced on the next save.
+- macOS: starting a preview scene no longer brings back a twin or remote you had hidden.
+- A colour, effect or brightness picked again in one window after the other window (the preview's
+  remote or the main window) changed it now reaches the lights; before, the stage showed it while
+  the lights kept the other window's choice. A pick whose change failed is sent again.
+- Hue: when the health check gives up on a stream (its retries ran out, or the bridge refused the
+  key), the stream really stops, instead of the lamps following the screen under a card that said
+  Stopped. One dropped stream uses one reconnect attempt, not two. After a short network drop a
+  reconnect no longer says another app took the area when the only holder is LumaSync's own dropped
+  session. Pressing Off while Hue is reconnecting switches the lamps off instead of leaving them on.
+- Hue: a short network drop while opening the area picker or pressing Refresh no longer deletes the
+  saved entertainment area and turns Start off; the failure is shown and the area is kept, and a
+  refused key asks for a re-pair.
+- Saving a Hue channel placement from Devices no longer undoes a USB strip just added to the room
+  map or an LED count LED Setup had just saved beside it.
+- An LED Setup change made while a save is still being written is no longer silently undone; it stays
+  on screen, marked unsaved.
 - macOS: clicking the empty part of the title bar, or the header of the LED preview's remote, no longer
   makes the window jump sideways.
 - The LED preview's remote opens at its own size, never taller than the screen; it came back at the
