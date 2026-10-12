@@ -23,7 +23,7 @@ import {
 import { hasSerialLinkBudget, type RuntimeHealth } from "@/shared/contracts/telemetry";
 import { rgbToHex } from "@/shared/lib/color";
 import { shallowEqual } from "@/shared/lib/store";
-import { ModeStage } from "./ModeStage";
+import { ModeStage } from "@/features/mode/ui/ModeStage";
 import { OutputsRail } from "./OutputsRail";
 import { useLightsModel } from "./useLightsModel";
 import styles from "./LightsPage.module.css";

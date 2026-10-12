@@ -19,7 +19,7 @@ import {
   type LightingModeKind,
 } from "@/shared/contracts/mode";
 import { shallowEqual } from "@/shared/lib/store";
-import { ModeStage } from "./ModeStage";
+import { ModeStage } from "@/features/mode/ui/ModeStage";
 import { useLightsModel } from "./useLightsModel";
 import styles from "./LightsCompact.module.css";
 
