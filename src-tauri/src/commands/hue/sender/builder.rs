@@ -27,7 +27,7 @@ use super::http_fallback::spawn_hue_http_sender;
 /// No-op sender used when the HTTP client cannot be built. Centralised so we
 /// avoid scattering the `tx`/`channel_count` initialiser across the failure
 /// paths of `build_hue_sender`.
-pub(crate) fn no_op_sender() -> HueColorSender {
+fn no_op_sender() -> HueColorSender {
     HueColorSender::with_mailbox(0).0
 }
 
@@ -35,7 +35,7 @@ pub(crate) fn no_op_sender() -> HueColorSender {
 /// because nothing else can fire it — a fresh signal here made every later
 /// `stop_hue_stream` burn the full timeout and report `HUE_STOP_TIMEOUT_PARTIAL`
 /// for a stream that was never running.
-pub(crate) fn settled_shutdown_signal() -> ShutdownSignal {
+fn settled_shutdown_signal() -> ShutdownSignal {
     let signal = new_shutdown_signal();
     signal_shutdown_complete(&signal);
     signal

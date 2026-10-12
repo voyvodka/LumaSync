@@ -465,7 +465,7 @@ impl Default for HueRuntimeStateStore {
 }
 
 impl HueRuntimeStateStore {
-    pub(crate) fn with_runtime(owner: HueRuntimeOwner) -> Self {
+    fn with_runtime(owner: HueRuntimeOwner) -> Self {
         let output_live = Arc::clone(&owner.output_live);
         Self {
             runtime: Arc::new(Mutex::new(owner)),

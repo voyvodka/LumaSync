@@ -56,7 +56,7 @@ pub(crate) fn trust_for_app_key(app_key: &str) -> BridgeTrust {
     trust_for_app_key_in(default_store().as_ref(), app_key)
 }
 
-pub(crate) fn trust_for_app_key_in(store: &dyn SecretStore, app_key: &str) -> BridgeTrust {
+fn trust_for_app_key_in(store: &dyn SecretStore, app_key: &str) -> BridgeTrust {
     if app_key.is_empty() {
         return BridgeTrust::any();
     }
@@ -111,7 +111,7 @@ pub(crate) fn build_async_client(
 
 /// Blocking twin of [`build_async_client`]. Never drop one on an async
 /// runtime thread — reqwest panics tearing its inner runtime down there.
-pub(crate) fn build_blocking_client(
+fn build_blocking_client(
     trust: &BridgeTrust,
     pins: Arc<dyn PinStore>,
     timeout: Duration,
@@ -148,7 +148,7 @@ pub(crate) fn async_client(trust: &BridgeTrust) -> Result<reqwest::Client, Strin
 
 /// Blocking counterpart of [`async_client`]; cached for the same reason, and
 /// because a cached client is never dropped on the wrong thread.
-pub(crate) fn blocking_client(trust: &BridgeTrust) -> Result<Arc<BlockingClient>, String> {
+fn blocking_client(trust: &BridgeTrust) -> Result<Arc<BlockingClient>, String> {
     static CLIENTS: OnceLock<Mutex<HashMap<BridgeTrust, Arc<BlockingClient>>>> = OnceLock::new();
     let mut clients = CLIENTS
         .get_or_init(Default::default)

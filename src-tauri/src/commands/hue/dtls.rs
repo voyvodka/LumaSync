@@ -106,7 +106,7 @@ pub(crate) fn connect_dtls(
 ///
 /// Works on bytes, not `str` slices: slicing at a byte offset panics inside a
 /// multi-byte character, and the input is a stored secret we do not control.
-pub(crate) fn hex_decode(hex: &str) -> Result<Vec<u8>, String> {
+fn hex_decode(hex: &str) -> Result<Vec<u8>, String> {
     fn nibble(byte: u8) -> Option<u8> {
         char::from(byte).to_digit(16).map(|digit| digit as u8)
     }

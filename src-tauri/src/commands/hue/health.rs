@@ -506,7 +506,7 @@ impl HueHealthMonitor {
         self.lock().published.clone()
     }
 
-    pub(crate) fn wake_handle(&self) -> Arc<Notify> {
+    fn wake_handle(&self) -> Arc<Notify> {
         Arc::clone(&self.0.wake)
     }
 

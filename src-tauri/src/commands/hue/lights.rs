@@ -69,7 +69,7 @@ pub(crate) enum LightsReadError {
 }
 
 /// Every light on the bridge in one request — no light budget spent.
-pub(crate) async fn read_bridge_lights(
+async fn read_bridge_lights(
     bridge_ip: &str,
     username: &str,
 ) -> Result<Vec<Value>, LightsReadError> {
@@ -102,7 +102,7 @@ fn light_id(item: &Value) -> Option<&str> {
 
 /// The names of `wanted`, in the order asked for. A light the bridge does not
 /// list, or lists without a name, is left out rather than named by its id.
-pub(crate) fn names_for(lights: &[Value], wanted: &[String]) -> Vec<HueLightName> {
+fn names_for(lights: &[Value], wanted: &[String]) -> Vec<HueLightName> {
     let by_id: HashMap<&str, &Value> = lights
         .iter()
         .filter_map(|item| Some((light_id(item)?, item)))
@@ -129,7 +129,7 @@ pub(crate) fn names_for(lights: &[Value], wanted: &[String]) -> Vec<HueLightName
 }
 
 /// The owning devices of `wanted`, deduplicated in the order asked for.
-pub(crate) fn owner_devices(lights: &[Value], wanted: &[String]) -> Vec<String> {
+fn owner_devices(lights: &[Value], wanted: &[String]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for item in lights {
         let Some(id) = light_id(item) else { continue };
@@ -176,7 +176,7 @@ fn checked_ids(light_ids: Vec<String>) -> Result<Vec<String>, String> {
 }
 
 /// The names body, bridge address already checked.
-pub(crate) async fn light_names_from_bridge(
+async fn light_names_from_bridge(
     bridge_ip: &str,
     username: &str,
     light_ids: Vec<String>,
@@ -371,7 +371,7 @@ async fn put_identify(
 }
 
 /// The identify body, bridge address already checked.
-pub(crate) async fn identify_lights_on_bridge(
+async fn identify_lights_on_bridge(
     bridge_ip: &str,
     username: &str,
     light_ids: Vec<String>,

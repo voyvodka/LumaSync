@@ -206,7 +206,7 @@ pub(crate) fn parse_light_state(item: &Value) -> Option<HueLightState> {
 /// The PUT body that puts one light back. An off light gets `on` alone: v1
 /// refused colour writes to an off light, and the bridge has already put its
 /// colour back on leaving entertainment.
-pub(crate) fn restore_body(state: &HueLightState) -> Value {
+fn restore_body(state: &HueLightState) -> Value {
     if !state.on {
         return json!({ "on": { "on": false } });
     }
