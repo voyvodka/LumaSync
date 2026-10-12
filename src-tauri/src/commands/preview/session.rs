@@ -468,7 +468,7 @@ impl PreviewSessionState {
 
     #[cfg(test)]
     pub(crate) fn twin_layout_for_test(&self) -> Option<super::feed::TwinLayout> {
-        self.feed.layout_for_test()
+        self.feed.current_layout()
     }
 
     #[cfg(test)]

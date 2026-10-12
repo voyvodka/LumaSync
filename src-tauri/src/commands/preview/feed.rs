@@ -25,6 +25,7 @@ use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime, WebviewWindow};
 
 use super::session::{PreviewSessionState, PREVIEW_NOT_OPEN};
+use crate::commands::hue::state_store::{snapshot_hue_output_context, HueRuntimeStateStore};
 use crate::commands::led_calibration::LedCalibrationConfig;
 use crate::commands::led_output::{scale_brightness, EncoderPlan};
 use crate::commands::lighting_mode::{LightingModeKind, LightingRuntimeState, SolidColorPayload};
@@ -189,14 +190,6 @@ impl TwinFeed {
         }
     }
 
-    #[cfg(test)]
-    pub(super) fn layout_for_test(&self) -> Option<TwinLayout> {
-        self.inner
-            .lock()
-            .ok()
-            .and_then(|inner| inner.layout.clone())
-    }
-
     pub(super) fn current_layout(&self) -> Option<TwinLayout> {
         self.inner
             .lock()
@@ -300,7 +293,7 @@ pub fn send_frame<R: Runtime>(app: &AppHandle<R>, leds: &[[u8; 3]], lamps: &[[u8
 
 /// The Hue stream moved on since the layout read its lamps.
 fn lamps_outdated<R: Runtime>(app: &AppHandle<R>, feed: &TwinFeed) -> bool {
-    app.try_state::<crate::commands::hue::state_store::HueRuntimeStateStore>()
+    app.try_state::<HueRuntimeStateStore>()
         .is_some_and(|store| feed.relayout_due(store.output_live().generation()))
 }
 
@@ -366,26 +359,19 @@ fn refresh_with<R: Runtime>(app: &AppHandle<R>, retuned_solid: Option<&SolidColo
         .filter(|layout| layout.total_leds > 1)
         .or_else(|| shell_state::persisted(app).and_then(|state| state.led_calibration()));
     let total = leds.as_ref().map_or(0, |layout| layout.total_leds as usize);
-    // The stream's channels in the order the worker sends their colours.
-    if let Some(store) = app.try_state::<crate::commands::hue::state_store::HueRuntimeStateStore>()
-    {
+    let hue = app.try_state::<HueRuntimeStateStore>();
+    if let Some(store) = &hue {
         session
             .feed
             .lamps_from
             .store(store.output_live().generation(), Ordering::SeqCst);
     }
-    let channels = if view.drives_hue {
-        app.try_state::<crate::commands::hue::state_store::HueRuntimeStateStore>()
-            .and_then(|store| {
-                crate::commands::hue::state_store::snapshot_hue_output_context(store.inner())
-                    .ok()
-                    .flatten()
-            })
-            .map(|context| context.channels)
-            .unwrap_or_default()
-    } else {
-        Vec::new()
-    };
+    // The stream's channels in the order the worker sends their colours.
+    let channels = hue
+        .filter(|_| view.drives_hue)
+        .and_then(|store| snapshot_hue_output_context(store.inner()).ok().flatten())
+        .map(|context| context.channels)
+        .unwrap_or_default();
     let lamps = twin_lamps(&channels, view.room_geometry.as_ref());
     let lamp_count = lamps.len();
 
