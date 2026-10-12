@@ -57,102 +57,6 @@ pub(crate) async fn fetch_area_channels(
             AreaListError::Other("Missing channels in entertainment area payload".to_string())
         })?;
 
-    fn push_unique(target: &mut Vec<String>, id: &str) {
-        if !target.iter().any(|existing| existing == id) {
-            target.push(id.to_string());
-        }
-    }
-
-    async fn fetch_resource(
-        client: &reqwest::Client,
-        bridge_ip: &str,
-        username: &str,
-        rtype: &str,
-        rid: &str,
-    ) -> Result<Value, String> {
-        let endpoint = format!("https://{bridge_ip}/clip/v2/resource/{rtype}/{rid}");
-        // Same classifier bypass the outer `fetch_area_channels` GET had: bare
-        // `error_for_status` collapses a Hue 403 into a generic status error,
-        // so an expired application key can never promote to AuthInvalid.
-        let response = client
-            .get(endpoint)
-            .header("hue-application-key", username)
-            .send()
-            .await
-            .map_err(|error| send_error_text(&error))?;
-        let response = classify_hue_response(response)
-            .await
-            .map_err(|fault| fault.to_string())?;
-        let payload = read_body(response).await?;
-        serde_json::from_str::<Value>(&payload).map_err(|error| error.to_string())
-    }
-
-    async fn resolve_to_light_ids(
-        client: &reqwest::Client,
-        bridge_ip: &str,
-        username: &str,
-        seed_rtype: &str,
-        seed_rid: &str,
-    ) -> Vec<String> {
-        let mut resolved = Vec::new();
-        if seed_rtype == "light" {
-            resolved.push(seed_rid.to_string());
-            return resolved;
-        }
-        let mut current_rtype = seed_rtype.to_string();
-        let mut current_rid = seed_rid.to_string();
-        for _ in 0..4 {
-            let resource =
-                match fetch_resource(client, bridge_ip, username, &current_rtype, &current_rid)
-                    .await
-                {
-                    Ok(value) => value,
-                    Err(_) => return resolved,
-                };
-            let Some(item) = resource
-                .get("data")
-                .and_then(|value| value.as_array())
-                .and_then(|items| items.first())
-            else {
-                return resolved;
-            };
-            let svc_array = item
-                .get("light_services")
-                .or_else(|| item.get("services"))
-                .and_then(|value| value.as_array());
-            if let Some(light_services) = svc_array {
-                for light in light_services {
-                    let rid = light.get("rid").and_then(|value| value.as_str());
-                    let rtype = light.get("rtype").and_then(|value| value.as_str());
-                    if matches!(rtype, Some("light")) {
-                        if let Some(light_id) = rid {
-                            push_unique(&mut resolved, light_id);
-                        }
-                    }
-                }
-                if !resolved.is_empty() {
-                    return resolved;
-                }
-            }
-            let Some(owner) = item.get("owner") else {
-                return resolved;
-            };
-            let Some(next_rtype) = owner.get("rtype").and_then(|value| value.as_str()) else {
-                return resolved;
-            };
-            let Some(next_rid) = owner.get("rid").and_then(|value| value.as_str()) else {
-                return resolved;
-            };
-            if next_rtype == "light" {
-                push_unique(&mut resolved, next_rid);
-                return resolved;
-            }
-            current_rtype = next_rtype.to_string();
-            current_rid = next_rid.to_string();
-        }
-        resolved
-    }
-
     // Build one `HueAreaChannel` per entertainment channel, preserving position.
     let mut result: Vec<HueAreaChannel> = Vec::new();
 
@@ -207,6 +111,100 @@ pub(crate) async fn fetch_area_channels(
     }
 
     Ok(result)
+}
+
+fn push_unique(target: &mut Vec<String>, id: &str) {
+    if !target.iter().any(|existing| existing == id) {
+        target.push(id.to_string());
+    }
+}
+
+async fn fetch_resource(
+    client: &reqwest::Client,
+    bridge_ip: &str,
+    username: &str,
+    rtype: &str,
+    rid: &str,
+) -> Result<Value, String> {
+    let endpoint = format!("https://{bridge_ip}/clip/v2/resource/{rtype}/{rid}");
+    // Same classifier bypass the `fetch_area_channels` GET had: bare
+    // `error_for_status` collapses a Hue 403 into a generic status error,
+    // so an expired application key can never promote to AuthInvalid.
+    let response = client
+        .get(endpoint)
+        .header("hue-application-key", username)
+        .send()
+        .await
+        .map_err(|error| send_error_text(&error))?;
+    let response = classify_hue_response(response)
+        .await
+        .map_err(|fault| fault.to_string())?;
+    let payload = read_body(response).await?;
+    serde_json::from_str::<Value>(&payload).map_err(|error| error.to_string())
+}
+
+async fn resolve_to_light_ids(
+    client: &reqwest::Client,
+    bridge_ip: &str,
+    username: &str,
+    seed_rtype: &str,
+    seed_rid: &str,
+) -> Vec<String> {
+    let mut resolved = Vec::new();
+    if seed_rtype == "light" {
+        resolved.push(seed_rid.to_string());
+        return resolved;
+    }
+    let mut current_rtype = seed_rtype.to_string();
+    let mut current_rid = seed_rid.to_string();
+    for _ in 0..4 {
+        let Ok(resource) =
+            fetch_resource(client, bridge_ip, username, &current_rtype, &current_rid).await
+        else {
+            return resolved;
+        };
+        let Some(item) = resource
+            .get("data")
+            .and_then(|value| value.as_array())
+            .and_then(|items| items.first())
+        else {
+            return resolved;
+        };
+        let svc_array = item
+            .get("light_services")
+            .or_else(|| item.get("services"))
+            .and_then(|value| value.as_array());
+        if let Some(light_services) = svc_array {
+            for light in light_services {
+                let rid = light.get("rid").and_then(|value| value.as_str());
+                let rtype = light.get("rtype").and_then(|value| value.as_str());
+                if matches!(rtype, Some("light")) {
+                    if let Some(light_id) = rid {
+                        push_unique(&mut resolved, light_id);
+                    }
+                }
+            }
+            if !resolved.is_empty() {
+                return resolved;
+            }
+        }
+        let Some(owner) = item.get("owner") else {
+            return resolved;
+        };
+        let Some(next_rtype) = owner.get("rtype").and_then(|value| value.as_str()) else {
+            return resolved;
+        };
+        let Some(next_rid) = owner.get("rid").and_then(|value| value.as_str()) else {
+            return resolved;
+        };
+        if next_rtype == "light" {
+            push_unique(&mut resolved, next_rid);
+            return resolved;
+        }
+        current_rtype = next_rtype.to_string();
+        current_rid = next_rid.to_string();
+    }
+    resolved
 }
 
 /// A bridge channel's `position` as `(x, y, z)`. A missing `x`/`y` reads as
@@ -388,9 +386,7 @@ pub fn unique_light_ids(channels: &[HueAreaChannel]) -> Vec<String> {
     let mut out = Vec::new();
     for ch in channels {
         for id in &ch.light_ids {
-            if !out.iter().any(|existing: &String| existing == id) {
-                out.push(id.clone());
-            }
+            push_unique(&mut out, id);
         }
     }
     out
