@@ -488,18 +488,35 @@ impl Drop for OpeningGuard<'_> {
     }
 }
 
-fn result(session: PreviewSession, code: &str, message: &str) -> PreviewSessionResult {
+pub(super) fn answer(session: PreviewSession, code: &str, message: &str) -> PreviewSessionResult {
     PreviewSessionResult {
         session,
         status: CommandStatus::ok(code, message),
     }
 }
 
-fn failure(code: &str, message: &str, details: String) -> PreviewSessionResult {
+pub(super) fn refusal(
+    session: PreviewSession,
+    code: &str,
+    message: &str,
+    details: Option<String>,
+) -> PreviewSessionResult {
     PreviewSessionResult {
-        session: PreviewSession::Closed,
-        status: CommandStatus::new(code, message, Some(details)),
+        session,
+        status: CommandStatus::new(code, message, details),
     }
+}
+
+pub(super) fn not_open() -> PreviewSessionResult {
+    answer(
+        PreviewSession::Closed,
+        PREVIEW_NOT_OPEN,
+        "No preview is open.",
+    )
+}
+
+fn failure(code: &str, message: &str, details: String) -> PreviewSessionResult {
+    refusal(PreviewSession::Closed, code, message, Some(details))
 }
 
 /// Where Ambilight captures: the saved display, else the primary, else the
@@ -669,14 +686,14 @@ pub fn open_preview<R: Runtime>(
             drop(inner);
             reveal_popup(&app, &label);
             emit_session(&app);
-            return Ok(result(
+            return Ok(answer(
                 session,
                 PREVIEW_ALREADY_OPEN,
                 "The preview is already open.",
             ));
         }
         if inner.opening {
-            return Ok(result(
+            return Ok(answer(
                 PreviewSession::Closed,
                 PREVIEW_ALREADY_OPEN,
                 "The preview is opening.",
@@ -773,7 +790,7 @@ pub fn open_preview<R: Runtime>(
     match committed {
         Ok(session) => {
             exclusion::session_opened(&app);
-            Ok(result(session, PREVIEW_OPENED, "Preview opened."))
+            Ok(answer(session, PREVIEW_OPENED, "Preview opened."))
         }
         Err(error) => {
             let mut failures = Vec::new();
@@ -857,13 +874,9 @@ pub fn end_session<R: Runtime>(app: &AppHandle<R>) -> Result<PreviewSessionResul
         ));
     }
     if open.is_none() && swept == 0 {
-        return Ok(result(
-            PreviewSession::Closed,
-            PREVIEW_NOT_OPEN,
-            "No preview is open.",
-        ));
+        return Ok(not_open());
     }
-    Ok(result(
+    Ok(answer(
         PreviewSession::Closed,
         PREVIEW_CLOSED,
         "Preview closed.",
@@ -900,18 +913,14 @@ pub async fn set_preview_twin_hidden<R: Runtime>(
         None => None,
     };
     let Some(session) = updated else {
-        return Ok(result(
-            PreviewSession::Closed,
-            PREVIEW_NOT_OPEN,
-            "No preview is open.",
-        ));
+        return Ok(not_open());
     };
     exclusion::sync_twin_visibility(&app);
     emit_session(&app);
     if !payload.hidden {
         super::feed::refresh_awaited(&app).await?;
     }
-    Ok(result(session, PREVIEW_TWIN_UPDATED, "LED twin updated."))
+    Ok(answer(session, PREVIEW_TWIN_UPDATED, "LED twin updated."))
 }
 
 #[tauri::command]
@@ -923,11 +932,7 @@ pub fn set_preview_popup_hidden<R: Runtime>(
     let (popup_label, session) = {
         let mut inner = state.lock()?;
         let Some(open) = inner.open.as_mut() else {
-            return Ok(result(
-                PreviewSession::Closed,
-                PREVIEW_NOT_OPEN,
-                "No preview is open.",
-            ));
+            return Ok(not_open());
         };
         open.popup_hidden = payload.hidden;
         (open.popup_label.clone(), open.wire())
@@ -940,7 +945,7 @@ pub fn set_preview_popup_hidden<R: Runtime>(
         reveal_popup(&app, &popup_label);
     }
     emit_session(&app);
-    Ok(result(
+    Ok(answer(
         session,
         PREVIEW_POPUP_UPDATED,
         "Preview controls updated.",

@@ -15,7 +15,8 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime};
 
 use super::session::{
-    emit_session, PreviewSession, PreviewSessionResult, PreviewSessionState, SceneSet,
+    answer, emit_session, not_open, refusal, PreviewSession, PreviewSessionResult,
+    PreviewSessionState, SceneSet,
 };
 use super::windows::{build_scene, next_scene_label, raise_over_scene, reuse_on_display};
 use crate::commands::ambilight_capture;
@@ -61,33 +62,6 @@ pub struct StartPreviewScenePayload {
 #[serde(rename_all = "camelCase")]
 pub struct SetPreviewSceneBrightnessPayload {
     pub brightness: f32,
-}
-
-fn answer(session: PreviewSession, code: &str, message: &str) -> PreviewSessionResult {
-    PreviewSessionResult {
-        session,
-        status: CommandStatus::ok(code, message),
-    }
-}
-
-fn refusal(
-    session: PreviewSession,
-    code: &str,
-    message: &str,
-    details: Option<String>,
-) -> PreviewSessionResult {
-    PreviewSessionResult {
-        session,
-        status: CommandStatus::new(code, message, details),
-    }
-}
-
-fn not_open() -> PreviewSessionResult {
-    answer(
-        PreviewSession::Closed,
-        super::session::PREVIEW_NOT_OPEN,
-        "No preview is open.",
-    )
 }
 
 /// `f` on the main thread, where windows are built, awaited. `Err` says why
