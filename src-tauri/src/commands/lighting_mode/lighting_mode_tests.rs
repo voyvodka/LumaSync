@@ -1054,10 +1054,12 @@ fn a_reconnect_hands_the_running_worker_the_new_sender() {
             Arc::clone(&owner.packet_send_count),
         );
         let signal = Arc::clone(&spawned.shutdown_signal);
+        let token = Arc::clone(&spawned.deactivate_token);
         store_active_stream_context(&mut owner, &request, channels, spawned);
         let _enter = rt.0.as_ref().expect("runtime").enter();
         spawn_reconnect_monitor_with(
             signal,
+            Some(token),
             Arc::clone(&runtime),
             request.clone(),
             ReconnectDeps::assume_ready(Arc::clone(&build)),

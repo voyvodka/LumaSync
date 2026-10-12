@@ -526,6 +526,9 @@ where
         if let Some(ref stream) = owner.active_stream {
             spawn_reconnect_monitor(
                 Arc::clone(&stream.shutdown_signal),
+                stream
+                    .uses_dtls
+                    .then(|| Arc::clone(&stream.deactivate_token)),
                 Arc::clone(runtime),
                 request.clone(),
             );

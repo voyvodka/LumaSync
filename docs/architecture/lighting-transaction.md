@@ -152,7 +152,9 @@ re-reads readiness before each attempt and must not take over a foreign session;
 streamer is the only blocker it used to spend the whole retry budget on it and end
 `TRANSIENT_RETRY_EXHAUSTED`, which reads as a network fault. It now ends `Failed` at once with
 `HUE_AREA_TAKEN_OVER` (`restart_refused` in `reconnect.rs`, `register_area_taken_over` in
-`retry.rs`), which the Hue card names.
+`retry.rs`), which the Hue card names. Only once our own dropped session has let go: while no
+deactivate PUT for it has landed, the streamer may be that session, which the bridge holds for
+about ten seconds, and the attempt is retried (`hue.md`).
 
 **Off stops the worker first, whatever its targets, then Hue.** A user's Off also stops Hue when a
 bridge is configured but no stream is known here, as the frontend's Off did — that is what cancels

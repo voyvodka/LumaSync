@@ -167,7 +167,8 @@ pub(crate) const ACTIVE_STREAMER_REASON: &str = "HUE_STREAM_NOT_READY_ACTIVE_STR
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ActiveStreamerView {
     /// Any active streamer blocks. Every gate that is about to start a session
-    /// passes this — ours has been stopped by then, so a holder is foreign.
+    /// passes this — ours has been stopped by then, so a holder is foreign,
+    /// unless that stop's deactivate never landed (a reconnect checks that).
     Foreign,
     /// Our running session holds this area; its `active_streamer` is us and
     /// is not a reason the area is unready.
