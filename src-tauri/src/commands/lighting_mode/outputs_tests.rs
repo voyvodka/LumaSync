@@ -878,6 +878,43 @@ fn every_saved_payload_carries_the_shared_brightness() {
     );
 }
 
+/// A file from a build that kept one brightness per mode starts at the last
+/// lit mode's, and the next save writes it into all three.
+#[test]
+fn a_launch_from_an_older_file_runs_at_the_last_lit_modes_brightness() {
+    let rig = Rig::new(RigSetup {
+        state: json!({
+            "lastLitKind": "effect",
+            "lightingMode": {
+                "kind": "ambilight",
+                "ambilight": { "brightness": 0.3 },
+                "solid": { "r": 1, "g": 2, "b": 3, "brightness": 0.5 },
+                "effect": { "id": "wave", "speed": 0.5, "brightness": 0.8 }
+            }
+        }),
+        ..RigSetup::default()
+    });
+
+    let booted = apply(&rig, request(LightingOrigin::Boot, None, None));
+
+    assert_eq!(booted.status.code, "OUTPUTS_APPLIED", "{booted:?}");
+    let ambilight = booted
+        .snapshot
+        .mode
+        .ambilight
+        .as_ref()
+        .map(|a| a.brightness);
+    assert!(ambilight.is_some_and(|b| near(b, 0.8)), "{ambilight:?}");
+    assert!(near(booted.snapshot.brightness, 0.8));
+
+    apply(&rig, user(Some(kind_only(LightingModeKind::Solid)), None));
+    let saved = rig.saved("lightingMode").unwrap();
+    for key in ["ambilight", "solid", "effect"] {
+        let brightness = saved[key]["brightness"].as_f64().unwrap() as f32;
+        assert!(near(brightness, 0.8), "{key}: {saved}");
+    }
+}
+
 // ---------------------------------------------------------------------------
 // The Hue stream after a refused apply
 // ---------------------------------------------------------------------------
@@ -1756,6 +1793,29 @@ fn a_drag_during_a_start_lands() {
     );
 
     assert_eq!(rig.state().tuning.accepting_brightness(), Some(0.25));
+}
+
+/// A brightness dragged while the kind it retunes is coming up is the shared
+/// one once that start commits: the commit replays it, and the snapshot says it.
+#[test]
+fn a_brightness_dragged_during_a_start_is_the_shared_one_once_it_commits() {
+    let rig = Rig::new(RigSetup::default());
+    let gate = rig.hue.hold_starts();
+    let start = spawn_apply(&rig, user(Some(ambilight(1.0)), Some(&[Usb, Hue])));
+    wait_until("the start reached Hue", || rig.hue.starts_entered() == 1);
+
+    assert_eq!(retune(&rig, ambilight_tuning(0.25)), "RETUNE_DEFERRED");
+    gate.add_permits(1);
+    let started = block_on(start).unwrap().unwrap();
+
+    assert_eq!(started.status.code, "OUTPUTS_APPLIED");
+    assert_eq!(rig.state().tuning.accepting_brightness(), Some(0.25));
+    assert!(
+        near(started.snapshot.brightness, 0.25),
+        "{}",
+        started.snapshot.brightness
+    );
+    assert_eq!(rig.state().tuning.brightness(), Some(0.25));
 }
 
 /// A drag between the apply and the commit is replayed by the commit.

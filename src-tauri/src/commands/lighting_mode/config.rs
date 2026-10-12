@@ -400,7 +400,7 @@ impl LightingModeConfig {
         }
     }
 
-    /// Its own kind's payload at `brightness`.
+    /// Every payload it carries at `brightness`.
     pub(crate) fn stamp_brightness(&mut self, brightness: f32) {
         if let Some(solid) = self.solid.as_mut() {
             solid.brightness = brightness;

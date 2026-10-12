@@ -106,6 +106,15 @@ pub(crate) enum Accepting {
 }
 
 impl Accepting {
+    /// The kind whose retune `apply` takes.
+    fn kind(&self) -> LightingModeKind {
+        match self {
+            Accepting::Ambilight(_) => LightingModeKind::Ambilight,
+            Accepting::Effect { .. } => LightingModeKind::Effect,
+            Accepting::Solid { .. } => LightingModeKind::Solid,
+        }
+    }
+
     /// Pushes whichever payload matches; `false` when this is the wrong kind.
     fn apply(
         &self,
@@ -364,8 +373,6 @@ impl TuningCell {
         let Some(kind) = tuning.kind() else {
             return RetuneOutcome::NotRunning;
         };
-        // Moves the shared brightness only once the retune reached the mode, so
-        // one of a kind that is not running leaves it as it was.
         let brightness = tuning.brightness();
         let turn = Arc::clone(&self.turn).lock_owned().await;
         let (accepting, awaiting) = {
@@ -374,6 +381,17 @@ impl TuningCell {
                 LightingModeKind::Solid => inner.stored.solid = tuning.solid.clone(),
                 LightingModeKind::Effect => inner.stored.effect = tuning.effect.clone(),
                 _ => inner.stored.ambilight = tuning.ambilight.clone(),
+            }
+            // The shared brightness moves for a retune that reaches the mode or
+            // the one coming up, never for another kind — and with the
+            // generation, so a transaction reading the store between the two
+            // cannot record this generation at the old brightness.
+            let reaches = match inner.accepting.as_deref() {
+                Some(accepting) => accepting.kind() == kind,
+                None => inner.awaiting == Some(kind),
+            };
+            if reaches {
+                inner.stored.brightness = brightness.or(inner.stored.brightness);
             }
             inner.stored.generation += 1;
             (inner.accepting.clone(), inner.awaiting)
@@ -392,14 +410,11 @@ impl TuningCell {
             if applied {
                 let mut inner = self.lock();
                 inner.applied = Some(inner.stored.generation);
-                inner.stored.brightness = brightness.or(inner.stored.brightness);
                 return RetuneOutcome::Applied;
             }
             return RetuneOutcome::NotRunning;
         }
         if awaiting == Some(kind) {
-            let mut inner = self.lock();
-            inner.stored.brightness = brightness.or(inner.stored.brightness);
             RetuneOutcome::Deferred
         } else {
             RetuneOutcome::NotRunning

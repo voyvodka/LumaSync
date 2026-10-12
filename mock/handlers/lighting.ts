@@ -185,6 +185,7 @@ export const lightingRuntimeHandlers = {
     shared = chosenBrightness(request.mode) ?? sharedBrightness();
     const solid = atShared(request.mode?.solid ?? current.solid);
     const ambilight = atShared(request.mode?.ambilight ?? current.ambilight);
+    const effect = atShared(request.mode?.effect ?? current.effect);
 
     if (kind === "off") {
       if (current.kind !== "off") stopLightingMode();
@@ -201,7 +202,7 @@ export const lightingRuntimeHandlers = {
       if (run.includes("hue") && !getWorld().hue.streaming) {
         outcome.hueStartCode = hueHandlers[HUE_COMMANDS.START_STREAM]().status.code;
       }
-      const payload = (targets: HueRuntimeTarget[]): LightingModeConfig => ({ kind, solid, ambilight, targets });
+      const payload = (targets: HueRuntimeTarget[]): LightingModeConfig => ({ kind, solid, ambilight, effect, targets });
       let applied = applyLightingMode(payload(run));
       if (applied.status.code === "HUE_NOT_READY" && run.includes("usb") && run.length > 1) {
         if (outcome.hueStartCode === HUE_RUNTIME_STATUS.TRANSIENT_RETRY_SCHEDULED) stopHueIfStreaming();
@@ -226,12 +227,12 @@ export const lightingRuntimeHandlers = {
         );
       }
       mutate((w) => {
-        w.lighting.mode = { ...w.lighting.mode, solid, ambilight };
+        w.lighting.mode = { ...w.lighting.mode, solid, ambilight, effect };
       });
     }
 
     if (choice && request.mode) {
-      writeShellStateKey("lightingMode", { kind, solid, ambilight, targets: savedTargets() });
+      writeShellStateKey("lightingMode", { kind, solid, ambilight, effect, targets: savedTargets() });
       // As Rust's persist_mode: a lit choice is also the one the power button brings back.
       if (kind !== "off") patchShellStateAsRust({ lastLitKind: kind });
     }
