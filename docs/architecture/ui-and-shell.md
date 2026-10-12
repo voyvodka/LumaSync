@@ -227,7 +227,10 @@ compact dimensions in `tauri.conf.json` (320×480, `visible: false`) and `tauri-
 is registered with `skip_initial_state("main")`. `windowLifecycle.ts` then restores position and the
 persisted mode's size from `shell-state.json` before its one `show()` — see the boot-restore gotcha
 below. Letting the plugin restore size or visibility would show and size the window before the
-bootstrap has, and two restorers disagreeing is a visible jump on every cold start.
+bootstrap has, and two restorers disagreeing is a visible jump on every cold start. It tracks `main`
+alone (`with_filter`): unfiltered it also saved and restored every other window by label, and since
+the preview's labels restart their counters each launch, the popup came back at the size an older
+build gave it and the overlays at another session's display size and visibility.
 
 **Background polls are visibility-aware, and that is a repo-wide convention, not a per-hook
 choice.** `useRuntimeTelemetry` uses a recursive `setTimeout` rather than `setInterval`, pauses

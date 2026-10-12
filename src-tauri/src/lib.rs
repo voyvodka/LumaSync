@@ -524,8 +524,12 @@ pub fn run() {
     // then restore the saved UI mode" rule and causes a visible resize flash.
     // `skip_initial_state("main")` keeps the save-on-close behavior but
     // disables the automatic restore so the JS bootstrap owns everything.
+    // Every other window is built at its own size and place: tracked, the
+    // preview's popup came back at a size an older build gave it, and the
+    // overlays at a display's size and visibility from another session.
     builder = builder.plugin(
         tauri_plugin_window_state::Builder::default()
+            .with_filter(|label| label == "main")
             .skip_initial_state("main")
             .build(),
     );
