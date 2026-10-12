@@ -16,7 +16,7 @@ import {
   type StartLedTestPatternPayload,
   type TwinSubscribeResult,
 } from "@/shared/contracts/preview";
-import { parseCommandError } from "@/shared/contracts/status";
+import { parseCommandError, type CommandStatusOf } from "@/shared/contracts/status";
 import { invokeCommand, type CommandInvoker } from "@/shared/ipcApi";
 
 // ---------------------------------------------------------------------------
@@ -35,13 +35,14 @@ function failedTestResult(error: unknown): LedTestPatternResult {
   };
 }
 
+function failureStatus<C extends string>(code: C, error: unknown): CommandStatusOf<C> {
+  const parsed = parseCommandError(error);
+  return { code, message: parsed.message, details: parsed.code ?? null };
+}
+
 /** A rejected session command says nothing about the session, so it reads closed with the failure's code. */
 function failedSessionResult(code: PreviewSessionStatusCode, error: unknown): PreviewSessionResult {
-  const parsed = parseCommandError(error);
-  return {
-    session: { state: "closed" },
-    status: { code, message: parsed.message, details: parsed.code ?? null },
-  };
+  return { session: { state: "closed" }, status: failureStatus(code, error) };
 }
 
 // ---------------------------------------------------------------------------
@@ -185,10 +186,6 @@ export async function subscribeTwinFrames(
     return await invoker(PREVIEW_COMMANDS.SUBSCRIBE_TWIN_FRAMES, { onFrame: channel });
   } catch (error) {
     console.error("[LumaSync] subscribe_twin_frames failed:", error);
-    const parsed = parseCommandError(error);
-    return {
-      layout: null,
-      status: { code: PREVIEW_STATUS.NOT_OPEN, message: parsed.message, details: parsed.code ?? null },
-    };
+    return { layout: null, status: failureStatus(PREVIEW_STATUS.NOT_OPEN, error) };
   }
 }
