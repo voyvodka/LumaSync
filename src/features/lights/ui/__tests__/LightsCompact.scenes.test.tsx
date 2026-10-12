@@ -69,4 +69,14 @@ describe("LightsCompact scenes", () => {
       targets: ["hue"],
     });
   });
+
+  // A mode press is the kind alone: Rust keeps each mode's last settings. The scene above is a
+  // whole look, so it carries its payload.
+  it("sends a mode press as the kind alone, Solid with the saved targets", async () => {
+    const changeMode = await renderCompact({ kind: "ambilight", ambilight: { brightness: 0.3 } });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("mode-button-solid"));
+    });
+    expect(changeMode).toHaveBeenCalledWith({ kind: "solid", targets: ["hue"] });
+  });
 });

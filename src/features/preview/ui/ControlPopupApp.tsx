@@ -137,11 +137,10 @@ export function ControlPopupApp() {
       void (async () => {
         try {
           retunes.reset();
-          // The kind alone for Off and Ambilight: Rust keeps the last Ambilight
-          // settings. Solid carries its saved colour; the colour itself is
-          // chosen on Lights.
+          // The kind alone: Rust keeps each mode's last settings. The colour
+          // itself is chosen on Lights.
           const result = await applyOutputs({
-            mode: modeKind(next).config({ solid: mode?.solid ?? DEFAULT_SOLID_COLOR }),
+            mode: modeKind(next).config({}),
             origin: LIGHTING_ORIGIN.POPUP,
           });
           adopt(result.snapshot);
@@ -164,7 +163,7 @@ export function ControlPopupApp() {
         }
       })();
     },
-    [adopt, retunes, t, mode?.solid],
+    [adopt, retunes, t],
   );
 
   // ── Brightness and the effect list: retunes of the running mode ──────────

@@ -230,7 +230,8 @@ describe("LightsPage", () => {
     expect(screen.getByTestId("effect-controls").closest("[data-wide]")).not.toBeNull();
   });
 
-  it("calls onModeChange with ambilight payload when Ambilight is selected", async () => {
+  // Rust keeps each mode's last settings; a payload from the page would be taken as a new choice.
+  it("sends the kind alone when Ambilight is selected", async () => {
     const user = userEvent.setup();
     const onModeChange = vi.fn();
 
@@ -250,10 +251,7 @@ describe("LightsPage", () => {
 
     await user.click(screen.getByRole("radio", { name: /Ambilight/ }));
 
-    expect(onModeChange).toHaveBeenCalledWith({
-      kind: "ambilight",
-      ambilight: { brightness: 1, blackBorderDetection: false, smoothingAlpha: 0.35, saturation: 1 },
-    } satisfies LightingModeConfig);
+    expect(onModeChange).toHaveBeenCalledWith({ kind: "ambilight" } satisfies LightingModeConfig);
   });
 
   it("updates solid payload when color is changed in solid mode", async () => {

@@ -13,7 +13,6 @@ import { ModeStrip } from "@/features/mode/ui/ModeStrip";
 import { usePreference } from "@/features/persistence/preferences";
 import { Scenes } from "@/features/scenes/ui/Scenes";
 import {
-  DEFAULT_SOLID_COLOR,
   LIGHTING_MODE_KIND,
   normalizeLightingModeConfig,
   type LightingModeConfig,
@@ -67,13 +66,14 @@ export const LightsCompact = memo(function LightsCompact() {
   const nonOffLocked = availability !== "ready" || calibrationLocked;
   const mode = normalizeLightingModeConfig(lightingMode);
 
-  // Solid carries the saved targets; the other kinds apply to whatever is live.
+  // The kind alone: Rust keeps each mode's last settings, and a payload here would be taken as a
+  // new choice of them. Solid carries the saved targets; the other kinds apply to whatever is live.
   const pickMode = useCallback(
     (kind: LightingModeKind) => {
-      const config = modeKind(kind).config({ solid: mode.solid ?? DEFAULT_SOLID_COLOR, ambilight: mode.ambilight ?? undefined });
+      const config = modeKind(kind).config({});
       changeMode(kind === LIGHTING_MODE_KIND.SOLID ? { ...config, targets: outputTargets } : config);
     },
-    [changeMode, mode.ambilight, mode.solid, outputTargets],
+    [changeMode, outputTargets],
   );
   const change = useCallback(
     (next: LightingModeConfig) =>

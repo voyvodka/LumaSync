@@ -250,29 +250,14 @@ describe("ControlPopupApp mode strip", () => {
     expect(request).toEqual({ mode: { kind: LIGHTING_MODE_KIND.AMBILIGHT }, origin: "popup" });
   });
 
-  it("sends Solid with its saved colour", async () => {
-    syncState.mode = { kind: LIGHTING_MODE_KIND.OFF, solid: { r: 1, g: 2, b: 3, brightness: 0.4 } };
+  // Rust keeps each mode's last settings, a White solid's temperature with them. A payload sent
+  // from here was the popup's copy, which fell back to white at full brightness whenever another
+  // mode ran, and was taken as a new choice of it.
+  it("sends Solid as the kind alone", async () => {
+    syncState.mode = { kind: LIGHTING_MODE_KIND.AMBILIGHT, ambilight: { brightness: 0.4 } };
     const request = await clickMode(/common:mode\.options\.solid/);
 
-    expect(request.origin).toBe("popup");
-    expect(request.mode).toEqual({
-      kind: LIGHTING_MODE_KIND.SOLID,
-      solid: { r: 1, g: 2, b: 3, brightness: 0.4 },
-    });
-  });
-
-  // A White solid switched back on from the popup stays White, not a colour of the same RGB.
-  it("sends a White solid with its temperature", async () => {
-    syncState.mode = {
-      kind: LIGHTING_MODE_KIND.OFF,
-      solid: { r: 255, g: 206, b: 166, brightness: 0.4, kelvin: 4000 },
-    };
-    const request = await clickMode(/common:mode\.options\.solid/);
-
-    expect(request.mode).toEqual({
-      kind: LIGHTING_MODE_KIND.SOLID,
-      solid: { r: 255, g: 206, b: 166, brightness: 0.4, kelvin: 4000 },
-    });
+    expect(request).toEqual({ mode: { kind: LIGHTING_MODE_KIND.SOLID }, origin: "popup" });
   });
 
   it("takes the snapshot the transaction answered with", async () => {

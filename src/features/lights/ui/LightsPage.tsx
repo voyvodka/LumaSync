@@ -173,7 +173,8 @@ export function LightsPage({
                 }),
               },
             }}
-            onSelect={(next) => onModeChange(MODE_KINDS[next].config({ solid: { ...solid }, ambilight, effect }))}
+            // The kind alone: Rust keeps each mode's last settings.
+            onSelect={(next) => onModeChange(MODE_KINDS[next].config({}))}
           />
           <Scenes mode={normalized} disabled={nonOffLocked} busy={isModeTransitioning} onApply={onModeChange} />
           <div data-wide={wideStage || undefined}>
