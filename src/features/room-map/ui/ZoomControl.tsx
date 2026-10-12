@@ -1,9 +1,7 @@
 import { useTranslation } from "react-i18next";
+import { clamp } from "@/shared/lib/math";
 import { IconButton } from "@/shared/ui/IconButton/IconButton";
-
-export const ZOOM_MIN = 0.3;
-export const ZOOM_MAX = 3;
-export const ZOOM_STEP = 0.1;
+import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "../state/useRoomMapViewport";
 
 interface ZoomControlProps {
   zoom: number;
@@ -31,7 +29,7 @@ export function ZoomControl({
   // Anchor on the canvas centre, the way the wheel anchors on the pointer —
   // without this the room slides off as you step in.
   const step = (delta: number) => {
-    const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoom + delta));
+    const next = clamp(zoom + delta, ZOOM_MIN, ZOOM_MAX);
     if (next === zoom) return;
     const cx = canvasSize.w / 2;
     const cy = canvasSize.h / 2;

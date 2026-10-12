@@ -1,7 +1,9 @@
 import type React from "react";
 import { memo, useRef, useState, useEffect, useCallback } from "react";
 import type { RoomMapConfig, ImageLayer } from "@/shared/contracts/roomMap";
+import { clamp } from "@/shared/lib/math";
 import { imageLayerObjectId } from "../model/objectId";
+import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "../state/useRoomMapViewport";
 import { readRoomMapImage } from "../roomMapFilesApi";
 
 type ResizeCorner = "nw" | "ne" | "sw" | "se";
@@ -304,8 +306,8 @@ export function RoomMapCanvas({
   const handleCanvasWheel = useCallback(
     (e: React.WheelEvent<HTMLDivElement>) => {
       if (!onZoomChange || !onPanChange) return;
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      const next = Math.max(0.3, Math.min(3, zoom + delta));
+      const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+      const next = clamp(zoom + delta, ZOOM_MIN, ZOOM_MAX);
       // Mouse position relative to canvas element
       const rect = canvasRef.current?.getBoundingClientRect();
       if (!rect) { onZoomChange(next); return; }

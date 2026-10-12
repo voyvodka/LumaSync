@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ZOOM_MAX, ZOOM_MIN, ZoomControl } from "../ZoomControl";
+import { ZOOM_MAX, ZOOM_MIN } from "../../state/useRoomMapViewport";
+import { ZoomControl } from "../ZoomControl";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),

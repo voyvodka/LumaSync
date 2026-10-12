@@ -2,9 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefCallback } from "react";
 import type { RoomDimensions } from "@/shared/contracts/roomMap";
 import { isEditableTarget } from "@/shared/lib/editableTarget";
+import { clamp } from "@/shared/lib/math";
 
 /** Fixed physical scale — objects always render at this size regardless of canvas. */
 export const ROOM_MAP_PX_PER_METER = 80;
+
+/** One zoom range for the wheel, the zoom buttons and fit-to-view. */
+export const ZOOM_MIN = 0.3;
+export const ZOOM_MAX = 3;
+export const ZOOM_STEP = 0.1;
 
 export interface UseRoomMapViewportReturn {
   canvasContainerRef: React.RefObject<HTMLDivElement | null>;
@@ -163,7 +169,7 @@ export function computeFit(
     (canvasW - pad * 2) / (widthMeters * ROOM_MAP_PX_PER_METER),
     (canvasH - pad * 2) / (depthMeters * ROOM_MAP_PX_PER_METER),
   );
-  const zoom = Math.max(0.3, Math.min(3, fitZoom));
+  const zoom = clamp(fitZoom, ZOOM_MIN, ZOOM_MAX);
   const roomW = widthMeters * ROOM_MAP_PX_PER_METER * zoom;
   const roomH = depthMeters * ROOM_MAP_PX_PER_METER * zoom;
   return { zoom, panOffset: { x: (canvasW - roomW) / 2, y: (canvasH - roomH) / 2 } };
