@@ -23,15 +23,15 @@ use crate::commands::ambilight_capture;
 
 /// Whether a preview window can be kept out of the capture on this machine.
 pub fn supported() -> bool {
-    #[cfg(target_os = "macos")]
-    return true;
     #[cfg(target_os = "windows")]
     {
         static SUPPORTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        return *SUPPORTED.get_or_init(|| windows_build() >= 19041);
+        *SUPPORTED.get_or_init(|| windows_build() >= 19041)
     }
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    return false;
+    #[cfg(not(target_os = "windows"))]
+    {
+        cfg!(target_os = "macos")
+    }
 }
 
 #[cfg(target_os = "windows")]

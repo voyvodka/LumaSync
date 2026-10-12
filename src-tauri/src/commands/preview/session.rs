@@ -102,6 +102,7 @@ struct OpenSession {
     /// another one: the switch deactivates an active app, and macOS hands focus
     /// to the next app in line, which pulls the user to that app's Space when
     /// it is full screen.
+    #[cfg_attr(not(any(target_os = "macos", test)), allow(dead_code))]
     floating: bool,
     /// The scene window, from its build until it is destroyed.
     scene_label: Option<String>,
