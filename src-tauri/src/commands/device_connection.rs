@@ -932,6 +932,8 @@ fn handshake_error_ui_message(err: &HandshakeError) -> (String, String) {
     }
 }
 
+// Not `CommandStatus::new`: `verify:shell-contracts` harvests the serial wire
+// union from `command_status("CODE"` literals here and in `local_outputs.rs`.
 pub fn command_status(code: &str, message: &str, details: Option<String>) -> CommandStatus {
     CommandStatus {
         code: code.to_string(),
