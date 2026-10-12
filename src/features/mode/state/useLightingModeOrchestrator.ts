@@ -74,7 +74,7 @@ export interface LightingModeOrchestratorInput {
 }
 
 export interface LightingModeOrchestrator {
-  /** What runs, with the last colour and Ambilight settings kept through Off. */
+  /** What runs, with each mode's last settings kept through Off. */
   lightingMode: LightingModeConfig;
   selectedOutputTargets: HueRuntimeTarget[];
   activeOutputTargets: HueRuntimeTarget[];
@@ -160,8 +160,8 @@ export function useLightingModeOrchestrator({
   const requestedKindRef = useRef<LightingModeConfig["kind"] | null>(null);
   const choiceSeqRef = useRef(0);
 
-  // The snapshot says what runs; Off carries no payload. The last colour and
-  // Ambilight settings seen are kept so the controls show them while Off.
+  // The snapshot says what runs; Off carries no payload. Each mode's last
+  // settings seen are kept so the controls show them while Off.
   const rememberedRef = useRef<{
     solid?: SolidColorPayload;
     ambilight?: AmbilightPayload;

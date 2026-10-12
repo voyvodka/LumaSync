@@ -15,7 +15,7 @@ import type { ModeGuardReason } from "./modeGuard";
  * The Hue ones still travel as props until the Hue health store replaces them.
  */
 export interface LightingControlState {
-  /** What runs, with the last colour and Ambilight settings kept through Off. */
+  /** What runs, with each mode's last settings kept through Off. */
   lightingMode: LightingModeConfig;
   /** The outputs the user chose, running or not. */
   outputTargets: HueRuntimeTarget[];
