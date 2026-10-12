@@ -1021,12 +1021,16 @@ pub(crate) async fn refresh_hue_stream_status(
     if let Some((_, _, _, ref shutdown_signal)) = active_stream_params {
         if is_shutdown_signaled(shutdown_signal) {
             let mut owner = acquire_hue_runtime(&runtime_state.runtime);
-            if matches!(
-                owner.state,
-                HueRuntimeState::Starting
-                    | HueRuntimeState::Running
-                    | HueRuntimeState::Reconnecting
-            ) {
+            // A claimed reconnect has counted this death already, and its
+            // first step still needs the dead stream's deactivate parameters.
+            if !owner.reconnect_in_progress
+                && matches!(
+                    owner.state,
+                    HueRuntimeState::Starting
+                        | HueRuntimeState::Running
+                        | HueRuntimeState::Reconnecting
+                )
+            {
                 // Clear dead stream/sender contexts so the next start can spawn fresh.
                 owner.set_active_stream(None);
                 owner.persistent_sender = None;

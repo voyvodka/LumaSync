@@ -23,7 +23,7 @@ use super::state_store::{
     HueRuntimeGateEvidence, HueRuntimeOwner, HueRuntimeState, HueRuntimeTriggerSource,
 };
 
-fn next_backoff_ms(policy: &HueRetryPolicy, attempt_index: u8) -> u64 {
+pub(crate) fn next_backoff_ms(policy: &HueRetryPolicy, attempt_index: u8) -> u64 {
     let exponent = u32::from(attempt_index.saturating_sub(1));
     let factor = 2_u64.saturating_pow(exponent);
     let raw = policy.base_backoff_ms.saturating_mul(factor);

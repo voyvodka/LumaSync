@@ -375,7 +375,10 @@ What it reads, and when:
   `status_refresh_with_evidence`, which moves the runtime to `Reconnecting` on a transport fault,
   to `Failed` on a refused key, and counts a transient fault against the reconnect budget. Changing
   the cadence changes how fast a flaky bridge exhausts that budget; 5 s is the App chip cadence it
-  replaced.
+  replaced. A sender's death spends one slot, whoever sees it first: the 1 s dead-sender probe
+  leaves a death the reconnect monitor has claimed to the monitor, and the monitor does not count
+  one the probe already counted. Both used to count it, so the budget of three allowed one restart
+  instead of two.
 - **Hidden means nothing new.** The old loops paused while hidden too, so the idle tray costs what
   it cost before — one probe at launch and nothing after, bar the bounded window above while a boot
   resume waits — and now also with the Devices view open behind it.

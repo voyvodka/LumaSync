@@ -38,7 +38,7 @@ use super::super::hue_onboarding::{
 };
 use super::area_cache::HueReadFreshness;
 use super::frame::HueAreaChannel;
-use super::retry::{register_area_taken_over, register_transient_fault};
+use super::retry::{next_backoff_ms, register_area_taken_over, register_transient_fault};
 use super::sender::{
     apply_channel_placements, build_hue_sender, deactivate_with_token, fetch_area_channels,
     fetch_light_metadata_for_channels, wait_for_shutdown, HueLightMetadata, ShutdownSignal,
@@ -280,6 +280,13 @@ fn try_claim_reconnect(owner: &mut HueRuntimeOwner) -> ReconnectClaim {
     ReconnectClaim::Proceed
 }
 
+/// Did the dead-sender probe count this death before the monitor claimed it?
+/// The probe takes the dead stream down as it counts, and nothing else leaves
+/// a `Reconnecting` runtime with no stream while no restart is in flight.
+fn the_probe_counted_this_death(owner: &HueRuntimeOwner) -> bool {
+    owner.state == HueRuntimeState::Reconnecting && owner.active_stream.is_none()
+}
+
 /// Should the monitor stop waiting on a shutdown signal that may never fire?
 /// Mirrors [`try_claim_reconnect`]'s abort set, so bailing here only ever
 /// short-circuits a wait whose claim would have been refused anyway.
@@ -378,36 +385,42 @@ pub(crate) fn spawn_reconnect_monitor_with(
         // runtime stuck in `Reconnecting` with `active_stream = None` forever.
         // The double-trigger guard is now the `reconnect_in_progress` flag, set
         // here and cleared by `ReconnectInProgressGuard` on every exit path.
-        let _in_progress_guard = {
+        let (_in_progress_guard, mut death_counted) = {
             let mut owner = acquire_hue_runtime(&runtime);
             match try_claim_reconnect(&mut owner) {
-                ReconnectClaim::Proceed => ReconnectInProgressGuard {
-                    runtime: Arc::clone(&runtime),
-                },
+                ReconnectClaim::Proceed => (
+                    ReconnectInProgressGuard {
+                        runtime: Arc::clone(&runtime),
+                    },
+                    the_probe_counted_this_death(&owner),
+                ),
                 ReconnectClaim::Abort => return,
             }
         };
 
         // Bounded by `register_transient_fault`, which owns the budget and
-        // exits the ladder through `Failed`.
+        // exits the ladder through `Failed`. One death spends one slot.
         let mut fault_detail = "DTLS sender thread exited unexpectedly".to_string();
         loop {
             let backoff_ms = {
                 let mut owner = acquire_hue_runtime(&runtime);
-                let result = register_transient_fault(
-                    &mut owner,
-                    &fault_detail,
-                    HueRuntimeTriggerSource::System,
-                );
                 owner.session_reconnect_total += 1;
+                if std::mem::take(&mut death_counted) {
+                    next_backoff_ms(&owner.retry_policy, owner.reconnect_attempt)
+                } else {
+                    let result = register_transient_fault(
+                        &mut owner,
+                        &fault_detail,
+                        HueRuntimeTriggerSource::System,
+                    );
 
-                if owner.state == HueRuntimeState::Failed {
-                    // Retry budget exhausted.
-                    info!("Reconnect monitor: retry budget exhausted, entering Failed state.");
-                    return;
+                    if owner.state == HueRuntimeState::Failed {
+                        info!("Reconnect monitor: retry budget exhausted, entering Failed state.");
+                        return;
+                    }
+
+                    result.status.next_attempt_ms.unwrap_or(400)
                 }
-
-                result.status.next_attempt_ms.unwrap_or(400)
             };
 
             // Wait for backoff.
@@ -827,6 +840,135 @@ mod tests {
             owner.reconnect_in_progress,
             "claim must mark the restart in flight"
         );
+    }
+
+    /// One sender death spends one slot of the budget. The monitor wakes on
+    /// the death and counts it; the dead-sender probe landing in its backoff
+    /// used to count it again — and take the deactivate parameters the
+    /// restart's first step needs.
+    #[tokio::test]
+    async fn the_probe_leaves_a_death_the_monitor_has_claimed_to_the_monitor() {
+        use super::super::commands::refresh_hue_stream_status;
+        use super::super::sender::signal_shutdown_complete;
+        use super::super::state_store::test_helpers::dummy_active_stream_context;
+
+        let store = HueRuntimeStateStore::default();
+        let runtime = store.runtime_arc();
+        {
+            let mut owner = acquire_hue_runtime(&runtime);
+            let _ = start_with_evidence(
+                &mut owner,
+                &strict_gate_ready(),
+                HueRuntimeTriggerSource::ModeControl,
+            );
+            let context = dummy_active_stream_context();
+            signal_shutdown_complete(&context.shutdown_signal);
+            owner.set_active_stream(Some(context));
+            assert_eq!(try_claim_reconnect(&mut owner), ReconnectClaim::Proceed);
+            let _ = register_transient_fault(
+                &mut owner,
+                "DTLS sender thread exited unexpectedly",
+                HueRuntimeTriggerSource::System,
+            );
+        }
+
+        let _ = refresh_hue_stream_status(&store, false).await;
+
+        let owner = acquire_hue_runtime(&runtime);
+        assert_eq!(owner.reconnect_attempt, 1, "one death was counted twice");
+        assert!(owner.active_stream.is_some());
+    }
+
+    /// The other order: the probe sees the death before the monitor claims
+    /// it. The monitor must not count it again, so a budget of three still
+    /// allows the second restart after a first one that failed.
+    #[tokio::test]
+    async fn a_death_the_probe_counted_first_is_not_counted_again_by_the_monitor() {
+        use super::super::commands::refresh_hue_stream_status;
+        use super::super::sender::signal_shutdown_complete;
+        use super::super::state_store::test_helpers::dummy_active_stream_context;
+        use super::super::test_bridge::{light_json, FakeHue, Reply};
+
+        let hue = FakeHue::start(
+            &[("living-room", &["light-1"])],
+            &[("light-1", light_json(true, 100.0, None, (0.6, 0.3)))],
+            |_| Reply::ok(),
+        );
+        let mut request = test_request();
+        request.bridge_ip = hue.bridge.authority.clone();
+
+        let store = HueRuntimeStateStore::default();
+        let runtime = store.runtime_arc();
+        let dead = {
+            let mut owner = acquire_hue_runtime(&runtime);
+            let _ = start_with_evidence(
+                &mut owner,
+                &strict_gate_ready(),
+                HueRuntimeTriggerSource::ModeControl,
+            );
+            let context = dummy_active_stream_context();
+            let signal = Arc::clone(&context.shutdown_signal);
+            owner.set_active_stream(Some(context));
+            signal
+        };
+        signal_shutdown_complete(&dead);
+        let _ = refresh_hue_stream_status(&store, false).await;
+        assert_eq!(acquire_hue_runtime(&runtime).reconnect_attempt, 1);
+
+        let builds = Arc::new(AtomicU32::new(0));
+        let build: HueSenderBuild = {
+            let builds = Arc::clone(&builds);
+            Arc::new(move |_request, channels, _metadata, _counter| {
+                assert!(
+                    builds.fetch_add(1, Ordering::SeqCst) > 0,
+                    "the first restart attempt fails"
+                );
+                SpawnedHueSender {
+                    color_sender: HueColorSender::with_mailbox(channels.len()).0,
+                    shutdown_signal: new_shutdown_signal(),
+                    ..SpawnedHueSender::inert()
+                }
+            })
+        };
+        spawn_reconnect_monitor_with(
+            dead,
+            Arc::clone(&runtime),
+            request,
+            ReconnectDeps::assume_ready(build),
+        );
+
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let state = acquire_hue_runtime(&runtime).state.clone();
+            if matches!(state, HueRuntimeState::Running | HueRuntimeState::Failed) {
+                break;
+            }
+            assert!(Instant::now() < deadline, "the reconnect never settled");
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        let mut owner = acquire_hue_runtime(&runtime);
+        assert_eq!(
+            owner.state,
+            HueRuntimeState::Running,
+            "{}",
+            owner.last_status.code
+        );
+        assert_eq!(builds.load(Ordering::SeqCst), 2);
+
+        // The test runtime waits for the new monitor's blocking wait on drop.
+        let live = owner
+            .active_stream
+            .as_ref()
+            .map(|s| Arc::clone(&s.shutdown_signal));
+        let _ = super::super::retry::stop_with_timeout(
+            &mut owner,
+            false,
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        drop(owner);
+        if let Some(live) = live {
+            signal_shutdown_complete(&live);
+        }
     }
 
     /// Single-restart-per-fault guarantee: once a restart is in flight, a
