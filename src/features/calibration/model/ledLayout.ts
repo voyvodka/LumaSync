@@ -1,6 +1,6 @@
 import { LED_CALIBRATION_MAX_TOTAL_LEDS } from "@/shared/contracts/calibration";
 
-import type { LedSegmentCounts, LedSegmentKey } from "./contracts";
+import { sumSegmentCounts, type LedSegmentCounts, type LedSegmentKey } from "./contracts";
 
 export type LinkedPair = "tb" | "lr";
 /** What one number on the canvas edits: an edge, a linked pair, or the stand gap. */
@@ -41,10 +41,6 @@ export interface DisplayAspect {
 const PARTNER: Record<LedSegmentKey, LedSegmentKey> = { top: "bottom", bottom: "top", left: "right", right: "left" };
 
 const isOn = (counts: LedSegmentCounts, edge: LedSegmentKey) => counts[edge] > 0;
-
-export function sumCounts(counts: LedSegmentCounts): number {
-  return counts.top + counts.right + counts.bottom + counts.left;
-}
 
 function hasStand(draft: Pick<LayoutDraft, "counts" | "gap">): boolean {
   return draft.gap > 0 && isOn(draft.counts, "bottom");
@@ -157,7 +153,7 @@ export function toggleEdge(draft: LayoutDraft, edge: LedSegmentKey, lit: boolean
     counts[edge] = 0;
   } else {
     const partner = PARTNER[edge];
-    counts[edge] = memo[edge] || counts[partner] || lengthShare(edge, sumCounts(counts), display);
+    counts[edge] = memo[edge] || counts[partner] || lengthShare(edge, sumSegmentCounts(counts), display);
   }
   const gap = isOn(counts, "bottom") ? draft.gap : 0;
   return { ...draft, counts, gap, memo, links: deriveLinks(counts) };
@@ -217,7 +213,7 @@ export function distribute(draft: LayoutDraft, total: number, display: DisplayAs
   if (tb) e.top = e.bottom = Math.min(e.top, e.bottom);
   if (lr) e.left = e.right = Math.min(e.left, e.right);
 
-  let rest = T - sumCounts(e);
+  let rest = T - sumSegmentCounts(e);
   // Minimums can overshoot a small total: take back from the biggest group that can give.
   while (rest < 0) {
     const giver = groups

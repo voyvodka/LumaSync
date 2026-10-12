@@ -9,11 +9,11 @@ import {
   minTotal,
   setCount,
   setStand,
-  sumCounts,
   toggleEdge,
   toggleLink,
   type LayoutDraft,
 } from "../ledLayout";
+import { sumSegmentCounts } from "../contracts";
 
 const MON = { width: 3600, height: 2338 };
 const four = () => draftFromCounts({ top: 50, right: 32, bottom: 50, left: 32 }, 0);
@@ -88,7 +88,7 @@ describe("distribute", () => {
   it("always adds up to the total and keeps linked pairs equal", () => {
     for (let total = 4; total <= 400; total += 1) {
       const d = distribute(four(), total, MON);
-      expect(sumCounts(d.counts)).toBe(total);
+      expect(sumSegmentCounts(d.counts)).toBe(total);
       if (total % 2 === 0) {
         expect(d.counts.left).toBe(d.counts.right);
         expect(d.counts.top).toBe(d.counts.bottom);
@@ -106,7 +106,7 @@ describe("distribute", () => {
     for (const s of [stand(), toggleLink(stand(), "tb")]) {
       for (let total = minTotal(s); total <= 300; total += 1) {
         const d = distribute(s, total, MON);
-        expect(sumCounts(d.counts)).toBe(total);
+        expect(sumSegmentCounts(d.counts)).toBe(total);
         expect(d.gap).toBe(8);
         if (isLinked(s, "tb")) expect(d.counts.top).toBe(d.counts.bottom);
       }
@@ -125,6 +125,6 @@ describe("distribute", () => {
 
   it("an empty layout shares the total over all four edges", () => {
     const empty = draftFromCounts({ top: 0, right: 0, bottom: 0, left: 0 }, 0);
-    expect(sumCounts(distribute(empty, 150, MON).counts)).toBe(150);
+    expect(sumSegmentCounts(distribute(empty, 150, MON).counts)).toBe(150);
   });
 });
