@@ -171,7 +171,7 @@ between the read and the save. `update(fn)` reads with `get_shell_state`, applie
 derives from that state, and writes with `replace_shell_state` guarded by the revision it read; on a
 conflict it re-reads and re-runs `fn`, up to five attempts, then rejects. It runs in the window's
 write queue, and its listeners hear the partial once, as for a save. Main window only, like the
-migration write-back. The Devices → USB roster writes use it.
+migration write-back. The Devices → USB roster writes and the Devices channel map's placement writes use it.
 
 **`shell://state-changed` carries `{ set, remove, revision, writerId }` to every window.** The
 facade feeds it to `onShellStateSaved` listeners, so a save in the popup reaches the main

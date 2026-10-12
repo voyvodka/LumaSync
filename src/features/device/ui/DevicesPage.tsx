@@ -238,15 +238,15 @@ export function DevicesPage({
       : updated;
     setChannelPlacements(scoped);
     try {
-      const current = await shellStore.load();
-      const currentRoomMap = current.roomMap;
-      const updatedRoomMap: RoomMapConfig = {
-        ...(currentRoomMap ?? DEFAULT_ROOM_MAP),
-        hueChannels: mergeHueChannels(currentRoomMap?.hueChannels ?? [], scoped),
-      };
-      await shellStore.save({
-        roomMap: updatedRoomMap,
-        roomMapVersion: (current.roomMapVersion ?? 0) + 1,
+      // Through `update`, not load-then-save: a save replaces the whole
+      // `roomMap` key, so a USB strip or LED count written between the read
+      // and the save would be reverted.
+      await shellStore.update((current) => {
+        const roomMap: RoomMapConfig = {
+          ...(current.roomMap ?? DEFAULT_ROOM_MAP),
+          hueChannels: mergeHueChannels(current.roomMap?.hueChannels ?? [], scoped),
+        };
+        return { roomMap, roomMapVersion: (current.roomMapVersion ?? 0) + 1 };
       });
       hueChannelPersistError.clear();
     } catch (e) {
