@@ -5,9 +5,9 @@
 //!
 //! - `next_backoff_ms` (exponential backoff, capped) for the
 //!   `Reconnecting → Reconnecting → Failed` ladder.
-//! - `register_transient_fault` and `register_auth_invalid` — the only two
-//!   fns allowed to flip the runtime to `Reconnecting` / `Failed` and to
-//!   record the matching error code + telemetry timestamp.
+//! - `register_transient_fault`, `register_area_taken_over` and
+//!   `register_auth_invalid` — the fault transitions to `Reconnecting` /
+//!   `Failed`.
 //! - `start_with_evidence` — the strict-gate state transition consumed by
 //!   `start_hue_stream` and `restart_hue_stream`.
 //! - `status_refresh_with_evidence` — the periodic poll path used by
@@ -15,10 +15,6 @@
 //! - `stop_with_timeout` — the synchronous cleanup that drops both
 //!   `active_stream` and `persistent_sender` so the background mpsc
 //!   channel can close.
-//!
-//! Behaviour is preserved exactly — the retry-budget arithmetic, the
-//! `HUE_STOPPED_BY_USER` guard, and the auth-invalid → `Repair` action
-//! hint are byte-for-byte identical to the pre-split implementation.
 
 use std::time::Instant;
 
