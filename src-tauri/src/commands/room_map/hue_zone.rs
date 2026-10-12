@@ -225,7 +225,7 @@ fn validate_zone_shape(zone: &HueZone) -> Result<(), CommandStatus> {
 }
 
 // ---------------------------------------------------------------------------
-// Coordinate transform (consumed by frame builder + tests)
+// Coordinate transform
 // ---------------------------------------------------------------------------
 
 /// Resolve a zone-relative position into world space.
@@ -239,24 +239,6 @@ pub fn world_pos_from_zone_relative(
         zone.center_y + zone.scale_y * relative.y,
         zone.center_z + zone.scale_z * relative.z,
     )
-}
-
-/// Same as [`world_pos_from_zone_relative`] but clamps the resolved world
-/// position into the `[-1, 1]` cube. Returns the clamped tuple plus
-/// whether any axis was actually clamped.
-#[cfg(test)]
-pub fn world_pos_clamped(
-    zone: &HueZone,
-    relative: &ZoneRelativePosition,
-) -> ((f64, f64, f64), bool) {
-    let (x, y, z) = world_pos_from_zone_relative(zone, relative);
-    let cx = x.clamp(-1.0, 1.0);
-    let cy = y.clamp(-1.0, 1.0);
-    let cz = z.clamp(-1.0, 1.0);
-    let clamped = (cx - x).abs() > f64::EPSILON
-        || (cy - y).abs() > f64::EPSILON
-        || (cz - z).abs() > f64::EPSILON;
-    ((cx, cy, cz), clamped)
 }
 
 // ---------------------------------------------------------------------------
@@ -625,21 +607,6 @@ mod tests {
         assert!((x - 0.8).abs() < 1e-9, "expected x≈0.8, got {x}");
         assert!((y - 0.8).abs() < 1e-9, "expected y≈0.8, got {y}");
         assert!(z.abs() < 1e-9, "expected z≈0, got {z}");
-    }
-
-    #[test]
-    fn world_pos_clamped_clips_to_unit_cube_and_signals_clamp() {
-        let mut zone = make_hue_zone("z1", "area-1", vec![]);
-        zone.center_x = 0.9;
-        zone.scale_x = 0.5;
-        let rel = ZoneRelativePosition {
-            x: 1.0,
-            y: 0.0,
-            z: 0.0,
-        };
-        let ((x, _, _), clamped) = world_pos_clamped(&zone, &rel);
-        assert!(clamped, "expected clamp signal");
-        assert!((x - 1.0).abs() < 1e-9, "expected clamped x=1.0, got {x}");
     }
 
     #[test]
