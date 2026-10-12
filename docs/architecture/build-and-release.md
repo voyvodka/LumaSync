@@ -12,7 +12,7 @@ layer covers a build path another misses. Lowering it reintroduces the v1.5.2 la
 *Resolved* below. The macOS jobs also select the newest installed Xcode: `screencapturekit` pulls
 `apple-metal`, whose Swift bridge needs the macOS 26 SDK at compile time; its `#available` guard
 keeps the binary runnable on 12.3. (The step names still say "screencapturekit 8"; the lockfile is
-on 10.x.)
+on 11.x.)
 
 **A debug build keeps line tables for our code and no debug info for dependencies**
 (`[profile.dev]` in `src-tauri/Cargo.toml`). Full debug info was most of `target/debug`: on a clean
