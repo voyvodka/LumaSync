@@ -4,15 +4,14 @@ import { useTranslation } from "react-i18next";
 import { RangeRow } from "@/shared/ui/RangeRow/RangeRow";
 
 interface PopupBrightnessRowProps {
-  /** 0..1, as the running mode holds it. */
+  /** 0..1, as the preview session holds it. */
   brightness: number;
-  disabled?: boolean;
   onChange: (brightness: number) => void;
 }
 
-/** The running mode's brightness. A drag keeps its own value until it ends, so a slower answer
- * from the runtime does not pull the thumb back under the pointer. */
-export function PopupBrightnessRow({ brightness, disabled = false, onChange }: PopupBrightnessRowProps) {
+/** The playing scene's brightness. A drag keeps its own value until it ends, so a slower answer
+ * from the session does not pull the thumb back under the pointer. */
+export function PopupBrightnessRow({ brightness, onChange }: PopupBrightnessRowProps) {
   const { t } = useTranslation();
   const [percent, setPercent] = useState(() => Math.round(brightness * 100));
   const [dragging, setDragging] = useState(false);
@@ -30,7 +29,6 @@ export function PopupBrightnessRow({ brightness, disabled = false, onChange }: P
       max={100}
       step={1}
       value={percent}
-      disabled={disabled}
       onDragStart={() => setDragging(true)}
       onDragEnd={() => setDragging(false)}
       onChange={(next) => {
