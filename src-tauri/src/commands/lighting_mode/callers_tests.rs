@@ -696,6 +696,96 @@ fn stopping_all_lighting_over_a_test_drops_the_mode_its_stop_would_restore() {
     assert_eq!(test_prior(&rig), None);
 }
 
+/// `start_test` plus the prior the real start records from the running mode.
+fn start_test_over_running(rig: &Rig) {
+    let prior = rig.running();
+    start_test(rig);
+    rig.state().runtime.lock().unwrap().preview.test_prior = Some(prior);
+}
+
+fn stop_test(rig: &Rig) -> super::LedTestPatternResult {
+    block_on(super::led_test_pattern::stop_led_test_pattern(rig.handle()))
+        .expect("the stop answers")
+}
+
+fn retune(rig: &Rig, tuning: super::tuning::LightingTuning) -> String {
+    block_on(super::tuning::retune_lighting(rig.handle(), tuning))
+        .expect("retune resolves")
+        .status
+        .code
+}
+
+/// A retune reaches the outputs and the store, never the running mode's copy
+/// the test records as its prior: the stop restores what the store holds.
+#[test]
+fn a_test_stop_brings_back_the_colour_and_brightness_retuned_before_it() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5), &["usb"]);
+    let blue = SolidColorPayload {
+        r: 0,
+        g: 0,
+        b: 200,
+        brightness: 0.3,
+        kelvin: None,
+    };
+    let tuning = super::tuning::LightingTuning {
+        solid: Some(blue),
+        ..Default::default()
+    };
+    assert_eq!(retune(&rig, tuning), "RETUNE_APPLIED");
+    start_test_over_running(&rig);
+
+    stop_test(&rig);
+
+    let restored = rig.running().solid.expect("Solid is back");
+    assert_eq!((restored.r, restored.b), (0, 200));
+    assert_eq!(restored.brightness, 0.3);
+    let snapshot = rig.state().snapshot.read();
+    assert_eq!(snapshot.brightness, 0.3);
+    assert_eq!(snapshot.mode.solid.map(|solid| solid.b), Some(200));
+}
+
+/// The user's choice superseded the test and dropped its prior; the test's
+/// own stop still comes (LED Setup's dispose, a Flash's timer) and must not
+/// apply Off around the transaction.
+#[test]
+fn a_stop_with_no_test_running_leaves_the_running_mode_alone() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5), &["usb"]);
+    start_test_over_running(&rig);
+    running(&rig, solid(7), &["usb"]);
+
+    let answer = stop_test(&rig);
+
+    assert_eq!(answer.status.code, "LED_TEST_PATTERN_STOPPED");
+    assert_eq!(mode_applies(&rig), 0, "{:?}", rig.log.events());
+    assert_eq!(rig.running().solid.map(|solid| solid.r), Some(7));
+    assert_eq!(
+        rig.state().snapshot.read().mode.kind,
+        LightingModeKind::Solid
+    );
+}
+
+/// The restore is the end of a transaction for retunes: what runs takes them.
+#[test]
+fn retunes_reach_the_mode_a_test_stop_brought_back() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(), &["usb"]);
+    start_test_over_running(&rig);
+    stop_test(&rig);
+    assert_eq!(rig.running().kind, LightingModeKind::Ambilight);
+
+    let tuning = super::tuning::LightingTuning {
+        ambilight: Some(AmbilightPayload {
+            brightness: 0.4,
+            ..AmbilightPayload::default()
+        }),
+        ..Default::default()
+    };
+    assert_eq!(retune(&rig, tuning), "RETUNE_APPLIED");
+    assert_eq!(rig.state().tuning.accepting_brightness(), Some(0.4));
+}
+
 /// The twin draws the layout the strip runs, so a layout being tested before
 /// it is saved shows as the strip shows it — not the saved one beside it.
 #[test]

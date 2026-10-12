@@ -1732,12 +1732,19 @@ fn a_solid_retune_reaches_the_twin() {
 
     assert_eq!(retune(&rig, solid_tuning(200)), "RETUNE_APPLIED");
 
-    let frames = frames.lock().unwrap();
-    let last = frames.last().expect("the retune sent the twin a frame");
-    let first_led = [last[16], last[17], last[18]];
     let expected =
         twin_colour(crate::commands::led_output::EncoderPlan::default().correct([200, 0, 0]));
-    assert_eq!(first_led, expected);
+    let first_led = |what: &str| {
+        let frames = frames.lock().unwrap();
+        let last = frames.last().unwrap_or_else(|| panic!("{what}"));
+        [last[16], last[17], last[18]]
+    };
+    assert_eq!(first_led("the retune sent the twin a frame"), expected);
+
+    // Any later refresh (the twin reopened, shown again) draws it too.
+    frames.lock().unwrap().clear();
+    crate::commands::preview::feed::refresh(&rig.handle());
+    assert_eq!(first_led("the refresh sent the twin a frame"), expected);
 }
 
 #[test]

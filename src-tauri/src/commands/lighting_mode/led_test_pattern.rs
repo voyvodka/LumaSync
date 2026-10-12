@@ -11,12 +11,14 @@ use super::config::{
     AmbilightPayload, LightingModeCommandResult, LightingModeConfig, LightingModeKind,
 };
 use super::hydrate::{hydrate_mode_payload, maybe_hydrate_led_calibration};
+use super::outputs::restore_payload_for;
 use super::preview::build_twin_sink;
 use super::runtime::LightingRuntimeState;
 use super::snapshot;
 use super::transition::{
     apply_mode_change, command_status, note_applied_mode, run_mode_transition,
 };
+use super::tuning::{accepting_for_running, StoredTuning};
 use crate::commands::calibration::list_displays;
 use crate::commands::hue::state_store::{snapshot_hue_output_context, HueRuntimeStateStore};
 use crate::commands::led_calibration::LedCalibrationConfig;
@@ -345,27 +347,39 @@ pub(super) fn is_ambilight_start_ok(code: &str) -> bool {
     code == "AMBILIGHT_MODE_STARTED" || code == "AMBILIGHT_MODE_UPDATED"
 }
 
-/// The pre-test mode with its output stamps and calibration re-read from disk.
-/// The snapshot dates from test start and hydration is caller-wins, so stale
-/// values would revert a chip / profile / correction change made mid-test and
-/// the calibration editor's save-then-stop. The snapshot's layout survives only
-/// when disk has none, instead of dropping to the legacy 1-LED frame.
+/// The pre-test mode as a choice of it would run now: its payload and the
+/// shared brightness from the retune store, its output stamps and calibration
+/// re-read from disk. The snapshot dates from test start and hydration is
+/// caller-wins, so stale values would revert a retune, a chip / profile /
+/// correction change made mid-test and the calibration editor's
+/// save-then-stop. The snapshot's layout survives only when disk has none,
+/// instead of dropping to the legacy 1-LED frame.
 pub(super) fn restore_mode_after_test(
     prior: Option<LightingModeConfig>,
+    stored: &StoredTuning,
     load: &dyn Fn() -> Option<PersistedShellState>,
 ) -> LightingModeConfig {
-    let mut restore = prior.unwrap_or_default();
-    restore.chip_type = None;
-    restore.firmware_profile = None;
-    restore.color_correction = None;
-    restore.color_order = None;
-    if let Some(snapshot_calibration) = restore.led_calibration.take() {
+    let prior = prior.unwrap_or_default();
+    let mut restore = restore_payload_for(&prior, stored, load().as_ref());
+    if let Some(snapshot_calibration) = prior.led_calibration {
         maybe_hydrate_led_calibration(&mut restore, load);
         if restore.led_calibration.is_none() {
             restore.led_calibration = Some(snapshot_calibration);
         }
     }
     restore
+}
+
+/// What a transaction's commit does for retunes, after a restore that ran
+/// outside one: the restored mode takes them again, and one that arrived
+/// after the restore read the store at `generation` is applied now. Not
+/// `carried`, so the next choice re-applies rather than trust it.
+pub(super) fn accept_retunes_after_restore<R: Runtime>(app: &AppHandle<R>, generation: u64) {
+    let hue_output = app.state::<HueRuntimeStateStore>().output_live();
+    let accepting = accepting_for_running(app, hue_output);
+    app.state::<LightingRuntimeState>()
+        .tuning
+        .commit_blocking(accepting, generation, false);
 }
 
 /// Stop the running LED test pattern and restore the mode that was active
@@ -386,8 +400,27 @@ fn stop_led_test_pattern_blocking<R: Runtime>(
     let telemetry_state = app.state::<RuntimeTelemetryState>();
     let preview_session = app.state::<PreviewSessionState>();
     let driven = app.state::<LocalOutputRegistry>().driven_checked()?;
-    let prior = runtime_state.lock_owner()?.preview.test_prior.take();
-    let restore = restore_mode_after_test(prior, &|| shell_state::persisted(app));
+    let prior = {
+        let mut owner = runtime_state.lock_owner()?;
+        let prior = owner.preview.test_prior.take();
+        // A user's choice that superseded the test dropped its prior and runs
+        // now; the test's own stop still comes (LED Setup's dispose, a
+        // Flash's timer) and must not apply Off around the transaction.
+        if prior.is_none() && owner.preview.active_test_pattern.is_none() {
+            return Ok(LedTestPatternResult {
+                active: owner.active_mode.kind != LightingModeKind::Off,
+                preview_only: false,
+                status: command_status(
+                    LED_TEST_PATTERN_STOPPED,
+                    "No LED test pattern was running.",
+                    None,
+                ),
+            });
+        }
+        prior
+    };
+    let stored = runtime_state.tuning.stored();
+    let restore = restore_mode_after_test(prior, &stored, &|| shell_state::persisted(app));
     let mut result = apply_and_broadcast(
         app,
         restore,
@@ -418,6 +451,7 @@ fn stop_led_test_pattern_blocking<R: Runtime>(
             None,
         )?;
     }
+    accept_retunes_after_restore(app, stored.generation);
 
     Ok(LedTestPatternResult {
         active: result.active,

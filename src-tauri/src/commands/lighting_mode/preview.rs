@@ -122,15 +122,29 @@ pub fn hue_lamp_screen_points(
 
 impl LightingRuntimeState {
     pub fn twin_view(&self) -> TwinModeView {
-        let owner = self.lock_owner_recovered();
-        let targets = owner.active_mode.targets.as_deref().unwrap_or_default();
-        TwinModeView {
-            layout: owner.active_mode.led_calibration.clone(),
-            still: owner.worker.is_none().then(|| owner.active_mode.clone()),
-            drives_hue: owner.active_mode.kind != super::LightingModeKind::Off
-                && targets.iter().any(|t| t == "hue"),
-            room_geometry: owner.active_mode.room_geometry.clone(),
+        let mut view = {
+            let owner = self.lock_owner_recovered();
+            let targets = owner.active_mode.targets.as_deref().unwrap_or_default();
+            TwinModeView {
+                layout: owner.active_mode.led_calibration.clone(),
+                still: owner.worker.is_none().then(|| owner.active_mode.clone()),
+                drives_hue: owner.active_mode.kind != super::LightingModeKind::Off
+                    && targets.iter().any(|t| t == "hue"),
+                room_geometry: owner.active_mode.room_geometry.clone(),
+            }
+        };
+        // A Solid retune reaches the outputs and the store, never the running
+        // mode's copy, which would draw the colour from before it.
+        if let Some(still) = view
+            .still
+            .as_mut()
+            .filter(|still| still.kind == super::LightingModeKind::Solid)
+        {
+            if let Some(solid) = self.tuning.stored().solid {
+                still.solid = Some(solid);
+            }
         }
+        view
     }
 
     /// Whether a preview scene owns the lights.

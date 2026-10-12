@@ -12,7 +12,8 @@ use super::config::{LightingModeConfig, LightingModeKind};
 use super::hydrate::hydrate_mode_payload;
 use super::latency::{LatencyResult, LatencySink};
 use super::led_test_pattern::{
-    apply_and_broadcast, is_ambilight_start_ok, restore_mode_after_test,
+    accept_retunes_after_restore, apply_and_broadcast, is_ambilight_start_ok,
+    restore_mode_after_test,
 };
 use super::live::retune_ambilight_live;
 use super::outputs::{ambilight_payload_for, power_off_left_wled_blocking};
@@ -233,7 +234,8 @@ fn restore_interrupted<R: Runtime>(
         .driven_checked()
         .map_err(give_up)?;
     let scene_mode = runtime_state.lock_owner()?.active_mode.clone();
-    let restore = restore_mode_after_test(prior, &|| shell_state::persisted(app));
+    let stored = runtime_state.tuning.stored();
+    let restore = restore_mode_after_test(prior, &stored, &|| shell_state::persisted(app));
     let apply = |mode: LightingModeConfig| apply_with(mode, driven.as_ref());
     let restored = apply(restore).map_err(give_up)?;
     // A gated restore (the strip unplugged mid-scene) returns before the
@@ -249,6 +251,7 @@ fn restore_interrupted<R: Runtime>(
     } else {
         SceneRestore::Restored
     };
+    accept_retunes_after_restore(app, stored.generation);
     let lights_off = runtime_state
         .runtime
         .lock()

@@ -99,6 +99,53 @@ fn stopping_the_scene_brings_back_the_mode_it_interrupted() {
     assert_eq!(prior_kind(&rig), None);
 }
 
+fn retune_ambilight(rig: &Rig, brightness: f32) -> String {
+    let tuning = super::tuning::LightingTuning {
+        ambilight: Some(super::AmbilightPayload {
+            brightness,
+            ..super::AmbilightPayload::default()
+        }),
+        ..Default::default()
+    };
+    block_on(super::tuning::retune_lighting(rig.handle(), tuning))
+        .expect("retune resolves")
+        .status
+        .code
+}
+
+fn ambilight() -> LightingModeConfig {
+    LightingModeConfig {
+        kind: LightingModeKind::Ambilight,
+        ..LightingModeConfig::default()
+    }
+}
+
+/// The interrupted mode comes back with the settings as saved now: a
+/// brightness drag before the scene is not undone by its stop.
+#[test]
+fn a_scene_stop_keeps_the_brightness_retuned_before_it() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight());
+    assert_eq!(retune_ambilight(&rig, 0.4), "RETUNE_APPLIED");
+    start(&rig, SceneKind::Spiral);
+
+    stop_scene_lighting(&rig.handle()).unwrap();
+
+    assert_eq!(rig.running().ambilight.map(|a| a.brightness), Some(0.4));
+    assert_eq!(rig.state().snapshot.read().brightness, 0.4);
+}
+
+#[test]
+fn retunes_reach_the_mode_a_scene_stop_brought_back() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight());
+    start(&rig, SceneKind::Spiral);
+    stop_scene_lighting(&rig.handle()).unwrap();
+
+    assert_eq!(retune_ambilight(&rig, 0.4), "RETUNE_APPLIED");
+    assert_eq!(rig.state().tuning.accepting_brightness(), Some(0.4));
+}
+
 /// Switching scenes moves the running one in place: the mode to come back to
 /// is still the user's, not the first scene's Ambilight.
 #[test]

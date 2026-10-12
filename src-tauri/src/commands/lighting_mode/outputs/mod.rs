@@ -656,6 +656,26 @@ pub(crate) fn ambilight_payload_for(
     payload_for(LightingModeKind::Ambilight, targets, stored, persisted)
 }
 
+/// The mode a test pattern or a preview scene interrupted, as a choice of it
+/// would apply it now. Retunes reach the store, never the running mode's copy
+/// the prior was taken from; a payload the store never held is the prior's.
+pub(crate) fn restore_payload_for(
+    prior: &LightingModeConfig,
+    stored: &StoredTuning,
+    persisted: Option<&PersistedShellState>,
+) -> LightingModeConfig {
+    if prior.kind == LightingModeKind::Off {
+        return LightingModeConfig::default();
+    }
+    let mut stored = stored.clone();
+    stored.solid = stored.solid.or_else(|| prior.solid.clone());
+    stored.ambilight = stored.ambilight.or_else(|| prior.ambilight.clone());
+    stored.effect = stored.effect.or_else(|| prior.effect.clone());
+    let mut mode = payload_for(prior.kind, &running_targets(prior), &stored, persisted);
+    mode.targets = prior.targets.clone();
+    mode
+}
+
 /// The mode to apply: the newest payloads, stamped the way the frontend's
 /// hydration stamped them — display, smoothing preset and room geometry. The
 /// calibration and output stamps are filled by `apply_config_blocking`.

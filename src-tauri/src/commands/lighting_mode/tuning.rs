@@ -192,6 +192,14 @@ impl StoredTuning {
         }
         self
     }
+
+    fn apply_to(&self, accepting: &Accepting) {
+        accepting.apply(
+            self.solid.as_ref(),
+            self.ambilight.as_ref(),
+            self.effect.as_ref(),
+        );
+    }
 }
 
 #[derive(Default)]
@@ -342,31 +350,48 @@ impl TuningCell {
         carried: bool,
     ) {
         let turn = Arc::clone(&self.turn).lock_owned().await;
-        let replay = {
-            let mut inner = self.lock();
-            inner.awaiting = None;
-            inner.accepting = accepting.map(Arc::new);
-            if carried {
-                inner.applied = Some(inner.stored.generation);
-            }
-            let moved = inner.stored.generation != applied_generation;
-            inner
-                .accepting
-                .clone()
-                .filter(|_| moved)
-                .map(|accepting| (accepting, inner.stored.clone().stamped()))
-        };
-        if let Some((accepting, stored)) = replay {
+        if let Some((accepting, stored)) = self.install(accepting, applied_generation, carried) {
             let _ = tauri::async_runtime::spawn_blocking(move || {
                 let _turn = turn;
-                accepting.apply(
-                    stored.solid.as_ref(),
-                    stored.ambilight.as_ref(),
-                    stored.effect.as_ref(),
-                );
+                stored.apply_to(&accepting);
             })
             .await;
         }
+    }
+
+    /// `commit` for a test pattern's or a preview scene's restore, which runs
+    /// outside a transaction on the blocking mode-change queue.
+    pub(crate) fn commit_blocking(
+        &self,
+        accepting: Option<Accepting>,
+        applied_generation: u64,
+        carried: bool,
+    ) {
+        let _turn = self.turn.blocking_lock();
+        if let Some((accepting, stored)) = self.install(accepting, applied_generation, carried) {
+            stored.apply_to(&accepting);
+        }
+    }
+
+    /// Under the turn: what a commit installs, and the replay it owes.
+    fn install(
+        &self,
+        accepting: Option<Accepting>,
+        applied_generation: u64,
+        carried: bool,
+    ) -> Option<(Arc<Accepting>, StoredTuning)> {
+        let mut inner = self.lock();
+        inner.awaiting = None;
+        inner.accepting = accepting.map(Arc::new);
+        if carried {
+            inner.applied = Some(inner.stored.generation);
+        }
+        let moved = inner.stored.generation != applied_generation;
+        inner
+            .accepting
+            .clone()
+            .filter(|_| moved)
+            .map(|accepting| (accepting, inner.stored.clone().stamped()))
     }
 
     pub(crate) async fn retune(&self, tuning: LightingTuning) -> RetuneOutcome {
@@ -504,12 +529,7 @@ pub async fn retune_lighting<R: Runtime>(
                 }
             });
             schedule_persist(&app);
-            match tuning.solid.as_ref() {
-                Some(solid) => {
-                    crate::commands::preview::feed::refresh_after_solid_retune(&app, solid)
-                }
-                None => crate::commands::preview::feed::refresh(&app),
-            }
+            crate::commands::preview::feed::refresh(&app);
             retune_status("RETUNE_APPLIED", "The running lighting mode was retuned.")
         }
         RetuneOutcome::Deferred => {

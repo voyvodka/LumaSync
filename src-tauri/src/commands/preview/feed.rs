@@ -28,7 +28,7 @@ use super::session::{PreviewSessionState, PREVIEW_NOT_OPEN};
 use crate::commands::hue::state_store::{snapshot_hue_output_context, HueRuntimeStateStore};
 use crate::commands::led_calibration::LedCalibrationConfig;
 use crate::commands::led_output::{scale_brightness, EncoderPlan};
-use crate::commands::lighting_mode::{LightingModeKind, LightingRuntimeState, SolidColorPayload};
+use crate::commands::lighting_mode::{LightingModeKind, LightingRuntimeState};
 use crate::commands::shell_state;
 use crate::commands::status::CommandStatus;
 use crate::events::PREVIEW_TWIN_LAYOUT_EVENT;
@@ -318,20 +318,6 @@ fn static_frame(mode: &crate::commands::lighting_mode::LightingModeConfig) -> [u
 /// take the fresher revision. Taken before the lighting lock, never inside it.
 static REFRESH: Mutex<()> = Mutex::new(());
 
-/// After the running mode, its layout or its tuning changed: sends the twin a
-/// new layout if it differs, and asks for a fresh frame — from the worker on
-/// its next tick, or right here when no worker runs. Takes the lighting lock
-/// and then the session's, never the other way round.
-pub fn refresh<R: Runtime>(app: &AppHandle<R>) {
-    refresh_with(app, None);
-}
-
-/// After a Solid retune: the retune sends its colour straight to the outputs
-/// and leaves the running mode's copy as it was, so the twin is handed it.
-pub fn refresh_after_solid_retune<R: Runtime>(app: &AppHandle<R>, solid: &SolidColorPayload) {
-    refresh_with(app, Some(solid));
-}
-
 /// `refresh` for an async command: on a blocking thread, since it waits on
 /// the lighting lock, which a transition can hold for seconds.
 pub(super) async fn refresh_awaited<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
@@ -341,7 +327,11 @@ pub(super) async fn refresh_awaited<R: Runtime>(app: &AppHandle<R>) -> Result<()
         .map_err(|error| format!("PREVIEW_SESSION_LOCK_FAILED: the twin refresh died: {error}"))
 }
 
-fn refresh_with<R: Runtime>(app: &AppHandle<R>, retuned_solid: Option<&SolidColorPayload>) {
+/// After the running mode, its layout or its tuning changed: sends the twin a
+/// new layout if it differs, and asks for a fresh frame — from the worker on
+/// its next tick, or right here when no worker runs. Takes the lighting lock
+/// and then the session's, never the other way round.
+pub fn refresh<R: Runtime>(app: &AppHandle<R>) {
     let _one_at_a_time = REFRESH.lock().unwrap_or_else(|e| e.into_inner());
     let Some(session) = app.try_state::<PreviewSessionState>() else {
         return;
@@ -357,12 +347,7 @@ fn refresh_with<R: Runtime>(app: &AppHandle<R>, retuned_solid: Option<&SolidColo
         return;
     };
     let view = runtime.twin_view();
-    let still = view.still.map(|mut mode| {
-        if let (Some(solid), LightingModeKind::Solid) = (retuned_solid, &mode.kind) {
-            mode.solid = Some(solid.clone());
-        }
-        static_frame(&mode)
-    });
+    let still = view.still.as_ref().map(static_frame);
     let leds = view
         .layout
         .filter(|layout| layout.total_leds > 1)

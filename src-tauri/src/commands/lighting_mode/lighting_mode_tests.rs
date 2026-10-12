@@ -2209,7 +2209,11 @@ fn hydration_never_overrides_a_stamped_chip_type() {
 /// `apply_mode_change`, with the persisted shell state injected.
 fn restored_after_test(prior: LightingModeConfig, shell_state: String) -> LightingModeConfig {
     let load = || persisted(&shell_state);
-    let mut restore = super::led_test_pattern::restore_mode_after_test(Some(prior), &load);
+    let mut restore = super::led_test_pattern::restore_mode_after_test(
+        Some(prior),
+        &super::tuning::StoredTuning::default(),
+        &load,
+    );
     super::hydrate::hydrate_mode_payload(&mut restore, &load);
     restore
 }

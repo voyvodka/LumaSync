@@ -240,7 +240,11 @@ a drag during a start lands, and no colour packet reaches the strip once Off has
 Off's own black frame does. Answers:
 `RETUNE_APPLIED`, `RETUNE_DEFERRED` (a transaction bringing that kind up will apply it),
 `RETUNE_NOT_RUNNING` (stored for the next start). A settled drag is saved 300 ms after the last
-retune.
+retune. A test pattern's or preview scene's stop runs outside a transaction, so once the mode it
+interrupted is back it commits accepting itself (`accept_retunes_after_restore`); without that,
+every drag after a test or scene answered `RETUNE_NOT_RUNNING` until the next transaction. A retune
+never writes the running mode's copy (`active_mode`), so whatever reads that copy for its payload
+reads the store over it: the twin's still Solid frame, and the restore after a test or scene.
 
 **One brightness for every mode.** `StoredTuning.brightness` is the only authority; each payload's
 own field is what it was chosen with, and `stored()` stamps the shared value over it, as do
@@ -376,6 +380,12 @@ restores the mode from the saved settings — and does nothing while Off.
 **A test pattern is not the mode.** A test runs as an Ambilight worker over a synthetic source, but
 starting one publishes nothing: every window keeps showing the mode it interrupted, and the test's
 stop publishes the restored one. The main window used to render the test as Ambilight running.
+The stop restores the interrupted mode as a choice of it would run now (`restore_payload_for`): its
+payload and the shared brightness from the store, not the copy the start recorded, which predates
+any retune and brought back the colour and brightness from before it. A stop with no test running —
+a user's choice superseded the test and dropped its prior, and LED Setup or a Devices Flash still
+sends its stop — answers `LED_TEST_PATTERN_STOPPED` and touches nothing; it used to apply Off around
+the transaction while the saved mode said otherwise.
 
 **A preview scene borrows the lights the same way, and the user's choice ends it.** A scene runs
 Ambilight on the user's saved settings (`lighting_mode/preview_scene.rs`), on the outputs they chose

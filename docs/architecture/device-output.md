@@ -222,8 +222,9 @@ Identify flow (`useColorOrderIdentify.ts`) runs one `channelProbe` per slot and 
 answers as read. It applies in a fixed order: save, then stop the probe, then retune. Stopping
 restores the prior mode with its stamps re-read from disk, so the save must land first; the retune
 must wait for the stop, or it would reach the test rather than the restored mode. It only sends a
-stop after a start reported itself active — a stop with no test running restores nothing and turns
-the lights off.
+stop after a start reported itself active. A stop with no test running used to restore nothing and
+turn the lights off; it now answers and leaves the lights alone (`lighting-transaction.md`, "A test
+pattern is not the mode").
 
 **Nothing makes the frame length and the panel's length agree, so the sink says so once.** The
 frame is sized by the LED calibration and the panel by its own configuration, and the two are
