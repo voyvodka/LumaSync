@@ -10,9 +10,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use super::config::{
     AmbilightPayload, LightingModeCommandResult, LightingModeConfig, LightingModeKind,
 };
-use super::hydrate::{
-    hydrate_mode_payload, maybe_hydrate_led_calibration, read_persisted_shell_state,
-};
+use super::hydrate::{hydrate_mode_payload, maybe_hydrate_led_calibration};
 use super::preview::build_twin_sink;
 use super::runtime::LightingRuntimeState;
 use super::snapshot;
@@ -77,7 +75,7 @@ pub(super) fn apply_and_broadcast<R: Runtime>(
     test_pattern: Option<TestPatternConfig>,
 ) -> Result<LightingModeCommandResult, String> {
     runtime_state.tuning.close_blocking();
-    hydrate_mode_payload(&mut payload, &|| read_persisted_shell_state(app));
+    hydrate_mode_payload(&mut payload, &|| shell_state::persisted(app));
     let (device_connected, connected_port, wled_sink) = DrivenLocal::plan_args(driven);
 
     let twin_sink = Some(build_twin_sink(app));
@@ -276,7 +274,7 @@ fn start_led_test_pattern_blocking<R: Runtime>(
     // guide is sized for FALLBACK_TOTAL_LEDS — a misleading single-dot
     // preview. Route the user to the calibration flow with a coded status
     // instead. (Never throws — coded status on the Ok result.)
-    maybe_hydrate_led_calibration(&mut config, &|| read_persisted_shell_state(app));
+    maybe_hydrate_led_calibration(&mut config, &|| shell_state::persisted(app));
     let effective_total_leds = config
         .led_calibration
         .as_ref()
@@ -405,7 +403,7 @@ fn stop_led_test_pattern_blocking<R: Runtime>(
     let preview_session = app.state::<PreviewSessionState>();
     let driven = app.state::<LocalOutputRegistry>().driven_checked()?;
     let prior = runtime_state.lock_owner()?.preview.test_prior.take();
-    let restore = restore_mode_after_test(prior, &|| read_persisted_shell_state(app));
+    let restore = restore_mode_after_test(prior, &|| shell_state::persisted(app));
     let mut result = apply_and_broadcast(
         app,
         restore,

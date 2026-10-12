@@ -9,7 +9,7 @@ use log::warn;
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::config::{LightingModeConfig, LightingModeKind};
-use super::hydrate::{hydrate_mode_payload, read_persisted_shell_state};
+use super::hydrate::hydrate_mode_payload;
 use super::latency::{LatencyResult, LatencySink};
 use super::led_test_pattern::{
     apply_and_broadcast, is_ambilight_start_ok, restore_mode_after_test,
@@ -26,6 +26,7 @@ use crate::commands::hue::state_store::{snapshot_hue_output_context, HueRuntimeS
 use crate::commands::local_outputs::{DrivenLocal, LocalOutputRegistry};
 use crate::commands::preview::{PreviewSessionState, SceneKind};
 use crate::commands::runtime_telemetry::RuntimeTelemetryState;
+use crate::commands::shell_state;
 use crate::commands::status::CommandStatus;
 
 pub enum SceneLighting {
@@ -97,9 +98,9 @@ pub fn start_scene_lighting<R: Runtime>(
     let mut config = ambilight_payload_for(
         &targets,
         &runtime_state.tuning.stored(),
-        read_persisted_shell_state(app).as_ref(),
+        shell_state::persisted(app).as_ref(),
     );
-    hydrate_mode_payload(&mut config, &|| read_persisted_shell_state(app));
+    hydrate_mode_payload(&mut config, &|| shell_state::persisted(app));
     let measuring = kind == SceneKind::Latency;
     if measuring {
         // A flip must reach the output as it is: unsmoothed — a saved preset
@@ -232,7 +233,7 @@ fn restore_interrupted<R: Runtime>(
         .driven_checked()
         .map_err(give_up)?;
     let scene_mode = runtime_state.lock_owner()?.active_mode.clone();
-    let restore = restore_mode_after_test(prior, &|| read_persisted_shell_state(app));
+    let restore = restore_mode_after_test(prior, &|| shell_state::persisted(app));
     let apply = |mode: LightingModeConfig| apply_with(mode, driven.as_ref());
     let restored = apply(restore).map_err(give_up)?;
     // A gated restore (the strip unplugged mid-scene) returns before the

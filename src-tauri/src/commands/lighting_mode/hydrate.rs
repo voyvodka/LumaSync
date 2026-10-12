@@ -3,27 +3,9 @@
 //! shell state. Caller-wins throughout.
 
 use log::info;
-use tauri::{AppHandle, Runtime};
 
 use super::config::{LightingModeConfig, LightingModeKind};
-use crate::commands::shell_state::{self, PersistedShellState};
-
-/// The persisted shell state, for the hydrators below. Resolution rules for
-/// the calibration, applied in `set_lighting_mode` before `apply_mode_change`:
-///
-/// 1. If the incoming payload already carries a calibration with
-///    `total_leds > 1`, keep it — caller-wins.
-/// 2. Otherwise take the persisted `ledCalibration` — the user's saved setup,
-///    which the frontend `savedCalibrationRef` should have stamped but
-///    evidently does not on every code path.
-/// 3. If both are absent, leave `None` so the existing legacy 1-LED
-///    fallback inside `apply_mode_change` keeps the v1.3 firmware
-///    compat path unchanged.
-pub(super) fn read_persisted_shell_state<R: Runtime>(
-    app: &AppHandle<R>,
-) -> Option<PersistedShellState> {
-    shell_state::persisted(app)
-}
+use crate::commands::shell_state::PersistedShellState;
 
 /// Every payload hydrator, run by both mode entry points (`set_lighting_mode`
 /// and `apply_and_broadcast`). One function so neither can run a subset: when
@@ -40,11 +22,13 @@ pub(super) fn hydrate_mode_payload(
     maybe_hydrate_output_stamps(payload, load);
 }
 
-/// Apply backend-side calibration fallback to an incoming
-/// `LightingModeConfig`. When the frontend payload is missing
-/// `led_calibration` or carries a degenerate `total_leds <= 1`, we read
-/// the persisted shell-state and inject the user's saved calibration so
-/// the Solid + Ambilight encoders can size USB packets correctly.
+/// Fills a missing or degenerate calibration from the saved one, so the Solid
+/// and Ambilight encoders size USB packets for the real strip:
+///
+/// 1. A payload calibration with `total_leds > 1` is kept — caller-wins.
+/// 2. Otherwise the persisted `ledCalibration`, the user's saved setup.
+/// 3. With neither, `None` stays, so the legacy 1-LED fallback inside
+///    `apply_mode_change` keeps the v1.3 firmware compat path unchanged.
 ///
 /// This function is the **only** safety net for frontend payload drops
 /// (a v1.5 hardware-repro bug where every Solid frame and every
@@ -77,13 +61,9 @@ pub(super) fn maybe_hydrate_led_calibration(
         }
     }
 
-    // No usable calibration anywhere. Log so the live diagnostic stream
-    // makes the legacy 1-LED fallback path obvious in the terminal.
-    if payload_total_leds <= 1 {
-        info!(
-            "[set_lighting_mode] led_calibration unavailable — payload_total_leds={payload_total_leds} disk_total_leds=0 (legacy 1-LED frame will be emitted)"
-        );
-    }
+    info!(
+        "[set_lighting_mode] led_calibration unavailable — payload_total_leds={payload_total_leds} disk_total_leds=0 (legacy 1-LED frame will be emitted)"
+    );
 }
 
 /// Apply backend-side ambilight-settings fallback to an incoming
@@ -94,11 +74,9 @@ pub(super) fn maybe_hydrate_led_calibration(
 /// untouched). This narrow trigger keeps the safety net from masking
 /// frontend bugs that would otherwise be visible.
 ///
-/// The frontend `withAmbilightSettings` hydrator already stamps the
-/// persisted payload onto every dispatch via `savedAmbilightRef`; this
-/// helper is the matching backend recovery path so a single missed
-/// frontend stamp (e.g. a future code path that bypasses the hydrator
-/// chain) doesn't strip the user's settings down to backend defaults.
+/// The backend recovery path for a frontend dispatch that went out without
+/// the saved settings, so one missed stamp does not strip the user's
+/// settings down to backend defaults.
 fn maybe_hydrate_ambilight_settings(
     payload: &mut LightingModeConfig,
     load: &dyn Fn() -> Option<PersistedShellState>,

@@ -15,7 +15,7 @@ use super::config::{
 use super::config_check;
 use super::effect_source::effect_ambilight;
 use super::effects::EffectDraw;
-use super::hydrate::{hydrate_mode_payload, read_persisted_shell_state};
+use super::hydrate::hydrate_mode_payload;
 use super::live::{retune_ambilight_live, AmbilightLiveSettings, RoomGeometryLive};
 use super::pacing::{capture_interval_for, SerialSendBudget};
 use super::preview::{build_preview_emit_context, build_twin_sink, TwinFrameSink};
@@ -29,6 +29,7 @@ use crate::commands::led_output::apply_color_correction_rgb;
 use crate::commands::local_outputs::{DrivenLocal, LocalOutputRegistry};
 use crate::commands::preview::PreviewSessionState;
 use crate::commands::runtime_telemetry::{RuntimeTelemetryState, SharedRuntimeTelemetry};
+use crate::commands::shell_state;
 use crate::commands::status::CommandStatus;
 use crate::commands::test_pattern::TestPatternLive;
 use crate::commands::wled_sink::WledSinkConfig;
@@ -823,7 +824,7 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
     //
     // Output stamps (colour correction, firmware profile, chip type) follow
     // the same caller-wins rule; the LED control popup sends none of them.
-    hydrate_mode_payload(&mut payload, &|| read_persisted_shell_state(app));
+    hydrate_mode_payload(&mut payload, &|| shell_state::persisted(app));
 
     let driven = local_outputs.driven_checked()?;
 
