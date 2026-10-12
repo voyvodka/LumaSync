@@ -18,7 +18,7 @@
  * component draws custom minimize / maximize-toggle / close buttons.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   closeCurrentWindow,
@@ -27,19 +27,9 @@ import {
   onCurrentWindowResized,
   toggleMaximizeCurrentWindow,
 } from "./windowApi";
-import { startWindowDrag } from "./windowDragApi";
+import { detectPlatform, handleDragRegionPress, type Platform } from "./windowDragApi";
 import { SECTION_ORDER, type SectionId } from "@/shared/contracts/shell";
 import styles from "./TitleBar.module.css";
-
-type Platform = "macos" | "windows" | "linux";
-
-function detectPlatform(): Platform {
-  if (typeof navigator === "undefined") return "linux";
-  const ua = navigator.userAgent;
-  if (/Mac|iPhone|iPod|iPad/i.test(ua)) return "macos";
-  if (/Win/i.test(ua)) return "windows";
-  return "linux";
-}
 
 interface TitleBarProps {
   uiMode: "full" | "compact";
@@ -91,22 +81,10 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
 
   const isMac = platform === "macos";
 
-  // A single press on the region itself, as Tauri's script decides it ("self": the element that
-  // carries the bare attribute). Stopped here, before the script's document listener; a
-  // double-click passes on to it for the zoom.
-  const handleDragPress = (event: MouseEvent<HTMLDivElement>) => {
-    if (!isMac || event.button !== 0 || event.detail !== 1) return;
-    const region = (event.target as HTMLElement).getAttribute?.("data-tauri-drag-region");
-    if (region !== "" && region !== "true") return;
-    event.preventDefault();
-    event.stopPropagation();
-    void startWindowDrag().catch((error) => console.error("[LumaSync] start_window_drag failed:", error));
-  };
-
   return (
     <div
       data-tauri-drag-region
-      onMouseDown={handleDragPress}
+      onMouseDown={handleDragRegionPress}
       className={`${styles.bar} fixed top-0 right-0 left-0 z-40 flex items-center select-none`}
       style={{
         height: `${TITLE_BAR_HEIGHT_PX}px`,

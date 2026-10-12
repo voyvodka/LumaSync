@@ -19,6 +19,7 @@ import { ModeStrip } from "@/features/mode/ui/ModeStrip";
 import { applyOutputs, retuneLighting } from "@/features/mode/modeApi";
 import { isOutputsApplied, needsCalibration } from "@/features/mode/state/modeApplyOutcome";
 import { choiceFailureMessage } from "@/features/shell/notices/choiceFailureMessage";
+import { handleDragRegionPress } from "@/features/shell/windowDragApi";
 import { createRetuneCoalescer, tuningOf } from "@/features/mode/state/retuneCoalescer";
 import { useLightingRuntime } from "@/features/mode/state/useLightingRuntime";
 import { LIGHTING_MODE_KIND, type LightingModeConfig, type LightingModeKind } from "@/shared/contracts/mode";
@@ -215,7 +216,7 @@ export function ControlPopupApp() {
 
   return (
     <div className={styles.root}>
-      <header className={styles.header} data-tauri-drag-region>
+      <header className={styles.header} data-tauri-drag-region onMouseDown={handleDragRegionPress}>
         <span className={styles.title} data-tauri-drag-region>
           {t("preview:title")}
         </span>

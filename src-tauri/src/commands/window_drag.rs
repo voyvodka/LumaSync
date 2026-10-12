@@ -1,5 +1,6 @@
-//! The title bar's drag. Off macOS it is Tauri's own; on macOS it starts from the pointer, since
-//! tao's anchors on whatever event AppKit last saw (`macos_window::drag_from_mouse`).
+//! The title bar's and the control popup header's drag. Off macOS it is Tauri's own; on macOS it
+//! starts from the pointer, since tao's anchors on whatever event AppKit last saw
+//! (`macos_window::drag_from_mouse`).
 
 use tauri::{Runtime, Window};
 

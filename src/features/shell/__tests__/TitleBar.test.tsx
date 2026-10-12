@@ -19,13 +19,14 @@ vi.mock("@tauri-apps/api/window", () => ({
   }),
 }));
 
-const startWindowDrag = vi.fn(() => Promise.resolve(null));
-vi.mock("../windowDragApi", () => ({ startWindowDrag: () => startWindowDrag() }));
+const invokeMock = vi.fn((..._args: unknown[]) => Promise.resolve(null));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => invokeMock(...args) }));
+const dragCalls = () => invokeMock.mock.calls.filter(([command]) => command === "start_window_drag").length;
 
 describe("TitleBar drag on macOS", () => {
   afterEach(() => {
     vi.restoreAllMocks();
-    startWindowDrag.mockClear();
+    invokeMock.mockClear();
   });
 
   /** Mounted as on a Mac; `seen` is what Tauri's drag script, a document listener, receives. */
@@ -47,7 +48,7 @@ describe("TitleBar drag on macOS", () => {
     fireEvent.mouseDown(bar, { button: 0, detail: 1 });
     done();
 
-    expect(startWindowDrag).toHaveBeenCalledTimes(1);
+    expect(dragCalls()).toBe(1);
     expect(seen).toEqual([]);
   });
 
@@ -56,7 +57,7 @@ describe("TitleBar drag on macOS", () => {
     fireEvent.mouseDown(bar, { button: 0, detail: 2 });
     done();
 
-    expect(startWindowDrag).not.toHaveBeenCalled();
+    expect(dragCalls()).toBe(0);
     expect(seen).toEqual([2]);
   });
 
@@ -65,7 +66,7 @@ describe("TitleBar drag on macOS", () => {
     fireEvent.mouseDown(screen.getByTestId(`section-tab-${SECTION_IDS.DEVICES}`), { button: 0, detail: 1 });
     done();
 
-    expect(startWindowDrag).not.toHaveBeenCalled();
+    expect(dragCalls()).toBe(0);
     expect(seen).toEqual([1]);
   });
 
@@ -74,7 +75,7 @@ describe("TitleBar drag on macOS", () => {
     fireEvent.mouseDown(bar, { button: 0, detail: 1 });
     done();
 
-    expect(startWindowDrag).not.toHaveBeenCalled();
+    expect(dragCalls()).toBe(0);
     expect(seen).toEqual([1]);
   });
 });

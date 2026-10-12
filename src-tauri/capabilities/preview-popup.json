@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "preview-popup",
-  "description": "v1.6 interactive control popup. Listens for mode and preview events, reads and patches shell state, persists its own position from three geometry reads, and drags by its header. App commands: what ControlPopupApp, its hooks and its error boundary invoke; closing and hiding go through the session commands rather than the window API. Policy: docs/architecture/ui-and-shell.md, \"Capabilities\".",
+  "description": "v1.6 interactive control popup. Listens for mode and preview events, reads and patches shell state, persists its own position from three geometry reads, and drags by its header (on macOS a press goes to start_window_drag). App commands: what ControlPopupApp, its hooks and its error boundary invoke; closing and hiding go through the session commands rather than the window API. Policy: docs/architecture/ui-and-shell.md, \"Capabilities\".",
   "windows": [
     "led-control-popup-*"
   ],
@@ -27,6 +27,7 @@
     "allow-start-preview-scene",
     "allow-stop-preview-scene",
     "allow-set-preview-scene-brightness",
-    "allow-open-log-dir"
+    "allow-open-log-dir",
+    "allow-start-window-drag"
   ]
 }

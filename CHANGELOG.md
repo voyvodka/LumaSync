@@ -380,7 +380,8 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
-- macOS: clicking the empty part of the title bar no longer makes the window jump sideways.
+- macOS: clicking the empty part of the title bar, or the header of the LED preview's remote, no longer
+  makes the window jump sideways.
 - The LED preview's remote opens at its own size, never taller than the screen; it came back at the
   size an older version gave it, and its settings fell into a scroll.
 - A long list opened in a short window — the effect list in the LED preview — stays inside the

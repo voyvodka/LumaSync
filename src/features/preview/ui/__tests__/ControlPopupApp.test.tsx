@@ -238,6 +238,37 @@ describe("ControlPopupApp close and hide", () => {
   });
 });
 
+describe("ControlPopupApp header drag on macOS", () => {
+  const dragCalls = () => invokeMock.mock.calls.filter(([command]) => command === "start_window_drag").length;
+
+  let userAgent: { mockRestore: () => void };
+  beforeEach(() => {
+    userAgent = vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Macintosh)");
+  });
+  afterEach(() => userAgent.mockRestore());
+
+  // Tauri's drag anchored on whatever event AppKit saw last, and the popup jumped on a click.
+  it("drags from the pointer on a press on the header or its title", async () => {
+    await renderSettled();
+    const header = document.querySelector<HTMLElement>("header[data-tauri-drag-region]")!;
+
+    fireEvent.mouseDown(header, { button: 0, detail: 1 });
+    fireEvent.mouseDown(screen.getByText("preview:title"), { button: 0, detail: 1 });
+
+    expect(dragCalls()).toBe(2);
+  });
+
+  it("leaves a double-click to Tauri and a press on a header button to the button", async () => {
+    await renderSettled();
+    const header = document.querySelector<HTMLElement>("header[data-tauri-drag-region]")!;
+
+    fireEvent.mouseDown(header, { button: 0, detail: 2 });
+    fireEvent.mouseDown(screen.getByRole("button", { name: "preview:control.hide" }), { button: 0, detail: 1 });
+
+    expect(dragCalls()).toBe(0);
+  });
+});
+
 describe("ControlPopupApp mode strip", () => {
   async function clickMode(name: RegExp) {
     const user = userEvent.setup();
