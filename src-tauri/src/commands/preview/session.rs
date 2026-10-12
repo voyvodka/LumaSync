@@ -521,7 +521,7 @@ fn failure(code: &str, message: &str, details: String) -> PreviewSessionResult {
 
 /// Where Ambilight captures: the saved display, else the primary, else the
 /// first — the order the capture itself falls back in.
-fn resolve_display(
+pub(crate) fn resolve_display(
     displays: &[DisplayInfoPayload],
     saved: Option<&str>,
 ) -> Option<DisplayInfoPayload> {

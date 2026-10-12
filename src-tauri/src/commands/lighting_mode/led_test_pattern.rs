@@ -22,6 +22,7 @@ use crate::commands::hue::state_store::{snapshot_hue_output_context, HueRuntimeS
 use crate::commands::led_calibration::LedCalibrationConfig;
 use crate::commands::led_output::LedColorOrder;
 use crate::commands::local_outputs::{DrivenLocal, LocalOutputRegistry};
+use crate::commands::preview::session::resolve_display;
 use crate::commands::preview::PreviewSessionState;
 use crate::commands::runtime_telemetry::RuntimeTelemetryState;
 use crate::commands::shell_state::{self, PersistedShellState};
@@ -46,13 +47,7 @@ fn resolve_display_aspect<R: Runtime>(app: &AppHandle<R>) -> f32 {
         return DEFAULT_DISPLAY_ASPECT;
     };
     let selected = shell_state::persisted(app).and_then(|state| state.selected_display_id());
-
-    let target = selected
-        .and_then(|id| displays.iter().find(|d| d.id == id))
-        .or_else(|| displays.iter().find(|d| d.is_primary))
-        .or_else(|| displays.first());
-
-    match target {
+    match resolve_display(&displays, selected.as_deref()) {
         Some(d) if d.height > 0 => d.width as f32 / d.height as f32,
         _ => DEFAULT_DISPLAY_ASPECT,
     }
