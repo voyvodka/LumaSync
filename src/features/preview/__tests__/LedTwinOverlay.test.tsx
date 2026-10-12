@@ -40,35 +40,26 @@ import { LedTwinOverlay } from "../ui/LedTwinOverlay";
 
 type ListenCallback = (event: { payload: TwinLayout }) => void;
 
-/** Every dot paint, as the colour of its centre stop, per canvas paint. */
+/** Every dot paint, as each dot's fill colour, per canvas paint. */
 let dotPaints: string[][] = [];
 
 function fakeContext() {
   let current: string[] | null = null;
-  let style: { first?: string } = {};
   return {
     setTransform: () => {},
+    fillStyle: "",
+    strokeStyle: "",
+    lineWidth: 0,
     clearRect(this: { canvas: HTMLCanvasElement }) {
       current = [];
       if (this.canvas.dataset.testid === "twin-dots") dotPaints.push(current);
     },
-    fillRect(this: { canvas: HTMLCanvasElement }) {
-      if (this.canvas.dataset.testid === "twin-dots" && style.first) current?.push(style.first);
-    },
-    set fillStyle(value: { first?: string }) {
-      style = value;
-    },
-    get fillStyle() {
-      return style;
-    },
-    createLinearGradient: () => ({ addColorStop: () => {} }),
-    createRadialGradient: () => {
-      const gradient: { first?: string; addColorStop: (offset: number, colour: string) => void } = {
-        addColorStop(offset, colour) {
-          if (offset === 0) gradient.first = colour;
-        },
-      };
-      return gradient;
+    fillRect: () => {},
+    beginPath: () => {},
+    arc: () => {},
+    stroke: () => {},
+    fill(this: { canvas: HTMLCanvasElement; fillStyle: string }) {
+      if (this.canvas.dataset.testid === "twin-dots") current?.push(this.fillStyle);
     },
   };
 }
@@ -136,7 +127,7 @@ describe("LedTwinOverlay", () => {
     await act(async () => {
       send(makeFrame(makeLeds(), 1));
     });
-    await waitFor(() => expect(lastPaint()[0]).toBe("rgba(10, 20, 30, 0.95)"));
+    await waitFor(() => expect(lastPaint()[0]).toBe("rgb(10, 20, 30)"));
     return view;
   }
 
@@ -170,7 +161,7 @@ describe("LedTwinOverlay", () => {
       send(makeFrame(leds, 3));
     });
 
-    expect(lastPaint().filter((colour) => colour === "rgba(200, 100, 50, 0.95)")).toHaveLength(1);
+    expect(lastPaint().filter((colour) => colour === "rgb(200, 100, 50)")).toHaveLength(1);
   });
 
   // Where the room map places a lamp is where the twin draws it.
@@ -210,7 +201,7 @@ describe("LedTwinOverlay", () => {
       send(makeFrame(makeLeds([1, 2, 3]), 1, 1, [[255, 0, 0], [0, 0, 255]]));
     });
 
-    await waitFor(() => expect(lastPaint()[0]).toBe("rgba(1, 2, 3, 0.95)"));
+    await waitFor(() => expect(lastPaint()[0]).toBe("rgb(1, 2, 3)"));
     expect(view.queryAllByTestId("twin-lamp")).toHaveLength(0);
   });
 
@@ -218,7 +209,7 @@ describe("LedTwinOverlay", () => {
     framesDuringSubscribe = [makeFrame(makeLeds([9, 9, 9]), 1)];
     render(<LedTwinOverlay />);
 
-    await waitFor(() => expect(lastPaint()[0]).toBe("rgba(9, 9, 9, 0.95)"));
+    await waitFor(() => expect(lastPaint()[0]).toBe("rgb(9, 9, 9)"));
   });
 
   it("ignores a frame cut for a layout it no longer draws", async () => {
@@ -230,11 +221,11 @@ describe("LedTwinOverlay", () => {
     await act(async () => {
       send(makeFrame(makeLeds([7, 7, 7]), 5, 1));
     });
-    expect(lastPaint()).not.toContain("rgba(7, 7, 7, 0.95)");
+    expect(lastPaint()).not.toContain("rgb(7, 7, 7)");
 
     await act(async () => {
       send(makeFrame(makeLeds([7, 7, 7]), 6, 2));
     });
-    expect(lastPaint()[0]).toBe("rgba(7, 7, 7, 0.95)");
+    expect(lastPaint()[0]).toBe("rgb(7, 7, 7)");
   });
 });

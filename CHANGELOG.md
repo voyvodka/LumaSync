@@ -88,8 +88,8 @@ https://keepachangelog.com/en/1.1.0/
 - WLED: the WLED page keeps showing your saved device after you leave it, with a "Forget device"
   action. Forgetting stops sending to it (lighting carries on with your other outputs, or stops if
   it was the only one) and stops LumaSync reconnecting to it at launch.
-- LED preview, rebuilt: opened from Lights or the menu bar menu, it shows the LEDs and Hue lamps
-  on screen as they really light — the layout the strip runs, its colours as the eye sees them, Hue
+- LED preview, rebuilt: opened from Lights or the menu bar menu, it shows the LEDs — dots in a band
+  along the screen's edges, as LED Setup draws them — and the Hue lamps on screen as they really light — the layout the strip runs, its colours as the eye sees them, Hue
   lamps where the room map places them — and changes no light by opening. Its small remote starts
   with six test scenes that play full screen while Ambilight captures them: an edge tour (order,
   direction, corners), a colour spiral, a sunset, drifting colour fields, a letterboxed film for

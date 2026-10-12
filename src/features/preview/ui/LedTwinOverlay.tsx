@@ -11,7 +11,8 @@
  * ordering; the frame's `leds` buffer is in that same order, so `leds[N]` is
  * the colour of the dot at `positions[N]`.
  *
- * Drawn on two canvases: the ribbons under a blur, the dots over them sharp.
+ * Drawn on two canvases: the band, painted again only when the screen changes,
+ * and the dots over it, painted per frame.
  */
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
@@ -22,7 +23,7 @@ import type { LedCalibrationConfig } from "@/features/calibration/model/contract
 import { computeTwinLedPositions } from "../geometry";
 import { EMPTY_PACKED_BUFFER, packLedBuffer, type PackedLedColor } from "../ledColor";
 import { useTwinFeed } from "../state/useTwinFeed";
-import { buildEdgeTracks, paintDots, paintRibbons } from "./twinCanvas";
+import { dotRadius, paintBand, paintDots } from "./twinCanvas";
 import styles from "./LedTwinOverlay.module.css";
 
 interface Viewport {
@@ -55,7 +56,7 @@ export function LedTwinOverlay() {
     [layout],
   );
   const [viewport, setViewport] = useState(readViewport);
-  const ribbonsRef = useRef<HTMLCanvasElement>(null);
+  const bandRef = useRef<HTMLCanvasElement>(null);
   const dotsRef = useRef<HTMLCanvasElement>(null);
 
   // Set the window title from the localized aria label so the overlay is
@@ -67,7 +68,7 @@ export function LedTwinOverlay() {
     // The twin lives in a transparent OS window, but index.html's global
     // styles paint an opaque app background on <body>. Neutralize it on this
     // window only so the desktop / app behind stays fully visible — the twin
-    // is just edge dots + ribbons, never a backdrop.
+    // is the edge band and its dots, never a backdrop.
     document.documentElement.style.background = "transparent";
     document.documentElement.style.colorScheme = "normal";
     document.body.style.background = "transparent";
@@ -82,7 +83,10 @@ export function LedTwinOverlay() {
   }, []);
 
   const positions = useMemo(() => (calibration ? computeTwinLedPositions(calibration) : []), [calibration]);
-  const edgeTracks = useMemo(() => buildEdgeTracks(positions), [positions]);
+  const radius = useMemo(
+    () => dotRadius(positions, viewport.width, viewport.height),
+    [positions, viewport.width, viewport.height],
+  );
 
   // Ref-held so an unchanged frame keeps the SAME array reference and the
   // paint below does not run. Deterministic in (source, previous), so
@@ -92,15 +96,18 @@ export function LedTwinOverlay() {
   const packedLeds = packedRef.current;
 
   useEffect(() => {
-    const ribbons = prepare(ribbonsRef.current, viewport);
+    const band = prepare(bandRef.current, viewport);
+    if (band) paintBand(band, viewport.width, viewport.height);
+  }, [viewport]);
+
+  useEffect(() => {
     const dots = prepare(dotsRef.current, viewport);
-    if (ribbons) paintRibbons(ribbons, edgeTracks, packedLeds, viewport.width, viewport.height);
-    if (dots) paintDots(dots, positions, packedLeds, viewport.width, viewport.height);
-  }, [viewport, edgeTracks, positions, packedLeds]);
+    if (dots) paintDots(dots, positions, packedLeds, viewport.width, viewport.height, radius);
+  }, [viewport, positions, packedLeds, radius]);
 
   return (
     <div className={styles.root} aria-hidden="true">
-      <canvas ref={ribbonsRef} className={`${styles.layer} ${styles.ribbons}`} data-testid="twin-ribbons" />
+      <canvas ref={bandRef} className={styles.layer} data-testid="twin-band" />
       <canvas ref={dotsRef} className={styles.layer} data-testid="twin-dots" />
 
       {/* Each Hue lamp where the layout puts it: where it samples the screen, or in a row along the
@@ -116,7 +123,7 @@ export function LedTwinOverlay() {
             style={{
               "--lamp-x": `${layout.lamps[i]!.x * 100}%`,
               "--lamp-y": `${layout.lamps[i]!.y * 100}%`,
-              background: `radial-gradient(circle, rgb(${c[0]}, ${c[1]}, ${c[2]}) 0%, rgba(${c[0]}, ${c[1]}, ${c[2]}, 0.5) 55%, transparent 80%)`,
+              background: `rgb(${c[0]}, ${c[1]}, ${c[2]})`,
             } as CSSProperties}
           />
         ))}
