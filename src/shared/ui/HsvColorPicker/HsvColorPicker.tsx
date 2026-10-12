@@ -124,6 +124,21 @@ const SQUARE_HALF = 50;
 const SQUARE_X0 = CENTER - SQUARE_HALF;
 const SQUARE_Y0 = CENTER - SQUARE_HALF;
 
+/** Saturation and value under the pointer, clamped to the square. */
+function svAtPointer(
+  square: SVGRectElement | null,
+  pointer: { clientX: number; clientY: number },
+): Pick<Hsv, "s" | "v"> {
+  const rect = (square?.ownerSVGElement as SVGSVGElement).getBoundingClientRect();
+  const scale = rect.width / VIEW_SIZE;
+  const localX = (pointer.clientX - rect.left) / scale;
+  const localY = (pointer.clientY - rect.top) / scale;
+  return {
+    s: clamp((localX - SQUARE_X0) / (SQUARE_HALF * 2), 0, 1),
+    v: clamp(1 - (localY - SQUARE_Y0) / (SQUARE_HALF * 2), 0, 1),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Drag throttle
 // ---------------------------------------------------------------------------
@@ -171,7 +186,6 @@ export function HsvColorPicker({
 }: HsvColorPickerProps) {
   const { t } = useTranslation();
   const hexInputId = useId();
-  const rootRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<SVGCircleElement>(null);
   const squareRef = useRef<SVGRectElement>(null);
 
@@ -217,30 +231,36 @@ export function HsvColorPicker({
     onChangeRef.current = onChange;
   }, [onChange]);
 
-  const pendingCommitRef = useRef<{ hex: string; hsv: Hsv } | null>(null);
+  const pendingHexRef = useRef<string | null>(null);
   const lastDispatchAtRef = useRef(0);
   const dispatchTimerRef = useRef<number | null>(null);
 
-  const flushPendingDispatch = useCallback(() => {
+  const cancelDispatchTimer = useCallback(() => {
     if (dispatchTimerRef.current !== null) {
       window.clearTimeout(dispatchTimerRef.current);
       dispatchTimerRef.current = null;
     }
-    const pending = pendingCommitRef.current;
-    if (!pending) return;
-    pendingCommitRef.current = null;
-    lastDispatchAtRef.current = Date.now();
-    onChangeRef.current(pending.hex);
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (dispatchTimerRef.current !== null) {
-        window.clearTimeout(dispatchTimerRef.current);
-        dispatchTimerRef.current = null;
-      }
-    };
-  }, []);
+  /** Sends `hex` now, dropping any throttled drag tick still waiting. */
+  const dispatchNow = useCallback(
+    (hex: string) => {
+      cancelDispatchTimer();
+      pendingHexRef.current = null;
+      lastDispatchAtRef.current = Date.now();
+      onChangeRef.current(hex);
+    },
+    [cancelDispatchTimer],
+  );
+
+  const flushPendingDispatch = useCallback(() => {
+    cancelDispatchTimer();
+    const pending = pendingHexRef.current;
+    if (pending === null) return;
+    dispatchNow(pending);
+  }, [cancelDispatchTimer, dispatchNow]);
+
+  useEffect(() => cancelDispatchTimer, [cancelDispatchTimer]);
 
   /**
    * Update local visual state from a drag tick and queue a throttled
@@ -252,7 +272,7 @@ export function HsvColorPicker({
     lastParsedHex.current = hex;
     setHsv(next);
     setHexDraft(sanitizeHexInput(hex));
-    pendingCommitRef.current = { hex, hsv: next };
+    pendingHexRef.current = hex;
 
     const now = Date.now();
     const elapsed = now - lastDispatchAtRef.current;
@@ -277,15 +297,8 @@ export function HsvColorPicker({
     lastParsedHex.current = hex;
     setHsv(next);
     setHexDraft(sanitizeHexInput(hex));
-
-    if (dispatchTimerRef.current !== null) {
-      window.clearTimeout(dispatchTimerRef.current);
-      dispatchTimerRef.current = null;
-    }
-    pendingCommitRef.current = null;
-    lastDispatchAtRef.current = Date.now();
-    onChangeRef.current(hex);
-  }, []);
+    dispatchNow(hex);
+  }, [dispatchNow]);
 
   const pushRecent = useCallback((hex: string) => {
     const normalised = hex.toLowerCase();
@@ -354,13 +367,7 @@ export function HsvColorPicker({
       setDraggingSv(true);
       // Single-tap commit — fire immediately so the user sees the new
       // value land without waiting for the drag throttle.
-      const rect = (squareRef.current?.ownerSVGElement as SVGSVGElement).getBoundingClientRect();
-      const scale = rect.width / VIEW_SIZE;
-      const localX = (e.clientX - rect.left) / scale;
-      const localY = (e.clientY - rect.top) / scale;
-      const s = clamp((localX - SQUARE_X0) / (SQUARE_HALF * 2), 0, 1);
-      const v = clamp(1 - (localY - SQUARE_Y0) / (SQUARE_HALF * 2), 0, 1);
-      commitImmediate({ ...hsv, s, v });
+      commitImmediate({ ...hsv, ...svAtPointer(squareRef.current, e) });
     },
     [disabled, hsv, commitImmediate],
   );
@@ -368,13 +375,7 @@ export function HsvColorPicker({
   const handleSvPointerMove = useCallback(
     (e: React.PointerEvent<SVGElement>) => {
       if (!draggingSv || !squareRef.current) return;
-      const rect = (squareRef.current.ownerSVGElement as SVGSVGElement).getBoundingClientRect();
-      const scale = rect.width / VIEW_SIZE;
-      const localX = (e.clientX - rect.left) / scale;
-      const localY = (e.clientY - rect.top) / scale;
-      const s = clamp((localX - SQUARE_X0) / (SQUARE_HALF * 2), 0, 1);
-      const v = clamp(1 - (localY - SQUARE_Y0) / (SQUARE_HALF * 2), 0, 1);
-      commitDrag({ ...hsv, s, v });
+      commitDrag({ ...hsv, ...svAtPointer(squareRef.current, e) });
     },
     [draggingSv, hsv, commitDrag],
   );
@@ -439,14 +440,8 @@ export function HsvColorPicker({
     setHsv(rgbToHsv(rgb));
     setHexDraft(sanitizeHexInput(hex));
     pushRecent(hex);
-    if (dispatchTimerRef.current !== null) {
-      window.clearTimeout(dispatchTimerRef.current);
-      dispatchTimerRef.current = null;
-    }
-    pendingCommitRef.current = null;
-    lastDispatchAtRef.current = Date.now();
-    onChangeRef.current(hex);
-  }, [hexDraft, value, pushRecent]);
+    dispatchNow(hex);
+  }, [hexDraft, value, pushRecent, dispatchNow]);
 
   // `maxLength` would truncate a pasted `#1A2B3C` (or a whitespace-padded one)
   // before the sanitiser ever saw it, so paste is merged by hand instead.
@@ -513,7 +508,6 @@ export function HsvColorPicker({
 
   return (
     <div
-      ref={rootRef}
       role="group"
       aria-label={ariaLabel ?? t("common:ui.colorPicker.rootAriaLabel")}
       aria-disabled={disabled}
@@ -712,13 +706,7 @@ export function HsvColorPicker({
                   if (rgb) {
                     setHsv(rgbToHsv(rgb));
                     setHexDraft(sanitizeHexInput(hex));
-                    if (dispatchTimerRef.current !== null) {
-                      window.clearTimeout(dispatchTimerRef.current);
-                      dispatchTimerRef.current = null;
-                    }
-                    pendingCommitRef.current = null;
-                    lastDispatchAtRef.current = Date.now();
-                    onChangeRef.current(hex);
+                    dispatchNow(hex);
                   }
                 }}
               />
