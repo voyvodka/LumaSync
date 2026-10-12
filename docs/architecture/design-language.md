@@ -42,8 +42,8 @@ the files it was removed from — it was once re-planted behind a false "kept fo
 are hand-drawn inline SVG in `src/shared/ui/icons.tsx` (`stroke="currentColor"`, `fill="none"`); an
 icon used in more than one place goes there, a single-use one may stay inline beside its caller.
 
-**Compact is a separate layout, not a narrow full.** `SettingsLayout` renders `CompactLayout`
-(`settings/sections/compact/`) in compact mode, so a control added only to a full-mode section does
+**Compact is a separate layout, not a narrow full.** `SettingsLayout` renders `LightsCompact`
+(`features/lights/ui/`) in compact mode, so a control added only to a full-mode section does
 not exist for a compact user. Decide which mode it belongs to; do not assume it appears in both.
 
 **The interface is direct and quiet, not corporate.** What the maintainer asked for, settled while
