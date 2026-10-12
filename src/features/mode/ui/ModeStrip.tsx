@@ -16,22 +16,17 @@ import styles from "./ModeStrip.module.css";
 export type ModeStripVariant = "full" | "compact" | "popup";
 
 /** Badge text comes from `KEYBIND_REGISTRY`, the same table `useGlobalKeybinds` reads. */
-function ModeKeybindBadge({ action }: { action: KeybindAction }) {
+function useKeybindBadge(action: KeybindAction): string {
   const platform = useMemo(() => resolveKeybindPlatform(), []);
-  const definition = useMemo(() => getKeybindDefinition(action, platform), [action, platform]);
-  return (
-    <span className={styles.badge} data-part="keybind">
-      {definition.badge.join("")}
-    </span>
-  );
+  return useMemo(() => getKeybindDefinition(action, platform).badge.join(""), [action, platform]);
 }
 
-/** Off's ⌥1, said in the power button's tooltip where the tiles show theirs as badges. */
-function usePowerShortcut(): string {
-  const platform = useMemo(() => resolveKeybindPlatform(), []);
-  return useMemo(
-    () => getKeybindDefinition(modeKind(LIGHTING_MODE_KIND.OFF).keybind, platform).badge.join(""),
-    [platform],
+function ModeKeybindBadge({ action }: { action: KeybindAction }) {
+  const badge = useKeybindBadge(action);
+  return (
+    <span className={styles.badge} data-part="keybind">
+      {badge}
+    </span>
   );
 }
 
@@ -78,7 +73,8 @@ export function ModeStrip({
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  const powerShortcut = usePowerShortcut();
+  // Off's ⌥1, said in the power button's tooltip where the tiles show theirs as badges.
+  const powerShortcut = useKeybindBadge(modeKind(LIGHTING_MODE_KIND.OFF).keybind);
   // Per mode, the subtitle's form and whether it has changed since the strip opened: only a span
   // mounted for a new form carries the flag, so opening the page animates nothing.
   const forms = useRef(new Map<LightingModeKind, { key: string; changed: boolean }>());
