@@ -18,7 +18,7 @@ import { initReactI18next } from "react-i18next";
 
 import { I18N_DEFAULT_NS, I18N_NAMESPACES } from "./namespaces";
 
-/** Supported language codes (must match languagePolicy.SUPPORTED_LANGUAGES) */
+/** Languages with a shipped locale bundle. */
 export const I18N_SUPPORTED_LANGUAGES = ["en", "tr"] as const;
 export type I18nLanguage = (typeof I18N_SUPPORTED_LANGUAGES)[number];
 
