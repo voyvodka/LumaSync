@@ -13,13 +13,13 @@
  * refresh would make anyone stop composing and go back to presets.
  */
 
-import type { SerialCommandStatusCode } from "../src/shared/contracts/device";
-import type { LightingModeConfig } from "../src/shared/contracts/mode";
 import type {
   FirmwareProfile,
   LedChipType,
+  SerialCommandStatusCode,
   WledProtocol,
 } from "../src/shared/contracts/device";
+import type { LightingModeConfig } from "../src/shared/contracts/mode";
 import type { TelemetryQueueHealth } from "../src/shared/contracts/telemetry";
 import type { ShellState } from "../src/shared/contracts/shell";
 import type { ScenarioId } from "./scenarios";
