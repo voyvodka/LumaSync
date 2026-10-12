@@ -92,6 +92,11 @@ export function RangeRow({
     clearTimeout(settle.current);
     settle.current = setTimeout(() => setHeld(null), SETTLE_MS);
   };
+  const release = () => {
+    pressed.current = false;
+    letGo();
+    onDragEnd?.();
+  };
   useEffect(() => () => clearTimeout(settle.current), []);
   // Caught up: nothing left to hold.
   if (held !== null && !pressed.current && value === held) setHeld(null);
@@ -188,16 +193,8 @@ export function RangeRow({
         if (glide !== null) stopGlide();
         onDragStart?.();
       }}
-      onPointerUp={() => {
-        pressed.current = false;
-        letGo();
-        onDragEnd?.();
-      }}
-      onPointerCancel={() => {
-        pressed.current = false;
-        letGo();
-        onDragEnd?.();
-      }}
+      onPointerUp={release}
+      onPointerCancel={release}
       onChange={(event) => {
         let next = Number(event.currentTarget.value);
         if (!Number.isFinite(next)) return;
