@@ -125,12 +125,20 @@ let syncState: {
     ambilight?: { brightness: number };
     effect?: { id: string; speed: number; brightness: number };
   } | null;
+  /** The shared brightness Rust says; the running payload's when absent, as Rust publishes it. */
+  brightness?: number;
 };
 const adopt = vi.fn();
 
+function sharedBrightness(): number {
+  const mode = syncState.mode;
+  const own = mode?.solid ?? mode?.ambilight ?? mode?.effect;
+  return syncState.brightness ?? (mode?.kind !== "off" ? own?.brightness : undefined) ?? 1;
+}
+
 vi.mock("@/features/mode/state/useLightingRuntime", () => ({
   useLightingRuntime: () => ({
-    snapshot: syncState.mode ? { revision: 1, mode: syncState.mode } : null,
+    snapshot: syncState.mode ? { revision: 1, mode: syncState.mode, brightness: sharedBrightness() } : null,
     adopt,
   }),
 }));
@@ -371,9 +379,12 @@ describe("ControlPopupApp brightness and effects", () => {
     expect(applyOutputs).not.toHaveBeenCalled();
   });
 
-  it("holds the brightness out of reach while the lights are off", async () => {
+  // Off carries no payload: the row shows, out of reach, the one brightness every mode runs at.
+  it("holds the shared brightness out of reach while the lights are off", async () => {
+    syncState.brightness = 0.35;
     await renderSettled();
     expect(screen.getByRole("slider", { name: "common:mode.brightness" })).toBeDisabled();
+    expect(screen.getByText("35%")).toBeInTheDocument();
   });
 
   it("lists effects only while an effect runs, and a pick retunes it in place", async () => {

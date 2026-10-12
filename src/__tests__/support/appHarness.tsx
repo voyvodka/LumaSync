@@ -424,6 +424,7 @@ export function snapshot(overrides: Partial<LightingRuntimeSnapshot> = {}): Ligh
   env.revision += 1;
   return {
     mode: { kind: "off" },
+    brightness: 1,
     active: false,
     activeTargets: [],
     selectedTargets: ["usb"],

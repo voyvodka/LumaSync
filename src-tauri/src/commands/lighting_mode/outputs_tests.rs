@@ -757,6 +757,7 @@ fn a_mode_choice_keeps_the_last_payloads_and_saves_the_selection() {
     let mut first = solid(10);
     first.ambilight = Some(AmbilightPayload {
         brightness: 0.7,
+        saturation: Some(1.3),
         ..AmbilightPayload::default()
     });
     running(&rig, first, &[Usb]);
@@ -772,13 +773,109 @@ fn a_mode_choice_keeps_the_last_payloads_and_saves_the_selection() {
     let saved = rig.saved("lightingMode").unwrap();
     assert_eq!(saved["solid"]["r"], json!(10));
     assert_eq!(
-        saved["ambilight"]["brightness"]
+        saved["ambilight"]["saturation"]
             .as_f64()
-            .map(|b| (b * 10.0).round()),
-        Some(7.0)
+            .map(|s| (s * 10.0).round()),
+        Some(13.0)
+    );
+    // One brightness: the Ambilight kept is saved at the one Solid was chosen with.
+    assert_eq!(
+        saved["ambilight"]["brightness"],
+        saved["solid"]["brightness"]
     );
     assert_eq!(saved.get("targets"), None);
     assert_eq!(rig.saved("lastOutputTargets"), Some(json!(["usb", "hue"])));
+}
+
+// ---------------------------------------------------------------------------
+// One brightness for every mode
+// ---------------------------------------------------------------------------
+
+fn kind_only(kind: LightingModeKind) -> LightingModeConfig {
+    LightingModeConfig {
+        kind,
+        ..LightingModeConfig::default()
+    }
+}
+
+fn near(value: f32, expected: f32) -> bool {
+    (value - expected).abs() < 1e-4
+}
+
+/// Dimmed under Ambilight, the strip stays dim when the user switches to Solid.
+#[test]
+fn a_brightness_retuned_in_one_mode_is_what_the_next_runs_at() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(1.0), &[Usb]);
+    assert_eq!(retune(&rig, ambilight_tuning(0.3)), "RETUNE_APPLIED");
+
+    let result = apply(&rig, user(Some(kind_only(LightingModeKind::Solid)), None));
+
+    assert_eq!(result.status.code, "OUTPUTS_APPLIED");
+    let solid = result.snapshot.mode.solid.as_ref().expect("Solid runs");
+    assert!(near(solid.brightness, 0.3), "{}", solid.brightness);
+    assert!(near(result.snapshot.brightness, 0.3));
+    let saved = rig.saved("lightingMode").unwrap();
+    let ambilight = saved["ambilight"]["brightness"].as_f64().unwrap() as f32;
+    assert!(near(ambilight, 0.3), "{saved}");
+}
+
+/// A payload of the chosen kind is a choice of its brightness; the kind alone,
+/// or a retune of a kind that is not running, moves nothing.
+#[test]
+fn only_a_choice_or_a_retune_of_what_runs_moves_the_brightness() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(0.5), &[Usb]);
+    assert_eq!(retune(&rig, solid_tuning(9)), "RETUNE_NOT_RUNNING");
+
+    let effect = apply(&rig, user(Some(kind_only(LightingModeKind::Effect)), None));
+    let brightness = effect.snapshot.mode.effect.as_ref().map(|e| e.brightness);
+    assert!(brightness.is_some_and(|b| near(b, 0.5)), "{brightness:?}");
+
+    let chosen = apply(&rig, user(Some(solid(10)), None));
+    assert!(near(chosen.snapshot.brightness, 1.0));
+}
+
+/// Off carries no payload, so the snapshot says what a lit mode would run at.
+#[test]
+fn off_still_reports_the_shared_brightness() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(0.4), &[Usb]);
+
+    let result = apply(&rig, user(Some(off()), None));
+
+    assert_eq!(result.snapshot.mode.kind, LightingModeKind::Off);
+    assert!(
+        near(result.snapshot.brightness, 0.4),
+        "{}",
+        result.snapshot.brightness
+    );
+}
+
+/// A payload this session never touched is saved at the shared brightness too,
+/// so a build that keeps one per mode reads the same value whatever it starts.
+#[test]
+fn every_saved_payload_carries_the_shared_brightness() {
+    let rig = Rig::new(RigSetup {
+        state: json!({
+            "lightingMode": {
+                "kind": "off",
+                "effect": { "id": "wave", "speed": 0.5, "brightness": 0.9 }
+            }
+        }),
+        ..RigSetup::default()
+    });
+
+    running(&rig, ambilight(0.4), &[Usb]);
+
+    let saved = rig.saved("lightingMode").unwrap();
+    let effect = saved["effect"]["brightness"].as_f64().unwrap() as f32;
+    assert!(near(effect, 0.4), "{saved}");
+    assert_eq!(
+        saved["effect"]["speed"],
+        json!(0.5),
+        "the rest is carried through"
+    );
 }
 
 // ---------------------------------------------------------------------------

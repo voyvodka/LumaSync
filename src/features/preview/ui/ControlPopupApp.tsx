@@ -7,7 +7,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { shellStore } from "@/features/persistence/shellStore";
-import { usePreference } from "@/features/persistence/preferences";
 import {
   onCurrentWindowMoved,
   readCurrentWindowLogicalCenter,
@@ -73,7 +72,6 @@ export function ControlPopupApp() {
   const { t } = useTranslation();
   const { snapshot, adopt } = useLightingRuntime();
   const session = usePreviewSession();
-  const lastLit = usePreference("lastLitKind");
   const mode = snapshot?.mode ?? null;
   const retunes = useMemo(() => createRetuneCoalescer((tuning) => retuneLighting(tuning)), []);
   const sendSceneBrightness = useMemo(() => createLatestSender(setPreviewSceneBrightness), []);
@@ -167,12 +165,8 @@ export function ControlPopupApp() {
   );
 
   // ── Brightness and the effect list: retunes of the running mode ──────────
-  const shownBrightness =
-    kind === LIGHTING_MODE_KIND.SOLID
-      ? solid.brightness
-      : kind === LIGHTING_MODE_KIND.EFFECT
-        ? effect.brightness
-        : ambilight.brightness;
+  // One brightness for every mode, Off included: a mode change leaves the row where it is.
+  const shownBrightness = snapshot?.brightness ?? 1;
   const retuneBrightness = (brightness: number) => {
     const tuning: LightingTuning | null =
       kind === LIGHTING_MODE_KIND.SOLID
@@ -277,7 +271,7 @@ export function ControlPopupApp() {
           <PopupBrightnessRow brightness={playing.sceneBrightness} onChange={sendSceneBrightness} />
         ) : (
           <PopupBrightnessRow
-            brightness={kind === LIGHTING_MODE_KIND.OFF ? brightnessOf(lastLit, solid, ambilight, effect) : shownBrightness}
+            brightness={shownBrightness}
             disabled={kind === LIGHTING_MODE_KIND.OFF}
             onChange={retuneBrightness}
           />
@@ -291,16 +285,4 @@ export function ControlPopupApp() {
       </div>
     </div>
   );
-}
-
-/** While the lights are off the row shows, out of reach, what turning them on brings back. */
-function brightnessOf(
-  kind: LightingModeKind,
-  solid: { brightness: number },
-  ambilight: { brightness: number },
-  effect: { brightness: number },
-): number {
-  if (kind === LIGHTING_MODE_KIND.SOLID) return solid.brightness;
-  if (kind === LIGHTING_MODE_KIND.EFFECT) return effect.brightness;
-  return ambilight.brightness;
 }

@@ -108,11 +108,14 @@ pub enum BootHueRetryState {
 }
 
 /// `LightingRuntimeSnapshot` in `src/shared/contracts/lightingRuntime.ts`.
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LightingRuntimeSnapshot {
     pub revision: u64,
     pub mode: LightingModeConfig,
+    /// The one brightness every mode runs at, Off included, where `mode`
+    /// carries no payload to read it from.
+    pub brightness: f32,
     pub active: bool,
     pub active_targets: Vec<OutputTarget>,
     pub selected_targets: Vec<OutputTarget>,
@@ -121,6 +124,24 @@ pub struct LightingRuntimeSnapshot {
     pub hue_held_out_reason: Option<HueLeftOutReason>,
     pub boot_hue_retry: Option<BootHueRetryState>,
     pub last_outcome: Option<LightingOutcome>,
+}
+
+impl Default for LightingRuntimeSnapshot {
+    fn default() -> Self {
+        Self {
+            revision: 0,
+            mode: LightingModeConfig::default(),
+            brightness: 1.0,
+            active: false,
+            active_targets: Vec::new(),
+            selected_targets: Vec::new(),
+            phase: LightingPhase::default(),
+            request_id: None,
+            hue_held_out_reason: None,
+            boot_hue_retry: None,
+            last_outcome: None,
+        }
+    }
 }
 
 impl LightingRuntimeSnapshot {
@@ -149,6 +170,9 @@ impl LightingRuntimeSnapshot {
         }
         self.active_targets = normalize_targets(driven);
         self.active = mode.kind != LightingModeKind::Off;
+        if let Some(brightness) = mode.chosen_brightness() {
+            self.brightness = brightness;
+        }
         self.mode = mode.clone();
     }
 }

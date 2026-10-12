@@ -171,17 +171,21 @@ export function useLightingModeOrchestrator({
     effect?: EffectPayload;
   }>({});
   const running = snapshot?.mode ?? OFF;
+  // One brightness for every mode: a remembered payload shows the shared value, not the one it ran at.
+  const brightness = snapshot?.brightness;
   const lightingMode = useMemo<LightingModeConfig>(() => {
     if (running.solid) rememberedRef.current.solid = running.solid;
     if (running.ambilight) rememberedRef.current.ambilight = running.ambilight;
     if (running.effect) rememberedRef.current.effect = running.effect;
+    const shared = <T extends { brightness: number }>(payload: T | null | undefined) =>
+      payload && brightness !== undefined ? { ...payload, brightness } : (payload ?? undefined);
     return {
       ...running,
-      solid: running.solid ?? rememberedRef.current.solid,
-      ambilight: running.ambilight ?? rememberedRef.current.ambilight,
-      effect: running.effect ?? rememberedRef.current.effect,
+      solid: shared(running.solid ?? rememberedRef.current.solid),
+      ambilight: shared(running.ambilight ?? rememberedRef.current.ambilight),
+      effect: shared(running.effect ?? rememberedRef.current.effect),
     };
-  }, [running]);
+  }, [running, brightness]);
   const lightingModeRef = useRef(lightingMode);
   lightingModeRef.current = lightingMode;
 

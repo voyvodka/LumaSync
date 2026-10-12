@@ -242,8 +242,21 @@ Off's own black frame does. Answers:
 `RETUNE_NOT_RUNNING` (stored for the next start). A settled drag is saved 300 ms after the last
 retune.
 
+**One brightness for every mode.** `StoredTuning.brightness` is the only authority; each payload's
+own field is what it was chosen with, and `stored()` stamps the shared value over it, as do
+`payload_for` (a default Solid or Effect included, since it runs), the commit's replay and
+`persist_mode`. What moves it: a choice whose mode carries a payload of its own kind (a scene, a
+stage commit), a retune once it Applies or is Deferred — one of a kind that is not running moves
+nothing — and the boot seed, `PersistedShellState::lighting_brightness`, which reads a file from a
+build that kept one per mode as the last lit mode's. So a mode press sends the kind alone: a payload
+there would be read as a new choice of brightness, and the copies the popup and the compact window
+held fell back to white at full brightness. `persist_mode` writes the value into every payload on
+disk, those this session never touched too, so a build that keeps one per mode reads the same value
+whichever it starts. The snapshot carries it as `brightness`, because Off has no payload to read it
+from. A preview scene's brightness is its own and never touches it.
+
 **What runs is one snapshot, never the runtime lock.** `LightingRuntimeSnapshot` carries the
-running mode, the driven targets, the session's selection, the phase, the held-out reason, the
+running mode, the shared brightness, the driven targets, the session's selection, the phase, the held-out reason, the
 boot wait and the last choice's answer. Its revision is bumped under a small mutex and the event is emitted after that mutex is
 released, so two publishers can deliver out of order; `listenLightingRuntime` keeps the higher
 revision. A transaction publishes when it starts, at each phase, and when it ends; so do the test

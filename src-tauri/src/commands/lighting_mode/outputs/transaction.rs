@@ -990,10 +990,15 @@ impl<'a, R: Runtime> Transaction<'a, R> {
                 }),
                 _ => None,
             };
+            let shared_brightness = self.state.tuning.brightness();
             self.state.snapshot.publish(self.app, |snapshot| {
                 // A Hue stop after the last apply changed what is driven.
                 let mode = snapshot.mode.clone();
                 snapshot.set_running(&mode, hue_live, hue_unconfirmed);
+                // Off carries no payload: the shared value says what a lit mode would run at.
+                if let Some(brightness) = shared_brightness {
+                    snapshot.brightness = brightness;
+                }
                 snapshot.phase = LightingPhase::Idle;
                 snapshot.request_id = Some(ticket);
                 snapshot.selected_targets = intent.targets.iter().copied().collect();
@@ -1124,10 +1129,13 @@ pub(crate) async fn apply_outputs_with<R: Runtime>(
         (Some(mode), _) => {
             // Stamped here, not only when applied, so what is saved carries it.
             let effect = mode.effect.clone().map(normalize_effect);
+            // A payload of the chosen kind chose the brightness too; the kind
+            // alone keeps the shared one.
             state.tuning.store(
                 mode.solid.as_ref(),
                 mode.ambilight.as_ref(),
                 effect.as_ref(),
+                mode.chosen_brightness(),
             );
             if request.origin.is_choice()
                 && mode.kind == LightingModeKind::Effect
@@ -1141,14 +1149,13 @@ pub(crate) async fn apply_outputs_with<R: Runtime>(
             }
         }
         (None, LightingOrigin::Boot) => {
-            if let Some(mode) = persisted
-                .as_ref()
-                .and_then(PersistedShellState::lighting_mode)
-            {
+            if let Some(persisted) = persisted.as_ref() {
+                let mode = persisted.lighting_mode();
                 state.tuning.store(
-                    mode.solid.as_ref(),
-                    mode.ambilight.as_ref(),
-                    mode.effect.as_ref(),
+                    mode.as_ref().and_then(|mode| mode.solid.as_ref()),
+                    mode.as_ref().and_then(|mode| mode.ambilight.as_ref()),
+                    mode.as_ref().and_then(|mode| mode.effect.as_ref()),
+                    Some(persisted.lighting_brightness()),
                 );
             }
         }

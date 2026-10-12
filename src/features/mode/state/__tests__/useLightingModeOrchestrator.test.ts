@@ -44,9 +44,20 @@ let revision = 0;
 
 function snapshot(overrides: Partial<LightingRuntimeSnapshot> = {}): LightingRuntimeSnapshot {
   revision += 1;
+  // As Rust publishes it: a lit mode's own payload is the shared brightness.
+  const mode = overrides.mode;
+  const chosen =
+    mode?.kind === "solid"
+      ? mode.solid?.brightness
+      : mode?.kind === "ambilight"
+        ? mode.ambilight?.brightness
+        : mode?.kind === "effect"
+          ? mode.effect?.brightness
+          : undefined;
   return {
     revision,
     mode: { kind: "off" },
+    brightness: chosen ?? 1,
     active: false,
     activeTargets: [],
     selectedTargets: ["usb"],
@@ -137,7 +148,8 @@ describe("useLightingModeOrchestrator", () => {
       await settle(view);
 
       publish(running({ kind: "solid", solid: { r: 9, g: 8, b: 7, brightness: 0.5 } }));
-      publish(snapshot());
+      // Off carries no payload; Rust still says the shared brightness.
+      publish(snapshot({ brightness: 0.5 }));
 
       expect(view.result.current.lightingMode.kind).toBe("off");
       expect(view.result.current.lightingMode.solid).toEqual({ r: 9, g: 8, b: 7, brightness: 0.5 });
@@ -152,7 +164,8 @@ describe("useLightingModeOrchestrator", () => {
       publish(running({ kind: "ambilight", ambilight: { brightness: 1 } }));
 
       expect(view.result.current.lightingMode.kind).toBe("ambilight");
-      expect(view.result.current.lightingMode.effect).toEqual(breathe);
+      // One brightness for every mode: the effect comes back at the one Ambilight runs at.
+      expect(view.result.current.lightingMode.effect).toEqual({ ...breathe, brightness: 1 });
     });
   });
 
@@ -249,7 +262,8 @@ describe("useLightingModeOrchestrator", () => {
       );
 
       expect(applyOutputsMock).toHaveBeenCalledWith({ origin: "boot" });
-      expect(view.result.current.lightingMode.ambilight).toEqual({ brightness: 0.3 });
+      // Each at the shared brightness the snapshot says, not the one saved with it.
+      expect(view.result.current.lightingMode.ambilight).toEqual({ brightness: 1 });
       expect(view.result.current.lightingMode.effect).toEqual({ id: "cycle", speed: 0.1, brightness: 1 });
     });
   });

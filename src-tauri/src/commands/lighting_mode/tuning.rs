@@ -52,6 +52,15 @@ impl LightingTuning {
         }
     }
 
+    /// The brightness the retuned payload carries.
+    fn brightness(&self) -> Option<f32> {
+        self.solid
+            .as_ref()
+            .map(|solid| solid.brightness)
+            .or_else(|| self.ambilight.as_ref().map(|a| a.brightness))
+            .or_else(|| self.effect.as_ref().map(|effect| effect.brightness))
+    }
+
     fn kind(&self) -> Option<LightingModeKind> {
         if self.solid.is_some() {
             Some(LightingModeKind::Solid)
@@ -152,7 +161,28 @@ pub(crate) struct StoredTuning {
     pub(crate) solid: Option<SolidColorPayload>,
     pub(crate) ambilight: Option<AmbilightPayload>,
     pub(crate) effect: Option<EffectPayload>,
+    /// The one brightness every mode runs at. A payload's own field is the
+    /// value it was chosen with; this is what wins (`stamped`).
+    pub(crate) brightness: Option<f32>,
     pub(crate) generation: u64,
+}
+
+impl StoredTuning {
+    /// Every payload at the shared brightness.
+    pub(crate) fn stamped(mut self) -> Self {
+        if let Some(brightness) = self.brightness {
+            if let Some(solid) = self.solid.as_mut() {
+                solid.brightness = brightness;
+            }
+            if let Some(ambilight) = self.ambilight.as_mut() {
+                ambilight.brightness = brightness;
+            }
+            if let Some(effect) = self.effect.as_mut() {
+                effect.brightness = brightness;
+            }
+        }
+        self
+    }
 }
 
 #[derive(Default)]
@@ -190,8 +220,13 @@ impl TuningCell {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
+    /// The newest payloads, at the shared brightness.
     pub(crate) fn stored(&self) -> StoredTuning {
-        self.lock().stored.clone()
+        self.lock().stored.clone().stamped()
+    }
+
+    pub(crate) fn brightness(&self) -> Option<f32> {
+        self.lock().stored.brightness
     }
 
     /// The running mode already carries the newest payloads.
@@ -200,17 +235,22 @@ impl TuningCell {
         inner.applied == Some(inner.stored.generation)
     }
 
-    /// Records a request's payloads as the newest, without applying them.
+    /// Records a request's payloads as the newest, without applying them, and
+    /// `brightness` as the shared one when the request chose it.
     pub(crate) fn store(
         &self,
         solid: Option<&SolidColorPayload>,
         ambilight: Option<&AmbilightPayload>,
         effect: Option<&EffectPayload>,
+        brightness: Option<f32>,
     ) {
-        if solid.is_none() && ambilight.is_none() && effect.is_none() {
+        if solid.is_none() && ambilight.is_none() && effect.is_none() && brightness.is_none() {
             return;
         }
         let mut inner = self.lock();
+        if let Some(brightness) = brightness {
+            inner.stored.brightness = Some(brightness);
+        }
         if let Some(solid) = solid {
             inner.stored.solid = Some(solid.clone());
         }
@@ -305,7 +345,7 @@ impl TuningCell {
                 .accepting
                 .clone()
                 .filter(|_| moved)
-                .map(|accepting| (accepting, inner.stored.clone()))
+                .map(|accepting| (accepting, inner.stored.clone().stamped()))
         };
         if let Some((accepting, stored)) = replay {
             let _ = tauri::async_runtime::spawn_blocking(move || {
@@ -324,6 +364,9 @@ impl TuningCell {
         let Some(kind) = tuning.kind() else {
             return RetuneOutcome::NotRunning;
         };
+        // Moves the shared brightness only once the retune reached the mode, so
+        // one of a kind that is not running leaves it as it was.
+        let brightness = tuning.brightness();
         let turn = Arc::clone(&self.turn).lock_owned().await;
         let (accepting, awaiting) = {
             let mut inner = self.lock();
@@ -349,11 +392,14 @@ impl TuningCell {
             if applied {
                 let mut inner = self.lock();
                 inner.applied = Some(inner.stored.generation);
+                inner.stored.brightness = brightness.or(inner.stored.brightness);
                 return RetuneOutcome::Applied;
             }
             return RetuneOutcome::NotRunning;
         }
         if awaiting == Some(kind) {
+            let mut inner = self.lock();
+            inner.stored.brightness = brightness.or(inner.stored.brightness);
             RetuneOutcome::Deferred
         } else {
             RetuneOutcome::NotRunning
@@ -429,6 +475,9 @@ pub async fn retune_lighting<R: Runtime>(
         RetuneOutcome::Applied => {
             let sink: Arc<dyn SnapshotSink> = Arc::new(app.clone());
             state.snapshot.publish_coalesced(sink, |snapshot| {
+                if let Some(brightness) = tuning.brightness() {
+                    snapshot.brightness = brightness;
+                }
                 if tuning.solid.is_some() && snapshot.mode.kind == LightingModeKind::Solid {
                     snapshot.mode.solid = tuning.solid.clone();
                 }

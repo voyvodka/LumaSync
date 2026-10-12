@@ -163,6 +163,25 @@ impl PersistedShellState {
         self.read("lightingMode")
     }
 
+    /// The one brightness every mode runs at. A file from a build that kept one
+    /// per mode reads as the last lit mode's (`lastLitKind`, Ambilight when
+    /// absent, as the frontend resolves it); a file with none reads as full.
+    pub fn lighting_brightness(&self) -> f32 {
+        let kind = self
+            .0
+            .get("lastLitKind")
+            .and_then(Value::as_str)
+            .filter(|kind| matches!(*kind, "solid" | "effect"))
+            .unwrap_or("ambilight");
+        self.0
+            .get("lightingMode")
+            .and_then(|mode| mode.get(kind))
+            .and_then(|payload| payload.get("brightness"))
+            .and_then(Value::as_f64)
+            .filter(|brightness| brightness.is_finite())
+            .map_or(1.0, |brightness| brightness.clamp(0.0, 1.0) as f32)
+    }
+
     /// `lightingMode` as stored, for a write that changes some fields and
     /// must carry the rest through as they are.
     pub fn lighting_mode_object(&self) -> Option<Map<String, Value>> {
@@ -1316,6 +1335,28 @@ mod tests {
 
     fn persisted(raw: &str) -> Option<PersistedShellState> {
         PersistedShellState::from_file_json(raw)
+    }
+
+    /// A file from a build that kept a brightness per mode reads as the last
+    /// lit mode's, and one with none as full.
+    #[test]
+    fn the_shared_brightness_reads_as_the_last_lit_modes() {
+        let read = |value: &str| {
+            persisted(&format!(r#"{{"shell-state": {{ {value} }} }}"#))
+                .unwrap()
+                .lighting_brightness()
+        };
+        let modes = r#""lightingMode": {
+            "kind": "off",
+            "solid": { "r": 1, "g": 2, "b": 3, "brightness": 0.2 },
+            "ambilight": { "brightness": 0.5 },
+            "effect": { "id": "wave", "brightness": 0.8 }
+        }"#;
+        assert_eq!(read(&format!(r#"{modes}, "lastLitKind": "solid""#)), 0.2);
+        assert_eq!(read(&format!(r#"{modes}, "lastLitKind": "effect""#)), 0.8);
+        assert_eq!(read(modes), 0.5, "absent is Ambilight");
+        assert_eq!(read(&format!(r#"{modes}, "lastLitKind": "disco""#)), 0.5);
+        assert_eq!(read(r#""lastLitKind": "solid""#), 1.0);
     }
 
     /// Off switching the Hue lights off is the default for every install,

@@ -120,6 +120,8 @@ export interface LightingRuntimeSnapshot {
   revision: number;
   /** The mode the backend runs — never the one asked for. */
   mode: LightingModeConfig;
+  /** The one brightness every mode runs at, Off included, where `mode` carries no payload to read it from. */
+  brightness: number;
   active: boolean;
   /** The outputs being driven, plus a Hue stream whose stop did not confirm. */
   activeTargets: HueRuntimeTarget[];

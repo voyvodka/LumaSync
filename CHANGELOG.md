@@ -103,6 +103,11 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- One brightness for every mode. Switching between Ambilight, Solid and Effect keeps the brightness
+  where it was, on Lights, in the compact window and in the LED preview, instead of each mode
+  keeping its own. The modes' separate brightnesses become one: the last lit mode's. Choosing a
+  scene sets it too, so a 20% scene leaves every mode at 20%.
+
 - LED Setup's Test shows the layout on the strip: LED #1 green, each edge's end LEDs blue, the two
   beside the stand red, and a white light running the way the strip goes. Edits show at once.
 

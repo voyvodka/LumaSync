@@ -230,6 +230,11 @@ fn the_scene_brightness_reaches_the_worker_and_is_never_saved() {
         "{:?}",
         rig.written_keys()
     );
+    assert_eq!(
+        rig.state().tuning.brightness(),
+        Some(1.0),
+        "the modes' shared brightness is not the scene's"
+    );
 }
 
 #[test]

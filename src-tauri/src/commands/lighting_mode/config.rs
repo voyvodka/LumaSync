@@ -388,6 +388,32 @@ impl SolidColorPayload {
     }
 }
 
+impl LightingModeConfig {
+    /// The brightness a request chose: its own kind's payload, when it carries
+    /// one. A press that names only the kind keeps the shared brightness.
+    pub(crate) fn chosen_brightness(&self) -> Option<f32> {
+        match self.kind {
+            LightingModeKind::Solid => self.solid.as_ref().map(|solid| solid.brightness),
+            LightingModeKind::Ambilight => self.ambilight.as_ref().map(|a| a.brightness),
+            LightingModeKind::Effect => self.effect.as_ref().map(|effect| effect.brightness),
+            LightingModeKind::Off => None,
+        }
+    }
+
+    /// Its own kind's payload at `brightness`.
+    pub(crate) fn stamp_brightness(&mut self, brightness: f32) {
+        if let Some(solid) = self.solid.as_mut() {
+            solid.brightness = brightness;
+        }
+        if let Some(ambilight) = self.ambilight.as_mut() {
+            ambilight.brightness = brightness;
+        }
+        if let Some(effect) = self.effect.as_mut() {
+            effect.brightness = brightness;
+        }
+    }
+}
+
 /// `DEFAULT_SOLID_COLOR` in `src/shared/contracts/mode.ts`: what Solid shows
 /// before any colour was chosen.
 pub(crate) const DEFAULT_SOLID: SolidColorPayload = SolidColorPayload {

@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tauri::{AppHandle, Listener, Manager, Runtime, State};
 
-use super::config::{normalize_effect, WledLiveFrameAdvisory};
+use super::config::{normalize_effect, WledLiveFrameAdvisory, DEFAULT_EFFECT, DEFAULT_SOLID};
 use super::hue_driver::{hue_driver_for, HueAreaVerdict, HueDriver};
 use super::snapshot::{
     parse_targets, publish_running, BootHueRetryState, HueLeftOutReason, LightingPhase,
@@ -708,6 +708,22 @@ fn payload_for(
         }
         LightingModeKind::Off => {}
     }
+    let shared = stored
+        .brightness
+        .or_else(|| persisted.map(PersistedShellState::lighting_brightness));
+    if let Some(brightness) = shared {
+        // The default too: it runs, so it runs at the shared brightness.
+        match kind {
+            LightingModeKind::Solid => {
+                mode.solid.get_or_insert(DEFAULT_SOLID);
+            }
+            LightingModeKind::Effect => {
+                mode.effect.get_or_insert(DEFAULT_EFFECT);
+            }
+            _ => {}
+        }
+        mode.stamp_brightness(brightness);
+    }
     mode
 }
 
@@ -747,6 +763,16 @@ fn persist_mode<R: Runtime>(app: &AppHandle<R>, kind: &LightingModeKind, stored:
             .as_ref()
             .and_then(|e| serde_json::to_value(e).ok()),
     );
+    // Every payload on disk at the shared brightness, those this session never
+    // touched too: a build that keeps one per mode then reads the same value
+    // whichever mode it starts.
+    if let Some(brightness) = stored.brightness {
+        for key in ["solid", "ambilight", "effect"] {
+            if let Some(Value::Object(payload)) = mode.get_mut(key) {
+                payload.insert("brightness".to_string(), Value::from(brightness));
+            }
+        }
+    }
     // Stamped per dispatch and never part of the saved mode; `targets` is a
     // copy an older build wrote, which nothing read.
     for derived in ["ledCalibration", "roomGeometry", "targets"] {
