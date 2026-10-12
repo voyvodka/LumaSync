@@ -9,6 +9,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { prefersReducedMotion } from "@/shared/lib/motion";
+import { useArrivals } from "@/shared/lib/useArrivals";
 import { useFlip } from "@/shared/lib/useFlip";
 import { SCENE_LIMITS, type StoredScene, type SuggestedSceneId } from "@/shared/contracts/scenes";
 import { IconButton } from "@/shared/ui/IconButton/IconButton";
@@ -28,7 +29,6 @@ import {
 } from "../model/sceneLibrary";
 import { editScenes } from "../state/scenesStore";
 import styles from "./SceneLibrary.module.css";
-import { useArrivals } from "@/shared/lib/useArrivals";
 
 /** How long a delete waits for its second press: the webview does not always blur a clicked button. */
 const ARMED_MS = 3000;

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useArrivals } from "@/shared/lib/useArrivals";
 import { useFlip } from "@/shared/lib/useFlip";
 import { useSideScroll } from "@/shared/lib/useSideScroll";
 
 import styles from "./ScenesRow.module.css";
-import { useArrivals } from "@/shared/lib/useArrivals";
 
 export interface SceneChip {
   id: string;
@@ -36,11 +36,11 @@ export function ScenesRow({ scenes, disabled = false, onPick, trailing, placehol
     const frame = requestAnimationFrame(() => setPlaced(true));
     return () => cancelAnimationFrame(frame);
   }, []);
+  const ids = scenes.map((scene) => scene.id);
   // A chip just saved or added grows in.
-  const { arrived, settled } = useArrivals(scenes.map((scene) => scene.id));
+  const { arrived, settled } = useArrivals(ids);
   // Reordered in the library behind the popover: the chips slide to their new places.
   const listRef = useRef<HTMLDivElement | null>(null);
-  const ids = scenes.map((scene) => scene.id);
   useFlip(listRef, ids);
   const activeId = scenes.find((scene) => scene.active)?.id;
   // Names too: a renamed chip changes width, and the edges' fades are measured afresh.
