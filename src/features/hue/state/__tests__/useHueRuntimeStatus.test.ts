@@ -15,6 +15,7 @@ import {
   setHealth,
 } from "../../__tests__/fakeHueHealth";
 import type * as modeApiModule from "@/features/mode/modeApi";
+import { flush } from "../../__tests__/support/flushTimers";
 
 const startHueMock = vi.fn<typeof modeApiModule.startHue>();
 const restartHueMock = vi.fn<typeof modeApiModule.restartHue>();
@@ -35,12 +36,6 @@ const bridge: HueBridgeSummary = { id: "bridge-1", ip: "192.168.1.10", name: "Br
 const credentials: HuePairingCredentials = { username: "app-user", clientKey: "AABBCCDD" };
 
 const running = { stream: { active: true, status: runtimeStatus("Running") } };
-
-const flush = async (ms = 0) => {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(ms);
-  });
-};
 
 const mount = (onError: (status: HueOnboardingStatus) => void = () => {}) =>
   renderHook(() => useHueRuntimeStatus({ bridge, credentials, areaId: "area-1", onError }));
