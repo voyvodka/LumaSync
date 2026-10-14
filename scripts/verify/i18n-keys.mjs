@@ -19,7 +19,7 @@ const CONTRACTS_DIR = resolve(ROOT, "src/shared/contracts");
 
 // Static heads of live `` t(`prefix.${x}`) `` sites. An unlisted head is only a
 // note(), but orphan accounting under it is unreliable until the list catches up.
-// phase01-shell-contracts.mjs reads this array literal, so it stays a flat list.
+// contracts/contractModules.mjs reads this array literal, so it stays a flat list.
 const KNOWN_DYNAMIC_PREFIXES = [
   "hue:runtime.codes",
   "hue:runtime.states",
