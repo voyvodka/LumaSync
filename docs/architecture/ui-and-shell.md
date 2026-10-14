@@ -244,7 +244,10 @@ watcher (`spawn_serial_watch`, `device-output.md`): lighting runs from the tray 
 hidden, and an unplug must still be noticed there. It lists ports without opening any.
 
 **`document.visibilityState` alone is not enough on Windows.** WebView2 can keep reporting
-`visible` while the window sits hidden in the tray, so the telemetry loop and
+`visible` while the window sits hidden in the tray — Tauri's `WebviewWindow::hide()` hides the
+native window only and never sets the WebView2 controller's `IsVisible` to false, which is the
+signal WebView2 uses to throttle and report the page hidden; WebKit on macOS and Linux follows
+window occlusion on its own. So the telemetry loop and
 `useCapturePermissionRecheck` read `isWindowVisible` / `useWindowVisible`
 (`features/shell/windowVisibility.ts`) instead: the document *and* Rust's answer for the native main
 window (shown and not minimised). Rust re-reads the window after every show or hide it makes itself,
