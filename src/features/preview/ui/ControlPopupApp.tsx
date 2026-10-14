@@ -35,6 +35,7 @@ import { IconClose, IconEye, IconEyeOff, IconMinus } from "@/shared/ui/icons";
 import {
   closePreview,
   setPreviewPopupHidden,
+  setPreviewSceneBlackBorders,
   setPreviewSceneBrightness,
   setPreviewTwinHidden,
   startPreviewScene,
@@ -44,6 +45,7 @@ import { createLatestSender } from "../state/latestSender";
 import { useLatencyResult } from "../state/useLatencyResult";
 import { usePopupStage } from "../state/usePopupStage";
 import { usePreviewSession } from "../state/usePreviewSession";
+import { PopupBlackBarsRow } from "./PopupBlackBarsRow";
 import { PopupBrightnessRow } from "./PopupBrightnessRow";
 import { PopupLatencyRow } from "./PopupLatencyRow";
 import { PopupScenePicker } from "./PopupScenePicker";
@@ -69,6 +71,7 @@ export function ControlPopupApp() {
   const mode = snapshot?.mode ?? null;
   const retunes = useMemo(() => createRetuneCoalescer((tuning) => retuneLighting(tuning)), []);
   const sendSceneBrightness = useMemo(() => createLatestSender(setPreviewSceneBrightness), []);
+  const sendSceneBlackBorders = useMemo(() => createLatestSender(setPreviewSceneBlackBorders), []);
   const [runError, setRunError] = useState<string | null>(null);
   const [sceneBusy, setSceneBusy] = useState(false);
   const playing = session?.state === "scene" ? session : null;
@@ -258,7 +261,12 @@ export function ControlPopupApp() {
         <ModeStrip variant="popup" value={playing ? null : kind} onSelect={handleModeClick} />
         {/* A scene's brightness is its own and never saved; the mode's settings wait until it stops. */}
         {playing ? (
-          <PopupBrightnessRow brightness={playing.sceneBrightness} onChange={sendSceneBrightness} />
+          <>
+            <PopupBrightnessRow brightness={playing.sceneBrightness} onChange={sendSceneBrightness} />
+            {playing.scene === "letterbox" && (
+              <PopupBlackBarsRow enabled={playing.sceneBlackBorders} onChange={sendSceneBlackBorders} />
+            )}
+          </>
         ) : (
           <div data-lights className={styles.stage}>
             <ModeStage

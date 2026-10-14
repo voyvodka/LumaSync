@@ -25,7 +25,8 @@ use crate::commands::ambilight_capture;
 use crate::commands::calibration::list_displays;
 use crate::commands::lighting_mode::latency::LatencyResult;
 use crate::commands::lighting_mode::preview_scene::{
-    set_scene_brightness, start_scene_queued, stop_scene_queued, SceneLighting, SceneRestore,
+    set_scene_black_borders, set_scene_brightness, start_scene_queued, stop_scene_queued,
+    SceneLighting, SceneRestore,
 };
 use crate::commands::lighting_mode::LightingRuntimeState;
 use crate::commands::status::CommandStatus;
@@ -64,6 +65,12 @@ pub struct StartPreviewScenePayload {
 #[serde(rename_all = "camelCase")]
 pub struct SetPreviewSceneBrightnessPayload {
     pub brightness: f32,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetPreviewSceneBlackBordersPayload {
+    pub enabled: bool,
 }
 
 /// `f` on the main thread, where windows are built, awaited. `Err` says why
@@ -238,8 +245,11 @@ pub async fn start_preview_scene<R: Runtime>(
         }
     };
     let failed = match outcome {
-        SceneLighting::Running { brightness } => {
-            return match state.set_scene(payload.kind, brightness)? {
+        SceneLighting::Running {
+            brightness,
+            black_borders,
+        } => {
+            return match state.set_scene(payload.kind, brightness, black_borders)? {
                 SceneSet::Playing(session) => {
                     emit_session(&app);
                     Ok(answer(session, PREVIEW_SCENE_STARTED, "Scene started."))
@@ -331,6 +341,43 @@ pub async fn set_preview_scene_brightness<R: Runtime>(
     }
     Ok(match updated {
         Some(session) => answer(session, PREVIEW_SCENE_UPDATED, "Scene brightness changed."),
+        None => match state.scene_target()? {
+            Some(target) => answer(target.session, PREVIEW_SCENE_NOT_RUNNING, "No scene plays."),
+            None => not_open(),
+        },
+    })
+}
+
+/// The scene's black-bar switch, live; never saved, since the scene is not
+/// the user's mode. The latency scene keeps it off and answers with the
+/// session unchanged.
+#[tauri::command]
+pub async fn set_preview_scene_black_borders<R: Runtime>(
+    app: AppHandle<R>,
+    payload: SetPreviewSceneBlackBordersPayload,
+) -> Result<PreviewSessionResult, String> {
+    let lighting_app = app.clone();
+    let applied = tauri::async_runtime::spawn_blocking(move || {
+        set_scene_black_borders(
+            &lighting_app.state::<LightingRuntimeState>(),
+            payload.enabled,
+        )
+    })
+    .await
+    .map_err(|error| {
+        format!("LIGHTING_TRANSITION_WORKER_FAILED: the black-bar change died: {error}")
+    })?;
+    let state = app.state::<PreviewSessionState>();
+    let updated = match applied {
+        Some(black_borders) => state.set_scene_black_borders(black_borders)?,
+        None => None,
+    };
+    if updated.is_some() {
+        emit_session(&app);
+        super::feed::refresh(&app);
+    }
+    Ok(match updated {
+        Some(session) => answer(session, PREVIEW_SCENE_UPDATED, "Scene black bars changed."),
         None => match state.scene_target()? {
             Some(target) => answer(target.session, PREVIEW_SCENE_NOT_RUNNING, "No scene plays."),
             None => not_open(),

@@ -53,6 +53,7 @@ const APP_COMMANDS: &[&str] = &[
     "start_preview_scene",
     "stop_preview_scene",
     "set_preview_scene_brightness",
+    "set_preview_scene_black_borders",
     "check_for_update",
     "download_and_install_update",
     "get_launch_context",

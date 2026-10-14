@@ -31,6 +31,7 @@ const getPreviewSession = vi.fn<typeof previewApiModule.getPreviewSession>();
 const startPreviewScene = vi.fn<typeof previewApiModule.startPreviewScene>();
 const stopPreviewScene = vi.fn<typeof previewApiModule.stopPreviewScene>();
 const setPreviewSceneBrightness = vi.fn<typeof previewApiModule.setPreviewSceneBrightness>();
+const setPreviewSceneBlackBorders = vi.fn<typeof previewApiModule.setPreviewSceneBlackBorders>();
 
 vi.mock("../../previewApi", () => ({
   closePreview: (...args: Parameters<typeof closePreview>) => closePreview(...args),
@@ -41,6 +42,8 @@ vi.mock("../../previewApi", () => ({
   stopPreviewScene: (...args: Parameters<typeof stopPreviewScene>) => stopPreviewScene(...args),
   setPreviewSceneBrightness: (...args: Parameters<typeof setPreviewSceneBrightness>) =>
     setPreviewSceneBrightness(...args),
+  setPreviewSceneBlackBorders: (...args: Parameters<typeof setPreviewSceneBlackBorders>) =>
+    setPreviewSceneBlackBorders(...args),
 }));
 
 /** The popup's `preview://session` handler, so a test can play Rust's event. */
@@ -68,7 +71,13 @@ const LIVE: PreviewSession = {
   twinHeldForCapture: false,
 };
 
-const SPIRAL: PreviewSession = { ...LIVE, state: "scene", scene: "spiral", sceneBrightness: 0.6 };
+const SPIRAL: PreviewSession = {
+  ...LIVE,
+  state: "scene",
+  scene: "spiral",
+  sceneBrightness: 0.6,
+  sceneBlackBorders: false,
+};
 
 const applyOutputs = vi.fn<typeof modeApiModule.applyOutputs>();
 const retuneLighting = vi.fn<typeof modeApiModule.retuneLighting>();
@@ -163,6 +172,7 @@ beforeEach(() => {
   startPreviewScene.mockResolvedValue(sessionReply(PREVIEW_STATUS.SCENE_STARTED));
   stopPreviewScene.mockResolvedValue(sessionReply(PREVIEW_STATUS.SCENE_STOPPED));
   setPreviewSceneBrightness.mockResolvedValue(sessionReply(PREVIEW_STATUS.SCENE_UPDATED));
+  setPreviewSceneBlackBorders.mockResolvedValue(sessionReply(PREVIEW_STATUS.SCENE_UPDATED));
   applyOutputs.mockResolvedValue(outputsReply());
   retuneLighting.mockResolvedValue({ status: { code: "RETUNE_APPLIED", message: "", details: null } });
   invokeMock.mockResolvedValue(undefined);
@@ -577,6 +587,45 @@ describe("ControlPopupApp scenes", () => {
 
     await waitFor(() => expect(applyOutputs).toHaveBeenCalledTimes(1));
     expect(applyOutputs.mock.calls[0][0].mode?.kind).toBe(LIGHTING_MODE_KIND.SOLID);
+  });
+
+  // The letterbox scene is where the crop can be seen; its switch is the scene's, never saved.
+  it("offers the black-bar switch while the letterbox plays, and flips it for the scene", async () => {
+    getPreviewSession.mockResolvedValue({ ...SPIRAL, scene: "letterbox", sceneBlackBorders: true });
+    const user = userEvent.setup();
+    render(<ControlPopupApp />);
+    const toggle = await screen.findByTestId("popup-black-bars");
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+
+    await user.click(toggle);
+
+    await waitFor(() => expect(setPreviewSceneBlackBorders).toHaveBeenCalledWith(false));
+    expect(retuneLighting).not.toHaveBeenCalled();
+    expect(storeSave).not.toHaveBeenCalled();
+    act(() => sessionHandler?.({ ...SPIRAL, scene: "letterbox", sceneBlackBorders: false }));
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+  });
+
+  // A flip the scene did not take must not show as taken: the switch is the session's.
+  it("keeps the black-bar switch where the scene is when a flip is refused", async () => {
+    getPreviewSession.mockResolvedValue({ ...SPIRAL, scene: "letterbox", sceneBlackBorders: true });
+    setPreviewSceneBlackBorders.mockResolvedValue(sessionReply(PREVIEW_STATUS.SCENE_NOT_RUNNING));
+    const user = userEvent.setup();
+    render(<ControlPopupApp />);
+    const toggle = await screen.findByTestId("popup-black-bars");
+
+    await user.click(toggle);
+
+    await waitFor(() => expect(setPreviewSceneBlackBorders).toHaveBeenCalledWith(false));
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("shows no black-bar switch for a scene without bars", async () => {
+    getPreviewSession.mockResolvedValue(SPIRAL);
+    render(<ControlPopupApp />);
+    await waitForScene();
+
+    expect(screen.queryByTestId("popup-black-bars")).not.toBeInTheDocument();
   });
 
   // The scene's brightness is its own: the user's mode is never retuned for it.

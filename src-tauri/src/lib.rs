@@ -107,7 +107,8 @@ use commands::notifications::{request_notification_permission, show_notification
 use commands::platform::open_log_dir;
 use commands::preview::feed::subscribe_twin_frames;
 use commands::preview::scene::{
-    set_preview_scene_brightness, start_preview_scene, stop_preview_scene,
+    set_preview_scene_black_borders, set_preview_scene_brightness, start_preview_scene,
+    stop_preview_scene,
 };
 use commands::preview::session::{
     close_preview, get_preview_session, open_preview, set_preview_popup_hidden,
@@ -975,6 +976,7 @@ pub fn run() {
             start_preview_scene,
             stop_preview_scene,
             set_preview_scene_brightness,
+            set_preview_scene_black_borders,
             check_for_update,
             download_and_install_update,
             get_launch_context,

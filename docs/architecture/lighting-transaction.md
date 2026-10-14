@@ -399,12 +399,17 @@ set and cleared under the runtime lock, like `test_prior`, and `apply_config_blo
 which reads the marker — so a late scene stop cannot put the old mode back over the user's choice.
 While it plays nothing is published or saved: the settings refresh leaves it alone,
 `accepting_for_running` offers retunes nothing, and `persist_running_choice` returns. Its brightness
-has its own command, `set_preview_scene_brightness`, which writes the running worker's live
-settings and nothing else; through `retune_lighting` it would land in the stored tuning and become
-the user's next Ambilight brightness. The stop restores with the settings as saved now, falls to Off
-if that restore is gated, and back at Off paints the strip black and switches a WLED panel off, as a
-user's Off does. Entering or leaving a scene rebuilds the worker rather than retuning it, so the
-history skip it was started with (`WorkerPacing::preview_scene`) matches what it captures.
+has its own command, `set_preview_scene_brightness`, which writes the running worker's live settings
+and nothing else; through `retune_lighting` it would land in the stored tuning and become the user's
+next Ambilight brightness. Its black-bar switch is the same kind of thing,
+`set_preview_scene_black_borders`: it starts as the Ambilight setting the scene was built from,
+flips the worker's live crop only, carries to the next scene as the brightness does — but not out of
+the latency scene, which keeps it off so a flip reaches the output uncropped — and a black-bar
+change made on Lights while a scene plays waits, like any retune, until it stops. The stop restores
+with the settings as saved now, falls to Off if that restore is gated, and back at Off paints the
+strip black and switches a WLED panel off, as a user's Off does. Entering or leaving a scene
+rebuilds the worker rather than retuning it, so the history skip it was started with
+(`WorkerPacing::preview_scene`) matches what it captures.
 
 **Targets are a set, and an unknown one is an error.** The request carries target names; they parse
 into a `BTreeSet<OutputTarget>` (ordered `usb, hue`, deduped by construction), and a name this build

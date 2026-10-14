@@ -175,6 +175,18 @@ export async function setPreviewSceneBrightness(
   }
 }
 
+export async function setPreviewSceneBlackBorders(
+  enabled: boolean,
+  invoker: CommandInvoker = invokeCommand,
+): Promise<PreviewSessionResult> {
+  try {
+    return await invoker(PREVIEW_COMMANDS.SET_SCENE_BLACK_BORDERS, { payload: { enabled } });
+  } catch (error) {
+    console.error("[LumaSync] set_preview_scene_black_borders failed:", error);
+    return failedSessionResult(PREVIEW_STATUS.SCENE_NOT_RUNNING, error);
+  }
+}
+
 /** The twin's frames, each handed to `onFrame` as the raw buffer. */
 export async function subscribeTwinFrames(
   onFrame: (frame: ArrayBuffer) => void,

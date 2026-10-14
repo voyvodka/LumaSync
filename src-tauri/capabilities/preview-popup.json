@@ -27,6 +27,7 @@
     "allow-start-preview-scene",
     "allow-stop-preview-scene",
     "allow-set-preview-scene-brightness",
+    "allow-set-preview-scene-black-borders",
     "allow-open-log-dir",
     "allow-start-window-drag"
   ]

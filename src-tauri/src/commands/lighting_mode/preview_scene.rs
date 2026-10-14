@@ -31,8 +31,11 @@ use crate::commands::shell_state;
 use crate::commands::status::CommandStatus;
 
 pub enum SceneLighting {
-    /// Ambilight runs for the scene, at this brightness.
-    Running { brightness: f32 },
+    /// Ambilight runs for the scene, at this brightness, cropping black bars or not.
+    Running {
+        brightness: f32,
+        black_borders: bool,
+    },
     /// A test pattern owns the lights.
     TestPatternActive,
     /// Nothing to light: no strip or WLED panel, and no Hue stream up.
@@ -120,15 +123,18 @@ pub fn start_scene_lighting<R: Runtime>(
     let (result, failed_prior) = {
         let mut owner = runtime_state.lock_owner()?;
         // A second scene keeps the first one's prior, which is the user's mode,
-        // and the brightness the user gave the scene.
-        if owner.preview.scene.is_none() {
+        // and the brightness and black-bar switch the user gave the scene — the
+        // switch not from the latency scene, which forces it off.
+        let previous = owner.preview.scene;
+        if previous.is_none() {
             owner.preview.session_prior = Some(owner.active_mode.clone());
-        } else if let Some(brightness) = owner.active_mode.ambilight.as_ref().map(|a| a.brightness)
-        {
-            config
-                .ambilight
-                .get_or_insert_with(Default::default)
-                .brightness = brightness;
+        } else if let Some(running) = owner.active_mode.ambilight.as_ref() {
+            let (brightness, black_borders) = (running.brightness, running.black_border_detection);
+            let ambilight = config.ambilight.get_or_insert_with(Default::default);
+            ambilight.brightness = brightness;
+            if !measuring && previous != Some(SceneKind::Latency) {
+                ambilight.black_border_detection = black_borders;
+            }
         }
         owner.preview.scene = Some(kind);
         owner.preview.latency_sink = measuring.then(|| latency_sink(app));
@@ -156,13 +162,13 @@ pub fn start_scene_lighting<R: Runtime>(
     };
     note_applied_mode(app, &result.mode);
     match failed_prior {
-        None => Ok(SceneLighting::Running {
-            brightness: result
-                .mode
-                .ambilight
-                .as_ref()
-                .map_or(1.0, |ambilight| ambilight.brightness),
-        }),
+        None => {
+            let ambilight = result.mode.ambilight.as_ref();
+            Ok(SceneLighting::Running {
+                brightness: ambilight.map_or(1.0, |ambilight| ambilight.brightness),
+                black_borders: ambilight.is_some_and(|ambilight| ambilight.black_border_detection),
+            })
+        }
         Some(prior) => {
             restore_interrupted(app, prior)?;
             Ok(SceneLighting::Failed(result.status))
@@ -280,6 +286,24 @@ pub fn set_scene_brightness(state: &LightingRuntimeState, brightness: f32) -> bo
     retune_ambilight_live(&live, &ambilight);
     owner.active_mode.ambilight = Some(ambilight);
     true
+}
+
+/// The scene's black-bar switch, live; never saved, since the scene is not the
+/// user's mode. `None` with no scene playing; otherwise what the scene now runs
+/// with, which for the latency scene stays off: its flips must reach the output
+/// uncropped.
+pub fn set_scene_black_borders(state: &LightingRuntimeState, enabled: bool) -> Option<bool> {
+    let mut owner = state.lock_owner_recovered();
+    let scene = owner.preview.scene?;
+    let live = owner.ambilight_live.clone()?;
+    if scene == SceneKind::Latency {
+        return Some(false);
+    }
+    let mut ambilight = owner.active_mode.ambilight.clone().unwrap_or_default();
+    ambilight.black_border_detection = enabled;
+    retune_ambilight_live(&live, &ambilight);
+    owner.active_mode.ambilight = Some(ambilight);
+    Some(enabled)
 }
 
 #[cfg(test)]

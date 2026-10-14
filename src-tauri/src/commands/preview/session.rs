@@ -60,6 +60,9 @@ pub enum PreviewSession {
         scene: SceneKind,
         /// The scene's own brightness, never saved.
         scene_brightness: f32,
+        /// Whether the scene crops black bars: the Ambilight setting at its
+        /// start, then the popup's switch; never saved.
+        scene_black_borders: bool,
     },
 }
 
@@ -114,6 +117,7 @@ struct OpenSession {
 struct PlayingScene {
     kind: SceneKind,
     brightness: f32,
+    black_borders: bool,
 }
 
 /// What `start_preview_scene` needs from the open session.
@@ -148,6 +152,7 @@ impl OpenSession {
                 twin_held_for_capture,
                 scene: scene.kind,
                 scene_brightness: scene.brightness,
+                scene_black_borders: scene.black_borders,
             },
             None => PreviewSession::Live {
                 display_id,
@@ -289,7 +294,12 @@ impl PreviewSessionState {
     /// The scene's lights are up; record it as playing — unless its window is
     /// gone, because the session ended or a mode change took the lights in
     /// between.
-    pub(super) fn set_scene(&self, kind: SceneKind, brightness: f32) -> Result<SceneSet, String> {
+    pub(super) fn set_scene(
+        &self,
+        kind: SceneKind,
+        brightness: f32,
+        black_borders: bool,
+    ) -> Result<SceneSet, String> {
         let mut inner = self.lock()?;
         let Some(open) = inner.open.as_mut() else {
             return Ok(SceneSet::Closed);
@@ -297,7 +307,11 @@ impl PreviewSessionState {
         if open.scene_label.is_none() {
             return Ok(SceneSet::Superseded(open.wire()));
         }
-        open.scene = Some(PlayingScene { kind, brightness });
+        open.scene = Some(PlayingScene {
+            kind,
+            brightness,
+            black_borders,
+        });
         Ok(SceneSet::Playing(open.wire()))
     }
 
@@ -310,6 +324,19 @@ impl PreviewSessionState {
             return Ok(None);
         };
         scene.brightness = brightness;
+        Ok(inner.open.as_ref().map(OpenSession::wire))
+    }
+
+    pub(super) fn set_scene_black_borders(
+        &self,
+        black_borders: bool,
+    ) -> Result<Option<PreviewSession>, String> {
+        let mut inner = self.lock()?;
+        let Some(scene) = inner.open.as_mut().and_then(|open| open.scene.as_mut()) else {
+            return Ok(None);
+        };
+        // A latency start that landed between the apply and this write runs uncropped.
+        scene.black_borders = black_borders && scene.kind != SceneKind::Latency;
         Ok(inner.open.as_ref().map(OpenSession::wire))
     }
 
@@ -447,7 +474,12 @@ impl PreviewSessionState {
 
     /// A scene as `start_preview_scene` records it, without its window and lights.
     #[cfg(test)]
-    pub(crate) fn play_scene_for_test(&self, kind: SceneKind, brightness: f32) {
+    pub(crate) fn play_scene_for_test(
+        &self,
+        kind: SceneKind,
+        brightness: f32,
+        black_borders: bool,
+    ) {
         if let Ok(mut inner) = self.lock() {
             if let Some(open) = inner.open.as_mut() {
                 open.scene_label.get_or_insert_with(|| {
@@ -455,7 +487,7 @@ impl PreviewSessionState {
                 });
             }
         }
-        let _ = self.set_scene(kind, brightness);
+        let _ = self.set_scene(kind, brightness, black_borders);
     }
 
     /// What `subscribe_twin_frames` does, without the window it needs.
@@ -1152,18 +1184,18 @@ mod tests {
     fn a_scene_whose_window_went_is_not_recorded_as_playing() {
         let state = PreviewSessionState::default();
         assert!(matches!(
-            state.set_scene(SceneKind::Spiral, 1.0),
+            state.set_scene(SceneKind::Spiral, 1.0, false),
             Ok(SceneSet::Closed)
         ));
         state.open_for_test("a", "led-twin-overlay-5", "led-control-popup-5");
         assert!(state.adopt_scene_window("led-preview-scene-5").unwrap());
         assert!(matches!(
-            state.set_scene(SceneKind::Spiral, 1.0),
+            state.set_scene(SceneKind::Spiral, 1.0, false),
             Ok(SceneSet::Playing(PreviewSession::Scene { .. }))
         ));
 
         let _ = state.clear_scene();
-        let superseded = state.set_scene(SceneKind::Sunset, 1.0);
+        let superseded = state.set_scene(SceneKind::Sunset, 1.0, false);
 
         assert!(matches!(
             superseded,

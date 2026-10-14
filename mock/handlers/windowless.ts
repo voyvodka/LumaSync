@@ -123,6 +123,12 @@ export const windowlessHandlers = {
       twinHeldForCapture,
       scene: payload.kind,
       sceneBrightness: session.state === "scene" ? session.sceneBrightness : 0.8,
+      // As Rust: the switch carries from one scene to the next, but not out of the latency
+      // scene, which keeps it off; a tab has no saved Ambilight setting, so a first scene starts off.
+      sceneBlackBorders:
+        payload.kind !== "latency" && session.state === "scene" && session.scene !== "latency"
+          ? session.sceneBlackBorders
+          : false,
     };
     void emitMockEvent(PREVIEW_EVENTS.SESSION, session);
     // No capture to measure in a tab: a plausible answer, so the row can be seen. Later than the
@@ -148,6 +154,13 @@ export const windowlessHandlers = {
     session = { ...session, sceneBrightness: Math.min(1, Math.max(0, payload.brightness)) };
     void emitMockEvent(PREVIEW_EVENTS.SESSION, session);
     return sessionResult(PREVIEW_STATUS.SCENE_UPDATED, "Scene brightness changed.");
+  },
+  [PREVIEW_COMMANDS.SET_SCENE_BLACK_BORDERS]: ({ payload }) => {
+    if (session.state === "closed") return sessionResult(PREVIEW_STATUS.NOT_OPEN, "No preview is open.");
+    if (session.state !== "scene") return sessionResult(PREVIEW_STATUS.SCENE_NOT_RUNNING, "No scene plays.");
+    session = { ...session, sceneBlackBorders: session.scene !== "latency" && payload.enabled };
+    void emitMockEvent(PREVIEW_EVENTS.SESSION, session);
+    return sessionResult(PREVIEW_STATUS.SCENE_UPDATED, "Scene black bars changed.");
   },
 
   [DISPLAY_OVERLAY_COMMANDS.OPEN_DISPLAY_OVERLAY]: () => ({

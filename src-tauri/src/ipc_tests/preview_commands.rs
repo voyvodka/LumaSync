@@ -30,7 +30,8 @@ fn app() -> App<MockRuntime> {
         crate::commands::preview::feed::subscribe_twin_frames,
         crate::commands::preview::scene::start_preview_scene,
         crate::commands::preview::scene::stop_preview_scene,
-        crate::commands::preview::scene::set_preview_scene_brightness
+        crate::commands::preview::scene::set_preview_scene_brightness,
+        crate::commands::preview::scene::set_preview_scene_black_borders
     ])
 }
 
@@ -348,6 +349,14 @@ fn the_scene_commands_with_no_session_never_reject() {
     )
     .expect("brightness must resolve");
     assert_eq!(status_code(&dimmed), "PREVIEW_NOT_OPEN");
+
+    let cropped = invoke(
+        &webview,
+        "set_preview_scene_black_borders",
+        json!({ "payload": { "enabled": true } }),
+    )
+    .expect("black bars must resolve");
+    assert_eq!(status_code(&cropped), "PREVIEW_NOT_OPEN");
 }
 
 #[test]
@@ -370,6 +379,14 @@ fn with_no_scene_playing_its_stop_and_brightness_say_so() {
     )
     .expect("brightness must resolve");
     assert_eq!(status_code(&dimmed), "PREVIEW_SCENE_NOT_RUNNING");
+
+    let cropped = invoke(
+        &webview,
+        "set_preview_scene_black_borders",
+        json!({ "payload": { "enabled": true } }),
+    )
+    .expect("black bars must resolve");
+    assert_eq!(status_code(&cropped), "PREVIEW_SCENE_NOT_RUNNING");
 }
 
 /// A scene that plays is reported tagged the way the TS union is.
@@ -381,7 +398,7 @@ fn a_playing_scene_is_reported_with_its_kind_and_brightness() {
     let webview = popup(&app);
     let session = app.state::<crate::commands::preview::PreviewSessionState>();
     session.open_for_test("display-1", "led-twin-overlay-1", "led-control-popup-0");
-    session.play_scene_for_test(crate::commands::preview::SceneKind::ColorFields, 0.5);
+    session.play_scene_for_test(crate::commands::preview::SceneKind::ColorFields, 0.5, true);
 
     let read = invoke(&webview, "get_preview_session", json!({})).expect("read must resolve");
 
@@ -395,7 +412,8 @@ fn a_playing_scene_is_reported_with_its_kind_and_brightness() {
             "twinHidden": false,
             "twinHeldForCapture": false,
             "scene": "colorFields",
-            "sceneBrightness": 0.5
+            "sceneBrightness": 0.5,
+            "sceneBlackBorders": true
         })
     );
 }

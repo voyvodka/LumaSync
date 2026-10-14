@@ -1074,6 +1074,7 @@ const REQUIRED_PREVIEW_COMMANDS = [
   "start_preview_scene",
   "stop_preview_scene",
   "set_preview_scene_brightness",
+  "set_preview_scene_black_borders",
 ];
 for (const cmd of REQUIRED_PREVIEW_COMMANDS) {
   check(

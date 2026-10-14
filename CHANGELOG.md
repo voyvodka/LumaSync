@@ -93,7 +93,8 @@ https://keepachangelog.com/en/1.1.0/
   lamps where the room map places them — and changes no light by opening. Its small remote starts
   with six test scenes that play full screen while Ambilight captures them: an edge tour (order,
   direction, corners), a colour spiral, a sunset, drifting colour fields, a letterboxed film for
-  black-bar detection, and a latency test that measures the delay from a captured frame to the
+  black-bar detection — with its own "Ignore black bars" switch to compare the two, never saved —
+  and a latency test that measures the delay from a captured frame to the
   lights' output. A scene borrows the lights and gives them back when it stops; choosing a mode
   anywhere ends it. The remote also holds the modes with the compact window's settings for each
   (Solid's colour or white, Ambilight's response, an effect with its palette and speed), an eye

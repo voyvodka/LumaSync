@@ -84,6 +84,7 @@ import type {
   PreviewSession,
   PreviewSessionResult,
   SetPreviewPopupHiddenPayload,
+  SetPreviewSceneBlackBordersPayload,
   SetPreviewSceneBrightnessPayload,
   SetPreviewTwinHiddenPayload,
   StartPreviewScenePayload,
@@ -238,6 +239,7 @@ export interface CommandMap {
   start_preview_scene: Command<{ payload: StartPreviewScenePayload }, PreviewSessionResult>;
   stop_preview_scene: NoArgs<PreviewSessionResult>;
   set_preview_scene_brightness: Command<{ payload: SetPreviewSceneBrightnessPayload }, PreviewSessionResult>;
+  set_preview_scene_black_borders: Command<{ payload: SetPreviewSceneBlackBordersPayload }, PreviewSessionResult>;
   subscribe_twin_frames: Command<{ onFrame: TwinFrameChannel }, TwinSubscribeResult>;
 
   // --- shell --------------------------------------------------------------

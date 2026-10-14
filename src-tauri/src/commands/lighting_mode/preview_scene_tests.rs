@@ -9,7 +9,8 @@ use super::outputs::{
     apply_outputs_with, refresh_running_with, ApplyOutputsRequest, LightingOrigin,
 };
 use super::preview_scene::{
-    set_scene_brightness, start_scene_lighting, stop_scene_lighting, SceneLighting, SceneRestore,
+    set_scene_black_borders, set_scene_brightness, start_scene_lighting, stop_scene_lighting,
+    SceneLighting, SceneRestore,
 };
 use super::test_support::{Rig, RigSetup};
 use super::{LightingModeConfig, LightingModeKind, SolidColorPayload};
@@ -46,9 +47,26 @@ fn running(rig: &Rig, mode: LightingModeConfig) {
 
 fn start(rig: &Rig, kind: SceneKind) -> f32 {
     match start_scene_lighting(&rig.handle(), kind).expect("the start answers") {
-        SceneLighting::Running { brightness } => brightness,
+        SceneLighting::Running { brightness, .. } => brightness,
         _ => panic!("the scene did not start"),
     }
+}
+
+/// What the scene's worker crops with, and what the scene's mode copy says.
+fn black_borders(rig: &Rig) -> (bool, bool) {
+    let state = rig.state();
+    let owner = state.runtime.lock().unwrap();
+    let live = owner
+        .ambilight_live
+        .as_ref()
+        .expect("a scene runs Ambilight")
+        .read_black_border_detection();
+    let running = owner
+        .active_mode
+        .ambilight
+        .as_ref()
+        .is_some_and(|ambilight| ambilight.black_border_detection);
+    (live, running)
 }
 
 fn scene(rig: &Rig) -> Option<SceneKind> {
@@ -398,4 +416,78 @@ fn a_gated_restore_turns_the_lights_off_and_says_so() {
     assert_eq!(rig.running().kind, LightingModeKind::Off);
     assert!(!rig.state().runtime.lock().unwrap().preview.scene_worker);
     assert!(!rig.worker_running());
+}
+
+/// The scene's black-bar switch is live and never saved: the user's
+/// Ambilight setting is theirs, and the mode the scene interrupted comes back
+/// without it.
+#[test]
+fn the_scene_black_bar_switch_reaches_the_worker_and_is_never_saved() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+    start(&rig, SceneKind::Letterbox);
+    assert_eq!(black_borders(&rig), (false, false));
+    let writes_before = rig.written_keys().len();
+
+    assert_eq!(set_scene_black_borders(&rig.state(), true), Some(true));
+    super::outputs::persist_running_choice(&rig.handle());
+
+    assert_eq!(black_borders(&rig), (true, true));
+    assert_eq!(
+        rig.written_keys().len(),
+        writes_before,
+        "{:?}",
+        rig.written_keys()
+    );
+    assert!(!rig
+        .state()
+        .tuning
+        .stored()
+        .ambilight
+        .is_some_and(|ambilight| ambilight.black_border_detection));
+
+    stop_scene_lighting(&rig.handle()).unwrap();
+    assert_eq!(rig.running().kind, LightingModeKind::Solid);
+}
+
+#[test]
+fn without_a_scene_its_black_bar_switch_changes_nothing() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+
+    assert_eq!(set_scene_black_borders(&rig.state(), true), None);
+    assert_eq!(rig.running().kind, LightingModeKind::Solid);
+}
+
+/// The latency scene's flips must reach the output uncropped.
+#[test]
+fn the_latency_scene_keeps_black_bars_off() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+    start(&rig, SceneKind::Latency);
+
+    assert_eq!(set_scene_black_borders(&rig.state(), true), Some(false));
+    assert_eq!(black_borders(&rig), (false, false));
+}
+
+/// The switch the user gave one scene carries to the next, as its brightness
+/// does — but not out of the latency scene, which forced it off.
+#[test]
+fn a_second_scene_keeps_the_black_bar_switch_but_not_the_latency_scenes() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+    start(&rig, SceneKind::Letterbox);
+    set_scene_black_borders(&rig.state(), true);
+
+    start(&rig, SceneKind::Spiral);
+    assert_eq!(black_borders(&rig), (true, true));
+
+    start(&rig, SceneKind::Latency);
+    assert_eq!(black_borders(&rig), (false, false));
+    start(&rig, SceneKind::Letterbox);
+    assert_eq!(
+        black_borders(&rig),
+        (false, false),
+        "back to the saved setting, off"
+    );
 }

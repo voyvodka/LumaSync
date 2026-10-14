@@ -15,6 +15,7 @@ describe("PREVIEW_COMMANDS — Rust snake_case name regression", () => {
     ["START_SCENE", "start_preview_scene"],
     ["STOP_SCENE", "stop_preview_scene"],
     ["SET_SCENE_BRIGHTNESS", "set_preview_scene_brightness"],
+    ["SET_SCENE_BLACK_BORDERS", "set_preview_scene_black_borders"],
   ] as const)("%s maps to %s", (key, name) => {
     expect(PREVIEW_COMMANDS[key]).toBe(name);
   });

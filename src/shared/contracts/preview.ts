@@ -50,6 +50,8 @@ export const PREVIEW_COMMANDS = {
   STOP_SCENE: "stop_preview_scene",
   /** The playing scene's brightness, live and never saved. */
   SET_SCENE_BRIGHTNESS: "set_preview_scene_brightness",
+  /** The playing scene's black-bar crop, live and never saved; the latency scene keeps it off. */
+  SET_SCENE_BLACK_BORDERS: "set_preview_scene_black_borders",
 } as const;
 
 export type PreviewCommandId = (typeof PREVIEW_COMMANDS)[keyof typeof PREVIEW_COMMANDS];
@@ -155,6 +157,9 @@ export type PreviewSession =
       scene: SceneKind;
       /** The scene's own brightness, 0..1; never saved. */
       sceneBrightness: number;
+      /** Whether the scene crops black bars: the Ambilight setting at its start, then the
+       * popup's switch; never saved. */
+      sceneBlackBorders: boolean;
     } & LiveSessionFields);
 
 /** The layout the twin draws: the one the running mode uses, which during a
@@ -242,6 +247,11 @@ export interface SetPreviewSceneBrightnessPayload {
   brightness: number;
 }
 
+/** Payload for `set_preview_scene_black_borders`. */
+export interface SetPreviewSceneBlackBordersPayload {
+  enabled: boolean;
+}
+
 /** Result of every session command. */
 export interface PreviewSessionResult {
   session: PreviewSession;
@@ -304,7 +314,8 @@ export const PREVIEW_STATUS = {
   SCENE_STARTED: "PREVIEW_SCENE_STARTED",
   /** The scene stopped and the mode it interrupted is back. */
   SCENE_STOPPED: "PREVIEW_SCENE_STOPPED",
-  /** The scene's brightness changed. */
+  /** The playing scene's brightness or black-bar switch changed (the latency scene answers it
+   * with its switch still off). */
   SCENE_UPDATED: "PREVIEW_SCENE_UPDATED",
   /** The session is open and no scene plays. */
   SCENE_NOT_RUNNING: "PREVIEW_SCENE_NOT_RUNNING",

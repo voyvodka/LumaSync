@@ -131,6 +131,7 @@ const APP_POLICY: &[(&str, [bool; 5])] = &[
     ("start_preview_scene", POPUP_ONLY),
     ("stop_preview_scene", POPUP_ONLY),
     ("set_preview_scene_brightness", POPUP_ONLY),
+    ("set_preview_scene_black_borders", POPUP_ONLY),
     // The scene draws what the session names.
     ("get_preview_session", POPUP_AND_SCENE),
     // The twin's one command: its frames.
