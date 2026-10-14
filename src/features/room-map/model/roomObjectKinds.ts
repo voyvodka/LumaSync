@@ -38,8 +38,6 @@ export interface RoomObjectAdapter<K extends RoomObjectKind> {
   moveTo: (config: RoomMapConfig, ref: RoomObjectRef<K>, x: number, y: number, ctx: RoomObjectContext) => Patch | null;
   /** Reads the newest config: a held arrow applies many of these in a row. */
   nudge: ((config: RoomMapConfig, ref: RoomObjectRef<K>, direction: NudgeDirection, ctx: RoomObjectContext) => Patch) | null;
-  resize: ((config: RoomMapConfig, ref: RoomObjectRef<K>, width: number, height: number) => Patch | null) | null;
-  rotateTo: ((config: RoomMapConfig, ref: RoomObjectRef<K>, rotation: number) => Patch) | null;
   rotateBy: ((config: RoomMapConfig, ref: RoomObjectRef<K>, degrees: number) => Patch) | null;
   /** The label the rename dialog opens on, and the patch that renames. */
   rename: {
@@ -74,9 +72,6 @@ export const ROOM_OBJECT_KINDS = {
       const { dx, dy } = worldStep(direction);
       return cfg.tvAnchor ? { tvAnchor: { ...cfg.tvAnchor, x: cfg.tvAnchor.x + dx, y: cfg.tvAnchor.y + dy } } : {};
     },
-    resize: (config, _ref, width, height) =>
-      config.tvAnchor ? { tvAnchor: { ...config.tvAnchor, width, height } } : null,
-    rotateTo: null,
     rotateBy: null,
     rename: null,
     inspect: (config) => (config.tvAnchor ? { kind: "tv", tv: config.tvAnchor } : null),
@@ -103,12 +98,6 @@ export const ROOM_OBJECT_KINDS = {
         furniture: cfg.furniture.map((f) => (f.id === ref.furnitureId ? { ...f, x: f.x + dx, y: f.y + dy } : f)),
       };
     },
-    resize: (config, ref, width, height) => ({
-      furniture: config.furniture.map((f) => (f.id === ref.furnitureId ? { ...f, width, height } : f)),
-    }),
-    rotateTo: (config, ref, rotation) => ({
-      furniture: config.furniture.map((f) => (f.id === ref.furnitureId ? { ...f, rotation } : f)),
-    }),
     rotateBy: (config, ref, degrees) => ({
       furniture: config.furniture.map((f) =>
         f.id === ref.furnitureId ? { ...f, rotation: ((f.rotation ?? 0) + degrees) % 360 } : f,
@@ -164,8 +153,6 @@ export const ROOM_OBJECT_KINDS = {
         ),
       };
     },
-    resize: null,
-    rotateTo: null,
     rotateBy: null,
     rename: null,
     inspect: (config, ref) => {
@@ -196,8 +183,6 @@ export const ROOM_OBJECT_KINDS = {
         nudgeHueChannel(ch, cfg.zones, x * HUE_NUDGE_STEP, -y * HUE_NUDGE_STEP),
       ),
     }),
-    resize: null,
-    rotateTo: null,
     rotateBy: null,
     rename: null,
     inspect: (config, ref) => {
@@ -219,8 +204,6 @@ export const ROOM_OBJECT_KINDS = {
       imageLayers: config.imageLayers.map((l) => (l.id === ref.layerId ? { ...l, offsetX: x, offsetY: y } : l)),
     }),
     nudge: null,
-    resize: null,
-    rotateTo: null,
     rotateBy: null,
     rename: {
       current: (config, ref) => config.imageLayers.find((l) => l.id === ref.layerId)?.label ?? "",

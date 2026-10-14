@@ -4,9 +4,11 @@ import type { TranslationKey } from "@/features/i18n/catalogue";
 import { resolveScreenKind, SCREEN_KINDS, type ScreenKind, type TvAnchorPlacement } from "@/shared/contracts/roomMap";
 import { Segmented } from "@/shared/ui/Segmented/Segmented";
 import chips from "./FurnitureInspector.module.css";
-import { Header, InspectorNumberField, InspectorOptionalNumberField } from "./InspectorPrimitives";
+import { Header } from "./InspectorPrimitives";
 import { defaultTvMountHeight } from "../../model/roomAware";
 import { TYPE_DOT_COLOR } from "../../model/zoneColor";
+import { DecimalField, FieldHint, FieldPair } from "../DecimalField";
+import { GlyphDepth, GlyphHeight, GlyphWidth } from "./fieldGlyphs";
 
 // The worker accepts 0, but a screen centre on the floor is never meant.
 const MIN_MOUNT_HEIGHT_M = 0.01;
@@ -72,30 +74,49 @@ export function TvAnchorInspector({
         />
       </div>
       )}
-      <div className="lm-room-dock-fields-wide">
-        <InspectorNumberField
-          id="tv-w"
+      <FieldPair>
+        <DecimalField
+          label={t("roomMap:inspector.xLabel")}
+          prefix="X"
+          value={tv.x}
+          unit="m"
+          disabled={locked}
+          onCommit={(x) => onUpdate({ x })}
+        />
+        <DecimalField
+          label={t("roomMap:inspector.yLabel")}
+          prefix="Y"
+          value={tv.y}
+          unit="m"
+          disabled={locked}
+          onCommit={(y) => onUpdate({ y })}
+        />
+      </FieldPair>
+      <FieldPair>
+        <DecimalField
           label={t("roomMap:inspector.widthLabel")}
+          prefix={<GlyphWidth />}
           value={tv.width}
-          step={0.05}
           min={0.05}
           unit="m"
           disabled={locked}
-          onCommit={(next) => onUpdate({ width: next })}
+          onCommit={(width) => onUpdate({ width })}
         />
-        <InspectorNumberField
-          id="tv-h"
+        <DecimalField
           label={t("roomMap:inspector.tvDepthLabel")}
+          prefix={<GlyphDepth />}
           value={tv.height}
-          step={0.05}
           min={0.02}
           unit="m"
           disabled={locked}
-          onCommit={(next) => onUpdate({ height: next })}
+          onCommit={(height) => onUpdate({ height })}
         />
-        <InspectorOptionalNumberField
-          id="tv-mount"
+      </FieldPair>
+      <FieldPair>
+        <DecimalField
+          optional
           label={t("roomMap:inspector.tvMountHeightLabel")}
+          prefix={<GlyphHeight />}
           value={tv.mountHeightMeters}
           placeholder={defaultMount}
           min={MIN_MOUNT_HEIGHT_M}
@@ -103,14 +124,15 @@ export function TvAnchorInspector({
           unit="m"
           disabled={locked}
           describedBy="tv-mount-hint"
-          onCommit={(next) => onUpdate({ mountHeightMeters: next })}
+          onCommit={(mountHeightMeters) => onUpdate({ mountHeightMeters })}
         />
-        <p id="tv-mount-hint" className="lm-room-dock-field-hint">
-          {mountAboveCeiling
-            ? t("roomMap:inspector.tvMountHeightAboveCeiling")
-            : t("roomMap:inspector.tvMountHeightHint", { metres: defaultMount })}
-        </p>
-      </div>
+        <span />
+      </FieldPair>
+      <FieldHint id="tv-mount-hint">
+        {mountAboveCeiling
+          ? t("roomMap:inspector.tvMountHeightAboveCeiling")
+          : t("roomMap:inspector.tvMountHeightHint", { metres: defaultMount })}
+      </FieldHint>
       <button
         type="button"
         className="lm-room-dock-inspect-action"

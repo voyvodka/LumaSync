@@ -23,7 +23,7 @@
  *
  *   1. Header chip — type + zone name + (optional) channel count
  *   2. Range slider — single row, full width
- *   3. EDGE  [n.nn] m   |   HEX  [#XXXXXX]            (single-row pair)
+ *   3. EDGE  [n.nn m]   |   HEX  [#XXXXXX]            (single-row pair)
  *   4. Color preset swatches  ──── single row, 6 buttons 22 px
  *   5. HSV picker (compact, centred)
  *   6. RECENT swatches (rendered by HsvColorPicker)
@@ -52,6 +52,7 @@ import type { HueZone } from "@/shared/contracts/roomMap";
 import { HsvColorPicker } from "@/shared/ui/HsvColorPicker/HsvColorPicker";
 import { normalizeHex } from "@/shared/lib/color";
 import { clamp, roundTo } from "@/shared/lib/math";
+import { DecimalField } from "./DecimalField";
 
 interface HueZoneInspectorProps {
   zone: HueZone;
@@ -162,29 +163,6 @@ export function HueZoneInspector({
     [roomMaxEdgeM, maxEdgeM, minEdgeM, safeWidthM, safeDepthM, onUpdate],
   );
 
-  const [edgeDraft, setEdgeDraft] = useState<string>(currentEdgeM.toFixed(2));
-  const [editingEdge, setEditingEdge] = useState(false);
-
-  // Only while unfocused, or an external change clobbers what the user is
-  // part-way through typing.
-  useEffect(() => {
-    if (!editingEdge) {
-      setEdgeDraft(currentEdgeM.toFixed(2));
-    }
-  }, [currentEdgeM, editingEdge]);
-
-  const commitEdge = useCallback(() => {
-    setEditingEdge(false);
-    const parsed = parseFloat(edgeDraft);
-    if (!Number.isFinite(parsed) || maxEdgeM <= 0) {
-      setEdgeDraft(currentEdgeM.toFixed(2));
-      return;
-    }
-    const clampedM = clamp(parsed, minEdgeM, maxEdgeM);
-    setEdgeDraft(clampedM.toFixed(2));
-    setEdgeM(clampedM);
-  }, [edgeDraft, maxEdgeM, minEdgeM, currentEdgeM, setEdgeM]);
-
   // `hideHex` because the inspector renders its own hex field inline beside
   // EDGE; the picker's own would overlap it.
   const [hexDraft, setHexDraft] = useState<string>(borderHex.toUpperCase());
@@ -265,35 +243,19 @@ export function HueZoneInspector({
         >
           {t("roomMap:inspector.zoneEdgeShort")}
         </label>
-        <input
+        <DecimalField
           id={`zone-size-m-${zone.id}`}
-          type="number"
-          step={0.05}
-          min={Number(minEdgeM.toFixed(2))}
-          max={Number(maxEdgeM.toFixed(2))}
-          inputMode="decimal"
-          className="lm-zone-inspector-num"
-          value={edgeDraft}
-          aria-label={t("roomMap:inspector.zoneEdgeAriaLabel")}
+          label={t("roomMap:inspector.zoneEdgeAriaLabel")}
+          value={currentEdgeM}
+          // Rounded as shown, so the edge on screen can be typed back; setEdgeM holds the exact range.
+          min={roundTo(minEdgeM, 2)}
+          max={roundTo(maxEdgeM, 2)}
+          unit="m"
           disabled={maxEdgeM <= 0}
-          data-testid="hue-zone-size-edge-input"
-          onFocus={() => setEditingEdge(true)}
-          onChange={(e) => setEdgeDraft(e.target.value)}
-          onBlur={commitEdge}
-          onKeyDown={(e) => {
-            e.stopPropagation();
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commitEdge();
-            } else if (e.key === "Escape") {
-              setEdgeDraft(currentEdgeM.toFixed(2));
-              setEditingEdge(false);
-            }
-          }}
+          testId="hue-zone-size-edge-input"
+          className="lm-zone-inspector-edge"
+          onCommit={setEdgeM}
         />
-        <span className="lm-zone-inspector-pair-unit" aria-hidden>
-          m
-        </span>
         </div>
 
         <div className="lm-zone-inspector-pair-group">

@@ -26,7 +26,7 @@ import {
   UsbStripInspector,
   type UsbStripConnectionStatus,
 } from "./objects/UsbStripInspector";
-import { hueChannelZRange, resolveHueChannelWorldZ } from "../model/hueChannelPosition";
+import { hueChannelZRange, resolveHueChannelWorld, resolveHueChannelWorldZ } from "../model/hueChannelPosition";
 import { resolveInspectorTarget } from "../model/resolveInspectorTarget";
 import {
   furnitureObjectId,
@@ -97,8 +97,11 @@ interface RoomDockPanelProps {
   onUpdateTvAnchor?: (patch: Partial<TvAnchorPlacement>) => void;
   /** Patch a USB strip placement by stripId (LED count primarily). */
   onUpdateUsbStrip?: (stripId: string, patch: Partial<UsbStripPlacement>) => void;
-  /** Patch an image layer by id (opacity edits from the inspector). */
+  /** Patch an image layer by id. */
   onUpdateImageLayer?: (id: string, patch: Partial<ImageLayer>) => void;
+  /** Move an object by its id to a typed position, in the kind's own units: a strip by its start
+   *  point, a Hue channel in the cube. */
+  onMoveObject?: (id: string, x: number, y: number) => void;
   /** Rename a Hue channel by index. */
   onRenameHueChannel?: (channelIndex: number, label: string) => void;
   /** Rename an image layer by id. */
@@ -160,6 +163,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
     onUpdateTvAnchor,
     onUpdateUsbStrip,
     onUpdateImageLayer,
+    onMoveObject,
     onRenameHueChannel,
     onRenameImageLayer,
     usbConnectedPort = null,
@@ -260,6 +264,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
             connectionStatus={usbConnectionStatus}
             connectedPort={usbConnectedPort}
             onUpdate={(patch) => onUpdateUsbStrip?.(strip.stripId, patch)}
+            onMove={(x, y) => onMoveObject?.(usbStripObjectId(strip.stripId), x, y)}
             onToggleLock={() => onToggleLock(usbStripObjectId(strip.stripId))}
             onManage={onUsbManage}
           />
@@ -281,9 +286,13 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
             }
             zoneName={inspectorTarget.zoneName}
             bridgeStatus={hueChannelStatus}
+            world={resolveHueChannelWorld(ch, config.zones)}
             worldZ={resolveHueChannelWorldZ(ch, config.zones)}
             heightRange={hueChannelZRange(ch, config.zones)}
+            roomWidthMeters={config.dimensions.widthMeters}
+            roomDepthMeters={config.dimensions.depthMeters}
             roomHeightMeters={config.dimensions.heightMeters}
+            onMove={(x, y) => onMoveObject?.(hueChannelObjectId(ch.channelIndex), x, y)}
             onHeightChange={(worldZ) => onHueChannelHeightChange?.(ch.channelIndex, worldZ)}
             onRename={(label) =>
               onRenameHueChannel?.(ch.channelIndex, label)

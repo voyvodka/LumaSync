@@ -18,12 +18,16 @@ import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
 import { Segmented } from "@/shared/ui/Segmented/Segmented";
 import { retypeFurniture } from "../../model/furnitureKinds";
 import { TYPE_DOT_COLOR } from "../../model/zoneColor";
+import { DecimalField, FieldHint, FieldPair } from "../DecimalField";
+import { GlyphDepth, GlyphHeight, GlyphRotation, GlyphWidth } from "./fieldGlyphs";
 import styles from "./FurnitureInspector.module.css";
-import { Header, InspectorNumberField, InspectorOptionalNumberField } from "./InspectorPrimitives";
+import { Header } from "./InspectorPrimitives";
 
 const AUTO = "auto";
 const DEFAULT_TONE = "default";
 const MAX_TOP_METRES = 3;
+const MIN_SIDE_METRES = 0.1;
+const wrapDegrees = (degrees: number) => ((degrees % 360) + 360) % 360;
 
 export function FurnitureInspector({
   item,
@@ -185,56 +189,81 @@ export function FurnitureInspector({
       </div>
       )}
 
-      <InspectorNumberField
-        id={`furn-w-${item.id}`}
-        label={t("roomMap:inspector.widthLabel")}
-        value={item.width}
-        step={0.05}
-        min={0.1}
-        unit="m"
-        disabled={locked}
-        onCommit={(next) => onUpdate({ width: next })}
-      />
-      <InspectorNumberField
-        id={`furn-d-${item.id}`}
-        label={t("roomMap:inspector.depthLabel")}
-        value={item.height}
-        step={0.05}
-        min={0.1}
-        unit="m"
-        disabled={locked}
-        onCommit={(next) => onUpdate({ height: next })}
-      />
-      {modelChoices && type !== "rug" && model && (
-        <>
-          <InspectorOptionalNumberField
-            id={`furn-top-${item.id}`}
+      <FieldPair>
+        <DecimalField
+          label={t("roomMap:inspector.xLabel")}
+          prefix="X"
+          value={item.x}
+          unit="m"
+          disabled={locked}
+          onCommit={(x) => onUpdate({ x })}
+        />
+        <DecimalField
+          label={t("roomMap:inspector.yLabel")}
+          prefix="Y"
+          value={item.y}
+          unit="m"
+          disabled={locked}
+          onCommit={(y) => onUpdate({ y })}
+        />
+      </FieldPair>
+      <FieldPair>
+        <DecimalField
+          label={t("roomMap:inspector.widthLabel")}
+          prefix={<GlyphWidth />}
+          value={item.width}
+          min={MIN_SIDE_METRES}
+          unit="m"
+          disabled={locked}
+          onCommit={(width) => onUpdate({ width })}
+        />
+        <DecimalField
+          label={t("roomMap:inspector.depthLabel")}
+          prefix={<GlyphDepth />}
+          value={item.height}
+          min={MIN_SIDE_METRES}
+          unit="m"
+          disabled={locked}
+          onCommit={(height) => onUpdate({ height })}
+        />
+      </FieldPair>
+      <FieldPair>
+        {modelChoices && type !== "rug" && model ? (
+          <DecimalField
+            optional
             label={t("roomMap:inspector.heightLabel")}
+            prefix={<GlyphHeight />}
             value={resolveFurnitureTop(item)}
             placeholder={modelTop(model).toFixed(2)}
-            min={0.1}
+            min={MIN_SIDE_METRES}
             max={MAX_TOP_METRES}
             unit="m"
             disabled={locked}
             describedBy={`furn-top-hint-${item.id}`}
-            onCommit={(next) => onUpdate({ topMeters: next })}
+            onCommit={(topMeters) => onUpdate({ topMeters })}
           />
-          <p id={`furn-top-hint-${item.id}`} className="lm-room-dock-field-hint">
-            {t("roomMap:inspector.topHint", { metres: modelTop(model).toFixed(2) })}
-          </p>
-        </>
+        ) : (
+          <span />
+        )}
+        <DecimalField
+          label={t("roomMap:inspector.furnitureRotationLabel")}
+          prefix={<GlyphRotation />}
+          value={item.rotation ?? 0}
+          decimals={0}
+          step={1}
+          min={0}
+          max={359}
+          normalize={wrapDegrees}
+          unit="°"
+          disabled={locked}
+          onCommit={(rotation) => onUpdate({ rotation })}
+        />
+      </FieldPair>
+      {modelChoices && type !== "rug" && model && (
+        <FieldHint id={`furn-top-hint-${item.id}`}>
+          {t("roomMap:inspector.topHint", { metres: modelTop(model).toFixed(2) })}
+        </FieldHint>
       )}
-      <InspectorNumberField
-        id={`furn-r-${item.id}`}
-        label={t("roomMap:inspector.furnitureRotationLabel")}
-        value={item.rotation ?? 0}
-        step={1}
-        min={0}
-        max={359}
-        unit="°"
-        disabled={locked}
-        onCommit={(next) => onUpdate({ rotation: ((next % 360) + 360) % 360 })}
-      />
 
       <button type="button" className="lm-room-dock-inspect-action" onClick={onToggleLock} aria-pressed={locked}>
         {locked ? t("roomMap:objectPanel.unlock") : t("roomMap:objectPanel.lock")}

@@ -334,10 +334,16 @@ https://keepachangelog.com/en/1.1.0/
   panning moves the canvas without redrawing every object, and moving an object no longer redraws
   the whole editor each time a snap guide is re-checked. Undoing a Hue zone change the bridge
   refused no longer brings back the refused state.
-- Room map: with more than one Hue entertainment area, the object list, the inspector, the
-  property bar, arrow nudges and "Move to" only touch the area on screen. Before, a light with the
-  same number in another area could be listed, shown or moved with it. Dragging a Hue light that
+- Room map: with more than one Hue entertainment area, the object list, the inspector, arrow
+  nudges and "Move to" only touch the area on screen. Before, a light with the same number in
+  another area could be listed, shown or moved with it. Dragging a Hue light that
   belongs to a zone now starts from where its dot is drawn instead of jumping.
+- Room map: the row of numbers under the plan is gone, and its numbers sit in the inspector with
+  the rest of what you select — a piece's position, size, height and rotation, a strip's start and
+  LED count, a Hue light's place in metres, an image's position, scale and proportions — so the
+  plan gets that height back. A number applies when you leave it or press Enter, takes a comma or a
+  point, and steps with the arrow keys (ten steps with Shift); one out of range, like Esc, puts the
+  old value back.
 - Room map: a background image larger than 20 MB is refused with a message that says so, rather
   than copied into the app's data folder. Copies of background images that no room map layer uses
   any more are deleted the next time the app starts.

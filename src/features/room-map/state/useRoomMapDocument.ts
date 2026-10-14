@@ -15,7 +15,7 @@ export interface RoomMapDocument extends UseRoomMapStateReturn, RoomMapHueArea {
   hue: UseRoomMapHueChannelsReturn;
   /** The bound area's channels: the ones the faces draw and select. */
   visibleHueChannels: HueChannelPlacement[];
-  /** `config` with only those channels — what the dock, the property bar and the viewer read. */
+  /** `config` with only those channels — what the dock, its inspectors and the viewer read. */
   scopedConfig: RoomMapConfig;
 }
 
@@ -36,7 +36,7 @@ export function useRoomMapDocument(): RoomMapDocument {
     () => scopeHueChannels(state.config.hueChannels, area.hueAreaId),
     [state.config.hueChannels, area.hueAreaId],
   );
-  // What the dock and the property bar read: the same one area the canvas
+  // What the dock and its inspectors read: the same one area the canvas
   // draws, or an object list and inspector keyed on `hue-<index>` would show,
   // and select, another area's same-numbered channel.
   const scopedConfig = useMemo<RoomMapConfig>(

@@ -39,6 +39,10 @@ function renderInspector(worldZ: number, onHeightChange = vi.fn(), locked = fals
       zoneName={null}
       worldZ={worldZ}
       roomHeightMeters={2.5}
+      world={{ x: 0, y: 0 }}
+      roomWidthMeters={5}
+      roomDepthMeters={4}
+      onMove={vi.fn<(x: number, y: number) => void>()}
       onHeightChange={onHeightChange}
       onRename={vi.fn()}
       onToggleLock={vi.fn()}
@@ -93,6 +97,10 @@ describe("channel identity", () => {
         zoneName={null}
         worldZ={0}
         roomHeightMeters={2.5}
+        world={{ x: 0, y: 0 }}
+        roomWidthMeters={5}
+        roomDepthMeters={4}
+        onMove={vi.fn<(x: number, y: number) => void>()}
         onHeightChange={vi.fn()}
         onRename={vi.fn()}
         onToggleLock={vi.fn()}
@@ -169,6 +177,10 @@ describe("HueChannelInspector height inside a zone", () => {
         worldZ={0}
         heightRange={{ min: -0.5, max: 0.5, zone }}
         roomHeightMeters={2.5}
+        world={{ x: 0, y: 0 }}
+        roomWidthMeters={5}
+        roomDepthMeters={4}
+        onMove={vi.fn<(x: number, y: number) => void>()}
         onHeightChange={vi.fn<(worldZ: number) => void>()}
         onRename={vi.fn<(label: string) => void>()}
         onToggleLock={vi.fn<() => void>()}
@@ -190,11 +202,73 @@ describe("HueChannelInspector height inside a zone", () => {
         worldZ={0}
         heightRange={{ min: -1, max: 1, zone }}
         roomHeightMeters={2.5}
+        world={{ x: 0, y: 0 }}
+        roomWidthMeters={5}
+        roomDepthMeters={4}
+        onMove={vi.fn<(x: number, y: number) => void>()}
         onHeightChange={vi.fn<(worldZ: number) => void>()}
         onRename={vi.fn<(label: string) => void>()}
         onToggleLock={vi.fn<() => void>()}
       />,
     );
     expect(screen.queryByTestId("hue-height-zone-limit")).toBeNull();
+  });
+});
+
+describe("HueChannelInspector position", () => {
+  beforeEach(cleanup);
+
+  function renderAt(world: { x: number; y: number }, locked = false) {
+    const onMove = vi.fn<(x: number, y: number) => void>();
+    render(
+      <HueChannelInspector
+        channel={locked ? { ...channel, locked: true } : channel}
+        zoneName={null}
+        world={world}
+        worldZ={0}
+        roomWidthMeters={5}
+        roomDepthMeters={4}
+        roomHeightMeters={2.5}
+        onMove={onMove}
+        onHeightChange={vi.fn<(worldZ: number) => void>()}
+        onRename={vi.fn<(label: string) => void>()}
+        onToggleLock={vi.fn<() => void>()}
+      />,
+    );
+    const field = (name: string) => screen.getByRole("spinbutton", { name }) as HTMLInputElement;
+    return { onMove, x: field("roomMap:inspector.xLabel"), y: field("roomMap:inspector.yLabel") };
+  }
+
+  it("reads in metres on the plan, x from the left wall and y from the TV wall", () => {
+    // Cube (0.5, 0.5): three quarters across a 5 m room, a quarter of the way back from the TV wall.
+    const { x, y } = renderAt({ x: 0.5, y: 0.5 });
+    expect(x.value).toBe("3.75");
+    expect(y.value).toBe("1.00");
+  });
+
+  it("writes a typed metre back as a cube position, keeping the other axis", () => {
+    const { onMove, x, y } = renderAt({ x: 0.5, y: 0.5 });
+    fireEvent.focus(x);
+    fireEvent.change(x, { target: { value: "1.25" } });
+    fireEvent.keyDown(x, { key: "Enter" });
+    const [cubeX, cubeY] = onMove.mock.calls[0];
+    expect(cubeX).toBeCloseTo(-0.5, 6);
+    expect(cubeY).toBeCloseTo(0.5, 6);
+
+    fireEvent.focus(y);
+    fireEvent.change(y, { target: { value: "4" } });
+    fireEvent.keyDown(y, { key: "Enter" });
+    expect(onMove.mock.calls[1][1]).toBeCloseTo(-1, 6);
+  });
+
+  it("keeps a typed position inside the room, and still while locked", () => {
+    const { onMove, x } = renderAt({ x: 0, y: 0 });
+    fireEvent.focus(x);
+    fireEvent.change(x, { target: { value: "6" } });
+    fireEvent.blur(x);
+    expect(onMove).not.toHaveBeenCalled();
+
+    cleanup();
+    expect(renderAt({ x: 0, y: 0 }, true).x).toBeDisabled();
   });
 });

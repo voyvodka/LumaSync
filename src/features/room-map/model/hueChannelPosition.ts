@@ -21,6 +21,26 @@ export function hueToMetres(hueVal: number, roomSizeM: number): number {
   return ((hueVal + 1) / 2) * roomSizeM;
 }
 
+/** A cube position as metres from the room's top-left corner on the plan, where the canvas draws
+ *  the dot: x from the left wall, y from the TV wall. */
+export function hueToPlanMetres(
+  world: { x: number; y: number },
+  roomWidthM: number,
+  roomDepthM: number,
+): { x: number; y: number } {
+  return { x: hueToMetres(world.x, roomWidthM), y: hueToMetres(-world.y, roomDepthM) };
+}
+
+/** `hueToPlanMetres` reversed. */
+export function planMetresToHue(
+  x: number,
+  y: number,
+  roomWidthM: number,
+  roomDepthM: number,
+): { x: number; y: number } {
+  return { x: (x / roomWidthM) * 2 - 1, y: 1 - (y / roomDepthM) * 2 };
+}
+
 /** The zone a channel is bound to, or `null` when it uses absolute placement. */
 export function findBoundZone(
   channel: HueChannelPlacement,

@@ -217,10 +217,6 @@ vi.mock("../LeftToolbar", () => ({
   LeftToolbar: () => <div data-testid="left-toolbar" />,
 }));
 
-vi.mock("../PropertyBar", () => ({
-  PropertyBar: () => null,
-}));
-
 vi.mock("../TemplateSelector", () => ({
   TemplateSelector: () => null,
 }));

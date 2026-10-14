@@ -1,8 +1,9 @@
 import { useTranslation } from "react-i18next";
 
 import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
-import { Header, InspectorNumberField } from "./InspectorPrimitives";
+import { Header } from "./InspectorPrimitives";
 import { TYPE_DOT_COLOR } from "../../model/zoneColor";
+import { DecimalField, FieldPair } from "../DecimalField";
 
 /**
  * Connection status the inspector renders next to the LED count.
@@ -16,6 +17,7 @@ export function UsbStripInspector({
   connectionStatus,
   connectedPort,
   onUpdate,
+  onMove,
   onToggleLock,
   onManage,
 }: {
@@ -23,6 +25,8 @@ export function UsbStripInspector({
   connectionStatus: UsbStripConnectionStatus;
   connectedPort: string | null;
   onUpdate: (patch: Partial<UsbStripPlacement>) => void;
+  /** Moves the strip by its start point; the end keeps its offset. */
+  onMove: (x: number, y: number) => void;
   onToggleLock: () => void;
   onManage?: () => void;
 }) {
@@ -58,16 +62,38 @@ export function UsbStripInspector({
         </span>
       </div>
 
-      <InspectorNumberField
-        id={`usb-leds-${strip.stripId}`}
-        label={t("roomMap:inspector.usbLedCountLabel")}
-        value={strip.ledCount}
-        step={1}
-        min={1}
-        max={1000}
-        disabled={locked}
-        onCommit={(next) => onUpdate({ ledCount: Math.round(next) })}
-      />
+      <FieldPair>
+        <DecimalField
+          label={t("roomMap:inspector.xLabel")}
+          prefix="X"
+          value={strip.startX}
+          unit="m"
+          disabled={locked}
+          onCommit={(x) => onMove(x, strip.startY)}
+        />
+        <DecimalField
+          label={t("roomMap:inspector.yLabel")}
+          prefix="Y"
+          value={strip.startY}
+          unit="m"
+          disabled={locked}
+          onCommit={(y) => onMove(strip.startX, y)}
+        />
+      </FieldPair>
+      <FieldPair>
+        <DecimalField
+          label={t("roomMap:inspector.usbLedCountLabel")}
+          value={strip.ledCount}
+          decimals={0}
+          step={1}
+          min={1}
+          max={1000}
+          unit="LED"
+          disabled={locked}
+          onCommit={(ledCount) => onUpdate({ ledCount })}
+        />
+        <span />
+      </FieldPair>
 
       <div className="lm-room-dock-field-actions">
         <button

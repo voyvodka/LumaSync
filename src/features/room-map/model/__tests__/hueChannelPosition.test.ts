@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import { HUE_CHANNEL_HEIGHT_ORIGIN } from "@/shared/contracts/roomMap";
 import {
+  hueToPlanMetres,
+  planMetresToHue,
   moveHueChannelToWorld,
   nudgeHueChannel,
   hueChannelZRange,
@@ -146,5 +148,22 @@ describe("hueChannelZRange", () => {
     const range = hueChannelZRange(BOUND, [high]);
     expect(range.max).toBe(1);
     expect(range.min).toBeCloseTo(0.3, 6);
+  });
+});
+
+describe("hueToPlanMetres / planMetresToHue", () => {
+  it("puts the cube's corners on the plan's: left wall at x 0, the TV wall at y 0", () => {
+    expect(hueToPlanMetres({ x: -1, y: 1 }, 5, 4)).toEqual({ x: 0, y: 0 });
+    expect(hueToPlanMetres({ x: 1, y: -1 }, 5, 4)).toEqual({ x: 5, y: 4 });
+    expect(hueToPlanMetres({ x: 0, y: 0 }, 5, 4)).toEqual({ x: 2.5, y: 2 });
+  });
+
+  it("round-trips a position", () => {
+    const back = planMetresToHue(1.25, 3, 5, 4);
+    expect(back.x).toBeCloseTo(-0.5, 9);
+    expect(back.y).toBeCloseTo(-0.5, 9);
+    const plan = hueToPlanMetres(back, 5, 4);
+    expect(plan.x).toBeCloseTo(1.25, 9);
+    expect(plan.y).toBeCloseTo(3, 9);
   });
 });

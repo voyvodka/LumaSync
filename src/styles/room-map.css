@@ -486,17 +486,6 @@
   width: 52px;
   text-transform: uppercase;
 }
-/* The TV inspector's "MONTAJ YÜKSEKLİĞİ" is one word too long for 52 px and
-   ran under its input; the whole group widens so the inputs still align. */
-.lm-room-dock-fields-wide {
-  display: contents;
-}
-.lm-room-dock-fields-wide .lm-room-dock-field-label {
-  width: 76px;
-}
-.lm-room-dock-fields-wide .lm-room-dock-field-hint {
-  margin-left: 84px;
-}
 .lm-room-dock-field-hint {
   margin: 2px 0 0 60px;
   font-size: 9.5px;
@@ -1157,80 +1146,6 @@
   }
 }
 
-/* Room map editor — bottom property bar (X/Y/W/H/R numeric edit row) */
-.lm-room-propbar {
-  height: 32px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 12px;
-  border-top: 1px solid var(--lm-line);
-  background: var(--lm-panel-2);
-}
-.lm-room-propbar--empty {
-  justify-content: flex-start;
-}
-.lm-room-propbar-empty {
-  font-family: var(--lm-mono);
-  font-size: 10px;
-  color: var(--lm-ink-faint);
-  letter-spacing: 0.04em;
-}
-.lm-room-propbar-sep {
-  width: 1px;
-  height: 16px;
-  background: var(--lm-line-2);
-  display: inline-block;
-}
-.lm-room-propbar-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  color: var(--lm-ink-dim);
-  font-family: var(--lm-mono);
-  letter-spacing: 0.04em;
-}
-.lm-room-propbar-field.is-disabled {
-  opacity: 0.4;
-  pointer-events: none;
-}
-.lm-room-propbar-field-label {
-  font-weight: 600;
-  width: 12px;
-  color: var(--lm-ink-faint);
-  text-transform: uppercase;
-}
-.lm-room-propbar-input {
-  width: 52px;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--lm-line-2);
-  color: var(--lm-ink);
-  font-family: var(--lm-mono);
-  font-size: 10px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  appearance: textfield;
-  outline: none;
-  padding: 1px 0;
-}
-.lm-room-propbar-input::-webkit-outer-spin-button,
-.lm-room-propbar-input::-webkit-inner-spin-button {
-  appearance: none;
-  margin: 0;
-}
-.lm-room-propbar-input:focus {
-  border-bottom-color: var(--lm-amber);
-}
-.lm-room-propbar-input:focus-visible {
-  box-shadow: var(--lm-focus-ring-soft);
-}
-.lm-room-propbar-input:disabled {
-  cursor: not-allowed;
-}
-
 .lm-room-rename-input {
   background: var(--lm-panel-2);
   border: 1px solid var(--lm-line-2);
@@ -1242,12 +1157,6 @@
   border-color: var(--lm-amber);
   box-shadow: var(--lm-focus-ring-soft);
 }
-@media (forced-colors: active) {
-  .lm-room-propbar {
-    border-color: CanvasText;
-  }
-}
-
 /* Room map editor — left tool chip dropdown menu */
 .lm-room-toolchip-menu {
   position: absolute;
@@ -1426,12 +1335,9 @@
 
    Tokens:
    - `lm-zone-inspector-pair` is the EDGE/HEX row. Group order is
-     LABEL → NUM → UNIT → LABEL → HEX so the layout reads left-to-
-     right under both LTR and forced-colors.
-   - `lm-zone-inspector-num` is a 64 px-cap mono number input; the
-     hex input mirrors it at 96 px. Both inherit the focus ring and
-     forced-colors fallback from the existing `.lm-room-dock-input`
-     pattern.
+     LABEL → EDGE FIELD → LABEL → HEX so the layout reads left-to-
+     right under both LTR and forced-colors. The edge is the room
+     map's DecimalField, held to 96 px here.
    - The picker block is a flex column centred on the dock width so
      the 160 px compact ring sits visually middle-aligned. No
      transitions > 120 ms here so the dock-wide reduced-motion rule
@@ -1502,15 +1408,9 @@
 .lm-zone-inspector-pair-label--hex {
   margin-left: 4px;
 }
-.lm-zone-inspector-pair-unit {
-  font-family: var(--lm-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.04em;
-  color: var(--lm-ink-faint);
-  text-transform: uppercase;
-  flex-shrink: 0;
+.lm-zone-inspector-edge {
+  width: 96px;
 }
-.lm-zone-inspector-num,
 .lm-zone-inspector-hex {
   flex: 0 0 auto;
   min-height: 26px;
@@ -1525,30 +1425,17 @@
   outline: none;
   appearance: none;
 }
-.lm-zone-inspector-num {
-  width: 64px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.lm-zone-inspector-num::-webkit-outer-spin-button,
-.lm-zone-inspector-num::-webkit-inner-spin-button {
-  appearance: none;
-  margin: 0;
-}
 .lm-zone-inspector-hex {
   flex: 1 1 96px;
   min-width: 0;
   text-transform: uppercase;
 }
-.lm-zone-inspector-num:focus,
 .lm-zone-inspector-hex:focus {
   border-color: rgba(255, 176, 32, 0.45);
 }
-.lm-zone-inspector-num:focus-visible,
 .lm-zone-inspector-hex:focus-visible {
   box-shadow: var(--lm-focus-ring-soft);
 }
-.lm-zone-inspector-num:disabled,
 .lm-zone-inspector-hex:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -1591,7 +1478,6 @@
   letter-spacing: 0.01em;
 }
 @media (forced-colors: active) {
-  .lm-zone-inspector-num,
   .lm-zone-inspector-hex,
   .lm-zone-inspector-swatch {
     border-color: CanvasText;

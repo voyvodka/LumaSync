@@ -78,7 +78,7 @@ function objectExists(config: RoomMapConfig, objectId: string): boolean {
 }
 
 /** Undo can take away the very object that is selected; a selection pointing
- *  at nothing would leave the inspector and the property bar dangling. */
+ *  at nothing would leave the inspector dangling. */
 function reconcileSelection(config: RoomMapConfig, selection: RoomMapSelection): RoomMapSelection {
   const objectId =
     selection.objectId !== null && objectExists(config, selection.objectId) ? selection.objectId : null;

@@ -1,67 +1,8 @@
-import { useRef, useEffect, useState, useCallback, useId } from "react";
+import { useRef, useEffect, useState, useId } from "react";
 import { useTranslation } from "react-i18next";
 import { DEFAULT_ROOM_DIMENSIONS, type RoomDimensions } from "@/shared/contracts/roomMap";
-import { clamp, roundTo } from "@/shared/lib/math";
-
-/** Numeric input that holds local string state and commits a clamped number on blur/Enter */
-function NumericField({
-  id,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-  className,
-  describedBy,
-}: {
-  id: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (v: number) => void;
-  className?: string;
-  describedBy?: string;
-}) {
-  const [local, setLocal] = useState(String(roundTo(value, 3)));
-
-  // Sync when external value changes (e.g. undo)
-  const prevValue = useRef(value);
-  if (prevValue.current !== value) {
-    prevValue.current = value;
-    setLocal(String(roundTo(value, 3)));
-  }
-
-  const commit = useCallback(() => {
-    const num = parseFloat(local);
-    if (isNaN(num)) {
-      setLocal(String(roundTo(value, 3)));
-      return;
-    }
-    const clamped = clamp(num, min, max);
-    onChange(clamped);
-    setLocal(String(clamped));
-  }, [local, value, min, max, onChange]);
-
-  return (
-    <input
-      id={id}
-      type="number"
-      min={min}
-      max={max}
-      step={step}
-      value={local}
-      onChange={(e) => setLocal(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        e.stopPropagation();
-        if (e.key === "Enter") commit();
-      }}
-      className={className}
-      aria-describedby={describedBy}
-    />
-  );
-}
+import { DecimalField } from "./DecimalField";
+import { GlyphDepth, GlyphHeight, GlyphWidth } from "./objects/fieldGlyphs";
 
 /** A low basement to a double-height room. */
 export const ROOM_HEIGHT_MIN_M = 1.5;
@@ -140,8 +81,6 @@ export function RoomMapSettingsPopover({
     }
   };
 
-  const inputClass =
-    "w-full rounded-md border border-line-2 bg-panel-2 px-2 py-1 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/60";
   const labelClass = "block text-[11px] font-semibold text-ink-dim mb-1";
 
   return (
@@ -157,14 +96,16 @@ export function RoomMapSettingsPopover({
           <label className={labelClass} htmlFor={`${fieldId}-width`}>
             {t("roomMap:settings.roomWidth")}
           </label>
-          <NumericField
+          <DecimalField
             id={`${fieldId}-width`}
+            label={t("roomMap:settings.roomWidth")}
+            prefix={<GlyphWidth />}
             value={dimensions.widthMeters}
             min={1}
             max={30}
             step={0.5}
-            onChange={(v) => onDimensionsChange({ ...dimensions, widthMeters: v })}
-            className={inputClass}
+            unit="m"
+            onCommit={(v) => onDimensionsChange({ ...dimensions, widthMeters: v })}
           />
         </div>
 
@@ -173,14 +114,16 @@ export function RoomMapSettingsPopover({
           <label className={labelClass} htmlFor={`${fieldId}-depth`}>
             {t("roomMap:settings.roomDepth")}
           </label>
-          <NumericField
+          <DecimalField
             id={`${fieldId}-depth`}
+            label={t("roomMap:settings.roomDepth")}
+            prefix={<GlyphDepth />}
             value={dimensions.depthMeters}
             min={1}
             max={30}
             step={0.5}
-            onChange={(v) => onDimensionsChange({ ...dimensions, depthMeters: v })}
-            className={inputClass}
+            unit="m"
+            onCommit={(v) => onDimensionsChange({ ...dimensions, depthMeters: v })}
           />
         </div>
 
@@ -189,15 +132,17 @@ export function RoomMapSettingsPopover({
           <label className={labelClass} htmlFor={`${fieldId}-height`}>
             {t("roomMap:settings.roomHeight")}
           </label>
-          <NumericField
+          <DecimalField
             id={`${fieldId}-height`}
+            label={t("roomMap:settings.roomHeight")}
+            prefix={<GlyphHeight />}
             value={dimensions.heightMeters ?? DEFAULT_ROOM_DIMENSIONS.heightMeters}
             min={ROOM_HEIGHT_MIN_M}
             max={ROOM_HEIGHT_MAX_M}
             step={0.1}
-            onChange={(v) => onDimensionsChange({ ...dimensions, heightMeters: v })}
-            className={inputClass}
+            unit="m"
             describedBy={`${fieldId}-height-hint`}
+            onCommit={(v) => onDimensionsChange({ ...dimensions, heightMeters: v })}
           />
           <p id={`${fieldId}-height-hint`} className="mt-1 text-[10.5px] leading-snug text-ink-faint">
             {t("roomMap:settings.roomHeightHint")}

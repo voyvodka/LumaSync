@@ -3,12 +3,13 @@ import { useTranslation } from "react-i18next";
 import { RangeRow } from "@/shared/ui/RangeRow/RangeRow";
 
 import { hueChannelIdLabel, hueChannelName } from "../../model/hueChannelLabel";
-import { hueToMetres } from "../../model/hueChannelPosition";
+import { hueToMetres, hueToPlanMetres, planMetresToHue } from "../../model/hueChannelPosition";
 
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import { Header } from "./InspectorPrimitives";
 import type { UsbStripConnectionStatus } from "./UsbStripInspector";
 import { TYPE_DOT_COLOR } from "../../model/zoneColor";
+import { DecimalField, FieldPair } from "../DecimalField";
 
 function heightBandKey(
   worldZ: number,
@@ -25,9 +26,13 @@ export function HueChannelInspector({
   channel,
   zoneName,
   bridgeStatus = "unknown",
+  world,
   worldZ,
   heightRange,
+  roomWidthMeters,
+  roomDepthMeters,
   roomHeightMeters,
+  onMove,
   onHeightChange,
   lightCount,
   isGhost = false,
@@ -36,11 +41,17 @@ export function HueChannelInspector({
 }: {
   channel: HueChannelPlacement;
   zoneName: string | null;
+  /** Resolved position in the cube — a zone-bound channel's live value is zone-relative. */
+  world: { x: number; y: number };
   /** Resolved height — a zone-bound channel's live value is zone-relative. */
   worldZ: number;
   /** Heights the channel can reach; a bound zone narrows it. Default [-1, 1]. */
   heightRange?: { min: number; max: number; zone: HueZone | null };
+  roomWidthMeters: number;
+  roomDepthMeters: number;
   roomHeightMeters: number;
+  /** A new position in the cube; the editor writes whichever field is live. */
+  onMove: (worldX: number, worldY: number) => void;
   onHeightChange: (worldZ: number) => void;
   /**
    * Hue bridge reachability mirror. Renders the same
@@ -77,6 +88,12 @@ export function HueChannelInspector({
   /** Slider stays in Hue's [-1, 1]; only the readout is metres, because that is
    *  the unit the rest of the map speaks and `-0.42` names nothing a person owns. */
   const heightMetres = (z: number) => hueToMetres(z, roomHeightMeters).toFixed(2);
+  // Metres on the plan, as every other object's position reads; the cube's [-1, 1] stays inside.
+  const plan = hueToPlanMetres(world, roomWidthMeters, roomDepthMeters);
+  const moveTo = (x: number, y: number) => {
+    const next = planMetresToHue(x, y, roomWidthMeters, roomDepthMeters);
+    onMove(next.x, next.y);
+  };
 
   const commitLabel = () => {
     setLabelDirty(false);
@@ -166,6 +183,28 @@ export function HueChannelInspector({
           {t("roomMap:inspector.hueChannelGhostNote")}
         </p>
       )}
+      <FieldPair>
+        <DecimalField
+          label={t("roomMap:inspector.xLabel")}
+          prefix="X"
+          value={plan.x}
+          min={0}
+          max={roomWidthMeters}
+          unit="m"
+          disabled={locked}
+          onCommit={(x) => moveTo(x, plan.y)}
+        />
+        <DecimalField
+          label={t("roomMap:inspector.yLabel")}
+          prefix="Y"
+          value={plan.y}
+          min={0}
+          max={roomDepthMeters}
+          unit="m"
+          disabled={locked}
+          onCommit={(y) => moveTo(plan.x, y)}
+        />
+      </FieldPair>
       <RangeRow
         variant="dock"
         className="lm-zone-inspector-slider-row"

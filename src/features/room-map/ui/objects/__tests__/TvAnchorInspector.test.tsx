@@ -76,18 +76,25 @@ describe("TvAnchorInspector mount height", () => {
     expect(onUpdate).toHaveBeenCalledWith({ mountHeightMeters: undefined });
   });
 
-  it("clamps to the room height", () => {
+  // Out of range puts the old value back rather than writing the nearest bound (design-language.md).
+  it("puts the old value back for a height above the room", () => {
     const { onUpdate, mount } = renderInspector(baseTv, 2.5);
     commit(mount, "4");
-    expect(onUpdate).toHaveBeenCalledWith({ mountHeightMeters: 2.5 });
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect((mount as HTMLInputElement).value).toBe("");
   });
 
-  it("clamps above zero", () => {
-    const { onUpdate, mount } = renderInspector(baseTv, 2.5);
+  it("puts the old value back for a height at or below the floor", () => {
+    const { onUpdate, mount } = renderInspector({ ...baseTv, mountHeightMeters: 1.1 }, 2.5);
     commit(mount, "-1");
-    const written = onUpdate.mock.calls[0][0].mountHeightMeters as number;
-    expect(written).toBeGreaterThan(0);
-    expect(written).toBeLessThanOrEqual(2.5);
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect((mount as HTMLInputElement).value).toBe("1.10");
+  });
+
+  it("takes the top of the range as typed", () => {
+    const { onUpdate, mount } = renderInspector(baseTv, 2.5);
+    commit(mount, "2,5");
+    expect(onUpdate).toHaveBeenCalledWith({ mountHeightMeters: 2.5 });
   });
 
   it("does not rewrite an unchanged explicit value", () => {

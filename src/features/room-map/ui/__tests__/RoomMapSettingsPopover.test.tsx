@@ -42,13 +42,17 @@ describe("RoomMapSettingsPopover — room height", () => {
     expect(onChange).toHaveBeenLastCalledWith({ ...DEFAULT_ROOM_DIMENSIONS, heightMeters: 3.2 });
   });
 
-  it("holds the height inside sensible bounds", () => {
+  it("holds the height inside sensible bounds, putting the old value back outside them", () => {
     const onChange = renderPopover();
-    const input = screen.getByLabelText("roomMap:settings.roomHeight");
+    const input = screen.getByLabelText("roomMap:settings.roomHeight") as HTMLInputElement;
     commit(input, "0.2");
-    expect(onChange).toHaveBeenLastCalledWith({ ...DEFAULT_ROOM_DIMENSIONS, heightMeters: ROOM_HEIGHT_MIN_M });
     commit(input, "40");
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input.value).toBe(DEFAULT_ROOM_DIMENSIONS.heightMeters.toFixed(2));
+    commit(input, String(ROOM_HEIGHT_MAX_M));
     expect(onChange).toHaveBeenLastCalledWith({ ...DEFAULT_ROOM_DIMENSIONS, heightMeters: ROOM_HEIGHT_MAX_M });
+    commit(input, String(ROOM_HEIGHT_MIN_M));
+    expect(onChange).toHaveBeenLastCalledWith({ ...DEFAULT_ROOM_DIMENSIONS, heightMeters: ROOM_HEIGHT_MIN_M });
   });
 
   it("says what the height is for", () => {

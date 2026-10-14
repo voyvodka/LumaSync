@@ -39,6 +39,17 @@ own, floating over both faces' top bars, so a keyboard switch keeps focus on it.
 stored: the map always opens on the room, and an empty map with no history opens on the templates
 before either face.
 
+**Every typed number is one field, and the inspector holds them all.** `ui/DecimalField.tsx` is
+the room map's only number input: the inspectors' position, size, height and rotation, a strip's
+LED count, a zone's edge and the room's size. It reads as a value at rest, applies on leaving or
+Enter, takes a comma as the decimal mark (Turkish writes one), and puts the old value back for a
+number out of range, as Esc does — the design language's rule, where the fields it replaced had
+clamped. ↑/↓ step and apply at once, so a caller that saves per commit passes a gesture key: typed
+moves go through the adapter's `moveTo` under `move:<id>`, which also writes a zone-bound Hue
+channel's live field. A field shows the map's metres whatever the kind stores: a Hue channel's cube
+position through `hueToPlanMetres`/`planMetresToHue`, an image's canvas pixels divided by
+`ROOM_MAP_PX_PER_METER`. The row of numbers under the plan that once held some of these is gone.
+
 **The editor's config, undo history and selection are one reducer, and a gesture reaches it once.**
 `state/roomMapReducer.ts` holds all three; `useRoomMapState` drives it and owns saving. Its actions
 are `apply` (a user edit: one undo entry, one save), `adopt` (a write the user did not make — the
@@ -107,7 +118,7 @@ bridge position, never re-route a light.
 
 **A channel placement names its entertainment area, because `channelIndex` is unique only inside one.** `HueZone` has carried `entertainmentAreaId` since v1.5 (and the since-retired `hueChannelRegionOverrides` was keyed by it); `hueChannels` was the one place that was not, so two areas' channel 0 were a single record and the second area's placements overwrote the first's. The `4 → 5` migration backfills from `lastHueAreaId` — sound because one bridge is paired at a time and, until this landed, a second area *overwrote* rather than joined. A state with no `lastHueAreaId` is left unscoped rather than bound to an invented area, and an unscoped record is adopted by whichever area is being viewed. Treat empty as unscoped rather than testing for `undefined`: the field is nullable like `zoneId` because the Rust mirror echoes `None` back as `null`, and a strict `=== undefined` hides every round-tripped record from every area.
 
-**The editor shows one area at a time, and the object-id scheme is why.** Room-map object ids are `hue-<index>` with no area (`model/objectId.ts`), so rendering two areas at once makes a selection ambiguous — every mutation matching on `channelIndex` alone would hit the same-numbered channel in the other area. `RoomMapEditor` filters to the active `hueAreaId` and writes back through `replaceHueChannel`, which matches area *and* index against the full stored list. The filter has to cover every reader and writer keyed on an object id, not just the canvas: the object list, the inspector and the property bar once read the unfiltered config, and the nudge, typed-position, lock and zone-assignment paths matched on the index alone, so another area's same-numbered channel was listed, shown or moved. They all go through `model/hueChannelScope.ts` or the editor's area-scoped config now. Placing several areas independently is P3 work and needs a wider id first.
+**The editor shows one area at a time, and the object-id scheme is why.** Room-map object ids are `hue-<index>` with no area (`model/objectId.ts`), so rendering two areas at once makes a selection ambiguous — every mutation matching on `channelIndex` alone would hit the same-numbered channel in the other area. `useRoomMapDocument` filters to the active `hueAreaId` and writes back through `replaceHueChannel`, which matches area *and* index against the full stored list. The filter has to cover every reader and writer keyed on an object id, not just the canvas: the object list, the inspector and the property bar once read the unfiltered config, and the nudge, typed-position, lock and zone-assignment paths matched on the index alone, so another area's same-numbered channel was listed, shown or moved. They all go through `model/hueChannelScope.ts` or the editor's area-scoped config now. Placing several areas independently is P3 work and needs a wider id first.
 
 **Anything the Rust zone commands echo back has to exist on the Rust struct, or the round trip erases it.** The four `hue_zone` commands return the channel list and `useRoomMapHueZones` re-applies it wholesale, so a field present in TypeScript and absent from `models/room_map.rs` is silently dropped the moment a channel is assigned to a zone. `locked` had been lost that way since it was added; `entertainmentAreaId` would have joined it. Both are mirrored now, and a channel synthesised by `assign_channel_to_hue_zone` inherits its area from the zone, which belongs to exactly one.
 

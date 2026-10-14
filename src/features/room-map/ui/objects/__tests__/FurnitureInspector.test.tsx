@@ -94,3 +94,45 @@ describe("FurnitureInspector — a build without the 3D room", () => {
     expect(screen.getByLabelText("roomMap:inspector.depthLabel")).toBeDefined();
   });
 });
+
+describe("FurnitureInspector — position and rotation", () => {
+  beforeEach(() => cleanup());
+
+  const field = (name: string) => screen.getByRole("spinbutton", { name }) as HTMLInputElement;
+  const enter = (input: HTMLInputElement, value: string) => {
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value } });
+    fireEvent.keyDown(input, { key: "Enter" });
+  };
+
+  it("takes a typed X and Y, the fields the property bar used to hold", () => {
+    const { onUpdate } = renderInspector();
+    expect(field("roomMap:inspector.xLabel").value).toBe("1.00");
+    enter(field("roomMap:inspector.xLabel"), "2.4");
+    expect(onUpdate).toHaveBeenLastCalledWith({ x: 2.4 });
+    enter(field("roomMap:inspector.yLabel"), "0,5");
+    expect(onUpdate).toHaveBeenLastCalledWith({ y: 0.5 });
+  });
+
+  it("wraps a rotation typed past a full turn or below zero", () => {
+    const { onUpdate } = renderInspector({ ...table, rotation: 350 });
+    enter(field("roomMap:inspector.furnitureRotationLabel"), "-90");
+    expect(onUpdate).toHaveBeenLastCalledWith({ rotation: 270 });
+    enter(field("roomMap:inspector.furnitureRotationLabel"), "370");
+    expect(onUpdate).toHaveBeenLastCalledWith({ rotation: 10 });
+  });
+
+  it("holds every number while the piece is locked", () => {
+    renderInspector({ ...table, locked: true });
+    for (const name of [
+      "roomMap:inspector.xLabel",
+      "roomMap:inspector.yLabel",
+      "roomMap:inspector.widthLabel",
+      "roomMap:inspector.depthLabel",
+      "roomMap:inspector.heightLabel",
+      "roomMap:inspector.furnitureRotationLabel",
+    ]) {
+      expect(field(name)).toBeDisabled();
+    }
+  });
+});

@@ -179,9 +179,9 @@ describe("RoomMapEditor — a held arrow key is one undo step and one save", () 
   });
 });
 
-// `hue-<index>` names no area, so the dock and the property bar have to read
+// `hue-<index>` names no area, so the dock and its inspector have to read
 // the one area the canvas draws. See docs/architecture/room-map.md.
-describe("RoomMapEditor — the dock and the property bar show the viewed area only", () => {
+describe("RoomMapEditor — the dock and its inspector show the viewed area only", () => {
   it("lists, inspects and reports the viewed area's channel 0, not another area's", async () => {
     stored(
       {
@@ -199,8 +199,42 @@ describe("RoomMapEditor — the dock and the property bar show the viewed area o
     expect(screen.queryByText("Lamp A")).toBeNull();
     fireEvent.click(screen.getByText("Lamp B"));
 
-    const x = screen.getByLabelText("roomMap:propertyBar.fields.x") as HTMLInputElement;
-    expect(x.value).toBe("0.50");
+    // Cube x 0.5 is three quarters across the 5 m room; area A's channel 0 would read 1.25.
+    const x = screen.getByRole("spinbutton", { name: "roomMap:inspector.xLabel" }) as HTMLInputElement;
+    expect(x.value).toBe("3.75");
+  });
+});
+
+describe("RoomMapEditor — stepping a typed position is one undo step and one save", () => {
+  it("coalesces a run of arrow steps in a Hue light's X field", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    stored(
+      { hueChannels: [{ channelIndex: 0, x: 0.5, y: 0, z: 0, entertainmentAreaId: "area-b", label: "Lamp B" }] },
+      { lastHueAreaId: "area-b" },
+    );
+    const { root } = await renderEditor();
+    await flush();
+    fireEvent.click(screen.getByText("Lamp B"));
+
+    const x = screen.getByRole("spinbutton", { name: "roomMap:inspector.xLabel" }) as HTMLInputElement;
+    fireEvent.focus(x);
+    for (let i = 0; i < 5; i++) {
+      fireEvent.keyDown(x, { key: "ArrowUp" });
+      act(() => vi.advanceTimersByTime(60));
+    }
+    expect(roomMapSaves()).toHaveLength(0);
+
+    await act(async () => {
+      vi.advanceTimersByTime(GESTURE_COALESCE_MS);
+    });
+    expect(roomMapSaves()).toHaveLength(1);
+    // Five 5 cm steps across a 5 m room are 0.1 of the cube.
+    expect(roomMapSaves()[0]?.hueChannels[0]?.x).toBeCloseTo(0.6, 6);
+
+    fireEvent.keyDown(root, { key: "z", metaKey: true });
+    await flush();
+    expect(roomMapSaves()).toHaveLength(2);
+    expect(roomMapSaves()[1]?.hueChannels[0]?.x).toBe(0.5);
   });
 });
 

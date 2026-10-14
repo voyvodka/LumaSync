@@ -33,7 +33,6 @@ import { LeftToolbar } from "./LeftToolbar";
 import { MouseCoordinateDisplay } from "./MouseCoordinateDisplay";
 import { ZoomControl } from "./ZoomControl";
 import { roomObjectAdapter } from "../model/roomObjectKinds";
-import { PropertyBar } from "./PropertyBar";
 import { RenameDialog } from "./RenameDialog";
 import { isRoomMapEmpty } from "../model/roomTemplate";
 import type {
@@ -184,8 +183,6 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     handleDuplicate,
     handleArrowNudge,
     handleUpdatePosition,
-    handleUpdateSize,
-    handleUpdateRotation,
     handleRenameFurniture,
   } = useRoomMapObjects({ config, hueAreaId, apply, selectedId, select });
 
@@ -193,10 +190,6 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     handleAddImage,
     imageError,
     imageErrorCode,
-    handleUpdateImageOpacity,
-    handleUpdateImageScale,
-    handleUpdateImageAspectLock,
-    handleResetImageScale,
     handleRenameImage,
   } = useRoomMapImageLayers({ config, apply, select });
 
@@ -733,6 +726,8 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
                 hueChannels: replaceHueChannel(config.hueChannels, { ...target, label }),
               });
             }}
+            // A held arrow in X or Y steps many times; the gesture keeps it one undo step and one save.
+            onMoveObject={(id, x, y) => handleUpdatePosition(id, x, y, { gesture: `move:${id}` })}
             onRenameImageLayer={handleRenameImage}
             // USB connection status feed for inspectors
             usbConnectedPort={usb.connectedPort}
@@ -745,19 +740,6 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
           />
         )}
       </div>
-
-      {/* Property bar */}
-      <PropertyBar
-        config={scopedConfig}
-        selectedId={selectedId}
-        onUpdatePosition={handleUpdatePosition}
-        onUpdateSize={handleUpdateSize}
-        onUpdateRotation={handleUpdateRotation}
-        onUpdateImageOpacity={handleUpdateImageOpacity}
-        onUpdateImageScale={handleUpdateImageScale}
-        onUpdateImageAspectLock={handleUpdateImageAspectLock}
-        onResetImageScale={handleResetImageScale}
-      />
 
       {/* Context menu */}
       {contextMenu && (

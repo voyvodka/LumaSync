@@ -38,9 +38,7 @@ export interface UseRoomMapObjectsReturn {
   handleRotate: () => void;
   handleDuplicate: (id: string) => void;
   handleArrowNudge: (e: React.KeyboardEvent<HTMLDivElement>) => void;
-  handleUpdatePosition: (id: string, x: number, y: number) => void;
-  handleUpdateSize: (id: string, w: number, h: number) => void;
-  handleUpdateRotation: (id: string, rotation: number) => void;
+  handleUpdatePosition: (id: string, x: number, y: number, options?: ApplyOptions) => void;
   handleRenameFurniture: (id: string, label: string) => void;
 }
 
@@ -162,31 +160,12 @@ export function useRoomMapObjects({
   );
 
   const handleUpdatePosition = useCallback(
-    (id: string, x: number, y: number) => {
+    (id: string, x: number, y: number, options?: ApplyOptions) => {
       const ref = parseObjectId(id);
       const patch = ref ? roomObjectAdapter(ref).moveTo(config, ref, x, y, { hueAreaId }) : null;
-      if (patch) apply(patch);
+      if (patch) apply(patch, options);
     },
     [config, hueAreaId, apply],
-  );
-
-  const handleUpdateSize = useCallback(
-    (id: string, w: number, h: number) => {
-      const ref = parseObjectId(id);
-      const resize = ref ? roomObjectAdapter(ref).resize : null;
-      const patch = ref && resize ? resize(config, ref, w, h) : null;
-      if (patch) apply(patch);
-    },
-    [config, apply],
-  );
-
-  const handleUpdateRotation = useCallback(
-    (id: string, rotation: number) => {
-      const ref = parseObjectId(id);
-      const rotateTo = ref ? roomObjectAdapter(ref).rotateTo : null;
-      if (ref && rotateTo) apply(rotateTo(config, ref, rotation));
-    },
-    [config, apply],
   );
 
   const handleRenameFurniture = useCallback(
@@ -209,8 +188,6 @@ export function useRoomMapObjects({
     handleDuplicate,
     handleArrowNudge,
     handleUpdatePosition,
-    handleUpdateSize,
-    handleUpdateRotation,
     handleRenameFurniture,
   };
 }
