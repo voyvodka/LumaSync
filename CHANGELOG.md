@@ -1123,6 +1123,10 @@ https://keepachangelog.com/en/1.1.0/
 - The frontend bundle has a size gate that fails, per chunk class: the start-up code every window
   loads, and each chunk loaded later. The old limit only printed a warning and had been passed
   without anyone noticing.
+- The room map editor saves only what it changed. It wrote its whole copy of the map, so a strip
+  added by connecting a controller, or an LED count saved in LED Setup, while it was open would have
+  been taken away by its next save; the settings pages showing one section at a time was all that
+  prevented it. The unused room map save counter is gone from the settings file.
 
 
 ## [1.5.5]

@@ -663,7 +663,7 @@ describe("LightsPage — add output", () => {
   beforeEach(() => {
     saveMock.mockClear();
     createHueZoneMock.mockClear();
-    shellStateRef.current = { lastHueAreaId: "area-1", roomMapVersion: 7, roomMap: { ...DEFAULT_ROOM_MAP } };
+    shellStateRef.current = { lastHueAreaId: "area-1", roomMap: { ...DEFAULT_ROOM_MAP } };
   });
 
   it("opens Devices and writes nothing to the room map", async () => {

@@ -77,7 +77,6 @@ const REQUIRED_STATE_FIELDS = [
   "lastSection",
   "trayHintShown",
   "roomMap",
-  "roomMapVersion",
 ];
 
 /**
@@ -294,9 +293,9 @@ if (orderMatch) {
 // ---------------------------------------------------------------------------
 console.log("\n[ Shell state schema version (strips stored) ]");
 check(
-  /SHELL_STATE_SCHEMA_VERSION\s*=\s*9\b/.test(source),
-  "SHELL_STATE_SCHEMA_VERSION === 9 (the old preview's keys dropped)",
-  "SHELL_STATE_SCHEMA_VERSION not bumped to 9 — the 8 → 9 step has no trigger"
+  /SHELL_STATE_SCHEMA_VERSION\s*=\s*10\b/.test(source),
+  "SHELL_STATE_SCHEMA_VERSION === 10 (roomMapVersion dropped)",
+  "SHELL_STATE_SCHEMA_VERSION not bumped to 10 — the 9 → 10 step has no trigger"
 );
 for (const retired of ["startupEnabled", "notificationsEnabled", "roomMapBackgroundOpacity"]) {
   check(
@@ -1181,6 +1180,52 @@ for (const field of RETIRED_PREVIEW_KEYS) {
     `the retired "${field}" is read again in: ${readers.join(", ")}`
   );
 }
+console.log("\n[ roomMap writers (R45) ]");
+// Retired at 9 → 10: every writer bumped it and nothing read it.
+check(
+  !source.includes("roomMapVersion?:"),
+  'ShellState no longer declares the retired "roomMapVersion"',
+  'ShellState still declares "roomMapVersion", retired at schema 10'
+);
+{
+  const readers = retiredKeyReaders
+    .filter(([, text]) => text.includes("roomMapVersion") || text.includes("room_map_version"))
+    .map(([file]) => relative(ROOT, file));
+  check(
+    readers.length === 0,
+    'nothing reads the retired "roomMapVersion"',
+    `the retired "roomMapVersion" is read again in: ${readers.join(", ")}`
+  );
+}
+// Several writers share these keys; a save replaces the whole key and reverts what another writer
+// stored between its read and its write. `shellStore.update` re-reads under the store's revision.
+// Syntactic: a save handed a variable rather than an object literal is not seen.
+const SHARED_KEYS = /\b(roomMap|hueBridgeSyncedPositions)\b/;
+function saveCallArguments(text) {
+  const args = [];
+  for (const m of text.matchAll(/\b(?:shellStore\.save|saveShellState)\s*\(/g)) {
+    let depth = 1;
+    let i = m.index + m[0].length;
+    const start = i;
+    while (i < text.length && depth > 0) {
+      if (text[i] === "(") depth += 1;
+      else if (text[i] === ")") depth -= 1;
+      i += 1;
+    }
+    args.push(text.slice(start, i - 1));
+  }
+  return args;
+}
+const wholeKeySavers = walkSourceFiles(resolve(ROOT, "src"), /\.tsx?$/)
+  .filter((file) => !file.endsWith("/features/persistence/shellStore.ts"))
+  .filter((file) => saveCallArguments(stripComments(readFileSync(file, "utf-8"))).some((arg) => SHARED_KEYS.test(arg)))
+  .map((file) => relative(ROOT, file));
+check(
+  wholeKeySavers.length === 0,
+  "roomMap and hueBridgeSyncedPositions are written only through shellStore.update",
+  `a whole-key save of roomMap or hueBridgeSyncedPositions in: ${wholeKeySavers.join(", ")}`
+);
+
 for (const field of REQUIRED_V16_STATE_FIELDS) {
   check(
     source.includes(field + "?:"),

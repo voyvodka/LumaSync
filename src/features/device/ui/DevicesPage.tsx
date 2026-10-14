@@ -246,7 +246,7 @@ export function DevicesPage({
           ...(current.roomMap ?? DEFAULT_ROOM_MAP),
           hueChannels: mergeHueChannels(current.roomMap?.hueChannels ?? [], scoped),
         };
-        return { roomMap, roomMapVersion: (current.roomMapVersion ?? 0) + 1 };
+        return { roomMap };
       });
       hueChannelPersistError.clear();
     } catch (e) {
@@ -271,13 +271,12 @@ export function DevicesPage({
       const areaId = selectedAreaId;
       setSyncedPositions(snapshot);
       try {
-        const current = await shellStore.load();
-        await shellStore.save({
+        await shellStore.update((current) => ({
           hueBridgeSyncedPositions: {
             ...(current.hueBridgeSyncedPositions ?? {}),
             [areaId]: snapshot,
           },
-        });
+        }));
       } catch (e) {
         console.error("[LumaSync] handleSyncedPositionsChange failed", e);
       }

@@ -577,11 +577,10 @@ describe("DevicesPage — a Hue channel save beside another room-map writer", ()
     const { DEFAULT_ROOM_MAP } = await import("@/shared/contracts/roomMap");
     vi.mocked(shellStore.load).mockResolvedValue({
       roomMap: { ...DEFAULT_ROOM_MAP, usbStrips: [] },
-      roomMapVersion: 2,
     } as never);
     const written: Array<Record<string, unknown> | null> = [];
     vi.mocked(shellStore.update).mockImplementation(async (update) => {
-      const patch = update({ roomMap: { ...DEFAULT_ROOM_MAP, usbStrips: [STRIP] }, roomMapVersion: 3 } as never);
+      const patch = update({ roomMap: { ...DEFAULT_ROOM_MAP, usbStrips: [STRIP] } } as never);
       written.push(patch as Record<string, unknown> | null);
       return {} as never;
     });
@@ -592,7 +591,8 @@ describe("DevicesPage — a Hue channel save beside another room-map writer", ()
       await user.click(await screen.findByText("stub:moveChannel"));
 
       await waitFor(() => expect(written).toHaveLength(1));
-      expect(written[0]).toMatchObject({ roomMap: { usbStrips: [STRIP] }, roomMapVersion: 4 });
+      expect(written[0]).toMatchObject({ roomMap: { usbStrips: [STRIP] } });
+      expect(written[0]).not.toHaveProperty("roomMapVersion");
       expect(shellStore.save).not.toHaveBeenCalledWith(expect.objectContaining({ roomMap: expect.anything() }));
     } finally {
       vi.mocked(shellStore.load).mockResolvedValue({ roomMap: null } as never);

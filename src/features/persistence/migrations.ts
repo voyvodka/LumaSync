@@ -77,6 +77,12 @@ type RetiredPreviewKeys = {
   ledPreviewHintShown?: boolean;
 };
 
+/** Retired at schemaVersion 10: every room-map writer bumped it and nothing read it — the store's
+ *  revision is what guards a write. */
+type RetiredRoomMapKeys = {
+  roomMapVersion?: number;
+};
+
 type LegacyWindowGeometry = {
   windowX?: number | null;
   windowY?: number | null;
@@ -150,6 +156,23 @@ export function migrateShellState(state: ShellState): ShellState {
     next = migrateV8ToV9(next);
   }
 
+  // 9 → 10: drop the room map counter nothing read
+  if ((next.schemaVersion ?? 1) < 10) {
+    next = migrateV9ToV10(next);
+  }
+
+  return next;
+}
+
+// ---------------------------------------------------------------------------
+// 9 → 10 — drop `roomMapVersion`
+// ---------------------------------------------------------------------------
+
+/** Safe to drop: no reader in either language. A v9 build reads it as absent and starts again
+ *  from 0, which nothing compares against. */
+function migrateV9ToV10(state: ShellState): ShellState {
+  const next = { ...state, schemaVersion: 10 } as ShellState & RetiredRoomMapKeys;
+  delete next.roomMapVersion;
   return next;
 }
 

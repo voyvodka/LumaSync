@@ -41,6 +41,13 @@ vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => Promise.resolve(store.state),
     save: (partial: Record<string, unknown>) => store.save(partial),
+    update: async (fn: (current: Record<string, unknown>) => Record<string, unknown> | null) => {
+      const partial = fn(store.state);
+      if (partial === null) return store.state;
+      store.save(partial);
+      store.state = { ...store.state, ...partial };
+      return store.state;
+    },
   },
 }));
 

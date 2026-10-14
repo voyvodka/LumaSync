@@ -3,6 +3,7 @@ import { shellStore } from "@/features/persistence/shellStore";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 import { parseCommandError } from "@/shared/contracts/status";
+import { mergeEditorSave } from "../model/roomMapMerge";
 import { applyRoomTemplate } from "../model/roomTemplate";
 import {
   GESTURE_COALESCE_MS,
@@ -46,7 +47,12 @@ export function useRoomMapState(): UseRoomMapStateReturn {
   const [state, dispatch] = useReducer(roomMapReducer, undefined, initialRoomMapState);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const versionRef = useRef(0);
+  // The map as the editor last loaded or wrote it: a save writes only what changed since, so a
+  // strip, LED count or channel another writer stored meanwhile survives (`mergeEditorSave`).
+  // Read when a save runs, not when it is asked for: a save queued behind one that fails must
+  // write whole, or the failed one's edit never reaches the file.
+  const writtenRef = useRef<RoomMapConfig | null>(DEFAULT_ROOM_MAP);
+  const savingRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,7 +81,8 @@ export function useRoomMapState(): UseRoomMapStateReturn {
             delete loaded.backgroundScale;
           }
           dispatch({ type: "hydrate", config: loaded });
-          versionRef.current = stored.roomMapVersion ?? 0;
+          // The stored map as it is, not the converted copy, so the conversion reaches the file.
+          writtenRef.current = stored.roomMap;
         }
         setLoading(false);
       })
@@ -91,16 +98,31 @@ export function useRoomMapState(): UseRoomMapStateReturn {
     };
   }, []);
 
-  const persist = useCallback(async (next: RoomMapConfig) => {
-    try {
-      versionRef.current += 1;
-      await shellStore.save({ roomMap: next, roomMapVersion: versionRef.current });
-      setError(null);
-    } catch (err) {
-      const reason = parseCommandError(err).message;
-      console.error(`[LumaSync] Room map save failed: ${reason}`);
-      setError(reason);
-    }
+  const persist = useCallback((next: RoomMapConfig) => {
+    const run = async () => {
+      const base = writtenRef.current;
+      try {
+        await shellStore.update((current) => ({
+          roomMap: mergeEditorSave(current.roomMap ?? DEFAULT_ROOM_MAP, base, next),
+        }));
+        writtenRef.current = next;
+        setError(null);
+      } catch (err) {
+        writtenRef.current = null;
+        const reason = parseCommandError(err).message;
+        console.error(`[LumaSync] Room map save failed: ${reason}`);
+        setError(reason);
+      }
+    };
+    // One after another, so a later save never lands before an earlier one; the first starts at
+    // once, so the unmount flush is under way before the editor is gone.
+    const queued = savingRef.current;
+    const saving = queued === null ? run() : queued.then(run);
+    savingRef.current = saving;
+    void saving.finally(() => {
+      if (savingRef.current === saving) savingRef.current = null;
+    });
+    return saving;
   }, []);
 
   const pendingRef = useRef<RoomMapConfig | null>(null);

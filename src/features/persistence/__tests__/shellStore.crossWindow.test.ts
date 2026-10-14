@@ -174,7 +174,6 @@ describe("update, the revision-guarded read-modify-write", () => {
     backend.seed({
       schemaVersion: SHELL_STATE_SCHEMA_VERSION,
       roomMap: { ...DEFAULT_ROOM_MAP, hueChannels: [CHANNEL_A] },
-      roomMapVersion: 1,
     });
   }
 
@@ -202,7 +201,7 @@ describe("update, the revision-guarded read-modify-write", () => {
     await main.shellStore.update((current) => {
       calls += 1;
       const roomMap = current.roomMap ?? DEFAULT_ROOM_MAP;
-      return { roomMap: { ...roomMap, usbStrips: [...roomMap.usbStrips, STRIP] }, roomMapVersion: 2 };
+      return { roomMap: { ...roomMap, usbStrips: [...roomMap.usbStrips, STRIP] }, lastSection: "devices" };
     });
 
     expect(calls).toBe(2);
@@ -211,7 +210,7 @@ describe("update, the revision-guarded read-modify-write", () => {
     expect(stored.roomMap?.usbStrips).toEqual([STRIP]);
     // Its own write reaches its listeners once; the echo is dropped.
     await flush();
-    expect(heard.filter((saved) => (saved as Partial<ShellState>).roomMapVersion === 2)).toHaveLength(1);
+    expect(heard.filter((saved) => (saved as Partial<ShellState>).lastSection === "devices")).toHaveLength(1);
   });
 
   it("writes nothing when the update has nothing to change", async () => {

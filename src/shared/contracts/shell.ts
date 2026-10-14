@@ -199,8 +199,9 @@ export const SECTION_ORDER: SectionId[] = [
  *  `7 → 8` stores the local output as `ledStrips`; the six keys it came from
  *  stay on disk, frozen, so a v7 build still boots (`LegacyV7StripKeys`).
  *  `8 → 9` drops the old LED preview's keys: `ledPreviewPopupVisible`,
- *  `ledTwinEnabledTest`, `lastLedTestPattern` and `ledPreviewHintShown`. */
-export const SHELL_STATE_SCHEMA_VERSION = 9 as const;
+ *  `ledTwinEnabledTest`, `lastLedTestPattern` and `ledPreviewHintShown`.
+ *  `9 → 10` drops `roomMapVersion`, which every room-map writer bumped and none read. */
+export const SHELL_STATE_SCHEMA_VERSION = 10 as const;
 
 /** Shape of shell state persisted to `shell-state.json` */
 export interface ShellState {
@@ -330,11 +331,6 @@ export interface ShellState {
    * Absent until the user first opens the room map editor.
    */
   roomMap?: RoomMapConfig;
-  /**
-   * Monotonically increasing integer, incremented on each room map save.
-   * Allows downstream consumers to detect stale in-memory state.
-   */
-  roomMapVersion?: number;
   /** Room map editor grid visibility */
   roomMapShowGrid?: boolean;
   /** Room map editor grid stroke width (px) */

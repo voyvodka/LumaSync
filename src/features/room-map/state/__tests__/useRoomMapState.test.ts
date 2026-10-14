@@ -9,11 +9,25 @@ import { useRoomMapState } from "../useRoomMapState";
 
 const mockLoad = vi.fn();
 const mockSave = vi.fn();
+// What the store holds: the last load, with every write the hook makes laid over it. `update` runs
+// the hook's updater against it and hands the partial to `mockSave`, as the real store writes it.
+let stored: ShellState = {} as ShellState;
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
-    load: () => mockLoad(),
+    load: async () => {
+      const state = await mockLoad();
+      stored = { ...(state ?? {}) };
+      return state;
+    },
     save: (partial: Partial<ShellState>) => mockSave(partial),
+    update: async (fn: (current: ShellState) => Partial<ShellState> | null) => {
+      const partial = fn(stored);
+      if (partial === null) return stored;
+      await mockSave(partial);
+      stored = { ...stored, ...partial };
+      return stored;
+    },
   },
 }));
 
@@ -50,7 +64,7 @@ describe("useRoomMapState — load", () => {
 
   it("loads the persisted roomMap without writing it back or making it undoable", async () => {
     const persisted = makePersistedConfig();
-    mockLoad.mockResolvedValue({ roomMap: persisted, roomMapVersion: 3 } as ShellState);
+    mockLoad.mockResolvedValue({ roomMap: persisted } as ShellState);
     const { result } = renderHook(() => useRoomMapState());
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.config).toEqual(persisted);
@@ -72,9 +86,50 @@ describe("useRoomMapState — load", () => {
   });
 });
 
+describe("useRoomMapState — another writer", () => {
+  // The USB roster adds a strip on a connect while the editor is open; the editor's next save
+  // used to write its own copy of the whole map and take that strip away again.
+  it("keeps a strip another writer stored while the editor was open", async () => {
+    const own = { stripId: "own", startX: 0, startY: 0, endX: 1, endY: 0, ledCount: 60 };
+    const added = { ...own, stripId: "added", portName: "/dev/cu.usbserial-1" };
+    mockLoad.mockResolvedValue({ roomMap: { ...makePersistedConfig(), usbStrips: [own] } } as ShellState);
+    const { result } = renderHook(() => useRoomMapState());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    stored = { ...stored, roomMap: { ...stored.roomMap!, usbStrips: [own, added] } };
+
+    act(() => result.current.apply({ dimensions: { widthMeters: 8, depthMeters: 6, heightMeters: 3 } }));
+
+    await waitFor(() => expect(roomMapSaves()).toHaveLength(1));
+    const saved = roomMapSaves()[0][0].roomMap as RoomMapConfig;
+    expect(saved.usbStrips.map((strip) => strip.stripId)).toEqual(["own", "added"]);
+    expect(saved.dimensions.widthMeters).toBe(8);
+  });
+});
+
+describe("useRoomMapState — a failed save", () => {
+  // A save queued behind one that fails used to write only its own change, against a baseline that
+  // never reached the file — the failed edit was lost for good.
+  it("makes the next save write the whole map", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockLoad.mockResolvedValue({ roomMap: makePersistedConfig() } as ShellState);
+    const { result } = renderHook(() => useRoomMapState());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    mockSave.mockRejectedValueOnce(new Error("disk full"));
+
+    act(() => result.current.apply({ dimensions: { widthMeters: 8, depthMeters: 6, heightMeters: 3 } }));
+    act(() => result.current.apply({ furniture: [] }));
+
+    await waitFor(() => expect(roomMapSaves()).toHaveLength(2));
+    const second = roomMapSaves()[1][0].roomMap as RoomMapConfig;
+    expect(second.dimensions.widthMeters).toBe(8);
+    expect(second.furniture).toEqual([]);
+    consoleError.mockRestore();
+  });
+});
+
 describe("useRoomMapState — saving", () => {
-  it("saves a plain apply at once, with the next version", async () => {
-    mockLoad.mockResolvedValue({ roomMapVersion: 3 } as ShellState);
+  it("saves a plain apply at once", async () => {
+    mockLoad.mockResolvedValue({} as ShellState);
     const { result } = renderHook(() => useRoomMapState());
     await waitFor(() => expect(result.current.loading).toBe(false));
 

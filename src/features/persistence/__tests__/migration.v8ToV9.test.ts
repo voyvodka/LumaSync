@@ -33,8 +33,8 @@ describe("migrateV8ToV9 — the old LED preview's keys are dropped", () => {
     expect(out.ledPreviewPopupCenterY).toBe(400);
   });
 
-  it("leaves a state already at 9 untouched", () => {
-    const state = { ...makeBaseState({ schemaVersion: 9 }), lastSection: "devices" } as ShellState;
+  it("leaves a state already at the current version untouched", () => {
+    const state = { ...makeBaseState({ schemaVersion: SHELL_STATE_SCHEMA_VERSION }), lastSection: "devices" } as ShellState;
     expect(migrateShellState(state)).toBe(state);
   });
 });
