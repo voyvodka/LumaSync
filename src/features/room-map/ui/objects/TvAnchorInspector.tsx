@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import type { TranslationKey } from "@/features/i18n/catalogue";
-import { SCREEN_KINDS, type ScreenKind, type TvAnchorPlacement } from "@/shared/contracts/roomMap";
+import { resolveScreenKind, SCREEN_KINDS, type ScreenKind, type TvAnchorPlacement } from "@/shared/contracts/roomMap";
 import { Segmented } from "@/shared/ui/Segmented/Segmented";
 import chips from "./FurnitureInspector.module.css";
 import { Header, InspectorNumberField, InspectorOptionalNumberField } from "./InspectorPrimitives";
@@ -21,6 +21,7 @@ export function TvAnchorInspector({
   tv,
   roomHeightMeters,
   autoKind,
+  modelChoices,
   onUpdate,
   onToggleLock,
 }: {
@@ -28,6 +29,8 @@ export function TvAnchorInspector({
   roomHeightMeters: number;
   /** What the screen reads as with no pick. */
   autoKind: ScreenKind;
+  /** The screen kind is drawn only by the 3D room; a build without it does not offer it. */
+  modelChoices: boolean;
   onUpdate: (patch: Partial<TvAnchorPlacement>) => void;
   onToggleLock: () => void;
 }) {
@@ -45,12 +48,13 @@ export function TvAnchorInspector({
         name={t("roomMap:objectPanel.tvLabel")}
         dotColor={TYPE_DOT_COLOR.tv}
       />
+      {modelChoices && (
       <div className={chips.group}>
         <span className={`lm-room-dock-field-label ${chips.label}`}>{t("roomMap:inspector.screenKindLabel")}</span>
         <Segmented
           className={chips.row}
           ariaLabel={t("roomMap:inspector.screenKindLabel")}
-          value={tv.screenKind ?? AUTO}
+          value={resolveScreenKind(tv.screenKind) ?? AUTO}
           disabled={locked}
           options={[
             {
@@ -67,6 +71,7 @@ export function TvAnchorInspector({
           onChange={(next) => onUpdate({ screenKind: next === AUTO ? undefined : (next as ScreenKind) })}
         />
       </div>
+      )}
       <div className="lm-room-dock-fields-wide">
         <InspectorNumberField
           id="tv-w"

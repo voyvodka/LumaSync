@@ -197,8 +197,14 @@ middle of an import.
     does not take goes, because `dining` means a table and a chair alike and a spread would carry it
     across silently.
   The piece's own height is `topMeters` — `height` on this type is the footprint's depth (and the
-  inspector now says Depth for it). `screenKind` is the editor's alone: `toRoomGeometry` copies the
-  anchor field by field, and the shared parity fixture pins that Rust never sees it.
+  inspector now says Depth for it). `screenKind` is the editor's alone: Rust receives it in the file
+  it owns but never mirrors or projects it — `toRoomGeometry` copies the anchor field by field, and
+  the shared parity fixture pins it. `resolveScreenKind` and `resolveFurnitureTop` read the two
+  without a type's help, so a value from a newer build or a hand-edited file reads as absent. The
+  model, tone, height and screen choices are offered only where the 3D room is built
+  (`ROOM_VIEW_3D_AVAILABLE`): nothing stores what nothing draws. Their inspector edits carry a
+  gesture key, because a chip or swatch group selects on every arrow key and each save re-applies
+  the running mode.
 - **The 3D room keeps its draw count fixed.** Furniture merges into one matte and one satin mesh by
   vertex colour; bulbs, halos (one `Points`), floor pools and wall washes are one draw each whatever
   the lamp count; contact shadows are geometry with per-vertex alpha merged into one mesh — a

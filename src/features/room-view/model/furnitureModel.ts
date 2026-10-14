@@ -8,6 +8,7 @@ import {
   type RoomMapConfig,
   resolveFurnitureType,
   resolveFurnitureVariant,
+  resolveScreenKind,
   SCREEN_KINDS,
   type ScreenKind,
 } from "@/shared/contracts/roomMap";
@@ -132,7 +133,7 @@ export function classifyFurniture(config: RoomMapConfig): Map<string, FurnitureM
   const models = new Map<string, FurnitureModel>();
   const items = config.furniture;
   const screen = screenSpot(config);
-  const monitor = config.tvAnchor?.screenKind === SCREEN_KINDS.MONITOR;
+  const monitor = resolveScreenKind(config.tvAnchor?.screenKind) === SCREEN_KINDS.MONITOR;
   const typed = items.map((item) => ({ item, type: resolveFurnitureType(item.type), variant: resolveFurnitureVariant(item) }));
 
   const sofas = typed

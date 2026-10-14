@@ -7,14 +7,18 @@ import { FURNITURE_DEFAULT_SIZE, retypeFurniture } from "../furnitureKinds";
 const table: FurniturePlacement = { id: "t", type: "table", x: 0, y: 0, width: 1, height: 0.6, variant: "dining", tone: "oak" };
 
 describe("retypeFurniture", () => {
+  it("drops the height, which belonged to what the piece was", () => {
+    expect(retypeFurniture({ ...table, type: "storage", topMeters: 2.2 }, "chair").topMeters).toBeUndefined();
+  });
+
   it("clears a variant and a tone the new type does not take", () => {
     // `dining` is a chair's variant too, but oak is no chair's tone.
-    expect(retypeFurniture(table, "chair")).toEqual({ type: "chair", variant: "dining", tone: undefined });
-    expect(retypeFurniture(table, "bed")).toEqual({ type: "bed", variant: undefined, tone: undefined });
+    expect(retypeFurniture(table, "chair")).toEqual({ type: "chair", variant: "dining", tone: undefined, topMeters: undefined });
+    expect(retypeFurniture(table, "bed")).toEqual({ type: "bed", variant: undefined, tone: undefined, topMeters: undefined });
   });
 
   it("keeps what still fits", () => {
-    expect(retypeFurniture(table, "storage")).toEqual({ type: "storage", variant: undefined, tone: "oak" });
+    expect(retypeFurniture(table, "storage")).toEqual({ type: "storage", variant: undefined, tone: "oak", topMeters: undefined });
   });
 });
 

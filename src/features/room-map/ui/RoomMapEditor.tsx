@@ -762,16 +762,21 @@ export function RoomMapEditor({
             onAssignChannelToZone={handleAssignChannelToZone}
             onNavigateToDevices={onNavigateToDevices}
             // Type-aware inspector patch hooks
+            // A chip or swatch group selects on every arrow key; the gesture keeps a run of them one
+            // undo step and one save, as the zone inspector's slider does.
             onUpdateTvAnchor={(patch) => {
               if (!config.tvAnchor) return;
-              apply({ tvAnchor: { ...config.tvAnchor, ...patch } });
+              apply({ tvAnchor: { ...config.tvAnchor, ...patch } }, { gesture: `tv:${Object.keys(patch).sort().join(",")}` });
             }}
             onUpdateFurniture={(id, patch) => {
-              apply({
-                furniture: config.furniture.map((f) =>
-                  f.id === id ? { ...f, ...patch } : f,
-                ),
-              });
+              apply(
+                {
+                  furniture: config.furniture.map((f) =>
+                    f.id === id ? { ...f, ...patch } : f,
+                  ),
+                },
+                { gesture: `furniture:${id}:${Object.keys(patch).sort().join(",")}` },
+              );
             }}
             onUpdateUsbStrip={(stripId, patch) => {
               apply({

@@ -10,6 +10,7 @@ import {
   type FurnitureType,
   type FurnitureVariant,
   resolveFurnitureTone,
+  resolveFurnitureTop,
   resolveFurnitureType,
   resolveFurnitureVariant,
 } from "@/shared/contracts/roomMap";
@@ -28,6 +29,7 @@ export function FurnitureInspector({
   item,
   model,
   autoModel,
+  modelChoices,
   onUpdate,
   onToggleLock,
   onRename,
@@ -37,6 +39,9 @@ export function FurnitureInspector({
   model: FurnitureModel | undefined;
   /** What it would read as with no pick: the name the Auto choice carries. */
   autoModel: FurnitureModel | undefined;
+  /** Model, tone and height are drawn only by the 3D room; a build without it does not offer them,
+   *  so nothing is stored that nothing shows. */
+  modelChoices: boolean;
   onUpdate: (patch: Partial<FurniturePlacement>) => void;
   onToggleLock: () => void;
   onRename: (label: string) => void;
@@ -149,7 +154,7 @@ export function FurnitureInspector({
         </select>
       </div>
 
-      {spec.variants.length > 0 && (
+      {modelChoices && spec.variants.length > 0 && (
         <div className={styles.group}>
           <span className={styles.labelRow}>
             <span className={`lm-room-dock-field-label ${styles.label}`}>{t("roomMap:inspector.modelLabel")}</span>
@@ -166,6 +171,7 @@ export function FurnitureInspector({
         </div>
       )}
 
+      {modelChoices && (
       <div className={styles.group}>
         <span className={`lm-room-dock-field-label ${styles.label}`}>{t("roomMap:inspector.toneLabel")}</span>
         <Segmented
@@ -177,6 +183,7 @@ export function FurnitureInspector({
           onChange={(next) => onUpdate({ tone: next === DEFAULT_TONE ? undefined : (next as FurnitureTone) })}
         />
       </div>
+      )}
 
       <InspectorNumberField
         id={`furn-w-${item.id}`}
@@ -198,12 +205,12 @@ export function FurnitureInspector({
         disabled={locked}
         onCommit={(next) => onUpdate({ height: next })}
       />
-      {type !== "rug" && model && (
+      {modelChoices && type !== "rug" && model && (
         <>
           <InspectorOptionalNumberField
             id={`furn-top-${item.id}`}
             label={t("roomMap:inspector.heightLabel")}
-            value={item.topMeters}
+            value={resolveFurnitureTop(item)}
             placeholder={modelTop(model).toFixed(2)}
             min={0.1}
             max={MAX_TOP_METRES}

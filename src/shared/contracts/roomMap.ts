@@ -320,6 +320,15 @@ export function resolveFurnitureVariant(item: FurniturePlacement): FurnitureVari
   return item.variant !== undefined && variants.includes(item.variant) ? item.variant : undefined;
 }
 
+/** The tallest piece the room map draws; a stored height past it is out of reach of any room. */
+const MAX_FURNITURE_TOP_METRES = 3;
+
+/** The stored height when it is a usable one (finite, above the floor, under the cap), else none. */
+export function resolveFurnitureTop(item: FurniturePlacement): number | undefined {
+  const top: unknown = item.topMeters;
+  return typeof top === "number" && Number.isFinite(top) && top > 0 && top <= MAX_FURNITURE_TOP_METRES ? top : undefined;
+}
+
 /** The stored tone when the piece's type takes it, else none. */
 export function resolveFurnitureTone(item: FurniturePlacement): FurnitureTone | undefined {
   const tones: readonly string[] = FURNITURE_CATALOGUE[resolveFurnitureType(item.type)].tones;
@@ -358,6 +367,13 @@ export const SCREEN_KINDS = {
 } as const;
 
 export type ScreenKind = (typeof SCREEN_KINDS)[keyof typeof SCREEN_KINDS];
+
+const SCREEN_KIND_VALUES = new Set<string>(Object.values(SCREEN_KINDS));
+
+/** The stored screen kind when it is a known one, else none (Auto). */
+export function resolveScreenKind(stored: unknown): ScreenKind | undefined {
+  return typeof stored === "string" && SCREEN_KIND_VALUES.has(stored) ? (stored as ScreenKind) : undefined;
+}
 
 /** Mirrors `DEFAULT_TV_MOUNT_HEIGHT_FRACTION` in `commands/room_affinity.rs`;
  * `verify:shell-contracts` fails if the two drift. */

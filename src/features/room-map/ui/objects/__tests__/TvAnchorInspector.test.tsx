@@ -23,6 +23,7 @@ function renderInspector(tv: TvAnchorPlacement = baseTv, roomHeightMeters = 2.5)
       tv={tv}
       roomHeightMeters={roomHeightMeters}
       autoKind="tv"
+      modelChoices
       onUpdate={onUpdate}
       onToggleLock={vi.fn()}
     />,

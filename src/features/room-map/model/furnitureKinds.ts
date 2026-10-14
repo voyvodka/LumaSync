@@ -18,7 +18,8 @@ export const FURNITURE_DEFAULT_SIZE = {
 } satisfies Record<FurnitureType, { width: number; depth: number }>;
 
 /** The patch that turns a piece into another type. A variant or tone the new type does not take is
- *  cleared: `dining` means a table and a chair alike, and a spread would carry it across silently. */
+ *  cleared — `dining` means a table and a chair alike, and a spread would carry it across silently —
+ *  and so is the height: a 2.2 m bookshelf retyped is not a 2.2 m chair. */
 export function retypeFurniture(item: FurniturePlacement, type: FurnitureType): Partial<FurniturePlacement> {
   const spec = FURNITURE_CATALOGUE[type];
   const keepsVariant = item.variant !== undefined && (spec.variants as readonly string[]).includes(item.variant);
@@ -27,5 +28,6 @@ export function retypeFurniture(item: FurniturePlacement, type: FurnitureType): 
     type,
     variant: keepsVariant ? item.variant : undefined,
     tone: keepsTone ? item.tone : undefined,
+    topMeters: undefined,
   };
 }

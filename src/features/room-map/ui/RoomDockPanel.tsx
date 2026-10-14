@@ -13,6 +13,7 @@ import type {
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
 import { autoScreenKind, classifyFurniture } from "@/features/room-view/model/furnitureModel";
+import { ROOM_VIEW_3D_AVAILABLE } from "@/features/room-view/ui/RoomView3DHost";
 import { moveTabFocus } from "@/shared/lib/tablistKeys";
 import { HueZoneInspector } from "./HueZoneInspector";
 import { HueZonesTab } from "./HueZonesTab";
@@ -227,6 +228,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
             tv={inspectorTarget.tv}
             roomHeightMeters={config.dimensions.heightMeters}
             autoKind={autoScreenKind(config)}
+            modelChoices={ROOM_VIEW_3D_AVAILABLE}
             onUpdate={(patch) => onUpdateTvAnchor?.(patch)}
             onToggleLock={() => onToggleLock("tv")}
           />
@@ -242,6 +244,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
               ...config,
               furniture: config.furniture.map((f) => (f.id === item.id ? { ...f, variant: undefined } : f)),
             }).get(item.id)}
+            modelChoices={ROOM_VIEW_3D_AVAILABLE}
             onUpdate={(patch) => onUpdateFurniture?.(item.id, patch)}
             onToggleLock={() => onToggleLock(furnitureObjectId(item.id))}
             onRename={(label) => onRenameFurniture(item.id, label)}

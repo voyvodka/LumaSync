@@ -19,7 +19,7 @@ import {
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
-import type { RoomMapConfig } from "@/shared/contracts/roomMap";
+import { type RoomMapConfig, resolveFurnitureTop } from "@/shared/contracts/roomMap";
 
 import { hueChannelScenePoint, roomToScene, tvMountHeight } from "../model/roomSpace";
 import { contactShadow, floorParts, roomLights, WALL_THICKNESS, wallFootShade, wallGeometry } from "./scene/environment";
@@ -129,7 +129,8 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     transformParts(parts, place);
     sort(parts);
     shadows.push(contactShadow(item.width / 2, item.height / 2, contactShade(model), place));
-    const scale = item.topMeters !== undefined && item.topMeters > 0 ? item.topMeters / modelTop(model) : 1;
+    const storedTop = resolveFurnitureTop(item);
+    const scale = storedTop !== undefined ? storedTop / modelTop(model) : 1;
     const top = surfaceTop(model) * scale;
     if (top > 0) {
       surfaces.push({

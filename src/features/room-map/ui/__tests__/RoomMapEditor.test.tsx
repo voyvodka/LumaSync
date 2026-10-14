@@ -185,11 +185,26 @@ vi.mock("../HueChannelOverlay", () => ({
 }));
 
 vi.mock("../RoomDockPanel", () => ({
-  // A real field inside the editor root, standing in for the dock inspector's.
-  RoomDockPanel: () => (
+  // A real field inside the editor root, standing in for the dock inspector's, and a stand-in for
+  // the inspector's width field on the first piece.
+  RoomDockPanel: ({
+    config,
+    onUpdateFurniture,
+  }: {
+    config: { furniture: Array<{ id: string }> };
+    onUpdateFurniture?: (id: string, patch: Record<string, unknown>) => void;
+  }) => (
     <div data-testid="room-dock-panel">
       <button type="button" role="tab" data-testid="dock-tab" />
       <input data-testid="dock-field" type="number" defaultValue={60} />
+      <button
+        type="button"
+        data-testid="widen-first"
+        onClick={() => {
+          const first = config.furniture[0];
+          if (first) onUpdateFurniture?.(first.id, { width: 3 });
+        }}
+      />
     </div>
   ),
 }));
@@ -710,5 +725,34 @@ describe("RoomMapEditor — 3D view", () => {
 
     expect(queryByTestId("room-view-3d")).toBeNull();
     expect(error).toHaveBeenCalled();
+  });
+});
+
+describe("RoomMapEditor — an edit keeps what a newer build stored", () => {
+  let realResizeObserver: typeof globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    realResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = StubResizeObserver as unknown as typeof globalThis.ResizeObserver;
+    persistState.apply.mockClear();
+  });
+
+  afterEach(() => {
+    globalThis.ResizeObserver = realResizeObserver;
+    persistState.configOverride = {};
+  });
+
+  it("saves a piece of an unknown kind whole, with only the edited field changed", async () => {
+    const stored = { id: "f", type: "hammock", x: 1, y: 1, width: 1, height: 1, variant: "swing", tone: "teal", topMeters: 2.2 };
+    persistState.configOverride = { furniture: [stored] };
+    const { getByTestId } = render(<RoomMapEditor />);
+    await act(async () => {});
+
+    act(() => getByTestId("widen-first").click());
+
+    expect(persistState.apply).toHaveBeenLastCalledWith(
+      { furniture: [{ ...stored, width: 3 }] },
+      { gesture: "furniture:f:width" },
+    );
   });
 });

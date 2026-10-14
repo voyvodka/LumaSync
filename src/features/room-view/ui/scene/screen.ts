@@ -2,7 +2,7 @@
 // over a low unit with a soundbar when it hangs on the wall.
 import { BufferAttribute, Color, PlaneGeometry } from "three";
 
-import { type RoomMapConfig, SCREEN_KINDS } from "@/shared/contracts/roomMap";
+import { type RoomMapConfig, resolveScreenKind, SCREEN_KINDS } from "@/shared/contracts/roomMap";
 
 import { DESK_TOP, type FurnitureModel } from "../../model/furnitureModel";
 import { roomToScene, type ScenePoint, tvMountHeight } from "../../model/roomSpace";
@@ -46,7 +46,7 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
   const onWall = centre.z - wallZ <= WALL_REACH;
   // The user's pick wins; absent, a desk under the screen makes it a monitor.
   const deskUnder = [...models.values()].some((m) => m.kind === "desk" && m.screenX !== null);
-  const kind = tv.screenKind ?? (deskUnder ? SCREEN_KINDS.MONITOR : SCREEN_KINDS.TV);
+  const kind = resolveScreenKind(tv.screenKind) ?? (deskUnder ? SCREEN_KINDS.MONITOR : SCREEN_KINDS.TV);
   const monitor = kind === SCREEN_KINDS.MONITOR;
   const depth = monitor ? 0.022 : 0.035;
 

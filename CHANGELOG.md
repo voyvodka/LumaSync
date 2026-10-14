@@ -49,12 +49,11 @@ https://keepachangelog.com/en/1.1.0/
   pixels, and Settings marks a firmware profile or LED chip type that disagrees, without changing
   either for you. Controllers that do not answer, such as Adalight sketches, connect exactly as
   before, about a quarter of a second later.
-- Room map: beds, storage, plants and rugs join sofas, tables and chairs, and a new piece starts at
-  a real size for its kind. The inspector shows what each piece is drawn as — a table under the
-  screen is a desk, one in front of a sofa a coffee table — and lets you pick another model (a desk,
-  a corner sofa, a bookshelf, a palm…), a tone from a small palette, and its height. The TV can be
-  set to TV or monitor. An older LumaSync may fail to open a room map that uses the new pieces; from
-  this version on, a piece a newer version adds shows as a plain box instead.
+- Room map: beds, storage, plants and rugs join sofas, tables and chairs, a new piece starts at a
+  real size for its kind, and a piece's second side is labelled Depth. Earlier versions show an error
+  screen when the room map is opened on a map with a bed, storage, plant or rug (Restart recovers;
+  lighting is unaffected). From this version on, a kind added by a newer version is drawn as a plain
+  box, and a model or tone this version does not know is ignored but kept.
 - Room map: the TV has an optional mount height. Left empty it follows 40% of the room height, so
   changing the ceiling moves it too. The TV's footprint field is now labelled Depth, since it never
   meant the screen's height. A small "Room-aware" chip in the room map toolbar and under the Hue
@@ -1139,7 +1138,7 @@ https://keepachangelog.com/en/1.1.0/
   added by connecting a controller, or an LED count saved in LED Setup, while it was open would have
   been taken away by its next save; the settings pages showing one section at a time was all that
   prevented it. The unused room map save counter is gone from the settings file.
-- A 3D room view, built only into dev builds and builds with `VITE_ROOM_VIEW_SPIKE=1`: three.js in its own lazy chunk that the chunk gate fails if it appears in a release build. It draws parametric furniture read from each piece's size and neighbours and each Hue light as its fixture (a Play bar, a floor lamp, a pendant…) from the bridge's archetype, and hands its WebGL context back when it closes.
+- A 3D room view, built only into dev builds and builds with `VITE_ROOM_VIEW_SPIKE=1`: three.js in its own lazy chunk that the chunk gate fails if it appears in a release build. In those builds the room map's inspector also offers a model per piece (a desk, a corner sofa, a bookshelf, a palm…), a tone, a height, and TV or monitor for the screen. It draws parametric furniture read from each piece's size and neighbours and each Hue light as its fixture (a Play bar, a floor lamp, a pendant…) from the bridge's archetype, and hands its WebGL context back when it closes.
 
 ## [1.5.5]
 

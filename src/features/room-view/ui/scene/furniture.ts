@@ -4,7 +4,7 @@
 // `model/furnitureModel.ts`; this file only builds it.
 import { Color } from "three";
 
-import { type FurniturePlacement, type FurnitureTone, resolveFurnitureTone } from "@/shared/contracts/roomMap";
+import { type FurniturePlacement, type FurnitureTone, resolveFurnitureTone, resolveFurnitureTop } from "@/shared/contracts/roomMap";
 
 import { armWidth, DESK_TOP, FURNITURE_TONE_COLORS, type FurnitureModel, modelTop } from "../../model/furnitureModel";
 import { PALETTE } from "./palette";
@@ -64,10 +64,10 @@ export function furnitureParts(item: FurniturePlacement, model: FurnitureModel):
   const d = Math.max(item.height, 0.1);
   const rand = seeded(hashString(item.id));
   const f = finishFor(item, model);
-  const parts = build(w, d, model, f, rand, item.topMeters);
+  const top = resolveFurnitureTop(item);
+  const parts = build(w, d, model, f, rand, top);
   // A stored height scales the model upright; the shelving kinds take it as a dimension instead.
-  const top = item.topMeters;
-  if (top !== undefined && top > 0 && model.kind !== "bookshelf" && model.kind !== "wardrobe" && model.kind !== "rug") {
+  if (top !== undefined && model.kind !== "bookshelf" && model.kind !== "wardrobe" && model.kind !== "rug") {
     const scale = top / modelTop(model);
     for (const part of parts) part.geometry.scale(1, scale, 1);
   }

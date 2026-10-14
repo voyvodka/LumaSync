@@ -7,8 +7,10 @@ import {
   mergeHueChannels,
   replaceHueChannel,
   resolveFurnitureTone,
+  resolveFurnitureTop,
   resolveFurnitureType,
   resolveFurnitureVariant,
+  resolveScreenKind,
   type HueChannelPlacement,
 } from "@/shared/contracts/roomMap";
 
@@ -121,5 +123,21 @@ describe("furniture resolvers", () => {
     expect(resolveFurnitureVariant(piece({ type: "table", variant: "bookshelf" }))).toBeUndefined();
     expect(resolveFurnitureTone(piece({ type: "sofa", tone: "slate" }))).toBe("slate");
     expect(resolveFurnitureTone(piece({ type: "sofa", tone: "walnut" }))).toBeUndefined();
+  });
+});
+
+describe("height and screen kind resolvers", () => {
+  const piece = (topMeters: unknown): FurniturePlacement =>
+    ({ id: "p", type: "storage", x: 0, y: 0, width: 1, height: 0.4, topMeters }) as FurniturePlacement;
+
+  it("keeps only a usable stored height", () => {
+    expect(resolveFurnitureTop(piece(1.8))).toBe(1.8);
+    for (const bad of [null, 0, -1, Number.NaN, 12, "2"]) expect(resolveFurnitureTop(piece(bad))).toBeUndefined();
+  });
+
+  it("reads an unknown screen kind as Auto", () => {
+    expect(resolveScreenKind("monitor")).toBe("monitor");
+    expect(resolveScreenKind("projector")).toBeUndefined();
+    expect(resolveScreenKind(undefined)).toBeUndefined();
   });
 });
