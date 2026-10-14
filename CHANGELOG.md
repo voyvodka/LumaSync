@@ -105,6 +105,11 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- The room's overall colour in Ambilight keeps the screen's colour instead of greying it out. It was
+  the plain average of the frame, so a picture with its colour in one part of the screen averaged to
+  a washed-out tone — and that colour is most of what a lamp far from the screen, or a strip that can
+  only show one colour, displays. It now gives coloured areas more say over the hue while keeping the
+  same brightness.
 - One brightness for every mode. Switching between Ambilight, Solid and Effect keeps the brightness
   where it was, on Lights, in the compact window and in the LED preview, instead of each mode
   keeping its own. The modes' separate brightnesses become one: the last lit mode's. Choosing a

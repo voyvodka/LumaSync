@@ -57,8 +57,12 @@ const CHANGE_RELEASE: f32 = 0.85;
 const CHANGE_LO: f32 = 0.008;
 const CHANGE_HI: f32 = 0.15;
 
-/// Ambience memory follows the frame mean at `alpha · AMBIENCE_RATE`.
+/// Ambience memory follows the frame's ambience colour at `alpha · AMBIENCE_RATE`.
 const AMBIENCE_RATE: f32 = 0.25;
+/// A frame-statistics sample counts `1 + AMBIENCE_CHROMA_GAIN · (max − min) / 255` towards the
+/// ambience colour's chromaticity. 2 keeps a white UI's tint shift under ~0.005 Δu′v′ while a frame
+/// whose colour sits in a fifth of it no longer averages to grey; 20 turned white UIs blue.
+const AMBIENCE_CHROMA_GAIN: f32 = 2.0;
 /// Ambience lean for an on-screen light, from a structured to a flat frame.
 const AMBIENCE_LEAN_MIN: f32 = 0.05;
 const AMBIENCE_LEAN_MAX: f32 = 0.35;
@@ -69,6 +73,26 @@ const CONTRAST_REF: f32 = 1.5;
 // ---------------------------------------------------------------------------
 // Colour helpers
 // ---------------------------------------------------------------------------
+
+/// The colour the ambience memory moves towards: the chroma-weighted mean's chromaticity at the
+/// plain mean's luminance. A plain mean goes grey wherever neutral areas dilute the frame's colour;
+/// weighting by chroma keeps the hue, and keeping the plain luminance stops one saturated element
+/// from setting the room's brightness. One continuous method for every frame and every light.
+fn ambience_target(plain: [f32; 3], weighted: [f32; 3]) -> [f32; 3] {
+    let luma = |c: [f32; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    let y_weighted = luma(weighted);
+    if y_weighted < 1e-6 {
+        return plain;
+    }
+    // Capped so no channel leaves the gamut: a later per-channel clamp would shift the hue.
+    let peak = weighted[0].max(weighted[1]).max(weighted[2]);
+    let scale = (luma(plain) / y_weighted).min(1.0 / peak);
+    [
+        weighted[0] * scale,
+        weighted[1] * scale,
+        weighted[2] * scale,
+    ]
+}
 
 fn srgb_to_linear_lut() -> [f32; 256] {
     #[cfg(test)]
@@ -270,6 +294,8 @@ impl SceneAnalyzer {
 
         self.hist_cur = [0; HIST_BINS];
         let mut sum = [0f32; 3];
+        let mut weighted = [0f32; 3];
+        let mut weight_total = 0f32;
         let mut count = 0u32;
         if w > 0 && h > 0 && !frame.pixels_rgb.is_empty() {
             let (rows, cols) = insets.content_bounds(w, h);
@@ -279,9 +305,20 @@ impl SceneAnalyzer {
                 let mut col = cols.start;
                 while col < cols.end {
                     if let Some(px) = frame.pixels_rgb.get(row * w + col) {
-                        sum[0] += self.lut[px[0] as usize];
-                        sum[1] += self.lut[px[1] as usize];
-                        sum[2] += self.lut[px[2] as usize];
+                        let lin = [
+                            self.lut[px[0] as usize],
+                            self.lut[px[1] as usize],
+                            self.lut[px[2] as usize],
+                        ];
+                        sum[0] += lin[0];
+                        sum[1] += lin[1];
+                        sum[2] += lin[2];
+                        let spread = px[0].max(px[1]).max(px[2]) - px[0].min(px[1]).min(px[2]);
+                        let weight = 1.0 + AMBIENCE_CHROMA_GAIN * f32::from(spread) / 255.0;
+                        weighted[0] += weight * lin[0];
+                        weighted[1] += weight * lin[1];
+                        weighted[2] += weight * lin[2];
+                        weight_total += weight;
                         let bin = (((px[0] >> shift) as usize) << (2 * HIST_BITS))
                             | (((px[1] >> shift) as usize) << HIST_BITS)
                             | ((px[2] >> shift) as usize);
@@ -324,13 +361,21 @@ impl SceneAnalyzer {
             + (alpha_ceiling - alpha_floor) * smoothstep(CHANGE_LO, CHANGE_HI, self.change_env);
 
         if count > 0 {
+            let target = ambience_target(
+                self.frame_mean,
+                [
+                    weighted[0] / weight_total,
+                    weighted[1] / weight_total,
+                    weighted[2] / weight_total,
+                ],
+            );
             let rate = rate_for_interval(self.alpha * AMBIENCE_RATE, self.frame_interval);
             self.ambience = Some(match self.ambience {
-                None => self.frame_mean,
+                None => target,
                 Some(prev) => [
-                    prev[0] + rate * (self.frame_mean[0] - prev[0]),
-                    prev[1] + rate * (self.frame_mean[1] - prev[1]),
-                    prev[2] + rate * (self.frame_mean[2] - prev[2]),
+                    prev[0] + rate * (target[0] - prev[0]),
+                    prev[1] + rate * (target[1] - prev[1]),
+                    prev[2] + rate * (target[2] - prev[2]),
                 ],
             });
         }
@@ -784,6 +829,131 @@ mod tests {
             a.observe_frame(&uniform([100 + i / 2, 80, 60]), &insets, 0.35);
         }
         assert!(a.alpha() < 0.35 * ALPHA_FLOOR_RATIO + 0.02, "{}", a.alpha());
+    }
+
+    fn luma(c: [f32; 3]) -> f32 {
+        0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+    }
+
+    fn chroma(c: [f32; 3]) -> f32 {
+        let y = luma(c).max(1e-6);
+        (c[0].max(c[1]).max(c[2]) - c[0].min(c[1]).min(c[2])) / y
+    }
+
+    /// The first observed frame seeds the memory with that frame's target.
+    fn first_ambience(f: &CapturedFrame) -> SceneAnalyzer {
+        let mut a = SceneAnalyzer::new();
+        a.observe_frame(f, &BlackBorderInsets::default(), 0.35);
+        a
+    }
+
+    /// A tenth of the frame in red over grey: the plain mean is a pale pink, the ambience keeps red.
+    fn grey_with_red(red_cols: usize) -> CapturedFrame {
+        frame(64, 36, |x, _| {
+            if x < red_cols {
+                [220, 30, 30]
+            } else {
+                [128, 128, 128]
+            }
+        })
+    }
+
+    #[test]
+    fn a_minority_colour_survives_in_the_ambience_at_the_mean_brightness() {
+        let a = first_ambience(&grey_with_red(8));
+        let ambience = a.ambience.unwrap();
+        assert!(
+            chroma(ambience) > 1.2 * chroma(a.frame_mean),
+            "{ambience:?} vs {:?}",
+            a.frame_mean
+        );
+        let (y, y_mean) = (luma(ambience), luma(a.frame_mean));
+        assert!((y - y_mean).abs() <= 0.01 * y_mean, "{y} vs {y_mean}");
+    }
+
+    #[test]
+    fn a_uniform_frame_ambience_is_its_plain_mean() {
+        let a = first_ambience(&uniform([200, 40, 40]));
+        let (ambience, mean) = (a.ambience.unwrap(), a.frame_mean);
+        for i in 0..3 {
+            assert!(
+                (ambience[i] - mean[i]).abs() < 1e-5,
+                "{ambience:?} vs {mean:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_black_frame_gives_a_black_ambience() {
+        let a = first_ambience(&uniform([0, 0, 0]));
+        assert_eq!(a.ambience.unwrap(), [0.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn the_ambience_never_leaves_the_gamut() {
+        let a = first_ambience(&frame(64, 36, |x, _| {
+            if x < 6 {
+                [0, 0, 255]
+            } else {
+                [250, 250, 250]
+            }
+        }));
+        let ambience = a.ambience.unwrap();
+        assert!(
+            ambience.iter().all(|c| (0.0..=1.0).contains(c)),
+            "{ambience:?}"
+        );
+    }
+
+    #[test]
+    fn the_ambience_moves_smoothly_as_a_colour_grows() {
+        // 512 wide: each step adds one sampled column in 64 (stats stride 8), ~1.6 % of the frame.
+        let mut last: Option<[f32; 3]> = None;
+        for step in 0..=13 {
+            let red_cols = step * STATS_STRIDE;
+            let f = frame(512, 36, |x, _| {
+                if x < red_cols {
+                    [220, 30, 30]
+                } else {
+                    [128, 128, 128]
+                }
+            });
+            let ambience = first_ambience(&f).ambience.unwrap();
+            if let Some(prev) = last {
+                let step = (0..3)
+                    .map(|i| (ambience[i] - prev[i]).abs())
+                    .fold(0.0, f32::max);
+                assert!(step < 0.04, "{red_cols}: {prev:?} -> {ambience:?}");
+            }
+            last = Some(ambience);
+        }
+    }
+
+    #[test]
+    fn a_noisy_frame_ambience_is_no_less_stable_than_its_mean() {
+        let mut a = SceneAnalyzer::new();
+        let insets = BlackBorderInsets::default();
+        let (mut ambience_var, mut mean_var) = (0f32, 0f32);
+        let mut prev: Option<([f32; 3], [f32; 3])> = None;
+        for i in 0..200usize {
+            let f = frame(64, 36, |x, y| {
+                let n = noise(i * 4096 + y * 64 + x, 12);
+                let base: [i32; 3] = if x < 16 {
+                    [60, 140, 200]
+                } else {
+                    [120, 110, 100]
+                };
+                base.map(|c| (c + n).clamp(0, 255) as u8)
+            });
+            a.observe_frame(&f, &insets, 0.35);
+            let now = (a.ambience.unwrap(), a.frame_mean);
+            if let Some((pa, pm)) = prev {
+                ambience_var += (0..3).map(|k| (now.0[k] - pa[k]).powi(2)).sum::<f32>();
+                mean_var += (0..3).map(|k| (now.1[k] - pm[k]).powi(2)).sum::<f32>();
+            }
+            prev = Some(now);
+        }
+        assert!(ambience_var <= mean_var, "{ambience_var} > {mean_var}");
     }
 
     #[test]
