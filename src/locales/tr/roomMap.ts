@@ -239,6 +239,13 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     pan: "Haritayı kaydır",
     zoom: "Yakınlaştır",
     scrollWheel: "Kaydırma",
+    keys: {
+      delete: "Delete",
+      del: "Del",
+      escape: "Esc",
+      arrows: "Ok tuşları",
+      spaceDrag: "Boşluk + sürükle",
+    },
   },
   templates: {
     title: "Şablon Seç",

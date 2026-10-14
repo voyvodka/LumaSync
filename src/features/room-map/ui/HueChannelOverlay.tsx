@@ -17,16 +17,6 @@ interface HueChannelOverlayProps {
   selectedId: string | null;
   onSelect: (channelIndex: number) => void;
   onChange: (updated: HueChannelPlacement) => void;
-  /** When true, clicks toggle zone membership instead of selecting */
-  zoneAssignMode?: boolean;
-  /** CSS/hex color for the active zone ring */
-  activeZoneColor?: string | null;
-  /** Channel indices assigned to ANY zone */
-  assignedChannels?: Set<number>;
-  /** Channel indices assigned to the ACTIVE zone */
-  activeZoneChannels?: Set<number>;
-  /** Called with channel index when toggling zone membership */
-  onChannelZoneToggle?: (channelIndex: number) => void;
   /** When true, space is held — don't start drag */
   panMode?: boolean;
   /** Bridge ids the area reports, or `null`/absent when no clean read has
@@ -171,6 +161,27 @@ export function pinnedZoneEdges(
  * Positions are computed in pixels (pxPerMeter * room metres) so they stay
  * aligned with all other room objects regardless of panel open/close resizing.
  */
+/** Cube units an arrow key moves a zone centre; with Shift, the larger step. */
+const ZONE_CENTER_KEY_STEP = 0.05;
+const ZONE_CENTER_KEY_STEP_LARGE = 0.2;
+/** Hue +y is the TV wall, the top of the canvas. */
+const ARROW_DELTAS: Record<string, { x: number; y: number }> = {
+  ArrowLeft: { x: -1, y: 0 },
+  ArrowRight: { x: 1, y: 0 },
+  ArrowUp: { x: 0, y: 1 },
+  ArrowDown: { x: 0, y: -1 },
+};
+
+/** Keeps the whole zone box (centre ± half-scale) inside the Hue cube, so the bounds never
+ *  overflow the room map. A degenerate zone wider than the cube falls back to the plain world
+ *  clamp, so the marker still follows the pointer. */
+function clampZoneCenter(cx: number, cy: number, halfScaleX: number, halfScaleY: number) {
+  return {
+    x: halfScaleX > 1 ? clamp(cx, -1, 1) : clamp(cx, -1 + halfScaleX, 1 - halfScaleX),
+    y: halfScaleY > 1 ? clamp(cy, -1, 1) : clamp(cy, -1 + halfScaleY, 1 - halfScaleY),
+  };
+}
+
 export const HueChannelOverlay = memo(function HueChannelOverlay({
   channels,
   liveChannelIds,
@@ -181,11 +192,6 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
   selectedId,
   onSelect,
   onChange,
-  zoneAssignMode = false,
-  activeZoneColor = null,
-  assignedChannels,
-  activeZoneChannels,
-  onChannelZoneToggle,
   panMode = false,
   activeHueZone = null,
   onHueZoneCenterChange,
@@ -210,9 +216,6 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
 
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-
-  const onChannelZoneToggleRef = useRef(onChannelZoneToggle);
-  onChannelZoneToggleRef.current = onChannelZoneToggle;
 
   const activeHueZoneRef = useRef(activeHueZone);
   activeHueZoneRef.current = activeHueZone;
@@ -450,6 +453,23 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
               zIndex: 19,
               touchAction: "none",
             }}
+            onKeyDown={(e) => {
+              const step = e.shiftKey ? ZONE_CENTER_KEY_STEP_LARGE : ZONE_CENTER_KEY_STEP;
+              const delta = ARROW_DELTAS[e.key];
+              if (!delta || !onHueZoneCenterChange) return;
+              // The editor's own arrow keys would also nudge the selection or pan the map.
+              e.preventDefault();
+              e.stopPropagation();
+              const next = clampZoneCenter(
+                activeHueZone.centerX + delta.x * step,
+                activeHueZone.centerY + delta.y * step,
+                Math.abs(activeHueZone.scaleX),
+                Math.abs(activeHueZone.scaleY),
+              );
+              if (next.x !== activeHueZone.centerX || next.y !== activeHueZone.centerY) {
+                onHueZoneCenterChange(activeHueZone.id, next.x, next.y);
+              }
+            }}
             onPointerDown={(e) => {
               if (panMode || !onHueZoneCenterChange) return;
               e.stopPropagation();
@@ -495,17 +515,12 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
                 const dxHue = (dxPx / effectivePpm) / widthRef.current * 2;
                 const dyHue = -(dyPx / effectivePpm) / depthRef.current * 2;
 
-                // Keep the entire zone box (center ±
-                // half-scale) inside the Hue cube while dragging. Without
-                // this, the bounds box visually overflows the room map.
-                const minCx = -1 + halfScaleX;
-                const maxCx = 1 - halfScaleX;
-                const minCy = -1 + halfScaleY;
-                const maxCy = 1 - halfScaleY;
-                // halfScaleX/Y can exceed 1 for degenerate zones; fall back
-                // to plain world clamp so the marker still follows the cursor.
-                const newCx = halfScaleX > 1 ? clamp(startCx + dxHue, -1, 1) : clamp(startCx + dxHue, minCx, maxCx);
-                const newCy = halfScaleY > 1 ? clamp(startCy + dyHue, -1, 1) : clamp(startCy + dyHue, minCy, maxCy);
+                const { x: newCx, y: newCy } = clampZoneCenter(
+                  startCx + dxHue,
+                  startCy + dyHue,
+                  halfScaleX,
+                  halfScaleY,
+                );
 
                 // Pixel delta from start, used to imperatively translate
                 // the bounds box and bound channels.
@@ -569,11 +584,6 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
         const topPx = Number.isFinite(rawTopPx) ? rawTopPx : 0;
 
         const isSelected = selectedId === hueChannelObjectId(ch.channelIndex);
-        const isInActiveZone = activeZoneChannels?.has(ch.channelIndex) ?? false;
-        const isAssignedToAnyZone = assignedChannels?.has(ch.channelIndex) ?? false;
-
-        const isUnassignedInZoneMode = zoneAssignMode && !isAssignedToAnyZone;
-
         // When a Hue zone is active, channels NOT bound to it
         // are visually de-emphasised and pointer-disabled so the editor
         // becomes focused on the zone subset.
@@ -581,11 +591,9 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
         const dimmedByHueZone = activeHueZone !== null && !isInActiveHueZone;
 
         const ringStyle: React.CSSProperties =
-          zoneAssignMode && isInActiveZone && activeZoneColor
-            ? { boxShadow: `0 0 0 2px ${activeZoneColor}` }
-            : isInActiveHueZone && activeHueZone?.borderColor
-              ? { boxShadow: `0 0 0 2px ${activeHueZone.borderColor}` }
-              : {};
+          isInActiveHueZone && activeHueZone?.borderColor
+            ? { boxShadow: `0 0 0 2px ${activeHueZone.borderColor}` }
+            : {};
 
         const isGhost =
           liveChannelIds != null && ch.channelId != null && !liveChannelIds.has(ch.channelId);
@@ -612,8 +620,10 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
           >
             <div
               role="button"
-              tabIndex={0}
-              aria-pressed={zoneAssignMode ? isInActiveZone : isSelected}
+              // Dimmed dots take no pointer, so the keyboard must not reach them either.
+              tabIndex={dimmedByHueZone ? -1 : 0}
+              aria-disabled={dimmedByHueZone || undefined}
+              aria-pressed={isSelected}
               aria-label={dotLabel}
               title={dotLabel}
               className={cx(
@@ -624,8 +634,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
                   : isSelected
                     ? "bg-white border-white text-zinc-900"
                     : "bg-white/80 border-zinc-400 text-zinc-900",
-                zoneAssignMode ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
-                isUnassignedInZoneMode ? "opacity-50" : "",
+                "cursor-grab active:cursor-grabbing",
                 dimmedByHueZone ? "opacity-30 cursor-not-allowed pointer-events-none" : "",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60",
               )}
@@ -638,20 +647,13 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
               onPointerUp={handlePointerUp}
               onClick={(e) => {
                 e.stopPropagation();
-                if (zoneAssignMode) {
-                  onChannelZoneToggleRef.current?.(ch.channelIndex);
-                } else {
-                  onSelect(ch.channelIndex);
-                }
+                onSelect(ch.channelIndex);
               }}
               onKeyDown={(e) => {
+                if (dimmedByHueZone) return;
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  if (zoneAssignMode) {
-                    onChannelZoneToggleRef.current?.(ch.channelIndex);
-                  } else {
-                    onSelect(ch.channelIndex);
-                  }
+                  onSelect(ch.channelIndex);
                 }
               }}
             >

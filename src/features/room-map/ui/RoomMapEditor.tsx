@@ -484,7 +484,7 @@ export function RoomMapEditor({
     if (adapter?.remove) {
       actions.push({
         label: t("roomMap:contextMenu.delete"),
-        shortcut: IS_MAC ? "\u232B" : "Del",
+        shortcut: IS_MAC ? "\u232B" : t("roomMap:shortcuts.keys.del"),
         danger: true,
         onClick: () => deleteById(id),
       });

@@ -236,6 +236,14 @@ export default {
     pan: "Pan canvas",
     zoom: "Zoom",
     scrollWheel: "Scroll",
+    // Key caps as printed on the keyboard; the TR caps keep the physical labels.
+    keys: {
+      delete: "Delete",
+      del: "Del",
+      escape: "Esc",
+      arrows: "Arrow keys",
+      spaceDrag: "Space + drag",
+    },
   },
   templates: {
     title: "Choose a Template",

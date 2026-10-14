@@ -297,3 +297,59 @@ describe("pinnedZoneEdges", () => {
       .toBe("top bottom left right");
   });
 });
+
+describe("HueChannelOverlay — keyboard", () => {
+  const renderWithZone = (
+    zone: HueZone,
+    onEditorKey = vi.fn<() => void>(),
+    onHueZoneCenterChange = vi.fn<(id: string, x: number, y: number) => void>(),
+  ) => {
+    // The editor's key handler sits on an ancestor, as it does in RoomMapEditor.
+    const view = render(
+      <div onKeyDown={onEditorKey}>
+        <HueChannelOverlay
+          channels={[CHANNEL_IN_ZONE, { channelIndex: 1, x: -0.8, y: -0.8, z: 0 }]}
+          pxPerMeter={80}
+          roomWidthM={5}
+          roomDepthM={4}
+          zoom={1}
+          selectedId={null}
+          onSelect={() => {}}
+          onChange={() => {}}
+          activeHueZone={zone}
+          onHueZoneCenterChange={onHueZoneCenterChange}
+        />
+      </div>,
+    );
+    const marker = view.getByRole("button", { name: "roomMap:hueZones.centerMarkerAriaLabel" });
+    return { ...view, marker, onHueZoneCenterChange };
+  };
+
+  it("moves the zone centre with the arrow keys, Up toward the TV wall", () => {
+    const { marker, onHueZoneCenterChange } = renderWithZone(ZONE);
+
+    fireEvent.keyDown(marker, { key: "ArrowRight" });
+    expect(onHueZoneCenterChange).toHaveBeenLastCalledWith("zone-1", 0.05, 0);
+
+    fireEvent.keyDown(marker, { key: "ArrowUp", shiftKey: true });
+    expect(onHueZoneCenterChange).toHaveBeenLastCalledWith("zone-1", 0, 0.2);
+  });
+
+  it("keeps the zone box inside the cube and stops the editor's own arrow handling", () => {
+    const onEditorKey = vi.fn<() => void>();
+    const { marker, onHueZoneCenterChange } = renderWithZone({ ...ZONE, centerX: 0.7 }, onEditorKey);
+
+    fireEvent.keyDown(marker, { key: "ArrowRight" });
+
+    expect(onHueZoneCenterChange).not.toHaveBeenCalled();
+    expect(onEditorKey).not.toHaveBeenCalled();
+  });
+
+  it("keeps a dot dimmed by the active zone out of the tab order", () => {
+    const { getAllByRole } = renderWithZone(ZONE);
+    const dots = getAllByRole("button").filter((el) => el.hasAttribute("aria-pressed"));
+
+    expect(dots.map((dot) => dot.tabIndex)).toEqual([0, -1]);
+    expect(dots[1]).toHaveAttribute("aria-disabled", "true");
+  });
+});

@@ -103,20 +103,21 @@ function ShortcutsHelpButton() {
   const mod = isMac ? "⌘" : "Ctrl+";
   const shift = isMac ? "⇧" : "Shift+";
 
+  const arrows = t("roomMap:shortcuts.keys.arrows");
   const shortcuts = [
-    { key: `${mod}Z`, desc: t("roomMap:shortcuts.undo") },
-    { key: `${mod}${shift}Z`, desc: t("roomMap:shortcuts.redo") },
-    { key: `${mod}D`, desc: t("roomMap:shortcuts.duplicate") },
-    { key: `${mod}0`, desc: t("roomMap:shortcuts.fitToView") },
-    { key: "Delete", desc: t("roomMap:shortcuts.delete") },
-    { key: "R", desc: t("roomMap:shortcuts.rotate") },
-    { key: "F", desc: t("roomMap:shortcuts.togglePanel") },
-    { key: "Escape", desc: t("roomMap:shortcuts.deselect") },
-    { key: `${shift}Arrow`, desc: t("roomMap:shortcuts.nudgeLarge") },
-    { key: "Arrow", desc: t("roomMap:shortcuts.nudge") },
-    { key: "Arrow", desc: t("roomMap:shortcuts.panKeyboard") },
-    { key: "Space+Drag", desc: t("roomMap:shortcuts.pan") },
-    { key: t("roomMap:shortcuts.scrollWheel"), desc: t("roomMap:shortcuts.zoom") },
+    { id: "undo", key: `${mod}Z`, desc: t("roomMap:shortcuts.undo") },
+    { id: "redo", key: `${mod}${shift}Z`, desc: t("roomMap:shortcuts.redo") },
+    { id: "duplicate", key: `${mod}D`, desc: t("roomMap:shortcuts.duplicate") },
+    { id: "fit", key: `${mod}0`, desc: t("roomMap:shortcuts.fitToView") },
+    { id: "delete", key: t("roomMap:shortcuts.keys.delete"), desc: t("roomMap:shortcuts.delete") },
+    { id: "rotate", key: "R", desc: t("roomMap:shortcuts.rotate") },
+    { id: "panel", key: "F", desc: t("roomMap:shortcuts.togglePanel") },
+    { id: "deselect", key: t("roomMap:shortcuts.keys.escape"), desc: t("roomMap:shortcuts.deselect") },
+    { id: "nudgeLarge", key: `${shift}${arrows}`, desc: t("roomMap:shortcuts.nudgeLarge") },
+    { id: "nudge", key: arrows, desc: t("roomMap:shortcuts.nudge") },
+    { id: "panKeyboard", key: arrows, desc: t("roomMap:shortcuts.panKeyboard") },
+    { id: "pan", key: t("roomMap:shortcuts.keys.spaceDrag"), desc: t("roomMap:shortcuts.pan") },
+    { id: "zoom", key: t("roomMap:shortcuts.scrollWheel"), desc: t("roomMap:shortcuts.zoom") },
   ];
 
   useEffect(() => {
@@ -164,7 +165,7 @@ function ShortcutsHelpButton() {
           </h3>
           <div className="lm-room-toolbar-popover-body">
             {shortcuts.map((s) => (
-              <div key={s.key} className="lm-room-toolbar-popover-row">
+              <div key={s.id} className="lm-room-toolbar-popover-row">
                 <span>{s.desc}</span>
                 <kbd>{s.key}</kbd>
               </div>
