@@ -66,10 +66,12 @@ function openRoomView(host: HTMLElement, onFail: (error: unknown) => void): Room
   let frame = 0;
   let observer: ResizeObserver | null = null;
   let controls: OrbitControls | null = null;
+  const listening = new AbortController();
 
   const close = () => {
     if (closed) return;
     closed = true;
+    listening.abort();
     delete window.__roomViewSpikeBench;
     observer?.disconnect();
     if (frame !== 0) cancelAnimationFrame(frame);
@@ -146,6 +148,16 @@ function openRoomView(host: HTMLElement, onFail: (error: unknown) => void): Room
       if (ready && frame === 0 && !closed) frame = requestAnimationFrame(draw);
     };
     orbit.addEventListener("change", request);
+    // A lost context (the GPU reset, the machine slept) comes back empty. three uploads the scene
+    // again on the next draw, but a view that draws only on a change has to be asked for one.
+    renderer.domElement.addEventListener(
+      "webglcontextrestored",
+      () => {
+        renderer.shadowMap.needsUpdate = shadows;
+        request();
+      },
+      { signal: listening.signal },
+    );
 
     const fit = () => {
       const { width, height } = host.getBoundingClientRect();

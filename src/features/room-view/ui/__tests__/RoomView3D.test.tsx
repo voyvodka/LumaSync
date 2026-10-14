@@ -8,6 +8,7 @@ import RoomView3D from "../RoomView3D";
 const gl = vi.hoisted(() => ({
   throwOnCreate: false,
   renderers: [] as Array<{
+    domElement: HTMLCanvasElement;
     render: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
     forceContextLoss: ReturnType<typeof vi.fn>;
@@ -93,6 +94,30 @@ describe("RoomView3D", () => {
     expect(gl.renderers).toHaveLength(1);
     expect(gl.renderers[0]?.forceContextLoss).not.toHaveBeenCalled();
     unmount();
+  });
+
+  it("draws again when a lost context comes back, and stops listening once closed", async () => {
+    const { unmount } = render(<RoomView3D config={DEFAULT_ROOM_MAP} label="Room" onFail={() => {}} />);
+    const renderer = gl.renderers[0];
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    const before = renderer?.render.mock.calls.length ?? 0;
+
+    act(() => {
+      renderer?.domElement.dispatchEvent(new Event("webglcontextrestored"));
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+    expect(renderer?.render.mock.calls.length).toBe(before + 1);
+
+    unmount();
+    renderer?.domElement.dispatchEvent(new Event("webglcontextrestored"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+    expect(renderer?.render.mock.calls.length).toBe(before + 1);
   });
 
   it("reports a missing WebGL context instead of throwing out of the effect", () => {
