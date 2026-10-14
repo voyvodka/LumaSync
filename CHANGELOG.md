@@ -49,6 +49,12 @@ https://keepachangelog.com/en/1.1.0/
   pixels, and Settings marks a firmware profile or LED chip type that disagrees, without changing
   either for you. Controllers that do not answer, such as Adalight sketches, connect exactly as
   before, about a quarter of a second later.
+- Room map: beds, storage, plants and rugs join sofas, tables and chairs, and a new piece starts at
+  a real size for its kind. The inspector shows what each piece is drawn as — a table under the
+  screen is a desk, one in front of a sofa a coffee table — and lets you pick another model (a desk,
+  a corner sofa, a bookshelf, a palm…), a tone from a small palette, and its height. The TV can be
+  set to TV or monitor. An older LumaSync may fail to open a room map that uses the new pieces; from
+  this version on, a piece a newer version adds shows as a plain box instead.
 - Room map: the TV has an optional mount height. Left empty it follows 40% of the room height, so
   changing the ceiling moves it too. The TV's footprint field is now labelled Depth, since it never
   meant the screen's height. A small "Room-aware" chip in the room map toolbar and under the Hue

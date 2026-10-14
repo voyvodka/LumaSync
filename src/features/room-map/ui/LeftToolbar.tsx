@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import type { FurniturePlacement } from "@/shared/contracts/roomMap";
+import { FURNITURE_TYPES, type FurniturePlacement } from "@/shared/contracts/roomMap";
 import { IconTv, IconFurniture, IconLed, IconImage } from "@/shared/ui/icons";
 
-const FURNITURE_TYPES: FurniturePlacement["type"][] = ["sofa", "table", "chair", "other"];
+const FURNITURE_KINDS = Object.values(FURNITURE_TYPES);
 
 interface LeftToolbarProps {
   hasTv: boolean;
@@ -96,7 +96,7 @@ export function LeftToolbar({
             className="lm-room-toolchip-menu"
             role="menu"
           >
-            {FURNITURE_TYPES.map((type) => (
+            {FURNITURE_KINDS.map((type) => (
               <button
                 key={type}
                 type="button"

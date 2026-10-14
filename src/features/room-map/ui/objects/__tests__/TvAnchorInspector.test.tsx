@@ -22,6 +22,7 @@ function renderInspector(tv: TvAnchorPlacement = baseTv, roomHeightMeters = 2.5)
     <TvAnchorInspector
       tv={tv}
       roomHeightMeters={roomHeightMeters}
+      autoKind="tv"
       onUpdate={onUpdate}
       onToggleLock={vi.fn()}
     />,
@@ -104,5 +105,25 @@ describe("TvAnchorInspector mount height", () => {
     renderInspector();
     expect(screen.getByLabelText("roomMap:inspector.tvDepthLabel")).toBeInTheDocument();
     expect(screen.queryByLabelText("roomMap:inspector.heightLabel")).toBeNull();
+  });
+});
+
+describe("TvAnchorInspector — screen kind", () => {
+  beforeEach(() => cleanup());
+
+  it("names what Auto reads as and stores a pick, clearing it on Auto", () => {
+    const { onUpdate } = renderInspector();
+    const auto = screen.getByRole("radio", { name: /roomMap:inspector\.screenKindAuto/ });
+    expect(auto.textContent).toContain("roomMap:inspector.screenKind.tv");
+    expect(auto).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.click(screen.getByRole("radio", { name: "roomMap:inspector.screenKind.monitor" }));
+    expect(onUpdate).toHaveBeenLastCalledWith({ screenKind: "monitor" });
+  });
+
+  it("clears the pick back to Auto", () => {
+    const { onUpdate } = renderInspector({ ...baseTv, screenKind: "monitor" });
+    fireEvent.click(screen.getByRole("radio", { name: /roomMap:inspector\.screenKindAuto/ }));
+    expect(onUpdate).toHaveBeenLastCalledWith({ screenKind: undefined });
   });
 });

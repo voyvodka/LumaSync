@@ -1,13 +1,10 @@
 import { memo, useRef, useState } from "react";
-import type { FurniturePlacement } from "@/shared/contracts/roomMap";
+import { type FurniturePlacement, type FurnitureType, resolveFurnitureType } from "@/shared/contracts/roomMap";
 import { ResizeHandle } from "./ResizeHandle";
 import { furnitureObjectId } from "../../model/objectId";
 import type { SnapResult } from "../../state/useSnapGuides";
 
-const FURNITURE_COLORS: Record<
-  FurniturePlacement["type"],
-  { bg: string; border: string }
-> = {
+const FURNITURE_COLORS: Record<FurnitureType, { bg: string; border: string }> = {
   sofa: {
     bg: "bg-zinc-500/35",
     border: "border-zinc-500",
@@ -19,6 +16,22 @@ const FURNITURE_COLORS: Record<
   chair: {
     bg: "bg-emerald-600/35",
     border: "border-emerald-500",
+  },
+  bed: {
+    bg: "bg-sky-600/35",
+    border: "border-sky-500",
+  },
+  storage: {
+    bg: "bg-stone-500/35",
+    border: "border-stone-400",
+  },
+  plant: {
+    bg: "bg-lime-600/35",
+    border: "border-lime-500",
+  },
+  rug: {
+    bg: "bg-rose-600/25",
+    border: "border-rose-500/70",
   },
   other: {
     bg: "bg-violet-600/35",
@@ -227,7 +240,8 @@ export const FurnitureObject = memo(function FurnitureObject({
     void corner;
   };
 
-  const colors = FURNITURE_COLORS[placement.type];
+  // Through the resolver: a type from a newer build has no entry here and would throw on open.
+  const colors = FURNITURE_COLORS[resolveFurnitureType(placement.type)];
   const rotation = placement.rotation ?? 0;
   const showResizeHandles = selected && !placement.locked;
 

@@ -10,7 +10,9 @@ export const KNOWN_DYNAMIC_PREFIXES = [
   "lights:effect.names",
   "lights:effect.palettes",
   "lights:scenes.suggested",
+  "roomMap:furniture.tone",
   "roomMap:furniture.type",
+  "roomMap:furniture.variant",
   "settings:nav.sections",
   "telemetry:queueHealth",
 ];

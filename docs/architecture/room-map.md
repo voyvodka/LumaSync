@@ -179,8 +179,26 @@ middle of an import.
   it touches one, a coffee table in front of a sofa, a side table when small, else a dining table; a
   small chair at a desk is an office chair, a wide shallow one a bench. Every part stays inside the
   footprint the 2D map gives the piece, at any size — the containment test runs each model at five
-  sizes, including a 3.81 × 0.17 m piece a user really drew. Explicit choices (TV or monitor, desk
-  or coffee table) will be stored overrides of this reading, never a replacement for it.
+  sizes, including a 3.81 × 0.17 m piece a user really drew. The reading lives in the three-free
+  `room-view/model/furnitureModel.ts`, so the inspector can say what "Auto" reads as without the 3D
+  chunk.
+- **A user's pick overrides the reading; it never replaces it.** `FurniturePlacement.variant` (a
+  table's desk/coffee/dining/side, a chair's dining/office/armchair/bench, a sofa's straight or
+  corner, storage's sideboard/bookshelf/wardrobe/nightstand/TV unit, a plant's habit, a rug's shape)
+  and `tone` are optional; absent is Auto, and `TvAnchorPlacement.screenKind` does the same for TV
+  or monitor. `FURNITURE_CATALOGUE` says which type takes which. Three rules hold them together:
+  - Every reader goes through `resolveFurnitureType` / `resolveFurnitureVariant` /
+    `resolveFurnitureTone`. A type from a newer build reads as `other`; read directly, it threw on
+    the plan's colour table the moment the room map opened.
+  - Nothing normalises on load. The editor writes `furniture` as a whole array, so a load-time
+    clean-up would delete a newer build's choice on the next edit; a value the type does not take
+    reads as absent and stays stored.
+  - A type change is the one place that clears (`retypeFurniture`): a variant or tone the new type
+    does not take goes, because `dining` means a table and a chair alike and a spread would carry it
+    across silently.
+  The piece's own height is `topMeters` — `height` on this type is the footprint's depth (and the
+  inspector now says Depth for it). `screenKind` is the editor's alone: `toRoomGeometry` copies the
+  anchor field by field, and the shared parity fixture pins that Rust never sees it.
 - **The 3D room keeps its draw count fixed.** Furniture merges into one matte and one satin mesh by
   vertex colour; bulbs, halos (one `Points`), floor pools and wall washes are one draw each whatever
   the lamp count; contact shadows are geometry with per-vertex alpha merged into one mesh — a

@@ -23,7 +23,8 @@ import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 
 import { hueChannelScenePoint, roomToScene, tvMountHeight } from "../model/roomSpace";
 import { contactShadow, floorParts, roomLights, WALL_THICKNESS, wallFootShade, wallGeometry } from "./scene/environment";
-import { classifyFurniture, contactShade, furnitureParts } from "./scene/furniture";
+import { classifyFurniture, contactShade } from "../model/furnitureModel";
+import { furnitureParts } from "./scene/furniture";
 import { buildGlow, type Lamp, poolTexture, radialTexture, type WallPlane } from "./scene/glow";
 import { PALETTE } from "./scene/palette";
 import { mergeParts, type Part, transformParts } from "./scene/parts";

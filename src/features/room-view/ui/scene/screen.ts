@@ -2,10 +2,10 @@
 // over a low unit with a soundbar when it hangs on the wall.
 import { BufferAttribute, Color, PlaneGeometry } from "three";
 
-import type { RoomMapConfig } from "@/shared/contracts/roomMap";
+import { type RoomMapConfig, SCREEN_KINDS } from "@/shared/contracts/roomMap";
 
+import { DESK_TOP, type FurnitureModel } from "../../model/furnitureModel";
 import { roomToScene, type ScenePoint, tvMountHeight } from "../../model/roomSpace";
-import { DESK_TOP, type FurnitureModel } from "./furniture";
 import { PALETTE } from "./palette";
 import { block, type Part } from "./parts";
 
@@ -44,12 +44,16 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
   const bottom = mount - height / 2;
   const wallZ = -dims.depthMeters / 2;
   const onWall = centre.z - wallZ <= WALL_REACH;
-  const depth = 0.035;
+  // The user's pick wins; absent, a desk under the screen makes it a monitor.
+  const deskUnder = [...models.values()].some((m) => m.kind === "desk" && m.screenX !== null);
+  const kind = tv.screenKind ?? (deskUnder ? SCREEN_KINDS.MONITOR : SCREEN_KINDS.TV);
+  const monitor = kind === SCREEN_KINDS.MONITOR;
+  const depth = monitor ? 0.022 : 0.035;
 
-  const parts: Part[] = [block(width, height, depth, centre.x, bottom, centre.z, PALETTE.bezel, 0.01)];
+  const parts: Part[] = [block(width, height, depth, centre.x, bottom, centre.z, PALETTE.bezel, monitor ? 0.006 : 0.01)];
   const footprints: ScreenBuild["footprints"] = [];
 
-  const onDesk = [...models.values()].some((m) => m.kind === "desk" && m.screenX !== null);
+  const onDesk = monitor && deskUnder;
   const covered = config.furniture.some((f) => {
     const sx = tv.x + tv.width / 2;
     const sy = tv.y + tv.height / 2;
@@ -60,7 +64,7 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
     const neck = Math.max(bottom - DESK_TOP, 0) + 0.08;
     parts.push(block(Math.min(0.26, width * 0.4), 0.012, 0.18, centre.x, DESK_TOP, centre.z - 0.02, PALETTE.metal, 0.006));
     parts.push(block(0.05, neck, 0.03, centre.x, DESK_TOP, centre.z - depth / 2 - 0.015, PALETTE.metal, 0.008));
-  } else if (bottom >= TV_UNIT_HEIGHT + 0.04 && !covered) {
+  } else if (!monitor && bottom >= TV_UNIT_HEIGHT + 0.04 && !covered) {
     const unitW = Math.min(Math.max(width * 1.15, 0.9), dims.widthMeters - 0.1);
     const unitZ = onWall ? wallZ + TV_UNIT_DEPTH / 2 + 0.02 : centre.z + TV_UNIT_DEPTH / 2 - 0.1;
     const legH = 0.06;
@@ -76,7 +80,7 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
     }
     parts.push(block(Math.min(width * 0.7, 1.1), 0.065, 0.09, centre.x, TV_UNIT_HEIGHT, unitZ + TV_UNIT_DEPTH / 2 - 0.08, PALETTE.metal, 0.02));
     footprints.push({ x: centre.x, z: unitZ, hw: unitW / 2, hd: TV_UNIT_DEPTH / 2, shade: 0.4 });
-  } else if (bottom < TV_UNIT_HEIGHT + 0.04 && !covered) {
+  } else if (!monitor && bottom < TV_UNIT_HEIGHT + 0.04 && !covered) {
     // A screen too low for a unit stands on its own feet; one over a piece of furniture stands on it.
     const footH = Math.max(bottom, 0.02);
     for (const sx of [-1, 1]) {

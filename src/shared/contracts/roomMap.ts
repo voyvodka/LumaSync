@@ -196,17 +196,134 @@ export interface UsbStripPlacement {
 // Furniture Placement
 // ---------------------------------------------------------------------------
 
+/** Every kind of piece the room map holds; `other` is a plain box. A value from a newer build reads
+ *  as `other` (`resolveFurnitureType`) rather than failing a reader. */
+export const FURNITURE_TYPES = {
+  SOFA: "sofa",
+  TABLE: "table",
+  CHAIR: "chair",
+  BED: "bed",
+  STORAGE: "storage",
+  PLANT: "plant",
+  RUG: "rug",
+  OTHER: "other",
+} as const;
+
+export type FurnitureType = (typeof FURNITURE_TYPES)[keyof typeof FURNITURE_TYPES];
+
+/** A model the user picked over the automatic reading of a piece's size and neighbours. Which
+ *  types take which is `FURNITURE_CATALOGUE`. */
+export const FURNITURE_VARIANTS = {
+  STRAIGHT: "straight",
+  CORNER_LEFT: "cornerLeft",
+  CORNER_RIGHT: "cornerRight",
+  DINING: "dining",
+  OFFICE: "office",
+  ARMCHAIR: "armchair",
+  BENCH: "bench",
+  DESK: "desk",
+  COFFEE: "coffee",
+  SIDE: "side",
+  SIDEBOARD: "sideboard",
+  BOOKSHELF: "bookshelf",
+  WARDROBE: "wardrobe",
+  NIGHTSTAND: "nightstand",
+  TV_UNIT: "tvUnit",
+  TOPIARY: "topiary",
+  LEAFY: "leafy",
+  PALM: "palm",
+  RECTANGLE: "rectangle",
+  ROUND: "round",
+} as const;
+
+export type FurnitureVariant = (typeof FURNITURE_VARIANTS)[keyof typeof FURNITURE_VARIANTS];
+
+/** One curated palette: fabrics for what is upholstered, woods for what is built. */
+export const FURNITURE_TONES = {
+  SLATE: "slate",
+  CARAMEL: "caramel",
+  SAGE: "sage",
+  CHARCOAL: "charcoal",
+  CREAM: "cream",
+  BRICK: "brick",
+  OAK: "oak",
+  WALNUT: "walnut",
+  WHITE: "white",
+  BLACK: "black",
+} as const;
+
+export type FurnitureTone = (typeof FURNITURE_TONES)[keyof typeof FURNITURE_TONES];
+
+export interface FurnitureKindSpec {
+  variants: readonly FurnitureVariant[];
+  tones: readonly FurnitureTone[];
+}
+
+const V = FURNITURE_VARIANTS;
+const FABRIC_TONES = [
+  FURNITURE_TONES.SLATE,
+  FURNITURE_TONES.CARAMEL,
+  FURNITURE_TONES.SAGE,
+  FURNITURE_TONES.CHARCOAL,
+  FURNITURE_TONES.CREAM,
+  FURNITURE_TONES.BRICK,
+] as const;
+const WOOD_TONES = [FURNITURE_TONES.OAK, FURNITURE_TONES.WALNUT, FURNITURE_TONES.WHITE, FURNITURE_TONES.BLACK] as const;
+
+/** What each type can be drawn as and coloured with. */
+export const FURNITURE_CATALOGUE = {
+  sofa: { variants: [V.STRAIGHT, V.CORNER_LEFT, V.CORNER_RIGHT], tones: FABRIC_TONES },
+  table: { variants: [V.DESK, V.COFFEE, V.DINING, V.SIDE], tones: WOOD_TONES },
+  chair: { variants: [V.DINING, V.OFFICE, V.ARMCHAIR, V.BENCH], tones: FABRIC_TONES },
+  bed: { variants: [], tones: FABRIC_TONES },
+  storage: { variants: [V.SIDEBOARD, V.BOOKSHELF, V.WARDROBE, V.NIGHTSTAND, V.TV_UNIT], tones: WOOD_TONES },
+  plant: { variants: [V.TOPIARY, V.LEAFY, V.PALM], tones: [FURNITURE_TONES.CREAM, FURNITURE_TONES.BRICK, FURNITURE_TONES.CHARCOAL, FURNITURE_TONES.WHITE] },
+  rug: { variants: [V.RECTANGLE, V.ROUND], tones: FABRIC_TONES },
+  other: { variants: [], tones: WOOD_TONES },
+} satisfies Record<FurnitureType, FurnitureKindSpec>;
+
 export interface FurniturePlacement {
   id: string;
-  type: "sofa" | "table" | "chair" | "other";
+  type: FurnitureType;
+  /** Top-left corner of the unrotated footprint, in room metres; `rotation` turns it about its
+   *  centre. */
   x: number;
   y: number;
   width: number;
+  /** Footprint depth along y, in metres — not the piece's height (`topMeters`). */
   height: number;
   /** Rotation in degrees (0-360) */
   rotation?: number;
   label?: string;
   locked?: boolean;
+  /** Absent ⇒ the model is read from the piece's size and neighbours. One the type does not take
+   *  reads as absent and is kept as stored, so a newer build's choice survives an edit here. */
+  variant?: FurnitureVariant;
+  /** Absent ⇒ the model's own colour. Kept as stored when the type does not take it, as above. */
+  tone?: FurnitureTone;
+  /** Top of the piece above the floor, in metres. Absent ⇒ the model's own height. */
+  topMeters?: number;
+}
+
+const FURNITURE_TYPE_VALUES = new Set<string>(Object.values(FURNITURE_TYPES));
+
+/** The stored type as a known one; anything else (a newer build's kind) reads as `other`. */
+export function resolveFurnitureType(stored: unknown): FurnitureType {
+  return typeof stored === "string" && FURNITURE_TYPE_VALUES.has(stored)
+    ? (stored as FurnitureType)
+    : FURNITURE_TYPES.OTHER;
+}
+
+/** The stored variant when the piece's type takes it, else none. */
+export function resolveFurnitureVariant(item: FurniturePlacement): FurnitureVariant | undefined {
+  const variants: readonly string[] = FURNITURE_CATALOGUE[resolveFurnitureType(item.type)].variants;
+  return item.variant !== undefined && variants.includes(item.variant) ? item.variant : undefined;
+}
+
+/** The stored tone when the piece's type takes it, else none. */
+export function resolveFurnitureTone(item: FurniturePlacement): FurnitureTone | undefined {
+  const tones: readonly string[] = FURNITURE_CATALOGUE[resolveFurnitureType(item.type)].tones;
+  return item.tone !== undefined && tones.includes(item.tone) ? item.tone : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -229,7 +346,18 @@ export interface TvAnchorPlacement {
   /** Screen centre above the floor, in metres. Absent ⇒ 40% of the room height,
    * resolved at runtime rather than written, so it follows a room-height edit. */
   mountHeightMeters?: number;
+  /** Absent ⇒ a monitor when a desk stands under it, else a TV. Frontend-only: never mirrored in
+   * Rust, which reads the anchor's place and mount height alone. */
+  screenKind?: ScreenKind;
 }
+
+/** What the captured screen is drawn as. */
+export const SCREEN_KINDS = {
+  TV: "tv",
+  MONITOR: "monitor",
+} as const;
+
+export type ScreenKind = (typeof SCREEN_KINDS)[keyof typeof SCREEN_KINDS];
 
 /** Mirrors `DEFAULT_TV_MOUNT_HEIGHT_FRACTION` in `commands/room_affinity.rs`;
  * `verify:shell-contracts` fails if the two drift. */

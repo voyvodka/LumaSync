@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   findHueChannel,
+  type FurniturePlacement,
   hueChannelsForArea,
   mergeHueChannels,
   replaceHueChannel,
+  resolveFurnitureTone,
+  resolveFurnitureType,
+  resolveFurnitureVariant,
   type HueChannelPlacement,
 } from "@/shared/contracts/roomMap";
 
@@ -99,5 +103,23 @@ describe("entertainment-area scoping", () => {
     expect(next.map((c) => c.entertainmentAreaId)).toEqual(["ea-a", "ea-b", "ea-a"]);
     expect(next[0].x).toBe(0);
     expect(next[1].x).toBe(0.7);
+  });
+});
+
+describe("furniture resolvers", () => {
+  const piece = (patch: Partial<FurniturePlacement> & { type: string }): FurniturePlacement =>
+    ({ id: "p", x: 0, y: 0, width: 1, height: 1, ...patch }) as FurniturePlacement;
+
+  it("reads a type from a newer build as other, so no reader meets an unknown one", () => {
+    expect(resolveFurnitureType("bed")).toBe("bed");
+    expect(resolveFurnitureType("hammock")).toBe("other");
+    expect(resolveFurnitureType(undefined)).toBe("other");
+  });
+
+  it("keeps a variant and a tone only where the type takes them", () => {
+    expect(resolveFurnitureVariant(piece({ type: "table", variant: "desk" }))).toBe("desk");
+    expect(resolveFurnitureVariant(piece({ type: "table", variant: "bookshelf" }))).toBeUndefined();
+    expect(resolveFurnitureTone(piece({ type: "sofa", tone: "slate" }))).toBe("slate");
+    expect(resolveFurnitureTone(piece({ type: "sofa", tone: "walnut" }))).toBeUndefined();
   });
 });

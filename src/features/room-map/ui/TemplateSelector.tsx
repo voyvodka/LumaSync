@@ -67,10 +67,13 @@ const TEMPLATES: Template[] = [
       usbStrips: [
         { stripId: "usb-tv", startX: 1.85, startY: 0.15, endX: 3.15, endY: 0.15, ledCount: 90 },
       ],
+      // The rug first, so the plan draws it under the pieces standing on it.
       furniture: [
+        { id: "rug-1", type: "rug", x: 1.3, y: 1.3, width: 2.4, height: 1.9, label: t("roomMap:furniture.type.rug") },
         { id: "sofa-1", type: "sofa", x: 1.5, y: 2.5, width: 2.0, height: 0.9, label: t("roomMap:furniture.templateLabel.sofa") },
         { id: "table-1", type: "table", x: 2.0, y: 1.6, width: 1.0, height: 0.6, label: t("roomMap:furniture.templateLabel.coffeeTable") },
         { id: "chair-1", type: "chair", x: 0.3, y: 2.5, width: 0.7, height: 0.7, label: t("roomMap:furniture.templateLabel.armchair") },
+        { id: "plant-1", type: "plant", x: 4.3, y: 0.25, width: 0.5, height: 0.5, label: t("roomMap:furniture.type.plant") },
       ],
     }),
   },

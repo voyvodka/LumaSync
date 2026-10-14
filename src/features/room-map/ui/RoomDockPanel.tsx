@@ -12,6 +12,7 @@ import type {
   TvAnchorPlacement,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
+import { autoScreenKind, classifyFurniture } from "@/features/room-view/model/furnitureModel";
 import { moveTabFocus } from "@/shared/lib/tablistKeys";
 import { HueZoneInspector } from "./HueZoneInspector";
 import { HueZonesTab } from "./HueZonesTab";
@@ -225,6 +226,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
             key="tv:singleton"
             tv={inspectorTarget.tv}
             roomHeightMeters={config.dimensions.heightMeters}
+            autoKind={autoScreenKind(config)}
             onUpdate={(patch) => onUpdateTvAnchor?.(patch)}
             onToggleLock={() => onToggleLock("tv")}
           />
@@ -235,6 +237,11 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
           <FurnitureInspector
             key={`furniture:${item.id}`}
             item={item}
+            model={classifyFurniture(config).get(item.id)}
+            autoModel={classifyFurniture({
+              ...config,
+              furniture: config.furniture.map((f) => (f.id === item.id ? { ...f, variant: undefined } : f)),
+            }).get(item.id)}
             onUpdate={(patch) => onUpdateFurniture?.(item.id, patch)}
             onToggleLock={() => onToggleLock(furnitureObjectId(item.id))}
             onRename={(label) => onRenameFurniture(item.id, label)}

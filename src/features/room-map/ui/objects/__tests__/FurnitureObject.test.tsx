@@ -39,6 +39,12 @@ const BASE_PROPS = {
 };
 
 describe("FurnitureObject", () => {
+  it("draws a type from a newer build as other instead of throwing", () => {
+    const placement = { ...BASE_PLACEMENT, type: "hammock" } as unknown as FurniturePlacement;
+    render(<FurnitureObject {...BASE_PROPS} placement={placement} />);
+    expect(screen.getByText("Corner sofa")).toBeDefined();
+  });
+
   // ROOM-02: furniture renders with label
   it("ROOM-02: renders the placement label as visible text", () => {
     render(<FurnitureObject {...BASE_PROPS} />);

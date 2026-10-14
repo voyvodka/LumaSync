@@ -6,6 +6,7 @@ import type {
   TvAnchorPlacement,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
+import { FURNITURE_DEFAULT_SIZE } from "../model/furnitureKinds";
 import { parseObjectId } from "../model/objectId";
 import { roomObjectAdapter, type NudgeDirection } from "../model/roomObjectKinds";
 import type { ApplyOptions } from "./useRoomMapState";
@@ -67,13 +68,14 @@ export function useRoomMapObjects({
   const handleAddFurniture = useCallback(
     (type: FurniturePlacement["type"]) => {
       const id = `furniture-${crypto.randomUUID()}`;
+      const size = FURNITURE_DEFAULT_SIZE[type];
       const newItem: FurniturePlacement = {
         id,
         type,
-        x: widthMeters / 2 - 0.3,
-        y: depthMeters / 2 - 0.3,
-        width: 0.6,
-        height: 0.6,
+        x: widthMeters / 2 - size.width / 2,
+        y: depthMeters / 2 - size.depth / 2,
+        width: size.width,
+        height: size.depth,
         label: t(`roomMap:furniture.type.${type}`),
       };
       apply({ furniture: [...config.furniture, newItem] });

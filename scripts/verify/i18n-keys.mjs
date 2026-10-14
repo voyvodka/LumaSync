@@ -51,7 +51,9 @@ const DYNAMIC_PREFIX_DOMAINS = {
   "lights:effect.names": { sources: ["effects.ts EFFECT_IDS"] },
   "lights:effect.palettes": { sources: ["effects.ts PALETTE_IDS"] },
   "lights:scenes.suggested": { sources: ["scenes.ts SUGGESTED_SCENE_IDS"] },
-  "roomMap:furniture.type": { sources: ["roomMap.ts FurniturePlacement.type"] },
+  "roomMap:furniture.tone": { sources: ["roomMap.ts FURNITURE_TONES"] },
+  "roomMap:furniture.type": { sources: ["roomMap.ts FURNITURE_TYPES"] },
+  "roomMap:furniture.variant": { sources: ["roomMap.ts FURNITURE_VARIANTS"] },
   "settings:nav.sections": { sources: ["shell.ts SECTION_IDS"] },
   "telemetry:queueHealth": { sources: ["telemetry.ts TELEMETRY_QUEUE_HEALTH"] },
 };
