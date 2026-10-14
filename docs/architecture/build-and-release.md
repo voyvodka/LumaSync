@@ -321,12 +321,14 @@ is strict JSON and cannot carry the reasoning inline, so it lives here — they 
 `pnpm-workspace.yaml` before the move to Bun. Each one exists to clear a GitHub advisory that the
 direct dependency tree cannot resolve on its own:
 
-- **`undici` → `^7.29.0`.** Reached transitively through the WebdriverIO e2e stack (`webdriver`
+- **`undici` → `^7.30.0`.** Reached transitively through the WebdriverIO e2e stack (`webdriver`
   asks for `^6`, `cheerio` for `^7`), so dev-only. Clears the advisories against `undici` < 7.29.0 — SOCKS5 cross-origin routing and TLS
-  certificate validation bypass among them.
-- **`serialize-javascript` → `^7.1.0`.** mocha still pins `^6.0.2`, which both GHSA-5c6j-r48x-rmvq
+  certificate validation bypass among them — and GHSA-2gqq-gqf2-x968 (response truncation in the dump
+  interceptor, fixed in 7.29.1). It stays on the 7 line: `webdriver` already asks for 6, and 8 would
+  move it two majors. The floor is the patched release, not just what the lockfile happens to hold.
+- **`serialize-javascript` → `^7.1.2`.** mocha still pins `^6.0.2`, which both GHSA-5c6j-r48x-rmvq
   (RCE) and GHSA-qj8w-gfj5-8c6v cover. 7.0.5 was the first release clear of the pair.
-- **`@puppeteer/browsers` → `^3.2.0`.** The 2.x line pulls `extract-zip` (GHSA-jmr9-qjv8-65gv),
+- **`@puppeteer/browsers` → `^3.2.4`.** The 2.x line pulls `extract-zip` (GHSA-jmr9-qjv8-65gv),
   which is unmaintained and has no patched release. Bumping the parent is the only exit.
 
 Drop one when its upstream ships a clean release, not before — `cargo audit`'s frontend counterpart
