@@ -44,8 +44,3 @@ export function takesPalette(id: EffectId): boolean {
 export function paramValue(effect: EffectPayload, param: "size" | "intensity" | "durationMinutes"): number {
   return effect[param] ?? EFFECT_DEFAULTS[param];
 }
-
-/** An effect that turns into something simpler on a few room lamps (a comet hops lamp to lamp). */
-export function bestOnStrip(id: EffectId): boolean {
-  return EFFECT_CATALOGUE[id].sparse !== "native";
-}

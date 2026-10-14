@@ -89,8 +89,6 @@ export default {
     colorN: "Colour {{n}}",
     addColor: "Add a colour",
     removeColor: "Remove this colour",
-    bestOnStrip: "Best on a strip — on a few lamps it moves more simply",
-    bestOnStripShort: "Best on a strip",
     direction: "Direction",
     duration: "Duration",
     durationValue: "{{count}} min",

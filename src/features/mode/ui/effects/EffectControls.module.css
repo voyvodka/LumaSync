@@ -181,21 +181,6 @@
   }
   .tileSwatchOut { position: absolute; inset: 0; animation: swatch-out var(--lm-dur-slow) linear forwards; }
   @keyframes swatch-out { to { opacity: 0; } }
-  /* Effects that turn simpler on a few lamps: a small strip mark, said to a screen reader as words.
-     Beside the name, not over the picture: a dark box on the swatch read as a glitch in it. */
-  .stripMark {
-    position: absolute;
-    right: 8px;
-    bottom: 8px;
-    display: grid;
-    place-items: center;
-    width: 14px;
-    height: 14px;
-    color: var(--lm-ink-faint);
-  }
-  .stripMark svg { width: 12px; height: 12px; }
-  .tile:has(.stripMark) .tileName { padding-right: 26px; }
-  .pickRow .stripMark { position: static; margin-left: auto; background: transparent; }
   .tileName {
     padding: 6px 9px 7px;
     overflow: hidden;

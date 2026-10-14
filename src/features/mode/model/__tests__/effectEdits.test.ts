@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { EFFECT_CATALOGUE, EFFECT_ORDER } from "@/shared/contracts/effects";
 import type { EffectPayload } from "@/shared/contracts/mode";
-import { bestOnStrip, usesParam, withEffect, withPalette } from "../effectEdits";
+import { usesParam, withEffect, withPalette } from "../effectEdits";
 import { effectSwatch, paletteOf, paletteStops } from "../effectSwatch";
 
 const running: EffectPayload = {
@@ -42,11 +42,6 @@ describe("effect edits", () => {
     expect(usesParam("wave", "direction")).toBe(true);
     expect(usesParam("sunrise", "durationMinutes")).toBe(true);
     expect(usesParam("naturalLight", "speed")).toBe(false);
-  });
-
-  it("marks the effects that turn simpler on a few lamps", () => {
-    expect(bestOnStrip("comet")).toBe(true);
-    expect(bestOnStrip("candle")).toBe(false);
   });
 });
 

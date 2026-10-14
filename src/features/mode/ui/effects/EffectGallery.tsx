@@ -8,25 +8,9 @@ import { useFlip } from "@/shared/lib/useFlip";
 import { useSideScroll } from "@/shared/lib/useSideScroll";
 import { PickerList } from "@/shared/ui/PickerList/PickerList";
 import { Segmented } from "@/shared/ui/Segmented/Segmented";
-import { bestOnStrip, withEffect } from "../../model/effectEdits";
+import { withEffect } from "../../model/effectEdits";
 import { effectSwatch, paletteOf, paletteStops } from "../../model/effectSwatch";
 import styles from "./EffectControls.module.css";
-
-/** A strip's dotted line: the effect is at its best on a strip. */
-function StripMark() {
-  const { t } = useTranslation();
-  return (
-    <span className={styles.stripMark} title={t("lights:effect.bestOnStrip")} data-testid="strip-mark">
-      <svg aria-hidden viewBox="0 0 12 12">
-        <path d="M1.5 6h9" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-        <circle cx="3" cy="6" r="1.2" fill="currentColor" />
-        <circle cx="6" cy="6" r="1.2" fill="currentColor" />
-        <circle cx="9" cy="6" r="1.2" fill="currentColor" />
-      </svg>
-      <span className="sr-only">{t("lights:effect.bestOnStripShort")}</span>
-    </span>
-  );
-}
 
 /**
  * A tile's picture, which changes when the palette does: the old one stays on top and fades, since
@@ -89,10 +73,8 @@ export function EffectGallery({ effect, disabled = false, onPick, row = false }:
             <>
               <TileSwatch background={tileBackground(effect, id)} />
               <span className={styles.tileName}>{t(`lights:effect.names.${id}`)}</span>
-              {bestOnStrip(id) ? <StripMark /> : null}
             </>
           ),
-          title: bestOnStrip(id) ? t("lights:effect.bestOnStrip") : undefined,
           testId: `effect-${id}`,
           flipId: id,
         }))}
@@ -147,7 +129,6 @@ export function EffectPicker({ effect, disabled = false, onPick }: EffectChoiceP
           <span className={styles.pickRow}>
             <span className={styles.pickerSwatch} style={{ background: tileBackground(effect, id) }} />
             <span className={styles.pickerName}>{t(`lights:effect.names.${id}`)}</span>
-            {bestOnStrip(id) ? <StripMark /> : null}
           </span>
         )}
         onPick={(i) => {
