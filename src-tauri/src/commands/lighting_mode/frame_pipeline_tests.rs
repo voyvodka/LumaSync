@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 use super::frame_pipeline::{
     strip_topology_for, AmbilightFramePipeline, FramePipelineConfig, FrameSettings,
+    StripStageConfig,
 };
 use super::live::{AmbilightLiveSettings, RoomGeometryLive};
 use super::sampling::{
@@ -17,6 +18,7 @@ use super::sampling::{
     WHOLE_FRAME_SAMPLE_WINDOW,
 };
 use super::smoothing::{alpha_for_interval, TimeSmoother, SMOOTHING_REFERENCE_INTERVAL};
+use super::strip_set::StripSpec;
 use super::usb_output::UsbOutputPlan;
 use super::worker::{start_ambilight_worker, WorkerPacing};
 use super::*;
@@ -609,8 +611,13 @@ fn assert_worker_matches_reference(profile: FirmwareProfile, chip_type: LedChipT
     let served = Arc::new(AtomicU32::new(0));
     let runtime = start_ambilight_worker(
         LedOutputBridge::from_sender(sent.clone()),
-        Some(UsbOutputPlan::Serial(PORT.to_string())),
-        Some(calibration),
+        vec![StripSpec {
+            plan: Some(UsbOutputPlan::Serial(PORT.to_string())),
+            layout: Some(calibration),
+            profile,
+            chip: chip_type,
+            correction: color_correction(),
+        }],
         Arc::clone(&live),
         Box::new(ScriptedFrameSource {
             frames: frames.clone(),
@@ -622,9 +629,6 @@ fn assert_worker_matches_reference(profile: FirmwareProfile, chip_type: LedChipT
         SharedRuntimeTelemetry::default(),
         Some(hue_output),
         None,
-        color_correction(),
-        profile,
-        chip_type,
         None,
         Arc::clone(&room),
         scripted_clock(&served),
@@ -685,7 +689,7 @@ fn worker_output_matches_reference_adalight_ws2812b() {
 // ---------------------------------------------------------------------------
 
 /// `start_ambilight_worker` without the thread, the capture or the telemetry:
-/// the same constructors, then per frame `sample_strip` → `analyze` →
+/// the same constructors, then per frame `sample` → `analyze` →
 /// `advance` → the serial sink, in the worker's order, one `FRAME_GAP` apart.
 struct PipelineRun {
     pipeline: AmbilightFramePipeline,
@@ -714,11 +718,13 @@ impl PipelineRun {
         );
         let led_sequence = build_led_sequence(led_calibration);
         let pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
-            led_sequence: led_sequence.clone(),
-            strip_shape: StripShape::of(led_calibration),
-            sample_window: LIVE_SAMPLE_WINDOW,
+            strips: vec![StripStageConfig {
+                led_sequence: led_sequence.clone(),
+                strip_shape: StripShape::of(led_calibration),
+                sample_window: LIVE_SAMPLE_WINDOW,
+                topology: strip_topology_for(Some(led_calibration)),
+            }],
             scene_enabled: true,
-            strip_topology: strip_topology_for(Some(led_calibration)),
             hue_channels: Some(hue_channels()),
             room_geometry,
             black_border_detection: live_settings.read_black_border_detection(),
@@ -738,7 +744,7 @@ impl PipelineRun {
         self.sink.set_brightness(live_settings.read_brightness());
         self.sink.set_color_order(live_settings.read_color_order());
         self.sink
-            .send_frame(self.pipeline.strip_frame())
+            .send_frame(self.pipeline.strip_frame(0))
             .expect("send");
     }
 
@@ -751,7 +757,8 @@ impl PipelineRun {
             &self.strip_shape,
             LIVE_SAMPLE_WINDOW,
         );
-        self.pipeline.seed_strip(&sampled, self.now);
+        self.pipeline
+            .seed_strips(std::slice::from_ref(&sampled), self.now);
         self.send(live_settings);
     }
 
@@ -761,14 +768,13 @@ impl PipelineRun {
         live_settings: &AmbilightLiveSettings,
     ) -> Option<&[HueRgb]> {
         self.now += FRAME_GAP;
-        let sampled = self.pipeline.sample_strip(raw_frame);
+        self.pipeline.sample(raw_frame);
         let settings = FrameSettings {
             black_border_detection: live_settings.read_black_border_detection(),
             alpha_ceiling: live_settings.read_smoothing_alpha(),
             saturation: live_settings.read_saturation(),
         };
-        self.pipeline
-            .analyze(raw_frame, sampled, settings, self.now);
+        self.pipeline.analyze(raw_frame, settings, self.now);
         self.pipeline.advance(self.now);
         self.send(live_settings);
         self.pipeline.hue_colors()
@@ -823,7 +829,7 @@ fn assert_step_matches_reference(
             "Hue colours, frame {n} ({profile:?}/{chip_type:?})"
         );
         assert_eq!(
-            run.pipeline.strip_frame(),
+            run.pipeline.strip_frame(0),
             expected.strip.as_slice(),
             "smoothed strip, frame {n} ({profile:?}/{chip_type:?})"
         );
@@ -900,8 +906,8 @@ fn outputs_are_the_same_whatever_the_output_rate() {
             let now = start + at;
             if frame_at == Some(at) {
                 let frame = &frames[next_frame];
-                let sampled = run.pipeline.sample_strip(frame);
-                run.pipeline.analyze(frame, sampled, settings, now);
+                run.pipeline.sample(frame);
+                run.pipeline.analyze(frame, settings, now);
                 next_frame += 1;
             }
             run.pipeline.advance(now);
@@ -910,7 +916,7 @@ fn outputs_are_the_same_whatever_the_output_rate() {
             }
             if next_checkpoint == at {
                 checkpoints.push((
-                    run.pipeline.strip_state().to_vec(),
+                    run.pipeline.strip_state(0).to_vec(),
                     run.pipeline.hue_colors().expect("hue colours").to_vec(),
                 ));
                 next_checkpoint += checkpoint_gap;
@@ -969,8 +975,13 @@ fn a_frame_is_analysed_once_however_often_the_worker_looks() {
     let (color_sender, hue_updates) = HueColorSender::recording(2);
     let runtime = start_ambilight_worker(
         LedOutputBridge::from_sender(Arc::new(NullSender)),
-        Some(UsbOutputPlan::Serial(PORT.to_string())),
-        Some(strip_164()),
+        vec![StripSpec {
+            plan: Some(UsbOutputPlan::Serial(PORT.to_string())),
+            layout: Some(strip_164()),
+            profile: FirmwareProfile::LumaSyncV1,
+            chip: LedChipType::Ws2812bGrb,
+            correction: color_correction(),
+        }],
         live_settings(),
         Box::new(StillScreen {
             frame: Arc::new(scene_frame(FRAME_W, FRAME_H, 0)),
@@ -982,9 +993,6 @@ fn a_frame_is_analysed_once_however_often_the_worker_looks() {
             color_sender,
         })),
         None,
-        color_correction(),
-        FirmwareProfile::LumaSyncV1,
-        LedChipType::Ws2812bGrb,
         None,
         RoomGeometryLive::new(None),
         WorkerPacing::live(Duration::from_millis(2)),
@@ -1100,11 +1108,13 @@ fn first_outputs(
     hue_channels: Option<Vec<HueAreaChannel>>,
 ) -> (Vec<[u8; 3]>, Option<Vec<HueRgb>>) {
     let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
-        led_sequence: build_led_sequence(led_calibration),
-        strip_shape: StripShape::of(led_calibration),
-        sample_window,
+        strips: vec![StripStageConfig {
+            led_sequence: build_led_sequence(led_calibration),
+            strip_shape: StripShape::of(led_calibration),
+            sample_window,
+            topology: strip_topology_for(Some(led_calibration)),
+        }],
         scene_enabled: false,
-        strip_topology: strip_topology_for(Some(led_calibration)),
         hue_channels,
         room_geometry: RoomGeometryLive::new(None),
         black_border_detection,
@@ -1112,10 +1122,9 @@ fn first_outputs(
         effect: None,
     });
     let now = Instant::now();
-    let sampled = pipeline.sample_strip(frame);
+    pipeline.sample(frame);
     pipeline.analyze(
         frame,
-        sampled,
         FrameSettings {
             black_border_detection,
             alpha_ceiling: 1.0,
@@ -1125,7 +1134,7 @@ fn first_outputs(
     );
     pipeline.advance(now);
     (
-        pipeline.strip_frame().to_vec(),
+        pipeline.strip_frame(0).to_vec(),
         pipeline.hue_colors().map(<[HueRgb]>::to_vec),
     )
 }
@@ -1283,11 +1292,13 @@ fn live_saturation_reaches_hue() {
     let hue_at = |saturation: f32| -> Vec<HueRgb> {
         let calibration = strip_164();
         let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
-            led_sequence: build_led_sequence(&calibration),
-            strip_shape: StripShape::of(&calibration),
-            sample_window: LIVE_SAMPLE_WINDOW,
+            strips: vec![StripStageConfig {
+                led_sequence: build_led_sequence(&calibration),
+                strip_shape: StripShape::of(&calibration),
+                sample_window: LIVE_SAMPLE_WINDOW,
+                topology: strip_topology_for(Some(&calibration)),
+            }],
             scene_enabled: false,
-            strip_topology: strip_topology_for(Some(&calibration)),
             hue_channels: Some(hue_channels()),
             room_geometry: RoomGeometryLive::new(None),
             black_border_detection: false,
@@ -1295,13 +1306,13 @@ fn live_saturation_reaches_hue() {
             effect: None,
         });
         let now = Instant::now();
-        let sampled = pipeline.sample_strip(&frame);
+        pipeline.sample(&frame);
         let settings = FrameSettings {
             black_border_detection: false,
             alpha_ceiling: 1.0,
             saturation,
         };
-        pipeline.analyze(&frame, sampled, settings, now);
+        pipeline.analyze(&frame, settings, now);
         pipeline.advance(now);
         pipeline.hue_colors().expect("hue colours").to_vec()
     };
@@ -1466,8 +1477,13 @@ fn a_strip_that_stops_taking_frames_is_reported_by_its_code() {
     let telemetry = SharedRuntimeTelemetry::default();
     let runtime = start_ambilight_worker(
         LedOutputBridge::from_sender(Arc::new(FailsAfterFirst(Default::default()))),
-        Some(UsbOutputPlan::Serial(PORT.to_string())),
-        Some(strip_164()),
+        vec![StripSpec {
+            plan: Some(UsbOutputPlan::Serial(PORT.to_string())),
+            layout: Some(strip_164()),
+            profile: FirmwareProfile::LumaSyncV1,
+            chip: LedChipType::Ws2812bGrb,
+            correction: color_correction(),
+        }],
         live_settings(),
         Box::new(StillScreen {
             frame: Arc::new(scene_frame(FRAME_W, FRAME_H, 0)),
@@ -1476,9 +1492,6 @@ fn a_strip_that_stops_taking_frames_is_reported_by_its_code() {
         Arc::clone(&telemetry),
         None,
         None,
-        color_correction(),
-        FirmwareProfile::LumaSyncV1,
-        LedChipType::Ws2812bGrb,
         None,
         RoomGeometryLive::new(None),
         WorkerPacing::live(Duration::from_millis(2)),
@@ -1935,11 +1948,13 @@ fn a_few_bulbs_never_go_dark_on_the_wire() {
     let brightness = 0.61f32;
     for &(tag, id) in super::config::EffectId::TAGS {
         let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
-            led_sequence: build_led_sequence(&led_calibration),
-            strip_shape: StripShape::of(&led_calibration),
-            sample_window: SYNTHETIC_SAMPLE_WINDOW,
+            strips: vec![StripStageConfig {
+                led_sequence: build_led_sequence(&led_calibration),
+                strip_shape: StripShape::of(&led_calibration),
+                sample_window: SYNTHETIC_SAMPLE_WINDOW,
+                topology: strip_topology_for(Some(&led_calibration)),
+            }],
             scene_enabled: false,
-            strip_topology: strip_topology_for(Some(&led_calibration)),
             hue_channels: Some(channels.clone()),
             room_geometry: RoomGeometryLive::new(None),
             black_border_detection: false,
@@ -1964,8 +1979,8 @@ fn a_few_bulbs_never_go_dark_on_the_wire() {
         let start = Instant::now();
         for n in 0..400u64 {
             let now = start + Duration::from_millis(n * 40);
-            let sampled = pipeline.sample_strip(&tick);
-            pipeline.analyze(&tick, sampled, settings, now);
+            pipeline.sample(&tick);
+            pipeline.analyze(&tick, settings, now);
             pipeline.advance(now);
             // The smoother starts from black: give it two seconds to arrive.
             if n < 50 {
@@ -2001,11 +2016,13 @@ fn a_steady_effect_step_allocates_nothing() {
         .collect();
     for &(_, id) in super::config::EffectId::TAGS {
         let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
-            led_sequence: build_led_sequence(&led_calibration),
-            strip_shape: StripShape::of(&led_calibration),
-            sample_window: SYNTHETIC_SAMPLE_WINDOW,
+            strips: vec![StripStageConfig {
+                led_sequence: build_led_sequence(&led_calibration),
+                strip_shape: StripShape::of(&led_calibration),
+                sample_window: SYNTHETIC_SAMPLE_WINDOW,
+                topology: strip_topology_for(Some(&led_calibration)),
+            }],
             scene_enabled: false,
-            strip_topology: strip_topology_for(Some(&led_calibration)),
             hue_channels: Some(channels.clone()),
             room_geometry: RoomGeometryLive::new(None),
             black_border_detection: false,
@@ -2032,8 +2049,8 @@ fn a_steady_effect_step_allocates_nothing() {
         let start = Instant::now();
         let mut step = |n: u64| {
             let now = start + Duration::from_millis(n * 16);
-            let sampled = pipeline.sample_strip(&tick);
-            pipeline.analyze(&tick, sampled, settings, now);
+            pipeline.sample(&tick);
+            pipeline.analyze(&tick, settings, now);
             pipeline.advance(now);
         };
         for n in 0..8 {
@@ -2074,8 +2091,13 @@ fn a_worker_that_panics_is_counted_out_and_its_stop_returns() {
     let served = Arc::new(AtomicU32::new(0));
     let runtime = start_ambilight_worker(
         LedOutputBridge::from_sender(Arc::new(RecordingSender::default())),
-        Some(UsbOutputPlan::Serial(PORT.to_string())),
-        Some(strip_164()),
+        vec![StripSpec {
+            plan: Some(UsbOutputPlan::Serial(PORT.to_string())),
+            layout: Some(strip_164()),
+            profile: FirmwareProfile::LumaSyncV1,
+            chip: LedChipType::Ws2812bGrb,
+            correction: color_correction(),
+        }],
         Arc::clone(&live),
         Box::new(PanickingFrameSource {
             frame: Arc::clone(&frames[0]),
@@ -2084,9 +2106,6 @@ fn a_worker_that_panics_is_counted_out_and_its_stop_returns() {
         SharedRuntimeTelemetry::default(),
         None,
         None,
-        color_correction(),
-        FirmwareProfile::LumaSyncV1,
-        LedChipType::Ws2812bGrb,
         None,
         Arc::clone(&room),
         scripted_clock(&served),
@@ -2234,8 +2253,13 @@ fn a_strip_with_no_layout_shows_the_picture_not_its_own_spot() {
     let sent = Arc::new(RecordingSender::default());
     let runtime = start_ambilight_worker(
         LedOutputBridge::from_sender(sent.clone()),
-        Some(UsbOutputPlan::Serial(PORT.to_string())),
-        None,
+        vec![StripSpec {
+            plan: Some(UsbOutputPlan::Serial(PORT.to_string())),
+            layout: None,
+            profile: FirmwareProfile::LumaSyncV1,
+            chip: LedChipType::Ws2812bGrb,
+            correction: color_correction(),
+        }],
         live_settings(),
         Box::new(StillScreen {
             frame: Arc::new(CapturedFrame::new(FRAME_W, FRAME_H, pixels)),
@@ -2244,9 +2268,6 @@ fn a_strip_with_no_layout_shows_the_picture_not_its_own_spot() {
         SharedRuntimeTelemetry::default(),
         None,
         None,
-        color_correction(),
-        FirmwareProfile::LumaSyncV1,
-        LedChipType::Ws2812bGrb,
         None,
         RoomGeometryLive::new(None),
         WorkerPacing::live(Duration::from_millis(2)),

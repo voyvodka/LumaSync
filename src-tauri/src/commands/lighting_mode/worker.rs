@@ -14,6 +14,7 @@ use log::{info, warn};
 use super::effects::EffectDraw;
 use super::frame_pipeline::{
     strip_topology_for, AmbilightFramePipeline, FramePipelineConfig, FrameSettings,
+    StripStageConfig,
 };
 use super::latency::{frame_level, LatencyMeter, LatencySink};
 use super::live::{AmbilightLiveSettings, RoomGeometryLive};
@@ -21,6 +22,7 @@ use super::pacing::{resolve_quality_config, AmbilightWorkerQualityState};
 use super::preview::{PreviewEmitContext, TwinFrameSink, TWIN_FRAME_INTERVAL_MS};
 use super::runtime::LightingWorkerRuntime;
 use super::sampling::{sample_window_for, strip_for_worker};
+use super::strip_set::StripSpec;
 use super::usb_output::{ActiveUsbSink, UsbOutputPlan};
 use super::{ACTIVE_AMBILIGHT_WORKERS, AMBILIGHT_CAPTURE_ATTEMPTS, AMBILIGHT_FRAME_ATTEMPTS};
 use crate::commands::ambilight_capture::{AmbilightFrameSource, CapturedFrame};
@@ -28,10 +30,9 @@ use crate::commands::hue::frame::HueMotion;
 use crate::commands::hue::state_store::{
     apply_hue_channels_with_context, HueActiveOutputContext, HueOutputLive,
 };
-use crate::commands::led_calibration::{sample_frame_for_sequence, LedCalibrationConfig};
+use crate::commands::led_calibration::sample_frame_for_sequence;
 use crate::commands::led_output::{
-    scale_brightness, ColorCorrectionConfig, FirmwareProfile, LedChipType, LedOutputBridge,
-    SerialSink,
+    scale_brightness, FirmwareProfile, LedChipType, LedOutputBridge, SerialSink,
 };
 use crate::commands::preview::feed::{twin_colour, twin_colour_linear};
 use crate::commands::runtime_telemetry::{RuntimeTelemetryWindow, SharedRuntimeTelemetry};
@@ -161,8 +162,20 @@ fn log_hue_output(context: Option<&HueActiveOutputContext>) {
     }
 }
 
-/// A frame from the source, and its strip samples when it had not been seen.
-type Captured = (Arc<CapturedFrame>, Option<Vec<[u8; 3]>>);
+/// A frame from the source, and whether it is new: a new one was sampled for every strip.
+type Captured = (Arc<CapturedFrame>, bool);
+
+/// One strip's output: the sink, the gate that paces its sends, and its counts for the log.
+struct StripOutput {
+    /// The pipeline stage it sends.
+    stage: usize,
+    sink: ActiveUsbSink,
+    gate: AmbilightWorkerQualityState,
+    /// This output step's send time, for its gate's cost on a new frame.
+    send_ms: f32,
+    send_count: u32,
+    fail_count: u32,
+}
 
 /// Sync live-tunable settings from shared atomic state (zero-cost on hot path).
 fn read_frame_settings(live_settings: &AmbilightLiveSettings) -> FrameSettings {
@@ -173,21 +186,18 @@ fn read_frame_settings(live_settings: &AmbilightLiveSettings) -> FrameSettings {
     }
 }
 
-/// `hue_output` is the Hue runtime's slot, handed over only when the mode's
-/// targets name Hue.
+/// `strips` are sampled and sent in order; one with no plan is sampled for the preview and sent
+/// nowhere. `hue_output` is the Hue runtime's slot, handed over only when the mode's targets name
+/// Hue.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn start_ambilight_worker(
     output_bridge: LedOutputBridge,
-    usb_plan: Option<UsbOutputPlan>,
-    led_calibration: Option<LedCalibrationConfig>,
+    strips: Vec<StripSpec>,
     live_settings: Arc<AmbilightLiveSettings>,
     frame_source: Box<dyn AmbilightFrameSource>,
     telemetry_snapshot: SharedRuntimeTelemetry,
     hue_output: Option<Arc<HueOutputLive>>,
     twin_sink: Option<TwinFrameSink>,
-    color_correction: ColorCorrectionConfig,
-    firmware_profile: FirmwareProfile,
-    chip_type: LedChipType,
     preview: Option<PreviewEmitContext>,
     room_geometry: Arc<RoomGeometryLive>,
     pacing: WorkerPacing,
@@ -217,29 +227,10 @@ pub(super) fn start_ambilight_worker(
         }
         found.ok_or(last_err)?
     };
-    // Per-LED calibration: build the strip sequence once at worker start. Each iteration calls
-    // sample_frame_for_sequence to produce per-LED colours from edge regions of the captured frame.
-    let (led_sequence, strip_shape, total_leds) =
-        strip_for_worker(led_calibration.as_ref(), usb_plan.is_some());
-    info!(
-        "[start_ambilight_worker] led sequence resolved — total_leds={total_leds} sequence_len={} calibration_present={}",
-        led_sequence.len(),
-        led_calibration.is_some()
-    );
-
     let mut hue_output = hue_output.map(HueOutputFollower::new);
-    let (quality_config, serial_budget) =
-        resolve_quality_config(&usb_plan, total_leds, firmware_profile, chip_type);
-    let mut quality_state = AmbilightWorkerQualityState::new(quality_config);
     let mut telemetry_window = RuntimeTelemetryWindow::new(Instant::now());
     telemetry_window.attach(telemetry_snapshot.clone());
     let telemetry_snapshot_for_stop = telemetry_snapshot.clone();
-    // Deliberately gated on `serial_budget`, not `usb_plan` -- a WLED-only
-    // session must report `link_max_fps: 0.0` / unconstrained, the same as
-    // a Hue-only session (see contract note on `RuntimeTelemetrySnapshot`).
-    if let Some(budget) = serial_budget {
-        telemetry_window.set_link_budget(budget.link_max_fps, budget.is_link_constrained());
-    }
 
     AMBILIGHT_CAPTURE_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
     // A synthetic test paints exact per-LED blocks; the live 0.05 box is wider
@@ -249,50 +240,109 @@ pub(super) fn start_ambilight_worker(
     if synthetic || pacing.preview_scene {
         telemetry_window.skip_history();
     }
-    let sample_window = sample_window_for(synthetic, led_calibration.is_some(), usb_plan.is_some());
-    info!(
-        "[start_ambilight_worker] sample_window={sample_window} synthetic={synthetic} calibration_present={} strip_output={}",
-        led_calibration.is_some(),
-        usb_plan.is_some()
-    );
-    // No border detection for the initial warmup frame — detection runs in the worker loop.
-    let initial_sampled =
-        sample_frame_for_sequence(&initial_frame, &led_sequence, &strip_shape, sample_window);
-    telemetry_window.record_capture();
 
-    // Built once at worker start; brightness and colour order are synced each
-    // output step via `set_brightness` / `set_color_order` before `send_frame`.
-    let mut usb_sink: Option<ActiveUsbSink> = usb_plan.as_ref().map(|plan| match plan {
-        UsbOutputPlan::Serial(port) => ActiveUsbSink::Serial(SerialSink::with_chip_type(
-            output_bridge.clone(),
-            Some(port.clone()),
-            live_settings.read_brightness(),
-            firmware_profile,
-            color_correction.clone(),
-            chip_type,
-        )),
-        UsbOutputPlan::Wled(cfg) => ActiveUsbSink::Wled(CorrectedWledSink::new(
-            cfg.build(),
-            color_correction.clone(),
-        )),
-    });
-    if let Some(ref mut sink) = usb_sink {
+    let mut stages = Vec::with_capacity(strips.len());
+    let mut initial_sampled = Vec::with_capacity(strips.len());
+    let mut outputs: Vec<StripOutput> = Vec::new();
+    for (stage, spec) in strips.iter().enumerate() {
+        // Per-LED calibration: build the strip sequence once at worker start. Each iteration calls
+        // sample_frame_for_sequence to produce per-LED colours from edge regions of the captured frame.
+        let (led_sequence, strip_shape, total_leds) =
+            strip_for_worker(spec.layout.as_ref(), spec.plan.is_some());
+        info!(
+            "[start_ambilight_worker] led sequence resolved — strip={stage} total_leds={total_leds} sequence_len={} calibration_present={}",
+            led_sequence.len(),
+            spec.layout.is_some()
+        );
+        let sample_window =
+            sample_window_for(synthetic, spec.layout.is_some(), spec.plan.is_some());
+        info!(
+            "[start_ambilight_worker] sample_window={sample_window} synthetic={synthetic} calibration_present={} strip_output={}",
+            spec.layout.is_some(),
+            spec.plan.is_some()
+        );
+        // No border detection for the initial warmup frame — detection runs in the worker loop.
+        initial_sampled.push(sample_frame_for_sequence(
+            &initial_frame,
+            &led_sequence,
+            &strip_shape,
+            sample_window,
+        ));
+        stages.push(StripStageConfig {
+            led_sequence,
+            strip_shape,
+            sample_window,
+            topology: strip_topology_for(spec.layout.as_ref()),
+        });
+        let Some(plan) = spec.plan.as_ref() else {
+            continue;
+        };
+        let (quality_config, serial_budget) =
+            resolve_quality_config(&spec.plan, total_leds, spec.profile, spec.chip);
+        // Deliberately gated on `serial_budget`, not on the plan -- a WLED-only
+        // session must report `link_max_fps: 0.0` / unconstrained, the same as
+        // a Hue-only session (see contract note on `RuntimeTelemetrySnapshot`).
+        if let Some(budget) = serial_budget {
+            telemetry_window.set_link_budget(budget.link_max_fps, budget.is_link_constrained());
+        }
+        // Built once at worker start; brightness and colour order are synced each
+        // output step via `set_brightness` / `set_color_order` before `send_frame`.
+        let mut sink = match plan {
+            UsbOutputPlan::Serial(port) => ActiveUsbSink::Serial(SerialSink::with_chip_type(
+                output_bridge.clone(),
+                Some(port.clone()),
+                live_settings.read_brightness(),
+                spec.profile,
+                spec.correction.clone(),
+                spec.chip,
+            )),
+            UsbOutputPlan::Wled(cfg) => {
+                ActiveUsbSink::Wled(CorrectedWledSink::new(cfg.build(), spec.correction.clone()))
+            }
+        };
         sink.start()?;
+        outputs.push(StripOutput {
+            stage,
+            sink,
+            gate: AmbilightWorkerQualityState::new(quality_config),
+            send_ms: 0.0,
+            send_count: 0,
+            fail_count: 0,
+        });
     }
+    telemetry_window.record_capture();
+    // With no strip output, a Hue-only gate keeps the capture cost for the latency report.
+    let mut hue_only_gate = outputs.is_empty().then(|| {
+        AmbilightWorkerQualityState::new(
+            resolve_quality_config(&None, 0, FirmwareProfile::default(), LedChipType::default()).0,
+        )
+    });
 
     let send_started = Instant::now();
-    if let Some(ref mut sink) = usb_sink {
-        sink.set_brightness(live_settings.read_brightness());
-        sink.set_color_order(live_settings.read_color_order());
-        if quality_state.should_send_now(Instant::now()) {
+    let mut warmed = false;
+    for output in &mut outputs {
+        output.sink.set_brightness(live_settings.read_brightness());
+        output
+            .sink
+            .set_color_order(live_settings.read_color_order());
+        if output.gate.should_send_now(Instant::now()) {
             AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-            sink.send_frame(&initial_sampled)?;
-            telemetry_window.record_send();
+            output.sink.send_frame(&initial_sampled[output.stage])?;
+            warmed = true;
         }
     }
+    if warmed {
+        telemetry_window.record_send();
+    }
     // Hue-only: no initial USB send needed, just apply Hue from capture
-    quality_state.observe_capture_and_send_cost(0.0, send_started.elapsed().as_secs_f32() * 1000.0);
-    telemetry_window.record_latency(quality_state.observed_cost_ms());
+    let warmup_ms = send_started.elapsed().as_secs_f32() * 1000.0;
+    for output in &mut outputs {
+        output.gate.observe_capture_and_send_cost(0.0, warmup_ms);
+    }
+    if let Some(gate) = hue_only_gate.as_mut() {
+        gate.observe_capture_and_send_cost(0.0, warmup_ms);
+    }
+    telemetry_window.record_latency(observed_cost_ms(&outputs, hue_only_gate.as_ref()));
     telemetry_window.flush_if_due(Instant::now(), &telemetry_snapshot)?;
 
     let cancel = Arc::new(AtomicBool::new(false));
@@ -315,9 +365,9 @@ pub(super) fn start_ambilight_worker(
         let initial_hue = hue_output.as_ref().and_then(|f| f.context.as_ref());
         let has_hue = initial_hue.map(|c| !c.channels.is_empty()).unwrap_or(false);
         info!(
-            "[ambilight-worker] started — sink={:?} chip={:?} hue={} channels={} capture_interval={:?} push_source={}",
-            usb_plan,
-            chip_type,
+            "[ambilight-worker] started — sinks={:?} chips={:?} hue={} channels={} capture_interval={:?} push_source={}",
+            strips.iter().map(|spec| &spec.plan).collect::<Vec<_>>(),
+            strips.iter().map(|spec| spec.chip).collect::<Vec<_>>(),
             has_hue,
             initial_hue.map(|c| c.channels.len()).unwrap_or(0),
             pacing.capture_interval,
@@ -327,10 +377,6 @@ pub(super) fn start_ambilight_worker(
             log_hue_output(initial_hue);
         }
         let mut hue_send_count = 0u32;
-        // Mirror of `hue_send_count` for the USB sink so live-debug sessions
-        // can confirm full-strip frames are reaching the wire (e.g. byte
-        // count, led_count) without flooding stdout at 60 Hz.
-        let mut usb_send_count = 0u32;
         // Scene-adaptive stage (docs/architecture/capture-and-pipeline.md). Off
         // for synthetic test frames, which must reach the strip exactly as
         // painted, and under LUMASYNC_AMBILIGHT_LEGACY=1 for A/B bisecting.
@@ -341,21 +387,22 @@ pub(super) fn start_ambilight_worker(
             && !measuring
             && std::env::var("LUMASYNC_AMBILIGHT_LEGACY").map_or(true, |v| v != "1");
         let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
-            led_sequence,
-            strip_shape,
-            sample_window,
+            strips: stages,
             scene_enabled,
-            strip_topology: strip_topology_for(led_calibration.as_ref()),
             hue_channels: hue_output
                 .as_ref()
                 .and_then(|f| f.context.as_ref())
                 .map(|ctx| ctx.channels.clone()),
             room_geometry,
             black_border_detection: live_settings.read_black_border_detection(),
-            color_correction,
+            // Hue and the twin take the first strip's correction, as they took the one strip's.
+            color_correction: strips
+                .first()
+                .map(|spec| spec.correction.clone())
+                .unwrap_or_default(),
             effect: effect_draw,
         });
-        pipeline.seed_strip(&initial_sampled, seeded_at);
+        pipeline.seed_strips(&initial_sampled, seeded_at);
         info!(
             "[ambilight-worker] scene-adaptive stage {}",
             if scene_enabled { "on" } else { "off" }
@@ -367,10 +414,9 @@ pub(super) fn start_ambilight_worker(
         } else {
             HueMotion::Ease
         };
-        let has_strip = usb_sink.is_some();
+        let has_strip = !outputs.is_empty();
 
         let mut capture_fail_count = 0u32;
-        let mut send_fail_count = 0u32;
         let mut last_twin_frame_at: Option<Instant> = None;
         // The twin's copy of the Hue lamps' linear colours, kept only while it
         // is fed — in f32, since a u8 here bands dark scenes once screen-encoded.
@@ -406,11 +452,12 @@ pub(super) fn start_ambilight_worker(
                 }
             }
 
-            let output_interval = if has_strip {
-                quality_state.current_send_interval()
-            } else {
-                HUE_ONLY_OUTPUT_INTERVAL
-            };
+            // The step runs at the fastest output's pace; each gate holds its own back.
+            let output_interval = outputs
+                .iter()
+                .map(|output| output.gate.current_send_interval())
+                .min()
+                .unwrap_or(HUE_ONLY_OUTPUT_INTERVAL);
             // A synthetic pattern animates per call, so it is drawn at the
             // output rate rather than the screen's.
             let poll_interval = if synthetic {
@@ -450,9 +497,11 @@ pub(super) fn start_ambilight_worker(
                         AMBILIGHT_CAPTURE_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
                         src.capture_frame().map_err(|e| e.as_reason()).map(|frame| {
                             // A frame already analysed is not sampled again.
-                            let sampled =
-                                (frame.seq != seen_seq).then(|| pipeline.sample_strip(&frame));
-                            (frame, sampled)
+                            let fresh = frame.seq != seen_seq;
+                            if fresh {
+                                pipeline.sample(&frame);
+                            }
+                            (frame, fresh)
                         })
                     }
                     Err(_) => Err("AMBILIGHT_CAPTURE_FRAME_LOCK_FAILED".to_string()),
@@ -469,14 +518,13 @@ pub(super) fn start_ambilight_worker(
                         telemetry_window.record_capture_error(&e, Instant::now());
                         let _ = telemetry_window.flush_if_due(Instant::now(), &telemetry_snapshot);
                     }
-                    Ok((frame, Some(sampled))) => {
+                    Ok((frame, true)) => {
                         seen_seq = frame.seq;
                         if let Some(meter) = latency_meter.as_mut() {
                             meter.observe_frame(frame_level(&frame), frame.captured_at);
                         }
                         let settings = read_frame_settings(&live_settings);
-                        let analyzed_at =
-                            pipeline.analyze(&frame, sampled, settings, (pacing.clock)());
+                        let analyzed_at = pipeline.analyze(&frame, settings, (pacing.clock)());
                         analyzed_with = Some(settings);
                         reanalyze = false;
                         last_frame = Some(frame);
@@ -492,7 +540,7 @@ pub(super) fn start_ambilight_worker(
                         unsent_frame = true;
                         new_frame = true;
                     }
-                    Ok((_, None)) => {}
+                    Ok((_, false)) => {}
                 }
             }
 
@@ -500,8 +548,8 @@ pub(super) fn start_ambilight_worker(
             if let (false, Some(frame)) = (new_frame, last_frame.as_ref()) {
                 let settings = read_frame_settings(&live_settings);
                 if reanalyze || analyzed_with != Some(settings) || pipeline.hue_resample_due() {
-                    let sampled = pipeline.sample_strip(frame);
-                    pipeline.analyze(frame, sampled, settings, (pacing.clock)());
+                    pipeline.sample(frame);
+                    pipeline.analyze(frame, settings, (pacing.clock)());
                     analyzed_with = Some(settings);
                     reanalyze = false;
                     retuned = true;
@@ -529,50 +577,59 @@ pub(super) fn start_ambilight_worker(
             });
 
             let send_started = Instant::now();
-            let send_ms = match usb_sink.as_mut() {
-                Some(sink) if quality_state.should_send_now(send_started) => {
-                    sink.set_brightness(brightness);
-                    sink.set_color_order(color_order);
-                    AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-                    let strip = pipeline.strip_frame();
-                    match sink.send_frame(strip) {
-                        Ok(()) => {
-                            telemetry_window.record_send();
-                            unsent_frame = false;
-                            report_latency(&mut latency_meter, pacing.latency.as_ref());
-                            // LumaSync v1 wire format: 5-byte header
-                            // (magic + brightness + count_le) + RGB payload
-                            // (3 bytes per LED) + 1-byte XOR. Adalight's
-                            // 6-byte header without the brightness byte
-                            // produces a slightly different total — the log
-                            // assumes LumaSyncV1 (the production default)
-                            // and is observability-only, not load-bearing.
-                            let usb_bytes_estimate = 5usize + strip.len().saturating_mul(3) + 1;
-                            usb_send_count += 1;
-                            if usb_send_count <= 3 || usb_send_count.is_multiple_of(200) {
-                                info!(
-                                    "[ambilight-worker] usb update #{usb_send_count} — bytes={usb_bytes_estimate} led_count={} frame_age_ms={frame_age_ms}",
-                                    strip.len()
-                                );
-                            }
-                            send_started.elapsed().as_secs_f32() * 1000.0
+            let mut sent = false;
+            for output in &mut outputs {
+                output.send_ms = 0.0;
+                if !output.gate.should_send_now(send_started) {
+                    continue;
+                }
+                let output_started = Instant::now();
+                output.sink.set_brightness(brightness);
+                output.sink.set_color_order(color_order);
+                AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
+                let strip = pipeline.strip_frame(output.stage);
+                match output.sink.send_frame(strip) {
+                    Ok(()) => {
+                        sent = true;
+                        // LumaSync v1 wire format: 5-byte header
+                        // (magic + brightness + count_le) + RGB payload
+                        // (3 bytes per LED) + 1-byte XOR. Adalight's
+                        // 6-byte header without the brightness byte
+                        // produces a slightly different total — the log
+                        // assumes LumaSyncV1 (the production default)
+                        // and is observability-only, not load-bearing.
+                        let usb_bytes_estimate = 5usize + strip.len().saturating_mul(3) + 1;
+                        output.send_count += 1;
+                        let count = output.send_count;
+                        if count <= 3 || count.is_multiple_of(200) {
+                            info!(
+                                "[ambilight-worker] usb update #{count} — strip={} bytes={usb_bytes_estimate} led_count={} frame_age_ms={frame_age_ms}",
+                                output.stage,
+                                strip.len()
+                            );
                         }
-                        Err(e) => {
-                            // Every one kept for telemetry; the log keeps the first few and a
-                            // sample after, as for capture, so a dead strip does not flood it.
-                            send_fail_count += 1;
-                            telemetry_window.record_output_error(&e, Instant::now());
-                            if is_logged_failure(send_fail_count) {
-                                warn!(
-                                    "[ambilight-worker] strip send failed #{send_fail_count}: {e}"
-                                );
-                            }
-                            0.0
+                        output.send_ms = output_started.elapsed().as_secs_f32() * 1000.0;
+                    }
+                    Err(e) => {
+                        // Every one kept for telemetry; the log keeps the first few and a
+                        // sample after, as for capture, so a dead strip does not flood it.
+                        output.fail_count += 1;
+                        telemetry_window.record_output_error(&e, Instant::now());
+                        if is_logged_failure(output.fail_count) {
+                            warn!(
+                                "[ambilight-worker] strip {} send failed #{}: {e}",
+                                output.stage, output.fail_count
+                            );
                         }
                     }
                 }
-                _ => 0.0,
-            };
+            }
+            // One send per step, however many strips took it.
+            if sent {
+                telemetry_window.record_send();
+                unsent_frame = false;
+                report_latency(&mut latency_meter, pacing.latency.as_ref());
+            }
 
             // Hue: the sender streams at its own 50 ms floor and eases between
             // the targets it finds, so the worker only keeps the newest one
@@ -620,8 +677,15 @@ pub(super) fn start_ambilight_worker(
             }
 
             if new_frame {
-                quality_state.observe_capture_and_send_cost(capture_ms, send_ms);
-                telemetry_window.record_latency(quality_state.observed_cost_ms());
+                for output in &mut outputs {
+                    output
+                        .gate
+                        .observe_capture_and_send_cost(capture_ms, output.send_ms);
+                }
+                if let Some(gate) = hue_only_gate.as_mut() {
+                    gate.observe_capture_and_send_cost(capture_ms, 0.0);
+                }
+                telemetry_window.record_latency(observed_cost_ms(&outputs, hue_only_gate.as_ref()));
             }
             let _ = telemetry_window.flush_if_due(Instant::now(), &telemetry_snapshot);
 
@@ -637,7 +701,8 @@ pub(super) fn start_ambilight_worker(
                     // brightness, then encoded for a screen. Hue arrives
                     // corrected already, so it takes brightness only.
                     twin_leds.clear();
-                    twin_leds.extend(pipeline.strip_frame().iter().map(|&rgb| {
+                    // The first strip, until the twin draws every strip.
+                    twin_leds.extend(pipeline.strip_frame(0).iter().map(|&rgb| {
                         twin_colour(scale_brightness(pipeline.correct_rgb(rgb), brightness))
                     }));
                     twin_lamps.clear();
@@ -652,9 +717,9 @@ pub(super) fn start_ambilight_worker(
             }
         }
 
-        // Stop the USB sink cleanly before the worker thread exits.
-        if let Some(mut sink) = usb_sink {
-            let _ = sink.stop();
+        // Stop every strip's sink cleanly before the worker thread exits.
+        for mut output in outputs {
+            let _ = output.sink.stop();
         }
     });
 
@@ -664,6 +729,19 @@ pub(super) fn start_ambilight_worker(
         telemetry: telemetry_snapshot_for_stop,
         _frame_source: frame_source_arc,
     })
+}
+
+/// What the latency telemetry reports: the slowest strip's capture and send cost, or the Hue-only
+/// gate's with no strip.
+fn observed_cost_ms(
+    outputs: &[StripOutput],
+    hue_only_gate: Option<&AmbilightWorkerQualityState>,
+) -> f32 {
+    outputs
+        .iter()
+        .map(|output| output.gate.observed_cost_ms())
+        .chain(hue_only_gate.map(AmbilightWorkerQualityState::observed_cost_ms))
+        .fold(0.0, f32::max)
 }
 
 /// An output just went out: the latency scene's sample ends here, if one began.

@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use super::live::AmbilightLiveSettings;
 use super::pacing::resolve_quality_config;
 use super::runtime::LightingRuntimeOwner;
+use super::strip_set::StripSpec;
 use super::transition::{apply_mode_change, set_active_port, stop_previous, Outgoing};
 use super::tuning::solid_output_for;
 use super::usb_output::UsbOutputPlan;
@@ -77,20 +78,7 @@ impl AmbilightFrameSource for FakeFrameSource {
 
 fn owner_with_fake_sender() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
-        effect_live: None,
-        effect_clock: Default::default(),
-        active_mode: LightingModeConfig::default(),
-        active_port: None,
-        active_usb_plan: None,
-        strips: Default::default(),
-        solid_hold: None,
-        worker: None,
-        ambilight_live: None,
-        room_geometry_live: None,
         output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
-        preview: Default::default(),
-        closing: Default::default(),
-        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(
@@ -101,31 +89,20 @@ fn owner_with_fake_sender() -> LightingRuntimeOwner {
                 fail_with_unavailable: false,
             }))
         }),
+        ..Default::default()
     }
 }
 
 fn owner_with_unavailable_capture() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
-        effect_live: None,
-        effect_clock: Default::default(),
-        active_mode: LightingModeConfig::default(),
-        active_port: None,
-        active_usb_plan: None,
-        strips: Default::default(),
-        solid_hold: None,
-        worker: None,
-        ambilight_live: None,
-        room_geometry_live: None,
         output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
-        preview: Default::default(),
-        closing: Default::default(),
-        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(1, 1, vec![[0, 0, 0]]),
                 fail_with_unavailable: true,
             }))
         }),
+        ..Default::default()
     }
 }
 
@@ -201,20 +178,7 @@ fn shared_runtime_telemetry() -> SharedRuntimeTelemetry {
 fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
     let recorder: Arc<FakeLedSender> = Arc::new(FakeLedSender::default());
     let owner = LightingRuntimeOwner {
-        effect_live: None,
-        effect_clock: Default::default(),
-        active_mode: LightingModeConfig::default(),
-        active_port: None,
-        active_usb_plan: None,
-        strips: Default::default(),
-        solid_hold: None,
-        worker: None,
-        ambilight_live: None,
-        room_geometry_live: None,
         output_bridge: LedOutputBridge::from_sender(recorder.clone()),
-        preview: Default::default(),
-        closing: Default::default(),
-        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(
@@ -225,6 +189,7 @@ fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
                 fail_with_unavailable: false,
             }))
         }),
+        ..Default::default()
     };
     (owner, recorder)
 }
@@ -613,18 +578,18 @@ fn set_ambilight_stops_previous_then_starts_new_runtime() {
     let _guard = acquire_worker_test_guard();
     let mut owner = owner_with_fake_sender();
     owner = LightingRuntimeOwner {
-        effect_live: None,
-        effect_clock: Default::default(),
         active_mode: ambilight_mode(),
         active_port: Some("COM1".to_string()),
-        active_usb_plan: None,
-        strips: Default::default(),
-        solid_hold: None,
         worker: Some(
             start_ambilight_worker(
                 owner.output_bridge.clone(),
-                Some(UsbOutputPlan::Serial("COM1".to_string())),
-                None,
+                vec![StripSpec {
+                    plan: Some(UsbOutputPlan::Serial("COM1".to_string())),
+                    layout: None,
+                    profile: crate::commands::led_output::FirmwareProfile::default(),
+                    chip: crate::commands::led_output::LedChipType::default(),
+                    correction: crate::commands::led_output::ColorCorrectionConfig::default(),
+                }],
                 AmbilightLiveSettings::new(0.8, false, 0.35, 1.0),
                 (owner.frame_source_factory)(super::runtime::AmbilightCaptureRequest {
                     effect: None,
@@ -639,22 +604,15 @@ fn set_ambilight_stops_previous_then_starts_new_runtime() {
                 shared_runtime_telemetry(),
                 None,
                 None,
-                crate::commands::led_output::ColorCorrectionConfig::default(),
-                crate::commands::led_output::FirmwareProfile::default(),
-                crate::commands::led_output::LedChipType::default(),
                 None,
                 super::live::RoomGeometryLive::new(None),
                 super::worker::WorkerPacing::live(Duration::from_millis(50)),
             )
             .expect("worker start should succeed"),
         ),
-        ambilight_live: None,
-        room_geometry_live: None,
         output_bridge: owner.output_bridge,
         frame_source_factory: owner.frame_source_factory,
-        preview: Default::default(),
-        closing: Default::default(),
-        hue_gate_waived: false,
+        ..Default::default()
     };
     let mut trace = Vec::new();
 
@@ -1014,20 +972,7 @@ fn ambilight_mode_with_calibration(total_leds: u16) -> LightingModeConfig {
 fn owner_with_recording_sender_for_ambilight() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
     let recorder: Arc<FakeLedSender> = Arc::new(FakeLedSender::default());
     let owner = LightingRuntimeOwner {
-        effect_live: None,
-        effect_clock: Default::default(),
-        active_mode: LightingModeConfig::default(),
-        active_port: None,
-        active_usb_plan: None,
-        strips: Default::default(),
-        solid_hold: None,
-        worker: None,
-        ambilight_live: None,
-        room_geometry_live: None,
         output_bridge: LedOutputBridge::from_sender(recorder.clone()),
-        preview: Default::default(),
-        closing: Default::default(),
-        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(
@@ -1043,6 +988,7 @@ fn owner_with_recording_sender_for_ambilight() -> (LightingRuntimeOwner, Arc<Fak
                 fail_with_unavailable: false,
             }))
         }),
+        ..Default::default()
     };
     (owner, recorder)
 }
@@ -1118,26 +1064,14 @@ fn ambilight_mode_with_30_led_calibration_emits_per_led_usb_packet() {
 fn owner_with_red_frame() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
     let recorder: Arc<FakeLedSender> = Arc::new(FakeLedSender::default());
     let owner = LightingRuntimeOwner {
-        effect_live: None,
-        effect_clock: Default::default(),
-        active_mode: LightingModeConfig::default(),
-        active_port: None,
-        active_usb_plan: None,
-        strips: Default::default(),
-        solid_hold: None,
-        worker: None,
-        ambilight_live: None,
-        room_geometry_live: None,
         output_bridge: LedOutputBridge::from_sender(recorder.clone()),
-        preview: Default::default(),
-        closing: Default::default(),
-        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(4, 4, vec![[255, 0, 0]; 16]),
                 fail_with_unavailable: false,
             }))
         }),
+        ..Default::default()
     };
     (owner, recorder)
 }

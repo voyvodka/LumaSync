@@ -63,20 +63,7 @@ impl AmbilightFrameSource for FakeFrameSource {
 
 fn owner_with_fake_sender() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
-        effect_live: None,
-        effect_clock: Default::default(),
-        active_mode: LightingModeConfig::default(),
-        active_port: None,
-        active_usb_plan: None,
-        strips: Default::default(),
-        solid_hold: None,
-        worker: None,
-        ambilight_live: None,
-        room_geometry_live: None,
         output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
-        preview: Default::default(),
-        closing: Default::default(),
-        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(
@@ -86,6 +73,7 @@ fn owner_with_fake_sender() -> LightingRuntimeOwner {
                 ),
             }))
         }),
+        ..Default::default()
     }
 }
 
@@ -114,20 +102,7 @@ impl AmbilightFrameSource for FailsAfterFirstFrameSource {
 
 fn owner_that_fails_after_first_frame() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
-        effect_live: None,
-        effect_clock: Default::default(),
-        active_mode: LightingModeConfig::default(),
-        active_port: None,
-        active_usb_plan: None,
-        strips: Default::default(),
-        solid_hold: None,
-        worker: None,
-        ambilight_live: None,
-        room_geometry_live: None,
         output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
-        preview: Default::default(),
-        closing: Default::default(),
-        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FailsAfterFirstFrameSource {
                 frame: CapturedFrame::new(
@@ -138,6 +113,7 @@ fn owner_that_fails_after_first_frame() -> LightingRuntimeOwner {
                 served: std::sync::atomic::AtomicBool::new(false),
             }))
         }),
+        ..Default::default()
     }
 }
 
@@ -1751,20 +1727,7 @@ fn fast_path_explicit_saturation_overrides_running_atomic() {
 fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
     let recorder: Arc<FakeLedSender> = Arc::new(FakeLedSender::default());
     let owner = LightingRuntimeOwner {
-        effect_live: None,
-        effect_clock: Default::default(),
-        active_mode: LightingModeConfig::default(),
-        active_port: None,
-        active_usb_plan: None,
-        strips: Default::default(),
-        solid_hold: None,
-        worker: None,
-        ambilight_live: None,
-        room_geometry_live: None,
         output_bridge: LedOutputBridge::from_sender(recorder.clone()),
-        preview: Default::default(),
-        closing: Default::default(),
-        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(
@@ -1774,6 +1737,7 @@ fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
                 ),
             }))
         }),
+        ..Default::default()
     };
     (owner, recorder)
 }

@@ -7,10 +7,26 @@ use std::net::Ipv4Addr;
 
 use serde_json::Value;
 
+use super::usb_output::UsbOutputPlan;
+use crate::commands::led_calibration::LedCalibrationConfig;
+use crate::commands::led_output::{ColorCorrectionConfig, FirmwareProfile, LedChipType};
 use crate::commands::local_outputs::{DrivenLocal, LocalOutputRegistry};
 use crate::commands::shell_state::PersistedShellState;
 use crate::commands::wled_sink::WledSinkConfig;
 use crate::models::led_strips::{LedStrip, StripTransport};
+
+/// One strip as the ambilight worker drives it: the output it writes, and what it needs to sample
+/// the screen and encode for that output.
+#[derive(Clone, Debug)]
+pub(super) struct StripSpec {
+    /// `None` for a strip the worker samples and sends nowhere: a test pattern with no device
+    /// connected, or a layout drawn beside Hue for the preview.
+    pub plan: Option<UsbOutputPlan>,
+    pub layout: Option<LedCalibrationConfig>,
+    pub profile: FirmwareProfile,
+    pub chip: LedChipType,
+    pub correction: ColorCorrectionConfig,
+}
 
 /// A connected output and the saved strip it is. A port connected with no `ledStrips` row is
 /// driven all the same, as it always was.

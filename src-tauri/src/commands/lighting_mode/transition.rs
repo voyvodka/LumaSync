@@ -21,7 +21,7 @@ use super::pacing::{capture_interval_for, SerialSendBudget};
 use super::preview::{build_preview_emit_context, build_twin_sink, TwinFrameSink};
 use super::runtime::{AmbilightCaptureRequest, LightingRuntimeOwner, LightingRuntimeState};
 use super::snapshot;
-use super::strip_set::strips_from;
+use super::strip_set::{strips_from, StripSpec};
 use super::usb_output::{SolidHold, SolidUsbOutput, UsbOutputPlan};
 use super::worker::{start_ambilight_worker, WorkerPacing};
 use super::SOLID_OUTPUT_ATTEMPTS;
@@ -691,18 +691,23 @@ fn apply_mode_change_inner(
             let preview_ctx = build_preview_emit_context(owner.preview.preview_gate.clone());
             let room_geometry_live = RoomGeometryLive::new(normalized_next.room_geometry.clone());
 
+            // One strip until the worker fans out: the one the "usb" channel drives, or a layout
+            // sampled for the preview with no output.
+            let strips = vec![StripSpec {
+                plan: usb_plan_for_worker.clone(),
+                layout: normalized_next.led_calibration.clone(),
+                profile,
+                chip,
+                correction: corrections,
+            }];
             match start_ambilight_worker(
                 owner.output_bridge.clone(),
-                usb_plan_for_worker.clone(),
-                normalized_next.led_calibration.clone(),
+                strips,
                 Arc::clone(&live_settings),
                 frame_source,
                 telemetry_snapshot.unwrap_or_default(),
                 hue_output,
                 twin_sink,
-                corrections,
-                profile,
-                chip,
                 preview_ctx,
                 Arc::clone(&room_geometry_live),
                 match &effect_live {
