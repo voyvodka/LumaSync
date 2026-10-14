@@ -48,10 +48,11 @@ export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewpo
   }, []);
 
   // Space held is pan mode, for the editor and its canvas alike. A space typed
-  // into a field is text, not a pan.
+  // into a field is text, and a space on a button presses it — taking it left
+  // every control in the window dead to the keyboard while the editor was open.
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (e.key !== " " || isEditableTarget(e.target)) return;
+      if (e.key !== " " || isEditableTarget(e.target) || isPressableTarget(e.target)) return;
       // Keeps the page from scrolling under a pan.
       e.preventDefault();
       if (!e.repeat) setSpaceHeld(true);
@@ -138,7 +139,15 @@ export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewpo
   };
 }
 
-/** Marks the canvas's clipping root, which `fitToView` scrolls back to zero. */
+const PRESSABLE_SELECTOR =
+  'button, a[href], summary, [role="button"], [role="tab"], [role="radio"], [role="checkbox"], [role="switch"], [role="menuitem"], [role="option"]';
+
+function isPressableTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.matches(PRESSABLE_SELECTOR);
+}
+
+/** Marks the canvas's clipping root, which `fitToView` scrolls back to zero and
+ *  the editor's bare keys (arrows, Delete, R, F, Escape) are scoped to. */
 export const ROOM_MAP_VIEWPORT_ATTR = "data-room-map-viewport";
 
 /**

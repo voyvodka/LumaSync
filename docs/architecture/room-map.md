@@ -171,6 +171,12 @@ middle of an import.
   (`shared/lib/editableTarget.ts`, the same test the global keybinds use). Space-to-pan has one
   owner too — `useRoomMapViewport` — with the canvas reading its `panMode` rather than keeping a
   second window listener that swallowed a space typed into any field.
+- **Bare keys belong to the canvas; modified ones to the whole editor.** Arrows, Delete/Backspace,
+  R, F and Escape act only when the event comes from the editor root or from inside the
+  `data-room-map-viewport` element. On a dock tab, a segmented control or a menu item an arrow moved
+  the selection along with the control, and Delete removed the selected object. Cmd/Ctrl+Z, +D and
+  +0 stay editor-wide. The window-wide Space listener also leaves a button, tab, radio or menu item
+  alone, because Space is how those are pressed.
 
 - **A Hue channel carries two positions and only one is live.** Once `zoneId` is set,
   `zoneRelativePosition` is what the canvas paints and the absolute `x`/`y` are leftovers. Three

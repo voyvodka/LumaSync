@@ -28,7 +28,7 @@ import { useRoomMapHueZones } from "../state/useRoomMapHueZones";
 import { imageLayerGestureKey, useRoomMapImageLayers } from "../state/useRoomMapImageLayers";
 import { scopeHueChannels } from "../model/hueChannelScope";
 import { useRoomMapObjects } from "../state/useRoomMapObjects";
-import { ROOM_MAP_PX_PER_METER, useRoomMapViewport } from "../state/useRoomMapViewport";
+import { ROOM_MAP_PX_PER_METER, ROOM_MAP_VIEWPORT_ATTR, useRoomMapViewport } from "../state/useRoomMapViewport";
 import { SnapGuideOverlay } from "./SnapGuideOverlay";
 import { OriginMarker } from "./OriginMarker";
 import { ContextMenu, type ContextMenuAction } from "./ContextMenu";
@@ -99,6 +99,11 @@ const HUE_ZONE_REJECTION_KEYS = {
   HUE_ZONE_CHANNEL_NOT_IN_AREA: "roomMap:hueZones.rejected.notInArea",
   HUE_ZONE_OVERSIZED: "roomMap:hueZones.rejected.oversized",
 } as const satisfies Record<HueZoneStatusCode, string>;
+
+function isCanvasKey(e: React.KeyboardEvent<HTMLElement>): boolean {
+  if (e.target === e.currentTarget) return true;
+  return e.target instanceof Element && e.target.closest(`[${ROOM_MAP_VIEWPORT_ATTR}]`) !== null;
+}
 
 export function RoomMapEditor({
   onNavigateToDevices,
@@ -378,6 +383,10 @@ export function RoomMapEditor({
         if (selectedId) handleDuplicate(selectedId);
         return;
       }
+      // Bare keys are the canvas's. On a dock tab, a segmented control or a menu
+      // item an arrow moved the selection along with the control, and Delete
+      // removed the selected object.
+      if (!isCanvasKey(e)) return;
       if (e.key === "Escape") {
         select(null);
         setContextMenu(null);

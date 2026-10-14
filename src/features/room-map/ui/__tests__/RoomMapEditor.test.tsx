@@ -111,6 +111,7 @@ vi.mock("../RoomMapCanvas", () => ({
   }) => (
     <div
       data-testid="room-map-canvas"
+      data-room-map-viewport=""
       data-pan-x={panOffset.x}
       data-pan-y={panOffset.y}
       data-pan-mode={String(Boolean(panMode))}
@@ -187,6 +188,7 @@ vi.mock("../RoomDockPanel", () => ({
   // A real field inside the editor root, standing in for the dock inspector's.
   RoomDockPanel: () => (
     <div data-testid="room-dock-panel">
+      <button type="button" role="tab" data-testid="dock-tab" />
       <input data-testid="dock-field" type="number" defaultValue={60} />
     </div>
   ),
@@ -526,6 +528,90 @@ describe("RoomMapEditor — editor shortcuts stand aside for form fields", () =>
     act(() => {
       fireEvent.keyUp(root, { key: " " });
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bare keys belong to the canvas, not to a control that has focus
+// ---------------------------------------------------------------------------
+
+describe("RoomMapEditor — bare keys stay on the canvas", () => {
+  let realResizeObserver: typeof globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    realResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = StubResizeObserver as unknown as typeof globalThis.ResizeObserver;
+    persistState.apply.mockClear();
+    persistState.undo.mockClear();
+  });
+
+  afterEach(() => {
+    globalThis.ResizeObserver = realResizeObserver;
+  });
+
+  async function renderEditor() {
+    const view = render(<RoomMapEditor />);
+    await act(async () => {});
+    return view;
+  }
+
+  it("does not pan the map for an arrow on a dock tab", async () => {
+    const { getByTestId } = await renderEditor();
+    const before = getByTestId("room-map-canvas").dataset.panX;
+
+    act(() => {
+      fireEvent.keyDown(getByTestId("dock-tab"), { key: "ArrowRight" });
+    });
+
+    expect(getByTestId("room-map-canvas").dataset.panX).toBe(before);
+  });
+
+  it("does not delete the selected object for Delete on a dock tab", async () => {
+    const { getByTestId } = await renderEditor();
+    act(() => {
+      getByTestId("select-tv").click();
+    });
+
+    act(() => {
+      fireEvent.keyDown(getByTestId("dock-tab"), { key: "Delete" });
+    });
+
+    expect(persistState.apply).not.toHaveBeenCalledWith({ tvAnchor: undefined });
+  });
+
+  it("still deletes for Delete on an object inside the canvas", async () => {
+    const { getByTestId } = await renderEditor();
+    act(() => {
+      getByTestId("select-tv").click();
+    });
+
+    act(() => {
+      fireEvent.keyDown(getByTestId("select-tv"), { key: "Delete" });
+    });
+
+    expect(persistState.apply).toHaveBeenCalledWith({ tvAnchor: undefined });
+  });
+
+  it("keeps Cmd+Z editor-wide, a dock tab included", async () => {
+    const { getByTestId } = await renderEditor();
+
+    act(() => {
+      fireEvent.keyDown(getByTestId("dock-tab"), { key: "z", metaKey: true });
+    });
+
+    expect(persistState.undo).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a space on a button to press the button instead of entering pan mode", async () => {
+    const { getByTestId } = await renderEditor();
+
+    let notPrevented = false;
+    act(() => {
+      notPrevented = fireEvent.keyDown(getByTestId("dock-tab"), { key: " " });
+    });
+
+    expect(getByTestId("room-map-canvas").dataset.panMode).toBe("false");
+    expect(notPrevented).toBe(true);
   });
 });
 
