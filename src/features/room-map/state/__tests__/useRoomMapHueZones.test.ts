@@ -183,6 +183,18 @@ describe("useRoomMapHueZones — assignment stays inside the viewed area", () =>
     expect(written.zones[0].channelIndices).toEqual([0]);
     expect(written.zones[1].channelIndices).toEqual([0]);
   });
+
+  // The light would name the zone while the zone's list, synced per area, never took the light.
+  it("refuses to put the viewed area's light in another area's zone", () => {
+    const otherZone: HueZone = { ...ZONE_A, id: "zone-b", entertainmentAreaId: "area-2" };
+    const ownChannel: HueChannelPlacement = { ...CHANNEL_0, entertainmentAreaId: "area-1" };
+    const { result, apply } = renderZones({ zones: [ZONE_A, otherZone], hueChannels: [ownChannel] });
+
+    act(() => result.current.handleAssignChannelToZone(0, "zone-b"));
+
+    expect(apply).not.toHaveBeenCalled();
+    expect(mockAssign).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------

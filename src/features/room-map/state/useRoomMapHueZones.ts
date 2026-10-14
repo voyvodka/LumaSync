@@ -171,6 +171,12 @@ export function useRoomMapHueZones({
       const targetZone = targetZoneId
         ? hueZones.find((z) => z.id === targetZoneId)
         : null;
+      if (targetZoneId && !targetZone) return;
+      // A zone holds its own area's lights: across areas the channel would point at a zone whose
+      // `channelIndices` the sync below leaves alone, the desync the backend refuses.
+      if (targetZone && channel.entertainmentAreaId && targetZone.entertainmentAreaId !== channel.entertainmentAreaId) {
+        return;
+      }
       const entertainmentAreaId =
         targetZone?.entertainmentAreaId ?? hueAreaId ?? "";
 

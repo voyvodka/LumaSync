@@ -62,7 +62,7 @@ export function ImageLayerInspector({
       }
       second={
         <>
-          <FieldRow>
+          <FieldRow fixed>
             <DecimalField
               label={t("roomMap:inspector.xLabel")}
               prefix="X"
@@ -79,6 +79,25 @@ export function ImageLayerInspector({
               disabled={locked}
               onCommit={(y) => onUpdate({ offsetY: pixels(y) })}
             />
+          </FieldRow>
+          {/* Before the scale, whose one or two fields would move them. */}
+          <IconButton
+            className={styles.action}
+            label={t("roomMap:inspector.imageAspectLock")}
+            aria-pressed={aspectLocked}
+            icon={aspectLocked ? <IconLock /> : <IconUnlock />}
+            disabled={locked}
+            onClick={() => onUpdate({ aspectLocked: !aspectLocked })}
+          />
+          <IconButton
+            className={styles.action}
+            label={t("roomMap:inspector.imageAspectReset")}
+            icon={<IconRefresh />}
+            // Equal proportions at the current width; nothing to do when they already are.
+            disabled={locked || sx === sy}
+            onClick={() => onUpdate({ scaleX: sx, scaleY: sx })}
+          />
+          <FieldRow>
             {aspectLocked ? (
               <DecimalField
                 label={t("roomMap:inspector.imageScaleLabel")}
@@ -113,22 +132,6 @@ export function ImageLayerInspector({
               </>
             )}
           </FieldRow>
-          <IconButton
-            className={styles.action}
-            label={aspectLocked ? t("roomMap:inspector.imageAspectLocked") : t("roomMap:inspector.imageAspectUnlocked")}
-            aria-pressed={aspectLocked}
-            icon={aspectLocked ? <IconLock /> : <IconUnlock />}
-            disabled={locked}
-            onClick={() => onUpdate({ aspectLocked: !aspectLocked })}
-          />
-          <IconButton
-            className={styles.action}
-            label={t("roomMap:inspector.imageAspectReset")}
-            icon={<IconRefresh />}
-            // Equal proportions at the current width; nothing to do when they already are.
-            disabled={locked || sx === sy}
-            onClick={() => onUpdate({ scaleX: sx, scaleY: sx })}
-          />
           <DockSlider
             label={t("roomMap:inspector.imageOpacityLabel")}
             prefix={<IconOpacity />}

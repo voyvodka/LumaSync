@@ -1,5 +1,6 @@
 @layer components {
-  /* Grey at rest and warming on hover; amber only while it holds the proportions. */
+  /* Grey at rest and warming on hover; holding the proportions is the usual state, so it reads as
+     ink rather than taking the one amber accent. */
   .action {
     display: grid;
     flex-shrink: 0;
@@ -15,7 +16,7 @@
     color: var(--lm-ink);
     background: rgb(255 255 255 / 4%);
   }
-  .action[aria-pressed="true"] { color: var(--lm-amber); }
+  .action[aria-pressed="true"] { color: var(--lm-ink); }
   .action:focus-visible {
     outline: 2px solid transparent;
     box-shadow: var(--lm-focus-ring-inset);

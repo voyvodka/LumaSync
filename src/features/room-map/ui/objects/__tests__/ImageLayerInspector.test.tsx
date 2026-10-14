@@ -60,7 +60,7 @@ describe("ImageLayerInspector — scale", () => {
 
   it("toggles the proportions lock, and evens them out only when they differ", () => {
     const { onUpdate } = renderInspector({ scaleX: 2, scaleY: 1 });
-    const lock = screen.getByRole("button", { name: "roomMap:inspector.imageAspectLocked" });
+    const lock = screen.getByRole("button", { name: "roomMap:inspector.imageAspectLock" });
     expect(lock).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(lock);
     expect(onUpdate).toHaveBeenLastCalledWith({ aspectLocked: false });
@@ -76,7 +76,7 @@ describe("ImageLayerInspector — scale", () => {
     renderInspector({ locked: true });
     expect(field("roomMap:inspector.xLabel")).toBeDisabled();
     expect(field("roomMap:inspector.imageScaleLabel")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "roomMap:inspector.imageAspectLocked" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "roomMap:inspector.imageAspectLock" })).toBeDisabled();
     expect(screen.getByRole("slider", { name: "roomMap:inspector.imageOpacityLabel" })).toBeDisabled();
   });
 });

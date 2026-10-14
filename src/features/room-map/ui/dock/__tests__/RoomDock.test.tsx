@@ -48,21 +48,35 @@ const spies = {
 };
 
 /** The dock over a selection it shares with "the canvas": `select` stands for a click there. */
-function Harness({ initial = null, onSelectRef }: { initial?: string | null; onSelectRef?: { current: (id: string | null) => void } }) {
+function Harness({
+  initial = null,
+  initialZone = null,
+  onSelectRef,
+}: {
+  initial?: string | null;
+  initialZone?: string | null;
+  onSelectRef?: { current: (id: string | null) => void };
+}) {
   const [selectedId, setSelectedId] = useState<string | null>(initial);
   if (onSelectRef) onSelectRef.current = setSelectedId;
+  const inspectorActions: InspectorActions = {
+    ...actions(),
+    // As the editor does: a copy comes selected, a deleted object leaves nothing selected.
+    onDuplicate: () => setSelectedId("usb-b"),
+    onDelete: () => setSelectedId(null),
+  };
   const props: RoomDockProps = {
     config,
     zones: [],
     selectedId,
-    activeHueZoneId: null,
+    activeHueZoneId: initialZone,
     channels: [],
     areaChannels: [],
     liveChannelIds: null,
     stripStatus: () => ({ status: "unknown", port: null }),
     hueBridgeStatus: "unknown",
     modelChoices: false,
-    actions: actions(),
+    actions: inspectorActions,
     add: {
       hasTv: false,
       onAddFurniture: (type) => {
@@ -183,5 +197,35 @@ describe("RoomDock", () => {
     expect(spies.onReset).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId("room-reset-confirm-yes"));
     expect(spies.onReset).toHaveBeenCalledTimes(1);
+  });
+
+  // The focused button goes with the inspector it was in; the keys must not be left with nowhere.
+  it("hands the keys back to the editor after a delete from the inspector", () => {
+    render(<Harness initial="usb-a" />);
+    const del = screen.getByRole("button", { name: "roomMap:objectPanel.delete" });
+    act(() => del.focus());
+    fireEvent.click(del, { detail: 0 });
+    expect(spies.onFocusEditor).toHaveBeenCalledTimes(1);
+  });
+
+  it("hands the keys back after a duplicate too", () => {
+    render(<Harness initial="usb-a" />);
+    const dup = screen.getByRole("button", { name: "roomMap:contextMenu.duplicate" });
+    act(() => dup.focus());
+    fireEvent.click(dup, { detail: 0 });
+    expect(spies.onFocusEditor).toHaveBeenCalledTimes(1);
+  });
+
+  it("lands focus at once on a pick of what is already selected", () => {
+    render(<Harness initial="usb-a" />);
+    fireEvent.click(screen.getByRole("button", { name: "roomMap:dock.objects" }));
+    const list = within(screen.getByRole("dialog", { name: "roomMap:dock.objects" }));
+    fireEvent.click(list.getByRole("button", { name: 'roomMap:objectPanel.ledLabel {"count":"60"}' }), { detail: 0 });
+    expect(screen.getByRole("spinbutton", { name: "roomMap:inspector.xLabel" })).toHaveFocus();
+  });
+
+  it("shows no inspector for a zone of another area, whose lights are not these", () => {
+    render(<Harness initialZone="zone-elsewhere" />);
+    expect(screen.getByRole("toolbar", { name: "roomMap:palette.label" })).toBeInTheDocument();
   });
 });

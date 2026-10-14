@@ -22,7 +22,8 @@
   .input {
     flex: 1;
     min-width: 0;
-    height: 16px;
+    /* The track is 3 px; the input around it is the 32 px a thumb is caught by. */
+    height: 32px;
     margin: 0;
     background: transparent;
     appearance: none;
@@ -56,6 +57,7 @@
   }
 
   @media (forced-colors: active) {
+    .input:focus-visible { outline: 2px solid Highlight; }
     .input::-webkit-slider-runnable-track { background: CanvasText; }
     .input::-webkit-slider-thumb { background: Highlight; }
   }

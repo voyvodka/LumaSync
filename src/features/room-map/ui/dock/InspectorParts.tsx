@@ -210,7 +210,8 @@ export function Actions({
   );
 }
 
-/** Numbers side by side, each taking an equal share of the row. */
-export function FieldRow({ children }: { children: ReactNode }) {
-  return <div className={styles.fields}>{children}</div>;
+/** Numbers side by side, each taking an equal share of the row. `fixed` keeps the row at its
+ *  fields' own width, so what follows it never moves when another part of the row changes. */
+export function FieldRow({ fixed = false, children }: { fixed?: boolean; children: ReactNode }) {
+  return <div className={cx(styles.fields, fixed && styles.fixed)}>{children}</div>;
 }

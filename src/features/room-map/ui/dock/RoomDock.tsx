@@ -98,23 +98,48 @@ export function RoomDock(props: RoomDockProps) {
   const [confirmReset, setConfirmReset] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const pending = useRef<Pending | null>(null);
+  // Whether the last focus anywhere was inside the dock, so a swap that takes the focused control
+  // away can give the keys back without touching focus that was elsewhere.
+  const focusInDock = useRef(false);
   const objectsId = useId();
   const roomId = useId();
 
-  const target = resolveInspectorTarget(config, selectedId, activeHueZoneId);
+  const resolved = resolveInspectorTarget(config, selectedId, activeHueZoneId);
+  // A zone of another area can stay selected across an area change; its chips would offer this
+  // area's lights to it, an assignment the backend refuses.
+  const target: InspectorTarget =
+    resolved.kind === "hueZone" && !zones.some((zone) => zone.id === resolved.zone.id) ? { kind: "empty" } : resolved;
   const key = target.kind === "empty" ? "palette" : inspectorKey(target);
 
-  /** Runs a selection the dock asked for and says where focus goes once its inspector is up. */
-  const fromDock = (event: MouseEvent<HTMLButtonElement>, run: () => void) => {
-    pending.current = event.detail === 0 ? "first" : "root";
+  /** Where focus goes once a dock-made selection is up: the inspector's first field, or the editor. */
+  const land = (asked: Pending) => {
+    if (asked === "root") {
+      onFocusEditor();
+      return;
+    }
+    // The page leaving is inert while it fades; its fields must not take the focus.
+    const live = Array.from(contentRef.current?.querySelectorAll<HTMLElement>("[data-dock-first], button, input") ?? []).filter(
+      (element) => !element.closest("[inert]"),
+    );
+    (live.find((element) => element.hasAttribute("data-dock-first")) ?? live[0])?.focus();
+  };
+
+  /** Runs a selection the dock asked for and says where focus goes once its inspector is up. A pick
+   *  of what is already selected changes nothing to wait for, so focus lands at once. */
+  const fromDock = (event: MouseEvent<HTMLButtonElement>, run: () => void, unchanged = false) => {
+    const asked: Pending = event.detail === 0 ? "first" : "root";
     run();
+    if (unchanged) land(asked);
+    else pending.current = asked;
   };
 
   // A dock request the selection never answered — an image picker cancelled — must not move focus
   // when the next selection comes from somewhere else.
   useEffect(() => {
     const forget = (event: Event) => {
-      if (!dockRef.current?.contains(event.target as Node)) pending.current = null;
+      const inside = dockRef.current?.contains(event.target as Node) ?? false;
+      if (event.type === "focusin") focusInDock.current = inside;
+      if (!inside) pending.current = null;
     };
     document.addEventListener("pointerdown", forget, true);
     document.addEventListener("focusin", forget, true);
@@ -133,14 +158,14 @@ export function RoomDock(props: RoomDockProps) {
     }
     const asked = pending.current;
     pending.current = null;
-    if (asked === "first") {
-      // The page leaving is inert while it fades; its fields must not take the focus.
-      const live = Array.from(contentRef.current?.querySelectorAll<HTMLElement>("[data-dock-first], button, input") ?? []).filter(
-        (element) => !element.closest("[inert]"),
-      );
-      (live.find((element) => element.hasAttribute("data-dock-first")) ?? live[0])?.focus();
-    } else if (asked === "root") {
-      onFocusEditor();
+    if (asked !== null) {
+      land(asked);
+    } else {
+      // Duplicate or delete from the inspector takes the focused button away with it; the keys go
+      // back to the editor rather than to nowhere.
+      const focused = document.activeElement;
+      const lost = !focused || focused === document.body || !focused.isConnected || focused.closest("[inert]") !== null;
+      if (lost && focusInDock.current) onFocusEditor();
     }
     setAnnouncement(asked === null && target.kind !== "empty" ? describe(target, t) : "");
   }, [key]);
@@ -232,16 +257,25 @@ export function RoomDock(props: RoomDockProps) {
         selectedId={selectedId}
         activeHueZoneId={activeHueZoneId}
         onSelect={(objectId, event) =>
-          fromDock(event, () => {
-            setObjectsOpen(false);
-            props.onSelect(objectId);
-          })
+          fromDock(
+            event,
+            () => {
+              setObjectsOpen(false);
+              props.onSelect(objectId);
+            },
+            // The object shows over any zone, so dropping the zone changes nothing on screen either.
+            objectId === selectedId,
+          )
         }
         onSelectZone={(zoneId, event) =>
-          fromDock(event, () => {
-            setObjectsOpen(false);
-            props.onSelectZone(zoneId);
-          })
+          fromDock(
+            event,
+            () => {
+              setObjectsOpen(false);
+              props.onSelectZone(zoneId);
+            },
+            zoneId === activeHueZoneId && selectedId === null,
+          )
         }
       />
       <RoomPanel

@@ -115,6 +115,8 @@
   }
   /* One width for every number, so X sits over X from one kind to the next; a full row shares out. */
   .fields > * { flex: 0 1 124px; min-width: 96px; }
+  .fixed { flex: 0 0 auto; }
+  .fixed > * { flex: 0 0 124px; }
 
   /* A connection read in a word, its width held so what follows never moves when it lands. */
   .status {
@@ -170,7 +172,8 @@
   @media (forced-colors: active) {
     .name:focus { outline: 2px solid Highlight; }
     .action[aria-pressed="true"] { outline: 1px solid Highlight; }
-    .disc { border-color: CanvasText; }
+    /* The fill and the zone's ring are what tell lights and zones apart. */
+    .disc { border-color: CanvasText; forced-color-adjust: none; }
     .link:focus-visible,
     .action:focus-visible { outline: 2px solid Highlight; }
   }

@@ -14,9 +14,11 @@
   }
 
   /* A piece as the plan draws it and its name: no frame at rest, a tint on hover. */
+  /* Tiles give way before the row overflows the dock: a long name ends in an ellipsis. */
   .tile {
     display: inline-flex;
-    flex-shrink: 0;
+    flex: 0 1 auto;
+    min-width: 0;
     align-items: center;
     gap: 6px;
     height: 32px;
@@ -57,7 +59,11 @@
   .tile:hover:not(.unavailable) .glyph { opacity: 1; }
   .unavailable .glyph { opacity: 0.45; }
 
-  .name { min-width: 0; }
+  .name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
   :global(:root[data-reduced-motion]) .tile,
   :global(:root[data-reduced-motion]) .glyph { transition: none; }
