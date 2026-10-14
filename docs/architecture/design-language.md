@@ -198,7 +198,8 @@ returning focus on close — or it is a `ConfirmDialog`, which does all of that.
 the trap is worse than neither: assistive technology treats the background as inert while Tab still
 walks into it. A popover that does not block (the shared `Popover` as a `dialog`, the room-map shortcut list)
 says `aria-modal="false"`. A scrim starts at `var(--lm-titlebar-h)`, never `inset: 0`: covering the
-title bar takes the drag region and the window controls with it (`modalScrimLayering.test.ts`).
+title bar takes the drag region and the window controls with it (`modalScrimLayering.test.ts`). It
+dims with `--lm-scrim`: the three modals had drifted to three depths.
 
 **Live regions are `polite`.** The one `assertive` region is the error boundary's fallback.
 

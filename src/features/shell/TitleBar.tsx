@@ -18,7 +18,7 @@
  * component draws custom minimize / maximize-toggle / close buttons.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   closeCurrentWindow,
@@ -29,6 +29,7 @@ import {
 } from "./windowApi";
 import { detectPlatform, handleDragRegionPress, type Platform } from "./windowDragApi";
 import { SECTION_ORDER, type SectionId } from "@/shared/contracts/shell";
+import { moveTabFocus } from "@/shared/lib/tablistKeys";
 import styles from "./TitleBar.module.css";
 
 interface TitleBarProps {
@@ -166,8 +167,6 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
 // Section tabs
 // ────────────────────────────────────────────────────────────────
 
-const STEP_BY_KEY: Record<string, 1 | -1> = { ArrowRight: 1, ArrowLeft: -1 };
-
 /**
  * The sections as a WAI-ARIA tablist: one tab stop, the arrows move focus and Enter or Space opens,
  * so an arrow does not leave a page (and ask about its unsaved work) on the way past it. One amber
@@ -217,23 +216,6 @@ function SectionTabs({
     };
   }, [active]);
 
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const tabs = Array.from(listRef.current?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []);
-    const at = tabs.indexOf(document.activeElement as HTMLElement);
-    if (at === -1) return;
-    const step = STEP_BY_KEY[event.key];
-    const next =
-      step !== undefined
-        ? tabs[(at + step + tabs.length) % tabs.length]
-        : event.key === "Home"
-          ? tabs[0]
-          : event.key === "End"
-            ? tabs[tabs.length - 1]
-            : undefined;
-    if (!next) return;
-    event.preventDefault();
-    next.focus();
-  };
 
   return (
     <div
@@ -243,7 +225,7 @@ function SectionTabs({
       aria-label={t("shell:titleBar.sectionsAriaLabel")}
       inert={locked}
       data-locked={locked || undefined}
-      onKeyDown={onKeyDown}
+      onKeyDown={moveTabFocus}
     >
       {SECTION_ORDER.map((id) => (
         <button

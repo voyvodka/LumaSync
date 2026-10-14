@@ -44,10 +44,29 @@ describe("RenameDialog", () => {
     );
   });
 
+  it("leaves the field's focus look to the stylesheet", () => {
+    // The ring was inline and on at rest, and focus swapped the border by hand.
+    expect(renderDialog().getByRole("textbox").getAttribute("style")).toBeNull();
+  });
+
   it("cancels on Escape raised from inside the dialog", () => {
     const { onCancel } = renderDialog();
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels on Escape pressed in the name field", () => {
+    // The field stopped the key on its way up, so Escape there did nothing.
+    const { onCancel } = renderDialog();
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Escape" });
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("wraps Shift+Tab from the name field to the last button", () => {
+    renderDialog();
+    const buttons = screen.getAllByRole("button");
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(buttons[buttons.length - 1]);
   });
 
   it("keeps Tab inside the dialog", () => {

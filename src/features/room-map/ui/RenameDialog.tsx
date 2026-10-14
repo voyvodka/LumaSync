@@ -45,7 +45,7 @@ export function RenameDialog({
       // backdrop covers the drag region and the window controls, so the window
       // cannot be moved or closed for as long as the dialog is up.
       className="fixed right-0 bottom-0 left-0 z-[200] flex items-center justify-center"
-      style={{ top: "var(--lm-titlebar-h)", background: "rgba(7, 8, 10, 0.55)" }}
+      style={{ top: "var(--lm-titlebar-h)", background: "var(--lm-scrim)" }}
       onClick={onCancel}
       role="dialog"
       aria-modal="true"
@@ -67,25 +67,12 @@ export function RenameDialog({
           type="text"
           value={value}
           onChange={(e) => setValue(e.target.value)}
+          // No stopPropagation: Escape and Tab must reach the dialog's own
+          // handler, and the editor already ignores keys from a field.
           onKeyDown={(e) => {
-            e.stopPropagation();
             if (e.key === "Enter") handleSubmit();
-            // ESC handled by document-level trap; stopPropagation still
-            // keeps room-map shortcuts from leaking through Tab/Enter.
           }}
-          className="w-full rounded px-2 py-1.5 text-sm focus:outline-none"
-          style={{
-            background: "var(--lm-panel-2)",
-            border: "1px solid var(--lm-line-2)",
-            color: "var(--lm-ink)",
-            boxShadow: "var(--lm-focus-ring-soft)",
-          }}
-          onFocus={(e) => {
-            e.currentTarget.style.borderColor = "rgba(255, 176, 32, 0.45)";
-          }}
-          onBlur={(e) => {
-            e.currentTarget.style.borderColor = "var(--lm-line-2)";
-          }}
+          className="lm-room-rename-input w-full rounded px-2 py-1.5 text-sm"
           autoFocus
         />
         <div className="mt-3 flex justify-end gap-2">

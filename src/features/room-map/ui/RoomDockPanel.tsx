@@ -1,6 +1,6 @@
 // Channel-under-zone grouping here is presentation only — `zoneId` is the join
 // key on disk. Dock rationale: docs/architecture/room-map.md.
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type {
@@ -12,6 +12,7 @@ import type {
   TvAnchorPlacement,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
+import { moveTabFocus } from "@/shared/lib/tablistKeys";
 import { HueZoneInspector } from "./HueZoneInspector";
 import { HueZonesTab } from "./HueZonesTab";
 import { ObjectsTab } from "./ObjectsTab";
@@ -173,7 +174,12 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
     onDeleteHueZone !== undefined &&
     onRenameHueZone !== undefined;
 
-  const [activeTab, setActiveTab] = useState<DockTab>("objects");
+  const [chosenTab, setChosenTab] = useState<DockTab>("objects");
+  // A Hue tab left open when zone editing goes away showed an empty panel and
+  // left the tablist with no tab stop.
+  const activeTab: DockTab = chosenTab === "hueZones" && !hueZoneEditing ? "objects" : chosenTab;
+  const idBase = useId();
+  const panelId = `${idBase}-panel`;
 
   // Resolved once; the priority order and why it was swapped are on
   // `resolveInspectorTarget` itself.
@@ -297,17 +303,20 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
 
   return (
     <aside className="lm-room-dock" aria-label={t("roomMap:objectPanel.dockAriaLabel")}>
-      <div className="lm-room-dock-tabs" role="tablist">
+      <div className="lm-room-dock-tabs" role="tablist" onKeyDown={moveTabFocus}>
         {tabs
           .filter((tab) => tab.visible)
           .map((tab) => (
             <button
               key={tab.id}
+              id={`${idBase}-tab-${tab.id}`}
               type="button"
               role="tab"
               aria-selected={activeTab === tab.id}
+              aria-controls={activeTab === tab.id ? panelId : undefined}
+              tabIndex={activeTab === tab.id ? 0 : -1}
               className="lm-room-dock-tab"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => setChosenTab(tab.id)}
             >
               <span className="lm-room-dock-tab-label">{tab.label}</span>
               {tab.count !== undefined && tab.count > 0 && (
@@ -318,7 +327,12 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
       </div>
 
       <div className="lm-room-dock-body">
-        <div className="lm-room-dock-list" role="tabpanel">
+        <div
+          className="lm-room-dock-list"
+          role="tabpanel"
+          id={panelId}
+          aria-labelledby={`${idBase}-tab-${activeTab}`}
+        >
           {activeTab === "objects" ? (
             <ObjectsTab
               config={config}
@@ -331,7 +345,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
               onRenameFurniture={onRenameFurniture}
               onToggleLock={onToggleLock}
             />
-          ) : activeTab === "hueZones" && hueZoneEditing ? (
+          ) : (
             <HueZonesTab
               hueZones={hueZones}
               channels={hueChannels ?? config.hueChannels}
@@ -351,7 +365,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
               isRefreshingChannels={isRefreshingChannels}
               channelsStatus={channelsStatus}
             />
-          ) : null}
+          )}
         </div>
 
         <div className="lm-room-dock-inspect" role="region" aria-label={t("roomMap:inspector.regionAriaLabel")}>

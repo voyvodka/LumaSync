@@ -1229,6 +1229,18 @@
 .lm-room-propbar-input:disabled {
   cursor: not-allowed;
 }
+
+.lm-room-rename-input {
+  background: var(--lm-panel-2);
+  border: 1px solid var(--lm-line-2);
+  color: var(--lm-ink);
+}
+/* The transparent outline is what forced colours paint; the ring alone drops there. */
+.lm-room-rename-input:focus-visible {
+  outline: 2px solid transparent;
+  border-color: var(--lm-amber);
+  box-shadow: var(--lm-focus-ring-soft);
+}
 @media (forced-colors: active) {
   .lm-room-propbar {
     border-color: CanvasText;

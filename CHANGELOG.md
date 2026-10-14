@@ -532,6 +532,11 @@ https://keepachangelog.com/en/1.1.0/
 - Room map: "Reset map" keeps your Hue lights, Hue zones and the strips connected in Devices. Room
   height can be edited, a Hue light's height slider inside a zone only covers the heights the zone
   allows, and Hue lights are numbered the same in the list as on the map.
+- Room map: keys stay with what has focus. An arrow on a panel tab or in a menu no longer also
+  moves the selected object, Delete there no longer removes it, and Space presses a focused button
+  instead of starting a pan. The panel's tabs move with the arrow keys, and the right-click menu
+  takes focus, moves with the arrow keys and hands focus back to the map when it closes. A Hue
+  light no longer opens an empty right-click menu, and Escape in the rename box closes it.
 - Settings: "Launch at login" now sets what you asked for instead of flipping whatever the system
   last reported, and says so when it cannot. "Check for updates" tells you when you are already on
   the latest version. When settings cannot be saved, one notice says so instead of switches quietly

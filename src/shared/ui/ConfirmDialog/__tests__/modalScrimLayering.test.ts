@@ -16,6 +16,7 @@ const titleBarSource = src("features/shell/TitleBar.tsx");
 const updateModalSource = src("features/updater/UpdateModal.tsx");
 const updateModalCss = src("features/updater/UpdateModal.module.css");
 const confirmDialogCss = src("shared/ui/ConfirmDialog/ConfirmDialog.module.css");
+const renameDialogSource = src("features/room-map/ui/RenameDialog.tsx");
 
 describe("modal scrim layering", () => {
   it("keeps both scrims below the title bar", () => {
@@ -28,6 +29,17 @@ describe("modal scrim layering", () => {
       expect(inset, `${selector} must declare an inset`).toBeDefined();
       expect(inset, `${selector} must clear the title bar`).toContain("var(--lm-titlebar-h)");
     }
+  });
+
+  it("dims the page by one token, so the modals stay the same depth", () => {
+    for (const [css, selector] of [
+      [updateModalCss, ".scrim"],
+      [confirmDialogCss, ".scrim"],
+    ] as const) {
+      const block = css.slice(css.indexOf(`${selector} {`));
+      expect(/background:\s*([^;]+);/.exec(block.slice(0, block.indexOf("}")))?.[1]).toBe("var(--lm-scrim)");
+    }
+    expect(renameDialogSource).toContain('background: "var(--lm-scrim)"');
   });
 
   it("pins the scrim offset to the title bar's real height", () => {

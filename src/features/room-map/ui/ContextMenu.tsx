@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { cx } from "@/shared/lib/cx";
 
 export interface ContextMenuAction {
@@ -27,6 +27,9 @@ interface ContextMenuProps {
  *    came from the menu animating from the raw mouse coords to the
  *    clamped position on the same frame.
  *  - Each action clears the 32 px tap-target floor.
+ *  - A WAI-ARIA menu: focus moves to the first item on open, the arrows,
+ *    Home and End move between items, Tab or Escape closes, and focus goes
+ *    back to where it was when the menu closes.
  */
 export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
@@ -52,6 +55,25 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
     setPos({ left, top });
   }, [x, y]);
 
+  // Not on mount: the first pass is `visibility: hidden`, and a hidden item
+  // cannot take focus.
+  const placed = pos !== null;
+  useEffect(() => {
+    if (placed) ref.current?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')?.focus();
+  }, [placed]);
+
+  useEffect(() => {
+    const returnTo = document.activeElement;
+    return () => {
+      // Only when focus is still ours to give: an action that opened a dialog
+      // has already moved it.
+      const now = document.activeElement;
+      if (returnTo instanceof HTMLElement && returnTo.isConnected && (now === null || now === document.body)) {
+        returnTo.focus();
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
@@ -69,10 +91,41 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
     };
   }, [onClose]);
 
+  // A Hue channel has no action of its own; right-clicking one drew an empty
+  // frame with nothing to focus.
+  if (actions.length === 0) return null;
+
+  const handleMenuKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Tab") {
+      e.preventDefault();
+      onClose();
+      return;
+    }
+    const items = Array.from(
+      e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)'),
+    );
+    if (items.length === 0) return;
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    const next =
+      e.key === "ArrowDown"
+        ? items[(at + 1) % items.length]
+        : e.key === "ArrowUp"
+          ? items[(at - 1 + items.length) % items.length]
+          : e.key === "Home"
+            ? items[0]
+            : e.key === "End"
+              ? items[items.length - 1]
+              : undefined;
+    if (!next) return;
+    e.preventDefault();
+    next.focus();
+  };
+
   return (
     <div
       ref={ref}
       role="menu"
+      onKeyDown={handleMenuKeyDown}
       className="lm-context-menu"
       style={{
         // First-pass render is invisible at the raw cursor coords so
@@ -89,6 +142,7 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
           key={i}
           type="button"
           role="menuitem"
+          tabIndex={-1}
           aria-label={action.label}
           className={cx(
             "lm-context-menu-item",
