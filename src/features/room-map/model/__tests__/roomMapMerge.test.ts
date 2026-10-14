@@ -95,6 +95,36 @@ describe("mergeEditorSave", () => {
     expect("backgroundImagePath" in JSON.parse(JSON.stringify(saved))).toBe(false);
   });
 
+  // Conflicts: the other writers (the USB roster, LED Setup's count sync, Devices' channel map) only
+  // add records or change fields, so the editor's save is the later word on anything both touched.
+  it("lets the editor's value win when it and another writer changed the same field", () => {
+    const base = map({ usbStrips: [strip("a", 60)] });
+    const next = { ...base, usbStrips: [strip("a", 120)] };
+    const stored = { ...base, usbStrips: [strip("a", 90)] };
+
+    expect(mergeEditorSave(stored, base, next).usbStrips[0]?.ledCount).toBe(120);
+  });
+
+  it("keeps the editor's move of a channel and the field only Devices changed on it", () => {
+    const placed = channel(0, "area-1", 0.2);
+    const base = map({ hueChannels: [placed] });
+    const next = { ...base, hueChannels: [{ ...placed, x: 0.6, y: 0.4 }] };
+    const stored = { ...base, hueChannels: [{ ...placed, x: 0.3, z: 0.5, zOrigin: "bridge" as const }] };
+
+    const saved = mergeEditorSave(stored, base, next).hueChannels[0];
+
+    expect(saved).toMatchObject({ x: 0.6, y: 0.4, z: 0.5, zOrigin: "bridge" });
+  });
+
+  it("keeps a strip deleted when another writer touched it while the editor deleted it", () => {
+    const a = strip("a");
+    const base = map({ usbStrips: [a, strip("b")] });
+    const next = { ...base, usbStrips: [strip("b")] };
+    const stored = { ...base, usbStrips: [{ ...a, portName: "/dev/cu.usbserial-10" }, strip("b")] };
+
+    expect(mergeEditorSave(stored, base, next).usbStrips.map((s) => s.stripId)).toEqual(["b"]);
+  });
+
   it("writes the editor's map whole when it has no baseline", () => {
     const next = map({ usbStrips: [strip("a")] });
     const stored = map({ usbStrips: [strip("a"), strip("b")] });

@@ -11,6 +11,7 @@ use super::live::AmbilightLiveSettings;
 use super::pacing::resolve_quality_config;
 use super::runtime::LightingRuntimeOwner;
 use super::transition::{apply_mode_change, set_active_port, stop_previous, Outgoing};
+use super::tuning::solid_output_for;
 use super::usb_output::UsbOutputPlan;
 use super::worker::start_ambilight_worker;
 use super::{
@@ -402,6 +403,63 @@ fn solid_mode_routes_to_wled_sink_and_never_touches_the_serial_bridge() {
     assert!(
         writes.is_empty(),
         "the serial bridge must see zero writes when a WLED sink is registered"
+    );
+}
+
+#[test]
+fn a_solid_retune_on_wled_moves_the_running_hold_to_the_new_colour() {
+    let socket = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind a receiver");
+    socket
+        .set_read_timeout(Some(Duration::from_millis(1500)))
+        .expect("read timeout");
+    let config = WledSinkConfig {
+        ip: "127.0.0.1".parse().expect("valid IPv4"),
+        port: socket.local_addr().expect("receiver address").port(),
+        led_count: 4,
+        protocol: WledProtocol::Drgb,
+    };
+    let mut owner = owner_with_fake_sender();
+    let result = apply_mode_change(
+        &mut owner,
+        solid_mode(),
+        false,
+        None,
+        Some(config),
+        None,
+        None,
+        None,
+        None,
+    );
+    assert_eq!(result.status.code, "SOLID_MODE_APPLIED");
+    assert!(owner.solid_hold.is_some(), "Solid on WLED runs a hold");
+
+    let blue = SolidColorPayload {
+        r: 0,
+        g: 0,
+        b: 255,
+        brightness: 1.0,
+        kelvin: None,
+    };
+    solid_output_for(&owner, UsbOutputPlan::Wled(config))
+        .send(&blue)
+        .expect("the retune's own frame");
+
+    // DRGB: protocol byte, timeout byte, then RGB per LED.
+    let mut buf = [0u8; 64];
+    let mut next = || {
+        let (len, _) = socket.recv_from(&mut buf).expect("a frame");
+        buf[..len].to_vec()
+    };
+    let retuned = loop {
+        let frame = next();
+        if frame[2..5] == [0, 0, 255] {
+            break frame;
+        }
+    };
+    assert_eq!(
+        next(),
+        retuned,
+        "the hold must resend the retuned colour, not the one Solid started with"
     );
 }
 

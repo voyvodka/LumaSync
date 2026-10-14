@@ -872,6 +872,26 @@ mod tests {
     }
 
     #[test]
+    fn a_far_light_shows_the_minority_colour_the_plain_mean_greys_out() {
+        let mut a = first_ambience(&grey_with_red(8));
+        let plain = a.frame_mean.map(linear_to_srgb_u8);
+        let mut colors = vec![[220, 30, 30], [128, 128, 128]];
+        let mut state = LightSetState::default();
+        a.process(
+            &mut colors,
+            &LightTopology::Points(vec![(-0.8, 0.9), (0.8, -0.9)]),
+            &[1.0, 0.0],
+            &mut state,
+        );
+        let far = colors[1];
+        let red_lead = |c: [u8; 3]| c[0] as i32 - c[2] as i32;
+        assert!(
+            red_lead(far) > red_lead(plain) + 10,
+            "far light {far:?} should be clearly redder than the plain mean {plain:?}"
+        );
+    }
+
+    #[test]
     fn a_uniform_frame_ambience_is_its_plain_mean() {
         let a = first_ambience(&uniform([200, 40, 40]));
         let (ambience, mean) = (a.ambience.unwrap(), a.frame_mean);

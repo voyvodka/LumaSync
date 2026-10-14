@@ -16,6 +16,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use super::config::{normalize_effect, unix_ms_now, EffectId};
 use super::effect_source::{effect_ambilight, EffectLiveSlot};
 use super::live::{retune_ambilight_live, AmbilightLiveSettings};
+use super::runtime::LightingRuntimeOwner;
 use super::snapshot::SnapshotSink;
 use super::usb_output::{SolidHold, SolidUsbOutput, UsbOutputPlan};
 use super::{
@@ -483,10 +484,9 @@ pub(crate) fn accepting_for_running<R: Runtime>(
             let needs_usb = targets.is_empty() || targets.iter().any(|t| t == "usb");
             let plan = driven.map(UsbOutputPlan::from);
             Some(Accepting::Solid {
-                usb: plan.filter(|_| needs_usb).map(|plan| {
-                    SolidUsbOutput::for_mode(&owner.output_bridge, plan, &owner.active_mode)
-                        .with_hold(owner.solid_hold.as_ref().map(SolidHold::handle))
-                }),
+                usb: plan
+                    .filter(|_| needs_usb)
+                    .map(|plan| solid_output_for(&owner, plan)),
                 hue: targets.iter().any(|t| t == "hue").then_some(hue_output),
                 hue_correction: owner
                     .active_mode
@@ -496,6 +496,16 @@ pub(crate) fn accepting_for_running<R: Runtime>(
             })
         }
     }
+}
+
+/// The running Solid mode's strip output, carrying the hold a WLED colour is resent by, so a retune
+/// repaints the strip and the hold's next resend is the new colour rather than the old one.
+pub(super) fn solid_output_for(
+    owner: &LightingRuntimeOwner,
+    plan: UsbOutputPlan,
+) -> SolidUsbOutput {
+    SolidUsbOutput::for_mode(&owner.output_bridge, plan, &owner.active_mode)
+        .with_hold(owner.solid_hold.as_ref().map(SolidHold::handle))
 }
 
 /// Apply a brightness or colour change to the running mode without a
