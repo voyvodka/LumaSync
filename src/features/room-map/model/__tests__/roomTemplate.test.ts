@@ -31,14 +31,18 @@ const TV_TEMPLATE = map({
 
 describe("isRoomMapEmpty", () => {
   it("still offers templates when the only strip is the one a connect added", () => {
-    expect(isRoomMapEmpty(map({ usbStrips: [strip({ portName: PORT })] }), 0)).toBe(true);
+    expect(isRoomMapEmpty(map({ usbStrips: [strip({ portName: PORT })] }))).toBe(true);
   });
 
-  it("does not when the user drew a strip, placed a TV or furniture, or Hue channels show", () => {
-    expect(isRoomMapEmpty(map({ usbStrips: [strip()] }), 0)).toBe(false);
-    expect(isRoomMapEmpty(map({ tvAnchor: TV_TEMPLATE.tvAnchor }), 0)).toBe(false);
-    expect(isRoomMapEmpty(map({ furniture: TV_TEMPLATE.furniture }), 0)).toBe(false);
-    expect(isRoomMapEmpty(map(), 2)).toBe(false);
+  it("still offers them with the Hue channels the bridge seeded, which a template keeps", () => {
+    const channel = { channelIndex: 0, x: 1, y: 1, z: 0 } as HueChannelPlacement;
+    expect(isRoomMapEmpty(map({ hueChannels: [channel] }))).toBe(true);
+  });
+
+  it("does not when the user drew a strip, placed a TV or furniture", () => {
+    expect(isRoomMapEmpty(map({ usbStrips: [strip()] }))).toBe(false);
+    expect(isRoomMapEmpty(map({ tvAnchor: TV_TEMPLATE.tvAnchor }))).toBe(false);
+    expect(isRoomMapEmpty(map({ furniture: TV_TEMPLATE.furniture }))).toBe(false);
   });
 });
 

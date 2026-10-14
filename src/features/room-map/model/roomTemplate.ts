@@ -1,17 +1,19 @@
 import type { RoomMapConfig, UsbStripPlacement } from "@/shared/contracts/roomMap";
 
 /**
- * Whether the editor opens on the template picker: nothing the user placed is
+ * Whether the room map opens on the template picker: nothing the user placed is
  * on the map. A strip linked to a port does not count — connecting a
  * controller on Devices → USB writes one, and that must not take the templates
- * away from a first-time USB user. A strip drawn without a port does count.
+ * away from a first-time USB user. Hue channels do not count either: the
+ * bridge sync seeds them a moment after the map opens, so counting them took
+ * the picker away under a first-time Hue user's pointer. A template keeps both.
+ * A strip drawn without a port does count.
  */
-export function isRoomMapEmpty(config: RoomMapConfig, visibleHueChannelCount: number): boolean {
+export function isRoomMapEmpty(config: RoomMapConfig): boolean {
   return (
     !config.tvAnchor &&
     config.furniture.length === 0 &&
-    config.usbStrips.every((strip) => Boolean(strip.portName)) &&
-    visibleHueChannelCount === 0
+    config.usbStrips.every((strip) => Boolean(strip.portName))
   );
 }
 

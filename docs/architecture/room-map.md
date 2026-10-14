@@ -37,7 +37,9 @@ room, and the room hands its WebGL context back under the plan. The one thing a 
 plan's zoom and pan, which fit the room again on return. The View | Edit switch is the surface's
 own, floating over both faces' top bars, so a keyboard switch keeps focus on it. The face is not
 stored: the map always opens on the room, and an empty map with no history opens on the templates
-before either face.
+before either face. Empty means nothing the user placed: the strip a connect on Devices links and the
+Hue channels the bridge sync seeds do not count, since the sync lands a moment after the map opens
+and once took the picker away under a first-time Hue user's pointer; a template keeps both.
 
 **The plan draws a piece the way the 3D room builds it.** `objects/FurnitureGlyph.tsx` draws each
 piece from above from the same `FurnitureModel` the room reads (`useFurnitureModels`, which keeps a

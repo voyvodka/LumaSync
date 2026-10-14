@@ -95,7 +95,7 @@ export function RoomMapSurface({
   }
 
   // An empty map with no edit history opens on the templates, in either face.
-  if (isRoomMapEmpty(config, doc.visibleHueChannels.length) && !doc.canUndo) {
+  if (isRoomMapEmpty(config) && !doc.canUndo) {
     return <TemplateSelector onSelect={handleTemplateSelect} />;
   }
 

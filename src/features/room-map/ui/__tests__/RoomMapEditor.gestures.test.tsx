@@ -209,7 +209,10 @@ describe("RoomMapEditor — stepping a typed position is one undo step and one s
   it("coalesces a run of arrow steps in a Hue light's X field", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     stored(
-      { hueChannels: [{ channelIndex: 0, x: 0.5, y: 0, z: 0, entertainmentAreaId: "area-b", label: "Lamp B" }] },
+      {
+        tvAnchor: { x: 2, y: 0.3, width: 1, height: 0.1 },
+        hueChannels: [{ channelIndex: 0, x: 0.5, y: 0, z: 0, entertainmentAreaId: "area-b", label: "Lamp B" }],
+      },
       { lastHueAreaId: "area-b" },
     );
     const { root } = await renderEditor();

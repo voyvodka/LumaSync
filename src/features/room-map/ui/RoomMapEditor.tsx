@@ -293,7 +293,8 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
   );
 
   const hasTv = !!config.tvAnchor;
-  const isEmpty = isRoomMapEmpty(config, visibleHueChannels.length);
+  // The hint says nothing is placed, so it waits for the lights too.
+  const isEmpty = isRoomMapEmpty(config) && visibleHueChannels.length === 0;
 
   const handleSelectObject = useCallback((id: string | null) => {
     select(id);

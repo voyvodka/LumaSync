@@ -338,6 +338,8 @@ https://keepachangelog.com/en/1.1.0/
   nudges and "Move to" only touch the area on screen. Before, a light with the same number in
   another area could be listed, shown or moved with it. Dragging a Hue light that
   belongs to a zone now starts from where its dot is drawn instead of jumping.
+- Room map: opened for the first time with a Hue bridge paired, it offers the templates and keeps
+  offering them; the Hue lights the bridge reports used to make them vanish a moment after opening.
 - Room map: the plan draws each piece from above as what it is — a sofa with its seats and back,
   an L sofa's chaise, a bed with its pillows, a desk with its screen and keyboard, a plant's leaves
   in its pot, a rug with its fringe — in the colours the piece has, instead of a coloured box. A

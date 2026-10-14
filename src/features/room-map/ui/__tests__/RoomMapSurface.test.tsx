@@ -156,6 +156,12 @@ describe("RoomMapSurface — faces", () => {
     expect(screen.queryByRole("radiogroup")).toBeNull();
     expect(screen.queryByTestId("room-view-3d")).toBeNull();
   });
+
+  it("keeps the templates for a map holding only the Hue channels the bridge seeded", async () => {
+    stored({ hueChannels: [{ channelIndex: 0, x: 0.5, y: 0, z: 0 }] });
+    await renderSurface();
+    expect(screen.getByTestId("templates")).toBeInTheDocument();
+  });
 });
 
 describe("RoomMapSurface — a room that cannot open", () => {
