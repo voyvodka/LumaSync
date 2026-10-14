@@ -170,6 +170,9 @@ export function mergeHueChannels(
 // ---------------------------------------------------------------------------
 
 export interface UsbStripPlacement {
+  /** The placement's own key: unique on the map, the editor's object id and the save-merge key.
+   *  Not a `LedStrip.id`, even when the two are equal — the strip a placement draws is the one on
+   *  its `portName`. */
   stripId: string;
   /** Starting corner position on room perimeter */
   startX: number;
