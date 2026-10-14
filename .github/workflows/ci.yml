@@ -183,7 +183,9 @@ jobs:
         run: bun run tauri build --debug --no-bundle --config src-tauri/tauri.windows-smoke.conf.json
 
       - name: Dev mock absent from the built frontend
-        # check:all proves the structure; this reads the dist/ the build above embedded.
+        # check:all proves the structure; this reads the dist/ the build above embedded. The
+        # frontend is the same on every OS, and the script builds paths POSIX-style.
+        if: runner.os != 'Windows'
         run: node scripts/verify/mock-not-shipped.mjs --dist
 
       - name: Launch smoke test (Linux)
