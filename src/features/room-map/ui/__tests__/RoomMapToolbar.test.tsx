@@ -73,6 +73,24 @@ describe("RoomMapToolbar", () => {
     expect(badge?.textContent).toBe("3");
   });
 
+  it("renders no 3D switch where the view is not built in", () => {
+    render(<RoomMapToolbar {...BASE_PROPS} />);
+    expect(screen.queryByTestId("room-view-3d-toggle")).not.toBeInTheDocument();
+  });
+
+  it("3D switch mirrors its state in aria-pressed and toggles on click", () => {
+    const onToggle = vi.fn<() => void>();
+    const { rerender } = render(<RoomMapToolbar {...BASE_PROPS} view3d={{ on: false, onToggle }} />);
+    const button = screen.getByTestId("room-view-3d-toggle");
+    expect(button).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(button);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+
+    rerender(<RoomMapToolbar {...BASE_PROPS} view3d={{ on: true, onToggle }} />);
+    expect(button).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("renders no room-aware chip unless room-aware is on", () => {
     render(<RoomMapToolbar {...BASE_PROPS} />);
     expect(

@@ -6,6 +6,8 @@ export default {
     addUsb: "Add LED Strip",
     addImage: "Add Image",
     settingsAriaLabel: "Map Settings",
+    view3d: "3D",
+    view3dLabel: "The room in 3D",
     undo: "Undo",
     redo: "Redo",
   },

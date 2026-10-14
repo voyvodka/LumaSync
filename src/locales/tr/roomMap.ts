@@ -9,6 +9,8 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     addUsb: "LED Şerit Ekle",
     addImage: "Resim Ekle",
     settingsAriaLabel: "Harita Ayarları",
+    view3d: "3D",
+    view3dLabel: "Odanın 3D görünümü",
     undo: "Geri Al",
     redo: "Yinele",
   },

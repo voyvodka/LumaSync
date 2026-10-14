@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { ROOM_VIEW_3D_AVAILABLE, RoomView3DHost } from "@/features/room-view/ui/RoomView3DHost";
 import { isEditableTarget } from "@/shared/lib/editableTarget";
 import { useRoomMapState } from "../state/useRoomMapState";
 import { RoomMapCanvas } from "./RoomMapCanvas";
@@ -125,6 +126,7 @@ export function RoomMapEditor({
     error,
   } = useRoomMapState();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [show3d, setShow3d] = useState(false);
   const [renameTarget, setRenameTarget] = useState<{ id: string; currentLabel: string } | null>(null);
   const [objectPanelOpen, setObjectPanelOpen] = useState(true);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; targetId: string } | null>(null);
@@ -340,11 +342,18 @@ export function RoomMapEditor({
     if (id !== null) selectHueZone(null);
   }, [select, selectHueZone]);
 
+  const handleView3dFail = useCallback((error: unknown) => {
+    console.error("[LumaSync] room 3D view failed to open:", error);
+    setShow3d(false);
+  }, []);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       // A field's keys are the field's: Backspace in the LED count deleted the
       // strip, and Cmd+Z replaced the field's own undo with the editor's.
       if (isEditableTarget(e.target)) return;
+      // The 2D selection is hidden under the 3D view; Delete or an arrow would change it unseen.
+      if (show3d) return;
       // Undo: Cmd+Z (Mac) / Ctrl+Z (Win/Linux)
       if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
@@ -388,7 +397,7 @@ export function RoomMapEditor({
         handleArrowPan(e);
       }
     },
-    [handleDelete, handleRotate, handleArrowNudge, handleArrowPan, handleDuplicate, undo, redo, select, selectedId, fitToView],
+    [handleDelete, handleRotate, handleArrowNudge, handleArrowPan, handleDuplicate, undo, redo, select, selectedId, fitToView, show3d],
   );
 
   const handleDimensionsChange = useCallback(
@@ -518,6 +527,7 @@ export function RoomMapEditor({
         canRedo={canRedo}
         onUndo={undo}
         onRedo={redo}
+        view3d={ROOM_VIEW_3D_AVAILABLE ? { on: show3d, onToggle: () => setShow3d((on) => !on) } : undefined}
       />
       <div className="flex flex-1 min-h-0">
         <div
@@ -532,6 +542,10 @@ export function RoomMapEditor({
             onAddUsb={handleAddUsb}
             onAddImage={() => void handleAddImage()}
           />
+
+          {show3d && (
+            <RoomView3DHost config={scopedConfig} label={t("roomMap:toolbar.view3dLabel")} onFail={handleView3dFail} />
+          )}
 
           {settingsOpen && (
             <RoomMapSettingsPopover
@@ -674,25 +688,29 @@ export function RoomMapEditor({
 
           </RoomMapCanvas>
 
-          <ZoomControl
-            zoom={zoom}
-            canvasSize={canvasSize}
-            panOffset={panOffset}
-            onZoomChange={setZoom}
-            onPanChange={setPanOffset}
-            onFitToView={() => fitToView(16)}
-            isMac={IS_MAC}
-          />
+          {!show3d && (
+            <ZoomControl
+              zoom={zoom}
+              canvasSize={canvasSize}
+              panOffset={panOffset}
+              onZoomChange={setZoom}
+              onPanChange={setPanOffset}
+              onFitToView={() => fitToView(16)}
+              isMac={IS_MAC}
+            />
+          )}
 
           {/* Mouse coordinate display — fixed to bottom-right of canvas container */}
-          <MouseCoordinateDisplay
-            canvasContainerRef={canvasContainerRef}
-            panOffset={panOffset}
-            pxPerMeter={pxPerMeter}
-            zoom={zoom}
-            widthMeters={widthMeters}
-            depthMeters={depthMeters}
-          />
+          {!show3d && (
+            <MouseCoordinateDisplay
+              canvasContainerRef={canvasContainerRef}
+              panOffset={panOffset}
+              pxPerMeter={pxPerMeter}
+              zoom={zoom}
+              widthMeters={widthMeters}
+              depthMeters={depthMeters}
+            />
+          )}
         </div>
 
         {/* Right dock — consolidated tabbed Objects / Zones / Hue Zones / Properties */}

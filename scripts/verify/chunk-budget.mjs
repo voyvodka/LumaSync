@@ -28,8 +28,11 @@ const ROOT = new URL("../..", import.meta.url).pathname;
 /** kB as Vite reports them (1000 bytes). */
 const ENTRY_BUDGET_KB = 345;
 const LAZY_BUDGET_KB = 180;
-/** Lazy chunks with a budget of their own, matched on the chunk's name before its hash. */
-const NAMED = {};
+/** Lazy chunks with a budget of their own, matched on the chunk's name before its hash; each is
+ *  explained in build-and-release.md. `spikeOnly` must be absent from a build without the flag. */
+const NAMED = {
+  RoomView3D: { budget: 600, spikeOnly: "VITE_ROOM_VIEW_SPIKE" },
+};
 
 let failures = 0;
 const pass = (msg) => console.log(`  ✔  ${msg}`);
@@ -74,15 +77,19 @@ try {
     const lazy = Object.entries(manifest)
       .filter(([key, chunk]) => !entryKeys.has(key) && isJs(chunk.file))
       .map(([, chunk]) => chunk.file);
-    let largest = { file: "", bytes: 0 };
+    let largest = { file: "", bytes: 0, budget: LAZY_BUDGET_KB };
     for (const file of new Set(lazy)) {
       const bytes = size(file);
       const name = basename(file).replace(/-[\w-]{8}\.js$/, "");
-      const budget = NAMED[name] ?? LAZY_BUDGET_KB;
+      const named = NAMED[name];
+      if (named?.spikeOnly && process.env[named.spikeOnly] !== "1") {
+        fail(`lazy ${basename(file)} is built without ${named.spikeOnly}=1 — it would ship`);
+      }
+      const budget = named?.budget ?? LAZY_BUDGET_KB;
       if (bytes > budget * 1000) fail(`lazy ${basename(file)} ${kb(bytes)} kB over its ${budget} kB budget`);
-      if (bytes > largest.bytes) largest = { file, bytes };
+      if (bytes > largest.bytes) largest = { file, bytes, budget };
     }
-    pass(`largest lazy chunk ${basename(largest.file)} ${kb(largest.bytes)} kB (budget ${LAZY_BUDGET_KB} kB)`);
+    pass(`largest lazy chunk ${basename(largest.file)} ${kb(largest.bytes)} kB (budget ${largest.budget} kB)`);
   }
 } finally {
   rmSync(outDir, { recursive: true, force: true });
@@ -90,7 +97,7 @@ try {
 
 console.log("\n============================================");
 if (failures > 0) {
-  console.log(`✘  ${failures} chunk(s) over budget.`);
+  console.log(`✘  ${failures} chunk check(s) failed.`);
   process.exit(1);
 }
 console.log("✔  Chunks within budget.");

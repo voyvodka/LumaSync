@@ -121,11 +121,28 @@ vi.mock("../RoomMapCanvas", () => ({
 }));
 
 vi.mock("../RoomMapToolbar", () => ({
-  RoomMapToolbar: ({ onToggleSettings }: { onToggleSettings: () => void }) => (
+  RoomMapToolbar: ({
+    onToggleSettings,
+    view3d,
+  }: {
+    onToggleSettings: () => void;
+    view3d?: { on: boolean; onToggle: () => void };
+  }) => (
     <div data-testid="room-map-toolbar">
       <button type="button" data-testid="toggle-settings" onClick={onToggleSettings} />
+      {view3d && <button type="button" data-testid="toggle-3d" onClick={view3d.onToggle} />}
     </div>
   ),
+}));
+
+const view3dHost = vi.hoisted(() => ({ fail: null as ((error: unknown) => void) | null }));
+
+vi.mock("@/features/room-view/ui/RoomView3DHost", () => ({
+  ROOM_VIEW_3D_AVAILABLE: true,
+  RoomView3DHost: ({ onFail }: { onFail: (error: unknown) => void }) => {
+    view3dHost.fail = onFail;
+    return <div data-testid="room-view-3d" />;
+  },
 }));
 
 vi.mock("../RoomMapSettingsPopover", () => ({
@@ -552,5 +569,60 @@ describe("RoomMapEditor — resizing the room", () => {
     // Channels are fractions of the room and follow it with no write; adding
     // the metre shift once pushed x from 0.5 to 1.5, outside [-1, 1].
     expect(patch).not.toHaveProperty("hueChannels");
+  });
+});
+
+describe("RoomMapEditor — 3D view", () => {
+  let realResizeObserver: typeof globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    realResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = StubResizeObserver as unknown as typeof globalThis.ResizeObserver;
+    persistState.apply.mockClear();
+  });
+
+  afterEach(() => {
+    globalThis.ResizeObserver = realResizeObserver;
+    vi.restoreAllMocks();
+  });
+
+  async function renderEditor() {
+    const view = render(<RoomMapEditor />);
+    await act(async () => {});
+    return view;
+  }
+
+  it("opens over the canvas from the toolbar and closes again", async () => {
+    const { getByTestId, queryByTestId } = await renderEditor();
+    expect(queryByTestId("room-view-3d")).toBeNull();
+
+    act(() => getByTestId("toggle-3d").click());
+    expect(getByTestId("room-view-3d")).toBeInTheDocument();
+
+    act(() => getByTestId("toggle-3d").click());
+    expect(queryByTestId("room-view-3d")).toBeNull();
+  });
+
+  it("does not delete the hidden 2D selection while the 3D view is open", async () => {
+    const { container, getByTestId } = await renderEditor();
+    act(() => getByTestId("select-tv").click());
+    act(() => getByTestId("toggle-3d").click());
+
+    act(() => {
+      fireEvent.keyDown(container.firstElementChild as HTMLElement, { key: "Backspace" });
+    });
+
+    expect(persistState.apply).not.toHaveBeenCalledWith({ tvAnchor: undefined });
+  });
+
+  it("turns the view off and logs when it cannot open", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { getByTestId, queryByTestId } = await renderEditor();
+    act(() => getByTestId("toggle-3d").click());
+
+    act(() => view3dHost.fail?.(new Error("no WebGL")));
+
+    expect(queryByTestId("room-view-3d")).toBeNull();
+    expect(error).toHaveBeenCalled();
   });
 });

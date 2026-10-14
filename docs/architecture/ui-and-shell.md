@@ -53,7 +53,13 @@ wait. Locale catalogues load per language (`LOCALE_LOADERS` in `i18n.ts`); a swi
 other catalogue before `changeLanguage`, so no frame renders raw keys. A TR window does not fetch
 the EN fallback — key parity is a CI gate, so the fallback is never reached. The label switch lives
 in `main.tsx` alone, and `scripts/verify/window-grants.mjs` follows `import()` as well as static
-imports, or a lazy section would drop out of the main window's required grants.
+imports, or a lazy section would drop out of the main window's required grants. The 3D room view
+(`room-view/ui/RoomView3D`, three.js) is the heaviest chunk and follows stricter rules: it is
+fetched only when the view opens and never warmed on idle; it mounts only while the window is
+visible (`RoomView3DHost`); it draws on a change rather than every frame; and on close it disposes
+the scene, forces the WebGL context lost and shrinks the canvas to 1×1 — measured, WebKit otherwise
+kept ~120 MB in its GPU process until something else collected the canvas. A failure to get a
+context turns the view off and logs, rather than reaching the window's error boundary.
 
 **Shell state reaches sections through stores.** `App.tsx` used to hand `SettingsLayout` every
 lighting value, the navigation state and the updater's, two of them as fresh closures, so the

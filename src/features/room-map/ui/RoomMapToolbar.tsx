@@ -16,6 +16,8 @@ interface RoomMapToolbarProps {
   canRedo?: boolean;
   onUndo?: () => void;
   onRedo?: () => void;
+  /** The 3D view's switch; absent where the view is not built in. */
+  view3d?: { on: boolean; onToggle: () => void };
 }
 
 const TOOLBAR_BTN = "lm-room-toolbar-btn";
@@ -30,6 +32,7 @@ export function RoomMapToolbar({
   canRedo = false,
   onUndo = () => {},
   onRedo = () => {},
+  view3d,
 }: RoomMapToolbarProps) {
   const { t } = useTranslation();
 
@@ -64,6 +67,18 @@ export function RoomMapToolbar({
       <div className="flex-1" />
 
       {roomAware && <RoomAwareIndicator variant="popover" status={roomAware} />}
+
+      {view3d && (
+        <button
+          type="button"
+          className={TOOLBAR_BTN}
+          aria-pressed={view3d.on}
+          onClick={view3d.onToggle}
+          data-testid="room-view-3d-toggle"
+        >
+          {t("roomMap:toolbar.view3d")}
+        </button>
+      )}
 
       <ShortcutsHelpButton />
 
