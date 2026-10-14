@@ -30,6 +30,7 @@ const PX_PER_METER = 80;
 
 const BASE_PROPS = {
   placement: BASE_PLACEMENT,
+  model: { kind: "upholstered", seats: 3, arms: true, corner: null } as const,
   pxPerMeter: PX_PER_METER,
   selected: false,
   gridStepPx: 40,

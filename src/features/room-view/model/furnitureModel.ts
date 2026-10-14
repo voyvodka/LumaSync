@@ -6,6 +6,7 @@ import {
   type FurnitureTone,
   type FurnitureVariant,
   type RoomMapConfig,
+  resolveFurnitureTone,
   resolveFurnitureType,
   resolveFurnitureVariant,
   resolveScreenKind,
@@ -94,6 +95,10 @@ function toLocal(item: FurniturePlacement, px: number, py: number): { x: number;
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 
 export const armWidth = (width: number) => clamp(width * 0.085, 0.1, 0.2);
+
+/** An L needs room for its chaise beside the back run; a smaller piece is built straight, in the
+ *  3D room and on the plan alike. */
+export const cornerFits = (width: number, depth: number) => depth >= 1.3 && width >= 1.6;
 
 function seating(width: number, corner: "left" | "right" | null = null): FurnitureModel {
   const arms = width >= ARMCHAIR_MIN_WIDTH;
@@ -416,7 +421,47 @@ export const FURNITURE_TONE_COLORS = {
   black: 0x2a2a2c,
 } satisfies Record<FurnitureTone, number>;
 
-/** A tone as a CSS colour, built at run time so no raw hex sits in the source. */
+/** A 0xRRGGBB colour as CSS, built at run time so no raw hex sits in the source. */
+export function hexCss(colour: number): string {
+  return `#${colour.toString(16).padStart(6, "0")}`;
+}
+
+/** A tone as a CSS colour. */
 export function toneCss(tone: FurnitureTone): string {
-  return `#${FURNITURE_TONE_COLORS[tone].toString(16).padStart(6, "0")}`;
+  return hexCss(FURNITURE_TONE_COLORS[tone]);
+}
+
+const FABRIC_TONES: ReadonlySet<FurnitureTone> = new Set(["slate", "caramel", "sage", "charcoal", "cream", "brick"]);
+
+/** What a piece is made of: its upholstery (a plant's pot, a rug's weave) and its wood, and whether
+ *  the wood is the user's tone rather than the default oak. The 3D room shades these into its
+ *  materials and the plan fills with them, so a piece is one colour in both. */
+export interface FurnitureColours {
+  fabric: number;
+  wood: number;
+  woodToned: boolean;
+}
+
+export function furnitureColours(item: FurniturePlacement, model: FurnitureModel): FurnitureColours {
+  // The model's own colours: one seat with arms reads as an armchair and takes the warm upholstery,
+  // a small armless seat is a slipper chair, a sofa stays slate.
+  const ownFabric =
+    model.kind === "upholstered"
+      ? model.arms && model.seats === 1 && model.corner === null
+        ? FURNITURE_TONE_COLORS.caramel
+        : !model.arms
+          ? FURNITURE_TONE_COLORS.sage
+          : FURNITURE_TONE_COLORS.slate
+      : model.kind === "bed"
+        ? FURNITURE_TONE_COLORS.cream
+        : model.kind === "rug"
+          ? FURNITURE_TONE_COLORS.slate
+          : FURNITURE_TONE_COLORS.sage;
+  const plain: FurnitureColours = { fabric: ownFabric, wood: FURNITURE_TONE_COLORS.oak, woodToned: false };
+  const tone = resolveFurnitureTone(item);
+  // A plant's tone is its pot, whichever family the tone comes from.
+  if (model.kind === "plant") return { ...plain, fabric: tone === undefined ? FURNITURE_TONE_COLORS.cream : FURNITURE_TONE_COLORS[tone] };
+  if (tone === undefined) return plain;
+  if (FABRIC_TONES.has(tone)) return { ...plain, fabric: FURNITURE_TONE_COLORS[tone] };
+  return { ...plain, wood: FURNITURE_TONE_COLORS[tone], woodToned: true };
 }

@@ -1,0 +1,44 @@
+@layer components {
+  .piece {
+    position: absolute;
+    z-index: 10;
+    transform-origin: center center;
+    user-select: none;
+    touch-action: none;
+  }
+
+  .selected { outline: 2px solid var(--lm-ink); outline-offset: 2px; }
+  .selected.locked { outline-color: rgb(255 255 255 / 40%); }
+
+  /* The drawing names the piece; its name comes with intent — on hover and while selected. */
+  .label {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    max-width: calc(100% - 6px);
+    padding: 1px 5px;
+    overflow: hidden;
+    border-radius: 4px;
+    background: rgb(0 0 0 / 60%);
+    color: var(--lm-ink);
+    font: 600 10px/1.4 var(--lm-sans);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--lm-dur-quick);
+  }
+  .piece:hover .label,
+  .selected .label { opacity: 1; }
+
+  :global(:root[data-reduced-motion]) .label { transition: none; }
+
+  @media (forced-colors: active) {
+    .selected { outline-color: Highlight; }
+    .label {
+      background: Canvas;
+      color: CanvasText;
+      forced-color-adjust: none;
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import type { FurnitureModel } from "@/features/room-view/model/furnitureModel";
 import { isEditableTarget } from "@/shared/lib/editableTarget";
 import type { RoomMapDocument } from "../state/useRoomMapDocument";
 import { RoomMapCanvas } from "./RoomMapCanvas";
@@ -20,6 +21,7 @@ import {
   TV_ANCHOR_OBJECT_ID,
   usbStripObjectId,
 } from "../model/objectId";
+import { useFurnitureModels } from "../state/useFurnitureModels";
 import { useSnapGuides } from "../state/useSnapGuides";
 import { useRoomMapGridSettings } from "../state/useRoomMapGridSettings";
 import { useRoomMapHueZones } from "../state/useRoomMapHueZones";
@@ -77,6 +79,7 @@ export interface RoomMapEditorProps {
 }
 
 const IS_MAC = navigator.platform.includes("Mac");
+const BOX_MODEL: FurnitureModel = { kind: "box" };
 
 // Literal keys, not `\`…${code}\``, so the orphan ratchet can see each one.
 const HUE_ZONE_REJECTION_KEYS = {
@@ -153,6 +156,7 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
   });
 
   const { guides: snapGuides, onDragMove: snapDragMove, onDragEnd: snapDragEnd } = useSnapGuides(config);
+  const furnitureModels = useFurnitureModels(config);
 
   const {
     canvasContainerRef,
@@ -548,6 +552,7 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
               <FurnitureObject
                 key={f.id}
                 placement={f}
+                model={furnitureModels.get(f.id) ?? BOX_MODEL}
                 pxPerMeter={pxPerMeter}
                 selected={selectedId === furnitureObjectId(f.id)}
                 gridStepPx={gridStepPx}

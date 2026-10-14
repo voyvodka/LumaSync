@@ -1,48 +1,19 @@
 import { memo, useRef, useState } from "react";
-import { type FurniturePlacement, type FurnitureType, resolveFurnitureType } from "@/shared/contracts/roomMap";
+import { type FurnitureModel, furnitureColours } from "@/features/room-view/model/furnitureModel";
+import type { FurniturePlacement } from "@/shared/contracts/roomMap";
+import { cx } from "@/shared/lib/cx";
+import { FurnitureGlyph } from "./FurnitureGlyph";
+import styles from "./FurnitureObject.module.css";
 import { ResizeHandle } from "./ResizeHandle";
 import { furnitureObjectId } from "../../model/objectId";
 import type { SnapResult } from "../../state/useSnapGuides";
-
-const FURNITURE_COLORS: Record<FurnitureType, { bg: string; border: string }> = {
-  sofa: {
-    bg: "bg-zinc-500/35",
-    border: "border-zinc-500",
-  },
-  table: {
-    bg: "bg-amber-600/35",
-    border: "border-amber-500",
-  },
-  chair: {
-    bg: "bg-emerald-600/35",
-    border: "border-emerald-500",
-  },
-  bed: {
-    bg: "bg-sky-600/35",
-    border: "border-sky-500",
-  },
-  storage: {
-    bg: "bg-stone-500/35",
-    border: "border-stone-400",
-  },
-  plant: {
-    bg: "bg-lime-600/35",
-    border: "border-lime-500",
-  },
-  rug: {
-    bg: "bg-rose-600/25",
-    border: "border-rose-500/70",
-  },
-  other: {
-    bg: "bg-violet-600/35",
-    border: "border-violet-500",
-  },
-};
 
 const MIN_SIZE_PX = 24;
 
 interface FurnitureObjectProps {
   placement: FurniturePlacement;
+  /** What the piece reads as — drawn from above as the 3D room builds it. */
+  model: FurnitureModel;
   pxPerMeter: number;
   selected: boolean;
   gridStepPx: number;
@@ -57,6 +28,7 @@ interface FurnitureObjectProps {
 
 export const FurnitureObject = memo(function FurnitureObject({
   placement,
+  model,
   pxPerMeter,
   selected,
   gridStepPx,
@@ -240,36 +212,31 @@ export const FurnitureObject = memo(function FurnitureObject({
     void corner;
   };
 
-  // Through the resolver: a type from a newer build has no entry here and would throw on open.
-  const colors = FURNITURE_COLORS[resolveFurnitureType(placement.type)];
   const rotation = placement.rotation ?? 0;
   const showResizeHandles = selected && !placement.locked;
 
   return (
     <div
-      className={`absolute border-2 ${colors.bg} ${
-        selected
-          ? placement.locked ? "border-white/40" : "border-white"
-          : colors.border
-      } ${placement.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"}`}
+      className={cx(
+        styles.piece,
+        selected && styles.selected,
+        placement.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing",
+        placement.locked && styles.locked,
+      )}
+      data-furniture-id={placement.id}
       style={{
         left: localX * pxPerMeter,
         top: localY * pxPerMeter,
         width: localW * pxPerMeter,
         height: localH * pxPerMeter,
         transform: `rotate(${rotation}deg)`,
-        transformOrigin: "center center",
-        userSelect: "none",
-        touchAction: "none",
-        zIndex: 10,
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
     >
-      <span className="pointer-events-none select-none px-1 text-[10px] font-semibold text-zinc-300 truncate block">
-        {placement.label}
-      </span>
+      <FurnitureGlyph model={model} colours={furnitureColours(placement, model)} width={localW} depth={localH} />
+      <span className={styles.label}>{placement.label}</span>
 
       {showResizeHandles && (
         <>

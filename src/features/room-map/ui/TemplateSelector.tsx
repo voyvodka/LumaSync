@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import type { TranslationKey } from "@/features/i18n/catalogue";
 import type { RoomMapConfig, FurniturePlacement, UsbStripPlacement, TvAnchorPlacement } from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
+import { RoomPreview } from "./RoomPreview";
+import styles from "./TemplateSelector.module.css";
 
 interface TemplateSelectorProps {
   onSelect: (config: RoomMapConfig) => void;
@@ -12,7 +14,6 @@ interface Template {
   id: string;
   nameKey: TranslationKey;
   descKey: TranslationKey;
-  icon: string;
   config: (t: TFunction) => RoomMapConfig;
 }
 
@@ -27,7 +28,6 @@ const TEMPLATES: Template[] = [
     id: "tv55",
     nameKey: "roomMap:templates.tv55.name",
     descKey: "roomMap:templates.tv55.desc",
-    icon: "📺",
     config: (t) => makeTemplate({
       tvAnchor: { x: 1.75, y: 0.2, width: 1.2, height: 0.08 },
       usbStrips: [
@@ -42,7 +42,6 @@ const TEMPLATES: Template[] = [
     id: "ldesk",
     nameKey: "roomMap:templates.ldesk.name",
     descKey: "roomMap:templates.ldesk.desc",
-    icon: "🖥",
     config: (t) => makeTemplate({
       dimensions: { widthMeters: 3, depthMeters: 3, heightMeters: 2.5 },
       tvAnchor: { x: 0.6, y: 0.1, width: 0.7, height: 0.05 },
@@ -60,7 +59,6 @@ const TEMPLATES: Template[] = [
     id: "fullroom",
     nameKey: "roomMap:templates.fullroom.name",
     descKey: "roomMap:templates.fullroom.desc",
-    icon: "🏠",
     config: (t) => makeTemplate({
       dimensions: { widthMeters: 5, depthMeters: 4, heightMeters: 2.5 },
       tvAnchor: { x: 1.75, y: 0.2, width: 1.5, height: 0.08 },
@@ -81,7 +79,6 @@ const TEMPLATES: Template[] = [
     id: "empty",
     nameKey: "roomMap:templates.empty.name",
     descKey: "roomMap:templates.empty.desc",
-    icon: "✏️",
     config: () => DEFAULT_ROOM_MAP,
   },
 ];
@@ -90,32 +87,29 @@ export function TemplateSelector({ onSelect }: TemplateSelectorProps) {
   const { t } = useTranslation();
 
   return (
-    <div className="flex h-full items-center justify-center">
-      <div className="max-w-[480px] px-4">
-        <h3 className="text-sm font-semibold text-ink text-center mb-1">
-          {t("roomMap:templates.title")}
-        </h3>
-        <p className="text-[11px] text-ink-dim text-center mb-4">
-          {t("roomMap:templates.subtitle")}
-        </p>
-        <div className="grid grid-cols-2 gap-2">
-          {TEMPLATES.map((tmpl) => (
-            <button
-              key={tmpl.id}
-              type="button"
-              aria-label={t(tmpl.nameKey)}
-              className="flex flex-col items-center gap-1.5 rounded-lg border border-line bg-panel px-3 py-3 hover:bg-panel-2 hover:border-amber/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/60"
-              onClick={() => onSelect(tmpl.config(t))}
-            >
-              <span className="text-2xl">{tmpl.icon}</span>
-              <span className="text-[11px] font-semibold text-ink">
-                {t(tmpl.nameKey)}
-              </span>
-              <span className="text-[9px] text-ink-faint text-center leading-tight">
-                {t(tmpl.descKey)}
-              </span>
-            </button>
-          ))}
+    <div className={styles.page}>
+      <div className={styles.column}>
+        <h3 className={styles.title}>{t("roomMap:templates.title")}</h3>
+        <p className={styles.subtitle}>{t("roomMap:templates.subtitle")}</p>
+        <div className={styles.grid}>
+          {TEMPLATES.map((tmpl) => {
+            const config = tmpl.config(t);
+            return (
+              <button
+                key={tmpl.id}
+                type="button"
+                aria-label={t(tmpl.nameKey)}
+                className={styles.card}
+                onClick={() => onSelect(config)}
+              >
+                <span className={styles.preview}>
+                  <RoomPreview config={config} />
+                </span>
+                <span className={styles.name}>{t(tmpl.nameKey)}</span>
+                <span className={styles.desc}>{t(tmpl.descKey)}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

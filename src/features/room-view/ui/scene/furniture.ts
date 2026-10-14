@@ -4,9 +4,9 @@
 // `model/furnitureModel.ts`; this file only builds it.
 import { Color } from "three";
 
-import { type FurniturePlacement, type FurnitureTone, resolveFurnitureTone, resolveFurnitureTop } from "@/shared/contracts/roomMap";
+import { type FurniturePlacement, resolveFurnitureTop } from "@/shared/contracts/roomMap";
 
-import { armWidth, DESK_TOP, FURNITURE_TONE_COLORS, type FurnitureModel, modelTop } from "../../model/furnitureModel";
+import { armWidth, cornerFits, DESK_TOP, type FurnitureModel, furnitureColours, modelTop } from "../../model/furnitureModel";
 import { PALETTE } from "./palette";
 import { ball, block, hashString, type Part, rod, seeded } from "./parts";
 
@@ -19,8 +19,6 @@ interface Finish {
   woodDark: number;
 }
 
-const FABRIC_TONES: ReadonlySet<FurnitureTone> = new Set(["slate", "caramel", "sage", "charcoal", "cream", "brick"]);
-
 function shade(hex: number, factor: number): number {
   return new Color(hex).multiplyScalar(factor).getHex();
 }
@@ -30,28 +28,8 @@ function fabricOf(base: number): Pick<Finish, "fabric" | "fabricDeep" | "cushion
 }
 
 function finishFor(item: FurniturePlacement, model: FurnitureModel): Finish {
-  // The model's own colours: one seat with arms reads as an armchair and takes the warm upholstery,
-  // a small armless seat is a slipper chair, a sofa stays slate.
-  const ownFabric =
-    model.kind === "upholstered"
-      ? model.arms && model.seats === 1 && model.corner === null
-        ? PALETTE.caramel
-        : !model.arms
-          ? PALETTE.sage
-          : PALETTE.slate
-      : model.kind === "bed"
-        ? FURNITURE_TONE_COLORS.cream
-        : model.kind === "rug"
-          ? FURNITURE_TONE_COLORS.slate
-          : PALETTE.sage;
-  const finish: Finish = { ...fabricOf(ownFabric), wood: PALETTE.oak, woodDark: PALETTE.oakDark };
-  const tone = resolveFurnitureTone(item);
-  // A plant's tone is its pot, whichever family the tone comes from.
-  if (model.kind === "plant") return { ...finish, fabric: tone === undefined ? FURNITURE_TONE_COLORS.cream : FURNITURE_TONE_COLORS[tone] };
-  if (tone === undefined) return finish;
-  const base = FURNITURE_TONE_COLORS[tone];
-  if (FABRIC_TONES.has(tone)) return { ...finish, ...fabricOf(base) };
-  return { ...finish, wood: base, woodDark: shade(base, 0.78) };
+  const { fabric, wood, woodToned } = furnitureColours(item, model);
+  return { ...fabricOf(fabric), wood, woodDark: woodToned ? shade(wood, 0.78) : PALETTE.oakDark };
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
@@ -77,7 +55,7 @@ export function furnitureParts(item: FurniturePlacement, model: FurnitureModel):
 function build(w: number, d: number, model: FurnitureModel, f: Finish, rand: () => number, top: number | undefined): Part[] {
   switch (model.kind) {
     case "upholstered":
-      return model.corner !== null && d >= 1.3 && w >= 1.6
+      return model.corner !== null && cornerFits(w, d)
         ? cornerSofa(w, d, model.corner, f)
         : upholstered(w, d, model.seats, model.arms, f);
     case "diningChair":

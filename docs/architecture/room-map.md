@@ -39,6 +39,14 @@ own, floating over both faces' top bars, so a keyboard switch keeps focus on it.
 stored: the map always opens on the room, and an empty map with no history opens on the templates
 before either face.
 
+**The plan draws a piece the way the 3D room builds it.** `objects/FurnitureGlyph.tsx` draws each
+piece from above from the same `FurnitureModel` the room reads (`useFurnitureModels`, which keeps a
+model object while the piece's reading holds, so an edit re-renders only the pieces it changed), in
+the same colours (`furnitureColours`, shared with the room's materials) and to the same rules — an
+L only where `cornerFits`, a seat facing the TV wall unrotated. Each drawing stays inside the
+piece's footprint at any size, as the 3D models do; `FurnitureGlyph.test.tsx` holds that for every
+model. The template cards draw their rooms with it (`RoomPreview`).
+
 **Every typed number is one field, and the inspector holds them all.** `ui/DecimalField.tsx` is
 the room map's only number input: the inspectors' position, size, height and rotation, a strip's
 LED count, a zone's edge and the room's size. It reads as a value at rest, applies on leaving or

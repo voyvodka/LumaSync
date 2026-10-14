@@ -86,7 +86,7 @@ async function flush() {
 function canvasSofa(): HTMLElement {
   const label = screen
     .getAllByText("Sofa")
-    .find((el) => el.parentElement?.classList.contains("cursor-grab"));
+    .find((el) => el.parentElement?.hasAttribute("data-furniture-id"));
   if (!label?.parentElement) throw new Error("sofa is not on the canvas");
   return label.parentElement;
 }

@@ -338,6 +338,11 @@ https://keepachangelog.com/en/1.1.0/
   nudges and "Move to" only touch the area on screen. Before, a light with the same number in
   another area could be listed, shown or moved with it. Dragging a Hue light that
   belongs to a zone now starts from where its dot is drawn instead of jumping.
+- Room map: the plan draws each piece from above as what it is — a sofa with its seats and back,
+  an L sofa's chaise, a bed with its pillows, a desk with its screen and keyboard, a plant's leaves
+  in its pot, a rug with its fringe — in the colours the piece has, instead of a coloured box. A
+  piece's name shows when the pointer is on it or it is selected. The templates show their room
+  drawn the same way.
 - Room map: the row of numbers under the plan is gone, and its numbers sit in the inspector with
   the rest of what you select — a piece's position, size, height and rotation, a strip's start and
   LED count, a Hue light's place in metres, an image's position, scale and proportions — so the
