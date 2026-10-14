@@ -1,7 +1,7 @@
 import { readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { ROOT, check, readOrEmpty, stripComments, constMembers, checkWireUnion } from "./lib.mjs";
+import { ROOT, check, readOrEmpty, stripComments, constMembers, checkWireUnion, stripRustTestModules } from "./lib.mjs";
 import { lightingSource, rustLightingSource } from "./sources.mjs";
 
 // ---------------------------------------------------------------------------
@@ -10,7 +10,7 @@ import { lightingSource, rustLightingSource } from "./sources.mjs";
 // ---------------------------------------------------------------------------
 
 console.log("\n[ Lighting-mode status codes — Rust → lighting.ts parity ]");
-const rustLightingProduction = rustLightingSource.split(/\nmod tests\s*\{/)[0];
+const rustLightingProduction = stripRustTestModules(rustLightingSource);
 const emittedLightingCodes = [
   ...new Set(
     [...rustLightingProduction.matchAll(/command_status\(\s*"([A-Z][A-Z0-9_]*)"/g)]

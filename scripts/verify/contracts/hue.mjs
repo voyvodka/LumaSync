@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 
-import { ROOT, fail, check, readOrEmpty, stripComments, rustStructFields } from "./lib.mjs";
+import { ROOT, fail, check, readOrEmpty, stripComments, rustStructFields, stripRustTestModules } from "./lib.mjs";
 import { hueSource } from "./sources.mjs";
 
 // ---------------------------------------------------------------------------
@@ -136,8 +136,7 @@ const emittedHueTransportReasons = [
   ...new Set(
     HUE_TRANSPORT_RUST_FILES.flatMap((file) =>
       [
-        ...stripComments(readOrEmpty(file, `rust ${file}`))
-          .split(/\n#\[cfg\(test\)\]\s*\nmod /)[0]
+        ...stripComments(stripRustTestModules(readOrEmpty(file, `rust ${file}`)))
           // `"CODE: detail"` counts: these are format! prefixes, not bare literals.
           .matchAll(/"((?:DTLS|ENTERTAINMENT|HUE_SENDER)_[A-Z0-9_]+)(?:"|:\s)/g),
       ].map((m) => m[1])

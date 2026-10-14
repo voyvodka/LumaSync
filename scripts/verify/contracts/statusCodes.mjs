@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { ROOT, VERIFY_DIR, fail, note, check, readOrEmpty, walkRustSourceFiles, stripComments, harvestCodes, constMembers, checkWireUnion } from "./lib.mjs";
+import { ROOT, VERIFY_DIR, fail, note, check, readOrEmpty, walkRustSourceFiles, stripComments, harvestCodes, constMembers, checkWireUnion, stripRustTestModules } from "./lib.mjs";
 import { hueSource, deviceSource, rustHealthSource, rustLocalOutputsSource, wledRustSource, captureContractSource, tsSourceFiles } from "./sources.mjs";
 
 // ---------------------------------------------------------------------------
@@ -65,7 +65,7 @@ checkWireUnion(
 );
 
 const rustHueRuntimeSource = walkRustSourceFiles(resolve(ROOT, "src-tauri/src/commands/hue"))
-  .map((f) => stripComments(readFileSync(f, "utf-8").split(/\n#\[cfg\(test\)\]\s*\nmod /)[0]))
+  .map((f) => stripComments(stripRustTestModules(readFileSync(f, "utf-8"))))
   .join("\n");
 const HUE_RUNTIME_NOT_ON_THIS_SHAPE = [
   "AUTH_INVALID_RE_PAIR_REQUIRED",
@@ -254,9 +254,11 @@ check(
 // ---------------------------------------------------------------------------
 // Ambilight capture reasons — derived Rust → capture.ts parity
 // ---------------------------------------------------------------------------
+// `lighting_mode.rs` is a module root; the worker under `lighting_mode/` emits reasons too.
 const RUST_CAPTURE_FILES = [
   resolve(ROOT, "src-tauri/src/commands/ambilight_capture.rs"),
   resolve(ROOT, "src-tauri/src/commands/lighting_mode.rs"),
+  ...walkRustSourceFiles(resolve(ROOT, "src-tauri/src/commands/lighting_mode")),
 ];
 
 console.log("\n[ Ambilight capture reasons — Rust → capture.ts parity ]");
@@ -267,7 +269,7 @@ const emittedCaptureReasons = [
       // These ride `status.details`, never a status code, so `undeclaredInBoth`
       // is structurally blind to them and this loop is the only guard.
       // Quoted only: `AMBILIGHT_CAPTURE_ATTEMPTS` is a counter, not a reason.
-      const production = source.split(/\n#\[cfg\(test\)\]\s*\nmod /)[0];
+      const production = stripRustTestModules(source);
       return [...production.matchAll(/"(AMBILIGHT_CAPTURE_[A-Z0-9_]+)"/g)].map((m) => m[1]);
     })
   ),
@@ -300,8 +302,7 @@ const LED_OUTPUT_RUST_FILE = resolve(ROOT, "src-tauri/src/commands/led_output/se
 const emittedLedOutputReasons = [
   ...new Set(
     [
-      ...stripComments(readOrEmpty(LED_OUTPUT_RUST_FILE, "rust led_output"))
-        .split(/\n#\[cfg\(test\)\]\s*\nmod /)[0]
+      ...stripComments(stripRustTestModules(readOrEmpty(LED_OUTPUT_RUST_FILE, "rust led_output")))
         .matchAll(/"(LED_OUTPUT_[A-Z0-9_]+)"/g),
     ].map((m) => m[1])
   ),

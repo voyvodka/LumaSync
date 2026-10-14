@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { ROOT, check, readOrEmpty, stripComments } from "./lib.mjs";
+import { ROOT, check, readOrEmpty, stripComments, stripRustTestModules } from "./lib.mjs";
 import { source, deviceSource, rustHealthSource, wledRustSource } from "./sources.mjs";
 
 // ---------------------------------------------------------------------------
@@ -166,12 +166,11 @@ const rustShellStateSource = readOrEmpty(
   resolve(ROOT, "src-tauri/src/commands/shell_state.rs"),
   "rust shell_state"
 );
-const rustShellStateProduction = rustShellStateSource.split(/\nmod tests\s*\{/)[0];
+const rustShellStateProduction = stripRustTestModules(rustShellStateSource);
 // `led_strips.rs` reads `ledStrips`, and the frozen v7 keys for a file not yet migrated.
-const rustStripsProduction = readOrEmpty(
-  resolve(ROOT, "src-tauri/src/models/led_strips.rs"),
-  "rust led_strips"
-).split(/\nmod tests\s*\{/)[0];
+const rustStripsProduction = stripRustTestModules(
+  readOrEmpty(resolve(ROOT, "src-tauri/src/models/led_strips.rs"), "rust led_strips")
+);
 const stripsContractSource = readOrEmpty(resolve(ROOT, "src/shared/contracts/strips.ts"), "strips contract");
 const legacyStripKeysBlock = stripsContractSource.match(/export interface LegacyV7StripKeys \{([\s\S]*?)\n\}/);
 const legacyStripKeys = new Set(
