@@ -78,17 +78,6 @@ pub enum DrivenLocal {
     Wled(WledSinkConfig),
 }
 
-impl DrivenLocal {
-    /// `apply_mode_change`'s three channel arguments.
-    pub fn plan_args(driven: Option<&Self>) -> (bool, Option<&str>, Option<WledSinkConfig>) {
-        match driven {
-            Some(Self::Serial(port)) => (true, Some(port.as_str()), None),
-            Some(Self::Wled(config)) => (false, None, Some(*config)),
-            None => (false, None, None),
-        }
-    }
-}
-
 /// What `serial_disconnected` replaced.
 pub struct DisconnectedSerial {
     entry: SerialOutputStatus,
@@ -153,12 +142,15 @@ impl Inner {
         LocalOutputsSnapshot {
             revision: self.revision,
             outputs,
-            driven: driven_in(self).map(|driven| match driven {
-                DrivenLocal::Serial(port_name) => DrivenOutputRef::Serial { port_name },
-                DrivenLocal::Wled(config) => DrivenOutputRef::Wled {
-                    ip: config.ip.to_string(),
-                },
-            }),
+            driven: connected_in(self)
+                .into_iter()
+                .next()
+                .map(|driven| match driven {
+                    DrivenLocal::Serial(port_name) => DrivenOutputRef::Serial { port_name },
+                    DrivenLocal::Wled(config) => DrivenOutputRef::Wled {
+                        ip: config.ip.to_string(),
+                    },
+                }),
         }
     }
 
@@ -185,7 +177,9 @@ impl Inner {
     }
 }
 
-fn driven_in(inner: &Inner) -> Option<DrivenLocal> {
+/// Every connected local output, earliest connected first. The sort is stable, so outputs stamped
+/// alike keep the order they are listed in — serial ports by name, then the WLED device.
+fn connected_in(inner: &Inner) -> Vec<DrivenLocal> {
     let serial = inner
         .serial
         .values()
@@ -201,10 +195,9 @@ fn driven_in(inner: &Inner) -> Option<DrivenLocal> {
     let wled = inner
         .wled
         .map(|config| (inner.wled_connected_at, DrivenLocal::Wled(config)));
-    serial
-        .chain(wled)
-        .min_by_key(|(at, _)| *at)
-        .map(|(_, driven)| driven)
+    let mut outputs: Vec<(u64, DrivenLocal)> = serial.chain(wled).collect();
+    outputs.sort_by_key(|(at, _)| *at);
+    outputs.into_iter().map(|(_, output)| output).collect()
 }
 
 impl LocalOutputRegistry {
@@ -407,16 +400,22 @@ impl LocalOutputRegistry {
         inner.changed();
     }
 
+    /// What the "usb" channel drives: the earliest connected output.
     pub fn driven(&self) -> Option<DrivenLocal> {
-        driven_in(&self.lock())
+        self.connected_outputs().into_iter().next()
     }
 
-    /// `driven` for a mode apply, which refuses on a poisoned lock rather than plan an output from
-    /// facts a panicking writer may have left half-written.
-    pub fn driven_checked(&self) -> Result<Option<DrivenLocal>, String> {
+    /// Every connected output, earliest connected first.
+    pub fn connected_outputs(&self) -> Vec<DrivenLocal> {
+        connected_in(&self.lock())
+    }
+
+    /// `connected_outputs` for a mode apply, which refuses on a poisoned lock rather than plan an
+    /// output from facts a panicking writer may have left half-written.
+    pub fn connected_outputs_checked(&self) -> Result<Vec<DrivenLocal>, String> {
         self.inner
             .lock()
-            .map(|inner| driven_in(&inner))
+            .map(|inner| connected_in(&inner))
             .map_err(|error| format!("LIGHTING_CONNECTION_STATE_LOCK_FAILED: {error}"))
     }
 

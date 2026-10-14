@@ -34,6 +34,7 @@ mod runtime;
 mod sampling;
 pub(crate) mod smoothing;
 pub mod snapshot;
+mod strip_set;
 pub mod transition;
 pub mod tuning;
 mod usb_output;
@@ -116,6 +117,9 @@ mod preview_tests;
 
 #[cfg(test)]
 mod led_test_pattern_tests;
+
+#[cfg(test)]
+mod strip_set_tests;
 
 #[cfg(test)]
 mod test_support;

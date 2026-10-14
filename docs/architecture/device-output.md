@@ -81,10 +81,24 @@ once, closes the port before reporting the writer gone, and waits at most `OUTPU
 once its two ping-pong buffers have grown; the allocation guard runs the production writer to prove
 it (`capture-and-pipeline.md`).
 
+**Which strips are driven is resolved once per apply: `resolve_strips` → `StripSet`
+(`lighting_mode/strip_set.rs`).** It matches the registry's connected outputs, in connect order, to
+the saved `ledStrips` — a port by name, a WLED device by its address alone, as binding the same
+device again keeps its place whatever port or LED count its saved sink carries. Every connected
+output is driven, with its strip or with none (a port connected before a strip was saved for it is
+driven as it always was); a saved strip that matches no connected output is left out as
+`NotConnected`, and a second one on a port already taken as `DuplicateTransport`. Whether a strip is
+enabled or has a layout decides nothing yet. The mode apply, a preview scene and the test pattern
+plan from it — `StripSet::plan_args` is the three channel arguments `apply_mode_change` takes, from
+the earliest connected output, so the worker still drives one — and the set the last apply was
+planned with stays on the runtime owner (`strips`) and in its log line, for the fan-out to drive the
+rest. `active_port` and `active_usb_plan` still say what the running mode writes.
+
 **One registry holds what is connected: `LocalOutputRegistry` (`local_outputs.rs`).** It keeps a
 status per serial port that passed admission (connected, failed, lost, let go of) and the bound WLED
-device, and `driven()` is the one place the "earliest connected" rule lives — the mode plan, the Off
-blank, a retune, the test pattern and the launch's wait for a strip all ask it.
+device, and the connect order lives there alone: `connected_outputs()` lists every connected output
+earliest first, and `driven()` is its first — the Off blank, a retune and the launch's wait for a
+strip ask that.
 It replaced a single serial status that every connect attempt overwrote and a sink slot that stored a
 `Box<dyn LedSink>` nothing ever wrote to. That split had three faults: a failed serial attempt emptied
 the slot and unbound a working WLED device the UI still showed, binding WLED never marked the serial

@@ -21,12 +21,13 @@ use super::pacing::{capture_interval_for, SerialSendBudget};
 use super::preview::{build_preview_emit_context, build_twin_sink, TwinFrameSink};
 use super::runtime::{AmbilightCaptureRequest, LightingRuntimeOwner, LightingRuntimeState};
 use super::snapshot;
+use super::strip_set::strips_from;
 use super::usb_output::{SolidHold, SolidUsbOutput, UsbOutputPlan};
 use super::worker::{start_ambilight_worker, WorkerPacing};
 use super::SOLID_OUTPUT_ATTEMPTS;
 use crate::commands::hue::state_store::{apply_hue_color_with_context, HueOutputLive};
 use crate::commands::led_output::apply_color_correction_rgb;
-use crate::commands::local_outputs::{DrivenLocal, LocalOutputRegistry};
+use crate::commands::local_outputs::LocalOutputRegistry;
 use crate::commands::preview::PreviewSessionState;
 use crate::commands::runtime_telemetry::{RuntimeTelemetryState, SharedRuntimeTelemetry};
 use crate::commands::shell_state;
@@ -233,7 +234,7 @@ fn apply_mode_change_inner(
     // calibration into apply_mode_change or whether something between
     // frontend and the runtime is dropping it.
     info!(
-        "[apply_mode_change] kind={:?} led_calibration_total_leds={} targets={:?}",
+        "[apply_mode_change] kind={:?} led_calibration_total_leds={} targets={:?} strips {}",
         normalized_next.kind,
         normalized_next
             .led_calibration
@@ -241,6 +242,7 @@ fn apply_mode_change_inner(
             .map(|c| c.total_leds as i32)
             .unwrap_or(-1),
         normalized_next.targets,
+        owner.strips.summary(),
     );
 
     // Checked under the runtime lock, which the quit's own stop also takes: a
@@ -826,9 +828,11 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
     //
     // Output stamps (colour correction, firmware profile, chip type) follow
     // the same caller-wins rule; the LED control popup sends none of them.
-    hydrate_mode_payload(&mut payload, &|| shell_state::persisted(app));
+    // One read of the saved state serves the hydration and the strips the apply plans with.
+    let persisted = shell_state::persisted(app);
+    hydrate_mode_payload(&mut payload, &|| persisted.clone());
 
-    let driven = local_outputs.driven_checked()?;
+    let strips = strips_from(&local_outputs, persisted.as_ref())?;
 
     let lock_t = std::time::Instant::now();
     let mut owner = runtime_state.lock_owner()?;
@@ -855,7 +859,8 @@ pub(crate) fn apply_config_blocking<R: Runtime>(
         owner.preview.latency_sink = None;
     }
     let twin_sink = Some(build_twin_sink(app));
-    let (device_connected, connected_port, wled_sink) = DrivenLocal::plan_args(driven.as_ref());
+    let (device_connected, connected_port, wled_sink) = strips.plan_args();
+    owner.strips = strips.clone();
 
     owner.hue_gate_waived = waive_hue_gate;
     let result = apply_mode_change(

@@ -623,7 +623,10 @@ fn start_test(rig: &Rig) {
         &handle,
         mode,
         rig.state().inner(),
-        rig.app.state::<LocalOutputRegistry>().driven().as_ref(),
+        &super::strip_set::resolve_strips(
+            &[],
+            rig.app.state::<LocalOutputRegistry>().connected_outputs(),
+        ),
         rig.app.state::<HueRuntimeStateStore>().inner(),
         rig.app.state::<RuntimeTelemetryState>().inner(),
         rig.app.state::<PreviewSessionState>().inner(),
@@ -805,7 +808,10 @@ fn the_twin_draws_the_layout_the_running_mode_uses_not_the_saved_one() {
         &rig.handle(),
         mode,
         rig.state().inner(),
-        rig.app.state::<LocalOutputRegistry>().driven().as_ref(),
+        &super::strip_set::resolve_strips(
+            &[],
+            rig.app.state::<LocalOutputRegistry>().connected_outputs(),
+        ),
         rig.app.state::<HueRuntimeStateStore>().inner(),
         rig.app.state::<RuntimeTelemetryState>().inner(),
         session.inner(),

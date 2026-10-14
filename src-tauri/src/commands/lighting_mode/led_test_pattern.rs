@@ -15,6 +15,7 @@ use super::outputs::restore_payload_for;
 use super::preview::build_twin_sink;
 use super::runtime::LightingRuntimeState;
 use super::snapshot;
+use super::strip_set::{strips_from, StripSet};
 use super::transition::{
     apply_mode_change, command_status, note_applied_mode, run_mode_transition,
 };
@@ -23,7 +24,7 @@ use crate::commands::calibration::list_displays;
 use crate::commands::hue::state_store::{snapshot_hue_output_context, HueRuntimeStateStore};
 use crate::commands::led_calibration::LedCalibrationConfig;
 use crate::commands::led_output::LedColorOrder;
-use crate::commands::local_outputs::{DrivenLocal, LocalOutputRegistry};
+use crate::commands::local_outputs::LocalOutputRegistry;
 use crate::commands::preview::session::resolve_display;
 use crate::commands::preview::PreviewSessionState;
 use crate::commands::runtime_telemetry::RuntimeTelemetryState;
@@ -65,7 +66,7 @@ pub(super) fn apply_and_broadcast<R: Runtime>(
     runtime_state: &LightingRuntimeState,
     // The whole "usb" channel, WLED included: collapsed to the serial one, a WLED-only session
     // ran preview-only and its restore was gated on stop.
-    driven: Option<&DrivenLocal>,
+    strips: &StripSet,
     hue_runtime_state: &HueRuntimeStateStore,
     telemetry_state: &RuntimeTelemetryState,
     preview_session: &PreviewSessionState,
@@ -73,7 +74,7 @@ pub(super) fn apply_and_broadcast<R: Runtime>(
 ) -> Result<LightingModeCommandResult, String> {
     runtime_state.tuning.close_blocking();
     hydrate_mode_payload(&mut payload, &|| shell_state::persisted(app));
-    let (device_connected, connected_port, wled_sink) = DrivenLocal::plan_args(driven);
+    let (device_connected, connected_port, wled_sink) = strips.plan_args();
 
     let twin_sink = Some(build_twin_sink(app));
 
@@ -83,6 +84,7 @@ pub(super) fn apply_and_broadcast<R: Runtime>(
         let hue_output = Some(hue_runtime_state.output_live());
         owner.preview.pending_test_pattern = test_pattern;
         owner.preview.preview_gate = Some(preview_session.twin_open());
+        owner.strips = strips.clone();
         apply_mode_change(
             &mut owner,
             payload,
@@ -222,7 +224,10 @@ fn start_led_test_pattern_blocking<R: Runtime>(
 
     // Resolve sink availability up front to choose targets + report
     // preview-only without re-deriving it from apply_mode_change.
-    let driven = app.state::<LocalOutputRegistry>().driven_checked()?;
+    let strips = strips_from(
+        &app.state::<LocalOutputRegistry>(),
+        shell_state::persisted(app).as_ref(),
+    )?;
     let hue_available = snapshot_hue_output_context(hue_runtime_state.inner())?
         .map(|ctx| !ctx.channels.is_empty())
         .unwrap_or(false);
@@ -231,7 +236,7 @@ fn start_led_test_pattern_blocking<R: Runtime>(
     let want_usb = requested.is_empty() || requested.iter().any(|t| t == "usb");
     let want_hue = requested.iter().any(|t| t == "hue");
     // A bound WLED device IS the "usb" channel — see `UsbOutputPlan`.
-    let use_usb = driven.is_some() && want_usb;
+    let use_usb = strips.primary().is_some() && want_usb;
     let use_hue = hue_available && want_hue;
     let preview_only = !use_usb && !use_hue;
 
@@ -297,7 +302,7 @@ fn start_led_test_pattern_blocking<R: Runtime>(
         app,
         config,
         runtime_state.inner(),
-        driven.as_ref(),
+        &strips,
         hue_runtime_state.inner(),
         telemetry_state.inner(),
         preview_session.inner(),
@@ -399,7 +404,10 @@ fn stop_led_test_pattern_blocking<R: Runtime>(
     let hue_runtime_state = app.state::<HueRuntimeStateStore>();
     let telemetry_state = app.state::<RuntimeTelemetryState>();
     let preview_session = app.state::<PreviewSessionState>();
-    let driven = app.state::<LocalOutputRegistry>().driven_checked()?;
+    let strips = strips_from(
+        &app.state::<LocalOutputRegistry>(),
+        shell_state::persisted(app).as_ref(),
+    )?;
     let prior = {
         let mut owner = runtime_state.lock_owner()?;
         let prior = owner.preview.test_prior.take();
@@ -425,7 +433,7 @@ fn stop_led_test_pattern_blocking<R: Runtime>(
         app,
         restore,
         runtime_state.inner(),
-        driven.as_ref(),
+        &strips,
         hue_runtime_state.inner(),
         telemetry_state.inner(),
         preview_session.inner(),
@@ -444,7 +452,7 @@ fn stop_led_test_pattern_blocking<R: Runtime>(
             app,
             LightingModeConfig::default(),
             runtime_state.inner(),
-            driven.as_ref(),
+            &strips,
             hue_runtime_state.inner(),
             telemetry_state.inner(),
             preview_session.inner(),

@@ -15,6 +15,7 @@ use super::live::{AmbilightLiveSettings, RoomGeometryLive};
 use super::outputs;
 use super::preview::PreviewRuntime;
 use super::snapshot::LightingSnapshotCell;
+use super::strip_set::StripSet;
 use super::tuning::TuningCell;
 use super::usb_output::{SolidHold, UsbOutputPlan};
 use crate::commands::ambilight_capture::{
@@ -102,6 +103,9 @@ pub(crate) struct LightingRuntimeOwner {
     /// Ambilight fast path compares against it: a retune must not keep a worker on an output that is
     /// no longer the driven one.
     pub(super) active_usb_plan: Option<UsbOutputPlan>,
+    /// The strips the last apply was planned with. Only the primary is driven until the worker fans
+    /// out; `active_port` and `active_usb_plan` still say what the running mode writes.
+    pub(super) strips: StripSet,
     /// Resends a Solid colour to a WLED device while Solid runs there (`SolidHold`).
     pub(super) solid_hold: Option<SolidHold>,
     pub(super) worker: Option<LightingWorkerRuntime>,
@@ -132,6 +136,7 @@ impl Default for LightingRuntimeOwner {
             active_mode: LightingModeConfig::default(),
             active_port: None,
             active_usb_plan: None,
+            strips: StripSet::default(),
             solid_hold: None,
             worker: None,
             ambilight_live: None,

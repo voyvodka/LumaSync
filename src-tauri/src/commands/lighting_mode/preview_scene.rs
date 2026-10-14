@@ -20,11 +20,12 @@ use super::outputs::{ambilight_payload_for, power_off_left_wled_blocking};
 use super::preview::build_twin_sink;
 use super::runtime::LightingRuntimeState;
 use super::snapshot::{OutputTarget, OutputTargets};
+use super::strip_set::{strips_from, StripSet};
 use super::transition::{
     apply_mode_change, blank_usb_after_off, note_applied_mode, run_mode_transition,
 };
 use crate::commands::hue::state_store::{snapshot_hue_output_context, HueRuntimeStateStore};
-use crate::commands::local_outputs::{DrivenLocal, LocalOutputRegistry};
+use crate::commands::local_outputs::LocalOutputRegistry;
 use crate::commands::preview::{PreviewSessionState, SceneKind};
 use crate::commands::runtime_telemetry::RuntimeTelemetryState;
 use crate::commands::shell_state;
@@ -84,13 +85,14 @@ pub fn start_scene_lighting<R: Runtime>(
     if runtime_state.test_pattern_active() {
         return Ok(SceneLighting::TestPatternActive);
     }
-    let driven = app.state::<LocalOutputRegistry>().driven_checked()?;
+    let persisted = shell_state::persisted(app);
+    let strips = strips_from(&app.state::<LocalOutputRegistry>(), persisted.as_ref())?;
     let hue_runtime_state = app.state::<HueRuntimeStateStore>();
     let hue_up = snapshot_hue_output_context(hue_runtime_state.inner())?
         .is_some_and(|context| !context.channels.is_empty());
     let targets = scene_targets(
         &runtime_state.outputs.intent().targets,
-        driven.is_some(),
+        strips.primary().is_some(),
         hue_up,
     );
     if targets.is_empty() {
@@ -99,12 +101,9 @@ pub fn start_scene_lighting<R: Runtime>(
 
     // The user's Ambilight as a choice of it would run — preset, display and
     // room map included — with the layout and output stamps filled after.
-    let mut config = ambilight_payload_for(
-        &targets,
-        &runtime_state.tuning.stored(),
-        shell_state::persisted(app).as_ref(),
-    );
-    hydrate_mode_payload(&mut config, &|| shell_state::persisted(app));
+    let mut config =
+        ambilight_payload_for(&targets, &runtime_state.tuning.stored(), persisted.as_ref());
+    hydrate_mode_payload(&mut config, &|| persisted.clone());
     let measuring = kind == SceneKind::Latency;
     if measuring {
         // A flip must reach the output as it is: unsmoothed — a saved preset
@@ -117,7 +116,7 @@ pub fn start_scene_lighting<R: Runtime>(
     }
     let telemetry_state = app.state::<RuntimeTelemetryState>();
     let preview_session = app.state::<PreviewSessionState>();
-    let (device_connected, connected_port, wled_sink) = DrivenLocal::plan_args(driven.as_ref());
+    let (device_connected, connected_port, wled_sink) = strips.plan_args();
 
     runtime_state.tuning.close_blocking();
     let (result, failed_prior) = {
@@ -140,6 +139,7 @@ pub fn start_scene_lighting<R: Runtime>(
         owner.preview.latency_sink = measuring.then(|| latency_sink(app));
         owner.preview.pending_test_pattern = None;
         owner.preview.preview_gate = Some(preview_session.twin_open());
+        owner.strips = strips.clone();
         let result = apply_mode_change(
             &mut owner,
             config,
@@ -214,12 +214,12 @@ fn restore_interrupted<R: Runtime>(
     let hue_runtime_state = app.state::<HueRuntimeStateStore>();
     let telemetry_state = app.state::<RuntimeTelemetryState>();
     let preview_session = app.state::<PreviewSessionState>();
-    let apply_with = |mode: LightingModeConfig, driven: Option<&DrivenLocal>| {
+    let apply_with = |mode: LightingModeConfig, strips: &StripSet| {
         apply_and_broadcast(
             app,
             mode,
             runtime_state.inner(),
-            driven,
+            strips,
             hue_runtime_state.inner(),
             telemetry_state.inner(),
             preview_session.inner(),
@@ -230,19 +230,20 @@ fn restore_interrupted<R: Runtime>(
     // run must still end the scene's worker, or it lights on with no owner.
     let give_up = |error: String| {
         warn!("[preview-scene] restore failed ({error}) — the lights go off");
-        if let Err(off) = apply_with(LightingModeConfig::default(), None) {
+        if let Err(off) = apply_with(LightingModeConfig::default(), &StripSet::default()) {
             warn!("[preview-scene] the lights could not go off either: {off}");
         }
         error
     };
-    let driven = app
-        .state::<LocalOutputRegistry>()
-        .driven_checked()
-        .map_err(give_up)?;
+    let strips = strips_from(
+        &app.state::<LocalOutputRegistry>(),
+        shell_state::persisted(app).as_ref(),
+    )
+    .map_err(give_up)?;
     let scene_mode = runtime_state.lock_owner()?.active_mode.clone();
     let stored = runtime_state.tuning.stored();
     let restore = restore_mode_after_test(prior, &stored, &|| shell_state::persisted(app));
-    let apply = |mode: LightingModeConfig| apply_with(mode, driven.as_ref());
+    let apply = |mode: LightingModeConfig| apply_with(mode, &strips);
     let restored = apply(restore).map_err(give_up)?;
     // A gated restore (the strip unplugged mid-scene) returns before the
     // scene's worker is torn down, which would leave it running unowned.
