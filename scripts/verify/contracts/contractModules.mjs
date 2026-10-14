@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { KNOWN_DYNAMIC_PREFIXES } from "../lib/i18nDynamicPrefixes.mjs";
 import { ROOT, VERIFY_DIR, fail, note, check, readOrEmpty, walkSourceFiles, stripComments } from "./lib.mjs";
 import { contractModuleFiles, runtimeSourceFiles } from "./sources.mjs";
 
@@ -45,25 +46,6 @@ const deadExportBaseline = new Set(
     .filter((line) => line.length > 0 && !line.startsWith("#"))
 );
 
-// Dynamic i18n heads are read from i18n-keys.mjs so there is one source of
-// truth: `hue:runtime.codes.${code}` means those codes ARE consumed.
-const i18nVerifierSource = readOrEmpty(
-  resolve(VERIFY_DIR, "i18n-keys.mjs"),
-  "i18n verifier"
-);
-const dynamicPrefixBlock = i18nVerifierSource.match(
-  /const KNOWN_DYNAMIC_PREFIXES = \[([\s\S]*?)\]/
-);
-const dynamicPrefixes = dynamicPrefixBlock
-  ? [...dynamicPrefixBlock[1].matchAll(/"([^"]+)"/g)].map((m) => m[1])
-  : [];
-check(
-  dynamicPrefixes.length > 0,
-  `read ${dynamicPrefixes.length} dynamic i18n prefixes from i18n-keys.mjs`,
-  "EXTRACTION FAILED: could not read KNOWN_DYNAMIC_PREFIXES — every const whose "
-    + "values are looked up dynamically would be misreported as dead"
-);
-
 function flattenCatalogue(obj, prefix = "") {
   const out = [];
   for (const [key, value] of Object.entries(obj)) {
@@ -89,7 +71,7 @@ try {
     for (const key of flattenCatalogue(mod.default)) {
       const lastDot = key.lastIndexOf(".");
       if (lastDot < 0) continue;
-      if (dynamicPrefixes.includes(`${ns}:${key.slice(0, lastDot)}`)) {
+      if (KNOWN_DYNAMIC_PREFIXES.includes(`${ns}:${key.slice(0, lastDot)}`)) {
         dynamicLeafNames.add(key.slice(lastDot + 1));
       }
     }

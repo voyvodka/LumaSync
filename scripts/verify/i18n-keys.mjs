@@ -7,6 +7,8 @@ import { readFileSync, readdirSync, existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 
+import { KNOWN_DYNAMIC_PREFIXES } from "./lib/i18nDynamicPrefixes.mjs";
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "../..");
 
@@ -17,22 +19,6 @@ const NAMESPACE_REGISTRY_FILE = resolve(ROOT, "src/features/i18n/namespaces.ts")
 
 const CONTRACTS_DIR = resolve(ROOT, "src/shared/contracts");
 
-// Static heads of live `` t(`prefix.${x}`) `` sites. An unlisted head is only a
-// note(), but orphan accounting under it is unreliable until the list catches up.
-// contracts/contractModules.mjs reads this array literal, so it stays a flat list.
-const KNOWN_DYNAMIC_PREFIXES = [
-  "hue:runtime.codes",
-  "hue:runtime.states",
-  "hue:runtime.writeback.codes",
-  "common:hotplug.targetLabel",
-  "lights:effect.directions",
-  "lights:effect.names",
-  "lights:effect.palettes",
-  "lights:scenes.suggested",
-  "roomMap:furniture.type",
-  "settings:nav.sections",
-  "telemetry:queueHealth",
-];
 
 // What `${x}` can be at each dynamic site, read from src/shared/contracts/.
 // Only children in that set count as referenced, so a key whose value left the

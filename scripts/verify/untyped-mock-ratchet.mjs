@@ -28,9 +28,6 @@ const ROOT = join(here, "../..");
 const BASELINE_FILE = join(here, "untyped-mock-baseline.txt");
 const PATTERN = /\bvi\.fn\(\)/g;
 
-// A comment naming `vi.fn()` is not a double.
-
-
 const baselineLine = readFileSync(BASELINE_FILE, "utf8")
   .split("\n")
   .map((line) => line.trim())
@@ -45,6 +42,7 @@ const byFile = [];
 let count = 0;
 for (const dir of ["src", "mock", "e2e"]) {
   for (const file of walk(join(ROOT, dir))) {
+    // A comment naming `vi.fn()` is not a double.
     const hits = (stripComments(readFileSync(file, "utf8")).match(PATTERN) ?? []).length;
     if (hits > 0) {
       count += hits;
