@@ -15,18 +15,17 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join, extname } from "node:path";
+
+import { createReport } from "./lib/report.mjs";
+import { stripComments, walkFiles as walk } from "./lib/source.mjs";
 
 const ROOT = new URL("../..", import.meta.url).pathname;
 const CHECK_DIST = process.argv.includes("--dist");
 
-let failures = 0;
-const pass = (msg) => console.log(`  ✔  ${msg}`);
-const fail = (msg) => {
-  failures += 1;
-  console.log(`  ✘  ${msg}`);
-};
+const report = createReport();
+const { pass, fail } = report;
 
 /** Read the sentinel out of its source rather than restating it here. */
 function sentinel() {
@@ -39,17 +38,6 @@ function sentinel() {
   return match[1];
 }
 
-function walk(dir, out = []) {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) {
-      if (entry !== "node_modules") walk(full, out);
-    } else {
-      out.push(full);
-    }
-  }
-  return out;
-}
 
 console.log("\n[ Dev mock — ship safety ]\n");
 
@@ -103,8 +91,6 @@ const marker = sentinel();
   const DECLARED_IN = new Set(["src/shared/contracts/hue.ts", "src/shared/contracts/ipc.ts"]);
   const isTest = (rel) =>
     rel.includes("/__tests__/") || /\.test\.tsx?$/.test(rel) || rel.startsWith("src/test/");
-  const stripComments = (text) =>
-    text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/[^\n]*/g, "$1");
   const referencing = walk(join(ROOT, "src"))
     .filter((f) => [".ts", ".tsx", ".js", ".jsx"].includes(extname(f)))
     .map((f) => ({ file: f, rel: f.replace(ROOT, "") }))
@@ -153,9 +139,9 @@ if (CHECK_DIST) {
 }
 
 console.log(`\n${"=".repeat(44)}`);
-if (failures === 0) {
+if (report.failures === 0) {
   console.log("✔  Dev mock cannot reach a shipped bundle.\n");
   process.exit(0);
 }
-console.log(`✘  ${failures} check(s) failed — the dev mock could ship.\n`);
+console.log(`✘  ${report.failures} check(s) failed — the dev mock could ship.\n`);
 process.exit(1);

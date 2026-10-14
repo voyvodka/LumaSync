@@ -28,32 +28,21 @@
  *   node scripts/verify/design-tokens.mjs
  */
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join, extname, resolve } from "node:path";
+
+import { createReport } from "./lib/report.mjs";
+import { stripComments, walkFiles } from "./lib/source.mjs";
 
 const ROOT = new URL("../..", import.meta.url).pathname;
 const STYLESHEET = join(ROOT, "src/styles.css");
 const SCANNED = ["src", "mock"];
 const EXTENSIONS = [".ts", ".tsx", ".css"];
+const walk = (dir) => walkFiles(dir, (name) => EXTENSIONS.includes(extname(name)));
 
-let failures = 0;
-const pass = (msg) => console.log(`  ✔  ${msg}`);
-const fail = (msg) => {
-  failures += 1;
-  console.log(`  ✘  ${msg}`);
-};
+const report = createReport();
+const { pass, fail } = report;
 
-function walk(dir, out = []) {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) {
-      if (entry !== "node_modules") walk(full, out);
-    } else if (EXTENSIONS.includes(extname(full))) {
-      out.push(full);
-    }
-  }
-  return out;
-}
 
 console.log("\n[ Design tokens ]\n");
 
@@ -173,8 +162,6 @@ const hexBaseline = Number(
     .filter((l) => l.trim() && !l.startsWith("#"))[0],
 );
 const HEX = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b/g;
-const stripComments = (source) =>
-  source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
 let hexCount = 0;
 for (const file of walk(join(ROOT, "src"))) {
   if (file.includes("/__tests__/") || file === TOKENS_FILE) continue;
@@ -194,9 +181,9 @@ if (!Number.isFinite(hexBaseline)) {
 }
 
 console.log(`\n${"=".repeat(44)}`);
-if (failures === 0) {
+if (report.failures === 0) {
   console.log("✔  Design tokens verified.\n");
   process.exit(0);
 }
-console.log(`✘  ${failures} check(s) failed.\n`);
+console.log(`✘  ${report.failures} check(s) failed.\n`);
 process.exit(1);

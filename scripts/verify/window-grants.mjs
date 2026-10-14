@@ -21,19 +21,19 @@
  *   node scripts/verify/window-grants.mjs
  */
 
-import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import { readFileSync, statSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+
+import { createReport } from "./lib/report.mjs";
+import { stripComments, walkFiles } from "./lib/source.mjs";
+
+const walk = (dir) => walkFiles(dir, (name) => /\.tsx?$/.test(name), ["__tests__"]);
 
 const ROOT = new URL("../..", import.meta.url).pathname;
 const SRC = join(ROOT, "src");
 
-let failures = 0;
-const pass = (msg) => console.log(`  ✔  ${msg}`);
-const fail = (msg) => {
-  failures += 1;
-  console.log(`  ✘  ${msg}`);
-};
-const check = (ok, good, bad) => (ok ? pass(good) : fail(bad));
+const report = createReport();
+const { pass, fail, check } = report;
 
 // ---------------------------------------------------------------------------
 // Windows, their entries, and the deliberate differences
@@ -112,20 +112,7 @@ const WINDOWS = [
 // Sources
 // ---------------------------------------------------------------------------
 
-function walk(dir, out = []) {
-  for (const name of readdirSync(dir)) {
-    const full = join(dir, name);
-    if (statSync(full).isDirectory()) {
-      if (name !== "node_modules" && name !== "__tests__") walk(full, out);
-    } else if (/\.tsx?$/.test(name)) {
-      out.push(full);
-    }
-  }
-  return out;
-}
 
-const stripComments = (text) =>
-  text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/[^\n]*/g, "$1");
 
 const read = (path) => readFileSync(path, "utf-8");
 
@@ -346,8 +333,8 @@ for (const window of WINDOWS) {
 }
 
 console.log("");
-if (failures > 0) {
-  console.log(`✘  ${failures} window-grant check(s) failed.`);
+if (report.failures > 0) {
+  console.log(`✘  ${report.failures} window-grant check(s) failed.`);
   process.exit(1);
 }
 console.log("✔  Every window is granted exactly the app commands its code can invoke.");
