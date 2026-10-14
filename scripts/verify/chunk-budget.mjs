@@ -1,0 +1,96 @@
+#!/usr/bin/env node
+/**
+ * Per-chunk-class size gate for the frontend bundle.
+ *
+ * Vite's `chunkSizeWarningLimit` is one number for every chunk and only warns,
+ * and nothing fails on a warning — so it had quietly stopped holding (the entry
+ * passed 300 kB with every build printing the warning). This builds the
+ * frontend into a temporary directory and fails when a chunk outgrows the budget
+ * of its class:
+ *
+ *   entry — the HTML entries plus their static imports: what every window
+ *           (main, popup, one twin overlay per display, scene) parses at start.
+ *   lazy  — any other chunk, unless it has its own line in NAMED.
+ *
+ * Raising a budget is a decision, not a fix: say why in
+ * docs/architecture/build-and-release.md in the same change.
+ *
+ *   node scripts/verify/chunk-budget.mjs
+ */
+
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
+
+const ROOT = new URL("../..", import.meta.url).pathname;
+
+/** kB as Vite reports them (1000 bytes). */
+const ENTRY_BUDGET_KB = 345;
+const LAZY_BUDGET_KB = 180;
+/** Lazy chunks with a budget of their own, matched on the chunk's name before its hash. */
+const NAMED = {};
+
+let failures = 0;
+const pass = (msg) => console.log(`  ✔  ${msg}`);
+const fail = (msg) => {
+  failures += 1;
+  console.log(`  ✘  ${msg}`);
+};
+const kb = (bytes) => (bytes / 1000).toFixed(1);
+
+console.log("\n[ Chunk budget ]\n");
+
+const outDir = mkdtempSync(join(tmpdir(), "lumasync-chunk-budget-"));
+try {
+  const build = spawnSync(
+    join(ROOT, "node_modules/.bin/vite"),
+    ["build", "--outDir", outDir, "--emptyOutDir", "--manifest", "--logLevel", "error"],
+    { cwd: ROOT, stdio: ["ignore", "inherit", "inherit"] },
+  );
+  if (build.status !== 0) {
+    fail(`vite build exited with ${build.status} — no sizes to check`);
+  } else {
+    const manifest = JSON.parse(readFileSync(join(outDir, ".vite/manifest.json"), "utf-8"));
+    const size = (file) => statSync(join(outDir, file)).size;
+    const isJs = (file) => file.endsWith(".js");
+
+    const entryKeys = new Set();
+    const visit = (key) => {
+      if (entryKeys.has(key)) return;
+      entryKeys.add(key);
+      for (const dep of manifest[key].imports ?? []) visit(dep);
+    };
+    for (const [key, chunk] of Object.entries(manifest)) {
+      if (chunk.isEntry) visit(key);
+    }
+
+    const entryFiles = [...entryKeys].map((key) => manifest[key].file).filter(isJs);
+    const entryBytes = entryFiles.reduce((sum, file) => sum + size(file), 0);
+    const entryLine = `entry ${kb(entryBytes)} kB of ${ENTRY_BUDGET_KB} kB (${entryFiles.map((f) => basename(f)).join(", ")})`;
+    if (entryBytes > ENTRY_BUDGET_KB * 1000) fail(entryLine);
+    else pass(entryLine);
+
+    const lazy = Object.entries(manifest)
+      .filter(([key, chunk]) => !entryKeys.has(key) && isJs(chunk.file))
+      .map(([, chunk]) => chunk.file);
+    let largest = { file: "", bytes: 0 };
+    for (const file of new Set(lazy)) {
+      const bytes = size(file);
+      const name = basename(file).replace(/-[\w-]{8}\.js$/, "");
+      const budget = NAMED[name] ?? LAZY_BUDGET_KB;
+      if (bytes > budget * 1000) fail(`lazy ${basename(file)} ${kb(bytes)} kB over its ${budget} kB budget`);
+      if (bytes > largest.bytes) largest = { file, bytes };
+    }
+    pass(`largest lazy chunk ${basename(largest.file)} ${kb(largest.bytes)} kB (budget ${LAZY_BUDGET_KB} kB)`);
+  }
+} finally {
+  rmSync(outDir, { recursive: true, force: true });
+}
+
+console.log("\n============================================");
+if (failures > 0) {
+  console.log(`✘  ${failures} chunk(s) over budget.`);
+  process.exit(1);
+}
+console.log("✔  Chunks within budget.");

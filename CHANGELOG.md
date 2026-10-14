@@ -1111,6 +1111,9 @@ https://keepachangelog.com/en/1.1.0/
   and a CI check that fails when a change makes every frame allocate more memory or rebuild a
   colour table. Two small per-frame allocations went away on the way, one on the Hue path and one
   on every USB send.
+- The frontend bundle has a size gate that fails, per chunk class: the start-up code every window
+  loads, and each chunk loaded later. The old limit only printed a warning and had been passed
+  without anyone noticing.
 
 
 ## [1.5.5]
