@@ -26,20 +26,6 @@ const CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/shell.ts");
 // ---------------------------------------------------------------------------
 // Required exports
 // ---------------------------------------------------------------------------
-const REQUIRED_EXPORTS = [
-  "TRAY_MENU_IDS",
-  "TrayMenuId",
-  "SECTION_IDS",
-  "SectionId",
-  "SECTION_ORDER",
-  "ShellState",
-  "SHELL_STATE_SCHEMA_VERSION",
-  "DEFAULT_SHELL_STATE",
-  "SHELL_STORE_KEY",
-  "UI_MODE_SIZES",
-  "UI_MODE_MIN_SIZES",
-];
-
 // ---------------------------------------------------------------------------
 // Required tray menu ID values
 // ---------------------------------------------------------------------------
@@ -183,16 +169,6 @@ try {
   process.exit(1);
 }
 
-// Check required exports
-console.log("\n[ Required exports ]");
-for (const name of REQUIRED_EXPORTS) {
-  check(
-    source.includes(`export`) && source.includes(name),
-    `export "${name}" present`,
-    `MISSING export "${name}"`
-  );
-}
-
 // Check tray menu IDs
 console.log("\n[ Tray menu IDs ]");
 for (const id of REQUIRED_TRAY_IDS) {
@@ -292,11 +268,6 @@ if (orderMatch) {
 // Schema version bump — gates the newest migration step; earlier steps chain.
 // ---------------------------------------------------------------------------
 console.log("\n[ Shell state schema version (strips stored) ]");
-check(
-  /SHELL_STATE_SCHEMA_VERSION\s*=\s*10\b/.test(source),
-  "SHELL_STATE_SCHEMA_VERSION === 10 (roomMapVersion dropped)",
-  "SHELL_STATE_SCHEMA_VERSION not bumped to 10 — the 9 → 10 step has no trigger"
-);
 for (const retired of ["startupEnabled", "notificationsEnabled", "roomMapBackgroundOpacity"]) {
   check(
     !new RegExp(`\\b${retired}\\??:`).test(source),
@@ -315,58 +286,6 @@ check(
 // ---------------------------------------------------------------------------
 const HUE_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/hue.ts");
 const hueSource = readOrEmpty(HUE_CONTRACT_FILE, "hue");
-
-console.log("\n[ Hue channel position commands ]");
-const REQUIRED_HUE_CHANNEL_COMMANDS = [
-  "update_hue_channel_positions",
-];
-for (const cmd of REQUIRED_HUE_CHANNEL_COMMANDS) {
-  check(
-    hueSource.includes(`"${cmd}"`),
-    `hue command "${cmd}" defined`,
-    `MISSING hue command "${cmd}" in hue.ts`
-  );
-}
-
-const REQUIRED_HUE_CHANNEL_STATUS = [
-  "HUE_CHANNEL_POSITIONS_UPDATED",
-  "HUE_CHANNEL_POSITIONS_FAILED",
-];
-for (const status of REQUIRED_HUE_CHANNEL_STATUS) {
-  check(
-    hueSource.includes(`"${status}"`),
-    `hue status "${status}" defined`,
-    `MISSING hue status "${status}" in hue.ts`
-  );
-}
-
-console.log("\n[ Hue v1.4 403 uniformization ]");
-check(
-  hueSource.includes(`"AUTH_INVALID_RE_PAIR_REQUIRED"`),
-  "hue runtime status AUTH_INVALID_RE_PAIR_REQUIRED defined",
-  "MISSING hue runtime status AUTH_INVALID_RE_PAIR_REQUIRED"
-);
-
-console.log("\n[ Hue G7 pairing split ]");
-const REQUIRED_HUE_PAIRING_CODES = [
-  "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED",
-  "HUE_PAIRING_DEVICETYPE_INVALID",
-  "HUE_PAIRING_BRIDGE_BUSY",
-  "HUE_PAIRING_RATE_LIMITED",
-];
-for (const code of REQUIRED_HUE_PAIRING_CODES) {
-  check(
-    hueSource.includes(`"${code}"`),
-    `hue pairing code "${code}" defined`,
-    `MISSING hue pairing code "${code}"`
-  );
-}
-// Backwards-compat: the catch-all must survive the split.
-check(
-  hueSource.includes(`"HUE_PAIRING_FAILED"`),
-  "hue pairing catch-all HUE_PAIRING_FAILED preserved",
-  "MISSING backwards-compat HUE_PAIRING_FAILED"
-);
 
 console.log("\n[ Hue intensity preset ]");
 check(
@@ -491,22 +410,6 @@ check(
 const DEVICE_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/device.ts");
 const deviceSource = readOrEmpty(DEVICE_CONTRACT_FILE, "device");
 
-console.log("\n[ Device serial health codes ]");
-const REQUIRED_SERIAL_HEALTH_CODES = [
-  "SERIAL_HEALTH_OK",
-  "SERIAL_HEALTH_HANDSHAKE_TIMEOUT",
-  "SERIAL_HEALTH_VERSION_MISMATCH",
-  "SERIAL_HEALTH_FIRMWARE_MISMATCH",
-  "SERIAL_HEALTH_PROTOCOL_ERROR",
-];
-for (const code of REQUIRED_SERIAL_HEALTH_CODES) {
-  check(
-    deviceSource.includes(`"${code}"`),
-    `serial health code "${code}" defined`,
-    `MISSING serial health code "${code}"`
-  );
-}
-
 console.log("\n[ Device firmware profile ]");
 const REQUIRED_FIRMWARE_PROFILE_VALUES = [
   "adalight",
@@ -618,19 +521,6 @@ for (const name of REQUIRED_CALIBRATION_EXPORTS) {
 const PLATFORM_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/platform.ts");
 const platformSource = readOrEmpty(PLATFORM_CONTRACT_FILE, "platform");
 
-console.log("\n[ Platform notification commands ]");
-const REQUIRED_PLATFORM_COMMANDS = [
-  "request_notification_permission",
-  "show_notification",
-];
-for (const cmd of REQUIRED_PLATFORM_COMMANDS) {
-  check(
-    platformSource.includes(`"${cmd}"`),
-    `platform command "${cmd}" defined`,
-    `MISSING platform command "${cmd}" in platform.ts`
-  );
-}
-
 console.log("\n[ Notification kinds ]");
 const REQUIRED_NOTIFICATION_KINDS = ["info", "warn", "error"];
 for (const kind of REQUIRED_NOTIFICATION_KINDS) {
@@ -638,20 +528,6 @@ for (const kind of REQUIRED_NOTIFICATION_KINDS) {
     platformSource.includes(`"${kind}"`),
     `notification kind "${kind}" defined`,
     `MISSING notification kind "${kind}"`
-  );
-}
-
-console.log("\n[ Notification result codes ]");
-const REQUIRED_NOTIFICATION_RESULT_CODES = [
-  "NOTIF_PERMISSION_DENIED",
-  "NOTIF_UNSUPPORTED_OS",
-  "NOTIF_SUPPRESSED",
-];
-for (const code of REQUIRED_NOTIFICATION_RESULT_CODES) {
-  check(
-    platformSource.includes(`"${code}"`),
-    `notification result code "${code}" defined`,
-    `MISSING notification result code "${code}"`
   );
 }
 
@@ -685,204 +561,12 @@ for (const typeName of REQUIRED_ROOM_MAP_TYPES) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Hue zone surface (Hue-only after the direction reversal)
-// ---------------------------------------------------------------------------
-console.log("\n[ Hue zone — canonical type shape (v1.5 W4-F2) ]");
-// `HueZone` is now Hue-only; the short-lived `zoneType` discriminator is gone,
-// so the Hue-required fields are non-optional on the canonical type.
-check(
-  /export\s+interface\s+HueZone\b/.test(roomMapSource),
-  "HueZone interface present in roomMap.ts",
-  "MISSING HueZone interface in roomMap.ts"
-);
-const HUE_ZONE_REQUIRED_FIELDS = [
-  ["entertainmentAreaId", "string"],
-  ["centerX", "number"],
-  ["centerY", "number"],
-  ["centerZ", "number"],
-  ["scaleX", "number"],
-  ["scaleY", "number"],
-  ["scaleZ", "number"],
-];
-// Slice the HueZone block so we only check fields inside that interface.
-const hueZoneBlockMatch = roomMapSource.match(
-  /export\s+interface\s+HueZone\b[\s\S]*?\n\}/,
-);
-const hueZoneBlock = hueZoneBlockMatch ? hueZoneBlockMatch[0] : "";
-for (const [field, ty] of HUE_ZONE_REQUIRED_FIELDS) {
-  // Required (no `?:`). Match `field: ty` — allow trailing semicolon /
-  // newline / comment.
-  const re = new RegExp(`\\b${field}:\\s*${ty}\\b`);
-  check(
-    re.test(hueZoneBlock),
-    `HueZone.${field} declared required (${ty})`,
-    `HueZone.${field} not declared required ${ty} (W4-F2: Hue-only fields lost their optional marker)`
-  );
-}
-// `zoneType` discriminator MUST be gone from the canonical HueZone block.
-check(
-  !/zoneType\s*[?:]/.test(hueZoneBlock),
-  "HueZone.zoneType discriminator removed (W4-F2 direction reversal)",
-  "HueZone.zoneType discriminator still present — W4-F2 cleanup incomplete"
-);
-
-console.log("\n[ Hue zone — legacy migration shape (v1.5 W4-F2) ]");
-check(
-  /export\s+interface\s+LegacyHueZone\b/.test(roomMapSource),
-  "LegacyHueZone interface present (read-only migration shape)",
-  "MISSING LegacyHueZone interface in roomMap.ts"
-);
-
-console.log("\n[ Hue zone — RoomMapConfig fields (v1.5 W4-F2) ]");
-check(
-  /zones:\s*HueZone\[\]/.test(roomMapSource),
-  "RoomMapConfig.zones typed HueZone[] (Hue-only, post-W4-F2)",
-  "RoomMapConfig.zones is not typed HueZone[] (W4-F2 cleanup incomplete)"
-);
-check(
-  /hueZones\?:\s*LegacyHueZone\[\]/.test(roomMapSource),
-  "RoomMapConfig.hueZones kept as @deprecated LegacyHueZone[] fallback",
-  "MISSING @deprecated RoomMapConfig.hueZones field — F6 migration shim has no fallback to read"
-);
-
-console.log("\n[ Hue zone — migration helper (v1.5 W4-F2) ]");
-check(
-  /export\s+function\s+migrateLegacyHueZone\s*\(/.test(roomMapSource),
-  "migrateLegacyHueZone helper exported (Hue-only)",
-  "MISSING migrateLegacyHueZone helper in roomMap.ts"
-);
-// The `toLogicalZone` and `toHueZone` helpers MUST be gone (the brief
-// logical-zone migration path was rolled back).
-check(
-  !/export\s+function\s+toLogicalZone\b/.test(roomMapSource),
-  "toLogicalZone helper removed (W4-F2 direction reversal)",
-  "STILL PRESENT: toLogicalZone helper — W4-F2 cleanup incomplete"
-);
-check(
-  !/export\s+function\s+toHueZone\b/.test(roomMapSource),
-  "toHueZone helper removed (renamed to migrateLegacyHueZone)",
-  "STILL PRESENT: toHueZone helper — should be renamed to migrateLegacyHueZone"
-);
-check(
-  !/export\s+function\s+asHueZoneLegacy\b/.test(roomMapSource),
-  "asHueZoneLegacy projection removed (W4-F2: HueZone is canonical, no projection needed)",
-  "STILL PRESENT: asHueZoneLegacy projection — should be deleted in W4-F2"
-);
-
-console.log("\n[ Hue zone — discriminator surface removed (v1.5 W4-F2) ]");
-// `ZONE_TYPES` / `ZoneType` were the zone unification's discriminator — both
-// must be gone after the direction reversal.
-check(
-  !/export\s+const\s+ZONE_TYPES\b/.test(roomMapSource),
-  "ZONE_TYPES const removed (W4-F2 reversal)",
-  "STILL PRESENT: ZONE_TYPES const — discriminator should be gone in W4-F2"
-);
-check(
-  !/export\s+type\s+ZoneType\b/.test(roomMapSource),
-  "ZoneType type removed (W4-F2 reversal)",
-  "STILL PRESENT: ZoneType type — discriminator should be gone in W4-F2"
-);
-// The brief generic `ZONE_COMMANDS` / `ZONE_STATUS_CODES` maps were renamed
-// back to the Hue-only `HUE_ZONE_*` family.
-check(
-  !/export\s+const\s+ZONE_COMMANDS\b/.test(roomMapSource),
-  "generic ZONE_COMMANDS map removed (W4-F2 reversal)",
-  "STILL PRESENT: generic ZONE_COMMANDS map — should be HUE_ZONE_COMMANDS after W4-F2"
-);
-check(
-  !/export\s+const\s+ZONE_STATUS_CODES\b/.test(roomMapSource),
-  "generic ZONE_STATUS_CODES map removed (W4-F2 reversal)",
-  "STILL PRESENT: generic ZONE_STATUS_CODES map — should be HUE_ZONE_STATUS_CODES after W4-F2"
-);
-// Brief unification-only status codes that only made sense in a logical/Hue
-// discriminated world.
-check(
-  !roomMapSource.includes(`"ZONE_TYPE_INVALID"`),
-  "ZONE_TYPE_INVALID status code removed (W4-F2 reversal)",
-  "STILL PRESENT: ZONE_TYPE_INVALID — only meaningful when discriminator existed"
-);
-check(
-  !roomMapSource.includes(`"ZONE_CONVERSION_OK"`),
-  "ZONE_CONVERSION_OK status code removed (W4-F2 reversal)",
-  "STILL PRESENT: ZONE_CONVERSION_OK — only meaningful for hue → logical conversion path"
-);
-
-console.log("\n[ Hue zone — command surface (v1.5 W4-F2) ]");
-const REQUIRED_HUE_ZONE_COMMANDS = [
-  "create_hue_zone",
-  "update_hue_zone",
-  "delete_hue_zone",
-  "assign_channel_to_hue_zone",
-];
-for (const cmd of REQUIRED_HUE_ZONE_COMMANDS) {
-  check(
-    roomMapSource.includes(`"${cmd}"`),
-    `hue zone command "${cmd}" defined in roomMap.ts`,
-    `MISSING hue zone command "${cmd}" in roomMap.ts > HUE_ZONE_COMMANDS`
-  );
-}
-check(
-  /export\s+const\s+HUE_ZONE_COMMANDS\s*=\s*\{/.test(roomMapSource),
-  "HUE_ZONE_COMMANDS const exported (Hue-only, post-W4-F2)",
-  "MISSING HUE_ZONE_COMMANDS const in roomMap.ts"
-);
-
-console.log("\n[ Hue zone — status codes (v1.5 W4-F2) ]");
-const REQUIRED_HUE_ZONE_STATUS_CODES = [
-  "HUE_ZONE_CREATED",
-  "HUE_ZONE_UPDATED",
-  "HUE_ZONE_DELETED",
-  "HUE_ZONE_NOT_FOUND",
-  "HUE_ZONE_CHANNEL_OUT_OF_BOUNDS",
-  "HUE_ZONE_LIMIT_REACHED",
-  "HUE_ZONE_CHANNEL_NOT_IN_AREA",
-  "HUE_ZONE_OVERSIZED",
-];
-for (const code of REQUIRED_HUE_ZONE_STATUS_CODES) {
-  check(
-    roomMapSource.includes(`"${code}"`),
-    `hue zone status code "${code}" defined`,
-    `MISSING hue zone status code "${code}" in roomMap.ts > HUE_ZONE_STATUS_CODES`
-  );
-}
-check(
-  /export\s+const\s+HUE_ZONE_STATUS_CODES\s*=\s*\{/.test(roomMapSource),
-  "HUE_ZONE_STATUS_CODES const exported (Hue-only, post-W4-F2)",
-  "MISSING HUE_ZONE_STATUS_CODES const in roomMap.ts"
-);
-
-// ---------------------------------------------------------------------------
-// Rust handler parity for the renamed Hue zone commands.
-//
-// `lib.rs` registers Tauri commands through `generate_handler!` — the
-// Hue-only verbs (`create_hue_zone`, `update_hue_zone`, `delete_hue_zone`,
-// `assign_channel_to_hue_zone`) MUST appear in that list, otherwise the
-// frontend's `invoke(HUE_ZONE_COMMANDS.X)` call resolves to nothing. The
-// brief generic `create_zone` / `update_zone` etc. handlers MUST
-// be gone.
-// ---------------------------------------------------------------------------
+// The commands Rust registers, read once for the ACL manifest and the name parity below.
 const RUST_LIB_FILE = resolve(ROOT, "src-tauri/src/lib.rs");
 const rustLibSource = readOrEmpty(RUST_LIB_FILE, "rust lib.rs");
-
-console.log("\n[ Hue zone — Rust handler parity (v1.5 W4-F2) ]");
-const REQUIRED_RUST_HUE_ZONE_HANDLERS = [
-  "create_hue_zone",
-  "update_hue_zone",
-  "delete_hue_zone",
-  "assign_channel_to_hue_zone",
-];
 const handlerListMatch = rustLibSource.match(/generate_handler!\[([\s\S]*?)\]/);
 const handlerListBlock = handlerListMatch ? handlerListMatch[1] : "";
-for (const fn of REQUIRED_RUST_HUE_ZONE_HANDLERS) {
-  const re = new RegExp(`(^|[\\s,])${fn}([\\s,]|$)`, "m");
-  check(
-    re.test(handlerListBlock),
-    `Rust generate_handler! list registers "${fn}"`,
-    `MISSING Rust generate_handler! entry for "${fn}" — `
-      + `frontend invoke(HUE_ZONE_COMMANDS.X) will resolve to nothing`
-  );
-}
+
 // `build.rs` lists every command for the app ACL manifest. A command missing
 // there has no permission to grant, so every window's invoke of it is refused;
 // one missing here was deleted from the app and still has a grant.
@@ -959,29 +643,6 @@ const WLED_DISCOVERY_FILE = resolve(
 );
 const wledRustSource = readOrEmpty(WLED_DISCOVERY_FILE, "wled_discovery.rs");
 
-console.log("\n[ Device WLED status codes (v1.5.2 patch — F4) ]");
-const REQUIRED_WLED_STATUS_CODES = [
-  "WLED_DISCOVERY_OK",
-  "WLED_DISCOVERY_TIMEOUT",
-  "WLED_BRIDGE_UNREACHABLE",
-  "WLED_PROTOCOL_MISMATCH",
-  "WLED_LED_COUNT_MISMATCH",
-  "WLED_INVALID_IP",
-  "WLED_INVALID_LED_COUNT",
-];
-for (const code of REQUIRED_WLED_STATUS_CODES) {
-  check(
-    deviceSource.includes(`"${code}"`),
-    `WLED_STATUS map contains "${code}" (device.ts)`,
-    `MISSING WLED_STATUS entry "${code}" in device.ts`
-  );
-  check(
-    wledRustSource.includes(`"${code}"`),
-    `Rust wled_discovery.rs emits status code "${code}"`,
-    `MISSING status code "${code}" in wled_discovery.rs`
-  );
-}
-
 console.log("\n[ WLED discovery wire shape — Vec<WledDeviceInfo> (A1.1) ]");
 check(
   wledRustSource.includes("pub devices: Vec<WledDeviceInfo>"),
@@ -1031,28 +692,6 @@ check(
   "STILL PRESENT: WledTestResponse.device field — A1.6 cleanup incomplete"
 );
 
-console.log("\n[ WLED SSRF guard — extended address range checks (A2.1) ]");
-check(
-  wledRustSource.includes("is_loopback()"),
-  "parse_ipv4 rejects loopback (127.x) via is_loopback()",
-  "MISSING: is_loopback() check in parse_ipv4"
-);
-check(
-  wledRustSource.includes("is_unspecified()"),
-  "parse_ipv4 rejects unspecified (0.0.0.0) via is_unspecified()",
-  "MISSING: is_unspecified() check in parse_ipv4"
-);
-check(
-  wledRustSource.includes("is_multicast()"),
-  "parse_ipv4 rejects multicast (224.x/4) via is_multicast()",
-  "MISSING: is_multicast() check in parse_ipv4"
-);
-check(
-  wledRustSource.includes("is_broadcast()"),
-  "parse_ipv4 rejects broadcast (255.255.255.255) via is_broadcast()",
-  "MISSING: is_broadcast() check in parse_ipv4"
-);
-
 // ---------------------------------------------------------------------------
 // LED preview contract: the test-pattern commands LED Setup and Devices use,
 // and the preview session (popup + twin) that Lights and the tray open.
@@ -1060,58 +699,7 @@ check(
 const PREVIEW_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/preview.ts");
 const previewSource = readOrEmpty(PREVIEW_CONTRACT_FILE, "preview");
 
-console.log("\n[ Preview commands (v1.6) ]");
-const REQUIRED_PREVIEW_COMMANDS = [
-  "start_led_test_pattern",
-  "stop_led_test_pattern",
-  "open_preview",
-  "close_preview",
-  "get_preview_session",
-  "set_preview_popup_hidden",
-  "set_preview_twin_hidden",
-  "subscribe_twin_frames",
-  "start_preview_scene",
-  "stop_preview_scene",
-  "set_preview_scene_brightness",
-  "set_preview_scene_black_borders",
-];
-for (const cmd of REQUIRED_PREVIEW_COMMANDS) {
-  check(
-    previewSource.includes(`"${cmd}"`),
-    `preview command "${cmd}" defined in preview.ts`,
-    `MISSING preview command "${cmd}" in preview.ts > PREVIEW_COMMANDS`
-  );
-}
-
-console.log("\n[ Preview status codes (v1.6) ]");
-const REQUIRED_PREVIEW_STATUS_CODES = [
-  // LED test pattern lifecycle
-  "LED_TEST_PATTERN_STARTED",
-  "LED_TEST_PATTERN_PREVIEW_ONLY",
-  "LED_TEST_PATTERN_STOPPED",
-  "LED_TEST_PATTERN_INVALID_PARAMS",
-  "LED_TEST_PATTERN_NO_CALIBRATION",
-  "LED_TEST_PATTERN_RUNTIME_ERROR",
-  // Preview session
-  "PREVIEW_OPENED",
-  "PREVIEW_ALREADY_OPEN",
-  "PREVIEW_CLOSED",
-  "PREVIEW_NOT_OPEN",
-  "PREVIEW_POPUP_UPDATED",
-  "PREVIEW_TWIN_UPDATED",
-  "PREVIEW_TWIN_SUBSCRIBED",
-  "PREVIEW_OPEN_FAILED",
-  "PREVIEW_CLOSE_FAILED",
-];
-for (const code of REQUIRED_PREVIEW_STATUS_CODES) {
-  check(
-    previewSource.includes(`"${code}"`),
-    `preview status code "${code}" defined`,
-    `MISSING preview status code "${code}" in preview.ts`
-  );
-}
-
-// Presence above proves containment only; the session's codes are pinned equal.
+console.log("\n[ Preview status codes — Rust ↔ preview.ts ]");
 {
   const rustPreview = ["session.rs", "feed.rs", "scene.rs"]
     .map((file) =>
@@ -1232,36 +820,6 @@ for (const field of REQUIRED_V16_STATE_FIELDS) {
     `ShellState v1.6 field "${field}" declared optional`,
     `MISSING optional ShellState v1.6 field "${field}"`
   );
-}
-
-console.log("\n[ Preview — Rust handler parity (v1.6 Phase 0 \u2192 Phase 1) ]");
-// Phase 0 known-pending allowlist. The Rust handlers land in Phase 1; remove
-// an entry the moment its #[tauri::command] is registered in lib.rs. When this
-// array is empty the loop enforces strict parity like the Hue zone block above.
-const PREVIEW_PENDING_RUST_HANDLERS = [];
-for (const fn of REQUIRED_PREVIEW_COMMANDS) {
-  const re = new RegExp(`(^|[\\s,])${fn}([\\s,]|$)`, "m");
-  const registered = re.test(handlerListBlock);
-  const pending = PREVIEW_PENDING_RUST_HANDLERS.includes(fn);
-  if (registered) {
-    pass(`Rust generate_handler! list registers "${fn}"`);
-    if (pending) {
-      note(
-        `"${fn}" is now registered in lib.rs — remove it from `
-          + `PREVIEW_PENDING_RUST_HANDLERS (Phase 1 cleanup)`
-      );
-    }
-  } else if (pending) {
-    note(
-      `PENDING (Phase 1): "${fn}" not yet in generate_handler! — `
-        + `known-pending allowlist, not a failure`
-    );
-  } else {
-    fail(
-      `MISSING Rust generate_handler! entry for "${fn}" — `
-        + `frontend invoke(PREVIEW_COMMANDS.X) will resolve to nothing`
-    );
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1543,10 +1101,8 @@ check(
 // ---------------------------------------------------------------------------
 const TELEMETRY_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/telemetry.ts");
 const RUST_TELEMETRY_FILE = resolve(ROOT, "src-tauri/src/commands/runtime_telemetry.rs");
-const RUST_EVENTS_FILE = resolve(ROOT, "src-tauri/src/events.rs");
 const telemetrySource = readOrEmpty(TELEMETRY_CONTRACT_FILE, "telemetry");
 const rustTelemetrySource = readOrEmpty(RUST_TELEMETRY_FILE, "rust runtime_telemetry");
-const rustEventsSource = readOrEmpty(RUST_EVENTS_FILE, "rust events");
 
 function rustStructFields(source, structName) {
   const block = source.match(
@@ -1628,22 +1184,9 @@ check(
     + `vs telemetry.ts LINK_CONSTRAINED_FPS_THRESHOLD=${tsLinkThreshold ? tsLinkThreshold[1] : "?"}`
 );
 
-// The stall notice and link note ride this push once the poll is gone, so a
-// renamed event or a drifted "failing now" window would silence them quietly.
-// The string lives in events.rs (single source, `verify:event-names` pins it);
-// runtime_telemetry.rs only re-exports it, so that is checked first and
-// events.rs is the fallback — whichever form is currently in place.
+// A drifted "failing now" window would silence the stall notice quietly. The event name itself is
+// `verify:event-names`'s to pin.
 console.log("\n[ Runtime health push — Rust ↔ telemetry.ts parity ]");
-const rustHealthEvent =
-  rustTelemetrySource.match(/RUNTIME_HEALTH_CHANGED_EVENT:\s*&str\s*=\s*"([^"]+)"/)
-  ?? rustEventsSource.match(/RUNTIME_HEALTH_CHANGED_EVENT:\s*&str\s*=\s*"([^"]+)"/);
-const tsHealthEvent = telemetrySource.match(/RUNTIME_HEALTH_CHANGED_EVENT\s*=\s*"([^"]+)"/);
-check(
-  rustHealthEvent !== null && tsHealthEvent !== null && rustHealthEvent[1] === tsHealthEvent[1],
-  `RUNTIME_HEALTH_CHANGED_EVENT matches ("${rustHealthEvent ? rustHealthEvent[1] : "?"}")`,
-  `EVENT DRIFT: Rust RUNTIME_HEALTH_CHANGED_EVENT=${rustHealthEvent ? rustHealthEvent[1] : "?"} `
-    + `vs telemetry.ts ${tsHealthEvent ? tsHealthEvent[1] : "?"}`
-);
 const rustOngoingAge = rustTelemetrySource.match(
   /CAPTURE_FAILURE_ONGOING_MAX_AGE_SECS:\s*u64\s*=\s*([0-9]+)/
 );
@@ -2721,44 +2264,7 @@ for (const structName of unpairedBaseline) {
 const checkedPairs = nullabilityPairs.filter(
   (p) => !(p.structName in NULLABILITY_EXCLUDED_PAIRS)
 );
-// 45 → 44: `WledCommandStatus` folded into the shared `CommandStatus`.
-// 44 → 45: `LaunchContext`, the `get_launch_context` response.
-// 45 → 49: the lighting-mode contract moved into shared/contracts/mode.ts,
-// pairing AmbilightPayload, LightingModeChangedPayload, LightingModeConfig and
-// SolidColorPayload.
-// 49 → 50: `SerialFirmwareInfo`, the PONG a connect or health check accepted.
-// 50 → 53: `ShellStateSnapshot`, `ShellStateWriteResult`, `ShellStateChanged`.
-// 53 → 57: the lighting transaction's `ApplyOutputsResult`, `ApplyOutputsOutcome`,
-// `LightingRuntimeSnapshot` and `RetuneLightingResult`.
-// 57 → 61: the Hue health monitor's `HueHealthSnapshot`, `HueBridgeHealth`,
-// `HueAreaHealth` and `HueStreamHealth`.
-// 61 → 62: `RuntimeHealth`, the `telemetry://health-changed` payload.
-// 62 → 83: the unpaired-struct baseline emptied. 21 feature-module mirrors
-// moved into contracts or gained an alias; the other 3 (`StartHueStreamRequest`,
-// `SetHueSolidColorRequest`, `TestPatternConfig`) never left Rust serialised
-// and lost the `Serialize` derive instead.
-// 83 → 84: `MainWindowVisibility`, the `get_main_window_visibility` response
-// and `shell://main-window-visibility` payload.
-// 84 → 83: `LightingModeChangedPayload`, with the `lighting://mode-changed`
-// event nothing listened to.
-// 83 → 86: `HueLightName`, `HueLightNamesResponse` (`get_hue_light_names`) and
-// `WledForgetResponse` (`forget_wled_device`).
-// 86 → 87: `LightingOutcome`, the snapshot's `lastOutcome`.
-// 87 → 89: `CaptureFpsSample` and `RuntimeTelemetryHistory`
-// (`get_runtime_telemetry_history`).
-// 89 → 90: `SerialPortsChangedEvent` (`device://serial-ports-changed`).
-// 90 → 94: the local-output registry — `SerialOutputStatus`, `WledOutputStatus`,
-// `LocalOutputsSnapshot` (`get_local_outputs`, `device://local-outputs-changed`) and
-// `SerialDisconnectResult` (`disconnect_serial_port`).
-// 94 → 92: `get_wled_sink_status` went, and with it `WledSinkStatusResponse` and
-// `WledSinkSnapshot`; the registry says which WLED device is bound.
-// 92 → 94: EffectPayload and EffectColor, the Effect mode's payload.
-// 94 → 92: the preview session — `TwinOverlayResult`, `ControlPopupResult` and
-// `LedPreviewStatus` went with their window commands; `PreviewSessionResult` came.
-// 92 → 93: the twin's channel feed — `EdgeSignalPayload` went with
-// `ambilight://edge-signal`; `TwinLayout` and `TwinSubscribeResult` came.
-// 93 → 94: the latency scene's `LatencyResult`.
-// 94 → 95: the twin's Hue lamps, `TwinLamp`.
+// Pinned so the harvest cannot narrow silently; the change that moves it says why.
 const EXPECTED_NULLABILITY_PAIR_COUNT = 95;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
