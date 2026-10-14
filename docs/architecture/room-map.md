@@ -171,6 +171,21 @@ middle of an import.
   (`shared/lib/editableTarget.ts`, the same test the global keybinds use). Space-to-pan has one
   owner too — `useRoomMapViewport` — with the canvas reading its `panMode` rather than keeping a
   second window listener that swallowed a space typed into any field.
+- **The 3D room reads each piece's model from its size and its neighbours.** The stored types are
+  four words (`sofa`, `table`, `chair`, `other`) and say little on their own, so
+  `room-view/ui/scene/furniture.ts` reads the model the way a person reads a floor plan: a seat grows
+  from a slipper chair through an armchair to a five-seat sofa with its width (one cushion per
+  0.62 m between the arms); a table is a desk when the screen stands over it, the desk's return when
+  it touches one, a coffee table in front of a sofa, a side table when small, else a dining table; a
+  small chair at a desk is an office chair, a wide shallow one a bench. Every part stays inside the
+  footprint the 2D map gives the piece, at any size — the containment test runs each model at five
+  sizes, including a 3.81 × 0.17 m piece a user really drew. Explicit choices (TV or monitor, desk
+  or coffee table) will be stored overrides of this reading, never a replacement for it.
+- **The 3D room keeps its draw count fixed.** Furniture merges into one matte and one satin mesh by
+  vertex colour; bulbs, halos (one `Points`), floor pools and wall washes are one draw each whatever
+  the lamp count; contact shadows are geometry with per-vertex alpha merged into one mesh — a
+  stretched blur texture smeared on a long sofa — and include a soft band along the foot of every
+  wall. The night backdrop is a CSS gradient behind a transparent canvas, so it costs no draw.
 - **Bare keys belong to the canvas; modified ones to the whole editor.** Arrows, Delete/Backspace,
   R, F and Escape act only when the event comes from the editor root or from inside the
   `data-room-map-viewport` element. On a dock tab, a segmented control or a menu item an arrow moved

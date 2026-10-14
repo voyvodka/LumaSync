@@ -16,6 +16,10 @@
      below the bar or it swallows the drag region and the window controls. The
      chrome scale keeps the bar at 100 % under any interface size (`useUiZoom`). */
   --lm-titlebar-h: calc(36px * var(--lm-chrome-scale, 1));
+  /* The 3D room's night backdrop, from behind the room out to the edge. */
+  --lm-room-night:      #1f2744;
+  --lm-room-night-mid:  #121829;
+  --lm-room-night-edge: #090b13;
   /* What a modal dims the page with — one depth for every dialog. */
   --lm-scrim:     rgb(0 0 0 / 55%);
   --lm-bg:        #07080a;

@@ -1,0 +1,115 @@
+// The captured screen and what it stands on: a monitor on its stand when a desk is under it, a TV
+// over a low unit with a soundbar when it hangs on the wall.
+import { BufferAttribute, Color, PlaneGeometry } from "three";
+
+import type { RoomMapConfig } from "@/shared/contracts/roomMap";
+
+import { roomToScene, type ScenePoint, tvMountHeight } from "../../model/roomSpace";
+import { DESK_TOP, type FurnitureModel } from "./furniture";
+import { PALETTE } from "./palette";
+import { block, type Part } from "./parts";
+
+/** A screen this close to the TV wall hangs on it; further out it stands in the room. */
+const WALL_REACH = 0.4;
+/** A strip this close to the screen is its backlight. */
+const BACKLIGHT_REACH = 1.0;
+const TV_UNIT_HEIGHT = 0.46;
+const TV_UNIT_DEPTH = 0.42;
+
+export interface ScreenLayout {
+  centre: ScenePoint;
+  width: number;
+  height: number;
+  /** The wall glow's plane, when a strip lights the screen from behind. */
+  backlight: { x: number; y: number; z: number; width: number; height: number } | null;
+}
+
+export interface ScreenBuild {
+  layout: ScreenLayout;
+  parts: Part[];
+  /** The panel's face, drawn unlit so it reads as a screen, not a slab. */
+  panel: PlaneGeometry;
+  /** Footprints (centre and half sizes in the scene) that shade the floor. */
+  footprints: Array<{ x: number; z: number; hw: number; hd: number; shade: number }>;
+}
+
+export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, FurnitureModel>): ScreenBuild | null {
+  const tv = config.tvAnchor;
+  if (!tv) return null;
+  const dims = config.dimensions;
+  const width = tv.width;
+  const height = width * 0.5625;
+  const mount = tvMountHeight(tv, dims);
+  const centre = roomToScene(tv.x + tv.width / 2, tv.y + tv.height / 2, mount, dims);
+  const bottom = mount - height / 2;
+  const wallZ = -dims.depthMeters / 2;
+  const onWall = centre.z - wallZ <= WALL_REACH;
+  const depth = 0.035;
+
+  const parts: Part[] = [block(width, height, depth, centre.x, bottom, centre.z, PALETTE.bezel, 0.01)];
+  const footprints: ScreenBuild["footprints"] = [];
+
+  const onDesk = [...models.values()].some((m) => m.kind === "desk" && m.screenX !== null);
+  const covered = config.furniture.some((f) => {
+    const sx = tv.x + tv.width / 2;
+    const sy = tv.y + tv.height / 2;
+    return sx >= f.x && sx <= f.x + f.width && sy >= f.y - 0.3 && sy <= f.y + f.height;
+  });
+
+  if (onDesk) {
+    const neck = Math.max(bottom - DESK_TOP, 0) + 0.08;
+    parts.push(block(Math.min(0.26, width * 0.4), 0.012, 0.18, centre.x, DESK_TOP, centre.z - 0.02, PALETTE.metal, 0.006));
+    parts.push(block(0.05, neck, 0.03, centre.x, DESK_TOP, centre.z - depth / 2 - 0.015, PALETTE.metal, 0.008));
+  } else if (bottom >= TV_UNIT_HEIGHT + 0.04 && !covered) {
+    const unitW = Math.min(Math.max(width * 1.15, 0.9), dims.widthMeters - 0.1);
+    const unitZ = onWall ? wallZ + TV_UNIT_DEPTH / 2 + 0.02 : centre.z + TV_UNIT_DEPTH / 2 - 0.1;
+    const legH = 0.06;
+    parts.push(block(unitW, TV_UNIT_HEIGHT - legH - 0.025, TV_UNIT_DEPTH, centre.x, legH, unitZ, PALETTE.walnut, 0.015));
+    parts.push(block(unitW + 0.01, 0.025, TV_UNIT_DEPTH + 0.01, centre.x, TV_UNIT_HEIGHT - 0.025, unitZ, PALETTE.oak, 0.008));
+    const drawers = Math.max(2, Math.round(unitW / 0.5));
+    const front = unitZ + TV_UNIT_DEPTH / 2 + 0.001;
+    for (let i = 1; i < drawers; i++) {
+      parts.push(block(0.006, TV_UNIT_HEIGHT - legH - 0.07, 0.004, centre.x - unitW / 2 + (unitW * i) / drawers, legH + 0.02, front, PALETTE.floorGap, 0));
+    }
+    for (const sx of [-1, 1]) {
+      parts.push(block(0.03, legH, 0.03, centre.x + sx * (unitW / 2 - 0.06), 0, unitZ, PALETTE.metal, 0.006));
+    }
+    parts.push(block(Math.min(width * 0.7, 1.1), 0.065, 0.09, centre.x, TV_UNIT_HEIGHT, unitZ + TV_UNIT_DEPTH / 2 - 0.08, PALETTE.metal, 0.02));
+    footprints.push({ x: centre.x, z: unitZ, hw: unitW / 2, hd: TV_UNIT_DEPTH / 2, shade: 0.4 });
+  } else if (bottom < TV_UNIT_HEIGHT + 0.04 && !covered) {
+    // A screen too low for a unit stands on its own feet; one over a piece of furniture stands on it.
+    const footH = Math.max(bottom, 0.02);
+    for (const sx of [-1, 1]) {
+      parts.push(block(0.06, footH + 0.04, 0.22, centre.x + sx * width * 0.36, 0, centre.z + 0.05, PALETTE.metal, 0.01));
+    }
+  }
+
+  const panel = new PlaneGeometry(Math.max(width - 0.02, 0.01), Math.max(height - 0.02, 0.01));
+  // A faint top-to-bottom fall-off, the way a dark screen catches the room's light.
+  const top = new Color(0x26324d);
+  const low = new Color(PALETTE.panel);
+  const colours = new Float32Array(4 * 3);
+  [top, top, low, low].forEach((c, i) => colours.set([c.r, c.g, c.b], i * 3));
+  panel.setAttribute("color", new BufferAttribute(colours, 3));
+  panel.translate(centre.x, mount, centre.z + depth / 2 + 0.001);
+
+  const sx = tv.x + tv.width / 2;
+  const sy = tv.y + tv.height / 2;
+  const lit = config.usbStrips.some((s) => {
+    const mx = (s.startX + s.endX) / 2;
+    const my = (s.startY + s.endY) / 2;
+    const overlaps = Math.max(s.startX, s.endX) >= tv.x && Math.min(s.startX, s.endX) <= tv.x + tv.width;
+    return Math.hypot(mx - sx, my - sy) <= BACKLIGHT_REACH || (overlaps && Math.abs(my - sy) <= BACKLIGHT_REACH);
+  });
+  const backlight = lit
+    ? {
+        x: centre.x,
+        y: mount,
+        z: onWall ? wallZ + 0.012 : centre.z - depth,
+        width: width * 1.8,
+        height: height * 1.9,
+      }
+    : null;
+
+  return { layout: { centre, width, height, backlight }, parts, panel, footprints };
+}

@@ -9,6 +9,7 @@ import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { prefersReducedMotion } from "@/shared/lib/motion";
 
 import { buildRoomScene, disposeScene, type RoomScene, type RoomSceneOptions } from "./roomScene";
+import styles from "./RoomView3D.module.css";
 
 /** What a measuring run varies; absent fields take the defaults below. */
 interface SpikeOptions extends Partial<RoomSceneOptions> {
@@ -56,7 +57,8 @@ function openRoomView(host: HTMLElement, onFail: (error: unknown) => void): Room
   // Measured: MSAA added ~50 MB to the page process at 2×, where the pixel density already
   // smooths the edges, so it is on only for a 1× screen.
   const pixelRatio = Math.min(window.devicePixelRatio, options.pixelRatio ?? 2);
-  const renderer = new WebGLRenderer({ antialias: options.antialias ?? pixelRatio < 2 });
+  // Transparent, so the view's night backdrop (a CSS gradient) shows behind the room.
+  const renderer = new WebGLRenderer({ antialias: options.antialias ?? pixelRatio < 2, alpha: true });
   let closed = false;
   let room: RoomScene | null = null;
   let frame = 0;
@@ -84,6 +86,7 @@ function openRoomView(host: HTMLElement, onFail: (error: unknown) => void): Room
 
   try {
     renderer.setPixelRatio(pixelRatio);
+    renderer.setClearColor(0x000000, 0);
     renderer.outputColorSpace = SRGBColorSpace;
     renderer.toneMapping = NeutralToneMapping;
     const shadows = options.shadows ?? true;
@@ -126,6 +129,7 @@ function openRoomView(host: HTMLElement, onFail: (error: unknown) => void): Room
       // Damping moves the camera a little on every update; keep drawing only while it does.
       const moving = orbit.update();
       cut(room);
+      room.setPixelsPerMetre(host.clientHeight / ((camera.top - camera.bottom) / camera.zoom));
       renderer.render(room.scene, camera);
       const now = performance.now();
       if (timings.firstFrameMs === 0) {
@@ -257,5 +261,5 @@ export default function RoomView3D({
     viewRef.current?.show(config);
   }, [config]);
 
-  return <div ref={hostRef} role="img" aria-label={label} className="absolute inset-0" />;
+  return <div ref={hostRef} role="img" aria-label={label} className={`absolute inset-0 ${styles.host}`} />;
 }

@@ -1,0 +1,8 @@
+@layer components {
+  /* The night the room floats in: a deep navy, lifted a little behind the room. The renderer is
+     transparent over it, so the backdrop costs no draw. */
+  .host {
+    background:
+      radial-gradient(ellipse 70% 60% at 50% 42%, var(--lm-room-night) 0%, var(--lm-room-night-mid) 55%, var(--lm-room-night-edge) 100%);
+  }
+}

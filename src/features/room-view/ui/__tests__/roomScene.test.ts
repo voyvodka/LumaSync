@@ -1,4 +1,4 @@
-import { type BufferGeometry, DirectionalLight, InstancedMesh, type Material, type Texture, Vector3 } from "three";
+import { type BufferGeometry, DirectionalLight, InstancedMesh, type Material, Matrix4, type Texture, Vector3 } from "three";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap";
@@ -47,6 +47,54 @@ describe("buildRoomScene", () => {
     expect(room.cutWalls(towardBack)).toBe(true);
     expect(room.cutWalls(towardBack)).toBe(false);
     expect(room.cutWalls(new Vector3(1, 0, 0))).toBe(true);
+    disposeScene(room.scene);
+  });
+});
+
+describe("buildRoomScene — draw budget", () => {
+  const drawables = (config: RoomMapConfig) => {
+    const { scene } = buildRoomScene(config, OPTIONS);
+    let count = 0;
+    scene.traverse((object) => {
+      if ((object as { isMesh?: boolean }).isMesh || (object as { isPoints?: boolean }).isPoints) count += 1;
+    });
+    disposeScene(scene);
+    return count;
+  };
+
+  it("draws the same number of objects for two lamps as for twelve", () => {
+    // Lamps near no wall, so neither set adds a wall wash the other lacks.
+    const lamp = (i: number) => ({ channelIndex: i, x: (i % 4) * 0.1 - 0.15, y: Math.floor(i / 4) * 0.1 - 0.1, z: 0.3, zOrigin: "bridge" as const });
+    const two = drawables({ ...furnished, hueChannels: [0, 1].map(lamp) });
+    const twelve = drawables({ ...furnished, hueChannels: Array.from({ length: 12 }, (_, i) => lamp(i)) });
+    expect(twelve).toBe(two);
+  });
+});
+
+describe("buildRoomScene — wall washes", () => {
+  it("hides a wall's wash while that wall is cut, and shows it again after", () => {
+    // One lamp against the TV wall (y = +1 is the TV wall in the bridge's cube).
+    const room = buildRoomScene({ ...DEFAULT_ROOM_MAP, hueChannels: [{ channelIndex: 0, x: 0, y: 0.95, z: 0, zOrigin: "bridge" }] }, OPTIONS);
+    // Pools and washes are both instanced planes, the pool added first.
+    const instances: InstancedMesh[] = [];
+    room.scene.traverse((object) => {
+      if (object instanceof InstancedMesh && object.geometry.type === "PlaneGeometry") instances.push(object);
+    });
+    const scaleOf = (mesh: InstancedMesh) => {
+      const m = new Matrix4();
+      mesh.getMatrixAt(0, m);
+      return new Vector3().setFromMatrixScale(m).x;
+    };
+    expect(instances).toHaveLength(2);
+    const wash = instances[1] as InstancedMesh;
+    const visible = scaleOf(wash);
+    expect(visible).toBeGreaterThan(0);
+
+    // The camera on the TV wall's outer side looks through it: that wall is cut.
+    expect(room.cutWalls(new Vector3(0, 0, -1))).toBe(true);
+    expect(scaleOf(wash)).toBe(0);
+    expect(room.cutWalls(new Vector3(0, 0, 1))).toBe(true);
+    expect(scaleOf(wash)).toBeCloseTo(visible, 6);
     disposeScene(room.scene);
   });
 });

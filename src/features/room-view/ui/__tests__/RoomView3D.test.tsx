@@ -25,6 +25,7 @@ vi.mock("three", async (importOriginal) => {
     dispose = vi.fn<() => void>();
     forceContextLoss = vi.fn<() => void>();
     setPixelRatio = vi.fn<() => void>();
+    setClearColor = vi.fn<() => void>();
     setSize = vi.fn<() => void>();
     getContext = vi.fn<() => void>();
     // Resolved by a timer, as a real compile is, so an unmount can land before it.
