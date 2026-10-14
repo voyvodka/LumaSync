@@ -34,7 +34,6 @@ pub struct HueLightName {
     pub name: String,
     /// CLIP v2 `metadata.archetype`, the bridge's spelling — an open set the frontend maps to a
     /// lamp's shape, never a code Rust acts on.
-    #[serde(default)]
     pub archetype: Option<String>,
 }
 
@@ -631,6 +630,12 @@ mod tests {
             archetypes,
             vec![("light-4", None), ("light-2", Some("hue_play"))],
             "a light with no archetype still has its name"
+        );
+        let wire = serde_json::to_value(&response.lights[0]).expect("serialise");
+        assert_eq!(
+            wire["archetype"],
+            Value::Null,
+            "none goes on the wire as null, not absent"
         );
     }
 

@@ -724,7 +724,8 @@ lamp that was. `get_hue_light_names` (`commands/hue/lights.rs`) reads every ligh
 `GET /clip/v2/resource/light` — no light budget, the restore's watch uses the same read — and
 answers the names of the ids asked for; a light listed without a name is left out and the row falls
 back to its count, never to an id. The frontend asks once per bridge and set of light ids and keeps
-the answer for the session (`useHueLightNames`); nothing polls, and Revalidate reads it again. The
+the answer for the session (`hueLightCache`, which the names and the 3D room's lamp shapes both read);
+nothing polls, and Revalidate drops it for both. The
 stream-start metadata fetch is per light and carries no name, so the same bulk read serves a running
 stream too. Each name carries the light's `metadata.archetype` as the bridge spells it (`null` when
 it names none): an open set, so it stays a string on the wire and Rust acts on none of it. The 3D

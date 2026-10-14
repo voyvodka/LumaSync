@@ -1,30 +1,37 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { getHueLightNames, type HueAreaChannelInfo } from "@/features/hue/hueOnboardingApi";
+import {
+  __resetHueLightCache,
+  cachedHueLights,
+  hueLightCacheKey,
+  storeHueLights,
+} from "@/features/hue/state/hueLightCache";
 import { shellStore } from "@/features/persistence/shellStore";
 import { channelLampFamily, type LampFamily } from "@/features/room-view/model/lampFamily";
-import { HUE_LIGHT_NAMES_STATUS } from "@/shared/contracts/hue";
+import { HUE_LIGHT_NAMES_STATUS, type HueLightName } from "@/shared/contracts/hue";
 import { parseCommandError } from "@/shared/contracts/status";
 
-/** Archetypes read this session, per bridge and set of lights: one bulk read, never polled. */
-const archetypeCache = new Map<string, Readonly<Record<string, string | null>>>();
-
-/** Test seam — the cache is module state. */
+/** Test seam — the cache is module state, shared with the light names. */
 export function __resetHueLampFamilyCache(): void {
-  archetypeCache.clear();
+  __resetHueLightCache();
 }
 
 const NONE: ReadonlyMap<number, LampFamily> = new Map();
 
+const archetypesOf = (lights: readonly HueLightName[]): Readonly<Record<string, string | null>> =>
+  Object.fromEntries(lights.map((light) => [light.id, light.archetype]));
+
 /** Each Hue channel's lamp shape (channel index → family), read from the bridge only while
- *  `enabled` — the 3D room is the one reader, so a closed view asks the bridge nothing. Until the
- *  answer lands, or without one, the map is empty and every light draws as a bulb. */
+ *  `enabled` — the 3D room is the one reader, so a closed view asks the bridge nothing. It shares
+ *  the light names' session cache, so the Hue page's read serves it and its Revalidate refreshes it.
+ *  Until the answer lands, or without one, the map is empty and every light draws as a bulb. */
 export function useHueLampFamilies(
   channels: readonly HueAreaChannelInfo[],
   enabled: boolean,
 ): ReadonlyMap<number, LampFamily> {
   const lightIds = useMemo(() => [...new Set(channels.flatMap((channel) => channel.lightIds))].sort(), [channels]);
-  const [archetypes, setArchetypes] = useState<{ key: string; value: Readonly<Record<string, string | null>> } | null>(null);
+  const [archetypes, setArchetypes] = useState<{ ids: string; value: Readonly<Record<string, string | null>> } | null>(null);
   const idsKey = lightIds.join(",");
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: idsKey stands for lightIds
@@ -36,18 +43,23 @@ export function useHueLampFamilies(
       .then(async (state) => {
         const ip = state.lastHueBridge?.ip;
         if (!ip) return;
-        const key = `${ip}|${idsKey}`;
-        const cached = archetypeCache.get(key);
+        const key = hueLightCacheKey(ip, lightIds);
+        const cached = cachedHueLights(key);
         if (cached) {
-          if (!cancelled) setArchetypes({ key: idsKey, value: cached });
+          if (!cancelled) setArchetypes({ ids: idsKey, value: archetypesOf(cached) });
           return;
         }
         // An empty app key is the keychain signal; the command resolves it there.
         const response = await getHueLightNames(ip, state.hueAppKey ?? "", lightIds);
-        if (cancelled || response.status.code !== HUE_LIGHT_NAMES_STATUS.OK) return;
-        const value = Object.fromEntries(response.lights.map((light) => [light.id, light.archetype]));
-        archetypeCache.set(key, value);
-        setArchetypes({ key: idsKey, value });
+        if (response.status.code !== HUE_LIGHT_NAMES_STATUS.OK) {
+          console.warn(
+            `[LumaSync] Hue lamp shapes not read (${response.status.code}): ${response.status.details ?? response.status.message}`,
+          );
+          return;
+        }
+        // Kept even when the view closed meanwhile, so reopening it does not ask again.
+        storeHueLights(key, response.lights);
+        if (!cancelled) setArchetypes({ ids: idsKey, value: archetypesOf(response.lights) });
       })
       .catch((error: unknown) => {
         if (!cancelled) console.warn(`[LumaSync] Hue lamp shapes not read: ${parseCommandError(error).message}`);
@@ -58,7 +70,7 @@ export function useHueLampFamilies(
   }, [enabled, idsKey]);
 
   return useMemo(() => {
-    if (archetypes === null || archetypes.key !== idsKey) return NONE;
+    if (archetypes === null || archetypes.ids !== idsKey) return NONE;
     return new Map(channels.map((channel) => [channel.index, channelLampFamily(channel.lightIds, archetypes.value)]));
   }, [archetypes, channels, idsKey]);
 }
