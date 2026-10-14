@@ -13,9 +13,9 @@ use super::frame_pipeline::{
 };
 use super::live::{AmbilightLiveSettings, RoomGeometryLive};
 use super::sampling::{
-    hue_sample_table, sample_screen_position_avg, sample_window_for, strip_for_worker,
-    BlackBorderCache, HueSampleTable, LIVE_SAMPLE_WINDOW, SYNTHETIC_SAMPLE_WINDOW,
-    WHOLE_FRAME_SAMPLE_WINDOW,
+    border_detections_on_this_thread, hue_sample_table, sample_screen_position_avg,
+    sample_window_for, strip_for_worker, BlackBorderCache, HueSampleTable, LIVE_SAMPLE_WINDOW,
+    SYNTHETIC_SAMPLE_WINDOW, WHOLE_FRAME_SAMPLE_WINDOW,
 };
 use super::smoothing::{alpha_for_interval, TimeSmoother, SMOOTHING_REFERENCE_INTERVAL};
 use super::strip_set::StripSpec;
@@ -2313,4 +2313,100 @@ fn a_session_with_no_strip_output_and_no_layout_has_no_strip() {
         (164, 164),
         "a layout is kept whatever drives it"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Strip stages: one frame, several strips
+// ---------------------------------------------------------------------------
+
+fn stage(led_calibration: &LedCalibrationConfig) -> StripStageConfig {
+    StripStageConfig {
+        led_sequence: build_led_sequence(led_calibration),
+        strip_shape: StripShape::of(led_calibration),
+        sample_window: LIVE_SAMPLE_WINDOW,
+        topology: strip_topology_for(Some(led_calibration)),
+    }
+}
+
+fn staged_pipeline(
+    strips: &[&LedCalibrationConfig],
+    hue_channels: Option<Vec<HueAreaChannel>>,
+) -> AmbilightFramePipeline {
+    AmbilightFramePipeline::new(FramePipelineConfig {
+        strips: strips.iter().map(|cal| stage(cal)).collect(),
+        scene_enabled: true,
+        hue_channels,
+        room_geometry: RoomGeometryLive::new(None),
+        black_border_detection: true,
+        color_correction: color_correction(),
+        effect: None,
+    })
+}
+
+type StripFrame = Vec<[u8; 3]>;
+
+/// Every stage's smoothed strip and Hue's colours after each of `frames`, `FRAME_GAP` apart.
+fn staged_run(
+    strips: &[&LedCalibrationConfig],
+    hue_channels: Option<Vec<HueAreaChannel>>,
+    frames: &[Arc<CapturedFrame>],
+) -> (Vec<Vec<StripFrame>>, Vec<Option<Vec<HueRgb>>>) {
+    let mut pipeline = staged_pipeline(strips, hue_channels);
+    let settings = FrameSettings {
+        black_border_detection: true,
+        alpha_ceiling: 0.35,
+        saturation: 1.1,
+    };
+    let mut now = Instant::now();
+    let mut strip_frames = vec![Vec::new(); strips.len()];
+    let mut hue = Vec::new();
+    for frame in frames {
+        now += FRAME_GAP;
+        pipeline.sample(frame);
+        pipeline.analyze(frame, settings, now);
+        pipeline.advance(now);
+        for (i, out) in strip_frames.iter_mut().enumerate() {
+            out.push(pipeline.strip_frame(i).to_vec());
+        }
+        hue.push(pipeline.hue_colors().map(<[HueRgb]>::to_vec));
+    }
+    (strip_frames, hue)
+}
+
+#[test]
+fn two_strips_share_one_border_detection_per_frame() {
+    let first = strip_164();
+    let second = calibration(20, 10, 20, 10);
+    let mut pipeline = staged_pipeline(&[&first, &second], None);
+    let frame = scene_frame(FRAME_W, FRAME_H, 0);
+    let before = border_detections_on_this_thread();
+    pipeline.sample(&frame);
+    // A cache per stage would scan the frame once for each strip.
+    assert_eq!(border_detections_on_this_thread() - before, 1);
+}
+
+#[test]
+fn each_strip_runs_as_it_would_alone() {
+    let first = strip_164();
+    let second = calibration(20, 10, 20, 10);
+    let frames = scene_frames(FRAME_W, FRAME_H, 40);
+    let (together, _) = staged_run(&[&first, &second], None, &frames);
+    let (first_alone, _) = staged_run(&[&first], None, &frames);
+    let (second_alone, _) = staged_run(&[&second], None, &frames);
+    // A scene state shared between the stages would let one strip's spread steer the other's.
+    assert_eq!(together[0], first_alone[0], "the 164-LED strip");
+    assert_eq!(together[1], second_alone[0], "the 60-LED strip");
+}
+
+#[test]
+fn hue_is_the_same_with_no_strip_one_or_two() {
+    let first = strip_164();
+    let second = calibration(20, 10, 20, 10);
+    let frames = scene_frames(FRAME_W, FRAME_H, 30);
+    let (_, none) = staged_run(&[], Some(hue_channels()), &frames);
+    let (_, one) = staged_run(&[&first], Some(hue_channels()), &frames);
+    let (_, two) = staged_run(&[&first, &second], Some(hue_channels()), &frames);
+    assert!(none.iter().all(Option::is_some), "hue colours every frame");
+    assert_eq!(one, none);
+    assert_eq!(two, none);
 }

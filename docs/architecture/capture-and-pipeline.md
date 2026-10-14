@@ -56,7 +56,7 @@ channel averages a box 30% of the frame wide, a rainbow drawn around the centre 
 a two-channel area showed two slow blobs. So the Effect mode's engine (`lighting_mode/effects/`)
 colours every light where it is. The pipeline's effect stage replaces the analysis for an effect —
 no sampling, no scene stage, no border crop — and writes the strip's and Hue's smoothing targets
-straight from what it drew; `sample_strip` returns nothing for the tick frame the effect's source
+straight from what it drew; `sample` takes nothing from the tick frame the effect's source
 (`effect_source.rs`) hands the worker so its pacing and loop run unchanged.
 
 - *Lights.* Every strip LED and Hue channel is an emitter in the room map's cube (`[-1, 1]`, y the
@@ -155,12 +155,23 @@ Ambilight samples, so without this the strip would light from its own picture.
 Unverified on hardware: app-level exclusion covering later windows, and WDA on a transparent
 WebView2 window and its child windows.
 
+**One frame, a stage per strip.** The pipeline holds one stage per strip it drives: each samples the
+frame with its own LED sequence and window, keeps its own scene-stage state (a strip's spread and
+lean are its own lights', not the room's) and its own smoother. The frame-wide parts are shared — the
+border cache, the scene stage's view of the frame and its α, Hue and an effect — so a second strip
+adds its sampling and smoothing and nothing else, and each strip runs exactly as it would alone
+(`each_strip_runs_as_it_would_alone`). The worker gives each output its own sink and send gate,
+steps at the fastest gate's interval, counts one send per step however many strips took it, and
+reports the slowest strip's cost. Until the fan-out lands the mode apply hands it one strip, so one
+strip runs byte for byte as before; an effect draws on the first stage only, and the twin shows it.
+
 **Every sampler crops the same black borders.** `BlackBorderCache` re-detects letterbox and
 pillarbox bars at most every 0.5 s, and the strip, the scene stage and Hue all sample inside those
 insets: `sample_frame_within_insets` maps each LED onto the picture rectangle and keeps its window
 out of the bars, so on a 2.39:1 film the top and bottom LEDs take the picture's edge instead of
-black. `AmbilightFramePipeline::sample_strip` is where the cache is refreshed, because it is the
-first thing the pipeline sees of a frame; the three consumers therefore read one answer per frame.
+black. `AmbilightFramePipeline::sample` is where the cache is refreshed, because it is the
+first thing the pipeline sees of a frame; the consumers therefore read one answer per frame, however
+many strips sample it (`two_strips_share_one_border_detection_per_frame`).
 From the per-LED sampler in 1.4.0 until this was fixed the strip sampled the whole frame while Hue
 was cropped. These edges are deliberate:
 
@@ -430,8 +441,8 @@ serial writer with a counting port behind it, asserts:
   rebuild; the thread-local build counters in `led_output/correction.rs` and `ambilight_scene.rs`
   can.
 
-`CorrectedWledSink` has its own pin, `WLED_ALLOCS_PER_FRAME` (four: the corrected strip, the
-datagram list, the chunk list, one datagram), over a loopback socket nothing reads.
+`CorrectedWledSink` has its own pin, `WLED_ALLOCS_PER_FRAME` (none: its buffers are reused), over a
+loopback socket nothing reads.
 
 A change that genuinely needs another per-frame allocation raises `ALLOCS_PER_FRAME` in the same
 PR and says why. The worker's check of the Hue output slot (`hue.md`, "The worker follows the live

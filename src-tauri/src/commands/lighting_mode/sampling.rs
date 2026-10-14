@@ -16,6 +16,17 @@ use crate::commands::led_calibration::{
 use crate::commands::room_affinity::{room_aware_hue_samples, room_geometry_rejection};
 use crate::models::room_map::RoomGeometry;
 
+#[cfg(test)]
+thread_local! {
+    static BORDER_DETECTIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Detection passes run on this thread: one per frame however many strips sample it.
+#[cfg(test)]
+pub(super) fn border_detections_on_this_thread() -> usize {
+    BORDER_DETECTIONS.with(|n| n.get())
+}
+
 /// The black-border insets the worker samples inside, kept steady.
 ///
 /// Detection runs at most every `UPDATE_INTERVAL`. A frame with nothing to
@@ -104,6 +115,8 @@ impl BlackBorderCache {
             return;
         }
         self.last_updated = Instant::now();
+        #[cfg(test)]
+        BORDER_DETECTIONS.with(|n| n.set(n.get() + 1));
         // One scan step of the detector, as a fraction of each axis.
         let step = |len: u32| 8.0 / len.max(1) as f32;
         self.absorb(
