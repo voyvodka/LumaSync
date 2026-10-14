@@ -369,6 +369,10 @@ https://keepachangelog.com/en/1.1.0/
   seen the strip settings; reconnecting on its own at launch does not bring the notice back. While
   the app is reconnecting to a strip on its own, you can press Connect to take over. Each rail
   badge counts what is active: a connected strip, a streaming bridge, a bound WLED device.
+- Frontend and Rust dependencies refreshed to their latest stable releases within their current
+  major versions — Tauri 2.12.3 with its plugins on matching npm and crate versions, Vite 8.3.4,
+  Vitest 5.0.4 — plus happy-dom 20 → 21 for the test environment. WebdriverIO stays on 9 because
+  the Tauri test service does not support 10 yet.
 
 ### Removed
 
