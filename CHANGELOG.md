@@ -578,6 +578,8 @@ https://keepachangelog.com/en/1.1.0/
   allows, and Hue lights are numbered the same in the list as on the map.
 - A USB strip with no LED layout saved shows the colour of the whole picture instead of the screen's
   top-left corner.
+- A strip edge with a single LED takes its colour from the middle of that edge, where LED Setup draws
+  it, instead of from its corner, which belongs to the neighbouring edge.
 - An effect on Hue lights alone, with no LED layout saved, spreads across the lights you have; a
   hidden one-LED strip in the screen's corner no longer took part in where it ran.
 - Room map: keys stay with what has focus. An arrow on a panel tab or in a menu no longer also

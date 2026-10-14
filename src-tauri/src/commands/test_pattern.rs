@@ -346,7 +346,9 @@ impl AmbilightFrameSource for SyntheticFrameSource {
 fn segment_fraction(item: &LedSequenceItem, shape: &StripShape) -> f32 {
     let pitches = shape.pitches(item.segment);
     let pitch = shape.pitch_of(item);
-    if pitch == 0 || pitches <= 1 {
+    if pitches <= 1 {
+        0.5
+    } else if pitch == 0 {
         0.0
     } else {
         pitch as f32 / (pitches - 1) as f32

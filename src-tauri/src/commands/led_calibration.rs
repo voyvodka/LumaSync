@@ -379,9 +379,12 @@ impl StripShape {
 pub fn led_to_screen_pos(item: &LedSequenceItem, shape: &StripShape) -> (f32, f32) {
     let pitches = shape.pitches(item.segment);
     let pitch = shape.pitch_of(item);
-    // Fractional position along the segment [0, 1].
-    let frac = if pitch == 0 || pitches <= 1 {
-        0.0_f32
+    // Fractional position along the segment [0, 1]. A lone LED stands for its whole edge, so it
+    // sits at the middle, where LED Setup draws it — its start corner is another edge's colour.
+    let frac = if pitches <= 1 {
+        0.5_f32
+    } else if pitch == 0 {
+        0.0
     } else {
         pitch as f32 / (pitches - 1) as f32
     };

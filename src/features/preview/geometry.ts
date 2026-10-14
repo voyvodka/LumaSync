@@ -55,7 +55,7 @@ export interface TwinLedPosition {
 
 /**
  * Normalized centre of the screen window an LED samples, `(0, 0)` top-left.
- * A one-LED edge sits at its local-0 corner, as it does in the backend.
+ * A one-LED edge sits at its middle, as it does in the backend and in LED Setup.
  */
 export function ledScreenPosition(
   item: Pick<LedSequenceItem, "segment" | "localIndex">,
@@ -67,7 +67,7 @@ export function ledScreenPosition(
   const gap = item.segment === "bottom" && count >= 2 ? bottomMissing : 0;
   const pitches = count + gap;
   const pitch = gap > 0 && item.localIndex >= gapRightCount(count) ? item.localIndex + gap : item.localIndex;
-  const frac = pitch === 0 || pitches <= 1 ? 0 : pitch / (pitches - 1);
+  const frac = pitches <= 1 ? 0.5 : pitch === 0 ? 0 : pitch / (pitches - 1);
   switch (item.segment) {
     case "top":
       return { x: frac, y: 0 };

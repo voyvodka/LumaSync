@@ -2105,7 +2105,7 @@ fn a_worker_that_panics_is_counted_out_and_its_stop_returns() {
 // A strip with no layout on record (sweep B8)
 // ---------------------------------------------------------------------------
 
-/// The worker's fallback: one LED at the top segment's start, which maps to the frame's corner.
+/// The worker's fallback: one LED on the top edge, which samples the edge's middle.
 fn layoutless_strip() -> (Vec<LedSequenceItem>, StripShape) {
     let calibration = LedCalibrationConfig {
         template_id: None,
@@ -2148,7 +2148,7 @@ fn halves_between_bars() -> CapturedFrame {
 }
 
 #[test]
-fn a_whole_frame_window_from_the_corner_takes_the_picture_mean() {
+fn a_whole_frame_window_from_the_lone_led_takes_the_picture_mean() {
     let (sequence, shape) = layoutless_strip();
     let frame = halves_between_bars();
 
@@ -2186,7 +2186,7 @@ fn a_whole_frame_window_from_the_corner_takes_the_picture_mean() {
     assert_eq!(
         corner,
         vec![[0, 0, 0]],
-        "the live box at the corner sees only the bar"
+        "the live box on the top edge sees only the bar"
     );
 }
 
@@ -2210,23 +2210,25 @@ fn the_sample_window_follows_the_frame_kind_and_the_strip() {
 }
 
 #[test]
-fn a_strip_with_no_layout_shows_the_picture_not_its_top_left_corner() {
+fn a_strip_with_no_layout_shows_the_picture_not_its_own_spot() {
     let _watchdog = Watchdog::arm(
-        "a_strip_with_no_layout_shows_the_picture_not_its_top_left_corner",
+        "a_strip_with_no_layout_shows_the_picture_not_its_own_spot",
         Duration::from_secs(60),
     );
     let _guard = WORKER_TEST_GUARD
         .lock()
         .unwrap_or_else(|err| err.into_inner());
-    // A red patch in the top-left sixteenth of a blue screen.
+    // A red patch where the lone LED sits — the top edge's middle — on a blue screen.
     let mut pixels = Vec::with_capacity((FRAME_W * FRAME_H) as usize);
     for y in 0..FRAME_H {
         for x in 0..FRAME_W {
-            pixels.push(if x < FRAME_W / 4 && y < FRAME_H / 4 {
-                [220, 30, 30]
-            } else {
-                [20, 40, 200]
-            });
+            pixels.push(
+                if (FRAME_W * 3 / 8..FRAME_W * 5 / 8).contains(&x) && y < FRAME_H / 4 {
+                    [220, 30, 30]
+                } else {
+                    [20, 40, 200]
+                },
+            );
         }
     }
     let sent = Arc::new(RecordingSender::default());

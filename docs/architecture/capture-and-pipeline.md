@@ -197,12 +197,13 @@ edge's pitches spread end to end, and the bottom counts the stand gap (`bottomMi
 (`StripShape`): its LEDs sit either side of the gap where LED Setup draws them, the right-hand run
 `floor(bottom / 2)` long, so each samples the screen above where it really is. Spreading them over
 the whole edge instead, as the sampler once did, put the LEDs beside the stand under screen several
-pitches away and showed the twin a strip with no gap. A one-LED edge samples its local-0 corner —
-except where that corner would be the strip's whole colour: a strip with no layout on record runs as
-one LED (the legacy single-zone path), and since it shows one colour for the whole strip it samples
-the whole picture inside any black bars (`WHOLE_FRAME_SAMPLE_WINDOW` via `sample_window_for`: the
-same corner position, a window that reaches the whole content rectangle from it). It once took the
-top-left corner, so a red corner tile lit a strip whose screen was blue. With neither a layout nor a
+pitches away and showed the twin a strip with no gap. A one-LED edge samples the middle of its edge,
+where LED Setup draws it: its lone LED stands for the whole edge, and it used to take the edge's
+start corner, which is a colour from a neighbouring edge's end. A strip with no layout on record
+runs as one LED (the legacy single-zone path), and since it shows one colour for the whole strip it
+samples the whole picture inside any black bars (`WHOLE_FRAME_SAMPLE_WINDOW` via
+`sample_window_for`: a window that reaches the whole content rectangle from the LED's place). It
+once took the top-left corner, so a red corner tile lit a strip whose screen was blue. With neither a layout nor a
 strip output (Hue alone) there is no strip at all (`strip_for_worker`): the fallback LED there was
 sampled every frame for nothing and stood in an effect's bounds as a light that does not exist. The
 twin's Hue lamps follow the same rule: `TwinLayout.lamps` puts each where it samples the screen, from
