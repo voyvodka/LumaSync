@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const { version } = JSON.parse(readFileSync("./package.json", "utf-8")) as { version: string };
+const { entryKb } = JSON.parse(readFileSync("./scripts/verify/chunk-budgets.json", "utf-8")) as { entryKb: number };
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
@@ -89,7 +90,7 @@ export default defineConfig(async ({ command }) => {
       // The gate is scripts/verify/chunk-budget.mjs (per chunk class, in check:all);
       // this only keeps Vite's own warning quiet below the entry's budget there —
       // see docs/architecture/build-and-release.md.
-      chunkSizeWarningLimit: 345,
+      chunkSizeWarningLimit: entryKb,
     },
 
     clearScreen: false,

@@ -102,6 +102,36 @@ https://keepachangelog.com/en/1.1.0/
   full-screen app's Space, and closing it leaves you where you are. The preview's windows stay out
   of the capture (macOS, and Windows 10 2004 or later; elsewhere the on-screen LEDs hide while
   Ambilight captures).
+- Room-aware Hue. With a TV placed on the room map, each Hue light now samples the part of the
+  screen that matches where it stands: its height picks the band — a floor lamp takes the bottom
+  of the picture, a ceiling light the top — and its position left or right of the TV picks the
+  side. Its distance from the TV sets how much it follows the screen and how much it keeps a
+  softer room-wide colour; no light is ever switched off for being far away, and even the
+  farthest light keeps part of its own side of the picture. Every room template
+  except Empty places a TV, so if you set up your room map from one of those templates this turns
+  on by itself when you update. Lights whose height LumaSync does not know yet sample the middle
+  of the screen. Moving a light or the TV applies to running Ambilight within about half a second,
+  without restarting the Hue stream. With no TV on the room map, Hue sampling is unchanged.
+- A development mode that answers the Tauri IPC boundary from fixtures, so UI work no longer needs
+  hardware attached. This first part ships the seam and the guarantees around it; the fixtures and
+  the scenario picker follow. `bun run dev:mock` serves the frontend to a browser with the Tauri
+  runtime simulated, which is the only place real pointer behaviour — CSS `:hover` among it — can be
+  checked at all; `bun run tauri:mock` runs the desktop app with the same seam in place. Neither can
+  reach a shipped build: the mock has no path into the production module graph, both Vite plugins
+  are dev-server only, a production build aborts outright if the flag is set, and
+  `bun run verify:mock-not-shipped` proves all three on every run of `check:all` by running into the
+  guard rather than reading the code that implements it.
+- The development mode now answers with fixtures and ships a scenario picker, so every screen can be
+  reached without hardware. Ten scenarios, and the eight past "nothing configured" and "fully
+  furnished" each reproduce a state the app once got wrong: an entertainment area that is genuinely
+  empty, a bridge that cannot be reached, a key the bridge no longer accepts, a Hue-only session, a
+  pairing waiting on the link button, refused screen-recording permission, and a store that rejects
+  every write. An empty state and a failed state look identical from outside, which is why both are
+  one click away. The picker sits on the left edge under `Ctrl+Shift+M`; clicking a scenario reloads
+  into it, shift-clicking swaps the fixtures under the running app so a response that lands after
+  its scenario is gone reports itself. Fixtures never answer on a microtask, and the delay is
+  adjustable, because a mock that answers instantly hides every loading state and ordering bug
+  behind it.
 
 ### Changed
 
@@ -378,6 +408,14 @@ https://keepachangelog.com/en/1.1.0/
   major versions — Tauri 2.12.3 with its plugins on matching npm and crate versions, Vite 8.3.4,
   Vitest 5.0.4 — plus happy-dom 20 → 21 for the test environment. WebdriverIO stays on 9 because
   the Tauri test service does not support 10 yet.
+- With both USB and Hue selected, a lighting mode now starts on USB when the Hue bridge cannot be
+  used — unreachable, needing a re-pair, or not set up — instead of refusing to start at all. A
+  notice says Hue was left out and why. Hue is not retried in the background: turn it back on
+  once the bridge is back, and the next launch tries it again on its own, because your saved
+  output selection is not changed.
+- Frontend and Rust dependencies refreshed to their latest stable releases within their current
+  major versions, including Tauri 2.11.6 (a security fix keeping one app window from reading data
+  sent to another) and the Tauri plugins kept on matching npm and crate versions.
 
 ### Removed
 
@@ -1053,50 +1091,6 @@ https://keepachangelog.com/en/1.1.0/
 - The status bar and the capture-stalled notice no longer redraw the window every second while
   nothing they show has changed.
 
-### Added
-
-- Room-aware Hue. With a TV placed on the room map, each Hue light now samples the part of the
-  screen that matches where it stands: its height picks the band — a floor lamp takes the bottom
-  of the picture, a ceiling light the top — and its position left or right of the TV picks the
-  side. Its distance from the TV sets how much it follows the screen and how much it keeps a
-  softer room-wide colour; no light is ever switched off for being far away, and even the
-  farthest light keeps part of its own side of the picture. Every room template
-  except Empty places a TV, so if you set up your room map from one of those templates this turns
-  on by itself when you update. Lights whose height LumaSync does not know yet sample the middle
-  of the screen. Moving a light or the TV applies to running Ambilight within about half a second,
-  without restarting the Hue stream. With no TV on the room map, Hue sampling is unchanged.
-- A development mode that answers the Tauri IPC boundary from fixtures, so UI work no longer needs
-  hardware attached. This first part ships the seam and the guarantees around it; the fixtures and
-  the scenario picker follow. `bun run dev:mock` serves the frontend to a browser with the Tauri
-  runtime simulated, which is the only place real pointer behaviour — CSS `:hover` among it — can be
-  checked at all; `bun run tauri:mock` runs the desktop app with the same seam in place. Neither can
-  reach a shipped build: the mock has no path into the production module graph, both Vite plugins
-  are dev-server only, a production build aborts outright if the flag is set, and
-  `bun run verify:mock-not-shipped` proves all three on every run of `check:all` by running into the
-  guard rather than reading the code that implements it.
-- The development mode now answers with fixtures and ships a scenario picker, so every screen can be
-  reached without hardware. Ten scenarios, and the eight past "nothing configured" and "fully
-  furnished" each reproduce a state the app once got wrong: an entertainment area that is genuinely
-  empty, a bridge that cannot be reached, a key the bridge no longer accepts, a Hue-only session, a
-  pairing waiting on the link button, refused screen-recording permission, and a store that rejects
-  every write. An empty state and a failed state look identical from outside, which is why both are
-  one click away. The picker sits on the left edge under `Ctrl+Shift+M`; clicking a scenario reloads
-  into it, shift-clicking swaps the fixtures under the running app so a response that lands after
-  its scenario is gone reports itself. Fixtures never answer on a microtask, and the delay is
-  adjustable, because a mock that answers instantly hides every loading state and ordering bug
-  behind it.
-
-### Changed
-
-- With both USB and Hue selected, a lighting mode now starts on USB when the Hue bridge cannot be
-  used — unreachable, needing a re-pair, or not set up — instead of refusing to start at all. A
-  notice says Hue was left out and why. Hue is not retried in the background: turn it back on
-  once the bridge is back, and the next launch tries it again on its own, because your saved
-  output selection is not changed.
-- Frontend and Rust dependencies refreshed to their latest stable releases within their current
-  major versions, including Tauri 2.11.6 (a security fix keeping one app window from reading data
-  sent to another) and the Tauri plugins kept on matching npm and crate versions.
-
 ### Security
 
 - Each app window can now call only the LumaSync commands its own screens use. The LED preview
@@ -1118,6 +1112,7 @@ https://keepachangelog.com/en/1.1.0/
   your local network. Existing pairings keep working: the first connection after updating learns
   the bridge's certificate, which is remembered in a small file beside the app's settings rather
   than in the keychain, so it adds no keychain prompt.
+- Dependency floors raised to patched releases: undici `^7.30.0` (GHSA-2gqq-gqf2-x968), serialize-javascript `^7.1.2`, @puppeteer/browsers `^3.2.4`. The lockfile already held them; the ranges still allowed a vulnerable undici.
 
 ### Internal
 
@@ -1132,7 +1127,7 @@ https://keepachangelog.com/en/1.1.0/
   added by connecting a controller, or an LED count saved in LED Setup, while it was open would have
   been taken away by its next save; the settings pages showing one section at a time was all that
   prevented it. The unused room map save counter is gone from the settings file.
-
+- A 3D room view, built only into dev builds and builds with `VITE_ROOM_VIEW_SPIKE=1`: three.js in its own lazy chunk that the chunk gate fails if it appears in a release build. It draws parametric furniture read from each piece's size and neighbours, and hands its WebGL context back when it closes.
 
 ## [1.5.5]
 

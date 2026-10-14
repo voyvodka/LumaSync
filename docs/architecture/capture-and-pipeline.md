@@ -328,23 +328,25 @@ things, in this order, per frame:
    sensitivity is low-pass and luminance sensitivity is not — smoothing hue across neighbours is
    nearly free perceptually, smoothing brightness the same way flattens visible structure.
 3. **Ambience blend.** The stage keeps a slow memory of the room's ambience colour and mixes a
-   little of it into every light. The colour is the frame's chroma-weighted mean held at the plain
-   mean's luminance: in the same stride-8 pass each sample counts `1 + 2·(max − min)/255`, the
-   weighted mean gives the hue, and it is rescaled to the plain mean's Y, capped so no channel leaves
-   the gamut. A plain mean went grey wherever neutral areas diluted the frame's colour — a fifth of
-   the screen in red over grey averaged to a pale pink — and that colour is most of what a light far
-   from the screen shows. Keeping the plain luminance stops one saturated element from setting the
-   room's brightness, and a uniform frame comes out as its plain mean exactly. It is one continuous
-   method for every frame and every light, never a choice between methods; hue cancellation
-   (teal and orange, red and blue) is not something any weighted mean undoes, and is not attempted.
-   The extra work is a max/min and three multiply-adds per sample, under 1 µs per frame measured. How much depends on two things: *what the frame is*
-   (a flat frame leans more, since nothing is lost; a structured one keeps its region colours) and
-   *where the light is* — `screen_affinity`, `1.0` for a strip LED on the screen edge and lower for
-   a Hue channel placed away from the TV wall. A bulb behind the viewer therefore shows mostly the
-   room's colour with a hint of its side of the screen, instead of a hard sample of the bottom of
-   the frame; that is the "defensible colour for a light with no screen region" the product bar
-   asks for. Without a TV anchor, affinity for Hue comes from the bridge's own `y`; with one, the room
-   map supplies a metre-based value through the same per-light `f32` (`room-map.md`).
+   little of it into every light. How much depends on two things: *what the frame is* (a flat frame
+   leans more, since nothing is lost; a structured one keeps its region colours) and *where the
+   light is* — `screen_affinity`, `1.0` for a strip LED on the screen edge and lower for a Hue
+   channel placed away from the TV wall. A bulb behind the viewer therefore shows mostly the room's
+   colour with a hint of its side of the screen, instead of a hard sample of the bottom of the
+   frame; that is the "defensible colour for a light with no screen region" the product bar asks
+   for. Without a TV anchor, affinity for Hue comes from the bridge's own `y`; with one, the room map
+   supplies a metre-based value through the same per-light `f32` (`room-map.md`).
+
+   The ambience colour is the frame's chroma-weighted mean held at the plain mean's luminance: in
+   the same stride-8 pass each sample counts `1 + 2·(max − min)/255`, the weighted mean gives the
+   hue, and it is rescaled to the plain mean's Y, capped so no channel leaves the gamut. A plain mean
+   went grey wherever neutral areas diluted the frame's colour — a fifth of the screen in red over
+   grey averaged to a pale pink — and that colour is most of what a light far from the screen shows.
+   Keeping the plain luminance stops one saturated element from setting the room's brightness, and a
+   uniform frame comes out as its plain mean exactly. It is one continuous method for every frame and
+   every light, never a choice between methods; hue cancellation (teal and orange, red and blue) is
+   not something any weighted mean undoes, and is not attempted. The extra work is a max/min and
+   three multiply-adds per sample inside the pass that already computes the plain mean.
 4. **Alpha as a continuous function of change.** The change signal is run through an envelope with
    instant attack and slow release; alpha is interpolated between a floor (30 % of the preset) and
    the preset ceiling by that envelope. A hard cut lifts every sink to the ceiling for a few frames

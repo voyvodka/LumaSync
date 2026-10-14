@@ -23,16 +23,21 @@ import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
+import { loadEnv } from "vite";
+
 const ROOT = new URL("../..", import.meta.url).pathname;
 
-/** kB as Vite reports them (1000 bytes). */
-const ENTRY_BUDGET_KB = 345;
-const LAZY_BUDGET_KB = 180;
-/** Lazy chunks with a budget of their own, matched on the chunk's name before its hash; each is
- *  explained in build-and-release.md. `spikeOnly` must be absent from a build without the flag. */
-const NAMED = {
-  RoomView3D: { budget: 600, spikeOnly: "VITE_ROOM_VIEW_SPIKE" },
-};
+/** kB as Vite reports them (1000 bytes). One file for the budgets, which `vite.config.ts` reads
+ *  too, so Vite's own warning cannot drift from the gate. Lazy chunks with a budget of their own
+ *  are matched on the chunk's name before its hash; each is explained in build-and-release.md, and
+ *  a `spikeOnly` one must be absent from a build without its flag. */
+const BUDGETS = JSON.parse(readFileSync(join(ROOT, "scripts/verify/chunk-budgets.json"), "utf-8"));
+const ENTRY_BUDGET_KB = BUDGETS.entryKb;
+const LAZY_BUDGET_KB = BUDGETS.lazyKb;
+const NAMED = BUDGETS.named;
+// The flag as the build sees it: Vite also reads it from `.env` files, so `process.env` alone
+// called a spike chunk built from `.env.local` a leak.
+const BUILD_ENV = { ...loadEnv("production", ROOT, ""), ...process.env };
 
 let failures = 0;
 const pass = (msg) => console.log(`  ✔  ${msg}`);
@@ -82,7 +87,7 @@ try {
       const bytes = size(file);
       const name = basename(file).replace(/-[\w-]{8}\.js$/, "");
       const named = NAMED[name];
-      if (named?.spikeOnly && process.env[named.spikeOnly] !== "1") {
+      if (named?.spikeOnly && BUILD_ENV[named.spikeOnly] !== "1") {
         fail(`lazy ${basename(file)} is built without ${named.spikeOnly}=1 — it would ship`);
       }
       const budget = named?.budget ?? LAZY_BUDGET_KB;
