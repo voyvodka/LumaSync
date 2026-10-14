@@ -36,6 +36,8 @@ export function PageSwap({ id, way, children, className }: PageSwapProps) {
         <span
           key={`out${n}`}
           aria-hidden
+          // Out of the tab order while it fades, or its fields stay reachable for the leave.
+          inert
           className={cx(styles.page, styles.out)}
           onAnimationEnd={() => setState((s) => (s.n === n ? { ...s, prev: null } : s))}
         >

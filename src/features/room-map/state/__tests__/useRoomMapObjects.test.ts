@@ -5,7 +5,7 @@ import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap";
-import { furnitureObjectId, hueChannelObjectId } from "../../model/objectId";
+import { furnitureObjectId, hueChannelObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "../../model/objectId";
 import type { RoomMapPatch } from "../roomMapReducer";
 import { useRoomMapObjects } from "../useRoomMapObjects";
 import type { ApplyOptions } from "../useRoomMapState";
@@ -31,13 +31,14 @@ function renderObjects(
   hueAreaId: string | null = null,
 ) {
   const apply = vi.fn<(patch: RoomMapPatch, options?: ApplyOptions) => void>();
+  const select = vi.fn<(objectId: string | null) => void>();
   const hook = renderHook(() =>
     useRoomMapObjects({
       config,
       hueAreaId,
       apply,
       selectedId,
-      select: vi.fn(),
+      select,
     }),
   );
   /** The config the `index`th apply produces, updater or plain partial alike. */
@@ -46,7 +47,7 @@ function renderObjects(
     if (patch === undefined) throw new Error(`no apply #${index}`);
     return { ...config, ...(typeof patch === "function" ? patch(config) : patch) };
   };
-  return { ...hook, apply, written };
+  return { ...hook, apply, select, written };
 }
 
 function arrowEvent(key: string, repeat = false) {
@@ -205,5 +206,22 @@ describe("useRoomMapObjects — a held arrow is one gesture per object", () => {
     act(() => result.current.handleArrowNudge(arrowEvent("ArrowRight", true)));
     expect(apply.mock.calls[0]?.[1]).toEqual({ gesture: "nudge:furniture-f1", continued: false });
     expect(apply.mock.calls[1]?.[1]).toEqual({ gesture: "nudge:furniture-f1", continued: true });
+  });
+});
+
+describe("useRoomMapObjects — an added object comes selected", () => {
+  it("selects the piece, the TV and the strip it adds, so the inspector opens on it", () => {
+    const { result, select, written } = renderObjects(DEFAULT_ROOM_MAP);
+
+    act(() => result.current.handleAddFurniture("sofa"));
+    const piece = written(0).furniture[0];
+    expect(select).toHaveBeenLastCalledWith(furnitureObjectId(piece!.id));
+
+    act(() => result.current.handleAddTv());
+    expect(select).toHaveBeenLastCalledWith(TV_ANCHOR_OBJECT_ID);
+
+    act(() => result.current.handleAddUsb());
+    const strip = written(2).usbStrips[0];
+    expect(select).toHaveBeenLastCalledWith(usbStripObjectId(strip!.stripId));
   });
 });

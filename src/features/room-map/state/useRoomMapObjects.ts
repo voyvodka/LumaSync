@@ -7,7 +7,7 @@ import type {
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
 import { FURNITURE_DEFAULT_SIZE } from "../model/furnitureKinds";
-import { parseObjectId } from "../model/objectId";
+import { furnitureObjectId, parseObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "../model/objectId";
 import { roomObjectAdapter, type NudgeDirection } from "../model/roomObjectKinds";
 import type { ApplyOptions } from "./useRoomMapState";
 import type { RoomMapPatch } from "./roomMapReducer";
@@ -61,7 +61,8 @@ export function useRoomMapObjects({
       height: 0.1,
     };
     apply({ tvAnchor: newTv });
-  }, [widthMeters, apply]);
+    select(TV_ANCHOR_OBJECT_ID);
+  }, [widthMeters, apply, select]);
 
   const handleAddFurniture = useCallback(
     (type: FurniturePlacement["type"]) => {
@@ -77,8 +78,9 @@ export function useRoomMapObjects({
         label: t(`roomMap:furniture.type.${type}`),
       };
       apply({ furniture: [...config.furniture, newItem] });
+      select(furnitureObjectId(id));
     },
-    [widthMeters, depthMeters, config.furniture, apply, t],
+    [widthMeters, depthMeters, config.furniture, apply, select, t],
   );
 
   const handleAddUsb = useCallback(() => {
@@ -92,7 +94,8 @@ export function useRoomMapObjects({
       ledCount: 60,
     };
     apply({ usbStrips: [...config.usbStrips, newStrip] });
-  }, [widthMeters, config.usbStrips, apply]);
+    select(usbStripObjectId(stripId));
+  }, [widthMeters, config.usbStrips, apply, select]);
 
   const isLocked = useCallback(
     (id: string): boolean => {

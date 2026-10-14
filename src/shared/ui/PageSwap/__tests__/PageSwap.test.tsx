@@ -10,6 +10,8 @@ describe("PageSwap", () => {
 
     const leaving = screen.getByText("Top-left");
     expect(leaving).toHaveAttribute("aria-hidden", "true");
+    // Out of the tab order too: a field in the leaving page is not reachable while it fades.
+    expect(leaving).toHaveAttribute("inert");
     expect(screen.getByText("Top-right")).toBeInTheDocument();
 
     fireEvent.animationEnd(leaving);

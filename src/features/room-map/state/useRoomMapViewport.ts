@@ -34,7 +34,7 @@ export interface UseRoomMapViewportReturn {
 export const PAN_STEP_PX = 32;
 export const PAN_STEP_LARGE_PX = 160;
 
-export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewportReturn {
+export function useRoomMapViewport(dimensions: RoomDimensions, fitInsets: FitInsets = NO_INSETS): UseRoomMapViewportReturn {
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const [canvasEl, setCanvasEl] = useState<HTMLDivElement | null>(null);
@@ -67,12 +67,12 @@ export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewpo
 
   const fitToView = useCallback(
     (pad: number) => {
-      const fit = computeFit(canvasSize.w, canvasSize.h, widthMeters, depthMeters, pad);
+      const fit = computeFit(canvasSize.w, canvasSize.h, widthMeters, depthMeters, pad, fitInsets);
       setZoom(fit.zoom);
       setPanOffset(fit.panOffset);
       resetViewportScroll(canvasContainerRef.current);
     },
-    [canvasSize, widthMeters, depthMeters],
+    [canvasSize, widthMeters, depthMeters, fitInsets],
   );
 
   // Arrows move the camera, not the map — ArrowRight reveals what is to the
@@ -100,6 +100,8 @@ export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewpo
   // `initialFitDone` is what stops a re-fit, not a stale ref.
   const liveDimensionsRef = useRef(dimensions);
   liveDimensionsRef.current = dimensions;
+  const liveInsetsRef = useRef(fitInsets);
+  liveInsetsRef.current = fitInsets;
 
   // Keyed on the element, not on mount: the editor renders a loading placeholder
   // first, so the container appears a commit or two late and a mount-only effect
@@ -115,7 +117,7 @@ export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewpo
         if (!initialFitDone.current) {
           initialFitDone.current = true;
           const { widthMeters: wm, depthMeters: dm } = liveDimensionsRef.current;
-          const fit = computeFit(width, height, wm, dm, 24);
+          const fit = computeFit(width, height, wm, dm, 24, liveInsetsRef.current);
           setZoom(fit.zoom);
           setPanOffset(fit.panOffset);
         }
@@ -165,6 +167,14 @@ export function resetViewportScroll(container: HTMLElement | null): void {
   }
 }
 
+/** What floats over the top and bottom of the canvas, which a fit keeps the room clear of. */
+export interface FitInsets {
+  top: number;
+  bottom: number;
+}
+
+const NO_INSETS: FitInsets = { top: 0, bottom: 0 };
+
 /** Exported for tests: measuring the canvas needs a layout engine, computing the
  *  fit from a measurement does not, and this is where the proportion is decided. */
 export function computeFit(
@@ -173,13 +183,15 @@ export function computeFit(
   widthMeters: number,
   depthMeters: number,
   pad: number,
+  insets: FitInsets = NO_INSETS,
 ): { zoom: number; panOffset: { x: number; y: number } } {
+  const availH = canvasH - insets.top - insets.bottom;
   const fitZoom = Math.min(
     (canvasW - pad * 2) / (widthMeters * ROOM_MAP_PX_PER_METER),
-    (canvasH - pad * 2) / (depthMeters * ROOM_MAP_PX_PER_METER),
+    (availH - pad * 2) / (depthMeters * ROOM_MAP_PX_PER_METER),
   );
   const zoom = clamp(fitZoom, ZOOM_MIN, ZOOM_MAX);
   const roomW = widthMeters * ROOM_MAP_PX_PER_METER * zoom;
   const roomH = depthMeters * ROOM_MAP_PX_PER_METER * zoom;
-  return { zoom, panOffset: { x: (canvasW - roomW) / 2, y: (canvasH - roomH) / 2 } };
+  return { zoom, panOffset: { x: (canvasW - roomW) / 2, y: insets.top + (availH - roomH) / 2 } };
 }
