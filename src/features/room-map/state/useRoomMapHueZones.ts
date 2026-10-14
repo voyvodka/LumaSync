@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { shellStore } from "@/features/persistence/shellStore";
 import type {
   HueZone,
   HueZoneCommandResult,
@@ -27,14 +26,13 @@ export interface UseRoomMapHueZonesArgs {
   activeHueZoneId: string | null;
   selectHueZone: (zoneId: string | null) => void;
   setObjectPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  /** The area new zones are authored in (`useRoomMapHueArea`); `null` adds nothing. */
+  hueAreaId: string | null;
 }
 
 export interface UseRoomMapHueZonesReturn {
   hueZones: HueZone[];
   activeHueZone: HueZone | null;
-  /** Cached active entertainment area id from shellStore — used when authoring Hue zones. */
-  hueAreaId: string | null;
-  hueBridgeConfigured: boolean;
   /** Code of the last refused mutation, until dismissed. `null` while nothing is refused. */
   hueZoneRejection: HueZoneStatusCode | null;
   dismissHueZoneRejection: () => void;
@@ -56,29 +54,9 @@ export function useRoomMapHueZones({
   activeHueZoneId,
   selectHueZone,
   setObjectPanelOpen,
+  hueAreaId,
 }: UseRoomMapHueZonesArgs): UseRoomMapHueZonesReturn {
   const { t } = useTranslation();
-  const [hueAreaId, setHueAreaId] = useState<string | null>(null);
-
-  // "Configured" is `hueAppKey` (legacy plaintext) OR a keychain backend. The
-  // editor deliberately stops there — anything beyond needs `useHueOnboarding`,
-  // and mounting that state machine here for a header is too much.
-  const [hueBridgeConfigured, setHueBridgeConfigured] = useState(false);
-  // Load the persisted last-selected entertainment area id once. We do not
-  // mount useHueOnboarding here to keep the editor decoupled from the
-  // onboarding state machine; the area id alone is enough to author zones.
-  useEffect(() => {
-    let cancelled = false;
-    void shellStore.load().then((state) => {
-      if (cancelled) return;
-      setHueAreaId(state.lastHueAreaId ?? null);
-      const hasKeychain = state.credentialStorageBackend === "keychain";
-      const hasLegacyKey = !!state.hueAppKey;
-      const hasBridge = !!state.lastHueBridge;
-      setHueBridgeConfigured(hasBridge && (hasKeychain || hasLegacyKey));
-    });
-    return () => { cancelled = true; };
-  }, []);
 
   const hueZones = config.zones;
 
@@ -298,8 +276,6 @@ export function useRoomMapHueZones({
   return {
     hueZones,
     activeHueZone,
-    hueAreaId,
-    hueBridgeConfigured,
     hueZoneRejection,
     dismissHueZoneRejection,
     handleAddHueZone,

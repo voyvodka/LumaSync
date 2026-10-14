@@ -908,7 +908,8 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 12px;
+  /* The room map's View | Edit switch floats over the leading edge (RoomMapSurface). */
+  padding: 0 12px 0 var(--room-bar-lead, 12px);
   border-bottom: 1px solid var(--lm-line);
   background: var(--lm-panel-2);
 }

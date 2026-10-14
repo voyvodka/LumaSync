@@ -1,8 +1,7 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { ROOM_VIEW_3D_AVAILABLE, RoomView3DHost } from "@/features/room-view/ui/RoomView3DHost";
 import { isEditableTarget } from "@/shared/lib/editableTarget";
-import { useRoomMapState } from "../state/useRoomMapState";
+import type { RoomMapDocument } from "../state/useRoomMapDocument";
 import { RoomMapCanvas } from "./RoomMapCanvas";
 import { RoomMapToolbar } from "./RoomMapToolbar";
 import { RoomMapSettingsPopover } from "./RoomMapSettingsPopover";
@@ -23,11 +22,8 @@ import {
 } from "../model/objectId";
 import { useSnapGuides } from "../state/useSnapGuides";
 import { useRoomMapGridSettings } from "../state/useRoomMapGridSettings";
-import { useHueLampFamilies } from "../state/useHueLampFamilies";
-import { useRoomMapHueChannels } from "../state/useRoomMapHueChannels";
 import { useRoomMapHueZones } from "../state/useRoomMapHueZones";
 import { imageLayerGestureKey, useRoomMapImageLayers } from "../state/useRoomMapImageLayers";
-import { scopeHueChannels } from "../model/hueChannelScope";
 import { useRoomMapObjects } from "../state/useRoomMapObjects";
 import { ROOM_MAP_PX_PER_METER, ROOM_MAP_VIEWPORT_ATTR, useRoomMapViewport } from "../state/useRoomMapViewport";
 import { SnapGuideOverlay } from "./SnapGuideOverlay";
@@ -39,14 +35,12 @@ import { ZoomControl } from "./ZoomControl";
 import { roomObjectAdapter } from "../model/roomObjectKinds";
 import { PropertyBar } from "./PropertyBar";
 import { RenameDialog } from "./RenameDialog";
-import { TemplateSelector } from "./TemplateSelector";
-import { applyRoomTemplate, isRoomMapEmpty } from "../model/roomTemplate";
+import { isRoomMapEmpty } from "../model/roomTemplate";
 import type {
   FurniturePlacement,
   HueChannelPlacement,
   HueZoneStatusCode,
   RoomDimensions,
-  RoomMapConfig,
   TvAnchorPlacement,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
@@ -59,11 +53,11 @@ import type React from "react";
 import { connectedSerialPort } from "@/features/device/model/localOutputs";
 import { useLocalOutputs } from "@/features/device/state/localOutputsStore";
 import { shallowEqual } from "@/shared/lib/store";
-import type { HueRuntimeTarget } from "@/shared/contracts/hue";
-import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
-import { roomAwareStatus } from "../model/roomAware";
+import type { RoomAwareStatus } from "../model/roomAware";
 
 export interface RoomMapEditorProps {
+  /** The map, its history and its Hue area, owned by the surface so they outlive this face. */
+  doc: RoomMapDocument;
   /**
    * Invoked when the dock state strip's CTA prompts the
    * user to finish Hue onboarding (pair bridge or pick an entertainment
@@ -79,12 +73,8 @@ export interface RoomMapEditorProps {
    * embeds that do not own a reachability source render no chip.
    */
   hueReachable?: boolean;
-  /** Selected outputs; with a TV anchor, a Hue target turns the room-aware chip on. */
-  outputTargets?: HueRuntimeTarget[];
-  /** A bridge is paired. Without one the room-aware chip stays hidden. */
-  hueConfigured?: boolean;
-  /** Picks the paused room-aware chip's reason, as it does the Lights Hue row's. */
-  hueProbeVerdict?: HueProbeVerdict | null;
+  /** The room-aware chip's state; `null` hides it. */
+  roomAware?: RoomAwareStatus | null;
 }
 
 const IS_MAC = navigator.platform.includes("Mac");
@@ -106,13 +96,7 @@ function isCanvasKey(e: React.KeyboardEvent<HTMLElement>): boolean {
   return e.target instanceof Element && e.target.closest(`[${ROOM_MAP_VIEWPORT_ATTR}]`) !== null;
 }
 
-export function RoomMapEditor({
-  onNavigateToDevices,
-  hueReachable,
-  outputTargets = [],
-  hueConfigured = false,
-  hueProbeVerdict = null,
-}: RoomMapEditorProps = {}) {
+export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAware = null }: RoomMapEditorProps) {
   const { t } = useTranslation();
   const {
     config,
@@ -120,7 +104,6 @@ export function RoomMapEditor({
     activeHueZoneId,
     apply,
     adopt,
-    replace,
     reset,
     undo,
     redo,
@@ -128,11 +111,14 @@ export function RoomMapEditor({
     selectHueZone,
     canUndo,
     canRedo,
-    loading,
     error,
-  } = useRoomMapState();
+    hueAreaId,
+    hueBridgeConfigured,
+    visibleHueChannels,
+    scopedConfig,
+  } = doc;
+  const { areaChannels, channelsStatus, isLoadingChannels, liveChannelIds, refreshChannels } = doc.hue;
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [show3d, setShow3d] = useState(false);
   const [renameTarget, setRenameTarget] = useState<{ id: string; currentLabel: string } | null>(null);
   const [objectPanelOpen, setObjectPanelOpen] = useState(true);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; targetId: string } | null>(null);
@@ -149,8 +135,6 @@ export function RoomMapEditor({
   const {
     hueZones,
     activeHueZone,
-    hueAreaId,
-    hueBridgeConfigured,
     hueZoneRejection,
     dismissHueZoneRejection,
     handleAddHueZone,
@@ -166,17 +150,8 @@ export function RoomMapEditor({
     activeHueZoneId,
     selectHueZone,
     setObjectPanelOpen,
-  });
-
-  const { areaChannels, channelsStatus, isLoadingChannels, liveChannelIds, refreshChannels } =
-    useRoomMapHueChannels({
-    config,
-    adopt,
     hueAreaId,
-    hueBridgeConfigured,
-    ready: !loading,
   });
-  const lampFamilies = useHueLampFamilies(areaChannels, show3d);
 
   const { guides: snapGuides, onDragMove: snapDragMove, onDragEnd: snapDragEnd } = useSnapGuides(config);
 
@@ -248,23 +223,6 @@ export function RoomMapEditor({
   const pxPerMeter = ROOM_MAP_PX_PER_METER;
   const gridStepM = widthMeters < 4 ? 0.5 : 1.0;
   const gridStepPx = gridStepM * pxPerMeter;
-
-  // The editor's object ids carry an index and no area, so it shows one area at
-  // a time; placing several independently is P3 work and needs a wider id.
-  const visibleHueChannels = useMemo(
-    () => scopeHueChannels(config.hueChannels, hueAreaId),
-    [config.hueChannels, hueAreaId],
-  );
-  // What the dock and the property bar read: the same one area the canvas
-  // draws, or an object list and inspector keyed on `hue-<index>` would show,
-  // and select, another area's same-numbered channel.
-  const scopedConfig = useMemo<RoomMapConfig>(
-    () =>
-      visibleHueChannels === config.hueChannels
-        ? config
-        : { ...config, hueChannels: visibleHueChannels },
-    [config, visibleHueChannels],
-  );
 
   // Canvas objects are memoised, so every callback they receive has to be
   // stable: an inline closure would re-render all of them on a pan commit.
@@ -339,28 +297,17 @@ export function RoomMapEditor({
 
   const hasTv = !!config.tvAnchor;
   const isEmpty = isRoomMapEmpty(config, visibleHueChannels.length);
-  const handleTemplateSelect = useCallback(
-    (template: RoomMapConfig) => replace(applyRoomTemplate(config, template)),
-    [config, replace],
-  );
 
   const handleSelectObject = useCallback((id: string | null) => {
     select(id);
     if (id !== null) selectHueZone(null);
   }, [select, selectHueZone]);
 
-  const handleView3dFail = useCallback((error: unknown) => {
-    console.error("[LumaSync] room 3D view failed to open:", error);
-    setShow3d(false);
-  }, []);
-
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       // A field's keys are the field's: Backspace in the LED count deleted the
       // strip, and Cmd+Z replaced the field's own undo with the editor's.
       if (isEditableTarget(e.target)) return;
-      // The 2D selection is hidden under the 3D view; Delete or an arrow would change it unseen.
-      if (show3d) return;
       // Undo: Cmd+Z (Mac) / Ctrl+Z (Win/Linux)
       if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
@@ -408,7 +355,7 @@ export function RoomMapEditor({
         handleArrowPan(e);
       }
     },
-    [handleDelete, handleRotate, handleArrowNudge, handleArrowPan, handleDuplicate, undo, redo, select, selectedId, fitToView, show3d],
+    [handleDelete, handleRotate, handleArrowNudge, handleArrowPan, handleDuplicate, undo, redo, select, selectedId, fitToView],
   );
 
   const handleDimensionsChange = useCallback(
@@ -504,19 +451,6 @@ export function RoomMapEditor({
     return actions;
   }, [contextMenu, t, handleDuplicate, handleRotate, deleteById, select, config]);
 
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <span className="text-sm text-ink-faint">{t("roomMap:loading")}</span>
-      </div>
-    );
-  }
-
-  // Show template selector for empty maps with no edit history
-  if (isEmpty && !canUndo) {
-    return <TemplateSelector onSelect={handleTemplateSelect} />;
-  }
-
   return (
     <div
       className="lm-room-editor flex h-full flex-col"
@@ -525,11 +459,7 @@ export function RoomMapEditor({
       tabIndex={0}
     >
       <RoomMapToolbar
-        roomAware={roomAwareStatus(config.tvAnchor, outputTargets, {
-          configured: hueConfigured,
-          reachable: hueReachable ?? false,
-          verdict: hueProbeVerdict,
-        })}
+        roomAware={roomAware}
         zoneCount={config.zones.length}
         onAddZone={handleAddHueZone}
         settingsOpen={settingsOpen}
@@ -538,7 +468,6 @@ export function RoomMapEditor({
         canRedo={canRedo}
         onUndo={undo}
         onRedo={redo}
-        view3d={ROOM_VIEW_3D_AVAILABLE ? { on: show3d, onToggle: () => setShow3d((on) => !on) } : undefined}
       />
       <div className="flex flex-1 min-h-0">
         <div
@@ -553,15 +482,6 @@ export function RoomMapEditor({
             onAddUsb={handleAddUsb}
             onAddImage={() => void handleAddImage()}
           />
-
-          {show3d && (
-            <RoomView3DHost
-              config={scopedConfig}
-              lampFamilies={lampFamilies}
-              label={t("roomMap:toolbar.view3dLabel")}
-              onFail={handleView3dFail}
-            />
-          )}
 
           {settingsOpen && (
             <RoomMapSettingsPopover
@@ -704,29 +624,25 @@ export function RoomMapEditor({
 
           </RoomMapCanvas>
 
-          {!show3d && (
-            <ZoomControl
-              zoom={zoom}
-              canvasSize={canvasSize}
-              panOffset={panOffset}
-              onZoomChange={setZoom}
-              onPanChange={setPanOffset}
-              onFitToView={() => fitToView(16)}
-              isMac={IS_MAC}
-            />
-          )}
+          <ZoomControl
+            zoom={zoom}
+            canvasSize={canvasSize}
+            panOffset={panOffset}
+            onZoomChange={setZoom}
+            onPanChange={setPanOffset}
+            onFitToView={() => fitToView(16)}
+            isMac={IS_MAC}
+          />
 
           {/* Mouse coordinate display — fixed to bottom-right of canvas container */}
-          {!show3d && (
-            <MouseCoordinateDisplay
-              canvasContainerRef={canvasContainerRef}
-              panOffset={panOffset}
-              pxPerMeter={pxPerMeter}
-              zoom={zoom}
-              widthMeters={widthMeters}
-              depthMeters={depthMeters}
-            />
-          )}
+          <MouseCoordinateDisplay
+            canvasContainerRef={canvasContainerRef}
+            panOffset={panOffset}
+            pxPerMeter={pxPerMeter}
+            zoom={zoom}
+            widthMeters={widthMeters}
+            depthMeters={depthMeters}
+          />
         </div>
 
         {/* Right dock — consolidated tabbed Objects / Zones / Hue Zones / Properties */}

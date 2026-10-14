@@ -30,7 +30,7 @@ import { SECTION_PANEL_ID } from "../shell/TitleBar";
 import { CalibrationPanel, preloadCalibrationPanel } from "../calibration/ui/CalibrationPanel";
 import type { LedSetupTarget } from "@/features/device/ui/DevicesPage";
 import { useCapturedDisplayName } from "../calibration/ui/useCapturedDisplayName";
-import type { RoomMapEditorProps } from "@/features/room-map/ui/RoomMapEditor";
+import type { RoomMapSurfaceProps } from "@/features/room-map/ui/RoomMapSurface";
 
 // The full-only sections that each outweigh the rest of the shell are split out,
 // so the compact window never parses them (LED Setup's is in its own panel). See
@@ -38,8 +38,8 @@ import type { RoomMapEditorProps } from "@/features/room-map/ui/RoomMapEditor";
 const DevicesPage = preloadableComponent("DevicesPage", () =>
   import("@/features/device/ui/DevicesPage").then((m) => m.DevicesPage),
 );
-const RoomMapEditor = preloadableComponent<RoomMapEditorProps>("RoomMapEditor", () =>
-  import("@/features/room-map/ui/RoomMapEditor").then((m) => m.RoomMapEditor),
+const RoomMapSurface = preloadableComponent<RoomMapSurfaceProps>("RoomMapSurface", () =>
+  import("@/features/room-map/ui/RoomMapSurface").then((m) => m.RoomMapSurface),
 );
 
 /** Warms the full-only chunks once full mode has painted, so a tab switch rarely meets the fallback. */
@@ -209,7 +209,7 @@ const RoomMapPanel = memo(function RoomMapPanel() {
   const openDevices = useCallback(() => void goToSection(SECTION_IDS.DEVICES), [goToSection]);
   return (
     <div className="h-full overflow-hidden">
-      <RoomMapEditor.Component
+      <RoomMapSurface.Component
         onNavigateToDevices={openDevices}
         hueReachable={hue.reachable}
         outputTargets={outputTargets}
@@ -244,7 +244,7 @@ export const SECTION_REGISTRY = {
   },
   [SECTION_IDS.ROOM_MAP]: {
     render: () => <RoomMapPanel />,
-    preload: RoomMapEditor.preload,
+    preload: RoomMapSurface.preload,
   },
 } satisfies Record<SectionId, SectionEntry>;
 

@@ -6,10 +6,15 @@ export default {
     addUsb: "Add LED Strip",
     addImage: "Add Image",
     settingsAriaLabel: "Map Settings",
-    view3d: "3D",
-    view3dLabel: "The room in 3D",
     undo: "Undo",
     redo: "Redo",
+  },
+  face: {
+    label: "Room map",
+    view: "View",
+    edit: "Edit",
+    viewLabel: "The room in 3D",
+    viewUnavailable: "View — the 3D room could not open on this computer",
   },
   empty: {
     heading: "No objects placed yet",

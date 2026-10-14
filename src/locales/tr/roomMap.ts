@@ -9,10 +9,15 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     addUsb: "LED Şerit Ekle",
     addImage: "Resim Ekle",
     settingsAriaLabel: "Harita Ayarları",
-    view3d: "3D",
-    view3dLabel: "Odanın 3D görünümü",
     undo: "Geri Al",
     redo: "Yinele",
+  },
+  face: {
+    label: "Oda haritası",
+    view: "Görünüm",
+    edit: "Düzenle",
+    viewLabel: "Odanın 3D görünümü",
+    viewUnavailable: "Görünüm — 3D oda bu bilgisayarda açılamadı",
   },
   empty: {
     heading: "Henüz nesne eklenmedi",

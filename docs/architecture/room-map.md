@@ -5,8 +5,9 @@ strip runs, and Hue channel dots. Most users never open it — first run reaches
 lighting without it — but everything authored here feeds the runtime sampler, so the coordinate
 rules below are load-bearing rather than cosmetic.
 
-The module is `src/features/room-map/`; `RoomMapEditor.tsx` is its entry point and one of the
-largest single pieces of UI in the codebase.
+The module is `src/features/room-map/`. Its entry point is `RoomMapSurface.tsx`: the room in 3D
+(View, where the build carries it) and the plan (Edit, `RoomMapEditor.tsx`, one of the largest
+single pieces of UI in the codebase) over one slot.
 
 ## Decisions
 
@@ -27,6 +28,17 @@ can see the change. A failed invoke is logged, never swallowed, but the local ed
 it would flicker the canvas, and the next save round reconciles. That is why a handler that returns
 early on an invoke failure is wrong here even though it would be right elsewhere.
 
+**The map belongs to the surface, not to a face.** `useRoomMapDocument` — the config, history,
+selection and save queue, the Hue area the map is bound to, and the bridge's channel seeding — runs
+in `RoomMapSurface`, and each face reads it as a prop. So a switch between View and Edit keeps undo,
+the selection and a gesture still waiting to save, and the channels are seeded whichever face is
+open. The face left behind unmounts: the plan does not keep rendering, or taking keys, under the
+room, and the room hands its WebGL context back under the plan. The one thing a switch drops is the
+plan's zoom and pan, which fit the room again on return. The View | Edit switch is the surface's
+own, floating over both faces' top bars, so a keyboard switch keeps focus on it. The face is not
+stored: the map always opens on the room, and an empty map with no history opens on the templates
+before either face.
+
 **The editor's config, undo history and selection are one reducer, and a gesture reaches it once.**
 `state/roomMapReducer.ts` holds all three; `useRoomMapState` drives it and owns saving. Its actions
 are `apply` (a user edit: one undo entry, one save), `adopt` (a write the user did not make — the
@@ -34,7 +46,7 @@ bridge seed, a refused Hue zone mutation's pre-image — which saves but stays o
 Cmd+Z would restore what the backend refused), `undo`/`redo`, and the two selections. An `apply`
 may carry a gesture key: consecutive applies under the same key within `GESTURE_COALESCE_MS`, or
 flagged as a key auto-repeat, fold into one undo step, and their save waits until the gesture goes
-quiet (unmount flushes it). Arrow nudges, the Hue zone size slider and colour picker, the channel
+quiet (leaving the room map flushes it; a face switch need not, as the map outlives the face). Arrow nudges, the Hue zone size slider and colour picker, the channel
 height slider, the image opacity slider and wheel, and the on-canvas LED count use it. A pointer
 drag does not need it: every canvas object keeps its in-flight position in local state or the DOM
 and calls back once, on release. Undo can remove the selected object, so the reducer drops a

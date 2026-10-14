@@ -1,0 +1,107 @@
+@layer components {
+  .surface {
+    --room-switch-w: 152px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  /* Both faces' top bars leave the switch its place, so it sits over each bar's leading edge. */
+  .surface[data-faces] {
+    --room-bar-lead: calc(12px + var(--room-switch-w) + 12px);
+  }
+
+  .face {
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* The face switched to fades in; the one it replaced is already gone, so nothing draws twice. */
+  .arriving {
+    animation: face-in var(--lm-dur-base) var(--lm-ease-out) backwards;
+  }
+
+  @keyframes face-in {
+    from { opacity: 0; }
+  }
+
+  /* Rides above both faces at one spot, so the pointer and keyboard focus stay on it across a
+     switch. Centred in the 40 px bar under it. */
+  .switch {
+    position: absolute;
+    top: 4px;
+    left: 12px;
+    z-index: 30;
+    width: var(--room-switch-w);
+    height: 32px;
+    border-radius: 8px;
+    background: var(--lm-panel);
+    box-shadow: inset 0 0 0 1px var(--lm-line-2);
+  }
+
+  /* The chosen face is marked by one plate that slides between the two; the labels never move. */
+  .mark {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 50%;
+    border-radius: 8px;
+    background: var(--lm-panel-2);
+    box-shadow: inset 0 0 0 1px var(--lm-amber);
+    transform: translateX(calc(var(--i, 0) * 100%));
+    transition: transform var(--lm-dur-base) var(--lm-ease-out);
+  }
+
+  .group {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    height: 100%;
+  }
+
+  .item {
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    font-family: var(--lm-sans);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color var(--lm-dur-quick);
+  }
+  .item:hover:not(:disabled) { color: var(--lm-ink); }
+  .item[aria-checked="true"] { color: var(--lm-amber); }
+  .item:focus-visible {
+    outline: none;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+  .item:disabled {
+    cursor: not-allowed;
+    color: var(--lm-ink-faint);
+  }
+
+  :global(:root[data-reduced-motion]) .arriving { animation: none; }
+  :global(:root[data-reduced-motion]) .mark,
+  :global(:root[data-reduced-motion]) .item { transition: none; }
+
+  @media (forced-colors: active) {
+    .switch {
+      box-shadow: none;
+      outline: 1px solid CanvasText;
+    }
+    .mark {
+      box-shadow: none;
+      background: Highlight;
+      forced-color-adjust: none;
+    }
+    .item[aria-checked="true"] {
+      color: HighlightText;
+      forced-color-adjust: none;
+    }
+    .item:focus-visible { outline: 2px solid Highlight; }
+  }
+}

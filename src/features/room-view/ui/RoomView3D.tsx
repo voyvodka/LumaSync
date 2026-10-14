@@ -137,6 +137,7 @@ function openRoomView(host: HTMLElement, onFail: (error: unknown) => void): Room
       if (timings.firstFrameMs === 0) {
         timings.firstFrameAt = now;
         timings.firstFrameMs = now - started;
+        host.setAttribute("data-ready", "");
       }
       timings.draws.push(now - t0);
       if (moving) request();

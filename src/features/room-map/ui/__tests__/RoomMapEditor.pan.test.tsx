@@ -10,7 +10,9 @@ import { act, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
-import { RoomMapEditor } from "../RoomMapEditor";
+import { RoomMapSurface } from "../RoomMapSurface";
+
+const RoomMapEditor = () => <RoomMapSurface view3dAvailable={false} />;
 
 const renders = vi.hoisted(() => ({ furniture: 0, tv: 0, usb: 0, hue: 0, toolbar: 0 }));
 

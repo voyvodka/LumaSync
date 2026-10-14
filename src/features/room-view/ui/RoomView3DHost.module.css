@@ -1,0 +1,15 @@
+@layer components {
+  /* The night the room floats in: a deep navy, lifted a little behind the room. The renderer is
+     transparent over it, so the backdrop costs no draw; it lives here rather than in the lazy view
+     so the slot is already night while three.js is on its way. */
+  .stage {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 70% 60% at 50% 42%, var(--lm-room-night) 0%, var(--lm-room-night-mid) 55%, var(--lm-room-night-edge) 100%);
+  }
+
+  @media (forced-colors: active) {
+    .stage { background: Canvas; }
+  }
+}

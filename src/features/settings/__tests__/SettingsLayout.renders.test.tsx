@@ -68,8 +68,8 @@ vi.mock("@/features/device/ui/DevicesPage", () => ({
   },
 }));
 
-vi.mock("@/features/room-map/ui/RoomMapEditor", () => ({
-  RoomMapEditor: () => {
+vi.mock("@/features/room-map/ui/RoomMapSurface", () => ({
+  RoomMapSurface: () => {
     count("roomMap");
     return <p data-testid="room-map" />;
   },

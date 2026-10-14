@@ -89,6 +89,7 @@ function renderZones(config: Partial<RoomMapConfig> = {}) {
       activeHueZoneId: null,
       selectHueZone: vi.fn(),
       setObjectPanelOpen: vi.fn(),
+      hueAreaId: SHELL.lastHueAreaId,
     }),
   );
   return { ...hook, apply, adopt };
@@ -109,6 +110,7 @@ function renderZonesWithStore(stored: Partial<RoomMapConfig>) {
       activeHueZoneId: store.activeHueZoneId,
       selectHueZone: store.selectHueZone,
       setObjectPanelOpen: vi.fn(),
+      hueAreaId: SHELL.lastHueAreaId,
     });
     return { store, zones };
   });
@@ -174,7 +176,6 @@ describe("useRoomMapHueZones — assignment stays inside the viewed area", () =>
       zones: [otherZone, ZONE_A],
       hueChannels: [otherChannel, ownChannel],
     });
-    await waitFor(() => expect(result.current.hueAreaId).toBe("area-1"));
 
     act(() => result.current.handleAssignChannelToZone(0, "zone-a"));
 
@@ -243,7 +244,6 @@ describe("useRoomMapHueZones — a refusal is a resolved promise", () => {
     mockCreate.mockResolvedValue(refused("HUE_ZONE_OVERSIZED", []));
     const { result } = renderZonesWithStore({});
 
-    await waitFor(() => expect(result.current.zones.hueAreaId).toBe("area-1"));
     await waitFor(() => expect(result.current.store.loading).toBe(false));
     act(() => result.current.zones.handleAddHueZone());
     expect(result.current.store.activeHueZoneId).not.toBeNull();

@@ -13,7 +13,9 @@ import { HueChannelOverlay } from "../HueChannelOverlay";
 import { FurnitureObject } from "../objects/FurnitureObject";
 import { TvAnchorObject } from "../objects/TvAnchorObject";
 import { UsbStripObject } from "../objects/UsbStripObject";
-import { RoomMapEditor } from "../RoomMapEditor";
+import { RoomMapSurface } from "../RoomMapSurface";
+
+const RoomMapEditor = () => <RoomMapSurface view3dAvailable={false} />;
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
