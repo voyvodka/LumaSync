@@ -36,6 +36,9 @@ import { getWorld, mutate, type MockWorld } from "../state";
 import { status } from "./status";
 import type { TypedHandlers } from "./types";
 
+/** The shapes the mock bridge reports, one per channel in turn. */
+const MOCK_ARCHETYPES = ["hue_play", "floor_shade", "table_shade", "pendant_round", "hue_go", "hue_lightstrip"];
+
 const MOCK_BRIDGE_HEIGHTS: readonly number[] = [0.1, 0.1, 0.9];
 
 /**
@@ -438,7 +441,8 @@ export const hueHandlers = {
     backend: "keychain" as const,
   }),
 
-  /** Each light is named after its channel, as `get_hue_area_channels` ids them. */
+  /** Each light is named after its channel, as `get_hue_area_channels` ids them, and takes a lamp
+   *  shape in turn so the 3D room shows several. */
   [HUE_COMMANDS.GET_LIGHT_NAMES]: ({ lightIds }) => {
     const { hue } = getWorld();
     if (!hue.reachable) {
@@ -449,7 +453,9 @@ export const hueHandlers = {
     }
     const lights = lightIds.flatMap((id) => {
       const channel = hue.channels.find((c) => `light-${c.index}` === id);
-      return channel ? [{ id, name: channel.name }] : [];
+      return channel
+        ? [{ id, name: channel.name, archetype: MOCK_ARCHETYPES[channel.index % MOCK_ARCHETYPES.length] ?? null }]
+        : [];
     });
     return { status: status(HUE_LIGHT_NAMES_STATUS.OK, "Hue light names loaded."), lights };
   },

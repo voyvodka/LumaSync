@@ -23,6 +23,7 @@ import {
 } from "../model/objectId";
 import { useSnapGuides } from "../state/useSnapGuides";
 import { useRoomMapGridSettings } from "../state/useRoomMapGridSettings";
+import { useHueLampFamilies } from "../state/useHueLampFamilies";
 import { useRoomMapHueChannels } from "../state/useRoomMapHueChannels";
 import { useRoomMapHueZones } from "../state/useRoomMapHueZones";
 import { imageLayerGestureKey, useRoomMapImageLayers } from "../state/useRoomMapImageLayers";
@@ -175,6 +176,7 @@ export function RoomMapEditor({
     hueBridgeConfigured,
     ready: !loading,
   });
+  const lampFamilies = useHueLampFamilies(areaChannels, show3d);
 
   const { guides: snapGuides, onDragMove: snapDragMove, onDragEnd: snapDragEnd } = useSnapGuides(config);
 
@@ -553,7 +555,12 @@ export function RoomMapEditor({
           />
 
           {show3d && (
-            <RoomView3DHost config={scopedConfig} label={t("roomMap:toolbar.view3dLabel")} onFail={handleView3dFail} />
+            <RoomView3DHost
+              config={scopedConfig}
+              lampFamilies={lampFamilies}
+              label={t("roomMap:toolbar.view3dLabel")}
+              onFail={handleView3dFail}
+            />
           )}
 
           {settingsOpen && (

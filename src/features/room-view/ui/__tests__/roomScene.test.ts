@@ -62,6 +62,18 @@ describe("buildRoomScene — draw budget", () => {
     return count;
   };
 
+  it("adds no draw for a light drawn as its fixture", () => {
+    const lamps = [0, 1].map((i) => ({ channelIndex: i, x: -0.2 + i * 0.4, y: 0, z: 0.3, zOrigin: "bridge" as const }));
+    const bulbs = drawables({ ...furnished, hueChannels: lamps });
+    const scene = buildRoomScene({ ...furnished, hueChannels: lamps }, { ...OPTIONS, lampFamilies: new Map([[0, "floorLamp"], [1, "playBar"]]) });
+    let fixtures = 0;
+    scene.scene.traverse((object) => {
+      if ((object as { isMesh?: boolean }).isMesh || (object as { isPoints?: boolean }).isPoints) fixtures += 1;
+    });
+    disposeScene(scene.scene);
+    expect(fixtures).toBe(bulbs);
+  });
+
   it("draws the same number of objects for two lamps as for twelve", () => {
     // Lamps near no wall, so neither set adds a wall wash the other lacks.
     const lamp = (i: number) => ({ channelIndex: i, x: (i % 4) * 0.1 - 0.15, y: Math.floor(i / 4) * 0.1 - 0.1, z: 0.3, zOrigin: "bridge" as const });

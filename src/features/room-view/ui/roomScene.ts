@@ -23,11 +23,13 @@ import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 
 import { hueChannelScenePoint, roomToScene, tvMountHeight } from "../model/roomSpace";
 import { contactShadow, floorParts, roomLights, WALL_THICKNESS, wallFootShade, wallGeometry } from "./scene/environment";
-import { classifyFurniture, contactShade } from "../model/furnitureModel";
+import { classifyFurniture, contactShade, modelTop, surfaceTop } from "../model/furnitureModel";
+import type { LampFamily } from "../model/lampFamily";
 import { furnitureParts } from "./scene/furniture";
 import { buildGlow, type Lamp, poolTexture, radialTexture, type WallPlane } from "./scene/glow";
 import { PALETTE } from "./scene/palette";
 import { mergeParts, type Part, transformParts } from "./scene/parts";
+import { lampFixture } from "./scene/lamps";
 import { buildScreen } from "./scene/screen";
 
 const LAMP_COLOURS = [0xffb347, 0x4fd1c5, 0xb388ff, 0xff7a59, 0x7aa2ff];
@@ -43,6 +45,33 @@ export interface RoomSceneOptions {
   lambert: boolean;
   /** Measuring only: a define that makes the shaders new to WebKit's cache, so they compile cold. */
   coldKey?: number;
+  /** Each Hue channel's fixture by channel index; one not listed draws as a bulb. */
+  lampFamilies?: ReadonlyMap<number, LampFamily>;
+}
+
+/** A piece's top as something stands on it, in the scene frame. */
+interface Surface {
+  x: number;
+  z: number;
+  /** The rotation the piece was placed with (radians), undone to test a point against it. */
+  angle: number;
+  hw: number;
+  hd: number;
+  top: number;
+}
+
+/** The highest surface under a point that is not above it: a lamp on a desk stands on the desk, one
+ *  over an empty floor on the floor. */
+function surfaceUnder(x: number, z: number, y: number, surfaces: readonly Surface[]): number {
+  let best = 0;
+  for (const s of surfaces) {
+    const dx = x - s.x;
+    const dz = z - s.z;
+    const lx = dx * Math.cos(s.angle) + dz * Math.sin(s.angle);
+    const lz = -dx * Math.sin(s.angle) + dz * Math.cos(s.angle);
+    if (Math.abs(lx) <= s.hw && Math.abs(lz) <= s.hd && s.top <= y + 0.02 && s.top > best) best = s.top;
+  }
+  return best;
 }
 
 export interface RoomScene {
@@ -85,6 +114,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   const matte: Part[] = [];
   const satin: Part[] = [];
   const shadows: BufferGeometry[] = [wallFootShade(W, D)];
+  const surfaces: Surface[] = [];
   const sort = (parts: readonly Part[]) => {
     for (const part of parts) (SATIN.has(part.color) ? satin : matte).push(part);
   };
@@ -99,7 +129,29 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     transformParts(parts, place);
     sort(parts);
     shadows.push(contactShadow(item.width / 2, item.height / 2, contactShade(model), place));
+    const scale = item.topMeters !== undefined && item.topMeters > 0 ? item.topMeters / modelTop(model) : 1;
+    const top = surfaceTop(model) * scale;
+    if (top > 0) {
+      surfaces.push({
+        x: centre.x,
+        z: centre.z,
+        angle: ((item.rotation ?? 0) * Math.PI) / 180,
+        hw: item.width / 2,
+        hd: item.height / 2,
+        top,
+      });
+    }
   }
+
+  // Hue lights as their fixtures; the bodies join the furniture's meshes, the lit parts the glow.
+  const mount = tvMountHeight(config.tvAnchor, dims);
+  const lamps: Lamp[] = config.hueChannels.map((channel, i) => {
+    const point = hueChannelScenePoint(channel, config.zones, dims, mount);
+    const family = options.lampFamilies?.get(channel.channelIndex) ?? "bulb";
+    const fixture = lampFixture(family, point, surfaceUnder(point.x, point.z, point.y, surfaces), H);
+    sort(fixture.body);
+    return { at: fixture.glow.at, radii: fixture.glow.radii, color: LAMP_COLOURS[i % LAMP_COLOURS.length] ?? 0xffb347 };
+  });
 
   const screen = buildScreen(config, models);
   if (screen) {
@@ -156,11 +208,6 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   }));
 
   const texture = radialTexture(256, "rgba(255,255,255,1)", "rgba(255,255,255,0)");
-  const mount = tvMountHeight(config.tvAnchor, dims);
-  const lamps: Lamp[] = config.hueChannels.map((channel, i) => ({
-    at: hueChannelScenePoint(channel, config.zones, dims, mount),
-    color: LAMP_COLOURS[i % LAMP_COLOURS.length] ?? 0xffb347,
-  }));
   const surface = poolTexture(128);
   const glow = buildGlow(lamps, planes, H, texture, surface);
   if (glow) scene.add(...glow.objects);

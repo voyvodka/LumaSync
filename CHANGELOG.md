@@ -1135,7 +1135,7 @@ https://keepachangelog.com/en/1.1.0/
   added by connecting a controller, or an LED count saved in LED Setup, while it was open would have
   been taken away by its next save; the settings pages showing one section at a time was all that
   prevented it. The unused room map save counter is gone from the settings file.
-- A 3D room view, built only into dev builds and builds with `VITE_ROOM_VIEW_SPIKE=1`: three.js in its own lazy chunk that the chunk gate fails if it appears in a release build. It draws parametric furniture read from each piece's size and neighbours, and hands its WebGL context back when it closes.
+- A 3D room view, built only into dev builds and builds with `VITE_ROOM_VIEW_SPIKE=1`: three.js in its own lazy chunk that the chunk gate fails if it appears in a release build. It draws parametric furniture read from each piece's size and neighbours and each Hue light as its fixture (a Play bar, a floor lamp, a pendant…) from the bridge's archetype, and hands its WebGL context back when it closes.
 
 ## [1.5.5]
 

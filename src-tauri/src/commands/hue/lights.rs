@@ -32,6 +32,10 @@ pub(crate) const HUE_LIGHT_REQUEST_MAX_IDS: usize = 64;
 pub struct HueLightName {
     pub id: String,
     pub name: String,
+    /// CLIP v2 `metadata.archetype`, the bridge's spelling — an open set the frontend maps to a
+    /// lamp's shape, never a code Rust acts on.
+    #[serde(default)]
+    pub archetype: Option<String>,
 }
 
 /// Result of `get_hue_light_names`. `lights` is empty on every failure arm.
@@ -112,16 +116,23 @@ fn names_for(lights: &[Value], wanted: &[String]) -> Vec<HueLightName> {
         if out.iter().any(|named| &named.id == id) {
             continue;
         }
-        let name = by_id
-            .get(id.as_str())
+        let item = by_id.get(id.as_str());
+        let name = item
             .and_then(|item| item.pointer("/metadata/name"))
             .and_then(Value::as_str)
             .map(str::trim)
             .filter(|name| !name.is_empty());
         if let Some(name) = name {
+            let archetype = item
+                .and_then(|item| item.pointer("/metadata/archetype"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|archetype| !archetype.is_empty())
+                .map(str::to_string);
             out.push(HueLightName {
                 id: id.clone(),
                 name: name.to_string(),
+                archetype,
             });
         }
     }
@@ -549,12 +560,20 @@ mod tests {
     }
 
     fn bridge() -> FakeHue {
+        let mut play = named("  TV left ");
+        play["metadata"]["archetype"] = json!("hue_play");
+        let mut shelf = named("Shelf");
+        shelf["metadata"]
+            .as_object_mut()
+            .expect("metadata")
+            .remove("archetype");
         FakeHue::start(
-            &[(AREA, &["light-1", "light-2", "light-3"])],
+            &[(AREA, &["light-1", "light-2", "light-3", "light-4"])],
             &[
                 ("light-1", named("Sofa lamp")),
-                ("light-2", named("  TV left ")),
+                ("light-2", play),
                 ("light-3", light_json(true, 50.0, None, (0.3, 0.3))),
+                ("light-4", shelf),
             ],
             |_| Reply::ok(),
         )
@@ -576,11 +595,13 @@ mod tests {
             vec![
                 HueLightName {
                     id: "light-2".into(),
-                    name: "TV left".into()
+                    name: "TV left".into(),
+                    archetype: Some("hue_play".into()),
                 },
                 HueLightName {
                     id: "light-1".into(),
-                    name: "Sofa lamp".into()
+                    name: "Sofa lamp".into(),
+                    archetype: Some("sultan_bulb".into()),
                 },
             ],
             "asked-for order, trimmed, unnamed and unknown lights left out"
@@ -589,6 +610,28 @@ mod tests {
         assert_eq!(requests.len(), 1, "one request for the whole area");
         assert_eq!(requests[0].method, "GET");
         assert_eq!(requests[0].path, "/clip/v2/resource/light");
+    }
+
+    #[tokio::test]
+    async fn each_name_carries_the_bridge_archetype_or_none() {
+        let hue = bridge();
+        let response = light_names_from_bridge(
+            &hue.bridge.authority,
+            "app-key",
+            ids(&["light-4", "light-2"]),
+        )
+        .await;
+
+        let archetypes: Vec<_> = response
+            .lights
+            .iter()
+            .map(|light| (light.id.as_str(), light.archetype.as_deref()))
+            .collect();
+        assert_eq!(
+            archetypes,
+            vec![("light-4", None), ("light-2", Some("hue_play"))],
+            "a light with no archetype still has its name"
+        );
     }
 
     #[tokio::test]

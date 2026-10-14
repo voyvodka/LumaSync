@@ -726,7 +726,11 @@ answers the names of the ids asked for; a light listed without a name is left ou
 back to its count, never to an id. The frontend asks once per bridge and set of light ids and keeps
 the answer for the session (`useHueLightNames`); nothing polls, and Revalidate reads it again. The
 stream-start metadata fetch is per light and carries no name, so the same bulk read serves a running
-stream too.
+stream too. Each name carries the light's `metadata.archetype` as the bridge spells it (`null` when
+it names none): an open set, so it stays a string on the wire and Rust acts on none of it. The 3D
+room maps it to a fixture — a Play bar, a floor or table lamp, a pendant, a lightstrip — in
+`room-view/model/lampFamily.ts`, where a word it does not know draws as a bulb, and reads it only
+while the room is open (`useHueLampFamilies`).
 
 - **Identify toggles the light where it can.** The device's own identify (`identify: {action:
   "identify"}` on `device`) is one breathe cycle, and on a light already at full brightness it read as

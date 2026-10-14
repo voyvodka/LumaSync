@@ -24,7 +24,10 @@ import {
 import type { ScenePoint } from "../../model/roomSpace";
 
 export interface Lamp {
+  /** The lit part's centre. */
   at: ScenePoint;
+  /** The lit part's radii: a bulb is a small sphere, a shade a drum, a Play bar's back a strip. */
+  radii: [number, number, number];
   color: number;
 }
 
@@ -112,9 +115,14 @@ export function buildGlow(
   const m = new Matrix4();
   const colour = new Color();
 
-  const bulbs = new InstancedMesh(new SphereGeometry(0.055, 16, 12), new MeshBasicMaterial({ toneMapped: false }), lamps.length);
+  const bulbs = new InstancedMesh(new SphereGeometry(1, 16, 12), new MeshBasicMaterial({ toneMapped: false }), lamps.length);
+  const unturned = new Quaternion();
   lamps.forEach((lamp, i) => {
-    bulbs.setMatrixAt(i, m.makeTranslation(lamp.at.x, Math.max(lamp.at.y, 0.08), lamp.at.z));
+    const [rx, ry, rz] = lamp.radii;
+    bulbs.setMatrixAt(
+      i,
+      m.compose(new Vector3(lamp.at.x, Math.max(lamp.at.y, ry + 0.02), lamp.at.z), unturned, new Vector3(rx, ry, rz)),
+    );
     bulbs.setColorAt(i, colour.set(lamp.color));
   });
 

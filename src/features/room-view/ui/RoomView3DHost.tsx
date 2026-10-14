@@ -3,6 +3,8 @@ import { lazy, Suspense } from "react";
 import { useWindowVisible } from "@/features/shell/windowVisibility";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 
+import type { LampFamily } from "../model/lampFamily";
+
 // Spike: built into dev builds and into a measuring build with VITE_ROOM_VIEW_SPIKE=1. A release
 // build drops the import and never emits the three.js chunk; `verify:chunk-budget` fails if it does.
 const RoomView3D =
@@ -14,7 +16,12 @@ export const ROOM_VIEW_3D_AVAILABLE = RoomView3D !== null;
 
 /** The 3D view over the room map's canvas. It holds a WebGL context only while the window is on
  *  screen: hidden, it unmounts and hands everything back. */
-export function RoomView3DHost(props: { config: RoomMapConfig; label: string; onFail: (error: unknown) => void }) {
+export function RoomView3DHost(props: {
+  config: RoomMapConfig;
+  lampFamilies?: ReadonlyMap<number, LampFamily>;
+  label: string;
+  onFail: (error: unknown) => void;
+}) {
   const visible = useWindowVisible();
   if (!RoomView3D || !visible) return null;
   return (

@@ -6,6 +6,8 @@ import { NeutralToneMapping, OrthographicCamera, PCFShadowMap, SRGBColorSpace, V
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
+
+import type { LampFamily } from "../model/lampFamily";
 import { prefersReducedMotion } from "@/shared/lib/motion";
 
 import { buildRoomScene, disposeScene, type RoomScene, type RoomSceneOptions } from "./roomScene";
@@ -40,7 +42,7 @@ declare global {
 }
 
 interface RoomView {
-  show(config: RoomMapConfig): void;
+  show(config: RoomMapConfig, lampFamilies: ReadonlyMap<number, LampFamily>): void;
   close(): void;
 }
 
@@ -160,11 +162,11 @@ function openRoomView(host: HTMLElement, onFail: (error: unknown) => void): Room
     observer = new ResizeObserver(fit);
     observer.observe(host);
 
-    const show = (config: RoomMapConfig) => {
+    const show = (config: RoomMapConfig, lampFamilies: ReadonlyMap<number, LampFamily>) => {
       if (closed) return;
       const first = room === null;
       if (room) disposeScene(room.scene);
-      room = buildRoomScene(config, { shadows, lambert: options.lambert ?? false, coldKey: options.coldKey });
+      room = buildRoomScene(config, { shadows, lambert: options.lambert ?? false, coldKey: options.coldKey, lampFamilies });
       orbit.target.copy(room.target);
       if (first) placeCamera(room, Math.PI / 4);
       renderer.shadowMap.needsUpdate = shadows;
@@ -209,9 +211,9 @@ function openRoomView(host: HTMLElement, onFail: (error: unknown) => void): Room
     };
 
     return {
-      show(config) {
+      show(config, lampFamilies) {
         try {
-          show(config);
+          show(config, lampFamilies);
         } catch (error) {
           onFail(error);
         }
@@ -224,12 +226,17 @@ function openRoomView(host: HTMLElement, onFail: (error: unknown) => void): Room
   }
 }
 
+const NO_FAMILIES: ReadonlyMap<number, LampFamily> = new Map();
+
 export default function RoomView3D({
   config,
+  lampFamilies = NO_FAMILIES,
   label,
   onFail,
 }: {
   config: RoomMapConfig;
+  /** Each Hue channel's fixture, by channel index; absent ones draw as bulbs. */
+  lampFamilies?: ReadonlyMap<number, LampFamily>;
   label: string;
   /** No view could be drawn — no WebGL context, or the scene failed to build. */
   onFail: (error: unknown) => void;
@@ -258,8 +265,8 @@ export default function RoomView3D({
   }, []);
 
   useEffect(() => {
-    viewRef.current?.show(config);
-  }, [config]);
+    viewRef.current?.show(config, lampFamilies);
+  }, [config, lampFamilies]);
 
   return <div ref={hostRef} role="img" aria-label={label} className={`absolute inset-0 ${styles.host}`} />;
 }
