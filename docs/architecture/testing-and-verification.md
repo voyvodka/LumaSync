@@ -267,7 +267,8 @@ focus-within and real pointer behaviour checkable at all — the cursor there is
 
 Nothing under `src/` may name `mock/`, which is what makes the ship-safety guarantee structural
 rather than a matter of trusting tree-shaking; `verify:mock-not-shipped` asserts it and proves the
-build guard by running into it. The reverse direction is fine and deliberate: `mock/` imports
+build guard by running into it; CI's build job then runs it with `--dist` against the frontend the
+smoke binary embedded, so a sentinel that reached a real bundle fails there. The reverse direction is fine and deliberate: `mock/` imports
 contract types, and `mock/hotplug.ts` imports two runtime singletons on purpose.
 
 Four things about it are not obvious and each cost a cycle:

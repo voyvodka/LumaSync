@@ -182,6 +182,10 @@ jobs:
         # exposes only the CI window until React takes over.
         run: bun run tauri build --debug --no-bundle --config src-tauri/tauri.windows-smoke.conf.json
 
+      - name: Dev mock absent from the built frontend
+        # check:all proves the structure; this reads the dist/ the build above embedded.
+        run: node scripts/verify/mock-not-shipped.mjs --dist
+
       - name: Launch smoke test (Linux)
         if: runner.os == 'Linux'
         env:
