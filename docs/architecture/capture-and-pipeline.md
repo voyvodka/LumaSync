@@ -202,8 +202,9 @@ except where that corner would be the strip's whole colour: a strip with no layo
 one LED (the legacy single-zone path), and since it shows one colour for the whole strip it samples
 the whole picture inside any black bars (`WHOLE_FRAME_SAMPLE_WINDOW` via `sample_window_for`: the
 same corner position, a window that reaches the whole content rectangle from it). It once took the
-top-left corner, so a red corner tile lit a strip whose screen was blue. A session with no strip
-output keeps the live box, because its strip sample is thrown away. The
+top-left corner, so a red corner tile lit a strip whose screen was blue. With neither a layout nor a
+strip output (Hue alone) there is no strip at all (`strip_for_worker`): the fallback LED there was
+sampled every frame for nothing and stood in an effect's bounds as a light that does not exist. The
 twin's Hue lamps follow the same rule: `TwinLayout.lamps` puts each where it samples the screen, from
 the room map's placements over the stream's channels as the worker's sample table reads them
 (`hue_lamp_screen_points`), and lines them up along the bottom only when no room map places them —

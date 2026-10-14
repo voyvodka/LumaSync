@@ -20,7 +20,7 @@ use super::live::{AmbilightLiveSettings, RoomGeometryLive};
 use super::pacing::{resolve_quality_config, AmbilightWorkerQualityState};
 use super::preview::{PreviewEmitContext, TwinFrameSink, TWIN_FRAME_INTERVAL_MS};
 use super::runtime::LightingWorkerRuntime;
-use super::sampling::sample_window_for;
+use super::sampling::{sample_window_for, strip_for_worker};
 use super::usb_output::{ActiveUsbSink, UsbOutputPlan};
 use super::{ACTIVE_AMBILIGHT_WORKERS, AMBILIGHT_CAPTURE_ATTEMPTS, AMBILIGHT_FRAME_ATTEMPTS};
 use crate::commands::ambilight_capture::{AmbilightFrameSource, CapturedFrame};
@@ -28,9 +28,7 @@ use crate::commands::hue::frame::HueMotion;
 use crate::commands::hue::state_store::{
     apply_hue_channels_with_context, HueActiveOutputContext, HueOutputLive,
 };
-use crate::commands::led_calibration::{
-    build_led_sequence, sample_frame_for_sequence, LedCalibrationConfig, StripShape,
-};
+use crate::commands::led_calibration::{sample_frame_for_sequence, LedCalibrationConfig};
 use crate::commands::led_output::{
     scale_brightness, ColorCorrectionConfig, FirmwareProfile, LedChipType, LedOutputBridge,
     SerialSink,
@@ -219,40 +217,10 @@ pub(super) fn start_ambilight_worker(
         }
         found.ok_or(last_err)?
     };
-    // Per-LED calibration: build the strip sequence once at worker start.
-    // Each iteration calls sample_frame_for_sequence to produce per-LED colours
-    // from edge regions of the captured frame.
-    // When led_calibration is absent we fall back to a minimal 1-LED sequence
-    // so the legacy single-zone firmware path keeps working unchanged.
-    let (led_sequence, strip_shape, total_leds) = if let Some(ref cal) = led_calibration {
-        (build_led_sequence(cal), StripShape::of(cal), cal.total_leds)
-    } else {
-        // Fallback: one LED for a strip with no layout on record (backward-compat with v1.3
-        // firmware). It sits at the top segment's start; `sample_window_for` gives it the whole
-        // picture, so that position does not decide its colour.
-        use crate::commands::led_calibration::LedSegmentCounts as Counts;
-        let fallback_cal = LedCalibrationConfig {
-            template_id: None,
-            counts: Counts {
-                top: 1,
-                right: 0,
-                bottom: 0,
-                left: 0,
-            },
-            bottom_missing: 0,
-            corner_ownership: "horizontal".to_string(),
-            visual_preset: "subtle".to_string(),
-            start_anchor: "top-start".to_string(),
-            start_local_index: None,
-            direction: "cw".to_string(),
-            total_leds: 1,
-        };
-        (
-            build_led_sequence(&fallback_cal),
-            StripShape::of(&fallback_cal),
-            1u16,
-        )
-    };
+    // Per-LED calibration: build the strip sequence once at worker start. Each iteration calls
+    // sample_frame_for_sequence to produce per-LED colours from edge regions of the captured frame.
+    let (led_sequence, strip_shape, total_leds) =
+        strip_for_worker(led_calibration.as_ref(), usb_plan.is_some());
     info!(
         "[start_ambilight_worker] led sequence resolved — total_leds={total_leds} sequence_len={} calibration_present={}",
         led_sequence.len(),

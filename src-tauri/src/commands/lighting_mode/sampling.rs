@@ -10,6 +10,9 @@ use crate::commands::ambilight_capture::{
     detect_black_borders, BlackBorderInsets, CapturedFrame, BLACK_BORDER_THRESHOLD,
 };
 use crate::commands::ambilight_scene::{hue_default_screen_affinity, LightTopology};
+use crate::commands::led_calibration::{
+    build_led_sequence, LedCalibrationConfig, LedSegmentCounts, LedSequenceItem, StripShape,
+};
 use crate::commands::room_affinity::{room_aware_hue_samples, room_geometry_rejection};
 use crate::models::room_map::RoomGeometry;
 
@@ -242,6 +245,41 @@ pub const SYNTHETIC_SAMPLE_WINDOW: f32 = 0.0125;
 /// least the whole content rectangle from any position: the lone LED takes the picture's mean
 /// (inside any black bars) instead of the corner a one-LED segment maps to.
 pub const WHOLE_FRAME_SAMPLE_WINDOW: f32 = 2.0;
+
+/// The strip the worker samples: the layout on record; without one, a single LED (backward-compat
+/// with v1.3 firmware) — but only when a strip output reads it. With neither a layout nor a strip
+/// output (Hue alone) there is no strip: a fallback LED there was sampled every frame for nothing,
+/// and stood in an effect's bounds as a light that does not exist.
+pub(super) fn strip_for_worker(
+    led_calibration: Option<&LedCalibrationConfig>,
+    strip_output: bool,
+) -> (Vec<LedSequenceItem>, StripShape, u16) {
+    if let Some(cal) = led_calibration {
+        return (build_led_sequence(cal), StripShape::of(cal), cal.total_leds);
+    }
+    let leds = u16::from(strip_output);
+    let fallback = LedCalibrationConfig {
+        template_id: None,
+        counts: LedSegmentCounts {
+            top: leds,
+            right: 0,
+            bottom: 0,
+            left: 0,
+        },
+        bottom_missing: 0,
+        corner_ownership: "horizontal".to_string(),
+        visual_preset: "subtle".to_string(),
+        start_anchor: "top-start".to_string(),
+        start_local_index: None,
+        direction: "cw".to_string(),
+        total_leds: leds,
+    };
+    (
+        build_led_sequence(&fallback),
+        StripShape::of(&fallback),
+        leds,
+    )
+}
 
 /// Which box the strip samples with. A synthetic test paints exact per-LED blocks; a strip with no
 /// layout takes the whole picture; anything else the live box. Without a strip output (Hue only)

@@ -12,8 +12,9 @@ use super::frame_pipeline::{
 };
 use super::live::{AmbilightLiveSettings, RoomGeometryLive};
 use super::sampling::{
-    hue_sample_table, sample_screen_position_avg, sample_window_for, BlackBorderCache,
-    HueSampleTable, LIVE_SAMPLE_WINDOW, SYNTHETIC_SAMPLE_WINDOW, WHOLE_FRAME_SAMPLE_WINDOW,
+    hue_sample_table, sample_screen_position_avg, sample_window_for, strip_for_worker,
+    BlackBorderCache, HueSampleTable, LIVE_SAMPLE_WINDOW, SYNTHETIC_SAMPLE_WINDOW,
+    WHOLE_FRAME_SAMPLE_WINDOW,
 };
 use super::smoothing::{alpha_for_interval, TimeSmoother, SMOOTHING_REFERENCE_INTERVAL};
 use super::usb_output::UsbOutputPlan;
@@ -2266,5 +2267,27 @@ fn a_strip_with_no_layout_shows_the_picture_not_its_top_left_corner() {
     assert!(
         pixel[2] > pixel[0] && pixel[2] > pixel[1],
         "the lone LED took {pixel:?} instead of the picture's blue"
+    );
+}
+
+#[test]
+fn a_session_with_no_strip_output_and_no_layout_has_no_strip() {
+    let (sequence, _, leds) = strip_for_worker(None, false);
+    assert!(sequence.is_empty(), "Hue alone samples no phantom LED");
+    assert_eq!(leds, 0);
+
+    let (sequence, _, leds) = strip_for_worker(None, true);
+    assert_eq!(
+        (sequence.len(), leds),
+        (1, 1),
+        "a strip with no layout still lights as one"
+    );
+
+    let calibration = strip_164();
+    let (sequence, _, leds) = strip_for_worker(Some(&calibration), false);
+    assert_eq!(
+        (sequence.len(), leds),
+        (164, 164),
+        "a layout is kept whatever drives it"
     );
 }
