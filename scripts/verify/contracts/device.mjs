@@ -1,30 +1,28 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { ROOT, check, readOrEmpty, stripComments, stripRustTestModules } from "./lib.mjs";
+import { ROOT, check, readOrEmpty, rustEnumWireValues, stripComments, stripRustTestModules, tsConstValues } from "./lib.mjs";
 import { source, deviceSource, rustHealthSource, wledRustSource } from "./sources.mjs";
 
 // ---------------------------------------------------------------------------
 // Device contract
 // ---------------------------------------------------------------------------
 
-console.log("\n[ Device firmware profile ]");
-const REQUIRED_FIRMWARE_PROFILE_VALUES = [
-  "adalight",
-  "lumasync-v1",
-];
-for (const value of REQUIRED_FIRMWARE_PROFILE_VALUES) {
+/** The values a Rust enum serialises as must be exactly the TS const's — one side growing a
+ *  variant the other cannot name is a value the frontend renders raw or the backend refuses. */
+function checkEnumParity(rustEnum, tsConst) {
+  const rust = rustEnumWireValues(rustWireSource, rustEnum);
+  const ts = tsConstValues(deviceSource, tsConst);
   check(
-    deviceSource.includes(`"${value}"`),
-    `firmware profile value "${value}" defined`,
-    `MISSING firmware profile value "${value}"`
+    rust !== null && rust.length > 0 && ts.length > 0 && [...rust].sort().join(",") === [...ts].sort().join(","),
+    `${tsConst} matches Rust ${rustEnum} (${[...ts].sort().join(" ")})`,
+    `${tsConst} DRIFT:\n     Rust ${rustEnum}: ${rust === null ? "enum not found" : rust.join(" ")}\n     TS  ${tsConst}: ${ts.join(" ")}`
   );
 }
-check(
-  deviceSource.includes("FIRMWARE_PROFILE"),
-  "FIRMWARE_PROFILE enum exported",
-  "MISSING FIRMWARE_PROFILE enum"
-);
+
+console.log("\n[ Device firmware profile ]");
+const rustWireSource = readOrEmpty(resolve(ROOT, "src-tauri/src/commands/led_output/wire.rs"), "rust led_output/wire");
+checkEnumParity("FirmwareProfile", "FIRMWARE_PROFILE");
 
 console.log("\n[ Device color correction ]");
 const REQUIRED_COLOR_CORRECTION_EXPORTS = [
@@ -42,22 +40,7 @@ for (const name of REQUIRED_COLOR_CORRECTION_EXPORTS) {
 }
 
 console.log("\n[ Device LED chip type (v1.5 G3) ]");
-const REQUIRED_LED_CHIP_TYPE_VALUES = [
-  "ws2812b-grb",
-  "sk6812-rgbw",
-];
-for (const value of REQUIRED_LED_CHIP_TYPE_VALUES) {
-  check(
-    deviceSource.includes(`"${value}"`),
-    `LED chip type value "${value}" defined`,
-    `MISSING LED chip type value "${value}"`
-  );
-}
-check(
-  deviceSource.includes("LED_CHIP_TYPE"),
-  "LED_CHIP_TYPE enum exported",
-  "MISSING LED_CHIP_TYPE enum"
-);
+checkEnumParity("LedChipType", "LED_CHIP_TYPE");
 check(
   deviceSource.includes("LedChipType"),
   "LedChipType type exported",

@@ -195,3 +195,38 @@ export function harvestCodes(files) {
   }
   return found;
 }
+
+/** String values of an `export const NAME = { ... } as const;` block, any case. */
+export function tsConstValues(source, name) {
+  const block = source.match(new RegExp(`export const ${name}\\s*=\\s*\\{([\\s\\S]*?)\\n\\} as const;`));
+  return block ? [...block[1].matchAll(/:\s*"([^"]+)"/g)].map((m) => m[1]) : [];
+}
+
+const RENAME_ALL = {
+  camelCase: (v) => v[0].toLowerCase() + v.slice(1),
+  lowercase: (v) => v.toLowerCase(),
+  snake_case: (v) => v.replace(/(?<!^)([A-Z])/g, "_$1").toLowerCase(),
+  "kebab-case": (v) => v.replace(/(?<!^)([A-Z])/g, "-$1").toLowerCase(),
+  SCREAMING_SNAKE_CASE: (v) => v.replace(/(?<!^)([A-Z])/g, "_$1").toUpperCase(),
+};
+
+/** What a unit-variant Rust enum serialises as: each variant's `#[serde(rename)]`, else the enum's
+ *  `rename_all` applied to its name. `null` when the enum is not found. */
+export function rustEnumWireValues(source, name) {
+  const match = source.match(new RegExp(`((?:#\\[[^\\n]*\\]\\s*\\n)*)pub enum ${name}\\s*\\{([\\s\\S]*?)\\n\\}`));
+  if (!match) return null;
+  const renameAll = /rename_all\s*=\s*"([^"]+)"/.exec(match[1])?.[1];
+  const convert = renameAll ? RENAME_ALL[renameAll] : (v) => v;
+  const values = [];
+  let rename = null;
+  for (const line of match[2].split("\n").map((l) => l.trim())) {
+    const renamed = /^#\[serde\(rename\s*=\s*"([^"]+)"\)\]/.exec(line);
+    if (renamed) rename = renamed[1];
+    const variant = /^([A-Z]\w*)\s*,?$/.exec(line);
+    if (variant) {
+      values.push(rename ?? convert(variant[1]));
+      rename = null;
+    }
+  }
+  return values;
+}
