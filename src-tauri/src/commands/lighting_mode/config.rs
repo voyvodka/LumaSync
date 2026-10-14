@@ -431,7 +431,7 @@ pub(crate) const DEFAULT_SOLID: SolidColorPayload = SolidColorPayload {
 pub struct AmbilightPayload {
     pub brightness: f32,
     /// Enable automatic letterbox / pillarbox detection.
-    /// When true, black borders are detected every ~2.5 s and excluded from sampling.
+    /// When true, black borders are detected every 0.5 s and excluded from sampling.
     #[serde(default)]
     pub black_border_detection: bool,
     /// EWMAalpha for per-frame color smoothing. Range [0.05, 1.0].

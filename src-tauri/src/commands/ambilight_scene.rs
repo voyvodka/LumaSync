@@ -233,6 +233,13 @@ impl SceneAnalyzer {
         }
     }
 
+    /// The next frame measures no change: the rectangle it is read in moved
+    /// (the black-border crop), so a histogram difference would be the move,
+    /// not the picture, and would read as a cut.
+    pub fn forget_previous_frame(&mut self) {
+        self.hist_prev = None;
+    }
+
     /// `observe_frame_after` one reference interval after the previous frame.
     #[cfg(test)]
     pub fn observe_frame(
@@ -265,19 +272,12 @@ impl SceneAnalyzer {
         let mut sum = [0f32; 3];
         let mut count = 0u32;
         if w > 0 && h > 0 && !frame.pixels_rgb.is_empty() {
-            let top = (h as f32 * insets.top) as usize;
-            let bottom = h
-                .saturating_sub((h as f32 * insets.bottom) as usize)
-                .max(top + 1);
-            let left = (w as f32 * insets.left) as usize;
-            let right = w
-                .saturating_sub((w as f32 * insets.right) as usize)
-                .max(left + 1);
+            let (rows, cols) = insets.content_bounds(w, h);
             let shift = 8 - HIST_BITS;
-            let mut row = top;
-            while row < bottom {
-                let mut col = left;
-                while col < right {
+            let mut row = rows.start;
+            while row < rows.end {
+                let mut col = cols.start;
+                while col < cols.end {
                     if let Some(px) = frame.pixels_rgb.get(row * w + col) {
                         sum[0] += self.lut[px[0] as usize];
                         sum[1] += self.lut[px[1] as usize];
@@ -913,5 +913,20 @@ mod tests {
         }
         let process_us = t.elapsed().as_secs_f64() * 1e6 / 100.0;
         println!("observe_frame ≈ {observe_us:.1} µs, process(200 LEDs) ≈ {process_us:.1} µs");
+    }
+
+    // A black-border crop that moves changes the rectangle the histogram is
+    // read in; measured, the move would read as a cut and snap the lights.
+    #[test]
+    fn a_frame_after_the_crop_moved_measures_no_change() {
+        let flat = |v: u8| CapturedFrame::new(8, 8, vec![[v, v, v]; 64]);
+        let insets = BlackBorderInsets::default();
+        let mut scene = SceneAnalyzer::new();
+        scene.observe_frame(&flat(40), &insets, 0.35);
+        scene.forget_previous_frame();
+        scene.observe_frame(&flat(220), &insets, 0.35);
+        assert_eq!(scene.last_change(), 0.0);
+        scene.observe_frame(&flat(40), &insets, 0.35);
+        assert!(scene.last_change() > 0.5, "the next frame measures again");
     }
 }

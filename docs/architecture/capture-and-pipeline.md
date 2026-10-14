@@ -156,14 +156,28 @@ Unverified on hardware: app-level exclusion covering later windows, and WDA on a
 WebView2 window and its child windows.
 
 **Every sampler crops the same black borders.** `BlackBorderCache` re-detects letterbox and
-pillarbox bars at most every 2.5 s, and the strip, the scene stage and Hue all sample inside those
+pillarbox bars at most every 0.5 s, and the strip, the scene stage and Hue all sample inside those
 insets: `sample_frame_within_insets` maps each LED onto the picture rectangle and keeps its window
 out of the bars, so on a 2.39:1 film the top and bottom LEDs take the picture's edge instead of
 black. `AmbilightFramePipeline::sample_strip` is where the cache is refreshed, because it is the
 first thing the pipeline sees of a frame; the three consumers therefore read one answer per frame.
 From the per-LED sampler in 1.4.0 until this was fixed the strip sampled the whole frame while Hue
-was cropped. Three edges are deliberate:
+was cropped. These edges are deliberate:
 
+- The detector reads what real films put in the bars, not only clean black
+  (`detect_black_borders`). A black frame — a fade, a cut through black — measures nothing
+  (`None`) and the crop stays. On a flat dark edge the threshold follows that edge's own black, so
+  limited-range video's 16 is still bar; an uneven one (a dim game, a dark interface) keeps the
+  fixed threshold, and an edge brighter than 24 means no bar. A line is picture only with two
+  samples on it, so a cursor or one bright pixel in a bar is not. Bars come in pairs: a dark band
+  on one side only is a dark shot, and a pair that disagrees takes the shallower depth, so no
+  picture is cropped — except a bottom bar whose extra content stays in the middle of the width
+  with bar again above it, which reads as subtitles and takes the top's depth.
+- The cache moves an axis — the letterbox rows or the pillarbox columns, each on its own — only
+  when three reads in a row agree on a new depth to within a scan step (about 1.5 s), so a subtitle
+  or a shot does not make the edge LEDs jump; the first read after detection is switched on is
+  taken at once. When the crop moves, the scene stage skips that frame's change measure
+  (`forget_previous_frame`): a histogram read in a different rectangle would look like a cut.
 - The setting is read after capture, so switching detection off reaches the strip one frame after
   Hue and the scene stage.
 - The worker's warm-up frame is sampled before the pipeline exists and is never cropped; the

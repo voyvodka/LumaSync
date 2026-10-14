@@ -1245,13 +1245,13 @@ impl BlackBorderInsets {
         width: usize,
         height: usize,
     ) -> (std::ops::Range<usize>, std::ops::Range<usize>) {
-        let top = (height as f32 * self.top) as usize;
+        let top = (height as f32 * self.top).round() as usize;
         let bottom = height
-            .saturating_sub((height as f32 * self.bottom) as usize)
+            .saturating_sub((height as f32 * self.bottom).round() as usize)
             .max(top + 1);
-        let left = (width as f32 * self.left) as usize;
+        let left = (width as f32 * self.left).round() as usize;
         let right = width
-            .saturating_sub((width as f32 * self.right) as usize)
+            .saturating_sub((width as f32 * self.right).round() as usize)
             .max(left + 1);
         (top..bottom, left..right)
     }
@@ -1260,100 +1260,191 @@ impl BlackBorderInsets {
 const BORDER_SCAN_STEP: usize = 8;
 const BORDER_MAX_INSET: f32 = 0.40;
 
-/// Brightness above which a pixel counts as content rather than letterbox.
-/// Lives here, next to the detector, because the live worker and the debug
-/// capture probe have to read the same number for their answers to be
-/// comparable — a probe measuring a different threshold measures nothing.
+/// Brightness above which a pixel counts as content rather than letterbox, on
+/// a frame whose bars are true black. Lives here, next to the detector,
+/// because the live worker and the debug capture probe have to read the same
+/// number for their answers to be comparable — a probe measuring a different
+/// threshold measures nothing.
 pub const BLACK_BORDER_THRESHOLD: u8 = 15;
 
-fn row_has_content(pixels: &[[u8; 3]], w: usize, row: usize, threshold: u8) -> bool {
+/// The brightest a bar can be. A player that leaves video in limited range
+/// draws its bars at 16, not 0, so the threshold follows the darkest edge's
+/// own black up to here — and only for a flat edge: a dim picture or a dark
+/// interface is uneven, and raising the threshold under it would crop it.
+const BORDER_BLACK_CEILING: u8 = 24;
+/// How much a bar's edge may vary and still be read as one flat black.
+const BORDER_BLACK_FLATNESS: u8 = 4;
+/// How far above that black a pixel must be to count as picture.
+const BORDER_BLACK_MARGIN: u8 = 8;
+/// A line is picture only with this many samples above the threshold, so a
+/// cursor, a stray bright pixel or compression noise in a bar is not.
+const BORDER_MIN_HITS: usize = 2;
+/// Opposite bars further apart than this, in scan steps, are not one bar
+/// drawn twice: something in one of them is not bar.
+const BORDER_SYMMETRY_STEPS: usize = 2;
+/// Bottom-bar content that stays inside this middle share of the width reads
+/// as subtitles over the bar, not as picture.
+const BORDER_SUBTITLE_SPAN: f32 = 0.85;
+
+/// Samples above `threshold` along one row: how many, and the first and last
+/// column they were found at.
+fn row_hits(pixels: &[[u8; 3]], w: usize, row: usize, threshold: u8) -> (usize, usize, usize) {
+    let mut hits = 0;
+    let (mut first, mut last) = (usize::MAX, 0);
     for col in (0..w).step_by(BORDER_SCAN_STEP) {
         if let Some(pixel) = pixels.get(row * w + col) {
             if pixel[0].max(pixel[1]).max(pixel[2]) > threshold {
-                return true;
+                hits += 1;
+                first = first.min(col);
+                last = col;
+            }
+        }
+    }
+    (hits, first, last)
+}
+
+fn row_has_content(pixels: &[[u8; 3]], w: usize, row: usize, threshold: u8) -> bool {
+    row_hits(pixels, w, row, threshold).0 >= BORDER_MIN_HITS
+}
+
+fn col_has_content(pixels: &[[u8; 3]], w: usize, h: usize, col: usize, threshold: u8) -> bool {
+    let mut hits = 0;
+    for row in (0..h).step_by(BORDER_SCAN_STEP) {
+        if let Some(pixel) = pixels.get(row * w + col) {
+            if pixel[0].max(pixel[1]).max(pixel[2]) > threshold {
+                hits += 1;
+                if hits >= BORDER_MIN_HITS {
+                    return true;
+                }
             }
         }
     }
     false
 }
 
-fn col_has_content(pixels: &[[u8; 3]], w: usize, h: usize, col: usize, threshold: u8) -> bool {
-    for row in (0..h).step_by(BORDER_SCAN_STEP) {
-        if let Some(pixel) = pixels.get(row * w + col) {
-            if pixel[0].max(pixel[1]).max(pixel[2]) > threshold {
-                return true;
-            }
+/// The darkest and brightest sample along each of the frame's outermost rows
+/// and columns.
+fn edge_ranges(pixels: &[[u8; 3]], w: usize, h: usize) -> [(u8, u8); 4] {
+    let range = |cells: &mut dyn Iterator<Item = usize>| {
+        cells
+            .filter_map(|i| pixels.get(i))
+            .map(|p| p[0].max(p[1]).max(p[2]))
+            .fold((u8::MAX, 0), |(lo, hi), v| (lo.min(v), hi.max(v)))
+    };
+    [
+        range(&mut (0..w).step_by(BORDER_SCAN_STEP)),
+        range(&mut (0..w).step_by(BORDER_SCAN_STEP).map(|c| (h - 1) * w + c)),
+        range(&mut (0..h).step_by(BORDER_SCAN_STEP).map(|r| r * w)),
+        range(&mut (0..h).step_by(BORDER_SCAN_STEP).map(|r| r * w + w - 1)),
+    ]
+}
+
+/// Depth of the bar on each edge, in pixels: the first scanned line with
+/// picture on it, or `None` when no line has any.
+fn edge_depths(px: &[[u8; 3]], w: usize, h: usize, threshold: u8) -> Option<[usize; 4]> {
+    let top = (0..h)
+        .step_by(BORDER_SCAN_STEP)
+        .find(|&row| row_has_content(px, w, row, threshold))?;
+    let bottom = (0..h)
+        .step_by(BORDER_SCAN_STEP)
+        .find(|&depth| row_has_content(px, w, h - 1 - depth, threshold))?;
+    let left = (0..w)
+        .step_by(BORDER_SCAN_STEP)
+        .find(|&col| col_has_content(px, w, h, col, threshold))?;
+    let right = (0..w)
+        .step_by(BORDER_SCAN_STEP)
+        .find(|&depth| col_has_content(px, w, h, w - 1 - depth, threshold))?;
+    Some([top, bottom, left, right])
+}
+
+/// One bar depth for two opposite edges. A bar on one side only is dark
+/// picture, not a bar: players centre the picture, so real bars come in pairs.
+/// A pair that disagrees takes the shallower depth, so no picture is cropped —
+/// except where `subtitles` says the bottom's extra content is a subtitle line
+/// over the bar, when the top's depth holds for both.
+fn paired_depth(near: usize, far: usize, subtitles: impl FnOnce() -> bool) -> usize {
+    if near == 0 || far == 0 {
+        return 0;
+    }
+    if near.abs_diff(far) <= BORDER_SYMMETRY_STEPS * BORDER_SCAN_STEP {
+        return near.min(far);
+    }
+    if far < near && subtitles() {
+        return near;
+    }
+    near.min(far)
+}
+
+/// Whether the content the bottom scan met between `depths` (from the bottom
+/// edge) is a subtitle over the bar: every line of it inside the middle of the
+/// width, and bar again between it and the picture. A lit object at the
+/// bottom of a picture whose top is dark runs on into the picture instead.
+fn band_is_subtitles(
+    px: &[[u8; 3]],
+    w: usize,
+    h: usize,
+    depths: std::ops::Range<usize>,
+    threshold: u8,
+) -> bool {
+    let margin = ((1.0 - BORDER_SUBTITLE_SPAN) / 2.0 * w as f32) as usize;
+    let (mut text, mut gap) = (false, false);
+    for depth in depths.step_by(BORDER_SCAN_STEP) {
+        let (hits, first, last) = row_hits(px, w, h - 1 - depth, threshold);
+        if hits < BORDER_MIN_HITS {
+            gap |= text;
+        } else if gap || first < margin || last + margin >= w {
+            return false;
+        } else {
+            text = true;
         }
     }
-    false
+    text && gap
 }
 
 /// Detect letterbox / pillarbox black borders in `frame`.
 ///
 /// Scans inward from each edge (every `BORDER_SCAN_STEP` pixels for speed)
-/// until a pixel brighter than `threshold` is found. Returns the resulting
-/// insets as fractions of the frame dimensions, capped at `BORDER_MAX_INSET`.
-pub fn detect_black_borders(frame: &CapturedFrame, threshold: u8) -> BlackBorderInsets {
+/// until a line with picture on it is found, then pairs opposite edges (see
+/// [`paired_depth`]). Returns the insets as fractions of the frame dimensions,
+/// capped at `BORDER_MAX_INSET`, or `None` for a frame with nothing to measure
+/// against — black, or too dark to tell — so the caller keeps its last answer
+/// instead of dropping the crop through a fade.
+pub fn detect_black_borders(frame: &CapturedFrame, threshold: u8) -> Option<BlackBorderInsets> {
     let w = frame.width as usize;
     let h = frame.height as usize;
-    if w == 0 || h == 0 || frame.pixels_rgb.is_empty() {
-        return BlackBorderInsets::default();
+    if w == 0 || h == 0 || frame.pixels_rgb.len() < w * h {
+        return None;
     }
-
     let px = frame.pixels_rgb.as_slice();
 
-    // Top
-    let mut top_rows = 0usize;
-    for row in (0..h).step_by(BORDER_SCAN_STEP) {
-        if row_has_content(px, w, row, threshold) {
-            top_rows = row;
-            break;
-        }
+    let (darkest_lo, darkest_hi) = edge_ranges(px, w, h)
+        .into_iter()
+        .min_by_key(|&(_, hi)| hi)
+        .unwrap_or((0, 0));
+    if darkest_hi > BORDER_BLACK_CEILING {
+        // Picture on all four edges: no bars.
+        return Some(BlackBorderInsets::default());
     }
+    let flat = darkest_hi - darkest_lo <= BORDER_BLACK_FLATNESS;
+    let threshold = if flat {
+        threshold.max(darkest_hi.saturating_add(BORDER_BLACK_MARGIN))
+    } else {
+        threshold
+    };
+    let [top, bottom, left, right] = edge_depths(px, w, h, threshold)?;
 
-    // Bottom
-    let mut bottom_rows = 0usize;
-    let mut row = h.saturating_sub(1);
-    loop {
-        if row_has_content(px, w, row, threshold) {
-            bottom_rows = h.saturating_sub(row + 1);
-            break;
-        }
-        if row < BORDER_SCAN_STEP {
-            break;
-        }
-        row -= BORDER_SCAN_STEP;
-    }
-
-    // Left
-    let mut left_cols = 0usize;
-    for col in (0..w).step_by(BORDER_SCAN_STEP) {
-        if col_has_content(px, w, h, col, threshold) {
-            left_cols = col;
-            break;
-        }
-    }
-
-    // Right
-    let mut right_cols = 0usize;
-    let mut col = w.saturating_sub(1);
-    loop {
-        if col_has_content(px, w, h, col, threshold) {
-            right_cols = w.saturating_sub(col + 1);
-            break;
-        }
-        if col < BORDER_SCAN_STEP {
-            break;
-        }
-        col -= BORDER_SCAN_STEP;
-    }
-
-    BlackBorderInsets {
-        top: (top_rows as f32 / h as f32).min(BORDER_MAX_INSET),
-        bottom: (bottom_rows as f32 / h as f32).min(BORDER_MAX_INSET),
-        left: (left_cols as f32 / w as f32).min(BORDER_MAX_INSET),
-        right: (right_cols as f32 / w as f32).min(BORDER_MAX_INSET),
-    }
+    let letterbox = paired_depth(top, bottom, || {
+        band_is_subtitles(px, w, h, bottom..top, threshold)
+    });
+    let pillarbox = paired_depth(left, right, || false);
+    let rows = (letterbox as f32 / h as f32).min(BORDER_MAX_INSET);
+    let cols = (pillarbox as f32 / w as f32).min(BORDER_MAX_INSET);
+    Some(BlackBorderInsets {
+        top: rows,
+        bottom: rows,
+        left: cols,
+        right: cols,
+    })
 }
 
 #[cfg(test)]
@@ -1587,5 +1678,257 @@ mod tests {
         ];
         let index = select_display_index(Some("missing"), &candidates).expect("candidate expected");
         assert_eq!(candidates[index].id, "a");
+    }
+
+    // ── Black-border detection ──────────────────────────────────────────────
+
+    use super::{detect_black_borders, BlackBorderInsets, CapturedFrame, BLACK_BORDER_THRESHOLD};
+
+    const W: u32 = 640;
+    const H: u32 = 360;
+    /// A 2.39:1 film on a 16:9 frame: 46 rows of bar above and below.
+    const BAR: u32 = 46;
+
+    fn frame(paint: impl Fn(u32, u32) -> [u8; 3]) -> CapturedFrame {
+        frame_sized(W, H, paint)
+    }
+
+    fn frame_sized(w: u32, h: u32, paint: impl Fn(u32, u32) -> [u8; 3]) -> CapturedFrame {
+        let pixels = (0..h)
+            .flat_map(|y| (0..w).map(move |x| (x, y)))
+            .map(|(x, y)| paint(x, y))
+            .collect();
+        CapturedFrame::new(w, h, pixels)
+    }
+
+    /// A busy picture: bright everywhere, varied enough to never read as bar.
+    fn picture(x: u32, y: u32) -> [u8; 3] {
+        [80 + (x % 120) as u8, 90 + (y % 100) as u8, 120]
+    }
+
+    fn letterboxed(bar: [u8; 3]) -> impl Fn(u32, u32) -> [u8; 3] {
+        move |x, y| {
+            if !(BAR..H - BAR).contains(&y) {
+                bar
+            } else {
+                picture(x, y)
+            }
+        }
+    }
+
+    fn rows_cropped(insets: &BlackBorderInsets) -> (usize, usize) {
+        let (rows, _) = insets.content_bounds(W as usize, H as usize);
+        (rows.start, H as usize - rows.end)
+    }
+
+    fn detect(frame: &CapturedFrame) -> Option<BlackBorderInsets> {
+        detect_black_borders(frame, BLACK_BORDER_THRESHOLD)
+    }
+
+    /// The crop lands on the bars, never more than one scan step into the picture.
+    fn assert_crops_the_bars(insets: &BlackBorderInsets) {
+        let (top, bottom) = rows_cropped(insets);
+        for crop in [top, bottom] {
+            assert!(
+                (BAR as usize..BAR as usize + 8).contains(&crop),
+                "crop {crop} rows, bars {BAR}"
+            );
+        }
+        assert_eq!(insets.left, 0.0);
+        assert_eq!(insets.right, 0.0);
+    }
+
+    #[test]
+    fn a_letterboxed_film_is_cropped_to_its_picture() {
+        assert_crops_the_bars(&detect(&frame(letterboxed([0, 0, 0]))).unwrap());
+    }
+
+    #[test]
+    fn a_picture_to_every_edge_has_no_bars() {
+        assert_eq!(detect(&frame(picture)), Some(BlackBorderInsets::default()));
+    }
+
+    // A fade or a cut through black says nothing about the bars: the caller keeps its crop.
+    #[test]
+    fn a_black_frame_measures_nothing() {
+        assert_eq!(detect(&frame(|_, _| [0, 0, 0])), None);
+        assert_eq!(detect(&frame(|_, _| [12, 12, 12])), None);
+    }
+
+    // Limited-range video draws its black at 16, above the true-black threshold.
+    #[test]
+    fn grey_bars_from_limited_range_video_are_bars() {
+        assert_crops_the_bars(&detect(&frame(letterboxed([16, 16, 16]))).unwrap());
+    }
+
+    #[test]
+    fn a_stray_bright_pixel_in_a_bar_is_not_picture() {
+        let film = letterboxed([0, 0, 0]);
+        let insets = detect(&frame(|x, y| {
+            if (x, y) == (320, 8) {
+                [255, 255, 255]
+            } else {
+                film(x, y)
+            }
+        }))
+        .unwrap();
+        assert_crops_the_bars(&insets);
+    }
+
+    #[test]
+    fn subtitles_over_the_bottom_bar_keep_the_crop() {
+        let film = letterboxed([0, 0, 0]);
+        let insets = detect(&frame(|x, y| {
+            let text = (H - 30..H - 18).contains(&y) && (200..440).contains(&x) && x % 5 < 3;
+            if text {
+                [235, 235, 235]
+            } else {
+                film(x, y)
+            }
+        }))
+        .unwrap();
+        assert_crops_the_bars(&insets);
+    }
+
+    // Players centre the picture: a dark band on one side only is a dark shot, not a bar.
+    #[test]
+    fn a_dark_sky_on_a_full_frame_is_not_a_bar() {
+        let insets = detect(&frame(|x, y| {
+            if y < H * 3 / 10 {
+                [4, 4, 8]
+            } else {
+                picture(x, y)
+            }
+        }))
+        .unwrap();
+        assert_eq!(insets, BlackBorderInsets::default());
+    }
+
+    #[test]
+    fn a_dark_shot_inside_a_letterbox_is_not_cropped_with_the_bar() {
+        let film = letterboxed([0, 0, 0]);
+        let insets = detect(&frame(|x, y| {
+            if (BAR..BAR + 40).contains(&y) {
+                [3, 3, 6]
+            } else {
+                film(x, y)
+            }
+        }))
+        .unwrap();
+        assert_crops_the_bars(&insets);
+    }
+
+    // A dark interface or a dim game is not bars, however even its edges look.
+    #[test]
+    fn a_dim_picture_is_not_cropped() {
+        let dark_ui = |x: u32, y: u32| {
+            if (120..520).contains(&x) && (140..220).contains(&y) {
+                [200, 200, 200]
+            } else {
+                [30, 30, 30]
+            }
+        };
+        assert_eq!(detect(&frame(dark_ui)), Some(BlackBorderInsets::default()));
+        let dim_game = |x: u32, y: u32| {
+            if (120..520).contains(&x) && (140..220).contains(&y) {
+                [200, 200, 200]
+            } else {
+                [(x % 13) as u8 + 10, 10, (y % 11) as u8 + 10]
+            }
+        };
+        assert_eq!(detect(&frame(dim_game)), Some(BlackBorderInsets::default()));
+    }
+
+    #[test]
+    fn noisy_limited_range_bars_are_still_bars() {
+        let film = letterboxed([0, 0, 0]);
+        let insets = detect(&frame(|x, y| {
+            if !(BAR..H - BAR).contains(&y) {
+                [16 + (x % 5) as u8, 16, 16 + (y % 3) as u8]
+            } else {
+                film(x, y)
+            }
+        }))
+        .unwrap();
+        assert_crops_the_bars(&insets);
+    }
+
+    // A dark-topped picture with a lit object at its bottom: the object is picture, not a subtitle.
+    #[test]
+    fn a_centred_object_at_the_bottom_of_a_dark_shot_is_not_cropped() {
+        let film = letterboxed([0, 0, 0]);
+        let insets = detect(&frame(|x, y| {
+            let dark_top = (BAR..BAR + 40).contains(&y);
+            let dark_sides = (BAR + 40..H - BAR).contains(&y) && !(160..480).contains(&x);
+            if dark_top || dark_sides {
+                [3, 3, 6]
+            } else {
+                film(x, y)
+            }
+        }))
+        .unwrap();
+        let (top, bottom) = rows_cropped(&insets);
+        assert_eq!(top, bottom);
+        assert!(
+            bottom <= BAR as usize + 8,
+            "cropped {bottom} rows of a {BAR}-row bar"
+        );
+    }
+
+    #[test]
+    fn a_pillarboxed_picture_is_cropped_at_the_sides() {
+        let side = 80;
+        let insets = detect(&frame(|x, y| {
+            if x < side || x >= W - side {
+                [0, 0, 0]
+            } else {
+                picture(x, y)
+            }
+        }))
+        .unwrap();
+        let (_, cols) = insets.content_bounds(W as usize, H as usize);
+        assert!(
+            (side as usize..side as usize + 8).contains(&cols.start),
+            "{cols:?}"
+        );
+        assert_eq!(cols.end, W as usize - cols.start);
+        assert_eq!((insets.top, insets.bottom), (0.0, 0.0));
+    }
+
+    #[test]
+    fn the_crop_never_takes_more_than_the_cap() {
+        let insets = detect(&frame(|x, y| {
+            if (170..190).contains(&y) {
+                picture(x, y)
+            } else {
+                [0, 0, 0]
+            }
+        }))
+        .unwrap();
+        assert!(insets.top <= 0.40 && insets.bottom <= 0.40, "{insets:?}");
+    }
+
+    #[test]
+    fn a_frame_smaller_than_a_scan_step_is_read_whole() {
+        let insets = detect(&frame_sized(5, 3, |_, _| [200, 200, 200]));
+        assert_eq!(insets, Some(BlackBorderInsets::default()));
+        assert_eq!(detect(&frame_sized(0, 0, |_, _| [0, 0, 0])), None);
+    }
+
+    #[test]
+    fn content_bounds_keep_every_row_the_insets_name() {
+        for h in 1..400usize {
+            for rows in 0..=(h * 2 / 5) {
+                let insets = BlackBorderInsets {
+                    top: rows as f32 / h as f32,
+                    ..Default::default()
+                };
+                assert_eq!(
+                    insets.content_bounds(4, h).0.start,
+                    rows,
+                    "h={h} rows={rows}"
+                );
+            }
+        }
     }
 }

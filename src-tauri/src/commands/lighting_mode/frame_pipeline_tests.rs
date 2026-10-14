@@ -1174,18 +1174,19 @@ fn letterboxed_strip_takes_the_picture_edge_not_the_bars() {
 
 /// The Hue sampler used to derive the content rectangle from the insets
 /// itself, per channel. It now takes `content_bounds`, computed once per
-/// frame; this is the arithmetic it replaced, and the two must agree on every
-/// frame size and inset the detector can produce (0 to its 0.40 cap).
+/// frame; this is that arithmetic, rounding to the nearest row since a
+/// truncated `48 / 360` lost the bar's last row, and the two must agree on
+/// every frame size and inset the detector can produce (0 to its 0.40 cap).
 #[test]
 fn hue_content_rectangle_is_the_one_the_inline_arithmetic_gave() {
     let inline = |w: usize, h: usize, insets: &BlackBorderInsets| {
-        let ct = (h as f32 * insets.top) as usize;
+        let ct = (h as f32 * insets.top).round() as usize;
         let cb = h
-            .saturating_sub((h as f32 * insets.bottom) as usize)
+            .saturating_sub((h as f32 * insets.bottom).round() as usize)
             .max(ct + 1);
-        let cl = (w as f32 * insets.left) as usize;
+        let cl = (w as f32 * insets.left).round() as usize;
         let cr = w
-            .saturating_sub((w as f32 * insets.right) as usize)
+            .saturating_sub((w as f32 * insets.right).round() as usize)
             .max(cl + 1);
         (ct..cb, cl..cr)
     };
@@ -1235,7 +1236,7 @@ fn black_border_detection_never_crops_a_test_pattern() {
     }
     let frame = CapturedFrame::new(w, h, pixels);
 
-    let insets = detect_black_borders(&frame, BLACK_BORDER_THRESHOLD);
+    let insets = detect_black_borders(&frame, BLACK_BORDER_THRESHOLD).unwrap_or_default();
     assert_ne!(
         insets,
         BlackBorderInsets::default(),
@@ -1804,7 +1805,7 @@ fn report_scenario(
     print_timing("output step (advance, Hue colour, encode)", &tick);
 
     let sequence = build_led_sequence(led_calibration);
-    let insets = detect_black_borders(frame_at(0), BLACK_BORDER_THRESHOLD);
+    let insets = detect_black_borders(frame_at(0), BLACK_BORDER_THRESHOLD).unwrap_or_default();
     print_timing(
         "  strip sampling (inside the border insets)",
         &time_calls(ITERATIONS, |i| {
@@ -1818,7 +1819,7 @@ fn report_scenario(
         }),
     );
     print_timing(
-        "  black-border detection (every 2.5 s)",
+        "  black-border detection (every 0.5 s)",
         &time_calls(ITERATIONS, |i| {
             std::hint::black_box(detect_black_borders(frame_at(i), BLACK_BORDER_THRESHOLD));
         }),

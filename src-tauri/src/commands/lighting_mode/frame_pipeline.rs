@@ -226,6 +226,9 @@ impl AmbilightFramePipeline {
         // lets Hue and the scene stage drop the crop one frame before the strip.
         self.border_cache
             .set_enabled(settings.black_border_detection);
+        if self.border_cache.take_changed() {
+            self.scene.forget_previous_frame();
+        }
         let since_previous = self
             .last_analysis
             .map_or(SMOOTHING_REFERENCE_INTERVAL, |at| {

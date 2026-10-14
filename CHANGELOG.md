@@ -380,6 +380,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Ambilight's "Ignore black bars" holds through a real film: a subtitle, a logo or the cursor in a
+  bar, a fade to black, a dark shot at one edge and the grey bars some players draw no longer make
+  the top and bottom LEDs fall into the bars or the picture get cropped, and the crop moves only
+  once its reads agree instead of jumping every 2.5 seconds.
 - Stopping an LED test pattern (LED Setup's Test, Devices → Flash) or a preview scene brings the
   lights back with the colour and brightness as saved now, not as they were before your last change,
   and brightness and colour drags work again straight away instead of doing nothing until the next
