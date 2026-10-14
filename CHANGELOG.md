@@ -385,6 +385,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- A Solid colour, and every Solid scene, now stays on a WLED device instead of going back to the
+  device's own effect after about two seconds. Solid sent the device a single frame, which WLED shows
+  only until its realtime timeout runs out; the colour is now resent twice a second while Solid runs
+  there, and stops before the next mode — Off's switch-off above all — reaches the device.
 - Ambilight's "Ignore black bars" holds through a real film: a subtitle, a logo or the cursor in a
   bar, a fade to black, a dark shot at one edge and the grey bars some players draw no longer make
   the top and bottom LEDs fall into the bars or the picture get cropped, and the crop moves only

@@ -1,5 +1,10 @@
 //! The "usb" channel: which sink carries the strip (serial or WLED), the
-//! worker's handle on it, and the one-shot Solid write.
+//! worker's handle on it, the Solid write, and the hold that keeps a Solid
+//! colour lit on a WLED device.
+
+use std::sync::{Arc, Condvar, Mutex};
+use std::thread::JoinHandle;
+use std::time::Duration;
 
 use super::config::{LightingModeConfig, SolidColorPayload};
 use crate::commands::led_output::{
@@ -88,9 +93,16 @@ pub(crate) struct SolidUsbOutput {
     chip: LedChipType,
     color_order: LedColorOrder,
     pub(super) led_count: usize,
+    hold: Option<SolidHoldHandle>,
 }
 
 impl SolidUsbOutput {
+    /// The running hold a retune must update, so the colour it resends is the new one.
+    pub(super) fn with_hold(mut self, hold: Option<SolidHoldHandle>) -> Self {
+        self.hold = hold;
+        self
+    }
+
     pub(super) fn for_mode(
         bridge: &LedOutputBridge,
         plan: UsbOutputPlan,
@@ -112,6 +124,7 @@ impl SolidUsbOutput {
                 .map(|cal| cal.total_leds as usize)
                 .filter(|n| *n > 0)
                 .unwrap_or(1),
+            hold: None,
         }
     }
 
@@ -164,12 +177,137 @@ impl SolidUsbOutput {
                 .map_err(|error| error.as_reason())
             }
             UsbOutputPlan::Wled(cfg) => {
+                // Published before this write: the hold sends under the same lock, so a
+                // resend can never land after it carrying the old colour.
+                if let Some(hold) = &self.hold {
+                    hold.publish(payload);
+                }
                 let mut sink = CorrectedWledSink::new(cfg.build(), self.corrections.clone());
                 sink.set_brightness(payload.brightness);
                 let result = sink.start().and_then(|_| sink.send_frame(&triplets));
                 let _ = sink.stop();
                 result
             }
+        }
+    }
+}
+
+/// How often a held Solid frame goes to a WLED device again. WLED leaves
+/// realtime mode once no frame has arrived within its timeout — 2 s on DRGB
+/// (`REALTIME_TIMEOUT_SEC`), the device's own setting on DDP — and returns to
+/// its own effect, so a single frame kept a Solid colour for about 2 s.
+/// 500 ms leaves room for lost datagrams on Wi-Fi.
+const SOLID_HOLD_INTERVAL: Duration = Duration::from_millis(500);
+
+struct HoldState {
+    payload: SolidColorPayload,
+    stopped: bool,
+}
+
+type HoldCell = Arc<(Mutex<HoldState>, Condvar)>;
+
+/// The colour a running hold resends; a retune publishes to it.
+#[derive(Clone)]
+pub(crate) struct SolidHoldHandle(HoldCell);
+
+impl SolidHoldHandle {
+    pub(super) fn publish(&self, payload: &SolidColorPayload) {
+        let (lock, _) = &*self.0;
+        lock.lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .payload = payload.clone();
+    }
+}
+
+/// Keeps a Solid colour lit on a WLED device by resending it inside the
+/// device's realtime timeout. A serial strip holds its frame on its own and
+/// never gets one. Dropping it stops and joins the thread, so no resend lands
+/// after what the next mode writes — Off's black frame above all, which a late
+/// resend would light again (an off WLED device still shows realtime frames).
+pub(crate) struct SolidHold {
+    cell: HoldCell,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl SolidHold {
+    pub(super) fn start(
+        cfg: &WledSinkConfig,
+        corrections: ColorCorrectionConfig,
+        led_count: usize,
+        payload: &SolidColorPayload,
+    ) -> Result<Self, String> {
+        Self::start_every(cfg, corrections, led_count, payload, SOLID_HOLD_INTERVAL)
+    }
+
+    pub(super) fn start_every(
+        cfg: &WledSinkConfig,
+        corrections: ColorCorrectionConfig,
+        led_count: usize,
+        payload: &SolidColorPayload,
+        interval: Duration,
+    ) -> Result<Self, String> {
+        let mut sink = CorrectedWledSink::new(cfg.build(), corrections);
+        sink.start()?;
+        let cell: HoldCell = Arc::new((
+            Mutex::new(HoldState {
+                payload: payload.clone(),
+                stopped: false,
+            }),
+            Condvar::new(),
+        ));
+        let thread_cell = Arc::clone(&cell);
+        let thread = std::thread::Builder::new()
+            .name("solid-hold".into())
+            .spawn(move || {
+                let (lock, wake) = &*thread_cell;
+                let mut frame = vec![[0u8; 3]; led_count];
+                let mut failing = false;
+                loop {
+                    let guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                    let (guard, _) = wake
+                        .wait_timeout_while(guard, interval, |state| !state.stopped)
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    if guard.stopped {
+                        break;
+                    }
+                    let held = &guard.payload;
+                    frame.fill([held.r, held.g, held.b]);
+                    sink.set_brightness(held.brightness);
+                    match sink.send_frame(&frame) {
+                        Ok(()) if failing => {
+                            failing = false;
+                            log::info!("[solid-hold] resending again");
+                        }
+                        Err(reason) if !failing => {
+                            failing = true;
+                            log::warn!("[solid-hold] resend failed — {reason}");
+                        }
+                        _ => {}
+                    }
+                }
+                let _ = sink.stop();
+            })
+            .map_err(|error| format!("solid hold thread did not start: {error}"))?;
+        Ok(Self {
+            cell,
+            thread: Some(thread),
+        })
+    }
+
+    pub(super) fn handle(&self) -> SolidHoldHandle {
+        SolidHoldHandle(Arc::clone(&self.cell))
+    }
+}
+
+impl Drop for SolidHold {
+    fn drop(&mut self) {
+        let (lock, wake) = &*self.cell;
+        lock.lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .stopped = true;
+        wake.notify_all();
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
         }
     }
 }

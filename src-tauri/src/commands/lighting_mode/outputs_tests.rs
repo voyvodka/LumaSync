@@ -600,15 +600,58 @@ fn off_on_a_wled_strip_paints_it_black_and_switches_it_off() {
 
     apply(&rig, user(Some(off()), None));
 
-    let (len, _) = receiver.recv_from(&mut datagram).expect("a black frame");
+    // Resends of the Solid frame from before the Off may still be queued.
+    let len = loop {
+        let (len, _) = receiver.recv_from(&mut datagram).expect("a black frame");
+        if datagram[2..len].iter().all(|byte| *byte == 0) {
+            break len;
+        }
+    };
     assert_eq!(datagram[0], 2, "DRGB");
     assert_eq!(len, 2 + 59 * 3);
-    assert!(datagram[2..len].iter().all(|byte| *byte == 0));
+    receiver
+        .set_read_timeout(Some(Duration::from_millis(1200)))
+        .unwrap();
+    assert!(
+        receiver.recv_from(&mut datagram).is_err(),
+        "nothing may follow the black frame: a held Solid frame would light the switched-off device again"
+    );
     assert!(
         order(&rig, "mode:off:", "wled:off:127.0.0.1"),
         "{:?}",
         events(&rig)
     );
+}
+
+/// One frame lit a Solid colour only until the device's realtime timeout ran out.
+#[test]
+fn solid_on_a_wled_strip_is_resent_inside_its_realtime_timeout() {
+    let rig = Rig::new(RigSetup {
+        serial_connected: false,
+        ..RigSetup::default()
+    });
+    let receiver = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    receiver
+        .set_read_timeout(Some(Duration::from_millis(1500)))
+        .unwrap();
+    let config = WledSinkConfig {
+        ip: "127.0.0.1".parse().unwrap(),
+        port: receiver.local_addr().unwrap().port(),
+        led_count: 59,
+        protocol: WledProtocol::Drgb,
+    };
+    rig.app.state::<LocalOutputRegistry>().wled_bound(config);
+    running(&rig, solid(200), &[Usb]);
+
+    let mut datagram = [0u8; 2048];
+    let (len, _) = receiver.recv_from(&mut datagram).expect("the Solid frame");
+    let first = datagram[..len].to_vec();
+    for _ in 0..2 {
+        let (len, _) = receiver
+            .recv_from(&mut datagram)
+            .expect("a resend inside the realtime timeout");
+        assert_eq!(&datagram[..len], &first[..]);
+    }
 }
 
 #[test]

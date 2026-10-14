@@ -21,7 +21,7 @@ use super::pacing::{capture_interval_for, SerialSendBudget};
 use super::preview::{build_preview_emit_context, build_twin_sink, TwinFrameSink};
 use super::runtime::{AmbilightCaptureRequest, LightingRuntimeOwner, LightingRuntimeState};
 use super::snapshot;
-use super::usb_output::{SolidUsbOutput, UsbOutputPlan};
+use super::usb_output::{SolidHold, SolidUsbOutput, UsbOutputPlan};
 use super::worker::{start_ambilight_worker, WorkerPacing};
 use super::SOLID_OUTPUT_ATTEMPTS;
 use crate::commands::hue::state_store::{apply_hue_color_with_context, HueOutputLive};
@@ -147,6 +147,8 @@ pub(super) fn stop_previous(
 ) {
     push_trace(trace, "stop_previous");
     let t0 = std::time::Instant::now();
+    // First: whatever the next mode writes must not be followed by a resend.
+    owner.solid_hold = None;
     owner.preview.scene_worker = false;
     owner.preview.latency_worker = false;
     owner.ambilight_live = None;
@@ -507,6 +509,19 @@ fn apply_mode_change_inner(
                     payload.b,
                 );
 
+                if let UsbOutputPlan::Wled(cfg) = &plan {
+                    match SolidHold::start(
+                        cfg,
+                        output.corrections.clone(),
+                        solid_led_count,
+                        &payload,
+                    ) {
+                        Ok(hold) => owner.solid_hold = Some(hold),
+                        Err(reason) => warn!(
+                            "[apply_mode_change] solid colour on WLED is not held past its realtime timeout — {reason}"
+                        ),
+                    }
+                }
                 if let UsbOutputPlan::Serial(port_name) = &plan {
                     set_active_port(owner, port_name.clone(), &outgoing);
                 }

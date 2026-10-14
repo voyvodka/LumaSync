@@ -16,7 +16,7 @@ use super::outputs;
 use super::preview::PreviewRuntime;
 use super::snapshot::LightingSnapshotCell;
 use super::tuning::TuningCell;
-use super::usb_output::UsbOutputPlan;
+use super::usb_output::{SolidHold, UsbOutputPlan};
 use crate::commands::ambilight_capture::{
     create_live_frame_source_at, AmbilightCaptureError, AmbilightFrameSource,
 };
@@ -102,6 +102,8 @@ pub(crate) struct LightingRuntimeOwner {
     /// Ambilight fast path compares against it: a retune must not keep a worker on an output that is
     /// no longer the driven one.
     pub(super) active_usb_plan: Option<UsbOutputPlan>,
+    /// Resends a Solid colour to a WLED device while Solid runs there (`SolidHold`).
+    pub(super) solid_hold: Option<SolidHold>,
     pub(super) worker: Option<LightingWorkerRuntime>,
     /// Shared settings for the currently running ambilight worker.
     /// Updated in-place when only ambilight settings change, avoiding worker restart.
@@ -130,6 +132,7 @@ impl Default for LightingRuntimeOwner {
             active_mode: LightingModeConfig::default(),
             active_port: None,
             active_usb_plan: None,
+            solid_hold: None,
             worker: None,
             ambilight_live: None,
             room_geometry_live: None,

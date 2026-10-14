@@ -89,6 +89,9 @@ mod away_tests;
 mod transition_tests;
 
 #[cfg(test)]
+mod usb_output_tests;
+
+#[cfg(test)]
 mod effect_tests;
 
 #[cfg(test)]

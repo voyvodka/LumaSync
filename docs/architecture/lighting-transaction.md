@@ -169,7 +169,10 @@ than letting go and leaving them as the last frame or the device's own state had
   a mode only stops writing, and a strip holds the last frame it was sent — a Solid colour
   indefinitely. `device-output.md` has the transport detail.
 - **A WLED device** gets the black frame and then `POST /json/state {"on":false}`, beside the Hue
-  stop rather than before it, so an unanswering device cannot hold the Hue switch-off back.
+  stop rather than before it, so an unanswering device cannot hold the Hue switch-off back. A Solid
+  colour on WLED is resent by a hold (`SolidHold`, `device-output.md`), and `stop_previous` drops
+  that hold before anything else, so its thread is joined before the black frame: a resend landing
+  after it would light the switched-off device again.
 - **Hue** gets `HueLightsAfterStop::TurnOff`, unless `ShellState.hueOffBehavior` is `restore`. The
   setting is read from the saved state when the Off runs, never from the request or the mode's
   payload, so a change made in any window after the mode started counts. Absent is `turnOff`.

@@ -17,7 +17,7 @@ use super::config::{normalize_effect, unix_ms_now, EffectId};
 use super::effect_source::{effect_ambilight, EffectLiveSlot};
 use super::live::{retune_ambilight_live, AmbilightLiveSettings};
 use super::snapshot::SnapshotSink;
-use super::usb_output::{SolidUsbOutput, UsbOutputPlan};
+use super::usb_output::{SolidHold, SolidUsbOutput, UsbOutputPlan};
 use super::{
     AmbilightPayload, EffectPayload, LightingModeKind, LightingRuntimeState, SolidColorPayload,
 };
@@ -485,6 +485,7 @@ pub(crate) fn accepting_for_running<R: Runtime>(
             Some(Accepting::Solid {
                 usb: plan.filter(|_| needs_usb).map(|plan| {
                     SolidUsbOutput::for_mode(&owner.output_bridge, plan, &owner.active_mode)
+                        .with_hold(owner.solid_hold.as_ref().map(SolidHold::handle))
                 }),
                 hue: targets.iter().any(|t| t == "hue").then_some(hue_output),
                 hue_correction: owner

@@ -267,6 +267,23 @@ redirects never followed, the same address guard (`parse_ipv4`) — with its own
 its `WledPowerOffError` variant and changes nothing else: the stream has stopped either way, and a
 device that missed the write only returns to its own effect.
 
+**A Solid colour on WLED is resent, because one frame lasted only until the realtime timeout.** Solid
+used to write one frame and stop, which suits a serial strip — it holds its last frame — but a WLED
+device leaves realtime mode once no frame has come within its timeout (2 s on DRGB, the device's own
+setting on DDP) and goes back to its own effect, so a Solid colour, and every Solid scene, reverted
+after about two seconds. Measured with a stand-in device counting datagrams: one frame on apply, then
+nothing. While Solid runs on a WLED sink, `SolidHold` (`lighting_mode/usb_output.rs`) resends the
+same frame every 500 ms from a thread that keeps one socket, through the same `CorrectedWledSink`
+correction and brightness as the first write; 500 ms rather than 1 s so a lost datagram on Wi-Fi
+does not open a gap past a 2 s window. A colour retune publishes to the hold under its lock before it
+writes, so a resend can never follow it with the old colour. The hold is created only for a WLED
+plan and only after the first write succeeded, so a serial strip pays nothing; `stop_previous` drops
+it first, joining the thread before whatever the next mode writes (see Off above). It sits outside
+the worker, so the per-frame budget does not apply to it. JSON's `/json/state` colour was the
+alternative and was not taken: it bypasses the host-side correction, is per segment where realtime
+is not, and overwrites the device's own effect and brightness. If LumaSync quits or crashes the
+device reverts within its timeout, as it does after streaming.
+
 **Forgetting a WLED device is an unplug that also forgets.** There was no way to let go of a WLED
 device at all, and once the discovery list was gone the page showed only the launch's restore note.
 The WLED page now keeps a card for the saved or bound device, with Forget device behind a
