@@ -197,7 +197,13 @@ edge's pitches spread end to end, and the bottom counts the stand gap (`bottomMi
 (`StripShape`): its LEDs sit either side of the gap where LED Setup draws them, the right-hand run
 `floor(bottom / 2)` long, so each samples the screen above where it really is. Spreading them over
 the whole edge instead, as the sampler once did, put the LEDs beside the stand under screen several
-pitches away and showed the twin a strip with no gap. A one-LED edge samples its local-0 corner. The
+pitches away and showed the twin a strip with no gap. A one-LED edge samples its local-0 corner —
+except where that corner would be the strip's whole colour: a strip with no layout on record runs as
+one LED (the legacy single-zone path), and since it shows one colour for the whole strip it samples
+the whole picture inside any black bars (`WHOLE_FRAME_SAMPLE_WINDOW` via `sample_window_for`: the
+same corner position, a window that reaches the whole content rectangle from it). It once took the
+top-left corner, so a red corner tile lit a strip whose screen was blue. A session with no strip
+output keeps the live box, because its strip sample is thrown away. The
 twin's Hue lamps follow the same rule: `TwinLayout.lamps` puts each where it samples the screen, from
 the room map's placements over the stream's channels as the worker's sample table reads them
 (`hue_lamp_screen_points`), and lines them up along the bottom only when no room map places them —

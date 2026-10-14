@@ -12,8 +12,8 @@ use super::frame_pipeline::{
 };
 use super::live::{AmbilightLiveSettings, RoomGeometryLive};
 use super::sampling::{
-    hue_sample_table, sample_screen_position_avg, BlackBorderCache, HueSampleTable,
-    LIVE_SAMPLE_WINDOW, SYNTHETIC_SAMPLE_WINDOW,
+    hue_sample_table, sample_screen_position_avg, sample_window_for, BlackBorderCache,
+    HueSampleTable, LIVE_SAMPLE_WINDOW, SYNTHETIC_SAMPLE_WINDOW, WHOLE_FRAME_SAMPLE_WINDOW,
 };
 use super::smoothing::{alpha_for_interval, TimeSmoother, SMOOTHING_REFERENCE_INTERVAL};
 use super::usb_output::UsbOutputPlan;
@@ -2098,4 +2098,173 @@ fn a_worker_that_panics_is_counted_out_and_its_stop_returns() {
     }
     assert_eq!(ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst), before);
     runtime.stop();
+}
+
+// ---------------------------------------------------------------------------
+// A strip with no layout on record (sweep B8)
+// ---------------------------------------------------------------------------
+
+/// The worker's fallback: one LED at the top segment's start, which maps to the frame's corner.
+fn layoutless_strip() -> (Vec<LedSequenceItem>, StripShape) {
+    let calibration = LedCalibrationConfig {
+        template_id: None,
+        counts: LedSegmentCounts {
+            top: 1,
+            right: 0,
+            bottom: 0,
+            left: 0,
+        },
+        bottom_missing: 0,
+        corner_ownership: "horizontal".to_string(),
+        visual_preset: "subtle".to_string(),
+        start_anchor: "top-start".to_string(),
+        start_local_index: None,
+        direction: "cw".to_string(),
+        total_leds: 1,
+    };
+    (
+        build_led_sequence(&calibration),
+        StripShape::of(&calibration),
+    )
+}
+
+/// Left half red, right half blue, six black rows top and bottom.
+fn halves_between_bars() -> CapturedFrame {
+    let (w, h) = (64u32, 36u32);
+    let mut pixels = Vec::with_capacity((w * h) as usize);
+    for y in 0..h {
+        for x in 0..w {
+            pixels.push(if !(6..30).contains(&y) {
+                [0, 0, 0]
+            } else if x < w / 2 {
+                [200, 0, 0]
+            } else {
+                [0, 0, 200]
+            });
+        }
+    }
+    CapturedFrame::new(w, h, pixels)
+}
+
+#[test]
+fn a_whole_frame_window_from_the_corner_takes_the_picture_mean() {
+    let (sequence, shape) = layoutless_strip();
+    let frame = halves_between_bars();
+
+    let full = sample_frame_within_insets(
+        &frame,
+        &sequence,
+        &shape,
+        WHOLE_FRAME_SAMPLE_WINDOW,
+        &BlackBorderInsets::default(),
+    );
+    // A third of the sampled rows are bars; the rest split evenly between red and blue.
+    assert_eq!(full, vec![[66, 0, 66]]);
+
+    let inside = sample_frame_within_insets(
+        &frame,
+        &sequence,
+        &shape,
+        WHOLE_FRAME_SAMPLE_WINDOW,
+        &BlackBorderInsets {
+            top: 6.0 / 36.0,
+            bottom: 6.0 / 36.0,
+            left: 0.0,
+            right: 0.0,
+        },
+    );
+    assert_eq!(inside, vec![[100, 0, 100]], "the bars stay out of the mean");
+
+    let corner = sample_frame_within_insets(
+        &frame,
+        &sequence,
+        &shape,
+        LIVE_SAMPLE_WINDOW,
+        &BlackBorderInsets::default(),
+    );
+    assert_eq!(
+        corner,
+        vec![[0, 0, 0]],
+        "the live box at the corner sees only the bar"
+    );
+}
+
+#[test]
+fn the_sample_window_follows_the_frame_kind_and_the_strip() {
+    for (synthetic, has_layout, has_strip, expected) in [
+        (true, true, true, SYNTHETIC_SAMPLE_WINDOW),
+        (true, false, true, SYNTHETIC_SAMPLE_WINDOW),
+        (false, true, true, LIVE_SAMPLE_WINDOW),
+        (false, false, true, WHOLE_FRAME_SAMPLE_WINDOW),
+        // Hue only: the strip sample is discarded, so it is not worth a whole-frame mean.
+        (false, false, false, LIVE_SAMPLE_WINDOW),
+        (false, true, false, LIVE_SAMPLE_WINDOW),
+    ] {
+        assert_eq!(
+            sample_window_for(synthetic, has_layout, has_strip),
+            expected,
+            "synthetic={synthetic} layout={has_layout} strip={has_strip}"
+        );
+    }
+}
+
+#[test]
+fn a_strip_with_no_layout_shows_the_picture_not_its_top_left_corner() {
+    let _watchdog = Watchdog::arm(
+        "a_strip_with_no_layout_shows_the_picture_not_its_top_left_corner",
+        Duration::from_secs(60),
+    );
+    let _guard = WORKER_TEST_GUARD
+        .lock()
+        .unwrap_or_else(|err| err.into_inner());
+    // A red patch in the top-left sixteenth of a blue screen.
+    let mut pixels = Vec::with_capacity((FRAME_W * FRAME_H) as usize);
+    for y in 0..FRAME_H {
+        for x in 0..FRAME_W {
+            pixels.push(if x < FRAME_W / 4 && y < FRAME_H / 4 {
+                [220, 30, 30]
+            } else {
+                [20, 40, 200]
+            });
+        }
+    }
+    let sent = Arc::new(RecordingSender::default());
+    let runtime = start_ambilight_worker(
+        LedOutputBridge::from_sender(sent.clone()),
+        Some(UsbOutputPlan::Serial(PORT.to_string())),
+        None,
+        live_settings(),
+        Box::new(StillScreen {
+            frame: Arc::new(CapturedFrame::new(FRAME_W, FRAME_H, pixels)),
+            calls: Arc::new(AtomicUsize::new(0)),
+        }),
+        SharedRuntimeTelemetry::default(),
+        None,
+        None,
+        color_correction(),
+        FirmwareProfile::LumaSyncV1,
+        LedChipType::Ws2812bGrb,
+        None,
+        RoomGeometryLive::new(None),
+        WorkerPacing::live(Duration::from_millis(2)),
+    )
+    .expect("worker starts");
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let packet = loop {
+        if let Some(packet) = sent.packets.lock().expect("packets lock").first().cloned() {
+            break packet;
+        }
+        assert!(Instant::now() < deadline, "no packet reached the wire");
+        thread::sleep(Duration::from_millis(10));
+    };
+    runtime.stop();
+
+    // One LED: a 5-byte header, one pixel, a checksum. Blue is the last byte in RGB and GRB alike.
+    assert_eq!(packet.len(), 9, "{packet:?}");
+    let pixel = &packet[5..8];
+    assert!(
+        pixel[2] > pixel[0] && pixel[2] > pixel[1],
+        "the lone LED took {pixel:?} instead of the picture's blue"
+    );
 }

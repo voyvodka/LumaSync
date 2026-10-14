@@ -570,6 +570,8 @@ https://keepachangelog.com/en/1.1.0/
 - Room map: "Reset map" keeps your Hue lights, Hue zones and the strips connected in Devices. Room
   height can be edited, a Hue light's height slider inside a zone only covers the heights the zone
   allows, and Hue lights are numbered the same in the list as on the map.
+- A USB strip with no LED layout saved shows the colour of the whole picture instead of the screen's
+  top-left corner.
 - Room map: keys stay with what has focus. An arrow on a panel tab or in a menu no longer also
   moves the selected object, Delete there no longer removes it, and Space presses a focused button
   instead of starting a pan. The panel's tabs move with the arrow keys, and the right-click menu

@@ -20,7 +20,7 @@ use super::live::{AmbilightLiveSettings, RoomGeometryLive};
 use super::pacing::{resolve_quality_config, AmbilightWorkerQualityState};
 use super::preview::{PreviewEmitContext, TwinFrameSink, TWIN_FRAME_INTERVAL_MS};
 use super::runtime::LightingWorkerRuntime;
-use super::sampling::{LIVE_SAMPLE_WINDOW, SYNTHETIC_SAMPLE_WINDOW};
+use super::sampling::sample_window_for;
 use super::usb_output::{ActiveUsbSink, UsbOutputPlan};
 use super::{ACTIVE_AMBILIGHT_WORKERS, AMBILIGHT_CAPTURE_ATTEMPTS, AMBILIGHT_FRAME_ATTEMPTS};
 use crate::commands::ambilight_capture::{AmbilightFrameSource, CapturedFrame};
@@ -227,7 +227,9 @@ pub(super) fn start_ambilight_worker(
     let (led_sequence, strip_shape, total_leds) = if let Some(ref cal) = led_calibration {
         (build_led_sequence(cal), StripShape::of(cal), cal.total_leds)
     } else {
-        // Fallback: 1 LED centred on screen (backward-compat with v1.3 firmware).
+        // Fallback: one LED for a strip with no layout on record (backward-compat with v1.3
+        // firmware). It sits at the top segment's start; `sample_window_for` gives it the whole
+        // picture, so that position does not decide its colour.
         use crate::commands::led_calibration::LedSegmentCounts as Counts;
         let fallback_cal = LedCalibrationConfig {
             template_id: None,
@@ -279,11 +281,12 @@ pub(super) fn start_ambilight_worker(
     if synthetic || pacing.preview_scene {
         telemetry_window.skip_history();
     }
-    let sample_window = if synthetic {
-        SYNTHETIC_SAMPLE_WINDOW
-    } else {
-        LIVE_SAMPLE_WINDOW
-    };
+    let sample_window = sample_window_for(synthetic, led_calibration.is_some(), usb_plan.is_some());
+    info!(
+        "[start_ambilight_worker] sample_window={sample_window} synthetic={synthetic} calibration_present={} strip_output={}",
+        led_calibration.is_some(),
+        usb_plan.is_some()
+    );
     // No border detection for the initial warmup frame — detection runs in the worker loop.
     let initial_sampled =
         sample_frame_for_sequence(&initial_frame, &led_sequence, &strip_shape, sample_window);

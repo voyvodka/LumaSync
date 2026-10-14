@@ -237,6 +237,25 @@ pub const LIVE_SAMPLE_WINDOW: f32 = 0.05;
 /// pitch or neighbouring LEDs blend into each other and no LED can reach the
 /// intensity the pattern asked for.
 pub const SYNTHETIC_SAMPLE_WINDOW: f32 = 0.0125;
+/// Sampling box for a strip with no layout on record — the legacy single-zone device, which shows
+/// one colour for the whole strip. The half-window is `content * window / 2`, so at 2.0 it is at
+/// least the whole content rectangle from any position: the lone LED takes the picture's mean
+/// (inside any black bars) instead of the corner a one-LED segment maps to.
+pub const WHOLE_FRAME_SAMPLE_WINDOW: f32 = 2.0;
+
+/// Which box the strip samples with. A synthetic test paints exact per-LED blocks; a strip with no
+/// layout takes the whole picture; anything else the live box. Without a strip output (Hue only)
+/// the strip sample is thrown away, so it keeps the cheap live box rather than averaging the frame
+/// for nothing.
+pub(super) fn sample_window_for(synthetic: bool, has_layout: bool, has_strip: bool) -> f32 {
+    if synthetic {
+        SYNTHETIC_SAMPLE_WINDOW
+    } else if !has_layout && has_strip {
+        WHOLE_FRAME_SAMPLE_WINDOW
+    } else {
+        LIVE_SAMPLE_WINDOW
+    }
+}
 
 /// Per-channel Hue inputs the worker holds between frames: where each channel
 /// samples the screen, and what the scene stage relates it by. Rebuilt only when
