@@ -1,17 +1,25 @@
-import { useState, useCallback } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import type React from "react";
 import { useTranslation } from "react-i18next";
+
+import { connectedSerialPort } from "@/features/device/model/localOutputs";
+import { useLocalOutputs } from "@/features/device/state/localOutputsStore";
 import type { FurnitureModel } from "@/features/room-view/model/furnitureModel";
+import { ROOM_VIEW_3D_AVAILABLE } from "@/features/room-view/ui/RoomView3DHost";
+import type {
+  FurniturePlacement,
+  HueChannelPlacement,
+  HueZoneStatusCode,
+  RoomDimensions,
+  TvAnchorPlacement,
+  UsbStripPlacement,
+} from "@/shared/contracts/roomMap";
+import { replaceHueChannel, ROOM_MAP_BACKGROUND_ERROR, ROOM_MAP_BACKGROUND_MAX_MB } from "@/shared/contracts/roomMap";
 import { isEditableTarget } from "@/shared/lib/editableTarget";
-import type { RoomMapDocument } from "../state/useRoomMapDocument";
-import { RoomMapCanvas } from "./RoomMapCanvas";
-import { RoomMapToolbar } from "./RoomMapToolbar";
-import { RoomMapSettingsPopover } from "./RoomMapSettingsPopover";
-import { RoomMapEmptyHint } from "./RoomMapEmptyHint";
-import { FurnitureObject } from "./objects/FurnitureObject";
-import { TvAnchorObject } from "./objects/TvAnchorObject";
-import { UsbStripObject } from "./objects/UsbStripObject";
-import { HueChannelOverlay } from "./HueChannelOverlay";
-import { RoomDockPanel } from "./RoomDockPanel";
+import { shallowEqual } from "@/shared/lib/store";
+import { Callout } from "@/shared/ui/Callout/Callout";
+
+import { deriveHueAreaState } from "../model/hueAreaState";
 import { setHueChannelWorldZ } from "../model/hueChannelPosition";
 import {
   furnitureObjectId,
@@ -21,58 +29,37 @@ import {
   TV_ANCHOR_OBJECT_ID,
   usbStripObjectId,
 } from "../model/objectId";
+import type { RoomAwareStatus } from "../model/roomAware";
+import { roomObjectAdapter } from "../model/roomObjectKinds";
 import { useFurnitureModels } from "../state/useFurnitureModels";
-import { useSnapGuides } from "../state/useSnapGuides";
+import type { RoomMapDocument } from "../state/useRoomMapDocument";
 import { useRoomMapGridSettings } from "../state/useRoomMapGridSettings";
 import { useRoomMapHueZones } from "../state/useRoomMapHueZones";
 import { imageLayerGestureKey, useRoomMapImageLayers } from "../state/useRoomMapImageLayers";
 import { useRoomMapObjects } from "../state/useRoomMapObjects";
 import { ROOM_MAP_PX_PER_METER, ROOM_MAP_VIEWPORT_ATTR, useRoomMapViewport } from "../state/useRoomMapViewport";
-import { SnapGuideOverlay } from "./SnapGuideOverlay";
-import { OriginMarker } from "./OriginMarker";
+import { useSnapGuides } from "../state/useSnapGuides";
 import { ContextMenu, type ContextMenuAction } from "./ContextMenu";
-import { LeftToolbar } from "./LeftToolbar";
-import { MouseCoordinateDisplay } from "./MouseCoordinateDisplay";
-import { ZoomControl } from "./ZoomControl";
-import { roomObjectAdapter } from "../model/roomObjectKinds";
-import { RenameDialog } from "./RenameDialog";
-import { isRoomMapEmpty } from "../model/roomTemplate";
-import type {
-  FurniturePlacement,
-  HueChannelPlacement,
-  HueZoneStatusCode,
-  RoomDimensions,
-  TvAnchorPlacement,
-  UsbStripPlacement,
-} from "@/shared/contracts/roomMap";
-import {
-  replaceHueChannel,
-  ROOM_MAP_BACKGROUND_ERROR,
-  ROOM_MAP_BACKGROUND_MAX_MB,
-} from "@/shared/contracts/roomMap";
-import type React from "react";
-import { connectedSerialPort } from "@/features/device/model/localOutputs";
-import { useLocalOutputs } from "@/features/device/state/localOutputsStore";
-import { shallowEqual } from "@/shared/lib/store";
-import type { RoomAwareStatus } from "../model/roomAware";
+import { CornerControls } from "./CornerControls";
+import { ROOM_MAP_FIT_INSETS } from "./dock/dockGeometry";
+import type { InspectorActions } from "./dock/DockInspector";
+import { RoomDock } from "./dock/RoomDock";
+import { HueChannelOverlay } from "./HueChannelOverlay";
+import { FurnitureObject } from "./objects/FurnitureObject";
+import { TvAnchorObject } from "./objects/TvAnchorObject";
+import type { UsbStripConnectionStatus } from "./objects/UsbStripInspector";
+import { UsbStripObject } from "./objects/UsbStripObject";
+import { OriginMarker } from "./OriginMarker";
+import { RoomMapCanvas } from "./RoomMapCanvas";
+import styles from "./RoomMapEditor.module.css";
+import { SnapGuideOverlay } from "./SnapGuideOverlay";
 
 export interface RoomMapEditorProps {
   /** The map, its history and its Hue area, owned by the surface so they outlive this face. */
   doc: RoomMapDocument;
-  /**
-   * Invoked when the dock state strip's CTA prompts the
-   * user to finish Hue onboarding (pair bridge or pick an entertainment
-   * area). The Settings shell wires this to `setActiveSection(DEVICES)`
-   * so the user is dropped into the right place to recover.
-   */
+  /** Opens Devices, where a bridge is paired, an area picked and a strip managed. */
   onNavigateToDevices?: () => void;
-  /**
-   * App-level Hue reachability snapshot, forwarded into
-   * the dock so HueChannelInspector + Hue zone rows can mirror the
-   * "Bridge offline" state alongside the existing USB connection chip
-   * pattern. `undefined` keeps the dock in legacy "unknown" mode so
-   * embeds that do not own a reachability source render no chip.
-   */
+  /** App-level Hue reachability; `undefined` (an embed with no source of truth) shows no state. */
   hueReachable?: boolean;
   /** The room-aware chip's state; `null` hides it. */
   roomAware?: RoomAwareStatus | null;
@@ -111,6 +98,7 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     redo,
     select,
     selectHueZone,
+    clearSelection,
     canUndo,
     canRedo,
     error,
@@ -120,19 +108,10 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     scopedConfig,
   } = doc;
   const { areaChannels, channelsStatus, isLoadingChannels, liveChannelIds, refreshChannels } = doc.hue;
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [renameTarget, setRenameTarget] = useState<{ id: string; currentLabel: string } | null>(null);
-  const [objectPanelOpen, setObjectPanelOpen] = useState(true);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; targetId: string } | null>(null);
 
-  const {
-    showGrid,
-    setShowGrid,
-    gridStrokeWidth,
-    setGridStrokeWidth,
-    showHueZones,
-    setShowHueZones,
-  } = useRoomMapGridSettings();
+  const { showGrid, setShowGrid, gridStrokeWidth, setGridStrokeWidth, showHueZones, setShowHueZones } = useRoomMapGridSettings();
 
   const {
     hueZones,
@@ -151,25 +130,19 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     adopt,
     activeHueZoneId,
     selectHueZone,
-    setObjectPanelOpen,
     hueAreaId,
   });
+  // The zones a light of the shown area can join: another area's zone holds another area's lights.
+  const areaZones = useMemo(
+    () => (hueAreaId ? hueZones.filter((zone) => zone.entertainmentAreaId === hueAreaId) : hueZones),
+    [hueZones, hueAreaId],
+  );
 
   const { guides: snapGuides, onDragMove: snapDragMove, onDragEnd: snapDragEnd } = useSnapGuides(config);
   const furnitureModels = useFurnitureModels(config);
 
-  const {
-    canvasContainerRef,
-    setCanvasContainer,
-    canvasSize,
-    zoom,
-    setZoom,
-    panOffset,
-    setPanOffset,
-    spaceHeld,
-    fitToView,
-    handleArrowPan,
-  } = useRoomMapViewport(config.dimensions);
+  const { setCanvasContainer, canvasSize, zoom, setZoom, panOffset, setPanOffset, spaceHeld, fitToView, handleArrowPan } =
+    useRoomMapViewport(config.dimensions, ROOM_MAP_FIT_INSETS);
 
   // The registry every other screen reads, so a pair or an unplug anywhere reaches the editor.
   const usb = useLocalOutputs(
@@ -187,43 +160,51 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     handleDuplicate,
     handleArrowNudge,
     handleUpdatePosition,
-    handleRenameFurniture,
+    handleRename,
   } = useRoomMapObjects({ config, hueAreaId, apply, selectedId, select });
 
-  const {
-    handleAddImage,
-    imageError,
-    imageErrorCode,
-    handleRenameImage,
-  } = useRoomMapImageLayers({ config, apply, select });
+  const { handleAddImage, imageError, imageErrorCode } = useRoomMapImageLayers({ apply, select });
 
   const { widthMeters, depthMeters } = config.dimensions;
 
-  const usbConnectionStatus = usb.ready
-    ? (usb.connectedPort ? "connected" : "disconnected")
-    : "unknown";
+  // Graded per strip against the live port, so a controller moved to another port reads offline.
+  // A legacy strip with no `portName` keeps the any-port-active reading.
+  const stripStatus = useCallback(
+    (strip: UsbStripPlacement): { status: UsbStripConnectionStatus; port: string | null } => {
+      if (!usb.ready) return { status: "unknown", port: strip.portName ?? null };
+      if (strip.portName) return { status: strip.portName === usb.connectedPort ? "connected" : "disconnected", port: strip.portName };
+      return { status: usb.connectedPort ? "connected" : "disconnected", port: usb.connectedPort };
+    },
+    [usb.ready, usb.connectedPort],
+  );
   // `undefined` means no source of truth (a legacy embed passes nothing) and
-  // must render no chip at all — it is not the same as `false`.
-  const hueChannelStatus: "connected" | "disconnected" | "unknown" =
-    hueReachable === undefined
-      ? "unknown"
-      : hueReachable
-        ? "connected"
-        : "disconnected";
-  // Deep-links to Devices: no window may call `disconnect_serial_port` until the Devices page
-  // carries a strip's Disconnect. Kept as a callback so a real disconnect can replace it without
-  // touching consumers.
-  const handleManageUsb = useCallback(() => {
-    onNavigateToDevices?.();
-  }, [onNavigateToDevices]);
+  // must show no state at all — it is not the same as `false`.
+  const hueBridgeStatus: UsbStripConnectionStatus =
+    hueReachable === undefined ? "unknown" : hueReachable ? "connected" : "disconnected";
 
   const pxPerMeter = ROOM_MAP_PX_PER_METER;
   const gridStepM = widthMeters < 4 ? 0.5 : 1.0;
   const gridStepPx = gridStepM * pxPerMeter;
 
+  const focusEditor = useCallback(() => rootRef.current?.focus({ preventScroll: true }), []);
+  // A pick from the list leaves the zone: a zone kept active dims every light outside it.
+  const selectFromList = useCallback(
+    (id: string) => {
+      select(id);
+      selectHueZone(null);
+    },
+    [select, selectHueZone],
+  );
+  // One step back: an object to the zone it was picked over, a zone to the palette.
+  const popSelection = useCallback(() => {
+    if (selectedId !== null) select(null);
+    else if (activeHueZoneId !== null) selectHueZone(null);
+  }, [selectedId, activeHueZoneId, select, selectHueZone]);
+
   // Canvas objects are memoised, so every callback they receive has to be
   // stable: an inline closure would re-render all of them on a pan commit.
-  const handleCanvasClick = useCallback(() => select(null), [select]);
+  // Empty ground lets go of both: `select(null)` alone left a zone selected under the palette.
+  const handleCanvasClick = clearSelection;
   const handleUsbStripSelect = useCallback((id: string) => select(usbStripObjectId(id)), [select]);
   const handleUsbStripChange = useCallback(
     (updated: UsbStripPlacement, continuous?: boolean) => {
@@ -246,14 +227,8 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     [apply],
   );
   const handleTvSelect = useCallback(() => select(TV_ANCHOR_OBJECT_ID), [select]);
-  const handleTvChange = useCallback(
-    (updated: TvAnchorPlacement) => apply({ tvAnchor: updated }),
-    [apply],
-  );
-  const handleHueChannelSelect = useCallback(
-    (channelIndex: number) => select(hueChannelObjectId(channelIndex)),
-    [select],
-  );
+  const handleTvChange = useCallback((updated: TvAnchorPlacement) => apply({ tvAnchor: updated }), [apply]);
+  const handleHueChannelSelect = useCallback((channelIndex: number) => select(hueChannelObjectId(channelIndex)), [select]);
   const handleHueChannelChange = useCallback(
     (updated: HueChannelPlacement) => {
       apply((cfg) => ({ hueChannels: replaceHueChannel(cfg.hueChannels, updated) }));
@@ -262,15 +237,7 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
   );
   const handleImageLayerSelect = useCallback((id: string) => select(imageLayerObjectId(id)), [select]);
   const handleImageLayerTransformChange = useCallback(
-    (
-      id: string,
-      offsetX: number,
-      offsetY: number,
-      scale: number,
-      scaleX?: number,
-      scaleY?: number,
-      continuous?: boolean,
-    ) => {
+    (id: string, offsetX: number, offsetY: number, scale: number, scaleX?: number, scaleY?: number, continuous?: boolean) => {
       apply(
         (cfg) => ({
           imageLayers: cfg.imageLayers.map((l) =>
@@ -291,15 +258,6 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     },
     [apply],
   );
-
-  const hasTv = !!config.tvAnchor;
-  // The hint says nothing is placed, so it waits for the lights too.
-  const isEmpty = isRoomMapEmpty(config) && visibleHueChannels.length === 0;
-
-  const handleSelectObject = useCallback((id: string | null) => {
-    select(id);
-    if (id !== null) selectHueZone(null);
-  }, [select, selectHueZone]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -330,12 +288,12 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
         if (selectedId) handleDuplicate(selectedId);
         return;
       }
-      // Bare keys are the canvas's. On a dock tab, a segmented control or a menu
+      // Bare keys are the canvas's. On a dock tile, a segmented control or a menu
       // item an arrow moved the selection along with the control, and Delete
       // removed the selected object.
       if (!isCanvasKey(e)) return;
       if (e.key === "Escape") {
-        select(null);
+        popSelection();
         setContextMenu(null);
         return;
       }
@@ -343,8 +301,6 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
         handleDelete();
       } else if ((e.key === "r" || e.key === "R") && !e.metaKey && !e.ctrlKey) {
         handleRotate();
-      } else if ((e.key === "f" || e.key === "F") && !e.metaKey && !e.ctrlKey) {
-        setObjectPanelOpen((v) => !v);
       } else if (selectedId) {
         handleArrowNudge(e);
       } else {
@@ -353,7 +309,7 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
         handleArrowPan(e);
       }
     },
-    [handleDelete, handleRotate, handleArrowNudge, handleArrowPan, handleDuplicate, undo, redo, select, selectedId, fitToView],
+    [handleDelete, handleRotate, handleArrowNudge, handleArrowPan, handleDuplicate, undo, redo, popSelection, selectedId, fitToView],
   );
 
   const handleDimensionsChange = useCallback(
@@ -396,6 +352,9 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
+      // A right-click in a popover reaches here through the React tree from its portal; only the
+      // plan has a menu.
+      if (!(e.target instanceof Element) || e.target.closest(`[${ROOM_MAP_VIEWPORT_ATTR}]`) === null) return;
       e.preventDefault();
       if (!selectedId) return;
       setContextMenu({ x: e.clientX, y: e.clientY, targetId: selectedId });
@@ -413,16 +372,8 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     if (adapter?.duplicate) {
       actions.push({
         label: t("roomMap:contextMenu.duplicate"),
-        shortcut: IS_MAC ? "\u2318D" : "Ctrl+D",
+        shortcut: IS_MAC ? "⌘D" : "Ctrl+D",
         onClick: () => handleDuplicate(id),
-      });
-    }
-
-    const rename = adapter?.rename;
-    if (parsed && rename) {
-      actions.push({
-        label: t("roomMap:contextMenu.rename"),
-        onClick: () => setRenameTarget({ id, currentLabel: rename.current(config, parsed) }),
       });
     }
 
@@ -440,364 +391,258 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     if (adapter?.remove) {
       actions.push({
         label: t("roomMap:contextMenu.delete"),
-        shortcut: IS_MAC ? "\u232B" : t("roomMap:shortcuts.keys.del"),
+        shortcut: IS_MAC ? "⌫" : t("roomMap:shortcuts.keys.del"),
         danger: true,
         onClick: () => deleteById(id),
       });
     }
 
     return actions;
-  }, [contextMenu, t, handleDuplicate, handleRotate, deleteById, select, config]);
+  }, [contextMenu, t, handleDuplicate, handleRotate, deleteById, select]);
+
+  // Inline closures on purpose: the dock is not memoised, and every one of these reads the
+  // config as it is now.
+  const inspectorActions: InspectorActions = {
+    // A chip or swatch group selects on every arrow key; the gesture keeps a run of them one
+    // undo step and one save, as the zone inspector's fields do.
+    onUpdateTvAnchor: (patch) => {
+      if (!config.tvAnchor) return;
+      apply({ tvAnchor: { ...config.tvAnchor, ...patch } }, { gesture: `tv:${Object.keys(patch).sort().join(",")}` });
+    },
+    onUpdateFurniture: (id, patch) => {
+      apply(
+        { furniture: config.furniture.map((f) => (f.id === id ? { ...f, ...patch } : f)) },
+        { gesture: `furniture:${id}:${Object.keys(patch).sort().join(",")}` },
+      );
+    },
+    onUpdateUsbStrip: (stripId, patch) => {
+      apply({ usbStrips: config.usbStrips.map((s) => (s.stripId === stripId ? { ...s, ...patch } : s)) });
+    },
+    onUpdateImageLayer: (id, patch) => {
+      // The opacity slider lands here per input event.
+      apply(
+        { imageLayers: config.imageLayers.map((l) => (l.id === id ? { ...l, ...patch } : l)) },
+        { gesture: imageLayerGestureKey(id, Object.keys(patch).sort().join(",")) },
+      );
+    },
+    // A held arrow in X or Y steps many times; the gesture keeps it one undo step and one save.
+    onMoveObject: (id, x, y) => handleUpdatePosition(id, x, y, { gesture: `move:${id}` }),
+    onHueChannelHeightChange: (channelIndex, worldZ) => {
+      const target = visibleHueChannels.find((ch) => ch.channelIndex === channelIndex);
+      if (!target) return;
+      // A slider, like the opacity one.
+      apply(
+        { hueChannels: replaceHueChannel(config.hueChannels, setHueChannelWorldZ(target, config.zones, worldZ)) },
+        { gesture: `hue-height:${channelIndex}` },
+      );
+    },
+    onRename: handleRename,
+    onToggleLock: (id) => {
+      const ref = parseObjectId(id);
+      const patch = ref ? roomObjectAdapter(ref).toggleLock(config, ref, visibleHueChannels) : null;
+      if (patch) apply(patch);
+    },
+    onDuplicate: handleDuplicate,
+    onDelete: deleteById,
+    onUpdateHueZone: handleHueZoneUpdate,
+    onRenameHueZone: handleRenameHueZone,
+    onDeleteHueZone: handleDeleteHueZone,
+    onAssignChannelToZone: handleAssignChannelToZone,
+    // Deep-links to Devices: no window may call `disconnect_serial_port` until the Devices page
+    // carries a strip's Disconnect.
+    onManageUsb: onNavigateToDevices,
+  };
+
+  const hasTv = !!config.tvAnchor;
+  const hasHue = hueBridgeConfigured || hueAreaId !== null || visibleHueChannels.length > 0 || hueZones.length > 0;
+  const freeHeight = Math.max(0, canvasSize.h - ROOM_MAP_FIT_INSETS.top - ROOM_MAP_FIT_INSETS.bottom);
 
   return (
-    <div
-      className="lm-room-editor flex h-full flex-col"
-      onKeyDown={handleKeyDown}
-      onContextMenu={handleContextMenu}
-      tabIndex={0}
-    >
-      <RoomMapToolbar
-        roomAware={roomAware}
-        zoneCount={config.zones.length}
-        onAddZone={handleAddHueZone}
-        settingsOpen={settingsOpen}
-        onToggleSettings={() => setSettingsOpen((v) => !v)}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        onUndo={undo}
-        onRedo={redo}
-      />
-      <div className="flex flex-1 min-h-0">
-        <div
-          className="relative flex-1"
-          ref={setCanvasContainer}
+    <div ref={rootRef} className="lm-room-editor relative h-full" onKeyDown={handleKeyDown} onContextMenu={handleContextMenu} tabIndex={0}>
+      <div className={styles.stage} ref={setCanvasContainer} data-testid="room-map-stage">
+        <RoomMapCanvas
+          config={config}
+          pxPerMeter={pxPerMeter}
+          canvasSize={canvasSize}
+          showGrid={showGrid}
+          gridStrokeWidth={gridStrokeWidth}
+          selectedId={selectedId}
+          onCanvasClick={handleCanvasClick}
+          onImageLayerTransformChange={handleImageLayerTransformChange}
+          onImageLayerSelect={handleImageLayerSelect}
+          zoom={zoom}
+          panOffset={panOffset}
+          onZoomChange={setZoom}
+          onPanChange={setPanOffset}
+          panMode={spaceHeld}
         >
-          {/* Floating tool chips — top-left of canvas */}
-          <LeftToolbar
-            hasTv={hasTv}
-            onAddTv={handleAddTv}
-            onAddFurniture={handleAddFurniture}
-            onAddUsb={handleAddUsb}
-            onAddImage={() => void handleAddImage()}
-          />
+          {/* Origin crosshair marker — always centered, extends to edges */}
+          <OriginMarker widthM={widthMeters} depthM={depthMeters} pxPerMeter={pxPerMeter} />
 
-          {settingsOpen && (
-            <RoomMapSettingsPopover
-              open={settingsOpen}
-              onClose={() => setSettingsOpen(false)}
-              dimensions={config.dimensions}
-              showGrid={showGrid}
-              onDimensionsChange={handleDimensionsChange}
-              gridStrokeWidth={gridStrokeWidth}
-              showHueZones={showHueZones}
-              onGridToggle={setShowGrid}
-              onGridStrokeWidthChange={setGridStrokeWidth}
-              onHueZonesToggle={setShowHueZones}
-              onReset={reset}
+          {config.usbStrips.map((strip) => (
+            <UsbStripObject
+              key={strip.stripId}
+              placement={strip}
+              pxPerMeter={pxPerMeter}
+              selected={selectedId === usbStripObjectId(strip.stripId)}
+              zoom={zoom}
+              panMode={spaceHeld}
+              connectionStatus={stripStatus(strip).status}
+              onSelect={handleUsbStripSelect}
+              onChange={handleUsbStripChange}
+            />
+          ))}
+
+          {config.furniture.map((f) => (
+            <FurnitureObject
+              key={f.id}
+              placement={f}
+              model={furnitureModels.get(f.id) ?? BOX_MODEL}
+              pxPerMeter={pxPerMeter}
+              selected={selectedId === furnitureObjectId(f.id)}
+              gridStepPx={gridStepPx}
+              snapEnabled={showGrid}
+              zoom={zoom}
+              panMode={spaceHeld}
+              onSelect={handleFurnitureSelect}
+              onChange={handleFurnitureChange}
+              onSnapDragMove={snapDragMove}
+              onSnapDragEnd={snapDragEnd}
+            />
+          ))}
+
+          {config.tvAnchor && (
+            <TvAnchorObject
+              placement={config.tvAnchor}
+              pxPerMeter={pxPerMeter}
+              selected={selectedId === TV_ANCHOR_OBJECT_ID}
+              gridStepPx={gridStepPx}
+              snapEnabled={showGrid}
+              zoom={zoom}
+              panMode={spaceHeld}
+              onSelect={handleTvSelect}
+              onChange={handleTvChange}
+              onSnapDragMove={snapDragMove}
+              onSnapDragEnd={snapDragEnd}
             />
           )}
-          <RoomMapCanvas
-            config={config}
-            pxPerMeter={pxPerMeter}
-            canvasSize={canvasSize}
-            showGrid={showGrid}
-            gridStrokeWidth={gridStrokeWidth}
-            selectedId={selectedId}
-            onCanvasClick={handleCanvasClick}
-            onImageLayerTransformChange={handleImageLayerTransformChange}
-            onImageLayerSelect={handleImageLayerSelect}
-            zoom={zoom}
-            panOffset={panOffset}
-            onZoomChange={setZoom}
-            onPanChange={setPanOffset}
-            panMode={spaceHeld}
-          >
-            {isEmpty && <RoomMapEmptyHint />}
 
-            {/* Origin crosshair marker — always centered, extends to edges */}
-            <OriginMarker
-              widthM={widthMeters}
-              depthM={depthMeters}
+          {/* Hue channel dots + zone bounds — bug #53: bounds box must
+              render even when no channels exist yet so the user can
+              author a zone before the area is paired. Also
+              mount whenever the user has at least one Hue zone AND
+              the visibility toggle is on, so passive zones paint
+              without needing an active selection. */}
+          {(visibleHueChannels.length > 0 || activeHueZone !== null || (showHueZones && hueZones.length > 0)) && (
+            <HueChannelOverlay
+              channels={visibleHueChannels}
+              liveChannelIds={liveChannelIds}
               pxPerMeter={pxPerMeter}
+              roomWidthM={widthMeters}
+              roomDepthM={depthMeters}
+              zoom={zoom}
+              selectedId={selectedId}
+              onSelect={handleHueChannelSelect}
+              onChange={handleHueChannelChange}
+              panMode={spaceHeld}
+              activeHueZone={activeHueZone}
+              onHueZoneCenterChange={handleHueZoneCenterChange}
+              allHueZones={hueZones}
+              hidePassiveZoneBounds={!showHueZones}
             />
+          )}
 
-            {/* USB strip SVG overlay + handles */}
-            {config.usbStrips.map((strip) => {
-              // Graded per strip against the live port, so a controller moved to
-              // another port reads OFFLINE. Legacy strips with no `portName`
-              // keep the old any-port-active heuristic.
-              const stripStatus: "connected" | "disconnected" | "unknown" = strip.portName
-                ? usb.ready
-                  ? strip.portName === usb.connectedPort
-                    ? "connected"
-                    : "disconnected"
-                  : "unknown"
-                : usbConnectionStatus;
-              return (
-              <UsbStripObject
-                key={strip.stripId}
-                placement={strip}
-                pxPerMeter={pxPerMeter}
-                selected={selectedId === usbStripObjectId(strip.stripId)}
-                zoom={zoom}
-                panMode={spaceHeld}
-                connectionStatus={stripStatus}
-                onSelect={handleUsbStripSelect}
-                onChange={handleUsbStripChange}
-              />
-              );
-            })}
+          <SnapGuideOverlay guides={snapGuides} pxPerMeter={pxPerMeter} canvasWidth={canvasSize.w} canvasHeight={canvasSize.h} />
+        </RoomMapCanvas>
 
-            {/* Furniture objects */}
-            {config.furniture.map((f) => (
-              <FurnitureObject
-                key={f.id}
-                placement={f}
-                model={furnitureModels.get(f.id) ?? BOX_MODEL}
-                pxPerMeter={pxPerMeter}
-                selected={selectedId === furnitureObjectId(f.id)}
-                gridStepPx={gridStepPx}
-                snapEnabled={showGrid}
-                zoom={zoom}
-                panMode={spaceHeld}
-                onSelect={handleFurnitureSelect}
-                onChange={handleFurnitureChange}
-                onSnapDragMove={snapDragMove}
-                onSnapDragEnd={snapDragEnd}
-              />
-            ))}
+        <CornerControls
+          roomAware={roomAware}
+          edit={{
+            canUndo,
+            canRedo,
+            onUndo: undo,
+            onRedo: redo,
+            zoom,
+            canvasSize,
+            panOffset,
+            anchor: { x: canvasSize.w / 2, y: ROOM_MAP_FIT_INSETS.top + freeHeight / 2 },
+            onZoomChange: setZoom,
+            onPanChange: setPanOffset,
+            onFitToView: () => fitToView(16),
+          }}
+        />
 
-            {/* TV anchor */}
-            {config.tvAnchor && (
-              <TvAnchorObject
-                placement={config.tvAnchor}
-                pxPerMeter={pxPerMeter}
-                selected={selectedId === TV_ANCHOR_OBJECT_ID}
-                gridStepPx={gridStepPx}
-                snapEnabled={showGrid}
-                zoom={zoom}
-                panMode={spaceHeld}
-                onSelect={handleTvSelect}
-                onChange={handleTvChange}
-                onSnapDragMove={snapDragMove}
-                onSnapDragEnd={snapDragEnd}
-              />
+        {(error || imageError || hueZoneRejection) && (
+          <div className={styles.alerts}>
+            {error && <Callout tone="error">{t("roomMap:persistError")}</Callout>}
+            {imageError && (
+              <Callout tone="error">
+                {imageErrorCode === ROOM_MAP_BACKGROUND_ERROR.TOO_LARGE
+                  ? t("roomMap:imageTooLarge", { maxMb: ROOM_MAP_BACKGROUND_MAX_MB })
+                  : t("roomMap:imageImportError")}
+              </Callout>
             )}
-
-            {/* Hue channel dots + zone bounds — bug #53: bounds box must
-                render even when no channels exist yet so the user can
-                author a zone before the area is paired. Also
-                mount whenever the user has at least one Hue zone AND
-                the visibility toggle is on, so passive zones paint
-                without needing an active selection. */}
-            {(
-              visibleHueChannels.length > 0
-              || activeHueZone !== null
-              || (showHueZones && hueZones.length > 0)
-            ) && (
-              <HueChannelOverlay
-                channels={visibleHueChannels}
-                liveChannelIds={liveChannelIds}
-                pxPerMeter={pxPerMeter}
-                roomWidthM={widthMeters}
-                roomDepthM={depthMeters}
-                zoom={zoom}
-                selectedId={selectedId}
-                onSelect={handleHueChannelSelect}
-                onChange={handleHueChannelChange}
-                panMode={spaceHeld}
-                activeHueZone={activeHueZone}
-                onHueZoneCenterChange={handleHueZoneCenterChange}
-                allHueZones={hueZones}
-                hidePassiveZoneBounds={!showHueZones}
-              />
+            {hueZoneRejection && (
+              <Callout tone="error" action={{ label: t("roomMap:hueZones.rejected.dismiss"), onClick: dismissHueZoneRejection }}>
+                {t(HUE_ZONE_REJECTION_KEYS[hueZoneRejection])}
+              </Callout>
             )}
-
-            {/* Snap alignment guides */}
-            <SnapGuideOverlay
-              guides={snapGuides}
-              pxPerMeter={pxPerMeter}
-              canvasWidth={canvasSize.w}
-              canvasHeight={canvasSize.h}
-            />
-
-          </RoomMapCanvas>
-
-          <ZoomControl
-            zoom={zoom}
-            canvasSize={canvasSize}
-            panOffset={panOffset}
-            onZoomChange={setZoom}
-            onPanChange={setPanOffset}
-            onFitToView={() => fitToView(16)}
-            isMac={IS_MAC}
-          />
-
-          {/* Mouse coordinate display — fixed to bottom-right of canvas container */}
-          <MouseCoordinateDisplay
-            canvasContainerRef={canvasContainerRef}
-            panOffset={panOffset}
-            pxPerMeter={pxPerMeter}
-            zoom={zoom}
-            widthMeters={widthMeters}
-            depthMeters={depthMeters}
-          />
-        </div>
-
-        {/* Right dock — consolidated tabbed Objects / Zones / Hue Zones / Properties */}
-        {objectPanelOpen && (
-          <RoomDockPanel
-            config={scopedConfig}
-            selectedId={selectedId}
-            onSelect={handleSelectObject}
-            onDelete={deleteById}
-            onRenameFurniture={handleRenameFurniture}
-            onToggleLock={(id) => {
-              const ref = parseObjectId(id);
-              const patch = ref ? roomObjectAdapter(ref).toggleLock(config, ref, visibleHueChannels) : null;
-              if (patch) apply(patch);
-            }}
-            hueZones={hueZones}
-            activeHueZoneId={activeHueZoneId}
-            onSelectHueZone={selectHueZone}
-            onAddHueZone={handleAddHueZone}
-            onDeleteHueZone={handleDeleteHueZone}
-            onRenameHueZone={handleRenameHueZone}
-            onUpdateHueZone={handleHueZoneUpdate}
-            addHueZoneDisabled={!hueAreaId}
-            addHueZoneDisabledTooltip={t("roomMap:hueZones.addDisabledTooltip")}
-            hueBridgeConfigured={hueBridgeConfigured}
-            onRefreshChannels={refreshChannels}
-            isRefreshingChannels={isLoadingChannels}
-            channelsStatus={channelsStatus}
-            hueChannels={visibleHueChannels}
-            areaChannels={areaChannels}
-            liveChannelIds={liveChannelIds}
-            hueAreaId={hueAreaId}
-            onAssignChannelToZone={handleAssignChannelToZone}
-            onNavigateToDevices={onNavigateToDevices}
-            // Type-aware inspector patch hooks
-            // A chip or swatch group selects on every arrow key; the gesture keeps a run of them one
-            // undo step and one save, as the zone inspector's slider does.
-            onUpdateTvAnchor={(patch) => {
-              if (!config.tvAnchor) return;
-              apply({ tvAnchor: { ...config.tvAnchor, ...patch } }, { gesture: `tv:${Object.keys(patch).sort().join(",")}` });
-            }}
-            onUpdateFurniture={(id, patch) => {
-              apply(
-                {
-                  furniture: config.furniture.map((f) =>
-                    f.id === id ? { ...f, ...patch } : f,
-                  ),
-                },
-                { gesture: `furniture:${id}:${Object.keys(patch).sort().join(",")}` },
-              );
-            }}
-            onUpdateUsbStrip={(stripId, patch) => {
-              apply({
-                usbStrips: config.usbStrips.map((s) =>
-                  s.stripId === stripId ? { ...s, ...patch } : s,
-                ),
-              });
-            }}
-            onUpdateImageLayer={(id, patch) => {
-              // The opacity slider lands here per input event.
-              apply(
-                {
-                  imageLayers: config.imageLayers.map((l) =>
-                    l.id === id ? { ...l, ...patch } : l,
-                  ),
-                },
-                { gesture: imageLayerGestureKey(id, Object.keys(patch).sort().join(",")) },
-              );
-            }}
-            onHueChannelHeightChange={(channelIndex, worldZ) => {
-              const target = visibleHueChannels.find((ch: HueChannelPlacement) => ch.channelIndex === channelIndex);
-              if (!target) return;
-              // A slider, like the opacity one.
-              apply(
-                {
-                  hueChannels: replaceHueChannel(
-                    config.hueChannels,
-                    setHueChannelWorldZ(target, config.zones, worldZ),
-                  ),
-                },
-                { gesture: `hue-height:${channelIndex}` },
-              );
-            }}
-            onRenameHueChannel={(channelIndex, label) => {
-              const target = visibleHueChannels.find((ch: HueChannelPlacement) => ch.channelIndex === channelIndex);
-              if (!target) return;
-              apply({
-                hueChannels: replaceHueChannel(config.hueChannels, { ...target, label }),
-              });
-            }}
-            // A held arrow in X or Y steps many times; the gesture keeps it one undo step and one save.
-            onMoveObject={(id, x, y) => handleUpdatePosition(id, x, y, { gesture: `move:${id}` })}
-            onRenameImageLayer={handleRenameImage}
-            // USB connection status feed for inspectors
-            usbConnectedPort={usb.connectedPort}
-            usbConnectionStatus={usbConnectionStatus}
-            onUsbManage={handleManageUsb}
-            // Hue reachability mirror (parallel to the
-            // USB connection status above). Drives the channel inspector
-            // chip and Hue zone row dim-state.
-            hueChannelStatus={hueChannelStatus}
-          />
+          </div>
         )}
+
+        <RoomDock
+          config={scopedConfig}
+          zones={areaZones}
+          selectedId={selectedId}
+          activeHueZoneId={activeHueZoneId}
+          channels={visibleHueChannels}
+          areaChannels={areaChannels}
+          liveChannelIds={liveChannelIds}
+          stripStatus={stripStatus}
+          hueBridgeStatus={hueBridgeStatus}
+          modelChoices={ROOM_VIEW_3D_AVAILABLE}
+          actions={inspectorActions}
+          add={{
+            hasTv,
+            onAddFurniture: handleAddFurniture,
+            onAddTv: handleAddTv,
+            onSelectTv: handleTvSelect,
+            onAddStrip: handleAddUsb,
+            onAddImage: () => void handleAddImage(),
+            onAddZone: handleAddHueZone,
+          }}
+          hue={
+            hasHue
+              ? {
+                  state: deriveHueAreaState(hueBridgeConfigured, hueAreaId),
+                  zoneCount: areaZones.length,
+                  channelsStatus,
+                  refreshing: isLoadingChannels,
+                  onRefresh: refreshChannels,
+                  onNavigateToDevices,
+                }
+              : null
+          }
+          room={{
+            dimensions: config.dimensions,
+            onDimensionsChange: handleDimensionsChange,
+            showGrid,
+            onShowGridChange: setShowGrid,
+            gridStrokeWidth,
+            onGridStrokeWidthChange: setGridStrokeWidth,
+            showHueZones,
+            onShowHueZonesChange: setShowHueZones,
+          }}
+          onReset={reset}
+          onSelect={selectFromList}
+          onSelectZone={selectHueZone}
+          onPopSelection={popSelection}
+          onFocusEditor={focusEditor}
+        />
       </div>
 
-      {/* Context menu */}
       {contextMenu && (
-        <ContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          actions={getContextMenuActions()}
-          onClose={() => setContextMenu(null)}
-        />
-      )}
-
-      {/* Rename dialog */}
-      {renameTarget && (
-        <RenameDialog
-          currentLabel={renameTarget.currentLabel}
-          promptText={t("roomMap:contextMenu.renamePrompt")}
-          onConfirm={(newName) => {
-            const ref = parseObjectId(renameTarget.id);
-            const rename = ref ? roomObjectAdapter(ref).rename : null;
-            if (ref && rename) apply(rename.apply(config, ref, newName));
-            setRenameTarget(null);
-          }}
-          onCancel={() => setRenameTarget(null)}
-        />
-      )}
-
-      {error && (
-        <div className="px-3 py-1.5 text-[11px] text-red">
-          {t("roomMap:persistError")}
-        </div>
-      )}
-
-      {imageError && (
-        <div role="alert" className="px-3 py-1.5 text-[11px] text-red">
-          {imageErrorCode === ROOM_MAP_BACKGROUND_ERROR.TOO_LARGE
-            ? t("roomMap:imageTooLarge", { maxMb: ROOM_MAP_BACKGROUND_MAX_MB })
-            : t("roomMap:imageImportError")}
-        </div>
-      )}
-
-      {hueZoneRejection && (
-        <div role="alert" className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-red">
-          <span>{t(HUE_ZONE_REJECTION_KEYS[hueZoneRejection])}</span>
-          <button
-            type="button"
-            onClick={dismissHueZoneRejection}
-            aria-label={t("roomMap:hueZones.rejected.dismiss")}
-            className="min-h-[32px] px-2 underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber"
-          >
-            {t("roomMap:hueZones.rejected.dismiss")}
-          </button>
-        </div>
+        <ContextMenu x={contextMenu.x} y={contextMenu.y} actions={getContextMenuActions()} onClose={() => setContextMenu(null)} />
       )}
     </div>
   );

@@ -3,7 +3,7 @@
  * only the Tauri boundary and the store file mocked. What these pin is what a
  * gesture costs: undo entries and `shellStore.save` calls.
  */
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
@@ -82,7 +82,7 @@ async function flush() {
   });
 }
 
-/** The sofa on the canvas, not its row in the dock's object list. */
+/** The sofa on the canvas, not its name in the dock. */
 function canvasSofa(): HTMLElement {
   const label = screen
     .getAllByText("Sofa")
@@ -196,8 +196,11 @@ describe("RoomMapEditor — the dock and its inspector show the viewed area only
     await renderEditor();
     await flush();
 
+    fireEvent.click(screen.getByRole("button", { name: "roomMap:dock.objects" }));
+    const list = within(screen.getByRole("dialog", { name: "roomMap:dock.objects" }));
+    expect(list.queryByRole("button", { name: "Lamp A" })).toBeNull();
+    fireEvent.click(list.getByRole("button", { name: "Lamp B" }));
     expect(screen.queryByText("Lamp A")).toBeNull();
-    fireEvent.click(screen.getByText("Lamp B"));
 
     // Cube x 0.5 is three quarters across the 5 m room; area A's channel 0 would read 1.25.
     const x = screen.getByRole("spinbutton", { name: "roomMap:inspector.xLabel" }) as HTMLInputElement;
@@ -217,7 +220,8 @@ describe("RoomMapEditor — stepping a typed position is one undo step and one s
     );
     const { root } = await renderEditor();
     await flush();
-    fireEvent.click(screen.getByText("Lamp B"));
+    // The light's dot on the plan.
+    fireEvent.click(screen.getByRole("button", { name: "Lamp B" }));
 
     const x = screen.getByRole("spinbutton", { name: "roomMap:inspector.xLabel" }) as HTMLInputElement;
     fireEvent.focus(x);

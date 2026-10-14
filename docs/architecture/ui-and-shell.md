@@ -112,7 +112,7 @@ the element rules go into Tailwind's `base` layer, every `lm-*` feature file int
 A CSS Module wraps its whole file in `@layer components { … }` itself, since its component, not
 the list, loads it; its class names are scoped, so its place in the source order cannot tie with
 another sheet's. The exception is a shared control whose element a caller also classes — the
-room-map toolbar puts its own 28 px row on an `IconButton`. Two classes on one element do tie, and the winner would be whichever sheet happened to
+room map's corner capsule and dock rail put their own look on an `IconButton`. Two classes on one element do tie, and the winner would be whichever sheet happened to
 load last, so `IconButton`, `Toggle` and `Callout` sit in a `primitives` layer declared between
 `base` and `components` at the top of `styles.css`, ahead of Tailwind's own list: every feature
 rule outranks them whatever the load order. Declared anywhere later, the layer would append after

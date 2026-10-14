@@ -90,7 +90,6 @@ export function SolidStage({
         </div>
         <div data-flip-id="brightness">
         <RangeRow
-          variant="stage"
           label={t("common:mode.brightness")}
           valueLabel={(v) => `${Math.round(v)}%`}
           min={0}

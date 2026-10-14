@@ -34,7 +34,6 @@ export function KelvinSlider({
   const say = (k: number) => t("lights:solid.kelvinValue", { kelvin: Math.round(k / KELVIN_STEP) * KELVIN_STEP });
   return (
     <RangeRow
-      variant="stage"
       label={t("lights:solid.temperature")}
       valueLabel={say}
       ariaValueText={say}

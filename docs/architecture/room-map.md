@@ -82,18 +82,20 @@ one commit re-renders none of them either. An inline closure in their props undo
 on each side, so the part a pan reveals before it commits is already there. Snap guides live in the
 editor, so `useSnapGuides` stores a new list only when it differs from the last one.
 
-**Channel-to-zone assignment keeps three shapes in sync by hand.** One handler serves drag-drop onto
-a zone header, drag-drop onto the unassigned bucket, and the "Move to →" popover, because all three
-have to write the same three fields: the channel's `zoneId` (the join key), its
+**Channel-to-zone assignment keeps three shapes in sync by hand.** One handler serves both ways a
+light changes zone — the zone picker in the light's inspector and the light chips in the zone's —
+because both have to write the same three fields: the channel's `zoneId` (the join key), its
 `zoneRelativePosition` (reset to the zone centre, refined by dragging), and the zone's
 `channelIndices` (denormalised for the runtime sampler). Letting those drift desyncs the frame
-builder from the zone-cap validator.
+builder from the zone-cap validator. Both offer only the shown area's zones and lights, since a pick
+across areas is one the backend refuses, and both hold still for a locked light: joining a zone
+moves it to the zone's centre.
 
 **Hue channels are bridge-managed; the editor never deletes one.** Only the Hue app or the bridge
 can remove a channel from an entertainment configuration, so LumaSync has no delete affordance for
 them. An earlier build spliced them out of `config.hueChannels` by array index, which detached the
 channel from its zone in a way the user had not asked for *and* shifted every later channel's slot.
-Detaching goes through "Move to → Unassigned" instead. Anything reaching for a channel by array
+A light leaves its zone through its zone picker instead. Anything reaching for a channel by array
 position rather than `channelIndex` is repeating that bug.
 
 **LED Setup owns the strip's edge counts; the map does not propose them.** The map once measured a
@@ -153,13 +155,22 @@ it, the way X and Y have them.
 
 **A large zone's centre marker stops well short of the wall it is pinned against, so the pinned edge lights up.** `|center| + scale ≤ 1` means the centre can only reach `1 - scale`, and at that point the box edge is exactly on the wall — correct, but on a 5 m zone in a 9 m room the marker parks 2.5 m away from the edge holding it, and the drag reads as broken rather than finished. `pinnedZoneEdges` names the flush walls and the drag path writes them to `data-zone-pinned`; four CSS custom-property slots compose the inset shadow so a corner lights both its edges. The cue is a `box-shadow` rather than a `border-*` override because the bounds box sets `border` inline, and it is dropped in forced-colours mode, where a real border stands in. The comparison is tolerant rather than `===`: the drag compares against the bound `clamp` just returned so it would match exactly, but a centre round-tripped through the backend carries float noise and `-1 + 0.6` is not `-0.4`.
 
-**The editor has one dock, and it deliberately has no Properties tab.** Object list, zone list and
-zone properties used to be three peer panels at three different DOM positions; when a Hue zone was
-active two of them sat side by side as 180 px columns, and on a narrow window the second one
-overflowed past the canvas. They are now a single tabbed dock whose lower half is a type-aware
-inspector. A Properties tab existed briefly and was dropped: the same inspector was already mounted
-in the split body, so the tab could only ever render a "pick something" hint. Re-adding a tab per
-object type recreates that redundancy — the inspector swaps on the active selection instead.
+**The editor's chrome is one floating dock of fixed height, and the plan gets the rest.** A toolbar
+above, chips down the left, a 300 px side dock and a coordinate readout used to take a quarter of the
+window and every fit's zoom with it. Now the plan fills the face; the View|Edit switch, a corner
+capsule (undo, redo, zoom, the keys) and the room-aware pill float over its top, and one 92 px dock
+floats over its foot (`ui/dock/`). The dock's slot shows what can be added — two rows of tiles, each
+piece drawn as the plan draws it — while nothing is selected, and the selection's two-row inspector
+when something is; its rail opens the objects list and the room's settings as popovers above it.
+The height never changes with what it shows, so nothing above it moves, and `ROOM_MAP_FIT_INSETS`
+keeps a fit's room clear of both bands. The objects list is the keyboard's way to select furniture,
+the TV, strips and images at all, and the way to reach a piece the dock covers. A selection made
+from the dock lands keyboard focus on the inspector's first field and gives pointer focus back to
+the editor root; one made on the canvas leaves focus alone and is announced instead. Escape in the
+dock goes back to the editor without letting go; on the canvas, and on ✕, it steps back one
+selection — an object, then the zone it was picked over, then the palette — and a click on empty
+ground lets go of both (`clearSelection`), since `select(null)` alone left a zone selected under the
+palette.
 
 **Background images are copied in, capped at 20 MB, and pruned only at startup.** An imported
 image is copied into `room-map-backgrounds/` in the app data dir under a UUID name, because the
@@ -244,11 +255,12 @@ middle of an import.
   stretched blur texture smeared on a long sofa — and include a soft band along the foot of every
   wall. The night backdrop is a CSS gradient behind a transparent canvas, so it costs no draw.
 - **Bare keys belong to the canvas; modified ones to the whole editor.** Arrows, Delete/Backspace,
-  R, F and Escape act only when the event comes from the editor root or from inside the
-  `data-room-map-viewport` element. On a dock tab, a segmented control or a menu item an arrow moved
+  R and Escape act only when the event comes from the editor root or from inside the
+  `data-room-map-viewport` element. On a dock tile, a segmented control or a menu item an arrow moved
   the selection along with the control, and Delete removed the selected object. Cmd/Ctrl+Z, +D and
   +0 stay editor-wide. The window-wide Space listener also leaves a button, tab, radio or menu item
-  alone, because Space is how those are pressed.
+  alone, because Space is how those are pressed. A right-click opens the plan's menu only inside the
+  viewport: a popover's right-click reaches the editor root through the React tree from its portal.
 
 - **A Hue channel carries two positions and only one is live.** Once `zoneId` is set,
   `zoneRelativePosition` is what the canvas paints and the absolute `x`/`y` are leftovers. Three
@@ -277,12 +289,6 @@ middle of an import.
   first, so growing a zone parked against a wall authored a state the backend refuses. The edge
   maximum is bounded by the centre's remaining headroom; the drag path in `HueChannelOverlay` had
   always done this, which is why only the inspector could produce it.
-- **WKWebView strips custom MIME types from a cross-element drag payload.** A channel dragged onto a
-  zone header arrived with an empty `getData("application/x-lumasync-channel")` under Tauri's macOS
-  webview, so the drop silently fell through. The index is written into `text/plain` as well as the
-  custom type, and there is an in-memory fallback behind both. Separately, both Chromium and WebKit
-  need `preventDefault()` in `onDragEnter` — not just `onDragOver` — or the browser cancels the drop
-  with a "no" cursor before `onDragOver` ever fires.
 - **The dock inspector needs a `key` per selection or in-flight typed text leaks between objects.**
   The dispatcher returns the same component identity for two different USB strips, so React reuses
   the instance and the number field's local draft string — the value the user is mid-way through

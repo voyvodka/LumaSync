@@ -8,11 +8,6 @@
     min-height: 0;
   }
 
-  /* Both faces' top bars leave the switch its place, so it sits over each bar's leading edge. */
-  .surface[data-faces] {
-    --room-bar-lead: calc(12px + var(--room-switch-w) + 12px);
-  }
-
   .face {
     flex: 1;
     min-height: 0;
@@ -28,10 +23,10 @@
   }
 
   /* Rides above both faces at one spot, so the pointer and keyboard focus stay on it across a
-     switch. Centred in the 40 px bar under it. */
+     switch. */
   .switch {
     position: absolute;
-    top: 4px;
+    top: 8px;
     left: 12px;
     z-index: 30;
     width: var(--room-switch-w);

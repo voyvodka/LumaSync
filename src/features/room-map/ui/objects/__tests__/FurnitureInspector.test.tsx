@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FurnitureModel } from "@/features/room-view/model/furnitureModel";
 import type { FurniturePlacement } from "@/shared/contracts/roomMap";
@@ -16,57 +16,66 @@ const table: FurniturePlacement = { id: "t", type: "table", x: 1, y: 1, width: 1
 const coffee: FurnitureModel = { kind: "coffeeTable" };
 
 function renderInspector(item: FurniturePlacement = table, model: FurnitureModel = coffee, modelChoices = true) {
-  const onUpdate = vi.fn<(patch: Partial<FurniturePlacement>) => void>();
-  render(
-    <FurnitureInspector
-      item={item}
-      model={model}
-      autoModel={coffee}
-      modelChoices={modelChoices}
-      onUpdate={onUpdate}
-      onToggleLock={vi.fn<() => void>()}
-      onRename={vi.fn<(label: string) => void>()}
-    />,
-  );
-  return { onUpdate };
+  const handlers = {
+    onUpdate: vi.fn<(patch: Partial<FurniturePlacement>) => void>(),
+    onRename: vi.fn<(label: string) => void>(),
+    onToggleLock: vi.fn<() => void>(),
+    onDuplicate: vi.fn<() => void>(),
+    onDelete: vi.fn<() => void>(),
+    onClose: vi.fn<() => void>(),
+  };
+  render(<FurnitureInspector item={item} model={model} autoModel={coffee} modelChoices={modelChoices} {...handlers} />);
+  return handlers;
 }
 
-describe("FurnitureInspector — model", () => {
-  beforeEach(() => cleanup());
+/** Opens a picker by its name and presses one of its options; a pick lands after the list's short exit. */
+function choose(picker: string, option: string) {
+  fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${picker.replace(/\./g, "\\.")}: `) }));
+  fireEvent.click(screen.getByRole("option", { name: option }));
+  act(() => {
+    vi.advanceTimersByTime(200);
+  });
+}
 
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
+
+describe("FurnitureInspector — model", () => {
   it("offers Auto, named for what it reads as, and the type's own models", () => {
     renderInspector();
-    const auto = screen.getByRole("radio", { name: /roomMap:inspector\.modelAutoAria/ });
-    expect(auto.textContent).toContain("roomMap:furniture.variant.coffee");
-    expect(auto).toHaveAttribute("aria-checked", "true");
+    const picker = screen.getByRole("button", { name: /^roomMap:inspector\.modelLabel: / });
+    expect(picker.textContent).toContain("roomMap:furniture.variant.coffee");
+    fireEvent.click(picker);
     for (const v of ["desk", "coffee", "dining", "side"]) {
-      expect(screen.getByRole("radio", { name: `roomMap:furniture.variant.${v}` })).toBeDefined();
+      expect(screen.getByRole("option", { name: `roomMap:furniture.variant.${v}` })).toBeDefined();
     }
   });
 
   it("keeps a pick and clears it on Auto", () => {
-    const { onUpdate } = renderInspector();
-    fireEvent.click(screen.getByRole("radio", { name: "roomMap:furniture.variant.desk" }));
-    expect(onUpdate).toHaveBeenLastCalledWith({ variant: "desk" });
+    const first = renderInspector();
+    choose("roomMap:inspector.modelLabel", "roomMap:furniture.variant.desk");
+    expect(first.onUpdate).toHaveBeenLastCalledWith({ variant: "desk" });
 
     cleanup();
     const second = renderInspector({ ...table, variant: "desk" }, { kind: "desk", screenX: null });
-    fireEvent.click(screen.getByRole("radio", { name: /roomMap:inspector\.modelAutoAria/ }));
+    choose("roomMap:inspector.modelLabel", 'roomMap:inspector.modelAuto {"model":"roomMap:furniture.variant.coffee"}');
     expect(second.onUpdate).toHaveBeenLastCalledWith({ variant: undefined });
   });
 
   it("clears a variant the new type does not take when the type changes", () => {
     const { onUpdate } = renderInspector({ ...table, variant: "desk", tone: "walnut" });
-    fireEvent.change(screen.getByLabelText("roomMap:inspector.furnitureTypeLabel"), { target: { value: "storage" } });
+    choose("roomMap:inspector.furnitureTypeLabel", "roomMap:furniture.type.storage");
     expect(onUpdate).toHaveBeenLastCalledWith({ type: "storage", variant: undefined, tone: "walnut", topMeters: undefined });
   });
 });
 
 describe("FurnitureInspector — tone and size", () => {
-  beforeEach(() => cleanup());
-
   it("picks a tone from the type's palette and clears it on Default", () => {
     const { onUpdate } = renderInspector();
+    fireEvent.click(screen.getByRole("button", { name: /^roomMap:inspector\.toneLabel: / }));
     expect(screen.queryByRole("radio", { name: "roomMap:furniture.tone.slate" })).toBeNull();
     fireEvent.click(screen.getByRole("radio", { name: "roomMap:furniture.tone.walnut" }));
     expect(onUpdate).toHaveBeenLastCalledWith({ tone: "walnut" });
@@ -84,20 +93,16 @@ describe("FurnitureInspector — tone and size", () => {
 });
 
 describe("FurnitureInspector — a build without the 3D room", () => {
-  beforeEach(() => cleanup());
-
   it("offers no model, tone or height, since nothing would draw them", () => {
     renderInspector(table, coffee, false);
-    expect(screen.queryByRole("radiogroup", { name: "roomMap:inspector.modelLabel" })).toBeNull();
-    expect(screen.queryByRole("radiogroup", { name: "roomMap:inspector.toneLabel" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^roomMap:inspector\.modelLabel: / })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^roomMap:inspector\.toneLabel: / })).toBeNull();
     expect(screen.queryByLabelText("roomMap:inspector.heightLabel")).toBeNull();
     expect(screen.getByLabelText("roomMap:inspector.depthLabel")).toBeDefined();
   });
 });
 
 describe("FurnitureInspector — position and rotation", () => {
-  beforeEach(() => cleanup());
-
   const field = (name: string) => screen.getByRole("spinbutton", { name }) as HTMLInputElement;
   const enter = (input: HTMLInputElement, value: string) => {
     fireEvent.focus(input);
@@ -105,7 +110,7 @@ describe("FurnitureInspector — position and rotation", () => {
     fireEvent.keyDown(input, { key: "Enter" });
   };
 
-  it("takes a typed X and Y, the fields the property bar used to hold", () => {
+  it("takes a typed X and Y", () => {
     const { onUpdate } = renderInspector();
     expect(field("roomMap:inspector.xLabel").value).toBe("1.00");
     enter(field("roomMap:inspector.xLabel"), "2.4");
@@ -122,7 +127,7 @@ describe("FurnitureInspector — position and rotation", () => {
     expect(onUpdate).toHaveBeenLastCalledWith({ rotation: 10 });
   });
 
-  it("holds every number while the piece is locked", () => {
+  it("holds every number, the name and the delete while the piece is locked", () => {
     renderInspector({ ...table, locked: true });
     for (const name of [
       "roomMap:inspector.xLabel",
@@ -134,5 +139,40 @@ describe("FurnitureInspector — position and rotation", () => {
     ]) {
       expect(field(name)).toBeDisabled();
     }
+    expect(screen.getByRole("textbox", { name: "roomMap:inspector.furnitureNameLabel" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "roomMap:objectPanel.delete" })).toBeDisabled();
+  });
+});
+
+describe("FurnitureInspector — name and actions", () => {
+  it("renames on Enter, and puts the name back on Escape or when emptied", () => {
+    const { onRename } = renderInspector();
+    const name = screen.getByRole("textbox", { name: "roomMap:inspector.furnitureNameLabel" }) as HTMLInputElement;
+    fireEvent.focus(name);
+    fireEvent.change(name, { target: { value: "Desk by the window" } });
+    fireEvent.keyDown(name, { key: "Enter" });
+    expect(onRename).toHaveBeenLastCalledWith("Desk by the window");
+
+    fireEvent.change(name, { target: { value: "Something else" } });
+    fireEvent.keyDown(name, { key: "Escape" });
+    expect(name.value).toBe("Table");
+    fireEvent.change(name, { target: { value: "   " } });
+    fireEvent.blur(name);
+    expect(name.value).toBe("Table");
+    expect(onRename).toHaveBeenCalledTimes(1);
+  });
+
+  it("locks, duplicates, deletes and closes from the row's end", () => {
+    const handlers = renderInspector();
+    const lock = screen.getByRole("button", { name: "roomMap:objectPanel.lock" });
+    expect(lock).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(lock);
+    fireEvent.click(screen.getByRole("button", { name: "roomMap:contextMenu.duplicate" }));
+    fireEvent.click(screen.getByRole("button", { name: "roomMap:objectPanel.delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "roomMap:dock.close" }));
+    expect(handlers.onToggleLock).toHaveBeenCalledTimes(1);
+    expect(handlers.onDuplicate).toHaveBeenCalledTimes(1);
+    expect(handlers.onDelete).toHaveBeenCalledTimes(1);
+    expect(handlers.onClose).toHaveBeenCalledTimes(1);
   });
 });

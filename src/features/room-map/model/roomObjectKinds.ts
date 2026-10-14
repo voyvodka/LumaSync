@@ -39,11 +39,8 @@ export interface RoomObjectAdapter<K extends RoomObjectKind> {
   /** Reads the newest config: a held arrow applies many of these in a row. */
   nudge: ((config: RoomMapConfig, ref: RoomObjectRef<K>, direction: NudgeDirection, ctx: RoomObjectContext) => Patch) | null;
   rotateBy: ((config: RoomMapConfig, ref: RoomObjectRef<K>, degrees: number) => Patch) | null;
-  /** The label the rename dialog opens on, and the patch that renames. */
-  rename: {
-    current: (config: RoomMapConfig, ref: RoomObjectRef<K>) => string;
-    apply: (config: RoomMapConfig, ref: RoomObjectRef<K>, label: string) => Patch;
-  } | null;
+  /** A new name, from the inspector's name field. */
+  rename: ((config: RoomMapConfig, ref: RoomObjectRef<K>, label: string, ctx: RoomObjectContext) => Patch) | null;
   inspect: (config: RoomMapConfig, ref: RoomObjectRef<K>) => InspectorTarget | null;
 }
 
@@ -103,12 +100,9 @@ export const ROOM_OBJECT_KINDS = {
         f.id === ref.furnitureId ? { ...f, rotation: ((f.rotation ?? 0) + degrees) % 360 } : f,
       ),
     }),
-    rename: {
-      current: (config, ref) => config.furniture.find((f) => f.id === ref.furnitureId)?.label ?? "",
-      apply: (config, ref, label) => ({
-        furniture: config.furniture.map((f) => (f.id === ref.furnitureId ? { ...f, label } : f)),
-      }),
-    },
+    rename: (config, ref, label) => ({
+      furniture: config.furniture.map((f) => (f.id === ref.furnitureId ? { ...f, label } : f)),
+    }),
     inspect: (config, ref) => {
       const item = config.furniture.find((f) => f.id === ref.furnitureId);
       return item ? { kind: "furniture", item } : null;
@@ -168,8 +162,8 @@ export const ROOM_OBJECT_KINDS = {
       const target = visibleHueChannels.find((ch) => ch.channelIndex === ref.channelIndex);
       return target ? { hueChannels: replaceHueChannel(config.hueChannels, { ...target, locked: !target.locked }) } : null;
     },
-    // Channels are bridge-managed and detaching goes through "Move to →
-    // Unassigned". See docs/architecture/room-map.md for the bug that removing one caused.
+    // Channels are bridge-managed, and a light leaves its zone through its zone picker.
+    // See docs/architecture/room-map.md for the bug that removing one caused.
     remove: null,
     duplicate: null,
     moveTo: (config, ref, x, y, { hueAreaId }) => ({
@@ -184,12 +178,13 @@ export const ROOM_OBJECT_KINDS = {
       ),
     }),
     rotateBy: null,
-    rename: null,
+    rename: (config, ref, label, { hueAreaId }) => ({
+      hueChannels: updateScopedHueChannel(config.hueChannels, hueAreaId, ref.channelIndex, (ch) => ({ ...ch, label })),
+    }),
     inspect: (config, ref) => {
       const channel = findHueChannel(config.hueChannels, ref.channelIndex);
       if (!channel) return null;
-      const zoneName = channel.zoneId ? (config.zones.find((z) => z.id === channel.zoneId)?.name ?? null) : null;
-      return { kind: "hueChannel", channel, zoneName };
+      return { kind: "hueChannel", channel };
     },
   },
   image: {
@@ -205,12 +200,9 @@ export const ROOM_OBJECT_KINDS = {
     }),
     nudge: null,
     rotateBy: null,
-    rename: {
-      current: (config, ref) => config.imageLayers.find((l) => l.id === ref.layerId)?.label ?? "",
-      apply: (config, ref, label) => ({
-        imageLayers: config.imageLayers.map((l) => (l.id === ref.layerId ? { ...l, label } : l)),
-      }),
-    },
+    rename: (config, ref, label) => ({
+      imageLayers: config.imageLayers.map((l) => (l.id === ref.layerId ? { ...l, label } : l)),
+    }),
     inspect: (config, ref) => {
       const layer = config.imageLayers.find((l) => l.id === ref.layerId);
       return layer ? { kind: "image", layer } : null;

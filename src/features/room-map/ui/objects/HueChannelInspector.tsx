@@ -1,15 +1,20 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { RangeRow } from "@/shared/ui/RangeRow/RangeRow";
-
-import { hueChannelIdLabel, hueChannelName } from "../../model/hueChannelLabel";
-import { hueToMetres, hueToPlanMetres, planMetresToHue } from "../../model/hueChannelPosition";
 
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
-import { Header } from "./InspectorPrimitives";
+import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
+import { StateWord } from "@/shared/ui/StateWord/StateWord";
+
+import { hueChannelDotText, hueChannelIdLabel, hueChannelName } from "../../model/hueChannelLabel";
+import { hueToMetres, hueToPlanMetres, planMetresToHue } from "../../model/hueChannelPosition";
+import { getZoneColor } from "../../model/zoneColor";
+import { DecimalField } from "../DecimalField";
+import { DockPicker } from "../dock/DockPicker";
+import { DockSlider } from "../dock/DockSlider";
+import { Actions, Disc, FieldRow, InspectorRows, Mark, Meta, NameField, Note, Status } from "../dock/InspectorParts";
+import { GlyphHeight } from "./fieldGlyphs";
 import type { UsbStripConnectionStatus } from "./UsbStripInspector";
-import { TYPE_DOT_COLOR } from "../../model/zoneColor";
-import { DecimalField, FieldPair } from "../DecimalField";
+
+const UNASSIGNED = "unassigned";
 
 function heightBandKey(
   worldZ: number,
@@ -24,7 +29,7 @@ function heightBandKey(
 
 export function HueChannelInspector({
   channel,
-  zoneName,
+  zones,
   bridgeStatus = "unknown",
   world,
   worldZ,
@@ -34,13 +39,16 @@ export function HueChannelInspector({
   roomHeightMeters,
   onMove,
   onHeightChange,
+  onAssignZone,
   lightCount,
   isGhost = false,
   onRename,
   onToggleLock,
+  onClose,
 }: {
   channel: HueChannelPlacement;
-  zoneName: string | null;
+  /** The zones of the channel's area, the ones it can join. */
+  zones: readonly HueZone[];
   /** Resolved position in the cube — a zone-bound channel's live value is zone-relative. */
   world: { x: number; y: number };
   /** Resolved height — a zone-bound channel's live value is zone-relative. */
@@ -53,12 +61,9 @@ export function HueChannelInspector({
   /** A new position in the cube; the editor writes whichever field is live. */
   onMove: (worldX: number, worldY: number) => void;
   onHeightChange: (worldZ: number) => void;
-  /**
-   * Hue bridge reachability mirror. Renders the same
-   * connection chip vocabulary used by `UsbStripInspector` so a
-   * disconnected Hue bridge is as visible as a disconnected USB port.
-   * `unknown` (default) ⇒ no chip rendered.
-   */
+  /** Joins a zone, or leaves one for `null`. Absent leaves membership read-only. */
+  onAssignZone?: (zoneId: string | null) => void;
+  /** Hue bridge reachability, in the strip inspector's words. `unknown` (default) shows none. */
   bridgeStatus?: UsbStripConnectionStatus;
   /** How many bulbs this channel drives, from the bridge. `null` when the
    *  channel is not in the area the bridge reports — see `isGhost`. */
@@ -68,18 +73,10 @@ export function HueChannelInspector({
   isGhost?: boolean;
   onRename: (label: string) => void;
   onToggleLock: () => void;
+  onClose: () => void;
 }) {
   const { t } = useTranslation();
   const locked = !!channel.locked;
-  const [labelDraft, setLabelDraft] = useState(
-    hueChannelName(channel, t),
-  );
-  const [labelDirty, setLabelDirty] = useState(false);
-
-  if (!labelDirty) {
-    const external = hueChannelName(channel, t);
-    if (external !== labelDraft) setLabelDraft(external);
-  }
 
   const minZ = heightRange?.min ?? -1;
   const maxZ = heightRange?.max ?? 1;
@@ -95,163 +92,115 @@ export function HueChannelInspector({
     onMove(next.x, next.y);
   };
 
-  const commitLabel = () => {
-    setLabelDirty(false);
-    const trimmed = labelDraft.trim();
-    if (!trimmed) {
-      setLabelDraft(hueChannelName(channel, t));
-      return;
-    }
-    if (trimmed !== channel.label) onRename(trimmed);
-  };
+  const zoneIndex = channel.zoneId ? zones.findIndex((z) => z.id === channel.zoneId) : -1;
+  const zone = zoneIndex >= 0 ? zones[zoneIndex] : undefined;
+  const facts = [
+    hueChannelIdLabel(channel.channelId) ?? t("roomMap:inspector.hueChannelUnresolved"),
+    lightCount == null ? null : lightCount === 1 ? t("roomMap:inspector.hueOneLight") : t("roomMap:inspector.hueLights", { count: lightCount }),
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
-    <>
-      <Header
-        typeLabel={t("roomMap:inspector.typeHue")}
-        name={hueChannelName(channel, t)}
-        dotColor={TYPE_DOT_COLOR.hue}
-      />
-      <div className="lm-room-dock-field">
-        <label className="lm-room-dock-field-label" htmlFor={`hue-label-${channel.channelIndex}`}>
-          {t("roomMap:inspector.furnitureNameLabel")}
-        </label>
-        <input
-          id={`hue-label-${channel.channelIndex}`}
-          type="text"
-          className="lm-room-dock-input"
-          value={labelDraft}
-          disabled={locked}
-          onChange={(e) => {
-            setLabelDirty(true);
-            setLabelDraft(e.target.value);
-          }}
-          onBlur={commitLabel}
-          onKeyDown={(e) => {
-            e.stopPropagation();
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commitLabel();
-            } else if (e.key === "Escape") {
-              setLabelDraft(hueChannelName(channel, t));
-              setLabelDirty(false);
-            }
-          }}
-        />
-      </div>
-      {bridgeStatus !== "unknown" ? (
-        <div className="lm-room-dock-field">
-          <span className="lm-room-dock-field-label">
-            {t("roomMap:inspector.hueBridgeLabel")}
-          </span>
-          <span
-            className={`lm-room-dock-conn-chip lm-room-dock-conn-chip--${bridgeStatus}`}
-            role="status"
-            aria-live="polite"
-          >
-            <span className="lm-room-dock-conn-chip-dot" aria-hidden />
-            <span className="lm-room-dock-conn-chip-tx">
-              {bridgeStatus === "connected"
-                ? t("roomMap:inspector.hueBridgeConnected")
-                : t("roomMap:inspector.hueBridgeDisconnected")}
-            </span>
-          </span>
-        </div>
-      ) : null}
-      <div className="lm-room-dock-field">
-        <span className="lm-room-dock-field-label">
-          {t("roomMap:inspector.hueChannelIndexLabel")}
-        </span>
-        <span className="lm-room-dock-field-value">
-          {hueChannelIdLabel(channel.channelId) ?? t("roomMap:inspector.hueChannelUnresolved")}
-        </span>
-      </div>
-      {lightCount != null && (
-        <div className="lm-room-dock-field">
-          <span className="lm-room-dock-field-label">
-            {t("roomMap:inspector.hueLightCountLabel")}
-          </span>
-          <span className="lm-room-dock-field-value">
-            {lightCount === 1
-              ? t("roomMap:inspector.hueOneLight")
-              : t("roomMap:inspector.hueLights", { count: lightCount })}
-          </span>
-        </div>
-      )}
-      {isGhost && (
-        <p className="lm-room-dock-note" role="status">
-          {t("roomMap:inspector.hueChannelGhostNote")}
-        </p>
-      )}
-      <FieldPair>
-        <DecimalField
-          label={t("roomMap:inspector.xLabel")}
-          prefix="X"
-          value={plan.x}
-          min={0}
-          max={roomWidthMeters}
-          unit="m"
-          disabled={locked}
-          onCommit={(x) => moveTo(x, plan.y)}
-        />
-        <DecimalField
-          label={t("roomMap:inspector.yLabel")}
-          prefix="Y"
-          value={plan.y}
-          min={0}
-          max={roomDepthMeters}
-          unit="m"
-          disabled={locked}
-          onCommit={(y) => moveTo(plan.x, y)}
-        />
-      </FieldPair>
-      <RangeRow
-        variant="dock"
-        className="lm-zone-inspector-slider-row"
-        label={t("roomMap:inspector.hueHeightLabel")}
-        ariaLabel={t("roomMap:inspector.hueHeightAriaLabel")}
-        min={minZ}
-        max={maxZ}
-        step={0.01}
-        value={shownZ}
-        disabled={locked || maxZ <= minZ}
-        onChange={onHeightChange}
-        // The raw -1..1 is meaningless read aloud; this is the whole reason the
-        // control moved off the Devices strip, so do not drop it.
-        ariaValueText={t("roomMap:inspector.hueHeightValueText", {
-          metres: heightMetres(shownZ),
-          label: t(heightBandKey(shownZ)),
-        })}
-        valueLabel={t("roomMap:inspector.hueHeightReadout", {
-          metres: heightMetres(shownZ),
-        })}
-      />
-      {limitingZone && (
-        <p className="lm-room-dock-field-hint" data-testid="hue-height-zone-limit">
-          {t("roomMap:inspector.hueHeightZoneLimit", {
-            name: limitingZone.name,
-            min: heightMetres(minZ),
-            max: heightMetres(maxZ),
-          })}
-        </p>
-      )}
-      <div className="lm-room-dock-field">
-        <span className="lm-room-dock-field-label">
-          {t("roomMap:inspector.hueZoneLabel")}
-        </span>
-        <span className="lm-room-dock-field-value">
-          {zoneName ?? t("roomMap:hueZones.unassignedTitle")}
-        </span>
-      </div>
-      <button
-        type="button"
-        className="lm-room-dock-inspect-action"
-        onClick={onToggleLock}
-        aria-pressed={locked}
-      >
-        {locked ? t("roomMap:objectPanel.unlock") : t("roomMap:objectPanel.lock")}
-      </button>
-      <p className="lm-room-dock-field-hint">{t("roomMap:inspector.hueChannelHint")}</p>
-    </>
+    <InspectorRows
+      first={
+        <>
+          <Mark>
+            <Disc fill="rgb(255 255 255 / 80%)" ring={zone ? getZoneColor(zone, zoneIndex) : undefined} ghost={isGhost}>
+              {hueChannelDotText(channel.channelId)}
+            </Disc>
+          </Mark>
+          <NameField
+            first
+            value={channel.label ?? undefined}
+            fallback={hueChannelName({ channelId: channel.channelId }, t)}
+            label={t("roomMap:inspector.furnitureNameLabel")}
+            disabled={locked}
+            onCommit={onRename}
+          />
+          <Status>
+            {isGhost ? (
+              <Note tone="warning" title={t("roomMap:inspector.hueChannelGhostNote")}>
+                {t("roomMap:inspector.hueGhostShort")}
+              </Note>
+            ) : (
+              <>
+                {bridgeStatus !== "unknown" && (
+                  <StateWord tone={bridgeStatus === "connected" ? "live" : "idle"}>
+                    <span className="sr-only">{t("roomMap:inspector.hueBridgeLabel")}: </span>
+                    {bridgeStatus === "connected" ? t("roomMap:inspector.hueBridgeConnected") : t("roomMap:inspector.hueBridgeDisconnected")}
+                  </StateWord>
+                )}
+                <Meta>{facts}</Meta>
+              </>
+            )}
+          </Status>
+          <DockPicker
+            label={t("roomMap:inspector.hueZoneLabel")}
+            value={zone?.id ?? UNASSIGNED}
+            width={150}
+            disabled={locked || !onAssignZone || zones.length === 0}
+            options={[
+              { value: UNASSIGNED, label: t("roomMap:hueZones.unassignedTitle"), mark: <Disc /> },
+              ...zones.map((z, i) => ({ value: z.id, label: z.name, mark: <Disc fill={getZoneColor(z, i)} /> })),
+            ]}
+            onChange={(next) => onAssignZone?.(next === UNASSIGNED ? null : next)}
+          />
+          <Actions locked={locked} onToggleLock={onToggleLock} onClose={onClose} />
+        </>
+      }
+      second={
+        <>
+          <FieldRow>
+            <DecimalField
+              label={t("roomMap:inspector.xLabel")}
+              prefix="X"
+              value={plan.x}
+              min={0}
+              max={roomWidthMeters}
+              unit="m"
+              disabled={locked}
+              onCommit={(x) => moveTo(x, plan.y)}
+            />
+            <DecimalField
+              label={t("roomMap:inspector.yLabel")}
+              prefix="Y"
+              value={plan.y}
+              min={0}
+              max={roomDepthMeters}
+              unit="m"
+              disabled={locked}
+              onCommit={(y) => moveTo(plan.x, y)}
+            />
+          </FieldRow>
+          <DockSlider
+            label={t("roomMap:inspector.hueHeightAriaLabel")}
+            prefix={<GlyphHeight />}
+            min={minZ}
+            max={maxZ}
+            step={0.01}
+            value={shownZ}
+            disabled={locked || maxZ <= minZ}
+            onChange={onHeightChange}
+            // The raw -1..1 is meaningless read aloud; this is the whole reason the
+            // control moved off the Devices strip, so do not drop it.
+            ariaValueText={t("roomMap:inspector.hueHeightValueText", {
+              metres: heightMetres(shownZ),
+              label: t(heightBandKey(shownZ)),
+            })}
+            readout={t("roomMap:inspector.hueHeightReadout", { metres: heightMetres(shownZ) })}
+          />
+          {limitingZone && (
+            <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.hueHeightLabel") })}>
+              {t("roomMap:inspector.hueHeightZoneLimit", {
+                name: limitingZone.name,
+                min: heightMetres(minZ),
+                max: heightMetres(maxZ),
+              })}
+            </InfoTip>
+          )}
+        </>
+      }
+    />
   );
 }

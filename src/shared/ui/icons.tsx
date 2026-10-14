@@ -104,23 +104,6 @@ export function IconSolidDot() {
   );
 }
 
-export function IconGear() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="8" cy="8" r="2.5" />
-      <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" />
-    </svg>
-  );
-}
-
 export function IconUndo() {
   return (
     <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -170,30 +153,11 @@ export function IconDragHandle() {
   );
 }
 
-export function IconMoveTo() {
-  return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M2 6h7" />
-      <path d="M6 3l3 3-3 3" />
-    </svg>
-  );
-}
-
 export function IconTv() {
   return (
     <svg viewBox="0 0 20 20" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="3" width="16" height="11" rx="1.5" />
       <path d="M7 17h6M10 14v3" />
-    </svg>
-  );
-}
-
-export function IconFurniture() {
-  return (
-    <svg viewBox="0 0 20 20" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 10v5h14v-5" />
-      <path d="M5 10V7a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v3" />
-      <path d="M3 15v2M17 15v2" />
     </svg>
   );
 }

@@ -1,0 +1,62 @@
+@layer components {
+  .slider {
+    display: flex;
+    flex: 1 1 140px;
+    align-items: center;
+    gap: 8px;
+    min-width: 120px;
+    height: 32px;
+    padding: 0 8px;
+    border-radius: 7px;
+  }
+  .prefix {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    color: var(--lm-ink-faint);
+    font: 10px var(--lm-mono);
+  }
+  .prefix svg { width: 12px; height: 12px; }
+
+  /* The amber part is the value: the track fills up to the thumb. */
+  .input {
+    flex: 1;
+    min-width: 0;
+    height: 16px;
+    margin: 0;
+    background: transparent;
+    appearance: none;
+    cursor: pointer;
+  }
+  .input::-webkit-slider-runnable-track {
+    height: 3px;
+    border-radius: 2px;
+    background: linear-gradient(to right, var(--lm-amber) var(--fill, 0%), var(--lm-line-2) var(--fill, 0%));
+  }
+  .input::-webkit-slider-thumb {
+    width: 12px;
+    height: 12px;
+    margin-top: -4.5px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--lm-ink);
+    appearance: none;
+  }
+  .input:focus-visible { outline: none; }
+  .input:focus-visible::-webkit-slider-thumb { box-shadow: var(--lm-focus-ring); }
+  .disabled .input { cursor: not-allowed; opacity: 0.5; }
+
+  .readout {
+    flex-shrink: 0;
+    min-width: 44px;
+    font: 11px var(--lm-mono);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: var(--lm-ink);
+  }
+
+  @media (forced-colors: active) {
+    .input::-webkit-slider-runnable-track { background: CanvasText; }
+    .input::-webkit-slider-thumb { background: Highlight; }
+  }
+}

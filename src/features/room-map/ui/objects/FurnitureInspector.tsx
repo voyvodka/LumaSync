@@ -1,12 +1,10 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { autoVariant, type FurnitureModel, modelTop, toneCss } from "@/features/room-view/model/furnitureModel";
+import { autoVariant, furnitureColours, type FurnitureModel, modelTop } from "@/features/room-view/model/furnitureModel";
 import {
   FURNITURE_CATALOGUE,
   FURNITURE_TYPES,
   type FurniturePlacement,
-  type FurnitureTone,
   type FurnitureType,
   type FurnitureVariant,
   resolveFurnitureTone,
@@ -15,19 +13,30 @@ import {
   resolveFurnitureVariant,
 } from "@/shared/contracts/roomMap";
 import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
-import { Segmented } from "@/shared/ui/Segmented/Segmented";
+
 import { retypeFurniture } from "../../model/furnitureKinds";
-import { TYPE_DOT_COLOR } from "../../model/zoneColor";
-import { DecimalField, FieldHint, FieldPair } from "../DecimalField";
+import { furnitureTile } from "../../model/paletteTiles";
+import { DecimalField } from "../DecimalField";
+import { DockPicker } from "../dock/DockPicker";
+import { TonePicker } from "../dock/DockSwatches";
+import { Actions, FieldRow, InspectorRows, Mark, NameField } from "../dock/InspectorParts";
 import { GlyphDepth, GlyphHeight, GlyphRotation, GlyphWidth } from "./fieldGlyphs";
-import styles from "./FurnitureInspector.module.css";
-import { Header } from "./InspectorPrimitives";
+import { FurnitureGlyph } from "./FurnitureGlyph";
 
 const AUTO = "auto";
-const DEFAULT_TONE = "default";
 const MAX_TOP_METRES = 3;
 const MIN_SIDE_METRES = 0.1;
 const wrapDegrees = (degrees: number) => ((degrees % 360) + 360) % 360;
+const TYPES = Object.values(FURNITURE_TYPES);
+
+function TypeMark({ type }: { type: FurnitureType }) {
+  const tile = furnitureTile(type);
+  return (
+    <span style={{ display: "block", width: 22, height: 16 }}>
+      <FurnitureGlyph model={tile.model} colours={furnitureColours(tile.piece, tile.model)} width={tile.piece.width} depth={tile.piece.height} fit />
+    </span>
+  );
+}
 
 export function FurnitureInspector({
   item,
@@ -35,8 +44,11 @@ export function FurnitureInspector({
   autoModel,
   modelChoices,
   onUpdate,
-  onToggleLock,
   onRename,
+  onToggleLock,
+  onDuplicate,
+  onDelete,
+  onClose,
 }: {
   item: FurniturePlacement;
   /** What the piece is drawn as now — the automatic reading, or the user's pick. */
@@ -47,227 +59,129 @@ export function FurnitureInspector({
    *  so nothing is stored that nothing shows. */
   modelChoices: boolean;
   onUpdate: (patch: Partial<FurniturePlacement>) => void;
-  onToggleLock: () => void;
   onRename: (label: string) => void;
+  onToggleLock: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onClose: () => void;
 }) {
   const { t } = useTranslation();
   const locked = !!item.locked;
   const type = resolveFurnitureType(item.type);
   const spec = FURNITURE_CATALOGUE[type];
   const variant = resolveFurnitureVariant(item);
-  const tone = resolveFurnitureTone(item);
   const typeName = t(`roomMap:furniture.type.${type}`);
-  const [labelDraft, setLabelDraft] = useState(item.label ?? typeName);
-  const [labelDirty, setLabelDirty] = useState(false);
-
-  const commitLabel = () => {
-    setLabelDirty(false);
-    const trimmed = labelDraft.trim();
-    if (!trimmed) {
-      setLabelDraft(item.label ?? typeName);
-      return;
-    }
-    if (trimmed !== item.label) onRename(trimmed);
-  };
-
-  // Sync external rename while not editing.
-  if (!labelDirty) {
-    const external = item.label ?? typeName;
-    if (external !== labelDraft) setLabelDraft(external);
-  }
-
   const reading = autoModel ? autoVariant(autoModel) : null;
-  const autoName = reading ? t(`roomMap:furniture.variant.${reading}`) : null;
-  const modelOptions = [
-    {
-      value: AUTO,
-      label: t("roomMap:inspector.modelAuto", { model: autoName ?? typeName }),
-      ariaLabel: autoName ? t("roomMap:inspector.modelAutoAria", { model: autoName }) : undefined,
-      className: styles.chip,
-    },
-    ...spec.variants.map((v) => ({
-      value: v,
-      label: t(`roomMap:furniture.variant.${v}`),
-      className: styles.chip,
-    })),
-  ];
-  const toneOptions = [
-    {
-      value: DEFAULT_TONE,
-      label: <span className={`${styles.disc} ${styles.discDefault}`} aria-hidden="true" />,
-      ariaLabel: t("roomMap:inspector.toneDefault"),
-      title: t("roomMap:inspector.toneDefault"),
-      className: styles.swatch,
-    },
-    ...spec.tones.map((tn) => ({
-      value: tn,
-      label: <span className={styles.disc} style={{ background: toneCss(tn) }} aria-hidden="true" />,
-      ariaLabel: t(`roomMap:furniture.tone.${tn}`),
-      title: t(`roomMap:furniture.tone.${tn}`),
-      className: styles.swatch,
-    })),
-  ];
+  const autoName = reading ? t(`roomMap:furniture.variant.${reading}`) : typeName;
+  const drawn = model ?? autoModel ?? furnitureTile(type).model;
+  const showHeight = modelChoices && type !== "rug" && model !== undefined;
 
   return (
-    <>
-      <Header typeLabel={t("roomMap:inspector.typeFurniture")} name={item.label ?? typeName} dotColor={TYPE_DOT_COLOR.furniture} />
-      <div className="lm-room-dock-field">
-        <label className="lm-room-dock-field-label" htmlFor={`furn-name-${item.id}`}>
-          {t("roomMap:inspector.furnitureNameLabel")}
-        </label>
-        <input
-          id={`furn-name-${item.id}`}
-          type="text"
-          className="lm-room-dock-input"
-          value={labelDraft}
-          disabled={locked}
-          onChange={(e) => {
-            setLabelDirty(true);
-            setLabelDraft(e.target.value);
-          }}
-          onBlur={commitLabel}
-          onKeyDown={(e) => {
-            e.stopPropagation();
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commitLabel();
-            } else if (e.key === "Escape") {
-              setLabelDraft(item.label ?? typeName);
-              setLabelDirty(false);
-            }
-          }}
-        />
-      </div>
-
-      <div className="lm-room-dock-field">
-        <label className="lm-room-dock-field-label" htmlFor={`furn-type-${item.id}`}>
-          {t("roomMap:inspector.furnitureTypeLabel")}
-        </label>
-        <select
-          id={`furn-type-${item.id}`}
-          className="lm-room-dock-select"
-          value={type}
-          disabled={locked}
-          onChange={(e) => onUpdate(retypeFurniture(item, e.target.value as FurnitureType))}
-        >
-          {Object.values(FURNITURE_TYPES).map((tp) => (
-            <option key={tp} value={tp}>
-              {t(`roomMap:furniture.type.${tp}`)}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {modelChoices && spec.variants.length > 0 && (
-        <div className={styles.group}>
-          <span className={styles.labelRow}>
-            <span className={`lm-room-dock-field-label ${styles.label}`}>{t("roomMap:inspector.modelLabel")}</span>
-            <InfoTip label={t("roomMap:inspector.modelLabel")}>{t("roomMap:inspector.modelInfo")}</InfoTip>
-          </span>
-          <Segmented
-            className={styles.row}
-            ariaLabel={t("roomMap:inspector.modelLabel")}
-            value={variant ?? AUTO}
+    <InspectorRows
+      first={
+        <>
+          <Mark>
+            <span style={{ display: "block", width: 24, height: 20 }}>
+              <FurnitureGlyph model={drawn} colours={furnitureColours(item, drawn)} width={item.width} depth={item.height} fit />
+            </span>
+          </Mark>
+          <NameField
+            first
+            value={item.label}
+            fallback={typeName}
+            label={t("roomMap:inspector.furnitureNameLabel")}
             disabled={locked}
-            options={modelOptions}
-            onChange={(next) => onUpdate({ variant: next === AUTO ? undefined : (next as FurnitureVariant) })}
+            onCommit={onRename}
           />
-        </div>
-      )}
-
-      {modelChoices && (
-      <div className={styles.group}>
-        <span className={`lm-room-dock-field-label ${styles.label}`}>{t("roomMap:inspector.toneLabel")}</span>
-        <Segmented
-          className={styles.row}
-          ariaLabel={t("roomMap:inspector.toneLabel")}
-          value={tone ?? DEFAULT_TONE}
-          disabled={locked}
-          options={toneOptions}
-          onChange={(next) => onUpdate({ tone: next === DEFAULT_TONE ? undefined : (next as FurnitureTone) })}
-        />
-      </div>
-      )}
-
-      <FieldPair>
-        <DecimalField
-          label={t("roomMap:inspector.xLabel")}
-          prefix="X"
-          value={item.x}
-          unit="m"
-          disabled={locked}
-          onCommit={(x) => onUpdate({ x })}
-        />
-        <DecimalField
-          label={t("roomMap:inspector.yLabel")}
-          prefix="Y"
-          value={item.y}
-          unit="m"
-          disabled={locked}
-          onCommit={(y) => onUpdate({ y })}
-        />
-      </FieldPair>
-      <FieldPair>
-        <DecimalField
-          label={t("roomMap:inspector.widthLabel")}
-          prefix={<GlyphWidth />}
-          value={item.width}
-          min={MIN_SIDE_METRES}
-          unit="m"
-          disabled={locked}
-          onCommit={(width) => onUpdate({ width })}
-        />
-        <DecimalField
-          label={t("roomMap:inspector.depthLabel")}
-          prefix={<GlyphDepth />}
-          value={item.height}
-          min={MIN_SIDE_METRES}
-          unit="m"
-          disabled={locked}
-          onCommit={(height) => onUpdate({ height })}
-        />
-      </FieldPair>
-      <FieldPair>
-        {modelChoices && type !== "rug" && model ? (
-          <DecimalField
-            optional
-            label={t("roomMap:inspector.heightLabel")}
-            prefix={<GlyphHeight />}
-            value={resolveFurnitureTop(item)}
-            placeholder={modelTop(model).toFixed(2)}
-            min={MIN_SIDE_METRES}
-            max={MAX_TOP_METRES}
-            unit="m"
+          <DockPicker
+            label={t("roomMap:inspector.furnitureTypeLabel")}
+            value={type}
+            width={104}
+            buttonMark={false}
             disabled={locked}
-            describedBy={`furn-top-hint-${item.id}`}
-            onCommit={(topMeters) => onUpdate({ topMeters })}
+            options={TYPES.map((tp) => ({ value: tp, label: t(`roomMap:furniture.type.${tp}`), mark: <TypeMark type={tp} /> }))}
+            onChange={(next) => onUpdate(retypeFurniture(item, next))}
           />
-        ) : (
-          <span />
-        )}
-        <DecimalField
-          label={t("roomMap:inspector.furnitureRotationLabel")}
-          prefix={<GlyphRotation />}
-          value={item.rotation ?? 0}
-          decimals={0}
-          step={1}
-          min={0}
-          max={359}
-          normalize={wrapDegrees}
-          unit="°"
-          disabled={locked}
-          onCommit={(rotation) => onUpdate({ rotation })}
-        />
-      </FieldPair>
-      {modelChoices && type !== "rug" && model && (
-        <FieldHint id={`furn-top-hint-${item.id}`}>
-          {t("roomMap:inspector.topHint", { metres: modelTop(model).toFixed(2) })}
-        </FieldHint>
-      )}
-
-      <button type="button" className="lm-room-dock-inspect-action" onClick={onToggleLock} aria-pressed={locked}>
-        {locked ? t("roomMap:objectPanel.unlock") : t("roomMap:objectPanel.lock")}
-      </button>
-    </>
+          {modelChoices && spec.variants.length > 0 && (
+            <>
+              <DockPicker
+                label={t("roomMap:inspector.modelLabel")}
+                value={variant ?? AUTO}
+                width={168}
+                disabled={locked}
+                options={[
+                  { value: AUTO, label: t("roomMap:inspector.modelAuto", { model: autoName }) },
+                  ...spec.variants.map((v) => ({ value: v, label: t(`roomMap:furniture.variant.${v}`) })),
+                ]}
+                onChange={(next) => onUpdate({ variant: next === AUTO ? undefined : (next as FurnitureVariant) })}
+              />
+              <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.modelLabel") })}>{t("roomMap:inspector.modelInfo")}</InfoTip>
+            </>
+          )}
+          {modelChoices && (
+            <TonePicker value={resolveFurnitureTone(item)} tones={spec.tones} disabled={locked} onChange={(tone) => onUpdate({ tone })} />
+          )}
+          <Actions locked={locked} onToggleLock={onToggleLock} onDuplicate={onDuplicate} onDelete={onDelete} onClose={onClose} />
+        </>
+      }
+      second={
+        <>
+          <FieldRow>
+            <DecimalField label={t("roomMap:inspector.xLabel")} prefix="X" value={item.x} unit="m" disabled={locked} onCommit={(x) => onUpdate({ x })} />
+            <DecimalField label={t("roomMap:inspector.yLabel")} prefix="Y" value={item.y} unit="m" disabled={locked} onCommit={(y) => onUpdate({ y })} />
+            <DecimalField
+              label={t("roomMap:inspector.widthLabel")}
+              prefix={<GlyphWidth />}
+              value={item.width}
+              min={MIN_SIDE_METRES}
+              unit="m"
+              disabled={locked}
+              onCommit={(width) => onUpdate({ width })}
+            />
+            <DecimalField
+              label={t("roomMap:inspector.depthLabel")}
+              prefix={<GlyphDepth />}
+              value={item.height}
+              min={MIN_SIDE_METRES}
+              unit="m"
+              disabled={locked}
+              onCommit={(height) => onUpdate({ height })}
+            />
+            {showHeight && model ? (
+              <DecimalField
+                optional
+                label={t("roomMap:inspector.heightLabel")}
+                prefix={<GlyphHeight />}
+                value={resolveFurnitureTop(item)}
+                placeholder={modelTop(model).toFixed(2)}
+                min={MIN_SIDE_METRES}
+                max={MAX_TOP_METRES}
+                unit="m"
+                disabled={locked}
+                onCommit={(topMeters) => onUpdate({ topMeters })}
+              />
+            ) : (
+              <span />
+            )}
+            <DecimalField
+              label={t("roomMap:inspector.furnitureRotationLabel")}
+              prefix={<GlyphRotation />}
+              value={item.rotation ?? 0}
+              decimals={0}
+              step={1}
+              min={0}
+              max={359}
+              normalize={wrapDegrees}
+              unit="°"
+              disabled={locked}
+              onCommit={(rotation) => onUpdate({ rotation })}
+            />
+          </FieldRow>
+          {showHeight && model && (
+            <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.heightLabel") })}>{t("roomMap:inspector.topHint", { metres: modelTop(model).toFixed(2) })}</InfoTip>
+          )}
+        </>
+      }
+    />
   );
 }

@@ -1,0 +1,31 @@
+@layer components {
+  .stage {
+    position: relative;
+    height: 100%;
+  }
+
+  /* What went wrong, just above the dock and over the plan, never pushing it. */
+  .alerts {
+    position: absolute;
+    bottom: 112px;
+    left: 50%;
+    z-index: 41;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: min(760px, calc(100% - 24px));
+    padding: 8px 12px;
+    border: 1px solid var(--lm-line-2);
+    border-radius: 10px;
+    background: var(--lm-panel-2);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
+    transform: translateX(-50%);
+  }
+
+  @media (forced-colors: active) {
+    .alerts {
+      border-color: CanvasText;
+      background: Canvas;
+    }
+  }
+}

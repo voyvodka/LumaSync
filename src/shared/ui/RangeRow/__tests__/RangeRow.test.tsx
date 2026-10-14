@@ -12,7 +12,6 @@ function ThrottledRow({ onCommit }: { onCommit: (value: number) => void }) {
   const throttle = useThrottledCommit(onCommit, 50);
   return (
     <RangeRow
-      variant="stage"
       label="Brightness"
       valueLabel={`${value}%`}
       min={0}
@@ -66,7 +65,6 @@ describe("RangeRow", () => {
   it("draws the fill from the value's place in the range, not the raw number", () => {
     render(
       <RangeRow
-        variant="stage"
         label="Saturation"
         valueLabel="125%"
         min={50}
@@ -78,20 +76,12 @@ describe("RangeRow", () => {
     );
     expect(screen.getByRole("slider").style.getPropertyValue("--fill")).toBe("50%");
   });
-
-  it("ties the dock label to its slider", () => {
-    render(
-      <RangeRow variant="dock" label="Opacity" valueLabel="40%" min={0} max={100} step={1} value={40} onChange={() => {}} />,
-    );
-    expect(screen.getByLabelText("Opacity")).toBe(screen.getByRole("slider"));
-  });
 });
 
 describe("RangeRow — a value set from outside", () => {
   function Row({ value, label = "Width" }: { value: number; label?: string }) {
     return (
       <RangeRow
-        variant="stage"
         label={label}
         valueLabel={`${value}%`}
         min={0}
@@ -138,7 +128,7 @@ describe("RangeRow — a value set from outside", () => {
     function Dragged() {
       const [value, setValue] = useState(50);
       return (
-        <RangeRow variant="stage" label="Speed" valueLabel={`${value}%`} min={0} max={100} step={1} value={value} onChange={setValue} testId="row" />
+        <RangeRow label="Speed" valueLabel={`${value}%`} min={0} max={100} step={1} value={value} onChange={setValue} testId="row" />
       );
     }
     render(<Dragged />);
@@ -156,7 +146,6 @@ describe("RangeRow — a drag the value given back has not caught up with", () =
   function Echoed({ echo, onChange }: { echo: number; onChange: (v: number) => void }) {
     return (
       <RangeRow
-        variant="stage"
         label="Saturation"
         valueLabel={(v) => `${Math.round(v)}%`}
         min={0}
@@ -208,7 +197,6 @@ describe("RangeRow — a neutral value", () => {
   function Neutral({ value, onChange = () => {} }: { value: number; onChange?: (v: number) => void }) {
     return (
       <RangeRow
-        variant="stage"
         label="Saturation"
         valueLabel={(v) => `${Math.round(v)}%`}
         min={50}
@@ -265,7 +253,6 @@ describe("RangeRow — the hold's edges", () => {
     function Lagging({ value }: { value: number }) {
       return (
         <RangeRow
-          variant="stage"
           label="Saturation"
           valueLabel={(v) => `${Math.round(v)}%`}
           min={50}
@@ -298,28 +285,12 @@ describe("RangeRow — the hold's edges", () => {
     vi.restoreAllMocks();
   });
 
-  it("holds nothing in the dock, whose one row serves every selected object", () => {
-    function Dock({ value }: { value: number }) {
-      return (
-        <RangeRow variant="dock" label="Height" valueLabel={(v) => `${v}`} min={0} max={100} step={1} value={value} onChange={() => {}} testId="row" />
-      );
-    }
-    const view = render(<Dock value={20} />);
-    const row = screen.getByTestId("row");
-    fireEvent.pointerDown(row);
-    fireEvent.change(row, { target: { value: "70" } });
-    fireEvent.pointerUp(row);
-    // Another object is selected: its value shows at once.
-    view.rerender(<Dock value={45} />);
-    expect(row).toHaveValue("45");
-  });
-
   it("lets go of the user's value when the row becomes another setting", async () => {
     let now = 1000;
     vi.spyOn(performance, "now").mockImplementation(() => now);
     function Swapped({ label, value }: { label: string; value: number }) {
       return (
-        <RangeRow variant="stage" label={label} valueLabel={(v) => `${Math.round(v)}%`} min={0} max={100} step={1} value={value} onChange={() => {}} testId="row" />
+        <RangeRow label={label} valueLabel={(v) => `${Math.round(v)}%`} min={0} max={100} step={1} value={value} onChange={() => {}} testId="row" />
       );
     }
     const view = render(<Swapped label="Width" value={50} />);

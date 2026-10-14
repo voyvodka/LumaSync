@@ -88,7 +88,6 @@ function renderZones(config: Partial<RoomMapConfig> = {}) {
       adopt,
       activeHueZoneId: null,
       selectHueZone: vi.fn(),
-      setObjectPanelOpen: vi.fn(),
       hueAreaId: SHELL.lastHueAreaId,
     }),
   );
@@ -109,7 +108,6 @@ function renderZonesWithStore(stored: Partial<RoomMapConfig>) {
       adopt: store.adopt,
       activeHueZoneId: store.activeHueZoneId,
       selectHueZone: store.selectHueZone,
-      setObjectPanelOpen: vi.fn(),
       hueAreaId: SHELL.lastHueAreaId,
     });
     return { store, zones };

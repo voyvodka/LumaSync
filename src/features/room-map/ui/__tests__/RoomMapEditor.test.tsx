@@ -1,14 +1,5 @@
 /**
- * RoomMapEditor — regression tests
- *
- * Covers the mousemove handler stability fix from commit fe351c2:
- * "fix(ui): prevent event listener thrashing in RoomMapEditor mousemove handler"
- *
- * The perf fix moved mousemove + mouseleave handlers into a stable useEffect
- * (deps: [canvasContainerRef]) inside the MouseCoordinateDisplay sub-component,
- * replacing the previous pattern that added/removed the listener on every render.
- *
- * Previously existing stub tests are preserved at the bottom.
+ * RoomMapEditor — the plan face: keys, the dock stand-in, room resizing and what an edit saves.
  */
 import type React from "react";
 import { render, act, fireEvent } from "@testing-library/react";
@@ -69,6 +60,7 @@ vi.mock("../../state/useRoomMapState", async () => {
       // Selection is real state, as it is in the reducer, so a click on the TV
       // stub re-renders the editor with the TV selected.
       const [selectedId, select] = useState<string | null>(null);
+      const [activeHueZoneId, selectHueZone] = useState<string | null>(null);
       return {
         config: {
           dimensions: { widthMeters: 5, depthMeters: 4 },
@@ -85,7 +77,7 @@ vi.mock("../../state/useRoomMapState", async () => {
           ...persistState.configOverride,
         },
         selectedId,
-        activeHueZoneId: null,
+        activeHueZoneId,
         apply: persistState.apply,
         adopt: vi.fn(),
         replace: vi.fn(),
@@ -93,7 +85,11 @@ vi.mock("../../state/useRoomMapState", async () => {
         undo: persistState.undo,
         redo: vi.fn(),
         select,
-        selectHueZone: vi.fn(),
+        selectHueZone,
+        clearSelection: () => {
+          select(null);
+          selectHueZone(null);
+        },
         // canUndo: true bypasses the isEmpty && !canUndo early-return to TemplateSelector
         canUndo: true,
         canRedo: false,
@@ -109,10 +105,12 @@ vi.mock("../RoomMapCanvas", () => ({
     children,
     panOffset,
     panMode,
+    onCanvasClick,
   }: {
     children?: React.ReactNode;
     panOffset: { x: number; y: number };
     panMode?: boolean;
+    onCanvasClick: () => void;
   }) => (
     <div
       data-testid="room-map-canvas"
@@ -121,37 +119,10 @@ vi.mock("../RoomMapCanvas", () => ({
       data-pan-y={panOffset.y}
       data-pan-mode={String(Boolean(panMode))}
     >
+      <button type="button" data-testid="empty-ground" onClick={onCanvasClick} />
       {children}
     </div>
   ),
-}));
-
-vi.mock("../RoomMapToolbar", () => ({
-  RoomMapToolbar: ({ onToggleSettings }: { onToggleSettings: () => void }) => (
-    <div data-testid="room-map-toolbar">
-      <button type="button" data-testid="toggle-settings" onClick={onToggleSettings} />
-    </div>
-  ),
-}));
-
-vi.mock("../RoomMapSettingsPopover", () => ({
-  RoomMapSettingsPopover: ({
-    dimensions,
-    onDimensionsChange,
-  }: {
-    dimensions: { widthMeters: number; depthMeters: number; heightMeters: number };
-    onDimensionsChange: (d: { widthMeters: number; depthMeters: number; heightMeters: number }) => void;
-  }) => (
-    <button
-      type="button"
-      data-testid="grow-room"
-      onClick={() => onDimensionsChange({ ...dimensions, widthMeters: 7, depthMeters: 6 })}
-    />
-  ),
-}));
-
-vi.mock("../RoomMapEmptyHint", () => ({
-  RoomMapEmptyHint: () => null,
 }));
 
 vi.mock("../objects/FurnitureObject", () => ({
@@ -172,28 +143,45 @@ vi.mock("../HueChannelOverlay", () => ({
   HueChannelOverlay: () => null,
 }));
 
-vi.mock("../RoomDockPanel", () => ({
-  // A real field inside the editor root, standing in for the dock inspector's, and a stand-in for
-  // the inspector's width field on the first piece.
-  RoomDockPanel: ({
+vi.mock("../dock/RoomDock", () => ({
+  // A real field and a control inside the editor root, standing in for the dock's, and stand-ins
+  // for the inspector's width field on the first piece and the room panel's size fields.
+  RoomDock: ({
     config,
-    onUpdateFurniture,
+    actions,
+    room,
+    selectedId,
+    activeHueZoneId,
+    onSelectZone,
   }: {
+    selectedId: string | null;
+    activeHueZoneId: string | null;
+    onSelectZone: (zoneId: string) => void;
     config: { furniture: Array<{ id: string }> };
-    onUpdateFurniture?: (id: string, patch: Record<string, unknown>) => void;
+    actions: { onUpdateFurniture: (id: string, patch: Record<string, unknown>) => void };
+    room: {
+      dimensions: { widthMeters: number; depthMeters: number; heightMeters: number };
+      onDimensionsChange: (d: { widthMeters: number; depthMeters: number; heightMeters: number }) => void;
+    };
   }) => (
-    <div data-testid="room-dock-panel">
-      <button type="button" role="tab" data-testid="dock-tab" />
-      <input data-testid="dock-field" type="number" defaultValue={60} />
+    <section data-testid="room-dock" data-room-dock="" data-selected={selectedId ?? ""} data-zone={activeHueZoneId ?? ""}>
+      <button type="button" data-testid="dock-tab" />
+      <button type="button" data-testid="pick-zone" onClick={() => onSelectZone("zone-1")} />
+      <input data-testid="dock-field" type="text" defaultValue={60} />
       <button
         type="button"
         data-testid="widen-first"
         onClick={() => {
           const first = config.furniture[0];
-          if (first) onUpdateFurniture?.(first.id, { width: 3 });
+          if (first) actions.onUpdateFurniture(first.id, { width: 3 });
         }}
       />
-    </div>
+      <button
+        type="button"
+        data-testid="grow-room"
+        onClick={() => room.onDimensionsChange({ ...room.dimensions, widthMeters: 7, depthMeters: 6 })}
+      />
+    </section>
   ),
 }));
 
@@ -211,10 +199,6 @@ vi.mock("../OriginMarker", () => ({
 
 vi.mock("../ContextMenu", () => ({
   ContextMenu: () => null,
-}));
-
-vi.mock("../LeftToolbar", () => ({
-  LeftToolbar: () => <div data-testid="left-toolbar" />,
 }));
 
 vi.mock("../TemplateSelector", () => ({
@@ -262,90 +246,9 @@ describe("RoomMapEditor — canvas container observation", () => {
       rerender(<RoomMapEditor />);
     });
 
-    // The container div is the one MouseCoordinateDisplay measures against.
-    const canvasContainer = container.querySelector(".relative.flex-1");
+    const canvasContainer = container.querySelector('[data-testid="room-map-stage"]');
     expect(canvasContainer).not.toBeNull();
     expect(StubResizeObserver.observed).toContain(canvasContainer);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// MouseCoordinateDisplay event-listener stability tests
-// ---------------------------------------------------------------------------
-
-describe("RoomMapEditor — MouseCoordinateDisplay event-listener stability (F8)", () => {
-  let addEventListenerSpy: ReturnType<typeof vi.spyOn>;
-  let removeEventListenerSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    // Spy on HTMLDivElement prototype so we capture calls on the canvas
-    // container div (the one with ref={canvasContainerRef}) that
-    // MouseCoordinateDisplay's useEffect attaches its handlers to.
-    addEventListenerSpy = vi.spyOn(HTMLDivElement.prototype, "addEventListener");
-    removeEventListenerSpy = vi.spyOn(HTMLDivElement.prototype, "removeEventListener");
-  });
-
-  afterEach(() => {
-    addEventListenerSpy.mockRestore();
-    removeEventListenerSpy.mockRestore();
-  });
-
-  it("stable handler invariant: mousemove listener count does not grow across re-renders", async () => {
-    const { rerender } = render(<RoomMapEditor />);
-
-    const countAfterMount = addEventListenerSpy.mock.calls.filter(
-      (call: unknown[]) => call[0] === "mousemove"
-    ).length;
-
-    // Three re-renders with prop changes. canvasContainerRef is stable across
-    // re-renders (same underlying DOM node), so the useEffect in
-    // MouseCoordinateDisplay must not fire again and must not register additional
-    // listeners. If thrashing is re-introduced, each rerender would bump the count.
-    await act(async () => {
-      rerender(<RoomMapEditor hueReachable={true} />);
-      rerender(<RoomMapEditor hueReachable={false} />);
-      rerender(<RoomMapEditor hueReachable={true} />);
-    });
-
-    const countAfterRerenders = addEventListenerSpy.mock.calls.filter(
-      (call: unknown[]) => call[0] === "mousemove"
-    ).length;
-
-    expect(countAfterRerenders).toBe(countAfterMount);
-  });
-
-  it("cleanup on unmount: mousemove listener removed exactly once", async () => {
-    const { unmount } = render(<RoomMapEditor />);
-
-    const removalsBeforeUnmount = removeEventListenerSpy.mock.calls.filter(
-      (call: unknown[]) => call[0] === "mousemove"
-    ).length;
-
-    act(() => { unmount(); });
-
-    const removalsAfterUnmount = removeEventListenerSpy.mock.calls.filter(
-      (call: unknown[]) => call[0] === "mousemove"
-    ).length;
-
-    // One removal = clean teardown. Zero = leaked. >1 = thrashing re-introduced.
-    expect(removalsAfterUnmount - removalsBeforeUnmount).toBe(1);
-  });
-
-  it("mouseleave listener added and removed symmetrically with mousemove", async () => {
-    const { unmount } = render(<RoomMapEditor />);
-
-    const addedCount = addEventListenerSpy.mock.calls.filter(
-      (call: unknown[]) => call[0] === "mouseleave",
-    ).length;
-
-    act(() => { unmount(); });
-
-    const removedCount = removeEventListenerSpy.mock.calls.filter(
-      (call: unknown[]) => call[0] === "mouseleave",
-    ).length;
-
-    expect(addedCount).toBeGreaterThanOrEqual(1);
-    expect(removedCount).toBe(addedCount);
   });
 });
 
@@ -554,7 +457,7 @@ describe("RoomMapEditor — bare keys stay on the canvas", () => {
     return view;
   }
 
-  it("does not pan the map for an arrow on a dock tab", async () => {
+  it("does not pan the map for an arrow on a dock control", async () => {
     const { getByTestId } = await renderEditor();
     const before = getByTestId("room-map-canvas").dataset.panX;
 
@@ -565,7 +468,7 @@ describe("RoomMapEditor — bare keys stay on the canvas", () => {
     expect(getByTestId("room-map-canvas").dataset.panX).toBe(before);
   });
 
-  it("does not delete the selected object for Delete on a dock tab", async () => {
+  it("does not delete the selected object for Delete on a dock control", async () => {
     const { getByTestId } = await renderEditor();
     act(() => {
       getByTestId("select-tv").click();
@@ -591,7 +494,7 @@ describe("RoomMapEditor — bare keys stay on the canvas", () => {
     expect(persistState.apply).toHaveBeenCalledWith({ tvAnchor: undefined });
   });
 
-  it("keeps Cmd+Z editor-wide, a dock tab included", async () => {
+  it("keeps Cmd+Z editor-wide, the dock included", async () => {
     const { getByTestId } = await renderEditor();
 
     act(() => {
@@ -640,9 +543,6 @@ describe("RoomMapEditor — resizing the room", () => {
     const { getByTestId } = render(<RoomMapEditor />);
 
     act(() => {
-      getByTestId("toggle-settings").click();
-    });
-    act(() => {
       getByTestId("grow-room").click();
     });
 
@@ -683,5 +583,56 @@ describe("RoomMapEditor — an edit keeps what a newer build stored", () => {
       { furniture: [{ ...stored, width: 3 }] },
       { gesture: "furniture:f:width" },
     );
+  });
+});
+
+describe("RoomMapEditor — letting go of a selection", () => {
+  let realResizeObserver: typeof globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    realResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = StubResizeObserver as unknown as typeof globalThis.ResizeObserver;
+  });
+
+  afterEach(() => {
+    globalThis.ResizeObserver = realResizeObserver;
+  });
+
+  function renderWithZoneAndTv() {
+    const view = render(<RoomMapEditor />);
+    act(() => view.getByTestId("pick-zone").click());
+    act(() => view.getByTestId("select-tv").click());
+    const dock = view.getByTestId("room-dock");
+    expect(dock.dataset.selected).toBe("tv");
+    expect(dock.dataset.zone).toBe("zone-1");
+    return { ...view, dock, root: view.container.querySelector(".lm-room-editor") as HTMLElement };
+  }
+
+  it("steps back one at a time on Escape: the object, then the zone it was picked over", () => {
+    const { root, dock } = renderWithZoneAndTv();
+    act(() => {
+      fireEvent.keyDown(root, { key: "Escape" });
+    });
+    expect(dock.dataset.selected).toBe("");
+    expect(dock.dataset.zone).toBe("zone-1");
+    act(() => {
+      fireEvent.keyDown(root, { key: "Escape" });
+    });
+    expect(dock.dataset.zone).toBe("");
+  });
+
+  // `select(null)` alone left the zone selected, so the palette never came back.
+  it("lets go of both on a click on empty ground", () => {
+    const { getByTestId, dock } = renderWithZoneAndTv();
+    act(() => getByTestId("empty-ground").click());
+    expect(dock.dataset.selected).toBe("");
+    expect(dock.dataset.zone).toBe("");
+  });
+
+  it("opens no plan menu for a right-click in the dock", () => {
+    const { getByTestId } = renderWithZoneAndTv();
+    // Not prevented: the plan's menu is the canvas's, and a popover's right-click bubbles here too.
+    expect(fireEvent.contextMenu(getByTestId("dock-tab"))).toBe(true);
+    expect(fireEvent.contextMenu(getByTestId("select-tv"))).toBe(false);
   });
 });

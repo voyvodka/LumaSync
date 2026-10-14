@@ -157,7 +157,6 @@ function CorrectionControls({
   const { t } = useTranslation();
   const gamma = (key: "gammaR" | "gammaG" | "gammaB", label: string) => (
     <RangeRow
-      variant="stage"
       label={label}
       min={GAMMA_RANGE.min}
       max={GAMMA_RANGE.max}
@@ -174,7 +173,6 @@ function CorrectionControls({
       {gamma("gammaG", t("lights:led.colorCorrection.gammaG"))}
       {gamma("gammaB", t("lights:led.colorCorrection.gammaB"))}
       <RangeRow
-        variant="stage"
         label={t("lights:led.colorCorrection.kelvin")}
         ariaLabel={`${t("lights:led.colorCorrection.kelvin")} — ${t("lights:led.colorCorrection.kelvinHint")}`}
         min={KELVIN_RANGE_K.min}
@@ -188,7 +186,6 @@ function CorrectionControls({
         testId="strip-color-kelvin"
       />
       <RangeRow
-        variant="stage"
         label={t("lights:led.colorCorrection.saturation")}
         min={SATURATION_RANGE.min}
         max={SATURATION_RANGE.max}

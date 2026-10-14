@@ -14,7 +14,7 @@ import { RoomMapSurface } from "../RoomMapSurface";
 
 const RoomMapEditor = () => <RoomMapSurface view3dAvailable={false} />;
 
-const renders = vi.hoisted(() => ({ furniture: 0, tv: 0, usb: 0, hue: 0, toolbar: 0 }));
+const renders = vi.hoisted(() => ({ furniture: 0, tv: 0, usb: 0, hue: 0, dock: 0 }));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -70,9 +70,9 @@ vi.mock("../HueChannelOverlay", async () => {
   return { HueChannelOverlay: memo(() => { renders.hue += 1; return null; }) };
 });
 // Not memoised: it re-renders with the editor, so it counts editor renders.
-vi.mock("../RoomMapToolbar", () => ({
-  RoomMapToolbar: (_props: Record<string, unknown>): React.ReactElement | null => {
-    renders.toolbar += 1;
+vi.mock("../dock/RoomDock", () => ({
+  RoomDock: (_props: Record<string, unknown>): React.ReactElement | null => {
+    renders.dock += 1;
     return null;
   },
 }));
@@ -126,7 +126,7 @@ describe("RoomMapEditor — panning", () => {
     fireEvent.pointerUp(canvas, { clientX: 350, clientY: 260, pointerId: 1 });
 
     // The commit renders the editor once and keeps the layer where it was left.
-    expect(renders.toolbar).toBe(before.toolbar + 1);
+    expect(renders.dock).toBe(before.dock + 1);
     expect(layer.style.transform).toBe("translate(150px, 60px) scale(1)");
     expect(renders.furniture).toBe(before.furniture);
     expect(renders.tv).toBe(before.tv);

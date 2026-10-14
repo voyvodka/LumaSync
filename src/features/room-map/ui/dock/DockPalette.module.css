@@ -1,0 +1,69 @@
+@layer components {
+  .palette {
+    display: grid;
+    grid-template-rows: 32px 32px;
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  /* A piece as the plan draws it and its name: no frame at rest, a tint on hover. */
+  .tile {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    font: 500 11.5px/1 var(--lm-sans);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .tile:hover:not(.unavailable) {
+    color: var(--lm-ink);
+    background: rgb(255 255 255 / 4%);
+  }
+  .tile:active:not(.unavailable) { color: var(--lm-amber); }
+  .tile:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+  .unavailable {
+    color: var(--lm-ink-faint);
+    cursor: not-allowed;
+  }
+
+  .glyph {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 26px;
+    height: 22px;
+    opacity: 0.8;
+    transition: opacity var(--lm-dur-quick);
+  }
+  .glyph svg { max-width: 26px; max-height: 22px; }
+  .tile:hover:not(.unavailable) .glyph { opacity: 1; }
+  .unavailable .glyph { opacity: 0.45; }
+
+  .name { min-width: 0; }
+
+  :global(:root[data-reduced-motion]) .tile,
+  :global(:root[data-reduced-motion]) .glyph { transition: none; }
+
+  @media (forced-colors: active) {
+    .tile:focus-visible { outline: 2px solid Highlight; }
+    .unavailable { color: GrayText; }
+  }
+}

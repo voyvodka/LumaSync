@@ -10,7 +10,7 @@ vi.mock("react-i18next", () => ({
 
 beforeEach(cleanup);
 
-function renderControl(zoom: number) {
+function renderControl(zoom: number, anchor?: { x: number; y: number }) {
   const onZoomChange = vi.fn();
   const onPanChange = vi.fn();
   const onFitToView = vi.fn();
@@ -23,6 +23,7 @@ function renderControl(zoom: number) {
       onPanChange={onPanChange}
       onFitToView={onFitToView}
       isMac={false}
+      anchor={anchor}
     />,
   );
   return {
@@ -50,6 +51,13 @@ describe("ZoomControl", () => {
       x: 400 - 400 * 1.1,
       y: 300 - 300 * 1.1,
     });
+  });
+
+  // The dock covers the canvas's foot, so the middle of what is left is higher than its centre.
+  it("re-anchors on the point it is given instead, the middle of what the chrome leaves free", () => {
+    const { zoomIn, onPanChange } = renderControl(1, { x: 400, y: 228 });
+    fireEvent.click(zoomIn);
+    expect(onPanChange).toHaveBeenCalledWith({ x: 400 - 400 * 1.1, y: 228 - 228 * 1.1 });
   });
 
   it("disables the buttons at the same bounds the wheel enforces", () => {

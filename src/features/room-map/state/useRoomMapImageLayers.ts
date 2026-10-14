@@ -2,7 +2,6 @@ import { useCallback, useState } from "react";
 import {
   ROOM_MAP_BACKGROUND_ERROR,
   type RoomMapBackgroundErrorCode,
-  type RoomMapConfig,
 } from "@/shared/contracts/roomMap";
 import { imageLayerObjectId } from "../model/objectId";
 import { copyBackgroundImage } from "../roomMapApi";
@@ -12,7 +11,6 @@ import type { RoomMapPatch } from "./roomMapReducer";
 import type { ApplyOptions } from "./useRoomMapState";
 
 export interface UseRoomMapImageLayersArgs {
-  config: RoomMapConfig;
   apply: (patch: RoomMapPatch, options?: ApplyOptions) => void;
   select: (objectId: string | null) => void;
 }
@@ -23,7 +21,6 @@ export interface UseRoomMapImageLayersReturn {
   imageError: string | null;
   /** The coded reason for `imageError`, when the backend gave one the UI words differently. */
   imageErrorCode: RoomMapBackgroundErrorCode | null;
-  handleRenameImage: (imageId: string, label: string) => void;
 }
 
 /** Shared by every continuous control over one image-layer field — the inspector's slider and
@@ -32,9 +29,8 @@ export function imageLayerGestureKey(imageId: string, field: string): string {
   return `image:${imageId}:${field}`;
 }
 
-/** Background image layer import and rename; the inspector patches the rest. */
+/** Background image layer import; the inspector patches the rest. */
 export function useRoomMapImageLayers({
-  config,
   apply,
   select,
 }: UseRoomMapImageLayersArgs): UseRoomMapImageLayersReturn {
@@ -64,19 +60,9 @@ export function useRoomMapImageLayers({
     }
   }, [apply, select]);
 
-  const handleRenameImage = useCallback(
-    (imageId: string, label: string) => {
-      apply({
-        imageLayers: config.imageLayers.map((l) => (l.id === imageId ? { ...l, label } : l)),
-      });
-    },
-    [config.imageLayers, apply],
-  );
-
   return {
     handleAddImage,
     imageError,
     imageErrorCode,
-    handleRenameImage,
   };
 }

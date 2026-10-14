@@ -56,7 +56,7 @@ https://keepachangelog.com/en/1.1.0/
   box, and a model or tone this version does not know is ignored but kept.
 - Room map: the TV has an optional mount height. Left empty it follows 40% of the room height, so
   changing the ceiling moves it too. The TV's footprint field is now labelled Depth, since it never
-  meant the screen's height. A small "Room-aware" chip in the room map toolbar and under the Hue
+  meant the screen's height. A small "Room-aware" chip in the room map's corner and under the Hue
   output on the Lights page shows when Hue lights are sampled by where they stand around the TV,
   and opens a short explanation.
 - USB strips: a color order setting for strips whose colors come out swapped, such as red
@@ -335,7 +335,7 @@ https://keepachangelog.com/en/1.1.0/
   the whole editor each time a snap guide is re-checked. Undoing a Hue zone change the bridge
   refused no longer brings back the refused state.
 - Room map: with more than one Hue entertainment area, the object list, the inspector, arrow
-  nudges and "Move to" only touch the area on screen. Before, a light with the same number in
+  nudges and moving a light between zones only touch the area on screen. Before, a light with the same number in
   another area could be listed, shown or moved with it. Dragging a Hue light that
   belongs to a zone now starts from where its dot is drawn instead of jumping.
 - Room map: opened for the first time with a Hue bridge paired, it offers the templates and keeps
@@ -351,6 +351,18 @@ https://keepachangelog.com/en/1.1.0/
   plan gets that height back. A number applies when you leave it or press Enter, takes a comma or a
   point, and steps with the arrow keys (ten steps with Shift); one out of range, like Esc, puts the
   old value back.
+- Room map: the plan fills the editor. The toolbar, the chips down the left, the side panel and the
+  coordinate readout are gone; one panel floats over the plan's foot at a height that never
+  changes. With nothing selected it shows what you can add — each piece drawn as the plan draws it,
+  then the TV, a strip, an image and a Hue zone, with how your Hue area stands beside them — and
+  with something selected, its name, its choices (type, model, tone, screen, zone) and its numbers
+  in two rows, with lock, duplicate, delete and close at the end. Two buttons at its side open the
+  list of everything in the room, the Hue lights under their zones, and the room's own settings.
+  Undo, redo, zoom and the keys sit in a small capsule in the top corner. A light joins a zone from
+  its zone picker, or from the light buttons in the zone's panel, instead of being dragged; a zone's
+  colour is one of six. Esc steps back from a light to its zone and then to what you can add, and a
+  click on empty floor lets go of everything. Clicking a piece no longer brings up a rename box;
+  its name is edited in place.
 - Room map: a background image larger than 20 MB is refused with a message that says so, rather
   than copied into the app's data folder. Copies of background images that no room map layer uses
   any more are deleted the next time the app starts.
@@ -594,11 +606,10 @@ https://keepachangelog.com/en/1.1.0/
   it, instead of from its corner, which belongs to the neighbouring edge.
 - An effect on Hue lights alone, with no LED layout saved, spreads across the lights you have; a
   hidden one-LED strip in the screen's corner no longer took part in where it ran.
-- Room map: keys stay with what has focus. An arrow on a panel tab or in a menu no longer also
+- Room map: keys stay with what has focus. An arrow on a panel button or in a menu no longer also
   moves the selected object, Delete there no longer removes it, and Space presses a focused button
-  instead of starting a pan. The panel's tabs move with the arrow keys, and the right-click menu
-  takes focus, moves with the arrow keys and hands focus back to the map when it closes. A Hue
-  light no longer opens an empty right-click menu, and Escape in the rename box closes it.
+  instead of starting a pan. The right-click menu takes focus, moves with the arrow keys and hands
+  focus back to the map when it closes, and a Hue light no longer opens an empty one.
 - Settings: "Launch at login" now sets what you asked for instead of flipping whatever the system
   last reported, and says so when it cannot. "Check for updates" tells you when you are already on
   the latest version. When settings cannot be saved, one notice says so instead of switches quietly
@@ -671,7 +682,7 @@ https://keepachangelog.com/en/1.1.0/
 - Hue: the spinners while pairing and reconnecting now slow down when Reduce Motion is on; the
   setting never reached them before.
 - Screen readers: the manual bridge IP field on the Hue page has a name, and the entertainment-area
-  list, the compact window's scene tiles and the room map's "Move to" menu say which item is
+  list, the compact window's scene tiles and the room map's zone picker say which item is
   chosen instead of showing it only by colour. An area another app is streaming to is announced
   as unavailable.
 - Ambilight: at the heaviest smoothing a strip could stop a few steps short of the colour on

@@ -25,6 +25,8 @@ interface CommonProps {
   id?: string;
   className?: string;
   testId?: string;
+  /** Takes focus when the inspector it opens in was reached from the keyboard. */
+  first?: boolean;
 }
 
 interface RequiredValue extends CommonProps {
@@ -73,6 +75,7 @@ export function DecimalField(props: DecimalFieldProps) {
     id,
     className,
     testId,
+    first = false,
   } = props;
   const value: number | undefined = props.value;
   const format = (v: number | undefined) => (v === undefined ? "" : v.toFixed(decimals));
@@ -165,6 +168,7 @@ export function DecimalField(props: DecimalFieldProps) {
         value={draft}
         placeholder={props.optional ? props.placeholder : undefined}
         data-testid={testId}
+        data-dock-first={first || undefined}
         onFocus={(e) => {
           setEditing(true);
           e.currentTarget.select();
@@ -196,11 +200,6 @@ export function DecimalField(props: DecimalFieldProps) {
       )}
     </label>
   );
-}
-
-/** Two fields side by side, X beside Y and width beside depth. */
-export function FieldPair({ children }: { children: ReactNode }) {
-  return <div className={styles.pair}>{children}</div>;
 }
 
 /** A line under the fields it explains, aligned with their values. */

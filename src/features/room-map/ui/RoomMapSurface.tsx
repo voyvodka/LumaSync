@@ -12,7 +12,7 @@ import { roomAwareStatus } from "../model/roomAware";
 import { applyRoomTemplate, isRoomMapEmpty } from "../model/roomTemplate";
 import { useHueLampFamilies } from "../state/useHueLampFamilies";
 import { useRoomMapDocument } from "../state/useRoomMapDocument";
-import { RoomAwareIndicator } from "./RoomAwareIndicator";
+import { CornerControls } from "./CornerControls";
 import { RoomMapEditor } from "./RoomMapEditor";
 import styles from "./RoomMapSurface.module.css";
 import { TemplateSelector } from "./TemplateSelector";
@@ -106,23 +106,18 @@ export function RoomMapSurface({
   });
 
   return (
-    <div className={styles.surface} data-faces={view3dAvailable || undefined}>
+    <div className={styles.surface}>
       {view3dAvailable && <FaceSwitch face={face} viewFailed={failed} onChange={handleFace} />}
       <div key={face} className={cx(styles.face, switched && styles.arriving)} data-testid={`room-face-${face}`}>
         {face === ROOM_FACES.VIEW ? (
-          <div className="flex h-full flex-col">
-            <div className="lm-room-toolbar shrink-0">
-              <div className="flex-1" />
-              {roomAware && <RoomAwareIndicator variant="popover" status={roomAware} />}
-            </div>
-            <div className="relative min-h-0 flex-1">
-              <RoomView3DHost
-                config={doc.scopedConfig}
-                lampFamilies={lampFamilies}
-                label={t("roomMap:face.viewLabel")}
-                onFail={handleViewFail}
-              />
-            </div>
+          <div className="relative h-full">
+            <RoomView3DHost
+              config={doc.scopedConfig}
+              lampFamilies={lampFamilies}
+              label={t("roomMap:face.viewLabel")}
+              onFail={handleViewFail}
+            />
+            <CornerControls roomAware={roomAware} />
           </div>
         ) : (
           <RoomMapEditor

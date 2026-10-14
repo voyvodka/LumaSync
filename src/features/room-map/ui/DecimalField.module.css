@@ -80,12 +80,6 @@
     cursor: not-allowed;
   }
 
-  .pair {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 4px;
-  }
-
   .hint {
     margin: 0 8px;
     font-size: 9.5px;

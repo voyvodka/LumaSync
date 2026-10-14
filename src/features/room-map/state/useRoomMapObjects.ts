@@ -39,7 +39,8 @@ export interface UseRoomMapObjectsReturn {
   handleDuplicate: (id: string) => void;
   handleArrowNudge: (e: React.KeyboardEvent<HTMLDivElement>) => void;
   handleUpdatePosition: (id: string, x: number, y: number, options?: ApplyOptions) => void;
-  handleRenameFurniture: (id: string, label: string) => void;
+  /** Renames any kind that takes a name, the viewed area's Hue light included. */
+  handleRename: (id: string, label: string) => void;
 }
 
 /** Create, delete, duplicate and transform handlers for every non-image object kind. */
@@ -171,13 +172,13 @@ export function useRoomMapObjects({
     [config, hueAreaId, apply],
   );
 
-  const handleRenameFurniture = useCallback(
+  const handleRename = useCallback(
     (id: string, label: string) => {
-      apply({
-        furniture: config.furniture.map((f) => (f.id === id ? { ...f, label } : f)),
-      });
+      const ref = parseObjectId(id);
+      const rename = ref ? roomObjectAdapter(ref).rename : null;
+      if (ref && rename) apply(rename(config, ref, label, { hueAreaId }));
     },
-    [config.furniture, apply],
+    [config, hueAreaId, apply],
   );
 
   return {
@@ -191,6 +192,6 @@ export function useRoomMapObjects({
     handleDuplicate,
     handleArrowNudge,
     handleUpdatePosition,
-    handleRenameFurniture,
+    handleRename,
   };
 }

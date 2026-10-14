@@ -12,16 +12,15 @@ vi.mock("react-i18next", () => ({
 const layer: ImageLayer = { id: "img", path: "/plan.png", label: "Plan", offsetX: 80, offsetY: 160, scale: 1 };
 
 function renderInspector(overrides: Partial<ImageLayer> = {}) {
-  const onUpdate = vi.fn<(patch: Partial<ImageLayer>) => void>();
-  render(
-    <ImageLayerInspector
-      layer={{ ...layer, ...overrides }}
-      onUpdate={onUpdate}
-      onToggleLock={vi.fn<() => void>()}
-      onRename={vi.fn<(label: string) => void>()}
-    />,
-  );
-  return { onUpdate };
+  const handlers = {
+    onUpdate: vi.fn<(patch: Partial<ImageLayer>) => void>(),
+    onToggleLock: vi.fn<() => void>(),
+    onRename: vi.fn<(label: string) => void>(),
+    onDelete: vi.fn<() => void>(),
+    onClose: vi.fn<() => void>(),
+  };
+  render(<ImageLayerInspector layer={{ ...layer, ...overrides }} {...handlers} />);
+  return handlers;
 }
 
 const field = (name: string) => screen.getByRole("spinbutton", { name }) as HTMLInputElement;
@@ -73,10 +72,24 @@ describe("ImageLayerInspector — scale", () => {
     expect(screen.getByRole("button", { name: "roomMap:inspector.imageAspectReset" })).toBeDisabled();
   });
 
-  it("holds position and scale while the layer is locked", () => {
+  it("holds position, scale and opacity while the layer is locked", () => {
     renderInspector({ locked: true });
     expect(field("roomMap:inspector.xLabel")).toBeDisabled();
     expect(field("roomMap:inspector.imageScaleLabel")).toBeDisabled();
     expect(screen.getByRole("button", { name: "roomMap:inspector.imageAspectLocked" })).toBeDisabled();
+    expect(screen.getByRole("slider", { name: "roomMap:inspector.imageOpacityLabel" })).toBeDisabled();
+  });
+});
+
+describe("ImageLayerInspector — opacity", () => {
+  beforeEach(() => cleanup());
+
+  it("writes a whole percentage from the slider and reads it back", () => {
+    const { onUpdate } = renderInspector({ opacity: 40 });
+    const slider = screen.getByRole("slider", { name: "roomMap:inspector.imageOpacityLabel" });
+    expect(slider).toHaveValue("40");
+    expect(screen.getByText("40%")).toBeInTheDocument();
+    fireEvent.change(slider, { target: { value: "65" } });
+    expect(onUpdate).toHaveBeenLastCalledWith({ opacity: 65 });
   });
 });

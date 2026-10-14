@@ -52,7 +52,6 @@ export function AmbilightStage({
     <Stage dense={dense} testId="ambilight-stage">
       <StageGrid>
         <RangeRow
-          variant="stage"
           label={t("lights:signal.profile.brightness")}
           valueLabel={(v) => `${Math.round(v)}%`}
           min={0}
@@ -66,7 +65,6 @@ export function AmbilightStage({
         />
         {dense ? null : (
           <RangeRow
-            variant="stage"
             label={t("lights:signal.profile.saturation")}
             valueLabel={(v) => `${Math.round(v)}%`}
             min={50}

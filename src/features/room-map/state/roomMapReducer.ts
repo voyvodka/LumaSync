@@ -54,7 +54,9 @@ export type RoomMapAction =
   | { type: "undo" }
   | { type: "redo" }
   | { type: "select"; objectId: string | null }
-  | { type: "selectHueZone"; hueZoneId: string | null };
+  | { type: "selectHueZone"; hueZoneId: string | null }
+  /** Nothing selected: a click on the empty plan. `select(null)` alone leaves a zone active. */
+  | { type: "clearSelection" };
 
 export function initialRoomMapState(): RoomMapState {
   return {
@@ -181,5 +183,8 @@ export function roomMapReducer(state: RoomMapState, action: RoomMapAction): Room
       }
       return { ...state, selection: { objectId, hueZoneId: action.hueZoneId } };
     }
+    case "clearSelection":
+      if (state.selection.objectId === null && state.selection.hueZoneId === null) return state;
+      return { ...state, selection: { objectId: null, hueZoneId: null } };
   }
 }

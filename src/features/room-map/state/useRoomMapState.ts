@@ -34,6 +34,8 @@ export interface UseRoomMapStateReturn {
   redo: () => void;
   select: (objectId: string | null) => void;
   selectHueZone: (hueZoneId: string | null) => void;
+  /** Neither an object nor a zone: back to the palette. */
+  clearSelection: () => void;
   canUndo: boolean;
   canRedo: boolean;
   loading: boolean;
@@ -192,6 +194,7 @@ export function useRoomMapState(): UseRoomMapStateReturn {
     (hueZoneId: string | null) => dispatch({ type: "selectHueZone", hueZoneId }),
     [],
   );
+  const clearSelection = useCallback(() => dispatch({ type: "clearSelection" }), []);
 
   return {
     config: state.config,
@@ -205,6 +208,7 @@ export function useRoomMapState(): UseRoomMapStateReturn {
     redo,
     select,
     selectHueZone,
+    clearSelection,
     canUndo: state.past.length > 0,
     canRedo: state.future.length > 0,
     loading,

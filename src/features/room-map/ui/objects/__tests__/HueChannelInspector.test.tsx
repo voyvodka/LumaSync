@@ -1,7 +1,7 @@
 // The slider stays in Hue's [-1, 1] because that is what is persisted; only the
 // readout is metres. `aria-valuetext` is the gain over the Devices strip.
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, it, expect, vi, beforeEach } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { HueChannelInspector } from "../HueChannelInspector";
 import type { HueChannelPlacement } from "@/shared/contracts/roomMap";
@@ -36,7 +36,7 @@ function renderInspector(worldZ: number, onHeightChange = vi.fn(), locked = fals
   render(
     <HueChannelInspector
       channel={locked ? { ...channel, locked: true } : channel}
-      zoneName={null}
+      zones={[]}
       worldZ={worldZ}
       roomHeightMeters={2.5}
       world={{ x: 0, y: 0 }}
@@ -46,6 +46,7 @@ function renderInspector(worldZ: number, onHeightChange = vi.fn(), locked = fals
       onHeightChange={onHeightChange}
       onRename={vi.fn()}
       onToggleLock={vi.fn()}
+      onClose={vi.fn<() => void>()}
     />,
   );
   return onHeightChange;
@@ -94,7 +95,7 @@ describe("channel identity", () => {
     render(
       <HueChannelInspector
         channel={ch}
-        zoneName={null}
+        zones={[]}
         worldZ={0}
         roomHeightMeters={2.5}
         world={{ x: 0, y: 0 }}
@@ -104,6 +105,7 @@ describe("channel identity", () => {
         onHeightChange={vi.fn()}
         onRename={vi.fn()}
         onToggleLock={vi.fn()}
+        onClose={vi.fn<() => void>()}
         {...extra}
       />,
     );
@@ -133,22 +135,35 @@ describe("channel identity", () => {
 
   it("uses the singular for one bulb", () => {
     renderChannel(gapped, { lightCount: 1 });
-    expect(screen.getByText("roomMap:inspector.hueOneLight")).toBeTruthy();
+    expect(screen.getByText(/roomMap:inspector\.hueOneLight/)).toBeTruthy();
   });
 
   it("omits the count rather than showing zero when the bridge has not said", () => {
     renderChannel(gapped, { lightCount: null });
-    expect(screen.queryByText("roomMap:inspector.hueLightCountLabel")).toBeNull();
+    expect(screen.getByText("#5")).toBeTruthy();
+    expect(screen.queryByText(/hueLights|hueOneLight/)).toBeNull();
   });
 
-  it("explains a channel the bridge no longer reports", () => {
+  it("says in a word that the bridge no longer reports the channel, the sentence as its tooltip", () => {
     renderChannel(gapped, { isGhost: true });
-    expect(screen.getByText("roomMap:inspector.hueChannelGhostNote")).toBeTruthy();
+    const note = screen.getByText("roomMap:inspector.hueGhostShort");
+    expect(note.closest("[title]")).toHaveAttribute("title", "roomMap:inspector.hueChannelGhostNote");
   });
 
   it("says nothing about ghosts for a channel the bridge still reports", () => {
     renderChannel(gapped);
-    expect(screen.queryByText("roomMap:inspector.hueChannelGhostNote")).toBeNull();
+    expect(screen.queryByText("roomMap:inspector.hueGhostShort")).toBeNull();
+  });
+
+  it("edits the user's own name, with the bridge's name as the fallback", () => {
+    const onRename = vi.fn<(label: string) => void>();
+    renderChannel(gapped, { onRename });
+    const name = screen.getByRole("textbox", { name: "roomMap:inspector.furnitureNameLabel" }) as HTMLInputElement;
+    expect(name.value).toBe("roomMap:hueChannel.defaultLabel");
+    fireEvent.focus(name);
+    fireEvent.change(name, { target: { value: "Floor lamp" } });
+    fireEvent.keyDown(name, { key: "Enter" });
+    expect(onRename).toHaveBeenCalledWith("Floor lamp");
   });
 });
 
@@ -173,7 +188,7 @@ describe("HueChannelInspector height inside a zone", () => {
     render(
       <HueChannelInspector
         channel={{ ...channel, zoneId: "zone-a", zoneRelativePosition: { x: 0, y: 0, z: 0 } }}
-        zoneName="Sofa"
+        zones={[zone]}
         worldZ={0}
         heightRange={{ min: -0.5, max: 0.5, zone }}
         roomHeightMeters={2.5}
@@ -184,21 +199,21 @@ describe("HueChannelInspector height inside a zone", () => {
         onHeightChange={vi.fn<(worldZ: number) => void>()}
         onRename={vi.fn<(label: string) => void>()}
         onToggleLock={vi.fn<() => void>()}
+        onClose={vi.fn<() => void>()}
       />,
     );
     const slider = screen.getByRole("slider");
     expect(slider.getAttribute("aria-valuemin")).toBe("-0.5");
     expect(slider.getAttribute("aria-valuemax")).toBe("0.5");
-    expect(screen.getByTestId("hue-height-zone-limit").textContent).toBe(
-      "Sofa: 0.63–1.88 m",
-    );
+    fireEvent.click(screen.getByRole("button", { name: "common:hintFor" }));
+    expect(screen.getByText("Sofa: 0.63–1.88 m")).toBeInTheDocument();
   });
 
   it("shows no limit for a zone as tall as the room", () => {
     render(
       <HueChannelInspector
         channel={channel}
-        zoneName={null}
+        zones={[]}
         worldZ={0}
         heightRange={{ min: -1, max: 1, zone }}
         roomHeightMeters={2.5}
@@ -209,9 +224,10 @@ describe("HueChannelInspector height inside a zone", () => {
         onHeightChange={vi.fn<(worldZ: number) => void>()}
         onRename={vi.fn<(label: string) => void>()}
         onToggleLock={vi.fn<() => void>()}
+        onClose={vi.fn<() => void>()}
       />,
     );
-    expect(screen.queryByTestId("hue-height-zone-limit")).toBeNull();
+    expect(screen.queryByRole("button", { name: "common:hintFor" })).toBeNull();
   });
 });
 
@@ -223,7 +239,7 @@ describe("HueChannelInspector position", () => {
     render(
       <HueChannelInspector
         channel={locked ? { ...channel, locked: true } : channel}
-        zoneName={null}
+        zones={[]}
         world={world}
         worldZ={0}
         roomWidthMeters={5}
@@ -233,6 +249,7 @@ describe("HueChannelInspector position", () => {
         onHeightChange={vi.fn<(worldZ: number) => void>()}
         onRename={vi.fn<(label: string) => void>()}
         onToggleLock={vi.fn<() => void>()}
+        onClose={vi.fn<() => void>()}
       />,
     );
     const field = (name: string) => screen.getByRole("spinbutton", { name }) as HTMLInputElement;
@@ -270,5 +287,82 @@ describe("HueChannelInspector position", () => {
 
     cleanup();
     expect(renderAt({ x: 0, y: 0 }, true).x).toBeDisabled();
+  });
+});
+
+describe("HueChannelInspector zone", () => {
+  beforeEach(() => {
+    cleanup();
+    vi.useFakeTimers();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const zone = (id: string, name: string) => ({
+    id,
+    name,
+    entertainmentAreaId: "area-1",
+    centerX: 0,
+    centerY: 0,
+    centerZ: 0,
+    scaleX: 0.5,
+    scaleY: 0.5,
+    scaleZ: 0.5,
+    channelIndices: [],
+    borderColor: "var(--lm-zone-1)",
+  });
+
+  function renderWithZones(ch: HueChannelPlacement, zones: ReturnType<typeof zone>[]) {
+    const onAssignZone = vi.fn<(zoneId: string | null) => void>();
+    render(
+      <HueChannelInspector
+        channel={ch}
+        zones={zones}
+        worldZ={0}
+        roomHeightMeters={2.5}
+        world={{ x: 0, y: 0 }}
+        roomWidthMeters={5}
+        roomDepthMeters={4}
+        onMove={vi.fn<(x: number, y: number) => void>()}
+        onHeightChange={vi.fn<(worldZ: number) => void>()}
+        onAssignZone={onAssignZone}
+        onRename={vi.fn<(label: string) => void>()}
+        onToggleLock={vi.fn<() => void>()}
+        onClose={vi.fn<() => void>()}
+      />,
+    );
+    return onAssignZone;
+  }
+  const picker = () => screen.getByRole("button", { name: /^roomMap:inspector\.hueZoneLabel: / });
+
+  it("moves the light into a zone, or out of every zone, from its picker", () => {
+    const onAssignZone = renderWithZones({ ...channel, zoneId: "a" }, [zone("a", "Sofa"), zone("b", "Desk")]);
+    expect(picker().textContent).toContain("Sofa");
+    fireEvent.click(picker());
+    fireEvent.click(screen.getByRole("option", { name: "Desk" }));
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(onAssignZone).toHaveBeenLastCalledWith("b");
+
+    fireEvent.click(picker());
+    fireEvent.click(screen.getByRole("option", { name: "roomMap:hueZones.unassignedTitle" }));
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(onAssignZone).toHaveBeenLastCalledWith(null);
+  });
+
+  it("reads a zone the area no longer has as no zone, rather than its raw id", () => {
+    renderWithZones({ ...channel, zoneId: "gone" }, [zone("a", "Sofa")]);
+    expect(picker().textContent).toContain("roomMap:hueZones.unassignedTitle");
+    expect(picker().textContent).not.toContain("gone");
+  });
+
+  it("offers no picker to open with no zone to join, or while the light is locked", () => {
+    renderWithZones(channel, []);
+    expect(picker()).toBeDisabled();
+    cleanup();
+    renderWithZones({ ...channel, locked: true }, [zone("a", "Sofa")]);
+    expect(picker()).toBeDisabled();
   });
 });

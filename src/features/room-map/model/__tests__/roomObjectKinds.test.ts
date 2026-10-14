@@ -46,6 +46,21 @@ describe("ROOM_OBJECT_KINDS", () => {
     });
   });
 
+  // The name field is the one way to rename now, so a Hue light renames through its row too — and
+  // only the shown area's light of that number.
+  it("renames a Hue light in the shown area, leaving another area's same-numbered light alone", () => {
+    const twoAreas: RoomMapConfig = {
+      ...config,
+      hueChannels: [
+        { channelIndex: 0, x: 0, y: 0, z: 0, entertainmentAreaId: "a", label: "Lamp A" },
+        { channelIndex: 0, x: 0, y: 0, z: 0, entertainmentAreaId: "b", label: "Lamp B" },
+      ],
+    };
+    const ref = parseObjectId(hueChannelObjectId(0)) as RoomObjectRef<"hue">;
+    const patch = ROOM_OBJECT_KINDS.hue.rename(twoAreas, ref, "Floor lamp", { hueAreaId: "b" });
+    expect(patch.hueChannels?.map((ch) => ch.label)).toEqual(["Lamp A", "Floor lamp"]);
+  });
+
   it("rotates furniture by a step, wrapping at a full turn", () => {
     const ref = parseObjectId(furnitureObjectId("f1")) as RoomObjectRef<"furniture">;
     expect(ROOM_OBJECT_KINDS.furniture.rotateBy(config, ref, 15).furniture?.[0]?.rotation).toBe(5);

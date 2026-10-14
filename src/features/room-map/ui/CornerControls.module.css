@@ -1,0 +1,72 @@
+@layer components {
+  .corner {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+  }
+
+  /* The switch's look: one quiet capsule, its buttons grey until the pointer or focus is on them. */
+  .capsule {
+    display: flex;
+    align-items: center;
+    height: 32px;
+    padding: 0 2px;
+    border-radius: 8px;
+    background: var(--lm-panel);
+    box-shadow: inset 0 0 0 1px var(--lm-line-2);
+  }
+  .group { display: flex; align-items: center; }
+
+  .button {
+    display: grid;
+    place-items: center;
+    min-width: 30px;
+    height: 32px;
+    padding: 0 4px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    font: 500 12px/1 var(--lm-sans);
+    cursor: pointer;
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .button svg { width: 14px; height: 14px; }
+  .button:hover:not(:disabled, [aria-disabled="true"]) { color: var(--lm-ink); background: rgb(255 255 255 / 4%); }
+  .button[aria-expanded="true"] { color: var(--lm-amber); }
+  .button:disabled,
+  .button[aria-disabled="true"] { color: var(--lm-ink-faint); cursor: default; }
+  .button:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+  /* The zoom readout is a value: fixed width and tabular, so stepping never shifts the buttons. */
+  .button[data-readout] {
+    width: 48px;
+    font: 11px var(--lm-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rule {
+    width: 1px;
+    height: 16px;
+    margin: 0 2px;
+    background: var(--lm-line-2);
+  }
+
+  :global(:root[data-reduced-motion]) .button { transition: none; }
+
+  @media (forced-colors: active) {
+    .capsule {
+      box-shadow: none;
+      outline: 1px solid CanvasText;
+    }
+    .button:focus-visible { outline: 2px solid Highlight; }
+    .rule { background: CanvasText; }
+  }
+}

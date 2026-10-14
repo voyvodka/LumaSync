@@ -25,7 +25,6 @@ export interface UseRoomMapHueZonesArgs {
   adopt: (patch: RoomMapPatch) => void;
   activeHueZoneId: string | null;
   selectHueZone: (zoneId: string | null) => void;
-  setObjectPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
   /** The area new zones are authored in (`useRoomMapHueArea`); `null` adds nothing. */
   hueAreaId: string | null;
 }
@@ -53,7 +52,6 @@ export function useRoomMapHueZones({
   adopt,
   activeHueZoneId,
   selectHueZone,
-  setObjectPanelOpen,
   hueAreaId,
 }: UseRoomMapHueZonesArgs): UseRoomMapHueZonesReturn {
   const { t } = useTranslation();
@@ -110,10 +108,9 @@ export function useRoomMapHueZones({
     };
     apply({ zones: [...config.zones, newZone] });
     selectHueZone(id);
-    setObjectPanelOpen(true);
 
     settle("create_hue_zone", createHueZone({ zone: newZone, existingZones: hueZones }), false);
-  }, [hueAreaId, hueZones, config.zones, apply, t, selectHueZone, setObjectPanelOpen, settle]);
+  }, [hueAreaId, hueZones, config.zones, apply, t, selectHueZone, settle]);
 
   const handleDeleteHueZone = useCallback(
     (zoneId: string) => {
@@ -157,7 +154,7 @@ export function useRoomMapHueZones({
     [config.zones, apply, settle],
   );
 
-  // One handler for all three channel→zone paths (both drops and the popover).
+  // One handler for both channel→zone paths (the light's zone picker and the zone's light chips).
   // It writes three fields that must stay in sync — `zoneId`,
   // `zoneRelativePosition`, `channelIndices` — see docs/architecture/room-map.md.
   const handleAssignChannelToZone = useCallback(

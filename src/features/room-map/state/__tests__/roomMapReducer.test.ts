@@ -174,6 +174,15 @@ describe("roomMapReducer — selection", () => {
     expect(zoned.selection).toEqual({ objectId: null, hueZoneId: "z1" });
   });
 
+  it("clears both the object and the zone, where a plain deselect leaves the zone", () => {
+    const zoned = run(loaded(), { type: "selectHueZone", hueZoneId: "z1" });
+    expect(roomMapReducer(zoned, { type: "select", objectId: null }).selection.hueZoneId).toBe("z1");
+    expect(roomMapReducer(zoned, { type: "clearSelection" }).selection).toEqual({ objectId: null, hueZoneId: null });
+
+    const idle = loaded();
+    expect(roomMapReducer(idle, { type: "clearSelection" })).toBe(idle);
+  });
+
   it("does not touch history or saving", () => {
     const s = loaded();
     const selected = roomMapReducer(s, { type: "select", objectId: furnitureObjectId("sofa") });

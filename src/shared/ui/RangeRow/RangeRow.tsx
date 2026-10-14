@@ -1,10 +1,8 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { cx } from "@/shared/lib/cx";
 import { prefersReducedMotion } from "@/shared/lib/motion";
 import styles from "./RangeRow.module.css";
-
-export type RangeRowVariant = "stage" | "dock";
 
 /** An outside change's glide: the stage's base duration, a little longer for the distance. */
 const GLIDE_MS = 240;
@@ -21,8 +19,6 @@ const DETENT_SHARE = 0.02;
 type ValueText<T> = T | ((value: number) => T);
 
 interface RangeRowProps {
-  /** `stage` is the Lights stages' slider, `dock` the room-map inspector's. */
-  variant: RangeRowVariant;
   label: string;
   /** A function is given the value on show, so the readout follows a drag the value has not caught up with. */
   valueLabel: ValueText<ReactNode>;
@@ -37,7 +33,7 @@ interface RangeRowProps {
   /** Read aloud instead of the raw number, when the number means nothing on its own. */
   ariaValueText?: ValueText<string>;
   title?: string;
-  /** Shown under a `stage` row — why it is locked. */
+  /** Shown under the row — why it is locked. */
   note?: string;
   className?: string;
   /** Drag bracketing, for a caller that must not take outside updates mid-drag. */
@@ -48,7 +44,7 @@ interface RangeRowProps {
    * settles into it near by, and the readout takes it back there. `label` names that press.
    */
   neutral?: { value: number; label: string };
-  /** A CSS background for the track in place of the amber fill — Solid's whites. Stage only. */
+  /** A CSS background for the track in place of the amber fill — Solid's whites. */
   track?: string;
   testId?: string;
 }
@@ -56,9 +52,8 @@ interface RangeRowProps {
 const resolve = <T,>(text: ValueText<T>, value: number): T =>
   typeof text === "function" ? (text as (value: number) => T)(value) : text;
 
-/** A labelled slider with its readout, in one of the app's two slider looks. */
+/** A labelled slider with its readout: the Lights stages' slider. */
 export function RangeRow({
-  variant,
   label,
   valueLabel,
   value,
@@ -78,13 +73,10 @@ export function RangeRow({
   track,
   testId,
 }: RangeRowProps) {
-  const id = useId();
 
   // The user's own value, held while they set it and until the value given back catches up. What
   // comes back meanwhile is behind the pointer — a drag outruns the lights — and taken as it came it
-  // pulled the thumb back and shook the readout. The dock's callers answer at once, and its one row
-  // serves every selected object, so it holds nothing.
-  const holds = variant === "stage";
+  // pulled the thumb back and shook the readout.
   const [held, setHeld] = useState<number | null>(null);
   const pressed = useRef(false);
   const settle = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -124,7 +116,7 @@ export function RangeRow({
   const glideTo = (from: number, to: number) => {
     cancelAnimationFrame(frame.current);
     setReadout((n) => n + 1);
-    if (variant !== "stage" || prefersReducedMotion()) {
+    if (prefersReducedMotion()) {
       displayed.current = to;
       setGlide(null);
       return;
@@ -141,7 +133,7 @@ export function RangeRow({
     };
     frame.current = requestAnimationFrame(tick);
   };
-  // `glideTo` reads refs and setters, and `variant` through it: a new one each render changes nothing.
+  // `glideTo` reads refs and setters: a new one each render changes nothing.
   // biome-ignore lint/correctness/useExhaustiveDependencies: glideTo is stable in effect
   useLayoutEffect(() => {
     if (held !== null) {
@@ -158,7 +150,7 @@ export function RangeRow({
       return;
     }
     glideTo(from, value);
-  }, [value, held, variant]);
+  }, [value, held]);
   useLayoutEffect(() => () => cancelAnimationFrame(frame.current), []);
 
   // A glide wins over the hold: the neutral press glides to a value it also holds.
@@ -167,10 +159,9 @@ export function RangeRow({
   const readoutText = resolve(valueLabel, shown);
   const atNeutral = neutral !== undefined && Math.round(shown) === neutral.value;
 
-  const input = (extra: { className?: string; style?: CSSProperties; id?: string }) => (
+  const input = (extra: { className?: string; style?: CSSProperties }) => (
     <input
       type="range"
-      id={extra.id}
       min={min}
       max={max}
       step={step}
@@ -206,79 +197,65 @@ export function RangeRow({
         // Where the thumb is now, for whatever follows: the hold can end in the same render as the
         // value catches up, before its effect has run.
         displayed.current = next;
-        if (holds) {
-          setHeld(next);
-          if (!pressed.current) letGo();
-        }
+        setHeld(next);
+        if (!pressed.current) letGo();
         onChange(next);
       }}
     />
   );
 
-  if (variant === "stage") {
-    return (
-      <div className={cx(styles.stage, className)}>
-        <div className={styles.head}>
-          <span key={label} className={styles.label} data-swapped={named.current.renamed || undefined}>
-            {label}
+  return (
+    <div className={cx(styles.stage, className)}>
+      <div className={styles.head}>
+        <span key={label} className={styles.label} data-swapped={named.current.renamed || undefined}>
+          {label}
+        </span>
+        {neutral && !atNeutral && !disabled ? (
+          <button
+            key={readout}
+            type="button"
+            className={cx(styles.value, styles.toNeutral)}
+            data-swapped={readout > 0 || undefined}
+            title={neutral.label}
+            aria-label={neutral.label}
+            onClick={() => {
+              // Held like a move of the user's, so a value still coming back from a drag does not
+              // pull it away; it glides there from wherever the thumb is.
+              const from = displayed.current;
+              displayed.current = neutral.value;
+              setHeld(neutral.value);
+              letGo();
+              glideTo(from, neutral.value);
+              onChange(neutral.value);
+            }}
+            data-testid={testId ? `${testId}-neutral` : undefined}
+          >
+            {readoutText}
+          </button>
+        ) : (
+          <span key={readout} className={styles.value} data-swapped={readout > 0 || undefined}>
+            {readoutText}
           </span>
-          {neutral && !atNeutral && !disabled ? (
-            <button
-              key={readout}
-              type="button"
-              className={cx(styles.value, styles.toNeutral)}
-              data-swapped={readout > 0 || undefined}
-              title={neutral.label}
-              aria-label={neutral.label}
-              onClick={() => {
-                // Held like a move of the user's, so a value still coming back from a drag does not
-                // pull it away; it glides there from wherever the thumb is.
-                const from = displayed.current;
-                displayed.current = neutral.value;
-                setHeld(neutral.value);
-                letGo();
-                glideTo(from, neutral.value);
-                onChange(neutral.value);
-              }}
-              data-testid={testId ? `${testId}-neutral` : undefined}
-            >
-              {readoutText}
-            </button>
-          ) : (
-            <span key={readout} className={styles.value} data-swapped={readout > 0 || undefined}>
-              {readoutText}
-            </span>
-          )}
-        </div>
-        <div className={styles.trackBox}>
-          {/* `--fill` drives the track, so the amber grows with the thumb. */}
-          {input({
-            className: cx(styles.slider, track && styles.whites),
-            style: {
-              ["--fill" as string]: `${share(shown) * 100}%`,
-              ...(track ? { ["--track" as string]: track } : {}),
-            } as CSSProperties,
-          })}
-          {neutral && !atNeutral ? (
-            <span className={styles.tick} style={{ ["--at" as string]: share(neutral.value) } as CSSProperties} aria-hidden />
-          ) : null}
-        </div>
-        {note && (
-          <p className={styles.note} role="note">
-            {note}
-          </p>
         )}
       </div>
-    );
-  }
-
-  return (
-    <div className={cx("lm-room-dock-field", className)}>
-      <label className="lm-room-dock-field-label" htmlFor={id}>
-        {label}
-      </label>
-      {input({ id, className: "lm-room-dock-slider" })}
-      <span className="lm-room-dock-field-value">{readoutText}</span>
+      <div className={styles.trackBox}>
+        {/* `--fill` drives the track, so the amber grows with the thumb. */}
+        {input({
+          className: cx(styles.slider, track && styles.whites),
+          style: {
+            ["--fill" as string]: `${share(shown) * 100}%`,
+            ...(track ? { ["--track" as string]: track } : {}),
+          } as CSSProperties,
+        })}
+        {neutral && !atNeutral ? (
+          <span className={styles.tick} style={{ ["--at" as string]: share(neutral.value) } as CSSProperties} aria-hidden />
+        ) : null}
+      </div>
+      {note && (
+        <p className={styles.note} role="note">
+          {note}
+        </p>
+      )}
     </div>
   );
 }

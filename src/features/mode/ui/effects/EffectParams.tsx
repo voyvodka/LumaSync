@@ -135,7 +135,6 @@ export function EffectParams({
     cell(
       key,
       <RangeRow
-        variant="stage"
         label={label}
         valueLabel={percentLabel}
         min={0}
@@ -178,7 +177,6 @@ export function EffectParams({
           ? cell(
               "durationMinutes",
               <RangeRow
-                variant="stage"
                 label={t("lights:effect.duration")}
                 valueLabel={(v) => t("lights:effect.durationValue", { count: Math.round(v) })}
                 min={minMinutes}

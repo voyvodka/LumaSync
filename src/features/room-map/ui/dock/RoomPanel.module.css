@@ -1,0 +1,70 @@
+@layer components {
+  .panel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .size {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 32px;
+    padding: 0 8px;
+    font-size: 12px;
+    color: var(--lm-ink);
+    cursor: pointer;
+  }
+
+  .slider {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding-left: 8px;
+  }
+  .sliderLabel {
+    flex-shrink: 0;
+    font-size: 12px;
+    color: var(--lm-ink-dim);
+  }
+
+  .rule {
+    width: 100%;
+    margin: 4px 0;
+    border: 0;
+    border-top: 1px solid var(--lm-line);
+  }
+
+  /* Starting over asks first, so the button itself stays a quiet line of red text. */
+  .reset {
+    align-self: flex-start;
+    height: 32px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--lm-red);
+    font: 500 12px/1 var(--lm-sans);
+    cursor: pointer;
+    transition: background var(--lm-dur-quick);
+  }
+  .reset:hover { background: color-mix(in srgb, var(--lm-red) 10%, transparent); }
+  .reset:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+
+  :global(:root[data-reduced-motion]) .reset { transition: none; }
+
+  @media (forced-colors: active) {
+    .reset { color: LinkText; }
+    .reset:focus-visible { outline: 2px solid Highlight; }
+  }
+}

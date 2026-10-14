@@ -9,6 +9,21 @@ export const ZONE_TOKENS = [
   "var(--lm-zone-6)",
 ];
 
+/** The palette's colours by name, in token order. */
+export const ZONE_SWATCH_NAMES = ["blue", "emerald", "purple", "amber", "rose", "cyan"] as const;
+export type ZoneSwatchName = (typeof ZONE_SWATCH_NAMES)[number];
+
+// What each token stood for when the zone inspector stored hex, so a zone saved then still reads as
+// its swatch.
+const ZONE_TOKEN_HEX = ["#3b82f6", "#10b981", "#a855f7", "#f59e0b", "#f43f5e", "#06b6d4"];
+
+/** The palette swatch a stored colour is, or -1 for a colour of the user's own. */
+export function zoneSwatchIndex(colour: string | null | undefined): number {
+  if (!colour) return -1;
+  const token = ZONE_TOKENS.indexOf(colour);
+  return token >= 0 ? token : ZONE_TOKEN_HEX.indexOf(colour.toLowerCase());
+}
+
 export const TYPE_DOT_COLOR: Record<RoomObjectKind, string> = {
   tv: "var(--lm-zone-3)", // purple
   furniture: "var(--lm-amber)",

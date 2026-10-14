@@ -22,7 +22,6 @@ export function PopupBrightnessRow({ brightness, onChange }: PopupBrightnessRowP
 
   return (
     <RangeRow
-      variant="stage"
       label={t("common:mode.brightness")}
       valueLabel={`${percent}%`}
       min={0}

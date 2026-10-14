@@ -29,7 +29,6 @@ function renderImageLayers() {
   const select = vi.fn();
   const hook = renderHook(() =>
     useRoomMapImageLayers({
-      config: { ...DEFAULT_ROOM_MAP, imageLayers: [] },
       apply,
       select,
     }),
