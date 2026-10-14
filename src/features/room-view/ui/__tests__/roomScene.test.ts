@@ -1,4 +1,4 @@
-import { type BufferGeometry, DirectionalLight, InstancedMesh, type Material, Matrix4, type Texture, Vector3 } from "three";
+import { BoxGeometry, type BufferGeometry, DirectionalLight, InstancedMesh, type Material, Matrix4, Mesh, type Texture, Vector3 } from "three";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap";
@@ -140,5 +140,44 @@ describe("disposeScene", () => {
     expect(lights.length).toBeGreaterThan(0);
     for (const spy of [...spies, ...instanceSpies, ...shadowSpies]) expect(spy).toHaveBeenCalledTimes(1);
     expect(scene.children).toHaveLength(0);
+  });
+});
+
+describe("buildRoomScene — an outline that is not a rectangle", () => {
+  // A 4 × 4 m room with its back-right quarter cut away.
+  const L = [
+    { x: 0, y: 0 },
+    { x: 4, y: 0 },
+    { x: 4, y: 2 },
+    { x: 2, y: 2 },
+    { x: 2, y: 4 },
+    { x: 0, y: 4 },
+  ];
+  const room: RoomMapConfig = { ...DEFAULT_ROOM_MAP, dimensions: { widthMeters: 4, depthMeters: 4, heightMeters: 2.5 } };
+  const walls = (scene: { traverse: (fn: (o: unknown) => void) => void }) => {
+    const found: Mesh[] = [];
+    scene.traverse((o) => {
+      if (o instanceof Mesh && o.geometry instanceof BoxGeometry) found.push(o);
+    });
+    return found;
+  };
+
+  it("stands a wall on every edge, and none inside the room at the corner it turns in at", () => {
+    const rectangle = buildRoomScene(room, OPTIONS);
+    expect(walls(rectangle.scene)).toHaveLength(4);
+    disposeScene(rectangle.scene);
+
+    const shaped = buildRoomScene(room, { ...OPTIONS, outline: L });
+    const built = walls(shaped.scene);
+    expect(built).toHaveLength(6);
+    // The inner corner is the scene's origin; the wall along x that ends there must not reach past
+    // it into the room (x < 0 at z just above 0).
+    for (const wall of built) {
+      wall.geometry.computeBoundingBox();
+      const box = wall.geometry.boundingBox!.clone().translate(wall.position);
+      const intoRoom = box.min.x < -0.001 && box.max.x > -0.001 && box.min.z < 0.05 && box.max.z > 0.0005 && box.max.z < 0.2;
+      expect(intoRoom).toBe(false);
+    }
+    disposeScene(shaped.scene);
   });
 });

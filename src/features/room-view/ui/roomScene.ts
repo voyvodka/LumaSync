@@ -21,6 +21,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
 import { type RoomMapConfig, resolveFurnitureTop } from "@/shared/contracts/roomMap";
 
+import { type PlanCorner, roomEdges } from "../model/roomOutline";
 import { hueChannelScenePoint, roomToScene, tvMountHeight } from "../model/roomSpace";
 import { contactShadow, floorParts, roomLights, WALL_THICKNESS, wallFootShade, wallGeometry } from "./scene/environment";
 import { classifyFurniture, contactShade, modelTop, surfaceTop } from "../model/furnitureModel";
@@ -47,6 +48,8 @@ export interface RoomSceneOptions {
   coldKey?: number;
   /** Each Hue channel's fixture by channel index; one not listed draws as a bulb. */
   lampFamilies?: ReadonlyMap<number, LampFamily>;
+  /** The room's outline on the plan when it is not the plain rectangle of its dimensions. */
+  outline?: readonly PlanCorner[] | null;
 }
 
 /** A piece's top as something stands on it, in the scene frame. */
@@ -104,7 +107,9 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     return material;
   };
 
-  const floor = mergeParts(floorParts(W, D), solid(0.72), false);
+  const corners = options.outline ?? null;
+  const edges = roomEdges(W, D, corners);
+  const floor = mergeParts(floorParts(W, D, corners, edges), solid(0.72), false);
   if (floor) {
     floor.castShadow = false;
     scene.add(floor);
@@ -113,7 +118,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   const models = classifyFurniture(config);
   const matte: Part[] = [];
   const satin: Part[] = [];
-  const shadows: BufferGeometry[] = [wallFootShade(W, D)];
+  const shadows: BufferGeometry[] = [wallFootShade(edges)];
   const surfaces: Surface[] = [];
   const sort = (parts: readonly Part[]) => {
     for (const part of parts) (SATIN.has(part.color) ? satin : matte).push(part);
@@ -184,28 +189,34 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     }
   }
 
-  // Walls: one mesh each, so a cut is a scale change rather than a rebuild. `outward` points away
-  // from the room; a wall whose outward side faces the camera is the one to cut.
+  // Walls: one mesh per edge of the outline, so a cut is a scale change rather than a rebuild.
+  // `outward` points away from the room; a wall whose outward side faces the camera is the one to
+  // cut. A wall along x wraps each corner the room bulges out at, so the walls meet there; at a
+  // corner it turns in at, the next wall already covers the joint from outside, and a wrap would
+  // poke into the room.
   const wallMaterial = solid(0.95);
-  const sides = [
-    { length: W, outward: new Vector3(0, 0, -1) },
-    { length: W, outward: new Vector3(0, 0, 1) },
-    { length: D, outward: new Vector3(-1, 0, 0) },
-    { length: D, outward: new Vector3(1, 0, 0) },
-  ];
-  const walls = sides.map(({ length, outward }) => {
-    const alongX = outward.z !== 0;
-    const mesh = new Mesh(wallGeometry(alongX, alongX ? length + WALL_THICKNESS * 2 : length), wallMaterial);
-    mesh.position.set(outward.x * (W / 2 + WALL_THICKNESS / 2), 0, outward.z * (D / 2 + WALL_THICKNESS / 2));
+  const walls = edges.map((e) => {
+    const alongX = e.outwardZ !== 0;
+    const wrapA = alongX && e.convexA ? WALL_THICKNESS : 0;
+    const wrapB = alongX && e.convexB ? WALL_THICKNESS : 0;
+    const dx = (e.bx - e.ax) / e.length;
+    const dz = (e.bz - e.az) / e.length;
+    const mesh = new Mesh(wallGeometry(alongX, e.length + wrapA + wrapB), wallMaterial);
+    mesh.position.set(
+      (e.ax + e.bx) / 2 + (dx * (wrapB - wrapA)) / 2 + (e.outwardX * WALL_THICKNESS) / 2,
+      0,
+      (e.az + e.bz) / 2 + (dz * (wrapB - wrapA)) / 2 + (e.outwardZ * WALL_THICKNESS) / 2,
+    );
     mesh.scale.y = H;
     mesh.receiveShadow = true;
     scene.add(mesh);
-    return { mesh, outward };
+    return { mesh, outward: new Vector3(e.outwardX, 0, e.outwardZ) };
   });
-  const planes: WallPlane[] = sides.map(({ length, outward }) => ({
-    normal: outward.clone().negate(),
-    offset: outward.z !== 0 ? D / 2 : W / 2,
-    halfLength: length / 2,
+  const planes: WallPlane[] = edges.map((e) => ({
+    normal: new Vector3(-e.outwardX, 0, -e.outwardZ),
+    offset: e.ax * e.outwardX + e.az * e.outwardZ,
+    centre: e.outwardZ !== 0 ? (e.ax + e.bx) / 2 : (e.az + e.bz) / 2,
+    halfLength: e.length / 2,
   }));
 
   const texture = radialTexture(256, "rgba(255,255,255,1)", "rgba(255,255,255,0)");

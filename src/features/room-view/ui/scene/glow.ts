@@ -36,6 +36,8 @@ export interface WallPlane {
   normal: Vector3;
   /** Distance from the room's centre to the inner face. */
   offset: number;
+  /** Where the wall's middle is along its face (x for a wall along x, z otherwise). */
+  centre: number;
   /** Half the wall's length along its face. */
   halfLength: number;
 }
@@ -163,14 +165,18 @@ export function buildGlow(
     walls.forEach((wall, wallIndex) => {
       const distance = wall.offset + p.dot(wall.normal);
       if (distance < 0 || distance > WASH_REACH) return;
+      // A wall of a room that is not a rectangle does not span it: a lamp off its end lights
+      // another wall, not this one.
+      const along = wall.normal.z !== 0 ? p.x : p.z;
+      if (Math.abs(along - wall.centre) > wall.halfLength) return;
       const fade = 1 - distance / WASH_REACH;
       const size = WASH_SIZE * (0.6 + 0.4 * fade);
       const onWall = p.clone().addScaledVector(wall.normal, -distance + 0.004);
       onWall.y = Math.min(Math.max(lamp.at.y, size * 0.35), heightM - size * 0.35);
       // Kept off the wall's ends, so a lamp in a corner does not wash the air outside the room.
       const reach = Math.max(wall.halfLength - size / 2, 0);
-      if (wall.normal.z !== 0) onWall.x = Math.min(Math.max(onWall.x, -reach), reach);
-      else onWall.z = Math.min(Math.max(onWall.z, -reach), reach);
+      if (wall.normal.z !== 0) onWall.x = Math.min(Math.max(onWall.x, wall.centre - reach), wall.centre + reach);
+      else onWall.z = Math.min(Math.max(onWall.z, wall.centre - reach), wall.centre + reach);
       const facing = new Quaternion().setFromUnitVectors(new Vector3(0, 0, 1), wall.normal);
       washes.push({ wall: wallIndex, matrix: new Matrix4().compose(onWall, facing, new Vector3(size, size, 1)) });
       washColours.push(colour.set(lamp.color).multiplyScalar(fade).getHex());
