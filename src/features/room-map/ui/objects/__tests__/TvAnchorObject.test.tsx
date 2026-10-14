@@ -1,0 +1,38 @@
+import { fireEvent, render } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+import type { TvAnchorPlacement } from "@/shared/contracts/roomMap";
+
+import { TvAnchorObject } from "../TvAnchorObject";
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
+
+const tv: TvAnchorPlacement = { x: 1.3, y: 0.3, width: 1, height: 0.1 };
+
+function renderTv(onChange = vi.fn<(updated: TvAnchorPlacement) => void>()) {
+  const onSelect = vi.fn<() => void>();
+  const { container } = render(
+    <TvAnchorObject placement={tv} pxPerMeter={80} selected={false} gridStepPx={40} snapEnabled onSelect={onSelect} onChange={onChange} />,
+  );
+  return { onChange, onSelect, root: container.firstElementChild as HTMLElement };
+}
+
+describe("TvAnchorObject", () => {
+  it("stays where it is after a click, even with the grid snapping", () => {
+    const { onChange, onSelect, root } = renderTv();
+    fireEvent.pointerDown(root, { clientX: 50, clientY: 50, pointerId: 1 });
+    fireEvent.pointerUp(root, { clientX: 51, clientY: 50, pointerId: 1 });
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("snaps a real drag to the grid", () => {
+    const { onChange, root } = renderTv();
+    fireEvent.pointerDown(root, { clientX: 50, clientY: 50, pointerId: 1 });
+    fireEvent.pointerMove(root, { clientX: 66, clientY: 50, pointerId: 1 });
+    fireEvent.pointerUp(root, { clientX: 66, clientY: 50, pointerId: 1 });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ x: 1.5, y: 0.5 }));
+  });
+});

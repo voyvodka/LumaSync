@@ -22,6 +22,14 @@ export interface SnapResult {
 
 export const SNAP_THRESHOLD_M = 0.08; // ~5px at typical zoom
 
+/** How far, in screen pixels, a press may wander and still be a click rather than a drag. */
+export const CLICK_SLOP_PX = 3;
+
+/** A press that never left its spot selects; snapping it to the grid would move a piece nobody dragged. */
+export function isClick(startX: number, startY: number, endX: number, endY: number): boolean {
+  return Math.hypot(endX - startX, endY - startY) < CLICK_SLOP_PX;
+}
+
 export function getObjectRects(config: RoomMapConfig, excludeId: string): ObjectRect[] {
   const rects: ObjectRect[] = [];
 

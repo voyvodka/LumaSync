@@ -2,6 +2,7 @@ import { memo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TvAnchorPlacement } from "@/shared/contracts/roomMap";
 import { ResizeHandle } from "./ResizeHandle";
+import { isClick } from "../../model/snapGeometry";
 import type { SnapResult } from "../../state/useSnapGuides";
 
 const MIN_SIZE_PX = 24;
@@ -106,6 +107,13 @@ export const TvAnchorObject = memo(function TvAnchorObject({
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragRef.current.active) return;
     dragRef.current.active = false;
+    if (isClick(dragRef.current.startClientX, dragRef.current.startClientY, e.clientX, e.clientY)) {
+      snapResultRef.current = null;
+      onSnapDragEnd?.();
+      setLocalX(placement.x);
+      setLocalY(placement.y);
+      return;
+    }
     const effectivePpm = pxPerMeter * zoom;
     const dx = (e.clientX - dragRef.current.startClientX) / effectivePpm;
     const dy = (e.clientY - dragRef.current.startClientY) / effectivePpm;

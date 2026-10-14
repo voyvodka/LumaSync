@@ -6,6 +6,7 @@ import { FurnitureGlyph } from "./FurnitureGlyph";
 import styles from "./FurnitureObject.module.css";
 import { ResizeHandle } from "./ResizeHandle";
 import { furnitureObjectId } from "../../model/objectId";
+import { isClick } from "../../model/snapGeometry";
 import type { SnapResult } from "../../state/useSnapGuides";
 
 const MIN_SIZE_PX = 24;
@@ -113,6 +114,13 @@ export const FurnitureObject = memo(function FurnitureObject({
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragRef.current.active) return;
     dragRef.current.active = false;
+    if (isClick(dragRef.current.startClientX, dragRef.current.startClientY, e.clientX, e.clientY)) {
+      snapResultRef.current = null;
+      onSnapDragEnd?.();
+      setLocalX(placement.x);
+      setLocalY(placement.y);
+      return;
+    }
     const effectivePpm = pxPerMeter * zoom;
     const dx = (e.clientX - dragRef.current.startClientX) / effectivePpm;
     const dy = (e.clientY - dragRef.current.startClientY) / effectivePpm;

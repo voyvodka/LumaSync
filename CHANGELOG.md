@@ -606,6 +606,9 @@ https://keepachangelog.com/en/1.1.0/
   it, instead of from its corner, which belongs to the neighbouring edge.
 - An effect on Hue lights alone, with no LED layout saved, spreads across the lights you have; a
   hidden one-LED strip in the screen's corner no longer took part in where it ran.
+- Room map: clicking a piece of furniture or the TV no longer moves it. With the grid on, a click
+  snapped it to the nearest grid line as though it had been dragged, so a piece off the grid
+  jumped up to half a metre the moment it was selected.
 - Room map: keys stay with what has focus. An arrow on a panel button or in a menu no longer also
   moves the selected object, Delete there no longer removes it, and Space presses a focused button
   instead of starting a pan. The right-click menu takes focus, moves with the arrow keys and hands

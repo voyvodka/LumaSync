@@ -9,7 +9,7 @@
  * The tests here pin structural rendering: label visibility, handle presence,
  * and locked-state suppression of handles.
  */
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 
 import { FurnitureObject } from "../FurnitureObject";
@@ -101,5 +101,36 @@ describe("FurnitureObject", () => {
       <FurnitureObject {...BASE_PROPS} placement={{ ...BASE_PLACEMENT, locked: true }} />,
     );
     expect((c2.firstElementChild as HTMLElement).className).toMatch(/cursor-default/);
+  });
+
+  // A click selected the piece and then snapped it to the grid as though it had been dragged, so a
+  // sofa off the grid jumped half a metre the moment it was clicked.
+  it("stays where it is after a click, even with the grid snapping", () => {
+    const onChange = vi.fn<(updated: FurniturePlacement) => void>();
+    const onSelect = vi.fn<(id: string) => void>();
+    const placement = { ...BASE_PLACEMENT, x: 1.3, y: 1.7 };
+    const { container } = render(
+      <FurnitureObject {...BASE_PROPS} placement={placement} snapEnabled onChange={onChange} onSelect={onSelect} />,
+    );
+    const piece = container.querySelector("[data-furniture-id]") as HTMLElement;
+    fireEvent.pointerDown(piece, { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(piece, { clientX: 101, clientY: 101, pointerId: 1 });
+    fireEvent.pointerUp(piece, { clientX: 101, clientY: 101, pointerId: 1 });
+    expect(onSelect).toHaveBeenCalledWith("sofa-1");
+    expect(onChange).not.toHaveBeenCalled();
+    expect(piece.style.left).toBe(`${1.3 * PX_PER_METER}px`);
+  });
+
+  it("still snaps a real drag to the grid", () => {
+    const onChange = vi.fn<(updated: FurniturePlacement) => void>();
+    const { container } = render(
+      <FurnitureObject {...BASE_PROPS} placement={{ ...BASE_PLACEMENT, x: 1.3, y: 1.7 }} snapEnabled onChange={onChange} />,
+    );
+    const piece = container.querySelector("[data-furniture-id]") as HTMLElement;
+    fireEvent.pointerDown(piece, { clientX: 100, clientY: 100, pointerId: 1 });
+    // 16 px at 80 px/m is 0.2 m; the 40 px grid is half a metre.
+    fireEvent.pointerMove(piece, { clientX: 116, clientY: 100, pointerId: 1 });
+    fireEvent.pointerUp(piece, { clientX: 116, clientY: 100, pointerId: 1 });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ x: 1.5, y: 1.5 }));
   });
 });
