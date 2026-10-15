@@ -21,6 +21,8 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     strip: "Şerit",
     zone: "Bölge",
     addZone: "Hue bölgesi ekle",
+    templates: "Şablonlar",
+    templatesHint: "Odayı bir şablondan kur",
     size: "{{name}} · {{width}} × {{depth}} m",
   },
   objects: {

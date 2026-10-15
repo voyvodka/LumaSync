@@ -294,6 +294,7 @@ export function RoomDock(props: RoomDockProps) {
           onAddStrip={(event) => fromDock(event, add.onAddStrip)}
           onAddImage={(event) => fromDock(event, add.onAddImage)}
           onAddZone={(event) => fromDock(event, add.onAddZone)}
+          onTemplates={props.onTemplates}
           hue={props.hue}
         />
       ) : (

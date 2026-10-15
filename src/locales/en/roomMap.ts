@@ -18,6 +18,8 @@ export default {
     strip: "Strip",
     zone: "Zone",
     addZone: "Add Hue zone",
+    templates: "Templates",
+    templatesHint: "Lay out the room from a template",
     size: "{{name}} · {{width}} × {{depth}} m",
   },
   objects: {

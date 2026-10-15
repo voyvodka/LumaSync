@@ -21,6 +21,15 @@ export function IconDuplicate() {
 }
 
 /** A stack of rows: what is in the room. */
+export function IconTemplates() {
+  return (
+    <svg {...PROPS} aria-hidden="true">
+      <rect x="2.2" y="2.2" width="11.6" height="11.6" rx="1.6" />
+      <path d="M2.2 7h6.3M8.5 2.2v11.6M8.5 10.2h5.3" />
+    </svg>
+  );
+}
+
 export function IconObjects() {
   return (
     <svg {...PROPS} aria-hidden="true">

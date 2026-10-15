@@ -32,6 +32,17 @@ const tile = (testId: string) => screen.getByTestId(testId);
 const ready: PaletteHueArea = { state: { kind: "ready", orphanedAreaId: false }, zoneCount: 2, lightCount: 4, channelsStatus: null, refreshing: false };
 
 describe("DockPalette", () => {
+  // The templates sat behind Room settings alone, where the maintainer could not find them.
+  it("offers the room templates in the palette where the editor has them", () => {
+    const onTemplates = vi.fn<() => void>();
+    renderPalette({ onTemplates });
+    fireEvent.click(tile("palette-templates"));
+    expect(onTemplates).toHaveBeenCalledOnce();
+    cleanup();
+    renderPalette();
+    expect(screen.queryByTestId("palette-templates")).toBeNull();
+  });
+
   it("adds a piece of the pressed type", () => {
     const props = renderPalette();
     fireEvent.click(tile("palette-table"));

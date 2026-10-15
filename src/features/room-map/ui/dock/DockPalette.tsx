@@ -11,6 +11,7 @@ import { FURNITURE_TILES } from "../../model/paletteTiles";
 import { TYPE_DOT_COLOR } from "../../model/zoneColor";
 import { usePaletteKeys } from "../../state/usePaletteKeys";
 import { FurnitureGlyph } from "../objects/FurnitureGlyph";
+import { IconTemplates } from "./dockIcons";
 import styles from "./DockPalette.module.css";
 import { HueAreaNote, type PaletteHueArea } from "./HueAreaNote";
 import { Disc } from "./InspectorParts";
@@ -26,19 +27,31 @@ export interface DockPaletteProps {
   onAddStrip: Press;
   onAddImage: Press;
   onAddZone: Press;
+  /** Opens the room templates, where the editor offers them. */
+  onTemplates?: Press;
   /** The Hue side of the room, when it has one: the Zone tile and the area's state beside it. */
   hue: PaletteHueArea | null;
 }
 
 /** What can be added, as two rows of tiles: the furniture, then the TV, a strip, an image and a Hue
  *  zone with the area's state at the end. */
-export function DockPalette({ hasTv, onAddFurniture, onAddTv, onSelectTv, onAddStrip, onAddImage, onAddZone, hue }: DockPaletteProps) {
+export function DockPalette({
+  hasTv,
+  onAddFurniture,
+  onAddTv,
+  onSelectTv,
+  onAddStrip,
+  onAddImage,
+  onAddZone,
+  onTemplates,
+  hue,
+}: DockPaletteProps) {
   const { t } = useTranslation();
   const noteRef = useRef<HTMLSpanElement | null>(null);
   const furnitureRef = useRef<HTMLDivElement | null>(null);
   const more = useSideScroll(furnitureRef, FURNITURE_TILES.map((tile) => tile.type).join(","), undefined);
   const zoneReady = hue?.state.kind === "ready";
-  const second = ["tv", "strip", "image", ...(hue ? ["zone"] : [])];
+  const second = ["tv", "strip", "image", ...(onTemplates ? ["templates"] : []), ...(hue ? ["zone"] : [])];
   const { tileProps } = usePaletteKeys([FURNITURE_TILES.map((tile) => tile.type), second]);
 
   return (
@@ -102,6 +115,17 @@ export function DockPalette({ hasTv, onAddFurniture, onAddTv, onSelectTv, onAddS
         >
           {t("roomMap:inspector.typeImage")}
         </Tile>
+        {onTemplates && (
+          <Tile
+            {...tileProps("templates")}
+            label={t("roomMap:palette.templatesHint")}
+            testId="palette-templates"
+            glyph={<IconTemplates />}
+            onClick={onTemplates}
+          >
+            {t("roomMap:palette.templates")}
+          </Tile>
+        )}
         {hue && (
           <>
             <Tile
