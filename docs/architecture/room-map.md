@@ -318,7 +318,9 @@ backlight drawn as a stray line along the wall.
   gesture key, because a chip or swatch group selects on every arrow key and each save re-applies
   the running mode.
 - **The 3D room keeps its draw count fixed.** Furniture merges into one mesh per material by
-  vertex colour; bulbs, floor pools and wall washes are one draw each whatever the lamp count;
+  vertex colour; the lamps' lit parts are one draw per shape (globe, drum shade, flared shade, bar —
+  each mesh holds every lamp and shows only its own), floor pools and wall washes one draw each,
+  whatever the lamp count;
   contact shadows are geometry with per-vertex alpha merged into one mesh — a stretched blur texture
   smeared on a long sofa — and include a soft band along the foot of every wall. The night backdrop
   is a CSS gradient behind a transparent canvas, so it costs no draw.

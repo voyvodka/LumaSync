@@ -3,9 +3,12 @@
 // Each kind is one draw call whatever the number of lamps.
 import {
   AdditiveBlending,
+  BoxGeometry,
+  type BufferGeometry,
   CanvasTexture,
   Color,
   DoubleSide,
+  CylinderGeometry,
   InstancedMesh,
   Matrix4,
   MeshBasicMaterial,
@@ -19,6 +22,7 @@ import {
 
 import type { ScenePoint } from "../../model/roomSpace";
 import { BLOOM_LAYER } from "./bloom";
+import type { LampShape } from "./lamps";
 
 export interface Lamp {
   /** Off the room's outline (in an L's or U's cut): it throws no pool on a floor that is not there. */
@@ -27,8 +31,10 @@ export interface Lamp {
   litByLight?: boolean;
   /** The lit part's centre. */
   at: ScenePoint;
-  /** The lit part's radii: a bulb is a small sphere, a shade a drum, a Play bar's back a strip. */
+  /** The lit part's half-extents: a bulb is a small sphere, a shade a drum, a Play bar's back a strip. */
   radii: [number, number, number];
+  /** Drawn as a globe when absent. */
+  shape?: LampShape;
   color: number;
 }
 
@@ -81,6 +87,15 @@ const WHITE = new Color(0xffffff);
 const UNLIT_BULB = new Color(0x24221f);
 /** Past 1: the bulb burns out to white in the picture, and feeds the glow pass more than a surface. */
 const BULB_BRIGHTNESS = 3;
+const SHADE_BRIGHTNESS = 1.9;
+
+/** Unit shapes, scaled per lamp by its half-extents: a cylinder 2 tall so its scale is a half-height. */
+const SHAPES: ReadonlyArray<{ shape: LampShape; geometry: () => BufferGeometry }> = [
+  { shape: "globe", geometry: () => new SphereGeometry(1, 16, 12) },
+  { shape: "drum", geometry: () => new CylinderGeometry(1, 1, 2, 28) },
+  { shape: "flare", geometry: () => new CylinderGeometry(0.4, 1, 2, 28) },
+  { shape: "bar", geometry: () => new BoxGeometry(2, 2, 2) },
+];
 const FLAT = new Quaternion().setFromEuler(new Object3D().rotateX(-Math.PI / 2).rotation);
 
 export interface Glow {
@@ -120,15 +135,20 @@ export function buildGlow(
   const m = new Matrix4();
   const colour = new Color();
 
-  const bulbs = new InstancedMesh(new SphereGeometry(1, 16, 12), new MeshBasicMaterial({ toneMapped: false }), lamps.length);
-  bulbs.layers.enable(BLOOM_LAYER);
+  // One mesh per shape, each holding every lamp and showing only its own (the rest scaled to
+  // nothing): the draw count stays four whatever the lamps are.
+  const material = new MeshBasicMaterial({ toneMapped: false });
+  const shapes = SHAPES.map(({ shape, geometry }) => {
+    const mesh = new InstancedMesh(geometry(), material, lamps.length);
+    mesh.layers.enable(BLOOM_LAYER);
+    return { shape, mesh };
+  });
   const unturned = new Quaternion();
+  const none = new Matrix4().makeScale(0, 0, 0);
   lamps.forEach((lamp, i) => {
     const [rx, ry, rz] = lamp.radii;
-    bulbs.setMatrixAt(
-      i,
-      m.compose(new Vector3(lamp.at.x, Math.max(lamp.at.y, ry + 0.02), lamp.at.z), unturned, new Vector3(rx, ry, rz)),
-    );
+    const place = m.compose(new Vector3(lamp.at.x, Math.max(lamp.at.y, ry + 0.02), lamp.at.z), unturned, new Vector3(rx, ry, rz));
+    for (const { shape, mesh } of shapes) mesh.setMatrixAt(i, shape === (lamp.shape ?? "globe") ? place : none);
   });
 
   // An evening room: each lamp throws a wide pool, so the lights read as what lights the room.
@@ -173,21 +193,24 @@ export function buildGlow(
   // unlit one is frosted glass.
   const paint = (lampColour: number | null, level: number) => {
     lamps.forEach((lamp, i) => {
-      const lit = colour.set(lampColour ?? lamp.color).lerp(WHITE, 0.2).multiplyScalar(BULB_BRIGHTNESS);
-      bulbs.setColorAt(i, lit.lerp(UNLIT_BULB, 1 - level));
+      // A shade glows through its fabric, dimmer than a bare bulb.
+      const gain = lamp.shape === "drum" || lamp.shape === "flare" ? SHADE_BRIGHTNESS : BULB_BRIGHTNESS;
+      const lit = colour.set(lampColour ?? lamp.color).lerp(WHITE, 0.2).multiplyScalar(gain);
+      lit.lerp(UNLIT_BULB, 1 - level);
+      for (const { mesh } of shapes) mesh.setColorAt(i, lit);
       pools.setColorAt(i, colour.set(lampColour ?? lamp.color).multiplyScalar(level));
     });
     washLamps.forEach(({ lamp, fade }, i) => {
       washMesh?.setColorAt(i, colour.set(lampColour ?? lamps[lamp]?.color ?? 0).multiplyScalar(fade * level));
     });
-    for (const mesh of [bulbs, pools, washMesh]) if (mesh?.instanceColor) mesh.instanceColor.needsUpdate = true;
+    for (const mesh of [...shapes.map((entry) => entry.mesh), pools, washMesh]) if (mesh?.instanceColor) mesh.instanceColor.needsUpdate = true;
   };
   paint(null, 1);
 
   const hidden = new Matrix4().makeScale(0, 0, 0);
   let cutState: readonly boolean[] = [];
   return {
-    objects: [bulbs, pools, ...(washMesh ? [washMesh] : [])],
+    objects: [...shapes.map((entry) => entry.mesh), pools, ...(washMesh ? [washMesh] : [])],
     paint,
     setCutWalls(cut) {
       if (!washMesh || (cutState.length === cut.length && cutState.every((c, i) => c === cut[i]))) return false;

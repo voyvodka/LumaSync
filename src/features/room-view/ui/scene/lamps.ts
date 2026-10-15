@@ -6,10 +6,15 @@ import type { ScenePoint } from "../../model/roomSpace";
 import { PALETTE } from "./palette";
 import { block, type Part, rod } from "./parts";
 
-/** The lit part: where it sits and its radii (an ellipsoid). */
+/** The lit part's shape: a bulb or globe, a lamp's drum shade, a pendant's flared shade, or a
+ *  bar (a Play's back, a strip, a tube). */
+export type LampShape = "globe" | "drum" | "flare" | "bar";
+
+/** The lit part: where it sits, its half-extents, and its shape. */
 export interface LampGlow {
   at: ScenePoint;
   radii: [number, number, number];
+  shape: LampShape;
 }
 
 export interface LampFixture {
@@ -35,12 +40,12 @@ export function lampFixture(family: LampFamily, at: ScenePoint, surface: number,
       const standing = bottom - surface < 0.03;
       const body = [block(0.045, half * 2, 0.04, x, bottom, z, BAR, 0.008)];
       if (standing) body.push(block(0.07, 0.012, 0.06, x, surface, z, BAR, 0.004));
-      return { body, glow: { at: { x, y: bottom + half, z }, radii: [0.024, half * 0.9, 0.024] } };
+      return { body, glow: { at: { x, y: bottom + half, z }, radii: [0.024, half * 0.9, 0.024], shape: "bar" } };
     }
     case "lightstrip":
-      return { body: [], glow: { at: { x, y, z }, radii: [0.32, 0.012, 0.012] } };
+      return { body: [], glow: { at: { x, y, z }, radii: [0.32, 0.012, 0.012], shape: "bar" } };
     case "tube":
-      return { body: [], glow: { at: { x, y, z }, radii: [0.3, 0.02, 0.02] } };
+      return { body: [], glow: { at: { x, y, z }, radii: [0.3, 0.02, 0.02], shape: "bar" } };
     case "floorLamp": {
       const shadeY = Math.max(y, 0.6);
       return {
@@ -48,14 +53,14 @@ export function lampFixture(family: LampFamily, at: ScenePoint, surface: number,
           rod(0.15, 0.16, 0.02, x, 0, z, PALETTE.metal, 24),
           rod(0.012, 0.012, Math.max(shadeY - 0.12, 0.05), x, 0.02, z, PALETTE.metal, 8),
         ],
-        glow: { at: { x, y: shadeY, z }, radii: [0.17, 0.13, 0.17] },
+        glow: { at: { x, y: shadeY, z }, radii: [0.16, 0.13, 0.16], shape: "drum" },
       };
     }
     case "signe": {
       const height = 1.45;
       return {
         body: [rod(0.12, 0.13, 0.015, x, surface, z, PALETTE.metal, 20), block(0.03, height, 0.03, x, surface + 0.015, z, BAR, 0.006)],
-        glow: { at: { x, y: surface + 0.015 + height / 2, z }, radii: [0.022, height * 0.47, 0.022] },
+        glow: { at: { x, y: surface + 0.015 + height / 2, z }, radii: [0.022, height * 0.47, 0.022], shape: "bar" },
       };
     }
     case "tableLamp": {
@@ -63,7 +68,7 @@ export function lampFixture(family: LampFamily, at: ScenePoint, surface: number,
       const shadeY = Math.min(Math.max(y, surface + 0.28), surface + 0.55);
       return {
         body: [rod(0.055, 0.075, Math.max(shadeY - surface - 0.1, 0.05), x, surface, z, CANOPY, 16)],
-        glow: { at: { x, y: shadeY, z }, radii: [0.13, 0.1, 0.13] },
+        glow: { at: { x, y: shadeY, z }, radii: [0.12, 0.09, 0.12], shape: "drum" },
       };
     }
     case "pendant": {
@@ -74,31 +79,31 @@ export function lampFixture(family: LampFamily, at: ScenePoint, surface: number,
           rod(0.004, 0.004, Math.max(ceiling - shadeY - 0.06, 0.02), x, shadeY + 0.06, z, BAR, 6),
           rod(0.06, 0.06, 0.02, x, ceiling - 0.02, z, CANOPY, 16),
         ],
-        glow: { at: { x, y: shadeY, z }, radii: [0.18, 0.09, 0.18] },
+        glow: { at: { x, y: shadeY, z }, radii: [0.18, 0.09, 0.18], shape: "flare" },
       };
     }
     case "ceiling":
       return {
         body: [rod(0.2, 0.2, 0.03, x, ceiling - 0.03, z, CANOPY, 32)],
-        glow: { at: { x, y: ceiling - 0.04, z }, radii: [0.19, 0.025, 0.19] },
+        glow: { at: { x, y: ceiling - 0.04, z }, radii: [0.19, 0.025, 0.19], shape: "drum" },
       };
     case "portable": {
       const domeY = surface + 0.075;
       return {
         body: [rod(0.1, 0.105, 0.015, x, surface, z, CANOPY, 24)],
-        glow: { at: { x, y: domeY, z }, radii: [0.1, 0.07, 0.1] },
+        glow: { at: { x, y: domeY, z }, radii: [0.1, 0.07, 0.1], shape: "globe" },
       };
     }
     case "spot": {
       const headY = Math.max(y, surface + 0.12);
       return {
         body: [rod(0.04, 0.045, 0.02, x, surface, z, BAR, 12), rod(0.01, 0.01, Math.max(headY - surface - 0.06, 0.02), x, surface + 0.02, z, BAR, 6)],
-        glow: { at: { x, y: headY, z }, radii: [0.045, 0.045, 0.045] },
+        glow: { at: { x, y: headY, z }, radii: [0.045, 0.045, 0.045], shape: "globe" },
       };
     }
     case "wall":
-      return { body: [], glow: { at: { x, y, z }, radii: [0.1, 0.14, 0.06] } };
+      return { body: [], glow: { at: { x, y, z }, radii: [0.1, 0.14, 0.06], shape: "drum" } };
     default:
-      return { body: [], glow: { at: { x, y, z }, radii: [BULB_RADIUS, BULB_RADIUS, BULB_RADIUS] } };
+      return { body: [], glow: { at: { x, y, z }, radii: [BULB_RADIUS, BULB_RADIUS, BULB_RADIUS], shape: "globe" } };
   }
 }

@@ -207,7 +207,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
       angle: 0,
     });
     const outside = corners !== null && outsideOutline(fixture.glow.at.x + W / 2, fixture.glow.at.z + D / 2, corners);
-    return { at: fixture.glow.at, radii: fixture.glow.radii, color: lampColour(i), outside };
+    return { at: fixture.glow.at, radii: fixture.glow.radii, shape: fixture.glow.shape, color: lampColour(i), outside };
   });
 
   const screen = buildScreen(config, models);
