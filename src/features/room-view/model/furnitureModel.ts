@@ -254,6 +254,9 @@ function chairModel(item: FurniturePlacement, variant: FurnitureVariant | undefi
   return item.height < 0.45 ? { kind: "bench" } : seating(item.width);
 }
 
+/** Longer than this, storage with no pick reads as wardrobes rather than a sideboard. */
+const STORAGE_RUN_MIN = 2.4;
+
 function storageModel(item: FurniturePlacement, variant: FurnitureVariant | undefined, screen: ScreenSpot | null): FurnitureModel {
   switch (variant) {
     case FURNITURE_VARIANTS.SIDEBOARD:
@@ -275,6 +278,8 @@ function storageModel(item: FurniturePlacement, variant: FurnitureVariant | unde
     if (Math.abs(local.x) <= item.width / 2 && Math.abs(local.y) <= item.height / 2 + 0.4) return { kind: "tvUnit" };
   }
   if (Math.min(item.width, item.height) <= 0.36) return { kind: "bookshelf" };
+  // A run of storage longer than a sideboard is a wall of wardrobes, not a 4 m console.
+  if (Math.max(item.width, item.height) > STORAGE_RUN_MIN) return { kind: "wardrobe" };
   return { kind: "cabinet", doors: clamp(Math.round(item.width / 0.45), 1, 6) };
 }
 

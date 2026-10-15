@@ -1,7 +1,8 @@
-import { type KeyboardEvent, useCallback, useMemo, useRef } from "react";
+import { type KeyboardEvent, useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { LampFamily } from "@/features/room-view/model/lampFamily";
+import type { CameraCommand } from "@/features/room-view/ui/RoomView3D";
 import { RoomView3DHost } from "@/features/room-view/ui/RoomView3DHost";
 
 import { deriveHueAreaState } from "../../model/hueAreaState";
@@ -31,6 +32,7 @@ export interface ViewStageProps {
 export function ViewStage({ doc, lampFamilies, roomAware, hueReachable, onEdit, onNavigateToDevices, onFail }: ViewStageProps) {
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const [cameraCommand, setCameraCommand] = useState<CameraCommand | undefined>(undefined);
   const { scopedConfig, selectedId, select, selectHueZone, hue, hueAreaId, hueBridgeConfigured, hueBridgeIp } = doc;
   const { stripStatus } = useUsbStripStatus(hueReachable);
   const identify = useHueIdentify(hueBridgeIp);
@@ -66,7 +68,8 @@ export function ViewStage({ doc, lampFamilies, roomAware, hueReachable, onEdit, 
     (objectId: string | null) => {
       const ref = objectId ? parseObjectId(objectId) : null;
       if (objectId && ref && (ref.kind === "hue" || ref.kind === "tv")) selectLight(objectId);
-      else if (viewSelectedId !== null) select(null);
+      // A piece of furniture is not empty ground: a click on the sofa kept nothing and dropped the light.
+      else if (objectId === null && viewSelectedId !== null) select(null);
       // OrbitControls takes the press, so the root is focused here for Esc to reach it.
       focusStage();
     },
@@ -87,6 +90,7 @@ export function ViewStage({ doc, lampFamilies, roomAware, hueReachable, onEdit, 
         label={t("roomMap:face.viewLabel")}
         selectedId={viewSelectedId}
         bottomInset={ROOM_MAP_FIT_INSETS.bottom}
+        cameraCommand={cameraCommand}
         onPick={handlePick}
         onFail={onFail}
       />
@@ -117,7 +121,14 @@ export function ViewStage({ doc, lampFamilies, roomAware, hueReachable, onEdit, 
         }}
         onFocusStage={focusStage}
       />
-      <CornerControls roomAware={roomAware} />
+      <CornerControls
+        roomAware={roomAware}
+        view={{
+          onZoomIn: () => setCameraCommand((c) => ({ kind: "in", seq: (c?.seq ?? 0) + 1 })),
+          onZoomOut: () => setCameraCommand((c) => ({ kind: "out", seq: (c?.seq ?? 0) + 1 })),
+          onReset: () => setCameraCommand((c) => ({ kind: "reset", seq: (c?.seq ?? 0) + 1 })),
+        }}
+      />
     </div>
   );
 }

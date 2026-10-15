@@ -47,8 +47,18 @@ interface RoomView {
   select(objectId: string | null): void;
   /** Pixels at the foot something floats over; the room is fitted above them. */
   setBottomInset(px: number): void;
+  /** The camera's own controls, beside the drag and the wheel. */
+  camera(command: CameraCommand["kind"]): void;
   close(): void;
 }
+
+/** A press on the view's corner controls; `seq` makes the same press twice two commands. */
+export interface CameraCommand {
+  kind: "in" | "out" | "reset";
+  seq: number;
+}
+
+const ZOOM_STEP = 1.25;
 
 const POLAR = 0.95;
 /** A press that moves further than this turns the room; one that stays within it is a click (the
@@ -118,10 +128,13 @@ function openRoomView(
     controls = orbit;
     orbit.minPolarAngle = 0.6;
     orbit.maxPolarAngle = 1.2;
-    orbit.enablePan = false;
+    // A right drag (two fingers on a trackpad with the button) moves what the room turns about, and
+    // the wheel zooms toward the pointer: the view is no longer pinned to the room's middle.
+    orbit.enablePan = true;
+    orbit.screenSpacePanning = true;
     orbit.zoomToCursor = true;
-    orbit.minZoom = 0.8;
-    orbit.maxZoom = 3;
+    orbit.minZoom = 0.6;
+    orbit.maxZoom = 8;
     orbit.enableDamping = !prefersReducedMotion();
 
     const placeCamera = (current: RoomScene, azimuth: number) => {
@@ -201,6 +214,26 @@ function openRoomView(
       { signal: listening.signal },
     );
     canvas.addEventListener("pointercancel", () => (press = null), { signal: listening.signal });
+    // A double-click looks at what it lands on: the room turns about that point and comes closer.
+    canvas.addEventListener(
+      "dblclick",
+      (event) => {
+        if (!room) return;
+        const rect = canvas.getBoundingClientRect();
+        pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
+        raycaster.setFromCamera(pointer, camera);
+        const hit = raycaster.intersectObject(room.scene, true)[0];
+        if (!hit) return;
+        const shift = hit.point.clone().sub(orbit.target);
+        orbit.target.add(shift);
+        camera.position.add(shift);
+        camera.zoom = Math.min(Math.max(camera.zoom * 1.6, orbit.minZoom), orbit.maxZoom);
+        camera.updateProjectionMatrix();
+        orbit.update();
+        request();
+      },
+      { signal: listening.signal },
+    );
 
     const fit = () => {
       const { width, height } = host.getBoundingClientRect();
@@ -273,6 +306,19 @@ function openRoomView(
     };
 
     return {
+      camera(kind) {
+        if (!room) return;
+        if (kind === "reset") {
+          orbit.target.copy(room.target);
+          camera.zoom = 1;
+          placeCamera(room, Math.PI / 4);
+        } else {
+          camera.zoom = Math.min(Math.max(camera.zoom * (kind === "in" ? ZOOM_STEP : 1 / ZOOM_STEP), orbit.minZoom), orbit.maxZoom);
+        }
+        camera.updateProjectionMatrix();
+        orbit.update();
+        request();
+      },
       setBottomInset(px) {
         if (px === bottomInset) return;
         bottomInset = px;
@@ -305,6 +351,7 @@ export default function RoomView3D({
   label,
   selectedId = null,
   bottomInset = 0,
+  cameraCommand,
   onPick,
   onFail,
 }: {
@@ -316,6 +363,7 @@ export default function RoomView3D({
   selectedId?: string | null;
   /** Pixels at the view's foot that something floats over; the room is fitted above them. */
   bottomInset?: number;
+  cameraCommand?: CameraCommand;
   /** A click in the room: the object it landed on, or null for empty ground. */
   onPick?: (objectId: string | null) => void;
   /** No view could be drawn — no WebGL context, or the scene failed to build. */
@@ -356,6 +404,10 @@ export default function RoomView3D({
   useEffect(() => {
     viewRef.current?.setBottomInset(bottomInset);
   }, [bottomInset]);
+
+  useEffect(() => {
+    if (cameraCommand) viewRef.current?.camera(cameraCommand.kind);
+  }, [cameraCommand]);
 
   // Its own effect, so a new selection marks the room without building it again.
   useEffect(() => {

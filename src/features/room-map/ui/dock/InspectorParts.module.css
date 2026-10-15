@@ -47,9 +47,34 @@
   }
 
   /* A value at rest, a field on intent — the DecimalField's tint and underline. */
-  .name {
+  .nameBox {
+    position: relative;
+    display: flex;
     flex: 1 1 120px;
     min-width: 96px;
+    border-radius: 7px;
+    transition: background var(--lm-dur-quick);
+  }
+  .nameBox:hover:has(.name:not(:disabled)) { background: rgb(255 255 255 / 4%); }
+  .nameEditing,
+  .nameEditing:hover:has(.name:not(:disabled)) { background: rgb(255 255 255 / 6%); }
+  .nameBox::after {
+    content: "";
+    position: absolute;
+    right: 8px;
+    bottom: 4px;
+    left: 8px;
+    height: 1px;
+    background: var(--lm-amber);
+    transform: scaleX(0);
+    transition: transform var(--lm-dur-base) var(--lm-ease-out);
+    pointer-events: none;
+  }
+  .nameEditing::after { transform: scaleX(1); }
+  .name {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
     height: 32px;
     padding: 0 8px;
     border: 0;
@@ -59,10 +84,8 @@
     font: 600 12px/1 var(--lm-sans);
     text-overflow: ellipsis;
     outline: none;
-    transition: background var(--lm-dur-quick);
+    caret-color: var(--lm-amber);
   }
-  .name:hover:not(:disabled) { background: rgb(255 255 255 / 4%); }
-  .name:focus { background: rgb(255 255 255 / 6%); box-shadow: inset 0 -1px 0 var(--lm-amber); }
   .name:disabled { color: var(--lm-ink-dim); cursor: not-allowed; }
 
   .spacer { flex: 1 1 0; min-width: 0; }
@@ -166,12 +189,14 @@
     white-space: nowrap;
   }
 
-  :global(:root[data-reduced-motion]) .name,
+  :global(:root[data-reduced-motion]) .nameBox,
+  :global(:root[data-reduced-motion]) .nameBox::after,
   :global(:root[data-reduced-motion]) .action,
   :global(:root[data-reduced-motion]) .link { transition: none; }
 
   @media (forced-colors: active) {
-    .name:focus { outline: 2px solid Highlight; }
+    .nameEditing { outline: 2px solid Highlight; }
+    .nameBox::after { background: Highlight; }
     .action[aria-pressed="true"] { outline: 1px solid Highlight; }
     /* The fill and the zone's ring are what tell lights and zones apart. */
     .disc { border-color: CanvasText; forced-color-adjust: none; }

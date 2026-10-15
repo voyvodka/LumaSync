@@ -11,6 +11,11 @@ import { isClick } from "../../model/snapGeometry";
 import type { SnapResult } from "../../state/useSnapGuides";
 
 const MIN_SIZE_PX = 24;
+/** A grid line or guide catches a dragged piece only this close, on screen; past it the piece moves
+ *  freely. Snapping to every grid step made a drag jump half a metre at a time. */
+const SOFT_SNAP_PX = 10;
+/** Sizes land on 5 cm, whatever the grid. */
+const RESIZE_STEP_M = 0.05;
 
 interface FurnitureObjectProps {
   placement: FurniturePlacement;
@@ -90,10 +95,15 @@ export const FurnitureObject = memo(function FurnitureObject({
     );
     const snap = onSnapDragMove?.(furnitureObjectId(placement.id), raw.x, raw.y, local.w, local.h) ?? null;
     if (free) return raw;
-    const onGrid = snapEnabled && gridStepM > 0;
-    // Per axis: a guide wins where it caught, the grid holds the other — it used to drop the grid on both.
-    const x = snap?.snapX ?? (onGrid ? snapToStep(raw.x, gridStepM) : raw.x);
-    const y = snap?.snapY ?? (onGrid ? snapToStep(raw.y, gridStepM) : raw.y);
+    const reach = SOFT_SNAP_PX / ppm;
+    const soft = (value: number) => {
+      if (!snapEnabled || gridStepM <= 0) return value;
+      const onLine = snapToStep(value, gridStepM);
+      return Math.abs(onLine - value) <= reach ? onLine : value;
+    };
+    // Per axis: a guide wins where it caught, a nearby grid line holds the other.
+    const x = snap?.snapX ?? soft(raw.x);
+    const y = snap?.snapY ?? soft(raw.y);
     return clampInsideRoom({ x, y, w: local.w, h: local.h, r: local.r }, room);
   };
 
@@ -136,7 +146,7 @@ export const FurnitureObject = memo(function FurnitureObject({
     const ppm = pxPerMeter * zoom;
     const next = resizeFromHandle(start, handleSigns(handle), dx / ppm, dy / ppm, {
       min: minSizeM,
-      step: snapEnabled ? gridStepM : 0,
+      step: RESIZE_STEP_M,
       keepRatio,
     });
     setLocal(next);

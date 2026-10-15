@@ -157,6 +157,17 @@ https://keepachangelog.com/en/1.1.0/
   - On a trackpad two fingers pan the plan and a pinch zooms; a mouse wheel still zooms.
   - A number in the inspector changes by dragging across it (⇧ for ten steps at a time); a press
     without moving types, as before. The value sits beside its mark instead of across the field.
+  - A dragged piece moves freely and is caught by a grid line only when it comes near one, instead
+    of jumping half a metre at a time; sizes land on 5 cm. A turned piece's side handles show the
+    cursor along the way they drag. The name field edits as the number fields do, with a soft tint
+    and an amber line instead of a framed box.
+  - The 3D view can look at something other than the room's middle: a right drag moves it, the
+    wheel zooms toward the pointer and further than before, a double-click turns the room about what
+    it lands on and comes closer, and the corner has zoom buttons and "Whole room" to go back. A
+    click on furniture keeps the light that is selected, the light card's link says "Place on map"
+    (it said "Edit", like the switch above it), and someone without Hue is no longer told their area
+    has no Hue lights. Storage longer than a sideboard reads as a run of wardrobes, with doors about
+    half a metre wide.
   - The template list says what the room map is for, a blank room opens on Edit rather than an
     empty 3D view, a second piece added lands beside the first instead of on it, the TV snaps like
     the furniture does, the cut's width, depth and offset fields carry drawn marks instead of the

@@ -19,16 +19,16 @@ export function handleSigns(handle: FrameHandle): { sx: -1 | 0 | 1; sy: -1 | 0 |
   };
 }
 
-const CURSOR: Record<FrameHandle, string> = {
-  n: "ns-resize",
-  s: "ns-resize",
-  e: "ew-resize",
-  w: "ew-resize",
-  ne: "nesw-resize",
-  sw: "nesw-resize",
-  nw: "nwse-resize",
-  se: "nwse-resize",
-};
+/** Where each handle points, in degrees clockwise from up, before the piece is turned. */
+const HANDLE_ANGLE: Record<FrameHandle, number> = { n: 0, ne: 45, e: 90, se: 135, s: 180, sw: 225, w: 270, nw: 315 };
+const CURSORS = ["ns-resize", "nesw-resize", "ew-resize", "nwse-resize"] as const;
+
+/** The resize cursor along a handle's direction once the piece is turned: a turned sofa's side
+ *  handle showed the unturned cursor, at right angles to the drag it makes. */
+export function handleCursor(handle: FrameHandle, rotation: number): string {
+  const angle = (((HANDLE_ANGLE[handle] + rotation) % 180) + 180) % 180;
+  return CURSORS[Math.round(angle / 45) % 4]!;
+}
 
 /** The rotation a pointer at (`dx`, `dy`) from the centre asks for: the knob sits at the front, up. */
 export function rotationToward(dx: number, dy: number, free: boolean): number {
@@ -156,7 +156,7 @@ export function SelectionFrame({
             <span
               key={handle}
               className={cx(styles.handle, styles[handle])}
-              style={{ cursor: CURSOR[handle] }}
+              style={{ cursor: handleCursor(handle, rotation) }}
               data-testid={`frame-handle-${handle}`}
               onPointerDown={(event) => begin(event, "resize", handle)}
               onPointerMove={move}

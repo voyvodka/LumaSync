@@ -164,7 +164,8 @@ describe("FurnitureObject", () => {
     expect(piece.style.left).toBe(`${1.3 * PX_PER_METER}px`);
   });
 
-  it("still snaps a real drag to the grid", () => {
+  // Snapping every step made a drag jump half a metre at a time; a line catches only what comes near it.
+  it("catches a drag on a grid line it ends near, and leaves the axis that is far from one", () => {
     const onChange = vi.fn<(updated: FurniturePlacement) => void>();
     const { container } = render(
       <FurnitureObject {...BASE_PROPS} placement={{ ...BASE_PLACEMENT, x: 1.3, y: 1.7 }} snapEnabled onChange={onChange} />,
@@ -174,6 +175,6 @@ describe("FurnitureObject", () => {
     // 16 px at 80 px/m is 0.2 m; the 40 px grid is half a metre.
     fireEvent.pointerMove(piece, { clientX: 116, clientY: 100, pointerId: 1 });
     fireEvent.pointerUp(piece, { clientX: 116, clientY: 100, pointerId: 1 });
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ x: 1.5, y: 1.5 }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ x: 1.5, y: 1.7 }));
   });
 });

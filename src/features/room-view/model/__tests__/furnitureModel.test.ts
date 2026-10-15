@@ -126,6 +126,11 @@ describe("classifyFurniture — the new kinds", () => {
     expect(modelOf(config, "side")).toEqual({ kind: "cabinet", doors: 3 });
   });
 
+  // A 4.6 m run of storage drew as one long sideboard, a console the length of the wall.
+  it("reads a run of storage longer than a sideboard as wardrobes", () => {
+    expect(modelOf(room([piece("run", "storage", 0, 0, 4.6, 0.6)]), "run")).toEqual({ kind: "wardrobe" });
+  });
+
   it("draws a bed, a plant by its habit, a rug round when square, and an unknown type as a plain box", () => {
     const config = room([
       piece("bed", "bed", 0, 0, 1.6, 2.05),

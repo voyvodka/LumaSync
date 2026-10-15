@@ -37,7 +37,8 @@ export function ViewLightRow({ lights, hue: hueArea, onSelect }: ViewLightRowPro
       <div ref={stripRef} className={cx(styles.row, styles.scroll)} data-more={more}>
         {areaMissing && hue.length === 0 ? (
           <HueAreaNote hue={hueArea} noteRef={noteRef} />
-        ) : hue.length === 0 ? (
+        ) : hue.length === 0 && hueArea !== null ? (
+          // Said only to someone with Hue: without a bridge there is no area to be empty.
           <span className={styles.hint}>{t("roomMap:view.lights.noHue")}</span>
         ) : (
           hue.map((light) => (

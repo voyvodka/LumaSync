@@ -4,6 +4,7 @@ import { useWindowVisible } from "@/features/shell/windowVisibility";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 
 import type { LampFamily } from "../model/lampFamily";
+import type { CameraCommand } from "./RoomView3D";
 import styles from "./RoomView3DHost.module.css";
 
 // Spike: built into dev builds and into a measuring build with VITE_ROOM_VIEW_SPIKE=1. A release
@@ -23,6 +24,7 @@ export function RoomView3DHost(props: {
   label: string;
   selectedId?: string | null;
   bottomInset?: number;
+  cameraCommand?: CameraCommand;
   onPick?: (objectId: string | null) => void;
   onFail: (error: unknown) => void;
 }) {

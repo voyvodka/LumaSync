@@ -29,8 +29,8 @@ const roomMap: Catalogue<typeof enRoomMap> = {
   face: {
     label: "Oda haritası",
     view: "Görünüm",
-    edit: "Düzenle",
-    viewLabel: "Odanın 3D görünümü. Aşağıdaki araç çubuğundan bir ışık seç.",
+    edit: "Haritada konumla",
+    viewLabel: "Odanın 3D görünümü. Döndürmek için sürükle, yakınlaştırmak için kaydır. Tüm ışıklar aşağıdaki araç çubuğunda.",
     viewUnavailable: "Görünüm — 3D oda bu bilgisayarda açılamadı",
   },
   frame: {
@@ -44,6 +44,8 @@ const roomMap: Catalogue<typeof enRoomMap> = {
       hint: "Burada ya da odada bir ışık seç",
     },
     back: "Işıklara dön",
+    resetCamera: "Tüm oda",
+    cameraHint: "Döndürmek için sürükle · taşımak için sağ tıkla sürükle · yakınlaştırmak için kaydır · bakmak için çift tıkla",
     identify: "Yanıp söndür",
     identifyHint: "Gerçek ışığı birkaç saniye yanıp söndür",
     identifyUnavailable: "Bu ışığı yanıp söndürmek için Cihazlar'da bir Hue Bridge eşle",

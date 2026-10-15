@@ -62,7 +62,9 @@ export function NameField({
     if (trimmed !== shown) onCommit(trimmed);
   };
 
+  // The box and line arrive as the number fields' do: a tint, and an amber line opening from the middle.
   return (
+    <span className={cx(styles.nameBox, editing && styles.nameEditing)}>
     <input
       type="text"
       className={styles.name}
@@ -93,6 +95,7 @@ export function NameField({
         }
       }}
     />
+    </span>
   );
 }
 

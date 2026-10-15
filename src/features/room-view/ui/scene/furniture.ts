@@ -433,7 +433,8 @@ function bookshelf(w: number, d: number, height: number, rand: () => number, f: 
 function wardrobe(w: number, d: number, height: number, f: Finish): Part[] {
   const plinth = 0.06;
   const h = clamp(height, 1.2, 2.8);
-  const doors = clamp(Math.round(w / 0.5), 2, 4);
+  // A door of about half a metre however long the run, so a wall of wardrobes does not get four doors a metre wide.
+  const doors = clamp(Math.round(w / 0.5), 2, 12);
   return [
     block(w, plinth, Math.max(d - 0.03, 0.05), 0, 0, 0.015, PALETTE.walnut, 0.006),
     block(w, h - plinth - 0.03, d, 0, plinth, 0, f.wood, 0.012),
