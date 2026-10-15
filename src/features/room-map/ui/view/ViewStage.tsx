@@ -118,6 +118,7 @@ export function ViewStage({
         label={t("roomMap:face.viewLabel")}
         selectedId={viewSelectedId}
         bottomInset={ROOM_MAP_FIT_INSETS.bottom}
+        topInset={ROOM_MAP_FIT_INSETS.top}
         cameraCommand={cameraCommand}
         onPick={handlePick}
         onMovePiece={handleMovePiece}

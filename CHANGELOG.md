@@ -189,6 +189,10 @@ https://keepachangelog.com/en/1.1.0/
     the 3D view keeps where each was looking for the session (a resized room is framed afresh).
   - A USB strip shows in the 3D view: one behind the screen is picked there as its backlight, one
     along a wall runs as a thin lit line at skirting height, and either one clicked opens its card.
+  - The 3D room fills its view between the View/Edit switch and the dock instead of leaving most of
+    the width empty, reads as an evening interior with each lamp throwing a wider, stronger pool on
+    the floor and wash on the walls near it, and a lamp standing in an L's or U's cut throws no
+    pool on a floor that is not there.
   - In the 3D view each light's chip is filled with the colour its lamp glows in the room, the inner
     walls of a U- or T-shaped room drop when they stand between the camera and the room, Blink waits
     with its reason while Hue streams instead of failing on the press, a table lamp stays on what is

@@ -24,6 +24,8 @@ import {
 import type { ScenePoint } from "../../model/roomSpace";
 
 export interface Lamp {
+  /** Off the room's outline (in an L's or U's cut): it throws no pool on a floor that is not there. */
+  outside?: boolean;
   /** The lit part's centre. */
   at: ScenePoint;
   /** The lit part's radii: a bulb is a small sphere, a shade a drum, a Play bar's back a strip. */
@@ -43,8 +45,8 @@ export interface WallPlane {
 }
 
 /** How near a wall a lamp must be to wash it. */
-const WASH_REACH = 0.9;
-const WASH_SIZE = 1.7;
+const WASH_REACH = 1.6;
+const WASH_SIZE = 2.4;
 /** The halo's diameter in metres; the view turns it into pixels for the current zoom. */
 export const HALO_METRES = 0.55;
 
@@ -150,9 +152,10 @@ export function buildGlow(
   });
   const halos = new Points(haloGeometry, haloMaterial);
 
-  const pools = new InstancedMesh(new PlaneGeometry(1, 1), additive(surface, 0.42), lamps.length);
+  // An evening room: each lamp throws a wide pool, so the lights read as what lights the room.
+  const pools = new InstancedMesh(new PlaneGeometry(1, 1), additive(surface, 0.62), lamps.length);
   lamps.forEach((lamp, i) => {
-    const size = 1.0 + Math.min(Math.max(lamp.at.y, 0), heightM) * 0.7;
+    const size = lamp.outside ? 0 : 1.6 + Math.min(Math.max(lamp.at.y, 0), heightM) * 0.9;
     pools.setMatrixAt(i, m.compose(new Vector3(lamp.at.x, 0.006, lamp.at.z), FLAT, new Vector3(size, size, 1)));
     pools.setColorAt(i, colour.set(lamp.color));
   });
@@ -161,6 +164,7 @@ export function buildGlow(
   const washColours: number[] = [];
   const p = new Vector3();
   lamps.forEach((lamp) => {
+    if (lamp.outside) return;
     p.set(lamp.at.x, lamp.at.y, lamp.at.z);
     walls.forEach((wall, wallIndex) => {
       const distance = wall.offset + p.dot(wall.normal);
@@ -182,7 +186,7 @@ export function buildGlow(
       washColours.push(colour.set(lamp.color).multiplyScalar(fade).getHex());
     });
   });
-  const washMesh = washes.length > 0 ? new InstancedMesh(new PlaneGeometry(1, 1), additive(surface, 0.38), washes.length) : null;
+  const washMesh = washes.length > 0 ? new InstancedMesh(new PlaneGeometry(1, 1), additive(surface, 0.55), washes.length) : null;
   if (washMesh) {
     washes.forEach((wash, i) => {
       washMesh.setMatrixAt(i, wash.matrix);

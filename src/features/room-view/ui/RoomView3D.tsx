@@ -59,8 +59,8 @@ declare global {
 interface RoomView {
   show(config: RoomMapConfig, lampFamilies: ReadonlyMap<number, LampFamily>): void;
   select(objectId: string | null): void;
-  /** Pixels at the foot something floats over; the room is fitted above them. */
-  setBottomInset(px: number): void;
+  /** Pixels at the foot and the head something floats over; the room is fitted between them. */
+  setInsets(bottom: number, top: number): void;
   /** The camera's own controls, beside the drag and the wheel. */
   camera(command: CameraCommand["kind"]): void;
   close(): void;
@@ -117,6 +117,7 @@ function openRoomView(
   let selected: string | null = null;
   let pixelsPerMetre = 0;
   let bottomInset = 0;
+  let topInset = 0;
   const listening = new AbortController();
 
   const close = () => {
@@ -392,15 +393,19 @@ function openRoomView(
       if (width === 0 || height === 0 || !room) return;
       renderer.setSize(width, height);
       const aspect = width / height;
-      // The room fits the part the dock leaves free and is centred in it: the frustum grows by the
-      // inset and the view slides down by half of it.
-      const inset = Math.min(bottomInset, height * 0.4);
-      const extent = (room.radius * 1.15 * height) / (height - inset);
+      // The room fits the part the dock and the face switch leave free and is centred in it: the
+      // frustum grows by both insets and the view slides by half their difference.
+      const bottom = Math.min(bottomInset, height * 0.4);
+      const top = Math.min(topInset, height * 0.2);
+      const inset = bottom + top;
+      // Framed on the room as seen from the opening corner, not on its whole bounding sphere: the
+      // sphere left more than half the width empty; turning far from that corner may crop a corner.
+      const extent = (room.radius * 0.92 * height) / (height - inset);
       camera.left = -extent * aspect;
       camera.right = extent * aspect;
       camera.top = extent;
       camera.bottom = -extent;
-      if (inset > 0) camera.setViewOffset(width, height, 0, inset / 2, width, height);
+      if (inset > 0) camera.setViewOffset(width, height, 0, (bottom - top) / 2, width, height);
       else camera.clearViewOffset();
       camera.updateProjectionMatrix();
       request();
@@ -490,9 +495,10 @@ function openRoomView(
         const factor = kind === "in" ? ZOOM_STEP : 1 / ZOOM_STEP;
         moveCamera({ zoom: Math.min(Math.max(camera.zoom * factor, orbit.minZoom), orbit.maxZoom) });
       },
-      setBottomInset(px) {
-        if (px === bottomInset) return;
-        bottomInset = px;
+      setInsets(bottom, top) {
+        if (bottom === bottomInset && top === topInset) return;
+        bottomInset = bottom;
+        topInset = top;
         fit();
       },
       select(objectId) {
@@ -522,6 +528,7 @@ export default function RoomView3D({
   label,
   selectedId = null,
   bottomInset = 0,
+  topInset = 0,
   cameraCommand,
   onPick,
   onMovePiece,
@@ -535,6 +542,8 @@ export default function RoomView3D({
   selectedId?: string | null;
   /** Pixels at the view's foot that something floats over; the room is fitted above them. */
   bottomInset?: number;
+  /** Pixels at the view's head that something floats over (the View/Edit switch). */
+  topInset?: number;
   cameraCommand?: CameraCommand;
   /** A piece carried to a new place on the floor: its centre there, in the scene frame. */
   onMovePiece?: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => void;
@@ -583,8 +592,8 @@ export default function RoomView3D({
   }, [config, lampFamilies]);
 
   useEffect(() => {
-    viewRef.current?.setBottomInset(bottomInset);
-  }, [bottomInset]);
+    viewRef.current?.setInsets(bottomInset, topInset);
+  }, [bottomInset, topInset]);
 
   useEffect(() => {
     if (cameraCommand) viewRef.current?.camera(cameraCommand.kind);

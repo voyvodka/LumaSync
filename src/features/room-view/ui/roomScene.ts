@@ -23,6 +23,7 @@ import {
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
 import { furnitureObjectId, hueChannelObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "@/features/room-map/model/objectId";
+import { outsideOutline } from "@/features/room-map/model/roomFootprint";
 import { type RoomMapConfig, resolveFurnitureTop, resolveRoomFootprint, resolveRoomSurfaces } from "@/shared/contracts/roomMap";
 
 import type { Pickable } from "../model/picking";
@@ -190,7 +191,8 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
       half: [rx, ry, rz],
       angle: 0,
     });
-    return { at: fixture.glow.at, radii: fixture.glow.radii, color: lampColour(i) };
+    const outside = corners !== null && outsideOutline(fixture.glow.at.x + W / 2, fixture.glow.at.z + D / 2, corners);
+    return { at: fixture.glow.at, radii: fixture.glow.radii, color: lampColour(i), outside };
   });
 
   const screen = buildScreen(config, models);

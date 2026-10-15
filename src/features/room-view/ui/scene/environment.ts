@@ -184,8 +184,10 @@ export interface RoomLights {
 /** An evening interior: a cool sky over a warm floor bounce, a warm key that casts the one static
  *  shadow map, and a faint cool fill from the other side so no face goes flat black. */
 export function roomLights(widthM: number, depthM: number, heightM: number, shadows: boolean): RoomLights {
-  const hemisphere = new HemisphereLight(0xdde4ff, 0x3a2b21, 1.05);
-  const key = new DirectionalLight(0xfff0dc, 1.75);
+  // Low enough that the lamps' pools carry the room, as an evening interior does; high enough that
+  // every piece still reads.
+  const hemisphere = new HemisphereLight(0xdde4ff, 0x3a2b21, 0.8);
+  const key = new DirectionalLight(0xfff0dc, 1.35);
   // From the side the view opens on, so both far walls and the room's fronts catch it.
   key.position.set(0.35 * widthM, 1.4 * heightM + 2, 0.75 * depthM);
   key.castShadow = shadows;

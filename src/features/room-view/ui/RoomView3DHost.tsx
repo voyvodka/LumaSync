@@ -24,6 +24,7 @@ export function RoomView3DHost(props: {
   label: string;
   selectedId?: string | null;
   bottomInset?: number;
+  topInset?: number;
   cameraCommand?: CameraCommand;
   onPick?: (objectId: string | null) => void;
   onMovePiece?: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => void;
