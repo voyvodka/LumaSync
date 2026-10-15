@@ -107,4 +107,41 @@ describe("Popover", () => {
     height.mockRestore();
     vi.unstubAllGlobals();
   });
+
+  // Room settings gains its shape rows after it opens; placed only once, it ran off the window.
+  it("places itself again when its content grows", () => {
+    let fire: () => void = () => {};
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(cb: () => void) {
+          fire = cb;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    let h = 100;
+    const height = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(() => h);
+    vi.stubGlobal("innerHeight", 620);
+    const anchor = createRef<HTMLButtonElement>();
+    render(<button ref={anchor} type="button">anchor</button>);
+    vi.spyOn(anchor.current!, "getBoundingClientRect").mockReturnValue(
+      { top: 400, bottom: 430, left: 100, right: 160, width: 60, height: 30, x: 100, y: 400 } as DOMRect,
+    );
+    const view = render(
+      <Popover open onClose={() => {}} anchorRef={anchor} side="above" role="dialog" label="grows">
+        <span>grows</span>
+      </Popover>,
+    );
+    const pop = screen.getByRole("dialog");
+    expect(pop.style.top).toBe("290px");
+
+    h = 300;
+    act(() => fire());
+    expect(pop.style.top).toBe("90px");
+    view.unmount();
+    height.mockRestore();
+    vi.unstubAllGlobals();
+  });
 });

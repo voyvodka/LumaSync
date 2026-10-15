@@ -39,6 +39,11 @@ export interface ShellNoticeInput {
   /** LED Setup is open over Devices. */
   ledSetupOpen: boolean;
   availability: OutputAvailability;
+  /**
+   * The check has run long enough to say so. At launch it usually ends within a second, and a line
+   * that came and went in that time pushed the page down and back up under the pointer.
+   */
+  outputCheckingDue: boolean;
   hueProbeGaveUp: boolean;
   hueProbeChecking: boolean;
   calibrationRequired: boolean;
@@ -490,7 +495,7 @@ export function buildShellNotices(
     });
   }
 
-  if (onLights && input.availability === "checking") {
+  if (onLights && input.availability === "checking" && input.outputCheckingDue) {
     notices.push({
       id: SHELL_NOTICE_IDS.OUTPUT_CHECKING,
       tier: NOTICE_TIER.INFO,

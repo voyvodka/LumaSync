@@ -10,4 +10,6 @@
     background: var(--lm-bg);
     color: var(--lm-ink);
   }
+  /* The column scrolls when the window is short; a child that shrank instead slid under the next. */
+  .compact > * { flex-shrink: 0; }
 }

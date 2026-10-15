@@ -108,6 +108,7 @@
     transition-delay: 0s, var(--lm-dur-follow);
   }
   .choiceItem {
+    position: relative;
     min-width: max-content;
     height: 28px;
     padding: 0 12px;
@@ -121,6 +122,8 @@
     transition: background var(--lm-dur-quick), color var(--lm-dur-quick);
   }
   /* Not the chosen one: its amber would turn white under the pointer, which read as unchosen. */
+  /* 28 px drawn, 32 px to the pointer. */
+  .choiceItem::after { content: ""; position: absolute; inset: -2px 0; }
   .choiceItem:hover:not(:disabled, [aria-checked="true"]) { color: var(--lm-ink); }
   .choiceItem[aria-checked="true"] { background: var(--lm-panel-2); color: var(--lm-amber); }
   .choice[data-thumb] .choiceItem[aria-checked="true"] { background: transparent; }

@@ -20,6 +20,7 @@ export const QUIET_INPUT: ShellNoticeInput = {
   activeSection: SECTION_IDS.LIGHTS,
   ledSetupOpen: false,
   availability: "ready",
+  outputCheckingDue: true,
   hueProbeGaveUp: false,
   hueProbeChecking: false,
   calibrationRequired: false,

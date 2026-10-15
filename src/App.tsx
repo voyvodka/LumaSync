@@ -59,7 +59,7 @@ import { isUpdateModalStatus } from "./features/updater/updateModalStatus";
 import { outputAvailability } from "./features/mode/model/outputAvailability";
 import { useCapturePermissionRecheck } from "./features/mode/state/useCapturePermissionRecheck";
 import type { DeviceCategory } from "@/features/device/model/deviceCategories";
-import { useHeldFlag } from "@/shared/lib/useHeldFlag";
+import { useHeldFlag, useLateFlag } from "@/shared/lib/useHeldFlag";
 import { CAPTURE_FAILURE_BUCKET } from "./shared/contracts/capture";
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "./shared/contracts/hue";
 import { useLedSetupPrompt } from "./features/calibration/state/useLedSetupPrompt";
@@ -462,6 +462,7 @@ function Shell() {
     hueProbeVerdict: hueProbe.verdict,
     bootstrapDone,
   });
+  const outputCheckingDue = useLateFlag(availability === "checking", 800);
 
   // Global keyboard shortcuts — the behaviour behind every `<kbd>` badge in
   // `KEYBIND_REGISTRY`. The hook is disabled during a UI-mode fade: firing
@@ -538,6 +539,7 @@ function Shell() {
           activeSection,
           ledSetupOpen,
           availability,
+          outputCheckingDue,
           hueProbeGaveUp: hueProbe.gaveUp,
           hueProbeChecking,
           // Before boot the saved calibration is simply unread, not missing.
@@ -577,6 +579,7 @@ function Shell() {
       activeSection,
       ledSetupOpen,
       availability,
+      outputCheckingDue,
       hueProbe.gaveUp,
       hueProbeChecking,
       bootstrapDone,

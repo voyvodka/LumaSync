@@ -13,6 +13,8 @@
     background: rgb(255 255 255 / 4%);
   }
   .action[aria-disabled] { color: var(--lm-ink-faint); cursor: default; }
+  .back:focus-visible,
+  .action:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
   .busy,
   .busy[aria-disabled] { color: var(--lm-amber); }
 

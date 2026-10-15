@@ -15,7 +15,9 @@
       grid-template-rows var(--lm-dur-base) var(--lm-ease-out),
       opacity var(--lm-dur-base) linear var(--lm-dur-follow);
   }
-  .inner { min-height: 0; overflow: hidden; }
+  /* min-width too: a grid item is otherwise as wide as its nowrap content, which pushed a
+     notice's action past the edge of a 320 px window instead of letting the line ellipsize. */
+  .inner { min-width: 0; min-height: 0; overflow: hidden; }
   .settled > .inner { overflow: visible; }
 
   :global(:root[data-reduced-motion]) .reveal { transition: none; }

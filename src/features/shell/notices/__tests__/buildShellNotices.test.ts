@@ -322,6 +322,11 @@ describe("buildShellNotices", () => {
       }
     });
 
+    // At launch the check usually ends within a second; a line that came and went pushed the page.
+    it("says it is checking only once the check has run long enough", () => {
+      expect(build({ availability: "checking", outputCheckingDue: false, uiMode: "compact" })).toEqual([]);
+    });
+
     it.each(["compact", "full"] as const)(
       "grades no output and calibration as error conditions and checking as info (%s)",
       (uiMode) => {

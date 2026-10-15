@@ -67,34 +67,58 @@ export function Popover({ open, onClose, anchorRef, side = "above", width = 240,
 
   useLayoutEffect(() => {
     if (!open || !anchorRef.current || !ref.current) return;
-    const a = anchorRef.current.getBoundingClientRect();
-    const h = ref.current.offsetHeight;
-    const w =
-      width === "fit" ? Math.min(Math.max(ref.current.offsetWidth, a.width), window.innerWidth - 16) : width;
-    const left = Math.max(8, Math.min(a.left + a.width / 2 - w / 2, window.innerWidth - w - 8));
-    // The asked side unless the popover would run off the window there and fits on the other. When
-    // it fits on neither — a long list in a short window — it takes the roomier side and scrolls.
-    const roomAbove = a.top - 10 - 8;
-    const roomBelow = window.innerHeight - 8 - (a.bottom + 10);
-    const fitsAbove = h <= roomAbove;
-    const fitsBelow = h <= roomBelow;
-    const placed =
-      !fitsAbove && !fitsBelow
-        ? roomAbove > roomBelow
-          ? "above"
-          : "below"
-        : side === "below"
-          ? !fitsBelow && fitsAbove
+    const place = () => {
+      const anchor = anchorRef.current;
+      const pop = ref.current;
+      if (!anchor || !pop) return;
+      const a = anchor.getBoundingClientRect();
+      // scrollHeight: once a max height clamps it, the box no longer says how tall its content is.
+      const h = Math.max(pop.offsetHeight, pop.scrollHeight);
+      const w =
+        width === "fit" ? Math.min(Math.max(pop.offsetWidth, a.width), window.innerWidth - 16) : width;
+      const left = Math.max(8, Math.min(a.left + a.width / 2 - w / 2, window.innerWidth - w - 8));
+      // The asked side unless the popover would run off the window there and fits on the other. When
+      // it fits on neither — a long list in a short window — it takes the roomier side and scrolls.
+      const roomAbove = a.top - 10 - 8;
+      const roomBelow = window.innerHeight - 8 - (a.bottom + 10);
+      const fitsAbove = h <= roomAbove;
+      const fitsBelow = h <= roomBelow;
+      const placed =
+        !fitsAbove && !fitsBelow
+          ? roomAbove > roomBelow
             ? "above"
             : "below"
-          : !fitsAbove && fitsBelow
-            ? "below"
-            : "above";
-    const room = placed === "above" ? roomAbove : roomBelow;
-    const maxHeight = h > room ? Math.max(room, 0) : undefined;
-    const shown = maxHeight ?? h;
-    const top = placed === "above" ? Math.max(8, a.top - shown - 10) : a.bottom + 10;
-    setPos({ left, top, arrow: a.left + a.width / 2 - left, width: w, side: placed, maxHeight });
+          : side === "below"
+            ? !fitsBelow && fitsAbove
+              ? "above"
+              : "below"
+            : !fitsAbove && fitsBelow
+              ? "below"
+              : "above";
+      const room = placed === "above" ? roomAbove : roomBelow;
+      const maxHeight = h > room ? Math.max(room, 0) : undefined;
+      const shown = maxHeight ?? h;
+      const top = placed === "above" ? Math.max(8, a.top - shown - 10) : a.bottom + 10;
+      const arrow = a.left + a.width / 2 - left;
+      setPos((prev) =>
+        prev &&
+        prev.left === left &&
+        prev.top === top &&
+        prev.arrow === arrow &&
+        prev.width === w &&
+        prev.side === placed &&
+        prev.maxHeight === maxHeight
+          ? prev
+          : { left, top, arrow, width: w, side: placed, maxHeight },
+      );
+    };
+    place();
+    // Content that grows after opening (Room settings gaining its shape rows) is placed again, or it
+    // runs off the window on the side it was first placed for.
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(place);
+    for (const child of Array.from(ref.current.children)) observer.observe(child);
+    return () => observer.disconnect();
   }, [open, anchorRef, side, width]);
 
   useEffect(() => {

@@ -29,7 +29,8 @@
   --lm-line-2:    #252b34;
   --lm-ink:       #eaeef4;
   --lm-ink-dim:   #8a94a3;
-  --lm-ink-faint: #4d5564;
+  /* Quiet text still clears 4.5:1 on --lm-bg and --lm-panel; #4d5564 was 2.67:1. */
+  --lm-ink-faint: #737c8c;
   --lm-amber:     #ffb020;
   --lm-amber-2:   #ff7a1a;
   --lm-cyan:      #22d3ee;
@@ -56,6 +57,8 @@
      preferred carrier (no layout shift). UI Gap 7 a11y consistency.       */
   --lm-focus-ring:       0 0 0 2px rgba(255, 176, 32, 0.45);
   --lm-focus-ring-inset: inset 0 0 0 2px rgba(255, 176, 32, 0.45);
+  /* A ring outside a 3 px gap of page colour, for a thumb whose resting halo would cover a plain ring. */
+  --lm-focus-ring-gap:   0 0 0 3px var(--lm-bg), 0 0 0 5px rgba(255, 176, 32, 0.45);
   --lm-focus-ring-soft:  0 0 0 2px rgba(255, 176, 32, 0.35), 0 0 0 4px rgba(255, 176, 32, 0.12);
 
   /* Motion. Small, light, answering a change (design-language.md): one set of

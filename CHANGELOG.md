@@ -475,6 +475,20 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- In the compact window a notice's action — "Devices ›", "System Settings ›", its × — sat past the
+  window's edge and could not be pressed; the line now ellipsizes and its arrow opens the rest.
+- Quiet text (navigation tabs, the status bar, captions, the room's light facts) is readable: its
+  colour rose from 2.7:1 to 4.8:1 against the background.
+- The brightness and other sliders show a focus ring on their thumb when reached with the keyboard.
+- A short compact window no longer squeezes the scenes row to nothing under the stage; the column
+  scrolls instead.
+- A popover whose content grows after it opens — Room settings gaining the L, U or T rows — moves to
+  stay inside the window instead of running under the status bar.
+- "Checking outputs…" no longer flashes at launch and pushes the page down and back up; it shows only
+  when the check takes longer than a moment.
+- The LED preview's Response choices and the room view card's buttons have a 32 px target and the
+  amber focus ring; popovers, info tips and lists keep their frame and focus under Windows contrast
+  themes.
 - A Solid colour, and every Solid scene, now stays on a WLED device instead of going back to the
   device's own effect after about two seconds. Solid sent the device a single frame, which WLED shows
   only until its realtime timeout runs out; the colour is now resent twice a second while Solid runs

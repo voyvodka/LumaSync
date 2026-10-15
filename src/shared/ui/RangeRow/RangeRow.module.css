@@ -81,7 +81,7 @@
   .toNeutral:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
   :global(:root[data-reduced-motion]) .toNeutral { transition: none; }
   .slider:focus-visible { outline: none; }
-  .slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--lm-bg), var(--lm-focus-ring); }
+  .slider:focus-visible::-webkit-slider-thumb { box-shadow: var(--lm-focus-ring-gap); }
   .note { margin: 2px 0 0; font-size: 11.5px; line-height: 1.4; color: var(--lm-ink-faint); }
 
   @media (forced-colors: active) {

@@ -58,4 +58,11 @@
 
   :global(:root[data-reduced-motion]) .mark,
   :global(:root[data-reduced-motion]) .option { transition: none; animation: none; }
+
+  @media (forced-colors: active) {
+    .option { color: CanvasText; }
+    .option[aria-selected="true"] { outline: 1px solid Highlight; }
+    .option:focus-visible { outline: 2px solid Highlight; outline-offset: -2px; }
+    .option[aria-disabled="true"] { color: GrayText; }
+  }
 }

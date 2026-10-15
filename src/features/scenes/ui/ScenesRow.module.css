@@ -3,7 +3,8 @@
      scene added or deleted never moves the stage under it; what does not fit scrolls sideways. */
   .row { display: flex; align-items: center; gap: 8px; min-width: 0; width: 100%; }
   /* The row and the edit bar take turns in one box of the row's height. */
-  .slot { height: 32px; min-width: 0; }
+  /* flex: none, or a short compact window squeezes the row to nothing under the stage. */
+  .slot { flex: none; height: 32px; min-width: 0; }
   /* The padding gives the focus ring and a landing chip room the scroll box would clip; the margin
      takes it back so the chips still line up with the strip above. */
   .list {
