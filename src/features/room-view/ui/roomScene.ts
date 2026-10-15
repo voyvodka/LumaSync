@@ -23,7 +23,7 @@ import {
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
 import { furnitureObjectId, hueChannelObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "@/features/room-map/model/objectId";
-import { type RoomMapConfig, resolveFurnitureTop, resolveRoomFootprint } from "@/shared/contracts/roomMap";
+import { type RoomMapConfig, resolveFurnitureTop, resolveRoomFootprint, resolveRoomSurfaces } from "@/shared/contracts/roomMap";
 
 import type { Pickable } from "../model/picking";
 import { roomEdges } from "../model/roomOutline";
@@ -125,7 +125,8 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   const footprint = resolveRoomFootprint(config);
   const corners = footprint.length > 4 ? footprint : null;
   const edges = roomEdges(W, D, corners);
-  const floor = mergeParts(floorParts(W, D, corners, edges), solid(0.72), false);
+  const finish = resolveRoomSurfaces(config);
+  const floor = mergeParts(floorParts(W, D, corners, edges, finish.floor), solid(finish.floor === "carpet" ? 0.95 : 0.72), false);
   if (floor) {
     floor.castShadow = false;
     scene.add(floor);
@@ -261,7 +262,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     const wrapB = alongX && e.convexB ? WALL_THICKNESS : 0;
     const dx = (e.bx - e.ax) / e.length;
     const dz = (e.bz - e.az) / e.length;
-    const mesh = new Mesh(wallGeometry(alongX, e.length + wrapA + wrapB), wallMaterial);
+    const mesh = new Mesh(wallGeometry(alongX, e.length + wrapA + wrapB, finish.walls), wallMaterial);
     mesh.position.set(
       (e.ax + e.bx) / 2 + (dx * (wrapB - wrapA)) / 2 + (e.outwardX * WALL_THICKNESS) / 2,
       0,

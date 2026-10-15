@@ -35,6 +35,51 @@
     color: var(--lm-ink-dim);
   }
 
+  /* The floor and walls: a short name, then the discs, each the colour the 3D room turns. */
+  .surfaces { display: flex; flex-direction: column; }
+  .surfaceRow {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 32px;
+    padding-left: 8px;
+  }
+  .surfaceLabel {
+    flex: 0 0 52px;
+    font-size: 12px;
+    color: var(--lm-ink-dim);
+  }
+  .swatches { display: flex; flex-shrink: 0; }
+  /* 30 px across, so seven fit beside their name in the panel; 32 px tall to the pointer. */
+  .swatch {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 32px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+  }
+  .swatch:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring);
+  }
+  .swatchDisc {
+    display: block;
+    width: 18px;
+    height: 18px;
+    border: 1px solid var(--lm-line-2);
+    border-radius: 999px;
+    transition: box-shadow var(--lm-dur-quick);
+  }
+  .swatch:hover .swatchDisc { box-shadow: 0 0 0 2px var(--lm-bg), 0 0 0 3px var(--lm-ink-faint); }
+  .swatch[aria-checked="true"] .swatchDisc { box-shadow: 0 0 0 2px var(--lm-bg), 0 0 0 4px var(--lm-amber); }
+  :global(:root[data-reduced-motion]) .swatchDisc { transition: none; }
+  @media (forced-colors: active) {
+    .swatch[aria-checked="true"] .swatchDisc { outline: 2px solid Highlight; outline-offset: 2px; }
+  }
+
   .rule {
     width: 100%;
     margin: 4px 0;

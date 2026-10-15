@@ -54,6 +54,8 @@ const DYNAMIC_PREFIX_DOMAINS = {
   "roomMap:furniture.tone": { sources: ["roomMap.ts FURNITURE_TONES"] },
   "roomMap:furniture.type": { sources: ["roomMap.ts FURNITURE_TYPES"] },
   "roomMap:furniture.variant": { sources: ["roomMap.ts FURNITURE_VARIANTS"] },
+  "roomMap:surfaces.floor": { sources: ["roomMap.ts FLOOR_FINISHES"] },
+  "roomMap:surfaces.walls": { sources: ["roomMap.ts WALL_COLORS"] },
   "settings:nav.sections": { sources: ["shell.ts SECTION_IDS"] },
   "telemetry:queueHealth": { sources: ["telemetry.ts TELEMETRY_QUEUE_HEALTH"] },
 };

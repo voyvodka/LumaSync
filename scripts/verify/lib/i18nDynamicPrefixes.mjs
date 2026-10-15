@@ -13,6 +13,8 @@ export const KNOWN_DYNAMIC_PREFIXES = [
   "roomMap:furniture.tone",
   "roomMap:furniture.type",
   "roomMap:furniture.variant",
+  "roomMap:surfaces.floor",
+  "roomMap:surfaces.walls",
   "settings:nav.sections",
   "telemetry:queueHealth",
 ];

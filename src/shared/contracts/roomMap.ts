@@ -987,6 +987,53 @@ export interface RoomMapConfig {
    *  through `resolveRoomFootprint`. The editor's alone: Rust samples the room by `dimensions`. A
    *  writer deletes the key for the plain rectangle, and changes it and `dimensions` in one apply. */
   footprint?: RoomCorner[];
+  /** What the room is finished in — its floor and walls — for the 3D view alone; absent ⇒ oak and
+   *  warm white. Read through `resolveRoomSurfaces`; a writer spreads the stored value, so a newer
+   *  build's choice survives an edit of the other. */
+  surfaces?: RoomSurfaces;
+}
+
+/** The floor's finish, as one choice: a wood, a tile, carpet or concrete. */
+export const FLOOR_FINISHES = {
+  OAK: "oak",
+  WALNUT: "walnut",
+  ASH: "ash",
+  TILE_LIGHT: "tileLight",
+  TILE_DARK: "tileDark",
+  CARPET: "carpet",
+  CONCRETE: "concrete",
+} as const;
+export type FloorFinish = (typeof FLOOR_FINISHES)[keyof typeof FLOOR_FINISHES];
+
+/** The walls' paint, from one short palette that stays behind the lights. */
+export const WALL_COLORS = {
+  WARM_WHITE: "warmWhite",
+  COOL_WHITE: "coolWhite",
+  GREIGE: "greige",
+  SAGE: "sage",
+  CLAY: "clay",
+  CHARCOAL: "charcoal",
+} as const;
+export type WallColor = (typeof WALL_COLORS)[keyof typeof WALL_COLORS];
+
+export interface RoomSurfaces {
+  /** Absent, or a finish this build does not know (kept as stored) ⇒ oak. */
+  floor?: FloorFinish;
+  /** Absent, or a colour this build does not know (kept as stored) ⇒ warm white. */
+  walls?: WallColor;
+}
+
+const FLOOR_FINISH_VALUES = new Set<string>(Object.values(FLOOR_FINISHES));
+const WALL_COLOR_VALUES = new Set<string>(Object.values(WALL_COLORS));
+
+/** The room's surfaces as this build draws them: every field filled, anything unknown read as the
+ *  default. Read-only — it never writes back what it does not know. */
+export function resolveRoomSurfaces(config: Pick<RoomMapConfig, "surfaces">): Required<RoomSurfaces> {
+  const stored: { floor?: unknown; walls?: unknown } = config.surfaces ?? {};
+  return {
+    floor: typeof stored.floor === "string" && FLOOR_FINISH_VALUES.has(stored.floor) ? (stored.floor as FloorFinish) : FLOOR_FINISHES.OAK,
+    walls: typeof stored.walls === "string" && WALL_COLOR_VALUES.has(stored.walls) ? (stored.walls as WallColor) : WALL_COLORS.WARM_WHITE,
+  };
 }
 
 // ---------------------------------------------------------------------------

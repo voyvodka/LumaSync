@@ -1,7 +1,18 @@
 import { type RefObject, useId } from "react";
 import { useTranslation } from "react-i18next";
 
-import { DEFAULT_ROOM_DIMENSIONS, type RoomDimensions } from "@/shared/contracts/roomMap";
+import { floorSwatchCss, wallSwatchCss } from "@/features/room-view/model/surfaceColours";
+import {
+  DEFAULT_ROOM_DIMENSIONS,
+  FLOOR_FINISHES,
+  type FloorFinish,
+  type RoomDimensions,
+  type RoomSurfaces,
+  resolveRoomSurfaces,
+  WALL_COLORS,
+  type WallColor,
+} from "@/shared/contracts/roomMap";
+import { Segmented } from "@/shared/ui/Segmented/Segmented";
 import { Popover } from "@/shared/ui/Popover/Popover";
 import { Toggle } from "@/shared/ui/Toggle/Toggle";
 
@@ -31,6 +42,8 @@ export interface RoomSettings {
   onGridStrokeWidthChange: (width: number) => void;
   showHueZones: boolean;
   onShowHueZonesChange: (show: boolean) => void;
+  /** What the room is finished in; offered only where the 3D room draws it. */
+  surfaces?: { value: RoomSurfaces | undefined; onChange: (patch: RoomSurfaces) => void };
 }
 
 /** The room itself: its size, what the plan draws over it, and starting over. */
@@ -97,6 +110,8 @@ export function RoomPanel({
 
         <RoomShapeField shape={settings.shape} dimensions={dimensions} onChange={settings.onShapeChange} />
 
+        {settings.surfaces ? <SurfaceFields {...settings.surfaces} /> : null}
+
         <label className={styles.toggle}>
           <span>{t("roomMap:settings.showGrid")}</span>
           <Toggle checked={settings.showGrid} onChange={settings.onShowGridChange} label={t("roomMap:settings.showGrid")} />
@@ -136,5 +151,50 @@ export function RoomPanel({
         <FieldHint id={`${hintId}-reset`}>{t("roomMap:settings.resetMapHint")}</FieldHint>
       </div>
     </Popover>
+  );
+}
+
+const FLOOR_ORDER = Object.values(FLOOR_FINISHES);
+const WALL_ORDER = Object.values(WALL_COLORS);
+
+/** The floor and the walls as two rows of discs, each the colour the 3D room turns. */
+function SurfaceFields({ value, onChange }: { value: RoomSurfaces | undefined; onChange: (patch: RoomSurfaces) => void }) {
+  const { t } = useTranslation();
+  const shown = resolveRoomSurfaces({ surfaces: value });
+  return (
+    <div className={styles.surfaces}>
+      <div className={styles.surfaceRow}>
+        <span className={styles.surfaceLabel}>{t("roomMap:settings.floor")}</span>
+        <Segmented
+          className={styles.swatches}
+          ariaLabel={t("roomMap:settings.floor")}
+          value={shown.floor}
+          options={FLOOR_ORDER.map((finish) => ({
+            value: finish,
+            label: <span className={styles.swatchDisc} style={{ background: floorSwatchCss(finish) }} aria-hidden="true" />,
+            ariaLabel: t(`roomMap:surfaces.floor.${finish}`),
+            title: t(`roomMap:surfaces.floor.${finish}`),
+            className: styles.swatch,
+          }))}
+          onChange={(floor) => onChange({ floor: floor as FloorFinish })}
+        />
+      </div>
+      <div className={styles.surfaceRow}>
+        <span className={styles.surfaceLabel}>{t("roomMap:settings.walls")}</span>
+        <Segmented
+          className={styles.swatches}
+          ariaLabel={t("roomMap:settings.walls")}
+          value={shown.walls}
+          options={WALL_ORDER.map((paint) => ({
+            value: paint,
+            label: <span className={styles.swatchDisc} style={{ background: wallSwatchCss(paint) }} aria-hidden="true" />,
+            ariaLabel: t(`roomMap:surfaces.walls.${paint}`),
+            title: t(`roomMap:surfaces.walls.${paint}`),
+            className: styles.swatch,
+          }))}
+          onChange={(walls) => onChange({ walls: walls as WallColor })}
+        />
+      </div>
+    </div>
   );
 }

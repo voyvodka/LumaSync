@@ -74,6 +74,17 @@ describe("applyRoomTemplate", () => {
     expect(applyRoomTemplate({ ...map({}), footprint: L }, TV_TEMPLATE).footprint).toBeUndefined();
   });
 
+  // A template is furniture; the floor and walls the user chose are their room's, not the template's.
+  it("keeps the room's floor and walls", () => {
+    const surfaces = { floor: "walnut" as const, walls: "sage" as const };
+    expect(applyRoomTemplate({ ...map({}), surfaces }, TV_TEMPLATE).surfaces).toEqual(surfaces);
+    // Reset map is the empty template: it clears the layout and leaves the finish, as it leaves the
+    // bridge's Hue lights.
+    expect(applyRoomTemplate({ ...map({}), surfaces }, DEFAULT_ROOM_MAP).surfaces).toEqual(surfaces);
+    // Even a template that named its own: the finish is the room's.
+    expect(applyRoomTemplate({ ...map({}), surfaces }, { ...TV_TEMPLATE, surfaces: { floor: "carpet" } }).surfaces).toEqual(surfaces);
+  });
+
   it("puts the connected strip where the template's strip goes, keeping its port and LED count", () => {
     const connected = strip({ stripId: "usb-conn", portName: PORT });
     const next = applyRoomTemplate(map({ usbStrips: [connected] }), TV_TEMPLATE);

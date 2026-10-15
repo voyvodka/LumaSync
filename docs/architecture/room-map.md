@@ -205,6 +205,17 @@ double-click on a plain room's wall cuts a U notch — only there, since eight c
 outline may have. The handles sit under every object, so a piece against a wall is still the piece
 you grab; they are pointer-only, and the Shape row is the keyboard's way to the same shapes.
 
+**The room's finish is the editor's alone, and an unknown value is kept.** `roomMap.surfaces` names
+the floor (`FLOOR_FINISHES`) and the walls' paint (`WALL_COLORS`) from short named lists — no hex, so
+the palette stays one the lights read well against, and the colours live once in
+`room-view/model/surfaceColours.ts` for both the 3D room and the Room settings discs. Only the 3D
+view draws it; Rust neither mirrors nor rewrites it (a Hue forget keeps it, `forget.rs` pins that).
+`resolveRoomSurfaces` reads it and never writes: a pick spreads over what is stored, so a floor a
+newer build chose survives this build changing the walls. A template keeps the room's surfaces, and
+so does Reset map, which is the empty template: it clears the layout, not the finish. A
+pick is a gesture, since every `roomMap` save refreshes the running mode. Glass walls were left out:
+a second wall material breaks the scene's fixed draw count, and they wait for their own change.
+
 **Background images are copied in, capped at 20 MB, and pruned only at startup.** An imported
 image is copied into `room-map-backgrounds/` in the app data dir under a UUID name, because the
 `fs:allow-read-file` capability is scoped to exactly that directory and the source may be on a

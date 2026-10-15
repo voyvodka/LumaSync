@@ -97,3 +97,19 @@ describe("RoomPanel — what the plan draws", () => {
     expect(onReset).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("RoomPanel — the room's floor and walls", () => {
+  it("offers them only where the 3D room draws them", () => {
+    renderPanel();
+    expect(screen.queryByRole("radiogroup", { name: "roomMap:settings.floor" })).toBeNull();
+  });
+
+  it("marks what is stored and hands over only the surface picked", () => {
+    const onChange = vi.fn<(patch: { floor?: string; walls?: string }) => void>();
+    renderPanel(settings({ surfaces: { value: { floor: "walnut" }, onChange } }));
+    const floor = screen.getByRole("radiogroup", { name: "roomMap:settings.floor" });
+    expect(floor.querySelector('[aria-checked="true"]')?.getAttribute("aria-label")).toBe("roomMap:surfaces.floor.walnut");
+    fireEvent.click(screen.getByRole("radio", { name: "roomMap:surfaces.walls.clay" }));
+    expect(onChange).toHaveBeenLastCalledWith({ walls: "clay" });
+  });
+});

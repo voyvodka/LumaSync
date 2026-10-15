@@ -345,3 +345,20 @@ describe("RoomMapEditor — several pieces at once", () => {
     expect(saves[saves.length - 1]?.furniture).toEqual([]);
   });
 });
+
+describe("RoomMapEditor — the room's floor and walls", () => {
+  // A newer build's floor must survive this build picking a wall colour.
+  it("writes the surface picked over what is stored, keeping a floor it does not know", async () => {
+    stored({ furniture: [SOFA], surfaces: { floor: "marble", walls: "sage" } as unknown as RoomMapConfig["surfaces"] });
+    await renderEditor();
+    fireEvent.click(screen.getByTestId("dock-room"));
+    await flush();
+    fireEvent.click(screen.getByRole("radio", { name: "roomMap:surfaces.walls.clay" }));
+    // Swatch picks are one gesture: the save waits for it to go quiet.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+    });
+    const saves = roomMapSaves();
+    expect(saves[saves.length - 1]?.surfaces).toEqual({ floor: "marble", walls: "clay" });
+  });
+});

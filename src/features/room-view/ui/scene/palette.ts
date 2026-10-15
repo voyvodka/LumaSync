@@ -1,11 +1,9 @@
-/** One material palette for the whole room: an evening interior — warm oak, off-white walls,
- *  slate and caramel upholstery — so the lights carry the colour, not the furniture. */
+/** One material palette for the whole room: an evening interior — slate and caramel upholstery
+ *  and warm woods, so the lights carry the colour, not the furniture. The floor and walls are the
+ *  room's own choice (`model/surfaceColours.ts`). */
 export const PALETTE = {
   floorGap: 0x4a3426,
-  planks: [0xb08a65, 0xab855f, 0xb48e69, 0xa8825d],
   skirting: 0xd8d0c4,
-  wall: 0xe4ddd2,
-  wallCap: 0xf4f0ea,
 
   slate: 0x55657d,
   slateDeep: 0x46536a,

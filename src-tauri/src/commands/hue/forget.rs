@@ -197,6 +197,7 @@ mod tests {
                         { "x": 0.0, "y": 0.0 }, { "x": 5.0, "y": 0.0 }, { "x": 5.0, "y": 2.5 },
                         { "x": 3.0, "y": 2.5 }, { "x": 3.0, "y": 4.0 }, { "x": 0.0, "y": 4.0 }
                     ],
+                    "surfaces": { "floor": "walnut", "walls": "sage" },
                 },
             }),
             ..RigSetup::default()
@@ -263,6 +264,11 @@ mod tests {
                 .map(|room| room["footprint"][3].clone()),
             Some(json!({ "x": 3.0, "y": 2.5 })),
             "the room's outline is the editor's and survives a forget"
+        );
+        assert_eq!(
+            rig.saved("roomMap").map(|room| room["surfaces"].clone()),
+            Some(json!({ "floor": "walnut", "walls": "sage" })),
+            "the room's finish is the editor's and survives a forget"
         );
         for slot in [KEY_HUE_APP_KEY, KEY_HUE_CLIENT_KEY, KEY_HUE_BRIDGE_ID] {
             assert_eq!(

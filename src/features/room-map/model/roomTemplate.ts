@@ -43,5 +43,6 @@ export function applyRoomTemplate(current: RoomMapConfig, template: RoomMapConfi
     ];
   }
 
-  return { ...template, usbStrips, hueChannels: current.hueChannels, zones: current.zones };
+  // A template lays out the furniture; the room's finish is the user's and stays.
+  return { ...template, usbStrips, hueChannels: current.hueChannels, zones: current.zones, surfaces: current.surfaces };
 }

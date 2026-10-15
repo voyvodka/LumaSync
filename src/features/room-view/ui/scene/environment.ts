@@ -10,7 +10,10 @@ import {
   type Matrix4,
 } from "three";
 
+import { FLOOR_FINISHES, type FloorFinish, WALL_COLORS, type WallColor } from "@/shared/contracts/roomMap";
+
 import { cornerCoordinates, insideAlong, type OutlineEdge, type PlanCorner } from "../../model/roomOutline";
+import { FLOOR_PALETTE, WALL_PALETTE } from "../../model/surfaceColours";
 import { PALETTE } from "./palette";
 import { block, type Part, seeded } from "./parts";
 
@@ -50,10 +53,19 @@ export function floorParts(
   depthM: number,
   corners: readonly PlanCorner[] | null = null,
   edges: readonly OutlineEdge[] = [],
+  finish: FloorFinish = FLOOR_FINISHES.OAK,
 ): Part[] {
-  const parts: Part[] = outlineRects(widthM, depthM, corners).map((r) =>
-    block(r.x1 - r.x0, 0.03, r.y1 - r.y0, (r.x0 + r.x1) / 2 - widthM / 2, -0.05, (r.y0 + r.y1) / 2 - depthM / 2, PALETTE.floorGap, 0),
+  const look = FLOOR_PALETTE[finish] ?? FLOOR_PALETTE.oak;
+  const rects = outlineRects(widthM, depthM, corners);
+  const parts: Part[] = rects.map((r) =>
+    block(r.x1 - r.x0, 0.03, r.y1 - r.y0, (r.x0 + r.x1) / 2 - widthM / 2, -0.05, (r.y0 + r.y1) / 2 - depthM / 2, look.gap, 0),
   );
+  if ("slab" in look) {
+    slabs(parts, rects, widthM, depthM, look.slab, look.size);
+    skirting(parts, edges);
+    return parts;
+  }
+  const planks = look.planks;
   const alongX = widthM >= depthM;
   const length = alongX ? widthM : depthM;
   const across = alongX ? depthM : widthM;
@@ -79,7 +91,7 @@ export function floorParts(
           const s0 = Math.max(pos, l0);
           const s1 = Math.min(pos + span, l1);
           if (s1 - s0 > 0.03) {
-            const base = PALETTE.planks[Math.floor(rand() * PALETTE.planks.length)] ?? PALETTE.planks[0];
+            const base = planks[Math.floor(rand() * planks.length)] ?? planks[0];
             const color = shade(base, 0.97 + rand() * 0.05);
             const along = s1 - s0 - PLANK_GAP;
             const mid = (s0 + s1) / 2;
@@ -94,7 +106,12 @@ export function floorParts(
       }
     }
   }
-  // Skirting along the inside of every wall.
+  skirting(parts, edges);
+  return parts;
+}
+
+/** Skirting along the inside of every wall. */
+function skirting(parts: Part[], edges: readonly OutlineEdge[]): void {
   for (const e of edges) {
     const x = (e.ax + e.bx) / 2 - e.outwardX * 0.007;
     const z = (e.az + e.bz) / 2 - e.outwardZ * 0.007;
@@ -104,18 +121,51 @@ export function floorParts(
         : block(0.014, SKIRTING_HEIGHT, e.length, x, 0, z, PALETTE.skirting, 0.004),
     );
   }
-  return parts;
+}
+
+/** Square slabs on a grid from the room's corner, cut to the outline; `size` 0 is one even sheet
+ *  (carpet). Each slab varies a hair, so a tiled floor does not read as a flat colour. */
+function slabs(
+  parts: Part[],
+  rects: readonly { x0: number; y0: number; x1: number; y1: number }[],
+  widthM: number,
+  depthM: number,
+  colour: number,
+  size: number,
+): void {
+  const rand = seeded(((widthM * 5.13 + depthM * 2.71) % 1) || 0.5);
+  const gap = size > 0 ? 0.004 : 0;
+  for (const r of rects) {
+    if (size === 0) {
+      parts.push(block(r.x1 - r.x0, 0.02, r.y1 - r.y0, (r.x0 + r.x1) / 2 - widthM / 2, -0.02, (r.y0 + r.y1) / 2 - depthM / 2, colour, 0));
+      continue;
+    }
+    for (let x = Math.floor(r.x0 / size) * size; x < r.x1 - 1e-6; x += size) {
+      for (let y = Math.floor(r.y0 / size) * size; y < r.y1 - 1e-6; y += size) {
+        const x0 = Math.max(x, r.x0);
+        const x1 = Math.min(x + size, r.x1);
+        const y0 = Math.max(y, r.y0);
+        const y1 = Math.min(y + size, r.y1);
+        if (x1 - x0 - gap <= 0.01 || y1 - y0 - gap <= 0.01) continue;
+        const shadeBy = 0.96 + rand() * 0.06;
+        parts.push(
+          block(x1 - x0 - gap, 0.02, y1 - y0 - gap, (x0 + x1) / 2 - widthM / 2, -0.02, (y0 + y1) / 2 - depthM / 2, shade(colour, shadeBy), 0),
+        );
+      }
+    }
+  }
 }
 
 /** One wall, one unit tall (the mesh's scale sets its height, so a cut is a scale change): its
  *  top face is the cut edge's lighter cap, its sides darken a little toward the floor. */
-export function wallGeometry(alongX: boolean, span: number): BoxGeometry {
+export function wallGeometry(alongX: boolean, span: number, paint: WallColor = WALL_COLORS.WARM_WHITE): BoxGeometry {
   const geometry = new BoxGeometry(alongX ? span : WALL_THICKNESS, 1, alongX ? WALL_THICKNESS : span);
   geometry.translate(0, 0.5, 0);
   const position = geometry.getAttribute("position");
   const normal = geometry.getAttribute("normal");
-  const wall = new Color(PALETTE.wall);
-  const cap = new Color(PALETTE.wallCap);
+  const look = WALL_PALETTE[paint] ?? WALL_PALETTE.warmWhite;
+  const wall = new Color(look.wall);
+  const cap = new Color(look.cap);
   const colours = new Float32Array(position.count * 3);
   for (let i = 0; i < position.count; i++) {
     const c = normal.getY(i) > 0.5 ? cap : wall.clone().multiplyScalar(0.86 + 0.14 * position.getY(i));

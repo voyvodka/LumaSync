@@ -860,6 +860,20 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
             onGridStrokeWidthChange: setGridStrokeWidth,
             showHueZones,
             onShowHueZonesChange: setShowHueZones,
+            // Spread over what is stored, so a value from a newer build survives a pick of the other.
+            surfaces: ROOM_VIEW_3D_AVAILABLE
+              ? {
+                  value: config.surfaces,
+                  onChange: (patch) =>
+                    apply(
+                      (cfg) => ({
+                        // A hand-edited file may hold anything here; only an object is spread.
+                        surfaces: { ...(typeof cfg.surfaces === "object" && cfg.surfaces !== null ? cfg.surfaces : {}), ...patch },
+                      }),
+                      { gesture: "room-surfaces" },
+                    ),
+                }
+              : undefined,
           }}
           onReset={reset}
           onSelect={selectFromList}

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   findHueChannel,
+  resolveRoomSurfaces,
+  type RoomSurfaces,
   type FurniturePlacement,
   hueChannelsForArea,
   mergeHueChannels,
@@ -286,5 +288,22 @@ describe("resolveRoomFootprint", () => {
 
   it("ignores extra keys on a corner", () => {
     expect(read(L.map((c) => ({ ...c, label: "x" })))).toEqual(L);
+  });
+});
+
+describe("resolveRoomSurfaces", () => {
+  it("reads a room with none as oak and warm white", () => {
+    expect(resolveRoomSurfaces({})).toEqual({ floor: "oak", walls: "warmWhite" });
+  });
+
+  it("reads what it does not know as the default, without touching what is stored", () => {
+    const surfaces = { floor: "marble", walls: "sage" } as unknown as RoomSurfaces;
+    expect(resolveRoomSurfaces({ surfaces })).toEqual({ floor: "oak", walls: "sage" });
+    expect(surfaces).toEqual({ floor: "marble", walls: "sage" });
+  });
+
+  it("reads an unknown wall colour, or a value that is not an object, as the defaults", () => {
+    expect(resolveRoomSurfaces({ surfaces: { walls: "neon" } as unknown as RoomSurfaces }).walls).toBe("warmWhite");
+    expect(resolveRoomSurfaces({ surfaces: "x" as unknown as RoomSurfaces })).toEqual({ floor: "oak", walls: "warmWhite" });
   });
 });

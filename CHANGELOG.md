@@ -9,6 +9,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Added
 
+- The room's floor and walls: Room settings offers the floor as oak, walnut, ash, light or dark tile,
+  carpet or concrete, and the walls in warm or cool white, greige, sage, clay or charcoal, and the
+  3D view draws the room in them. A template keeps them, and a choice from a newer version survives
+  a change made here.
 - Effects: a fourth lighting mode beside Off, Ambilight and Solid, with sixteen effects — wave,
   colour cycle, breathe, candle, fireplace, drift, gradient, ocean, aurora, twinkle, comet,
   scanner, chase, plasma, sunrise and natural light — in eleven palettes or up to three colours of
