@@ -209,6 +209,14 @@ function upholstered(w: number, d: number, seats: number, arms: boolean, f: Fini
       });
     }
   }
+  if (arms && seats >= 3 && d >= 0.75) {
+    // A knitted throw folded over the right arm, falling to the seat inside and the floor outside.
+    const throwD = Math.min(0.5, d * 0.55);
+    const x = w / 2 - armW / 2;
+    parts.push({ ...block(armW + 0.004, 0.018, throwD, x - 0.002, armTop, -0.02, PALETTE.pillowCream, 0.008), finish: "fabric" });
+    parts.push({ ...block(0.014, armTop - legH - 0.05, throwD, w / 2 - 0.007, legH + 0.05, -0.02, PALETTE.pillowCream, 0.006), finish: "fabric" });
+    parts.push({ ...block(0.014, armTop - seatTop + 0.02, throwD, x - armW / 2 - 0.009, seatTop - 0.02, -0.02, PALETTE.pillowCream, 0.006), finish: "fabric" });
+  }
   return parts;
 }
 
@@ -570,6 +578,13 @@ function bed(w: number, d: number, f: Finish): Part[] {
   // Its fill: a low dome, so the duvet lies soft over the mattress instead of as a board.
   parts.push(crown(w - 0.08, duvetD - 0.06, 0.04, 0, mattressTop + 0.024, duvetZ, f.fabric));
   parts.push(block(w - 0.03, 0.07, 0.12, 0, mattressTop - 0.02, -d / 2 + 0.02 + duvetD - 0.04, f.cushion, 0.035));
+  // A throw across the foot, falling over both sides.
+  const throwD = Math.min(0.45, duvetD * 0.42);
+  const throwZ = -d / 2 + 0.03 + throwD / 2;
+  parts.push({ ...block(w - 0.004, 0.014, throwD, 0, mattressTop + 0.05, throwZ, PALETTE.pillowCamel, 0.006), finish: "fabric" });
+  for (const sx of [-1, 1]) {
+    parts.push({ ...block(0.012, 0.2, throwD, sx * (w / 2 - 0.008), mattressTop - 0.14, throwZ, PALETTE.pillowCamel, 0.005), finish: "fabric" });
+  }
   const sleepers = w >= 1.2 ? 2 : 1;
   const pillowW = Math.max(Math.min(0.62, (w - 0.18) / sleepers - 0.05), 0.05);
   // The pillow's depth follows the bed's, so a short bed keeps its pillows on it.
@@ -580,6 +595,13 @@ function bed(w: number, d: number, f: Finish): Part[] {
     pillow.geometry.rotateX(-0.2);
     pillow.geometry.translate(x, mattressTop - 0.01, d / 2 - headD - 0.03 - pillowD / 2);
     parts.push(pillow);
+  }
+  if (w >= 0.9 && mattressD > 0.8) {
+    // A lumbar cushion propped against the pillows.
+    const lumbar = block(Math.min(0.5, w * 0.32), 0.2, 0.09, 0, 0, 0, PALETTE.sage, 0.04);
+    lumbar.geometry.rotateX(-0.35);
+    lumbar.geometry.translate(0, mattressTop + 0.02, d / 2 - headD - 0.06 - pillowD);
+    parts.push(lumbar);
   }
   return parts;
 }
@@ -677,14 +699,50 @@ function plant(w: number, d: number, style: "topiary" | "leafy" | "palm", rand: 
 }
 
 /** A flat rug with a border: an outer band and a slightly raised field. */
+/** A bordered field with a woven pattern: rings on a round rug; on a long one a second border line,
+ *  a centre medallion where it is wide enough and fringe at its short ends. Each layer lies a
+ *  millimetre over the last, so none z-fights. */
 function rug(w: number, d: number, round: boolean, f: Finish): Part[] {
   const border = Math.min(0.08, Math.min(w, d) * 0.08);
   const field = shade(f.fabric, 1.18);
   if (round) {
     const r = Math.min(w, d) / 2;
-    return [rod(r, r, 0.01, 0, 0, 0, f.fabricDeep, 40), rod(r - border, r - border, 0.012, 0, 0, 0, field, 40)];
+    const parts = [rod(r, r, 0.01, 0, 0, 0, f.fabricDeep, 40), rod(r - border, r - border, 0.012, 0, 0, 0, field, 40)];
+    if (r > 0.3) {
+      parts.push(rod(r * 0.62, r * 0.62, 0.013, 0, 0, 0, f.fabricDeep, 40), rod(r * 0.56, r * 0.56, 0.014, 0, 0, 0, field, 40));
+      parts.push(rod(r * 0.18, r * 0.18, 0.015, 0, 0, 0, f.fabric, 24));
+    }
+    return parts;
   }
-  return [block(w, 0.01, d, 0, 0, 0, f.fabricDeep, 0), block(w - 2 * border, 0.012, d - 2 * border, 0, 0, 0, field, 0)];
+  const fringe = Math.min(0.035, Math.max(w, d) * 0.02);
+  const long = w >= d;
+  const bw = long ? w - 2 * fringe : w;
+  const bd = long ? d : d - 2 * fringe;
+  const parts: Part[] = [block(bw, 0.01, bd, 0, 0, 0, f.fabricDeep, 0), block(bw - 2 * border, 0.012, bd - 2 * border, 0, 0, 0, field, 0)];
+  const line = border * 0.35;
+  const iw = bw - 4 * border;
+  const id = bd - 4 * border;
+  if (iw > 0.2 && id > 0.2) {
+    parts.push(block(iw, 0.013, id, 0, 0, 0, f.fabricDeep, 0), block(iw - 2 * line, 0.014, id - 2 * line, 0, 0, 0, field, 0));
+    const m = Math.min(iw, id) * 0.32;
+    if (m > 0.15) {
+      const medallion = block(m, 0.015, m, 0, 0, 0, f.fabric, 0);
+      medallion.geometry.rotateY(Math.PI / 4);
+      medallion.geometry.scale(long ? Math.min(1.6, iw / id) : 1, 1, long ? 1 : Math.min(1.6, id / iw));
+      parts.push(medallion);
+    }
+  }
+  // Fringe: short threads off both ends of the long side's run.
+  const ends = long ? bd : bw;
+  const threads = Math.max(2, Math.floor(ends / 0.05));
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < threads; i++) {
+      const at = -ends / 2 + (ends * (i + 0.5)) / threads;
+      const reach = side * ((long ? bw : bd) / 2 + fringe / 2);
+      parts.push(long ? block(fringe, 0.004, 0.008, reach, 0, at, PALETTE.paper, 0) : block(0.008, 0.004, fringe, at, 0, reach, PALETTE.paper, 0));
+    }
+  }
+  return parts;
 }
 
 /** A bar stool: a round seat on four slim legs, ringed by a footrest. */
