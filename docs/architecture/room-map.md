@@ -402,12 +402,13 @@ backlight drawn as a stray line along the wall.
 - **The lamps light the room; they are not painted on it.** The first six lamps in the room each get
   a real `PointLight` (`scene/lampLights.ts`), three of them casting a small cube shadow, and the
   evening rig — sky, key and fill — gives way to two rigs set far apart: a lamp-lit one, a warm
-  bounce that takes a third of the lamps' colour, and a night one that falls to a quarter of it, so
-  the lamps going out reads as the room going dark. The lit rig once sat dimmer than a room with no
+  bounce that takes a third of the lamps' colour (half as saturated for an effect, whose pure-RGB mean
+  washed the wood teal), and a night one at a quarter of its sky under a cool moonlight key, so the
+  lamps going out reads as the room going dark while its walls and floor still read. The lit rig once sat dimmer than a room with no
   lamps, and Off still showed a fully readable floor. The count is fixed,
   the spare lights dark, because three.js builds its shader programs for a number of lights: a count
   that followed the lamps recompiled the room on every added lamp. A lamp with a real light throws
-  no painted wash and only half its pool — at the lights' strength the real light alone left dark
+  no painted wash and most of its pool — at the lights' strength the real light alone left dark
   wood an even brown with no pool under the lamp; one past the six keeps both. Their
   placeholder colour is one warm white — one rainbow colour per lamp read as a party, not a home.
   A one-sided fixture — a Play bar, a Signe, an Iris, a Bloom (`ONE_SIDED` in `scene/lamps.ts`) —

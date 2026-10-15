@@ -62,6 +62,7 @@ import { type LedTape, ledTape, TAPE_DEPTH as STRIP_DEPTH, TAPE_WIDTH as STRIP_W
 const STRIP_GLOW = 0xffc46b;
 const BACKLIGHT_GAIN = 1.6;
 const LAMP_BOUNCE = 0.35;
+const PALETTE_BOUNCE_SATURATION = 0.5;
 const UNLIT_STRIP = new Color(0x2a2a2e);
 /** A wall between the camera and the room drops to this, so the room reads as a cutaway. */
 const WALL_CUT_HEIGHT = 0.2;
@@ -378,18 +379,25 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   // A room with no lamps keeps its evening light whatever the mode.
   const evening = { sky: lights.hemisphere.color.clone(), ground: lights.hemisphere.groundColor.clone(), hemi: lights.hemisphere.intensity, key: lights.key.intensity, keyColour: lights.key.color.clone(), fill: lights.fill.intensity };
   const rigs = {
-    // Far apart, so the lamps going out reads: the lit room was dimmer than one with no lamps at all.
-    lit: { sky: new Color(0xffe4c8), ground: new Color(0x6a4c38), hemi: 0.95, key: 0.6, keyColour: evening.keyColour, fill: 0.22 },
-    night: { sky: new Color(0x8d9ccc), ground: new Color(0x1c1a26), hemi: 0.25, key: 0.18, keyColour: new Color(0xa9b8e8), fill: 0.08 },
+    // Far apart so the lamps going out reads, yet Off keeps a cool moonlight that holds walls and floor.
+    lit: { sky: new Color(0xffe4c8), ground: new Color(0x6a4c38), hemi: 0.68, key: 0.6, keyColour: evening.keyColour, fill: 0.22 },
+    night: { sky: new Color(0x8d9ccc), ground: new Color(0x1c1a26), hemi: 0.25, key: 0.4, keyColour: new Color(0x9fb4ff), fill: 0.08 },
   };
   const litSky = new Color();
   const bounce = new Color();
+  const hsl = { h: 0, s: 0, l: 0 };
   const setMood = (lampColour: number | null, { level, ambient, strip }: MoodLevels, palette?: readonly number[]) => {
     const from = lampLit ? rigs.night : evening;
     const to = lampLit ? rigs.lit : evening;
     const k = lampLit ? ambient : 1;
     // The bounce takes some of the lamps' colour, so a red room is not lit by a peach sky.
-    const sky = to === rigs.lit && lampColour !== null ? litSky.copy(to.sky).lerp(bounce.set(lampColour), LAMP_BOUNCE) : to.sky;
+    // An effect's mean is a pure-RGB average: at full strength its teal washed the wood out.
+    if (lampColour !== null) bounce.set(lampColour);
+    if (palette && palette.length > 1) {
+      bounce.getHSL(hsl);
+      bounce.setHSL(hsl.h, hsl.s * PALETTE_BOUNCE_SATURATION, hsl.l);
+    }
+    const sky = to === rigs.lit && lampColour !== null ? litSky.copy(to.sky).lerp(bounce, LAMP_BOUNCE) : to.sky;
     lights.hemisphere.color.lerpColors(from.sky, sky, k);
     lights.hemisphere.groundColor.lerpColors(from.ground, to.ground, k);
     lights.hemisphere.intensity = from.hemi + (to.hemi - from.hemi) * k;

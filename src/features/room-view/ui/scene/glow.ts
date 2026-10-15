@@ -97,9 +97,9 @@ function additive(texture: Texture, opacity: number): MeshBasicMaterial {
 const WHITE = new Color(0xffffff);
 const UNLIT_BULB = new Color(0x16171c);
 /** Past 1 on purpose: the bulb burns out to white and feeds the glow pass. */
-const BULB_BRIGHTNESS = 2.2;
+const BULB_BRIGHTNESS = 1.7;
 const SHADE_BRIGHTNESS = 1.9;
-const LIT_POOL_SHARE = 0.5;
+const LIT_POOL_SHARE = 0.85;
 
 /** Unit size 2, so a lamp's half-extents are its scale. */
 const SHAPES: ReadonlyArray<{ shape: LampShape; geometry: () => BufferGeometry }> = [

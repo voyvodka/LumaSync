@@ -98,7 +98,6 @@ function moodOf(mode: LightingModeConfig | null): Omit<RoomMood, "brightness"> {
   }
 }
 
-/** Lamp `i`'s stop of a palette, or nothing without one. */
 export function paletteColour(palette: readonly number[] | undefined, i: number): number | undefined {
   return palette && palette.length > 0 ? palette[i % palette.length] : undefined;
 }

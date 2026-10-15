@@ -594,7 +594,6 @@ function openRoomView(
         const colour0 = moodNow.colour.clone();
         const from = { ...moodNow };
         const colour1 = new Color(mood.lamp);
-        // Only the palette changed: nothing to fade, but its colours still go on.
         if (colour0.equals(colour1) && LEVELS.every((key) => from[key] === mood[key])) {
           paintMood();
           request();
