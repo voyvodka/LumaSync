@@ -462,7 +462,9 @@ export function furnitureColours(item: FurniturePlacement, model: FurnitureModel
         : model.kind === "rug"
           ? FURNITURE_TONE_COLORS.slate
           : FURNITURE_TONE_COLORS.sage;
-  const plain: FurnitureColours = { fabric: ownFabric, wood: FURNITURE_TONE_COLORS.oak, woodToned: false };
+  // Wardrobes are painted unless a tone says otherwise: a wall of them in oak read as one brown block.
+  const ownWood = model.kind === "wardrobe" ? FURNITURE_TONE_COLORS.white : FURNITURE_TONE_COLORS.oak;
+  const plain: FurnitureColours = { fabric: ownFabric, wood: ownWood, woodToned: model.kind === "wardrobe" };
   const tone = resolveFurnitureTone(item);
   // A plant's tone is its pot, whichever family the tone comes from.
   if (model.kind === "plant") return { ...plain, fabric: tone === undefined ? FURNITURE_TONE_COLORS.cream : FURNITURE_TONE_COLORS[tone] };
