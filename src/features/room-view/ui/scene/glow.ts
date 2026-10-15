@@ -1,10 +1,8 @@
-// What makes a lamp read as lit without a real light per lamp: an unlit bulb, a camera-facing
-// halo, a pool on the floor and a wash on the nearest wall. Each kind is one draw call whatever
-// the number of lamps.
+// What makes a lamp read as lit: a bulb burning past white (the bloom pass glows from it) and,
+// for a lamp past the real lights' count, a pool on the floor and a wash on the nearest wall.
+// Each kind is one draw call whatever the number of lamps.
 import {
   AdditiveBlending,
-  BufferAttribute,
-  BufferGeometry,
   CanvasTexture,
   Color,
   DoubleSide,
@@ -13,8 +11,6 @@ import {
   MeshBasicMaterial,
   Object3D,
   PlaneGeometry,
-  Points,
-  PointsMaterial,
   Quaternion,
   SphereGeometry,
   type Texture,
@@ -22,10 +18,13 @@ import {
 } from "three";
 
 import type { ScenePoint } from "../../model/roomSpace";
+import { BLOOM_LAYER } from "./bloom";
 
 export interface Lamp {
   /** Off the room's outline (in an L's or U's cut): it throws no pool on a floor that is not there. */
   outside?: boolean;
+  /** Lit by a real light, which puts the light on the floor and walls itself: no pool, no wash. */
+  litByLight?: boolean;
   /** The lit part's centre. */
   at: ScenePoint;
   /** The lit part's radii: a bulb is a small sphere, a shade a drum, a Play bar's back a strip. */
@@ -47,8 +46,6 @@ export interface WallPlane {
 /** How near a wall a lamp must be to wash it. */
 const WASH_REACH = 1.6;
 const WASH_SIZE = 2.4;
-/** The halo's diameter in metres; the view turns it into pixels for the current zoom. */
-export const HALO_METRES = 0.55;
 
 export function radialTexture(size: number, inner: string, outer: string): CanvasTexture {
   const canvas = document.createElement("canvas");
@@ -80,13 +77,15 @@ function additive(texture: Texture, opacity: number): MeshBasicMaterial {
   });
 }
 
+const WHITE = new Color(0xffffff);
+/** Past 1: the bulb burns out to white in the picture, and feeds the glow pass more than a surface. */
+const BULB_BRIGHTNESS = 3;
 const FLAT = new Quaternion().setFromEuler(new Object3D().rotateX(-Math.PI / 2).rotation);
 
 export interface Glow {
-  objects: Array<InstancedMesh | Points>;
+  objects: InstancedMesh[];
   /** Hides the washes on walls the camera has cut down; true when anything changed. */
   setCutWalls(cut: readonly boolean[]): boolean;
-  setPixelsPerMetre(ppm: number): void;
 }
 
 /** A wide, soft fall-off for light thrown on a surface: no bright core, so pools from neighbouring
@@ -112,7 +111,6 @@ export function buildGlow(
   lamps: readonly Lamp[],
   walls: readonly WallPlane[],
   heightM: number,
-  texture: Texture,
   surface: Texture,
 ): Glow | null {
   if (lamps.length === 0) return null;
@@ -120,6 +118,7 @@ export function buildGlow(
   const colour = new Color();
 
   const bulbs = new InstancedMesh(new SphereGeometry(1, 16, 12), new MeshBasicMaterial({ toneMapped: false }), lamps.length);
+  bulbs.layers.enable(BLOOM_LAYER);
   const unturned = new Quaternion();
   lamps.forEach((lamp, i) => {
     const [rx, ry, rz] = lamp.radii;
@@ -127,35 +126,14 @@ export function buildGlow(
       i,
       m.compose(new Vector3(lamp.at.x, Math.max(lamp.at.y, ry + 0.02), lamp.at.z), unturned, new Vector3(rx, ry, rz)),
     );
-    bulbs.setColorAt(i, colour.set(lamp.color));
+    // A lit bulb burns nearly white whatever its colour; the bloom pass carries the colour out.
+    bulbs.setColorAt(i, colour.set(lamp.color).lerp(WHITE, 0.2).multiplyScalar(BULB_BRIGHTNESS));
   });
-
-  const haloGeometry = new BufferGeometry();
-  const positions = new Float32Array(lamps.length * 3);
-  const colours = new Float32Array(lamps.length * 3);
-  lamps.forEach((lamp, i) => {
-    positions.set([lamp.at.x, Math.max(lamp.at.y, 0.08), lamp.at.z], i * 3);
-    colour.set(lamp.color);
-    colours.set([colour.r, colour.g, colour.b], i * 3);
-  });
-  haloGeometry.setAttribute("position", new BufferAttribute(positions, 3));
-  haloGeometry.setAttribute("color", new BufferAttribute(colours, 3));
-  const haloMaterial = new PointsMaterial({
-    map: texture,
-    size: 48,
-    sizeAttenuation: false,
-    vertexColors: true,
-    transparent: true,
-    depthWrite: false,
-    blending: AdditiveBlending,
-    toneMapped: false,
-  });
-  const halos = new Points(haloGeometry, haloMaterial);
 
   // An evening room: each lamp throws a wide pool, so the lights read as what lights the room.
   const pools = new InstancedMesh(new PlaneGeometry(1, 1), additive(surface, 0.62), lamps.length);
   lamps.forEach((lamp, i) => {
-    const size = lamp.outside ? 0 : 1.6 + Math.min(Math.max(lamp.at.y, 0), heightM) * 0.9;
+    const size = lamp.outside || lamp.litByLight ? 0 : 1.6 + Math.min(Math.max(lamp.at.y, 0), heightM) * 0.9;
     pools.setMatrixAt(i, m.compose(new Vector3(lamp.at.x, 0.006, lamp.at.z), FLAT, new Vector3(size, size, 1)));
     pools.setColorAt(i, colour.set(lamp.color));
   });
@@ -164,7 +142,7 @@ export function buildGlow(
   const washColours: number[] = [];
   const p = new Vector3();
   lamps.forEach((lamp) => {
-    if (lamp.outside) return;
+    if (lamp.outside || lamp.litByLight) return;
     p.set(lamp.at.x, lamp.at.y, lamp.at.z);
     walls.forEach((wall, wallIndex) => {
       const distance = wall.offset + p.dot(wall.normal);
@@ -197,16 +175,13 @@ export function buildGlow(
   const hidden = new Matrix4().makeScale(0, 0, 0);
   let cutState: readonly boolean[] = [];
   return {
-    objects: [bulbs, halos, pools, ...(washMesh ? [washMesh] : [])],
+    objects: [bulbs, pools, ...(washMesh ? [washMesh] : [])],
     setCutWalls(cut) {
       if (!washMesh || (cutState.length === cut.length && cutState.every((c, i) => c === cut[i]))) return false;
       cutState = [...cut];
       washes.forEach((wash, i) => washMesh.setMatrixAt(i, cut[wash.wall] ? hidden : wash.matrix));
       washMesh.instanceMatrix.needsUpdate = true;
       return true;
-    },
-    setPixelsPerMetre(ppm) {
-      haloMaterial.size = Math.min(Math.max(HALO_METRES * ppm, 8), 256);
     },
   };
 }

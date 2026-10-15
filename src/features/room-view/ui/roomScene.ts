@@ -6,9 +6,9 @@ import {
   AdditiveBlending,
   BoxGeometry,
   type BufferGeometry,
-  DirectionalLight,
   DoubleSide,
   InstancedMesh,
+  Light,
   type Material,
   Matrix4,
   Mesh,
@@ -39,6 +39,7 @@ import { PALETTE } from "./scene/palette";
 import { type FinishKind, finishMaterial } from "./scene/finishes";
 import { mergeParts, type Part, transformParts } from "./scene/parts";
 import { lampFixture } from "./scene/lamps";
+import { lampLights } from "./scene/lampLights";
 import { buildScreen } from "./scene/screen";
 import { buildSelectionMark } from "./scene/selection";
 
@@ -90,7 +91,7 @@ export interface RoomScene {
   scene: Scene;
   /** Lowers the walls standing between the camera and the room; true when anything changed. */
   cutWalls(cameraDirection: Vector3): boolean;
-  /** Keeps the halos a fixed size in the room as the view zooms. */
+  /** Keeps the selection's ring a fixed size on screen as the view zooms. */
   setPixelsPerMetre(ppm: number): void;
   /** What a click can land on: every light, piece of furniture and the screen. */
   pickables: readonly Pickable[];
@@ -285,14 +286,24 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     halfLength: e.length / 2,
   }));
 
-  const texture = radialTexture(256, "rgba(255,255,255,1)", "rgba(255,255,255,0)");
+  if (lamps.some((lamp) => !lamp.outside)) {
+    // Lamp-lit: the lamps carry the room, the sky and the key fall back to a dim evening fill.
+    lights.hemisphere.color.set(0xc9ccdf);
+    lights.hemisphere.groundColor.set(0x5a3e28);
+    lights.hemisphere.intensity = 0.5;
+    lights.key.intensity = 0.55;
+    lights.fill.intensity = 0.2;
+    scene.add(...lampLights(lamps, Math.max(W, D) * 1.1, options.shadows).lights);
+  }
+
   const surface = poolTexture(128);
-  const glow = buildGlow(lamps, planes, H, texture, surface);
+  const glow = buildGlow(lamps, planes, H, surface);
   if (glow) scene.add(...glow.objects);
   else surface.dispose();
 
   const backlight = screen?.layout.backlight;
   if (backlight) {
+    const texture = radialTexture(256, "rgba(255,255,255,1)", "rgba(255,255,255,0)");
     const plane = new Mesh(
       new PlaneGeometry(backlight.width, backlight.height),
       new MeshBasicMaterial({
@@ -306,8 +317,6 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     );
     plane.position.set(backlight.x, backlight.y, backlight.z);
     scene.add(plane);
-  } else if (!glow) {
-    texture.dispose();
   }
 
   const mark = buildSelectionMark(pickables);
@@ -338,7 +347,6 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
       return changed;
     },
     setPixelsPerMetre(ppm: number) {
-      glow?.setPixelsPerMetre(ppm);
       mark.setPixelsPerMetre(ppm);
     },
   };
@@ -349,7 +357,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
 export function disposeScene(scene: Scene): void {
   const seen = new Set<object>();
   scene.traverse((object) => {
-    if (object instanceof InstancedMesh || object instanceof DirectionalLight) object.dispose();
+    if (object instanceof InstancedMesh || object instanceof Light) object.dispose();
     const mesh = object as Mesh;
     if (mesh.geometry && !seen.has(mesh.geometry)) {
       seen.add(mesh.geometry);

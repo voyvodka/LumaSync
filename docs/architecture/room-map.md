@@ -317,11 +317,26 @@ backlight drawn as a stray line along the wall.
   (`ROOM_VIEW_3D_AVAILABLE`): nothing stores what nothing draws. Their inspector edits carry a
   gesture key, because a chip or swatch group selects on every arrow key and each save re-applies
   the running mode.
-- **The 3D room keeps its draw count fixed.** Furniture merges into one matte and one satin mesh by
-  vertex colour; bulbs, halos (one `Points`), floor pools and wall washes are one draw each whatever
-  the lamp count; contact shadows are geometry with per-vertex alpha merged into one mesh — a
-  stretched blur texture smeared on a long sofa — and include a soft band along the foot of every
-  wall. The night backdrop is a CSS gradient behind a transparent canvas, so it costs no draw.
+- **The 3D room keeps its draw count fixed.** Furniture merges into one mesh per material by
+  vertex colour; bulbs, floor pools and wall washes are one draw each whatever the lamp count;
+  contact shadows are geometry with per-vertex alpha merged into one mesh — a stretched blur texture
+  smeared on a long sofa — and include a soft band along the foot of every wall. The night backdrop
+  is a CSS gradient behind a transparent canvas, so it costs no draw.
+- **The lamps light the room; they are not painted on it.** The first six lamps in the room each get
+  a real `PointLight` (`scene/lampLights.ts`), three of them casting a small cube shadow, and the
+  evening rig — sky, key and fill — drops to a dim fill while any lamp is lit. The count is fixed,
+  the spare lights dark, because three.js builds its shader programs for a number of lights: a count
+  that followed the lamps recompiled the room on every added lamp. A lamp with a real light throws
+  no painted pool or wash (it would light the floor twice); one past the six keeps them. Their
+  placeholder colour is one warm white — one rainbow colour per lamp read as a party, not a home.
+- **The glow comes from the bulbs alone.** `scene/bloom.ts` draws the room a second time at half
+  resolution with every material black but the bulbs (`BLOOM_LAYER`), blurs that and adds it over
+  the room, so a sofa in front of a lamp still hides its glow. A brightness threshold could not pick
+  the bulbs out: a wall a hand from a lamp is lit brighter than the bulb is drawn, and the whole room
+  hazed. The canvas stays transparent, the glow's alpha following its light, so a halo past the
+  room's edge lands on the backdrop as light. Screenshots of the view from a hidden headless page
+  catch the canvas's fade-in half done — the whole room looks veiled — so the capture forces it
+  opaque; the veil is not in the app.
 - **Bare keys belong to the canvas; modified ones to the whole editor.** Arrows, Delete/Backspace,
   R and Escape act only when the event comes from the editor root or from inside the
   `data-room-map-viewport` element. On a dock tile, a segmented control or a menu item an arrow moved

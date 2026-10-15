@@ -8,8 +8,8 @@ const lamp = (x: number, outside?: boolean) => ({ at: { x, y: 1, z: 0 }, radii: 
 describe("buildGlow", () => {
   // A lamp standing in an L's cut threw its pool over a floor that is not there.
   it("throws no pool for a lamp outside the room's outline", () => {
-    const glow = buildGlow([lamp(0), lamp(1, true)], [], 2.5, new Texture(), new Texture())!;
-    const pools = glow.objects[2] as InstancedMesh;
+    const glow = buildGlow([lamp(0), lamp(1, true)], [], 2.5, new Texture())!;
+    const pools = glow.objects[1] as InstancedMesh;
     const scale = (i: number) => {
       const m = new Matrix4();
       pools.getMatrixAt(i, m);

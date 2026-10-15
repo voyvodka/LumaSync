@@ -27,6 +27,7 @@ import { lightPickHalf, pickObject } from "../model/picking";
 import { prefersReducedMotion } from "@/shared/lib/motion";
 
 import { buildRoomScene, disposeScene, type RoomScene, type RoomSceneOptions } from "./roomScene";
+import { type Bloom, createBloom } from "./scene/bloom";
 import styles from "./RoomView3D.module.css";
 
 /** What a measuring run varies; absent fields take the defaults below. */
@@ -37,6 +38,8 @@ interface SpikeOptions extends Partial<RoomSceneOptions> {
   asyncCompile?: boolean;
   /** Shrink the canvas to 1×1 after the context is lost, so WebKit drops its buffers at once. */
   shrinkOnClose?: boolean;
+  /** The lamps' halo pass (default on). */
+  bloom?: boolean;
 }
 
 interface Timings {
@@ -110,7 +113,9 @@ function openRoomView(
   // smooths the edges, so it is on only for a 1× screen.
   const pixelRatio = Math.min(window.devicePixelRatio, options.pixelRatio ?? 2);
   // Transparent, so the view's night backdrop (a CSS gradient) shows behind the room.
-  const renderer = new WebGLRenderer({ antialias: options.antialias ?? pixelRatio < 2, alpha: true });
+  const antialias = options.antialias ?? pixelRatio < 2;
+  const renderer = new WebGLRenderer({ antialias, alpha: true });
+  let bloom: Bloom | null = null;
   let closed = false;
   let room: RoomScene | null = null;
   let frame = 0;
@@ -131,6 +136,7 @@ function openRoomView(
     if (frame !== 0) cancelAnimationFrame(frame);
     controls?.dispose();
     if (room) disposeScene(room.scene);
+    bloom?.dispose();
     renderer.dispose();
     renderer.forceContextLoss();
     // Measured: without this WebKit kept ~120 MB in its GPU process after the view closed,
@@ -151,6 +157,7 @@ function openRoomView(
     renderer.shadowMap.enabled = shadows;
     renderer.shadowMap.type = PCFShadowMap;
     renderer.shadowMap.autoUpdate = false;
+    if (options.bloom ?? true) bloom = createBloom(renderer, antialias);
     host.appendChild(renderer.domElement);
 
     const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
@@ -193,7 +200,8 @@ function openRoomView(
       pixelsPerMetre = host.clientHeight / ((camera.top - camera.bottom) / camera.zoom);
       room.setPixelsPerMetre(pixelsPerMetre);
       room.faceCamera(camera.quaternion);
-      renderer.render(room.scene, camera);
+      if (bloom) bloom.render(room.scene, camera);
+      else renderer.render(room.scene, camera);
       const now = performance.now();
       if (timings.firstFrameMs === 0) {
         timings.firstFrameAt = now;
@@ -439,6 +447,7 @@ function openRoomView(
       const { width, height } = host.getBoundingClientRect();
       if (width === 0 || height === 0 || !room) return;
       renderer.setSize(width, height);
+      bloom?.setSize(width, height);
       const aspect = width / height;
       // The room fits the part the dock and the face switch leave free and is centred in it: the
       // frustum grows by both insets and the view slides by half their difference.
@@ -513,7 +522,8 @@ function openRoomView(
         for (let i = 0; i < n; i++) {
           placeCamera(current, Math.PI / 4 + (i / n) * Math.PI);
           cut(current);
-          renderer.render(current.scene, camera);
+          if (bloom) bloom.render(current.scene, camera);
+          else renderer.render(current.scene, camera);
           if (sync) gl.finish();
         }
         return (performance.now() - t0) / n;

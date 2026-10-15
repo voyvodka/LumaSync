@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap";
 
+import { LAMP_LIGHTS } from "../scene/lampLights";
 import { buildRoomScene, disposeScene } from "../roomScene";
 
 const OPTIONS = { shadows: true, lambert: false };
@@ -85,8 +86,11 @@ describe("buildRoomScene — draw budget", () => {
 
 describe("buildRoomScene — wall washes", () => {
   it("hides a wall's wash while that wall is cut, and shows it again after", () => {
-    // One lamp against the TV wall (y = +1 is the TV wall in the bridge's cube).
-    const room = buildRoomScene({ ...DEFAULT_ROOM_MAP, hueChannels: [{ channelIndex: 0, x: 0, y: 0.95, z: 0, zOrigin: "bridge" }] }, OPTIONS);
+    // A real light lights its own walls; only a lamp past their count washes one. Six lamps in
+    // the middle take the lights, the seventh stands against the TV wall (y = +1 in the bridge's cube).
+    const middle = Array.from({ length: LAMP_LIGHTS }, (_, i) => ({ channelIndex: i, x: i * 0.05, y: 0, z: 0, zOrigin: "bridge" as const }));
+    const hueChannels = [...middle, { channelIndex: LAMP_LIGHTS, x: 0, y: 0.95, z: 0, zOrigin: "bridge" as const }];
+    const room = buildRoomScene({ ...DEFAULT_ROOM_MAP, hueChannels }, OPTIONS);
     // Pools and washes are both instanced planes, the pool added first.
     const instances: InstancedMesh[] = [];
     room.scene.traverse((object) => {

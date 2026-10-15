@@ -55,6 +55,16 @@ vi.mock("three/addons/controls/OrbitControls.js", async () => {
   };
 });
 
+// The glow pass needs a real context; the fake renderer draws the room straight.
+vi.mock("../scene/bloom", () => ({
+  BLOOM_LAYER: 1,
+  createBloom: (renderer: { render: (...args: unknown[]) => void }) => ({
+    render: (scene: unknown, camera: unknown) => renderer.render(scene, camera),
+    setSize: () => {},
+    dispose: () => {},
+  }),
+}));
+
 class StubResizeObserver {
   observe() {}
   disconnect() {}

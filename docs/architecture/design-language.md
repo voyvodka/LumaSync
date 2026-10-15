@@ -112,6 +112,12 @@ rebuilding LED Setup; apply it to every new screen:
 - **Before building, show options.** Two or three directions with a sketch each, a recommendation,
   then build; iterate on the running app with hot reload.
 
+**The 3D room is the exception, on the maintainer's word.** Inside the room view's canvas — its
+scene, its lighting, its scene moods, its camera and light motion — the target is expressive: lamps
+that bloom and light the room, coloured spill, a camera that travels to what was picked. "Quiet"
+and "motion is small" below hold for the chrome around it (the dock, the face switch, the
+controls), not for the room itself.
+
 **Motion is small, light and answers a change.** The maintainer's taste, stated plainly: tiny,
 sweet micro-animations, never big ones and never a loop on a button. Each one shows what just
 changed and is gone in about a quarter of a second. The patterns are components — reach for them
