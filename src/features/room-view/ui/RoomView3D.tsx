@@ -386,7 +386,9 @@ function openRoomView(
       const first = room === null;
       if (room) disposeScene(room.scene);
       room = buildRoomScene(config, { shadows, lambert: options.lambert ?? false, coldKey: options.coldKey, lampFamilies });
-      orbit.target.copy(room.target);
+      // Only on opening, or when the room is resized: an edit (a piece carried, a light moved)
+      // rebuilds the scene, and taking the target back to the middle threw the view across the room.
+      if (first || roomKey(config) !== shownRoom) orbit.target.copy(room.target);
       room.select(selected);
       if (first) {
         const kept = sessionCamera;
@@ -398,6 +400,9 @@ function openRoomView(
         } else {
           placeCamera(room, Math.PI / 4);
         }
+        shownRoom = roomKey(config);
+      } else if (roomKey(config) !== shownRoom) {
+        placeCamera(room, Math.PI / 4);
         shownRoom = roomKey(config);
       }
       renderer.shadowMap.needsUpdate = shadows;

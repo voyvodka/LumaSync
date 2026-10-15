@@ -7,6 +7,7 @@ import RoomView3D from "../RoomView3D";
 
 const gl = vi.hoisted(() => ({
   throwOnCreate: false,
+  orbits: [] as Array<{ target: { x: number; y: number; z: number; set: (x: number, y: number, z: number) => void } }>,
   renderers: [] as Array<{
     domElement: HTMLCanvasElement;
     render: ReturnType<typeof vi.fn>;
@@ -44,6 +45,9 @@ vi.mock("three/addons/controls/OrbitControls.js", async () => {
   return {
     OrbitControls: class {
       target = new Vector3();
+      constructor() {
+        gl.orbits.push(this as never);
+      }
       update = () => false;
       addEventListener = vi.fn<() => void>();
       dispose = vi.fn<() => void>();
@@ -63,6 +67,7 @@ describe("RoomView3D", () => {
     vi.useFakeTimers();
     gl.throwOnCreate = false;
     gl.renderers = [];
+    gl.orbits = [];
     realResizeObserver = globalThis.ResizeObserver;
     globalThis.ResizeObserver = StubResizeObserver as unknown as typeof globalThis.ResizeObserver;
   });
@@ -93,6 +98,17 @@ describe("RoomView3D", () => {
 
     expect(gl.renderers).toHaveLength(1);
     expect(gl.renderers[0]?.forceContextLoss).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  // Carrying a piece rebuilt the scene and put the orbit back on the room's middle.
+  it("keeps where the view looks when the room's contents change, not its size", () => {
+    const onFail = vi.fn<(error: unknown) => void>();
+    const { rerender, unmount } = render(<RoomView3D config={DEFAULT_ROOM_MAP} label="Room" onFail={onFail} />);
+    const orbit = gl.orbits[0]!;
+    orbit.target.set(1.5, 0.2, -0.8);
+    rerender(<RoomView3D config={{ ...DEFAULT_ROOM_MAP, furniture: [] }} label="Room" onFail={onFail} />);
+    expect([orbit.target.x, orbit.target.y, orbit.target.z]).toEqual([1.5, 0.2, -0.8]);
     unmount();
   });
 

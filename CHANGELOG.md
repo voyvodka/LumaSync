@@ -543,6 +543,8 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- In the 3D view, carrying a piece or changing anything in the room no longer throws the view back
+  to the room's middle; only resizing the room frames it afresh.
 - In the room map, undoing back past a template no longer drops the editor for the template list with
   no way to redo, and ⇧⌘Z / Ctrl+Shift+Z redoes on every keyboard layout.
 - The scene chips are one Tab stop and the arrow keys move between them, as the mode buttons above
