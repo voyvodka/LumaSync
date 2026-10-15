@@ -125,7 +125,7 @@ const shell: Catalogue<typeof enShell> = {
       calibrationRequired: "LED kurulumu gerekli — bu mod için LED'lerin nasıl dizildiğini bildir",
       ledSetupNext: "Şerit bağlandı — sıradaki adım: her ekran kenarında kaç LED olduğunu bildir",
       onboarding: {
-        devices: "Hoş geldin — başlamak için bir şerit ya da Hue bağla",
+        devices: "Hoş geldin — başlamak için bir ışık ekle",
         ledSetup: "Her ekran kenarında kaç LED olduğunu LumaSync'e bildir",
         turnOn: "Son adım — ekranını yansıtmak için Ambilight'ı aç",
       },

@@ -106,7 +106,10 @@ export function OutputsRail({
               ? localSink.reachable === false
                 ? "lights:dock.rows.wledSubSilent"
                 : "lights:dock.rows.wledSub"
-              : "lights:dock.rows.usbSub"
+              : // "0 LEDs" read as a broken strip; what it means is that LED Setup has not been done.
+                (totalLeds ?? 0) === 0
+                ? "lights:dock.rows.usbSubNoLeds"
+                : "lights:dock.rows.usbSub"
           }
           values={{ count: totalLeds ?? 0 }}
           components={{ b: <b /> }}

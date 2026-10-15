@@ -202,6 +202,7 @@ export default {
       usbType: "strip",
       usbSub: "{{count}} LEDs · <b>serial</b>",
       usbSubUnavailable: "No strip connected",
+      usbSubNoLeds: "LEDs not set up · <b>serial</b>",
       wledName: "WLED",
       wledSub: "{{count}} LEDs · <b>UDP</b>",
       wledSubSilent: "{{count}} LEDs · <b>not answering</b>",

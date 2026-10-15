@@ -205,6 +205,7 @@ const lights: Catalogue<typeof enLights> = {
       usbType: "şerit",
       usbSub: "{{count}} LED · <b>seri</b>",
       usbSubUnavailable: "Şerit bağlı değil",
+      usbSubNoLeds: "LED'ler kurulmadı · <b>seri</b>",
       wledName: "WLED",
       wledSub: "{{count}} LED · <b>UDP</b>",
       wledSubSilent: "{{count}} LED · <b>yanıt vermiyor</b>",

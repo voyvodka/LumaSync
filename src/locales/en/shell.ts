@@ -124,7 +124,7 @@ export default {
       calibrationRequired: "LED setup needed — say how your LEDs run to use this mode",
       ledSetupNext: "Strip connected — next, tell LumaSync how many LEDs sit on each screen edge",
       onboarding: {
-        devices: "Welcome — connect a strip or Hue to start",
+        devices: "Welcome — add a light to start",
         ledSetup: "Tell LumaSync how many LEDs sit on each screen edge",
         turnOn: "Last step — turn on Ambilight to mirror your screen",
       },
