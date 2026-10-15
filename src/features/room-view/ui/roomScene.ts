@@ -121,8 +121,7 @@ export interface RoomScene {
   faceCamera(cameraQuaternion: Quaternion): void;
   /** `null` keeps each lamp's own colour; a palette gives lamp i stop i mod n. */
   setMood(lampColour: number | null, levels: MoodLevels, palette?: readonly number[]): void;
-  /** Takes a piece of furniture, the screen or a strip out to follow the pointer; null for a lamp,
-   *  whose light and glow stay where the scene was built. */
+  /** Null for a lamp: its light and glow are built into the scene. */
   lift(objectId: string): LiftedPiece | null;
   /** Where to aim and how far the room reaches from it. */
   target: Vector3;

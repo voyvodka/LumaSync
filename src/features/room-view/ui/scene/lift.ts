@@ -1,13 +1,11 @@
 import { BufferAttribute, BufferGeometry, Group, Mesh, type Object3D, type Scene } from "three";
 
-/** Where one object's vertices sit in a merged mesh. */
 export interface Span {
   mesh: Mesh;
   start: number;
   count: number;
 }
 
-/** What a carried object is made of: its share of the merged meshes and the meshes of its own. */
 export interface Liftable {
   spans: Span[];
   extras: Object3D[];
@@ -20,11 +18,9 @@ export interface LiftedPiece {
   moveTo(x: number, z: number): void;
   /** On top of the turn it was built with. */
   turnTo(radians: number): void;
-  /** Back where it was picked up, in the merged meshes again. */
   restore(): void;
 }
 
-/** Spans laid end to end, one per part, skipping the parts no one owns. */
 export function spansOf(mesh: Mesh, counts: readonly number[], owners: readonly (string | null)[], into: (owner: string) => Liftable | undefined) {
   let start = 0;
   counts.forEach((count, i) => {
@@ -37,7 +33,6 @@ export function spansOf(mesh: Mesh, counts: readonly number[], owners: readonly 
   });
 }
 
-/** The vertices of a span, and the triangles of an indexed mesh that use only them. */
 function copySpan({ mesh, start, count }: Span): BufferGeometry {
   const source = mesh.geometry;
   const copy = new BufferGeometry();
@@ -54,11 +49,7 @@ function copySpan({ mesh, start, count }: Span): BufferGeometry {
   return copy;
 }
 
-/**
- * Takes an object out of the merged meshes into a group of its own that can follow the pointer:
- * its vertices are copied out and collapsed onto the origin, a zero-area point, so nothing is
- * rebuilt while it is carried. The scene built from the landed room replaces both.
- */
+/** Copied out and collapsed onto the origin, a zero-area point, so nothing is rebuilt while carried. */
 export function liftPiece(scene: Scene, piece: Liftable, riders: ReadonlyMap<string, Liftable> = new Map()): LiftedPiece {
   const carried = [...riders].map(([id, rider]) => ({ id, rider, lifted: liftPiece(scene, rider) }));
   const pivot = new Group();

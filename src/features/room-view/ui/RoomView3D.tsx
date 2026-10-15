@@ -76,7 +76,6 @@ interface RoomView {
   ready(): boolean;
   /** Takes the canvas off the page and stops drawing, keeping the context and the scene. */
   park(): void;
-  /** Puts a parked view's canvas in a new host, drawn at once. */
   adopt(host: HTMLElement): void;
   close(): void;
 }
@@ -321,9 +320,7 @@ function openRoomView(
       raycaster.setFromCamera(pointer, camera);
       return raycaster.ray;
     };
-    // The selected piece, the TV or a light pressed on is carried at its own height: the piece itself
-    // follows the pointer in a frame, and it is put there on release. A lamp's light cannot leave the
-    // built scene, so a lamp moves as the frame alone. A press on anything else turns the room.
+    // Only the selected object is carried, at its own height; a press on anything else turns the room.
     let carry: {
       id: string;
       kind: string;
@@ -751,11 +748,7 @@ interface Handlers {
   hover: (objectId: string | null, clientX: number, clientY: number) => void;
 }
 const IDLE: Handlers = { fail: () => {}, pick: () => {}, move: () => false, hover: () => {} };
-/**
- * A view closed by a face or stage switch is parked this long for the one that opens next: a new
- * context, its shaders and the scene took a visible pause on every switch. One at a time; hidden,
- * the window hands it back at once.
- */
+/** A new context, its shaders and the scene paused every face or stage switch; one is kept this long. */
 const PARK_MS = 20_000;
 let parked: { view: RoomView; handlers: Handlers; timer: ReturnType<typeof setTimeout> } | null = null;
 
