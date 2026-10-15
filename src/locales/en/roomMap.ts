@@ -125,6 +125,7 @@ export default {
       storage: "Storage",
       plant: "Plant",
       rug: "Rug",
+      kitchen: "Kitchen",
       other: "Other",
     },
     variant: {
@@ -148,6 +149,12 @@ export default {
       palm: "Palm",
       rectangle: "Rectangle",
       round: "Round",
+      stool: "Stool",
+      beanbag: "Beanbag",
+      dresser: "Dresser",
+      counter: "Counter",
+      island: "Island",
+      fridge: "Fridge",
     },
     tone: {
       slate: "Slate",

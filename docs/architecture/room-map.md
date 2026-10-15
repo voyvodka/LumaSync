@@ -284,19 +284,22 @@ backlight drawn as a stray line along the wall.
   owner too — `useRoomMapViewport` — with the canvas reading its `panMode` rather than keeping a
   second window listener that swallowed a space typed into any field.
 - **The 3D room reads each piece's model from its size and its neighbours.** The stored types are
-  four words (`sofa`, `table`, `chair`, `other`) and say little on their own, so
-  `room-view/ui/scene/furniture.ts` reads the model the way a person reads a floor plan: a seat grows
+  a few words (`sofa`, `table`, `chair`, `bed`, `storage`, `plant`, `rug`, `kitchen`, `other`) and
+  say little on their own, so the model is read the way a person reads a floor plan: a seat grows
   from a slipper chair through an armchair to a five-seat sofa with its width (one cushion per
   0.62 m between the arms); a table is a desk when the screen stands over it, the desk's return when
   it touches one, a coffee table in front of a sofa, a side table when small, else a dining table; a
-  small chair at a desk is an office chair, a wide shallow one a bench. Every part stays inside the
-  footprint the 2D map gives the piece, at any size — the containment test runs each model at five
+  small chair at a desk is an office chair, a wide shallow one a bench; a kitchen piece about a
+  fridge's footprint is the fridge, one deeper than 0.85 m the island, any other a counter run.
+  Every part stays inside the
+  footprint the 2D map gives the piece, at any size — the containment test runs each model at seven
   sizes, including a 3.81 × 0.17 m piece a user really drew. The reading lives in the three-free
   `room-view/model/furnitureModel.ts`, so the inspector can say what "Auto" reads as without the 3D
   chunk.
 - **A user's pick overrides the reading; it never replaces it.** `FurniturePlacement.variant` (a
-  table's desk/coffee/dining/side, a chair's dining/office/armchair/bench, a sofa's straight or
-  corner, storage's sideboard/bookshelf/wardrobe/nightstand/TV unit, a plant's habit, a rug's shape)
+  table's desk/coffee/dining/side, a chair's dining/office/armchair/bench/stool/beanbag, a sofa's
+  straight or corner, storage's sideboard/bookshelf/wardrobe/nightstand/TV unit/dresser, a kitchen's
+  counter/island/fridge, a plant's habit, a rug's shape)
   and `tone` are optional; absent is Auto, and `TvAnchorPlacement.screenKind` does the same for TV
   or monitor. `FURNITURE_CATALOGUE` says which type takes which. Three rules hold them together:
   - Every reader goes through `resolveFurnitureType` / `resolveFurnitureVariant` /

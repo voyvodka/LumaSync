@@ -251,6 +251,7 @@ export const FURNITURE_TYPES = {
   STORAGE: "storage",
   PLANT: "plant",
   RUG: "rug",
+  KITCHEN: "kitchen",
   OTHER: "other",
 } as const;
 
@@ -279,6 +280,12 @@ export const FURNITURE_VARIANTS = {
   PALM: "palm",
   RECTANGLE: "rectangle",
   ROUND: "round",
+  STOOL: "stool",
+  BEANBAG: "beanbag",
+  DRESSER: "dresser",
+  COUNTER: "counter",
+  ISLAND: "island",
+  FRIDGE: "fridge",
 } as const;
 
 export type FurnitureVariant = (typeof FURNITURE_VARIANTS)[keyof typeof FURNITURE_VARIANTS];
@@ -319,11 +326,12 @@ const WOOD_TONES = [FURNITURE_TONES.OAK, FURNITURE_TONES.WALNUT, FURNITURE_TONES
 export const FURNITURE_CATALOGUE = {
   sofa: { variants: [V.STRAIGHT, V.CORNER_LEFT, V.CORNER_RIGHT], tones: FABRIC_TONES },
   table: { variants: [V.DESK, V.COFFEE, V.DINING, V.SIDE], tones: WOOD_TONES },
-  chair: { variants: [V.DINING, V.OFFICE, V.ARMCHAIR, V.BENCH], tones: FABRIC_TONES },
+  chair: { variants: [V.DINING, V.OFFICE, V.ARMCHAIR, V.BENCH, V.STOOL, V.BEANBAG], tones: FABRIC_TONES },
   bed: { variants: [], tones: FABRIC_TONES },
-  storage: { variants: [V.SIDEBOARD, V.BOOKSHELF, V.WARDROBE, V.NIGHTSTAND, V.TV_UNIT], tones: WOOD_TONES },
+  storage: { variants: [V.SIDEBOARD, V.BOOKSHELF, V.WARDROBE, V.NIGHTSTAND, V.TV_UNIT, V.DRESSER], tones: WOOD_TONES },
   plant: { variants: [V.TOPIARY, V.LEAFY, V.PALM], tones: [FURNITURE_TONES.CREAM, FURNITURE_TONES.BRICK, FURNITURE_TONES.CHARCOAL, FURNITURE_TONES.WHITE] },
   rug: { variants: [V.RECTANGLE, V.ROUND], tones: FABRIC_TONES },
+  kitchen: { variants: [V.COUNTER, V.ISLAND, V.FRIDGE], tones: WOOD_TONES },
   other: { variants: [], tones: WOOD_TONES },
 } satisfies Record<FurnitureType, FurnitureKindSpec>;
 

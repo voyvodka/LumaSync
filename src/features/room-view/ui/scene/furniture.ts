@@ -26,6 +26,7 @@ interface Finish {
   cushion: number;
   wood: number;
   woodDark: number;
+  toned: boolean;
 }
 
 function shade(hex: number, factor: number): number {
@@ -38,7 +39,7 @@ function fabricOf(base: number): Pick<Finish, "fabric" | "fabricDeep" | "cushion
 
 function finishFor(item: FurniturePlacement, model: FurnitureModel): Finish {
   const { fabric, wood, woodToned } = furnitureColours(item, model);
-  return { ...fabricOf(fabric), wood, woodDark: woodToned ? shade(wood, 0.78) : PALETTE.oakDark };
+  return { ...fabricOf(fabric), wood, woodDark: woodToned ? shade(wood, 0.78) : PALETTE.oakDark, toned: woodToned };
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
@@ -125,6 +126,18 @@ function build(w: number, d: number, model: FurnitureModel, f: Finish, rand: () 
       return plant(w, d, model.style, rand, f);
     case "rug":
       return rug(w, d, model.round, f);
+    case "stool":
+      return stool(w, d, f);
+    case "beanbag":
+      return beanbag(w, d, f);
+    case "dresser":
+      return dresser(w, d, f);
+    case "counter":
+      return counter(w, d, false, f);
+    case "island":
+      return counter(w, d, true, f);
+    case "fridge":
+      return fridge(w, d, f.toned ? f.wood : PALETTE.steel);
     case "box":
       return [block(w, 0.72, d, 0, 0, 0, f.wood, 0.03), block(w, 0.03, d, 0, 0.72, 0, shade(f.wood, 1.08), 0.012)];
   }
@@ -672,4 +685,111 @@ function rug(w: number, d: number, round: boolean, f: Finish): Part[] {
     return [rod(r, r, 0.01, 0, 0, 0, f.fabricDeep, 40), rod(r - border, r - border, 0.012, 0, 0, 0, field, 40)];
   }
   return [block(w, 0.01, d, 0, 0, 0, f.fabricDeep, 0), block(w - 2 * border, 0.012, d - 2 * border, 0, 0, 0, field, 0)];
+}
+
+/** A bar stool: a round seat on four slim legs, ringed by a footrest. */
+function stool(w: number, d: number, f: Finish): Part[] {
+  const r = Math.min(w, d) / 2 - 0.01;
+  const seatY = 0.7;
+  const parts: Part[] = [rod(r * 0.98, r * 0.92, 0.05, 0, seatY, 0, f.fabric, 24), rod(r, r, 0.012, 0, seatY - 0.012, 0, f.wood, 24)];
+  const at = r * 0.66;
+  for (const [sx, sz] of [
+    [1, 1],
+    [1, -1],
+    [-1, 1],
+    [-1, -1],
+  ] as const) {
+    parts.push(rod(0.012, 0.014, seatY - 0.012, (sx * at) / Math.SQRT2, 0, (sz * at) / Math.SQRT2, PALETTE.metal, 8));
+  }
+  for (const turn of [0, Math.PI / 2]) {
+    const bar = block(at * Math.SQRT2, 0.014, 0.014, 0, 0.26, 0, PALETTE.metal, 0.005);
+    bar.geometry.rotateY(turn + Math.PI / 4);
+    parts.push(bar);
+  }
+  return parts;
+}
+
+/** A beanbag: a slumped pouch with its back risen where someone last sat. */
+function beanbag(w: number, d: number, f: Finish): Part[] {
+  const body = ball(0.5, 0, 0, 0, f.fabric, 18);
+  body.geometry.scale(w * 0.96, 0.5, d * 0.96);
+  body.geometry.translate(0, 0.25, 0);
+  const back = ball(0.5, 0, 0, 0, f.fabricDeep, 16);
+  back.geometry.scale(w * 0.78, 0.5, d * 0.42);
+  back.geometry.translate(0, 0.37, d * 0.24);
+  const dent = ball(0.5, 0, 0, 0, f.cushion, 14);
+  dent.geometry.scale(w * 0.55, 0.12, d * 0.45);
+  dent.geometry.translate(0, 0.45, -d * 0.06);
+  return [body, back, dent];
+}
+
+/** A chest of drawers: three rows of fronts, each with a pair of pulls, on short legs. */
+function dresser(w: number, d: number, f: Finish): Part[] {
+  const legH = 0.08;
+  const bodyH = 0.82;
+  const rows = 3;
+  const parts: Part[] = [
+    block(Math.max(w - 0.01, 0.05), bodyH, Math.max(d - 0.01, 0.05), 0, legH, 0, f.wood, 0.014),
+    block(w, 0.025, d, 0, legH + bodyH - 0.005, 0, shade(f.wood, 1.06), 0.01),
+  ];
+  const rowH = (bodyH - 0.04) / rows;
+  for (let i = 1; i < rows; i++) parts.push(block(w - 0.03, 0.006, 0.004, 0, legH + 0.02 + rowH * i, -d / 2 + 0.002, PALETTE.floorGap, 0));
+  for (let i = 0; i < rows; i++) {
+    const y = legH + 0.02 + rowH * (i + 0.5);
+    for (const sx of w > 0.7 ? [-1, 1] : [0]) parts.push(block(0.1, 0.012, 0.014, sx * w * 0.26, y, -d / 2 + 0.007, PALETTE.handle, 0.005));
+  }
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) parts.push(rod(0.014, 0.018, legH, sx * (w / 2 - 0.05), 0, sz * (d / 2 - 0.05), PALETTE.walnut, 8));
+  }
+  return parts;
+}
+
+/** Base cabinets under a stone worktop with a sink and a hob let into it; an island's top runs
+ *  over its front (−z) far enough to sit at. */
+function counter(w: number, d: number, island: boolean, f: Finish): Part[] {
+  const kick = 0.1;
+  const worktop = 0.04;
+  const topY = 0.92 - worktop;
+  const overhang = island ? Math.min(0.28, d * 0.3) : 0;
+  const bodyD = Math.max(d - overhang - 0.02, Math.min(0.2, d * 0.6));
+  const bodyZ = overhang / 2;
+  const parts: Part[] = [
+    block(w - 0.02, kick, bodyD - 0.08, 0, 0, bodyZ + 0.04, PALETTE.floorGap, 0.005),
+    block(w - 0.01, topY - kick, bodyD, 0, kick, bodyZ, f.wood, 0.01),
+    { ...block(w, worktop, d, 0, topY, 0, PALETTE.stone, 0.012), finish: "satin" },
+  ];
+  const doors = Math.max(1, Math.round(w / 0.6));
+  const front = bodyZ - bodyD / 2;
+  for (let i = 1; i < doors; i++) parts.push(block(0.006, topY - kick - 0.04, 0.004, -w / 2 + (w * i) / doors, kick + 0.02, front + 0.002, PALETTE.floorGap, 0));
+  for (let i = 0; i < doors; i++) {
+    parts.push(block(Math.min(0.14, w / doors - 0.1), 0.012, 0.014, -w / 2 + (w * (i + 0.5)) / doors, topY - 0.07, front + 0.006, PALETTE.handle, 0.005));
+  }
+  if (w >= 1.2) {
+    const sinkX = -w / 2 + w * 0.3;
+    const sinkW = Math.min(0.55, w * 0.25);
+    parts.push({ ...block(sinkW, 0.006, Math.min(0.42, bodyD - 0.14), sinkX, topY + worktop - 0.004, bodyZ, PALETTE.steel, 0.02), finish: "satin" });
+    parts.push({ ...rod(0.012, 0.014, 0.24, sinkX, topY + worktop, bodyZ + bodyD / 2 - 0.08, PALETTE.steel, 10), finish: "satin" });
+  }
+  if (w >= 1.8) {
+    const hobX = -w / 2 + w * 0.72;
+    parts.push({ ...block(Math.min(0.6, w * 0.25), 0.006, Math.min(0.5, bodyD - 0.1), hobX, topY + worktop, bodyZ, PALETTE.glassBlack, 0.01), finish: "satin" });
+  }
+  return parts;
+}
+
+/** A fridge-freezer: one tall body, steel unless a tone paints it, the freezer drawer below, a bar
+ *  handle on each door. */
+function fridge(w: number, d: number, body: number): Part[] {
+  const h = 1.85;
+  const split = 0.72;
+  // The body stands back from the footprint's front by the handles' reach.
+  const reach = 0.045;
+  const front = -d / 2 + reach - 0.001;
+  const satin = (part: Part): Part => ({ ...part, finish: "satin" });
+  return [
+    satin(block(w - 0.01, h, d - reach - 0.005, 0, 0, (reach - 0.005) / 2, body, 0.025)),
+    block(w - 0.03, 0.008, 0.004, 0, split, front, PALETTE.floorGap, 0),
+    satin(block(0.022, 0.5, 0.03, w / 2 - 0.08, split + 0.25, front - 0.017, PALETTE.metalSoft, 0.008)),
+    satin(block(0.022, 0.3, 0.03, w / 2 - 0.08, split - 0.36, front - 0.017, PALETTE.metalSoft, 0.008)),
+  ];
 }

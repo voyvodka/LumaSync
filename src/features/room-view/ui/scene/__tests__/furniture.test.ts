@@ -43,6 +43,12 @@ describe("furnitureParts — every model stays inside its footprint", () => {
     { kind: "plant", style: "palm" },
     { kind: "rug", round: false },
     { kind: "rug", round: true },
+    { kind: "stool" },
+    { kind: "beanbag" },
+    { kind: "dresser" },
+    { kind: "counter" },
+    { kind: "island" },
+    { kind: "fridge" },
     { kind: "box" },
   ];
   // Including the maintainer's own 3.81 × 0.17 m piece, a shape no template makes.

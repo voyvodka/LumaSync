@@ -31,4 +31,8 @@ export const PALETTE = {
   paper: 0xefe9de,
   mug: 0xf2eee7,
   keyboard: 0x2e3035,
+
+  stone: 0xd9d6cf,
+  steel: 0xc4c8cd,
+  glassBlack: 0x18191c,
 } as const;

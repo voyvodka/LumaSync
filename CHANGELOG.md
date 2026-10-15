@@ -201,6 +201,20 @@ https://keepachangelog.com/en/1.1.0/
     empty 3D view, a second piece added lands beside the first instead of on it, the TV snaps like
     the furniture does, the cut's width, depth and offset fields carry drawn marks instead of the
     English letters W, D and ↦, and the room settings' wall row reads "On wall".
+  - A Hue light is drawn as its model — a Play bar, Signe, Go, Iris or Bloom has its own shape — and
+    one that lights only one side, such as a Play bar turned to the wall, lights that side in the
+    3D room instead of all round. The light's card picks the model when the bridge names the wrong
+    one and turns a one-sided light to face where it really points, drawn on the plan as a wedge;
+    left empty it faces its nearest wall.
+  - A Hue light set down on a desk or a shelf stands on its top, and moved off it goes back to the
+    floor, whether dragged on the plan, typed or carried in 3D; the light's card offers to stand it
+    on the piece under it.
+  - A kitchen: a counter run with a stone worktop, sink and hob, an island with a seating overhang,
+    and a fridge, read from the piece's shape unless one is picked. Chairs can be stools or a
+    beanbag and storage a chest of drawers. Like a bed, a kitchen shows an error screen in versions
+    before this one.
+  - A mode no longer washes the whole 3D room in its colour: Ambilight keeps the room dark with a
+    rim of light around the screen, and an effect lights the room at about half its lamps.
 - The Lights page's outputs say what they are in plain words: "USB strip" (not the CH340 chip name
   for every controller), "Hue lights", "Bridge · ready" / "live · 20 Hz" instead of "standby" /
   "DTLS 20 Hz", and "Not set up". The Hue area row explains in its ⓘ what an entertainment area is

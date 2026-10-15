@@ -38,6 +38,12 @@ export type FurnitureModel =
   | { kind: "bed" }
   | { kind: "plant"; style: "topiary" | "leafy" | "palm" }
   | { kind: "rug"; round: boolean }
+  | { kind: "stool" }
+  | { kind: "beanbag" }
+  | { kind: "dresser" }
+  | { kind: "counter" }
+  | { kind: "island" }
+  | { kind: "fridge" }
   | { kind: "box" };
 
 /** Where a seat stops being a chair and becomes an armchair; also the narrowest piece with arms. */
@@ -224,6 +230,9 @@ export function classifyFurniture(config: RoomMapConfig): Map<string, FurnitureM
             (variant === undefined && Math.abs(item.width - item.height) < 0.1),
         });
         break;
+      case "kitchen":
+        models.set(item.id, kitchenModel(item, variant));
+        break;
       case "other":
         models.set(item.id, { kind: "box" });
         break;
@@ -244,6 +253,10 @@ function chairModel(item: FurniturePlacement, variant: FurnitureVariant | undefi
       return { kind: "upholstered", seats: 1, arms: true, corner: null };
     case FURNITURE_VARIANTS.BENCH:
       return { kind: "bench" };
+    case FURNITURE_VARIANTS.STOOL:
+      return { kind: "stool" };
+    case FURNITURE_VARIANTS.BEANBAG:
+      return { kind: "beanbag" };
     default:
       break;
   }
@@ -269,6 +282,8 @@ function storageModel(item: FurniturePlacement, variant: FurnitureVariant | unde
       return { kind: "nightstand" };
     case FURNITURE_VARIANTS.TV_UNIT:
       return { kind: "tvUnit" };
+    case FURNITURE_VARIANTS.DRESSER:
+      return { kind: "dresser" };
     default:
       break;
   }
@@ -281,6 +296,17 @@ function storageModel(item: FurniturePlacement, variant: FurnitureVariant | unde
   // A run of storage longer than a sideboard is a wall of wardrobes, not a 4 m console.
   if (Math.max(item.width, item.height) > STORAGE_RUN_MIN) return { kind: "wardrobe" };
   return { kind: "cabinet", doors: clamp(Math.round(item.width / 0.45), 1, 6) };
+}
+
+/** A kitchen with no pick: about a fridge's footprint is the fridge, deeper than 0.85 m the island
+ *  (wherever it stands), any other a counter run. */
+function kitchenModel(item: FurniturePlacement, variant: FurnitureVariant | undefined): FurnitureModel {
+  if (variant === FURNITURE_VARIANTS.COUNTER) return { kind: "counter" };
+  if (variant === FURNITURE_VARIANTS.ISLAND) return { kind: "island" };
+  if (variant === FURNITURE_VARIANTS.FRIDGE) return { kind: "fridge" };
+  if (Math.max(item.width, item.height) <= 0.95 && Math.min(item.width, item.height) >= 0.55) return { kind: "fridge" };
+  if (Math.min(item.width, item.height) >= 0.85) return { kind: "island" };
+  return { kind: "counter" };
 }
 
 /** What the screen reads as with no pick: a monitor when a desk stands under it, else a TV. */
@@ -327,6 +353,18 @@ export function autoVariant(model: FurnitureModel): FurnitureVariant | null {
       return model.style === "leafy" ? FURNITURE_VARIANTS.LEAFY : model.style === "palm" ? FURNITURE_VARIANTS.PALM : FURNITURE_VARIANTS.TOPIARY;
     case "rug":
       return model.round ? FURNITURE_VARIANTS.ROUND : FURNITURE_VARIANTS.RECTANGLE;
+    case "stool":
+      return FURNITURE_VARIANTS.STOOL;
+    case "beanbag":
+      return FURNITURE_VARIANTS.BEANBAG;
+    case "dresser":
+      return FURNITURE_VARIANTS.DRESSER;
+    case "counter":
+      return FURNITURE_VARIANTS.COUNTER;
+    case "island":
+      return FURNITURE_VARIANTS.ISLAND;
+    case "fridge":
+      return FURNITURE_VARIANTS.FRIDGE;
     default:
       return null;
   }
@@ -367,6 +405,18 @@ export function modelTop(model: FurnitureModel): number {
       return model.style === "palm" ? 1.6 : model.style === "leafy" ? 0.9 : 1.15;
     case "rug":
       return 0.012;
+    case "stool":
+      return 0.75;
+    case "beanbag":
+      return 0.62;
+    case "dresser":
+      return 0.92;
+    case "counter":
+      return 0.92;
+    case "island":
+      return 0.92;
+    case "fridge":
+      return 1.85;
     case "box":
       return 0.75;
   }
@@ -381,6 +431,10 @@ export function surfaceTop(model: FurnitureModel): number {
       return 0.45;
     case "bed":
       return 0.55;
+    case "stool":
+      return 0.75;
+    case "beanbag":
+      return 0.4;
     case "plant":
     case "rug":
       return 0;
@@ -399,6 +453,11 @@ export function contactShade(model: FurnitureModel): number {
     case "tvUnit":
     case "bed":
     case "box":
+    case "dresser":
+    case "counter":
+    case "island":
+    case "fridge":
+    case "beanbag":
       return 0.42;
     case "officeChair":
     case "sideTable":

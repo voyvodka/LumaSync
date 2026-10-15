@@ -145,6 +145,32 @@ describe("classifyFurniture — the new kinds", () => {
   });
 });
 
+describe("classifyFurniture — the kitchen", () => {
+  it("reads a tall narrow piece as the fridge, a deep free one as the island and the rest as counter", () => {
+    const config = room([
+      piece("fridge", "kitchen", 0, 0, 0.7, 0.68),
+      piece("island", "kitchen", 2, 2, 1.8, 0.9),
+      piece("run", "kitchen", 1, 0, 2.4, 0.62),
+      piece("picked", "kitchen", 3, 3, 0.7, 0.68, { variant: "counter" }),
+    ]);
+    expect(modelOf(config, "fridge")).toEqual({ kind: "fridge" });
+    expect(modelOf(config, "island")).toEqual({ kind: "island" });
+    expect(modelOf(config, "run")).toEqual({ kind: "counter" });
+    expect(modelOf(config, "picked")).toEqual({ kind: "counter" });
+  });
+
+  it("draws a stool, a beanbag and a dresser only when picked", () => {
+    const config = room([
+      piece("stool", "chair", 0, 0, 0.4, 0.4, { variant: "stool" }),
+      piece("bag", "chair", 2, 0, 0.9, 0.9, { variant: "beanbag" }),
+      piece("dresser", "storage", 0, 3, 1, 0.5, { variant: "dresser" }),
+    ]);
+    expect(modelOf(config, "stool")).toEqual({ kind: "stool" });
+    expect(modelOf(config, "bag")).toEqual({ kind: "beanbag" });
+    expect(modelOf(config, "dresser")).toEqual({ kind: "dresser" });
+  });
+});
+
 describe("autoVariant", () => {
   it("names what Auto reads as in the type's own choices", () => {
     expect(autoVariant({ kind: "upholstered", seats: 1, arms: true, corner: null })).toBe("armchair");

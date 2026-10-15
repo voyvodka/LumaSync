@@ -128,6 +128,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
       storage: "Dolap",
       plant: "Bitki",
       rug: "Halı",
+      kitchen: "Mutfak",
       other: "Diğer",
     },
     variant: {
@@ -151,6 +152,12 @@ const roomMap: Catalogue<typeof enRoomMap> = {
       palm: "Palmiye",
       rectangle: "Dikdörtgen",
       round: "Yuvarlak",
+      stool: "Tabure",
+      beanbag: "Armut koltuk",
+      dresser: "Şifonyer",
+      counter: "Tezgâh",
+      island: "Ada",
+      fridge: "Buzdolabı",
     },
     tone: {
       slate: "Arduvaz",

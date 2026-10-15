@@ -24,7 +24,7 @@ import {
   type TvAnchorPlacement,
 } from "../src/shared/contracts/roomMap";
 
-export const ROOM_MAP_PRESET_IDS = ["none", "simple", "zoned", "legacy-gapped", "tv-anchored"] as const;
+export const ROOM_MAP_PRESET_IDS = ["none", "simple", "zoned", "legacy-gapped", "tv-anchored", "studio"] as const;
 
 export type RoomMapPresetId = (typeof ROOM_MAP_PRESET_IDS)[number];
 
@@ -217,6 +217,35 @@ function tvAnchored(): RoomMapConfig {
   };
 }
 
+/** Every kitchen, stool, beanbag and dresser kind on one map, for the plan and the 3D room. */
+function studio(): RoomMapConfig {
+  const base = tvAnchored();
+  const dimensions = { ...DIMENSIONS, widthMeters: 7, depthMeters: 4.6 };
+  return {
+    ...base,
+    dimensions,
+    furniture: [
+      ...FURNITURE,
+      { id: "counter-1", type: "kitchen", x: 4.6, y: dimensions.depthMeters - 0.62, width: 2.4, height: 0.62, rotation: 0, label: "Counter" },
+      { id: "fridge-1", type: "kitchen", x: 3.85, y: dimensions.depthMeters - 0.68, width: 0.7, height: 0.68, rotation: 0, label: "Fridge" },
+      { id: "island-1", type: "kitchen", x: 4.9, y: 2.2, width: 1.8, height: 0.9, rotation: 0, label: "Island" },
+      ...[5.15, 5.6, 6.05].map((x, i) => ({
+        id: `stool-${i + 1}`,
+        type: "chair" as const,
+        x,
+        y: 1.7,
+        width: 0.4,
+        height: 0.4,
+        rotation: 0,
+        variant: "stool" as const,
+        label: `Stool ${i + 1}`,
+      })),
+      { id: "beanbag-1", type: "chair", x: 0.3, y: 3.4, width: 0.9, height: 0.9, rotation: 20, variant: "beanbag", label: "Beanbag" },
+      { id: "dresser-1", type: "storage", x: 5.6, y: 0, width: 1.0, height: 0.5, rotation: 180, variant: "dresser", label: "Dresser" },
+    ],
+  };
+}
+
 export const ROOM_MAP_PRESETS: Record<RoomMapPresetId, RoomMapPreset> = {
   none: {
     id: "none",
@@ -247,5 +276,11 @@ export const ROOM_MAP_PRESETS: Record<RoomMapPresetId, RoomMapPreset> = {
     label: "TV-anchored, known heights",
     summary: "TV with an explicit mount height, channels with recorded floor/mid/ceiling z-origins.",
     build: tvAnchored,
+  },
+  studio: {
+    id: "studio",
+    label: "Open-plan studio",
+    summary: "The tv-anchored room widened with a kitchen run, fridge, island, stools, a beanbag and a dresser.",
+    build: studio,
   },
 };

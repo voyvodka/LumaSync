@@ -23,6 +23,9 @@ const BOOK_BLUE = 0x3f679a;
 const LEAVES = [0x55744a, 0x67875a, 0x4a6640];
 const BOOKS = [0xb4513e, 0x3f679a, 0xd8c9a8, 0x5d7d52, 0xc49a3c, 0x7b4f6e, 0x2f3b4d];
 const BOX = 0x6b7079;
+const STONE = 0xd9d6cf;
+const STEEL = 0xc4c8cd;
+const GLASS_BLACK = 0x18191c;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 
@@ -317,11 +320,54 @@ function draw(pen: Pen, model: FurnitureModel, w: number, d: number, c: Furnitur
       return plant(pen, w, d, model.style, c);
     case "rug":
       return rug(pen, w, d, model.round, c);
+    case "stool": {
+      const r = Math.min(w, d) / 2 - 0.01;
+      pen.ellipse({ key: "seat", fill: c.fabric }, w / 2, d / 2, r, r);
+      pen.ellipse({ key: "rim", fill: shade(c.fabric, 1.1), line: null }, w / 2, d / 2, r * 0.7, r * 0.7);
+      return;
+    }
+    case "beanbag":
+      pen.ellipse({ key: "body", fill: c.fabric }, w / 2, d / 2, w / 2 - 0.01, d / 2 - 0.01);
+      pen.ellipse({ key: "back", fill: shade(c.fabric, 0.84) }, w / 2, d * 0.72, w * 0.39, d * 0.21);
+      pen.ellipse({ key: "dent", fill: shade(c.fabric, 1.1), line: null }, w / 2, d * 0.44, w * 0.27, d * 0.22);
+      return;
+    case "dresser":
+      return cabinetTop(pen, w, d, shade(c.wood, 1.06), w > 0.7 ? 2 : 1);
+    case "counter":
+    case "island":
+      return worktop(pen, w, d, model.kind === "island");
+    case "fridge":
+      pen.rect({ key: "body", fill: c.woodToned ? c.wood : STEEL }, 0, 0, w, d, 0.025);
+      pen.rect({ key: "handle", fill: shade(STEEL, 0.6), line: null }, w - 0.11, 0.005, 0.03, 0.04, 0.008);
+      return;
     case "box":
       pen.rect({ key: "box", fill: BOX }, 0, 0, w, d, 0.02);
       pen.line("cross-a", shade(BOX, 0.7), 0.04, 0.04, w - 0.04, d - 0.04);
       pen.line("cross-b", shade(BOX, 0.7), w - 0.04, 0.04, 0.04, d - 0.04);
       return;
+    default: {
+      // `draw` returns nothing, so a model left out here drew blank with no compile error.
+      const unhandled: never = model;
+      return unhandled;
+    }
+  }
+}
+
+/** A stone worktop with its sink and hob, as `counter` lets them into it in the 3D room. */
+function worktop(pen: Pen, w: number, d: number, island: boolean) {
+  pen.rect({ key: "top", fill: STONE }, 0, 0, w, d, 0.012);
+  const overhang = island ? Math.min(0.28, d * 0.3) : 0;
+  const bodyD = Math.max(d - overhang - 0.02, Math.min(0.2, d * 0.6));
+  const midY = overhang + 0.01 + bodyD / 2;
+  if (w >= 1.2) {
+    const sinkW = Math.min(0.55, w * 0.25);
+    const sinkD = Math.min(0.42, bodyD - 0.14);
+    pen.rect({ key: "sink", fill: STEEL }, w * 0.3 - sinkW / 2, midY - sinkD / 2, sinkW, sinkD, 0.03);
+  }
+  if (w >= 1.8) {
+    const hobW = Math.min(0.6, w * 0.25);
+    const hobD = Math.min(0.5, bodyD - 0.1);
+    pen.rect({ key: "hob", fill: GLASS_BLACK, line: null }, w * 0.72 - hobW / 2, midY - hobD / 2, hobW, hobD, 0.01);
   }
 }
 

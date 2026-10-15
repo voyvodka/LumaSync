@@ -12,6 +12,7 @@ describe("FURNITURE_TILES", () => {
       ["storage", { kind: "cabinet", doors: 3 }],
       ["plant", { kind: "plant", style: "topiary" }],
       ["rug", { kind: "rug", round: false }],
+      ["kitchen", { kind: "counter" }],
       ["other", { kind: "box" }],
     ]);
   });

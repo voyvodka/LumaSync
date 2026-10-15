@@ -14,6 +14,7 @@ export const FURNITURE_DEFAULT_SIZE = {
   storage: { width: 1.2, depth: 0.45 },
   plant: { width: 0.5, depth: 0.5 },
   rug: { width: 2.0, depth: 1.4 },
+  kitchen: { width: 2.4, depth: 0.62 },
   other: { width: 0.6, depth: 0.6 },
 } satisfies Record<FurnitureType, { width: number; depth: number }>;
 
