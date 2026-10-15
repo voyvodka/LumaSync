@@ -1,7 +1,7 @@
-import { BoxGeometry, type BufferGeometry, DirectionalLight, InstancedMesh, type Material, Matrix4, Mesh, type MeshBasicMaterial, type Texture, Vector3 } from "three";
+import { BoxGeometry, type BufferGeometry, DirectionalLight, InstancedMesh, type Material, Matrix4, Mesh, type MeshBasicMaterial, type Scene, type Texture, Vector3 } from "three";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap";
+import { DEFAULT_ROOM_MAP, type RoomMapConfig, type UsbStripPlacement } from "@/shared/contracts/roomMap";
 
 import { LAMP_LIGHTS } from "../scene/lampLights";
 import { buildRoomScene, disposeScene } from "../roomScene";
@@ -249,9 +249,7 @@ describe("buildRoomScene — mood", () => {
       usbStrips: [{ stripId: "wall", startX: 0.5, startY: 3.5, endX: 3.5, endY: 3.5, ledCount: 60 }],
     };
     const room = buildRoomScene(config, OPTIONS);
-    const bar = room.scene.children.find(
-      (object): object is Mesh => object instanceof Mesh && object.geometry instanceof BoxGeometry && object.geometry.parameters.height === 0.018,
-    );
+    const bar = stripBar(room.scene);
     expect(bar).toBeDefined();
     const colour = () => (bar!.material as MeshBasicMaterial).color;
     room.setMood(0xff0000, { level: 1, ambient: 1, strip: 1 });
@@ -260,4 +258,29 @@ describe("buildRoomScene — mood", () => {
     expect(colour().r).toBeLessThan(0.1);
     disposeScene(room.scene);
   });
+
+  // A strip read as a 2 cm beam with a ring round half the room; the tape is a centimetre wide.
+  it("draws a strip a centimetre wide: at the skirting on a wall, flat on the floor away from one, at its own height when set", () => {
+    const at = (strip: Partial<UsbStripPlacement>) => {
+      const room = buildRoomScene(
+        { ...DEFAULT_ROOM_MAP, tvAnchor: undefined, usbStrips: [{ stripId: "s", startX: 1, startY: 0.05, endX: 3, endY: 0.05, ledCount: 60, ...strip }] },
+        OPTIONS,
+      );
+      const bar = stripBar(room.scene)!;
+      const { height, depth } = (bar.geometry as BoxGeometry).parameters;
+      const result = { y: bar.position.y, thickest: Math.max(height, depth) };
+      disposeScene(room.scene);
+      return result;
+    };
+    expect(at({})).toEqual({ y: 0.08, thickest: 0.012 });
+    expect(at({ startY: 2, endY: 2 }).y).toBeLessThan(0.01);
+    expect(at({ mountHeightMeters: 2.2 }).y).toBeCloseTo(2.2);
+    expect(at({ mountHeightMeters: 9 }).y).toBeLessThan(DEFAULT_ROOM_MAP.dimensions.heightMeters);
+  });
 });
+
+function stripBar(scene: Scene): Mesh | undefined {
+  return scene.children.find(
+    (object): object is Mesh => object instanceof Mesh && object.geometry instanceof BoxGeometry && object.geometry.parameters.width >= 1 && object.geometry.parameters.height <= 0.02,
+  );
+}

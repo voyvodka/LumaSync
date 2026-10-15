@@ -224,6 +224,11 @@ function studio(): RoomMapConfig {
   return {
     ...base,
     dimensions,
+    usbStrips: [
+      ...base.usbStrips,
+      // Under the wall cabinets a counter would have: a strip on its own height, off the skirting.
+      { stripId: "strip-kitchen", startX: 4.65, startY: 4.59, endX: 6.95, endY: 4.59, ledCount: 90, mountHeightMeters: 1.45 },
+    ],
     furniture: [
       ...FURNITURE,
       { id: "counter-1", type: "kitchen", x: 4.6, y: dimensions.depthMeters - 0.62, width: 2.4, height: 0.62, rotation: 0, label: "Counter" },

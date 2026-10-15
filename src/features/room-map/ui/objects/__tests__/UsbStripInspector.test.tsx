@@ -15,6 +15,7 @@ function renderInspector(
   overrides: Partial<UsbStripPlacement> = {},
   connectionStatus: UsbStripConnectionStatus = "unknown",
   port: string | null = null,
+  extra: { height?: { placeholder: string; max: number }; onStickToWall?: () => void } = {},
 ) {
   const handlers = {
     onUpdate: vi.fn<(patch: Partial<UsbStripPlacement>) => void>(),
@@ -25,7 +26,7 @@ function renderInspector(
     onClose: vi.fn<() => void>(),
     onManage: vi.fn<() => void>(),
   };
-  render(<UsbStripInspector strip={{ ...strip, ...overrides }} connectionStatus={connectionStatus} port={port} {...handlers} />);
+  render(<UsbStripInspector strip={{ ...strip, ...overrides }} connectionStatus={connectionStatus} port={port} {...handlers} {...extra} />);
   return handlers;
 }
 
@@ -38,6 +39,30 @@ const enter = (name: string, value: string) => {
 
 describe("UsbStripInspector", () => {
   beforeEach(() => cleanup());
+
+  it("offers a height only where the 3D room draws the strip by one", () => {
+    renderInspector();
+    expect(screen.queryByRole("spinbutton", { name: "roomMap:inspector.usbHeightLabel" })).toBeNull();
+    cleanup();
+    const { onUpdate } = renderInspector({ mountHeightMeters: 1.2 }, "unknown", null, { height: { placeholder: "0.08", max: 2.6 } });
+    const field = screen.getByRole("spinbutton", { name: "roomMap:inspector.usbHeightLabel" }) as HTMLInputElement;
+    expect(field.value).toBe("1.20");
+    expect(field.placeholder).toBe("0.08");
+    enter("roomMap:inspector.usbHeightLabel", "2.1");
+    expect(onUpdate).toHaveBeenLastCalledWith({ mountHeightMeters: 2.1 });
+    enter("roomMap:inspector.usbHeightLabel", "");
+    expect(onUpdate).toHaveBeenLastCalledWith({ mountHeightMeters: null });
+  });
+
+  it("lays the strip on its wall from the link, shown only when there is somewhere to go", () => {
+    renderInspector();
+    expect(screen.queryByText("roomMap:inspector.usbStickToWall")).toBeNull();
+    cleanup();
+    const onStickToWall = vi.fn<() => void>();
+    renderInspector({}, "unknown", null, { onStickToWall });
+    fireEvent.click(screen.getByText("roomMap:inspector.usbStickToWall"));
+    expect(onStickToWall).toHaveBeenCalledTimes(1);
+  });
 
   it("moves the strip by its start point, keeping the other axis", () => {
     const { onMove } = renderInspector();

@@ -276,6 +276,18 @@ backlight drawn as a stray line along the wall.
   with `DEFAULT_ROOM_MAP`, so the Hue channels and zones (the bridge sync's) and every port-linked
   strip (Devices') survive, the first one keeping its placement. Writing `DEFAULT_ROOM_MAP` over the
   config once wiped all three, and the map then disagreed with both owners until they re-synced.
+- **A strip's height is the 3D room's alone.** `UsbStripPlacement.mountHeightMeters` is optional and
+  drawing-only: Rust reads a strip's id and port and nothing else, so there is no mirror. Absent, a
+  strip within 25 cm of a wall runs at the skirting and one further out lies flat on the floor
+  (`defaultStripHeight`, `model/stripWall.ts`), which the inspector shows as the field's placeholder.
+  `resolveStripMountHeight` takes any finite height at or above the floor with no cap — a room can be
+  8 m tall — and the 3D room holds it under its own ceiling; a ceiling lowered under a stored height
+  keeps the number in the field while the strip is drawn just under the new ceiling, with no warning
+  as the TV's mount height has, since nothing but the drawing reads it. A backlight strip has no height field:
+  it is drawn at the screen. The tape is drawn at its real size, 12 × 4 mm, flat against its wall or
+  the floor. "Onto the wall" (`stickStripToWall`) lays a strip along its nearest wall 1 cm inside it,
+  at its length and running the way it ran. A template moves the strip to its own placement, so the
+  height goes with the old place.
 - **Editor shortcuts stand aside for form fields.** The editor root owns Delete/Backspace, Cmd+Z,
   arrows and the rest, and the dock's fields sit inside it: Backspace in the on-canvas LED count
   deleted the strip, and Cmd+Z in a field ran the editor's undo instead of the field's own.

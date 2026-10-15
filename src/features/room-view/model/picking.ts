@@ -15,6 +15,8 @@ export interface Pickable {
   half: readonly [number, number, number];
   /** The rotation about y the piece was placed with (radians, as the plan stores it). */
   angle: number;
+  /** A strip: long and a centimetre thick. */
+  line?: boolean;
 }
 
 export interface PickRay {

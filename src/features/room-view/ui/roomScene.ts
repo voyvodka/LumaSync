@@ -25,6 +25,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
 import { furnitureObjectId, hueChannelObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "@/features/room-map/model/objectId";
 import { isBacklightStrip } from "@/features/room-map/model/backlight";
+import { defaultStripHeight } from "@/features/room-map/model/stripWall";
 import { outsideOutline } from "@/features/room-map/model/roomFootprint";
 import {
   type RoomMapConfig,
@@ -33,6 +34,7 @@ import {
   resolveHueFixture,
   resolveRoomFootprint,
   resolveRoomSurfaces,
+  resolveStripMountHeight,
 } from "@/shared/contracts/roomMap";
 
 import type { Pickable } from "../model/picking";
@@ -53,8 +55,9 @@ import { buildScreen } from "./scene/screen";
 import { buildSelectionMark } from "./scene/selection";
 import { BLOOM_LAYER } from "./scene/bloom";
 
-/** Where a strip along a wall runs: about skirting height. */
-const STRIP_HEIGHT = 0.08;
+/** An LED strip's tape is about a centimetre wide and a few millimetres deep. */
+const STRIP_WIDTH = 0.012;
+const STRIP_DEPTH = 0.004;
 const STRIP_GLOW = 0xffc46b;
 const BACKLIGHT_GAIN = 1.6;
 const UNLIT_STRIP = new Color(0x2a2a2e);
@@ -233,8 +236,8 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     for (const f of screen.footprints) shadows.push(contactShadow(f.hw, f.hd, f.shade, new Matrix4().makeTranslation(f.x, 0, f.z)));
     scene.add(new Mesh(screen.panel, new MeshBasicMaterial({ vertexColors: true })));
   }
-  // The USB strips: one behind the screen is its backlight, picked there; one along a wall or the
-  // floor runs as a thin lit line at skirting height. A strip was listed in the dock and drawn nowhere.
+  // The USB strips: one behind the screen is its backlight, picked there; any other runs as a lit line
+  // a centimetre wide at its height. A strip was listed in the dock and drawn nowhere.
   const stripMaterials: MeshBasicMaterial[] = [];
   for (const strip of config.usbStrips) {
     const mx = (strip.startX + strip.endX) / 2;
@@ -248,15 +251,19 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     const length = Math.hypot(strip.endX - strip.startX, strip.endY - strip.startY);
     if (length < 0.05) continue;
     const angle = Math.atan2(strip.endY - strip.startY, strip.endX - strip.startX);
-    const centre = roomToScene(mx, my, STRIP_HEIGHT, dims);
+    const height = Math.min(resolveStripMountHeight(strip) ?? defaultStripHeight(config, strip), dims.heightMeters - STRIP_WIDTH);
+    // Away from a wall a strip lies taped flat to the floor; on one it stands flat against it.
+    const lying = height < STRIP_WIDTH;
+    const half: [number, number, number] = lying ? [length / 2, STRIP_DEPTH / 2, STRIP_WIDTH / 2] : [length / 2, STRIP_WIDTH / 2, STRIP_DEPTH / 2];
+    const centre = roomToScene(mx, my, lying ? STRIP_DEPTH / 2 + 0.001 : height, dims);
     const barMaterial = new MeshBasicMaterial({ color: STRIP_GLOW, toneMapped: false });
     stripMaterials.push(barMaterial);
-    const bar = new Mesh(new BoxGeometry(length, 0.018, 0.018), barMaterial);
+    const bar = new Mesh(new BoxGeometry(half[0] * 2, half[1] * 2, half[2] * 2), barMaterial);
     bar.layers.enable(BLOOM_LAYER);
     bar.position.set(centre.x, centre.y, centre.z);
     bar.rotation.y = -angle;
     scene.add(bar);
-    pickables.push({ id, kind: "light", centre, half: [length / 2, 0.12, 0.12], angle });
+    pickables.push({ id, kind: "light", centre, half, angle, line: true });
   }
 
   // One mesh per material: a room is still a handful of draws.

@@ -12,6 +12,8 @@ import {
   replaceHueChannel,
   resolveFurnitureTone,
   resolveFurnitureTop,
+  resolveStripMountHeight,
+  type UsbStripPlacement,
   resolveFurnitureType,
   resolveFurnitureVariant,
   resolveRoomFootprint,
@@ -139,6 +141,15 @@ describe("height and screen kind resolvers", () => {
   it("keeps only a usable stored height", () => {
     expect(resolveFurnitureTop(piece(1.8))).toBe(1.8);
     for (const bad of [null, 0, -1, Number.NaN, 12, "2"]) expect(resolveFurnitureTop(piece(bad))).toBeUndefined();
+  });
+
+  it("keeps only a strip height at or above the floor", () => {
+    const strip = (mountHeightMeters: unknown) =>
+      ({ stripId: "s", startX: 0, startY: 0, endX: 1, endY: 0, ledCount: 30, mountHeightMeters }) as UsbStripPlacement;
+    expect(resolveStripMountHeight(strip(0))).toBe(0);
+    expect(resolveStripMountHeight(strip(2.4))).toBe(2.4);
+    expect(resolveStripMountHeight(strip(4.5))).toBe(4.5);
+    for (const bad of [undefined, null, -0.1, Number.NaN, Number.POSITIVE_INFINITY, "1"]) expect(resolveStripMountHeight(strip(bad))).toBeUndefined();
   });
 
   it("reads an unknown screen kind as Auto", () => {

@@ -235,6 +235,16 @@ export interface UsbStripPlacement {
    * blocking the user.
    */
   portName?: string;
+  /** The strip's height above the floor in metres; absent ⇒ at the skirting. Drawing-only: Rust
+   *  reads a strip's id and port alone. Read through `resolveStripMountHeight`. */
+  mountHeightMeters?: number | null;
+}
+
+/** The stored height when it is a usable one (finite, not below the floor), else none. No cap: a
+ *  room can be 8 m tall, so the 3D room holds it under its own ceiling. */
+export function resolveStripMountHeight(strip: UsbStripPlacement): number | undefined {
+  const height: unknown = strip.mountHeightMeters;
+  return typeof height === "number" && Number.isFinite(height) && height >= 0 ? height : undefined;
 }
 
 // ---------------------------------------------------------------------------

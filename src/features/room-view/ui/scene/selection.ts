@@ -15,8 +15,13 @@ const FLOOR_LIFT = 0.006;
 /** A light's ring never shrinks below this radius on screen, however far the view zooms out. */
 const HALO_MIN_PX = 20;
 
-/** A rounded-rectangle band `LINE` wide around a `w` × `d` rectangle, in the xy plane. */
-function outline(w: number, d: number): ShapeGeometry {
+/** A strip's frame hugs its tape: the floor outline's margin round a centimetre-wide line read as a
+ *  slab. */
+const STRIP_MARGIN = 0.025;
+const STRIP_LINE = 0.012;
+
+/** A rounded-rectangle band `line` wide around a `w` × `d` rectangle, in the xy plane. */
+function outline(w: number, d: number, margin = MARGIN, line = LINE): ShapeGeometry {
   const rect = <P extends Path>(hw: number, hd: number, r: number, path: P): P => {
     path.moveTo(-hw + r, -hd);
     path.lineTo(hw - r, -hd);
@@ -29,11 +34,11 @@ function outline(w: number, d: number): ShapeGeometry {
     path.quadraticCurveTo(-hw, -hd, -hw + r, -hd);
     return path;
   };
-  const hw = w / 2 + MARGIN;
-  const hd = d / 2 + MARGIN;
+  const hw = w / 2 + margin;
+  const hd = d / 2 + margin;
   const r = Math.min(0.12, hw, hd);
   const shape = rect(hw, hd, r, new Shape());
-  shape.holes.push(rect(hw - LINE, hd - LINE, Math.max(r - LINE, 0.005), new Path()));
+  shape.holes.push(rect(hw - line, hd - line, Math.max(r - line, 0.005), new Path()));
   return new ShapeGeometry(shape, 6);
 }
 
@@ -107,7 +112,16 @@ export function buildSelectionMark(pickables: readonly Pickable[]): SelectionMar
       }
       group.visible = true;
       const [hx, hy, hz] = item.half;
-      if (item.kind === "light") {
+      if (item.line) {
+        // A ring sized to a strip's length circled half the room.
+        halo.visible = false;
+        haloThrough.visible = false;
+        const lying = hy < hz;
+        floor = new Mesh(outline(hx * 2, Math.max(hy, hz) * 2, STRIP_MARGIN, STRIP_LINE), material);
+        if (lying) floor.rotation.set(-Math.PI / 2, -item.angle, 0, "YXZ");
+        else floor.rotation.set(0, -item.angle, 0);
+        floor.position.set(item.centre.x, lying ? FLOOR_LIFT : item.centre.y, item.centre.z);
+      } else if (item.kind === "light") {
         const radius = Math.max(hx, hy, hz) + MARGIN;
         haloRadius = radius;
         for (const ring of [halo, haloThrough]) {

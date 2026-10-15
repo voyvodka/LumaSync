@@ -17,6 +17,8 @@ import type { InspectorTarget } from "../../model/resolveInspectorTarget";
 import { outsideOutline } from "../../model/roomFootprint";
 import { autoHueFacing } from "../../model/hueFacing";
 import { pieceUnder } from "../../model/lightSeat";
+import { isBacklightStrip } from "../../model/backlight";
+import { defaultStripHeight, stickStripToWall } from "../../model/stripWall";
 import { FurnitureInspector } from "../objects/FurnitureInspector";
 import { HueChannelInspector } from "../objects/HueChannelInspector";
 import { HueZoneInspector } from "../objects/HueZoneInspector";
@@ -171,6 +173,9 @@ export function DockInspector({
       const strip = target.strip;
       const id = usbStripObjectId(strip.stripId);
       const { status, port } = stripStatus(strip);
+      // Behind the screen a strip is drawn as its backlight, at the screen and by no height of its own.
+      const backlight = config.tvAnchor !== undefined && isBacklightStrip(strip, config.tvAnchor);
+      const stuck = strip.locked || backlight ? null : stickStripToWall(strip, config);
       return (
         <UsbStripInspector
           key={key}
@@ -184,6 +189,12 @@ export function DockInspector({
           onDelete={() => actions.onDelete(id)}
           onClose={onClose}
           onManage={actions.onManageUsb}
+          height={
+            modelChoices && !backlight
+              ? { placeholder: defaultStripHeight(config, strip).toFixed(2), max: config.dimensions.heightMeters }
+              : undefined
+          }
+          onStickToWall={stuck ? () => actions.onUpdateUsbStrip(strip.stripId, stuck) : undefined}
         />
       );
     }

@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 
-import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
+import { resolveStripMountHeight, type UsbStripPlacement } from "@/shared/contracts/roomMap";
 import { IconLed } from "@/shared/ui/icons";
 import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
 import { StateWord } from "@/shared/ui/StateWord/StateWord";
@@ -8,6 +8,7 @@ import { StateWord } from "@/shared/ui/StateWord/StateWord";
 import { TYPE_DOT_COLOR } from "../../model/zoneColor";
 import { DecimalField } from "../DecimalField";
 import { Actions, FieldRow, InspectorRows, Mark, Meta, RowLink, Spacer, Status, Title } from "../dock/InspectorParts";
+import { GlyphHeight } from "./fieldGlyphs";
 
 /**
  * Whether the strip's port is the one connected. `unknown` ⇒ no port snapshot has loaded yet, and
@@ -26,6 +27,8 @@ export function UsbStripInspector({
   onDelete,
   onClose,
   onManage,
+  height,
+  onStickToWall,
 }: {
   strip: UsbStripPlacement;
   connectionStatus: UsbStripConnectionStatus;
@@ -39,6 +42,10 @@ export function UsbStripInspector({
   onDelete: () => void;
   onClose: () => void;
   onManage?: () => void;
+  /** The height field, where the 3D room draws the strip by it (not behind the screen). */
+  height?: { placeholder: string; max: number };
+  /** Lays the strip along its nearest wall; absent when it is there already or cannot move. */
+  onStickToWall?: () => void;
 }) {
   const { t } = useTranslation();
   const locked = !!strip.locked;
@@ -63,6 +70,7 @@ export function UsbStripInspector({
             )}
             {port && <Meta>{port}</Meta>}
           </Status>
+          {onStickToWall && <RowLink onClick={onStickToWall}>{t("roomMap:inspector.usbStickToWall")}</RowLink>}
           {onManage && <RowLink onClick={onManage}>{t("roomMap:inspector.usbManage")}</RowLink>}
           <Spacer />
           <Actions locked={locked} onToggleLock={onToggleLock} onDuplicate={onDuplicate} onDelete={onDelete} onClose={onClose} />
@@ -99,8 +107,24 @@ export function UsbStripInspector({
               disabled={locked}
               onCommit={(ledCount) => onUpdate({ ledCount })}
             />
+            {height && (
+              <DecimalField
+                optional
+                label={t("roomMap:inspector.usbHeightLabel")}
+                prefix={<GlyphHeight />}
+                value={resolveStripMountHeight(strip)}
+                placeholder={height.placeholder}
+                min={0}
+                max={height.max}
+                unit="m"
+                disabled={locked}
+                onCommit={(mountHeightMeters) => onUpdate({ mountHeightMeters: mountHeightMeters ?? null })}
+              />
+            )}
           </FieldRow>
-          <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.usbLedCountLabel") })}>{t("roomMap:inspector.usbHint")}</InfoTip>
+          <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.usbLedCountLabel") })}>
+            {height ? `${t("roomMap:inspector.usbHint")} ${t("roomMap:inspector.usbHeightHint")}` : t("roomMap:inspector.usbHint")}
+          </InfoTip>
         </>
       }
     />

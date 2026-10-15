@@ -67,6 +67,13 @@ describe("mergeEditorSave", () => {
     ]);
   });
 
+  it("writes a strip height the editor set and then cleared, keeping a port another writer stamped", () => {
+    const base = map({ usbStrips: [{ ...strip("a"), mountHeightMeters: 1.2 }] });
+    const next = { ...base, usbStrips: [{ ...strip("a"), mountHeightMeters: null }] };
+    const stored = { ...base, usbStrips: [{ ...strip("a"), mountHeightMeters: 1.2, portName: "/dev/cu.usbserial-1" }] };
+    expect(mergeEditorSave(stored, base, next).usbStrips[0]).toMatchObject({ mountHeightMeters: null, portName: "/dev/cu.usbserial-1" });
+  });
+
   it("removes what the editor deleted and adds what it created", () => {
     const [a, b] = [strip("a"), strip("b")];
     const base = map({ usbStrips: [a, b] });
