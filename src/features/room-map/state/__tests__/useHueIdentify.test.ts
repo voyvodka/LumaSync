@@ -92,4 +92,17 @@ describe("useHueIdentify", () => {
     expect(result.current.busyId).toBe("hue-0");
     warn.mockRestore();
   });
+
+  it("leaves nothing running when the card closes before the bridge answers", async () => {
+    let answer: (status: HueIdentifyStatus) => void = () => {};
+    mockIdentify.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { result, unmount } = renderHook(() => useHueIdentify("192.168.1.2"));
+    await act(async () => result.current.identify("hue-0", ["l-a"]));
+    unmount();
+    await act(async () => answer(status(HUE_IDENTIFY_STATUS.OK)));
+    expect(vi.getTimerCount()).toBe(0);
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
 });
