@@ -1,7 +1,7 @@
 import type { PickKind } from "./picking";
 
-/** What the 3D room can pick up and carry. */
-export const CARRIED_KINDS: ReadonlySet<PickKind> = new Set<PickKind>(["furniture"]);
+/** What the 3D room can pick up and carry: everything it can pick. */
+export const CARRIED_KINDS: ReadonlySet<PickKind> = new Set<PickKind>(["furniture", "tv", "light"]);
 
 /**
  * Whether a press starts carrying what it landed on: only the piece already selected does. A drag

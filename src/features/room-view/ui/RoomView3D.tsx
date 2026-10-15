@@ -265,12 +265,22 @@ function openRoomView(
       raycaster.setFromCamera(pointer, camera);
       return raycaster.ray;
     };
-    // A piece pressed on is carried over the floor: a frame shows where it will stand, and it is
-    // put there on release. A press on anything else turns the room as before.
-    let carry: { id: string; dx: number; dz: number; ghost: LineSegments; moved: boolean; turn: number; angle: number } | null = null;
-    // While a piece is carried, the wheel or R turns it in 15° steps (⇧ turns the other way).
+    // The selected piece, the TV or a light pressed on is carried at its own height: a frame shows
+    // where it will stand, and it is put there on release. A press on anything else turns the room.
+    let carry: {
+      id: string;
+      kind: string;
+      dx: number;
+      dz: number;
+      ghost: LineSegments;
+      moved: boolean;
+      turn: number;
+      angle: number;
+    } | null = null;
+    // While a piece of furniture is carried, the wheel or R turns it in 15° steps (⇧ the other way);
+    // the TV and the lights keep the axes they have.
     const turnCarry = (by: number) => {
-      if (!carry) return;
+      if (!carry || carry.kind !== "furniture") return;
       carry.turn = (((carry.turn + by) % 360) + 360) % 360;
       carry.moved = true;
       carry.ghost.visible = true;
@@ -314,19 +324,34 @@ function openRoomView(
         press = event.button === 0 ? { x: event.clientX, y: event.clientY, id: event.pointerId } : null;
         if (!press || !room || !onMovePiece) return;
         const ray = rayAt(event.clientX, event.clientY);
-        const id = pickObject(ray, room.pickables, lightPickHalf(pixelsPerMetre));
-        const item = id ? room.pickables.find((p) => p.id === id) : undefined;
-        if (!id || !item || !pressStartsCarry(item, selected) || !ray.intersectPlane(floor, onFloor)) return;
+        // The selected one is carried when the press lands on it, even behind something nearer:
+        // the TV's backlight strip covers the TV and took every press on it.
+        const mine = room.pickables.find((p) => p.id === selected);
+        const item = mine && pickObject(ray, [mine], lightPickHalf(pixelsPerMetre)) === mine.id ? mine : undefined;
+        const id = item?.id;
+        if (!id || !item || !pressStartsCarry(item, selected)) return;
+        // Dragged across the level it stands at, so a pendant follows the pointer, not the floor below it.
+        floor.constant = -item.centre.y;
+        if (!ray.intersectPlane(floor, onFloor)) return;
         const [hx, hy, hz] = item.half;
         const ghost = new LineSegments(
           new EdgesGeometry(new BoxGeometry(hx * 2, Math.max(hy * 2, 0.05), hz * 2)),
           new LineBasicMaterial({ color: CARRY_COLOUR }),
         );
-        ghost.position.set(item.centre.x, Math.max(hy, 0.025), item.centre.z);
+        ghost.position.set(item.centre.x, Math.max(item.centre.y, 0.025), item.centre.z);
         ghost.rotation.y = -item.angle;
         ghost.visible = false;
         room.scene.add(ghost);
-        carry = { id, dx: item.centre.x - onFloor.x, dz: item.centre.z - onFloor.z, ghost, moved: false, turn: 0, angle: item.angle };
+        carry = {
+          id,
+          kind: item.kind,
+          dx: item.centre.x - onFloor.x,
+          dz: item.centre.z - onFloor.z,
+          ghost,
+          moved: false,
+          turn: 0,
+          angle: item.angle,
+        };
         orbit.enabled = false;
         canvas.setPointerCapture(event.pointerId);
       },
@@ -337,9 +362,9 @@ function openRoomView(
       (event) => {
         if (!carry && !press && room && onMovePiece) {
           // The selected piece says it can be picked up; nothing else changes the cursor.
-          const hovered = pickObject(rayAt(event.clientX, event.clientY), room.pickables, lightPickHalf(pixelsPerMetre));
-          const item = hovered ? room.pickables.find((p) => p.id === hovered) : undefined;
-          canvas.style.cursor = pressStartsCarry(item, selected) ? "grab" : "";
+          const mine = room.pickables.find((p) => p.id === selected);
+          const over = mine !== undefined && pickObject(rayAt(event.clientX, event.clientY), [mine], lightPickHalf(pixelsPerMetre)) === mine.id;
+          canvas.style.cursor = over && pressStartsCarry(mine, selected) ? "grab" : "";
           return;
         }
         if (!carry || !press) return;

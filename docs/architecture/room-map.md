@@ -246,10 +246,18 @@ near its start. Esc mid-drag restores the start and writes nothing, caught on th
 the editor's own Esc so the selection survives. A drag also stops at the room's walls, the same
 `keepPlacedInside` / `keepStripInside` that typed positions and arrow nudges go through.
 
-In the 3D room only the selected piece is carried (`pressStartsCarry` in
+In the 3D room only the selected object is carried (`pressStartsCarry` in
 `room-view/model/carryIntent.ts`); a drag that starts on anything else turns the room. Carrying from
 any press made turning the room from over the sofa move the sofa — most of the view is furniture.
-The cost is one click before a move, and the camera hint says so.
+The cost is one click before a move, and the camera hint says so. Furniture, the TV, a strip and a
+Hue light can all be carried; the selected one is taken wherever the press lands on it, even behind
+something nearer (the TV's backlight strip covers the TV). It is dragged across the level it stands
+at, so a pendant follows the pointer rather than the floor under it, and it lands through
+`landCarried` (`model/carryLanding.ts`), the same per-kind adapters a typed position uses: a light
+stays in its zone and everything stops at the walls. Only furniture turns. The TV takes its
+backlight with it — a strip whose middle is within a metre of the screen's (`model/backlight.ts`,
+the rule the 3D room draws backlights by) — on the plan too, so moving the screen never leaves its
+backlight drawn as a stray line along the wall.
 
 ## Gotchas
 

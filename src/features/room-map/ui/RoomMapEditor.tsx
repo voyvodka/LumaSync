@@ -47,6 +47,7 @@ import {
   resizeFootprint,
   type FootprintSide,
 } from "../model/roomFootprint";
+import { moveTvWithBacklight } from "../model/backlight";
 import { keepPlacedInside, keepStripInside, roomBoxOf, snapToStep } from "../model/pieceGeometry";
 import { resizeRoomFromSide } from "../model/roomResize";
 import { useRoomMapHueZones } from "../state/useRoomMapHueZones";
@@ -374,7 +375,14 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
   const handleUsbStripSelect = useCallback((id: string) => pick(usbStripObjectId(id), shiftHeld.current), [pick]);
   const handleTvSelect = useCallback(() => pick(TV_ANCHOR_OBJECT_ID, shiftHeld.current), [pick]);
   const handleTvChange = useCallback(
-    (updated: TvAnchorPlacement) => apply({ tvAnchor: keepPlacedInside(updated, roomBoxOf(config)) }),
+    (updated: TvAnchorPlacement) => {
+      const room = roomBoxOf(config);
+      const tvAnchor = keepPlacedInside(updated, room);
+      const strips = config.tvAnchor
+        ? moveTvWithBacklight(config.usbStrips, config.tvAnchor, tvAnchor, (s) => keepStripInside(s, room))
+        : null;
+      apply(strips ? { tvAnchor, usbStrips: strips } : { tvAnchor });
+    },
     [apply, config],
   );
   const handleHueChannelSelect = useCallback(

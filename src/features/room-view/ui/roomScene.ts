@@ -23,6 +23,7 @@ import {
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
 import { furnitureObjectId, hueChannelObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "@/features/room-map/model/objectId";
+import { isBacklightStrip } from "@/features/room-map/model/backlight";
 import { outsideOutline } from "@/features/room-map/model/roomFootprint";
 import { type RoomMapConfig, resolveFurnitureTop, resolveRoomFootprint, resolveRoomSurfaces } from "@/shared/contracts/roomMap";
 
@@ -41,8 +42,6 @@ import { buildScreen } from "./scene/screen";
 import { buildSelectionMark } from "./scene/selection";
 
 /** A wall between the camera and the room drops to this, so the room reads as a cutaway. */
-/** A strip this close to the screen's middle is its backlight. */
-const STRIP_BACKLIGHT_REACH = 1.0;
 /** Where a strip along a wall runs: about skirting height. */
 const STRIP_HEIGHT = 0.08;
 const STRIP_GLOW = 0xffc46b;
@@ -205,14 +204,11 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   }
   // The USB strips: one behind the screen is its backlight, picked there; one along a wall or the
   // floor runs as a thin lit line at skirting height. A strip was listed in the dock and drawn nowhere.
-  const tvCentre = config.tvAnchor
-    ? { x: config.tvAnchor.x + config.tvAnchor.width / 2, y: config.tvAnchor.y + config.tvAnchor.height / 2 }
-    : null;
   for (const strip of config.usbStrips) {
     const mx = (strip.startX + strip.endX) / 2;
     const my = (strip.startY + strip.endY) / 2;
     const id = usbStripObjectId(strip.stripId);
-    if (tvCentre && screen && Math.hypot(mx - tvCentre.x, my - tvCentre.y) <= STRIP_BACKLIGHT_REACH) {
+    if (config.tvAnchor && screen && isBacklightStrip(strip, config.tvAnchor)) {
       const { centre, width, height } = screen.layout;
       pickables.push({ id, kind: "light", centre, half: [width / 2 + 0.05, height / 2 + 0.05, 0.08], angle: 0 });
       continue;

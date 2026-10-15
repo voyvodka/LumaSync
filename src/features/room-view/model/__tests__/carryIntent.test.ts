@@ -15,8 +15,9 @@ describe("pressStartsCarry", () => {
     expect(pressStartsCarry(sofa, "furniture-sofa")).toBe(true);
   });
 
-  it("carries only what the room can carry, and nothing on empty floor", () => {
-    expect(pressStartsCarry({ id: "hue-0", kind: "light" }, "hue-0")).toBe(false);
+  it("carries the TV and the lights too, and nothing on empty floor", () => {
+    expect(pressStartsCarry({ id: "hue-0", kind: "light" }, "hue-0")).toBe(true);
+    expect(pressStartsCarry({ id: "tv", kind: "tv" }, "tv")).toBe(true);
     expect(pressStartsCarry(undefined, null)).toBe(false);
   });
 });

@@ -6,8 +6,8 @@ import type { CameraCommand } from "@/features/room-view/ui/RoomView3D";
 import { RoomView3DHost } from "@/features/room-view/ui/RoomView3DHost";
 
 import { deriveHueAreaState } from "../../model/hueAreaState";
-import { parseObjectId } from "../../model/objectId";
-import { landCarriedPiece } from "../../model/pieceGeometry";
+import { furnitureObjectId, parseObjectId } from "../../model/objectId";
+import { landCarried } from "../../model/carryLanding";
 import type { RoomAwareStatus } from "../../model/roomAware";
 import { buildViewLights, resolveViewSelection } from "../../model/viewLights";
 import { useHueIdentify } from "../../state/useHueIdentify";
@@ -61,6 +61,9 @@ export function ViewStage({
     [scopedConfig, zones, hue.areaChannels, hue.liveChannelIds, lampFamilies, t],
   );
   const viewSelectedId = resolveViewSelection(scopedConfig, selectedId);
+  // A piece of furniture can be selected here too — to be carried — but it has no card in the dock.
+  const pieceSelectedId =
+    selectedId !== null && scopedConfig.furniture.some((f) => furnitureObjectId(f.id) === selectedId) ? selectedId : null;
   const selected = lights.find((light) => light.id === viewSelectedId) ?? null;
   const hasHue = hueBridgeConfigured || !!hueAreaId || scopedConfig.hueChannels.length > 0;
 
@@ -74,38 +77,34 @@ export function ViewStage({
     [select, selectHueZone],
   );
 
-  // A piece of furniture is not something View can show, so a click on one reads as the ground.
+  // A light opens its card; a piece of furniture is selected so it can be carried, with no card.
   const handlePick = useCallback(
     (objectId: string | null) => {
       const ref = objectId ? parseObjectId(objectId) : null;
       if (objectId && ref && (ref.kind === "hue" || ref.kind === "tv" || ref.kind === "usb")) selectLight(objectId);
-      // A piece of furniture is not empty ground: a click on the sofa kept nothing and dropped the light.
-      else if (objectId === null && viewSelectedId !== null) select(null);
+      else if (objectId && ref?.kind === "furniture") selectLight(objectId);
+      else if (objectId === null && (viewSelectedId !== null || selectedId !== null)) select(null);
       // OrbitControls takes the press, so the root is focused here for Esc to reach it.
       focusStage();
     },
-    [select, selectLight, viewSelectedId, focusStage],
+    [select, selectLight, viewSelectedId, selectedId, focusStage],
   );
 
-  // A piece carried across the floor in the room lands there on the plan, inside the walls.
+  // What is carried across the room lands there on the plan, inside the walls; the scene's origin
+  // is the room's middle, the plan's its top-left corner.
   const handleMovePiece = useCallback(
     (objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => {
-      const ref = parseObjectId(objectId);
-      if (!ref || ref.kind !== "furniture") return;
       const { widthMeters, depthMeters } = scopedConfig.dimensions;
-      apply((cfg) => ({
-        furniture: cfg.furniture.map((f) =>
-          f.id !== ref.furnitureId || f.locked
-            ? f
-            : landCarriedPiece(f, sceneX + widthMeters / 2, sceneZ + depthMeters / 2, turnDeg, { width: widthMeters, depth: depthMeters }),
-        ),
-      }));
+      const cx = sceneX + widthMeters / 2;
+      const cy = sceneZ + depthMeters / 2;
+      if (!landCarried(doc.config, objectId, cx, cy, turnDeg, { hueAreaId })) return;
+      apply((cfg) => landCarried(cfg, objectId, cx, cy, turnDeg, { hueAreaId }) ?? {});
     },
-    [apply, scopedConfig.dimensions],
+    [apply, doc.config, hueAreaId, scopedConfig.dimensions],
   );
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Escape" || event.target !== event.currentTarget || viewSelectedId === null) return;
+    if (event.key !== "Escape" || event.target !== event.currentTarget || (viewSelectedId === null && pieceSelectedId === null)) return;
     event.preventDefault();
     select(null);
   };
@@ -116,7 +115,7 @@ export function ViewStage({
         config={scopedConfig}
         lampFamilies={lampFamilies}
         label={t("roomMap:face.viewLabel")}
-        selectedId={viewSelectedId}
+        selectedId={viewSelectedId ?? pieceSelectedId}
         bottomInset={ROOM_MAP_FIT_INSETS.bottom}
         topInset={ROOM_MAP_FIT_INSETS.top}
         cameraCommand={cameraCommand}
