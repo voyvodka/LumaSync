@@ -148,7 +148,7 @@ describe("sceneName", () => {
   it("prefers the user's name, then the library's, then what it plays", () => {
     expect(sceneName({ ...suggestedScene("movie", "m"), name: "Cinema" }, t)).toBe("Cinema");
     expect(sceneName(suggestedScene("movie", "m"), t)).toBe("lights:scenes.suggested.movie");
-    expect(sceneName(scene("c", { solid: { r: 255, g: 0, b: 16, brightness: 1 } }), t)).toBe("#FF0010");
+    expect(sceneName(scene("c", { solid: { r: 255, g: 0, b: 16, brightness: 1 } }), t)).toBe("lights:scenes.colourNames.red");
     expect(sceneName(scene("w", { solid: { r: 1, g: 1, b: 1, brightness: 1, kelvin: 3000 } }), t)).toBe(
       'lights:scenes.whiteName:{"kelvin":3000}',
     );

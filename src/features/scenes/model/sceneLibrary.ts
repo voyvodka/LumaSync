@@ -22,6 +22,8 @@ import {
 } from "@/shared/contracts/scenes";
 import { kelvinToRgb, rgbToHex } from "@/shared/lib/color";
 
+import { COLOUR_NAME_KEYS, colourName } from "./colourName";
+
 /** What a scene plays, without its place in the list. */
 export type SceneLook = Pick<StoredScene, "kind" | "solid" | "ambilight" | "effect">;
 
@@ -276,7 +278,7 @@ export function sceneName(scene: StoredScene, t: TFunction): string {
       const solid = normalizeSolidColorPayload(scene.solid);
       return solid.kelvin != null
         ? t("lights:scenes.whiteName", { kelvin: solid.kelvin })
-        : rgbToHex(solid).toUpperCase();
+        : t(COLOUR_NAME_KEYS[colourName(solid.r, solid.g, solid.b)]);
     }
     case LIGHTING_MODE_KIND.AMBILIGHT:
       return t("common:mode.options.ambilight");
