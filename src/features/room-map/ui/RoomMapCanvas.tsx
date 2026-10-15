@@ -277,6 +277,8 @@ interface RoomMapCanvasProps {
   children?: React.ReactNode;
 }
 
+/** Changes to the view inside this long after the plan mounts are its opening fit, not a move. */
+const OPENING_SETTLE_MS = 500;
 /** How long a wheel pan waits after the last event before it commits the offset. */
 const WHEEL_PAN_SETTLE_MS = 120;
 
@@ -305,6 +307,9 @@ export function RoomMapCanvas({
   // A zoom or pan from a button (+, −, fit, an arrow key) eases there; one the pointer drives — a
   // drag, the wheel, a pinch — follows it at once, or the plan would lag behind the hand.
   const pointerDriven = useRef(false);
+  // The plan opens framed, not travelling there: the first fit lands before the easing starts.
+  const openedAt = useRef<number | null>(null);
+  if (openedAt.current === null) openedAt.current = performance.now();
   const viewKey = `${zoom}:${panOffset.x}:${panOffset.y}`;
   const lastView = useRef(viewKey);
   useLayoutEffect(() => {
@@ -312,7 +317,8 @@ export function RoomMapCanvas({
     lastView.current = viewKey;
     const layer = objectLayerRef.current;
     if (!layer) return;
-    const eased = !pointerDriven.current && !prefersReducedMotion();
+    const settled = performance.now() - (openedAt.current ?? 0) > OPENING_SETTLE_MS;
+    const eased = settled && !pointerDriven.current && !prefersReducedMotion();
     pointerDriven.current = false;
     layer.style.transition = eased ? "transform var(--lm-dur-base) var(--lm-ease-out)" : "none";
   }, [viewKey]);

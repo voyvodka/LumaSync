@@ -7,6 +7,7 @@ import { RoomView3DHost } from "@/features/room-view/ui/RoomView3DHost";
 
 import { deriveHueAreaState } from "../../model/hueAreaState";
 import { parseObjectId } from "../../model/objectId";
+import { clampInsideRoom } from "../../model/pieceGeometry";
 import type { RoomAwareStatus } from "../../model/roomAware";
 import { buildViewLights, resolveViewSelection } from "../../model/viewLights";
 import { useHueIdentify } from "../../state/useHueIdentify";
@@ -43,7 +44,7 @@ export function ViewStage({
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [cameraCommand, setCameraCommand] = useState<CameraCommand | undefined>(undefined);
-  const { scopedConfig, selectedId, select, selectHueZone, hue, hueAreaId, hueBridgeConfigured, hueBridgeIp } = doc;
+  const { scopedConfig, selectedId, select, selectHueZone, hue, hueAreaId, hueBridgeConfigured, hueBridgeIp, apply } = doc;
   const { stripStatus } = useUsbStripStatus(hueReachable);
   const identify = useHueIdentify(hueBridgeIp);
 
@@ -86,6 +87,26 @@ export function ViewStage({
     [select, selectLight, viewSelectedId, focusStage],
   );
 
+  // A piece carried across the floor in the room lands there on the plan, inside the walls.
+  const handleMovePiece = useCallback(
+    (objectId: string, sceneX: number, sceneZ: number) => {
+      const ref = parseObjectId(objectId);
+      if (!ref || ref.kind !== "furniture") return;
+      const { widthMeters, depthMeters } = scopedConfig.dimensions;
+      apply((cfg) => ({
+        furniture: cfg.furniture.map((f) => {
+          if (f.id !== ref.furnitureId || f.locked) return f;
+          const box = clampInsideRoom(
+            { x: sceneX + widthMeters / 2 - f.width / 2, y: sceneZ + depthMeters / 2 - f.height / 2, w: f.width, h: f.height, r: f.rotation ?? 0 },
+            { width: widthMeters, depth: depthMeters },
+          );
+          return { ...f, x: Math.round(box.x * 100) / 100, y: Math.round(box.y * 100) / 100 };
+        }),
+      }));
+    },
+    [apply, scopedConfig.dimensions],
+  );
+
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Escape" || event.target !== event.currentTarget || viewSelectedId === null) return;
     event.preventDefault();
@@ -102,6 +123,7 @@ export function ViewStage({
         bottomInset={ROOM_MAP_FIT_INSETS.bottom}
         cameraCommand={cameraCommand}
         onPick={handlePick}
+        onMovePiece={handleMovePiece}
         onFail={onFail}
       />
       <RoomViewDock

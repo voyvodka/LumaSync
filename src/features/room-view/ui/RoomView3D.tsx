@@ -2,7 +2,21 @@
 // on a change, and hands back everything — context included — on unmount. The rules it follows are
 // in docs/architecture/ui-and-shell.md, "Per-window bundles".
 import { useEffect, useRef } from "react";
-import { NeutralToneMapping, OrthographicCamera, PCFShadowMap, Raycaster, SRGBColorSpace, Vector2, Vector3, WebGLRenderer } from "three";
+import {
+  BoxGeometry,
+  EdgesGeometry,
+  LineBasicMaterial,
+  LineSegments,
+  NeutralToneMapping,
+  OrthographicCamera,
+  PCFShadowMap,
+  Plane,
+  Raycaster,
+  SRGBColorSpace,
+  Vector2,
+  Vector3,
+  WebGLRenderer,
+} from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
@@ -59,6 +73,14 @@ export interface CameraCommand {
 }
 
 const ZOOM_STEP = 1.25;
+/**
+ * Where the camera was, kept for the session: switching to the plan and back reopens the room as
+ * it was left instead of from the default corner. For the same room size only.
+ */
+let sessionCamera: { position: Vector3; target: Vector3; zoom: number; room: string } | null = null;
+const roomKey = (config: RoomMapConfig) => `${config.dimensions.widthMeters}x${config.dimensions.depthMeters}`;
+/** The frame of a piece being carried: the app's amber. */
+const CARRY_COLOUR = 0xffb020;
 /** A camera move from the corner buttons or a double-click: short and settling, as the app's
  *  motion is (`--lm-dur-slow`, an ease-out); a jump read as the view breaking. */
 const CAMERA_MOVE_MS = 320;
@@ -75,6 +97,7 @@ function openRoomView(
   host: HTMLElement,
   onFail: (error: unknown) => void,
   onPick: (objectId: string | null) => void,
+  onMovePiece: ((objectId: string, sceneX: number, sceneZ: number) => void) | null,
 ): RoomView {
   const options: SpikeOptions = window.__roomViewSpikeOptions ?? {};
   const started = performance.now();
@@ -180,7 +203,13 @@ function openRoomView(
     const request = () => {
       if (ready && frame === 0 && !closed) frame = requestAnimationFrame(draw);
     };
-    orbit.addEventListener("change", request);
+    let shownRoom = "";
+    orbit.addEventListener("change", () => {
+      request();
+      if (shownRoom) {
+        sessionCamera = { position: camera.position.clone(), target: orbit.target.clone(), zoom: camera.zoom, room: shownRoom };
+      }
+    });
     // A lost context (the GPU reset, the machine slept) comes back empty. three uploads the scene
     // again on the next draw, but a view that draws only on a change has to be asked for one.
     renderer.domElement.addEventListener(
@@ -225,18 +254,75 @@ function openRoomView(
     const pointer = new Vector2();
     let press: { x: number; y: number; id: number } | null = null;
     const canvas = renderer.domElement;
+    const floor = new Plane(new Vector3(0, 1, 0), 0);
+    const onFloor = new Vector3();
+    const rayAt = (clientX: number, clientY: number) => {
+      const rect = canvas.getBoundingClientRect();
+      pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+      raycaster.setFromCamera(pointer, camera);
+      return raycaster.ray;
+    };
+    // A piece pressed on is carried over the floor: a frame shows where it will stand, and it is
+    // put there on release. A press on anything else turns the room as before.
+    let carry: { id: string; dx: number; dz: number; ghost: LineSegments; moved: boolean } | null = null;
     canvas.addEventListener(
       "pointerdown",
       (event) => {
         press = event.button === 0 ? { x: event.clientX, y: event.clientY, id: event.pointerId } : null;
+        if (!press || !room || !onMovePiece) return;
+        const ray = rayAt(event.clientX, event.clientY);
+        const id = pickObject(ray, room.pickables, lightPickHalf(pixelsPerMetre));
+        const item = id ? room.pickables.find((p) => p.id === id) : undefined;
+        if (!id || !item || item.kind !== "furniture" || !ray.intersectPlane(floor, onFloor)) return;
+        const [hx, hy, hz] = item.half;
+        const ghost = new LineSegments(
+          new EdgesGeometry(new BoxGeometry(hx * 2, Math.max(hy * 2, 0.05), hz * 2)),
+          new LineBasicMaterial({ color: CARRY_COLOUR }),
+        );
+        ghost.position.set(item.centre.x, Math.max(hy, 0.025), item.centre.z);
+        ghost.rotation.y = -item.angle;
+        ghost.visible = false;
+        room.scene.add(ghost);
+        carry = { id, dx: item.centre.x - onFloor.x, dz: item.centre.z - onFloor.z, ghost, moved: false };
+        orbit.enabled = false;
+        canvas.setPointerCapture(event.pointerId);
       },
       { signal: listening.signal },
     );
+    canvas.addEventListener(
+      "pointermove",
+      (event) => {
+        if (!carry || !press) return;
+        if (!carry.moved && Math.hypot(event.clientX - press.x, event.clientY - press.y) <= CLICK_SLOP_PX) return;
+        if (!rayAt(event.clientX, event.clientY).intersectPlane(floor, onFloor)) return;
+        carry.moved = true;
+        canvas.style.cursor = "grabbing";
+        carry.ghost.visible = true;
+        carry.ghost.position.x = onFloor.x + carry.dx;
+        carry.ghost.position.z = onFloor.z + carry.dz;
+        request();
+      },
+      { signal: listening.signal },
+    );
+    const drop = (commit: boolean) => {
+      const c = carry;
+      if (!c) return false;
+      carry = null;
+      orbit.enabled = true;
+      canvas.style.cursor = "";
+      c.ghost.removeFromParent();
+      c.ghost.geometry.dispose();
+      (c.ghost.material as LineBasicMaterial).dispose();
+      request();
+      if (commit && c.moved) onMovePiece?.(c.id, c.ghost.position.x, c.ghost.position.z);
+      return c.moved;
+    };
     canvas.addEventListener(
       "pointerup",
       (event) => {
         const start = press;
         press = null;
+        if (drop(true)) return;
         if (!start || start.id !== event.pointerId || !room) return;
         if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > CLICK_SLOP_PX) return;
         const rect = canvas.getBoundingClientRect();
@@ -246,7 +332,14 @@ function openRoomView(
       },
       { signal: listening.signal },
     );
-    canvas.addEventListener("pointercancel", () => (press = null), { signal: listening.signal });
+    canvas.addEventListener(
+      "pointercancel",
+      () => {
+        press = null;
+        drop(false);
+      },
+      { signal: listening.signal },
+    );
     // A double-click looks at what it lands on: the room turns about that point and comes closer.
     canvas.addEventListener(
       "dblclick",
@@ -295,7 +388,18 @@ function openRoomView(
       room = buildRoomScene(config, { shadows, lambert: options.lambert ?? false, coldKey: options.coldKey, lampFamilies });
       orbit.target.copy(room.target);
       room.select(selected);
-      if (first) placeCamera(room, Math.PI / 4);
+      if (first) {
+        const kept = sessionCamera;
+        if (kept && kept.room === roomKey(config)) {
+          camera.position.copy(kept.position);
+          orbit.target.copy(kept.target);
+          camera.zoom = kept.zoom;
+          camera.updateProjectionMatrix();
+        } else {
+          placeCamera(room, Math.PI / 4);
+        }
+        shownRoom = roomKey(config);
+      }
       renderer.shadowMap.needsUpdate = shadows;
       if (!first) {
         fit();
@@ -388,6 +492,7 @@ export default function RoomView3D({
   bottomInset = 0,
   cameraCommand,
   onPick,
+  onMovePiece,
   onFail,
 }: {
   config: RoomMapConfig;
@@ -399,6 +504,8 @@ export default function RoomView3D({
   /** Pixels at the view's foot that something floats over; the room is fitted above them. */
   bottomInset?: number;
   cameraCommand?: CameraCommand;
+  /** A piece carried to a new place on the floor: its centre there, in the scene frame. */
+  onMovePiece?: (objectId: string, sceneX: number, sceneZ: number) => void;
   /** A click in the room: the object it landed on, or null for empty ground. */
   onPick?: (objectId: string | null) => void;
   /** No view could be drawn — no WebGL context, or the scene failed to build. */
@@ -410,6 +517,8 @@ export default function RoomView3D({
   onFailRef.current = onFail;
   const onPickRef = useRef(onPick);
   onPickRef.current = onPick;
+  const onMoveRef = useRef(onMovePiece);
+  onMoveRef.current = onMovePiece;
   const selectedRef = useRef(selectedId);
   selectedRef.current = selectedId;
 
@@ -419,7 +528,12 @@ export default function RoomView3D({
     const fail = (error: unknown) => onFailRef.current(error);
     let view: RoomView;
     try {
-      view = openRoomView(host, fail, (objectId) => onPickRef.current?.(objectId));
+      view = openRoomView(
+        host,
+        fail,
+        (objectId) => onPickRef.current?.(objectId),
+        (objectId, x, z) => onMoveRef.current?.(objectId, x, z),
+      );
     } catch (error) {
       fail(error);
       return;

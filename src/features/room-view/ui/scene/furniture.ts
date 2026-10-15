@@ -430,17 +430,44 @@ function bookshelf(w: number, d: number, height: number, rand: () => number, f: 
   return parts;
 }
 
+/**
+ * A run of wardrobes: a carcass in the tone, a cornice over it, a plinth set back under it, and a
+ * door every half metre or so that stands proud of the front with a shadow gap around it and a
+ * long bar handle where each pair meets. One flat box with seams drawn on read as a crate.
+ */
 function wardrobe(w: number, d: number, height: number, f: Finish): Part[] {
-  const plinth = 0.06;
+  const plinth = 0.08;
+  const cornice = 0.035;
   const h = clamp(height, 1.2, 2.8);
-  // A door of about half a metre however long the run, so a wall of wardrobes does not get four doors a metre wide.
   const doors = clamp(Math.round(w / 0.5), 2, 12);
-  return [
-    block(w, plinth, Math.max(d - 0.03, 0.05), 0, 0, 0.015, PALETTE.walnut, 0.006),
-    block(w, h - plinth - 0.03, d, 0, plinth, 0, f.wood, 0.012),
-    block(w, 0.03, d, 0, h - 0.03, 0, shade(f.wood, 0.9), 0.006),
-    ...doorsAndHandles(w, d, doors, plinth, h - plinth - 0.03, plinth + (h - plinth) * 0.52),
+  const doorW = w / doors;
+  const gap = 0.006;
+  const proud = 0.018;
+  const handleDepth = 0.02;
+  // Everything inside the footprint: the handles at its front edge, the doors behind them, the
+  // carcass behind the doors, so a wardrobe against a wall stands exactly where it is drawn.
+  const doorFront = -d / 2 + handleDepth;
+  const carcassFront = doorFront + proud;
+  const carcassDepth = Math.max(d / 2 - carcassFront, 0.05);
+  const doorBottom = plinth + 0.01;
+  const doorH = h - cornice - doorBottom - 0.01;
+  const parts: Part[] = [
+    // Plinth, set back and dark so the wardrobe seems to stand off the floor.
+    block(Math.max(w - 0.04, 0.05), plinth, Math.max(carcassDepth - 0.04, 0.05), 0, 0, carcassFront + carcassDepth / 2 + 0.02, PALETTE.walnut, 0.004),
+    // Carcass: sides, back and the reveal the shadow gaps show.
+    block(w, h - cornice - plinth, carcassDepth, 0, plinth, carcassFront + carcassDepth / 2, shade(f.wood, 0.82), 0.006),
+    // Cornice over the carcass and the doors.
+    block(w, cornice, d - handleDepth, 0, h - cornice, handleDepth / 2, shade(f.wood, 0.94), 0.008),
   ];
+  for (let i = 0; i < doors; i++) {
+    const x = -w / 2 + doorW * (i + 0.5);
+    parts.push(block(doorW - gap, doorH, proud, x, doorBottom, doorFront + proud / 2, f.wood, 0.004));
+    // Pairs meet at their handles; an odd last door keeps its handle on its inner edge.
+    const toward = i % 2 === 0 ? 1 : -1;
+    const hx = x + toward * (doorW / 2 - 0.045);
+    parts.push(block(0.014, 0.36, handleDepth, hx, doorBottom + doorH * 0.42, -d / 2 + handleDepth / 2, PALETTE.handle, 0.006));
+  }
+  return parts;
 }
 
 function tvUnit(w: number, d: number, f: Finish): Part[] {

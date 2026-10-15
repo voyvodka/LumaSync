@@ -175,6 +175,12 @@ https://keepachangelog.com/en/1.1.0/
   - Camera moves ease in about a third of a second instead of jumping: the 3D view's zoom buttons,
     "Whole room" and a double-click's focus, and the plan's zoom buttons, fit and arrow-key pans.
     What the pointer drives — a drag, the wheel, a pinch — still follows it at once.
+  - In the 3D view a piece of furniture can be picked up and carried across the floor: an amber
+    frame shows where it will stand and it lands there on release, inside the walls; a drag on
+    anything else still turns the room. Wardrobes are drawn as a run of doors standing proud of the
+    carcass with shadow gaps, long bar handles, a cornice and a set-back plinth.
+  - The plan opens already framed instead of sliding into place, and switching between the plan and
+    the 3D view keeps where each was looking for the session (a resized room is framed afresh).
   - A USB strip shows in the 3D view: one behind the screen is picked there as its backlight, one
     along a wall runs as a thin lit line at skirting height, and either one clicked opens its card.
   - In the 3D view each light's chip is filled with the colour its lamp glows in the room, the inner

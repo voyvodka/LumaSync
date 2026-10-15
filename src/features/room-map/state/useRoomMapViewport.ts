@@ -34,6 +34,19 @@ export interface UseRoomMapViewportReturn {
 export const PAN_STEP_PX = 32;
 export const PAN_STEP_LARGE_PX = 160;
 
+/**
+ * Where the plan was looking, kept for the session: switching to the 3D view and back, or to
+ * another section and back, reopens the plan there instead of fitting it again. Only for the same
+ * room size; a resized room is framed afresh.
+ */
+let sessionView: { zoom: number; pan: { x: number; y: number }; room: string } | null = null;
+const roomKey = (d: RoomDimensions) => `${d.widthMeters}x${d.depthMeters}`;
+
+/** Test-only: forget the session's view. */
+export function __resetSessionViewForTests(): void {
+  sessionView = null;
+}
+
 export function useRoomMapViewport(dimensions: RoomDimensions, fitInsets: FitInsets = NO_INSETS): UseRoomMapViewportReturn {
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const canvasContainerRef = useRef<HTMLDivElement>(null);
@@ -116,6 +129,12 @@ export function useRoomMapViewport(dimensions: RoomDimensions, fitInsets: FitIns
 
         if (!initialFitDone.current) {
           initialFitDone.current = true;
+          const kept = sessionView;
+          if (kept && kept.room === roomKey(liveDimensionsRef.current)) {
+            setZoom(kept.zoom);
+            setPanOffset(kept.pan);
+            continue;
+          }
           const { widthMeters: wm, depthMeters: dm } = liveDimensionsRef.current;
           const fit = computeFit(width, height, wm, dm, 24, liveInsetsRef.current);
           setZoom(fit.zoom);
@@ -126,6 +145,10 @@ export function useRoomMapViewport(dimensions: RoomDimensions, fitInsets: FitIns
     ro.observe(canvasEl);
     return () => ro.disconnect();
   }, [canvasEl]);
+
+  useEffect(() => {
+    if (initialFitDone.current) sessionView = { zoom, pan: panOffset, room: roomKey(dimensions) };
+  }, [zoom, panOffset, dimensions]);
 
   return {
     canvasContainerRef,
