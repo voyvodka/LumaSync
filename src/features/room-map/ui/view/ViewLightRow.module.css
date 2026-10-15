@@ -1,0 +1,92 @@
+@layer components {
+  .page {
+    display: grid;
+    grid-template-rows: 32px 32px;
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+  }
+  /* Eight lights and more scroll sideways; the edge with more past it fades. */
+  .scroll {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .scroll::-webkit-scrollbar { display: none; }
+  .scroll[data-more="end"] { mask-image: linear-gradient(90deg, black calc(100% - 20px), transparent); }
+  .scroll[data-more="start"] { mask-image: linear-gradient(90deg, transparent, black 20px); }
+  .scroll[data-more="both"] { mask-image: linear-gradient(90deg, transparent, black 20px, black calc(100% - 20px), transparent); }
+
+  .chip {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 6px;
+    min-width: 40px;
+    max-width: 150px;
+    height: 32px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    font: 500 11.5px/1 var(--lm-sans);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .chip:hover {
+    color: var(--lm-ink);
+    background: rgb(255 255 255 / 4%);
+  }
+  .chip:active { color: var(--lm-amber); }
+  .chip:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+  .ghost { color: var(--lm-ink-faint); }
+
+  .mark {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+  }
+  .mark svg { max-width: 16px; max-height: 16px; }
+  .zone {
+    flex-shrink: 0;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+  .name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .hint {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0 8px;
+    overflow: hidden;
+    color: var(--lm-ink-faint);
+    font-size: 11.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  :global(:root[data-reduced-motion]) .chip { transition: none; }
+
+  @media (forced-colors: active) {
+    .scroll[data-more] { mask-image: none; }
+    .chip:focus-visible { outline: 2px solid Highlight; }
+    .zone { forced-color-adjust: none; border: 1px solid CanvasText; }
+  }
+}

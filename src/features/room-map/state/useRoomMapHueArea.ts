@@ -7,9 +7,11 @@ export interface RoomMapHueArea {
   /** Cached active entertainment area id from shellStore — used when authoring Hue zones. */
   hueAreaId: string | null;
   hueBridgeConfigured: boolean;
+  /** The paired bridge's address, which identify needs; the key comes from the keychain. */
+  hueBridgeIp: string | null;
 }
 
-const UNKNOWN: RoomMapHueArea = { hueAreaId: null, hueBridgeConfigured: false };
+const UNKNOWN: RoomMapHueArea = { hueAreaId: null, hueBridgeConfigured: false, hueBridgeIp: null };
 
 /** The area the room map's Hue channels and zones belong to, read once when the map opens. */
 export function useRoomMapHueArea(): RoomMapHueArea {
@@ -33,6 +35,7 @@ export function useRoomMapHueArea(): RoomMapHueArea {
         setArea({
           hueAreaId: state.lastHueAreaId ?? null,
           hueBridgeConfigured: hasBridge && (hasKeychain || hasLegacyKey),
+          hueBridgeIp: state.lastHueBridge?.ip ?? null,
         });
       })
       .catch((error: unknown) => {

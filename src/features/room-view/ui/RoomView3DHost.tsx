@@ -21,6 +21,9 @@ export function RoomView3DHost(props: {
   config: RoomMapConfig;
   lampFamilies?: ReadonlyMap<number, LampFamily>;
   label: string;
+  selectedId?: string | null;
+  bottomInset?: number;
+  onPick?: (objectId: string | null) => void;
   onFail: (error: unknown) => void;
 }) {
   const visible = useWindowVisible();

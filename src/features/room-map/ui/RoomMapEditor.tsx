@@ -1,9 +1,7 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { useTranslation } from "react-i18next";
 
-import { connectedSerialPort } from "@/features/device/model/localOutputs";
-import { useLocalOutputs } from "@/features/device/state/localOutputsStore";
 import type { FurnitureModel } from "@/features/room-view/model/furnitureModel";
 import { ROOM_VIEW_3D_AVAILABLE } from "@/features/room-view/ui/RoomView3DHost";
 import type {
@@ -16,7 +14,6 @@ import type {
 } from "@/shared/contracts/roomMap";
 import { replaceHueChannel, ROOM_MAP_BACKGROUND_ERROR, ROOM_MAP_BACKGROUND_MAX_MB } from "@/shared/contracts/roomMap";
 import { isEditableTarget } from "@/shared/lib/editableTarget";
-import { shallowEqual } from "@/shared/lib/store";
 import { Callout } from "@/shared/ui/Callout/Callout";
 
 import { deriveHueAreaState } from "../model/hueAreaState";
@@ -34,6 +31,7 @@ import { roomObjectAdapter } from "../model/roomObjectKinds";
 import { useFurnitureModels } from "../state/useFurnitureModels";
 import type { RoomMapDocument } from "../state/useRoomMapDocument";
 import { useRoomMapGridSettings } from "../state/useRoomMapGridSettings";
+import { useUsbStripStatus } from "../state/useUsbStripStatus";
 import { useRoomMapHueZones } from "../state/useRoomMapHueZones";
 import { imageLayerGestureKey, useRoomMapImageLayers } from "../state/useRoomMapImageLayers";
 import { useRoomMapObjects } from "../state/useRoomMapObjects";
@@ -47,7 +45,6 @@ import { RoomDock } from "./dock/RoomDock";
 import { HueChannelOverlay } from "./HueChannelOverlay";
 import { FurnitureObject } from "./objects/FurnitureObject";
 import { TvAnchorObject } from "./objects/TvAnchorObject";
-import type { UsbStripConnectionStatus } from "./objects/UsbStripInspector";
 import { UsbStripObject } from "./objects/UsbStripObject";
 import { OriginMarker } from "./OriginMarker";
 import { RoomMapCanvas } from "./RoomMapCanvas";
@@ -63,6 +60,8 @@ export interface RoomMapEditorProps {
   hueReachable?: boolean;
   /** The room-aware chip's state; `null` hides it. */
   roomAware?: RoomAwareStatus | null;
+  /** Take the keys on mount: the face opened from a control the switch just took away. */
+  focusOnMount?: boolean;
 }
 
 const IS_MAC = navigator.platform.includes("Mac");
@@ -85,7 +84,7 @@ function isCanvasKey(e: React.KeyboardEvent<HTMLElement>): boolean {
   return e.target instanceof Element && e.target.closest(`[${ROOM_MAP_VIEWPORT_ATTR}]`) !== null;
 }
 
-export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAware = null }: RoomMapEditorProps) {
+export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAware = null, focusOnMount = false }: RoomMapEditorProps) {
   const { t } = useTranslation();
   const {
     config,
@@ -144,11 +143,7 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
   const { setCanvasContainer, canvasSize, zoom, setZoom, panOffset, setPanOffset, spaceHeld, fitToView, handleArrowPan } =
     useRoomMapViewport(config.dimensions, ROOM_MAP_FIT_INSETS);
 
-  // The registry every other screen reads, so a pair or an unplug anywhere reaches the editor.
-  const usb = useLocalOutputs(
-    ({ snapshot }) => ({ ready: snapshot !== null, connectedPort: connectedSerialPort(snapshot) }),
-    shallowEqual,
-  );
+  const { stripStatus, hueBridgeStatus } = useUsbStripStatus(hueReachable);
 
   const {
     handleAddTv,
@@ -167,26 +162,15 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
 
   const { widthMeters, depthMeters } = config.dimensions;
 
-  // Graded per strip against the live port, so a controller moved to another port reads offline.
-  // A legacy strip with no `portName` keeps the any-port-active reading.
-  const stripStatus = useCallback(
-    (strip: UsbStripPlacement): { status: UsbStripConnectionStatus; port: string | null } => {
-      if (!usb.ready) return { status: "unknown", port: strip.portName ?? null };
-      if (strip.portName) return { status: strip.portName === usb.connectedPort ? "connected" : "disconnected", port: strip.portName };
-      return { status: usb.connectedPort ? "connected" : "disconnected", port: usb.connectedPort };
-    },
-    [usb.ready, usb.connectedPort],
-  );
-  // `undefined` means no source of truth (a legacy embed passes nothing) and
-  // must show no state at all — it is not the same as `false`.
-  const hueBridgeStatus: UsbStripConnectionStatus =
-    hueReachable === undefined ? "unknown" : hueReachable ? "connected" : "disconnected";
-
   const pxPerMeter = ROOM_MAP_PX_PER_METER;
   const gridStepM = widthMeters < 4 ? 0.5 : 1.0;
   const gridStepPx = gridStepM * pxPerMeter;
 
   const focusEditor = useCallback(() => rootRef.current?.focus({ preventScroll: true }), []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: on mount only
+  useEffect(() => {
+    if (focusOnMount) focusEditor();
+  }, []);
   // A pick from the list leaves the zone: a zone kept active dims every light outside it.
   const selectFromList = useCallback(
     (id: string) => {

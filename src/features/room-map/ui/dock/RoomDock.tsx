@@ -1,4 +1,4 @@
-import { type CSSProperties, type KeyboardEvent, type MouseEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { type KeyboardEvent, type MouseEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -7,15 +7,15 @@ import { resolveFurnitureType } from "@/shared/contracts/roomMap";
 import { cx } from "@/shared/lib/cx";
 import { ConfirmPopover } from "@/shared/ui/ConfirmPopover/ConfirmPopover";
 import { IconButton } from "@/shared/ui/IconButton/IconButton";
-import { PageSwap } from "@/shared/ui/PageSwap/PageSwap";
 
 import { hueChannelName } from "../../model/hueChannelLabel";
 import { type InspectorTarget, resolveInspectorTarget } from "../../model/resolveInspectorTarget";
 import type { UsbStripConnectionStatus } from "../objects/UsbStripInspector";
 import { DockInspector, type InspectorActions, inspectorKey } from "./DockInspector";
-import { DOCK_BOTTOM_PX, DOCK_HEIGHT_PX } from "./dockGeometry";
+import { DockFrame } from "./DockFrame";
 import { IconObjects, IconRoom } from "./dockIcons";
-import { DockPalette, type PaletteHueArea } from "./DockPalette";
+import { DockPalette } from "./DockPalette";
+import type { PaletteHueArea } from "./HueAreaNote";
 import { ObjectsPopover } from "./ObjectsPopover";
 import styles from "./RoomDock.module.css";
 import { RoomPanel, type RoomSettings } from "./RoomPanel";
@@ -178,133 +178,133 @@ export function RoomDock(props: RoomDockProps) {
   };
 
   return (
-    <section
-      ref={dockRef}
-      className={styles.dock}
-      style={{ "--room-dock-h": `${DOCK_HEIGHT_PX}px`, "--room-dock-bottom": `${DOCK_BOTTOM_PX}px` } as CSSProperties}
-      aria-label={t("roomMap:dock.label")}
-      data-room-dock=""
+    <DockFrame
+      dockRef={dockRef}
+      contentRef={contentRef}
+      label={t("roomMap:dock.label")}
+      page={target.kind}
       onKeyDown={onKeyDown}
-    >
-      <div className={styles.rail}>
-        <IconButton
-          ref={objectsRef}
-          className={cx(styles.railButton, objectsOpen && styles.railOpen)}
-          label={t("roomMap:dock.objects")}
-          aria-expanded={objectsOpen}
-          aria-controls={objectsOpen ? objectsId : undefined}
-          icon={<IconObjects />}
-          data-testid="dock-objects"
-          onClick={() => setObjectsOpen((open) => !open)}
-        />
-        <IconButton
-          ref={roomRef}
-          className={cx(styles.railButton, (roomOpen || confirmReset) && styles.railOpen)}
-          label={t("roomMap:dock.room")}
-          aria-expanded={roomOpen}
-          aria-controls={roomOpen ? roomId : undefined}
-          icon={<IconRoom />}
-          data-testid="dock-room"
-          onClick={() => setRoomOpen((open) => !open)}
-        />
-      </div>
-      <span className={styles.separator} aria-hidden="true" />
-      <div ref={contentRef} className={styles.content}>
-        <PageSwap id={target.kind} way="fade" className={styles.swap}>
-          {target.kind === "empty" ? (
-            <DockPalette
-              hasTv={add.hasTv}
-              onAddFurniture={(type, event) => fromDock(event, () => add.onAddFurniture(type))}
-              onAddTv={(event) => fromDock(event, add.onAddTv)}
-              onSelectTv={(event) => fromDock(event, add.onSelectTv)}
-              onAddStrip={(event) => fromDock(event, add.onAddStrip)}
-              onAddImage={(event) => fromDock(event, add.onAddImage)}
-              onAddZone={(event) => fromDock(event, add.onAddZone)}
-              hue={props.hue}
-            />
-          ) : (
-            <DockInspector
-              target={target}
-              config={config}
-              zones={zones}
-              channels={props.channels}
-              areaChannels={props.areaChannels}
-              liveChannelIds={props.liveChannelIds}
-              stripStatus={props.stripStatus}
-              hueBridgeStatus={props.hueBridgeStatus}
-              modelChoices={props.modelChoices}
-              actions={props.actions}
-              onClose={() => {
-                props.onPopSelection();
-                // ✕ leaves with its inspector; the keys go back to the editor.
-                onFocusEditor();
-              }}
-            />
-          )}
-        </PageSwap>
-      </div>
-      <span className="sr-only" role="status" aria-live="polite">
-        {announcement}
-      </span>
+      rail={
+        <div className={styles.rail}>
+          <IconButton
+            ref={objectsRef}
+            className={cx(styles.railButton, objectsOpen && styles.railOpen)}
+            label={t("roomMap:dock.objects")}
+            aria-expanded={objectsOpen}
+            aria-controls={objectsOpen ? objectsId : undefined}
+            icon={<IconObjects />}
+            data-testid="dock-objects"
+            onClick={() => setObjectsOpen((open) => !open)}
+          />
+          <IconButton
+            ref={roomRef}
+            className={cx(styles.railButton, (roomOpen || confirmReset) && styles.railOpen)}
+            label={t("roomMap:dock.room")}
+            aria-expanded={roomOpen}
+            aria-controls={roomOpen ? roomId : undefined}
+            icon={<IconRoom />}
+            data-testid="dock-room"
+            onClick={() => setRoomOpen((open) => !open)}
+          />
+        </div>
+      }
+      extra={
+        <>
+          <span className="sr-only" role="status" aria-live="polite">
+            {announcement}
+          </span>
 
-      <ObjectsPopover
-        open={objectsOpen}
-        onClose={() => setObjectsOpen(false)}
-        anchorRef={objectsRef}
-        id={objectsId}
-        config={config}
-        zones={zones}
-        selectedId={selectedId}
-        activeHueZoneId={activeHueZoneId}
-        onSelect={(objectId, event) =>
-          fromDock(
-            event,
-            () => {
-              setObjectsOpen(false);
-              props.onSelect(objectId);
-            },
-            // The object shows over any zone, so dropping the zone changes nothing on screen either.
-            objectId === selectedId,
-          )
-        }
-        onSelectZone={(zoneId, event) =>
-          fromDock(
-            event,
-            () => {
-              setObjectsOpen(false);
-              props.onSelectZone(zoneId);
-            },
-            zoneId === activeHueZoneId && selectedId === null,
-          )
-        }
-      />
-      <RoomPanel
-        open={roomOpen}
-        onClose={() => setRoomOpen(false)}
-        anchorRef={roomRef}
-        id={roomId}
-        settings={props.room}
-        onReset={() => {
-          setRoomOpen(false);
-          setConfirmReset(true);
-        }}
-      />
-      <ConfirmPopover
-        open={confirmReset}
-        anchorRef={roomRef}
-        label={t("roomMap:settings.resetMap")}
-        text={t("roomMap:settings.resetMapHint")}
-        confirmLabel={t("roomMap:settings.resetConfirm")}
-        cancelLabel={t("roomMap:settings.resetCancel")}
-        danger
-        testId="room-reset-confirm"
-        confirmTestId="room-reset-confirm-yes"
-        onConfirm={() => {
-          setConfirmReset(false);
-          props.onReset();
-        }}
-        onCancel={() => setConfirmReset(false)}
-      />
-    </section>
+          <ObjectsPopover
+            open={objectsOpen}
+            onClose={() => setObjectsOpen(false)}
+            anchorRef={objectsRef}
+            id={objectsId}
+            config={config}
+            zones={zones}
+            selectedId={selectedId}
+            activeHueZoneId={activeHueZoneId}
+            onSelect={(objectId, event) =>
+              fromDock(
+                event,
+                () => {
+                  setObjectsOpen(false);
+                  props.onSelect(objectId);
+                },
+                // The object shows over any zone, so dropping the zone changes nothing on screen either.
+                objectId === selectedId,
+              )
+            }
+            onSelectZone={(zoneId, event) =>
+              fromDock(
+                event,
+                () => {
+                  setObjectsOpen(false);
+                  props.onSelectZone(zoneId);
+                },
+                zoneId === activeHueZoneId && selectedId === null,
+              )
+            }
+          />
+          <RoomPanel
+            open={roomOpen}
+            onClose={() => setRoomOpen(false)}
+            anchorRef={roomRef}
+            id={roomId}
+            settings={props.room}
+            onReset={() => {
+              setRoomOpen(false);
+              setConfirmReset(true);
+            }}
+          />
+          <ConfirmPopover
+            open={confirmReset}
+            anchorRef={roomRef}
+            label={t("roomMap:settings.resetMap")}
+            text={t("roomMap:settings.resetMapHint")}
+            confirmLabel={t("roomMap:settings.resetConfirm")}
+            cancelLabel={t("roomMap:settings.resetCancel")}
+            danger
+            testId="room-reset-confirm"
+            confirmTestId="room-reset-confirm-yes"
+            onConfirm={() => {
+              setConfirmReset(false);
+              props.onReset();
+            }}
+            onCancel={() => setConfirmReset(false)}
+          />
+        </>
+      }
+    >
+      {target.kind === "empty" ? (
+        <DockPalette
+          hasTv={add.hasTv}
+          onAddFurniture={(type, event) => fromDock(event, () => add.onAddFurniture(type))}
+          onAddTv={(event) => fromDock(event, add.onAddTv)}
+          onSelectTv={(event) => fromDock(event, add.onSelectTv)}
+          onAddStrip={(event) => fromDock(event, add.onAddStrip)}
+          onAddImage={(event) => fromDock(event, add.onAddImage)}
+          onAddZone={(event) => fromDock(event, add.onAddZone)}
+          hue={props.hue}
+        />
+      ) : (
+        <DockInspector
+          target={target}
+          config={config}
+          zones={zones}
+          channels={props.channels}
+          areaChannels={props.areaChannels}
+          liveChannelIds={props.liveChannelIds}
+          stripStatus={props.stripStatus}
+          hueBridgeStatus={props.hueBridgeStatus}
+          modelChoices={props.modelChoices}
+          actions={props.actions}
+          onClose={() => {
+            props.onPopSelection();
+            // ✕ leaves with its inspector; the keys go back to the editor.
+            onFocusEditor();
+          }}
+        />
+      )}
+    </DockFrame>
   );
 }

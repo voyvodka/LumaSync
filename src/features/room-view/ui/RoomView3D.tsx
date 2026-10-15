@@ -2,12 +2,13 @@
 // on a change, and hands back everything — context included — on unmount. The rules it follows are
 // in docs/architecture/ui-and-shell.md, "Per-window bundles".
 import { useEffect, useRef } from "react";
-import { NeutralToneMapping, OrthographicCamera, PCFShadowMap, SRGBColorSpace, Vector3, WebGLRenderer } from "three";
+import { NeutralToneMapping, OrthographicCamera, PCFShadowMap, Raycaster, SRGBColorSpace, Vector2, Vector3, WebGLRenderer } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 
 import type { LampFamily } from "../model/lampFamily";
+import { lightPickHalf, pickObject } from "../model/picking";
 import { prefersReducedMotion } from "@/shared/lib/motion";
 
 import { buildRoomScene, disposeScene, type RoomScene, type RoomSceneOptions } from "./roomScene";
@@ -43,14 +44,24 @@ declare global {
 
 interface RoomView {
   show(config: RoomMapConfig, lampFamilies: ReadonlyMap<number, LampFamily>): void;
+  select(objectId: string | null): void;
+  /** Pixels at the foot something floats over; the room is fitted above them. */
+  setBottomInset(px: number): void;
   close(): void;
 }
 
 const POLAR = 0.95;
+/** A press that moves further than this turns the room; one that stays within it is a click (the
+ *  plan's rule, so a nudge while clicking a lamp does not throw the selection away). */
+const CLICK_SLOP_PX = 3;
 
 /** The renderer, camera and controls live as long as the view; a room-map change swaps only the
  *  scene. Throws when no WebGL context can be had. */
-function openRoomView(host: HTMLElement, onFail: (error: unknown) => void): RoomView {
+function openRoomView(
+  host: HTMLElement,
+  onFail: (error: unknown) => void,
+  onPick: (objectId: string | null) => void,
+): RoomView {
   const options: SpikeOptions = window.__roomViewSpikeOptions ?? {};
   const started = performance.now();
   const timings: Timings = { options, openMs: 0, compileMs: 0, firstFrameMs: 0, firstFrameAt: 0, draws: [] };
@@ -66,6 +77,9 @@ function openRoomView(host: HTMLElement, onFail: (error: unknown) => void): Room
   let frame = 0;
   let observer: ResizeObserver | null = null;
   let controls: OrbitControls | null = null;
+  let selected: string | null = null;
+  let pixelsPerMetre = 0;
+  let bottomInset = 0;
   const listening = new AbortController();
 
   const close = () => {
@@ -133,7 +147,9 @@ function openRoomView(host: HTMLElement, onFail: (error: unknown) => void): Room
       // Damping moves the camera a little on every update; keep drawing only while it does.
       const moving = orbit.update();
       cut(room);
-      room.setPixelsPerMetre(host.clientHeight / ((camera.top - camera.bottom) / camera.zoom));
+      pixelsPerMetre = host.clientHeight / ((camera.top - camera.bottom) / camera.zoom);
+      room.setPixelsPerMetre(pixelsPerMetre);
+      room.faceCamera(camera.quaternion);
       renderer.render(room.scene, camera);
       const now = performance.now();
       if (timings.firstFrameMs === 0) {
@@ -159,16 +175,48 @@ function openRoomView(host: HTMLElement, onFail: (error: unknown) => void): Room
       { signal: listening.signal },
     );
 
+    const raycaster = new Raycaster();
+    const pointer = new Vector2();
+    let press: { x: number; y: number; id: number } | null = null;
+    const canvas = renderer.domElement;
+    canvas.addEventListener(
+      "pointerdown",
+      (event) => {
+        press = event.button === 0 ? { x: event.clientX, y: event.clientY, id: event.pointerId } : null;
+      },
+      { signal: listening.signal },
+    );
+    canvas.addEventListener(
+      "pointerup",
+      (event) => {
+        const start = press;
+        press = null;
+        if (!start || start.id !== event.pointerId || !room) return;
+        if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > CLICK_SLOP_PX) return;
+        const rect = canvas.getBoundingClientRect();
+        pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
+        raycaster.setFromCamera(pointer, camera);
+        onPick(pickObject(raycaster.ray, room.pickables, lightPickHalf(pixelsPerMetre)));
+      },
+      { signal: listening.signal },
+    );
+    canvas.addEventListener("pointercancel", () => (press = null), { signal: listening.signal });
+
     const fit = () => {
       const { width, height } = host.getBoundingClientRect();
       if (width === 0 || height === 0 || !room) return;
       renderer.setSize(width, height);
       const aspect = width / height;
-      const extent = room.radius * 1.15;
+      // The room fits the part the dock leaves free and is centred in it: the frustum grows by the
+      // inset and the view slides down by half of it.
+      const inset = Math.min(bottomInset, height * 0.4);
+      const extent = (room.radius * 1.15 * height) / (height - inset);
       camera.left = -extent * aspect;
       camera.right = extent * aspect;
       camera.top = extent;
       camera.bottom = -extent;
+      if (inset > 0) camera.setViewOffset(width, height, 0, inset / 2, width, height);
+      else camera.clearViewOffset();
       camera.updateProjectionMatrix();
       request();
     };
@@ -181,6 +229,7 @@ function openRoomView(host: HTMLElement, onFail: (error: unknown) => void): Room
       if (room) disposeScene(room.scene);
       room = buildRoomScene(config, { shadows, lambert: options.lambert ?? false, coldKey: options.coldKey, lampFamilies });
       orbit.target.copy(room.target);
+      room.select(selected);
       if (first) placeCamera(room, Math.PI / 4);
       renderer.shadowMap.needsUpdate = shadows;
       if (!first) {
@@ -224,6 +273,15 @@ function openRoomView(host: HTMLElement, onFail: (error: unknown) => void): Room
     };
 
     return {
+      setBottomInset(px) {
+        if (px === bottomInset) return;
+        bottomInset = px;
+        fit();
+      },
+      select(objectId) {
+        selected = objectId;
+        if (room?.select(objectId)) request();
+      },
       show(config, lampFamilies) {
         try {
           show(config, lampFamilies);
@@ -245,12 +303,21 @@ export default function RoomView3D({
   config,
   lampFamilies = NO_FAMILIES,
   label,
+  selectedId = null,
+  bottomInset = 0,
+  onPick,
   onFail,
 }: {
   config: RoomMapConfig;
   /** Each Hue channel's fixture, by channel index; absent ones draw as bulbs. */
   lampFamilies?: ReadonlyMap<number, LampFamily>;
   label: string;
+  /** The room map's selection, marked in the room. */
+  selectedId?: string | null;
+  /** Pixels at the view's foot that something floats over; the room is fitted above them. */
+  bottomInset?: number;
+  /** A click in the room: the object it landed on, or null for empty ground. */
+  onPick?: (objectId: string | null) => void;
   /** No view could be drawn — no WebGL context, or the scene failed to build. */
   onFail: (error: unknown) => void;
 }) {
@@ -258,6 +325,10 @@ export default function RoomView3D({
   const viewRef = useRef<RoomView | null>(null);
   const onFailRef = useRef(onFail);
   onFailRef.current = onFail;
+  const onPickRef = useRef(onPick);
+  onPickRef.current = onPick;
+  const selectedRef = useRef(selectedId);
+  selectedRef.current = selectedId;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -265,12 +336,13 @@ export default function RoomView3D({
     const fail = (error: unknown) => onFailRef.current(error);
     let view: RoomView;
     try {
-      view = openRoomView(host, fail);
+      view = openRoomView(host, fail, (objectId) => onPickRef.current?.(objectId));
     } catch (error) {
       fail(error);
       return;
     }
     viewRef.current = view;
+    view.select(selectedRef.current);
     return () => {
       viewRef.current = null;
       view.close();
@@ -280,6 +352,15 @@ export default function RoomView3D({
   useEffect(() => {
     viewRef.current?.show(config, lampFamilies);
   }, [config, lampFamilies]);
+
+  useEffect(() => {
+    viewRef.current?.setBottomInset(bottomInset);
+  }, [bottomInset]);
+
+  // Its own effect, so a new selection marks the room without building it again.
+  useEffect(() => {
+    viewRef.current?.select(selectedId);
+  }, [selectedId]);
 
   return <div ref={hostRef} role="img" aria-label={label} className={`absolute inset-0 ${styles.host}`} />;
 }

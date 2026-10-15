@@ -181,3 +181,29 @@ describe("buildRoomScene — an outline that is not a rectangle", () => {
     disposeScene(shaped.scene);
   });
 });
+
+describe("buildRoomScene — picking and the selection mark", () => {
+  it("offers every light, piece and the screen to a click, by its room map id", () => {
+    const room = buildRoomScene(furnished, OPTIONS);
+    expect(room.pickables.map((p) => p.id).sort()).toEqual(["furniture-chair", "furniture-sofa", "hue-0", "hue-1", "tv"]);
+    expect(room.pickables.find((p) => p.id === "furniture-chair")?.angle).toBeCloseTo(Math.PI / 2);
+    disposeScene(room.scene);
+  });
+
+  it("moves the mark without adding to the scene, and reports only a change", () => {
+    const room = buildRoomScene(furnished, OPTIONS);
+    const count = () => {
+      let n = 0;
+      room.scene.traverse(() => (n += 1));
+      return n;
+    };
+    expect(room.select("hue-0")).toBe(true);
+    const marked = count();
+    expect(room.select("hue-0")).toBe(false);
+    expect(room.select("furniture-sofa")).toBe(true);
+    expect(count()).toBe(marked);
+    expect(room.select("furniture-gone")).toBe(true);
+    expect(room.select(null)).toBe(false);
+    disposeScene(room.scene);
+  });
+});

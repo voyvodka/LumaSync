@@ -172,6 +172,23 @@ selection — an object, then the zone it was picked over, then the palette — 
 ground lets go of both (`clearSelection`), since `select(null)` alone left a zone selected under the
 palette.
 
+**The View face selects lights, not furniture, and shares the selection with the plan.** The 3D
+room is drawn as a few merged meshes, so a raycast against them cannot say which piece it hit; the
+scene hands back one oriented box per light, piece and screen (`room-view/model/picking.ts`) and a
+click tests the ray against those. A light the ray passes through wins over a nearer piece, so a
+lamp on a desk or half behind the sofa is still the one clicked, and a light is picked as if it were
+at least 32 px across at the current zoom. A press that moves more than 3 px turns the room instead,
+as on the plan. A click on furniture reads as the ground — View has nothing to say about a piece, and
+Edit is one switch away — and a furniture or image selection made in Edit is shown as nothing in
+View but left stored for the way back. The selection's mark (`scene/selection.ts`) is moved, never
+rebuilt: a floor outline under a piece, a frame in front of the screen, and for a light a ring that
+faces the camera, never under 20 px, with a faint copy drawn through whatever stands in front. The
+View dock is the editor's box (`ui/dock/DockFrame.tsx`) without a rail: the lights as chips, or one
+light's card with identify and the way to the plan. Identify sends an empty key, which the command
+resolves from the keychain, so the room never holds a credential. The card keeps its second row's
+end and its facts' width for a power switch and a brightness bar, so neither moves anything when
+per-light control arrives; until the live feed reaches the view, the lamps' colours are placeholders.
+
 **Background images are copied in, capped at 20 MB, and pruned only at startup.** An imported
 image is copied into `room-map-backgrounds/` in the app data dir under a UUID name, because the
 `fs:allow-read-file` capability is scoped to exactly that directory and the source may be on a

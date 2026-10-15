@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { FurnitureType } from "@/shared/contracts/roomMap";
 
-import { DockPalette, type DockPaletteProps, type PaletteHueArea } from "../DockPalette";
+import { DockPalette, type DockPaletteProps } from "../DockPalette";
+import type { PaletteHueArea } from "../HueAreaNote";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({

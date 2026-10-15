@@ -1,32 +1,20 @@
-import { type MouseEvent, type ReactNode, type RefObject, useRef } from "react";
+import { type MouseEvent, type ReactNode, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import { furnitureColours } from "@/features/room-view/model/furnitureModel";
-import { HUE_AREA_CHANNELS_STATUS } from "@/shared/contracts/hue";
 import type { FurnitureType } from "@/shared/contracts/roomMap";
 import { cx } from "@/shared/lib/cx";
-import { useHeldFlag } from "@/shared/lib/useHeldFlag";
 import { IconCheck, IconImage, IconLed, IconTv } from "@/shared/ui/icons";
 
-import type { HueAreaState } from "../../model/hueAreaState";
 import { FURNITURE_TILES } from "../../model/paletteTiles";
 import { TYPE_DOT_COLOR } from "../../model/zoneColor";
 import { usePaletteKeys } from "../../state/usePaletteKeys";
 import { FurnitureGlyph } from "../objects/FurnitureGlyph";
 import styles from "./DockPalette.module.css";
-import { Disc, Note } from "./InspectorParts";
+import { HueAreaNote, type PaletteHueArea } from "./HueAreaNote";
+import { Disc } from "./InspectorParts";
 
 type Press = (event: MouseEvent<HTMLButtonElement>) => void;
-
-export interface PaletteHueArea {
-  state: HueAreaState;
-  zoneCount: number;
-  /** Last channel-fetch code. A failed read must not look like an empty area. */
-  channelsStatus: string | null;
-  refreshing: boolean;
-  onRefresh?: () => void;
-  onNavigateToDevices?: () => void;
-}
 
 export interface DockPaletteProps {
   hasTv: boolean;
@@ -124,7 +112,7 @@ export function DockPalette({ hasTv, onAddFurniture, onAddTv, onSelectTv, onAddS
             >
               {t("roomMap:palette.zone")}
             </Tile>
-            <AreaNote hue={hue} noteRef={noteRef} />
+            <HueAreaNote hue={hue} noteRef={noteRef} />
           </>
         )}
       </div>
@@ -166,74 +154,5 @@ function Tile({
       </span>
       <span className={styles.name}>{children}</span>
     </button>
-  );
-}
-
-function AreaNote({ hue, noteRef }: { hue: PaletteHueArea; noteRef: RefObject<HTMLSpanElement | null> }) {
-  const { t } = useTranslation();
-  const refreshing = useHeldFlag(hue.refreshing);
-  const { state } = hue;
-
-  if (state.kind !== "ready") {
-    const offline = state.kind === "not-configured" && state.orphanedAreaId;
-    const title =
-      state.kind === "no-area"
-        ? t("roomMap:hueZones.areaState.noAreaTitle")
-        : offline
-          ? t("roomMap:hueZones.areaState.offlineTitle")
-          : t("roomMap:hueZones.areaState.notConfiguredTitle");
-    const hint =
-      state.kind === "no-area"
-        ? t("roomMap:hueZones.areaState.noAreaHint")
-        : offline
-          ? t("roomMap:hueZones.areaState.offlineHint")
-          : t("roomMap:hueZones.areaState.notConfiguredHint");
-    return (
-      <Note
-        ref={noteRef}
-        tone="warning"
-        title={hint}
-        action={
-          hue.onNavigateToDevices
-            ? {
-                label:
-                  state.kind === "no-area" ? t("roomMap:hueZones.areaState.noAreaCta") : t("roomMap:hueZones.areaState.notConfiguredCta"),
-                onClick: hue.onNavigateToDevices,
-              }
-            : undefined
-        }
-      >
-        {title}
-      </Note>
-    );
-  }
-
-  // EMPTY is a clean answer — the area really has no lights — so only the
-  // genuinely unread codes may claim the screen is showing stale data.
-  const empty = hue.channelsStatus === HUE_AREA_CHANNELS_STATUS.EMPTY;
-  const unread = hue.channelsStatus != null && hue.channelsStatus !== HUE_AREA_CHANNELS_STATUS.OK && !empty;
-  return (
-    <Note
-      ref={noteRef}
-      tone={unread || empty ? "info" : "ok"}
-      title={
-        unread
-          ? t("roomMap:hueZones.areaState.unreadHint")
-          : empty
-            ? t("roomMap:hueZones.areaState.emptyHint")
-            : t("roomMap:hueZones.areaState.readyHint")
-      }
-      action={
-        hue.onRefresh
-          ? {
-              label: refreshing ? t("roomMap:hueZones.areaState.refreshing") : t("roomMap:hueZones.areaState.refresh"),
-              onClick: hue.onRefresh,
-              pending: refreshing,
-            }
-          : undefined
-      }
-    >
-      {t("roomMap:hueZones.areaState.readyTitle", { N: String(hue.zoneCount) })}
-    </Note>
   );
 }

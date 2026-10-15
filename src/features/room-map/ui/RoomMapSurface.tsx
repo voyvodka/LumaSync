@@ -2,7 +2,7 @@ import { type CSSProperties, useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
-import { ROOM_VIEW_3D_AVAILABLE, RoomView3DHost } from "@/features/room-view/ui/RoomView3DHost";
+import { ROOM_VIEW_3D_AVAILABLE } from "@/features/room-view/ui/RoomView3DHost";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { cx } from "@/shared/lib/cx";
@@ -12,10 +12,10 @@ import { roomAwareStatus } from "../model/roomAware";
 import { applyRoomTemplate, isRoomMapEmpty } from "../model/roomTemplate";
 import { useHueLampFamilies } from "../state/useHueLampFamilies";
 import { useRoomMapDocument } from "../state/useRoomMapDocument";
-import { CornerControls } from "./CornerControls";
 import { RoomMapEditor } from "./RoomMapEditor";
 import styles from "./RoomMapSurface.module.css";
 import { TemplateSelector } from "./TemplateSelector";
+import { ViewStage } from "./view/ViewStage";
 
 export const ROOM_FACES = { VIEW: "view", EDIT: "edit" } as const;
 export type RoomFace = (typeof ROOM_FACES)[keyof typeof ROOM_FACES];
@@ -67,10 +67,13 @@ export function RoomMapSurface({
   const [face, setFace] = useState<RoomFace>(view3dAvailable && !viewFailed ? ROOM_FACES.VIEW : ROOM_FACES.EDIT);
   // The first face appears as the map opens; only a switch fades one in.
   const [switched, setSwitched] = useState(false);
+  // Edit opened from the light card takes the keys, or they would fall to the page with the card.
+  const [editTakesFocus, setEditTakesFocus] = useState(false);
   const lampFamilies = useHueLampFamilies(doc.hue.areaChannels, face === ROOM_FACES.VIEW);
 
   const handleFace = useCallback((next: RoomFace) => {
     setSwitched(true);
+    setEditTakesFocus(false);
     setFace(next);
   }, []);
 
@@ -110,21 +113,25 @@ export function RoomMapSurface({
       {view3dAvailable && <FaceSwitch face={face} viewFailed={failed} onChange={handleFace} />}
       <div key={face} className={cx(styles.face, switched && styles.arriving)} data-testid={`room-face-${face}`}>
         {face === ROOM_FACES.VIEW ? (
-          <div className="relative h-full">
-            <RoomView3DHost
-              config={doc.scopedConfig}
-              lampFamilies={lampFamilies}
-              label={t("roomMap:face.viewLabel")}
-              onFail={handleViewFail}
-            />
-            <CornerControls roomAware={roomAware} />
-          </div>
+          <ViewStage
+            doc={doc}
+            lampFamilies={lampFamilies}
+            roomAware={roomAware}
+            hueReachable={hueReachable}
+            onEdit={() => {
+              handleFace(ROOM_FACES.EDIT);
+              setEditTakesFocus(true);
+            }}
+            onNavigateToDevices={onNavigateToDevices}
+            onFail={handleViewFail}
+          />
         ) : (
           <RoomMapEditor
             doc={doc}
             onNavigateToDevices={onNavigateToDevices}
             hueReachable={hueReachable}
             roomAware={roomAware}
+            focusOnMount={editTakesFocus}
           />
         )}
       </div>

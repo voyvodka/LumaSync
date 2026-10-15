@@ -14,13 +14,16 @@ import {
   MeshLambertMaterial,
   MeshStandardMaterial,
   PlaneGeometry,
+  type Quaternion,
   Scene,
   Vector3,
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
+import { furnitureObjectId, hueChannelObjectId, TV_ANCHOR_OBJECT_ID } from "@/features/room-map/model/objectId";
 import { type RoomMapConfig, resolveFurnitureTop } from "@/shared/contracts/roomMap";
 
+import type { Pickable } from "../model/picking";
 import { type PlanCorner, roomEdges } from "../model/roomOutline";
 import { hueChannelScenePoint, roomToScene, tvMountHeight } from "../model/roomSpace";
 import { contactShadow, floorParts, roomLights, WALL_THICKNESS, wallFootShade, wallGeometry } from "./scene/environment";
@@ -32,6 +35,7 @@ import { PALETTE } from "./scene/palette";
 import { mergeParts, type Part, transformParts } from "./scene/parts";
 import { lampFixture } from "./scene/lamps";
 import { buildScreen } from "./scene/screen";
+import { buildSelectionMark } from "./scene/selection";
 
 const LAMP_COLOURS = [0xffb347, 0x4fd1c5, 0xb388ff, 0xff7a59, 0x7aa2ff];
 /** A wall between the camera and the room drops to this, so the room reads as a cutaway. */
@@ -83,6 +87,12 @@ export interface RoomScene {
   cutWalls(cameraDirection: Vector3): boolean;
   /** Keeps the halos a fixed size in the room as the view zooms. */
   setPixelsPerMetre(ppm: number): void;
+  /** What a click can land on: every light, piece of furniture and the screen. */
+  pickables: readonly Pickable[];
+  /** Marks the object with this id, or nothing; true when the mark changed. */
+  select(objectId: string | null): boolean;
+  /** Turns what faces the camera (the selection's ring) to it; call before each draw. */
+  faceCamera(cameraQuaternion: Quaternion): void;
   /** Where to aim and how far the room reaches from it. */
   target: Vector3;
   radius: number;
@@ -120,6 +130,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   const satin: Part[] = [];
   const shadows: BufferGeometry[] = [wallFootShade(edges)];
   const surfaces: Surface[] = [];
+  const pickables: Pickable[] = [];
   const sort = (parts: readonly Part[]) => {
     for (const part of parts) (SATIN.has(part.color) ? satin : matte).push(part);
   };
@@ -137,6 +148,14 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     const storedTop = resolveFurnitureTop(item);
     const scale = storedTop !== undefined ? storedTop / modelTop(model) : 1;
     const top = surfaceTop(model) * scale;
+    const height = Math.max(modelTop(model) * scale, 0.02);
+    pickables.push({
+      id: furnitureObjectId(item.id),
+      kind: "furniture",
+      centre: { x: centre.x, y: height / 2, z: centre.z },
+      half: [item.width / 2, height / 2, item.height / 2],
+      angle: ((item.rotation ?? 0) * Math.PI) / 180,
+    });
     if (top > 0) {
       surfaces.push({
         x: centre.x,
@@ -156,12 +175,22 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     const family = options.lampFamilies?.get(channel.channelIndex) ?? "bulb";
     const fixture = lampFixture(family, point, surfaceUnder(point.x, point.z, point.y, surfaces), H);
     sort(fixture.body);
+    const [rx, ry, rz] = fixture.glow.radii;
+    pickables.push({
+      id: hueChannelObjectId(channel.channelIndex),
+      kind: "light",
+      centre: fixture.glow.at,
+      half: [rx, ry, rz],
+      angle: 0,
+    });
     return { at: fixture.glow.at, radii: fixture.glow.radii, color: LAMP_COLOURS[i % LAMP_COLOURS.length] ?? 0xffb347 };
   });
 
   const screen = buildScreen(config, models);
   if (screen) {
     sort(screen.parts);
+    const { centre, width, height } = screen.layout;
+    pickables.push({ id: TV_ANCHOR_OBJECT_ID, kind: "tv", centre, half: [width / 2, height / 2, 0.06], angle: 0 });
     for (const f of screen.footprints) shadows.push(contactShadow(f.hw, f.hd, f.shade, new Matrix4().makeTranslation(f.x, 0, f.z)));
     scene.add(new Mesh(screen.panel, new MeshBasicMaterial({ vertexColors: true })));
   }
@@ -244,8 +273,14 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     texture.dispose();
   }
 
+  const mark = buildSelectionMark(pickables);
+  scene.add(mark.group);
+
   return {
     scene,
+    pickables,
+    select: mark.select,
+    faceCamera: mark.orient,
     target: new Vector3(0, H * 0.3, 0),
     radius: Math.hypot(W, D, H) / 2,
     cutWalls(direction: Vector3) {
@@ -264,6 +299,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     },
     setPixelsPerMetre(ppm: number) {
       glow?.setPixelsPerMetre(ppm);
+      mark.setPixelsPerMetre(ppm);
     },
   };
 }

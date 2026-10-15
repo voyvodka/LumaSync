@@ -46,3 +46,23 @@ export function IconChevronUp() {
     </svg>
   );
 }
+
+/** Back to the list the card was opened from. */
+export function IconBack() {
+  return (
+    <svg {...PROPS} aria-hidden="true">
+      <path d="M10 3.5 5.5 8l4.5 4.5" />
+    </svg>
+  );
+}
+
+/** A bulb with rays: make the real light blink. */
+export function IconIdentify() {
+  return (
+    <svg {...PROPS} aria-hidden="true">
+      <path d="M6.2 10.5a3.4 3.4 0 1 1 3.6 0v1.3H6.2z" />
+      <path d="M6.6 13.8h2.8" />
+      <path d="M8 1.2v1M2.6 3.4l.7.7M13.4 3.4l-.7.7" />
+    </svg>
+  );
+}

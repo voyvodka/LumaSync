@@ -22,8 +22,10 @@ describe("useRoomMapHueArea", () => {
     });
     const { result } = renderHook(() => useRoomMapHueArea());
 
-    expect(result.current).toEqual({ hueAreaId: null, hueBridgeConfigured: false });
-    await waitFor(() => expect(result.current).toEqual({ hueAreaId: "area-1", hueBridgeConfigured: true }));
+    expect(result.current).toEqual({ hueAreaId: null, hueBridgeConfigured: false, hueBridgeIp: null });
+    await waitFor(() =>
+      expect(result.current).toEqual({ hueAreaId: "area-1", hueBridgeConfigured: true, hueBridgeIp: "192.168.1.2" }),
+    );
   });
 
   it("counts a legacy plaintext key as paired, and no bridge as not", async () => {
@@ -36,6 +38,7 @@ describe("useRoomMapHueArea", () => {
     const bridgeless = renderHook(() => useRoomMapHueArea());
     await waitFor(() => expect(bridgeless.result.current.hueAreaId).toBe("area-1"));
     expect(bridgeless.result.current.hueBridgeConfigured).toBe(false);
+    expect(bridgeless.result.current.hueBridgeIp).toBeNull();
   });
 
   it("logs a failed read and stays unbound", async () => {
@@ -44,7 +47,7 @@ describe("useRoomMapHueArea", () => {
     const { result } = renderHook(() => useRoomMapHueArea());
 
     await waitFor(() => expect(warn).toHaveBeenCalledWith(expect.stringContaining("Room map Hue area not read")));
-    expect(result.current).toEqual({ hueAreaId: null, hueBridgeConfigured: false });
+    expect(result.current).toEqual({ hueAreaId: null, hueBridgeConfigured: false, hueBridgeIp: null });
     warn.mockRestore();
   });
 });
